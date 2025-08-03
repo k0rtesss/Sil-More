@@ -108,10 +108,16 @@ CC = gcc
 #
 
 ##
-## Standard -- "main-x11.c" & "main-gcu.c"
+## Standard -- "main-gcu.c" (ncurses, should work on Linux and macOS)
 ##
 CFLAGS = -Wall -O1 -pipe -g -D"USE_GCU"
 LIBS = -lcurses
+
+##
+## Variation -- "main-x11.c" & "main-gcu.c"
+##
+# CFLAGS = -Wall -O1 -pipe -g -D"USE_X11" -D"USE_GCU"
+# LIBS = -lX11 -lcurses
 
 
 ##
@@ -133,13 +139,6 @@ LIBS = -lcurses
 ##
 #CFLAGS = -Wall -O1 -pipe -g -D"USE_X11"
 #LIBS = -L/usr/X11/lib -lX11
-
-
-##
-## Variation -- "main-gcu.c"
-##
-#CFLAGS = -Wall -O1 -pipe -g -D"USE_GCU"
-#LIBS = -lcurses
 
 
 ##
@@ -335,4 +334,3 @@ z-term.o: z-term.c $(HDRS) z-term.h z-virt.h
 z-util.o: z-util.c $(HDRS) z-util.h
 z-virt.o: z-virt.c $(HDRS) z-virt.h z-util.h
 log.o: log.c log.h
-
