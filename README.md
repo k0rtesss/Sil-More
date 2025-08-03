@@ -1,61 +1,171 @@
 # Sil-QH
-SIL-Q Heroes is a version of SIL-Q which incorporates two main ideas. 
+SIL-Q Heroes is a version of SIL-Q which incorporates two main ideas.
 First, it has real life characters from Tolkien FA and storyline.
 Secondly, it uses a system of metaruns, where consequtive runs are connected into one storyline idea more like modern Rougue-light games.
-  
-# Road Map    
 
-# Release of alpha 0.7 (Storyline updates) (done) 
- 
--Balance tweaks  
--Add unique RHF flags  
---Earendil  
---Turin  
---Celeborn  
---Maedhros 
--Change Score to Character database 
-# Release of beta 0.8  
+# Building on macOS
 
-# Ideas  
---New heroes 
----Eol 
---More frequent forges for gnomes  
---Calculate the forge probablity  
---New Oaths  
---Quests  
---Pride  
---Greed   
-  
-# Done  
--Implement main curses (done)  
--Implement common RHF flags (done)  
---Cheap cost (done)  
---Morgoth Curse (done)  
--Add more debuging functions (done)  
--Add unique RHF flags  
---Feanor (done)  
---Telchar (done)  
---Gamil (done)  
---Melian (done)  
---Thingol (done)  
---Tuor (done)  
---Hurin (done)  
--Figure out last abilities and balance tweaks (done)  
---All starting abilities (done)  
---Multiple starting abilities (done)  
-# Release closed alpha 0.5 (done)  
--Bug fixes (ongoing)   
+## Prerequisites
+
+Sil-q requires some C compiler (any modern like gcc or clang would work), `ncurses`, and, optionally, `git`. As for the C compiler and `git`, these are likely already installed on your Mac. You can check it. Start Terminal.app (or any other terminal emulator of your choice) and run:
+
+```shell
+gcc -dumpversion
+```
+
+If it outputs something like '17.0.0' (or other version, depending on your macOS version, that doesn't really matter for this project), you're good. Otherwise, you should install Apple's Xcode Command Line Tools.
+
+### Xcode Command Line Tools
+
+To do it, run, again, in your terminal:
+
+```shell
+xcode-select --install
+```
+
+This step will take some time as it will download the files from Apple's servers. It will also ask you whether you want to install it. Agree. After it's done, verify it's working:
+
+```shell
+xcode-select -p
+```
+
+It should show you the path to where it's installed, like this:
+
+```
+/Library/Developer/CommandLineTools
+```
+
+Aside from the C and C++ compiler, it also installs `git`.
+
+
+### Homebrew
+
+Now, we also need to install homebrew which is a package manager for macOS often used to install development tools and command line utilities. If you already have it installed, of course skip this step. Otherwise, follow [this guide](https://docs.brew.sh/Installation) on their official website.
+
+### ncurses
+
+This version of sil-q only works in the terminal, so it requires a library to draw ASCII graphics. This is called `ncurses` and is easily installed via homebrew:
+
+```shell
+brew install ncurses
+```
+
+This will probably also pull its dependencies as brew tracks and installs them automatically.
+
+
+## Building
+
+### Getting the code
+
+Now to the actual building! First, clone the repo:
+
+```shell
+git clone https://github.com/k0rtesss/sil-qh
+```
+
+Or simply download and unpack the ZIP archive from the GitHub page clicking on Code > Download ZIP.
+
+In any case, in terminal, navigate to the folder:
+
+```shell
+cd ~/sil-qh
+```
+
+or wherever you've cloned or downloaded it.
+
+### Compiling
+
+Now just change to the source folder:
+
+```shell
+cd src
+```
+
+and compile the code:
+
+```shell
+make -f Makefile.std
+```
+
+## Running
+
+If everything went well, you can play! To start sil-qh, change back to the parent folder:
+
+```shell
+cd ..
+```
+
+and run:
+
+```shell
+./src/sil
+```
+
+It's essential to run the game from the parent folder as it looks for the game data in locations relative to it.
+
+If the game complains about the metarun file, create the folder it wants:
+
+```shell
+mkdir lib/apex/metaruns
+```
+
+and restart.
+
+
+
+# Road Map
+
+# Release of alpha 0.7 (Storyline updates) (done)
+
+-Balance tweaks
+-Add unique RHF flags
+--Earendil
+--Turin
+--Celeborn
+--Maedhros
+-Change Score to Character database
+# Release of beta 0.8
+
+# Ideas
+--New heroes
+---Eol
+--More frequent forges for gnomes
+--Calculate the forge probablity
+--New Oaths
+--Quests
+--Pride
+--Greed
+
+# Done
+-Implement main curses (done)
+-Implement common RHF flags (done)
+--Cheap cost (done)
+--Morgoth Curse (done)
+-Add more debuging functions (done)
+-Add unique RHF flags
+--Feanor (done)
+--Telchar (done)
+--Gamil (done)
+--Melian (done)
+--Thingol (done)
+--Tuor (done)
+--Hurin (done)
+-Figure out last abilities and balance tweaks (done)
+--All starting abilities (done)
+--Multiple starting abilities (done)
+# Release closed alpha 0.5 (done)
+-Bug fixes (ongoing)
 -UI fixes (done)
---Start menu (done) 
+--Start menu (done)
 --Character menu (done)
--Decriptions update (done) 
-# Release alpha 0.6 (UI updates) (done) 
--Bug fixes (ongoing)  
--UI updates   
---Score menu (done)  
---Final menu (done) 
--Flavor ideas for final menus (done)   
-  
+-Decriptions update (done)
+# Release alpha 0.6 (UI updates) (done)
+-Bug fixes (ongoing)
+-UI updates
+--Score menu (done)
+--Final menu (done)
+-Flavor ideas for final menus (done)
+
 ## Compiling Instructions
 
 Compiling Sil-Q is not very difficult, and has been tested on Windows, Linux, and OS X.
@@ -66,7 +176,7 @@ with any changes necessary, update this file and open a github pull request agai
 https://github.com/sil-quirk/sil-q.
 
 The first step is the same on all systems, so do this and then look through
-this file for advice on your specific system. 
+this file for advice on your specific system.
 
 0. Install the Sil source code:
 
@@ -104,7 +214,7 @@ this file for advice on your specific system.
 
 ### Windows with Cygwin   (tested with Sil-Q)
 
-1. Getting the free Cygwin compiler: 
+1. Getting the free Cygwin compiler:
 
    Download the free Cygwin compiler. It provides a shell interface very
    similar to a normal Unix/Linux shell with many useful tools. Install it
@@ -113,16 +223,16 @@ this file for advice on your specific system.
    Note you will have to ensure "make" and the mingw C compiler are installed
    as they may not be included in your Cygwin default installation.
 
-2. Compile Sil-Q: 
+2. Compile Sil-Q:
 
-   In the Cygwin terminal change to the src directory and run 
-   "make -f Makefile.cyg install". 
-   Sil should now be compiled and installed into the Sil folder.  
-   The executable file will be called Sil.exe. 
+   In the Cygwin terminal change to the src directory and run
+   "make -f Makefile.cyg install".
+   Sil should now be compiled and installed into the Sil folder.
+   The executable file will be called Sil.exe.
 
-3. Run Sil-Q: 
+3. Run Sil-Q:
 
-   Go back to the Sil folder and run Sil.exe. 
+   Go back to the Sil folder and run Sil.exe.
 
 ### Windows with Visual Studio 2022 (experimental, tested with Sil-Q on MSVC 2022)
 
@@ -171,4 +281,3 @@ NOTE: This is a very new and very raw port, and requires testing.
    Sil-Q or Sil before, you'll see a dialog about granting Sil-Q access to
    your Documents folder since it wants to place saved games, the high
    score file, and some other data in Documents/Sil.
-
