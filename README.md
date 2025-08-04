@@ -117,14 +117,19 @@ and restart.
 
 # Release of alpha 0.7 (Storyline updates) (done)
 
--Balance tweaks
--Add unique RHF flags
---Earendil
---Turin
---Celeborn
---Maedhros
--Change Score to Character database
+-Balance tweaks 
+-Add unique RHF flags 
+--Earendil 
+--Turin 
+--Celeborn 
+--Maedhros 
+--New heroes 
+---Eol 
 # Release of beta 0.8
+
+-Change Score to Character database
+-Quest systems  
+# Release of beta 0.9
 
 # Ideas
 --New heroes
