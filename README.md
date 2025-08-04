@@ -1,5 +1,5 @@
-# Sil-QH
-SIL-Q Heroes is a version of SIL-Q which incorporates two main ideas.
+# Sil-Morë
+SIL-Morë is a version of SIL-Q which incorporates two main ideas.
 First, it has real life characters from Tolkien FA and storyline.
 Secondly, it uses a system of metaruns, where consequtive runs are connected into one storyline idea more like modern Rougue-light games.
 
