@@ -1,5 +1,5 @@
 # Sil-Morë
-SIL-Morë is a version of SIL-Q which incorporates two main ideas.
+Sil-Morë — Shining Darkness is a version of SIL-Q which incorporates two main ideas.
 First, it has real life characters from Tolkien FA and storyline.
 Secondly, it uses a system of metaruns, where consequtive runs are connected into one storyline idea more like modern Rougue-light games.
 
@@ -125,53 +125,53 @@ and restart.
 --Maedhros 
 --New heroes 
 ---Eol 
-# Release of beta 0.8
+# Release of beta 0.8 
 
--Change Score to Character database
+-Change Score to Character database 
 -Quest systems  
-# Release of beta 0.9
+# Release of beta 0.9 
 
-# Ideas
---New heroes
----Eol
---More frequent forges for gnomes
---Calculate the forge probablity
---New Oaths
---Quests
---Pride
---Greed
+# Ideas 
+--New heroes 
+---Eol 
+--More frequent forges for gnomes 
+--Calculate the forge probablity 
+--New Oaths 
+--Quests 
+--Pride 
+--Greed 
+ 
+# Done 
+-Implement main curses (done) 
+-Implement common RHF flags (done) 
+--Cheap cost (done) 
+--Morgoth Curse (done) 
+-Add more debuging functions (done) 
+-Add unique RHF flags 
+--Feanor (done) 
+--Telchar (done) 
+--Gamil (done) 
+--Melian (done) 
+--Thingol (done) 
+--Tuor (done) 
+--Hurin (done) 
+-Figure out last abilities and balance tweaks (done) 
+--All starting abilities (done) 
+--Multiple starting abilities (done) 
+# Release closed alpha 0.5 (done) 
+-Bug fixes (ongoing) 
+-UI fixes (done) 
+--Start menu (done) 
+--Character menu (done) 
+-Decriptions update (done) 
+# Release alpha 0.6 (UI updates) (done) 
+-Bug fixes (ongoing) 
+-UI updates 
+--Score menu (done) 
+--Final menu (done) 
+-Flavor ideas for final menus (done) 
 
-# Done
--Implement main curses (done)
--Implement common RHF flags (done)
---Cheap cost (done)
---Morgoth Curse (done)
--Add more debuging functions (done)
--Add unique RHF flags
---Feanor (done)
---Telchar (done)
---Gamil (done)
---Melian (done)
---Thingol (done)
---Tuor (done)
---Hurin (done)
--Figure out last abilities and balance tweaks (done)
---All starting abilities (done)
---Multiple starting abilities (done)
-# Release closed alpha 0.5 (done)
--Bug fixes (ongoing)
--UI fixes (done)
---Start menu (done)
---Character menu (done)
--Decriptions update (done)
-# Release alpha 0.6 (UI updates) (done)
--Bug fixes (ongoing)
--UI updates
---Score menu (done)
---Final menu (done)
--Flavor ideas for final menus (done)
-
-## Compiling Instructions
+## Compiling Instructions 
 
 Compiling Sil-Q is not very difficult, and has been tested on Windows, Linux, and OS X.
 
