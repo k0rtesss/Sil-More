@@ -770,12 +770,9 @@ static void process_command(void)
     log_trace("process_command: character_icky=%d, command='%c' (%d)", 
               character_icky, p_ptr->command_cmd, (int)p_ptr->command_cmd);
 
-    /* Debug: Check for stuck character_icky */
+    /* Debug: Log character_icky state but don't aggressively reset it during normal operation */
     if (character_icky > 0) {
-        log_info("process_command: character_icky is %d (should be 0), this indicates a screen_save/screen_load imbalance", character_icky);
-        /* Temporary fix: reset character_icky if it's stuck */
-        character_icky = 0;
-        log_info("process_command: reset character_icky to 0 to prevent stuck screen state");
+        log_debug("process_command: character_icky is %d (may be normal during menu operations)", character_icky);
     }
 
 #ifdef ALLOW_REPEAT

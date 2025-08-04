@@ -3273,7 +3273,7 @@ void update_stuff(void)
 
     /* Character is in "icky" mode, no screen updates */
     if (character_icky) {
-        log_info("update_stuff: character in icky mode (value=%d), skipping screen updates - this may indicate a screen_save/screen_load imbalance!", character_icky);
+        log_trace("update_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
         return;
     }
 
@@ -3336,7 +3336,7 @@ void redraw_stuff(void)
 
     /* Character is in "icky" mode, no screen updates */
     if (character_icky && !p_ptr->is_dead) {
-        log_info("redraw_stuff: character in icky mode (value=%d), skipping screen updates - this may indicate a screen_save/screen_load imbalance!", character_icky);
+        log_trace("redraw_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
         return;
     }
 
