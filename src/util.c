@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "log.h"
 
 #ifdef SET_UID
 
@@ -3055,6 +3056,7 @@ void screen_save(void)
 
     /* Increase "icky" depth */
     character_icky++;
+    log_debug("screen_save: character_icky incremented to %d, screen_depth=%d", character_icky, screen_depth);
 }
 
 /*
@@ -3073,6 +3075,7 @@ void screen_load(void)
 
     /* Decrease "icky" depth */
     character_icky--;
+    log_debug("screen_load: character_icky decremented to %d, screen_depth=%d", character_icky, screen_depth);
 }
 
 /*
@@ -5267,7 +5270,7 @@ cptr attr_to_text(byte a)
 void init_logger(bool quiet)
 {
     const char* log_level_str = getenv("SIL_LOG_LEVEL");
-    int level = LOG_INFO;
+    int level = LOG_DEBUG;
     if (log_level_str)
     {
         for (level = LOG_TRACE; level <= LOG_FATAL; level++)

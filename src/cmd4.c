@@ -4001,7 +4001,19 @@ int create_sval_menu_aux(int tval, int* highlight)
 
             /* Skip certain item types that cannot be made */
             if (k_ptr->flags3 & (TR3_NO_SMITHING))
-                continue;
+            {
+                bool allow_override = false;
+                
+                /* Check for specific house unique flag and sval overrides */
+                if ((c_info[p_ptr->phouse].flags_u & UNQ_SMT_EOL) && 
+                    (k_ptr->tval == TV_SOFT_ARMOR) && (k_ptr->sval == SV_ARMOUR_OF_GALVORN))
+                {
+                    allow_override = true;
+                }
+                
+                if (!allow_override)
+                    continue;
+            }
 
             /* Get the "name" of object "i" */
             strip_name(name, i);
@@ -6607,95 +6619,110 @@ void do_cmd_main_menu(void)
     while (!leave_menu)
     {
         actiontype = main_menu_aux(&highlight);
-        leave_menu = true;
 
         // if an action has been selected...
         switch (actiontype)
         {
         case MAIN_MENU_RETURN:
         {
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_CHARACTER:
         {
             do_cmd_character_sheet();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_OPTIONS:
         {
             do_cmd_options();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_MAP:
         {
             do_cmd_view_map();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_SCORES:
         {
             show_scores(true);
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_KNOWN_OBJECTS:
         {
             do_cmd_knowledge_objects();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_KNOWN_ARTEFACTS:
         {
             do_cmd_knowledge_artefacts();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_KNOWN_MONSTERS:
         {
             do_cmd_knowledge_monsters();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_SLAIN_MONSTERS:
         {
             show_known_curses_menu();
-
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_NOTE:
         {
             do_cmd_note("", p_ptr->depth);
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_SCREENSHOT:
         {
             // have to do this later to avoid taking a shot of this very menu
             take_screen_shot = true;
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_MACROS:
         {
             do_cmd_macros();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_COLORS:
         {
             do_cmd_colors();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_MESSAGES:
         {
             do_cmd_messages();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_VERSION:
         {
             do_cmd_version();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_ABORT:
         {
             do_cmd_suicide();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_SAVE:
         {
             do_cmd_save_game();
+            leave_menu = true;
             break;
         }
         case MAIN_MENU_SAVE_QUIT:
@@ -6705,15 +6732,18 @@ void do_cmd_main_menu(void)
 
             /* Leaving */
             p_ptr->leaving = true;
+            leave_menu = true;
             break;
         }
         case -1:
         {
+            leave_menu = true;
             break;
         }
         default:
         {
-            leave_menu = false;
+            /* Invalid selection - stay in menu */
+            break;
         }
         }
     }

@@ -371,6 +371,10 @@ int main(int argc, char* argv[])
 
     bool args = true;
 
+    /* Initialize character_icky to ensure it starts at 0 */
+    character_icky = 0;
+    log_debug("main: character_icky initialized to %d", character_icky);
+
     /* Save the "program name" XXX XXX XXX */
     argv0 = argv[0];
 

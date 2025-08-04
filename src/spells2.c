@@ -157,6 +157,10 @@ bool do_dec_stat(int stat, monster_type* m_ptr)
 {
     bool resistance = false; // default to soothe compiler warnings
 
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (true);
+
     /* Get the "sustain" */
     switch (stat)
     {

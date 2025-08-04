@@ -1034,6 +1034,7 @@ extern int affinity_level(int skilltype);
 
 /* xtra2.c */
 extern bool saving_throw(monster_type* m_ptr, int resistance);
+extern bool turin_resist_bad_effect(void);
 extern bool allow_player_blind(monster_type* m_ptr);
 extern bool set_blind(int v);
 extern bool allow_player_confusion(monster_type* m_ptr);

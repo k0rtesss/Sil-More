@@ -58,10 +58,39 @@ bool allow_player_aux(monster_type* m_ptr, int player_flag, u32b ident_flag)
     return (true);
 }
 
+/* Turin house resistance function - 70% chance to resist bad effects but becomes raged */
+bool turin_resist_bad_effect(void)
+{
+    /* Check if player has Turin house flag */
+    if (!(c_info[p_ptr->phouse].flags_u & UNQ_WIL_TURIN))
+        return (false);
+    
+    /* 70% chance to resist */
+    if (one_in_(10) || one_in_(10) || one_in_(10))
+        return (false);
+    
+    /* Turin resists! Apply rage */
+    msg_print("Your will hardens against adversity!");
+    (void)set_rage(p_ptr->rage + damroll(5, 4));
+    
+    /* 50% chance to become hallucinated when raged */
+    if (one_in_(2))
+    {
+        msg_print("The rage clouds your vision!");
+        (void)set_image(p_ptr->image + damroll(3, 4));
+    }
+    
+    return (true);
+}
+
 /* Players with blindness resistance or who make their saving throw don't get
  * blinded */
 bool allow_player_blind(monster_type* m_ptr)
 {
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (false);
+    
     return (allow_player_aux(m_ptr, p_ptr->resist_blind, TR2_RES_BLIND));
 }
 
@@ -133,6 +162,10 @@ bool set_blind(int v)
  * confused */
 bool allow_player_confusion(monster_type* m_ptr)
 {
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (false);
+    
     return (allow_player_aux(m_ptr, p_ptr->resist_confu, TR2_RES_CONFU));
 }
 
@@ -288,8 +321,12 @@ bool allow_player_fear(monster_type* m_ptr)
     // rage is incompatible with fear -- more than just a resistance
     if (p_ptr->rage)
         return (false);
-    else
-        return (allow_player_aux(m_ptr, p_ptr->resist_fear, TR2_RES_FEAR));
+    
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (false);
+    
+    return (allow_player_aux(m_ptr, p_ptr->resist_fear, TR2_RES_FEAR));
 }
 
 /*
@@ -351,6 +388,10 @@ bool set_afraid(int v)
  */
 bool allow_player_entrancement(monster_type* m_ptr)
 {
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (false);
+    
     return (allow_player_aux(m_ptr, p_ptr->free_act, TR2_FREE_ACT));
 }
 
@@ -524,6 +565,10 @@ bool set_fast(int v)
 /* Players with free action or who make their saving throw don't get slowed */
 bool allow_player_slow(monster_type* m_ptr)
 {
+    /* Turin house resistance check first */
+    if (turin_resist_bad_effect())
+        return (false);
+    
     return (allow_player_aux(m_ptr, p_ptr->free_act, TR2_FREE_ACT));
 }
 
@@ -597,6 +642,13 @@ bool set_rage(int v)
 
             /* Redraw map */
             p_ptr->redraw |= (PR_MAP);
+            
+            /* Turin house has 50% chance to become hallucinated when raged */
+            if ((c_info[p_ptr->phouse].flags_u & UNQ_WIL_TURIN) && one_in_(2))
+            {
+                msg_print("The rage clouds your vision!");
+                (void)set_image(p_ptr->image + damroll(3, 4));
+            }
         }
     }
 

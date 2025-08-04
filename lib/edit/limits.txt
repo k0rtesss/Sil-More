@@ -54,7 +54,7 @@ M:V:500
 M:P:6
 
 # Maximum number of player houses
-M:C:37
+M:C:38
 
 # Maximum number of player history lines
 M:H:165

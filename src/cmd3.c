@@ -452,6 +452,22 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    /* Check if Maedhros house is trying to wield a two-handed weapon */
+    if ((k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
+        && (c_info[p_ptr->phouse].flags_u & UNQ_MEL_MAEDHROS))
+    {
+        msg_print("Your injury prevents you from wielding two-handed weapons.");
+        return;
+    }
+
+    /* Check if Maedhros house is trying to wield a shield */
+    if ((o_ptr->tval == TV_SHIELD)
+        && (c_info[p_ptr->phouse].flags_u & UNQ_MEL_MAEDHROS))
+    {
+        msg_print("Your injury prevents you from using shields.");
+        return;
+    }
+
     /* Deal with wielding of two-handed weapons when already using a shield */
     if ((k_info[o_ptr->k_idx].flags3 & (TR3_TWO_HANDED))
         && (inventory[INVEN_ARM].k_idx))
