@@ -745,7 +745,6 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count)
     }
     else if (!escaped_with_sils) {
         log_debug("Player escaped without Silmarils - no narrative needed");
-        screen_load();                 /* restore game view            */
         save_metaruns();
         return;                        /* no further narrative needed  */
     }
