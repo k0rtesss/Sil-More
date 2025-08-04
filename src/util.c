@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "log.h"
 
 #ifdef SET_UID
 
@@ -5269,7 +5270,7 @@ cptr attr_to_text(byte a)
 void init_logger(bool quiet)
 {
     const char* log_level_str = getenv("SIL_LOG_LEVEL");
-    int level = LOG_INFO;
+    int level = LOG_TRACE;
     if (log_level_str)
     {
         for (level = LOG_TRACE; level <= LOG_FATAL; level++)

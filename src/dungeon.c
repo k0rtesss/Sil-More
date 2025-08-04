@@ -3176,14 +3176,10 @@ PlayResult play_game(void)
         NavResult cr = character_creation();
         if (cr == NAV_TO_MAIN) { 
             log_info("Returning to main menu from character creation"); 
-            character_icky--; 
-            log_debug("play_game: character_icky decremented to %d (NAV_TO_MAIN)", character_icky);
             return PLAY_DONE; 
         }
         if (cr == NAV_QUIT) { 
             log_info("Quitting from character creation"); 
-            character_icky--; 
-            log_debug("play_game: character_icky decremented to %d (NAV_QUIT)", character_icky); 
             return PLAY_QUIT; 
         }
 
@@ -3246,14 +3242,10 @@ PlayResult play_game(void)
         }
         if (br == NAV_TO_MAIN) { 
             log_info("Returning to main menu from character birth"); 
-            character_icky--; 
-            log_debug("play_game: character_icky decremented to %d (birth NAV_TO_MAIN)", character_icky);
             return PLAY_DONE; 
         }
         if (br == NAV_QUIT) { 
             log_info("Quitting from character birth"); 
-            character_icky--; 
-            log_debug("play_game: character_icky decremented to %d (birth NAV_QUIT)", character_icky);
             return PLAY_QUIT; 
         }
         /* NAV_OK falls through */
@@ -3352,10 +3344,6 @@ PlayResult play_game(void)
     /* Start with normal object generation mode */
     object_generation_mode = OB_GEN_MODE_NORMAL;
 
-    /* Hack -- Decrease "icky" depth */
-    character_icky--;
-    log_debug("play_game: character_icky decremented to %d (character creation complete)", character_icky);
-
     /* Start playing */
     p_ptr->playing = true;
     metarun_created = false;
@@ -3379,6 +3367,10 @@ PlayResult play_game(void)
     // assume the player is on the ground and not being knocked back
     p_ptr->leaping = false;
     p_ptr->knocked_back = false;
+
+    /* Hack -- Decrease "icky" depth before entering main game loop */
+    character_icky--;
+    log_debug("play_game: character_icky decremented to %d (entering main game loop)", character_icky);
 
     /* Process */
     while (true)
@@ -3512,6 +3504,11 @@ PlayResult play_game(void)
 
     /* Close stuff */
     log_info("Player '%s' has left the game.", op_ptr->base_name);
+    
+    /* Hack -- Decrease "icky" depth */
+    character_icky--;
+    log_debug("play_game: character_icky decremented to %d (function exit)", character_icky);
+    
     close_game();
     if (!p_ptr->is_dead && !p_ptr->playing)
         return PLAY_QUIT;
