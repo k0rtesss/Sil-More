@@ -767,6 +767,17 @@ static bool verify_debug_mode(void)
  */
 static void process_command(void)
 {
+    log_trace("process_command: character_icky=%d, command='%c' (%d)", 
+              character_icky, p_ptr->command_cmd, (int)p_ptr->command_cmd);
+
+    /* Debug: Check for stuck character_icky */
+    if (character_icky > 0) {
+        log_info("process_command: character_icky is %d (should be 0), this indicates a screen_save/screen_load imbalance", character_icky);
+        /* Temporary fix: reset character_icky if it's stuck */
+        character_icky = 0;
+        log_info("process_command: reset character_icky to 0 to prevent stuck screen state");
+    }
+
 #ifdef ALLOW_REPEAT
 
     /* Handle repeating the last command */

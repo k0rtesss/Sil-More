@@ -70,8 +70,11 @@ byte strength_modified_ds(const object_type* o_ptr, int str_adjustment)
             divisor = 10;
 
             /* Bonus for 'hand and a half' weapons like the bastard sword when
-             * used with two hands */
-            int_mds += hand_and_a_half_bonus(o_ptr);
+             * used with two hands - but not when using Subtlety */
+            if (!p_ptr->active_ability[S_MEL][MEL_CONTROL])
+            {
+                int_mds += hand_and_a_half_bonus(o_ptr);
+            }
         }
         else
         {
@@ -139,6 +142,15 @@ extern bool two_handed_melee(void)
     {
         return (true);
     }
+    
+    /* For Maedhros house, hand-and-a-half weapons count as two-handed for ability purposes */
+    if ((c_info[p_ptr->phouse].flags_u & UNQ_MEL_MAEDHROS)
+        && (k_info[o_ptr->k_idx].flags3 & (TR3_HAND_AND_A_HALF))
+        && (&inventory[INVEN_WIELD] == o_ptr) && (!inventory[INVEN_ARM].k_idx))
+    {
+        return (true);
+    }
+    
     return (false);
 }
 
@@ -146,11 +158,16 @@ extern bool two_handed_melee(void)
  * Bonus for 'hand and a half' weapons like the bastard sword when wielded with
  * two hands
  */
-extern int hand_and_a_half_bonus(const object_type* o_ptr)
+extern int hand_and_a_half_bonus(const object_type* o_ptr) //XXX Hand and a half
 {
     if ((k_info[o_ptr->k_idx].flags3 & (TR3_HAND_AND_A_HALF))
         && (&inventory[INVEN_WIELD] == o_ptr) && (!inventory[INVEN_ARM].k_idx))
     {
+        /* Maedhros house gets double the hand-and-a-half bonus */
+        if (c_info[p_ptr->phouse].flags_u & UNQ_MEL_MAEDHROS)
+        {
+            return (4);
+        }
         return (2);
     }
     return (0);
@@ -3252,11 +3269,13 @@ void update_stuff(void)
         return;
     }
 
+    log_trace("update_stuff: character_icky=%d", character_icky);
+
     /* Character is in "icky" mode, no screen updates */
-    // if (character_icky) {
-    //     log_trace("update_stuff: character in icky mode, skipping screen updates");
-    //     return;
-    // }
+    if (character_icky) {
+        log_info("update_stuff: character in icky mode (value=%d), skipping screen updates - this may indicate a screen_save/screen_load imbalance!", character_icky);
+        return;
+    }
 
     if (p_ptr->update & (PU_FORGET_VIEW))
     {
@@ -3312,11 +3331,14 @@ void redraw_stuff(void)
     if (!character_generated)
         return;
 
+    log_trace("redraw_stuff: character_icky=%d, character_generated=%s", 
+              character_icky, character_generated ? "true" : "false");
+
     /* Character is in "icky" mode, no screen updates */
-    // if (character_icky && !p_ptr->is_dead) {
-    //     log_trace("redraw_stuff: character in icky mode, skipping screen updates");
-    //     return;
-    // }
+    if (character_icky && !p_ptr->is_dead) {
+        log_info("redraw_stuff: character in icky mode (value=%d), skipping screen updates - this may indicate a screen_save/screen_load imbalance!", character_icky);
+        return;
+    }
 
     if (p_ptr->redraw & (PR_MAP))
     {

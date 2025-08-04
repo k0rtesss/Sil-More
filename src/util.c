@@ -3055,6 +3055,7 @@ void screen_save(void)
 
     /* Increase "icky" depth */
     character_icky++;
+    log_debug("screen_save: character_icky incremented to %d, screen_depth=%d", character_icky, screen_depth);
 }
 
 /*
@@ -3073,6 +3074,7 @@ void screen_load(void)
 
     /* Decrease "icky" depth */
     character_icky--;
+    log_debug("screen_load: character_icky decremented to %d, screen_depth=%d", character_icky, screen_depth);
 }
 
 /*

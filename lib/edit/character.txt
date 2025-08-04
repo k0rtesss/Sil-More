@@ -122,6 +122,7 @@ N:4:Maedhros
 A: the Red
 B:You stride toward shadow-eldest son of flame, bound by oath and tragic resolve.
 F:WIL_AFFINITY | STL_PENALTY
+U:MEL_MAEDHROS
 S:1:1:3:0
 C:5:8 #Vengeance
 D:Eldest son of fire-hearted Feanor, whose flame-red hair now shadows grief; 
@@ -251,7 +252,7 @@ D:a legacy ever remembered in song beneath stars and shattered stone.
 N:12:Elu Thingol
 A:, Lord of Beleriand
 B:You command wisely-Lord of Doriath, ensnared by beauty and shadowed doom.
-F:WIL_AFFINITY | PER_AFFINITY | ARC_PENALTY
+F:WIL_AFFINITY | PER_AFFINITY | ARC_PENALTY | SMT_PENALTY
 U:SNG_THINGOL
 S:2:1:1:3
 C:5:9:7:11  # Song of Mastery Majesty
@@ -268,7 +269,7 @@ D:foreshadowing ruin wrought by desire, grief deeper than twilight itself.
 N:13:Cirdan
 A: the Shipwright
 B:You watch patiently-shipwright, keeper of hope, guiding stars across endless seas.
-F:PER_AFFINITY | SMT_AFFINITY | ARC_PENALTY | FREE | BOW_PROFICIENCY
+F:PER_AFFINITY | SMT_AFFINITY | ARC_PENALTY | FREE | BOW_PROFICIENCY| SMT_PENALTY
 S:0:1:1:2
 C:4:2:4:4 # Keen Senses Alchemy
 D:Wise shipwright, silver-bearded master mariner dwelling by western shores; 
@@ -282,7 +283,7 @@ D:keeper of hope unseen, guiding future kings unto shores yet unknown.
 N:14:Mablung
 A: of the Heavy Hand
 B:You guard faithfully-Heavy-Handed captain of Doriath, steadfast amid sorrow.
-F:MEL_AFFINITY
+F:MEL_AFFINITY| SMT_PENALTY
 S:2:1:0:0
 C:0:10 # Smite
 D:Brave huntsman, faithful captain of Thingol’s guard beneath starlit woods, 
@@ -296,7 +297,7 @@ D:destined to fall loyal, remembered in lament beneath darkening trees.
 N:15:Luthien
 A: Tinúviel
 B:You sing fearlessly-fairest daughter of twilight, whose love defied Morgoth.
-F:WIL_AFFINITY | SNG_AFFINITY | STL_AFFINITY | EVN_AFFINITY | ARC_PENALTY
+F:WIL_AFFINITY | SNG_AFFINITY | STL_AFFINITY | EVN_AFFINITY | ARC_PENALTY| SMT_PENALTY
 U:SNG_LUT
 S:-1:3:1:3
 C:7:10:5:0   # Curse Breaking #Lorien
@@ -311,7 +312,7 @@ D:remembered ever as brightest jewel in Arda’s song, grief and joy entwined.
 N:16:Voronwe
 A: the Steadfast
 B:You journey onward-messenger steadfast, bearer of hope whispered by Ulmo.
-F:PER_PENALTY | FREE | BOW_PROFICIENCY
+F:PER_PENALTY | FREE | BOW_PROFICIENCY| SMT_PENALTY
 S:0:1:1:0
 C:4:0 # Quick Study
 D:Faithful mariner, storm-tossed survivor, bearer of Ulmo’s whispered hope, 
@@ -325,7 +326,7 @@ D:bearer of hope amid despair, witness to glory lost beneath waves of flame.
 N:17:Beleg
 A: Strongbow
 B:You stalk bravely-Strongbow of Doriath, loyal heart doomed by friendship.
-F:ARC_AFFINITY | SNG_PENALTY | BOW_PROFICIENCY
+F:ARC_AFFINITY | SNG_PENALTY | BOW_PROFICIENCY| SMT_PENALTY
 S:1:2:0:0
 C:1:7 # Deadly Hail
 D:Strongbow of Doriath, brave-hearted ranger whose arrows sang in twilight, 
@@ -485,6 +486,7 @@ N:28:Turin Turambar
 A:, Master of Fate
 B:You struggle grimly-tragic hero whose black blade cleaves fate and sorrow.
 F:EVN_AFFINITY | MEL_AFFINITY | PER_PENALTY | MOR_CURSE | STL_AFFINITY
+U:WIL_TURIN
 S:2:2:2:-1
 C:5:2:0:10:0:5  # Follow-Through  # Smite # Strength in Adversity
 D:Dark-haired warrior, tragic son of doom, shadow-haunted mortal hero, 
@@ -557,7 +559,7 @@ N:33:Celeborn
 A:, Prince of Doriath
 B:You guard quietly-wise prince, whose strength endures beyond sorrow.
 S:1:1:0:1
-F:ARC_PENALTY | FREE | BOW_PROFICIENCY
+F:ARC_PENALTY | FREE | BOW_PROFICIENCY| SMT_PENALTY
 C:7:11
 D:Noble prince of twilight woods, wise lord whose heart bears hidden grief, 
 D:destined guardian of fading realms beneath shadows yet unseen. 
@@ -570,7 +572,7 @@ D:Celeborn, silent watcher, whose heart endures beyond sorrowful loss.
 N:34:Daeron
 A: the Minstrel
 B:You sing sorrowfully-minstrel whose lament echoes through twilight.
-F:SNG_AFFINITY | WIL_PENALTY | PER_PENALTY
+F:SNG_AFFINITY | WIL_PENALTY | PER_PENALTY| SMT_PENALTY
 S:0:1:-1:3
 C:7:5:7:12 # Song of Staunching and Woven Themes
 D:Greatest minstrel of twilight realm, singer whose melodies haunted woods, 
@@ -584,7 +586,7 @@ D:Daeron, mournful voice whose music outlasts realms and time itself.
 N:35:Melian Maia
 A:, Queen of Doriath
 B:You weave enchantment-guardian queen, whose power shields from shadow.
-F:WIL_AFFINITY | SNG_AFFINITY | PER_AFFINITY | ARC_PENALTY
+F:WIL_AFFINITY | SNG_AFFINITY | PER_AFFINITY | ARC_PENALTY| SMT_PENALTY
 U:SNG_MEL
 S:1:0:1:5
 C:7:11:7:6 # Song of Mastery Song of Thresholds
@@ -609,3 +611,18 @@ D:foreshadowing betrayal born of lust for jewels and glory.
 D:Destiny stained by pursuit ruthless, turning kin against kin, 
 D:marred forever by treachery against love and friendship sacred; 
 D:Celegorm, proud hunter fallen, memory darkened by tragic desire. 
+
+N:37:Eol
+A: the Dark Elf
+B:You hunt relentlessly-fiery prince whose pride leads to treachery.
+F:SMT_AFFINITY | TREACHERY | BOW_PROFICIENCY | SNG_PENALTY | STL_AFFINITY | PER_AFFINITY
+U:SMT_EOL
+S:1:2:2:0
+C:0:11  # Two Weapon Fighting
+D:Dark-hearted smith dwelling deep beneath gloomy forest halls unseen, 
+D:crafting meteoric iron into blades of peril and subtle enchantment. 
+D:Secretive and proud, bound by jealousy, shadow hiding heart’s desire, 
+D:fate entwined tragically with Aredhel, foreshadowing ruin and loss. 
+D:Father to son who shares dark destiny, weaving doom in hidden halls, 
+D:remembered bitterly in dark tales whispered beneath forest twilight; 
+D:Eol, elf whose pride forged tragedy beneath shadowed leaves of Nan Elmoth. 
