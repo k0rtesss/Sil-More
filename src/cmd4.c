@@ -290,14 +290,15 @@ void do_cmd_character_sheet(void)
 
         /* Prompt */
         Term_putstr(1, 23, -1, TERM_SLATE,
-            "notes   story stats   save to a file   abilities   increase "
-            "skills   ESC");
+            "notes  story stats  save to file  abilities  curses  increase "
+            "skills  ESC");
         Term_putstr(1, 23, -1, TERM_L_WHITE, "n");
-        Term_putstr(9, 23, -1, TERM_L_WHITE, "s");
-        Term_putstr(33, 23, -1, TERM_L_WHITE, "f");
-        Term_putstr(40, 23, -1, TERM_L_WHITE, "a");
-        Term_putstr(52, 23, -1, TERM_L_WHITE, "i");
-        Term_putstr(70, 23, -1, TERM_L_WHITE, "ESC");
+        Term_putstr(8, 23, -1, TERM_L_WHITE, "s");
+        Term_putstr(29, 23, -1, TERM_L_WHITE, "f");
+        Term_putstr(35, 23, -1, TERM_L_WHITE, "a");
+        Term_putstr(46, 23, -1, TERM_L_WHITE, "c");
+        Term_putstr(54, 23, -1, TERM_L_WHITE, "i");
+        Term_putstr(71, 23, -1, TERM_L_WHITE, "ESC");
 
         /* Query */
         ch = inkey();
@@ -326,8 +327,8 @@ void do_cmd_character_sheet(void)
             print_metarun_stats();
         }
 
-        /* Change name */
-        else if (ch == 'd')
+        /* Curses Menu */
+        else if (ch == 'c')
         {
             dbg_show_active_flags();
         }

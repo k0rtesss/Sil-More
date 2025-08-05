@@ -544,7 +544,7 @@ void dbg_show_active_flags(void)
     Term_clear();
 #ifdef DEBUG_CURSES
     Term_putstr(0, row++, -1, TERM_YELLOW,
-                "*** DEBUG: meta-run DEBUG – a:add-curse  c:clear-all  e:+death  1-3:+sils  any:key:exit ***");
+                "*** DEBUG: meta-run DEBUG - a:add-curse  c:clear-all  e:+death  1-3:+sils  any:key:exit ***");
 #endif
 
     for (size_t g = 0; g < N_ELEMENTS(grp); g++)
@@ -684,15 +684,13 @@ void dbg_show_active_flags(void)
                 "[a] add random curse   [x] clear all   [e] +death   [1-3] escape   [any other] quit");
 #else
     Term_putstr(0, row++, -1, TERM_L_DARK,
-                "[any key] quit");
+                "[a] add random curse   [any key] quit");
 #endif
 }
 
 /* ----------------------------------------------------------------- */
 
 /* ===================  key-handling loop  ========================= */
-#ifdef DEBUG_CURSES
-// static bool in_loop = false;  
     while (true)
     {
         int ch = inkey();
@@ -704,6 +702,7 @@ void dbg_show_active_flags(void)
             dbg_show_active_flags();          /* redraw */
             break;
         }
+#ifdef DEBUG_CURSES
         else if (ch == 'x')       /* clear all curses */
         {
             if (get_check("Erase ALL curses for this meta-run? "))
@@ -738,11 +737,9 @@ void dbg_show_active_flags(void)
             dbg_show_active_flags();
             break;
         }
+#endif
          break;                    /* any other key exits */
      }
-#else
-(void)inkey();                /* wait for a key, then return */
-#endif
 /* ================================================================ */
 }
 

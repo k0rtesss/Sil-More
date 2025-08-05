@@ -35,3 +35,6 @@ src/silq2.txt
 src.code-workspace
 src.code-workspace
 src.code-workspace
+/Sil-More-alpha-0.72
+/lib/xtra/graf/__pycache__
+lib/xtra/graf/check_morgoth.py

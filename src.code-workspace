@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "lib/edit"
+		},
+		{
+			"path": "lib/pref"
+		},
+		{
+			"path": "lib/xtra"
 		}
 	],
 	"settings": {}
