@@ -59,6 +59,7 @@ void metarun_update_on_exit(bool died,
 /* Call exactly once when a character leaves the dungeon.  Decides if
  * the run ends and persists everything.                              */
 
+void check_run_end(void);                        /* Check win/loss conditions */
 void metarun_increment_deaths(void);             /* Shortcut: +1 death      */
 void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
@@ -104,6 +105,7 @@ void metarun_clear_all_curses(void);   /* zero every curse counter     */
 void add_curse_stack(int idx);         /* +1 stack respecting caps     */
 /* NEW: show a menu of all *known* curses (those with CURSE_SEEN). */
 void show_known_curses_menu(void);
+void choose_difficulty_level(void);   /* Difficulty selection menu    */
 
 /* Flag-query utilities used throughout the code-base                 */
 u32b curse_flag_mask(void);            /* bitmask of active flags      */

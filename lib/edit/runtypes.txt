@@ -12,16 +12,37 @@
 
 V:1.5.0
 
-N:0:Glorfindel
+N:0:Echoes (Normal)
 C:
-U:TERM_WHITE
+U:White
 W:15
 L:15
 H:*          # applies to all heroes
 
-N:1:Galadriel
+N:1:Echoes (Hard)
+C:0|1|2|3|4|5|6|7|8|9|10|11
+U:LightGreen
+W:15
+L:15
+H:*          # applies to all heroes
+
+N:2:Echoes (Very Hard)
+C:
+U:Orange
+W:15
+L:15
+H:*          # applies to all heroes
+
+N:3:Echoes (Impossible)
+C:
+U:Red
+W:15
+L:15
+H:*          # applies to all heroes
+
+N:4:Iron Gates (Normal)
 C:1|5|7
-U:TERM_RED
+U:Red
 W:10         # quicker win variant
 L:2          # ironman style – 2 deaths ends the run
 H:0|5|7|12   # only certain heroes

@@ -3091,9 +3091,18 @@ static void print_story_intro(void)
         Term_xtra(TERM_XTRA_DELAY, 1000);
     } 
  
-    /* Final "finish" prompt */ 
+    /* Final "finish" prompt with difficulty option */ 
+    Term_putstr(8, h - 2, -1, TERM_L_WHITE, "[c] Change difficulty (experienced players)");
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to finish)"); 
-    inkey(); 
+    
+    /* Handle input */
+    char key = inkey();
+    if (key == 'c' || key == 'C')
+    {
+        Term_clear();
+        choose_difficulty_level();
+    }
+    
     Term_clear(); 
 }
 
@@ -3129,6 +3138,14 @@ static void print_story_intro(void)
 PlayResult play_game(void)
 {
     bool new_game = false;
+    
+    /* Safety: Fix character_icky imbalance from previous game sessions */
+    if (character_icky != 0)
+    {
+        log_info("play_game: Fixing character_icky imbalance - was %d, resetting to 0", character_icky);
+        character_icky = 0;
+    }
+    
     /* Hack -- Increase "icky" depth */
     character_icky++;
     log_debug("play_game: character_icky incremented to %d", character_icky);

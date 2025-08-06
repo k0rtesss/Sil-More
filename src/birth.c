@@ -1350,6 +1350,11 @@ NavResult character_creation(void)
             if (!get_player_house())
             {
                 phase = 1;          /* Esc here → go back to race */
+                /* Clear the house display area when going back to race selection */
+                for (i = HEADER_ROW; i <= TABLE_ROW + A_MAX + 10; i++)
+                {
+                    Term_erase(TOTAL_AUX_COL, i, 255);
+                }
                 continue;
             }
 
