@@ -71,30 +71,22 @@ static void apply_difficulty_curses(metarun *m)
 
     runtype_type *rt = &runtype_info[m->type];
     
-    /* Apply curses for difficulty levels 2, 3, 4 */
-    if (m->type >= 2 && m->type <= 4)
+    log_info("Applying curses for runtype %d (%s)", m->type, rt->name);
+    
+    /* Apply curses based on runtype configuration */
+    if (rt->start_curses)
     {
-        int stacks = m->type - 1; /* 2->1, 3->2, 4->3 stacks */
-        log_info("Applying difficulty level %d (%d stacks each for curses 0-11)", m->type, stacks);
-        
-        /* Apply stacks to curses 0-11 (basic stat/skill penalties) */
-        for (int curse_id = 0; curse_id <= 11; curse_id++)
-        {
-            CURSE_SET(curse_id, (byte)stacks);
-            CURSE_SEEN_SET(curse_id); /* make them visible */
-            log_debug("Applied %d stacks of curse %d", stacks, curse_id);
-        }
-    }
-    else if (rt->start_curses)
-    {
-        /* Handle other runtypes with start_curses bitmask */
         for (int curse_id = 0; curse_id < 32; curse_id++)
         {
             if (rt->start_curses & (1UL << curse_id))
             {
-                CURSE_SET(curse_id, 1);
-                CURSE_SEEN_SET(curse_id);
-                log_debug("Applied 1 stack of curse %d from runtype", curse_id);
+                byte stacks = rt->curse_stacks[curse_id];
+                if (stacks > 0)
+                {
+                    CURSE_SET(curse_id, stacks);
+                    CURSE_SEEN_SET(curse_id);
+                    log_debug("Applied %d stacks of curse %d from runtype", stacks, curse_id);
+                }
             }
         }
     }
@@ -1457,6 +1449,61 @@ void print_metarun_stats(void)
     check_run_end();
 }
 
+/* Generate curse description for a runtype */
+static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
+{
+    if (!runtype_info || runtype_id >= z_info->rt_max || buf_size < 64)
+    {
+        strncpy(buf, "No curses", buf_size - 1);
+        buf[buf_size - 1] = '\0';
+        return;
+    }
+    
+    runtype_type *rt = &runtype_info[runtype_id];
+    
+    if (!rt->start_curses)
+    {
+        strncpy(buf, "No curses", buf_size - 1);
+        buf[buf_size - 1] = '\0';
+        return;
+    }
+    
+    /* Count curses and determine stack ranges */
+    int curse_count = 0;
+    int min_stacks = 255, max_stacks = 0;
+    
+    for (int curse_id = 0; curse_id < 32; curse_id++)
+    {
+        if (rt->start_curses & (1UL << curse_id))
+        {
+            curse_count++;
+            int stacks = rt->curse_stacks[curse_id];
+            if (stacks < min_stacks) min_stacks = stacks;
+            if (stacks > max_stacks) max_stacks = stacks;
+        }
+    }
+    
+    if (curse_count == 0)
+    {
+        strncpy(buf, "No curses", buf_size - 1);
+        buf[buf_size - 1] = '\0';
+        return;
+    }
+    
+    /* Format the description */
+    if (min_stacks == max_stacks)
+    {
+        if (min_stacks == 1)
+            snprintf(buf, buf_size, "Curses: %d x %d stack", curse_count, min_stacks);
+        else
+            snprintf(buf, buf_size, "Curses: %d x %d stacks", curse_count, min_stacks);
+    }
+    else
+    {
+        snprintf(buf, buf_size, "Curses: %d (%d-%d stacks)", curse_count, min_stacks, max_stacks);
+    }
+}
+
 /* Difficulty selection menu */
 static void choose_difficulty_menu(void)
 {
@@ -1518,7 +1565,10 @@ static void choose_difficulty_menu(void)
             }
             
             char desc_buf[128];
-            snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Lose: %d deaths", win_goal, death_limit);
+            char curse_buf[64];
+            get_curse_description(i, curse_buf, sizeof(curse_buf));
+            snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Lose: %d deaths, %s", 
+                     win_goal, death_limit, curse_buf);
             
             char name_buf[128];
             snprintf(name_buf, sizeof(name_buf), "%d) %s", i, rt_name);

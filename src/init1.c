@@ -1108,12 +1108,39 @@ errr parse_rt_info(char *buf, header *head)
     if (buf[0] == 'C')
     {
         if (!rt_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+        
+        /* Initialize curse_stacks array to 0 */
+        memset(rt_ptr->curse_stacks, 0, sizeof(rt_ptr->curse_stacks));
+        rt_ptr->start_curses = 0;
+        
+        /* Parse curse specifications */
         char *tok = strtok(buf+2, "|");
         while (tok)
         {
-            int bit = atoi(tok);
-            if (bit >= 0 && bit < 32)
-                rt_ptr->start_curses |= (1UL << bit);
+            char *colon = strchr(tok, ':');
+            if (colon)
+            {
+                /* Format: curse_id:stack_count */
+                *colon = '\0';
+                int curse_id = atoi(tok);
+                int stack_count = atoi(colon + 1);
+                
+                if (curse_id >= 0 && curse_id < 32 && stack_count > 0 && stack_count <= 255)
+                {
+                    rt_ptr->start_curses |= (1UL << curse_id);
+                    rt_ptr->curse_stacks[curse_id] = (byte)stack_count;
+                }
+            }
+            else
+            {
+                /* Legacy format: just curse_id (default to 1 stack) */
+                int curse_id = atoi(tok);
+                if (curse_id >= 0 && curse_id < 32)
+                {
+                    rt_ptr->start_curses |= (1UL << curse_id);
+                    rt_ptr->curse_stacks[curse_id] = 1;
+                }
+            }
             tok = strtok(NULL, "|");
         }
         return 0;

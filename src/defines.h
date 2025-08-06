@@ -185,6 +185,37 @@
 #define MORGOTH_DEPTH 20
 
 /*
+ * Depth-based wall graphics configuration
+ */
+#define DEPTH_BASED_WALLS 0  /* Set to 0 to disable depth-based wall graphics */
+
+#if DEPTH_BASED_WALLS
+/* Maximum number of depth tiers for wall graphics */
+#define MAX_WALL_DEPTH_TIERS 6
+
+/* Structure to define depth-based wall tile mappings */
+typedef struct depth_wall_tier {
+    int min_depth;      /* Minimum depth for this tier (inclusive) */
+    int max_depth;      /* Maximum depth for this tier (inclusive) */
+    int wall_row;       /* Tileset row for wall tiles */
+    int wall_col;       /* Tileset column for wall tiles */
+    int vein_row;       /* Tileset row for vein tiles */
+    int vein_col;       /* Tileset column for vein tiles */
+} depth_wall_tier;
+
+/* Default depth-based wall tier configuration */
+/* Distribution: 2+3+4+4+4+3 levels = 20 total levels */
+static const depth_wall_tier wall_depth_tiers[MAX_WALL_DEPTH_TIERS] = {
+    { 1,  2,  0, 4,  0, 6},   /* Depths 1-2: original wall/vein pair */
+    { 3,  5, 15,14, 15,15},   /* Depths 3-5: first new pair */
+    { 6,  9, 15,16, 15,17},   /* Depths 6-9: second new pair */
+    {10, 13, 15,18, 15,19},   /* Depths 10-13: third new pair */
+    {14, 17, 15,20, 15,21},   /* Depths 14-17: fourth new pair */
+    {18, 20, 15,22, 15,23}    /* Depths 18-20: fifth new pair */
+};
+#endif /* DEPTH_BASED_WALLS */
+
+/*
  * Locations of various monsters in the monster.txt file
  */
 

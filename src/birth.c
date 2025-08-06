@@ -1049,6 +1049,24 @@ static void race_aux_hook(birth_menu r_str)
     Term_putstr(RACE_AUX_COL, TABLE_ROW + A_MAX + 4, -1, TERM_WHITE,
         "                        ");
 
+    /* Clear the TOTAL_AUX_COL area (where house info was displayed) */
+    Term_putstr(TOTAL_AUX_COL, HEADER_ROW, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 1, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 2, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 3, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 4, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 5, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 6, -1, TERM_WHITE,
+        "                                         ");
+    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 7, -1, TERM_WHITE,
+        "                                         ");
+
     // print_rh_flags(race, 0, RACE_AUX_COL, TABLE_ROW + A_MAX + 1);
 }
 
@@ -1114,8 +1132,6 @@ static void house_aux_hook(birth_menu c_str)
     char s[128];
     byte attr;
 
-
-
     /* Extract the proper house index from the string. */
     for (house_idx = 0; house_idx < z_info->c_max; house_idx++)
     {
@@ -1126,7 +1142,24 @@ static void house_aux_hook(birth_menu c_str)
     if (house_idx == z_info->c_max)
         return;
 
-    /* Display relevant details. */
+    /* Clear the entire TOTAL_AUX_COL area FIRST before displaying new info */
+    /* Clear from HEADER_ROW down but stop before DESCRIPTION_ROW to preserve history */
+    for (i = HEADER_ROW; i < DESCRIPTION_ROW; i++)
+    {
+        Term_putstr(TOTAL_AUX_COL, i, -1, TERM_WHITE,
+            "                                         ");
+        /* Also clear the right side area where penalties/flags appear */
+        Term_putstr(TOTAL_AUX_COL + 21, i, -1, TERM_WHITE,
+            "                                         ");
+    }
+    
+    /* Also clear the abilities area (col + 7) but only in the same range */
+    for (i = 0; i < DESCRIPTION_ROW; i++)
+    {
+        Term_erase(TOTAL_AUX_COL + 7, i, 60);  /* Wider clearing */
+    }
+
+    /* Now display the new stats */
     for (i = 0; i < A_MAX; i++)
     {
         /*dump potential total stats*/
@@ -1149,25 +1182,6 @@ static void house_aux_hook(birth_menu c_str)
 
         Term_putstr(TOTAL_AUX_COL + 4, TABLE_ROW + i, -1, attr, s);
     }
-
-    /* Display the race flags */
-
-    Term_putstr(TOTAL_AUX_COL, HEADER_ROW, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 1, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 2, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 3, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 4, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 5, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 6, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 7, -1, TERM_WHITE,
-        "                                         ");
     // Check dead   
     // if (c_str.ghost) Term_putstr(TOTAL_AUX_COL, QUESTION_ROW + A_MAX + 7, -1, TERM_RED,
     //     "Dead");

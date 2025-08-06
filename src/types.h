@@ -773,6 +773,7 @@ typedef struct runtype_type {
     u16b id;
     char name[32];
     u32b start_curses;             /* default curses mask (bits 0..31)      */
+    byte curse_stacks[32];         /* stack count for each curse (0 = disabled) */
     byte colour;                   /* display colour (TERM_*)               */
     byte win_con;                  /* target Silmarils to win (default 15)  */
     byte lose_con;                 /* deaths to lose (min 1; default 15)    */
