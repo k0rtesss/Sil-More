@@ -39,3 +39,7 @@ src.code-workspace
 /lib/xtra/graf/__pycache__
 lib/xtra/graf/check_morgoth.py
 /Sil-More-alpha-0.73
+/Sil-More-alpha-0.74
+/lib/xtra/graf/Tiles_test
+/src/Visuals
+/src/__pycache__

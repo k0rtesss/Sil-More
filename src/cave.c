@@ -1039,8 +1039,102 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Normal char */
             c = f_ptr->x_char;
 
-            /* Special lighting effects (walls only) */
+#if DEPTH_BASED_WALLS
+            /* Debug: Check if we reach wall processing */
+            if (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) {
+                log_trace("Wall feature %d detected, graphics_are_ascii()=%d", feat, graphics_are_ascii());
+            }
+            
+            /* Apply depth-based wall graphics for non-ASCII graphics */
+            if (!graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL))
+            {
+                log_trace("DEPTH_BASED_WALLS: Processing feature %d, graphics_are_ascii()=%d", feat, graphics_are_ascii());
+                
+                /* Find the appropriate depth tier */
+                int tier_index = -1;
+                for (int i = 0; i < MAX_WALL_DEPTH_TIERS; i++) {
+                    if (p_ptr->depth >= wall_depth_tiers[i].min_depth && 
+                        p_ptr->depth <= wall_depth_tiers[i].max_depth) {
+                        tier_index = i;
+                        break;
+                    }
+                }
+                
+                log_trace("DEPTH_BASED_WALLS: tier_index=%d, depth=%d", tier_index, p_ptr->depth);
+                
+                /* If we found a matching tier, apply custom graphics */
+                if (tier_index >= 0) {
+                    /* Get the cave color for this location */
+                    byte color_value = cave_color[y][x];
+                    
+                    log_trace("DEPTH_BASED_WALLS: At (%d,%d) feat=%d, cave_color=%d, depth=%d", y, x, feat, color_value, p_ptr->depth);
+                    
+                    /* Note: cave_color comes from vault.txt C: lines or get_depth_color() */
+                    /* Don't override - use the actual cave_color value */
+                    
+                    /* Set tile coordinates based on color and feature type */
+                    if (feat == FEAT_QUARTZ) {
+                        /* Vein tiles based on color */
+                        if (color_value == 0) {
+                            /* Default vein tile with graphics bit */
+                            a = (byte)(0 | 0x80); c = (char)(6 | 0x80);
+                        } else if (color_value == 1) {
+                            /* Colored vein tile at row 15, col 18 */
+                            a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
+                        } else if (color_value == 2) {
+                            /* Vault vein tile - use row 15, col 16 for testing */
+                            a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
+                        } else {
+                            /* Other colors - use colored vein as fallback */
+                            a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
+                        }
+                    } else {
+                        /* All other wall types based on color */
+                        if (color_value == 0) {
+                            /* Default wall tile with graphics bit */
+                            a = (byte)(0 | 0x80); c = (char)(4 | 0x80);
+                        } else if (color_value == 1) {
+                            /* Colored wall tile from row 15, col 14 */
+                            a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
+                        } else if (color_value == 2) {
+                            /* Vault wall tile - use row 15, col 16 for testing */
+                            a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
+                        } else {
+                            /* Other colors - use colored wall as fallback */
+                            a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
+                        }
+                    }
+                    
+                    /* Apply standard lighting effects (+1 for dark version) */
+                    if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
+                        if (!(info & (CAVE_SEEN)) && (p_ptr->blind || !(info & (CAVE_GLOW)))) {
+                            c += 1;
+                        }
+                    }
+                    
+                    log_trace("DEPTH_BASED_WALLS: final_a=%d, final_c=%d", a, c);
+                    
+                    /* Apply the updated tile coordinates to both main and terrain */
+                    *ap = a;
+                    *cp = c;
+                    *tap = a;
+                    *tcp = c;
+                    
+                    /* Early return since we've set the values */
+                    return;
+                } else {
+                    /* No matching tier found, use standard lighting */
+                    special_lighting_wall(&a, &c, feat, info);
+                }
+            }
+            else {
+                /* Standard lighting effects for non-wall features */
+                special_lighting_wall(&a, &c, feat, info);
+            }
+#else
+            /* Depth-based walls disabled, use standard lighting only */
             special_lighting_wall(&a, &c, feat, info);
+#endif /* DEPTH_BASED_WALLS */
         }
 
         /* Unknown */
@@ -4242,12 +4336,39 @@ void gates_illuminate(bool daytime)
 }
 
 /*
- * Change the "feat" flag for a grid, and notice/redraw the grid
+ * Get the default wall color for a given depth
  */
-void cave_set_feat(int y, int x, int feat)
+byte get_depth_color(int depth)
+{
+    /* Testing color scheme: */
+    /* 0 = default tiles (depth 1) */
+    /* 1 = colored tiles (depth 2+) */ 
+    /* 2 = vault tiles (set separately) */
+    
+    if (depth == 1) return 0;      /* Level 1 = color 0 (default walls) */
+    else return 1;                 /* Level 2+ = color 1 (colored walls) */
+}
+
+/*
+ * Change the "feat" flag and color for a grid, and notice/redraw the grid
+ */
+void cave_set_feat_with_color(int y, int x, int feat, int color)
 {
     /* Change the feature */
     cave_feat[y][x] = feat;
+
+    /* Set the color (0 means use depth default) */
+    if (color == 0)
+    {
+        /* Use depth-based default color */
+        cave_color[y][x] = get_depth_color(p_ptr->depth);
+        log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=0 -> cave_color=%d", y, x, feat, cave_color[y][x]);
+    }
+    else
+    {
+        cave_color[y][x] = color;
+        log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=%d -> cave_color=%d", y, x, feat, color, cave_color[y][x]);
+    }
 
     /* Handle "wall/door" grids */
     if (((feat >= FEAT_DOOR_HEAD) && (feat <= FEAT_WALL_TAIL))
@@ -4271,6 +4392,14 @@ void cave_set_feat(int y, int x, int feat)
         /* Redraw */
         lite_spot(y, x);
     }
+}
+
+/*
+ * Change the "feat" flag for a grid, and notice/redraw the grid
+ */
+void cave_set_feat(int y, int x, int feat)
+{
+    cave_set_feat_with_color(y, x, feat, 0); /* Use default depth color */
 }
 
 /*

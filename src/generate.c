@@ -2382,6 +2382,8 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     int original_object_level = object_level;
     int original_monster_level = monster_level;
 
+    log_trace("build_vault: Building vault '%s' with color=%d", v_name + v_ptr->name, v_ptr->color);
+
     cptr t;
 
     // Check that the vault doesn't contain invalid things for its depth
@@ -2458,28 +2460,28 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             /* Granite wall (outer) */
             case '$':
             {
-                cave_set_feat(y, x, FEAT_WALL_OUTER);
+                cave_set_feat_with_color(y, x, FEAT_WALL_OUTER, v_ptr->color);
                 break;
             }
 
             /* Granite wall (inner) */
             case '#':
             {
-                cave_set_feat(y, x, FEAT_WALL_INNER);
+                cave_set_feat_with_color(y, x, FEAT_WALL_INNER, v_ptr->color);
                 break;
             }
 
             /* Quartz vein */
             case '%':
             {
-                cave_set_feat(y, x, FEAT_QUARTZ);
+                cave_set_feat_with_color(y, x, FEAT_QUARTZ, v_ptr->color);
                 break;
             }
 
             /* Rubble */
             case ':':
             {
-                cave_set_feat(y, x, FEAT_RUBBLE);
+                cave_set_feat_with_color(y, x, FEAT_RUBBLE, v_ptr->color);
                 break;
             }
 
@@ -3452,13 +3454,16 @@ static void set_perm_boundry(void)
 static void basic_granite(void)
 {
     int y, x;
+    int depth_color = get_depth_color(p_ptr->depth);
+
+    log_trace("basic_granite: Setting all walls to depth color=%d for depth=%d", depth_color, p_ptr->depth);
 
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
     {
         for (x = 0; x < p_ptr->cur_map_wid; x++)
         {
-            /* Create granite wall */
-            cave_set_feat(y, x, FEAT_WALL_EXTRA);
+            /* Create granite wall with depth-based color */
+            cave_set_feat_with_color(y, x, FEAT_WALL_EXTRA, depth_color);
 
             // initialise the corridor id array
             cave_corridor1[y][x] = -1;
@@ -3995,6 +4000,9 @@ void generate_cave(void)
 {
     int y, x, i;
 
+    log_info("generate_cave: Function entry - about to start");
+    log_info("generate_cave: Starting cave generation");
+
     /* The dungeon is not ready */
     character_dungeon = false;
 
@@ -4042,6 +4050,16 @@ if (playerturn == 0) {
 }
 
 
+    log_trace("generate_cave: About to check cave_color array allocation");
+    
+    /* Safety check: make sure cave_color is allocated */
+    if (!cave_color) {
+        log_error("generate_cave: cave_color array is not allocated!");
+        return;
+    }
+    
+    log_trace("generate_cave: cave_color array is properly allocated");
+
     // reset smithing leftover (as there is no access to the old forge)
     p_ptr->smithing_leftover = 0;
 
@@ -4055,10 +4073,19 @@ if (playerturn == 0) {
 
         cptr why = NULL;
 
+        /* Paranoia: Check that cave_color is allocated */
+        if (!cave_color)
+        {
+            log_debug("ERROR: cave_color array is not allocated!");
+            quit("cave_color array not allocated");
+        }
+
         /* Reset */
         o_max = 1;
         mon_max = 1;
         feeling = 0;
+
+        log_trace("generate_cave: About to start cave initialization loop");
 
         /* Start with a blank cave */
         for (y = 0; y < MAX_DUNGEON_HGT; y++)
@@ -4070,6 +4097,9 @@ if (playerturn == 0) {
 
                 /* No features */
                 cave_feat[y][x] = 0;
+
+                /* No colors (use default) */
+                cave_color[y][x] = 0;
 
                 /* No objects */
                 cave_o_idx[y][x] = 0;
@@ -4086,11 +4116,15 @@ if (playerturn == 0) {
             }
         }
 
+        log_trace("generate_cave: Cave initialization completed successfully");
+
         // reset the wandering monster pauses
         for (i = 0; i < MAX_FLOWS; i++)
         {
             wandering_pause[i] = 0;
         }
+
+        log_trace("generate_cave: Wandering monster pauses reset");
 
         /* Mega-Hack -- no player yet */
         p_ptr->px = p_ptr->py = 0;
@@ -4114,29 +4148,35 @@ if (playerturn == 0) {
         /* Build the gates to Angband */
         if (!p_ptr->depth)
         {
+            log_trace("generate_cave: Building gates to Angband");
             gates_gen();
 
             /* Hack -- Clear stairs request */
             p_ptr->create_stair = 0;
+            log_trace("generate_cave: Gates generation completed");
         }
 
         /* Build Morgoth's throne room */
         else if (p_ptr->depth == MORGOTH_DEPTH)
         {
+            log_trace("generate_cave: Building Morgoth's throne room");
             throne_gen();
 
             /* Hack -- Clear stairs request */
             p_ptr->create_stair = 0;
+            log_trace("generate_cave: Throne room generation completed");
         }
 
         /* Build a real level */
         else
         {
+            log_trace("generate_cave: Building regular dungeon level");
             /* Make a dungeon, or report the failure to make one*/
             if (cave_gen())
                 okay = true;
             else
                 okay = false;
+            log_trace("generate_cave: Regular level generation completed, okay=%s", okay ? "true" : "false");
         }
 
         /*message*/

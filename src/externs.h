@@ -131,6 +131,7 @@ extern byte* temp_y;
 extern byte* temp_x;
 extern u16b (*cave_info)[256];
 extern byte (*cave_feat)[MAX_DUNGEON_WID];
+extern byte (*cave_color)[MAX_DUNGEON_WID];
 extern s16b (*cave_light)[MAX_DUNGEON_WID];
 extern s16b (*cave_o_idx)[MAX_DUNGEON_WID];
 extern s16b (*cave_m_idx)[MAX_DUNGEON_WID];
@@ -305,6 +306,8 @@ extern void wiz_light(void);
 extern void wiz_dark(void);
 extern void gates_illuminate(bool daytime);
 extern void cave_set_feat(int y, int x, int feat);
+extern void cave_set_feat_with_color(int y, int x, int feat, int color);
+extern byte get_depth_color(int depth);
 extern int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);

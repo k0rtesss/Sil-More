@@ -3350,6 +3350,7 @@ PlayResult play_game(void)
     if (!character_dungeon)
     {
         log_info("Generating initial dungeon level");
+        /* About to call generate_cave() function */
         generate_cave();
         log_debug("Initial dungeon level generated successfully");
     }

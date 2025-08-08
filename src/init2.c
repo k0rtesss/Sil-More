@@ -1142,6 +1142,10 @@ extern void re_init_some_things(void)
     FREE(cave_feat);
     C_MAKE(cave_feat, MAX_DUNGEON_HGT, byte_wid);
 
+    /* Color array */
+    FREE(cave_color);
+    C_MAKE(cave_color, MAX_DUNGEON_HGT, byte_wid);
+
     /* Light array */
     FREE(cave_light);
     C_MAKE(cave_light, MAX_DUNGEON_HGT, s16b_wid);
@@ -1258,6 +1262,9 @@ static errr init_other(void)
 
     /* Feature array */
     C_MAKE(cave_feat, MAX_DUNGEON_HGT, byte_wid);
+
+    /* Color array */
+    C_MAKE(cave_color, MAX_DUNGEON_HGT, byte_wid);
 
     /* Light array */
     C_MAKE(cave_light, MAX_DUNGEON_HGT, s16b_wid);
@@ -1953,6 +1960,7 @@ void cleanup_angband(void)
     FREE(cave_o_idx);
     FREE(cave_m_idx);
     FREE(cave_feat);
+    FREE(cave_color);
     FREE(cave_info);
     FREE(cave_light);
 

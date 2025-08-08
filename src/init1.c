@@ -1744,6 +1744,9 @@ errr parse_v_info(char* buf, header* head)
         /* Point at the "info" */
         v_ptr = (vault_type*)head->info_ptr + i;
 
+        /* Initialize default values */
+        v_ptr->color = 0; /* Default to depth color */
+
         /* Store the name */
         if (!(v_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
@@ -1768,6 +1771,28 @@ errr parse_v_info(char* buf, header* head)
         v_ptr->rarity = rarity;
         v_ptr->hgt = 0;
         v_ptr->wid = 0;
+        /* Note: Don't reset color here - it may have been set by a C: line */
+    }
+
+    /* Process 'C' for "Color" (one line only) */
+    else if (buf[0] == 'C')
+    {
+        int color;
+
+        /* There better be a current v_ptr */
+        if (!v_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        /* Scan for the color value */
+        if (1 != sscanf(buf + 2, "%d", &color))
+            return (PARSE_ERROR_GENERIC);
+
+        /* Verify color range (0-255) */
+        if (color < 0 || color > 255)
+            return (PARSE_ERROR_GENERIC);
+
+        /* Save the color value */
+        v_ptr->color = color;
     }
 
     /* Hack -- Process 'F' for flags */

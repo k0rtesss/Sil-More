@@ -1452,10 +1452,10 @@ void display_player_xtra_info(int mode)
         score -= curse_flag_count(PEN_FLAG);                                            \
         if (score >  2) score =  2;                                                     \
         if (score < -2) score = -2;                                                     \
-        if (score ==  2)      PUSH(ma_buf,  ma_n,  LABEL " MA", attr_mastery);          \
-        else if (score == 1)  PUSH(af_buf,  af_n,  LABEL " AF", attr_affinity);         \
-        else if (score == -1) PUSH(pen_buf, pen_n, LABEL " PE", attr_penalty);          \
-        else if (score == -2) PUSH(pen_buf, pen_n, LABEL " GP", attr_gr_penalty);       \
+        if (score ==  2)      PUSH(ma_buf,  ma_n,  LABEL "++", attr_mastery);          \
+        else if (score == 1)  PUSH(af_buf,  af_n,  LABEL "+ ", attr_affinity);         \
+        else if (score == -1) PUSH(pen_buf, pen_n, LABEL "- ", attr_penalty);          \
+        else if (score == -2) PUSH(pen_buf, pen_n, LABEL "--", attr_gr_penalty);       \
     } while (0)
 
 #define HANDLE_UNIQUE(LABEL, FLAG, COLOR)                                               \
@@ -5833,8 +5833,8 @@ static void close_game_aux(void)
     }
 
      /* One more corpse recorded for this metarun */
-    log_info("Player died - updating metarun data"); 
-    metarun_update_on_exit(true,false,0);
+    log_info("Player died - updating metarun data");
+    if (!p_ptr->escaped) metarun_update_on_exit(true, false, 0);
 
      /* You are dead */
      print_tomb(&the_score);

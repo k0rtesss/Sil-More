@@ -453,6 +453,8 @@ struct vault_type
 
     byte forge; /* Is there a forge in it? */
 
+    byte color; /* Wall color (0 = use depth default) */
+
     u32b flags; /* Vault Flags (ie VLT flags) */
 };
 
