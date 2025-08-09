@@ -308,6 +308,7 @@ extern void gates_illuminate(bool daytime);
 extern void cave_set_feat(int y, int x, int feat);
 extern void cave_set_feat_with_color(int y, int x, int feat, int color);
 extern byte get_depth_color(int depth);
+extern void reset_depth_color_cache(void);
 extern int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);

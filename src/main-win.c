@@ -1279,7 +1279,22 @@ static bool init_graphics(void)
             wid = 16;
             hgt = 16;
 
-            name = "16X16.BMP";
+            /* Prefer a taller atlas if present (supports rows up to 31) */
+            /* Search order: 32-row sheets first, then fallback to default */
+            const char* candidates[] = {
+                "16X16-32.BMP",            /* 32 rows x N cols */
+                "16X16_MICROCHASM.BMP",    /* optional alt name */
+                "16X16_EXT.BMP",           /* optional alt name */
+                "16X16.BMP"                 /* legacy 16 rows */
+            };
+            int i;
+            name = NULL;
+            for (i = 0; i < (int)(sizeof(candidates)/sizeof(candidates[0])); i++)
+            {
+                path_build(buf, sizeof(buf), ANGBAND_DIR_XTRA_GRAF, candidates[i]);
+                if (check_file(buf)) { name = candidates[i]; break; }
+            }
+            if (!name) name = "16X16.BMP"; /* last resort */
 
             ANGBAND_GRAF = "new";
 
@@ -1299,6 +1314,18 @@ static bool init_graphics(void)
         /* Save the new sizes */
         infGraph.CellWidth = wid;
         infGraph.CellHeight = hgt;
+
+        /* Log atlas dimensions for diagnostics */
+        {
+            BITMAP bm;
+            if (GetObject(infGraph.hBitmap, sizeof(bm), &bm))
+            {
+                int cols = (wid > 0) ? (bm.bmWidth / wid) : 0;
+                int rows = (hgt > 0) ? (bm.bmHeight / hgt) : 0;
+                log_info("init_graphics: loaded %s (%dx%d px) cells=%dx%d (cell=%dx%d)",
+                         name, bm.bmWidth, bm.bmHeight, cols, rows, wid, hgt);
+            }
+        }
 
         /* Activate a palette */
         if (!new_palette())
@@ -2287,9 +2314,37 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
         byte a = ap[i];
         char c = cp[i];
 
-        /* Extract picture */
+        /* Extract picture indices from attr/char */
         int row = (a & 0x3F);
         int col = (c & 0x3F);
+
+        /* Optional safety: verify row/col are within the atlas bounds */
+        {
+            static HBITMAP s_last_hbm = NULL;
+            static int s_last_w1 = 0, s_last_h1 = 0;
+            static int s_rows = 0, s_cols = 0;
+            if (s_last_hbm != infGraph.hBitmap || s_last_w1 != w1 || s_last_h1 != h1)
+            {
+                BITMAP bm;
+                s_last_hbm = infGraph.hBitmap;
+                s_last_w1 = w1;
+                s_last_h1 = h1;
+                if (GetObject(infGraph.hBitmap, sizeof(bm), &bm))
+                {
+                    /* Compute number of rows/cols available in the atlas */
+                    s_cols = (w1 > 0) ? (bm.bmWidth / w1) : 0;
+                    s_rows = (h1 > 0) ? (bm.bmHeight / h1) : 0;
+                }
+                log_trace("main-win: atlas dims cols=%d rows=%d (cell=%dx%d)", s_cols, s_rows, w1, h1);
+            }
+            if (s_rows && s_cols && (row >= s_rows || col >= s_cols))
+            {
+                log_info("main-win: WARN out-of-range tile row=%d col=%d (max rows=%d cols=%d)", row, col, s_rows, s_cols);
+                /* Clamp to prevent GDI from sampling outside */
+                if (row >= s_rows) row = s_rows - 1;
+                if (col >= s_cols) col = s_cols - 1;
+            }
+        }
 
         bool alert = (c & GRAPHICS_ALERT_MASK);
         bool glow = (a & GRAPHICS_GLOW_MASK);

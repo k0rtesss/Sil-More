@@ -9,6 +9,33 @@
  */
 
 #include "angband.h"
+/* Standard headers for utility functions used in this file */
+#include <string.h>
+#include <stdlib.h>
+
+/* Color/group codes used for depth-based wall/vein rendering and selection */
+#ifndef COLOR_GREY
+#define COLOR_GREY    3
+#define COLOR_GREEN   4
+#define COLOR_BLUE    5
+#define COLOR_RED     6
+#define COLOR_PURPLE  7
+#define COLOR_BLACK   8
+#endif
+
+#ifndef GROUP_GREY
+#define GROUP_GREY    1
+#define GROUP_GREEN   2
+#define GROUP_BLUE    3
+#define GROUP_RED     4
+#define GROUP_PURPLE  5
+#define GROUP_BLACK   6
+#endif
+
+/* Per-level cached style for the grey group: 0=default, 1=style A, 2=style B */
+static int cached_grey_style = -1;
+/* Per-level cached style for the purple group: 0,1,2 map to the rows provided */
+static int cached_purple_style = -1;
 
 /*
  * Support for tilesets, lighting and transparency effects
@@ -664,6 +691,91 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info)
     }
 }
 
+/*
+ * Group-aware floor and door graphics (extensible)
+ * These helpers allow selecting alternative tiles for floors and doors
+ * based on the current level's group color (cave_color). If no specific
+ * override exists for a group, they return false and the caller keeps
+ * the default feature tiles. This provides a safe default while enabling
+ * future per-group customization for floors and doors.
+ */
+static bool is_door_feat(int feat)
+{
+    /* Open / broken doors */
+    if (feat == FEAT_OPEN || feat == FEAT_BROKEN) return true;
+    /* Closed/locked/jammed doors */
+    if ((feat >= FEAT_DOOR_HEAD) && (feat <= FEAT_DOOR_TAIL)) return true;
+    return false;
+}
+
+static bool apply_group_floor_graphics(int y, int x, int feat, int info, byte* a, char* c)
+{
+    /* Only consider non-ASCII graphics; ASCII uses chars/colors directly */
+    if (graphics_are_ascii()) return false;
+
+    /* Safety: only floors here */
+    if (feat != FEAT_FLOOR && feat != FEAT_RAGE_FLOOR && feat != FEAT_SUNLIGHT)
+        return false;
+
+    /* Respect per-cell color selection; 0/1/2 are defaults/legacy/vault */
+    byte color_value = cave_color[y][x];
+
+    /* Only override for explicit purple group */
+    if (color_value == COLOR_PURPLE)
+    {
+        /* Style-based floor tiles for purple group */
+        int row, col;
+        switch (cached_purple_style)
+        {
+        default:
+        case 0: row = 16; col = 20; break; /* (16,20) */
+        case 1: row = 16; col = 24; break; /* (16,24) */
+        case 2: row = 0;  col = 1;  break; /* (0,1)   */
+        }
+        *a = (byte)(row | 0x80);
+        *c = (char)(col | 0x80);
+        log_trace("FLOOR override: PURPLE style=%d at (%d,%d) -> (row=%d,col=%d)", cached_purple_style, y, x, row, col);
+        /* Let special_lighting_floor() adjust brightness afterwards */
+        return true;
+    }
+
+    (void)info; (void)a; (void)c; (void)y; (void)x; (void)feat;
+    return false;
+}
+
+static bool apply_group_door_graphics(int y, int x, int feat, int info, byte* a, char* c)
+{
+    /* Only consider non-ASCII graphics; ASCII uses chars/colors directly */
+    if (graphics_are_ascii()) return false;
+
+    if (!is_door_feat(feat)) return false;
+
+    /* Respect per-cell color selection; 0/1/2 are defaults/legacy/vault */
+    byte color_value = cave_color[y][x];
+
+    if (color_value == COLOR_PURPLE)
+    {
+        /* Style-based base door tile; adjust col by door state: open +1, broken +2 */
+        int row, col;
+        switch (cached_purple_style)
+        {
+        default:
+        case 0: row = 17; col = 4; break; /* base (17,4) */
+        case 1: row = 17; col = 7; break; /* base (17,7) */
+        case 2: row = 17; col = 7; break; /* base (17,7) */
+        }
+        if (feat == FEAT_OPEN) col += 1;
+        else if (feat == FEAT_BROKEN) col += 2;
+        *a = (byte)(row | 0x80);
+        *c = (char)(col | 0x80);
+        log_trace("DOOR override: PURPLE style=%d at (%d,%d) feat=%d -> (row=%d,col=%d)", cached_purple_style, y, x, feat, row, col);
+        return true;
+    }
+
+    (void)info; (void)feat; (void)a; (void)c; (void)y; (void)x;
+    return false;
+}
+
 int player_tile_offset()
 {
     object_type * main_wield_ptr = &inventory[INVEN_WIELD];
@@ -997,6 +1109,9 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Normal char */
             c = f_ptr->x_char;
 
+            /* Optional: apply group-based override for floor tiles */
+            (void)apply_group_floor_graphics(y, x, feat, info, &a, &c);
+
             /* Skip special light for the player tile. */
             special_lighting_floor(&a, &c, info, cave_light[y][x]);
         }
@@ -1039,6 +1154,9 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             /* Normal char */
             c = f_ptr->x_char;
 
+            /* Optional: apply group-based override for doors */
+            (void)apply_group_door_graphics(y, x, feat, info, &a, &c);
+
 #if DEPTH_BASED_WALLS
             /* Debug: Check if we reach wall processing */
             if (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) {
@@ -1076,31 +1194,62 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                     if (feat == FEAT_QUARTZ) {
                         /* Vein tiles based on color */
                         if (color_value == 0) {
-                            /* Default vein tile with graphics bit */
+                            /* Default vein tile (0,6) */
                             a = (byte)(0 | 0x80); c = (char)(6 | 0x80);
                         } else if (color_value == 1) {
-                            /* Colored vein tile at row 15, col 18 */
+                            /* Generic colored vein (15,18) */
                             a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
                         } else if (color_value == 2) {
-                            /* Vault vein tile - use row 15, col 16 for testing */
+                            /* Vault vein (15,16) */
                             a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
+                        } else if (color_value == COLOR_GREY) {
+                            /* Grey group vein: per-level style */
+                            if (cached_grey_style <= 0) { a = (byte)(0  | 0x80); c = (char)(6  | 0x80); } /* default */
+                            else                        { a = (byte)(15 | 0x80); c = (char)(18 | 0x80); } /* style A/B share vein */
+                        } else if (color_value == COLOR_PURPLE) {
+                            /* Purple group vein: style-specific */
+                            int row = 16, col = 2; /* default (16,2) */
+                            switch (cached_purple_style) {
+                                default:
+                                case 0: row = 16; col = 2; break; /* (16,2) */
+                                case 1: row = 16; col = 2; break; /* (16,2) */
+                                case 2: row = 16; col = 2; break; /* (16,2) */
+                            }
+                            a = (byte)(row | 0x80); c = (char)(col | 0x80);
+                            log_trace("DEPTH_BASED_WALLS: PURPLE vein at (%d,%d) style=%d -> (row=%d,col=%d)", y, x, cached_purple_style, row, col);
                         } else {
-                            /* Other colors - use colored vein as fallback */
+                            /* Other groups - fallback to generic colored vein */
                             a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
                         }
                     } else {
                         /* All other wall types based on color */
                         if (color_value == 0) {
-                            /* Default wall tile with graphics bit */
+                            /* Default wall tile (0,4) */
                             a = (byte)(0 | 0x80); c = (char)(4 | 0x80);
                         } else if (color_value == 1) {
-                            /* Colored wall tile from row 15, col 14 */
+                            /* Generic colored wall (15,14) */
                             a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
                         } else if (color_value == 2) {
-                            /* Vault wall tile - use row 15, col 16 for testing */
+                            /* Vault wall (15,16) */
                             a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
+                        } else if (color_value == COLOR_GREY) {
+                            /* Grey group wall: per-level style */
+                            if (cached_grey_style == 0)      { a = (byte)(0  | 0x80); c = (char)(4  | 0x80); } /* default */
+                            else if (cached_grey_style == 1) { a = (byte)(15 | 0x80); c = (char)(14 | 0x80); } /* style A */
+                            else                              { a = (byte)(15 | 0x80); c = (char)(20 | 0x80); } /* style B */
+                        } else if (color_value == COLOR_PURPLE) {
+                            /* Purple group wall: per-level style */
+                            int row, col;
+                            switch (cached_purple_style) {
+                                default:
+                                case 0: row = 16; col = 0;  break; /* (16,0)  */
+                                case 1: row = 17; col = 0;  break; /* (17,0)  */
+                                case 2: row = 16; col = 22; break; /* (16,22) */
+                            }
+                            a = (byte)(row | 0x80); c = (char)(col | 0x80);
+                            log_trace("DEPTH_BASED_WALLS: PURPLE wall style=%d -> (row=%d,col=%d)", cached_purple_style, row, col);
                         } else {
-                            /* Other colors - use colored wall as fallback */
+                            /* Other groups - fallback to generic colored wall */
                             a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
                         }
                     }
@@ -4336,17 +4485,123 @@ void gates_illuminate(bool daytime)
 }
 
 /*
- * Get the default wall color for a given depth
+ * Floor/wall color codes
+ * 0 = default tiles (keep existing behavior)
+ * 1 = generic colored tiles (legacy for depths 2+)
+ * 2 = vault tiles (set by vault.txt)
+ * 3..8 = explicit color families used by groups
+ */
+#define COLOR_GREY    3
+#define COLOR_GREEN   4
+#define COLOR_BLUE    5
+#define COLOR_RED     6
+#define COLOR_PURPLE  7
+#define COLOR_BLACK   8
+
+/* Group identifiers (for readability/logging) */
+#define GROUP_GREY    1
+#define GROUP_GREEN   2
+#define GROUP_BLUE    3
+#define GROUP_RED     4
+#define GROUP_PURPLE  5
+#define GROUP_BLACK   6
+
+/* Helper: determine if a color_value should use the standard "colored" tiles */
+static int is_colored_group(byte v)
+{
+    switch (v)
+    {
+    case 1: /* legacy generic colored */
+    case COLOR_GREY:
+    case COLOR_GREEN:
+    case COLOR_BLUE:
+    case COLOR_RED:
+    case COLOR_PURPLE:
+    case COLOR_BLACK:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+/* Choose a random color from a named group; all groups also include default (0) */
+static byte pick_from_group(int group_id)
+{
+    switch (group_id)
+    {
+    case GROUP_GREY:
+    {
+        /* Choose once per level which variant to use */
+        cached_grey_style = rand_int(3); /* 0,1,2 */
+    log_info("pick_from_group: GREY style=%d", cached_grey_style);
+    if (cached_grey_style == 0) return 0; /* default */
+    return COLOR_GREY; /* indicates the grey-specific set */
+    }
+    case GROUP_GREEN:  return COLOR_GREEN;
+    case GROUP_BLUE:   return COLOR_BLUE;
+    case GROUP_RED:    return COLOR_RED;
+    case GROUP_PURPLE:
+    {
+        /* Choose once per level one of the three purple variants */
+        cached_purple_style = rand_int(3); /* 0,1,2 */
+        log_info("pick_from_group: PURPLE style=%d", cached_purple_style);
+        return COLOR_PURPLE;
+    }
+    case GROUP_BLACK:  return COLOR_BLACK;
+    default:           return 1; /* fallback to legacy colored */
+    }
+}
+
+/* Cache the chosen color per depth for consistency across the whole level */
+static int cached_depth_for_color = -1;
+static byte cached_depth_color = 0;
+
+/* Expose a reset so new levels can re-roll a color from the assigned group */
+void reset_depth_color_cache(void)
+{
+    cached_depth_for_color = -1;
+    cached_depth_color = 0;
+    cached_grey_style = -1;
+    cached_purple_style = -1;
+    log_trace("reset_depth_color_cache: cleared caches");
+}
+
+/*
+ * Get the default wall color for a given depth (per-floor selection)
+ * - Supports assigning a color group to a depth; one color is chosen once per level.
+ * - Also supports assigning a single explicit color to a depth.
+ * Current defaults:
+ *   depths 1–3 -> purple group (temporary for debugging walls/veins only)
+ *   depth 4+  -> legacy generic colored (1) unless overridden later
  */
 byte get_depth_color(int depth)
 {
-    /* Testing color scheme: */
-    /* 0 = default tiles (depth 1) */
-    /* 1 = colored tiles (depth 2+) */ 
-    /* 2 = vault tiles (set separately) */
-    
-    if (depth == 1) return 0;      /* Level 1 = color 0 (default walls) */
-    else return 1;                 /* Level 2+ = color 1 (colored walls) */
+    /* Return cached selection for this level to keep it consistent */
+    if (cached_depth_for_color == depth)
+        return cached_depth_color;
+
+    byte chosen = 0;
+
+    /* Explicit per-depth assignments go here */
+    if (depth <= 0)
+    {
+        chosen = 0; /* safety */
+    }
+    else if (depth >= 1 && depth <= 3)
+    {
+        /* Debug: use purple group on early levels */
+        chosen = pick_from_group(GROUP_PURPLE);
+    }
+    else
+    {
+        /* Legacy behavior for other depths (can be customized later) */
+        chosen = 1; /* generic colored */
+    }
+
+    cached_depth_for_color = depth;
+    cached_depth_color = chosen;
+    log_info("get_depth_color: depth=%d chosen=%d (grey_style=%d purple_style=%d)", depth, chosen, cached_grey_style, cached_purple_style);
+    return chosen;
 }
 
 /*

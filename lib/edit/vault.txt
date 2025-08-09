@@ -274,6 +274,7 @@ D:    #$#
 
 
 N:24:Diamond
+C:2
 X:6:6:6
 D:     #$#     
 D:    ##.##    
@@ -291,6 +292,7 @@ D:     #$#
 
 
 N:30:Hexagon
+C:2
 X:6:2:3
 F:NO_ROTATION
 D:   #$$$$$#   
@@ -320,6 +322,7 @@ D:   #$$$$$#
 
 
 N:32:Hexagon 3
+C:2
 X:6:3:6
 F:NO_ROTATION
 D:   #$$$$$#   
@@ -334,6 +337,7 @@ D:   #$$$$$#
 
 
 N:33:Hexagon 4
+C:2
 X:6:4:12
 F:NO_ROTATION
 D:   #$$$$$#   
@@ -348,6 +352,7 @@ D:   #$$$$$#
 
 
 N:40:T
+C:2
 X:6:3:6
 F:NO_ROTATION
 D:$$$$$$$$$$$$$$$$$
@@ -377,6 +382,7 @@ D:######$$$$$$
 
 
 N:45:Thin Cross
+C:2
 X:6:8:4
 F:NO_ROTATION 
 D:      $$$$$$      
@@ -394,6 +400,7 @@ D:      $$$$$$
 
 
 N:46:Collapsed Cross
+C:2
 X:6:12:12
 F:NO_ROTATION 
 D:      $$$$$$      
@@ -411,6 +418,7 @@ D:      $$$$$$
 
 
 N:47:Corridor Cross
+C:2
 X:6:2:3
 F:NO_ROTATION 
 D:     #$$$$$#     
@@ -428,6 +436,7 @@ D:     #$$$$$#
 
 
 N:48:Hourglass
+C:2
 X:6:3:3
 F:NO_ROTATION 
 D:$$$$$$$$$
@@ -444,6 +453,7 @@ D:$$$$$$$$$
 
 
 N:50:Sunlit shaft
+C:2
 X:6:1:1
 F:SURFACE | LIGHT
 D:  #$$#  
@@ -457,6 +467,7 @@ D:  #$$#
 
 
 N:51:Golden door
+C:2
 X:6:1:1
 F:SURFACE | LIGHT
 D:$$$$$$$$$
@@ -471,6 +482,7 @@ D:$$$$$$$$$
 
 
 N:52:Small sunlit shaft
+C:2
 X:6:1:1
 F:SURFACE | LIGHT
 D:###$###
@@ -481,6 +493,7 @@ D:###$###
 
 
 N:53:Fallen treasure
+C:2
 X:6:1:5
 F:SURFACE | LIGHT
 D:$$$$$
@@ -491,6 +504,7 @@ D:$$$$$
 
 
 N:54:Collapsed corner
+C:2
 X:6:1:2
 F:SURFACE | LIGHT
 D:$$$$#####
@@ -505,6 +519,7 @@ D:$$$$$$$$$
 
 
 N:55:Sunlight with chasm
+C:2
 X:6:1:3
 F:SURFACE | LIGHT
 D:$$$$#####
@@ -519,6 +534,7 @@ D:$$$$$$$$$
 
 
 N:56:Thrall pit 1
+C:2
 X:6:2:1
 F:SURFACE | LIGHT
 D:#####$$$#####
@@ -537,6 +553,7 @@ D:#####$$$#####
 
 
 N:57:Thrall pit 2
+C:2
 X:6:2:1
 F:SURFACE | LIGHT
 D:#####$$$#####
@@ -555,6 +572,7 @@ D:#####$$$#####
 
 
 N:58:Thrall pit 3
+C:2
 X:6:2:1
 F:SURFACE | LIGHT
 D:$$#########$$
@@ -569,6 +587,7 @@ D:$$#########$$
 
 
 N:59:Slave mine
+C:2
 X:6:2:1
 F:SURFACE 
 D:#######$$$$$
@@ -583,6 +602,7 @@ D:$$$$$$######
 
 
 N:60:Maze
+C:2
 X:6:5:1
 F:NO_ROTATION 
 D:$$$$$$$$$$$$$$$
@@ -597,6 +617,7 @@ D:$$$$$$$$$$$$$$$
 
 
 N:61:Maze 2
+C:2
 X:6:5:1
 F:NO_ROTATION 
 D:$$$$$$$$$$$$$$$$$
@@ -612,6 +633,7 @@ D:$$$$$$$$$$$$$$$$$
 
 
 N:62:Maze 3
+C:2
 X:6:5:3
 D:$$$$$$$$
 D:$.#?...$
@@ -623,6 +645,7 @@ D:$$$$$$$$
 
 
 N:63:Maze 4
+C:2
 X:6:5:3
 D:$$$$$$$$
 D:$?..#?.$
@@ -634,6 +657,7 @@ D:$$$$$$$$
 
 
 N:64:Cross Maze
+C:2
 X:6:5:3
 F:NO_ROTATION
 D:    $$$$$$$$$    

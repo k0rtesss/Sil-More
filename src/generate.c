@@ -4003,6 +4003,9 @@ void generate_cave(void)
     log_info("generate_cave: Function entry - about to start");
     log_info("generate_cave: Starting cave generation");
 
+    /* Reset per-level color cache so depth group re-rolls when entering a new level */
+    reset_depth_color_cache();
+
     /* The dungeon is not ready */
     character_dungeon = false;
 

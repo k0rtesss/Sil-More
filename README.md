@@ -12,12 +12,13 @@ Secondly, it uses a system of metaruns, where consequtive runs are connected int
 - Balance tweaks
 - Add unique RHF flags
   * Earendil
-  * Turin
+  * Turin (done)
   * Celeborn
-  * Maedhros
+  * Maedhros (done)
 - New heroes
-  * Eol
-
+  * Eol (done) 
+- Dynamic tile system 
+- Difficulty levels for current run 
 
 ## Release of beta 0.8 
 
@@ -25,6 +26,8 @@ Secondly, it uses a system of metaruns, where consequtive runs are connected int
 - Quest systems
 
 ## Release of beta 0.9 
+
+- Multiple runs support  
 
 ### Ideas
 
