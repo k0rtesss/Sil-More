@@ -5,8 +5,8 @@ V:1.5.0
 # Level style rules (exact depths 1..20). Each line:
 # L:<depth>: <style_index>:<weight> [<style_index>:<weight> ...]
 # Example handcrafted distribution; adjust as you like.
-L:1: 0:1 0:2 0:3 0:4 0:5 0:6 0:7  # First
-L:2: 0:1 0:2 0:3 0:4 0:5 0:6 0:7  
+L:1: 0:1
+L:2: 0:1 
 L:3: 4:5 5:4 0:1
 L:4: 4:3 5:5 0:1 1:1
 L:5: 5:7 0:2 1:1

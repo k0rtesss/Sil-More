@@ -146,6 +146,11 @@ extern byte update_center_y[MAX_FLOWS];
 extern byte update_center_x[MAX_FLOWS];
 extern s16b wandering_pause[MAX_FLOWS];
 
+/* Public style color encoding base for save/load */
+#ifndef COLOR_STYLE_BASE
+#define COLOR_STYLE_BASE 200
+#endif
+
 extern s16b stealth_score;
 extern bool player_attacked;
 extern bool attacked_player;
@@ -327,9 +332,11 @@ extern void styles_vault_rules_clear(void);
 extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
 extern void styles_apply_vault_default_for_depth(int depth);
 extern int styles_get_level_primary_style(void);
+extern int styles_get_vault_primary_style(void);
 extern void styles_select_vault_primary(void);
 extern void styles_rules_clear(void);
 extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
+extern void styles_set_loaded_level_primary(int sidx);
 extern int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);

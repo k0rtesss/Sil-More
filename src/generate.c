@@ -2444,6 +2444,8 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     }
     /* Choose one primary style for the entire vault */
     styles_select_vault_primary();
+    log_debug("build_vault: level_primary=%d vault_primary=%d",
+        styles_get_level_primary_style(), styles_get_vault_primary_style());
 
     /* Place dungeon features and objects */
     for (t = data, dy = 0; dy < ymax; dy++)

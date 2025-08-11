@@ -50,6 +50,14 @@ static int g_vault_primary_style = -1; /* exact style chosen for current vault *
 
 /* Forward declaration */
 static int styles_pick_random(void);
+static void styles_log_list(const char* tag, const style_weight_list* L)
+{
+    if (!L) { log_trace("%s: (null list)", tag); return; }
+    log_trace("%s: count=%d total=%d", tag, L->count, L->total_weight);
+    for (int i = 0; i < L->count; ++i) {
+        log_trace("  [%d] sidx=%d w=%d", i, L->sidx[i], L->weight[i]);
+    }
+}
 
 static void styles_clear(style_weight_list* L)
 {
@@ -73,11 +81,28 @@ static void styles_add(style_weight_list* L, int sidx, int weight)
 void styles_rules_clear(void) { for (int i = 0; i < 32; ++i) styles_clear(&g_level_rule[i]); }
 void styles_add_level_rule(int depth, int unused, const int* sidx, const int* weight, int count)
 {
+    /* Important: this function may be called before style_info is assigned.
+     * Do NOT call styles_add() here (it checks style_info). Instead, copy
+     * raw indices/weights into the per-depth rule table with minimal bounds
+     * checks using z_info->style_max. Validation will happen later when
+     * constructing active lists for a level.
+     */
     (void)unused;
     if (depth < 1 || depth >= 32) return;
     style_weight_list* L = &g_level_rule[depth];
-    styles_clear(L);
-    for (int i = 0; i < count && i < 64; ++i) styles_add(L, sidx[i], weight[i]);
+    L->count = 0;
+    L->total_weight = 0;
+    if (!z_info) return;
+    for (int i = 0; i < count && i < 64; ++i) {
+        int si = sidx[i];
+        int wt = weight[i];
+        if (si < 0 || si >= z_info->style_max) continue;
+        if (wt <= 0) continue;
+        L->sidx[L->count] = si;
+        L->weight[L->count] = wt;
+        L->count++;
+        L->total_weight += wt;
+    }
 }
 
 /* Backward-compatibility: reset any cached depth/style state between levels */
@@ -122,8 +147,9 @@ void styles_init_for_level(void)
     } else {
         g_level_primary_style = -1;
     }
-    log_info("styles_init_for_level: initialized %d styles (total_weight=%d)",
-        g_level_styles.count, g_level_styles.total_weight);
+    log_info("styles_init_for_level: depth=%d initialized %d styles (total_weight=%d) primary=%d",
+        p_ptr->depth, g_level_styles.count, g_level_styles.total_weight, g_level_primary_style);
+    styles_log_list("styles_init_for_level list", &g_level_styles);
 }
 
 /* Begin vault: by default prefer the level's chosen style with weight 5 and
@@ -139,6 +165,7 @@ void styles_begin_vault(int extra_sidx, int extra_weight)
     g_active_styles = &g_vault_styles;
     log_info("styles_begin_vault: active styles=%d (extra=%d, w=%d)",
         g_vault_styles.count, extra_sidx, extra_weight);
+    styles_log_list("styles_begin_vault list", &g_vault_styles);
 }
 
 /* End vault: restore level styles */
@@ -199,6 +226,7 @@ void styles_apply_vault_list(const int* sidx, const int* weight, int count)
         }
         else styles_add_vault_weight(sidx[i], weight[i]);
     }
+    styles_log_list("styles_apply_vault_list", &g_vault_styles);
 }
 
 /* Per-depth default vault lists (1..20), tokens may include '*' (-1) */
@@ -216,16 +244,20 @@ void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int co
 void styles_apply_vault_default_for_depth(int depth)
 {
     if (depth >= 1 && depth < 32 && g_vault_rule[depth].count > 0) {
+        log_debug("styles_apply_vault_default_for_depth: using per-depth defaults for depth=%d", depth);
         styles_apply_vault_list(g_vault_rule[depth].sidx, g_vault_rule[depth].weight, g_vault_rule[depth].count);
     } else if (g_vault_default_count > 0) {
+        log_debug("styles_apply_vault_default_for_depth: using global defaults for depth=%d", depth);
         styles_apply_vault_list(g_vault_default_sidx, g_vault_default_weight, g_vault_default_count);
     } else {
     /* Fallback: 100% same as the exact chosen level style */
+    log_debug("styles_apply_vault_default_for_depth: using fallback to level primary for depth=%d", depth);
     if (g_level_primary_style >= 0) styles_add_vault_weight(g_level_primary_style, 10);
     }
 }
 
 int styles_get_level_primary_style(void) { return g_level_primary_style; }
+void styles_set_loaded_level_primary(int sidx) { g_level_primary_style = sidx; }
 
 /* Decode a style index from a cave_color cell (or -1 if not encoded) */
 static int style_index_for_color(byte color_value)
@@ -247,7 +279,11 @@ static byte get_active_style_color(void)
 }
 void styles_select_vault_primary(void)
 {
-    if (g_vault_styles.count <= 0) { g_vault_primary_style = g_level_primary_style; return; }
+    if (g_vault_styles.count <= 0) {
+        g_vault_primary_style = g_level_primary_style;
+        log_info("styles_select_vault_primary: no vault list, defaulting to level primary=%d", g_level_primary_style);
+        return;
+    }
     int total = g_vault_styles.total_weight;
     int r = rand_int(total);
     int pick = g_vault_styles.sidx[0];
@@ -256,7 +292,12 @@ void styles_select_vault_primary(void)
         r -= g_vault_styles.weight[i];
     }
     g_vault_primary_style = pick;
+    log_info("styles_select_vault_primary: selected vault primary=%d from %d entries (total=%d)",
+        g_vault_primary_style, g_vault_styles.count, g_vault_styles.total_weight);
+    styles_log_list("styles_select_vault_primary list", &g_vault_styles);
 }
+
+int styles_get_vault_primary_style(void) { return g_vault_primary_style; }
 
 /*
  * Support for tilesets, lighting and transparency effects

@@ -47,8 +47,8 @@
 /*
  * Current version string
  */
-#define VERSION_STRING "1.5.0"
 
+#define VERSION_STRING "1.5.0"
 /*
  * Current version numbers
  */

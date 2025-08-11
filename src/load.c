@@ -1345,7 +1345,7 @@ static errr rd_dungeon(void)
         return (1);
     }
 
-    /*** Run length decoding ***/
+    /*** Run length decoding of cave_info ***/
 
     /* Load the dungeon data */
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
@@ -1373,7 +1373,7 @@ static errr rd_dungeon(void)
         }
     }
 
-    /*** Run length decoding ***/
+    /*** Run length decoding of cave_feat ***/
 
     /* Load the dungeon data */
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
@@ -1387,6 +1387,33 @@ static errr rd_dungeon(void)
         {
             /* Extract "feat" */
             cave_set_feat(y, x, tmp8u);
+
+            /* Advance/Wrap */
+            if (++x >= p_ptr->cur_map_wid)
+            {
+                /* Wrap */
+                x = 0;
+
+                /* Advance/Wrap */
+                if (++y >= p_ptr->cur_map_hgt)
+                    break;
+            }
+        }
+    }
+
+    /*** Run length decoding of cave_color (style encoding) ***/
+
+    for (x = y = 0; y < p_ptr->cur_map_hgt;)
+    {
+        /* Grab RLE info */
+        rd_byte(&count);
+        rd_byte(&tmp8u);
+
+        /* Apply the RLE info */
+        for (i = count; i > 0; i--)
+        {
+            /* Extract encoded style/color */
+            cave_color[y][x] = tmp8u;
 
             /* Advance/Wrap */
             if (++x >= p_ptr->cur_map_wid)
@@ -1563,6 +1590,27 @@ static errr rd_dungeon(void)
     }
 
     /*** Success ***/
+
+    /* After loading the level, pick the level primary style based on the
+     * majority style encoded in cave_color, if any. */
+    {
+        int counts[256];
+        int max_count = 0, best = -1;
+        memset(counts, 0, sizeof(counts));
+        for (y = 0; y < p_ptr->cur_map_hgt; ++y) {
+            for (x = 0; x < p_ptr->cur_map_wid; ++x) {
+                byte c = cave_color[y][x];
+                if (c >= COLOR_STYLE_BASE) {
+                    int idx = c - COLOR_STYLE_BASE;
+                    if (idx >= 0 && idx < 256) {
+                        int v = ++counts[idx];
+                        if (v > max_count) { max_count = v; best = idx; }
+                    }
+                }
+            }
+        }
+        if (best >= 0) styles_set_loaded_level_primary(best);
+    }
 
     /* The dungeon is ready */
     character_dungeon = true;

@@ -1109,7 +1109,7 @@ static void wr_dungeon(void)
     wr_byte(p_ptr->cur_map_hgt);
     wr_byte(p_ptr->cur_map_wid);
 
-    /*** Simple "Run-Length-Encoding" of cave ***/
+    /*** Simple "Run-Length-Encoding" of cave_info ***/
 
     /* Note that this will induce two wasted bytes */
     count = 0;
@@ -1147,7 +1147,7 @@ static void wr_dungeon(void)
         wr_byte((byte)prev_char);
     }
 
-    /*** Simple "Run-Length-Encoding" of cave ***/
+    /*** Simple "Run-Length-Encoding" of cave_feat ***/
 
     /* Note that this will induce two wasted bytes */
     count = 0;
@@ -1171,6 +1171,41 @@ static void wr_dungeon(void)
             }
 
             /* Continue the run */
+            else
+            {
+                count++;
+            }
+        }
+    }
+
+    /* Flush the data (if any) */
+    if (count)
+    {
+        wr_byte((byte)count);
+        wr_byte((byte)prev_char);
+    }
+
+    /*** Simple "Run-Length-Encoding" of cave_color (style encoding) ***/
+
+    /* Note that this will induce two wasted bytes */
+    count = 0;
+    prev_char = 0;
+
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+    {
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            /* Extract the encoded color/style byte */
+            tmp8u = cave_color[y][x];
+
+            /* If the run is broken, or too full, flush it */
+            if ((tmp8u != prev_char) || (count == MAX_UCHAR))
+            {
+                wr_byte((byte)count);
+                wr_byte((byte)prev_char);
+                prev_char = tmp8u;
+                count = 1;
+            }
             else
             {
                 count++;

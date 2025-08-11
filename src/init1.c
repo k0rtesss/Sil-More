@@ -1284,6 +1284,7 @@ errr parse_style_levels(char* buf, header* head)
         styles_rules_clear();
         styles_vault_rules_clear();
         styles_default_vault_clear();
+    log_info("parse_style_levels: Version header encountered, cleared existing rules");
         return 0;
     }
     /* Comments or blank lines */
@@ -1293,13 +1294,21 @@ errr parse_style_levels(char* buf, header* head)
     if (buf[0] == 'L')
     {
         int min_d = 0, max_d = 0;
-        char* s = strchr(buf + 2, ':'); if (!s) return PARSE_ERROR_GENERIC; *s++ = '\0';
+        char* s = strchr(buf + 2, ':');
+        if (!s) return PARSE_ERROR_GENERIC;
+        *s++ = '\0';
         min_d = atoi(buf + 2);
-        char* t = strchr(s, ':');
-        if (t) { /* range form */
-            *t++ = '\0';
+        /* Decide if this is a range by checking for a ':' before any space after the first ':' */
+        char* first_space = strchr(s, ' ');
+        char* second_colon = strchr(s, ':');
+        char* t;
+        if (second_colon && (!first_space || second_colon < first_space)) {
+            /* Range form: L:min:max: ...  --> s points to max followed by ':' */
+            *second_colon = '\0';
             max_d = atoi(s);
-        } else { /* exact form */
+            t = second_colon + 1;
+        } else {
+            /* Exact form: L:depth: ... */
             max_d = min_d;
             t = s;
         }
@@ -1311,11 +1320,21 @@ errr parse_style_levels(char* buf, header* head)
             char* e = t; while (*e && *e != ' ') e++;
             char hold = *e; if (*e) *e = '\0';
             char* c = strchr(t, ':'); if (!c) { if (hold) *e = hold; break; }
-            *c = '\0'; int si = atoi(t); int w = atoi(c + 1);
+            *c = '\0';
+            int si = atoi(t); int w = atoi(c + 1);
             if (si >= 0 && w > 0 && n < 64) { sidx[n] = si; wt[n] = w; n++; }
             if (hold) { *e = hold; t = e + 1; } else break;
         }
-        if (n > 0) styles_add_level_rule(min_d, max_d, sidx, wt, n);
+        if (n > 0) {
+            /* Apply to each depth in the range (min_d..max_d), inclusive */
+            if (min_d < 1) min_d = 1;
+            if (max_d > 31) max_d = 31;
+            for (int d = min_d; d <= max_d; ++d) {
+                styles_add_level_rule(d, 0, sidx, wt, n);
+            }
+            log_info("parse_style_levels: L:%d..%d with %d entries (first sidx=%d w=%d)",
+                min_d, max_d, n, sidx[0], wt[0]);
+        }
         return 0;
     }
     /* U:depth: sidx:weight ...   or   U:*: sidx:weight ... (default vault styles) */
@@ -1340,9 +1359,13 @@ errr parse_style_levels(char* buf, header* head)
         if (depth_tok[0] == '*' && depth_tok[1] == '\0') {
             styles_default_vault_clear();
             for (int i = 0; i < n; ++i) styles_default_vault_add(sidx[i], wt[i]);
+            log_info("parse_style_levels: U:* default with %d entries (first=%d:%d)", n, sidx[0], wt[0]);
         } else {
             int d = atoi(depth_tok);
-            if (n > 0) styles_set_vault_rule(d, sidx, wt, n);
+            if (n > 0) {
+                styles_set_vault_rule(d, sidx, wt, n);
+                log_info("parse_style_levels: U:%d with %d entries (first=%d:%d)", d, n, sidx[0], wt[0]);
+            }
         }
         return 0;
     }

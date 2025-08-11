@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include <stdio.h>
 #include "log.h"
 #include "metarun.h"
 
@@ -698,17 +699,34 @@ static errr init_style_info(void)
     errr err;
     /* Default to zero if not specified yet; will be set by limits.txt */
     init_header(&style_head, z_info->style_max, sizeof(style_type));
-#ifdef ALLOW_TEMPLATES
     style_head.parse_info_txt = parse_style_info;
-#endif
     err = init_info("style", &style_head);
     if (err) return err;
-    /* Load level/vault rules from separate file */
-#ifdef ALLOW_TEMPLATES
-    header levels_head; init_header(&levels_head, 1, 1);
-    levels_head.parse_info_txt = parse_style_levels;
-    (void)init_info("style-levels", &levels_head);
-#endif
+    /* Load level/vault rules from separate file (always parse text for side-effects).
+     * We bypass the RAW cache here so manual edits to style-levels.txt take effect
+     * even when ALLOW_TEMPLATES is not defined. */
+    {
+        FILE* fp;
+        char buf[1024];
+        header levels_head;
+        init_header(&levels_head, 1, 1);
+        /* Build full path to lib/edit/style-levels.txt */
+        path_build(buf, sizeof(buf), ANGBAND_DIR_EDIT, format("%s.txt", "style-levels"));
+        fp = my_fopen(buf, "r");
+        if (!fp) quit("Cannot open 'style-levels.txt' file.");
+        /* Parse the file using the style-levels parser (populates global rule tables) */
+        {
+            char linebuf[1024];
+            err = init_info_txt(fp, linebuf, &levels_head, parse_style_levels);
+        }
+        my_fclose(fp);
+        if (err)
+        {
+            /* Report a parse error with helpful context */
+            display_parse_error("style-levels", err, "style-levels");
+            return err;
+        }
+    }
     return 0;
 }
 
