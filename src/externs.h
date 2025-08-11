@@ -207,6 +207,8 @@ extern flavor_type* flavor_info;
 extern char* flavor_name;
 extern char* flavor_text;
 extern names_type* n_info;
+extern style_type* style_info;
+extern char* style_name;
 
 extern combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];
 extern int combat_number;
@@ -309,6 +311,25 @@ extern void cave_set_feat(int y, int x, int feat);
 extern void cave_set_feat_with_color(int y, int x, int feat, int color);
 extern byte get_depth_color(int depth);
 extern void reset_depth_color_cache(void);
+/* Style-weight APIs */
+extern void styles_init_for_level(void);
+extern void styles_begin_vault(int extra_sidx, int extra_weight);
+extern void styles_end_vault(void);
+extern void styles_reset_level_weights(void);
+extern void styles_add_level_weight(int sidx, int weight);
+extern void styles_reset_vault_weights(void);
+extern void styles_add_vault_weight(int sidx, int weight);
+extern void styles_add_vault_from_level(int factor);
+extern void styles_default_vault_clear(void);
+extern void styles_default_vault_add(int sidx_or_star, int weight);
+extern void styles_apply_vault_list(const int* sidx, const int* weight, int count);
+extern void styles_vault_rules_clear(void);
+extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
+extern void styles_apply_vault_default_for_depth(int depth);
+extern int styles_get_level_primary_style(void);
+extern void styles_select_vault_primary(void);
+extern void styles_rules_clear(void);
+extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
 extern int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);

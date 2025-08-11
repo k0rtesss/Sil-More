@@ -1,0 +1,100 @@
+# File: style.txt
+# Versioned like other edit files
+V:1.5.0
+
+# Sections
+# - Styles: N:/G:/W:/Y:/F:/D: define tile coordinates per style.
+# Note: Level/vault rules (L:/U:) are in style-levels.txt now.
+
+#First level styles
+
+N:0:First0
+W:16:0
+Y:18:0
+F:23:0
+D:20:6
+
+N:1:First1
+W:16:2
+Y:18:0
+F:23:0
+D:20:6
+
+N:2:First2
+W:16:4
+Y:18:0
+F:23:0
+D:20:6
+
+N:3:First3
+W:16:6
+Y:18:0
+F:23:0
+D:20:6
+
+N:4:First4
+W:16:8
+Y:18:0
+F:23:0
+D:20:6
+
+N:5:First5
+W:16:10
+Y:18:0
+F:23:0
+D:20:6
+
+N:6:First6
+W:16:12
+Y:18:0
+F:23:0
+D:20:6
+
+N:7:First7
+W:16:14
+Y:18:0
+F:23:0
+D:20:6
+
+# Purple styles 
+# N:0:Purple A
+# W:18:8
+# Y:18:8
+# F:18:30
+# D:17:4
+
+# N:1:Purple B
+# G:5
+# W:18:28
+# Y:18:28
+# F:18:2
+# D:17:4
+
+# N:2:Purple C
+# G:5
+# W:18:24
+# Y:18:24
+# F:18:2
+# D:17:7
+
+# N:3:Purple D
+# G:5
+# W:18:24
+# Y:18:24
+# F:18:2
+# D:17:7
+
+# Grey styles 
+# N:4:Grey A
+# G:1
+# W:0:4
+# Y:0:6
+# F:0:1
+# D:0:10
+
+# N:5:Grey B
+# G:1
+# W:15:14
+# Y:15:18
+# F:0:1
+# D:0:10

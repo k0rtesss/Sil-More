@@ -312,6 +312,7 @@ header g_head;
 header flavor_head;
 header q_head;
 header n_head;
+header style_head;
 
 /*** Initialize from binary image files ***/
 
@@ -368,6 +369,7 @@ static errr init_info_raw(int fd, header* head)
 
 /* local forward */
 static errr init_rt_info(void);
+static errr init_style_info(void);
 
 /*
  * Initialize the header of an *_info.raw file.
@@ -686,6 +688,28 @@ static errr init_f_info(void)
     f_text = f_head.text_ptr;
 
     return (err);
+}
+
+/*
+ * Initialize the "style_info" array
+ */
+static errr init_style_info(void)
+{
+    errr err;
+    /* Default to zero if not specified yet; will be set by limits.txt */
+    init_header(&style_head, z_info->style_max, sizeof(style_type));
+#ifdef ALLOW_TEMPLATES
+    style_head.parse_info_txt = parse_style_info;
+#endif
+    err = init_info("style", &style_head);
+    if (err) return err;
+    /* Load level/vault rules from separate file */
+#ifdef ALLOW_TEMPLATES
+    header levels_head; init_header(&levels_head, 1, 1);
+    levels_head.parse_info_txt = parse_style_levels;
+    (void)init_info("style-levels", &levels_head);
+#endif
+    return 0;
 }
 
 /*
@@ -1822,6 +1846,13 @@ void init_angband(void)
     if (init_st_info())
         quit("Cannot initialize stories");
 
+    /* Initialize style info (visual styles) */
+    note("[Initializing arrays... (styles)]");
+    if (init_style_info())
+        quit("Cannot initialize styles");
+    style_info = (style_type*)style_head.info_ptr;
+    style_name = style_head.name_ptr;
+
     /* Initialize curses info */
     note("[Initializing arrays... (curses)]");        
     if (init_cu_info())
@@ -1994,6 +2025,7 @@ void cleanup_angband(void)
     free_info(&f_head);
     free_info(&z_head);
     free_info(&n_head);
+    free_info(&style_head);
 
     /* Free the format() buffer */
     vformat_kill();

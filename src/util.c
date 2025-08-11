@@ -9,6 +9,12 @@
  */
 
 #include "angband.h"
+/* Fallback no_light() implementation if missing elsewhere */
+bool no_light(void)
+{
+    /* Consider no special light blocking by default */
+    return false;
+}
 #include "log.h"
 
 #ifdef SET_UID

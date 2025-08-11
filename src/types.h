@@ -86,6 +86,7 @@ typedef struct names_type names_type;
 typedef struct flavor_type flavor_type;
 typedef struct editing_buffer editing_buffer;
 typedef struct autoinscription autoinscription;
+typedef struct style_type style_type;
 
 /**** Available structs ****/
 
@@ -119,6 +120,7 @@ struct maxima
     u16b art_rand_max; /* Max number of random artefacts */
     u16b art_self_made_max; /* Max number of self-made artefacts */
     u16b rt_max;           /* ↑ total run-type records                         */
+    u16b style_max;        /* Max size for "style_info[]" */
 };
 
 /*
@@ -456,6 +458,11 @@ struct vault_type
     byte color; /* Wall color (0 = use depth default) */
 
     u32b flags; /* Vault Flags (ie VLT flags) */
+
+    /* Optional style weights for this vault */
+    byte style_count;            /* number of entries in arrays below */
+    s16b style_idx[16];          /* style indices from style.txt */
+    s16b style_weight[16];       /* corresponding weights */
 };
 
 /*
@@ -781,6 +788,21 @@ typedef struct runtype_type {
     byte lose_con;                 /* deaths to lose (min 1; default 15)    */
     u32b heroes[FLAG_WORDS];       /* applicable heroes (max 64)            */
 } runtype_type;
+
+/*
+ * Depth-based visual style definition (data-driven from lib/edit/style.txt)
+ * Each style belongs to a group (GREY/GREEN/BLUE/RED/PURPLE/BLACK) and
+ * provides tile coordinates for walls, veins, floors, and a base door tile.
+ */
+struct style_type {
+    u32b name;               /* Name (offset) */
+    byte group;              /* GROUP_* identifier */
+    /* Microchasm atlas coordinates: row/col for each element */
+    byte wall_row,  wall_col;
+    byte vein_row,  vein_col;
+    byte floor_row, floor_col;
+    byte door_row,  door_col; /* base door; open +1, broken +2 */
+};
 
 /*
  * Some more player information

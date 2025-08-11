@@ -11,6 +11,8 @@
 #include "angband.h"
 #include "h-define.h"
 #include "z-form.h" 
+/* Forward declaration for init2 and local placement */
+errr parse_style_levels(char* buf, header* head);
 
 /*
  * This file is used to initialize various variables and arrays for the
@@ -1067,6 +1069,11 @@ errr parse_z_info(char* buf, header* head)
     {
         z_info->rt_max = (u16b)atoi(buf + 4);
     }
+    /* M:Z:<number_of_styles> */
+    else if (buf[2] == 'Z')
+    {
+        z_info->style_max = (u16b)atoi(buf + 4);
+    }
     else
     {
         /* Oops */
@@ -1202,6 +1209,144 @@ errr parse_rt_info(char *buf, header *head)
 
     /* ignore unknown / comment lines                              */
     return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+}
+
+/* ====================  style.txt parser  ===================== */
+
+static style_type* stl_ptr = NULL;
+
+errr parse_style_info(char* buf, header* head)
+{
+    /* Note: L:/U: moved to style-levels.txt for clarity. */
+    /* N:<index>:<name> */
+    if (buf[0] == 'N')
+    {
+        int idx;
+        char* s = strchr(buf + 2, ':');
+        if (!s) return PARSE_ERROR_GENERIC;
+        *s++ = '\0';
+    idx = atoi(buf + 2);
+
+        if (idx <= error_idx) return PARSE_ERROR_NON_SEQUENTIAL_RECORDS;
+        if (idx >= head->info_num) return PARSE_ERROR_TOO_MANY_ENTRIES;
+        error_idx = idx;
+
+        stl_ptr = ((style_type*)head->info_ptr) + idx;
+        WIPE(stl_ptr, style_type);
+        stl_ptr->name = add_name(head, s);
+    if (idx == 0) { /* styles only here */ }
+        return 0;
+    }
+
+    if (!stl_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
+
+    /* G:<group_id> (1..6) */
+    if (buf[0] == 'G')
+    {
+        stl_ptr->group = (byte)atoi(buf + 2);
+        return 0;
+    }
+    /* W:row:col  (wall) */
+    if (buf[0] == 'W')
+    {
+        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
+        stl_ptr->wall_row = (byte)r; stl_ptr->wall_col = (byte)c; return 0;
+    }
+    /* Y:row:col  (vein) — use 'Y' since 'V' is reserved for file version */
+    if (buf[0] == 'Y')
+    {
+        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
+        stl_ptr->vein_row = (byte)r; stl_ptr->vein_col = (byte)c; return 0;
+    }
+    /* F:row:col  (floor) */
+    if (buf[0] == 'F')
+    {
+        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
+        stl_ptr->floor_row = (byte)r; stl_ptr->floor_col = (byte)c; return 0;
+    }
+    /* D:row:col  (door base) */
+    if (buf[0] == 'D')
+    {
+        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
+        stl_ptr->door_row = (byte)r; stl_ptr->door_col = (byte)c; return 0;
+    }
+
+    return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+}
+
+/* ====================  style-levels.txt parser  ===================== */
+
+errr parse_style_levels(char* buf, header* head)
+{
+    (void)head; /* unused */
+    /* Version header clears accumulated rules to allow reparse safely */
+    if (buf[0] == 'V') {
+        styles_rules_clear();
+        styles_vault_rules_clear();
+        styles_default_vault_clear();
+        return 0;
+    }
+    /* Comments or blank lines */
+    if (buf[0] == '#' || buf[0] == '\0') return 0;
+
+    /* L:depth: ... (exact)  or  L:min:max: ... (range)  -> level style rules */
+    if (buf[0] == 'L')
+    {
+        int min_d = 0, max_d = 0;
+        char* s = strchr(buf + 2, ':'); if (!s) return PARSE_ERROR_GENERIC; *s++ = '\0';
+        min_d = atoi(buf + 2);
+        char* t = strchr(s, ':');
+        if (t) { /* range form */
+            *t++ = '\0';
+            max_d = atoi(s);
+        } else { /* exact form */
+            max_d = min_d;
+            t = s;
+        }
+        int sidx[64]; int wt[64]; int n = 0;
+        while (*t)
+        {
+            while (*t == ' ') t++;
+            if (!*t) break;
+            char* e = t; while (*e && *e != ' ') e++;
+            char hold = *e; if (*e) *e = '\0';
+            char* c = strchr(t, ':'); if (!c) { if (hold) *e = hold; break; }
+            *c = '\0'; int si = atoi(t); int w = atoi(c + 1);
+            if (si >= 0 && w > 0 && n < 64) { sidx[n] = si; wt[n] = w; n++; }
+            if (hold) { *e = hold; t = e + 1; } else break;
+        }
+        if (n > 0) styles_add_level_rule(min_d, max_d, sidx, wt, n);
+        return 0;
+    }
+    /* U:depth: sidx:weight ...   or   U:*: sidx:weight ... (default vault styles) */
+    if (buf[0] == 'U')
+    {
+        char* s = strchr(buf + 2, ':'); if (!s) return PARSE_ERROR_GENERIC; *s++ = '\0';
+        const char* depth_tok = buf + 2;
+        int sidx[64]; int wt[64]; int n = 0;
+        while (*s)
+        {
+            while (*s == ' ') s++;
+            if (!*s) break;
+            char* e = s; while (*e && *e != ' ') e++;
+            char hold = *e; if (*e) *e = '\0';
+            char* c = strchr(s, ':'); if (!c) { if (hold) *e = hold; break; }
+            *c = '\0';
+            int si = (s[0] == '*' && s[1] == '\0') ? -1 : atoi(s);
+            int w = atoi(c + 1);
+            if (w > 0 && n < 64) { sidx[n] = si; wt[n] = w; n++; }
+            if (hold) { *e = hold; s = e + 1; } else break;
+        }
+        if (depth_tok[0] == '*' && depth_tok[1] == '\0') {
+            styles_default_vault_clear();
+            for (int i = 0; i < n; ++i) styles_default_vault_add(sidx[i], wt[i]);
+        } else {
+            int d = atoi(depth_tok);
+            if (n > 0) styles_set_vault_rule(d, sidx, wt, n);
+        }
+        return 0;
+    }
+    return 0;
 }
 
 
@@ -1744,8 +1889,10 @@ errr parse_v_info(char* buf, header* head)
         /* Point at the "info" */
         v_ptr = (vault_type*)head->info_ptr + i;
 
-        /* Initialize default values */
+    /* Initialize default values */
         v_ptr->color = 0; /* Default to depth color */
+    v_ptr->style_count = 0;
+    for (int j = 0; j < 16; ++j) { v_ptr->style_idx[j] = -1; v_ptr->style_weight[j] = 0; }
 
         /* Store the name */
         if (!(v_ptr->name = add_name(head, s)))
@@ -1793,6 +1940,37 @@ errr parse_v_info(char* buf, header* head)
 
         /* Save the color value */
         v_ptr->color = color;
+    }
+
+    /* Process 'S' for Styles: one or more pairs "sidx:weight" separated by spaces */
+    else if (buf[0] == 'S')
+    {
+        /* There better be a current v_ptr */
+        if (!v_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        char* s = buf + 2;
+        char* tok;
+        while (*s)
+        {
+            while (*s == ' ') s++;
+            if (!*s) break;
+            tok = s;
+            while (*s && *s != ' ') s++;
+            if (*s) { *s = '\0'; s++; }
+            /* parse tok as sidx:weight; '*' means sidx == -1 (level styles) */
+            char* colon = strchr(tok, ':');
+            if (!colon) return PARSE_ERROR_GENERIC;
+            *colon = '\0';
+            int sidx = (tok[0] == '*' && tok[1] == '\0') ? -1 : atoi(tok);
+            int w = atoi(colon + 1);
+            if (v_ptr->style_count < 16 && sidx >= -1 && w > 0)
+            {
+                v_ptr->style_idx[v_ptr->style_count] = (s16b)sidx;
+                v_ptr->style_weight[v_ptr->style_count] = (s16b)w;
+                v_ptr->style_count++;
+            }
+        }
     }
 
     /* Hack -- Process 'F' for flags */

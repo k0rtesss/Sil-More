@@ -10,6 +10,10 @@
 
 #include "angband.h"
 #include "metarun.h"
+/* Ensure C library prototypes are visible for tools */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 /*
  * Note that Level generation is *not* an important bottleneck,
  * though it can be annoyingly slow on older machines...  Thus
@@ -2383,6 +2387,10 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     int original_monster_level = monster_level;
 
     log_trace("build_vault: Building vault '%s' with color=%d", v_name + v_ptr->name, v_ptr->color);
+    /* If vault color encodes a style, capture it to bias vault styles later */
+    int extra_sidx = -1;
+    if (v_ptr->color >= COLOR_STYLE_BASE) extra_sidx = v_ptr->color - COLOR_STYLE_BASE;
+    else if (v_ptr->color > 0) extra_sidx = v_ptr->color; /* treat color as style index */
 
     cptr t;
 
@@ -2417,6 +2425,25 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
         if (one_in_(2))
             flip_h = true;
     }
+
+    /* Begin the vault style context now that the vault is accepted */
+    styles_begin_vault(-1, 0);
+    /* If vault has explicit style list, use it (support '*'=-1); else apply per-depth default */
+    styles_reset_vault_weights();
+    if (v_ptr->style_count > 0) {
+        for (int si = 0; si < v_ptr->style_count; ++si) {
+            int sidx = v_ptr->style_idx[si];
+            int w = v_ptr->style_weight[si];
+            if (sidx == -1) styles_add_vault_from_level(w);
+            else styles_add_vault_weight(sidx, w);
+        }
+    } else {
+        /* Apply per-depth default or global default; fallback to clone w/ bias */
+        styles_apply_vault_default_for_depth(p_ptr->depth);
+        if (extra_sidx >= 0) styles_add_vault_weight(extra_sidx, 2);
+    }
+    /* Choose one primary style for the entire vault */
+    styles_select_vault_primary();
 
     /* Place dungeon features and objects */
     for (t = data, dy = 0; dy < ymax; dy++)
@@ -2460,28 +2487,27 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             /* Granite wall (outer) */
             case '$':
             {
-                cave_set_feat_with_color(y, x, FEAT_WALL_OUTER, v_ptr->color);
+                cave_set_feat_with_color(y, x, FEAT_WALL_OUTER, 0);
                 break;
             }
-
             /* Granite wall (inner) */
             case '#':
             {
-                cave_set_feat_with_color(y, x, FEAT_WALL_INNER, v_ptr->color);
+                cave_set_feat_with_color(y, x, FEAT_WALL_INNER, 0);
                 break;
             }
 
             /* Quartz vein */
             case '%':
             {
-                cave_set_feat_with_color(y, x, FEAT_QUARTZ, v_ptr->color);
+                cave_set_feat_with_color(y, x, FEAT_QUARTZ, 0);
                 break;
             }
 
             /* Rubble */
             case ':':
             {
-                cave_set_feat_with_color(y, x, FEAT_RUBBLE, v_ptr->color);
+                cave_set_feat_with_color(y, x, FEAT_RUBBLE, 0);
                 break;
             }
 
@@ -2559,6 +2585,9 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             }
         }
     }
+
+    /* Restore level styles after vault placement */
+    styles_end_vault();
 
     /* Place dungeon monsters and objects */
     for (t = data, dy = 0; dy < ymax; dy++)
@@ -3568,6 +3597,8 @@ static bool cave_gen(void)
 
     room_attempts = l * l * l * l;
 
+    /* Initialize level style weights and start with basic granite */
+    styles_init_for_level();
     /*start with basic granite*/
     basic_granite();
 

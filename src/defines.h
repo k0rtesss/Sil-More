@@ -189,6 +189,11 @@
  */
 #define DEPTH_BASED_WALLS 1  /* Set to 0 to disable depth-based wall graphics */
 
+/* Encoded color range used to store an absolute style index per cell. */
+#ifndef COLOR_STYLE_BASE
+#define COLOR_STYLE_BASE 200 /* 200..(200+style_max-1) map to style_info indices */
+#endif
+
 #if DEPTH_BASED_WALLS
 /* Maximum number of depth tiers for wall graphics */
 #define MAX_WALL_DEPTH_TIERS 6

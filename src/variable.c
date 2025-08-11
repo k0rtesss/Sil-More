@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "h-basic.h"
 #include "metarun.h" 
+#include "init.h"
 
 /*
  * Hack -- Link a copyright message into the executable
@@ -529,6 +530,8 @@ char* a_text;
  * The random name generator tables
  */
 names_type* n_info;
+style_type* style_info;
+char* style_name;
 
 /*
  * The special item arrays
