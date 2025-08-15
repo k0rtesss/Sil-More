@@ -78,7 +78,7 @@ M:O:512
 M:Y:5
 
 # Number of Styles (visual themes)
-M:Z:40
+M:Z:62
 
 # Previously we had the maximum number of monsters on the level here
 # but it has been made into a compile-time #define

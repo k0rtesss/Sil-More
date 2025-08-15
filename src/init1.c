@@ -1214,10 +1214,50 @@ errr parse_rt_info(char *buf, header *head)
 /* ====================  style.txt parser  ===================== */
 
 static style_type* stl_ptr = NULL;
+/* Global defaults for vein overlay when a style omits Y: */
+static byte g_default_vein_row = 19;
+static byte g_default_vein_col = 0;
+
+/* Optional fixed color key for overlays (if provided) */
+static bool g_overlay_key_enabled = false;
+static byte g_overlay_key_r = 255, g_overlay_key_g = 0, g_overlay_key_b = 255; /* default magenta */
+
+/* Accessors used by rendering */
+byte get_default_vein_row(void);
+byte get_default_vein_col(void);
+byte get_default_vein_row(void) { return g_default_vein_row; }
+byte get_default_vein_col(void) { return g_default_vein_col; }
+bool get_overlay_key_enabled(void);
+void get_overlay_key_rgb(byte* r, byte* g, byte* b);
+bool get_overlay_key_enabled(void) { return g_overlay_key_enabled; }
+void get_overlay_key_rgb(byte* r, byte* g, byte* b) { if (r) *r = g_overlay_key_r; if (g) *g = g_overlay_key_g; if (b) *b = g_overlay_key_b; }
 
 errr parse_style_info(char* buf, header* head)
 {
     /* Note: L:/U: moved to style-levels.txt for clarity. */
+    /* E:<row>:<col> or DY:<row>:<col> — default vein overlay tile (used if a style omits Y:) */
+    {
+        const char* p = buf;
+        while (*p == ' ' || *p == '\t') p++;
+        if (((p[0] == 'D' || p[0] == 'd') && (p[1] == 'Y' || p[1] == 'y') && p[2] == ':') ||
+            ((p[0] == 'E' || p[0] == 'e') && p[1] == ':' ))
+        {
+            const char* q = (p[0] == 'E' || p[0] == 'e') ? (p + 2) : (p + 3);
+            int r, c; if (2 != sscanf(q, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
+            g_default_vein_row = (byte)r; g_default_vein_col = (byte)c; return 0;
+        }
+    }
+
+    /* EK:R:G:B — optional explicit color key for overlays (e.g., 255:0:255) */
+    {
+        const char* p = buf;
+        while (*p == ' ' || *p == '\t') p++;
+        if ((p[0] == 'E' || p[0] == 'e') && (p[1] == 'K' || p[1] == 'k') && p[2] == ':')
+        {
+            int r, g, b; if (3 != sscanf(p + 3, "%d:%d:%d", &r, &g, &b)) return PARSE_ERROR_GENERIC;
+            g_overlay_key_r = (byte)r; g_overlay_key_g = (byte)g; g_overlay_key_b = (byte)b; g_overlay_key_enabled = true; return 0;
+        }
+    }
     /* N:<index>:<name> */
     if (buf[0] == 'N')
     {
@@ -1231,8 +1271,11 @@ errr parse_style_info(char* buf, header* head)
         if (idx >= head->info_num) return PARSE_ERROR_TOO_MANY_ENTRIES;
         error_idx = idx;
 
-        stl_ptr = ((style_type*)head->info_ptr) + idx;
-        WIPE(stl_ptr, style_type);
+    stl_ptr = ((style_type*)head->info_ptr) + idx;
+    WIPE(stl_ptr, style_type);
+    /* Initialize counts */
+    stl_ptr->floor_count = 0;
+    stl_ptr->door_count = 0;
         stl_ptr->name = add_name(head, s);
     if (idx == 0) { /* styles only here */ }
         return 0;
@@ -1256,19 +1299,59 @@ errr parse_style_info(char* buf, header* head)
     if (buf[0] == 'Y')
     {
         int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
-        stl_ptr->vein_row = (byte)r; stl_ptr->vein_col = (byte)c; return 0;
+    stl_ptr->vein_row = (byte)r; stl_ptr->vein_col = (byte)c; stl_ptr->vein_defined = true; return 0;
     }
-    /* F:row:col  (floor) */
+    /* F:row:col [row:col ...]  (floor) — multiple allowed; tokens separated by spaces */
     if (buf[0] == 'F')
     {
-        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
-        stl_ptr->floor_row = (byte)r; stl_ptr->floor_col = (byte)c; return 0;
+        const char* p = buf + 2;
+        int added = 0;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '\0' || *p == '#') break;
+            int r = -1, c = -1; int n = 0;
+            /* parse r:c */
+            if (sscanf(p, "%d:%d%n", &r, &c, &n) == 2) {
+                if (stl_ptr->floor_count == 0) { stl_ptr->floor_row = (byte)r; stl_ptr->floor_col = (byte)c; }
+                if (stl_ptr->floor_count < 8) {
+                    stl_ptr->floor_rowv[stl_ptr->floor_count] = (byte)r;
+                    stl_ptr->floor_colv[stl_ptr->floor_count] = (byte)c;
+                    stl_ptr->floor_count++;
+                    added++;
+                }
+                p += n;
+            } else {
+                /* stop on invalid token */
+                break;
+            }
+        }
+        if (!added) return PARSE_ERROR_GENERIC;
+        return 0;
     }
-    /* D:row:col  (door base) */
+    /* D:row:col [row:col ...]  (door base) — multiple allowed; tokens separated by spaces */
     if (buf[0] == 'D')
     {
-        int r, c; if (2 != sscanf(buf + 2, "%d:%d", &r, &c)) return PARSE_ERROR_GENERIC;
-        stl_ptr->door_row = (byte)r; stl_ptr->door_col = (byte)c; return 0;
+        const char* p = buf + 2;
+        int added = 0;
+        while (*p) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '\0' || *p == '#') break;
+            int r = -1, c = -1; int n = 0;
+            if (sscanf(p, "%d:%d%n", &r, &c, &n) == 2) {
+                if (stl_ptr->door_count == 0) { stl_ptr->door_row = (byte)r; stl_ptr->door_col = (byte)c; }
+                if (stl_ptr->door_count < 8) {
+                    stl_ptr->door_rowv[stl_ptr->door_count] = (byte)r;
+                    stl_ptr->door_colv[stl_ptr->door_count] = (byte)c;
+                    stl_ptr->door_count++;
+                    added++;
+                }
+                p += n;
+            } else {
+                break;
+            }
+        }
+        if (!added) return PARSE_ERROR_GENERIC;
+        return 0;
     }
 
     return PARSE_ERROR_UNDEFINED_DIRECTIVE;

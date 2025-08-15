@@ -19,9 +19,23 @@
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals
  * and removes the need for group indirection.
+ *
+ * Additionally, we reserve an offset of 64 to indicate a "first-variant"
+ * override. That is, values in the range COLOR_STYLE_BASE+64..+127 encode
+ * the same style indices 0..63, but signal that when a style offers multiple
+ * floor/door variants, variant index 0 should be used regardless of the
+ * per-level/per-vault random choice. This is used by the vault halo so that
+ * adjacent tiles reliably use the vault's first variant.
  */
 #ifndef COLOR_STYLE_BASE
 #define COLOR_STYLE_BASE 200 /* 200..(200+style_max-1) map to style_info indices */
+#endif
+/* Max supported styles in encoded color and the special first-variant flag */
+#ifndef COLOR_STYLE_SLOT_MAX
+#define COLOR_STYLE_SLOT_MAX 64
+#endif
+#ifndef COLOR_STYLE_FLAG_FIRSTVAR
+#define COLOR_STYLE_FLAG_FIRSTVAR COLOR_STYLE_SLOT_MAX
 #endif
 /*
  * Weighted style selection
@@ -38,6 +52,12 @@ typedef struct {
     int weight[64];       /* weights for each index */
 } style_weight_list;
 
+/* For each style, pick one floor/door variant per level/vault */
+static byte g_level_floor_choice[64];  /* index into floor_rowv/colv, 0..count-1 */
+static byte g_level_door_choice[64];
+static byte g_vault_floor_choice[64];
+static byte g_vault_door_choice[64];
+
 /* Per-depth level style rules (1..20) loaded from style.txt via L:depth: tokens */
 static style_weight_list g_level_rule[32]; /* only need up to 20 */
 
@@ -48,8 +68,7 @@ static style_weight_list* g_active_styles = NULL; /* defaults to &g_level_styles
 static int g_level_primary_style = -1; /* exact style chosen for this level */
 static int g_vault_primary_style = -1; /* exact style chosen for current vault */
 
-/* Forward declaration */
-static int styles_pick_random(void);
+/* Forward declarations */
 static void styles_log_list(const char* tag, const style_weight_list* L)
 {
     if (!L) { log_trace("%s: (null list)", tag); return; }
@@ -120,6 +139,8 @@ void reset_depth_color_cache(void)
 void styles_init_for_level(void)
 {
     styles_clear(&g_level_styles);
+    /* Reset per-style variant picks */
+    for (int i = 0; i < 64; ++i) { g_level_floor_choice[i] = 0; g_level_door_choice[i] = 0; }
     bool applied = false;
     /* Apply rule matching exact depth (1..20) */
     if (p_ptr->depth >= 1 && p_ptr->depth < 32) {
@@ -147,6 +168,17 @@ void styles_init_for_level(void)
     } else {
         g_level_primary_style = -1;
     }
+    /* For all styles, pick a variant index (if multiple) once per level */
+    if (z_info && style_info) {
+        for (int i = 0; i < z_info->style_max && i < 64; ++i) {
+            if (!style_info[i].name) continue;
+            byte fc = style_info[i].floor_count;
+            byte dc = style_info[i].door_count;
+            if (fc > 1) g_level_floor_choice[i] = (byte)rand_int(fc);
+            if (dc > 1) g_level_door_choice[i] = (byte)rand_int(dc);
+        }
+    }
+
     log_info("styles_init_for_level: depth=%d initialized %d styles (total_weight=%d) primary=%d",
         p_ptr->depth, g_level_styles.count, g_level_styles.total_weight, g_level_primary_style);
     styles_log_list("styles_init_for_level list", &g_level_styles);
@@ -159,6 +191,13 @@ void styles_begin_vault(int extra_sidx, int extra_weight)
 {
     styles_clear(&g_vault_styles);
     g_vault_primary_style = -1;
+    /* Reset and start with level picks, then override randomly per vault */
+    for (int i = 0; i < 64; ++i) {
+        /* Floors inside vaults use the first variant for visual cohesion */
+        g_vault_floor_choice[i] = 0;
+        /* Keep door variant selection from level unless overridden */
+        g_vault_door_choice[i] = g_level_door_choice[i];
+    }
     /* Default: start empty; callers may clone level list via API */
     /* Optionally add one more style */
     if (extra_sidx >= 0 && extra_weight > 0) styles_add(&g_vault_styles, extra_sidx, extra_weight);
@@ -175,18 +214,16 @@ void styles_end_vault(void)
     g_vault_primary_style = -1;
 }
 
-/* Pick a style index using the active weighted list */
-static int styles_pick_random(void)
-{
-    style_weight_list* L = g_active_styles ? g_active_styles : &g_level_styles;
-    if (!L->count || L->total_weight <= 0) return -1;
-    int r = rand_int(L->total_weight);
-    for (int i = 0; i < L->count; i++) {
-        if (r < L->weight[i]) return L->sidx[i];
-        r -= L->weight[i];
-    }
-    return L->sidx[L->count - 1];
+/* Helpers to get current variant choice for a style index (vault if active) */
+static inline byte style_floor_choice(int sidx) {
+    return (g_vault_primary_style >= 0) ? g_vault_floor_choice[sidx & 63] : g_level_floor_choice[sidx & 63];
 }
+static inline byte style_door_choice(int sidx) {
+    return (g_vault_primary_style >= 0) ? g_vault_door_choice[sidx & 63] : g_level_door_choice[sidx & 63];
+}
+
+/* Pick a style index using the active weighted list */
+/* styles_pick_random was removed; we always pick primary styles at scope start */
 
 /* External APIs to explicitly control level/vault weight lists */
 void styles_reset_level_weights(void) { styles_clear(&g_level_styles); g_active_styles = &g_level_styles; }
@@ -264,10 +301,22 @@ static int style_index_for_color(byte color_value)
 {
     if (!z_info || !style_info) return -1;
     if (color_value >= COLOR_STYLE_BASE) {
-        int sidx = color_value - COLOR_STYLE_BASE;
-        if (sidx >= 0 && sidx < z_info->style_max && style_info[sidx].name) return sidx;
+        int slot = color_value - COLOR_STYLE_BASE;
+        /* Strip the first-variant flag if present */
+        if (slot >= COLOR_STYLE_FLAG_FIRSTVAR) slot -= COLOR_STYLE_FLAG_FIRSTVAR;
+        if (slot >= 0 && slot < z_info->style_max && style_info[slot].name) return slot;
     }
     return -1;
+}
+
+/* Does the encoded color request the first variant explicitly? */
+static bool style_color_force_first_variant(byte color_value)
+{
+    if (color_value >= COLOR_STYLE_BASE) {
+        int slot = color_value - COLOR_STYLE_BASE;
+        return (slot >= COLOR_STYLE_FLAG_FIRSTVAR);
+    }
+    return false;
 }
 
 /* Return COLOR_STYLE_BASE + active chosen style (vault if active, else level) */
@@ -277,6 +326,8 @@ static byte get_active_style_color(void)
     if (sidx < 0) return 0;
     return (byte)(COLOR_STYLE_BASE + sidx);
 }
+/* Variant of get_active_style_color() that forces the first variant */
+/* Note: first-variant override is encoded directly into cave_color by callers */
 void styles_select_vault_primary(void)
 {
     if (g_vault_styles.count <= 0) {
@@ -875,46 +926,39 @@ static void special_lighting_floor(byte* a, char* c, int info, int light)
     }
 }
 
-static void special_lighting_wall(byte* a, char* c, int feat, int info)
+static void special_lighting_wall(byte* a, char* c, int feat, int info, int light)
 {
-    /* Handle "seen" grids */
-    if (info & (CAVE_SEEN))
-    {
-        /* Do nothing */
-    }
+    /* Determine brightness based on blindness and dynamic light (torch/lantern) */
+    bool is_dark = false;
 
-    /* Handle "blind" */
-    else if (p_ptr->blind)
+    if (p_ptr->blind)
     {
-        switch (use_graphics)
-        {
-        case GRAPHICS_NONE:
-        case GRAPHICS_PSEUDO:
-            /* darken the colour */
-            *a = darken(*a, *c);
-            break;
-        case GRAPHICS_MICROCHASM:
-            if (feat_supports_lighting(feat))
-                *c += 1;
-            break;
-        }
+        is_dark = true;
     }
-
-    /* Handle "unseen" grids */
     else
     {
-        switch (use_graphics)
+        /* If there's no positive light on this grid and it's not sunlit, treat as dark */
+        if (light <= 0 && !(info & (CAVE_GLOW)))
+            is_dark = true;
+    }
+
+    switch (use_graphics)
+    {
+    case GRAPHICS_NONE:
+    case GRAPHICS_PSEUDO:
+        if (is_dark)
         {
-        case GRAPHICS_NONE:
-        case GRAPHICS_PSEUDO:
             /* darken the colour */
             *a = darken(*a, *c);
-            break;
-        case GRAPHICS_MICROCHASM:
-            if (feat_supports_lighting(feat))
-                *c += 1;
-            break;
         }
+        break;
+    case GRAPHICS_MICROCHASM:
+        if (feat_supports_lighting(feat) && is_dark)
+        {
+            /* use darker tile variant */
+            *c += 1;
+        }
+        break;
     }
 
     if (use_background_colors)
@@ -972,8 +1016,15 @@ static bool apply_style_floor_graphics(int y, int x, int feat, int info, byte* a
     if (sidx >= 0)
     {
         style_type* s = &style_info[sidx];
-        *a = (byte)(s->floor_row | 0x80);
-        *c = (char)(s->floor_col | 0x80);
+        /* Halo can force variant 0 via color flag */
+        byte choice = 0;
+        if (!style_color_force_first_variant(color_value) && s->floor_count > 1) {
+            choice = style_floor_choice(sidx);
+        }
+        byte fr = (s->floor_count > 0) ? s->floor_rowv[choice] : s->floor_row;
+        byte fc = (s->floor_count > 0) ? s->floor_colv[choice] : s->floor_col;
+        *a = (byte)(fr | 0x80);
+        *c = (char)(fc | 0x80);
         log_trace("FLOOR override: STYLE idx=%d at (%d,%d) -> (row=%d,col=%d)", sidx, y, x, s->floor_row, s->floor_col);
         /* Let special_lighting_floor() adjust brightness afterwards */
         return true;
@@ -998,7 +1049,13 @@ static bool apply_style_door_graphics(int y, int x, int feat, int info, byte* a,
     if (sidx >= 0)
     {
         style_type* s = &style_info[sidx];
-        int row = s->door_row, col = s->door_col;
+        /* Respect first-variant override (if ever used for doors) */
+        byte choice = 0;
+        if (!style_color_force_first_variant(color_value) && s->door_count > 1) {
+            choice = style_door_choice(sidx);
+        }
+        int row = (s->door_count > 0) ? s->door_rowv[choice] : s->door_row;
+        int col = (s->door_count > 0) ? s->door_colv[choice] : s->door_col;
         if (feat == FEAT_OPEN) col += 1; else if (feat == FEAT_BROKEN) col += 2;
         *a = (byte)(row | 0x80);
         *c = (char)(col | 0x80);
@@ -1423,55 +1480,95 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                     
                     /* Note: cave_color comes from vault.txt C: lines or get_depth_color() */
                     /* Don't override - use the actual cave_color value */
-                    
-                    /* Set tile coordinates based on color and feature type */
-                    /* Absolute style override encoded in color */
-                    if (color_value >= COLOR_STYLE_BASE && z_info && style_info) {
-                        int sidx = color_value - COLOR_STYLE_BASE;
-                        if (sidx >= 0 && sidx < z_info->style_max && style_info[sidx].name) {
-                            style_type* s = &style_info[sidx];
-                            if (feat == FEAT_QUARTZ) { a = (byte)(s->vein_row | 0x80); c = (char)(s->vein_col | 0x80); }
-                            else { a = (byte)(s->wall_row | 0x80); c = (char)(s->wall_col | 0x80); }
-                            log_trace("DEPTH_BASED_WALLS: STYLE idx=%d for %s -> (row=%d,col=%d)", sidx, (feat==FEAT_QUARTZ?"vein":"wall"), (feat==FEAT_QUARTZ? s->vein_row : s->wall_row), (feat==FEAT_QUARTZ? s->vein_col : s->wall_col));
-                        }
-                    }
-                    else if (feat == FEAT_QUARTZ) {
-                        /* Veins: resolve via style when group/override present; otherwise use defaults */
-                        int sidx2 = style_index_for_color(color_value);
+
+                    /* Decode style index from cave_color (first-variant flag is ignored here) */
+                    int sidx2 = style_index_for_color(color_value);
+                    if (feat == FEAT_QUARTZ) {
+                        /* Veins */
                         if (sidx2 >= 0) {
-                            style_type* s2 = &style_info[sidx2];
-                            a = (byte)(s2->vein_row | 0x80); c = (char)(s2->vein_col | 0x80);
-                            log_trace("DEPTH_BASED_WALLS: STYLE idx=%d for vein -> (row=%d,col=%d)", sidx2, s2->vein_row, s2->vein_col);
-                        } else if (color_value == 0) {
-                            a = (byte)(0 | 0x80); c = (char)(6 | 0x80);
-                        } else if (color_value == 1) {
-                            a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
-                        } else if (color_value == 2) {
-                            a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
+                            style_type* s = &style_info[sidx2];
+                            if (s->vein_defined) {
+                                /* Full replacement vein tile */
+                                a = (byte)(s->vein_row | 0x80);
+                                c = (char)(s->vein_col | 0x80);
+                                log_trace("DEPTH_BASED_WALLS: STYLE idx=%d vein replacement -> (row=%d,col=%d)", sidx2, s->vein_row, s->vein_col);
+                            } else {
+                                /* Overlay default vein tile on this style's wall tile */
+                                extern byte get_default_vein_row(void);
+                                extern byte get_default_vein_col(void);
+                                byte dv_r = get_default_vein_row();
+                                byte dv_c = get_default_vein_col();
+                                byte wall_a = (byte)(s->wall_row | 0x80);
+                                byte wall_c = (byte)(s->wall_col | 0x80);
+                                if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
+                                    if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
+                                        wall_c += 1;
+                                    }
+                                }
+                                *tap = wall_a; *tcp = wall_c;
+                                a = (byte)(dv_r | 0x80); c = (char)(dv_c | 0x80);
+                                log_trace("DEPTH_BASED_WALLS: STYLE idx=%d vein overlay default -> (row=%d,col=%d) over wall(row=%d,col=%d)", sidx2, dv_r, dv_c, s->wall_row, s->wall_col);
+                                if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
+                                    if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
+                                        c += 1;
+                                    }
+                                }
+                                *ap = a; *cp = c;
+                                return;
+                            }
                         } else {
-                            a = (byte)(15 | 0x80); c = (char)(18 | 0x80);
+                            /* No encoded style in cave_color: fall back to primary style (level or vault). */
+                            int fb = (g_vault_primary_style >= 0 && (cave_info[y][x] & CAVE_ICKY)) ? g_vault_primary_style : g_level_primary_style;
+                            if (fb >= 0 && style_info[fb].name) {
+                                style_type* sfb = &style_info[fb];
+                                byte wall_a = (byte)(sfb->wall_row | 0x80);
+                                byte wall_c = (byte)(sfb->wall_col | 0x80);
+                                extern byte get_default_vein_row(void);
+                                extern byte get_default_vein_col(void);
+                                byte dv_r = get_default_vein_row();
+                                byte dv_c = get_default_vein_col();
+                                a = (byte)(dv_r | 0x80); c = (char)(dv_c | 0x80);
+                                if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
+                                    if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
+                                        c += 1; wall_c += 1;
+                                    }
+                                }
+                                *ap = a; *cp = c; /* overlay vein */
+                                *tap = wall_a; *tcp = wall_c; /* base wall */
+                                log_warn("VEIN fallback: unencoded cave_color=%d at (%d,%d); using primary style %d wall(row=%d,col=%d)", color_value, y, x, fb, sfb->wall_row, sfb->wall_col);
+                                return;
+                            } else {
+                                /* Give up: leave existing tiles */
+                                log_warn("VEIN fallback: no primary style available at (%d,%d)", y, x);
+                                return;
+                            }
                         }
                     } else {
-                        /* Walls: resolve via style when group/override present; otherwise use defaults */
-                        int sidx2 = style_index_for_color(color_value);
+                        /* Walls */
                         if (sidx2 >= 0) {
                             style_type* s2 = &style_info[sidx2];
-                            a = (byte)(s2->wall_row | 0x80); c = (char)(s2->wall_col | 0x80);
+                            a = (byte)(s2->wall_row | 0x80);
+                            c = (char)(s2->wall_col | 0x80);
                             log_trace("DEPTH_BASED_WALLS: STYLE idx=%d for wall -> (row=%d,col=%d)", sidx2, s2->wall_row, s2->wall_col);
-                        } else if (color_value == 0) {
-                            a = (byte)(0 | 0x80); c = (char)(4 | 0x80);
-                        } else if (color_value == 1) {
-                            a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
-                        } else if (color_value == 2) {
-                            a = (byte)(15 | 0x80); c = (char)(16 | 0x80);
                         } else {
-                            a = (byte)(15 | 0x80); c = (char)(14 | 0x80);
+                            int fb = (g_vault_primary_style >= 0 && (cave_info[y][x] & CAVE_ICKY)) ? g_vault_primary_style : g_level_primary_style;
+                            if (fb >= 0 && style_info[fb].name) {
+                                style_type* sfb = &style_info[fb];
+                                a = (byte)(sfb->wall_row | 0x80);
+                                c = (char)(sfb->wall_col | 0x80);
+                                log_warn("WALL fallback: unencoded cave_color=%d at (%d,%d); using primary style %d (row=%d,col=%d)", color_value, y, x, fb, sfb->wall_row, sfb->wall_col);
+                            } else {
+                                a = (byte)(15 | 0x80);
+                                c = (char)(14 | 0x80);
+                                log_warn("WALL fallback: no primary style; using hard fallback at (%d,%d)", y, x);
+                            }
                         }
                     }
                     
-                    /* Apply standard lighting effects (+1 for dark version) */
+                    /* Apply standard lighting effects (+1 for dark version)
+                     * Dark variant only if not sunlit (no CAVE_GLOW) or if blind. */
                     if (use_graphics == GRAPHICS_MICROCHASM && feat_supports_lighting(feat)) {
-                        if (!(info & (CAVE_SEEN)) && (p_ptr->blind || !(info & (CAVE_GLOW)))) {
+                        if (p_ptr->blind || (!(info & (CAVE_GLOW)) && cave_light[y][x] <= 0)) {
                             c += 1;
                         }
                     }
@@ -1488,16 +1585,16 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
                     return;
                 } else {
                     /* No matching tier found, use standard lighting */
-                    special_lighting_wall(&a, &c, feat, info);
+                    special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
                 }
             }
             else {
                 /* Standard lighting effects for non-wall features */
-                special_lighting_wall(&a, &c, feat, info);
+                special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
             }
 #else
             /* Depth-based walls disabled, use standard lighting only */
-            special_lighting_wall(&a, &c, feat, info);
+            special_lighting_wall(&a, &c, feat, info, cave_light[y][x]);
 #endif /* DEPTH_BASED_WALLS */
         }
 
@@ -4722,15 +4819,21 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
     /* Set the color (0 means use depth default) */
     if (color == 0)
     {
-    /* Use active style (level or vault) */
-    cave_color[y][x] = get_active_style_color();
-        log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=0 -> cave_color=%d", y, x, feat, cave_color[y][x]);
+        /* Preserve existing per-cell style if already encoded. */
+        if (cave_color[y][x] >= COLOR_STYLE_BASE) {
+            /* Keep the chosen style for this cell; only the feature changes. */
+            log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=0 -> preserve cave_color=%d", y, x, feat, cave_color[y][x]);
+        } else {
+            /* No style encoded yet: use active style (level or vault). */
+            cave_color[y][x] = get_active_style_color();
+            log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=0 -> init cave_color=%d", y, x, feat, cave_color[y][x]);
+        }
     }
     else
     {
-    /* If a raw style index is passed, encode it; if already encoded, keep */
-    if (color < COLOR_STYLE_BASE) cave_color[y][x] = (byte)(COLOR_STYLE_BASE + color);
-    else cave_color[y][x] = color;
+        /* If a raw style index is passed, encode it; if already encoded, keep */
+        if (color < COLOR_STYLE_BASE) cave_color[y][x] = (byte)(COLOR_STYLE_BASE + color);
+        else cave_color[y][x] = color;
         log_trace("cave_set_feat_with_color: (%d,%d) feat=%d, color=%d -> cave_color=%d", y, x, feat, color, cave_color[y][x]);
     }
 

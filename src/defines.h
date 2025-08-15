@@ -3045,6 +3045,22 @@ static const depth_wall_tier wall_depth_tiers[MAX_WALL_DEPTH_TIERS] = {
             && (cave_info[Y][X] & (CAVE_HIDDEN))))
 
 /*
+ * Global style color encoding used in cave_color[]
+ * COLOR_STYLE_BASE + sidx encodes absolute style index per-cell.
+ * We reserve an extra offset (COLOR_STYLE_FLAG_FIRSTVAR) to request
+ * the "first variant" of a style for floors/doors, used by vault halos.
+ */
+#ifndef COLOR_STYLE_BASE
+#define COLOR_STYLE_BASE 200
+#endif
+#ifndef COLOR_STYLE_SLOT_MAX
+#define COLOR_STYLE_SLOT_MAX 64
+#endif
+#ifndef COLOR_STYLE_FLAG_FIRSTVAR
+#define COLOR_STYLE_FLAG_FIRSTVAR COLOR_STYLE_SLOT_MAX
+#endif
+
+/*
  * Determine if a "legal" grid is a "trap" grid
  */
 #define cave_trap_bold(Y, X)                                                   \

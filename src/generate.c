@@ -2434,8 +2434,12 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
         for (int si = 0; si < v_ptr->style_count; ++si) {
             int sidx = v_ptr->style_idx[si];
             int w = v_ptr->style_weight[si];
-            if (sidx == -1) styles_add_vault_from_level(w);
-            else styles_add_vault_weight(sidx, w);
+            if (sidx == -1) {
+                int lp = styles_get_level_primary_style();
+                if (lp >= 0) styles_add_vault_weight(lp, w);
+            } else {
+                styles_add_vault_weight(sidx, w);
+            }
         }
     } else {
         /* Apply per-depth default or global default; fallback to clone w/ bias */
@@ -2448,6 +2452,8 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
         styles_get_level_primary_style(), styles_get_vault_primary_style());
 
     /* Place dungeon features and objects */
+    int vault_primary_sidx_for_encoding = styles_get_vault_primary_style();
+    int v_min_y = 32767, v_min_x = 32767, v_max_y = -32768, v_max_x = -32768; /* track vault bbox */
     for (t = data, dy = 0; dy < ymax; dy++)
     {
         if (flip_v)
@@ -2473,12 +2479,23 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 y = y0 - (xmax / 2) + ax;
             }
 
-            /* Hack -- skip "non-grids" */
+            /* Hack -- skip "non-grids" but still advance bbox only on placed tiles */
             if (*t == ' ')
                 continue;
 
-            /* Lay down a floor */
-            cave_set_feat(y, x, FEAT_FLOOR);
+            /* Track bbox of actual vault content */
+            if (y < v_min_y) v_min_y = y;
+            if (y > v_max_y) v_max_y = y;
+            if (x < v_min_x) v_min_x = x;
+            if (x > v_max_x) v_max_x = x;
+
+            /* Lay down a floor, encoding the vault style and forcing first variant */
+            if (vault_primary_sidx_for_encoding >= 0) {
+                int enc = COLOR_STYLE_BASE + COLOR_STYLE_FLAG_FIRSTVAR + (vault_primary_sidx_for_encoding & (COLOR_STYLE_SLOT_MAX - 1));
+                cave_set_feat_with_color(y, x, FEAT_FLOOR, enc);
+            } else {
+                cave_set_feat(y, x, FEAT_FLOOR);
+            }
 
             /* Part of a vault */
             cave_info[y][x] |= (CAVE_ROOM | CAVE_ICKY);
@@ -2584,6 +2601,75 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 cave_info[y][x] &= ~(CAVE_ROOM | CAVE_ICKY);
                 break;
             }
+            }
+        }
+    }
+
+    /* After placement, apply a 1-tile style halo so adjacent walls/floors match the vault style.
+     * Refined: do NOT recolor corridor floor tiles that sit just outside a vault door.
+     * We only halo floors when adjacent to a vault wall (not a door), to keep vault
+     * entrances blending into the corridor style. Doors themselves remain excluded. */
+    if (v_min_y <= v_max_y && v_min_x <= v_max_x) {
+        int ay0 = MAX(1, v_min_y - 1);
+        int ax0 = MAX(1, v_min_x - 1);
+        int ay1 = MIN(p_ptr->cur_map_hgt - 2, v_max_y + 1);
+        int ax1 = MIN(p_ptr->cur_map_wid - 2, v_max_x + 1);
+        for (int yy = ay0; yy <= ay1; ++yy) {
+            for (int xx = ax0; xx <= ax1; ++xx) {
+                /* Skip squares that are already part of the vault */
+                if (cave_info[yy][xx] & (CAVE_ICKY)) continue;
+
+                /* Only halo cells adjacent to vault content (8-directional),
+                 * and classify what kind of vault neighbor it is. */
+                bool near_vault_any = false;
+                bool near_vault_wall = false;
+                bool near_vault_door = false;
+                for (int dy2 = -1; dy2 <= 1; ++dy2) {
+                    for (int dx2 = -1; dx2 <= 1; ++dx2) {
+                        if (dy2 == 0 && dx2 == 0) continue;
+                        int ny = yy + dy2, nx = xx + dx2;
+                        if (!(cave_info[ny][nx] & (CAVE_ICKY))) continue;
+                        near_vault_any = true;
+                        int nfeat = cave_feat[ny][nx];
+                        /* Door features */
+                        if (nfeat == FEAT_OPEN || nfeat == FEAT_BROKEN ||
+                            (nfeat >= FEAT_DOOR_HEAD && nfeat <= FEAT_DOOR_TAIL)) {
+                            near_vault_door = true;
+                        }
+                        /* Walls and wall-like */
+                        else if ((nfeat >= FEAT_WALL_HEAD && nfeat <= FEAT_WALL_TAIL) ||
+                                 nfeat == FEAT_QUARTZ || nfeat == FEAT_RUBBLE) {
+                            near_vault_wall = true;
+                        }
+                    }
+                }
+                if (!near_vault_any) continue;
+
+                int feat = cave_feat[yy][xx];
+                /* Skip doors; let corridor/door visuals remain level-styled */
+                if (feat == FEAT_OPEN || feat == FEAT_BROKEN ||
+                    (feat >= FEAT_DOOR_HEAD && feat <= FEAT_DOOR_TAIL)) {
+                    continue;
+                }
+
+                /* Apply to floors only when adjacent to vault walls and NOT adjacent to vault doors */
+                if (cave_floorlike_bold(yy, xx)) {
+                    if (!(near_vault_wall && !near_vault_door)) continue;
+                }
+                /* Apply to walls/veins/rubble regardless, to blend the boundary */
+                else if ((cave_info[yy][xx] & (CAVE_WALL)) || feat == FEAT_QUARTZ || feat == FEAT_RUBBLE) {
+                    /* ok */
+                } else {
+                    continue;
+                }
+
+                {
+                    /* Re-encode color to the vault primary style, forcing first variant */
+                    int sidx = styles_get_vault_primary_style();
+                    if (sidx < 0) sidx = styles_get_level_primary_style();
+                    int enc = COLOR_STYLE_BASE + COLOR_STYLE_FLAG_FIRSTVAR + (sidx & (COLOR_STYLE_SLOT_MAX - 1));
+                    cave_set_feat_with_color(yy, xx, feat, enc);
+                }
             }
         }
     }

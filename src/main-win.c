@@ -1263,6 +1263,112 @@ static int new_palette(void)
 
 #ifdef USE_GRAPHICS
 /*
+ * Overlay cache and helpers (file scope)
+ * Build/find 32bpp ARGB bitmaps for overlay tiles (e.g., vein overlays)
+ * with per-pixel alpha using a color key and small tolerance.
+ */
+typedef struct {
+    int row, col;           /* tile indices */
+    int w, h;               /* cell size at source */
+    COLORREF key;           /* key used when built */
+    int tol;                /* tolerance used when built */
+    HBITMAP hbmp;           /* 32bpp ARGB DIBSection with alpha */
+} overlay_cache_entry;
+static overlay_cache_entry s_overlay_cache[128];
+static int s_overlay_cache_count = 0;
+static HBITMAP s_overlay_cache_atlas = NULL;
+static int s_overlay_cache_w1 = 0, s_overlay_cache_h1 = 0;
+
+/* Clear overlay cache when atlas or cell dims change */
+static void clear_overlay_cache(void)
+{
+    for (int i = 0; i < s_overlay_cache_count; ++i) {
+        if (s_overlay_cache[i].hbmp) DeleteObject(s_overlay_cache[i].hbmp);
+        s_overlay_cache[i].hbmp = NULL;
+    }
+    s_overlay_cache_count = 0;
+}
+
+/* Build/find a 32bpp ARGB bitmap of the overlay tile with per-pixel alpha
+   Alpha = 0 for pixels within tolerance of the key color (or near-gray when use_sat), 255 otherwise. */
+static HBITMAP get_alpha_overlay_tile(HDC hdcSrc, int row, int col, int w1, int h1, COLORREF key, int tol, int use_sat)
+{
+    /* Invalidate cache on atlas or cell change */
+    if (s_overlay_cache_atlas != infGraph.hBitmap || s_overlay_cache_w1 != w1 || s_overlay_cache_h1 != h1) {
+        clear_overlay_cache();
+        s_overlay_cache_atlas = infGraph.hBitmap;
+        s_overlay_cache_w1 = w1; s_overlay_cache_h1 = h1;
+    }
+    /* Lookup */
+    for (int i = 0; i < s_overlay_cache_count; ++i) {
+        overlay_cache_entry* e = &s_overlay_cache[i];
+        if (e->row == row && e->col == col && e->w == w1 && e->h == h1 && e->key == key && e->tol == tol) {
+            return e->hbmp;
+        }
+    }
+    if (s_overlay_cache_count >= (int)(sizeof(s_overlay_cache) / sizeof(s_overlay_cache[0]))) {
+        /* Simple eviction: drop all if full */
+        clear_overlay_cache();
+    }
+
+    /* Create a 32bpp DIBSection and copy the source tile into it */
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w1;
+    bmi.bmiHeader.biHeight = -h1; /* top-down */
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* bits = NULL;
+    HBITMAP hbmp32 = CreateDIBSection(hdcSrc, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!hbmp32 || !bits) {
+        if (hbmp32) DeleteObject(hbmp32);
+        return NULL;
+    }
+
+    HDC hdc32 = CreateCompatibleDC(hdcSrc);
+    HBITMAP old32 = (HBITMAP)SelectObject(hdc32, hbmp32);
+    int x1 = col * w1;
+    int y1 = row * h1;
+    BitBlt(hdc32, 0, 0, w1, h1, hdcSrc, x1, y1, SRCCOPY);
+
+    /* Apply alpha: 0 for near-key, 255 for others (premultiplied) */
+    byte* p = (byte*)bits; /* BGRA order */
+    int kr = GetRValue(key), kg = GetGValue(key), kb = GetBValue(key);
+    for (int yy = 0; yy < h1; ++yy) {
+        for (int xx = 0; xx < w1; ++xx) {
+            byte* px = p + (yy * w1 + xx) * 4;
+            int b = px[0], g = px[1], r = px[2];
+            int dr = abs(r - kr), dg = abs(g - kg), db = abs(b - kb);
+            int maxc = r; if (g > maxc) maxc = g; if (b > maxc) maxc = b;
+            int minc = r; if (g < minc) minc = g; if (b < minc) minc = b;
+            int sat = maxc - minc; /* simple saturation proxy */
+            bool is_key = (dr <= tol && dg <= tol && db <= tol);
+            bool is_near_gray = (use_sat && sat <= 30); /* threshold to drop grayish pixels */
+            if (is_key || is_near_gray) {
+                /* transparent */
+                px[3] = 0; /* A */
+                /* zero RGB to avoid fringes */
+                px[0] = px[1] = px[2] = 0;
+            } else {
+                /* opaque */
+                px[3] = 255; /* A */
+            }
+        }
+    }
+
+    /* Cleanup DC */
+    SelectObject(hdc32, old32);
+    DeleteDC(hdc32);
+
+    /* Insert into cache */
+    overlay_cache_entry* e = &s_overlay_cache[s_overlay_cache_count++];
+    e->row = row; e->col = col; e->w = w1; e->h = h1; e->key = key; e->tol = tol; e->hbmp = hbmp32;
+    return hbmp32;
+}
+
+/*
  * Initialize graphics
  */
 static bool init_graphics(void)
@@ -2308,6 +2414,8 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
     hdcSrc = CreateCompatibleDC(hdc);
     hbmSrcOld = SelectObject(hdcSrc, infGraph.hBitmap);
 
+    /* Overlay helpers are defined at file scope (see above) */
+
     /* Draw attr/char pairs */
     for (i = 0; i < n; i++, x2 += w2)
     {
@@ -2367,7 +2475,7 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
             /* Perfect size */
             if ((w1 == tw2) && (h1 == h2))
             {
-                COLORREF transparent = GetPixel(hdcSrc, 0, 0);
+                COLORREF transparent_atlas = GetPixel(hdcSrc, 0, 0);
 
                 /* Copy the terrain picture from the bitmap to the window */
                 BitBlt(hdc, x2, y2, tw2, h2, hdcSrc, x3, y3, SRCCOPY);
@@ -2375,18 +2483,56 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
                 if (glow)
                 {
                     TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, glow_x, glow_y,
-                        w1, h1, transparent);
+                        w1, h1, transparent_atlas);
                 }
 
                 /* Draw the tile */
-                TransparentBlt(
-                    hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1, transparent);
+                {
+                    bool overlay_diff = ((x1 != x3) || (y1 != y3));
+                    if (overlay_diff) {
+                        /* Detect vein overlay by matching default E: tile (light or dark) */
+                        extern byte get_default_vein_row(void);
+                        extern byte get_default_vein_col(void);
+                        byte dv_r = get_default_vein_row();
+                        byte dv_c = get_default_vein_col();
+                        bool is_vein_overlay = (row == dv_r) && (col == dv_c || col == (byte)(dv_c + 1));
+
+                        if (is_vein_overlay) {
+                            extern bool get_overlay_key_enabled(void);
+                            extern void get_overlay_key_rgb(byte* r, byte* g, byte* b);
+                            COLORREF key;
+                            if (get_overlay_key_enabled()) {
+                                byte kr, kg, kb; get_overlay_key_rgb(&kr, &kg, &kb);
+                                key = RGB(kr, kg, kb);
+                            } else {
+                                key = GetPixel(hdcSrc, x1, y1);
+                            }
+                            /* Build/find ARGB overlay with hard transparency */
+                            int tol = 8; /* small tolerance to eliminate fringes */
+                            int use_sat = get_overlay_key_enabled() ? 0 : 1;
+                            HBITMAP hbmp32 = get_alpha_overlay_tile(hdcSrc, row, col, w1, h1, key, tol, use_sat);
+                            if (hbmp32) {
+                                HDC hdc32 = CreateCompatibleDC(hdc);
+                                HBITMAP old32 = (HBITMAP)SelectObject(hdc32, hbmp32);
+                                BLENDFUNCTION bf; bf.BlendOp = AC_SRC_OVER; bf.BlendFlags = 0; bf.SourceConstantAlpha = 255; bf.AlphaFormat = AC_SRC_ALPHA;
+                                AlphaBlend(hdc, x2, y2, tw2, h2, hdc32, 0, 0, w1, h1, bf);
+                                SelectObject(hdc32, old32);
+                                DeleteDC(hdc32);
+                            } else {
+                                TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1, transparent_atlas);
+                            }
+                        } else {
+                            /* Non-vein overlays (player, monsters, items): draw normally with atlas key */
+                            TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1, transparent_atlas);
+                        }
+                    }
+                }
             }
 
             /* Need to stretch */
             else
             {
-                COLORREF transparent = GetPixel(hdcSrc, 0, 0);
+                COLORREF transparent_atlas = GetPixel(hdcSrc, 0, 0);
 
                 /* Set the correct mode for stretching the tiles */
                 SetStretchBltMode(hdc, COLORONCOLOR);
@@ -2398,15 +2544,44 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
                 if (glow)
                 {
                     TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, glow_x, glow_y,
-                        w1, h1, transparent);
+                        w1, h1, transparent_atlas);
                 }
 
                 /* Only draw if terrain and overlay are different */
                 if ((x1 != x3) || (y1 != y3))
                 {
-                    /* Draw the tile */
-                    TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1,
-                        transparent);
+                    extern byte get_default_vein_row(void);
+                    extern byte get_default_vein_col(void);
+                    byte dv_r = get_default_vein_row();
+                    byte dv_c = get_default_vein_col();
+                    bool is_vein_overlay = (row == dv_r) && (col == dv_c || col == (byte)(dv_c + 1));
+
+                    if (is_vein_overlay) {
+                        extern bool get_overlay_key_enabled(void);
+                        extern void get_overlay_key_rgb(byte* r, byte* g, byte* b);
+                        COLORREF key;
+                        if (get_overlay_key_enabled()) {
+                            byte kr, kg, kb; get_overlay_key_rgb(&kr, &kg, &kb);
+                            key = RGB(kr, kg, kb);
+                        } else {
+                            key = GetPixel(hdcSrc, x1, y1);
+                        }
+                        int tol = 8;
+                        int use_sat = get_overlay_key_enabled() ? 0 : 1;
+                        HBITMAP hbmp32 = get_alpha_overlay_tile(hdcSrc, row, col, w1, h1, key, tol, use_sat);
+                        if (hbmp32) {
+                            HDC hdc32 = CreateCompatibleDC(hdc);
+                            HBITMAP old32 = (HBITMAP)SelectObject(hdc32, hbmp32);
+                            BLENDFUNCTION bf; bf.BlendOp = AC_SRC_OVER; bf.BlendFlags = 0; bf.SourceConstantAlpha = 255; bf.AlphaFormat = AC_SRC_ALPHA;
+                            AlphaBlend(hdc, x2, y2, tw2, h2, hdc32, 0, 0, w1, h1, bf);
+                            SelectObject(hdc32, old32);
+                            DeleteDC(hdc32);
+                        } else {
+                            TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1, transparent_atlas);
+                        }
+                    } else {
+                        TransparentBlt(hdc, x2, y2, tw2, h2, hdcSrc, x1, y1, w1, h1, transparent_atlas);
+                    }
                 }
             }
 

@@ -213,6 +213,11 @@ extern char* flavor_name;
 extern char* flavor_text;
 extern names_type* n_info;
 extern style_type* style_info;
+/* Default vein tile accessors (defined in init1.c) */
+byte get_default_vein_row(void);
+byte get_default_vein_col(void);
+bool get_overlay_key_enabled(void);
+void get_overlay_key_rgb(byte* r, byte* g, byte* b);
 extern char* style_name;
 
 extern combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];

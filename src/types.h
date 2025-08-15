@@ -800,8 +800,15 @@ struct style_type {
     /* Microchasm atlas coordinates: row/col for each element */
     byte wall_row,  wall_col;
     byte vein_row,  vein_col;
-    byte floor_row, floor_col;
-    byte door_row,  door_col; /* base door; open +1, broken +2 */
+    /* Floors: support multiple options (first used if no selection) */
+    byte floor_row, floor_col;            /* legacy single values */
+    byte floor_count;                     /* number of floor variants */
+    byte floor_rowv[8], floor_colv[8];    /* up to 8 variants */
+    /* Doors: support multiple options (first used if no selection) */
+    byte door_row,  door_col;             /* legacy base tile; open +1, broken +2 */
+    byte door_count;                      /* number of door variants */
+    byte door_rowv[8], door_colv[8];      /* up to 8 variants */
+    bool vein_defined;       /* true if Y: was specified in style.txt */
 };
 
 /*
