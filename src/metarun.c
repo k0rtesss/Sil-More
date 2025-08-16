@@ -247,6 +247,24 @@ int any_curse_flag_active(u32b flag)
 }
 
 /* ---------------------------------------------------------------
+ * Simple counters used by other modules (no UI side-effects)
+ * ------------------------------------------------------------- */
+void metarun_increment_deaths(void)
+{
+    /* Clamp to byte range; defer saving/UI to caller */
+    if (metar.deaths < 255) metar.deaths++;
+}
+
+void metarun_gain_silmarils(byte n)
+{
+    if (!n) return;
+    int total = (int)metar.silmarils + (int)n;
+    if (total > 255) total = 255;
+    if (total < 0) total = 0;
+    metar.silmarils = (byte)total;
+}
+
+/* ---------------------------------------------------------------
  * Pick a curse at random, respecting weights, stacks, caps,
  * and the RHF_CURSE tail-lift.
  * ------------------------------------------------------------- */

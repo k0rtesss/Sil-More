@@ -12,6 +12,10 @@
 #include "log.h"
 #include "metarun.h"
 #include "z-term.h"
+#include <time.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 /*
  * Return a "feeling" (or NULL) about an item.  Method 1 (Weak).
@@ -3178,14 +3182,33 @@ PlayResult play_game(void)
     print_story_intro();
     else print_metarun_stats();
 
+     /* New startup behavior: try to auto-load any alive character
+         lingering in the scorefile. If successful, skip character
+         selection and proceed directly. */
+     character_loaded = false;
+     character_loaded_dead = false;
+     bool autoloaded = autoload_alive_from_scores();
+     if (autoloaded && character_loaded) {
+        log_info("Auto-loaded alive character from scores; skipping selection");
+        new_game = false;
+    }
+
     log_info("Starting new game session");
 
-    character_dungeon = false;
-    character_loaded = false;
-    character_loaded_dead = false;
+     /* Only reset flags if no character has been loaded yet.
+         If autoload succeeded, keep the loaded state and the
+         dungeon-loaded flag set by load_player(). */
+     if (!character_loaded) {
+          character_dungeon = false;
+          character_loaded = false;
+          character_loaded_dead = false;
+     }
 
     for (;;)
     {
+        /* If we already loaded a living character, break to init */
+        if (character_loaded) break;
+
         /* Wipe the player each time we (re)enter creation */
         player_wipe();
 
@@ -3200,8 +3223,8 @@ PlayResult play_game(void)
             return PLAY_QUIT; 
         }
 
-        /* Attempt to load */
-        if (!load_player()) {
+    /* Attempt to load (manual path) */
+    if (!load_player()) {
             log_debug("Failed to load player");
             if (character_loaded_dead) player_wipe();
         }

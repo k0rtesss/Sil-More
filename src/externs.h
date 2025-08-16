@@ -342,6 +342,10 @@ extern void styles_select_vault_primary(void);
 extern void styles_rules_clear(void);
 extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
 extern void styles_set_loaded_level_primary(int sidx);
+/* Persisted door-style variant choices for consistency across save/load */
+extern int styles_get_choice_capacity(void);
+extern void styles_copy_level_door_choices(byte* out_buf, int max_n);
+extern void styles_load_level_door_choices(const byte* in_buf, int n);
 extern int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);
@@ -586,6 +590,7 @@ extern int meta_fill(bool);
 extern void print_story(int last_parts, bool fade_in);
 extern const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll);
 extern void clear_scorefile(void);
+extern bool autoload_alive_from_scores(void);
 
 /* generate.c */
 extern void place_monster_by_flag(

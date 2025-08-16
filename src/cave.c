@@ -296,6 +296,27 @@ void styles_apply_vault_default_for_depth(int depth)
 int styles_get_level_primary_style(void) { return g_level_primary_style; }
 void styles_set_loaded_level_primary(int sidx) { g_level_primary_style = sidx; }
 
+/* Expose capacity for style choice arrays (for save/load) */
+int styles_get_choice_capacity(void) { return 64; }
+
+/* Copy out the current per-level door variant choices. Caller provides buffer. */
+void styles_copy_level_door_choices(byte* out_buf, int max_n)
+{
+    if (!out_buf || max_n <= 0) return;
+    int n = styles_get_choice_capacity();
+    if (max_n < n) n = max_n;
+    for (int i = 0; i < n; ++i) out_buf[i] = g_level_door_choice[i];
+}
+
+/* Load per-level door variant choices from a buffer of length n. */
+void styles_load_level_door_choices(const byte* in_buf, int n)
+{
+    if (!in_buf || n <= 0) return;
+    int cap = styles_get_choice_capacity();
+    if (n > cap) n = cap;
+    for (int i = 0; i < n; ++i) g_level_door_choice[i] = in_buf[i];
+}
+
 /* Decode a style index from a cave_color cell (or -1 if not encoded) */
 static int style_index_for_color(byte color_value)
 {

@@ -6918,6 +6918,94 @@ extern void prt_mini_screenshot(int col, int row)
 }
 
 /*
+ * Attempt to auto-load the first "alive" character found in the scorefile.
+ * If a corresponding savefile cannot be loaded, mark the score entry as
+ * dead (cause: "their own hand"), increment the metarun death counter, show
+ * a warning, and continue scanning. Returns true if a character was loaded;
+ * false if no alive entries remain or none could be loaded.
+ */
+bool autoload_alive_from_scores(void)
+{
+    char score_path[1024];
+    path_build(score_path, sizeof score_path, ANGBAND_DIR_APEX, "scores.raw");
+
+    /* Open for read/write so we can patch entries */
+    int fd_local;
+    safe_setuid_grab();
+    fd_local = open(score_path, O_RDWR | O_CREAT, 0644);
+    safe_setuid_drop();
+    if (fd_local < 0) {
+        log_info("autoload: could not open scorefile: %s", score_path);
+        return false;
+    }
+
+    off_t file_end = lseek(fd_local, 0, SEEK_END);
+    int n_recs = (int)(file_end / (off_t)sizeof(high_score));
+    if (n_recs <= 0) {
+        safe_setuid_grab();
+        close(fd_local);
+        safe_setuid_drop();
+        return false;
+    }
+
+    /* Iterate alive entries in order; load first that succeeds. */
+    for (int i = 0; i < n_recs; i++) {
+        high_score entry;
+        if (lseek(fd_local, (off_t)i * (off_t)sizeof entry, SEEK_SET) < 0)
+            break;
+        ssize_t got = read(fd_local, &entry, sizeof entry);
+        if (got != sizeof entry) break;
+
+        /* Alive entries are encoded as how == "(alive and well)" */
+        if (strcmp(entry.how, "(alive and well)") != 0) continue;
+
+        /* Try to load this character by name */
+        char who_buf[sizeof entry.who + 1];
+        memset(who_buf, 0, sizeof who_buf);
+        my_strcpy(who_buf, entry.who, sizeof(who_buf));
+
+        log_info("autoload: found alive entry '%s' – attempting load", who_buf);
+
+        /* Set up savefile path for this name */
+        my_strcpy(op_ptr->full_name, who_buf, sizeof(op_ptr->full_name));
+        process_player_name(true); /* ensures savefile is set for this name */
+
+        /* Attempt to load */
+        if (load_player()) {
+            log_info("autoload: successfully loaded '%s'", who_buf);
+            /* Keep the descriptor closed before returning */
+            safe_setuid_grab();
+            close(fd_local);
+            safe_setuid_drop();
+            return true;
+        }
+
+        /* Failed to load – mark as dead by own hand and warn */
+        log_warn("autoload: savefile missing/corrupt for '%s' – marking dead", who_buf);
+        strnfmt(entry.how, sizeof entry.how, "%-.49s", "their own hand");
+        if (lseek(fd_local, (off_t)i * (off_t)sizeof entry, SEEK_SET) >= 0) {
+            (void)write(fd_local, &entry, sizeof entry);
+        }
+
+        /* Increment meta-run death count and persist */
+        metarun_increment_deaths();
+        (void)save_metaruns();
+
+        /* Anti-cheat warning */
+        msg_format("Warning: Alive entry '%s' had no valid savefile. Marked as dead.", who_buf);
+        msg_print("Please do not tamper with savefiles.");
+        message_flush();
+        /* Continue looking for another alive entry */
+    }
+
+    /* None loaded; close and return */
+    safe_setuid_grab();
+    close(fd_local);
+    safe_setuid_drop();
+    return false;
+}
+
+/*
  * Delete the current high-score file and immediately recreate an empty
  * placeholder so subsequent fd_open() calls succeed without special cases.
  */
