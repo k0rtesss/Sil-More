@@ -1232,6 +1232,9 @@ void get_overlay_key_rgb(byte* r, byte* g, byte* b);
 bool get_overlay_key_enabled(void) { return g_overlay_key_enabled; }
 void get_overlay_key_rgb(byte* r, byte* g, byte* b) { if (r) *r = g_overlay_key_r; if (g) *g = g_overlay_key_g; if (b) *b = g_overlay_key_b; }
 
+/* Forward decl for per-style message parser (M:) */
+static errr parse_style_message_line(char* buf);
+
 errr parse_style_info(char* buf, header* head)
 {
     /* Note: L:/U: moved to style-levels.txt for clarity. */
@@ -1354,6 +1357,13 @@ errr parse_style_info(char* buf, header* head)
         return 0;
     }
 
+    /* M: <text> — per-style message (banner) */
+    if (buf[0] == 'M')
+    {
+        /* Reuse the message parser; it uses error_idx as current style index */
+        return parse_style_message_line(buf);
+    }
+
     return PARSE_ERROR_UNDEFINED_DIRECTIVE;
 }
 
@@ -1453,6 +1463,128 @@ errr parse_style_levels(char* buf, header* head)
         return 0;
     }
     return 0;
+}
+
+/* ====================  style display strings (per-style M:)  ===================== */
+
+/* Per-style banner strings (by style index, 0..127 safe upper bound) */
+static char* g_style_display_text[128] = { 0 };
+
+/* Accessor for per-style banner */
+const char* styles_get_style_display(int sidx)
+{
+    if (sidx < 0 || sidx >= 128) return NULL;
+    return g_style_display_text[sidx];
+}
+
+/* Extend style.txt parser to support per-style messages via M: */
+/* In-record form:  M: <text>         (applies to current style error_idx) */
+/* Global form:     M:<idx>: <text>   (applies to the given style index)   */
+static errr parse_style_message_line(char* buf)
+{
+    if (buf[0] != 'M') return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+    char* s = NULL;
+    int idx = -1;
+    if (buf[1] == ':')
+    {
+        /* Could be M:<idx>: or M: <text> (no idx) */
+        char* p = buf + 2;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p >= '0' && *p <= '9')
+        {
+            /* M:<idx>:<text> */
+            char* c = strchr(p, ':'); if (!c) return PARSE_ERROR_GENERIC; *c++ = '\0';
+            idx = atoi(p);
+            s = c;
+        }
+        else
+        {
+            /* M: <text> (use current error_idx) */
+            idx = error_idx;
+            s = p;
+        }
+    }
+    else return PARSE_ERROR_GENERIC;
+
+    /* Trim leading spaces */
+    while (*s == ' ' || *s == '\t') s++;
+    /* Strip optional surrounding quotes */
+    if (*s == '"' || *s == '\'') { char q = *s++; char* e = strrchr(s, q); if (e) *e = '\0'; }
+    /* Trim trailing comment */
+    char* h = strchr(s, '#'); if (h) *h = '\0';
+    for (char* t = s + strlen(s) - 1; t >= s && (*t == ' ' || *t == '\t' || *t == '\r' || *t == '\n'); --t) *t = '\0';
+
+    if (idx < 0 || idx >= 128) return PARSE_ERROR_GENERIC;
+    if (g_style_display_text[idx]) {
+        log_debug("parse_style_message_line: style %d already has message, skipping overwrite", idx);
+        return 0;
+    }
+    g_style_display_text[idx] = string_make(s);
+    log_debug("parse_style_message_line: set style %d message: '%s'", idx, s);
+    return 0;
+}
+
+/* Clear all loaded per-style banner messages (free and NULL them). */
+void styles_clear_display_messages(void)
+{
+    for (int i = 0; i < 128; ++i)
+    {
+        if (g_style_display_text[i])
+        {
+            string_free(g_style_display_text[i]);
+            g_style_display_text[i] = NULL;
+        }
+    }
+}
+
+/* Reload only M: lines from style.txt so banners are available even if RAW cache was used. */
+void styles_reload_messages_from_text(void)
+{
+    char path[1024];
+    FILE* fp;
+    char buf[1024];
+    /* Start clean to avoid stale/duplicate entries */
+    styles_clear_display_messages();
+
+    /* Build full path to lib/edit/style.txt */
+    path_build(path, sizeof(path), ANGBAND_DIR_EDIT, format("%s.txt", "style"));
+    fp = my_fopen(path, "r");
+    if (!fp)
+    {
+        log_info("styles_reload_messages_from_text: couldn't open %s", path);
+        return;
+    }
+
+    /* We need to maintain the current style index (error_idx) for in-record M: lines */
+    /* error_idx is the conventional global parser index in this translation unit */
+    error_idx = -1;
+
+    while (my_fgets(fp, buf, sizeof(buf)) == 0)
+    {
+        /* Trim leading spaces */
+        char* s = buf;
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == '\0' || *s == '#') continue;
+        if (*s == 'N')
+        {
+            /* N:<idx>:<name>  — capture idx to set error_idx */
+            char* colon = strchr(s + 2, ':');
+            if (!colon) continue;
+            *colon = '\0';
+            int idx = atoi(s + 2);
+            error_idx = idx;
+            continue;
+        }
+        if (*s == 'M')
+        {
+            /* Pass through to the same message parser to support both M:<idx>: and in-record M: */
+            (void)parse_style_message_line(s);
+            continue;
+        }
+        /* Ignore other lines */
+    }
+    my_fclose(fp);
+    log_info("styles_reload_messages_from_text: loaded per-style messages from text");
 }
 
 

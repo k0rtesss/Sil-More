@@ -4591,6 +4591,218 @@ static bool print_paragraph_fade(cptr text, int row, int indent,
 }
 
 /* -------------------------------------------------------------
+ * Public helper: fade-in a single line/paragraph at a row
+ * ----------------------------------------------------------- */
+void print_fade_line(cptr text, int row, int indent)
+{
+    int wid, h;
+    Term_get_size(&wid, &h);
+    int wrap_width = wid - indent - 1;
+    if (wrap_width < 10) wrap_width = 10;
+    /* Reuse the paragraph fade; ignore Esc return here (non-interactive hint) */
+    (void)print_paragraph_fade(text, row, indent, wrap_width);
+}
+
+/* -------------------------------------------------------------
+ * Public helper: fade-in centered text, wrapping at (wid - 15)
+ *  - Vertically centers the block of 1..N wrapped lines
+ *  - Horizontally centers each line
+ *  - Wraps on word boundaries; if a single word exceeds the
+ *    width, it will be hard-split to avoid overflow
+ * ----------------------------------------------------------- */
+void print_fade_centered(cptr text)
+{
+    if (!text || !*text) return;
+
+    int wid, h;
+    Term_get_size(&wid, &h);
+
+    int max_width = wid - 15;
+    if (max_width < 10) max_width = (wid > 2 ? wid - 2 : wid);
+    if (max_width < 1) max_width = 1;
+
+    /* Simple word-wrapping into a small fixed buffer */
+    enum { MAX_LINES = 32, MAX_LEN = 255 };
+    char lines[MAX_LINES][MAX_LEN + 1];
+    int  nlines = 0;
+
+    const char *p = text;
+    while (*p && nlines < MAX_LINES)
+    {
+        /* Start a new line */
+        int linelen = 0;
+        lines[nlines][0] = '\0';
+
+        /* Skip leading spaces */
+        while (*p && isspace((unsigned char)*p)) p++;
+
+        while (*p)
+        {
+            /* Identify next word */
+            const char *w = p;
+            while (*p && !isspace((unsigned char)*p)) p++;
+            int wlen = (int)(p - w);
+
+            /* If word does not fit on empty line: hard split */
+            if (wlen > max_width && linelen == 0)
+            {
+                int take = (wlen > max_width) ? max_width : wlen;
+                if (take > MAX_LEN) take = MAX_LEN;
+                memcpy(lines[nlines], w, (size_t)take);
+                linelen = take;
+                lines[nlines][linelen] = '\0';
+
+                /* Move pointer back to remaining part of the word */
+                w += take;
+                wlen -= take;
+                p = w; /* continue from remainder */
+                break; /* line filled */
+            }
+
+            /* Would adding this word (plus space if needed) fit? */
+            int need = (linelen ? 1 : 0) + wlen;
+            if (linelen + need <= max_width && linelen + need <= MAX_LEN)
+            {
+                if (linelen)
+                    lines[nlines][linelen++] = ' ';
+                memcpy(lines[nlines] + linelen, w, (size_t)wlen);
+                linelen += wlen;
+                lines[nlines][linelen] = '\0';
+            }
+            else
+            {
+                /* Doesn't fit, finish the line */
+                break;
+            }
+
+            /* Skip spaces to next word */
+            while (*p && isspace((unsigned char)*p)) { if (*p == '\n') break; p++; }
+
+            /* Stop at hard newline to keep author's breaks */
+            if (*p == '\n') { p++; break; }
+        }
+
+        nlines++;
+
+        /* Respect explicit newline(s) by collapsing consecutive breaks */
+        while (*p == '\n') p++;
+    }
+
+    if (nlines == 0) return;
+
+    /* Vertically center the block */
+    int start_row = (h - nlines) / 2;
+    if (start_row < 0) start_row = 0;
+
+    /* Print each line centered with fade */
+    for (int i = 0; i < nlines; i++)
+    {
+        int len = (int)strlen(lines[i]);
+        if (len > wid) len = wid; /* paranoia */
+        int indent = (wid - len) / 2;
+        if (indent < 0) indent = 0;
+        int wrap_width = wid - indent - 1;
+        if (wrap_width < len) wrap_width = len; /* print as-is */
+        (void)print_paragraph_fade(lines[i], start_row + i, indent, wrap_width);
+    }
+}
+
+/* -------------------------------------------------------------
+ * Public helper: fade-in horizontally centered text at a row
+ *  - Starts at the provided row (no vertical centering)
+ *  - Wraps at (wid - 15) into multiple lines as needed
+ *  - Centers each resulting line horizontally
+ * ----------------------------------------------------------- */
+void print_fade_centered_at_row(cptr text, int row_start)
+{
+    if (!text || !*text) return;
+
+    int wid, h;
+    Term_get_size(&wid, &h);
+
+    /* Force to second row (index 1) if the caller requests anything above it */
+    if (row_start < 1) row_start = 1;
+    if (row_start >= h) return; /* off-screen */
+
+    int max_width = wid - 15;
+    if (max_width < 10) max_width = (wid > 2 ? wid - 2 : wid);
+    if (max_width < 1) max_width = 1;
+
+    /* Wrap into lines (same logic as above) */
+    enum { MAX_LINES2 = 32, MAX_LEN2 = 255 };
+    char lines[MAX_LINES2][MAX_LEN2 + 1];
+    int  nlines = 0;
+
+    const char *p = text;
+    while (*p && nlines < MAX_LINES2 && (row_start + nlines) < h)
+    {
+        int linelen = 0;
+        lines[nlines][0] = '\0';
+
+        while (*p && isspace((unsigned char)*p)) p++;
+
+        while (*p)
+        {
+            const char *w = p;
+            while (*p && !isspace((unsigned char)*p)) p++;
+            int wlen = (int)(p - w);
+
+            if (wlen > max_width && linelen == 0)
+            {
+                int take = (wlen > max_width) ? max_width : wlen;
+                if (take > MAX_LEN2) take = MAX_LEN2;
+                memcpy(lines[nlines], w, (size_t)take);
+                linelen = take;
+                lines[nlines][linelen] = '\0';
+                w += take; wlen -= take; p = w;
+                break;
+            }
+
+            int need = (linelen ? 1 : 0) + wlen;
+            if (linelen + need <= max_width && linelen + need <= MAX_LEN2)
+            {
+                if (linelen) lines[nlines][linelen++] = ' ';
+                memcpy(lines[nlines] + linelen, w, (size_t)wlen);
+                linelen += wlen; lines[nlines][linelen] = '\0';
+            }
+            else
+            {
+                break;
+            }
+
+            while (*p && isspace((unsigned char)*p)) { if (*p == '\n') break; p++; }
+            if (*p == '\n') { p++; break; }
+        }
+
+        nlines++;
+        while (*p == '\n') p++;
+    }
+
+    if (nlines == 0) return;
+
+    /* Fade colours same as paragraph fade */
+    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE };
+    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
+
+    for (int i = 0; i < nlines; i++)
+    {
+        int len = (int)strlen(lines[i]);
+        if (len > wid) len = wid;
+        int indent = (wid - len) / 2;
+        if (indent < 0) indent = 0;
+
+        for (int s = 0; s < steps; s++)
+        {
+            c_put_str(fade_cols[s], lines[i], row_start + i, indent);
+            Term_fresh();
+            Term_xtra(TERM_XTRA_DELAY, 125);
+        }
+    }
+
+    Term_xtra(TERM_XTRA_DELAY, 1000);
+}
+
+/* -------------------------------------------------------------
  * print_story() — paging, subset & fade‑in options
  * ----------------------------------------------------------- */
 void print_story(int last_parts, bool fade_in)
@@ -6966,13 +7178,13 @@ bool autoload_alive_from_scores(void)
 
         log_info("autoload: found alive entry '%s' – attempting load", who_buf);
 
-        /* Set up savefile path for this name */
+        /* Set up savefile path for this name (normalized: non-alnum -> '_') */
         my_strcpy(op_ptr->full_name, who_buf, sizeof(op_ptr->full_name));
-        process_player_name(true); /* ensures savefile is set for this name */
+        process_player_name(true); /* sets savefile using underscored base_name */
 
-        /* Attempt to load */
+        /* First attempt: normalized filename (underscores) */
         if (load_player()) {
-            log_info("autoload: successfully loaded '%s'", who_buf);
+            log_info("autoload: successfully loaded '%s' (normalized name)", who_buf);
             /* Keep the descriptor closed before returning */
             safe_setuid_grab();
             close(fd_local);
@@ -6980,7 +7192,47 @@ bool autoload_alive_from_scores(void)
             return true;
         }
 
-        /* Failed to load – mark as dead by own hand and warn */
+        /* Second attempt: legacy filename that preserves spaces */
+        {
+            char savefile_backup[1024];
+            char alt_temp[128];
+            char alt_path[1024];
+
+            /* Backup the current savefile path */
+            my_strcpy(savefile_backup, savefile, sizeof(savefile_backup));
+
+            /* Build alternative filename using the unmodified who_buf */
+#ifdef SAVEFILE_USE_UID
+            strnfmt(alt_temp, sizeof(alt_temp), "%d.%s", player_uid, who_buf);
+#else
+            strnfmt(alt_temp, sizeof(alt_temp), "%s", who_buf);
+#endif
+#ifdef VM
+            strnfmt(alt_temp, sizeof(alt_temp), "%s.sv", who_buf);
+#endif
+            path_build(alt_path, sizeof(alt_path), ANGBAND_DIR_SAVE, alt_temp);
+
+            /* Point global savefile to the alternative and try again */
+            my_strcpy(savefile, alt_path, sizeof(savefile));
+            log_info("autoload: retrying with legacy spaced filename '%s'", savefile);
+            if (load_player()) {
+                log_info("autoload: successfully loaded '%s' (legacy spaced filename)", who_buf);
+
+                /* Restore canonical savefile for future saves (underscored) */
+                my_strcpy(op_ptr->full_name, who_buf, sizeof(op_ptr->full_name));
+                process_player_name(true);
+
+                safe_setuid_grab();
+                close(fd_local);
+                safe_setuid_drop();
+                return true;
+            }
+
+            /* Restore original (normalized) savefile path before proceeding */
+            my_strcpy(savefile, savefile_backup, sizeof(savefile));
+        }
+
+        /* Failed both attempts – mark as dead by own hand and warn */
         log_warn("autoload: savefile missing/corrupt for '%s' – marking dead", who_buf);
         strnfmt(entry.how, sizeof entry.how, "%-.49s", "their own hand");
         if (lseek(fd_local, (off_t)i * (off_t)sizeof entry, SEEK_SET) >= 0) {

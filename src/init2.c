@@ -371,6 +371,7 @@ static errr init_info_raw(int fd, header* head)
 /* local forward */
 static errr init_rt_info(void);
 static errr init_style_info(void);
+/* From init1.c */
 
 /*
  * Initialize the header of an *_info.raw file.
@@ -702,6 +703,8 @@ static errr init_style_info(void)
     style_head.parse_info_txt = parse_style_info;
     err = init_info("style", &style_head);
     if (err) return err;
+    /* Ensure M: banner strings are loaded even if RAW cache was used. */
+    styles_reload_messages_from_text();
     /* Load level/vault rules from separate file (always parse text for side-effects).
      * We bypass the RAW cache here so manual edits to style-levels.txt take effect
      * even when ALLOW_TEMPLATES is not defined. */
@@ -727,6 +730,8 @@ static errr init_style_info(void)
             return err;
         }
     }
+
+    /* No separate pass for D: depth banners; per requirements, banners come from per-style M: only. */
     return 0;
 }
 

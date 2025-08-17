@@ -136,7 +136,7 @@
 #define NODBCS /* Double-byte character set routines */
 #define NOKEYBOARDINFO /* Keyboard driver routines */
 #define NOCOLOR /* COLOR_* color values */
-#define NODRAWTEXT /* DrawText() and related definitions */
+/* Note: keep DrawText() and DT_* by not defining NODRAWTEXT */
 #define NOSCALABLEFONT /* truetype scalable font support */
 #define NOMETAFILE /* Metafile support */
 #define NOSYSTEMPARAMSINFO /* SystemParametersInfo() and SPI_* definitions */
@@ -387,6 +387,8 @@ static bool can_use_graphics = false;
 static DIBINIT infGraph;
 
 #endif /* USE_GRAPHICS */
+
+/* banner overlay timer removed */
 
 #ifdef USE_SOUND
 
@@ -3335,16 +3337,21 @@ static void process_menus(WORD wCmd)
 /*
  * Redraw a section of a window
  */
+/* banner drawing removed per user request */
+
 static void handle_wm_paint(HWND hWnd)
 {
     int x1, y1, x2, y2;
     PAINTSTRUCT ps;
     term_data* td;
+    /* banner overlay removed */
 
     /* Acquire proper "term_data" info */
     td = (term_data*)GetWindowLong(hWnd, 0);
 
     BeginPaint(hWnd, &ps);
+
+    /* banner overlay removed */
 
     if (td->map_active)
     {
@@ -3364,6 +3371,8 @@ static void handle_wm_paint(HWND hWnd)
         /* Redraw */
         if (td)
             term_data_redraw_section(td, x1, y1, x2, y2);
+
+    /* banner overlay removed per user request */
     }
 
     EndPaint(hWnd, &ps);
@@ -3524,6 +3533,8 @@ static LRESULT FAR PASCAL AngbandWndProc(
         process_menus(LOWORD(wParam));
         return 0;
     }
+
+    /* WM_TIMER handling for banner removed */
 
     case WM_SIZE:
     {

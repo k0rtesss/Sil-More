@@ -341,7 +341,14 @@ extern int styles_get_vault_primary_style(void);
 extern void styles_select_vault_primary(void);
 extern void styles_rules_clear(void);
 extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
+/* Banner strings: from style.txt (per-style via M: lines only) */
+extern const char* styles_get_style_display(int sidx);
+extern void styles_reload_messages_from_text(void);
+extern void styles_clear_display_messages(void);
+extern int p_ptr_depth_proxy(void);
 extern void styles_set_loaded_level_primary(int sidx);
+extern void print_fade_centered(cptr text);
+extern void print_fade_centered_at_row(cptr text, int row_start);
 /* Persisted door-style variant choices for consistency across save/load */
 extern int styles_get_choice_capacity(void);
 extern void styles_copy_level_door_choices(byte* out_buf, int max_n);
@@ -588,6 +595,8 @@ extern errr meta_read(metarun*);
 extern int meta_seek(int i);
 extern int meta_fill(bool);
 extern void print_story(int last_parts, bool fade_in);
+/* Generic fade-in line printer for arbitrary text */
+extern void print_fade_line(cptr text, int row, int indent);
 extern const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll);
 extern void clear_scorefile(void);
 extern bool autoload_alive_from_scores(void);

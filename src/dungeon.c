@@ -2741,6 +2741,21 @@ static void dungeon(void)
     /* Reset the object generation level */
     object_level = p_ptr->depth;
 
+    /* Show per-style entry message now that the level is fully entered and drawn */
+    {
+        extern int styles_get_level_primary_style(void);
+        extern const char* styles_get_style_display(int sidx);
+    extern void print_fade_centered_at_row(cptr text, int row_start);
+        int sidx = styles_get_level_primary_style();
+        if (sidx >= 0) {
+            const char* m = styles_get_style_display(sidx);
+            if (m && m[0]) {
+                /* second row (row index 1) */
+                print_fade_centered_at_row(m, 1);
+            }
+        }
+    }
+
     log_info("Starting main dungeon loop for depth %d", p_ptr->depth);
 
     /* Main loop */
@@ -2921,6 +2936,9 @@ static void dungeon(void)
         turn++;
     }
 }
+
+/* Tiny proxy for frontends to query current depth without including player headers */
+int p_ptr_depth_proxy(void) { return p_ptr ? p_ptr->depth : 0; }
 
 /*
  * Process some user pref files
