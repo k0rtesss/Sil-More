@@ -1467,14 +1467,19 @@ errr parse_style_levels(char* buf, header* head)
 
 /* ====================  style display strings (per-style M:)  ===================== */
 
-/* Per-style banner strings (by style index, 0..127 safe upper bound) */
-static char* g_style_display_text[128] = { 0 };
+/* Per-style banner strings (by style index, allow multiple sayings) */
+#define MAX_STYLE_MSG 8
+static char* g_style_display_text[128][MAX_STYLE_MSG];
+static byte  g_style_display_count[128];
 
 /* Accessor for per-style banner */
 const char* styles_get_style_display(int sidx)
 {
     if (sidx < 0 || sidx >= 128) return NULL;
-    return g_style_display_text[sidx];
+    byte n = g_style_display_count[sidx];
+    if (!n) return NULL;
+    int pick = (n == 1) ? 0 : rand_int(n);
+    return g_style_display_text[sidx][pick];
 }
 
 /* Extend style.txt parser to support per-style messages via M: */
@@ -1515,12 +1520,14 @@ static errr parse_style_message_line(char* buf)
     for (char* t = s + strlen(s) - 1; t >= s && (*t == ' ' || *t == '\t' || *t == '\r' || *t == '\n'); --t) *t = '\0';
 
     if (idx < 0 || idx >= 128) return PARSE_ERROR_GENERIC;
-    if (g_style_display_text[idx]) {
-        log_debug("parse_style_message_line: style %d already has message, skipping overwrite", idx);
+    if (g_style_display_count[idx] >= MAX_STYLE_MSG) {
+        log_debug("parse_style_message_line: style %d message list full, dropping: '%s'", idx, s);
         return 0;
     }
-    g_style_display_text[idx] = string_make(s);
-    log_debug("parse_style_message_line: set style %d message: '%s'", idx, s);
+    /* Append */
+    g_style_display_text[idx][g_style_display_count[idx]] = string_make(s);
+    g_style_display_count[idx]++;
+    log_debug("parse_style_message_line: added style %d message #%d", idx, g_style_display_count[idx]);
     return 0;
 }
 
@@ -1529,11 +1536,13 @@ void styles_clear_display_messages(void)
 {
     for (int i = 0; i < 128; ++i)
     {
-        if (g_style_display_text[i])
-        {
-            string_free(g_style_display_text[i]);
-            g_style_display_text[i] = NULL;
+        for (int j = 0; j < MAX_STYLE_MSG; ++j) {
+            if (g_style_display_text[i][j]) {
+                string_free(g_style_display_text[i][j]);
+                g_style_display_text[i][j] = NULL;
+            }
         }
+        g_style_display_count[i] = 0;
     }
 }
 

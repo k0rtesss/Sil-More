@@ -4671,7 +4671,8 @@ void print_fade_centered(cptr text)
             }
             else
             {
-                /* Doesn't fit, finish the line */
+                /* Doesn't fit: rewind so the word is processed on the next line */
+                p = w;
                 break;
             }
 
@@ -4708,10 +4709,13 @@ void print_fade_centered(cptr text)
 }
 
 /* -------------------------------------------------------------
- * Public helper: fade-in horizontally centered text at a row
+ * Public helper: fade-in text at a row, left-aligned with indent
  *  - Starts at the provided row (no vertical centering)
- *  - Wraps at (wid - 15) into multiple lines as needed
- *  - Centers each resulting line horizontally
+ *  - Left aligned at column >= 14, and for each subsequent line
+ *    indentation increases by 2 columns (14, 16, 18, ...)
+ *  - Wraps dynamically per line width to ensure nothing is cut off
+ *  - Adds a 500 ms delay between lines
+ *  - Clears the printed region after a short hold to avoid artifacts
  * ----------------------------------------------------------- */
 void print_fade_centered_at_row(cptr text, int row_start)
 {
@@ -4724,49 +4728,71 @@ void print_fade_centered_at_row(cptr text, int row_start)
     if (row_start < 1) row_start = 1;
     if (row_start >= h) return; /* off-screen */
 
-    int max_width = wid - 15;
-    if (max_width < 10) max_width = (wid > 2 ? wid - 2 : wid);
-    if (max_width < 1) max_width = 1;
+    /* Dynamic per-line wrapping and printing */
+    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE, TERM_ORANGE };
+    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
 
-    /* Wrap into lines (same logic as above) */
     enum { MAX_LINES2 = 32, MAX_LEN2 = 255 };
-    char lines[MAX_LINES2][MAX_LEN2 + 1];
-    int  nlines = 0;
-
     const char *p = text;
-    while (*p && nlines < MAX_LINES2 && (row_start + nlines) < h)
-    {
-        int linelen = 0;
-        lines[nlines][0] = '\0';
+    int printed_lines = 0;
+    int line_start_cols[MAX_LINES2];
+    int line_lengths[MAX_LINES2];
 
-        while (*p && isspace((unsigned char)*p)) p++;
+    /* Start at the requested column; align to left-half in bigtile to avoid residuals */
+    int base_indent = 14;
+    if (use_bigtile)
+    {
+        /* Left halves are at COL_MAP, COL_MAP+2, ...; if we hit a right half, bump */
+        if (((base_indent - COL_MAP) & 1) != 0) base_indent++;
+    }
+
+    while (*p && printed_lines < MAX_LINES2 && (row_start + printed_lines) < h)
+    {
+    int indent = base_indent + 2 * printed_lines; /* left sticky, step by +2 each line */
+    if (indent >= wid - 1) break; /* nothing to show */
+    int avail = wid - indent - 1;
+    if (avail < 8) avail = 8; /* minimal width */
+
+        char buf[MAX_LEN2 + 1];
+        int  linelen = 0;
+        buf[0] = '\0';
+
+        /* Skip leading spaces/newlines */
+        while (*p && (unsigned char)*p <= ' ') {
+            if (*p == '\n') { p++; break; }
+            p++; 
+        }
 
         while (*p)
         {
+            if (*p == '\n') { p++; break; }
             const char *w = p;
-            while (*p && !isspace((unsigned char)*p)) p++;
+            while (*p && *p != '\n' && !isspace((unsigned char)*p)) p++;
             int wlen = (int)(p - w);
 
-            if (wlen > max_width && linelen == 0)
+            if (wlen > avail && linelen == 0)
             {
-                int take = (wlen > max_width) ? max_width : wlen;
+                int take = (wlen > avail) ? avail : wlen;
                 if (take > MAX_LEN2) take = MAX_LEN2;
-                memcpy(lines[nlines], w, (size_t)take);
+                memcpy(buf, w, (size_t)take);
                 linelen = take;
-                lines[nlines][linelen] = '\0';
-                w += take; wlen -= take; p = w;
+                buf[linelen] = '\0';
+                w += take; /* remainder for next loop */
+                p = w; 
                 break;
             }
 
             int need = (linelen ? 1 : 0) + wlen;
-            if (linelen + need <= max_width && linelen + need <= MAX_LEN2)
+            if (linelen + need <= avail && linelen + need <= MAX_LEN2)
             {
-                if (linelen) lines[nlines][linelen++] = ' ';
-                memcpy(lines[nlines] + linelen, w, (size_t)wlen);
-                linelen += wlen; lines[nlines][linelen] = '\0';
+                if (linelen) buf[linelen++] = ' ';
+                memcpy(buf + linelen, w, (size_t)wlen);
+                linelen += wlen; buf[linelen] = '\0';
             }
             else
             {
+                /* Defer word to the next line */
+                p = w;
                 break;
             }
 
@@ -4774,32 +4800,28 @@ void print_fade_centered_at_row(cptr text, int row_start)
             if (*p == '\n') { p++; break; }
         }
 
-        nlines++;
-        while (*p == '\n') p++;
-    }
+        if (linelen == 0) break; /* nothing collected */
 
-    if (nlines == 0) return;
-
-    /* Fade colours same as paragraph fade */
-    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE };
-    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-
-    for (int i = 0; i < nlines; i++)
-    {
-        int len = (int)strlen(lines[i]);
-        if (len > wid) len = wid;
-        int indent = (wid - len) / 2;
-        if (indent < 0) indent = 0;
-
+        /* Fade this line */
         for (int s = 0; s < steps; s++)
         {
-            c_put_str(fade_cols[s], lines[i], row_start + i, indent);
+            c_put_str(fade_cols[s], buf, row_start + printed_lines, indent);
             Term_fresh();
             Term_xtra(TERM_XTRA_DELAY, 125);
         }
+
+        line_start_cols[printed_lines] = indent;
+        line_lengths[printed_lines]    = linelen;
+        printed_lines++;
+
+        /* Half-second gap before next line if more text remains */
+        if (*p && (row_start + printed_lines) < h)
+            Term_xtra(TERM_XTRA_DELAY, 500);
     }
 
+    /* Hold briefly so the player can read (keep 1s as before) */
     Term_xtra(TERM_XTRA_DELAY, 1000);
+    /* Do not explicitly erase: allow natural redraws to overwrite the text */
 }
 
 /* -------------------------------------------------------------
