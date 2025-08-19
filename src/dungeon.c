@@ -9,9 +9,15 @@
  */
 
 #include "angband.h"
+/* Countdown for forcing a redraw after showing the per-style banner */
+int g_banner_force_redraw_remaining = 0;
 #include "log.h"
 #include "metarun.h"
 #include "z-term.h"
+#include <time.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdlib.h>
 
 /*
  * Return a "feeling" (or NULL) about an item.  Method 1 (Weak).
@@ -700,8 +706,9 @@ static bool enter_wizard_mode(void)
 
     /* Mark savefile */
     p_ptr->noscore |= 0x0002;
-    
-    log_debug("Entering wizard mode - savefile marked");
+
+    log_info("Entering wizard mode - savefile marked (noscore=0x%04X, savefile='%s')",
+             (unsigned)p_ptr->noscore, savefile);
 
     /* Success */
     return (true);
@@ -754,6 +761,9 @@ static bool verify_debug_mode(void)
 
     /* Mark savefile */
     p_ptr->noscore |= 0x0008;
+
+    log_info("Debug mode enabled (noscore=0x%04X, savefile='%s')",
+             (unsigned)p_ptr->noscore, savefile);
 
     /* Okay */
     return (true);
@@ -824,7 +834,11 @@ static void process_command(void)
     case KTRL('A'):
     {
         if (verify_debug_mode())
+        {
+            log_info("Ctrl-A debug menu opened (wizard=%d, noscore=0x%04X, savefile='%s')",
+                     p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
             do_cmd_debug();
+        }
         break;
     }
 
@@ -2493,6 +2507,17 @@ static void process_player(void)
 
     playerturn++;
 
+    /* If a banner was recently shown, count down per full player turn and force a full redraw when it expires.
+       This ensures the redraw happens after the third normal action without consuming input. */
+    if (g_banner_force_redraw_remaining > 0)
+    {
+        g_banner_force_redraw_remaining--;
+        if (g_banner_force_redraw_remaining == 0)
+        {
+            do_cmd_redraw();
+        }
+    }
+
     depth_counter_increment = 85 - (playerturn / 850);
     depth_counter_increment += 3 * (p_ptr->depth - min_depth());
 
@@ -2737,6 +2762,23 @@ static void dungeon(void)
     /* Reset the object generation level */
     object_level = p_ptr->depth;
 
+    /* Show per-style entry message now that the level is fully entered and drawn */
+    {
+        extern int styles_get_level_primary_style(void);
+        extern const char* styles_get_style_display(int sidx);
+    extern void print_fade_centered_at_row(cptr text, int row_start);
+        int sidx = styles_get_level_primary_style();
+        if (sidx >= 0) {
+            const char* m = styles_get_style_display(sidx);
+            if (m && m[0]) {
+                /* second row (row index 1) */
+                print_fade_centered_at_row(m, 1);
+                /* After showing the banner, force a full redraw after 3 inputs */
+                g_banner_force_redraw_remaining = 3;
+            }
+        }
+    }
+
     log_info("Starting main dungeon loop for depth %d", p_ptr->depth);
 
     /* Main loop */
@@ -2918,6 +2960,9 @@ static void dungeon(void)
     }
 }
 
+/* Tiny proxy for frontends to query current depth without including player headers */
+int p_ptr_depth_proxy(void) { return p_ptr ? p_ptr->depth : 0; }
+
 /*
  * Process some user pref files
  */
@@ -3057,7 +3102,13 @@ static void print_story_intro(void)
         /* Check if we have enough space for the whole paragraph */ 
         if (row + lines_needed >= h - 1) { 
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key)"); 
-            inkey(); 
+            {
+                char k = inkey();
+                if (k == 'S') { /* Capital S skips the intro entirely */
+                    Term_clear();
+                    return;
+                }
+            }
             Term_clear(); 
             row = 1; 
         } 
@@ -3097,6 +3148,10 @@ static void print_story_intro(void)
     
     /* Handle input */
     char key = inkey();
+    if (key == 'S') {
+        Term_clear();
+        return; /* Skip without changing difficulty */
+    }
     if (key == 'c' || key == 'C')
     {
         Term_clear();
@@ -3175,21 +3230,41 @@ PlayResult play_game(void)
     }
 
     if (metarun_created)        /* show only the first time ever */
-    print_story_intro();
-    else print_metarun_stats();
+        print_story_intro();
+    else
+        print_metarun_stats();
+
+     /* New startup behavior: try to auto-load any alive character
+         lingering in the scorefile. If successful, skip character
+         selection and proceed directly. */
+     character_loaded = false;
+     character_loaded_dead = false;
+     bool autoloaded = autoload_alive_from_scores();
+     if (autoloaded && character_loaded) {
+        log_info("Auto-loaded alive character from scores; skipping selection");
+        new_game = false;
+    }
 
     log_info("Starting new game session");
 
-    character_dungeon = false;
-    character_loaded = false;
-    character_loaded_dead = false;
+     /* Only reset flags if no character has been loaded yet.
+         If autoload succeeded, keep the loaded state and the
+         dungeon-loaded flag set by load_player(). */
+     if (!character_loaded) {
+          character_dungeon = false;
+          character_loaded = false;
+          character_loaded_dead = false;
+     }
 
     for (;;)
     {
+        /* If we already loaded a living character, break to init */
+        if (character_loaded) break;
+
         /* Wipe the player each time we (re)enter creation */
         player_wipe();
 
-        log_info("Choosing character");
+    log_info("Choosing character");
         NavResult cr = character_creation();
         if (cr == NAV_TO_MAIN) { 
             log_info("Returning to main menu from character creation"); 
@@ -3200,8 +3275,8 @@ PlayResult play_game(void)
             return PLAY_QUIT; 
         }
 
-        /* Attempt to load */
-        if (!load_player()) {
+    /* Attempt to load (manual path) */
+    if (!load_player()) {
             log_debug("Failed to load player");
             if (character_loaded_dead) player_wipe();
         }
@@ -3350,6 +3425,7 @@ PlayResult play_game(void)
     if (!character_dungeon)
     {
         log_info("Generating initial dungeon level");
+        /* About to call generate_cave() function */
         generate_cave();
         log_debug("Initial dungeon level generated successfully");
     }
