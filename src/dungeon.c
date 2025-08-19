@@ -704,8 +704,9 @@ static bool enter_wizard_mode(void)
 
     /* Mark savefile */
     p_ptr->noscore |= 0x0002;
-    
-    log_debug("Entering wizard mode - savefile marked");
+
+    log_info("Entering wizard mode - savefile marked (noscore=0x%04X, savefile='%s')",
+             (unsigned)p_ptr->noscore, savefile);
 
     /* Success */
     return (true);
@@ -758,6 +759,9 @@ static bool verify_debug_mode(void)
 
     /* Mark savefile */
     p_ptr->noscore |= 0x0008;
+
+    log_info("Debug mode enabled (noscore=0x%04X, savefile='%s')",
+             (unsigned)p_ptr->noscore, savefile);
 
     /* Okay */
     return (true);
@@ -828,7 +832,11 @@ static void process_command(void)
     case KTRL('A'):
     {
         if (verify_debug_mode())
+        {
+            log_info("Ctrl-A debug menu opened (wizard=%d, noscore=0x%04X, savefile='%s')",
+                     p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
             do_cmd_debug();
+        }
         break;
     }
 
@@ -3079,7 +3087,13 @@ static void print_story_intro(void)
         /* Check if we have enough space for the whole paragraph */ 
         if (row + lines_needed >= h - 1) { 
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key)"); 
-            inkey(); 
+            {
+                char k = inkey();
+                if (k == 'S') { /* Capital S skips the intro entirely */
+                    Term_clear();
+                    return;
+                }
+            }
             Term_clear(); 
             row = 1; 
         } 
@@ -3119,6 +3133,10 @@ static void print_story_intro(void)
     
     /* Handle input */
     char key = inkey();
+    if (key == 'S') {
+        Term_clear();
+        return; /* Skip without changing difficulty */
+    }
     if (key == 'c' || key == 'C')
     {
         Term_clear();
@@ -3197,8 +3215,9 @@ PlayResult play_game(void)
     }
 
     if (metarun_created)        /* show only the first time ever */
-    print_story_intro();
-    else print_metarun_stats();
+        print_story_intro();
+    else
+        print_metarun_stats();
 
      /* New startup behavior: try to auto-load any alive character
          lingering in the scorefile. If successful, skip character
@@ -3230,7 +3249,7 @@ PlayResult play_game(void)
         /* Wipe the player each time we (re)enter creation */
         player_wipe();
 
-        log_info("Choosing character");
+    log_info("Choosing character");
         NavResult cr = character_creation();
         if (cr == NAV_TO_MAIN) { 
             log_info("Returning to main menu from character creation"); 

@@ -277,6 +277,10 @@ extern bool use_background_colors;
 
 extern metarun metar;
 extern int meta_fd;
+/* metarun/score helpers */
+extern void clear_scorefile(void);
+extern bool autoload_alive_from_scores(void);
+extern void metarun_finalize_scores_and_saves(void);
 
 /*
  * Automatically generated "function declarations"

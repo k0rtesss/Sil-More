@@ -16,7 +16,7 @@ N:0:Echoes (Normal)
 C:
 U:White
 W:15
-L:15
+L:1
 H:*          # applies to all heroes
 
 N:1:Echoes (Hard)

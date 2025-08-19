@@ -735,6 +735,16 @@ void dbg_show_active_flags(void)
         }
         else if (ch == 'd')  /* debug menu */
         {
+            
+        /* If the player opens the debug menu from debug curses UI from the character sheet,
+        * make sure the save is marked as tempered/debug (noscore 0x0008)
+        * so metarun finalization will purge it just like the Ctrl-A debug path.
+        */
+        if (!(p_ptr->noscore & 0x0008)) {
+            p_ptr->noscore |= 0x0008;
+            log_info("Debug curses UI enabled (noscore=0x%04X, savefile='%s')",
+                    (unsigned)p_ptr->noscore, savefile);
+        }
             do_cmd_debug();
             dbg_show_active_flags();
             break;

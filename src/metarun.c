@@ -1201,7 +1201,36 @@ void check_run_end(void)
 static void start_new_metarun(void)
 {
     log_info("Starting new metarun (previous run ID: %d)", metar.id);
-    clear_scorefile();
+    log_debug("metarun: pre-finalize state (wizard=%d, noscore=0x%04X, savefile='%s')",
+              p_ptr ? (p_ptr->wizard ? 1 : 0) : -1,
+              p_ptr ? (unsigned)p_ptr->noscore : 0,
+              savefile);
+     /* Before wiping scores for the next run, finalize current ones:
+         - mark all alive entries as dead by their own hand
+         - save any corresponding savefiles as dead
+         Then archive/clear the score file so the next run starts clean. */
+     metarun_finalize_scores_and_saves();
+     clear_scorefile();
+
+    /* Hard purge the current savefile if this was a noscore wizard/debug run */
+    if (p_ptr && (p_ptr->wizard || (p_ptr->noscore & 0x0008)) && (p_ptr->noscore & 0x000F)) {
+        if (savefile[0]) {
+            int rc;
+            safe_setuid_grab();
+            rc = fd_kill(savefile);
+            safe_setuid_drop();
+            if (rc == 0) {
+                log_info("metarun: deleted noscore savefile '%s'", savefile);
+            } else {
+                log_warn("metarun: failed to delete noscore savefile '%s'", savefile);
+            }
+        }
+    } else {
+        log_info("metarun: purge skipped (wizard=%d, noscore=0x%04X, savefile='%s')",
+                 p_ptr ? (p_ptr->wizard ? 1 : 0) : -1,
+                 p_ptr ? (unsigned)p_ptr->noscore : 0,
+                 savefile);
+    }
     /* Save old state */
     s16b old_max   = metarun_max;
     metarun *old   = metaruns;

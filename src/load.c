@@ -2157,6 +2157,10 @@ bool load_player(void)
             /* Attempt to load */
             err = rd_savefile();
             log_info("Read savefile %s", err ? "failed" : "success");
+            if (!err) {
+                log_info("load: post-read flags (is_dead=%d, wizard=%d, noscore=0x%04X)",
+                         p_ptr->is_dead, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore);
+            }
 
             /* Message (below) */
             if (err)

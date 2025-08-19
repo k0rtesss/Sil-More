@@ -2039,9 +2039,27 @@ static int Term_xtra_win_delay(int v)
 {
 #ifdef WIN32
 
-    /* Sleep */
-    if (v > 0)
-        Sleep(v);
+    /* On Windows, pump messages while delaying to keep the UI responsive. */
+    if (v <= 0) return 0;
+
+    DWORD deadline = GetTickCount() + (DWORD)v;
+    MSG msg;
+
+    while (GetTickCount() < deadline)
+    {
+        /* Process any pending window messages */
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        /* Sleep in small chunks so we can continue to pump messages */
+        DWORD now = GetTickCount();
+        DWORD remain = (deadline > now) ? (deadline - now) : 0;
+        if (remain > 10) remain = 10; /* granularity */
+        if (remain > 0) Sleep(remain);
+    }
 
 #else /* WIN32 */
 

@@ -2033,29 +2033,22 @@ bool show_buffer(cptr main_buffer, cptr what, int line)
     char ch;
 
     int next = 0;
-    int size = 0;
 
     char buf[1024];
 
     int wid, hgt;
 
-    // hack to soothe compiler warnings since 'what' is unused
-    if (what) { }
-
-    /* Get size */
+    // get current terminal size
     Term_get_size(&wid, &hgt);
+    if (hgt <= 0) hgt = 24;
 
-    /* Count the lines in the buffer */
-    for (j = 0; true; j++)
-    {
-        if (main_buffer[j] == '\n')
-            next++;
-        if (main_buffer[j] == '\0')
-            break;
+    // count lines in the buffer
+    int size = 0;
+    for (j = 0; main_buffer[j] != '\0'; j++) {
+        if (main_buffer[j] == '\n') size++;
     }
-
-    // store the number of lines
-    size = next;
+    // add one more if last line doesn't end with newline
+    if (j > 0 && main_buffer[j-1] != '\n') size++;
 
     /* Display the file */
     while (true)
@@ -5215,13 +5208,9 @@ static errr enter_score(high_score* the_score)
         return (0);
     }
 
-    /* Hack -- Quitter */
-    if (!p_ptr->escaped && strstr(p_ptr->died_from, "own hand"))
-    {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score when quitting)");
-        score_idx = -1;
-        return (0);
-    }
+    /* Allow recording of voluntary death ("their own hand").
+       This ensures aborted characters are written to the score file and
+       won't be treated as alive on the next startup. */
 
 #ifndef SCORE_CHEATERS
     /* Cheaters are not scored */
@@ -6014,13 +6003,14 @@ static void close_game_aux(void)
     high_score the_score;
     int choice = 0, highlight = 1;
 
-    log_info("Processing character death for '%s'", op_ptr->full_name);
+    log_info("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
+             op_ptr->full_name, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
 
     /* Dump bones file */
     // make_bones();
 
     /* Save dead player */
-    log_info("saving dead player");
+    log_info("saving dead player (noscore=0x%04X) -> '%s'", (unsigned)p_ptr->noscore, savefile);
     if (!save_player())
     {
         log_debug("Death save failed - player data may be lost");
@@ -7090,8 +7080,9 @@ extern void mini_screenshot(void)
         {
             for (x = 0; x <= 6; x++)
             {
+                /* Fallback: blank miniature with dark attributes */
                 mini_screenshot_char[y][x] = ' ';
-                mini_screenshot_char[y][x] = TERM_DARK;
+                mini_screenshot_attr[y][x] = TERM_DARK;
             }
         }
     }
@@ -7285,11 +7276,11 @@ bool autoload_alive_from_scores(void)
  */
 void clear_scorefile(void)
 {
-    char buf[1024];
+    char cur_path[1024];
     bool was_open = (highscore_fd >= 0);
 
     /* Full path to "scores.raw" */
-    path_build(buf, sizeof buf, ANGBAND_DIR_APEX, "scores.raw");
+    path_build(cur_path, sizeof cur_path, ANGBAND_DIR_APEX, "scores.raw");
 
     /* Close existing descriptor if open */
     if (was_open) {
@@ -7297,24 +7288,143 @@ void clear_scorefile(void)
         highscore_fd = -1;
     }
 
-    /* Remove it (ignore failure) */
-    (void)fd_kill(buf);
+    /* If the file exists and is non-empty, archive it with timestamp */
+    {
+        /* Peek size */
+        safe_setuid_grab();
+        int fd_probe = open(cur_path, O_RDONLY);
+        off_t sz = -1;
+        if (fd_probe >= 0) {
+            sz = lseek(fd_probe, 0, SEEK_END);
+            close(fd_probe);
+        }
+        safe_setuid_drop();
 
-    /* Grab permissions */
-    safe_setuid_grab();
+        if (sz > 0) {
+            /* Build archive filename: scores-YYYYMMDD-HHMMSS-<run>.raw */
+            time_t now = time(NULL);
+            struct tm *lt = localtime(&now);
+            char stamp[32];
+            if (lt) strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", lt);
+            else my_strcpy(stamp, "unknown", sizeof stamp);
+
+            /* Include run id if available (metar declared in metarun.h) */
+            extern metarun metar; /* declared in metarun.h */
+            char arch_leaf[128];
+            strnfmt(arch_leaf, sizeof arch_leaf, "scores-%s-%08u.raw",
+                    stamp, (unsigned)metar.id);
+
+            char arch_path[1024];
+            path_build(arch_path, sizeof arch_path, ANGBAND_DIR_APEX, arch_leaf);
+
+            /* Try to rename; if it fails, fall back to delete */
+            safe_setuid_grab();
+            int rn = rename(cur_path, arch_path);
+            safe_setuid_drop();
+            if (rn != 0) {
+                (void)fd_kill(cur_path); /* fallback */
+            }
+        }
+        else {
+            /* Nothing useful to archive; just remove it */
+            (void)fd_kill(cur_path);
+        }
+    }
 
     /* Re-create a zero-length file properly */
-    int fd = fd_make(buf, 0644);
-    if (fd >= 0) fd_close(fd);
-
-    /* Drop permissions */
+    safe_setuid_grab();
+    int fd_new = fd_make(cur_path, 0644);
+    if (fd_new >= 0) fd_close(fd_new);
     safe_setuid_drop();
 
     /* If the file was previously open, reopen it for read/write */
     if (was_open) {
-        /* Grab permissions again for reopening */
         safe_setuid_grab();
-        highscore_fd = fd_open(buf, O_RDWR);
+        highscore_fd = fd_open(cur_path, O_RDWR);
         safe_setuid_drop();
+    }
+}
+
+/*
+ * Metarun finalizer: iterate all "alive" entries in scores.raw.
+ * For each entry, attempt to load the savefile by name; if load succeeds,
+ * flag the character as dead by their own hand and save back. In either
+ * case, patch the score entry's how field to "their own hand".
+ */
+void metarun_finalize_scores_and_saves(void)
+{
+    log_info("finalize: entry (wizard=%d, noscore=0x%04X, savefile='%s')",
+             p_ptr ? (p_ptr->wizard ? 1 : 0) : -1,
+             p_ptr ? (unsigned)p_ptr->noscore : 0,
+             savefile);
+    char score_path[1024];
+    path_build(score_path, sizeof score_path, ANGBAND_DIR_APEX, "scores.raw");
+
+    /* Open for read/write so we can patch entries */
+    int fd_local;
+    safe_setuid_grab();
+    fd_local = open(score_path, O_RDWR | O_CREAT, 0644);
+    safe_setuid_drop();
+    if (fd_local < 0) {
+        log_info("finalize: could not open scorefile: %s", score_path);
+        return;
+    }
+
+    off_t file_end = lseek(fd_local, 0, SEEK_END);
+    int n_recs = (int)(file_end / (off_t)sizeof(high_score));
+    if (n_recs <= 0) {
+        safe_setuid_grab();
+        close(fd_local);
+        safe_setuid_drop();
+        return;
+    }
+
+    int patched = 0;
+    for (int i = 0; i < n_recs; i++) {
+        high_score entry;
+        if (lseek(fd_local, (off_t)i * (off_t)sizeof entry, SEEK_SET) < 0)
+            break;
+        ssize_t got = read(fd_local, &entry, sizeof entry);
+        if (got != sizeof entry) break;
+
+        /* Only touch entries marked as alive */
+        if (strcmp(entry.how, "(alive and well)") != 0) continue;
+
+        /* Patch score entry regardless of save success */
+        strnfmt(entry.how, sizeof entry.how, "%-.49s", "their own hand");
+        if (lseek(fd_local, (off_t)i * (off_t)sizeof entry, SEEK_SET) >= 0) {
+            (void)write(fd_local, &entry, sizeof entry);
+        }
+        patched++;
+    }
+
+    safe_setuid_grab();
+    close(fd_local);
+    safe_setuid_drop();
+    log_info("finalize: patched %d alive entries to 'their own hand'", patched);
+
+    /*
+     * If the current character is a noscore wizard/debug run, purge their
+     * savefile entirely as part of metarun cleanup, so it can't be resumed.
+     *
+     * Harmonized with start_new_metarun(): allow either wizard OR debug
+     * (0x0008) in combination with any noscore bit (0x000F).
+     */
+    if (p_ptr && (p_ptr->wizard || (p_ptr->noscore & 0x0008)) && (p_ptr->noscore & 0x000F)) {
+        if (savefile[0]) {
+            int rc;
+            safe_setuid_grab();
+            rc = fd_kill(savefile);
+            safe_setuid_drop();
+            if (rc == 0) {
+                log_info("finalize: deleted noscore wizard/debug savefile '%s'", savefile);
+            } else {
+                log_warn("finalize: failed to delete noscore wizard/debug savefile '%s'", savefile);
+            }
+        }
+    } else {
+        log_info("finalize: no direct purge in finalize (wizard=%d, noscore=0x%04X)",
+                 p_ptr ? (p_ptr->wizard ? 1 : 0) : -1,
+                 p_ptr ? (unsigned)p_ptr->noscore : 0);
     }
 }
