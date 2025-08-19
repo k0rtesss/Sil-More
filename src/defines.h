@@ -191,7 +191,7 @@
 
 /* Encoded color range used to store an absolute style index per cell. */
 #ifndef COLOR_STYLE_BASE
-#define COLOR_STYLE_BASE 200 /* 200..(200+style_max-1) map to style_info indices */
+#define COLOR_STYLE_BASE 128 /* 128..(128+style_max-1) map to style_info indices; leaves +64 for first-variant */
 #endif
 
 #if DEPTH_BASED_WALLS
@@ -3051,7 +3051,7 @@ static const depth_wall_tier wall_depth_tiers[MAX_WALL_DEPTH_TIERS] = {
  * the "first variant" of a style for floors/doors, used by vault halos.
  */
 #ifndef COLOR_STYLE_BASE
-#define COLOR_STYLE_BASE 200
+#define COLOR_STYLE_BASE 128
 #endif
 #ifndef COLOR_STYLE_SLOT_MAX
 #define COLOR_STYLE_SLOT_MAX 64

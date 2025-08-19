@@ -2189,7 +2189,12 @@ errr parse_v_info(char* buf, header* head)
         v_ptr->color = color;
     }
 
-    /* Process 'S' for Styles: one or more pairs "sidx:weight" separated by spaces */
+    /* Process 'S' for Styles: one or more pairs "sidx:weight" separated by spaces
+     * sidx may be:
+     *   <number>  => exact style index
+     *   *          => the already generated level style (sentinel -1)
+     *   $          => any random style suitable for this depth's floors (sentinel -2)
+     */
     else if (buf[0] == 'S')
     {
         /* There better be a current v_ptr */
@@ -2205,13 +2210,17 @@ errr parse_v_info(char* buf, header* head)
             tok = s;
             while (*s && *s != ' ') s++;
             if (*s) { *s = '\0'; s++; }
-            /* parse tok as sidx:weight; '*' means sidx == -1 (level styles) */
+            /* parse tok as sidx:weight; '*' means sidx == -1 (level styles)
+             * and '$' means sidx == -2 (any style available at this depth) */
             char* colon = strchr(tok, ':');
             if (!colon) return PARSE_ERROR_GENERIC;
             *colon = '\0';
-            int sidx = (tok[0] == '*' && tok[1] == '\0') ? -1 : atoi(tok);
+            int sidx;
+            if (tok[0] == '*' && tok[1] == '\0') sidx = -1;        /* level style */
+            else if (tok[0] == '$' && tok[1] == '\0') sidx = -2;   /* any depth-available style */
+            else sidx = atoi(tok);
             int w = atoi(colon + 1);
-            if (v_ptr->style_count < 16 && sidx >= -1 && w > 0)
+            if (v_ptr->style_count < 16 && sidx >= -2 && w > 0)
             {
                 v_ptr->style_idx[v_ptr->style_count] = (s16b)sidx;
                 v_ptr->style_weight[v_ptr->style_count] = (s16b)w;

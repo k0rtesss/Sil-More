@@ -148,7 +148,7 @@ extern s16b wandering_pause[MAX_FLOWS];
 
 /* Public style color encoding base for save/load */
 #ifndef COLOR_STYLE_BASE
-#define COLOR_STYLE_BASE 200
+#define COLOR_STYLE_BASE 128
 #endif
 
 extern s16b stealth_score;
@@ -339,6 +339,7 @@ extern void styles_apply_vault_default_for_depth(int depth);
 extern int styles_get_level_primary_style(void);
 extern int styles_get_vault_primary_style(void);
 extern void styles_select_vault_primary(void);
+extern int styles_pick_random_from_level(void);
 extern void styles_rules_clear(void);
 extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
 /* Banner strings: from style.txt (per-style via M: lines only) */

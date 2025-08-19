@@ -2387,10 +2387,6 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     int original_monster_level = monster_level;
 
     log_trace("build_vault: Building vault '%s' with color=%d", v_name + v_ptr->name, v_ptr->color);
-    /* If vault color encodes a style, capture it to bias vault styles later */
-    int extra_sidx = -1;
-    if (v_ptr->color >= COLOR_STYLE_BASE) extra_sidx = v_ptr->color - COLOR_STYLE_BASE;
-    else if (v_ptr->color > 0) extra_sidx = v_ptr->color; /* treat color as style index */
 
     cptr t;
 
@@ -2437,14 +2433,19 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             if (sidx == -1) {
                 int lp = styles_get_level_primary_style();
                 if (lp >= 0) styles_add_vault_weight(lp, w);
+            } else if (sidx == -2) {
+                /* '$' token: pick one random style from the current level's
+                 * available list and add it with the specified weight. */
+                int rs = styles_pick_random_from_level();
+                if (rs >= 0) styles_add_vault_weight(rs, w);
             } else {
                 styles_add_vault_weight(sidx, w);
             }
         }
     } else {
-        /* Apply per-depth default or global default; fallback to clone w/ bias */
-        styles_apply_vault_default_for_depth(p_ptr->depth);
-        if (extra_sidx >= 0) styles_add_vault_weight(extra_sidx, 2);
+        /* No S: provided — choose a random style from the depth-available list */
+        int rs = styles_pick_random_from_level();
+        if (rs >= 0) styles_add_vault_weight(rs, 1);
     }
     /* Choose one primary style for the entire vault */
     styles_select_vault_primary();
@@ -3925,6 +3926,14 @@ static void gates_gen(void)
     /* Restrict to single-screen size */
     p_ptr->cur_map_hgt = (3 * PANEL_HGT);
     p_ptr->cur_map_wid = (2 * PANEL_WID_FIXED);
+
+    /* Initialize level style weights for depth 0 */
+    styles_init_for_level();
+    /* If no primary style was selected (e.g., no rules loaded yet), force style 13 */
+    if (styles_get_level_primary_style() < 0) {
+        styles_set_loaded_level_primary(13);
+        log_info("gates_gen: forced level primary style to 13 for depth 0");
+    }
 
     /*start with basic granite*/
     basic_granite();
