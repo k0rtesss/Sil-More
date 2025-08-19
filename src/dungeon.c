@@ -9,6 +9,8 @@
  */
 
 #include "angband.h"
+/* Countdown for forcing a redraw after showing the per-style banner */
+int g_banner_force_redraw_remaining = 0;
 #include "log.h"
 #include "metarun.h"
 #include "z-term.h"
@@ -2505,6 +2507,17 @@ static void process_player(void)
 
     playerturn++;
 
+    /* If a banner was recently shown, count down per full player turn and force a full redraw when it expires.
+       This ensures the redraw happens after the third normal action without consuming input. */
+    if (g_banner_force_redraw_remaining > 0)
+    {
+        g_banner_force_redraw_remaining--;
+        if (g_banner_force_redraw_remaining == 0)
+        {
+            do_cmd_redraw();
+        }
+    }
+
     depth_counter_increment = 85 - (playerturn / 850);
     depth_counter_increment += 3 * (p_ptr->depth - min_depth());
 
@@ -2760,6 +2773,8 @@ static void dungeon(void)
             if (m && m[0]) {
                 /* second row (row index 1) */
                 print_fade_centered_at_row(m, 1);
+                /* After showing the banner, force a full redraw after 3 inputs */
+                g_banner_force_redraw_remaining = 3;
             }
         }
     }

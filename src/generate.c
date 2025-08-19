@@ -2395,10 +2395,10 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     {
         for (dx = 0; dx < xmax; dx++, t++)
         {
-            // Barrow wights can't be deeper than level 12
-            if ((*t == 'W') && (p_ptr->depth > 12))
+            // Barrow wights can't be deeper than level 15
+            if ((*t == 'W') && (p_ptr->depth > 15))
             {
-                // msg_print("Skipped a barrow wight vault.");
+                log_debug("Skipped a barrow wight vault.");
                 return (false);
             }
 

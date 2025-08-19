@@ -348,6 +348,9 @@ extern void styles_rules_clear(void);
 extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
 /* Banner strings: from style.txt (per-style via M: lines only) */
 extern const char* styles_get_style_display(int sidx);
+/* After showing the per-style banner on level entry, count down user inputs
+ * and force a full screen redraw when it reaches zero. */
+extern int g_banner_force_redraw_remaining;
 extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);

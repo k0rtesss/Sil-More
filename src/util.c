@@ -1955,6 +1955,8 @@ char inkey(void)
     /* Hack -- Activate main screen */
     Term_activate(term_screen);
 
+    /* (banner redraw countdown moved to per-turn logic in dungeon.c) */
+
     /* Get a key */
     while (!ch)
     {
@@ -2094,6 +2096,8 @@ char inkey(void)
 
     /* Cancel the various "global parameters" */
     inkey_base = inkey_xtra = inkey_flag = inkey_scan = false;
+
+    /* (no banner countdown updates here; handled per turn) */
 
     /* Return the keypress */
     return (ch);
