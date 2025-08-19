@@ -3186,18 +3186,8 @@ void process_player_name(bool sf)
     {
         char temp[128];
 
-#ifdef SAVEFILE_USE_UID
-        /* Rename the savefile, using the player_uid and base_name */
-        strnfmt(temp, sizeof(temp), "%d.%s", player_uid, op_ptr->base_name);
-#else
         /* Rename the savefile, using the base name */
         strnfmt(temp, sizeof(temp), "%s", op_ptr->base_name);
-#endif
-
-#ifdef VM
-        /* Hack -- support "flat directory" usage on VM/ESA */
-        strnfmt(temp, sizeof(temp), "%s.sv", op_ptr->base_name);
-#endif /* VM */
 
         /* Build the filename */
         path_build(savefile, sizeof(savefile), ANGBAND_DIR_SAVE, temp);
@@ -7224,14 +7214,7 @@ bool autoload_alive_from_scores(void)
             my_strcpy(savefile_backup, savefile, sizeof(savefile_backup));
 
             /* Build alternative filename using the unmodified who_buf */
-#ifdef SAVEFILE_USE_UID
-            strnfmt(alt_temp, sizeof(alt_temp), "%d.%s", player_uid, who_buf);
-#else
             strnfmt(alt_temp, sizeof(alt_temp), "%s", who_buf);
-#endif
-#ifdef VM
-            strnfmt(alt_temp, sizeof(alt_temp), "%s.sv", who_buf);
-#endif
             path_build(alt_path, sizeof(alt_path), ANGBAND_DIR_SAVE, alt_temp);
 
             /* Point global savefile to the alternative and try again */
