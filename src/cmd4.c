@@ -6485,7 +6485,7 @@ void create_smithing_item(void)
 #define MAIN_MENU_KNOWN_OBJECTS 6
 #define MAIN_MENU_KNOWN_ARTEFACTS 7
 #define MAIN_MENU_KNOWN_MONSTERS 8
-#define MAIN_MENU_SLAIN_MONSTERS 9
+#define MAIN_MENU_KNOWN_CURSES 9
 #define MAIN_MENU_NOTE 10
 #define MAIN_MENU_SCREENSHOT 11
 #define MAIN_MENU_MACROS 12
@@ -6523,7 +6523,7 @@ int main_menu_aux(int* highlight)
     Term_putstr(COL_MAIN, 5, -1, (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
         "d) Map");
     Term_putstr(COL_MAIN, 6, -1, (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
-        "e) Names of the fallen");
+        "e) Halls of Mandos");
     Term_putstr(COL_MAIN, 7, -1, (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE,
         "f) Known objects");
     Term_putstr(COL_MAIN, 8, -1, (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE,
@@ -6671,7 +6671,7 @@ void do_cmd_main_menu(void)
             leave_menu = true;
             break;
         }
-        case MAIN_MENU_SLAIN_MONSTERS:
+        case MAIN_MENU_KNOWN_CURSES:
         {
             show_known_curses_menu();
             leave_menu = true;
@@ -6730,6 +6730,9 @@ void do_cmd_main_menu(void)
         {
             /* Stop playing */
             p_ptr->playing = false;
+            
+            /* Mark that we want to quit to menu, not exit application */
+            p_ptr->quit_to_menu = true;
 
             /* Leaving */
             p_ptr->leaving = true;

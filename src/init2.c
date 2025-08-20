@@ -1681,7 +1681,7 @@ extern void display_introduction(void)
         "       No stain yet on the moon was seen...              ");
 
     Term_putstr(12, 5, -1, TERM_WHITE,
-        "Welcome to SilQ: Heroes of the First Age                ");
+        "Welcome to Sil-More, Shining Darkness                ");
     Term_putstr(12, 6, -1, TERM_WHITE,
         "  An adventure set in Middle-earth's mythic past,                    ");
     Term_putstr(12, 7, -1, TERM_WHITE,

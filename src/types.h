@@ -988,6 +988,7 @@ struct player_type
     bool playing; /* true if player is playing the game */
     bool restoring; /* true if player is restoring a game */
     bool leaving; /* true if player is leaving the game */
+    bool quit_to_menu; /* true if player wants to quit to menu instead of exiting */
 
     s16b create_stair; /* Create a staircase on next level */
     s16b create_rubble; /* Create rubble on next level */

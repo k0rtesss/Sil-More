@@ -3598,7 +3598,17 @@ PlayResult play_game(void)
     
     close_game();
     if (!p_ptr->is_dead && !p_ptr->playing)
-        return PLAY_QUIT;
+    {
+        if (p_ptr->quit_to_menu)
+        {
+            p_ptr->quit_to_menu = false; /* Reset the flag */
+            return PLAY_DONE;
+        }
+        else
+        {
+            return PLAY_QUIT;
+        }
+    }
     else 
         return PLAY_DONE;
 }
