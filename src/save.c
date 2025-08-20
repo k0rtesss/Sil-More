@@ -26,7 +26,7 @@ void updatecharinfoS(void)
 
     FILE* oFile = fopen(tmp_Path, "w");
     if (!oFile) {
-        log_debug("Failed to open character output file: %s", tmp_Path);
+        log_warn("Failed to open character output file: %s", tmp_Path);
         return;
     }
 
@@ -942,9 +942,7 @@ static void wr_extra(void)
     wr_u16b(p_ptr->noscore);
     wr_u16b(p_ptr->smithing_leftover);
     wr_byte(p_ptr->unique_forge_made ? 1 : 0);
-    log_trace("Unique forge made: %d", p_ptr->unique_forge_made ? 1 : 0);
     wr_byte(p_ptr->unique_forge_seen ? 1 : 0);
-    log_trace("Unique forge seen: %d", p_ptr->unique_forge_seen ? 1 : 0);
 
     /* Write death */
     wr_byte(p_ptr->is_dead ? 1 : 0);
@@ -952,11 +950,9 @@ static void wr_extra(void)
 
     /* Write feeling */
     wr_byte(feeling);
-    log_trace("Feeling: %d", feeling);
 
     /* Turn of last "feeling" */
     wr_byte(do_feeling);
-    log_trace("Do feeling: %d", do_feeling);
 
     /* Current turn */
     wr_s32b(turn);
@@ -1449,7 +1445,7 @@ static bool wr_savefile(void)
     /* Error in save */
     if (ferror(fff) || (fflush(fff) == EOF))
     {
-        log_debug("Save file write error detected");
+        log_error("Save file write error detected");
         return false;
     }
 
@@ -1515,7 +1511,7 @@ static bool save_player_aux(cptr name)
         }
         else
         {
-            log_debug("Failed to open savefile for writing: %s", name);
+            log_error("Failed to open savefile for writing: %s", name);
         }
 
         /* Grab permissions */
@@ -1530,13 +1526,13 @@ static bool save_player_aux(cptr name)
     }
     else
     {
-        log_debug("Failed to create savefile: %s", name);
+        log_error("Failed to create savefile: %s", name);
     }
 
     /* Failure */
     if (!ok)
     {
-        log_debug("save_player_aux failed for file: %s", name);
+        log_error("save_player_aux failed for file: %s", name);
         return (false);
     }
 
@@ -1646,7 +1642,7 @@ bool save_player(void)
     }
     else 
     {
-        log_info("Save failed - could not write savefile");
+        log_error("Save failed - could not write savefile");
     }
 
     char buf[1024];

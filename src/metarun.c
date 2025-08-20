@@ -60,7 +60,7 @@ static void reset_defaults(metarun *m)
     m->curses_seen = 0;   
     m->deaths      = 0;
     m->silmarils   = 0;
-    log_trace("After init: curses_seen = 0x%08X", m->curses_seen);
+    log_debug("After init: curses_seen = 0x%08X", m->curses_seen);
 }
 
 /* Apply initial curses based on difficulty level (runtype) */
@@ -132,7 +132,7 @@ static void curses_pack_words(void)
  * ---------------------------------------------------------------- */
 static void curses_unpack_words(void)
 {
-    log_trace("curses_unpack_words: before - curses_seen=0x%08X", metar.curses_seen);
+    log_debug("curses_unpack_words: before - curses_seen=0x%08X", metar.curses_seen);
     
     u32b lo = metar.curses_lo;          
     u32b hi = metar.curses_hi;
@@ -145,7 +145,7 @@ static void curses_unpack_words(void)
         CURSE_SET(id, (byte)cnt);            
     }
     
-    log_trace("curses_unpack_words: after - curses_seen=0x%08X", metar.curses_seen);
+    log_debug("curses_unpack_words: after - curses_seen=0x%08X", metar.curses_seen);
 }
 
 
@@ -1740,17 +1740,10 @@ void show_known_curses_menu(void)
     int row = 2;
     int id;
 
-    log_trace("show_known_curses_menu: metar.curses_seen=0x%08lX",
-            (unsigned long) metar.curses_seen);
-
-
     /* Collect and count first */
     for (id = 0; id < (int)z_info->cu_max; id++)
         if (CURSE_SEEN(id)) {
                 shown++;
-                int seen = CURSE_SEEN(id) ? 1 : 0;
-                log_trace("show_known_curses_menu: id=%d, name='%s', Seen=%d",
-                id, cu_name + cu_info[id].name, seen);
             }
     if (!shown) {
         log_debug("No curses have been seen yet");

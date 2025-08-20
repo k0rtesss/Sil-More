@@ -5280,7 +5280,7 @@ cptr attr_to_text(byte a)
 void init_logger(bool quiet)
 {
     const char* log_level_str = getenv("SIL_LOG_LEVEL");
-    int level = LOG_TRACE; /* Default to TRACE level */
+    int level = LOG_DEBUG; /* Default to TRACE level */
     
     if (log_level_str && strlen(log_level_str) > 0)
     {
@@ -5291,7 +5291,7 @@ void init_logger(bool quiet)
                 break;
             }
         }
-        if (level > LOG_FATAL)
+    if (level > LOG_FATAL)
         {
             level = LOG_INFO;
             log_warn("Unknown log level %s, log level will be set to INFO",

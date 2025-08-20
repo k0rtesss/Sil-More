@@ -1387,7 +1387,7 @@ errr parse_style_levels(char* buf, header* head)
         styles_rules_clear();
         styles_vault_rules_clear();
         styles_default_vault_clear();
-    log_info("parse_style_levels: Version header encountered, cleared existing rules");
+    log_debug("parse_style_levels: Version header encountered, cleared existing rules");
         return 0;
     }
     /* Comments or blank lines */
@@ -1435,7 +1435,7 @@ errr parse_style_levels(char* buf, header* head)
             for (int d = min_d; d <= max_d; ++d) {
                 styles_add_level_rule(d, 0, sidx, wt, n);
             }
-            log_info("parse_style_levels: L:%d..%d with %d entries (first sidx=%d w=%d)",
+            log_debug("parse_style_levels: L:%d..%d with %d entries (first sidx=%d w=%d)",
                 min_d, max_d, n, sidx[0], wt[0]);
         }
         return 0;
@@ -1462,12 +1462,12 @@ errr parse_style_levels(char* buf, header* head)
         if (depth_tok[0] == '*' && depth_tok[1] == '\0') {
             styles_default_vault_clear();
             for (int i = 0; i < n; ++i) styles_default_vault_add(sidx[i], wt[i]);
-            log_info("parse_style_levels: U:* default with %d entries (first=%d:%d)", n, sidx[0], wt[0]);
+            log_debug("parse_style_levels: U:* default with %d entries (first=%d:%d)", n, sidx[0], wt[0]);
         } else {
             int d = atoi(depth_tok);
             if (n > 0) {
                 styles_set_vault_rule(d, sidx, wt, n);
-                log_info("parse_style_levels: U:%d with %d entries (first=%d:%d)", d, n, sidx[0], wt[0]);
+                log_debug("parse_style_levels: U:%d with %d entries (first=%d:%d)", d, n, sidx[0], wt[0]);
             }
         }
         return 0;
@@ -1537,7 +1537,7 @@ static errr parse_style_message_line(char* buf)
     /* Append */
     g_style_display_text[idx][g_style_display_count[idx]] = string_make(s);
     g_style_display_count[idx]++;
-    log_debug("parse_style_message_line: added style %d message #%d", idx, g_style_display_count[idx]);
+    log_trace("parse_style_message_line: added style %d message #%d", idx, g_style_display_count[idx]);
     return 0;
 }
 
@@ -1570,7 +1570,7 @@ void styles_reload_messages_from_text(void)
     fp = my_fopen(path, "r");
     if (!fp)
     {
-        log_info("styles_reload_messages_from_text: couldn't open %s", path);
+        log_warn("styles_reload_messages_from_text: couldn't open %s", path);
         return;
     }
 

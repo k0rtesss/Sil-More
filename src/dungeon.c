@@ -2817,13 +2817,11 @@ static void dungeon(void)
             {
                 /* Update stuff */
                 if (p_ptr->update) {
-                    log_trace("Main loop: running update_stuff in player turn");
                     update_stuff();
                 }
 
                 /* Redraw stuff */
                 if (p_ptr->redraw) {
-                    log_trace("Main loop: running redraw_stuff in player turn");
                     redraw_stuff();
                 }
 
@@ -2834,25 +2832,21 @@ static void dungeon(void)
 
         /* Notice stuff */
         if (p_ptr->notice) {
-            log_trace("Main loop: running notice_stuff");
             notice_stuff();
         }
 
         /* Update stuff */
         if (p_ptr->update) {
-            log_trace("Main loop: running update_stuff after player action");
             update_stuff();
         }
 
         /* Redraw stuff */
         if (p_ptr->redraw) {
-            log_trace("Main loop: running redraw_stuff after player action");
             redraw_stuff();
         }
 
         /* Redraw stuff */
         if (p_ptr->window) {
-            log_trace("Main loop: running window_stuff after player action");
             window_stuff();
         }
 

@@ -2294,7 +2294,7 @@ bool show_file(cptr name, cptr what, int line)
     /* Oops */
     if (!fff)
     {
-        log_info("Failed to open help file: %s", name);
+        log_warn("Failed to open help file: %s", name);
         /* Message */
         msg_format("Cannot open '%s'.", name);
         message_flush();
@@ -3431,12 +3431,12 @@ void do_cmd_save_game(void)
     /* Save the player */
     /* Make sure meta-run data (curses, flags, etc.) is up-to-date even
       when the player merely saves & quits. */
-   log_info("Saving game and updating metarun data");    
+    log_info("Saving game and updating metarun data");    
    metarun_update_on_exit(false, false, 0);
 
     if (save_player())
     {
-        log_info("Game saved successfully");
+    log_debug("Game saved successfully");
         if (!save_game_quietly)
         {
             prt("Saving game... done.", 0, 0);
@@ -3446,7 +3446,7 @@ void do_cmd_save_game(void)
     /* Save failed (oops) */
     else
     {
-        log_info("Game save failed");
+    log_error("Game save failed");
         prt("Saving game... failed!", 0, 0);
     }
 
@@ -3592,7 +3592,7 @@ static errr highscore_read(high_score* score)
     /* Read the record, note failure */
     result = fd_read(highscore_fd, (char*)(score), sizeof(high_score));
     if (result != 0) {
-        log_info("Failed to read score from highscore file (error: %d)", result);
+    log_error("Failed to read score from highscore file (error: %d)", result);
     }
     return result;
 }
@@ -3607,7 +3607,7 @@ static int highscore_write(const high_score* score)
     /* Write the record, note failure */
     result = fd_write(highscore_fd, (cptr)(score), sizeof(high_score));
     if (result != 0) {
-        log_info("Failed to write score to highscore file (error: %d)", result);
+    log_error("Failed to write score to highscore file (error: %d)", result);
     }
     return result;
 }   
@@ -3711,13 +3711,13 @@ static int highscore_where(high_score* score)
 
     /* Paranoia -- it may not have opened */
     if (highscore_fd < 0) {
-        log_info("Highscore file not opened, cannot determine score placement");
+    log_warn("Highscore file not opened, cannot determine score placement");
         return (-1);
     }
 
     /* Go to the start of the highscore file */
     if (highscore_seek(0)) {
-        log_info("Failed to seek to start of highscore file");
+    log_error("Failed to seek to start of highscore file");
         return (-1);
     }
 
@@ -3817,7 +3817,7 @@ static int highscore_add(high_score* score)
 
     /* Paranoia -- it may not have opened */
     if (highscore_fd < 0) {
-        log_info("Cannot add score - highscore file not opened");
+    log_warn("Cannot add score - highscore file not opened");
         return (-1);
     }
 
@@ -3826,7 +3826,7 @@ static int highscore_add(high_score* score)
     
     /* Hack -- Not on the list */
     if (slot < 0) {
-        log_info("Score for player '%s' rejected - not eligible for high scores", score->who);
+    log_warn("Score for player '%s' rejected - not eligible for high scores", score->who);
         return (-1);
     }
     
@@ -4444,7 +4444,7 @@ void display_scores(int from, int to)
     highscore_fd = fd_open(buf, O_RDONLY);
     
     if (highscore_fd < 0) {
-        log_info("Failed to open highscore file for reading");
+    log_error("Failed to open highscore file for reading");
         return;
     }
 
@@ -4817,8 +4817,8 @@ void print_story(int last_parts, bool fade_in)
     bool fast_forward = false;
     bool show_page_instantly = false;
 
-    log_info("=== Starting story display (parts=%d, fade_in=%s) ===", last_parts, fade_in ? "true" : "false");
-    log_trace("last_parts=%d, fade_in=%s", last_parts, fade_in ? "true" : "false");
+    log_debug("=== Starting story display (parts=%d, fade_in=%s) ===", last_parts, fade_in ? "true" : "false");
+    log_debug("last_parts=%d, fade_in=%s", last_parts, fade_in ? "true" : "false");
 
     /* Convenience macro to keep the bottom‑line hint fresh */
 #define REDRAW_HINT() \
@@ -4833,7 +4833,7 @@ void print_story(int last_parts, bool fade_in)
     static int sel_idx[1024];
     if (max_st > (int)N_ELEMENTS(sel_idx)) max_st = (int)N_ELEMENTS(sel_idx);
 
-    log_trace("Building story list: sils=%d, rt=%d, max_st=%d", sils, rt, max_st);
+    log_debug("Building story list: sils=%d, rt=%d, max_st=%d", sils, rt, max_st);
 
     for (int i = 0; i < max_st; i++)
     {
@@ -4849,7 +4849,7 @@ void print_story(int last_parts, bool fade_in)
         }
     }
 
-    log_info("Found %d matching stories for display", total);
+    log_debug("Found %d matching stories for display", total);
     
     if (total == 0) {
         log_debug("No stories match criteria - sils=%d, rt=%d", sils, rt);
@@ -4871,37 +4871,30 @@ void print_story(int last_parts, bool fade_in)
 
     /* Restrict to the last N parts if requested ------------- */
     int start = (last_parts > 0 && last_parts < total) ? total - last_parts : 0;
-    log_trace("Story range: start=%d, total=%d", start, total);
+    log_debug("Story range: start=%d, total=%d", start, total);
 
     /* Screen prep ------------------------------------------- */
     Term_get_size(&wid, &h);
-    log_trace("Screen size: %dx%d", wid, h);
     screen_save();
     Term_clear();
 
     Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
     int row = 2;
-    log_trace("Initial row position: %d", row);
     REDRAW_HINT();
 
     /* Main loop -------------------------------------------- */
     for (int idx = start; idx < total; idx++)
     {
         story_type *st = &st_info[sel_idx[idx]];
-        log_trace("=== PROCESSING STORY %d/%d (idx=%d) ===", idx - start + 1, total - start, idx);
-        log_trace("Story name: '%s'", st_name + st->name);
-        log_trace("Row before heading: %d", row);
 
         /* Check if we need to paginate BEFORE rendering this story */
         /* Estimate space needed: 1 for heading + ~4 for text + 1 for blank line */
         int estimated_space_needed = 6;
         if (row + estimated_space_needed >= h - 2)
         {
-            log_trace("PRE-PAGINATION: estimated space %d would exceed limit", estimated_space_needed);
             if (!fast_forward)
             {
                 show_page_instantly = false;
-                log_trace("Waiting for user input...");
                 REDRAW_HINT();
                 char ch = inkey();
                 if (ch == ESCAPE)
@@ -4909,50 +4902,41 @@ void print_story(int last_parts, bool fade_in)
                     fast_forward = true;
                     fade_in = false;
                     Term_erase(0, h - 1, wid);
-                    log_info("User pressed ESC - enabling fast forward mode");
+                    log_debug("User pressed ESC - enabling fast forward mode");
                 }
                 else
                 {
-                    log_trace("User pressed Enter - new page");
                     row = 2;
                     Term_clear();
                     Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
                     REDRAW_HINT();
-                    log_trace("New page started, row reset to %d", row);
                 }
             }
             else
             {
-                log_trace("Fast-forward mode: auto-pagination");
                 row = 2;
                 Term_clear();
                 Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
-                log_trace("Auto-paginated, row reset to %d", row);
             }
         }
 
         /* Heading */
         Term_putstr(indent, row++, -1, TERM_L_BLUE, st_name + st->name);
-        log_trace("Row after heading: %d", row);
 
         /* Body */
         int wrap_width = wid - indent - 1;
         if (wrap_width < 20) wrap_width = 20;
         cptr text      = st_text + st->text;
-        log_trace("Text length: %d, wrap_width: %d", (int)strlen(text), wrap_width);
 
         if (fade_in && !fast_forward && !show_page_instantly)
         {
-            log_trace("Using fade-in for text at row %d", row);
             if (!print_paragraph_fade(text, row, indent, wrap_width))
             {
                 show_page_instantly = true; /* Esc was pressed during fade */
-                log_trace("Fade interrupted, switching to instant display");
             }
         }
         else
         {
-            log_trace("Rendering text directly at row %d", row);
             text_out_indent = indent;
             text_out_wrap   = wrap_width;
             Term_gotoxy(indent, row);
@@ -4967,34 +4951,24 @@ void print_story(int last_parts, bool fade_in)
         int cursor_x, cursor_y;
         Term_locate(&cursor_x, &cursor_y);
         int text_rows = cursor_y - row + 1;
-        log_trace("Text spans %d rows (actual cursor tracking)", text_rows);
         row = cursor_y + 1; /* Position after the text */
-        log_trace("Row after text: %d", row);
 
         /* Check if we'll have room for the blank line before adding it */
         bool will_add_blank_line = (idx < total - 1);
-        log_trace("Will add blank line: %s (idx=%d, total=%d)", 
-                  will_add_blank_line ? "YES" : "NO", idx, total);
         
         /* Pagination logic - check if we need to paginate BEFORE adding blank line */
         int space_needed = will_add_blank_line ? 1 : 0;
         int available_space = h - 2 - row;
-        log_trace("Space check: row=%d, space_needed=%d, available=%d (h=%d)", 
-                  row, space_needed, available_space, h);
         
         bool paginated = false;
         if (row + space_needed >= h - 2)
         {
-            log_trace("PAGINATION TRIGGERED: row+space=%d >= h-2=%d", 
-                      row + space_needed, h - 2);
-            
             paginated = true;
             if (!fast_forward)
             {
                 /* Reset show_page_instantly for next page */
                 show_page_instantly = false;
                 
-                log_trace("Waiting for user input...");
                 REDRAW_HINT();
                 char ch = inkey();
                 if (ch == ESCAPE)
@@ -5002,61 +4976,42 @@ void print_story(int last_parts, bool fade_in)
                     fast_forward = true;
                     fade_in      = false;   /* Disable delays for rest of story */
                     Term_erase(0, h - 1, wid); /* clear hint line */
-                    log_info("User pressed ESC - enabling fast forward mode");
+                    log_debug("User pressed ESC - enabling fast forward mode");
                 }
                 else /* Enter */
                 {
-                    log_trace("User pressed Enter - new page");
                     row = 2;
                     Term_clear();
                     Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
                     REDRAW_HINT();
-                    log_trace("New page started, row reset to %d", row);
                     continue;
                 }
             }
             else
             {
-                log_trace("Fast-forward mode: auto-pagination");
+                /* fast‑forward mode: auto‑clear, no waits */
+                row = 2;
+                Term_clear();
+                Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
             }
-            /* fast‑forward mode: auto‑clear, no waits */
-            row = 2;
-            Term_clear();
-            Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
-            log_trace("Auto-paginated, row reset to %d", row);
         }
 
         /* Add visible blank spacer line between paragraphs if there's room and we didn't paginate */
         if (will_add_blank_line && !paginated)
         {
-            log_trace("ADDING BLANK LINE at row %d", row);
             Term_putstr(indent, row, -1, TERM_WHITE, "");
             row++;
-            log_trace("Row after blank line: %d", row);
         }
-        else if (paginated)
-        {
-            log_trace("NOT adding blank line (paginated - page break provides separation)");
-        }
-        else
-        {
-            log_trace("NOT adding blank line (last story)");
-        }
-        
-        log_trace("=== END STORY %d ===", idx - start + 1);
     }
-
-    log_trace("=== MAIN LOOP COMPLETE ===");
 
     /* Footer ------------------------------------------------ */
     Term_erase(0, h - 1, wid); /* clear bottom line entirely */
     Term_putstr(indent, h - 1, -1, TERM_L_WHITE,
                 "[Press any key to continue]");
-    log_trace("Waiting for final key press...");
     (void)inkey();
     screen_load();
     
-    log_info("=== Story display completed ===");
+    log_debug("Story display completed");
 
 #undef REDRAW_HINT
 }
@@ -5474,7 +5429,7 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         if (hit >= 0) {
             /* 5.d) Found – check alive */
             if (highscore_dead(entry.how)) {
-                log_trace("hero already dead – skip");
+                log_debug("hero already dead – skip");
                 continue;
             }
             /* kill existing */
@@ -5495,7 +5450,7 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
             highscore_seek(0);
             int slot = highscore_add(&dummy);
             if (slot < 0)
-                log_trace("error: highscore_add() failed");
+                log_error("highscore_add() failed");
             else
                 log_info("Kinslayer inserted dummy entry \"%s\" at slot %d",
                         dummy.who, slot);
@@ -5508,9 +5463,9 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
 
         /* 7) Close the descriptor and reset */
         safe_setuid_grab();
-        if (close(highscore_fd) != 0)
-            log_trace("warning: close(highscore_fd=%d) failed, errno=%d",
-                    highscore_fd, errno);
+    if (close(highscore_fd) != 0)
+        log_warn("close(highscore_fd=%d) failed, errno=%d",
+            highscore_fd, errno);
         safe_setuid_drop();
         highscore_fd = -1;
 
@@ -5520,11 +5475,11 @@ const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll)
     /* 8) No kill performed – close and exit */
     safe_setuid_grab();
     if (close(highscore_fd) != 0)
-        log_trace("warning: close(highscore_fd=%d) failed, errno=%d",
+        log_warn("close(highscore_fd=%d) failed, errno=%d",
                 highscore_fd, errno);
     safe_setuid_drop();
     highscore_fd = -1;
-    log_trace("finished – no kill performed");
+    log_debug("finished – no kill performed");
     return NULL;
 }
 
@@ -5993,7 +5948,7 @@ static void close_game_aux(void)
     high_score the_score;
     int choice = 0, highlight = 1;
 
-    log_info("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
+    log_debug("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
              op_ptr->full_name, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
 
     /* Dump bones file */
@@ -6003,7 +5958,7 @@ static void close_game_aux(void)
     log_info("saving dead player (noscore=0x%04X) -> '%s'", (unsigned)p_ptr->noscore, savefile);
     if (!save_player())
     {
-        log_debug("Death save failed - player data may be lost");
+        log_error("Death save failed - player data may be lost");
         msg_print("death save failed!");
         message_flush();
     }
@@ -6264,7 +6219,7 @@ void close_game(void)
     safe_setuid_drop();
     
     if (highscore_fd < 0) {
-        log_info("Failed to open scores file for read/write");
+    log_error("Failed to open scores file for read/write");
     }
 
     /* Handle death */
@@ -7150,7 +7105,7 @@ bool autoload_alive_from_scores(void)
     fd_local = open(score_path, O_RDWR | O_CREAT, 0644);
     safe_setuid_drop();
     if (fd_local < 0) {
-        log_info("autoload: could not open scorefile: %s", score_path);
+    log_warn("autoload: could not open scorefile: %s", score_path);
         return false;
     }
 
@@ -7349,7 +7304,7 @@ void metarun_finalize_scores_and_saves(void)
     fd_local = open(score_path, O_RDWR | O_CREAT, 0644);
     safe_setuid_drop();
     if (fd_local < 0) {
-        log_info("finalize: could not open scorefile: %s", score_path);
+    log_warn("finalize: could not open scorefile: %s", score_path);
         return;
     }
 

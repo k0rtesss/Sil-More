@@ -1855,10 +1855,10 @@ void do_cmd_debug(void)
     /* Edit character */
     case 'e':
     {
-    log_info("debug: invoking character edit (before: wizard=%d, noscore=0x%04X)",
+    log_debug("debug: invoking character edit (before: wizard=%d, noscore=0x%04X)",
          p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore);
         do_cmd_wiz_change();
-    log_info("debug: finished character edit (after: wizard=%d, noscore=0x%04X)",
+    log_debug("debug: finished character edit (after: wizard=%d, noscore=0x%04X)",
          p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore);
         break;
     }

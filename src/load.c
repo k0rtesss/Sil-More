@@ -957,7 +957,6 @@ static errr rd_extra(void)
     rd_bool(&p_ptr->unique_forge_made);
     rd_bool(&p_ptr->unique_forge_seen);
     rd_bool(&p_ptr->is_dead);
-    log_trace("is_dead: %d", p_ptr->is_dead);
 
     /* Read "feeling" */
     rd_byte(&tmp8u);
@@ -966,16 +965,12 @@ static errr rd_extra(void)
     /*read the level feeling*/
     rd_byte(&tmp8u);
     do_feeling = tmp8u;
-    // rd_byte(&do_feeling);
-    log_trace("do_feeling: %d", do_feeling);
 
     /* Current turn */
     rd_s32b(&turn);
-    log_trace("turn: %d", turn);
 
     /* Current player turn */
     rd_s32b(&playerturn);
-    log_trace("playerturn: %d", playerturn);
 
     // rd_byte(&tmp8u);
     // p_ptr->killed_enemy_with_arrow = tmp8u;
@@ -1931,7 +1926,7 @@ static errr rd_savefile(void)
     /* Paranoia */
     if (!fff)
     {
-        log_debug("Failed to open savefile: %s", savefile);
+        log_error("Failed to open savefile: %s", savefile);
         return (-1);
     }
 
@@ -1941,7 +1936,7 @@ static errr rd_savefile(void)
     /* Check for errors */
     if (ferror(fff))
     {
-        log_debug("File read error detected");
+        log_error("File read error detected");
         err = -1;
     }
 
@@ -1981,7 +1976,7 @@ bool load_player(void)
 
     cptr what = "generic";
 
-    log_info("Loading savefile '%s'", savefile);
+    log_debug("Loading savefile '%s'", savefile);
 
     /* Paranoia */
     turn = 0;
@@ -2156,9 +2151,13 @@ bool load_player(void)
         {
             /* Attempt to load */
             err = rd_savefile();
-            log_info("Read savefile %s", err ? "failed" : "success");
+            if (err) {
+                log_error("Read savefile failed");
+            } else {
+                log_debug("Read savefile success");
+            }
             if (!err) {
-                log_info("load: post-read flags (is_dead=%d, wizard=%d, noscore=0x%04X)",
+                log_debug("load: post-read flags (is_dead=%d, wizard=%d, noscore=0x%04X)",
                          p_ptr->is_dead, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore);
             }
 

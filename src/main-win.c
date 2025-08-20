@@ -2467,7 +2467,7 @@ static errr Term_pict_win(int x, int y, int n, const byte* ap, const char* cp,
             }
             if (s_rows && s_cols && (row >= s_rows || col >= s_cols))
             {
-                log_info("main-win: WARN out-of-range tile row=%d col=%d (max rows=%d cols=%d)", row, col, s_rows, s_cols);
+                log_warn("main-win: out-of-range tile row=%d col=%d (max rows=%d cols=%d)", row, col, s_rows, s_cols);
                 /* Clamp to prevent GDI from sampling outside */
                 if (row >= s_rows) row = s_rows - 1;
                 if (col >= s_cols) col = s_cols - 1;
