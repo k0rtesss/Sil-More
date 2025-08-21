@@ -4194,6 +4194,9 @@ errr parse_c_info(char* buf, header* head)
         /* RESET equipment counter for new house */
         cur_equip = 0;
 
+        /* Initialize power to default value 1 (average) */
+        ph_ptr->power = 1;
+
         /* Store the name offset */
         if (!(ph_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
@@ -4462,6 +4465,19 @@ errr parse_c_info(char* buf, header* head)
         }
 
         log_debug("  total %d ability pairs parsed", pair);
+    }
+
+    /* Process 'P' for "Power" */
+    else if (buf[0] == 'P')
+    {
+        /* There better be a current ph_ptr */
+        if (!ph_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        /* Parse the power value */
+        ph_ptr->power = (byte)atoi(buf + 2);
+        
+        log_debug("  power set to %d", ph_ptr->power);
     }
 
     else

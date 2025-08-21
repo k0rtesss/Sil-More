@@ -732,6 +732,7 @@ struct player_character
 
     u32b flags; /* House Flags (ie RHF flags) */
     u32b flags_u; /* House Flags (ie RHF flags) */
+    byte power; /* Power rating: 0=weak, 1=average, 2=powerful, 3=very powerful */
     start_item start_items[MAX_START_ITEMS];       /* NEW: bonus kit */
 };
 
