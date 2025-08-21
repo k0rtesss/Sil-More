@@ -193,16 +193,39 @@ errr load_metaruns(bool create_if_missing)
     
     bool is_old_format = false;
     
-    /* If the file size is exactly divisible by old format size, and the 
-     * result doesn't match new format, it's probably old format */
-    if ((file_size % sizeof(metarun_old)) == 0 && 
-        (file_size % sizeof(metarun)) != 0) {
-        is_old_format = true;
-        metarun_max = old_count;
-        log_info("Detected old format metarun file, converting %d entries", old_count);
-    } else {
+    /* Debug: log structure sizes and file info */
+    log_info("File size: %d bytes, old struct: %d bytes, new struct: %d bytes", 
+             file_size, (int)sizeof(metarun_old), (int)sizeof(metarun));
+    log_info("Old count would be: %d, new count would be: %d", old_count, new_count);
+    
+    /* If the file is exactly divisible by old format size but would give a much larger
+     * count than new format, it's probably old format. The new format is 4x larger,
+     * so old format should give roughly 4x more entries. */
+    if ((file_size % sizeof(metarun_old)) == 0) {
+        s16b ratio = old_count / (new_count > 0 ? new_count : 1);
+        if (ratio >= 3) {  /* If old format gives 3+ times more entries, it's probably old format */
+            is_old_format = true;
+            metarun_max = old_count;
+            log_info("Detected old format metarun file, converting %d entries (ratio: %d)", old_count, ratio);
+        } else if ((file_size % sizeof(metarun)) == 0) {
+            is_old_format = false;
+            metarun_max = new_count;
+            log_info("Loading new format metarun file with %d entries", new_count);
+        } else {
+            /* Fallback to old format if new doesn't divide evenly */
+            is_old_format = true;
+            metarun_max = old_count;
+            log_info("Defaulting to old format metarun file, converting %d entries", old_count);
+        }
+    } else if ((file_size % sizeof(metarun)) == 0) {
+        is_old_format = false;
         metarun_max = new_count;
         log_info("Loading new format metarun file with %d entries", new_count);
+    } else {
+        /* File size doesn't match either format - assume corruption or try old format */
+        is_old_format = true;
+        metarun_max = old_count;
+        log_info("File size doesn't match known formats, attempting old format with %d entries", old_count);
     }
 
     metaruns = C_ZNEW(metarun_max, metarun);
@@ -214,6 +237,13 @@ errr load_metaruns(bool create_if_missing)
         
         /* Convert each old entry to new format */
         for (s16b i = 0; i < metarun_max; i++) {
+            /* Debug: log what we read from old format */
+            log_info("Old entry %d: id=%u, type=%u, deaths=%u, silmarils=%u, last_played=%u", 
+                     i, old_data[i].id, old_data[i].type, old_data[i].deaths, 
+                     old_data[i].silmarils, old_data[i].last_played);
+            log_info("Old entry %d: curses_lo=0x%08X, curses_hi=0x%08X, curses_seen=0x%08X",
+                     i, old_data[i].curses_lo, old_data[i].curses_hi, old_data[i].curses_seen);
+                     
             /* Copy old fields */
             metaruns[i].id = old_data[i].id;
             metaruns[i].type = old_data[i].type;
@@ -223,6 +253,11 @@ errr load_metaruns(bool create_if_missing)
             metaruns[i].curses_lo = old_data[i].curses_lo;
             metaruns[i].curses_hi = old_data[i].curses_hi;
             metaruns[i].curses_seen = old_data[i].curses_seen;
+            
+            /* Debug: log what we stored in new format */
+            log_info("New entry %d: id=%u, type=%u, deaths=%u, silmarils=%u, last_played=%u", 
+                     i, metaruns[i].id, metaruns[i].type, metaruns[i].deaths, 
+                     metaruns[i].silmarils, metaruns[i].last_played);
             
             /* Initialize new persistent settings fields with defaults */
             for (int j = 0; j < 8; j++) {
@@ -236,11 +271,8 @@ errr load_metaruns(bool create_if_missing)
             metaruns[i].persistent_options_initialized = 0;
         }
         
-        FREE(old_data);
-        log_info("Successfully converted old format to new format");
-        
-        /* Save the converted data in new format */
-        save_metaruns();
+    FREE(old_data);
+    log_info("Successfully converted old format to new format");
     } else {
         /* Load new format directly */
         fd_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
