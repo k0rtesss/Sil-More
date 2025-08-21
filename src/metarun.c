@@ -266,7 +266,7 @@ void metarun_gain_silmarils(byte n)
 
 /* ---------------------------------------------------------------
  * Pick a curse at random, respecting weights, stacks, caps,
- * and the RHF_CURSE tail-lift.
+ * and the RHF_CURSE tail-lift and exclusion of most weighted curses.
  * ------------------------------------------------------------- */
 static int weighted_random_curse(void)
 {
@@ -294,6 +294,9 @@ static int weighted_random_curse(void)
         byte cap = cu_info[i].max_stacks;
         if (cap && cnt >= cap) continue;           /* cap reached */
 
+        /* RHF_CURSE excludes the most weighted choices */
+        if (tilt && w == w_max) continue;
+
         long base = tilt
             ? w + ((w_max + 1 - w) >> 1)           /* lift the tail */
             : w;
@@ -312,6 +315,9 @@ static int weighted_random_curse(void)
         byte cnt = CURSE_GET(i);
         byte cap = cu_info[i].max_stacks;
         if (cap && cnt >= cap) continue;
+
+        /* RHF_CURSE excludes the most weighted choices */
+        if (tilt && w == w_max) continue;
 
         long base = tilt
             ? w + ((w_max + 1 - w) >> 1)
