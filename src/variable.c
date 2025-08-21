@@ -527,6 +527,11 @@ artefact_type* a_info;
 char* a_text;
 
 /*
+ * Valar quest artifact reservation
+ */
+bool* valar_reserved_artifacts;
+
+/*
  * The random name generator tables
  */
 names_type* n_info;

@@ -2868,30 +2868,54 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
-            case 'z':
+            /* Valar Projection */
+            case 'P':
             {
-                int humanOrElf
-                    = one_in_(2) ? R_IDX_HUMAN_THRALL : R_IDX_ELF_THRALL;
-
-                if (p_ptr->thrall_quest == QUEST_NOT_STARTED)
+                log_trace("Vault generation: Found 'P' character for Valar Projection");
+                // Generate Valar Projection ONLY if quest not started AND none exists on this level
+                if (p_ptr->valar_quest == VALAR_QUEST_NOT_STARTED)
                 {
-                    if (one_in_(8))
+                    // Check if Valar Projection already exists on this level
+                    bool valar_exists = false;
+                    int i;
+                    for (i = 1; i < mon_max; i++)
                     {
-                        humanOrElf = one_in_(2) ?
-                                    R_IDX_ALERT_HUMAN_THRALL :
-                                    R_IDX_ALERT_ELF_THRALL;
-                        p_ptr->thrall_quest = QUEST_GIVER_PRESENT; 
+                        monster_type *m_ptr = &mon_list[i];
+                        if (m_ptr->r_idx == R_IDX_VALAR_PROJECTION)
+                        {
+                            valar_exists = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!valar_exists)
+                    {
+                        log_trace("Valar quest not started and no Valar exists, spawning Valar Projection at (%d, %d)", y, x);
+                        place_monster_one(y, x, R_IDX_VALAR_PROJECTION, true, true, NULL);
+                        p_ptr->valar_quest = VALAR_QUEST_GIVER_PRESENT;
+                        log_trace("Valar Projection spawned successfully, quest state: %d", p_ptr->valar_quest);
+                    }
+                    else
+                    {
+                        log_trace("Valar Projection already exists on this level, skipping spawn");
                     }
                 }
+                else
+                {
+                    log_trace("Valar quest already started (state: %d), not spawning Valar Projection", p_ptr->valar_quest);
+                }
+                break;
+            }
 
-                place_monster_one(y, x, humanOrElf, true, true, NULL);
+            case 'z':
+            {
+                // This case is no longer used (was for thrall)
                 break;
             }
 
             case 'Z':
             {
-                place_monster_one(
-                    y, x, R_IDX_ORC_THRALLMASTER, true, true, NULL);
+                // This case is no longer used (was for orc thrallmaster)
                 break;
             }
 
@@ -3191,15 +3215,31 @@ static bool build_type6(int y0, int x0, bool force_forge)
         /* Get a random vault record */
         v_ptr = &v_info[rand_int(z_info->v_max)];
 
+        log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
+                  (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
+
+        // Skip Valar Chamber if quest is already started or completed
+        if ((int)(v_ptr - v_info) == 15 && p_ptr->valar_quest != VALAR_QUEST_NOT_STARTED)
+        {
+            log_trace("Skipping Valar Chamber - quest already active (state: %d)", p_ptr->valar_quest);
+            continue;
+        }
+
         // if forcing a forge, then skip vaults without forges in them
         if (force_forge && !v_ptr->forge)
+        {
+            log_trace("Skipping vault - force_forge=true but vault has no forge");
             continue;
+        }
 
         // unless forcing a forge, try additional times to place any vault
         // marked TEST
         if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST))
             && !p_ptr->force_forge)
+        {
+            log_trace("Skipping vault - tries=%d, no TEST flag", tries);
             continue;
+        }
 
         rarity = v_ptr->rarity;
         if (p_ptr->depth < 6)
@@ -4412,10 +4452,5 @@ if (playerturn == 0) {
         }
     }
 
-    if (p_ptr->thrall_quest == QUEST_REWARD_MAP)
-    {
-        msg_print("You remember the thrall told you of the passages here.");
-        map_area();
-        p_ptr->thrall_quest = QUEST_COMPLETE;
-    }
+    // Valar quest doesn't provide map rewards like the old thrall quest
 }

@@ -1989,6 +1989,11 @@ extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
     if (a_ptr->cur_num > 0)
         return;
 
+    // Don't generate it if it's reserved for Valar quest (unless this IS the quest reward)
+    if (valar_reserved_artifacts && valar_reserved_artifacts[name1] && 
+        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+        return;
+
     // Don't generate it in no-artefact games, with one obvious exception
     if (birth_no_artefacts && (name1 != ART_MORGOTH_3))
         return;
@@ -2379,6 +2384,9 @@ void monster_death(int m_idx)
 
     /* Update monster list window */
     p_ptr->window |= PW_MONLIST;
+
+    /* Check for Valar quest completion */
+    check_valar_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -5421,6 +5429,250 @@ void pause_with_text(const char desc[][100], int row, int col,
     }
 
     screen_load();
+}
+
+/*
+ * Select a suitable unique monster for the Valar quest
+ */
+static int select_valar_quest_target(void)
+{
+    int i;
+    int valid_targets[50];
+    int count = 0;
+    
+    /* Look for unique monsters at current depth or deeper */
+    for (i = 1; i < z_info->r_max; i++)
+    {
+        monster_race* r_ptr = &r_info[i];
+        
+        /* Must be unique, alive, and at appropriate depth */
+        if ((r_ptr->flags1 & RF1_UNIQUE) &&
+            (r_ptr->cur_num == 0) &&
+            (r_ptr->level >= p_ptr->depth) &&
+            (r_ptr->level <= MORGOTH_DEPTH) &&
+            (i != R_IDX_VALAR_PROJECTION))
+        {
+            valid_targets[count] = i;
+            count++;
+            if (count >= 50) break; /* Safety limit */
+        }
+    }
+    
+    if (count == 0) return 0; /* No valid targets */
+    
+    return valid_targets[rand_int(count)];
+}
+
+/*
+ * Select a suitable artifact prize for the Valar quest
+ */
+static int select_valar_quest_prize(int target_level)
+{
+    int i;
+    int valid_prizes[100];
+    int count = 0;
+    
+    /* Look for artifacts with rarity >= 10 and level >= target level */
+    for (i = 1; i < z_info->art_max; i++)
+    {
+        artefact_type* a_ptr = &a_info[i];
+        
+        /* Must be high rarity, appropriate level, and not yet created */
+        if ((a_ptr->rarity >= 10) &&
+            (a_ptr->level >= target_level) &&
+            (a_ptr->cur_num == 0) &&
+            !valar_reserved_artifacts[i])
+        {
+            valid_prizes[count] = i;
+            count++;
+            if (count >= 100) break; /* Safety limit */
+        }
+    }
+    
+    if (count == 0) return 0; /* No valid prizes */
+    
+    return valid_prizes[rand_int(count)];
+}
+
+/*
+ * Handle Valar Projection interaction
+ */
+void valar_quest_interaction(void)
+{
+    int target_r_idx, prize_a_idx;
+    monster_race* r_ptr;
+    artefact_type* a_ptr;
+    
+    /* Safety check - ensure valid quest state */
+    if (p_ptr->valar_quest != VALAR_QUEST_GIVER_PRESENT && 
+        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+    {
+        log_trace("valar_quest_interaction called with invalid quest state: %d", p_ptr->valar_quest);
+        return;
+    }
+    
+    if (p_ptr->valar_quest == VALAR_QUEST_GIVER_PRESENT)
+    {
+        log_trace("Starting Valar quest interaction - assigning target and prize");
+        
+        /* Assign quest target and prize */
+        target_r_idx = select_valar_quest_target();
+        if (target_r_idx == 0 || target_r_idx >= z_info->r_max)
+        {
+            log_trace("Invalid target_r_idx: %d", target_r_idx);
+            msg_print("The Valar Projection shimmers and fades away, finding no worthy challenge for you at this time.");
+            return;
+        }
+        
+        r_ptr = &r_info[target_r_idx];
+        if (!r_ptr || !r_ptr->name)
+        {
+            log_trace("Invalid monster race pointer for r_idx: %d", target_r_idx);
+            msg_print("The Valar Projection shimmers and fades away, finding no worthy challenge for you at this time.");
+            return;
+        }
+        
+        prize_a_idx = select_valar_quest_prize(r_ptr->level);
+        if (prize_a_idx == 0 || prize_a_idx >= z_info->art_max)
+        {
+            log_trace("Invalid prize_a_idx: %d", prize_a_idx);
+            msg_print("The Valar Projection shimmers and fades away, having no suitable reward to offer.");
+            return;
+        }
+        
+        a_ptr = &a_info[prize_a_idx];
+        if (!a_ptr)
+        {
+            log_trace("Invalid artifact pointer for a_idx: %d", prize_a_idx);
+            msg_print("The Valar Projection shimmers and fades away, having no suitable reward to offer.");
+            return;
+        }
+        
+        /* Store quest data */
+        p_ptr->valar_target_r_idx = target_r_idx;
+        p_ptr->valar_prize_a_idx = prize_a_idx;
+        p_ptr->valar_quest = VALAR_QUEST_ACTIVE;
+        
+        /* Reserve the artifact */
+        valar_reserved_artifacts[prize_a_idx] = true;
+        
+        log_trace("Quest assigned: target=%d (%s), prize=%d (%s)", 
+                 target_r_idx, r_name + r_ptr->name, prize_a_idx, a_ptr->name);
+        
+        /* Give quest message */
+        msg_format("The Valar Projection speaks: 'Seeker of fame, I have a task for you.'");
+        msg_format("'Seek out %s, and prove your worth by defeating this foe.'", r_name + r_ptr->name);
+        
+        /* Check if artifact name is valid */
+        if (strlen(a_ptr->name) > 0)
+        {
+            msg_format("'As reward for this deed, you shall receive %s.'", a_ptr->name);
+        }
+        else
+        {
+            log_trace("Empty artifact name for a_idx %d, using generic message", prize_a_idx);
+            msg_format("'As reward for this deed, you shall receive a legendary artifact.'");
+        }
+        
+        msg_print("The projection fades away, leaving you with your quest.");
+    }
+    else if (p_ptr->valar_quest == VALAR_QUEST_COMPLETE)
+    {
+        log_trace("Completing Valar quest - giving reward artifact %d", p_ptr->valar_prize_a_idx);
+        
+        /* Safety check for valid artifact index */
+        if (p_ptr->valar_prize_a_idx <= 0 || p_ptr->valar_prize_a_idx >= z_info->art_max)
+        {
+            log_trace("Invalid prize artifact index: %d", p_ptr->valar_prize_a_idx);
+            msg_print("The Valar Projection appears but seems confused about your reward.");
+            return;
+        }
+        
+        /* Give the artifact reward */
+        create_chosen_artefact(p_ptr->valar_prize_a_idx, p_ptr->py, p_ptr->px, true);
+        
+        /* Clear quest state */
+        valar_reserved_artifacts[p_ptr->valar_prize_a_idx] = false;
+        p_ptr->valar_quest = VALAR_QUEST_REWARDED;
+        p_ptr->valar_target_r_idx = 0;
+        p_ptr->valar_prize_a_idx = 0;
+        p_ptr->valar_quest_complete = 0;
+        
+        msg_print("The Valar Projection appears and nods approvingly.");
+        msg_print("'You have proven yourself worthy. Take this reward.'");
+        msg_print("The projection smiles and vanishes, leaving behind your prize.");
+        
+        log_trace("Valar quest completed and rewarded");
+    }
+}
+
+/*
+ * Check if player is adjacent to Valar Projection and handle interaction
+ */
+void check_valar_quest_interaction(void)
+{
+    int i, y, x;
+    
+    /* Only check if quest is in appropriate state */
+    if (p_ptr->valar_quest != VALAR_QUEST_GIVER_PRESENT && 
+        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+        return;
+    
+    /* Check all adjacent squares for Valar Projection */
+    for (i = 1; i < 9; i++)
+    {
+        y = p_ptr->py + ddy[i];
+        x = p_ptr->px + ddx[i];
+        
+        /* Check bounds */
+        if (!in_bounds(y, x)) continue;
+        
+        /* Check for monster */
+        if (cave_m_idx[y][x] > 0)
+        {
+            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+            
+            /* Check if it's a Valar Projection */
+            if (m_ptr->r_idx == R_IDX_VALAR_PROJECTION)
+            {
+                valar_quest_interaction();
+                return;
+            }
+        }
+    }
+}
+
+/*
+ * Handle monster death for Valar quest
+ */
+void check_valar_quest_completion(int r_idx)
+{
+    if (p_ptr->valar_quest == VALAR_QUEST_ACTIVE && 
+        r_idx == p_ptr->valar_target_r_idx)
+    {
+        p_ptr->valar_quest = VALAR_QUEST_COMPLETE;
+        p_ptr->valar_quest_complete = 1;
+        
+        msg_print("You have completed your quest! Seek out a Valar Projection to claim your reward.");
+        
+        /* Spawn a Valar Projection in the same room */
+        int y, x;
+        
+        /* Try to find a suitable spot near the player */
+        for (y = p_ptr->py - 3; y <= p_ptr->py + 3; y++)
+        {
+            for (x = p_ptr->px - 3; x <= p_ptr->px + 3; x++)
+            {
+                if (in_bounds(y, x) && cave_floor_bold(y, x) && 
+                    cave_m_idx[y][x] == 0 && distance(p_ptr->py, p_ptr->px, y, x) >= 2)
+                {
+                    place_monster_one(y, x, R_IDX_VALAR_PROJECTION, true, true, NULL);
+                    msg_print("A Valar Projection materializes nearby, ready to give you your reward.");
+                    return;
+                }
+            }
+        }
+    }
 }
 
 

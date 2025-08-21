@@ -28,16 +28,18 @@ Secondly, it uses a system of metaruns, where consequtive runs are connected int
 
 ## Release of beta 0.8 (Visual update)
 
-- Change Score to Character database
+- SDL 
 - Quest systems
+- Simple Valar -> kill -> Artefact quest
 -- Update to oath system
 - More Vaults
 - More monsters
 
 ## Release of beta 0.9 
 
+- Change Score to Character database
 - Multiple runs support 
-- SDL 
+
 
 ### Ideas
 

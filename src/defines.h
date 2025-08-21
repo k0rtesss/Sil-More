@@ -229,6 +229,7 @@ static const depth_wall_tier wall_depth_tiers[MAX_WALL_DEPTH_TIERS] = {
 #define R_IDX_ORC_THRALLMASTER 15
 #define R_IDX_ALERT_HUMAN_THRALL 16
 #define R_IDX_ALERT_ELF_THRALL 17
+#define R_IDX_VALAR_PROJECTION 18
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
 #define R_IDX_ORC_CHAMPION 81
@@ -3476,12 +3477,13 @@ static const depth_wall_tier wall_depth_tiers[MAX_WALL_DEPTH_TIERS] = {
 #define OATH_IRON 3
 
 /*
- * States for the thrall quest
+ * States for the Valar quest
  */
-#define QUEST_NOT_STARTED 0
-#define QUEST_GIVER_PRESENT 1
-#define QUEST_REWARD_MAP 2
-#define QUEST_COMPLETE 10
+#define VALAR_QUEST_NOT_STARTED 0
+#define VALAR_QUEST_GIVER_PRESENT 1
+#define VALAR_QUEST_ACTIVE 2
+#define VALAR_QUEST_COMPLETE 3
+#define VALAR_QUEST_REWARDED 4
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

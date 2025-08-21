@@ -485,6 +485,9 @@ static void process_world(void)
 
     bool was_ghost = false;
 
+    /* Check for Valar quest interaction every turn */
+    check_valar_quest_interaction();
+
     /* Stop now unless the turn count is divisible by 10 */
     if (turn % 10)
         return;

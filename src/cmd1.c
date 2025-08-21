@@ -79,7 +79,7 @@ void reward_player_for_quest(cptr m_name, unsigned int quest_index)
             msg_format("%^s murmurs the song of staunching.", m_name);
             set_cut(0);
             hp_player(50, true, true);
-            p_ptr->thrall_quest = QUEST_COMPLETE;
+            // Note: Old thrall quest removed
             return;
         }
     }
@@ -92,17 +92,17 @@ void reward_player_for_quest(cptr m_name, unsigned int quest_index)
         msg_format("%^s gives you a ragged herb.", m_name);
         object_prep(&herb, O_IDX_HERB_RAGE);
         give_player_item(&herb);
-        p_ptr->thrall_quest = QUEST_COMPLETE;
+        // Note: Old thrall quest removed
         break;
     case 2:
         msg_format("%^s gives you a ragged herb.", m_name);
         object_prep(&herb, O_IDX_HERB_TERROR);
         give_player_item(&herb);
-        p_ptr->thrall_quest = QUEST_COMPLETE;
+        // Note: Old thrall quest removed
         break;
     default:
         msg_format("%^s tells you about some passages a little way off.", m_name);
-        p_ptr->thrall_quest = QUEST_REWARD_MAP;
+        // Note: Old thrall quest map reward removed
     }
 }
 
@@ -127,11 +127,7 @@ void do_quest(monster_type* m_ptr)
     /* Get the monster name */
     monster_desc(m_name, sizeof(m_name), m_ptr, 0);
 
-    if (p_ptr->thrall_quest > QUEST_GIVER_PRESENT)
-    {
-        msg_format("%^s thanks you again.", m_name);
-        return;
-    }
+    // Note: Old thrall quest logic removed - Valar quest handles this differently
 
     msg_format("Looking up at you, %s begs you for %s.", m_name,
         quest_text[quest_index]);

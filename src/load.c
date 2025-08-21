@@ -978,7 +978,11 @@ static errr rd_extra(void)
 
     rd_byte(&p_ptr->oath_type);
     rd_byte(&p_ptr->oaths_broken);
-    rd_byte(&p_ptr->thrall_quest);
+    
+    rd_byte(&p_ptr->valar_quest);
+    rd_s16b(&p_ptr->valar_target_r_idx);
+    rd_s16b(&p_ptr->valar_prize_a_idx);
+    rd_byte(&p_ptr->valar_quest_complete);
 
     rd_s32b(&p_ptr->unused2);
     rd_s32b(&p_ptr->unused3);

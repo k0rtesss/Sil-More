@@ -311,6 +311,16 @@ void player_wipe(void)
         a_ptr->cur_num = 0;
         a_ptr->found_num = 0;
     }
+    
+    /* Initialize Valar artifact reservation array */
+    if (!valar_reserved_artifacts)
+    {
+        C_MAKE(valar_reserved_artifacts, z_info->art_max, bool);
+    }
+    for (i = 0; i < z_info->art_max; i++)
+    {
+        valar_reserved_artifacts[i] = false;
+    }
 
     /*re-set the object_level*/
     object_level = 0;
@@ -373,7 +383,10 @@ void player_wipe(void)
     p_ptr->oath_type = 0;
     p_ptr->oaths_broken = 0;
 
-    p_ptr->thrall_quest = QUEST_NOT_STARTED;
+    p_ptr->valar_quest = VALAR_QUEST_NOT_STARTED;
+    p_ptr->valar_target_r_idx = 0;
+    p_ptr->valar_prize_a_idx = 0;
+    p_ptr->valar_quest_complete = 0;
 
     p_ptr->unused2 = 0;
     p_ptr->unused3 = 0;
