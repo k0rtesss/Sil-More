@@ -198,34 +198,21 @@ errr load_metaruns(bool create_if_missing)
              file_size, (int)sizeof(metarun_old), (int)sizeof(metarun));
     log_info("Old count would be: %d, new count would be: %d", old_count, new_count);
     
-    /* If the file is exactly divisible by old format size but would give a much larger
-     * count than new format, it's probably old format. The new format is 4x larger,
-     * so old format should give roughly 4x more entries. */
-    if ((file_size % sizeof(metarun_old)) == 0) {
-        s16b ratio = old_count / (new_count > 0 ? new_count : 1);
-        if (ratio >= 3) {  /* If old format gives 3+ times more entries, it's probably old format */
-            is_old_format = true;
-            metarun_max = old_count;
-            log_info("Detected old format metarun file, converting %d entries (ratio: %d)", old_count, ratio);
-        } else if ((file_size % sizeof(metarun)) == 0) {
-            is_old_format = false;
-            metarun_max = new_count;
-            log_info("Loading new format metarun file with %d entries", new_count);
-        } else {
-            /* Fallback to old format if new doesn't divide evenly */
-            is_old_format = true;
-            metarun_max = old_count;
-            log_info("Defaulting to old format metarun file, converting %d entries", old_count);
-        }
-    } else if ((file_size % sizeof(metarun)) == 0) {
+    /* If the file is exactly divisible by new format size, it's new format */
+    if ((file_size % sizeof(metarun)) == 0) {
         is_old_format = false;
         metarun_max = new_count;
         log_info("Loading new format metarun file with %d entries", new_count);
-    } else {
-        /* File size doesn't match either format - assume corruption or try old format */
+    } else if ((file_size % sizeof(metarun_old)) == 0) {
+        /* Only consider old format if new format doesn't fit exactly */
         is_old_format = true;
         metarun_max = old_count;
-        log_info("File size doesn't match known formats, attempting old format with %d entries", old_count);
+        log_info("Detected old format metarun file, converting %d entries", old_count);
+    } else {
+        /* File size doesn't match either format - default to new format with truncation */
+        is_old_format = false;
+        metarun_max = new_count;  /* This will truncate partial entries */
+        log_info("File size doesn't match known formats exactly, assuming new format with %d complete entries", new_count);
     }
 
     metaruns = C_ZNEW(metarun_max, metarun);
@@ -282,15 +269,29 @@ errr load_metaruns(bool create_if_missing)
 
     /* choose current run */
     u32b latest = 0;
+    current_run = -1;  /* Initialize to invalid value so any valid entry will be selected */
+    
     for (s16b i = 0; i < metarun_max; i++) {
+        log_debug("Metarun %d: id=%u, last_played=%u, deaths=%u, silmarils=%u", 
+                  i, metaruns[i].id, metaruns[i].last_played, metaruns[i].deaths, metaruns[i].silmarils);
+                  
         if (metaruns[i].last_played > latest ||
             (metaruns[i].last_played == latest && i > current_run))
         {
             latest      = metaruns[i].last_played;
             current_run = i;
+            log_debug("Selected metarun %d as current (last_played=%u)", i, latest);
         }
     }
+    
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_info("No valid metarun found, defaulting to entry 0");
+        current_run = 0;
+    }
+    
     metar = metaruns[current_run];
+    log_debug("Final current_run=%d, metar: id=%u, deaths=%u, silmarils=%u", 
+              current_run, metar.id, metar.deaths, metar.silmarils);
 
     /* ensure its per-run directory exists */
     ensure_run_dir(&metar);
@@ -311,19 +312,139 @@ errr load_metaruns(bool create_if_missing)
  *  Safely write the meta-run array.  Bail out if the indices look     *
  *  wrong – avoids dereferencing a freed/reallocated block.           *
  * ------------------------------------------------------------------ */
+static errr backup_file(const char *filepath)
+{
+    /* Check if original file exists */
+    int fd_src = fd_open(filepath, O_RDONLY);
+    if (fd_src < 0) {
+        /* Original file doesn't exist, no backup needed */
+        log_info("backup_file: original file %s doesn't exist, no backup needed", filepath);
+        return 0;
+    }
+    
+    /* Get file size */
+    int file_size = fd_file_size(fd_src);
+    if (file_size <= 0) {
+        log_info("backup_file: original file %s is empty, no backup needed", filepath);
+        fd_close(fd_src);
+        return 0;
+    }
+    
+    log_info("backup_file: creating backup for %s (size: %d bytes)", filepath, file_size);
+    
+    /* Read original file */
+    char *buffer = C_ZNEW(file_size, char);
+    if (!buffer) {
+        fd_close(fd_src);
+        return -1;
+    }
+    
+    if (fd_read(fd_src, buffer, file_size) != 0) {
+        FREE(buffer);
+        fd_close(fd_src);
+        return -1;
+    }
+    fd_close(fd_src);
+    
+    /* Simple backup rotation: bak1 (newest) -> bak2 -> bak3 (oldest) */
+    char backup_path1[1024], backup_path2[1024], backup_path3[1024];
+    strnfmt(backup_path1, sizeof(backup_path1), "%s.bak1", filepath);
+    strnfmt(backup_path2, sizeof(backup_path2), "%s.bak2", filepath);
+    strnfmt(backup_path3, sizeof(backup_path3), "%s.bak3", filepath);
+    
+    log_info("backup_file: rotating backups for %s", filepath);
+    
+    /* Rotate: bak2 -> bak3, bak1 -> bak2, current -> bak1 */
+    fd_kill(backup_path3);                    /* Remove oldest */
+    log_info("backup_file: removed old bak3");
+    
+    /* Move bak2 to bak3 (if bak2 exists) - preserves timestamp */
+    int fd_test2 = fd_open(backup_path2, O_RDONLY);
+    if (fd_test2 >= 0) {
+        fd_close(fd_test2);
+        log_info("backup_file: moving bak2 to bak3 (preserving timestamp)");
+        if (fd_move(backup_path2, backup_path3) == 0) {
+            log_info("backup_file: successfully moved bak2 to bak3");
+        } else {
+            log_error("backup_file: failed to move bak2 to bak3");
+        }
+    } else {
+        log_info("backup_file: no bak2 file to move");
+    }
+    
+    /* Move bak1 to bak2 (if bak1 exists) - preserves timestamp */
+    int fd_test1 = fd_open(backup_path1, O_RDONLY);
+    if (fd_test1 >= 0) {
+        fd_close(fd_test1);
+        log_info("backup_file: moving bak1 to bak2 (preserving timestamp)");
+        if (fd_move(backup_path1, backup_path2) == 0) {
+            log_info("backup_file: successfully moved bak1 to bak2");
+        } else {
+            log_error("backup_file: failed to move bak1 to bak2");
+        }
+    } else {
+        log_info("backup_file: no bak1 file to move");
+    }
+    
+    /* Create new bak1 from current file */
+    log_info("backup_file: creating new bak1 from current file (size: %d)", file_size);
+    int fd_dst = fd_make(backup_path1, 0644);
+    if (fd_dst < 0) {
+        FREE(buffer);
+        return -1;
+    }
+    
+    errr result = fd_write(fd_dst, buffer, file_size);
+    fd_close(fd_dst);
+    FREE(buffer);
+    
+    if (result == 0) {
+        log_info("backup_file: successfully created backup rotation for %s", filepath);
+    } else {
+        log_error("backup_file: failed to write bak1 for %s", filepath);
+    }
+    
+    return result;
+}
+
 errr save_metaruns(void)
 {
+    static u32b last_save_time = 0;
+    u32b current_time = (u32b)time(NULL);
+    
+    /* Log save frequency tracking */
+    if (last_save_time > 0) {
+        u32b time_since_last = current_time - last_save_time;
+        log_info("save_metaruns() called again after %u seconds", time_since_last);
+    } else {
+        log_info("save_metaruns() called for the first time this session");
+    }
+    last_save_time = current_time;
+
     curses_pack_words();      /* NEW: ensure words hold 2-bit data */
 
     char fn[1024];
     build_meta_path(fn, sizeof fn, NULL, META_RAW);
 
-    metar.last_played      = (u32b)time(NULL);
-    metaruns[current_run] = metar;            /* safe: array is valid */
+    /* Create backup before saving */
+    backup_file(fn);
 
+    log_debug("Before save: current_run=%d, metar: id=%u, deaths=%u, silmarils=%u", 
+              current_run, metar.id, metar.deaths, metar.silmarils);
+              
+    metar.last_played      = current_time;
+    metaruns[current_run] = metar;            /* safe: array is valid */
+    
+    log_debug("After updating array: metaruns[%d]: id=%u, deaths=%u, silmarils=%u", 
+              current_run, metaruns[current_run].id, metaruns[current_run].deaths, metaruns[current_run].silmarils);
+
+    /* After backup is created in backup_file(), remove the original so fd_make can succeed */
+    fd_kill(fn);
+    
     /* Write using the existing fd_* functions for consistency */
     int fd = fd_make(fn, 0644);
     if (fd < 0) {
+        log_info("Failed to create metarun file for writing");
         return -1;
     }
 
@@ -332,10 +453,11 @@ errr save_metaruns(void)
     fd_close(fd);
     
     if (result != 0) {
+        log_info("Failed to write metarun data to file");
         return -1;
     }
     
-    log_info("Metarun data saved successfully");
+    log_info("Metarun data saved successfully (%d bytes, %d entries)", bytes_to_write, metarun_max);
 
     return 0;
 }
@@ -1304,6 +1426,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count)
     check_run_end();
     /* Save persistent settings when exiting */
     metarun_save_persistent_settings();
+    
+    /* Save metarun data (deaths, silmarils, etc.) */
+    save_metaruns();
 }
 
 
