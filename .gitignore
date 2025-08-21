@@ -55,3 +55,8 @@ src/build-warnings.txt
 monsters_ideas.txt
 /Sil-More-beta-0.8
 /lib/edit/__pycache__
+*.bak
+lib/edit/character_backup.txt
+*.bak1
+*.bak2
+*.bak3

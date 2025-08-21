@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "h-basic.h"
 #include "metarun.h"
+#include "platform.h"
 #include "z-term.h"
 #include <stdio.h>
 
@@ -3613,6 +3614,84 @@ static int highscore_write(const high_score* score)
 }   
 
 /*
+ * Create backup of scores file with 3-backup rotation
+ */
+static errr backup_scores_file(const char *filepath)
+{
+    /* Check if original file exists */
+    int fd_src = fd_open(filepath, O_RDONLY);
+    if (fd_src < 0) {
+        /* Original file doesn't exist, no backup needed */
+        return 0;
+    }
+    
+    /* Get file size */
+    int file_size = fd_file_size(fd_src);
+    if (file_size <= 0) {
+        fd_close(fd_src);
+        return 0;
+    }
+    
+    /* Read original file */
+    char *buffer = C_ZNEW(file_size, char);
+    if (!buffer) {
+        fd_close(fd_src);
+        return -1;
+    }
+    
+    if (fd_read(fd_src, buffer, file_size) != 0) {
+        FREE(buffer);
+        fd_close(fd_src);
+        return -1;
+    }
+    fd_close(fd_src);
+    
+    /* Simple backup rotation: bak1 (newest) -> bak2 -> bak3 (oldest) */
+    char backup_path1[1024], backup_path2[1024], backup_path3[1024];
+    strnfmt(backup_path1, sizeof(backup_path1), "%s.bak1", filepath);
+    strnfmt(backup_path2, sizeof(backup_path2), "%s.bak2", filepath);
+    strnfmt(backup_path3, sizeof(backup_path3), "%s.bak3", filepath);
+    
+    /* Rotate: bak2 -> bak3, bak1 -> bak2, current -> bak1 */
+    fd_kill(backup_path3);                    /* Remove oldest */
+    
+    /* Move bak2 to bak3 (if bak2 exists) - preserves timestamp */
+    int fd_test2 = fd_open(backup_path2, O_RDONLY);
+    if (fd_test2 >= 0) {
+        fd_close(fd_test2);
+        if (fd_move(backup_path2, backup_path3) != 0) {
+            log_error("backup_scores_file: failed to move bak2 to bak3");
+        }
+    }
+    
+    /* Move bak1 to bak2 (if bak1 exists) - preserves timestamp */
+    int fd_test1 = fd_open(backup_path1, O_RDONLY);
+    if (fd_test1 >= 0) {
+        fd_close(fd_test1);
+        if (fd_move(backup_path1, backup_path2) != 0) {
+            log_error("backup_scores_file: failed to move bak1 to bak2");
+        }
+    }
+    
+    /* Create new bak1 from current file */
+    int fd_dst = fd_make(backup_path1, 0644);
+    if (fd_dst < 0) {
+        FREE(buffer);
+        return -1;
+    }
+    
+    errr result = fd_write(fd_dst, buffer, file_size);
+    fd_close(fd_dst);
+    FREE(buffer);
+    
+    if (result == 0) {
+        log_info("Created scores backup: %s (rotated 3 backups)", backup_path1);
+    }
+    
+    return result;
+}
+
+/*
  * An integer value representing the player's "points".
  *
  * In reality it isn't so much a score as a number that has the same ordering
@@ -4799,11 +4878,11 @@ void print_fade_centered_at_row(cptr text, int row_start)
 
         /* Half-second gap before next line if more text remains */
         if (*p && (row_start + printed_lines) < h)
-            Term_xtra(TERM_XTRA_DELAY, 500);
+            Term_xtra(TERM_XTRA_DELAY, 400);
     }
 
     /* Hold briefly so the player can read (keep 1s as before) */
-    Term_xtra(TERM_XTRA_DELAY, 1000);
+    Term_xtra(TERM_XTRA_DELAY, 500);
     /* Do not explicitly erase: allow natural redraws to overwrite the text */
 }
 
@@ -6208,6 +6287,9 @@ void close_game(void)
     path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
 
     log_debug("Opening scores file for read/write: %s", buf);
+
+    /* Create backup before opening for write operations */
+    backup_scores_file(buf);
 
     /* Grab permissions */
     safe_setuid_grab();
