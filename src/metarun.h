@@ -26,6 +26,22 @@
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
 /* ------------------------------------------------------------------ */
+
+/* Old metarun structure for backwards compatibility */
+typedef struct metarun_old
+{
+    /* ----- per-run counters --------------------------------------- */
+    u32b id;            /* monotonic 0-based index                    */
+    byte type;          /* reserved for future run-type support       */
+    byte deaths;        /* how many characters have died so far       */
+    byte silmarils;     /* Silmarils recovered so far                 */
+    u32b last_played;   /* time() of the most recent character        */
+
+    u32b curses_lo;     /* curse IDs  0–15  – 2 bits each (max 4) */
+    u32b curses_hi;     /* curse IDs 16–31  – 2 bits each (max 4) */
+    u32b curses_seen;   /* bit i == 1  → curse i is known/revealed    */
+} metarun_old;
+
 typedef struct metarun
 {
     /* ----- per-run counters --------------------------------------- */
@@ -38,6 +54,13 @@ typedef struct metarun
     u32b curses_lo;     /* curse IDs  0–15  – 2 bits each (max 4) */
     u32b curses_hi;     /* curse IDs 16–31  – 2 bits each (max 4) */
     u32b curses_seen;   /* bit i == 1  → curse i is known/revealed    */
+
+    /* ----- persistent settings ----------------------------------- */
+    u32b persistent_options[8];  /* Persistent options across the metarun */
+    byte persistent_delay_factor; /* Persistent delay factor */
+    byte persistent_hitpoint_warn; /* Persistent hitpoint warning */
+    u32b persistent_window_flags[ANGBAND_TERM_MAX]; /* Persistent window flags */
+    byte persistent_options_initialized; /* Flag to track if persistent options are set */
 
 } metarun;
 
@@ -65,6 +88,12 @@ void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
 void print_metarun_stats(void);                  /* Pretty single-run view  */
 void list_metaruns(void);                        /* Full meta-run history   */
+
+/* ------------------------------------------------------------------ */
+/*  Persistent Settings                                               */
+/* ------------------------------------------------------------------ */
+void metarun_save_persistent_settings(void);     /* Save current options to metarun */
+void metarun_load_persistent_settings(void);     /* Load metarun options to current */
 
 static inline byte CURSE_GET(int id)
 {

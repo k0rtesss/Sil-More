@@ -2046,6 +2046,9 @@ NavResult player_birth()
     /* Hack -- outfit the player */
     player_outfit();
 
+    /* Load persistent settings from metarun if this is a continuing metarun */
+    metarun_load_persistent_settings();
+
     log_info("Character creation completed: %s the %s", op_ptr->full_name, p_name + rp_ptr->name);
 
     return NAV_OK;

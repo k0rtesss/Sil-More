@@ -7197,6 +7197,9 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
             }
 
+            /* Save persistent settings to metarun after options are changed */
+            metarun_save_persistent_settings();
+
             return;
         }
 

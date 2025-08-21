@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <stddef.h>
 
 #include <stdio.h>  
 
@@ -60,6 +61,18 @@ static void reset_defaults(metarun *m)
     m->curses_seen = 0;   
     m->deaths      = 0;
     m->silmarils   = 0;
+    
+    /* Initialize persistent settings with defaults */
+    for (int i = 0; i < 8; i++) {
+        m->persistent_options[i] = 0;
+    }
+    for (int i = 0; i < ANGBAND_TERM_MAX; i++) {
+        m->persistent_window_flags[i] = 0;
+    }
+    m->persistent_delay_factor = 5;      /* Default delay factor */
+    m->persistent_hitpoint_warn = 3;     /* Default hitpoint warning */
+    m->persistent_options_initialized = 0; /* Mark as not initialized yet */
+    
     log_debug("After init: curses_seen = 0x%08X", m->curses_seen);
 }
 
@@ -173,9 +186,66 @@ errr load_metaruns(bool create_if_missing)
     else log_info("Loading existing metarun file: %s", fn);
     if (fd < 0) return -1;
 
-    metarun_max = (s16b)(fd_file_size(fd) / sizeof(metarun));
-    metaruns    = C_ZNEW(metarun_max, metarun);
-    fd_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
+    /* Check if this is an old format file by trying both structure sizes */
+    int file_size = fd_file_size(fd);
+    s16b old_count = (s16b)(file_size / sizeof(metarun_old));
+    s16b new_count = (s16b)(file_size / sizeof(metarun));
+    
+    bool is_old_format = false;
+    
+    /* If the file size is exactly divisible by old format size, and the 
+     * result doesn't match new format, it's probably old format */
+    if ((file_size % sizeof(metarun_old)) == 0 && 
+        (file_size % sizeof(metarun)) != 0) {
+        is_old_format = true;
+        metarun_max = old_count;
+        log_info("Detected old format metarun file, converting %d entries", old_count);
+    } else {
+        metarun_max = new_count;
+        log_info("Loading new format metarun file with %d entries", new_count);
+    }
+
+    metaruns = C_ZNEW(metarun_max, metarun);
+    
+    if (is_old_format) {
+        /* Load old format and convert to new format */
+        metarun_old *old_data = C_ZNEW(metarun_max, metarun_old);
+        fd_read(fd, (char*)old_data, metarun_max * sizeof(metarun_old));
+        
+        /* Convert each old entry to new format */
+        for (s16b i = 0; i < metarun_max; i++) {
+            /* Copy old fields */
+            metaruns[i].id = old_data[i].id;
+            metaruns[i].type = old_data[i].type;
+            metaruns[i].deaths = old_data[i].deaths;
+            metaruns[i].silmarils = old_data[i].silmarils;
+            metaruns[i].last_played = old_data[i].last_played;
+            metaruns[i].curses_lo = old_data[i].curses_lo;
+            metaruns[i].curses_hi = old_data[i].curses_hi;
+            metaruns[i].curses_seen = old_data[i].curses_seen;
+            
+            /* Initialize new persistent settings fields with defaults */
+            for (int j = 0; j < 8; j++) {
+                metaruns[i].persistent_options[j] = 0;
+            }
+            for (int j = 0; j < ANGBAND_TERM_MAX; j++) {
+                metaruns[i].persistent_window_flags[j] = 0;
+            }
+            metaruns[i].persistent_delay_factor = 5;
+            metaruns[i].persistent_hitpoint_warn = 3;
+            metaruns[i].persistent_options_initialized = 0;
+        }
+        
+        FREE(old_data);
+        log_info("Successfully converted old format to new format");
+        
+        /* Save the converted data in new format */
+        save_metaruns();
+    } else {
+        /* Load new format directly */
+        fd_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
+    }
+    
     fd_close(fd);
 
     /* choose current run */
@@ -219,21 +289,19 @@ errr save_metaruns(void)
     metar.last_played      = (u32b)time(NULL);
     metaruns[current_run] = metar;            /* safe: array is valid */
 
-    /* Use standard C file operations instead of the problematic fd_* functions */
-    FILE *fp = fopen(fn, "wb");
-    if (!fp) {
+    /* Write using the existing fd_* functions for consistency */
+    int fd = fd_make(fn, 0644);
+    if (fd < 0) {
         return -1;
     }
 
-    size_t bytes_to_write = metarun_max * sizeof(metarun);
-    size_t bytes_written = fwrite(metaruns, 1, bytes_to_write, fp);
+    int bytes_to_write = metarun_max * sizeof(metarun);
+    errr result = fd_write(fd, (cptr)metaruns, bytes_to_write);
+    fd_close(fd);
     
-    if (bytes_written != bytes_to_write) {
-        fclose(fp);
+    if (result != 0) {
         return -1;
     }
-    
-    fclose(fp);
     
     log_info("Metarun data saved successfully");
 
@@ -262,6 +330,85 @@ void metarun_gain_silmarils(byte n)
     if (total > 255) total = 255;
     if (total < 0) total = 0;
     metar.silmarils = (byte)total;
+}
+
+/* ---------------------------------------------------------------
+ * Persistent Settings Management
+ * ------------------------------------------------------------- */
+
+/*
+ * Save current game options to the metarun persistent settings
+ */
+void metarun_save_persistent_settings(void)
+{
+    log_info("Saving persistent settings to metarun");
+    
+    /* Save options */
+    for (int i = 0; i < 8; i++) {
+        metar.persistent_options[i] = 0;
+    }
+    
+    /* Pack options into the persistent storage */
+    for (int i = 0; i < OPT_MAX; i++) {
+        int word_idx = i / 32;
+        int bit_idx = i % 32;
+        
+        if (word_idx < 8 && option_text[i] && op_ptr->opt[i]) {
+            metar.persistent_options[word_idx] |= (1UL << bit_idx);
+        }
+    }
+    
+    /* Save special settings */
+    metar.persistent_delay_factor = op_ptr->delay_factor;
+    metar.persistent_hitpoint_warn = op_ptr->hitpoint_warn;
+    
+    /* Save window flags */
+    for (int i = 0; i < ANGBAND_TERM_MAX; i++) {
+        metar.persistent_window_flags[i] = op_ptr->window_flag[i];
+    }
+    
+    /* Mark as initialized */
+    metar.persistent_options_initialized = 1;
+    
+    /* Save the metarun data */
+    save_metaruns();
+    
+    log_info("Persistent settings saved successfully");
+}
+
+/*
+ * Load metarun persistent settings to current game options
+ */
+void metarun_load_persistent_settings(void)
+{
+    /* Only load if settings have been previously saved */
+    if (!metar.persistent_options_initialized) {
+        log_info("No persistent settings found, using defaults");
+        return;
+    }
+    
+    log_info("Loading persistent settings from metarun");
+    
+    /* Load options */
+    for (int i = 0; i < OPT_MAX; i++) {
+        int word_idx = i / 32;
+        int bit_idx = i % 32;
+        
+        if (word_idx < 8 && option_text[i]) {
+            op_ptr->opt[i] = (metar.persistent_options[word_idx] & (1UL << bit_idx)) != 0;
+        }
+    }
+    
+    /* Load special settings */
+    op_ptr->delay_factor = metar.persistent_delay_factor;
+    op_ptr->hitpoint_warn = metar.persistent_hitpoint_warn;
+    
+    /* Load window flags */
+    for (int i = 0; i < ANGBAND_TERM_MAX; i++) {
+        op_ptr->window_flag[i] = metar.persistent_window_flags[i];
+    }
+    
+    log_info("Persistent settings loaded successfully");
 }
 
 /* ---------------------------------------------------------------
@@ -1123,7 +1270,8 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count)
     screen_load();
 
     check_run_end();
-    save_metaruns();
+    /* Save persistent settings when exiting */
+    metarun_save_persistent_settings();
 }
 
 
