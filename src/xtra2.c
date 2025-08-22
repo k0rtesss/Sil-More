@@ -5440,10 +5440,24 @@ static int select_valar_quest_target(void)
     int valid_targets[50];
     int count = 0;
     
+    log_trace("select_valar_quest_target: z_info=%p, r_max=%d", z_info, z_info ? z_info->r_max : -1);
+    
+    if (!z_info) 
+    {
+        log_trace("z_info is NULL!");
+        return 0;
+    }
+    
     /* Look for unique monsters at current depth or deeper */
     for (i = 1; i < z_info->r_max; i++)
     {
         monster_race* r_ptr = &r_info[i];
+        
+        if (!r_ptr) 
+        {
+            log_trace("r_info[%d] returned NULL", i);
+            continue;
+        }
         
         /* Must be unique, alive, and at appropriate depth */
         if ((r_ptr->flags1 & RF1_UNIQUE) &&
@@ -5472,10 +5486,31 @@ static int select_valar_quest_prize(int target_level)
     int valid_prizes[100];
     int count = 0;
     
+    log_trace("select_valar_quest_prize: target_level=%d, z_info=%p, art_max=%d", 
+              target_level, z_info, z_info ? z_info->art_max : -1);
+    
+    if (!z_info) 
+    {
+        log_trace("z_info is NULL!");
+        return 0;
+    }
+    
+    if (!valar_reserved_artifacts)
+    {
+        log_trace("valar_reserved_artifacts is NULL!");
+        return 0;
+    }
+    
     /* Look for artifacts with rarity >= 10 and level >= target level */
     for (i = 1; i < z_info->art_max; i++)
     {
         artefact_type* a_ptr = &a_info[i];
+        
+        if (!a_ptr) 
+        {
+            log_trace("a_info[%d] returned NULL", i);
+            continue;
+        }
         
         /* Must be high rarity, appropriate level, and not yet created */
         if ((a_ptr->rarity >= 10) &&
@@ -5525,9 +5560,9 @@ void valar_quest_interaction(void)
         }
         
         r_ptr = &r_info[target_r_idx];
-        if (!r_ptr || !r_ptr->name)
+        if (target_r_idx <= 0 || target_r_idx >= z_info->r_max || r_ptr->name == 0)
         {
-            log_trace("Invalid monster race pointer for r_idx: %d", target_r_idx);
+            log_trace("Invalid monster race data for r_idx: %d", target_r_idx);
             msg_print("The Valar Projection shimmers and fades away, finding no worthy challenge for you at this time.");
             return;
         }
@@ -5541,9 +5576,9 @@ void valar_quest_interaction(void)
         }
         
         a_ptr = &a_info[prize_a_idx];
-        if (!a_ptr)
+        if (prize_a_idx <= 0 || prize_a_idx >= z_info->art_max)
         {
-            log_trace("Invalid artifact pointer for a_idx: %d", prize_a_idx);
+            log_trace("Invalid artifact data for a_idx: %d", prize_a_idx);
             msg_print("The Valar Projection shimmers and fades away, having no suitable reward to offer.");
             return;
         }
@@ -5566,7 +5601,40 @@ void valar_quest_interaction(void)
         /* Check if artifact name is valid */
         if (strlen(a_ptr->name) > 0)
         {
-            msg_format("'As reward for this deed, you shall receive %s.'", a_ptr->name);
+            /* Get the object kind for the artifact */
+            int k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
+            if (k_idx > 0)
+            {
+                object_kind* k_ptr = &k_info[k_idx];
+                char full_name[80];
+                
+                /* Construct full artifact name: "The [Object Type] [of Name]" */
+                if (a_ptr->name[0] == '\'')
+                {
+                    /* Names like 'Ringil' or 'Glamdring' */
+                    strnfmt(full_name, sizeof(full_name), "The %s %s", 
+                            k_name + k_ptr->name, a_ptr->name);
+                }
+                else if (prefix(a_ptr->name, "of "))
+                {
+                    /* Names like "of Barahir" or "of Dolmed" */
+                    strnfmt(full_name, sizeof(full_name), "The %s %s", 
+                            k_name + k_ptr->name, a_ptr->name);
+                }
+                else
+                {
+                    /* Other naming patterns */
+                    strnfmt(full_name, sizeof(full_name), "The %s %s", 
+                            k_name + k_ptr->name, a_ptr->name);
+                }
+                
+                msg_format("'As reward for this deed, you shall receive %s.'", full_name);
+            }
+            else
+            {
+                /* Fallback if object lookup fails */
+                msg_format("'As reward for this deed, you shall receive %s.'", a_ptr->name);
+            }
         }
         else
         {
@@ -5613,10 +5681,15 @@ void check_valar_quest_interaction(void)
 {
     int i, y, x;
     
+    log_trace("check_valar_quest_interaction called, quest state: %d", p_ptr->valar_quest);
+    
     /* Only check if quest is in appropriate state */
     if (p_ptr->valar_quest != VALAR_QUEST_GIVER_PRESENT && 
         p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+    {
+        log_trace("Quest not in correct state, returning");
         return;
+    }
     
     /* Check all adjacent squares for Valar Projection */
     for (i = 1; i < 9; i++)
@@ -5624,22 +5697,42 @@ void check_valar_quest_interaction(void)
         y = p_ptr->py + ddy[i];
         x = p_ptr->px + ddx[i];
         
+        log_trace("Checking adjacent square %d: (%d,%d)", i, y, x);
+        
         /* Check bounds */
-        if (!in_bounds(y, x)) continue;
+        if (!in_bounds(y, x)) 
+        {
+            log_trace("Square out of bounds");
+            continue;
+        }
         
         /* Check for monster */
         if (cave_m_idx[y][x] > 0)
         {
-            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+            int m_idx = cave_m_idx[y][x];
+            log_trace("Found monster at index %d", m_idx);
+            
+            if (m_idx >= mon_max)
+            {
+                log_trace("Monster index %d >= mon_max %d, skipping", m_idx, mon_max);
+                continue;
+            }
+            
+            monster_type* m_ptr = &mon_list[m_idx];
+            
+            log_trace("Monster r_idx: %d, checking against R_IDX_VALAR_PROJECTION: %d", m_ptr->r_idx, R_IDX_VALAR_PROJECTION);
             
             /* Check if it's a Valar Projection */
             if (m_ptr->r_idx == R_IDX_VALAR_PROJECTION)
             {
+                log_trace("Found Valar Projection, calling interaction");
                 valar_quest_interaction();
                 return;
             }
         }
     }
+    
+    log_trace("No Valar Projection found adjacent");
 }
 
 /*

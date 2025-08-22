@@ -407,7 +407,7 @@ D: Dried blood encrusts a noble face. His eyes are fixed on you.
 # Can't move from idx 18 for dungeon generation reasons
 N:18:Valar Projection
 W:1:1
-G:V:D
+G:V:v
 I:2:20d4:0
 A:0:0:0:15
 P:[+0]
