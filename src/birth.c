@@ -206,12 +206,41 @@ static int curses_stat_adj(int s)   /* s = 0-3  (STR-DEX-CON-GRA) */
  */
 static void get_extra(void)
 {
+    int i, j;
+    
     p_ptr->new_exp = p_ptr->exp = get_start_xp();
     log_debug("Set starting experience to %d", p_ptr->exp);
 
     /* Player is not singing */
     p_ptr->song1 = SNG_NOTHING;
     p_ptr->song2 = SNG_NOTHING;
+    
+    /* Clear the abilities and add house abilities */
+    for (i = 0; i < S_MAX; i++)
+    {
+        for (j = 0; j < ABILITIES_MAX; j++)
+        {
+            p_ptr->innate_ability[i][j] = false;
+            p_ptr->active_ability[i][j] = false;
+        }
+    }
+    
+    /* Grant all parsed house abilities */
+    for (int slot = 0; slot < HOUSE_ABILITY_MAX; slot++)
+    {
+        int stat = c_info[p_ptr->phouse].a_adj[slot][0];
+        /* sentinel: no more entries */
+        if (stat < 0) break;
+
+        int ab = c_info[p_ptr->phouse].a_adj[slot][1];
+        /* sanity-check bounds */
+        if (stat < S_MAX && ab < ABILITIES_MAX)
+        {
+            p_ptr->innate_ability[stat][ab] = true;
+            p_ptr->active_ability[stat][ab] = true;
+            log_debug("Assigned house ability: stat=%d, ability=%d", stat, ab);
+        }
+    }
 }
 
 /*
