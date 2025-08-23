@@ -2868,54 +2868,26 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 break;
             }
 
-            /* Valar Projection */
+            /* Tulkas Unclad */
             case 'P':
             {
-                log_trace("Vault generation: Found 'P' character for Valar Projection");
-                // Generate Valar Projection ONLY if quest not started AND none exists on this level
-                if (p_ptr->valar_quest == VALAR_QUEST_NOT_STARTED)
-                {
-                    // Check if Valar Projection already exists on this level
-                    bool valar_exists = false;
-                    int i;
-                    for (i = 1; i < mon_max; i++)
-                    {
-                        monster_type *m_ptr = &mon_list[i];
-                        if (m_ptr->r_idx == R_IDX_VALAR_PROJECTION)
-                        {
-                            valar_exists = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!valar_exists)
-                    {
-                        log_trace("Valar quest not started and no Valar exists, spawning Valar Projection at (%d, %d)", y, x);
-                        place_monster_one(y, x, R_IDX_VALAR_PROJECTION, true, true, NULL);
-                        p_ptr->valar_quest = VALAR_QUEST_GIVER_PRESENT;
-                        log_trace("Valar Projection spawned successfully, quest state: %d", p_ptr->valar_quest);
-                    }
-                    else
-                    {
-                        log_trace("Valar Projection already exists on this level, skipping spawn");
-                    }
-                }
-                else
-                {
-                    log_trace("Valar quest already started (state: %d), not spawning Valar Projection", p_ptr->valar_quest);
-                }
+                // Vault-based Tulkas spawning disabled - using room-based spawning only
+                log_trace("Vault generation: Found 'P' character for Tulkas but vault spawning disabled");
                 break;
             }
 
             case 'z':
             {
-                // This case is no longer used (was for thrall)
+                /* Randomly spawn human or elf thrall */
+                int thrall_r_idx = one_in_(2) ? R_IDX_HUMAN_THRALL : R_IDX_ELF_THRALL;
+                place_monster_one(y, x, thrall_r_idx, true, true, NULL);
                 break;
             }
 
             case 'Z':
             {
-                // This case is no longer used (was for orc thrallmaster)
+                place_monster_one(
+                    y, x, R_IDX_ORC_THRALLMASTER, true, true, NULL);
                 break;
             }
 
@@ -3218,10 +3190,10 @@ static bool build_type6(int y0, int x0, bool force_forge)
         log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
                   (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
 
-        // Skip Valar Chamber if quest is already started or completed
-        if ((int)(v_ptr - v_info) == 15 && p_ptr->valar_quest != VALAR_QUEST_NOT_STARTED)
+        // Skip Tulkas Chamber if quest is already started or completed
+        if ((int)(v_ptr - v_info) == 15 && p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED)
         {
-            log_trace("Skipping Valar Chamber - quest already active (state: %d)", p_ptr->valar_quest);
+            log_trace("Skipping Tulkas Chamber - quest already active (state: %d)", p_ptr->tulkas_quest);
             continue;
         }
 
@@ -3914,6 +3886,106 @@ static bool cave_gen(void)
     for (i = mon_gen; i > 0; i--)
     {
         (void)alloc_monster(false, false);
+    }
+
+    /* Check for Tulkas room-based spawning */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED && 
+        p_ptr->depth >= 6 &&  /* Minimum level 6 */
+        p_ptr->depth < 20)    /* Only up to depth 20 */
+    {
+        /* Probability formula: 1/(25-depth) */
+        int spawn_chance = 25 - p_ptr->depth;
+        
+        if (one_in_(spawn_chance))
+        {
+            /* Try to find a room to spawn Tulkas in */
+            int attempts;
+            bool tulkas_spawned = false;
+            
+            log_trace("Room-based Tulkas spawn triggered at depth %d (chance was 1/%d)", 
+                     p_ptr->depth, spawn_chance);
+            
+            /* Check if Tulkas already exists on this level */
+            bool tulkas_exists = false;
+            int j;
+            for (j = 1; j < mon_max; j++)
+            {
+                monster_type *m_ptr = &mon_list[j];
+                if (m_ptr->r_idx == R_IDX_TULKAS)
+                {
+                    tulkas_exists = true;
+                    break;
+                }
+            }
+            
+            if (!tulkas_exists)
+            {
+                /* Try to spawn Tulkas near the player's starting room */
+                int player_y = p_ptr->py;
+                int player_x = p_ptr->px;
+                
+                /* Try to find a spot in the same room as the player first */
+                for (attempts = 0; attempts < 50 && !tulkas_spawned; attempts++)
+                {
+                    /* Search in a radius around the player */
+                    int dy = rand_range(-5, 5);
+                    int dx = rand_range(-5, 5);
+                    int try_y = player_y + dy;
+                    int try_x = player_x + dx;
+                    
+                    /* Must be valid coordinates and a floor in the same room */
+                    if (try_y > 0 && try_y < p_ptr->cur_map_hgt - 1 &&
+                        try_x > 0 && try_x < p_ptr->cur_map_wid - 1 &&
+                        cave_floor_bold(try_y, try_x) && 
+                        (cave_info[try_y][try_x] & CAVE_ROOM) &&
+                        !(cave_info[try_y][try_x] & CAVE_ICKY) &&
+                        cave_m_idx[try_y][try_x] == 0)
+                    {
+                        if (place_monster_one(try_y, try_x, R_IDX_TULKAS, true, true, NULL))
+                        {
+                            p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
+                            tulkas_spawned = true;
+                            log_trace("Tulkas spawned near player at (%d, %d), player at (%d, %d), quest state: %d", 
+                                     try_y, try_x, player_y, player_x, p_ptr->tulkas_quest);
+                        }
+                    }
+                }
+                
+                /* If that failed, try any room on the level */
+                if (!tulkas_spawned)
+                {
+                    for (attempts = 0; attempts < 100 && !tulkas_spawned; attempts++)
+                    {
+                        int room_y = rand_int(p_ptr->cur_map_hgt);
+                        int room_x = rand_int(p_ptr->cur_map_wid);
+                        
+                        /* Must be a floor in a room, not in a vault/interesting room */
+                        if (cave_floor_bold(room_y, room_x) && 
+                            (cave_info[room_y][room_x] & CAVE_ROOM) &&
+                            !(cave_info[room_y][room_x] & CAVE_ICKY) &&
+                            cave_m_idx[room_y][room_x] == 0)
+                        {
+                            if (place_monster_one(room_y, room_x, R_IDX_TULKAS, true, true, NULL))
+                            {
+                                p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
+                                tulkas_spawned = true;
+                                log_trace("Tulkas spawned in fallback room at (%d, %d), quest state: %d", 
+                                         room_y, room_x, p_ptr->tulkas_quest);
+                            }
+                        }
+                    }
+                }
+                
+                if (!tulkas_spawned)
+                {
+                    log_trace("Failed to spawn Tulkas in room after all attempts");
+                }
+            }
+            else
+            {
+                log_trace("Tulkas already exists on level, skipping room spawn");
+            }
+        }
     }
 
     // place Morgoth if on the run

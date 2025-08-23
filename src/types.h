@@ -1130,10 +1130,10 @@ struct player_type
     byte oath_type; /* which oath the player has chosen to keep */
     byte oaths_broken; /* which possible oaths the player has broken */
 
-    byte valar_quest; /* Valar quest state */
-    s16b valar_target_r_idx; /* Target unique monster for Valar quest */
-    s16b valar_prize_a_idx; /* Artifact prize for Valar quest */
-    byte valar_quest_complete; /* Whether quest is completed but reward not given */
+    byte tulkas_quest; /* Tulkas quest state */
+    s16b tulkas_target_r_idx; /* Target unique monster for Tulkas quest */
+    s16b tulkas_prize_a_idx; /* Artifact prize for Tulkas quest */
+    byte tulkas_quest_complete; /* Whether quest is completed but reward not given */
 
     s32b unused2; // Room for expansion without breaking savefiles
     s32b unused3; // Room for expansion without breaking savefiles

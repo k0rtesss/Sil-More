@@ -221,16 +221,16 @@ D:$$..$$
 D: $$$$ 
 
 
-### Simple Valar Chamber - guarantees Valar Projection spawn on level 1
-N:15:Valar Chamber
-X:6:1:1:5:5
-S:57:1
-F:LIGHT | TEST
-D:##$##
-D:#...#
-D:$.P.$
-D:#...#
-D:##$##
+### Simple Tulkas Chamber - guarantees Tulkas Unclad spawn on level 1 (DISABLED)
+# N:15:Tulkas Chamber
+# X:6:1:1:5:5
+# S:57:1
+# F:LIGHT | TEST
+# D:##$##
+# D:#...#
+# D:$.P.$
+# D:#...#
+# D:##$##
 
 
 N:20:Diamond 1

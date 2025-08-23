@@ -412,10 +412,10 @@ void player_wipe(void)
     p_ptr->oath_type = 0;
     p_ptr->oaths_broken = 0;
 
-    p_ptr->valar_quest = VALAR_QUEST_NOT_STARTED;
-    p_ptr->valar_target_r_idx = 0;
-    p_ptr->valar_prize_a_idx = 0;
-    p_ptr->valar_quest_complete = 0;
+    p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+    p_ptr->tulkas_target_r_idx = 0;
+    p_ptr->tulkas_prize_a_idx = 0;
+    p_ptr->tulkas_quest_complete = 0;
 
     p_ptr->unused2 = 0;
     p_ptr->unused3 = 0;

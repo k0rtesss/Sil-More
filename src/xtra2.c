@@ -1989,9 +1989,9 @@ extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
     if (a_ptr->cur_num > 0)
         return;
 
-    // Don't generate it if it's reserved for Valar quest (unless this IS the quest reward)
+    // Don't generate it if it's reserved for Tulkas quest (unless this IS the quest reward)
     if (valar_reserved_artifacts && valar_reserved_artifacts[name1] && 
-        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
         return;
 
     // Don't generate it in no-artefact games, with one obvious exception
@@ -2385,8 +2385,8 @@ void monster_death(int m_idx)
     /* Update monster list window */
     p_ptr->window |= PW_MONLIST;
 
-    /* Check for Valar quest completion */
-    check_valar_quest_completion(m_ptr->r_idx);
+    /* Check for Tulkas quest completion */
+    check_tulkas_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -5432,15 +5432,15 @@ void pause_with_text(const char desc[][100], int row, int col,
 }
 
 /*
- * Select a suitable unique monster for the Valar quest
+ * Select a suitable unique monster for the Tulkas quest
  */
-static int select_valar_quest_target(void)
+static int select_tulkas_quest_target(void)
 {
     int i;
     int valid_targets[50];
     int count = 0;
     
-    log_trace("select_valar_quest_target: z_info=%p, r_max=%d", z_info, z_info ? z_info->r_max : -1);
+    log_trace("select_tulkas_quest_target: z_info=%p, r_max=%d", z_info, z_info ? z_info->r_max : -1);
     
     if (!z_info) 
     {
@@ -5464,7 +5464,7 @@ static int select_valar_quest_target(void)
             (r_ptr->cur_num == 0) &&
             (r_ptr->level >= p_ptr->depth) &&
             (r_ptr->level <= MORGOTH_DEPTH) &&
-            (i != R_IDX_VALAR_PROJECTION))
+            (i != R_IDX_TULKAS))
         {
             valid_targets[count] = i;
             count++;
@@ -5478,16 +5478,17 @@ static int select_valar_quest_target(void)
 }
 
 /*
- * Select a suitable artifact prize for the Valar quest
+ * Select a suitable artifact prize for the Tulkas quest
  */
-static int select_valar_quest_prize(int target_level)
+static int select_tulkas_quest_prize(int target_level)
 {
     int i;
     int valid_prizes[100];
     int count = 0;
+    int max_artifact_level = target_level + 5; /* Not more than 5 levels deeper */
     
-    log_trace("select_valar_quest_prize: target_level=%d, z_info=%p, art_max=%d", 
-              target_level, z_info, z_info ? z_info->art_max : -1);
+    log_trace("select_tulkas_quest_prize: target_level=%d, max_artifact_level=%d, z_info=%p, art_max=%d", 
+              target_level, max_artifact_level, z_info, z_info ? z_info->art_max : -1);
     
     if (!z_info) 
     {
@@ -5501,7 +5502,7 @@ static int select_valar_quest_prize(int target_level)
         return 0;
     }
     
-    /* Look for artifacts with rarity >= 10 and level >= target level */
+    /* First pass: Look for artifacts with rarity >= 10 within depth constraint */
     for (i = 1; i < z_info->art_max; i++)
     {
         artefact_type* a_ptr = &a_info[i];
@@ -5512,9 +5513,10 @@ static int select_valar_quest_prize(int target_level)
             continue;
         }
         
-        /* Must be high rarity, appropriate level, and not yet created */
+        /* Must be high rarity, within depth constraint, and not yet created */
         if ((a_ptr->rarity >= 10) &&
             (a_ptr->level >= target_level) &&
+            (a_ptr->level <= max_artifact_level) &&
             (a_ptr->cur_num == 0) &&
             !valar_reserved_artifacts[i])
         {
@@ -5524,38 +5526,73 @@ static int select_valar_quest_prize(int target_level)
         }
     }
     
+    /* If no suitable artifacts found with rarity >= 10, increase level requirement */
+    if (count == 0)
+    {
+        log_trace("No artifacts found with rarity >= 10 within depth constraint, relaxing requirements");
+        max_artifact_level = MORGOTH_DEPTH; /* Remove depth constraint */
+        
+        /* Second pass: Look for any artifacts with rarity >= 10 regardless of depth */
+        for (i = 1; i < z_info->art_max; i++)
+        {
+            artefact_type* a_ptr = &a_info[i];
+            
+            if (!a_ptr) continue;
+            
+            /* Must be high rarity, appropriate level, and not yet created */
+            if ((a_ptr->rarity >= 10) &&
+                (a_ptr->level >= target_level) &&
+                (a_ptr->cur_num == 0) &&
+                !valar_reserved_artifacts[i])
+            {
+                valid_prizes[count] = i;
+                count++;
+                if (count >= 100) break; /* Safety limit */
+            }
+        }
+        
+        if (count > 0)
+        {
+            log_trace("Found %d artifacts after relaxing depth constraint", count);
+        }
+    }
+    else
+    {
+        log_trace("Found %d artifacts with rarity >= 10 within depth constraint", count);
+    }
+    
     if (count == 0) return 0; /* No valid prizes */
     
     return valid_prizes[rand_int(count)];
 }
 
 /*
- * Handle Valar Projection interaction
+ * Handle Tulkas interaction
  */
-void valar_quest_interaction(void)
+void tulkas_quest_interaction(void)
 {
     int target_r_idx, prize_a_idx;
     monster_race* r_ptr;
     artefact_type* a_ptr;
     
     /* Safety check - ensure valid quest state */
-    if (p_ptr->valar_quest != VALAR_QUEST_GIVER_PRESENT && 
-        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+    if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
+        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
     {
-        log_trace("valar_quest_interaction called with invalid quest state: %d", p_ptr->valar_quest);
+        log_trace("tulkas_quest_interaction called with invalid quest state: %d", p_ptr->tulkas_quest);
         return;
     }
     
-    if (p_ptr->valar_quest == VALAR_QUEST_GIVER_PRESENT)
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
-        log_trace("Starting Valar quest interaction - assigning target and prize");
+        log_trace("Starting Tulkas quest interaction - assigning target and prize");
         
         /* Assign quest target and prize */
-        target_r_idx = select_valar_quest_target();
+        target_r_idx = select_tulkas_quest_target();
         if (target_r_idx == 0 || target_r_idx >= z_info->r_max)
         {
             log_trace("Invalid target_r_idx: %d", target_r_idx);
-            msg_print("The Valar Projection shimmers and fades away, finding no worthy challenge for you at this time.");
+            msg_print("Tulkas nods thoughtfully and fades away, finding no worthy challenge for you at this time.");
             return;
         }
         
@@ -5563,15 +5600,15 @@ void valar_quest_interaction(void)
         if (target_r_idx <= 0 || target_r_idx >= z_info->r_max || r_ptr->name == 0)
         {
             log_trace("Invalid monster race data for r_idx: %d", target_r_idx);
-            msg_print("The Valar Projection shimmers and fades away, finding no worthy challenge for you at this time.");
+            msg_print("Tulkas nods thoughtfully and fades away, finding no worthy challenge for you at this time.");
             return;
         }
         
-        prize_a_idx = select_valar_quest_prize(r_ptr->level);
+        prize_a_idx = select_tulkas_quest_prize(r_ptr->level);
         if (prize_a_idx == 0 || prize_a_idx >= z_info->art_max)
         {
             log_trace("Invalid prize_a_idx: %d", prize_a_idx);
-            msg_print("The Valar Projection shimmers and fades away, having no suitable reward to offer.");
+            msg_print("Tulkas frowns and fades away, having no suitable reward to offer.");
             return;
         }
         
@@ -5579,14 +5616,14 @@ void valar_quest_interaction(void)
         if (prize_a_idx <= 0 || prize_a_idx >= z_info->art_max)
         {
             log_trace("Invalid artifact data for a_idx: %d", prize_a_idx);
-            msg_print("The Valar Projection shimmers and fades away, having no suitable reward to offer.");
+            msg_print("Tulkas frowns and fades away, having no suitable reward to offer.");
             return;
         }
         
         /* Store quest data */
-        p_ptr->valar_target_r_idx = target_r_idx;
-        p_ptr->valar_prize_a_idx = prize_a_idx;
-        p_ptr->valar_quest = VALAR_QUEST_ACTIVE;
+        p_ptr->tulkas_target_r_idx = target_r_idx;
+        p_ptr->tulkas_prize_a_idx = prize_a_idx;
+        p_ptr->tulkas_quest = TULKAS_QUEST_ACTIVE;
         
         /* Reserve the artifact */
         valar_reserved_artifacts[prize_a_idx] = true;
@@ -5595,8 +5632,8 @@ void valar_quest_interaction(void)
                  target_r_idx, r_name + r_ptr->name, prize_a_idx, a_ptr->name);
         
         /* Give quest message */
-        msg_format("The Valar Projection speaks: 'Seeker of fame, I have a task for you.'");
-        msg_format("'Seek out %s, and prove your worth by defeating this foe.'", r_name + r_ptr->name);
+        msg_format("Tulkas the Strong speaks in a voice like thunder: 'Champion of valor!'");
+        msg_format("'Seek out %s, and prove your might by defeating this foe in battle.'", r_name + r_ptr->name);
         
         /* Check if artifact name is valid */
         if (strlen(a_ptr->name) > 0)
@@ -5628,70 +5665,71 @@ void valar_quest_interaction(void)
                             k_name + k_ptr->name, a_ptr->name);
                 }
                 
-                msg_format("'As reward for this deed, you shall receive %s.'", full_name);
+                msg_format("'When this deed is done, you shall be rewarded with %s.'", full_name);
             }
             else
             {
                 /* Fallback if object lookup fails */
-                msg_format("'As reward for this deed, you shall receive %s.'", a_ptr->name);
+                msg_format("'When this deed is done, you shall be rewarded with %s.'", a_ptr->name);
             }
         }
         else
         {
             log_trace("Empty artifact name for a_idx %d, using generic message", prize_a_idx);
-            msg_format("'As reward for this deed, you shall receive a legendary artifact.'");
+            msg_format("'When this deed is done, you shall receive a legendary weapon forged in Valinor.'");
         }
         
-        msg_print("The projection fades away, leaving you with your quest.");
+        msg_print("Tulkas grins fiercely and vanishes, leaving you with your sacred task.");
     }
-    else if (p_ptr->valar_quest == VALAR_QUEST_COMPLETE)
+    else if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE)
     {
-        log_trace("Completing Valar quest - giving reward artifact %d", p_ptr->valar_prize_a_idx);
+        log_trace("Completing Tulkas quest - giving reward artifact %d", p_ptr->tulkas_prize_a_idx);
         
         /* Safety check for valid artifact index */
-        if (p_ptr->valar_prize_a_idx <= 0 || p_ptr->valar_prize_a_idx >= z_info->art_max)
+        if (p_ptr->tulkas_prize_a_idx <= 0 || p_ptr->tulkas_prize_a_idx >= z_info->art_max)
         {
-            log_trace("Invalid prize artifact index: %d", p_ptr->valar_prize_a_idx);
-            msg_print("The Valar Projection appears but seems confused about your reward.");
+            log_trace("Invalid prize artifact index: %d", p_ptr->tulkas_prize_a_idx);
+            msg_print("Tulkas appears but looks puzzled about your reward.");
             return;
         }
         
         /* Give the artifact reward */
-        create_chosen_artefact(p_ptr->valar_prize_a_idx, p_ptr->py, p_ptr->px, true);
+        create_chosen_artefact(p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px, true);
         
         /* Clear quest state */
-        valar_reserved_artifacts[p_ptr->valar_prize_a_idx] = false;
-        p_ptr->valar_quest = VALAR_QUEST_REWARDED;
-        p_ptr->valar_target_r_idx = 0;
-        p_ptr->valar_prize_a_idx = 0;
-        p_ptr->valar_quest_complete = 0;
+        valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
+        p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
+        p_ptr->tulkas_target_r_idx = 0;
+        p_ptr->tulkas_prize_a_idx = 0;
+        p_ptr->tulkas_quest_complete = 0;
         
-        msg_print("The Valar Projection appears and nods approvingly.");
-        msg_print("'You have proven yourself worthy. Take this reward.'");
-        msg_print("The projection smiles and vanishes, leaving behind your prize.");
+        msg_print("Tulkas appears with a great laugh of triumph!");
+        msg_print("'Well fought, warrior! You have proven your valor in battle.'");
+        msg_print("'Take this gift, forged in the deeps of time before the world's making.'");
+        msg_print("Tulkas strides away with thunderous footsteps, leaving your prize behind.");
         
-        log_trace("Valar quest completed and rewarded");
+        log_trace("Tulkas quest completed and rewarded");
     }
 }
 
 /*
- * Check if player is adjacent to Valar Projection and handle interaction
+ * Check if player is adjacent to Tulkas and handle interaction
  */
-void check_valar_quest_interaction(void)
+void check_tulkas_quest_interaction(void)
 {
     int i, y, x;
     
-    log_trace("check_valar_quest_interaction called, quest state: %d", p_ptr->valar_quest);
+    log_trace("check_tulkas_quest_interaction called, quest state: %d", p_ptr->tulkas_quest);
     
     /* Only check if quest is in appropriate state */
-    if (p_ptr->valar_quest != VALAR_QUEST_GIVER_PRESENT && 
-        p_ptr->valar_quest != VALAR_QUEST_COMPLETE)
+    if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
+        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
     {
         log_trace("Quest not in correct state, returning");
         return;
     }
     
-    /* Check all adjacent squares for Valar Projection */
+    /* Check all adjacent squares for Tulkas */
     for (i = 1; i < 9; i++)
     {
         y = p_ptr->py + ddy[i];
@@ -5720,35 +5758,35 @@ void check_valar_quest_interaction(void)
             
             monster_type* m_ptr = &mon_list[m_idx];
             
-            log_trace("Monster r_idx: %d, checking against R_IDX_VALAR_PROJECTION: %d", m_ptr->r_idx, R_IDX_VALAR_PROJECTION);
+            log_trace("Monster r_idx: %d, checking against R_IDX_TULKAS: %d", m_ptr->r_idx, R_IDX_TULKAS);
             
-            /* Check if it's a Valar Projection */
-            if (m_ptr->r_idx == R_IDX_VALAR_PROJECTION)
+            /* Check if it's Tulkas */
+            if (m_ptr->r_idx == R_IDX_TULKAS)
             {
-                log_trace("Found Valar Projection, calling interaction");
-                valar_quest_interaction();
+                log_trace("Found Tulkas, calling interaction");
+                tulkas_quest_interaction();
                 return;
             }
         }
     }
     
-    log_trace("No Valar Projection found adjacent");
+    log_trace("No Tulkas found adjacent");
 }
 
 /*
- * Handle monster death for Valar quest
+ * Handle monster death for Tulkas quest
  */
-void check_valar_quest_completion(int r_idx)
+void check_tulkas_quest_completion(int r_idx)
 {
-    if (p_ptr->valar_quest == VALAR_QUEST_ACTIVE && 
-        r_idx == p_ptr->valar_target_r_idx)
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE && 
+        r_idx == p_ptr->tulkas_target_r_idx)
     {
-        p_ptr->valar_quest = VALAR_QUEST_COMPLETE;
-        p_ptr->valar_quest_complete = 1;
+        p_ptr->tulkas_quest = TULKAS_QUEST_COMPLETE;
+        p_ptr->tulkas_quest_complete = 1;
         
-        msg_print("You have completed your quest! Seek out a Valar Projection to claim your reward.");
+        msg_print("The deed is done! Seek out Tulkas Unclad to claim your reward.");
         
-        /* Spawn a Valar Projection in the same room */
+        /* Spawn Tulkas in the same room */
         int y, x;
         
         /* Try to find a suitable spot near the player */
@@ -5759,8 +5797,8 @@ void check_valar_quest_completion(int r_idx)
                 if (in_bounds(y, x) && cave_floor_bold(y, x) && 
                     cave_m_idx[y][x] == 0 && distance(p_ptr->py, p_ptr->px, y, x) >= 2)
                 {
-                    place_monster_one(y, x, R_IDX_VALAR_PROJECTION, true, true, NULL);
-                    msg_print("A Valar Projection materializes nearby, ready to give you your reward.");
+                    place_monster_one(y, x, R_IDX_TULKAS, true, true, NULL);
+                    msg_print("Tulkas Unclad materializes nearby with a booming laugh, ready to reward your valor!");
                     return;
                 }
             }

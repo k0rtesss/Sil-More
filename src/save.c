@@ -965,10 +965,10 @@ static void wr_extra(void)
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
     
-    wr_byte(p_ptr->valar_quest);
-    wr_s16b(p_ptr->valar_target_r_idx);
-    wr_s16b(p_ptr->valar_prize_a_idx);
-    wr_byte(p_ptr->valar_quest_complete);
+    wr_byte(p_ptr->tulkas_quest);
+    wr_s16b(p_ptr->tulkas_target_r_idx);
+    wr_s16b(p_ptr->tulkas_prize_a_idx);
+    wr_byte(p_ptr->tulkas_quest_complete);
 
     wr_s32b(p_ptr->unused2);
     wr_s32b(p_ptr->unused3);

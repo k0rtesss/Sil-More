@@ -288,10 +288,10 @@ void do_cmd_go_up(void)
     /* New depth */
     p_ptr->depth = new;
 
-    /* Reset Valar quest */
-    if (p_ptr->valar_quest == VALAR_QUEST_GIVER_PRESENT)
+    /* Reset tulkas quest */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
-        p_ptr->valar_quest = VALAR_QUEST_NOT_STARTED;
+        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
     }
 
     // another staircase has been used...
@@ -441,10 +441,10 @@ void do_cmd_go_down(void)
     /* New depth */
     p_ptr->depth = new;
 
-    /* Reset Valar quest */
-    if (p_ptr->valar_quest == VALAR_QUEST_GIVER_PRESENT)
+    /* Reset tulkas quest */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT)
     {
-        p_ptr->valar_quest = VALAR_QUEST_NOT_STARTED;
+        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
     }
 
     // another staircase has been used...

@@ -405,15 +405,16 @@ D:A chained elf crouches here, filthy hair hanging to his shoulders.
 D: Dried blood encrusts a noble face. His eyes are fixed on you. 
 
 # Can't move from idx 18 for dungeon generation reasons
-N:18:Valar Projection
+N:18:Tulkas Unclad
 W:1:1
 G:V:v
 I:2:20d4:0
 A:0:0:0:15
 P:[+0]
-F:MALE | NEVER_MOVE | NEVER_BLOW | SMART | PEACEFUL | SPECIAL_GEN | UNIQUE
-D:A shimmering projection of one of the Valar, radiating divine power.
-D: His presence fills you with awe and reverence. He seems to wish to speak with you.
+F:MALE | NEVER_MOVE | SMART | PEACEFUL | UNIQUE | NEVER_BLOW
+D:The mighty Vala of war and strength, Tulkas the Strong, has taken
+D: physical form to test and reward worthy heroes. His presence radiates
+D: courage and valor, and he seems eager to speak with you.
 
 
 ##### 2 #####
