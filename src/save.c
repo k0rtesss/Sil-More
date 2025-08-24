@@ -970,8 +970,15 @@ static void wr_extra(void)
     wr_s16b(p_ptr->tulkas_prize_a_idx);
     wr_byte(p_ptr->tulkas_quest_complete);
 
-    wr_s32b(p_ptr->unused2);
-    wr_s32b(p_ptr->unused3);
+    /* Aule quest fields */
+    wr_byte(p_ptr->aule_quest);
+    wr_byte(p_ptr->aule_forge_y);
+    wr_byte(p_ptr->aule_forge_x);
+    wr_byte(p_ptr->aule_reserved);
+    wr_s16b(p_ptr->aule_level);
+    wr_s16b(p_ptr->aule_last_object_diff);
+    wr_byte(p_ptr->quest_vault_used);
+    for (i = 0; i < 15; i++) wr_byte(p_ptr->quest_reserved[i]);
 
     wr_s32b(min_depth_counter);
     log_trace("Min depth counter: %d", min_depth_counter);

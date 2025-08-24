@@ -1134,9 +1134,16 @@ struct player_type
     s16b tulkas_target_r_idx; /* Target unique monster for Tulkas quest */
     s16b tulkas_prize_a_idx; /* Artifact prize for Tulkas quest */
     byte tulkas_quest_complete; /* Whether quest is completed but reward not given */
-
-    s32b unused2; // Room for expansion without breaking savefiles
-    s32b unused3; // Room for expansion without breaking savefiles
+    /* Aule quest tracking */
+    byte aule_quest;           /* Aule quest state (AULE_QUEST_*) */
+    byte aule_forge_y;         /* Y coord of Aule's forge (for validation) */
+    byte aule_forge_x;         /* X coord of Aule's forge */
+    byte aule_reserved;        /* padding */
+    s16b aule_level;           /* Dungeon depth where forge resides */
+    s16b aule_last_object_diff;/* Difficulty of last forged object (for logging) */
+    /* Generic quest/vault tracking */
+    byte quest_vault_used;     /* Has a quest-designated vault generated this game */
+    byte quest_reserved[15];   /* Reserved for future quests / padding */
 };
 
 /*

@@ -1843,6 +1843,57 @@ static void process_player(void)
                 msg_print("You complete your work.");
 
                 create_smithing_item();
+
+                /* Aule quest revision: success triggers on forging diff>20; Aule then appears to grant reward */
+                {
+                    int diff = object_difficulty(smith_o_ptr);
+                    p_ptr->aule_last_object_diff = diff;
+                    if (diff > 20 && p_ptr->aule_quest != AULE_QUEST_SUCCESS) {
+                        if (p_ptr->aule_quest < AULE_QUEST_ACTIVE) {
+                            p_ptr->aule_quest = AULE_QUEST_ACTIVE;
+                            log_trace("Aule quest: state -> ACTIVE (diff=%d)", diff);
+                        }
+                        p_ptr->aule_quest = AULE_QUEST_SUCCESS;
+                        log_trace("Aule quest: state -> SUCCESS (diff=%d) spawning Aule", diff);
+                        msg_print("Your forging radiates unparalleled craft.");
+                        /* Spawn Aule adjacent if not already on level */
+                        bool aule_present = false;
+                        /* Scan local area for existing Aule (cheap) */
+                        for (int dy = -5; dy <= 5 && !aule_present; ++dy) {
+                            for (int dx = -5; dx <= 5 && !aule_present; ++dx) {
+                                int ay = p_ptr->py + dy, ax = p_ptr->px + dx;
+                                if (!in_bounds(ay,ax)) continue;
+                                if (cave_m_idx[ay][ax] > 0) {
+                                    monster_type *m_ptr = &mon_list[cave_m_idx[ay][ax]];
+                                    if (m_ptr->r_idx == R_IDX_AULE) aule_present = true;
+                                }
+                            }
+                        }
+                        if (!aule_present) {
+                            int tries = 100;
+                            while (tries--) {
+                                int y = p_ptr->py + rand_range(-2,2);
+                                int x = p_ptr->px + rand_range(-2,2);
+                                if (!in_bounds(y,x)) continue;
+                                if (!cave_empty_bold(y,x)) continue;
+                                place_monster_one(y, x, R_IDX_AULE, true, true, NULL);
+                                log_trace("Aule quest: spawned Aule at (%d,%d)", y, x);
+                                break;
+                            }
+                        }
+                        msg_print("Aule appears: 'I grant you the secret of Masterworking.'");
+                        /* Grant Masterpiece ability (auto-learn + activate) */
+                        if (!p_ptr->have_ability[S_SMT][SMT_MASTERPIECE]) {
+                            p_ptr->have_ability[S_SMT][SMT_MASTERPIECE] = 1;
+                            p_ptr->active_ability[S_SMT][SMT_MASTERPIECE] = 1;
+                            msg_print("You have learned Masterpiece.");
+                            log_trace("Aule quest: granted Masterpiece ability");
+                            /* Recalculate smithing skill usage / costs */
+                            p_ptr->update |= (PU_BONUS);
+                            p_ptr->redraw |= (PR_STATE);
+                        }
+                    }
+                }
             }
 
             /* Reduce smithing count */
@@ -1860,6 +1911,7 @@ static void process_player(void)
             /* Redraw the state */
             p_ptr->redraw |= (PR_STATE);
         }
+    /* Aule quest: no longer requires standing at special forge; acceptance handled during forging */
 
         /* Fletching */
         else if (p_ptr->fletching)
@@ -2864,7 +2916,7 @@ static void dungeon(void)
             Term_fresh();
 
         /* Handle "leaving" */
-        if (p_ptr->leaving) {
+    if (p_ptr->leaving) {
             log_info("Player leaving dungeon level %d", p_ptr->depth);
             break;
         }
@@ -2899,7 +2951,7 @@ static void dungeon(void)
             Term_fresh();
 
         /* Handle "leaving" */
-        if (p_ptr->leaving)
+    if (p_ptr->leaving)
             break;
 
         /* Process the world */
@@ -2932,7 +2984,7 @@ static void dungeon(void)
             Term_fresh();
 
         /* Handle "leaving" */
-        if (p_ptr->leaving)
+    if (p_ptr->leaving)
             break;
 
         /* Give the player some energy */

@@ -417,8 +417,15 @@ void player_wipe(void)
     p_ptr->tulkas_prize_a_idx = 0;
     p_ptr->tulkas_quest_complete = 0;
 
-    p_ptr->unused2 = 0;
-    p_ptr->unused3 = 0;
+    /* Aule quest init */
+    p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+    p_ptr->aule_forge_y = 0;
+    p_ptr->aule_forge_x = 0;
+    p_ptr->aule_reserved = 0;
+    p_ptr->aule_level = 0;
+    p_ptr->aule_last_object_diff = 0;
+    p_ptr->quest_vault_used = 0;
+    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0;
 
     /*re-set the thefts counter*/
     recent_failed_thefts = 0;

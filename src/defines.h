@@ -48,20 +48,23 @@
  * Current version string
  */
 
-#define VERSION_STRING "0.8"
+/* Formalized new fork versioning */
+#define VERSION_STRING "0.8.5"
 /*
  * Current version numbers
  */
-#define VERSION_MAJOR 1
-#define VERSION_MINOR 5
-#define VERSION_PATCH 0
+/* Version components (0.8.5) */
+#define VERSION_MAJOR 0
+#define VERSION_MINOR 8
+#define VERSION_PATCH 5
 #define VERSION_EXTRA 0
 
 /*
  * Oldest version number that can still be imported
  */
-#define OLD_VERSION_MAJOR 1
-#define OLD_VERSION_MINOR 5
+/* Oldest loadable version in new scheme */
+#define OLD_VERSION_MAJOR 0
+#define OLD_VERSION_MINOR 8
 #define OLD_VERSION_PATCH 0
 
 /*
@@ -230,6 +233,7 @@
 #define R_IDX_ALERT_HUMAN_THRALL 16
 #define R_IDX_ALERT_ELF_THRALL 17
 #define R_IDX_TULKAS 18
+#define R_IDX_AULE 19
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
 #define R_IDX_ORC_CHAMPION 81
@@ -2033,7 +2037,7 @@
 #define VLT_WEBS 0x00000008L /* Vault has spider webs */
 #define VLT_LIGHT 0x00000010L /* Vault is always generated with light */
 #define VLT_SURFACE 0x00000020L
-#define VLT_VLTXXXX7 0x00000040L
+#define VLT_QUEST   0x00000040L /* Quest vault – only once per game, max one per level */
 #define VLT_VLTXXXX8 0x00000080L
 #define VLT_VLTXXXX9 0x00000100L
 #define VLT_VLTXXX10 0x00000200L
@@ -3484,6 +3488,16 @@
 #define TULKAS_QUEST_ACTIVE 2
 #define TULKAS_QUEST_COMPLETE 3
 #define TULKAS_QUEST_REWARDED 4
+
+/* States for the Aule forging quest */
+#define AULE_QUEST_NOT_STARTED 0
+#define AULE_QUEST_FORGE_PRESENT 1  /* Entered Aule's forge vault */
+#define AULE_QUEST_ACTIVE 2         /* Accepted quest: must forge qualifying artifact at this forge */
+#define AULE_QUEST_SUCCESS 3        /* Forged qualifying artifact (reward granted) */
+/* Retain old value 4 for save compatibility (quest no longer fails) */
+#define AULE_QUEST_FAILED 4         /* Legacy: previously used for failure; now unused */
+/* Minimum smithing skill required for Aule quest vault to spawn */
+#define AULE_SMITH_REQ 10
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

@@ -139,7 +139,7 @@
 
 # Version stamp (required)
 
-V:1.5.0
+V:0.8.5
 
 ### The Gates of Angband (type 10) -- maximum size 66x44 ??? ###
 ### This must be the first vault record
@@ -2848,3 +2848,21 @@ D:#&..###s##...s^^^##**..........s.~#
 D:#######&########################..#
 D:###################################
 
+#Quest Vaults
+
+# Quest vault: Aule's Forge (small)
+N:460:Aule's Forge (Small)
+X:6:5:6:7:11
+S:57:1
+F:QUEST | LIGHT
+D:    #$#    
+D:   ##.##   
+D:  ##...##  
+D: ##...2.## 
+D:##...#...##
+D:$...#0#...$
+D:##...L...##
+D: ##.....## 
+D:  ##...##  
+D:   ##.##   
+D:    #$#    
