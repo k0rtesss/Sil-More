@@ -11,14 +11,7 @@
 #include "metarun.h"
 #include "h-define.h"
 #include "log.h"
-#include "platform.h"    /* path_build(), fd_*, MKDIR         */
-
-#include <string.h>
-#include <stdlib.h>
-#include <time.h>
-#include <stddef.h>
-
-#include <stdio.h>  
+#include "platform.h"    /* path_build(), fd_*, MKDIR         */  
 
 /* --------------------------------------------------------------- */
 /*  metarun.c : quick-and-dirty logger                             */
@@ -72,6 +65,12 @@ static void reset_defaults(metarun *m)
     m->persistent_delay_factor = 5;      /* Default delay factor */
     m->persistent_hitpoint_warn = 3;     /* Default hitpoint warning */
     m->persistent_options_initialized = 0; /* Mark as not initialized yet */
+    
+    /* Initialize quest tracking */
+    m->completed_quests = 0;             /* No quests completed initially */
+    for (int i = 0; i < 15; i++) {
+        m->quest_reserved[i] = 0;
+    }
     
     log_debug("After init: curses_seen = 0x%08X", m->curses_seen);
 }
@@ -163,6 +162,29 @@ static void curses_unpack_words(void)
 
 
 /* =======================  load / save  ========================= */
+
+/* Check if a file is in the new versioned format */
+static bool is_versioned_meta_file(int fd, int file_size)
+{
+    if (file_size < sizeof(meta_file_header)) return false;
+    
+    meta_file_header header;
+    fd_seek(fd, 0);
+    if (fd_read(fd, (char*)&header, sizeof(header)) != 0) return false;
+    
+    /* Check for reasonable version numbers (0-255) and entry count */
+    if (header.version_major > 255 || header.version_minor > 255 || 
+        header.version_patch > 255 || header.version_extra > 255) return false;
+    
+    /* Check if the entry count makes sense with file size */
+    size_t expected_size = sizeof(meta_file_header) + header.entry_count * sizeof(metarun);
+    if (expected_size != file_size) return false;
+    
+    log_info("Detected versioned meta file: v%d.%d.%d, %u entries", 
+             header.version_major, header.version_minor, header.version_patch, header.entry_count);
+    return true;
+}
+
 errr load_metaruns(bool create_if_missing)
 {
     char fn[1024];
@@ -172,12 +194,23 @@ errr load_metaruns(bool create_if_missing)
     fd = fd_open(fn, O_RDONLY);
 
     if (fd < 0 && create_if_missing) {
-        log_info("Creating new metarun file: %s", fn);
+        log_info("Creating new versioned metarun file: %s", fn);
         FILE_TYPE(FILE_TYPE_DATA);
         fd = fd_make(fn, 0644);
         if (fd < 0) return -1;
 
-        metarun seed; reset_defaults(&seed);
+        /* Write versioned header */
+        meta_file_header header;
+        header.version_major = VERSION_MAJOR;
+        header.version_minor = VERSION_MINOR;
+        header.version_patch = VERSION_PATCH;
+        header.version_extra = VERSION_EXTRA;
+        header.entry_count = 1;
+        
+        fd_write(fd, (cptr)&header, sizeof(header));
+        
+        metarun seed; 
+        reset_defaults(&seed);
         fd_write(fd, (cptr)&seed, sizeof seed);
         fd_close(fd);
         fd = fd_open(fn, O_RDONLY);
@@ -186,83 +219,97 @@ errr load_metaruns(bool create_if_missing)
     else log_info("Loading existing metarun file: %s", fn);
     if (fd < 0) return -1;
 
-    /* Check if this is an old format file by trying both structure sizes */
+    /* Check if this is a versioned file */
     int file_size = fd_file_size(fd);
-    s16b old_count = (s16b)(file_size / sizeof(metarun_old));
-    s16b new_count = (s16b)(file_size / sizeof(metarun));
+    bool is_versioned = is_versioned_meta_file(fd, file_size);
     
-    bool is_old_format = false;
-    
-    /* Debug: log structure sizes and file info */
-    log_info("File size: %d bytes, old struct: %d bytes, new struct: %d bytes", 
-             file_size, (int)sizeof(metarun_old), (int)sizeof(metarun));
-    log_info("Old count would be: %d, new count would be: %d", old_count, new_count);
-    
-    /* If the file is exactly divisible by new format size, it's new format */
-    if ((file_size % sizeof(metarun)) == 0) {
-        is_old_format = false;
-        metarun_max = new_count;
-        log_info("Loading new format metarun file with %d entries", new_count);
-    } else if ((file_size % sizeof(metarun_old)) == 0) {
-        /* Only consider old format if new format doesn't fit exactly */
-        is_old_format = true;
-        metarun_max = old_count;
-        log_info("Detected old format metarun file, converting %d entries", old_count);
-    } else {
-        /* File size doesn't match either format - default to new format with truncation */
-        is_old_format = false;
-        metarun_max = new_count;  /* This will truncate partial entries */
-        log_info("File size doesn't match known formats exactly, assuming new format with %d complete entries", new_count);
-    }
-
-    metaruns = C_ZNEW(metarun_max, metarun);
-    
-    if (is_old_format) {
-        /* Load old format and convert to new format */
-        metarun_old *old_data = C_ZNEW(metarun_max, metarun_old);
-        fd_read(fd, (char*)old_data, metarun_max * sizeof(metarun_old));
+    if (is_versioned) {
+        /* Load versioned format */
+        meta_file_header header;
+        fd_seek(fd, 0);
+        fd_read(fd, (char*)&header, sizeof(header));
         
-        /* Convert each old entry to new format */
-        for (s16b i = 0; i < metarun_max; i++) {
-            /* Debug: log what we read from old format */
-            log_info("Old entry %d: id=%u, type=%u, deaths=%u, silmarils=%u, last_played=%u", 
-                     i, old_data[i].id, old_data[i].type, old_data[i].deaths, 
-                     old_data[i].silmarils, old_data[i].last_played);
-            log_info("Old entry %d: curses_lo=0x%08X, curses_hi=0x%08X, curses_seen=0x%08X",
-                     i, old_data[i].curses_lo, old_data[i].curses_hi, old_data[i].curses_seen);
-                     
-            /* Copy old fields */
-            metaruns[i].id = old_data[i].id;
-            metaruns[i].type = old_data[i].type;
-            metaruns[i].deaths = old_data[i].deaths;
-            metaruns[i].silmarils = old_data[i].silmarils;
-            metaruns[i].last_played = old_data[i].last_played;
-            metaruns[i].curses_lo = old_data[i].curses_lo;
-            metaruns[i].curses_hi = old_data[i].curses_hi;
-            metaruns[i].curses_seen = old_data[i].curses_seen;
-            
-            /* Debug: log what we stored in new format */
-            log_info("New entry %d: id=%u, type=%u, deaths=%u, silmarils=%u, last_played=%u", 
-                     i, metaruns[i].id, metaruns[i].type, metaruns[i].deaths, 
-                     metaruns[i].silmarils, metaruns[i].last_played);
-            
-            /* Initialize new persistent settings fields with defaults */
-            for (int j = 0; j < 8; j++) {
-                metaruns[i].persistent_options[j] = 0;
-            }
-            for (int j = 0; j < ANGBAND_TERM_MAX; j++) {
-                metaruns[i].persistent_window_flags[j] = 0;
-            }
-            metaruns[i].persistent_delay_factor = 5;
-            metaruns[i].persistent_hitpoint_warn = 3;
-            metaruns[i].persistent_options_initialized = 0;
-        }
+        log_info("Loading versioned meta file v%d.%d.%d with %u entries", 
+                 header.version_major, header.version_minor, header.version_patch, header.entry_count);
         
-    FREE(old_data);
-    log_info("Successfully converted old format to new format");
-    } else {
-        /* Load new format directly */
+        metarun_max = header.entry_count;
+        metaruns = C_ZNEW(metarun_max, metarun);
         fd_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
+    }
+    else {
+        /* Legacy format detection and conversion */
+        s16b old_count = (s16b)(file_size / sizeof(metarun_old));
+        s16b new_count = (s16b)(file_size / sizeof(metarun));
+        
+        bool is_old_format = false;
+        
+        log_info("File size: %d bytes, old struct: %d bytes, new struct: %d bytes", 
+                 file_size, (int)sizeof(metarun_old), (int)sizeof(metarun));
+        log_info("Old count would be: %d, new count would be: %d", old_count, new_count);
+        
+        /* If the file is exactly divisible by new format size, it's new format */
+        if ((file_size % sizeof(metarun)) == 0) {
+            is_old_format = false;
+            metarun_max = new_count;
+            log_info("Loading legacy new format metarun file with %d entries", new_count);
+        } else if ((file_size % sizeof(metarun_old)) == 0) {
+            /* Only consider old format if new format doesn't fit exactly */
+            is_old_format = true;
+            metarun_max = old_count;
+            log_info("Detected legacy old format metarun file, converting %d entries", old_count);
+        } else {
+            /* File size doesn't match either format - default to new format with truncation */
+            is_old_format = false;
+            metarun_max = new_count;  /* This will truncate partial entries */
+            log_info("File size doesn't match known formats exactly, assuming new format with %d complete entries", new_count);
+        }
+
+        metaruns = C_ZNEW(metarun_max, metarun);
+        
+        if (is_old_format) {
+            /* Load old format and convert to new format */
+            metarun_old *old_data = C_ZNEW(metarun_max, metarun_old);
+            fd_seek(fd, 0);
+            fd_read(fd, (char*)old_data, metarun_max * sizeof(metarun_old));
+            
+            /* Convert each old entry to new format */
+            for (s16b i = 0; i < metarun_max; i++) {
+                /* Copy old fields */
+                metaruns[i].id = old_data[i].id;
+                metaruns[i].type = old_data[i].type;
+                metaruns[i].deaths = old_data[i].deaths;
+                metaruns[i].silmarils = old_data[i].silmarils;
+                metaruns[i].last_played = old_data[i].last_played;
+                metaruns[i].curses_lo = old_data[i].curses_lo;
+                metaruns[i].curses_hi = old_data[i].curses_hi;
+                metaruns[i].curses_seen = old_data[i].curses_seen;
+                
+                /* Initialize new persistent settings fields with defaults */
+                for (int j = 0; j < 8; j++) {
+                    metaruns[i].persistent_options[j] = 0;
+                }
+                for (int j = 0; j < ANGBAND_TERM_MAX; j++) {
+                    metaruns[i].persistent_window_flags[j] = 0;
+                }
+                metaruns[i].persistent_delay_factor = 5;
+                metaruns[i].persistent_hitpoint_warn = 3;
+                metaruns[i].persistent_options_initialized = 0;
+                
+                /* Initialize quest tracking fields for old format */
+                metaruns[i].completed_quests = 0;
+                for (int j = 0; j < 15; j++) {
+                    metaruns[i].quest_reserved[j] = 0;
+                }
+            }
+            
+            FREE(old_data);
+            log_info("Successfully converted legacy old format to new format");
+        } else {
+            /* Load new format directly */
+            fd_seek(fd, 0);
+            fd_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
+            log_info("Loaded legacy new format entries");
+        }
     }
     
     fd_close(fd);
@@ -441,15 +488,31 @@ errr save_metaruns(void)
     /* After backup is created in backup_file(), remove the original so fd_make can succeed */
     fd_kill(fn);
     
-    /* Write using the existing fd_* functions for consistency */
+    /* Write using the new versioned format */
     int fd = fd_make(fn, 0644);
     if (fd < 0) {
         log_info("Failed to create metarun file for writing");
         return -1;
     }
 
+    /* Write version header first */
+    meta_file_header header;
+    header.version_major = VERSION_MAJOR;
+    header.version_minor = VERSION_MINOR;
+    header.version_patch = VERSION_PATCH;
+    header.version_extra = VERSION_EXTRA;
+    header.entry_count = metarun_max;
+    
+    errr result = fd_write(fd, (cptr)&header, sizeof(header));
+    if (result != 0) {
+        fd_close(fd);
+        log_info("Failed to write metarun header to file");
+        return -1;
+    }
+
+    /* Write metarun data */
     int bytes_to_write = metarun_max * sizeof(metarun);
-    errr result = fd_write(fd, (cptr)metaruns, bytes_to_write);
+    result = fd_write(fd, (cptr)metaruns, bytes_to_write);
     fd_close(fd);
     
     if (result != 0) {
@@ -2120,4 +2183,45 @@ void show_known_curses_menu(void)
 void choose_difficulty_level(void)
 {
     choose_difficulty_menu();
+}
+
+/* ================================================================== */
+/*  Quest completion tracking functions                               */
+/* ================================================================== */
+
+/* Check if a specific quest is completed in the current metarun */
+bool metarun_is_quest_completed(u32b quest_flag)
+{
+    if (current_run < 0 || current_run >= metarun_max) return false;
+    return (metaruns[current_run].completed_quests & quest_flag) != 0;
+}
+
+/* Mark a quest as completed in the current metarun */
+void metarun_mark_quest_completed(u32b quest_flag)
+{
+    if (current_run < 0 || current_run >= metarun_max) return;
+    metaruns[current_run].completed_quests |= quest_flag;
+    
+    /* Save the updated metarun state */
+    save_metaruns();
+}
+
+/* Check and update quest completion status based on player state */
+void metarun_check_and_update_quests(void)
+{
+    if (current_run < 0 || current_run >= metarun_max) return;
+    
+    /* Check Tulkas quest completion */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE || p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED) {
+        if (!metarun_is_quest_completed(METARUN_QUEST_TULKAS)) {
+            metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
+        }
+    }
+    
+    /* Check Aule quest completion */
+    if (p_ptr->aule_quest == AULE_QUEST_SUCCESS) {
+        if (!metarun_is_quest_completed(METARUN_QUEST_AULE)) {
+            metarun_mark_quest_completed(METARUN_QUEST_AULE);
+        }
+    }
 }

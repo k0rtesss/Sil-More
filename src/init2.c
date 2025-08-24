@@ -1800,6 +1800,20 @@ void init_angband(void)
             /* Crash and burn */
             init_angband_aux(why);
         }
+        else
+        {
+            /* Write version header to new scores file */
+            score_file_header header;
+            header.version_major = VERSION_MAJOR;
+            header.version_minor = VERSION_MINOR;
+            header.version_patch = VERSION_PATCH;
+            header.version_extra = VERSION_EXTRA;
+            header.entry_count = 0;
+            header.reserved[0] = 0;
+            header.reserved[1] = 0;
+            
+            fd_write(fd, (cptr)&header, sizeof(header));
+        }
     }
 
     /* Close it */

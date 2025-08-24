@@ -3311,6 +3311,9 @@ void update_stuff(void)
         verify_panel();
     }
 
+    /* Check quest completion status for metarun tracking */
+    metarun_check_and_update_quests();
+
     log_trace("update_stuff: completed all updates");
 }
 

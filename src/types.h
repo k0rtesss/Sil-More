@@ -1147,6 +1147,19 @@ struct player_type
 };
 
 /*
+ * Version header for scores.raw file (12 bytes)
+ */
+typedef struct score_file_header
+{
+    byte version_major;  /* Major version (0) */
+    byte version_minor;  /* Minor version (8) */
+    byte version_patch;  /* Patch version (5) */
+    byte version_extra;  /* Extra version (0) */
+    u32b entry_count;    /* Number of score entries in file */
+    u32b reserved[2];    /* Reserved for future use */
+} score_file_header;
+
+/*
  * Semi-Portable High Score List Entry (128 bytes)
  *
  * All fields listed below are null terminated ascii strings.

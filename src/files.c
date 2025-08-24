@@ -3571,16 +3571,203 @@ static void death_examine(void)
     }
 }
 
+/* 
+ * Global flag to track if scores.raw is in versioned format
+ */
+static bool scores_file_is_versioned = false;
+static u32b scores_file_entry_count = 0;
 
+/* Forward declarations for functions used in versioned score handling */
+static errr highscore_read(high_score* score);
+
+/*
+ * Seek score 'i' in the highscore file (with version awareness)
+ */
+static int highscore_seek_versioned(int i)
+{
+    log_debug("Seeking to score position %d in highscore file", i);
+    
+    int offset;
+    if (scores_file_is_versioned) {
+        offset = sizeof(score_file_header) + i * sizeof(high_score);
+    } else {
+        offset = i * sizeof(high_score);
+    }
+    
+    return fd_seek(highscore_fd, offset);
+}
+
+/*
+ * Check if scores.raw is in versioned format
+ */
+static bool detect_versioned_scores_file(const char *filepath)
+{
+    int fd = fd_open(filepath, O_RDONLY);
+    if (fd < 0) return false;
+    
+    int file_size = fd_file_size(fd);
+    if (file_size < sizeof(score_file_header)) {
+        fd_close(fd);
+        return false;
+    }
+    
+    score_file_header header;
+    fd_seek(fd, 0);
+    if (fd_read(fd, (char*)&header, sizeof(header)) != 0) {
+        fd_close(fd);
+        return false;
+    }
+    
+    fd_close(fd);
+    
+    /* Check for reasonable version numbers and entry count */
+    if (header.version_major > 255 || header.version_minor > 255 || 
+        header.version_patch > 255 || header.version_extra > 255) return false;
+    
+    /* Check if the entry count makes sense with file size */
+    size_t expected_size = sizeof(score_file_header) + header.entry_count * sizeof(high_score);
+    if (expected_size != file_size) return false;
+    
+    log_info("Detected versioned scores file: v%d.%d.%d, %u entries", 
+             header.version_major, header.version_minor, header.version_patch, header.entry_count);
+    scores_file_entry_count = header.entry_count;
+    return true;
+}
+
+/*
+ * Convert legacy scores.raw to versioned format
+ */
+static errr convert_scores_to_versioned(const char *filepath)
+{
+    /* Read existing scores */
+    int fd_old = fd_open(filepath, O_RDONLY);
+    if (fd_old < 0) return -1;
+    
+    int file_size = fd_file_size(fd_old);
+    u32b entry_count = file_size / sizeof(high_score);
+    
+    high_score *scores = C_ZNEW(entry_count, high_score);
+    if (fd_read(fd_old, (char*)scores, file_size) != 0) {
+        FREE(scores);
+        fd_close(fd_old);
+        return -1;
+    }
+    fd_close(fd_old);
+    
+    /* Backup original file */
+    char backup_path[1024];
+    strnfmt(backup_path, sizeof(backup_path), "%s.legacy", filepath);
+    fd_move(filepath, backup_path);
+    
+    /* Create new versioned file */
+    int fd_new = fd_make(filepath, 0644);
+    if (fd_new < 0) {
+        FREE(scores);
+        return -1;
+    }
+    
+    /* Write version header */
+    score_file_header header;
+    header.version_major = VERSION_MAJOR;
+    header.version_minor = VERSION_MINOR;
+    header.version_patch = VERSION_PATCH;
+    header.version_extra = VERSION_EXTRA;
+    header.entry_count = entry_count;
+    header.reserved[0] = 0;
+    header.reserved[1] = 0;
+    
+    if (fd_write(fd_new, (cptr)&header, sizeof(header)) != 0) {
+        fd_close(fd_new);
+        FREE(scores);
+        return -1;
+    }
+    
+    /* Write scores */
+    if (fd_write(fd_new, (cptr)scores, entry_count * sizeof(high_score)) != 0) {
+        fd_close(fd_new);
+        FREE(scores);
+        return -1;
+    }
+    
+    fd_close(fd_new);
+    FREE(scores);
+    
+    log_info("Converted legacy scores.raw to versioned format (%u entries)", entry_count);
+    scores_file_is_versioned = true;
+    scores_file_entry_count = entry_count;
+    return 0;
+}
+
+/*
+ * Open scores file, detecting and handling version format
+ */
+static int open_scores_file_versioned(const char *filepath, int mode)
+{
+    /* First check if file exists and detect format */
+    scores_file_is_versioned = detect_versioned_scores_file(filepath);
+    
+    if (!scores_file_is_versioned) {
+        /* Check if it's a legacy file that can be converted */
+        int fd_test = fd_open(filepath, O_RDONLY);
+        if (fd_test >= 0) {
+            int file_size = fd_file_size(fd_test);
+            fd_close(fd_test);
+            
+            /* If file exists and size is reasonable, convert it */
+            if (file_size > 0 && (file_size % sizeof(high_score)) == 0) {
+                if (mode != O_RDONLY) {  /* Only convert if we're opening for write */
+                    convert_scores_to_versioned(filepath);
+                }
+            }
+        }
+    }
+    
+    int fd = fd_open(filepath, mode);
+    return fd;
+}
+
+/*
+ * Update the entry count in a versioned scores file header
+ */
+static void update_scores_file_header_count(void)
+{
+    if (!scores_file_is_versioned) return;
+    
+    /* Count the actual entries in the file */
+    u32b count = 0;
+    high_score temp_score;
+    
+    /* Count entries by reading through the file */
+    highscore_seek_versioned(0);
+    while (count < MAX_HISCORES && highscore_read(&temp_score) == 0) {
+        /* Check if this is a valid entry (has a name) */
+        if (temp_score.who[0] != '\0') {
+            count++;
+        } else {
+            break; /* Stop at first empty entry */
+        }
+    }
+    
+    /* Update the header if count changed */
+    if (scores_file_entry_count != count) {
+        score_file_header header;
+        fd_seek(highscore_fd, 0);
+        fd_read(highscore_fd, (char*)&header, sizeof(header));
+        
+        header.entry_count = count;
+        fd_seek(highscore_fd, 0);
+        fd_write(highscore_fd, (cptr)&header, sizeof(header));
+        scores_file_entry_count = count;
+        log_debug("Updated scores file header count to %u", count);
+    }
+}
 
 /*
  * Seek score 'i' in the highscore file
  */
 static int highscore_seek(int i)
 {
-    log_debug("Seeking to score position %d in highscore file", i);
-    /* Seek for the requested record */
-    return (fd_seek(highscore_fd, i * sizeof(high_score)));
+    return highscore_seek_versioned(i);
 }
 
 /*
@@ -3911,6 +4098,10 @@ static int highscore_add(high_score* score)
     
     highscore_seek(slot);
     highscore_write(score);
+    
+    /* Update header count if using versioned format */
+    update_scores_file_header_count();
+    
     log_debug("Added score entry for %s at position %d", score->who, slot);
     return (slot);
 }
@@ -4520,7 +4711,7 @@ void display_scores(int from, int to)
     log_debug("Opening highscore file: %s", buf);
 
     /* Open the binary high score file, for reading */
-    highscore_fd = fd_open(buf, O_RDONLY);
+    highscore_fd = open_scores_file_versioned(buf, O_RDONLY);
     
     if (highscore_fd < 0) {
     log_error("Failed to open highscore file for reading");
@@ -4557,7 +4748,7 @@ void display_scores_short(int from, int to)
 {
     char buf[1024];
     path_build(buf, sizeof buf, ANGBAND_DIR_APEX, "scores.raw");
-    highscore_fd = fd_open(buf, O_RDONLY);
+    highscore_fd = open_scores_file_versioned(buf, O_RDONLY);
 
     Term_clear();
     put_str("               Names of the Fallen (compact)", 0, 0);
@@ -5381,7 +5572,7 @@ void show_scores(bool longscore)
     path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
 
     /* Open the binary high score file, for reading */
-    highscore_fd = fd_open(buf, O_RDONLY);
+    highscore_fd = open_scores_file_versioned(buf, O_RDONLY);
 
     /* Paranoia -- No score file */
     if (highscore_fd < 0)
@@ -6295,7 +6486,7 @@ void close_game(void)
     safe_setuid_grab();
 
     /* Open the high score file, for reading/writing */
-    highscore_fd = fd_open(buf, O_RDWR);
+    highscore_fd = open_scores_file_versioned(buf, O_RDWR);
 
     /* Drop permissions */
     safe_setuid_drop();

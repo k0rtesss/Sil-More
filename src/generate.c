@@ -3179,19 +3179,13 @@ static bool place_room(int y0, int x0, vault_type* v_ptr)
 /*
  * Type 6 -- least vaults (see "vault.txt")
  */
-/* Helper: after placing a quest vault, scan its area for forge & Aule */
-static bool quest_vault_has_aule(int y0, int x0, vault_type *qv) {
-    int y1 = y0 - qv->hgt / 2;
-    int x1 = x0 - qv->wid / 2;
-    int y2 = y1 + qv->hgt - 1;
-    int x2 = x1 + qv->wid - 1;
-    for (int dy = y1; dy <= y2; ++dy) {
-        for (int dx = x1; dx <= x2; ++dx) {
-            if (cave_m_idx[dy][dx] > 0) {
-                monster_type *m_ptr = &mon_list[cave_m_idx[dy][dx]];
-                if (m_ptr->r_idx == R_IDX_AULE) return true;
-            }
-        }
+/* Helper: scan vault template text (from vault.txt) for Aule symbol 'L' BEFORE placement */
+static bool vault_template_has_aule(vault_type *v) {
+    if (!v || v->text == 0 || v->hgt == 0) return false;
+    char *s = v_text + v->text;
+    for (int row = 0; row < v->hgt; ++row) {
+        if (strchr(s, 'L')) return true; /* 'L' designates Aule in template */
+        s += strlen(s) + 1; /* advance to next stored line (null-terminated) */
     }
     return false;
 }
@@ -3218,7 +3212,8 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
             }
         }
     }
-    if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED) {
+    if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED && 
+        !metarun_is_quest_completed(METARUN_QUEST_AULE)) {
         p_ptr->aule_level = p_ptr->depth;
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
         log_trace("Aule quest: FORGE_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
@@ -3241,19 +3236,17 @@ static bool build_type6(int y0, int x0, bool force_forge)
             if (!(qv->flags & VLT_QUEST)) continue;
             if (qv->depth > p_ptr->depth) continue;
             if (!one_in_(qv->rarity)) continue;
-            if (!place_room(y0, x0, qv)) break; /* bail to normal path if failed */
-            /* If vault includes Aule but smithing below threshold, undo and skip */
-            if (quest_vault_has_aule(y0, x0, qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
-                log_trace("Quest vault with Aule skipped due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                /* Mark level grids dirty? Simplest: do not mark quest_vault_used so future attempts allowed */
-                return false; /* treat as failure to allow normal vault path */
+            /* If Aule present in template but smithing below threshold or quest already completed, skip BEFORE placement */
+            if (vault_template_has_aule(qv) && 
+                (p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ || metarun_is_quest_completed(METARUN_QUEST_AULE))) {
+                log_trace("Quest vault (type6) with Aule skipped pre-placement due to smithing %d < %d or quest already completed", 
+                         p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
+                continue; /* try another quest vault candidate */
             }
-
-            /* Mark quest vault usage */
-            p_ptr->quest_vault_used = 1;
-            /* Process quest vault contents for Aule quest */
-            process_quest_vault_area(y0, x0, qv);
-            return true;
+            if (!place_room(y0, x0, qv)) break; /* bail to normal path if failed */
+            p_ptr->quest_vault_used = 1;            /* Mark quest vault usage */
+            process_quest_vault_area(y0, x0, qv);   /* Process contents */
+            return true;                            /* Done */
         }
     }
 
@@ -3342,11 +3335,11 @@ static bool build_type7(int y0, int x0)
             if (!(qv->flags & VLT_QUEST)) continue;
             if (qv->depth > p_ptr->depth) continue;
             if (!one_in_(qv->rarity)) continue;
-            if (!place_room(y0, x0, qv)) break;
-            if (quest_vault_has_aule(y0, x0, qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
-                log_trace("Quest vault (type7) with Aule skipped due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                return false;
+            if (vault_template_has_aule(qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
+                log_trace("Quest vault (type7) with Aule skipped pre-placement due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
+                continue;
             }
+            if (!place_room(y0, x0, qv)) break;
             p_ptr->quest_vault_used = 1;
             process_quest_vault_area(y0, x0, qv);
             return true;
@@ -3442,11 +3435,11 @@ static bool build_type8(int y0, int x0)
             if (!(qv->flags & VLT_QUEST)) continue;
             if (qv->depth > p_ptr->depth) continue;
             if (!one_in_(qv->rarity)) continue;
-            if (!place_room(y0, x0, qv)) break;
-            if (quest_vault_has_aule(y0, x0, qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
-                log_trace("Quest vault (type8) with Aule skipped due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                return false;
+            if (vault_template_has_aule(qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
+                log_trace("Quest vault (type8) with Aule skipped pre-placement due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
+                continue;
             }
+            if (!place_room(y0, x0, qv)) break;
             p_ptr->quest_vault_used = 1;
             process_quest_vault_area(y0, x0, qv);
             return true;
@@ -4014,7 +4007,8 @@ static bool cave_gen(void)
     /* Check for Tulkas room-based spawning */
     if (p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED && 
         p_ptr->depth >= 6 &&  /* Minimum level 6 */
-        p_ptr->depth < 20)    /* Only up to depth 20 */
+        p_ptr->depth < 20 &&  /* Only up to depth 20 */
+        !metarun_is_quest_completed(METARUN_QUEST_TULKAS))  /* Don't spawn if already completed in metarun */
     {
         /* Probability formula: 1/(25-depth) */
         int spawn_chance = 25 - p_ptr->depth;

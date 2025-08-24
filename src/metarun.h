@@ -24,8 +24,25 @@
 #define LOSECON_DEATHS    15   /* Two deaths end the run  (test value)  */
 
 /* ------------------------------------------------------------------ */
+/*  Quest completion tracking                                         */
+/* ------------------------------------------------------------------ */
+#define METARUN_QUEST_TULKAS   (1UL << 0)   /* Tulkas quest completed */
+#define METARUN_QUEST_AULE     (1UL << 1)   /* Aule quest completed   */
+/* Additional quests can be added as (1UL << 2), (1UL << 3), etc.   */
+
+/* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
 /* ------------------------------------------------------------------ */
+
+/* Version header for meta.raw file */
+typedef struct meta_file_header
+{
+    byte version_major;  /* Major version (0) */
+    byte version_minor;  /* Minor version (8) */
+    byte version_patch;  /* Patch version (5) */
+    byte version_extra;  /* Extra version (0) */
+    u32b entry_count;    /* Number of metarun entries in file */
+} meta_file_header;
 
 /* Old metarun structure for backwards compatibility */
 typedef struct metarun_old
@@ -62,6 +79,10 @@ typedef struct metarun
     u32b persistent_window_flags[ANGBAND_TERM_MAX]; /* Persistent window flags */
     byte persistent_options_initialized; /* Flag to track if persistent options are set */
 
+    /* ----- quest completion tracking --------------------------- */
+    u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aule, etc.) */
+    byte quest_reserved[15];    /* Reserved for future quest expansion */
+
 } metarun;
 
 /* The *current* meta-run – defined once in metarun.c */
@@ -88,6 +109,13 @@ void metarun_gain_silmarils(byte n);             /* Shortcut: +n Silmarils  */
 
 void print_metarun_stats(void);                  /* Pretty single-run view  */
 void list_metaruns(void);                        /* Full meta-run history   */
+
+/* ------------------------------------------------------------------ */
+/*  Quest completion tracking                                         */
+/* ------------------------------------------------------------------ */
+bool metarun_is_quest_completed(u32b quest_flag);   /* Check if quest is completed */
+void metarun_mark_quest_completed(u32b quest_flag); /* Mark quest as completed */
+void metarun_check_and_update_quests(void);         /* Check current character quests and update metarun */
 
 /* ------------------------------------------------------------------ */
 /*  Persistent Settings                                               */
