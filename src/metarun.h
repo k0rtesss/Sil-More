@@ -28,7 +28,8 @@
 /* ------------------------------------------------------------------ */
 #define METARUN_QUEST_TULKAS   (1UL << 0)   /* Tulkas quest completed */
 #define METARUN_QUEST_AULE     (1UL << 1)   /* Aule quest completed   */
-/* Additional quests can be added as (1UL << 2), (1UL << 3), etc.   */
+#define METARUN_QUEST_MANDOS   (1UL << 2)   /* Mandos quest completed */
+/* Additional quests can be added as (1UL << 3), (1UL << 4), etc.   */
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */

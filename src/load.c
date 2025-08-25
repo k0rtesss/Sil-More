@@ -1037,9 +1037,19 @@ static errr rd_extra(void)
         rd_byte(&p_ptr->aule_reserved);
         rd_s16b(&p_ptr->aule_level);
         rd_s16b(&p_ptr->aule_last_object_diff);
+        
+        /* Mandos quest */
+        rd_byte(&p_ptr->mandos_quest);
+        rd_byte(&p_ptr->mandos_vault_y);
+        rd_byte(&p_ptr->mandos_vault_x);
+        rd_byte(&p_ptr->mandos_monsters_remaining);
+        rd_s16b(&p_ptr->mandos_level);
+        rd_s16b(&p_ptr->mandos_reserved);
+        
         rd_byte(&p_ptr->quest_vault_used);
         for (qi = 0; qi < 15; qi++) rd_byte(&p_ptr->quest_reserved[qi]);
     LOAD_LOG("aule state=%u forge_y=%u forge_x=%u level=%d last_diff=%d vault_used=%u", p_ptr->aule_quest, p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->aule_level, p_ptr->aule_last_object_diff, p_ptr->quest_vault_used);
+    LOAD_LOG("mandos state=%u vault_y=%u vault_x=%u monsters_remaining=%u level=%d", p_ptr->mandos_quest, p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->mandos_monsters_remaining, p_ptr->mandos_level);
     }
     else /* pre-0.8.5 new-fork dev snapshots (shouldn't really exist) */
     {
@@ -1056,6 +1066,14 @@ static errr rd_extra(void)
         p_ptr->aule_reserved = 0;
         p_ptr->aule_level = 0;
         p_ptr->aule_last_object_diff = 0;
+        
+        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        p_ptr->mandos_vault_y = 0;
+        p_ptr->mandos_vault_x = 0;
+        p_ptr->mandos_monsters_remaining = 0;
+        p_ptr->mandos_level = 0;
+        p_ptr->mandos_reserved = 0;
+        
     p_ptr->quest_vault_used = 0;
     memset(p_ptr->quest_reserved, 0, sizeof(p_ptr->quest_reserved));
     }

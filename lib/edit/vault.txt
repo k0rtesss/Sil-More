@@ -99,6 +99,7 @@
 #     G - Gorthaur
 #     V - Morgoth
 #     C - Carcharoth
+#     N - Mandos
 #
 
 # Future Vault Thoughts
@@ -219,18 +220,6 @@ D:$....$
 D:$..?.$
 D:$$..$$
 D: $$$$ 
-
-
-### Simple Tulkas Chamber - guarantees Tulkas Unclad spawn on level 1 (DISABLED)
-# N:15:Tulkas Chamber
-# X:6:1:1:5:5
-# S:57:1
-# F:LIGHT | TEST
-# D:##$##
-# D:#...#
-# D:$.P.$
-# D:#...#
-# D:##$##
 
 
 N:20:Diamond 1
@@ -2618,14 +2607,14 @@ D:#########
 # Aldor's vault
 
 N:400:the Tomb of the King
-X:8:8:1
+X:7:8:1
 S:60:1
-F:NO_ROTATION
+F:NO_ROTATION | QUEST |TEST
 D:  ###                           
 D: ##W##   #############    ##$$$$
 D:##...## ##W###....+..##  ##;...$
 D:#&...*###...##.####...####.;...$
-D:#A....+.....^..#&;+W..+..+.....$
+D:#A....+.....^..#&;+W..+..+....N$
 D:#&...*###...##.####...####.;...$
 D:##...## ##W###....+..##  ##;...$
 D: ##W##   #############    ##$$$$
@@ -2852,7 +2841,7 @@ D:###################################
 
 # Quest vault: Aule's Forge (small)
 N:460:Aule's Forge (Small)
-X:6:5:6:7:11
+X:6:5:1
 S:57:1
 F:QUEST | LIGHT
 D:    #$#    

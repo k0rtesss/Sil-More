@@ -424,6 +424,15 @@ void player_wipe(void)
     p_ptr->aule_reserved = 0;
     p_ptr->aule_level = 0;
     p_ptr->aule_last_object_diff = 0;
+    
+    /* Mandos quest init */
+    p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+    p_ptr->mandos_vault_y = 0;
+    p_ptr->mandos_vault_x = 0;
+    p_ptr->mandos_monsters_remaining = 0;
+    p_ptr->mandos_level = 0;
+    p_ptr->mandos_reserved = 0;
+    
     p_ptr->quest_vault_used = 0;
     for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0;
 

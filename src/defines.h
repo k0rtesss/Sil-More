@@ -234,6 +234,7 @@
 #define R_IDX_ALERT_ELF_THRALL 17
 #define R_IDX_TULKAS 18
 #define R_IDX_AULE 19
+#define R_IDX_MANDOS 20
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
 #define R_IDX_ORC_CHAMPION 81
@@ -3498,6 +3499,12 @@
 #define AULE_QUEST_FAILED 4         /* Legacy: previously used for failure; now unused */
 /* Minimum smithing skill required for Aule quest vault to spawn */
 #define AULE_SMITH_REQ 10
+
+/* States for the Mandos clearing quest */
+#define MANDOS_QUEST_NOT_STARTED 0
+#define MANDOS_QUEST_GIVER_PRESENT 1  /* Entered Tomb of the King with Mandos */
+#define MANDOS_QUEST_ACTIVE 2         /* Accepted quest: must clear all monsters from vault */
+#define MANDOS_QUEST_SUCCESS 3        /* Cleared all monsters (reward granted) */
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

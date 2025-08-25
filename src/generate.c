@@ -2058,6 +2058,11 @@ static bool connect_rooms_stairs(void)
  */
 
 /*
+ * Forward declaration for quest vault helper
+ */
+static bool try_quest_vault_type(int vault_type);
+
+/*
  * Type 1 -- normal rectangular rooms
  */
 static bool build_type1(int y0, int x0)
@@ -3003,6 +3008,12 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 place_monster_one(y, x, R_IDX_AULE, true, true, NULL);
                 break;
             }
+            /* Mandos (quest giver) */
+            case 'N':
+            {
+                place_monster_one(y, x, R_IDX_MANDOS, true, true, NULL);
+                break;
+            }
 
             /* Glaurung */
             case 'D':
@@ -3190,6 +3201,16 @@ static bool vault_template_has_aule(vault_type *v) {
     return false;
 }
 
+static bool vault_template_has_mandos(vault_type *v) {
+    if (!v || v->text == 0 || v->hgt == 0) return false;
+    char *s = v_text + v->text;
+    for (int row = 0; row < v->hgt; ++row) {
+        if (strchr(s, 'N')) return true; /* 'N' designates Mandos in template */
+        s += strlen(s) + 1; /* advance to next stored line (null-terminated) */
+    }
+    return false;
+}
+
 static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     int y1 = y0 - qv->hgt / 2;
     int x1 = x0 - qv->wid / 2;
@@ -3197,6 +3218,7 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     int x2 = x1 + qv->wid - 1;
     bool has_forge = false;
     bool has_aule  = false;
+    bool has_mandos = false;
     for (int dy = y1; dy <= y2; ++dy) {
         for (int dx = x1; dx <= x2; ++dx) {
             if ((cave_feat[dy][dx] >= FEAT_FORGE_HEAD) && (cave_feat[dy][dx] <= FEAT_FORGE_TAIL)) {
@@ -3209,6 +3231,11 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
             if (cave_m_idx[dy][dx] > 0) {
                 monster_type *m_ptr = &mon_list[cave_m_idx[dy][dx]];
                 if (m_ptr->r_idx == R_IDX_AULE) has_aule = true;
+                if (m_ptr->r_idx == R_IDX_MANDOS) {
+                    has_mandos = true;
+                    p_ptr->mandos_vault_y = (byte)dy;
+                    p_ptr->mandos_vault_x = (byte)dx;
+                }
             }
         }
     }
@@ -3218,37 +3245,18 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
         log_trace("Aule quest: FORGE_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
+    if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED && 
+        !metarun_is_quest_completed(METARUN_QUEST_MANDOS)) {
+        p_ptr->mandos_level = p_ptr->depth;
+        p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
+        log_trace("Mandos quest: GIVER_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
+    }
 }
 
 static bool build_type6(int y0, int x0, bool force_forge)
 {
     vault_type* v_ptr;
     int tries = 0;
-
-    /* First, attempt a quest vault (type 6) if conditions allow */
-    if (!p_ptr->quest_vault_used)
-    {
-        int i;
-        for (i = 0; i < z_info->v_max; i++)
-        {
-            vault_type* qv = &v_info[i];
-            if (qv->typ != 6) continue;
-            if (!(qv->flags & VLT_QUEST)) continue;
-            if (qv->depth > p_ptr->depth) continue;
-            if (!one_in_(qv->rarity)) continue;
-            /* If Aule present in template but smithing below threshold or quest already completed, skip BEFORE placement */
-            if (vault_template_has_aule(qv) && 
-                (p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ || metarun_is_quest_completed(METARUN_QUEST_AULE))) {
-                log_trace("Quest vault (type6) with Aule skipped pre-placement due to smithing %d < %d or quest already completed", 
-                         p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                continue; /* try another quest vault candidate */
-            }
-            if (!place_room(y0, x0, qv)) break; /* bail to normal path if failed */
-            p_ptr->quest_vault_used = 1;            /* Mark quest vault usage */
-            process_quest_vault_area(y0, x0, qv);   /* Process contents */
-            return true;                            /* Done */
-        }
-    }
 
     /* Pick an interesting room */
     while (true)
@@ -3261,13 +3269,6 @@ static bool build_type6(int y0, int x0, bool force_forge)
 
         log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
                   (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
-
-        // Skip Tulkas Chamber if quest is already started or completed
-        if ((int)(v_ptr - v_info) == 15 && p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED)
-        {
-            log_trace("Skipping Tulkas Chamber - quest already active (state: %d)", p_ptr->tulkas_quest);
-            continue;
-        }
 
         // if forcing a forge, then skip vaults without forges in them
         if (force_forge && !v_ptr->forge)
@@ -3323,28 +3324,6 @@ static bool build_type7(int y0, int x0)
 {
     vault_type* v_ptr;
     int tries = 0;
-
-    /* Attempt quest vault of type 7 */
-    if (!p_ptr->quest_vault_used)
-    {
-        int i;
-        for (i = 0; i < z_info->v_max; i++)
-        {
-            vault_type* qv = &v_info[i];
-            if (qv->typ != 7) continue;
-            if (!(qv->flags & VLT_QUEST)) continue;
-            if (qv->depth > p_ptr->depth) continue;
-            if (!one_in_(qv->rarity)) continue;
-            if (vault_template_has_aule(qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
-                log_trace("Quest vault (type7) with Aule skipped pre-placement due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                continue;
-            }
-            if (!place_room(y0, x0, qv)) break;
-            p_ptr->quest_vault_used = 1;
-            process_quest_vault_area(y0, x0, qv);
-            return true;
-        }
-    }
 
     /* Pick a lesser vault */
     while (true)
@@ -3422,28 +3401,6 @@ static bool build_type8(int y0, int x0)
     if (g_vault_name[0] != '\0')
     {
         return (false);
-    }
-
-    /* Optional quest vault attempt (type 8) */
-    if (!p_ptr->quest_vault_used)
-    {
-        int i;
-        for (i = 0; i < z_info->v_max; i++)
-        {
-            vault_type* qv = &v_info[i];
-            if (qv->typ != 8) continue;
-            if (!(qv->flags & VLT_QUEST)) continue;
-            if (qv->depth > p_ptr->depth) continue;
-            if (!one_in_(qv->rarity)) continue;
-            if (vault_template_has_aule(qv) && p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ) {
-                log_trace("Quest vault (type8) with Aule skipped pre-placement due to smithing %d < %d", p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-                continue;
-            }
-            if (!place_room(y0, x0, qv)) break;
-            p_ptr->quest_vault_used = 1;
-            process_quest_vault_area(y0, x0, qv);
-            return true;
-        }
     }
 
     /* Pick a greater vault */
@@ -3655,6 +3612,67 @@ static bool room_build(int typ)
     return (true);
 }
 
+/*
+ * Try to place a quest vault of specified type
+ * Returns true if successfully placed, false otherwise
+ */
+static bool try_quest_vault_type(int v_type)
+{
+    int i;
+    vault_type* qv_ptr;
+    int y, x;
+    
+    log_trace("Quest vault: Attempting type %d quest vault", v_type);
+    
+    for (i = 0; i < z_info->v_max; i++)
+    {
+        qv_ptr = &v_info[i];
+        if (qv_ptr->typ != v_type) continue;
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+        
+        log_trace("Quest vault: Checking vault %d '%s' (rarity=%d)", i, v_name + qv_ptr->name, qv_ptr->rarity);
+        
+        if (!one_in_(qv_ptr->rarity)) {
+            log_trace("Quest vault: Rarity check failed (1/%d)", qv_ptr->rarity);
+            continue;
+        }
+        
+        /* Check Aule requirements */
+        if (vault_template_has_aule(qv_ptr) && 
+            (p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ || metarun_is_quest_completed(METARUN_QUEST_AULE))) {
+            log_trace("Quest vault: Aule vault skipped (smithing %d < %d or quest completed)", 
+                     p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
+            continue;
+        }
+        
+        /* Check Mandos requirements */
+        if (vault_template_has_mandos(qv_ptr) && 
+            (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED || metarun_is_quest_completed(METARUN_QUEST_MANDOS))) {
+            log_trace("Quest vault: Mandos vault skipped (quest state %d or quest completed)", 
+                     p_ptr->mandos_quest);
+            continue;
+        }
+        
+        /* Try to place the vault */
+        y = rand_range(5, p_ptr->cur_map_hgt - 5);
+        x = rand_range(5, p_ptr->cur_map_wid - 5);
+        
+        if (place_room(y, x, qv_ptr)) {
+            p_ptr->quest_vault_used = 1;
+            process_quest_vault_area(y, x, qv_ptr);
+            log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d)", 
+                     v_type, v_name + qv_ptr->name, y, x);
+            return true;
+        } else {
+            log_trace("Quest vault: Failed to place vault at (%d,%d)", y, x);
+        }
+    }
+    
+    log_trace("Quest vault: No type %d quest vault could be placed", v_type);
+    return false;
+}
+
 static void set_perm_boundry(void)
 {
     int y, x;
@@ -3787,8 +3805,6 @@ static bool cave_gen(void)
 
     int y, x;
 
-    int r;
-
     int room_attempts = 0;
 
     int is_guaranteed_forge_level = false;
@@ -3867,38 +3883,97 @@ static bool cave_gen(void)
             msg_format("succeeded.");
     }
 
+    /* Quest vault determination - ONCE per level before any room generation */
+    if (!p_ptr->quest_vault_used)
+    {
+        int quest_vault_roll = dieroll(p_ptr->depth + 5);
+        log_trace("Quest vault: Level determination roll = %d", quest_vault_roll);
+
+        if (one_in_(5))
+        {
+            int bonus = dieroll(5);
+            quest_vault_roll += bonus;
+            log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
+        }
+
+        bool quest_vault_placed = false;
+        
+        if (quest_vault_roll >= 18)
+        {
+            log_trace("Quest vault: Hit greater vault threshold (%d >= 18), trying quest vaults 8->7->6", quest_vault_roll);
+            quest_vault_placed = try_quest_vault_type(8) || try_quest_vault_type(7) || try_quest_vault_type(6);
+        }
+        else if (quest_vault_roll >= 13)
+        {
+            log_trace("Quest vault: Hit lesser vault threshold (%d >= 13), trying quest vaults 7->6", quest_vault_roll);
+            quest_vault_placed = try_quest_vault_type(7) || try_quest_vault_type(6);
+        }
+        else if (quest_vault_roll >= 8)
+        {
+            log_trace("Quest vault: Hit interesting room threshold (%d >= 8), trying quest vault 6", quest_vault_roll);
+            quest_vault_placed = try_quest_vault_type(6);
+        }
+        else
+        {
+            log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
+        }
+        
+        if (quest_vault_placed)
+        {
+            log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
+        }
+        else
+        {
+            log_trace("Quest vault: No quest vault placed this level");
+        }
+    }
+    else
+    {
+        log_trace("Quest vault: Already used this run, skipping quest vault check");
+    }
+
     /* Build some rooms */
     for (i = 0; i < room_attempts; i++)
     {
-        r = dieroll(p_ptr->depth + 5);
+        int r = dieroll(p_ptr->depth + 5);
+        log_trace("Room generation: depth+5 roll = %d", r);
 
         if (one_in_(5))
-            r += dieroll(5);
+        {
+            int bonus = dieroll(5);
+            r += bonus;
+            log_trace("Room generation: bonus roll (+%d) = %d total", bonus, r);
+        }
 
         // choose a room type based on the level
         if ((r < 5) || one_in_(2))
         {
             // standard room
+            log_trace("Room generation: Building standard room (r=%d)", r);
             room_build(1);
         }
         else if ((r < 8) || p_ptr->depth == 1)
         {
             // cross room
+            log_trace("Room generation: Building cross room (r=%d)", r);
             room_build(2);
         }
         else if ((r < 13) || one_in_(2))
         {
             // interesting room
+            log_trace("Room generation: Building interesting room (r=%d)", r);
             room_build(6);
         }
         else if (r < 18)
         {
             // lesser vault
+            log_trace("Room generation: Building lesser vault (r=%d)", r);
             room_build(7);
         }
         else
         {
             // greater vault
+            log_trace("Room generation: Building greater vault (r=%d)", r);
             room_build(8);
         }
 

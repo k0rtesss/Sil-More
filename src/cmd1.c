@@ -5092,6 +5092,9 @@ void move_player(int dir)
         /* Move player */
         monster_swap(py, px, y, x);
 
+        /* Check for Mandos quest interaction after movement */
+        check_mandos_quest_interaction();
+
         if (cave_feat[y][x] == FEAT_SUNLIGHT
             && cave_feat[py][px] != FEAT_SUNLIGHT)
         {

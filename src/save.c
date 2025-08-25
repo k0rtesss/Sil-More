@@ -977,6 +977,15 @@ static void wr_extra(void)
     wr_byte(p_ptr->aule_reserved);
     wr_s16b(p_ptr->aule_level);
     wr_s16b(p_ptr->aule_last_object_diff);
+    
+    /* Mandos quest fields */
+    wr_byte(p_ptr->mandos_quest);
+    wr_byte(p_ptr->mandos_vault_y);
+    wr_byte(p_ptr->mandos_vault_x);
+    wr_byte(p_ptr->mandos_monsters_remaining);
+    wr_s16b(p_ptr->mandos_level);
+    wr_s16b(p_ptr->mandos_reserved);
+    
     wr_byte(p_ptr->quest_vault_used);
     for (i = 0; i < 15; i++) wr_byte(p_ptr->quest_reserved[i]);
 

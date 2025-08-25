@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "metarun.h"
 
 /*
  * The saving throw is a will skill check.
@@ -2387,6 +2388,9 @@ void monster_death(int m_idx)
 
     /* Check for Tulkas quest completion */
     check_tulkas_quest_completion(m_ptr->r_idx);
+    
+    /* Check for Mandos quest completion */
+    check_mandos_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -5802,6 +5806,202 @@ void check_tulkas_quest_completion(int r_idx)
                     return;
                 }
             }
+        }
+    }
+}
+
+/*
+ * Count hostile monsters in Mandos vault area using proper vault boundaries
+ */
+/*
+ * Check if Brodda (formerly Aldor) has been killed for Mandos quest
+ */
+static bool is_brodda_dead(void)
+{
+    int i;
+    
+    /* Check if Brodda is still alive on the level */
+    for (i = 1; i < mon_max; i++)
+    {
+        monster_type *m_ptr = &mon_list[i];
+        if (m_ptr->r_idx == R_IDX_ALDOR) /* Brodda uses the same monster index as Aldor */
+        {
+            log_trace("Brodda is still alive at (%d, %d)", m_ptr->fy, m_ptr->fx);
+            return false;
+        }
+    }
+    
+    log_trace("Brodda has been slain");
+    return true;
+}
+
+/*
+ * Handle Mandos interaction
+ */
+void mandos_quest_interaction(void)
+{
+    /* Handle first encounter - initialize quest */
+    if (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED)
+    {
+        log_trace("First encounter with Mandos - setting to GIVER_PRESENT");
+        p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
+        p_ptr->mandos_level = p_ptr->depth;
+        /* Don't start the actual quest conversation yet, let them talk again */
+        msg_print("You encounter Mandos, the Doomsman of the Valar.");
+        msg_print("His stern gaze weighs upon your soul, as if judging your worth.");
+        return;
+    }
+    
+    /* Safety check - ensure valid quest state */
+    if (p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
+        p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
+        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS)
+    {
+        log_trace("mandos_quest_interaction called with invalid quest state: %d", p_ptr->mandos_quest);
+        return;
+    }
+    
+    if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    {
+        log_trace("Starting Mandos quest interaction - assigning Brodda quest");
+        
+        /* Set quest state */
+        p_ptr->mandos_quest = MANDOS_QUEST_ACTIVE;
+        p_ptr->mandos_level = p_ptr->depth;
+        
+        /* Give quest message */
+        msg_print("Mandos speaks with the authority of the Valar:");
+        msg_print("'Mortal, you have descended deep into the darkness.");
+        msg_print("Here lies Brodda the Easterling, a cruel tyrant who oppressed");
+        msg_print("the people of Dor-lómin and brought suffering upon the Edain.'");
+        msg_print("");
+        msg_print("'It was foretold that Túrin Turambar would slay him in righteous");
+        msg_print("vengeance, but fate has been altered. Now this burden falls to you.'");
+        msg_print("");
+        msg_print("'Slay Brodda, and you shall be granted passage deeper into");
+        msg_print("the halls of Mandos, where greater trials await.'");
+        
+        log_trace("Mandos quest activated - player must slay Brodda");
+    }
+    else if (p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE)
+    {
+        /* Check if Brodda is dead */
+        if (is_brodda_dead())
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_SUCCESS;
+            msg_print("Mandos nods with solemn approval:");
+            msg_print("'Justice has been served. Brodda's cruelty is ended,");
+            msg_print("and the spirits of Dor-lómin may know peace.'");
+            msg_print("");
+            msg_print("'You have proven yourself worthy of deeper knowledge.");
+            msg_print("The path ahead grows ever more perilous, but also");
+            msg_print("more meaningful. Go now, with the blessing of doom.'");
+            msg_print("");
+            msg_print("A strange power flows through you, and the way forward opens.");
+            log_trace("Mandos quest completed successfully");
+        }
+        else
+        {
+            msg_print("Mandos gazes at you with penetrating eyes:");
+            msg_print("'Brodda the Easterling still draws breath within these halls.");
+            msg_print("Until his tyranny is ended, you may not pass beyond.'");
+            msg_print("");
+            msg_print("'Remember - he who ruled Dor-lómin with an iron fist");
+            msg_print("must face the justice he denied to others.'");
+        }
+    }
+    else if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS)
+    {
+        log_trace("Mandos quest already completed - giving standard reward");
+        
+        /* Give a good artifact or special reward */
+        create_chosen_artefact(ART_GLEND, p_ptr->py, p_ptr->px, true);
+        
+        /* Mark quest as completed in metarun */
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+        
+        msg_print("Mandos acknowledges you with respect:");
+        msg_print("'You have fulfilled the task set before you.");
+        msg_print("The halls beyond await those who would challenge");
+        msg_print("the very foundations of fate itself.'");
+        msg_print("");
+        msg_print("'Take this blade, forged in the halls beyond time,");
+        msg_print("as reward for bringing justice to the oppressed.'");
+        msg_print("Mandos bows deeply and fades into shadow, his task complete.");
+        
+        log_trace("Mandos quest reward given");
+    }
+}
+
+/*
+ * Check if player is adjacent to Mandos and handle interaction
+ */
+void check_mandos_quest_interaction(void)
+{
+    int i, y, x;
+    static s32b last_interaction_turn = -1;
+    
+    log_trace("check_mandos_quest_interaction called, quest state: %d, turn: %d", p_ptr->mandos_quest, turn);
+    
+    /* Prevent multiple interactions in the same turn */
+    if (last_interaction_turn == turn)
+    {
+        log_trace("Already interacted this turn, skipping");
+        return;
+    }
+    
+    /* Only check if quest is in appropriate state */
+    if (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED &&
+        p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
+        p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
+        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS)
+    {
+        log_trace("Quest not in correct state (%d), returning", p_ptr->mandos_quest);
+        return;
+    }
+    
+    /* Check all adjacent squares for Mandos */
+    for (i = 1; i < 9; i++)
+    {
+        y = p_ptr->py + ddy[i];
+        x = p_ptr->px + ddx[i];
+        
+        if (in_bounds(y, x))
+        {
+            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+            
+            if (m_ptr->r_idx == R_IDX_MANDOS)
+            {
+                log_trace("Found Mandos, calling interaction (turn %d)", turn);
+                last_interaction_turn = turn;
+                mandos_quest_interaction();
+                return;
+            }
+        }
+    }
+    
+    log_trace("No Mandos found adjacent");
+}
+
+/*
+ * Handle monster death for Mandos quest
+ */
+void check_mandos_quest_completion(int r_idx)
+{
+    if (p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE)
+    {
+        log_trace("Mandos quest: Checking completion after death of r_idx %d", r_idx);
+        
+        /* Check if Brodda was killed */
+        if (r_idx == R_IDX_ALDOR)  /* Brodda (formerly Aldor) */
+        {
+            p_ptr->mandos_quest = MANDOS_QUEST_SUCCESS;
+            
+            msg_print("Brodda the Easterling falls! His tyranny is ended at last.");
+            msg_print("The spirits of Dor-lómin can finally know peace.");
+            msg_print("Return to Mandos the Doomsman to claim your reward.");
+            
+            log_trace("Mandos quest completed - Brodda slain");
         }
     }
 }

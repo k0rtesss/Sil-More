@@ -1141,6 +1141,13 @@ struct player_type
     byte aule_reserved;        /* padding */
     s16b aule_level;           /* Dungeon depth where forge resides */
     s16b aule_last_object_diff;/* Difficulty of last forged object (for logging) */
+    /* Mandos quest tracking */
+    byte mandos_quest;         /* Mandos quest state (MANDOS_QUEST_*) */
+    byte mandos_vault_y;       /* Y coord of Mandos' vault center */
+    byte mandos_vault_x;       /* X coord of Mandos' vault center */
+    byte mandos_monsters_remaining; /* Number of monsters left to clear */
+    s16b mandos_level;         /* Dungeon depth where vault resides */
+    s16b mandos_reserved;      /* padding */
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Has a quest-designated vault generated this game */
     byte quest_reserved[15];   /* Reserved for future quests / padding */
