@@ -131,6 +131,10 @@ static const char *house_ability_names[S_MAX][ABILITIES_MAX] =
         [SNG_WOVEN_THEMES]  = "Woven Themes",
         [SNG_GRA]           = NULL,
     },
+    [S_SPC] = {
+        [SPC_MANDOS] = "Mandos' Doom", /* immunity reward */
+    [SPC_AULE] = "Aule's Forge", /* improved masterpiece forging */
+    },
 };
 
 /*
@@ -434,7 +438,7 @@ void player_wipe(void)
     p_ptr->mandos_reserved = 0;
     
     p_ptr->quest_vault_used = 0;
-    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0;
+    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag */
 
     /*re-set the thefts counter*/
     recent_failed_thefts = 0;
@@ -1351,14 +1355,9 @@ static bool get_player_house(void)
     /* Build the filename */
     path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
 
-    /* Grab permissions */
-    safe_setuid_grab();
-
-    /* Open the high score file, for reading/writing */
-    highscore_fd = fd_open(buf, O_RDWR);
-
-    /* Drop permissions */
-    safe_setuid_drop();
+     /* Open via highscore_dead on demand; no manual open needed here.
+         (Legacy direct fd_open removed – versioned score files have a header.) */
+     highscore_fd = NULL; /* ensure closed */
 
     /* Tabulate houses */
 
@@ -1379,11 +1378,8 @@ static bool get_player_house(void)
         }
     }
 
-    /* Shut the high score file */
-    fd_close(highscore_fd);
-
-    /* Forget the high score fd */
-    highscore_fd = -1;
+    /* highscore_dead opens/closes internally now; ensure descriptor not leaked */
+    if (highscore_fd) { fclose(highscore_fd); highscore_fd = NULL; }
 
     house_choice = get_player_choice(
         houses, house, old_house_choice, CLASS_COL, 22, house_aux_hook);
@@ -1813,6 +1809,9 @@ extern NavResult gain_skills(void)
         /* Process skills */
         for (i = 0; i < S_MAX; i++)
         {
+            /* Skip Special abilities skill - not trainable */
+            if (i == S_SPC) continue;
+            
             /* Total cost */
             total_cost += skill_cost(old_base[i], skill_gain[i]);
         }
@@ -1842,6 +1841,9 @@ extern NavResult gain_skills(void)
         /* update the skills */
         for (i = 0; i < S_MAX; i++)
         {
+            /* Skip Special abilities skill - not trainable */
+            if (i == S_SPC) continue;
+            
             p_ptr->skill_base[i] = old_base[i] + skill_gain[i];
         }
 
@@ -1873,6 +1875,9 @@ extern NavResult gain_skills(void)
         /* Display the costs */
         for (i = 0; i < S_MAX; i++)
         {
+            /* Skip Special abilities skill - not trainable */
+            if (i == S_SPC) continue;
+            
             if (i == skill)
             {
                 byte attr = TERM_L_BLUE;
@@ -1919,7 +1924,10 @@ extern NavResult gain_skills(void)
         if (((ch == 'Q') || (ch == 'q')) && (turn == 0)) {
             /* restore state before leaving */
             p_ptr->new_exp = old_new_exp;
-            for (i = 0; i < S_MAX; i++) p_ptr->skill_base[i] = old_base[i];
+            for (i = 0; i < S_MAX; i++) {
+                if (i != S_SPC) /* Don't restore Special abilities skill */
+                    p_ptr->skill_base[i] = old_base[i];
+            }
             skill_gain_in_progress = false;
             return NAV_TO_MAIN;
         }
@@ -1935,8 +1943,10 @@ extern NavResult gain_skills(void)
         if (ch == ESCAPE)
         {
             p_ptr->new_exp = old_new_exp;
-            for (i = 0; i < S_MAX; i++)
-                p_ptr->skill_base[i] = old_base[i];
+            for (i = 0; i < S_MAX; i++) {
+                if (i != S_SPC) /* Don't restore Special abilities skill */
+                    p_ptr->skill_base[i] = old_base[i];
+            }
             result = NAV_BACK;   /* go back to Character Selection */
             break;
         }
@@ -1944,13 +1954,17 @@ extern NavResult gain_skills(void)
         /* Prev skill */
         if (ch == '8')
         {
-            skill = (skill + S_MAX - 1) % S_MAX;
+            do {
+                skill = (skill + S_MAX - 1) % S_MAX;
+            } while (skill == S_SPC); /* Skip Special abilities skill */
         }
 
         /* Next skill */
         if (ch == '2')
         {
-            skill = (skill + 1) % S_MAX;
+            do {
+                skill = (skill + 1) % S_MAX;
+            } while (skill == S_SPC); /* Skip Special abilities skill */
         }
 
         /* Decrease skill */
@@ -1962,7 +1976,10 @@ extern NavResult gain_skills(void)
         /* Increase stat */
         if (ch == '6')
         {
-            skill_gain[skill]++;
+            /* Don't allow increasing Special abilities skill */
+            if (skill != S_SPC) {
+                skill_gain[skill]++;
+            }
         }
     }
 

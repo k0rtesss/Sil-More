@@ -5836,6 +5836,162 @@ static bool is_brodda_dead(void)
 }
 
 /*
+ * Check if player is adjacent to Aule
+ */
+void check_aule_quest_interaction(void)
+{
+    int i, y, x;
+    
+    log_trace("check_aule_quest_interaction called, quest state: %d", p_ptr->aule_quest);
+    
+    /* Only check if quest is in appropriate state */
+    if (p_ptr->aule_quest != AULE_QUEST_FORGE_PRESENT && 
+        p_ptr->aule_quest != AULE_QUEST_SUCCESS)
+    {
+        log_trace("Quest not in correct state, returning");
+        return;
+    }
+    
+    /* Skip interaction if quest already rewarded */
+    if (p_ptr->aule_quest == AULE_QUEST_REWARDED)
+    {
+        log_trace("Quest already rewarded, skipping interaction");
+        return;
+    }
+    
+    /* Check all adjacent squares for Aule */
+    for (i = 1; i < 9; i++)
+    {
+        y = p_ptr->py + ddy[i];
+        x = p_ptr->px + ddx[i];
+        
+        log_trace("Checking adjacent square %d: (%d,%d)", i, y, x);
+        
+        /* Check bounds */
+        if (!in_bounds(y, x)) 
+        {
+            log_trace("Square out of bounds");
+            continue;
+        }
+        
+        /* Check for monster */
+        if (cave_m_idx[y][x] > 0)
+        {
+            int m_idx = cave_m_idx[y][x];
+            log_trace("Found monster at index %d", m_idx);
+            
+            if (m_idx >= mon_max)
+            {
+                log_trace("Monster index %d >= mon_max %d, skipping", m_idx, mon_max);
+                continue;
+            }
+            
+            monster_type* m_ptr = &mon_list[m_idx];
+            
+            log_trace("Monster r_idx: %d, checking against R_IDX_AULE: %d", m_ptr->r_idx, R_IDX_AULE);
+            
+            /* Check if it's Aule */
+            if (m_ptr->r_idx == R_IDX_AULE)
+            {
+                log_trace("Found Aule, calling interaction");
+                aule_quest_interaction();
+                return;
+            }
+        }
+    }
+}
+
+/*
+ * Handle Aule interaction
+ */
+void aule_quest_interaction(void)
+{
+    /* Skip interaction if quest already rewarded */
+    if (p_ptr->aule_quest == AULE_QUEST_REWARDED)
+    {
+        log_trace("Quest already rewarded, no interaction");
+        return;
+    }
+    
+    /* Handle first encounter - initialize quest */
+    if (p_ptr->aule_quest == AULE_QUEST_NOT_STARTED)
+    {
+        log_trace("First encounter with Aule - setting to FORGE_PRESENT");
+        p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
+        p_ptr->aule_level = p_ptr->depth;
+        /* Don't start the actual quest conversation yet, let them talk again */
+        msg_print("You encounter Aule the Smith, Maker of Mountains.");
+        msg_print("'Speak with me again to learn of the challenges that await.'");
+        return;
+    }
+    
+    /* Handle quest explanation */
+    if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
+    {
+        log_trace("Aule quest explanation - setting to ACTIVE");
+        p_ptr->aule_quest = AULE_QUEST_ACTIVE;
+        
+        msg_print("Aule speaks in a voice like hammer on anvil:");
+        msg_print("'Mortal, I have watched your progress through these halls.'");
+        msg_print("'If you would prove worthy of my blessing, you must demonstrate'");
+        msg_print("'the mastery of creation that I myself possess.'");
+        msg_print("'Find my forge upon this level and create an item of power.'");
+        msg_print("'Only through the act of creation can you earn my gift.'");
+        msg_print("'Seek the forge and let your hammer sing!'");
+        
+        /* Mark in the notes */
+        do_cmd_note("Aule has challenged me to use his forge to create an item.", p_ptr->depth);
+        return;
+    }
+    
+    /* Handle quest completion */
+    if (p_ptr->aule_quest == AULE_QUEST_SUCCESS)
+    {
+        log_trace("Aule quest completed - giving special ability reward");
+        
+        msg_print("Aule nods with satisfaction:");
+        msg_print("'Well done! Your skill at the forge shows promise.'");
+        msg_print("'I grant you the secret of my forge - knowledge beyond mortal smiths.'");
+        
+        /* Grant Aule's Forge special ability instead of artifact */
+        if (!p_ptr->have_ability[S_SPC][SPC_AULE]) {
+            p_ptr->have_ability[S_SPC][SPC_AULE] = true;
+            p_ptr->active_ability[S_SPC][SPC_AULE] = true;
+            msg_print("You have learned Aule's Forge!");
+            log_trace("Aule quest: granted Aule's Forge special ability");
+            
+            /* Recalculate bonuses since this affects smithing */
+            p_ptr->update |= (PU_BONUS);
+            p_ptr->redraw |= (PR_STATE);
+        } else {
+            msg_print("You already possess the wisdom of Aule's Forge.");
+        }
+        
+        /* Mark quest as completed in metarun */
+        metarun_mark_quest_completed(METARUN_QUEST_AULE);
+        
+        /* Change quest state to prevent repeated interactions */
+        p_ptr->aule_quest = AULE_QUEST_REWARDED;
+        
+        msg_print("The knowledge of divine craftsmanship flows through you!");
+        msg_print("Aule smiles with approval and returns to his eternal labors.");
+        
+        return;
+    }
+    
+    /* Handle other quest states */
+    if (p_ptr->aule_quest == AULE_QUEST_ACTIVE)
+    {
+        msg_print("Aule watches you with eyes like glowing coals:");
+        msg_print("'The forge awaits your skill. Show me what you can create.'");
+        return;
+    }
+    
+    /* Default message */
+    msg_print("Aule the Smith regards you with interest.");
+}
+
+/*
  * Handle Mandos interaction
  */
 void mandos_quest_interaction(void)
@@ -5855,7 +6011,8 @@ void mandos_quest_interaction(void)
     /* Safety check - ensure valid quest state */
     if (p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
         p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
-        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS)
+        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS &&
+        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
     {
         log_trace("mandos_quest_interaction called with invalid quest state: %d", p_ptr->mandos_quest);
         return;
@@ -5912,24 +6069,46 @@ void mandos_quest_interaction(void)
     }
     else if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS)
     {
-        log_trace("Mandos quest already completed - giving standard reward");
-        
-        /* Give a good artifact or special reward */
-        create_chosen_artefact(ART_GLEND, p_ptr->py, p_ptr->px, true);
-        
-        /* Mark quest as completed in metarun */
-        metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+        log_trace("Mandos quest already completed - giving special ability reward");
         
         msg_print("Mandos acknowledges you with respect:");
         msg_print("'You have fulfilled the task set before you.");
-        msg_print("The halls beyond await those who would challenge");
-        msg_print("the very foundations of fate itself.'");
-        msg_print("");
-        msg_print("'Take this blade, forged in the halls beyond time,");
-        msg_print("as reward for bringing justice to the oppressed.'");
+        msg_print("'Accept the gift of my doom - protection from the fears that plague mortals.'");
+        
+        /* Grant Mandos' Doom special ability instead of artifact */
+        if (!p_ptr->have_ability[S_SPC][SPC_MANDOS]) {
+            p_ptr->have_ability[S_SPC][SPC_MANDOS] = true;
+            p_ptr->active_ability[S_SPC][SPC_MANDOS] = true;
+            msg_print("You have learned Mandos' Doom!");
+            log_trace("Mandos quest: granted Mandos' Doom special ability");
+            log_trace("Special ability check: have_ability[S_SPC][SPC_MANDOS]=%d, active_ability[S_SPC][SPC_MANDOS]=%d", 
+                     p_ptr->have_ability[S_SPC][SPC_MANDOS], p_ptr->active_ability[S_SPC][SPC_MANDOS]);
+            
+            /* Recalculate bonuses since this affects resistances */
+            p_ptr->update |= (PU_BONUS);
+            p_ptr->redraw |= (PR_STATE);
+        } else {
+            msg_print("You already possess the protection of Mandos' Doom.");
+        }
+        
+        /* Mark quest as completed in metarun */
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+        log_trace("Mandos quest: marked as completed in metarun");
+        
+        /* Change quest state to prevent repeated interactions */
+        p_ptr->mandos_quest = MANDOS_QUEST_REWARDED;
+        
+        msg_print("The power of the Doomsman flows through you, protecting your mind!");
         msg_print("Mandos bows deeply and fades into shadow, his task complete.");
         
         log_trace("Mandos quest reward given");
+    }
+    else if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED)
+    {
+        log_trace("Mandos quest already rewarded - giving acknowledgment");
+        msg_print("Mandos nods with solemn respect:");
+        msg_print("'The task is done, and the doom has been fulfilled.'");
+        msg_print("'Your path continues ever deeper into the halls of Mandos.'");
     }
 }
 
@@ -5954,7 +6133,8 @@ void check_mandos_quest_interaction(void)
     if (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED &&
         p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
         p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
-        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS)
+        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS &&
+        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
     {
         log_trace("Quest not in correct state (%d), returning", p_ptr->mandos_quest);
         return;

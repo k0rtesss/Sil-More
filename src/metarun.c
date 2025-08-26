@@ -2189,39 +2189,124 @@ void choose_difficulty_level(void)
 /*  Quest completion tracking functions                               */
 /* ================================================================== */
 
-/* Check if a specific quest is completed in the current metarun */
+/* Check if a specific quest is completed in ANY metarun */
 bool metarun_is_quest_completed(u32b quest_flag)
 {
-    if (current_run < 0 || current_run >= metarun_max) return false;
-    return (metaruns[current_run].completed_quests & quest_flag) != 0;
+    int i;
+    
+    /* Check all previous metaruns for quest completion */
+    for (i = 0; i < metarun_max; i++) {
+        if (metaruns[i].completed_quests & quest_flag) {
+            log_trace("Metarun quest check: Found quest 0x%x completed in metarun[%d] (id=%d)", 
+                      quest_flag, i, metaruns[i].id);
+            return true;
+        }
+    }
+    
+    log_trace("Metarun quest check: Quest 0x%x not found in any of %d metaruns", quest_flag, metarun_max);
+    return false;
 }
 
 /* Mark a quest as completed in the current metarun */
 void metarun_mark_quest_completed(u32b quest_flag)
 {
     if (current_run < 0 || current_run >= metarun_max) return;
-    metaruns[current_run].completed_quests |= quest_flag;
-    
-    /* Save the updated metarun state */
-    save_metaruns();
+    /* IMPORTANT: modify the live 'metar' copy first, THEN persist.
+     * Previous code wrote directly to metaruns[current_run] and was
+     * immediately overwritten inside save_metaruns() when that
+     * function copied the stale 'metar' struct back into the array.
+     * (metaruns[current_run] = metar;). This caused lost quest flags.
+     */
+    if (!(metar.completed_quests & quest_flag)) {
+        metar.completed_quests |= quest_flag;                  /* update live */
+        metaruns[current_run].completed_quests = metar.completed_quests; /* keep array in sync early (optional) */
+        log_trace("Metarun: Quest flag 0x%x added (completed_quests=0x%08X)", quest_flag, metar.completed_quests);
+        save_metaruns();
+    } else {
+        log_trace("Metarun: Quest flag 0x%x already set (completed_quests=0x%08X) - no save needed", quest_flag, metar.completed_quests);
+    }
 }
 
 /* Check and update quest completion status based on player state */
 void metarun_check_and_update_quests(void)
 {
-    if (current_run < 0 || current_run >= metarun_max) return;
+    log_trace("Metarun quest check: Entry - current_run=%d, metarun_max=%d", current_run, metarun_max);
+    
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_trace("Metarun quest check: Early return - current_run=%d, metarun_max=%d", current_run, metarun_max);
+        return;
+    }
+    
+    log_trace("Metarun quest check: current_run=%d, tulkas=%d, aule=%d, mandos=%d", 
+              current_run, p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
     
     /* Check Tulkas quest completion */
     if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE || p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED) {
         if (!metarun_is_quest_completed(METARUN_QUEST_TULKAS)) {
+            log_trace("Metarun: Marking Tulkas quest as completed (was %d)", p_ptr->tulkas_quest);
             metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
+        } else {
+            log_trace("Metarun: Tulkas quest already marked as completed");
         }
     }
     
     /* Check Aule quest completion */
-    if (p_ptr->aule_quest == AULE_QUEST_SUCCESS) {
+    if (p_ptr->aule_quest == AULE_QUEST_SUCCESS || p_ptr->aule_quest == AULE_QUEST_REWARDED) {
         if (!metarun_is_quest_completed(METARUN_QUEST_AULE)) {
+            log_trace("Metarun: Marking Aule quest as completed");
             metarun_mark_quest_completed(METARUN_QUEST_AULE);
+        } else {
+            log_trace("Metarun: Aule quest already marked as completed");
         }
     }
+
+    /* Check Mandos quest completion */
+    if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS || p_ptr->mandos_quest == MANDOS_QUEST_REWARDED) {
+        if (!metarun_is_quest_completed(METARUN_QUEST_MANDOS)) {
+            log_trace("Metarun: Marking Mandos quest as completed");
+            metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+        } else {
+            log_trace("Metarun: Mandos quest already marked as completed");
+        }
+    }
+}
+
+/* Restore quest states from metarun data after character loading */
+void metarun_restore_quest_states(void)
+{
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_trace("Metarun restore: Invalid current_run=%d, metarun_max=%d", current_run, metarun_max);
+        return;
+    }
+    
+    u32b completed = metaruns[current_run].completed_quests;
+    log_trace("Metarun restore: Restoring quest states from metarun[%d], completed_quests=0x%08X", 
+              current_run, completed);
+    
+    /* Restore Tulkas quest state */
+    if (completed & METARUN_QUEST_TULKAS) {
+        if (p_ptr->tulkas_quest < TULKAS_QUEST_REWARDED) {
+            p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
+            log_trace("Metarun restore: Tulkas quest set to REWARDED (%d)", TULKAS_QUEST_REWARDED);
+        }
+    }
+    
+    /* Restore Aule quest state */
+    if (completed & METARUN_QUEST_AULE) {
+        if (p_ptr->aule_quest < AULE_QUEST_REWARDED) {
+            p_ptr->aule_quest = AULE_QUEST_REWARDED;
+            log_trace("Metarun restore: Aule quest set to REWARDED (%d)", AULE_QUEST_REWARDED);
+        }
+    }
+    
+    /* Restore Mandos quest state */
+    if (completed & METARUN_QUEST_MANDOS) {
+        if (p_ptr->mandos_quest < MANDOS_QUEST_REWARDED) {
+            p_ptr->mandos_quest = MANDOS_QUEST_REWARDED;
+            log_trace("Metarun restore: Mandos quest set to REWARDED (%d)", MANDOS_QUEST_REWARDED);
+        }
+    }
+    
+    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d",
+              p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
 }

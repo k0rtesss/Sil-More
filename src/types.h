@@ -1150,11 +1150,11 @@ struct player_type
     s16b mandos_reserved;      /* padding */
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Has a quest-designated vault generated this game */
-    byte quest_reserved[15];   /* Reserved for future quests / padding */
+    byte quest_reserved[15];   /* quest_reserved[0] = any quest spawned flag (run-wide); rest reserved */
 };
 
 /*
- * Version header for scores.raw file (12 bytes)
+ * Version header for scores.raw file (16 bytes)
  */
 typedef struct score_file_header
 {
@@ -1167,46 +1167,57 @@ typedef struct score_file_header
 } score_file_header;
 
 /*
- * Semi-Portable High Score List Entry (128 bytes)
+ * High Score List Entry (on-disk record length = 133 bytes)
  *
- * All fields listed below are null terminated ascii strings.
+ * All fields are fixed-length, null-terminated ascii strings with any
+ * unused trailing bytes left as zeros. The historical comment claimed
+ * 128 bytes; additions (longer 'how' field + extra flags) increased
+ * this without updating the note. We freeze the on-disk layout at the
+ * sum of the declared field lengths (8+5+10+10+16+8+2+3+3+4+4+4+50+2+2+2=133).
  *
- * In addition, the "number" fields are right justified, and
- * space padded, to the full available length (minus the "null").
- *
- * Note that "string comparisons" are thus valid on "pts".
+ * Portability: we need a packed representation without relying on
+ * non‑standard attributes under non-GNU compilers (e.g. MSVC). We use
+ * #pragma pack for MSVC and GCC/Clang attribute elsewhere. If neither
+ * is available we accept potential padding (in which case add manual
+ * serialization before shipping to that platform).
  */
 
-typedef struct high_score high_score;
+#if defined(_MSC_VER)
+#pragma pack(push,1)
+#endif
 
 struct high_score
 {
-    char what[8]; /* Version info (string) */
-
-    char pts[5]; /* obsolete */
-
-    char turns[10]; /* Turns Taken (number) */
-
-    char day[10]; /* Time stamp (string) */
-
-    char who[16]; /* Player Name (string) */
-
-    char uid[8]; /* Player UID (number) */
-
-    char unused[2]; /* Was sex */
-    char p_r[3]; /* Player Race (number) */
-    char p_h[3]; /* Player House (number) */
-
-    char cur_lev[4]; /* Current Player Level (number) */
-    char cur_dun[4]; /* Current Dungeon Level (number) */
-    char max_dun[4]; /* Max Dungeon Level (number) */
-
-    char how[50]; /* Method of death (string) */
-
-    char silmarils[2]; /* Number of Silmarils (number) */
+    char what[8];        /* Version info (string) */
+    char pts[5];         /* obsolete */
+    char turns[10];      /* Turns Taken (number) */
+    char day[10];        /* Time stamp (string) */
+    char who[16];        /* Player Name (string) */
+    char uid[8];         /* Player UID (number) */
+    char unused[2];      /* Was sex */
+    char p_r[3];         /* Player Race (number) */
+    char p_h[3];         /* Player House (number) */
+    char cur_lev[4];     /* Current Player Level (number) */
+    char cur_dun[4];     /* Current Dungeon Level (number) */
+    char max_dun[4];     /* Max Dungeon Level (number) */
+    char how[50];        /* Method of death (string) */
+    char silmarils[2];   /* Number of Silmarils (number) */
     char morgoth_slain[2]; /* Has player slain Morgoth (t/f) */
-    char escaped[2]; /* Has player escaped (t/f) */
-};
+    char escaped[2];     /* Has player escaped (t/f) */
+}
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((packed))
+#endif
+;
+
+#if defined(_MSC_VER)
+#pragma pack(pop)
+#endif
+
+typedef struct high_score high_score;
+
+/* C89-friendly compile-time size check (negative array size => error) */
+typedef char high_score_size_must_be_133[(sizeof(struct high_score) == 133) ? 1 : -1];
 
 
 

@@ -796,6 +796,12 @@ static void wr_extra(void)
         {
             wr_byte(p_ptr->innate_ability[i][j]);
             wr_byte(p_ptr->active_ability[i][j]);
+            wr_byte(p_ptr->have_ability[i][j]);
+            
+            /* Debug special abilities save */
+            if (i == S_SPC && p_ptr->have_ability[i][j] != 0) {
+                log_trace("Save: Special ability %d has value %d", j, p_ptr->have_ability[i][j]);
+            }
         }
     }
 
@@ -964,12 +970,15 @@ static void wr_extra(void)
 
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
-    
+
+    /* From 0.8.6 onward, write quest block preceded by marker 0x51 */
+#if (VERSION_MAJOR > 0) || (VERSION_MAJOR == 0 && (VERSION_MINOR > 8 || (VERSION_MINOR == 8 && VERSION_PATCH >= 6)))
+    log_trace("Writing quest block marker 0x51 (version %s)", VERSION_STRING);
+    wr_byte(0x51); /* quest block marker */
     wr_byte(p_ptr->tulkas_quest);
     wr_s16b(p_ptr->tulkas_target_r_idx);
     wr_s16b(p_ptr->tulkas_prize_a_idx);
     wr_byte(p_ptr->tulkas_quest_complete);
-
     /* Aule quest fields */
     wr_byte(p_ptr->aule_quest);
     wr_byte(p_ptr->aule_forge_y);
@@ -977,7 +986,6 @@ static void wr_extra(void)
     wr_byte(p_ptr->aule_reserved);
     wr_s16b(p_ptr->aule_level);
     wr_s16b(p_ptr->aule_last_object_diff);
-    
     /* Mandos quest fields */
     wr_byte(p_ptr->mandos_quest);
     wr_byte(p_ptr->mandos_vault_y);
@@ -985,9 +993,11 @@ static void wr_extra(void)
     wr_byte(p_ptr->mandos_monsters_remaining);
     wr_s16b(p_ptr->mandos_level);
     wr_s16b(p_ptr->mandos_reserved);
-    
     wr_byte(p_ptr->quest_vault_used);
     for (i = 0; i < 15; i++) wr_byte(p_ptr->quest_reserved[i]);
+#else
+    /* Older versions (<=0.8.5) had no quest block; do not write marker */
+#endif
 
     wr_s32b(min_depth_counter);
     log_trace("Min depth counter: %d", min_depth_counter);

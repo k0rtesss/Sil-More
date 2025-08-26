@@ -823,7 +823,7 @@ char g_vault_name[80];
 /*
  * The "highscore" file descriptor, if available.
  */
-int highscore_fd;
+FILE* highscore_fd;
 
 /*
  * The metarun file descriptor, if available.

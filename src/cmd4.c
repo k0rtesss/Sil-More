@@ -1193,6 +1193,23 @@ int abilities_menu1(int* highlight)
     int i;
     int ch;
     int options = S_MAX;
+    bool show_special = false;
+
+    // Determine if any special abilities are present (owned or active)
+    log_trace("Special abilities detection: Starting loop, ABILITIES_MAX=%d", ABILITIES_MAX);
+    for (i = 0; i < ABILITIES_MAX; i++) {
+        log_trace("Special abilities detection: checking slot %d, have_ability[S_SPC][%d]=%d", 
+                 i, i, p_ptr->have_ability[S_SPC][i]);
+        if (p_ptr->have_ability[S_SPC][i]) { 
+            log_trace("Special abilities check: have_ability[S_SPC][%d]=%d - FOUND!", i, p_ptr->have_ability[S_SPC][i]);
+            show_special = true; 
+            break; 
+        }
+    }
+    log_trace("Special abilities menu: show_special=%s, options=%d", show_special ? "true" : "false", options);
+    if (!show_special) {
+        options = S_MAX - 1; // hide Special category
+    }
 
     char buf[80];
 
@@ -1227,7 +1244,7 @@ int abilities_menu1(int* highlight)
         *highlight = (int)ch - 'a' + 1;
 
         // relist the skills
-        for (i = 0; i < options; i++)
+    for (i = 0; i < options; i++)
         {
             strnfmt(buf, 80, "%c) %s", (char)'a' + i, skill_names_full[i]);
 
@@ -1243,7 +1260,7 @@ int abilities_menu1(int* highlight)
         *highlight = (int)ch - 'A' + 1;
 
         // relist the skills
-        for (i = 0; i < options; i++)
+    for (i = 0; i < options; i++)
         {
             strnfmt(buf, 80, "%c) %s", (char)'a' + i, skill_names_full[i]);
 
@@ -1256,7 +1273,7 @@ int abilities_menu1(int* highlight)
 
     if ((ch == ESCAPE) || (ch == 'q') || (ch == '\t'))
     {
-        return (options + 1);
+        return (S_MAX + 1);  // Always return S_MAX + 1 to exit, regardless of options
     }
 
     /* Choose current  */
@@ -1312,8 +1329,12 @@ int abilities_menu2(int skilltype, int* highlight)
         if (b_ptr->skilltype != skilltype)
             continue;
 
+        /* For special abilities, only show granted abilities */
+        if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            continue;
+
         // Determine the appropriate colour
-        if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
         {
             if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
             {
@@ -1455,7 +1476,11 @@ int abilities_menu2(int skilltype, int* highlight)
                     Term_putstr(COL_DESCRIPTION + 2, 13, -1, TERM_GREEN, buf);
                 }
 
-                if (prereqs(skilltype, b_ptr->abilitynum))
+                if (skilltype == S_SPC)
+                {
+                    // Special abilities cannot be purchased; show as granted only
+                }
+                else if (prereqs(skilltype, b_ptr->abilitynum))
                 {
                     // Normalize flag check to 0 or 1
                     int is_free = (c_info[p_ptr->phouse].flags & RHF_FREE) ? 1 : 0;
@@ -1632,6 +1657,11 @@ void do_cmd_ability_screen(void)
                 {
                     if (!p_ptr->have_ability[skilltype][abilitynum])
                     {
+                        // Special abilities cannot be purchased
+                        if (skilltype == S_SPC) {
+                            bell("This special ability cannot be purchased.");
+                            continue;
+                        }
                         if (prereqs(skilltype, abilitynum))
                         {
                             // Normalize flag check to 0 or 1
@@ -1728,6 +1758,12 @@ void do_cmd_ability_screen(void)
                                     }
 
                                     return_to_abilities = false;
+                                }
+
+                                // Block purchasing Masterpiece if Aule's Forge already owned
+                                if (skilltype == S_SMT && abilitynum == SMT_MASTERPIECE && p_ptr->have_ability[S_SPC][SPC_AULE]) {
+                                    bell("Aule's Forge supersedes Masterpiece; you cannot purchase it.");
+                                    skip_purchase = true;
                                 }
 
                                 if (!skip_purchase)
@@ -3493,11 +3529,17 @@ int object_difficulty(object_type* o_ptr)
         dif /= 2;
 
     // Deal with masterpiece
-    if ((dif > p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px))
-        && p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
+    int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
+    if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]) {
+        effective_skill += p_ptr->skill_base[S_SMT];
+    }
+    // Aule's Forge special ability grants an extra 2 difficulty points beyond Masterpiece
+    if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
+        effective_skill += 2;
+    }
+    if (dif > effective_skill && p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
     {
-        smithing_cost.drain += dif
-            - (p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
+        smithing_cost.drain += dif - effective_skill;
     }
 
     // determine which additional smithing abilities would be required
@@ -3625,6 +3667,8 @@ int too_difficult(object_type* o_ptr)
 
     if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
         ability += p_ptr->skill_base[S_SMT];
+    if (p_ptr->have_ability[S_SPC][SPC_AULE])
+        ability += 2; // extra mastery margin
 
     if (ability < dif)
         return (true);

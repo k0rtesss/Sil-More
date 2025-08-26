@@ -49,14 +49,15 @@
  */
 
 /* Formalized new fork versioning */
-#define VERSION_STRING "0.8.5"
+/* Bumped to 0.8.6 for introduction of new skill S_SPC (Special abilities) */
+#define VERSION_STRING "0.8.6"
 /*
  * Current version numbers
  */
-/* Version components (0.8.5) */
+/* Version components (0.8.6) */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 8
-#define VERSION_PATCH 5
+#define VERSION_PATCH 6
 #define VERSION_EXTRA 0
 
 /*
@@ -592,6 +593,13 @@
 #define SNG_EXCHANGE_THEMES 101
 
 /*
+ * Special abilities (quest rewards etc.)
+ * These are not purchaseable with experience; they are only granted.
+ */
+#define SPC_MANDOS 0
+#define SPC_AULE 1
+
+/*
  * Attack Types
  */
 
@@ -697,11 +705,12 @@
 #define S_WIL 5
 #define S_SMT 6
 #define S_SNG 7
+#define S_SPC 8 /* Special (quest) abilities */
 
 /*
  * Total number of skills.
  */
-#define S_MAX 8
+#define S_MAX 9
 
 /*
  * The internal maximum for a given skill (the minimum is 0).
@@ -3497,6 +3506,7 @@
 #define AULE_QUEST_SUCCESS 3        /* Forged qualifying artifact (reward granted) */
 /* Retain old value 4 for save compatibility (quest no longer fails) */
 #define AULE_QUEST_FAILED 4         /* Legacy: previously used for failure; now unused */
+#define AULE_QUEST_REWARDED 5       /* Reward has been granted to prevent repeated interactions */
 /* Minimum smithing skill required for Aule quest vault to spawn */
 #define AULE_SMITH_REQ 10
 
@@ -3505,6 +3515,7 @@
 #define MANDOS_QUEST_GIVER_PRESENT 1  /* Entered Tomb of the King with Mandos */
 #define MANDOS_QUEST_ACTIVE 2         /* Accepted quest: must clear all monsters from vault */
 #define MANDOS_QUEST_SUCCESS 3        /* Cleared all monsters (reward granted) */
+#define MANDOS_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

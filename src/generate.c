@@ -14,6 +14,74 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
+/* Some legacy build configurations (strict C89 without prototypes) may not
+ * expose standard C library prototypes before usage; declare defensively. */
+#ifndef HAVE_STRCHR_PROTO
+extern char *strchr(const char *, int);
+extern size_t strlen(const char *);
+extern void *memset(void *, int, size_t);
+#endif
+/* Quest vault debug instrumentation */
+#define DEBUG_QUEST_VAULT 1
+#if DEBUG_QUEST_VAULT
+static int qv_y1 = -1, qv_x1 = -1, qv_y2 = -1, qv_x2 = -1;
+static int qv_h = 0, qv_w = 0;
+static unsigned short *qv_feat_snapshot = NULL;
+
+static void qv_capture(void) {
+    int y,x;
+    if (qv_y1 < 0) return;
+    qv_h = qv_y2 - qv_y1 + 1;
+    qv_w = qv_x2 - qv_x1 + 1;
+    FREE(qv_feat_snapshot);
+    qv_feat_snapshot = C_ZNEW(qv_h * qv_w, unsigned short);
+    for (y = qv_y1; y <= qv_y2; ++y)
+        for (x = qv_x1; x <= qv_x2; ++x)
+            qv_feat_snapshot[(y - qv_y1) * qv_w + (x - qv_x1)] = cave_feat[y][x];
+    log_trace("Quest vault DEBUG: snapshot captured (%d x %d) bounds (%d,%d)-(%d,%d)", qv_h, qv_w, qv_y1, qv_x1, qv_y2, qv_x2);
+}
+
+static char qv_glyph(int f) {
+    switch (f) {
+        case FEAT_FLOOR: return '.'; case FEAT_WALL_OUTER: return '#';
+        case FEAT_WALL_INNER: return '+'; case FEAT_WALL_EXTRA: return 'X';
+#ifdef FEAT_DOOR_CLOSED
+        case FEAT_DOOR_CLOSED: return 'D';
+#endif
+        case FEAT_FORGE_HEAD: case FEAT_FORGE_TAIL: return 'F';
+        default: return '?';
+    }
+}
+
+static void qv_dump(const char *phase) {
+    if (qv_y1 < 0) return;
+    int y,x; char row[256];
+    log_trace("Quest vault DEBUG: layout (%s) bounds (%d,%d)-(%d,%d)", phase, qv_y1, qv_x1, qv_y2, qv_x2);
+    for (y = qv_y1; y <= qv_y2; ++y) {
+        int idx=0;
+        for (x = qv_x1; x <= qv_x2 && idx < (int)sizeof(row)-2; ++x)
+            row[idx++] = qv_glyph(cave_feat[y][x]);
+        row[idx]='\0';
+        log_trace("Quest vault DEBUG ROW %2d: %s", y, row);
+    }
+}
+
+static void qv_compare(void) {
+    if (!qv_feat_snapshot) return;
+    int diffs=0, y,x;
+    for (y = qv_y1; y <= qv_y2; ++y) for (x = qv_x1; x <= qv_x2; ++x) {
+        unsigned short before = qv_feat_snapshot[(y - qv_y1) * qv_w + (x - qv_x1)];
+        unsigned short now = cave_feat[y][x];
+        if (before != now) {
+            log_trace("Quest vault DEBUG: tile changed (%d,%d) %d->%d", y, x, before, now);
+            if (++diffs >= 50) goto done_diffs;
+        }
+    }
+done_diffs:
+    if (!diffs) log_trace("Quest vault DEBUG: no tile changes detected since snapshot");
+}
+#endif
 /*
  * Note that Level generation is *not* an important bottleneck,
  * though it can be annoyingly slow on older machines...  Thus
@@ -3119,6 +3187,7 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
         }
     }
 
+    log_trace("build_vault: Successfully built vault '%s' at (%d,%d)", v_name + v_ptr->name, y0, x0);
     return (true);
 }
 
@@ -3126,6 +3195,9 @@ static bool place_room(int y0, int x0, vault_type* v_ptr)
 {
     int y1, x1, y2, x2;
     bool flip_d;
+    
+    log_trace("place_room: Attempting to place vault '%s' at center (%d,%d), size %dx%d", 
+             v_name + v_ptr->name, y0, x0, v_ptr->hgt, v_ptr->wid);
 
     // choose whether to rotate (flip diagonally)
     flip_d = one_in_(3);
@@ -3156,19 +3228,28 @@ static bool place_room(int y0, int x0, vault_type* v_ptr)
     if ((y1 <= 3) || (x1 <= 3) || (y2 >= p_ptr->cur_map_hgt - 3)
         || (x2 >= p_ptr->cur_map_wid - 3))
     {
+        log_trace("place_room: Vault bounds check failed - y1=%d x1=%d y2=%d x2=%d (map size %dx%d)", 
+                 y1, x1, y2, x2, p_ptr->cur_map_hgt, p_ptr->cur_map_wid);
         return (false);
     }
     /* make sure that the location is empty */
     if (!solid_rock(y1 - 2, x1 - 2, y2 + 2, x2 + 2))
     {
+        log_trace("place_room: solid_rock check failed - area not empty around (%d,%d)-(%d,%d)", 
+                 y1 - 2, x1 - 2, y2 + 2, x2 + 2);
         return (false);
     }
 
     /* Try building the vault */
     if (!build_vault(y0, x0, v_ptr, flip_d))
     {
+        log_trace("place_room: build_vault failed for vault '%s' at (%d,%d)", 
+                 v_name + v_ptr->name, y0, x0);
         return (false);
     }
+    
+    log_trace("place_room: Successfully built vault '%s' at (%d,%d)", 
+             v_name + v_ptr->name, y0, x0);
 
     /* save the corner locations */
     dun->corner[dun->cent_n].y1 = y1 + 1;
@@ -3219,36 +3300,83 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     bool has_forge = false;
     bool has_aule  = false;
     bool has_mandos = false;
+    
+    log_trace("Quest vault processing: Area (%d,%d) to (%d,%d), size %dx%d", 
+              y1, x1, y2, x2, qv->wid, qv->hgt);
+    
+    /* Debug: Check what's actually in the vault area */
+    int wall_count = 0, floor_count = 0, monster_count = 0, feature_count = 0;
     for (int dy = y1; dy <= y2; ++dy) {
         for (int dx = x1; dx <= x2; ++dx) {
+            if (cave_feat[dy][dx] == FEAT_WALL_OUTER || cave_feat[dy][dx] == FEAT_WALL_INNER) {
+                wall_count++;
+            } else if (cave_feat[dy][dx] == FEAT_FLOOR) {
+                floor_count++;
+            } else if (cave_feat[dy][dx] != FEAT_WALL_EXTRA) {
+                feature_count++;
+            }
+            
+            if (cave_m_idx[dy][dx] > 0) {
+                monster_count++;
+            }
+            
             if ((cave_feat[dy][dx] >= FEAT_FORGE_HEAD) && (cave_feat[dy][dx] <= FEAT_FORGE_TAIL)) {
                 if (!has_forge) {
                     p_ptr->aule_forge_y = (byte)dy;
                     p_ptr->aule_forge_x = (byte)dx;
                     has_forge = true;
+                    log_trace("Quest vault: Found forge at (%d,%d), feature=%d", dy, dx, cave_feat[dy][dx]);
                 }
             }
             if (cave_m_idx[dy][dx] > 0) {
                 monster_type *m_ptr = &mon_list[cave_m_idx[dy][dx]];
-                if (m_ptr->r_idx == R_IDX_AULE) has_aule = true;
+                if (m_ptr->r_idx == R_IDX_AULE) {
+                    has_aule = true;
+                    log_trace("Quest vault: Found Aule at (%d,%d)", dy, dx);
+                }
                 if (m_ptr->r_idx == R_IDX_MANDOS) {
                     has_mandos = true;
                     p_ptr->mandos_vault_y = (byte)dy;
                     p_ptr->mandos_vault_x = (byte)dx;
+                    log_trace("Quest vault: Found Mandos at (%d,%d)", dy, dx);
                 }
             }
         }
     }
+    
+    log_trace("Quest vault contents: %d walls, %d floors, %d features, %d monsters", 
+              wall_count, floor_count, feature_count, monster_count);
+#if DEBUG_QUEST_VAULT
+    qv_y1 = y1; qv_x1 = x1; qv_y2 = y2; qv_x2 = x2; /* record bounds */
+    qv_capture();
+    qv_dump("initial");
+    /* Debug visibility tracking removed - let natural visibility rules apply */
+#endif
+
+    /* Enhanced debugging: log vault visibility status */
+    log_trace("Quest vault DEBUG: Final check - vault area (%d,%d) to (%d,%d)", y1, x1, y2, x2);
+    int visible_count = 0, total_count = 0;
+    for (int ry = y1; ry <= y2; ++ry) {
+        for (int rx = x1; rx <= x2; ++rx) {
+            total_count++;
+            if (cave_info[ry][rx] & (CAVE_MARK | CAVE_SEEN)) {
+                visible_count++;
+            }
+        }
+    }
+    log_trace("Quest vault DEBUG: %d/%d tiles marked as visible", visible_count, total_count);
     if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED && 
-        !metarun_is_quest_completed(METARUN_QUEST_AULE)) {
+        !metarun_is_quest_completed(METARUN_QUEST_AULE) && !p_ptr->quest_reserved[0]) {
         p_ptr->aule_level = p_ptr->depth;
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
         log_trace("Aule quest: FORGE_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
     if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED && 
-        !metarun_is_quest_completed(METARUN_QUEST_MANDOS)) {
+        !metarun_is_quest_completed(METARUN_QUEST_MANDOS) && !p_ptr->quest_reserved[0]) {
         p_ptr->mandos_level = p_ptr->depth;
         p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
         log_trace("Mandos quest: GIVER_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
     }
 }
@@ -3299,9 +3427,9 @@ static bool build_type6(int y0, int x0, bool force_forge)
             rarity += (1 << (p_ptr->depth));
         }
 
-        /* Accept the first interesting room */
+        /* Accept the first interesting room (but not quest vaults) */
         if ((v_ptr->typ == 6) && (v_ptr->depth <= p_ptr->depth)
-            && (one_in_(rarity)))
+            && (one_in_(rarity)) && !(v_ptr->flags & VLT_QUEST))
             break;
 
         if (tries > 20000)
@@ -3337,9 +3465,9 @@ static bool build_type7(int y0, int x0)
         if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST)))
             continue;
 
-        /* Accept the first lesser vault */
+        /* Accept the first lesser vault (but not quest vaults) */
         if ((v_ptr->typ == 7) && (v_ptr->depth <= p_ptr->depth)
-            && (one_in_(v_ptr->rarity)))
+            && (one_in_(v_ptr->rarity)) && !(v_ptr->flags & VLT_QUEST))
             break;
 
         if (tries > 2000)
@@ -3416,9 +3544,9 @@ static bool build_type8(int y0, int x0)
         if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST)))
             continue;
 
-        /* Accept the first greater vault */
+        /* Accept the first greater vault (but not quest vaults) */
         if ((v_ptr->typ == 8) && (v_ptr->depth <= p_ptr->depth)
-            && (one_in_(v_ptr->rarity)))
+            && (one_in_(v_ptr->rarity)) && !(v_ptr->flags & VLT_QUEST))
         {
             repeated = false;
             for (i = 0; i < MAX_GREATER_VAULTS; i++)
@@ -3639,33 +3767,57 @@ static bool try_quest_vault_type(int v_type)
         }
         
         /* Check Aule requirements */
-        if (vault_template_has_aule(qv_ptr) && 
-            (p_ptr->skill_use[S_SMT] < AULE_SMITH_REQ || metarun_is_quest_completed(METARUN_QUEST_AULE))) {
-            log_trace("Quest vault: Aule vault skipped (smithing %d < %d or quest completed)", 
-                     p_ptr->skill_use[S_SMT], AULE_SMITH_REQ);
-            continue;
+        if (vault_template_has_aule(qv_ptr)) {
+            if (p_ptr->skill_base[S_SMT] < AULE_SMITH_REQ) {
+                log_trace("Quest vault: Aule vault skipped (base smithing %d < %d)", 
+                         p_ptr->skill_base[S_SMT], AULE_SMITH_REQ);
+                continue;
+            }
+            if (metarun_is_quest_completed(METARUN_QUEST_AULE)) {
+                log_trace("Quest vault: Aule vault skipped (quest completed in metarun)");
+                continue;
+            }
+            if (p_ptr->quest_reserved[0]) {
+                log_trace("Quest vault: Aule vault skipped (another quest already spawned this run)");
+                continue;
+            }
         }
         
         /* Check Mandos requirements */
-        if (vault_template_has_mandos(qv_ptr) && 
-            (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED || metarun_is_quest_completed(METARUN_QUEST_MANDOS))) {
-            log_trace("Quest vault: Mandos vault skipped (quest state %d or quest completed)", 
-                     p_ptr->mandos_quest);
-            continue;
+        if (vault_template_has_mandos(qv_ptr)) {
+            log_trace("Quest vault: Checking Mandos vault '%s' - mandos_quest=%d, quest_reserved[0]=%d", 
+                     v_name + qv_ptr->name, p_ptr->mandos_quest, p_ptr->quest_reserved[0]);
+            if (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED) {
+                log_trace("Quest vault: Mandos vault skipped (quest state %d)", 
+                         p_ptr->mandos_quest);
+                continue;
+            }
+            if (metarun_is_quest_completed(METARUN_QUEST_MANDOS)) {
+                log_trace("Quest vault: Mandos vault skipped (quest completed in metarun)");
+                continue;
+            }
+            if (p_ptr->quest_reserved[0]) {
+                log_trace("Quest vault: Mandos vault skipped (another quest already spawned this run)");
+                continue;
+            }
         }
         
-        /* Try to place the vault */
-        y = rand_range(5, p_ptr->cur_map_hgt - 5);
-        x = rand_range(5, p_ptr->cur_map_wid - 5);
-        
-        if (place_room(y, x, qv_ptr)) {
-            p_ptr->quest_vault_used = 1;
-            process_quest_vault_area(y, x, qv_ptr);
-            log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d)", 
-                     v_type, v_name + qv_ptr->name, y, x);
-            return true;
-        } else {
-            log_trace("Quest vault: Failed to place vault at (%d,%d)", y, x);
+        /* Try to place the vault - try multiple locations */
+        for (int attempts = 0; attempts < 50; attempts++) {
+            y = rand_range(5, p_ptr->cur_map_hgt - 5);
+            x = rand_range(5, p_ptr->cur_map_wid - 5);
+            
+            log_trace("Quest vault: Attempt %d to place at (%d,%d)", attempts + 1, y, x);
+            
+            if (place_room(y, x, qv_ptr)) {
+                p_ptr->quest_vault_used = 1;
+                process_quest_vault_area(y, x, qv_ptr);
+                log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) after %d attempts", 
+                         v_type, v_name + qv_ptr->name, y, x, attempts + 1);
+                return true;
+            } else {
+                log_trace("Quest vault: Failed to place vault at (%d,%d), attempt %d", y, x, attempts + 1);
+            }
         }
     }
     
@@ -3808,6 +3960,10 @@ static bool cave_gen(void)
     int room_attempts = 0;
 
     int is_guaranteed_forge_level = false;
+    
+    /* Track quest vaults placed this level (for validation) */
+    static bool quest_vault_attempted_this_level = false;
+    quest_vault_attempted_this_level = false; /* Reset for each level */
 
     /* Hack - variables for allocations */
     s16b mon_gen, obj_room_gen;
@@ -3886,45 +4042,60 @@ static bool cave_gen(void)
     /* Quest vault determination - ONCE per level before any room generation */
     if (!p_ptr->quest_vault_used)
     {
-        int quest_vault_roll = dieroll(p_ptr->depth + 5);
-        log_trace("Quest vault: Level determination roll = %d", quest_vault_roll);
-
-        if (one_in_(5))
-        {
-            int bonus = dieroll(5);
-            quest_vault_roll += bonus;
-            log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
+        if (quest_vault_attempted_this_level) {
+            log_trace("Quest vault: ERROR - Quest vault already attempted this level!");
+            return false;
         }
-
-        bool quest_vault_placed = false;
+        quest_vault_attempted_this_level = true;
         
-        if (quest_vault_roll >= 18)
-        {
-            log_trace("Quest vault: Hit greater vault threshold (%d >= 18), trying quest vaults 8->7->6", quest_vault_roll);
-            quest_vault_placed = try_quest_vault_type(8) || try_quest_vault_type(7) || try_quest_vault_type(6);
-        }
-        else if (quest_vault_roll >= 13)
-        {
-            log_trace("Quest vault: Hit lesser vault threshold (%d >= 13), trying quest vaults 7->6", quest_vault_roll);
-            quest_vault_placed = try_quest_vault_type(7) || try_quest_vault_type(6);
-        }
-        else if (quest_vault_roll >= 8)
-        {
-            log_trace("Quest vault: Hit interesting room threshold (%d >= 8), trying quest vault 6", quest_vault_roll);
-            quest_vault_placed = try_quest_vault_type(6);
-        }
-        else
-        {
-            log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
-        }
-        
-        if (quest_vault_placed)
-        {
-            log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
-        }
-        else
-        {
-            log_trace("Quest vault: No quest vault placed this level");
+        /* Check if any quest is already active */
+        if (p_ptr->quest_reserved[0] || 
+            p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
+            p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
+            p_ptr->aule_quest != AULE_QUEST_NOT_STARTED) {
+            log_trace("Quest vault: Skipping - quest already active (tulkas=%d, mandos=%d, aule=%d, reserved=%d)", 
+                     p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->quest_reserved[0]);
+        } else {
+            int quest_vault_roll = dieroll(p_ptr->depth + 5);
+            log_trace("Quest vault: Level determination roll = %d", quest_vault_roll);
+
+            if (one_in_(5))
+            {
+                int bonus = dieroll(5);
+                quest_vault_roll += bonus;
+                log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
+            }
+
+            bool quest_vault_placed = false;
+            
+            if (quest_vault_roll >= 18)
+            {
+                log_trace("Quest vault: Hit greater vault threshold (%d >= 18), trying quest vaults 8->7->6", quest_vault_roll);
+                quest_vault_placed = try_quest_vault_type(8) || try_quest_vault_type(7) || try_quest_vault_type(6);
+            }
+            else if (quest_vault_roll >= 13)
+            {
+                log_trace("Quest vault: Hit lesser vault threshold (%d >= 13), trying quest vaults 7->6", quest_vault_roll);
+                quest_vault_placed = try_quest_vault_type(7) || try_quest_vault_type(6);
+            }
+            else if (quest_vault_roll >= 8)
+            {
+                log_trace("Quest vault: Hit interesting room threshold (%d >= 8), trying quest vault 6", quest_vault_roll);
+                quest_vault_placed = try_quest_vault_type(6);
+            }
+            else
+            {
+                log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
+            }
+            
+            if (quest_vault_placed)
+            {
+                log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
+            }
+            else
+            {
+                log_trace("Quest vault: No quest vault placed this level");
+            }
         }
     }
     else
@@ -4062,6 +4233,38 @@ static bool cave_gen(void)
         return (false);
     }
 
+    /* Validate quest vault connectivity if one was placed */
+    if (p_ptr->quest_reserved[0] && (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT || 
+                                    p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)) {
+        bool quest_vault_connected = false;
+        
+        /* Check if the quest vault area is reachable from the player start position */
+        if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT) {
+            /* Check connectivity to Mandos vault */
+            /* Simple check: if area is part of a room, it should be connected */
+            if (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_ROOM)) {
+                quest_vault_connected = true;
+            }
+            log_trace("Quest vault connectivity: Mandos vault at (%d,%d) connected=%s", 
+                     p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, 
+                     quest_vault_connected ? "true" : "false");
+        }
+        
+        if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT) {
+            /* Check connectivity to Aule forge */
+            if (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_ROOM)) {
+                quest_vault_connected = true;
+            }
+            log_trace("Quest vault connectivity: Aule forge at (%d,%d) connected=%s", 
+                     p_ptr->aule_forge_y, p_ptr->aule_forge_x, 
+                     quest_vault_connected ? "true" : "false");
+        }
+        
+        if (!quest_vault_connected) {
+            log_trace("Quest vault: WARNING - Quest vault may not be properly connected to dungeon");
+        }
+    }
+
     /* Put some objects in rooms */
     obj_room_gen = 3 * mon_gen / 4;
     if (obj_room_gen > 0)
@@ -4080,10 +4283,30 @@ static bool cave_gen(void)
     }
 
     /* Check for Tulkas room-based spawning */
+    log_trace("Tulkas spawn check: quest=%d, depth=%d, metarun_completed=%s, quest_reserved[0]=%d", 
+             p_ptr->tulkas_quest, p_ptr->depth, 
+             metarun_is_quest_completed(METARUN_QUEST_TULKAS) ? "true" : "false",
+             p_ptr->quest_reserved[0]);
+             
+    if (p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED) {
+        log_trace("Tulkas spawn: SKIPPED - quest already started/completed (state=%d)", p_ptr->tulkas_quest);
+    } else if (p_ptr->depth < 6) {
+        log_trace("Tulkas spawn: SKIPPED - too shallow (depth=%d < 6)", p_ptr->depth);
+    } else if (p_ptr->depth >= 20) {
+        log_trace("Tulkas spawn: SKIPPED - too deep (depth=%d >= 20)", p_ptr->depth);
+    } else if (metarun_is_quest_completed(METARUN_QUEST_TULKAS)) {
+        log_trace("Tulkas spawn: SKIPPED - quest completed in metarun");
+    } else if (p_ptr->quest_reserved[0]) {
+        log_trace("Tulkas spawn: SKIPPED - another quest already spawned this run");
+    } else {
+        log_trace("Tulkas spawn: CONDITIONS MET - attempting spawn");
+    }
+             
     if (p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED && 
         p_ptr->depth >= 6 &&  /* Minimum level 6 */
         p_ptr->depth < 20 &&  /* Only up to depth 20 */
-        !metarun_is_quest_completed(METARUN_QUEST_TULKAS))  /* Don't spawn if already completed in metarun */
+        !metarun_is_quest_completed(METARUN_QUEST_TULKAS) && /* Don't spawn if already completed in metarun */
+        !p_ptr->quest_reserved[0])  /* Another quest already spawned this run? */
     {
         /* Probability formula: 1/(25-depth) */
         int spawn_chance = 25 - p_ptr->depth;
@@ -4160,6 +4383,7 @@ static bool cave_gen(void)
                             if (place_monster_one(room_y, room_x, R_IDX_TULKAS, true, true, NULL))
                             {
                                 p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
+                                p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
                                 tulkas_spawned = true;
                                 log_trace("Tulkas spawned in fallback room at (%d, %d), quest state: %d", 
                                          room_y, room_x, p_ptr->tulkas_quest);
@@ -4212,6 +4436,31 @@ static bool cave_gen(void)
     }
 
     p_ptr->force_forge = false;
+
+#if DEBUG_QUEST_VAULT
+    /* Final quest vault state check */
+    qv_capture();
+    qv_dump("final");
+    qv_compare();
+    
+    /* Log final connectivity status */
+    if (p_ptr->quest_reserved[0]) {
+        if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT) {
+            bool is_connected = (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_ROOM)) != 0;
+            bool is_visible = (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_MARK | CAVE_SEEN)) != 0;
+            log_trace("Quest vault FINAL: Mandos at (%d,%d) - connected=%s, visible=%s", 
+                     p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, 
+                     is_connected ? "true" : "false", is_visible ? "true" : "false");
+        }
+        if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT) {
+            bool is_connected = (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_ROOM)) != 0;
+            bool is_visible = (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_MARK | CAVE_SEEN)) != 0;
+            log_trace("Quest vault FINAL: Aule forge at (%d,%d) - connected=%s, visible=%s", 
+                     p_ptr->aule_forge_y, p_ptr->aule_forge_x, 
+                     is_connected ? "true" : "false", is_visible ? "true" : "false");
+        }
+    }
+#endif
 
     return (true);
 }

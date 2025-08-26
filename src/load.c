@@ -9,13 +9,17 @@
  */
 
 #include "angband.h"
-
-#include "init.h"
-#include "log.h"
+#include <string.h> /* memset, strstr */
+#include <stdio.h>  /* FILE, getc, ftell, fseek, ferror */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>  /* O_RDONLY */
+#include <errno.h>
 #include <stdbool.h>
-#include <stdio.h>   /* FILE, getc, ferror, ftell, fseek */
-#include <string.h>  /* memset, strstr */
-#include <fcntl.h>   /* O_RDONLY */
+
+/* #include "init.h"  not required directly here after refactor */
+#include "log.h"
+#include "metarun.h"  /* For metarun_restore_quest_states */
 
 /*
  * This file loads savefiles from Sil.
@@ -789,17 +793,50 @@ static errr rd_extra(void)
     for (i = 0; i < A_MAX; i++)
         rd_s16b(&p_ptr->stat_drain[i]);
 
-    /* Read the skill info */
-    for (i = 0; i < S_MAX; i++)
-        rd_s16b(&p_ptr->skill_base[i]);
+    /* Read the skill info
+     * Version note: Prior to 0.8.6 there were only 8 skills (S_MAX==8).
+     * 0.8.6 adds S_SPC (Special) as the 9th skill. Older savefiles lack
+     * data for this row, so we conditionally read only the legacy count.
+     */
+    int legacy_skill_max = 8; /* last pre-0.8.6 S_MAX value */
+    bool legacy_lineage = (sf_major >= 1); /* Original Sil 1.x */
+    bool pre_special_skills = legacy_lineage || older_than(0, 8, 6);
+    int skills_to_read = pre_special_skills ? legacy_skill_max : S_MAX;
 
-    /* Read the abilities info */
-    for (i = 0; i < S_MAX; i++)
+    for (i = 0; i < skills_to_read; i++)
+        rd_s16b(&p_ptr->skill_base[i]);
+    /* Zero any new skills not present in older savefiles */
+    for (i = skills_to_read; i < S_MAX; i++)
+        p_ptr->skill_base[i] = 0;
+
+    /* Read the abilities info (innate + active flags) */
+    for (i = 0; i < skills_to_read; i++)
     {
         for (j = 0; j < ABILITIES_MAX; j++)
         {
             rd_byte(&p_ptr->innate_ability[i][j]);
             rd_byte(&p_ptr->active_ability[i][j]);
+            /* Only read have_ability for 0.8.6+ saves */
+            if (!pre_special_skills) {
+                rd_byte(&p_ptr->have_ability[i][j]);
+                
+                /* Debug special abilities load */
+                if (i == S_SPC && p_ptr->have_ability[i][j] != 0) {
+                    log_trace("Load: Special ability %d loaded with value %d", j, p_ptr->have_ability[i][j]);
+                }
+            } else {
+                p_ptr->have_ability[i][j] = 0;
+            }
+        }
+    }
+    /* Zero out abilities for any new skill rows */
+    for (i = skills_to_read; i < S_MAX; i++)
+    {
+        for (j = 0; j < ABILITIES_MAX; j++)
+        {
+            p_ptr->innate_ability[i][j] = 0;
+            p_ptr->active_ability[i][j] = 0;
+            p_ptr->have_ability[i][j] = 0;
         }
     }
 
@@ -994,20 +1031,17 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->oaths_broken);
 
     /* Quest fields compatibility ----------------------------------------------
-       New fork (0.8.5+) adds Tulkas (9 bytes) and Aule (24 bytes).
+    New fork (0.8.5+) adds Tulkas (9 bytes) and Aule (24 bytes). 0.8.6 adds
+    Special skill (S_SPC) requiring backward-compatible skill/ability reads.
        Legacy 1.5.x had a single "thrall quest" byte here. */
     /* Log offset entering quest compatibility block */
     log_debug("rd_extra: pre-quest block (byte_ofs=%u) version=%u.%u.%u", (unsigned)load_byte_offset, (unsigned)sf_major, (unsigned)sf_minor, (unsigned)sf_patch);
     if (sf_major >= 1) /* treat any 1.x+ as legacy lineage (e.g., 1.5.0) */
     {
         log_info("QUEST: legacy branch (sf_major=%u)", (unsigned)sf_major);
-        /* Original layout: SINGLE thrall quest state byte here. */
-    byte legacy_thrall_state; rd_byte(&legacy_thrall_state);
-    /* Empirically misalignment suggests two extra legacy bytes followed; consume them */
-    byte legacy_pad1 = 0, legacy_pad2 = 0;
-    rd_byte(&legacy_pad1);
-    rd_byte(&legacy_pad2);
-    LOAD_LOG("legacy thrall_state=0x%02X pad1=0x%02X pad2=0x%02X", legacy_thrall_state, legacy_pad1, legacy_pad2);
+        /* Original layout: SINGLE thrall quest state byte here (Sil 1.x). */
+        byte legacy_thrall_state; rd_byte(&legacy_thrall_state);
+        LOAD_LOG("legacy thrall_state=0x%02X", legacy_thrall_state);
         p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
         p_ptr->tulkas_target_r_idx = 0;
         p_ptr->tulkas_prize_a_idx = 0;
@@ -1015,41 +1049,60 @@ static errr rd_extra(void)
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
         p_ptr->aule_forge_y = 0; p_ptr->aule_forge_x = 0; p_ptr->aule_reserved = 0;
         p_ptr->aule_level = 0; p_ptr->aule_last_object_diff = 0;
+        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        p_ptr->mandos_vault_y = 0; p_ptr->mandos_vault_x = 0; p_ptr->mandos_monsters_remaining = 0; p_ptr->mandos_level = 0; p_ptr->mandos_reserved = 0;
         p_ptr->quest_vault_used = 0;
         memset(p_ptr->quest_reserved, 0, sizeof(p_ptr->quest_reserved));
     }
-    else if ((sf_major == 0) && (sf_minor > 8 || (sf_minor == 8 && sf_patch >= 5)))
+    else if (sf_major == 0 && (sf_minor > 8 || (sf_minor == 8 && sf_patch >= 5)))
     {
-        int qi;
-    log_info("QUEST: new-fork quest block (0.%u.%u)", (unsigned)sf_minor, (unsigned)sf_patch);
-    LOAD_LOG0("reading Tulkas quest block (0.8.5+)");
-    /* Tulkas quest */
-        rd_byte(&p_ptr->tulkas_quest);
-        rd_s16b(&p_ptr->tulkas_target_r_idx);
-        rd_s16b(&p_ptr->tulkas_prize_a_idx);
-        rd_byte(&p_ptr->tulkas_quest_complete);
-    LOAD_LOG("tulkas state=%u target_r=%d prize_a=%d complete=%u", p_ptr->tulkas_quest, p_ptr->tulkas_target_r_idx, p_ptr->tulkas_prize_a_idx, p_ptr->tulkas_quest_complete);
-
-        /* Aule quest */
-        rd_byte(&p_ptr->aule_quest);
-        rd_byte(&p_ptr->aule_forge_y);
-        rd_byte(&p_ptr->aule_forge_x);
-        rd_byte(&p_ptr->aule_reserved);
-        rd_s16b(&p_ptr->aule_level);
-        rd_s16b(&p_ptr->aule_last_object_diff);
-        
-        /* Mandos quest */
-        rd_byte(&p_ptr->mandos_quest);
-        rd_byte(&p_ptr->mandos_vault_y);
-        rd_byte(&p_ptr->mandos_vault_x);
-        rd_byte(&p_ptr->mandos_monsters_remaining);
-        rd_s16b(&p_ptr->mandos_level);
-        rd_s16b(&p_ptr->mandos_reserved);
-        
-        rd_byte(&p_ptr->quest_vault_used);
-        for (qi = 0; qi < 15; qi++) rd_byte(&p_ptr->quest_reserved[qi]);
-    LOAD_LOG("aule state=%u forge_y=%u forge_x=%u level=%d last_diff=%d vault_used=%u", p_ptr->aule_quest, p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->aule_level, p_ptr->aule_last_object_diff, p_ptr->quest_vault_used);
-    LOAD_LOG("mandos state=%u vault_y=%u vault_x=%u monsters_remaining=%u level=%d", p_ptr->mandos_quest, p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->mandos_monsters_remaining, p_ptr->mandos_level);
+        /* 0.8.5+ new fork: quest block only present from 0.8.6 onward and preceded by marker 0x51 */
+    long pos_before = ftell(fff);
+    /* Save stream decode/checksum state so we can rewind safely */
+    u32b saved_v_check = v_check, saved_x_check = x_check, saved_offset = load_byte_offset;
+    byte saved_xor = xor_byte;
+    byte marker; rd_byte(&marker);
+    log_debug("QUEST: probed marker byte=0x%02X at ofs=%u", marker, (unsigned)load_byte_offset);
+        if (marker == 0x51) {
+            int qi;
+            log_info("QUEST: marker 0x51 detected, reading quest block");
+            rd_byte(&p_ptr->tulkas_quest);
+            rd_s16b(&p_ptr->tulkas_target_r_idx);
+            rd_s16b(&p_ptr->tulkas_prize_a_idx);
+            rd_byte(&p_ptr->tulkas_quest_complete);
+            rd_byte(&p_ptr->aule_quest);
+            rd_byte(&p_ptr->aule_forge_y);
+            rd_byte(&p_ptr->aule_forge_x);
+            rd_byte(&p_ptr->aule_reserved);
+            rd_s16b(&p_ptr->aule_level);
+            rd_s16b(&p_ptr->aule_last_object_diff);
+            rd_byte(&p_ptr->mandos_quest);
+            rd_byte(&p_ptr->mandos_vault_y);
+            rd_byte(&p_ptr->mandos_vault_x);
+            rd_byte(&p_ptr->mandos_monsters_remaining);
+            rd_s16b(&p_ptr->mandos_level);
+            rd_s16b(&p_ptr->mandos_reserved);
+            rd_byte(&p_ptr->quest_vault_used);
+            for (qi = 0; qi < 15; qi++) rd_byte(&p_ptr->quest_reserved[qi]);
+        } else {
+            /* Legacy 0.8.5 save without quest data: rewind and zero */
+            log_info("QUEST: no marker (0x%02X) -> legacy 0.8.5 save, rewinding", marker);
+            fseek(fff, pos_before, SEEK_SET);
+            /* Restore decode/checksum state so subsequent bytes parse correctly */
+            v_check = saved_v_check; x_check = saved_x_check; load_byte_offset = saved_offset; xor_byte = saved_xor;
+            p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+            p_ptr->tulkas_target_r_idx = 0;
+            p_ptr->tulkas_prize_a_idx = 0;
+            p_ptr->tulkas_quest_complete = 0;
+            p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+            p_ptr->aule_forge_y = 0; p_ptr->aule_forge_x = 0; p_ptr->aule_reserved = 0;
+            p_ptr->aule_level = 0; p_ptr->aule_last_object_diff = 0;
+            p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+            p_ptr->mandos_vault_y = 0; p_ptr->mandos_vault_x = 0; p_ptr->mandos_monsters_remaining = 0;
+            p_ptr->mandos_level = 0; p_ptr->mandos_reserved = 0;
+            p_ptr->quest_vault_used = 0;
+            memset(p_ptr->quest_reserved, 0, sizeof(p_ptr->quest_reserved));
+        }
     }
     else /* pre-0.8.5 new-fork dev snapshots (shouldn't really exist) */
     {
@@ -1080,6 +1133,9 @@ static errr rd_extra(void)
 
     /* Min depth counter */
     rd_s32b(&min_depth_counter);
+
+    /* Restore quest states from metarun after character loading */
+    metarun_restore_quest_states();
 
     return (0);
 }

@@ -2300,6 +2300,11 @@ static void calc_bonuses(void)
     {
         for (j = 0; j < ABILITIES_MAX; j++)
         {
+            /* For Special abilities skill, preserve quest-granted abilities */
+            if (i == S_SPC) {
+                /* Don't reset special abilities - they're not item-granted */
+                continue;
+            }
             p_ptr->have_ability[i][j] = p_ptr->innate_ability[i][j];
         }
     }
@@ -2662,6 +2667,21 @@ static void calc_bonuses(void)
         p_ptr->resist_stun += 1;
         p_ptr->resist_hallu += 1;
         p_ptr->hunger -= 1;
+    }
+
+    // Mandos' Doom special ability grants immunity to fear, hallucination,
+    // entrancement, rage and stun (implemented as high resistance + clear)
+    if (p_ptr->have_ability[S_SPC][SPC_MANDOS]) {
+        p_ptr->resist_fear += 100; // effectively immune
+        p_ptr->resist_hallu += 100;
+        p_ptr->resist_stun += 100;
+        p_ptr->resist_confu += 1; // confusion not specified? keep minimal
+        // Clear timed effects each turn
+        if (p_ptr->afraid) p_ptr->afraid = 0;
+        if (p_ptr->image) p_ptr->image = 0;
+        if (p_ptr->entranced) p_ptr->entranced = 0;
+        if (p_ptr->rage) p_ptr->rage = 0;
+        if (p_ptr->stun) p_ptr->stun = 0;
     }
 
     /*** Handle stats ***/
@@ -3312,7 +3332,9 @@ void update_stuff(void)
     }
 
     /* Check quest completion status for metarun tracking */
+    log_trace("update_stuff: About to call metarun_check_and_update_quests()");
     metarun_check_and_update_quests();
+    log_trace("update_stuff: Finished calling metarun_check_and_update_quests()");
 
     log_trace("update_stuff: completed all updates");
 }

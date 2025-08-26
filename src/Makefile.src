@@ -6,7 +6,7 @@
 #
 
 NAME = Sil
-VERSION = 0.8.5
+VERSION = 0.8.6
 COPYRIGHT = half & Scatha
 PROG = sil
 

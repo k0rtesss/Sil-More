@@ -28,7 +28,7 @@
 
 # Version stamp (required)
 
-V:0.8.5
+V:0.8.6
 
 # Melee ---------------------------------------------
 
@@ -699,4 +699,13 @@ T:35:0:99  # Cloak
 N:153:Grace
 I:7:13:12
 D:You gain a point of grace.
+
+# Special (quest) abilities ---------------------------------------------
+
+N:160:Mandos' Doom
+I:8:0:0
+D:Grants immunity to fear, hallucination, trance, rage and stun. Awarded by quest; cannot be purchased.
+N:161:Aule's Forge
+I:8:1:0
+D:Grants superior mastery at the forge: counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece.
 

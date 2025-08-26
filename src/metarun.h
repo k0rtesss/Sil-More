@@ -117,6 +117,7 @@ void list_metaruns(void);                        /* Full meta-run history   */
 bool metarun_is_quest_completed(u32b quest_flag);   /* Check if quest is completed */
 void metarun_mark_quest_completed(u32b quest_flag); /* Mark quest as completed */
 void metarun_check_and_update_quests(void);         /* Check current character quests and update metarun */
+void metarun_restore_quest_states(void);            /* Restore quest states from metarun after character load */
 
 /* ------------------------------------------------------------------ */
 /*  Persistent Settings                                               */

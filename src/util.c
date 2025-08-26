@@ -776,8 +776,11 @@ errr fd_read(int fd, char* buf, size_t n)
     while (n >= 16384)
     {
         /* Read a piece */
-        if (read(fd, buf, 16384) != 16384)
+        ssize_t bytes_read = read(fd, buf, 16384);
+        if (bytes_read != 16384) {
+            /* For large reads, we need exact bytes */
             return (1);
+        }
 
         /* Shorten the task */
         buf += 16384;
@@ -789,8 +792,20 @@ errr fd_read(int fd, char* buf, size_t n)
 #endif
 
     /* Read the final piece */
-    if (read(fd, buf, n) != (int)n)
+    ssize_t bytes_read = read(fd, buf, n);
+    if (bytes_read < 0) {
+        /* Read error */
         return (1);
+    }
+    if (bytes_read == 0 && n > 0) {
+        /* EOF when we expected data */
+        return (1);
+    }
+    if (bytes_read != (ssize_t)n) {
+        /* For score files and other structured data, we need exact bytes.
+         * However, let's log this for debugging. */
+        return (1);
+    }
 
     /* Success */
     return (0);

@@ -62,3 +62,5 @@ lib/edit/character_backup.txt
 *.bak2
 *.bak3
 /Visuals
+/src/lib
+src/sil.INI
