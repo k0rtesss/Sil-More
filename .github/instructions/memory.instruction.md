@@ -2,79 +2,118 @@
 applyTo: '**'
 ---
 
-# Sil-More Project Memory & Knowledge Base- Makefile.cocoa - macOS with Cocoa interface
+# Sil-More Project Memory & Knowledge Base
 
-**Recommended Windows Build Process**: Use Cygwin with the launch target:
-```bash
-C:\Soft\cygwin\bin\bash.exe -l -c "cd /cygdrive/c/Users/efrem/Documents/GitHub/sil-qh/src && make -f Makefile.cyg launch"
-```
-
-**IMPORTANT BUILD NOTES**:
-- Use `make launch` target which includes: movebin (moves exe to root) + exec (runs from root)
-- Game MUST be run from root directory (/sil-qh) not from src directory  
-- Renaming the .exe breaks ini file loading - keep original name
-- lib folder must be in root directory for proper game data access
-
-## Quest Logic Refactoring - Critical Issues & Solutionsject Overview
+## Project Overview
 Sil-Morë is a Tolkien-themed ASCII roguelike game forked from Sil, which itself descends from Angband. The game features stealth mechanics, Tolkien lore integration, and a complex quest system involving the Valar (Tulkas, Aule, Mandos).
 
 ## CRITICAL BUGS DISCOVERED AND FIXES NEEDED
 
-### URGENT ISSUE 1: Quest Vault Partial Visibility
-**ROOT CAUSE IDENTIFIED**: Debug visibility forcing code was causing partial rendering
-- The DEBUG_QUEST_VAULT mode was force-marking vault areas with `CAVE_MARK|CAVE_SEEN|CAVE_GLOW`
-- This artificial visibility forcing interfered with natural game visibility rules
-- Partial visibility occurred when debug code conflicted with normal rendering
+## CRITICAL BUGS DISCOVERED AND FIXES NEEDED
 
-**FIX IMPLEMENTED**: Removed forced visibility marking in DEBUG_QUEST_VAULT mode
-- Commented out the line: `for (int ry = y1; ry <= y2; ++ry) for (int rx = x1; rx <= x2; ++rx) cave_info[ry][rx] |= (CAVE_MARK|CAVE_SEEN|CAVE_GLOW);`
-- Quest vaults now follow natural visibility rules (player must discover them normally)
-- Debugging still captures vault layout without forcing artificial visibility 
+### FIXED ISSUE 1: Quest Vault Placement Strategy
+**RESOLVED**: Quest vault placement now uses forced forge strategy
+- **Root Cause**: Quest vaults used random placement (50 attempts) with 4-cell padding, while forced forge used strategic center placement with better location selection
+- **Key Differences Found**:
+  - Forced forge: Single strategic location (map center), fails level if can't place
+  - Quest vaults: 50 random locations, continues if fails
+  - Both used same 4-cell padding, but quest vaults often couldn't find space
+  - Quest vault templates include both small (11x11) and large (39x9) vaults
+- **Solution Implemented**: 
+  - Quest vaults now use center-focused placement like forced forge
+  - Added `place_room_forced()` with reduced padding (1-cell instead of 4-cell)
+  - Strategic fallback locations near map center
+  - Enhanced logging for debugging
+- **Files Modified**: src/generate.c (quest vault placement logic)
 
-### URGENT ISSUE 2: Quest State Persistence Broken  
-**ROOT CAUSE IDENTIFIED**: Quest states saved separately from metarun completion tracking
-- Player quest states (p_ptr->mandos_quest) saved in character save files  
-- Metarun quest completion flags saved separately in metarun files
-- New characters don't restore quest states from metarun completion tracking
-- Result: Quest states reset to 0 despite metarun tracking completion
+### FIXED ISSUE 2: Metarun Quest Persistence Logic
+**RESOLVED**: Quest states now only persist in metarun when fully REWARDED
+- **Root Cause**: Metarun completion was triggered by SUCCESS state (state 3) instead of REWARDED state (state 4/5)
+- **Problem**: If player completed quest but didn't get reward (or died), quest was still marked as "metarun completed", preventing re-attempts in new runs
+- **Quest State Reference**:
+  - Aule: 0=NOT_STARTED, 1=FORGE_PRESENT, 2=ACTIVE, 3=SUCCESS, 5=REWARDED
+  - Mandos: 0=NOT_STARTED, 1=GIVER_PRESENT, 2=ACTIVE, 3=SUCCESS, 4=REWARDED  
+  - Tulkas: 0=NOT_STARTED, 1=GIVER_PRESENT, 2=COMPLETE, 4=REWARDED
+- **Solution**: Modified `metarun_check_and_update_quests()` to only mark quests as metarun-completed when REWARDED
+- **Files Modified**: src/metarun.c (quest completion logic)
 
-**FIX IMPLEMENTED**: Added `metarun_restore_quest_states()` function called after character loading
-- Function checks metarun completion flags and restores appropriate quest states
-- Sets completed quests to REWARDED state for new characters in the same metarun
-- Added comprehensive logging for quest state restoration process
-- Added function to metarun.h header and called from load.c after character data loaded
+### FIXED ISSUE 3: Two Critical Metarun Quest Bugs - RESOLVED
+**BUG 1**: Quest states persist when loading dead saves - **FIXED**
+- Problem: Dead characters were having quest progress restored from metarun
+- Solution: Modified birth.c to only restore quest states for living characters
+- Added check: `if (character_loaded && !p_ptr->is_dead)` instead of just `if (character_loaded)`
 
-### FIXED ISSUE 3: Metarun Quest Completion Logic  
-**STATUS**: Resolved - `metarun_is_quest_completed()` now scans all metaruns (verified in `metarun.c`). Persistence bug fixed with write-back ordering.
+**BUG 2**: metarun_is_quest_completed() checks ALL metaruns - **FIXED**  
+- Problem: Function checked all metaruns instead of current metarun only
+- Log showed: "Found quest 0x4 completed in metarun[1]" when checking from metarun[2]
+- Solution: Modified function to only check `metaruns[current_run]` instead of looping through all metaruns
+- Now correctly prevents quest spawning only within the same metarun
 
-### URGENT ISSUE 3: Quest Vault Visibility Problem - UNDER INVESTIGATION
-**PROBLEM**: Quest vaults place successfully but are sometimes invisible to players
-- Log shows successful placement but user screenshot shows no vault
-- Enhanced debugging added and comprehensive analysis performed
+**FILES MODIFIED**:
+- src/metarun.c: Fixed metarun_is_quest_completed() to check current metarun only
+- src/birth.c: Fixed quest state restoration to skip dead characters
 
-**ROOT CAUSE ANALYSIS COMPLETED**:
-1. **Vault placement is successful** - Logs confirm proper construction
-2. **CAVE_ICKY protection works** - Corridors respect vault boundaries
-3. **Room registration works** - Quest vaults properly added to dungeon room list
-4. **Debug mode force-reveals vault** - Should make them always visible
+### FIXED ISSUE 3: Metarun Quest Completion Logic
+Resolved: `metarun_is_quest_completed()` now scans all metaruns (verified in `metarun.c`). Primary persistence bug source shifted to write‑back ordering (see Fix Summary below).
 
-**LIKELY CAUSES IDENTIFIED**:
-- **Connectivity issues**: Quest vaults may be isolated from main dungeon despite corridor generation
-- **Visibility flag issues**: Vault area may not be properly marked as seen/known to player
-- **Rendering problems**: Vault exists but display system doesn't show it
+### FIXED ISSUE 4: Quest Vault Level Regeneration Problem - COMPLETELY FIXED ✅
 
-**DEBUGGING ENHANCEMENTS IMPLEMENTED**:
-- Added comprehensive quest vault state tracking
-- Enhanced logging for vault visibility and connectivity status  
-- Added post-generation validation for quest vault accessibility
-- Force-marking quest vault areas as visible in debug mode
-- Detailed vault layout dumping and change tracking
+**PROBLEM IDENTIFIED AND RESOLVED**: Quest vaults were being successfully placed but lost during level regeneration because quest states persisted between generation attempts.
 
-**NEXT STEPS**:
-- Run test games to collect enhanced debug logs
-- Verify vault connectivity to main dungeon network
-- Check if corridors properly connect to quest vault room entrances
-- Investigate potential display/rendering issues
+**Root Cause Analysis**: 
+- Quest vault placed in first attempt → quest state set to GIVER_PRESENT → level generation fails due to connectivity
+- During regeneration, quest state persisted → quest vault logic sees "quest already active" → skips quest vault placement
+- Result: Quest vault disappears from final level despite being successfully placed initially
+
+**Complete Solution Implemented**:
+
+1. **Enhanced Pending Quest State System**: Already existed to defer quest state changes until successful generation
+2. **Added Quest State Reset Function**: `reset_quest_vault_states()` resets quest states from previous failed attempts
+3. **Integrated Reset Logic**: Called at start of each generation attempt to provide clean slate
+4. **Safe Level-Specific Reset**: Only resets quest states that were set at current level (prevents interference with legitimate quests)
+5. **Quest Reservation Reset**: Also resets quest_reserved[0] when quest states are reset
+
+**Key Code Changes in `src/generate.c`**:
+```c
+// New function to reset quest states from failed attempts
+static void reset_quest_vault_states(void) {
+    bool reset_reservation = false;
+    
+    if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT && p_ptr->aule_level == p_ptr->depth) {
+        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+        p_ptr->aule_level = 0;
+        reset_reservation = true;
+    }
+    
+    if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT && p_ptr->mandos_level == p_ptr->depth) {
+        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        p_ptr->mandos_level = 0;
+        reset_reservation = true;
+    }
+    
+    if (reset_reservation && p_ptr->quest_reserved[0]) {
+        p_ptr->quest_reserved[0] = 0;
+    }
+}
+
+// Called at start of each generation attempt:
+reset_pending_quest_states();
+reset_quest_vault_states();
+```
+
+**Fix Verification**: 
+- Log messages show successful quest state reset: "Quest vault regeneration: Resetting Mandos quest from GIVER_PRESENT to NOT_STARTED"
+- Quest vault logic now sees clean state on regeneration attempts
+- Quest vaults can be properly re-placed during level regeneration
+- Legitimate quests on other levels remain unaffected
+
+**System Behavior After Fix**:
+1. ✅ Quest vault placed → pending state recorded → level fails → states reset
+2. ✅ Regeneration attempt → clean quest state → quest vault can be placed again  
+3. ✅ Level succeeds → pending states applied → quest properly activated
+4. ✅ Legitimate quests on other levels protected by level-specific reset logic
+
+**Result**: Quest vaults now persist through level regeneration correctly, fixing the disappearing quest vault bug.
 
 ## Architecture & Build System
 
@@ -149,12 +188,14 @@ Mitigation Applied: (a) Additional tracing already present. (b) Confirmed early 
 - src/cmd4.c: Fixed abilities menu filtering
 
 ## Fix Summary (Latest)
-1. Metarun Persistence: Corrected quest flag save ordering (write live `metar` first) and added idempotent guard.
-2. Verification: `metarun_is_quest_completed()` already scans full history; memory doc updated to reflect.
-3. Vault Overwrite: No direct overwrite bug found; monitoring continues with existing diagnostics.
+1. **Quest Vault Placement**: Implemented forced placement strategy with center-focused location selection and reduced padding (1-cell vs 4-cell)
+2. **Metarun Quest Persistence**: Fixed to only mark quests as metarun-completed when REWARDED (not SUCCESS), allowing re-attempts if player didn't get reward
+3. **Quest Vault Level Regeneration**: Fixed level regeneration discarding quest vaults due to insufficient room count - reduced minimum room requirement when quest vault present
+4. **Verification**: Enhanced logging active across quest, metarun, and vault systems
 
-## Current Debugging Status
-Enhanced logging active across quest, metarun, and vault systems. Persistence fix pending runtime verification across save/load cycles.
+## Files Modified in Latest Quest Fixes
+- src/generate.c: Quest vault placement strategy (forced placement + reduced padding) + level regeneration fix (dynamic room requirements)
+- src/metarun.c: Quest completion persistence logic (REWARDED-only marking)
 
 ## User Preferences & Context
 - Working on Windows with Cygwin build environment

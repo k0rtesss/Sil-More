@@ -82,6 +82,76 @@ done_diffs:
     if (!diffs) log_trace("Quest vault DEBUG: no tile changes detected since snapshot");
 }
 #endif
+
+/* Structure to hold pending quest state changes that should only be applied
+ * when level generation is completely successful */
+typedef struct {
+    bool has_aule_change;
+    bool has_mandos_change;
+    int aule_level;
+    int mandos_level;
+    int aule_forge_y, aule_forge_x;
+    int mandos_vault_y, mandos_vault_x;
+} pending_quest_states_t;
+
+/* Global variable to track pending quest state changes */
+static pending_quest_states_t pending_quest_states = {0};
+
+/* Function to reset pending quest state changes */
+static void reset_pending_quest_states(void) {
+    pending_quest_states.has_aule_change = false;
+    pending_quest_states.has_mandos_change = false;
+}
+
+/* Function to reset quest states that were set by quest vaults during regeneration */
+static void reset_quest_vault_states(void) {
+    /* Only reset quest states if they were set at the current level during quest vault placement */
+    /* This prevents interfering with quests that were legitimately started on other levels */
+    
+    bool reset_reservation = false;
+    
+    if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT && p_ptr->aule_level == p_ptr->depth) {
+        log_trace("Quest vault regeneration: Resetting Aule quest from FORGE_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
+        p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
+        p_ptr->aule_level = 0;
+        reset_reservation = true;
+    }
+    
+    if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT && p_ptr->mandos_level == p_ptr->depth) {
+        log_trace("Quest vault regeneration: Resetting Mandos quest from GIVER_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
+        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        p_ptr->mandos_level = 0;
+        reset_reservation = true;
+    }
+    
+    /* Reset quest reservation if we reset any quest states at this level */
+    if (reset_reservation && p_ptr->quest_reserved[0]) {
+        log_trace("Quest vault regeneration: Resetting quest_reserved[0] from 1 to 0");
+        p_ptr->quest_reserved[0] = 0;
+    }
+}
+
+/* Function to apply pending quest state changes when level generation is successful */
+static void apply_pending_quest_states(void) {
+    if (pending_quest_states.has_aule_change) {
+        p_ptr->aule_level = pending_quest_states.aule_level;
+        p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        log_trace("Aule quest: FORGE_PRESENT APPLIED (deferred from quest vault) at %d,%d depth=%d", 
+                  pending_quest_states.aule_forge_y, pending_quest_states.aule_forge_x, pending_quest_states.aule_level);
+    }
+    if (pending_quest_states.has_mandos_change) {
+        p_ptr->mandos_level = pending_quest_states.mandos_level;
+        p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        log_trace("Mandos quest: GIVER_PRESENT APPLIED (deferred from quest vault) at %d,%d depth=%d", 
+                  pending_quest_states.mandos_vault_y, pending_quest_states.mandos_vault_x, pending_quest_states.mandos_level);
+    }
+    
+    /* Reset pending changes after applying them */
+    reset_pending_quest_states();
+}
+
 /*
  * Note that Level generation is *not* an important bottleneck,
  * though it can be annoyingly slow on older machines...  Thus
@@ -1854,7 +1924,10 @@ static bool place_rubble_player(void)
             }
         }
         if (i == 100)
+        {
+            log_trace("place_rubble_player failed: Could not find suitable player placement after 100 attempts");
             return (false);
+        }
     }
 
     return (true);
@@ -2063,11 +2136,12 @@ static bool connect_rooms_stairs(void)
     if ((p_ptr->create_stair == FEAT_MORE)
         || (p_ptr->create_stair == FEAT_MORE_SHAFT))
         stairs--;
+    
     if (!(alloc_stairs(initial_down, stairs)))
     {
         if (cheat_room)
             msg_format("Failed to place down stairs.");
-
+        log_trace("connect_rooms_stairs failed: Could not place %d down stairs", stairs);
         return (false);
     }
 
@@ -2089,11 +2163,12 @@ static bool connect_rooms_stairs(void)
     if ((p_ptr->create_stair == FEAT_LESS)
         || (p_ptr->create_stair == FEAT_LESS_SHAFT))
         stairs--;
+    
     if (!(alloc_stairs(initial_up, stairs)))
     {
         if (cheat_room)
             msg_format("Failed to place up stairs.");
-
+        log_trace("connect_rooms_stairs failed: Could not place %d up stairs", stairs);
         return (false);
     }
 
@@ -2102,7 +2177,10 @@ static bool connect_rooms_stairs(void)
     {
         /*if we can't build streamers, something is wrong with level*/
         if (!build_streamer(FEAT_QUARTZ))
+        {
+            log_trace("connect_rooms_stairs failed: Could not build quartz streamer %d", i);
             return (false);
+        }
     }
 
     // add any chasms if needed
@@ -2128,6 +2206,8 @@ static bool connect_rooms_stairs(void)
 /*
  * Forward declaration for quest vault helper
  */
+static bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2);
+static bool place_room_forced(int y0, int x0, vault_type* v_ptr);
 static bool try_quest_vault_type(int vault_type);
 
 /*
@@ -2459,7 +2539,14 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     int original_object_level = object_level;
     int original_monster_level = monster_level;
 
-    log_trace("build_vault: Building vault '%s' with color=%d", v_name + v_ptr->name, v_ptr->color);
+    log_trace("build_vault: Building vault '%s' with color=%d at center (%d,%d), size %dx%d", 
+              v_name + v_ptr->name, v_ptr->color, y0, x0, xmax, ymax);
+    log_trace("build_vault: Vault flags = 0x%x, flip_d = %s", v_ptr->flags, flip_d ? "true" : "false");
+    
+    /* DEBUGGING: Check if this is a quest vault */
+    if (v_ptr->flags & VLT_QUEST) {
+        log_trace("build_vault: *** QUEST VAULT DETECTED *** Building '%s'", v_name + v_ptr->name);
+    }
 
     cptr t;
 
@@ -3191,6 +3278,155 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
     return (true);
 }
 
+/*
+ * Generate helper -- test a rectangle to see if it is all rock with reduced padding
+ * (i.e. not floor and not icky) - used for quest vaults to reduce placement failures
+ */
+static bool solid_rock_reduced_padding(int y1, int x1, int y2, int x2)
+{
+    int y, x;
+
+    if (x2 >= MAX_DUNGEON_WID || y2 >= MAX_DUNGEON_HGT)
+        return (false);
+
+    for (y = y1; y <= y2; y++)
+    {
+        for (x = x1; x <= x2; x++)
+        {
+            if (cave_feat[y][x] == FEAT_FLOOR)
+                return (false);
+            if (cave_info[y][x] & CAVE_ICKY)
+                return (false);
+        }
+    }
+    return (true);
+}
+
+/*
+ * Place a room using forced placement strategy with reduced padding for quest vaults
+ */
+static bool place_room_forced(int y0, int x0, vault_type* v_ptr)
+{
+    int y1, x1, y2, x2;
+    bool flip_d;
+    
+    log_trace("place_room_forced: Attempting to place quest vault '%s' at center (%d,%d), size %dx%d with reduced padding", 
+             v_name + v_ptr->name, y0, x0, v_ptr->hgt, v_ptr->wid);
+
+    // choose whether to rotate (flip diagonally)
+    flip_d = one_in_(3);
+
+    // some vaults ask not be be rotated
+    if (v_ptr->flags & (VLT_NO_ROTATION))
+        flip_d = false;
+
+    if (flip_d)
+    {
+        /* determine the coordinates with height/width flipped */
+        y1 = y0 - (v_ptr->wid / 2);
+        x1 = x0 - (v_ptr->hgt / 2);
+        y2 = y1 + v_ptr->wid - 1;
+        x2 = x1 + v_ptr->hgt - 1;
+    }
+
+    else
+    {
+        /* determine the coordinates */
+        y1 = y0 - (v_ptr->hgt / 2);
+        x1 = x0 - (v_ptr->wid / 2);
+        y2 = y1 + v_ptr->hgt - 1;
+        x2 = x1 + v_ptr->wid - 1;
+    }
+
+    /* make sure that the location is within the map bounds */
+    if ((y1 <= 2) || (x1 <= 2) || (y2 >= p_ptr->cur_map_hgt - 2)
+        || (x2 >= p_ptr->cur_map_wid - 2))
+    {
+        log_trace("place_room_forced: Vault bounds check failed - y1=%d x1=%d y2=%d x2=%d (map size %dx%d)", 
+                 y1, x1, y2, x2, p_ptr->cur_map_hgt, p_ptr->cur_map_wid);
+        return (false);
+    }
+    /* make sure that the location is empty using reduced padding (1 cell instead of 2) */
+    if (!solid_rock_reduced_padding(y1 - 1, x1 - 1, y2 + 1, x2 + 1))
+    {
+        log_trace("place_room_forced: solid_rock_reduced_padding check failed - area not empty around (%d,%d)-(%d,%d)", 
+                 y1 - 1, x1 - 1, y2 + 1, x2 + 1);
+        return (false);
+    }
+
+    /* Try building the vault */
+    if (!build_vault(y0, x0, v_ptr, flip_d))
+    {
+        log_trace("place_room_forced: build_vault failed for quest vault '%s' at (%d,%d)", 
+                 v_name + v_ptr->name, y0, x0);
+        return (false);
+    }
+    
+    log_trace("place_room_forced: Successfully built quest vault '%s' at (%d,%d) with reduced padding", 
+             v_name + v_ptr->name, y0, x0);
+
+    /* save the corner locations */
+    dun->corner[dun->cent_n].y1 = y1 + 1;
+    dun->corner[dun->cent_n].x1 = x1 + 1;
+    dun->corner[dun->cent_n].y2 = y2 - 1;
+    dun->corner[dun->cent_n].x2 = x2 - 1;
+
+    /* Save the room location */
+    dun->cent[dun->cent_n].y = y0;
+    dun->cent[dun->cent_n].x = x0;
+    dun->cent_n++;
+
+    /* Cause a special feeling */
+    good_item_flag = true;
+
+    log_trace("build_vault: *** SUCCESSFULLY COMPLETED *** vault '%s' at (%d,%d)", 
+              v_name + v_ptr->name, y0, x0);
+    
+    /* DEBUGGING: For quest vaults, do immediate verification */
+    if (v_ptr->flags & VLT_QUEST) {
+        int verify_y1 = y0 - v_ptr->hgt / 2;
+        int verify_x1 = x0 - v_ptr->wid / 2;
+        int verify_y2 = verify_y1 + v_ptr->hgt - 1;
+        int verify_x2 = verify_x1 + v_ptr->wid - 1;
+        
+        int post_walls = 0, post_floors = 0, post_features = 0, post_monsters = 0;
+        int post_icky = 0, post_room = 0;
+        
+        for (int vy = verify_y1; vy <= verify_y2; vy++) {
+            for (int vx = verify_x1; vx <= verify_x2; vx++) {
+                if (cave_feat[vy][vx] == FEAT_WALL_OUTER || cave_feat[vy][vx] == FEAT_WALL_INNER) {
+                    post_walls++;
+                } else if (cave_feat[vy][vx] == FEAT_FLOOR) {
+                    post_floors++;
+                } else if (cave_feat[vy][vx] != FEAT_WALL_EXTRA) {
+                    post_features++;
+                }
+                
+                if (cave_m_idx[vy][vx] > 0) {
+                    post_monsters++;
+                }
+                
+                if (cave_info[vy][vx] & CAVE_ICKY) {
+                    post_icky++;
+                }
+                
+                if (cave_info[vy][vx] & CAVE_ROOM) {
+                    post_room++;
+                }
+            }
+        }
+        
+        log_trace("build_vault: QUEST VAULT POST-BUILD VERIFICATION: Area (%d,%d) to (%d,%d)", 
+                  verify_y1, verify_x1, verify_y2, verify_x2);
+        log_trace("build_vault: QUEST VAULT POST-BUILD: %d walls, %d floors, %d features, %d monsters", 
+                  post_walls, post_floors, post_features, post_monsters);
+        log_trace("build_vault: QUEST VAULT POST-BUILD: %d CAVE_ICKY, %d CAVE_ROOM flags", 
+                  post_icky, post_room);
+    }
+
+    return (true);
+}
+
 static bool place_room(int y0, int x0, vault_type* v_ptr)
 {
     int y1, x1, y2, x2;
@@ -3292,6 +3528,63 @@ static bool vault_template_has_mandos(vault_type *v) {
     return false;
 }
 
+/* Global variables to store quest vault coordinates for monitoring */
+int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
+bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
+
+/* DEBUGGING: Function to check if quest vault still exists at monitored coordinates */
+static void check_quest_vault_integrity(const char* checkpoint_name) {
+    if (!qv_placed_this_level) {
+        log_trace("VAULT INTEGRITY CHECK [%s]: No quest vault placed this level - skipping check", checkpoint_name);
+        return;
+    }
+    if (qv_stored_y1 < 0 || qv_stored_y2 < 0) {
+        log_trace("VAULT INTEGRITY CHECK [%s]: No quest vault coordinates stored", checkpoint_name);
+        return;
+    }
+    
+    int check_walls = 0, check_floors = 0, check_features = 0, check_monsters = 0;
+    int check_icky = 0, check_room = 0, check_extra = 0;
+    
+    for (int cy = qv_stored_y1; cy <= qv_stored_y2; cy++) {
+        for (int cx = qv_stored_x1; cx <= qv_stored_x2; cx++) {
+            if (cave_feat[cy][cx] == FEAT_WALL_OUTER || cave_feat[cy][cx] == FEAT_WALL_INNER) {
+                check_walls++;
+            } else if (cave_feat[cy][cx] == FEAT_FLOOR) {
+                check_floors++;
+            } else if (cave_feat[cy][cx] == FEAT_WALL_EXTRA) {
+                check_extra++;
+            } else {
+                check_features++;
+            }
+            
+            if (cave_m_idx[cy][cx] > 0) {
+                check_monsters++;
+            }
+            
+            if (cave_info[cy][cx] & CAVE_ICKY) {
+                check_icky++;
+            }
+            
+            if (cave_info[cy][cx] & CAVE_ROOM) {
+                check_room++;
+            }
+        }
+    }
+    
+    log_trace("VAULT INTEGRITY CHECK [%s]: Area (%d,%d) to (%d,%d)", 
+              checkpoint_name, qv_stored_y1, qv_stored_x1, qv_stored_y2, qv_stored_x2);
+    log_trace("VAULT INTEGRITY CHECK [%s]: %d walls, %d floors, %d features, %d monsters, %d extra_walls", 
+              checkpoint_name, check_walls, check_floors, check_features, check_monsters, check_extra);
+    log_trace("VAULT INTEGRITY CHECK [%s]: %d CAVE_ICKY, %d CAVE_ROOM flags", 
+              checkpoint_name, check_icky, check_room);
+              
+    /* Alert if vault appears to be gone */
+    if (check_walls < 50 && check_floors < 30) {
+        log_trace("VAULT INTEGRITY WARNING [%s]: Vault appears to have been OVERWRITTEN! Very low content.", checkpoint_name);
+    }
+}
+
 static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     int y1 = y0 - qv->hgt / 2;
     int x1 = x0 - qv->wid / 2;
@@ -3346,38 +3639,37 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
     
     log_trace("Quest vault contents: %d walls, %d floors, %d features, %d monsters", 
               wall_count, floor_count, feature_count, monster_count);
+              
+    /* DEBUGGING: Store quest vault bounds for monitoring */
+    qv_stored_y1 = y1; qv_stored_x1 = x1; qv_stored_y2 = y2; qv_stored_x2 = x2;
+    qv_placed_this_level = true;  /* Mark that quest vault was actually placed */
+    log_trace("QUEST VAULT MONITOR: Storing bounds (%d,%d) to (%d,%d) for tracking", 
+              qv_stored_y1, qv_stored_x1, qv_stored_y2, qv_stored_x2);
+              
 #if DEBUG_QUEST_VAULT
     qv_y1 = y1; qv_x1 = x1; qv_y2 = y2; qv_x2 = x2; /* record bounds */
     qv_capture();
     qv_dump("initial");
-    /* Debug visibility tracking removed - let natural visibility rules apply */
+    /* Force mark/reveal for debugging */
+    for (int ry = y1; ry <= y2; ++ry) for (int rx = x1; rx <= x2; ++rx) cave_info[ry][rx] |= (CAVE_MARK|CAVE_SEEN|CAVE_GLOW);
 #endif
-
-    /* Enhanced debugging: log vault visibility status */
-    log_trace("Quest vault DEBUG: Final check - vault area (%d,%d) to (%d,%d)", y1, x1, y2, x2);
-    int visible_count = 0, total_count = 0;
-    for (int ry = y1; ry <= y2; ++ry) {
-        for (int rx = x1; rx <= x2; ++rx) {
-            total_count++;
-            if (cave_info[ry][rx] & (CAVE_MARK | CAVE_SEEN)) {
-                visible_count++;
-            }
-        }
-    }
-    log_trace("Quest vault DEBUG: %d/%d tiles marked as visible", visible_count, total_count);
     if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED && 
         !metarun_is_quest_completed(METARUN_QUEST_AULE) && !p_ptr->quest_reserved[0]) {
-        p_ptr->aule_level = p_ptr->depth;
-        p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
-        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
-        log_trace("Aule quest: FORGE_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
+        /* Record pending quest state change instead of applying immediately */
+        pending_quest_states.has_aule_change = true;
+        pending_quest_states.aule_level = p_ptr->depth;
+        pending_quest_states.aule_forge_y = p_ptr->aule_forge_y;
+        pending_quest_states.aule_forge_x = p_ptr->aule_forge_x;
+        log_trace("Aule quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
     if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED && 
         !metarun_is_quest_completed(METARUN_QUEST_MANDOS) && !p_ptr->quest_reserved[0]) {
-        p_ptr->mandos_level = p_ptr->depth;
-        p_ptr->mandos_quest = MANDOS_QUEST_GIVER_PRESENT;
-        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
-        log_trace("Mandos quest: GIVER_PRESENT set (quest vault) at %d,%d depth=%d", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
+        /* Record pending quest state change instead of applying immediately */
+        pending_quest_states.has_mandos_change = true;
+        pending_quest_states.mandos_level = p_ptr->depth;
+        pending_quest_states.mandos_vault_y = p_ptr->mandos_vault_y;
+        pending_quest_states.mandos_vault_x = p_ptr->mandos_vault_x;
+        log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
     }
 }
 
@@ -3741,7 +4033,7 @@ static bool room_build(int typ)
 }
 
 /*
- * Try to place a quest vault of specified type
+ * Try to place a quest vault of specified type using forced placement strategy
  * Returns true if successfully placed, false otherwise
  */
 static bool try_quest_vault_type(int v_type)
@@ -3750,7 +4042,7 @@ static bool try_quest_vault_type(int v_type)
     vault_type* qv_ptr;
     int y, x;
     
-    log_trace("Quest vault: Attempting type %d quest vault", v_type);
+    log_trace("Quest vault: Attempting type %d quest vault with forced placement strategy", v_type);
     
     for (i = 0; i < z_info->v_max; i++)
     {
@@ -3802,26 +4094,136 @@ static bool try_quest_vault_type(int v_type)
             }
         }
         
-        /* Try to place the vault - try multiple locations */
-        for (int attempts = 0; attempts < 50; attempts++) {
-            y = rand_range(5, p_ptr->cur_map_hgt - 5);
-            x = rand_range(5, p_ptr->cur_map_wid - 5);
+        /* Use forced placement strategy like forge placement:
+         * Pick optimal location near center and use reduced padding */
+        
+        /* Calculate optimal placement position (center of map with some variation) */
+        int center_y = p_ptr->cur_map_hgt / 2;
+        int center_x = p_ptr->cur_map_wid / 2;
+        
+        /* Add some randomness but keep near center for best chance of success */
+        y = center_y + rand_range(-p_ptr->cur_map_hgt/6, p_ptr->cur_map_hgt/6);
+        x = center_x + rand_range(-p_ptr->cur_map_wid/6, p_ptr->cur_map_wid/6);
+        
+        /* Ensure within reasonable bounds */
+        y = MAX(qv_ptr->hgt/2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt/2 - 3));
+        x = MAX(qv_ptr->wid/2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid/2 - 3));
+        
+        log_trace("Quest vault: Attempting forced placement of '%s' at optimal location (%d,%d) (center: %d,%d)", 
+                 v_name + qv_ptr->name, y, x, center_y, center_x);
+        
+        if (place_room_forced(y, x, qv_ptr)) {
+            /* Mark that quest vault was placed in this attempt */
+            qv_placed_this_level = true;  /* Track for integrity checks */
             
-            log_trace("Quest vault: Attempt %d to place at (%d,%d)", attempts + 1, y, x);
+            /* DEBUGGING: Verify vault actually exists at coordinates immediately after placement */
+            int y1 = y - qv_ptr->hgt / 2;
+            int x1 = x - qv_ptr->wid / 2;
+            int y2 = y1 + qv_ptr->hgt - 1;
+            int x2 = x1 + qv_ptr->wid - 1;
             
-            if (place_room(y, x, qv_ptr)) {
-                p_ptr->quest_vault_used = 1;
-                process_quest_vault_area(y, x, qv_ptr);
-                log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) after %d attempts", 
-                         v_type, v_name + qv_ptr->name, y, x, attempts + 1);
-                return true;
-            } else {
-                log_trace("Quest vault: Failed to place vault at (%d,%d), attempt %d", y, x, attempts + 1);
+            int verify_walls = 0, verify_floors = 0, verify_features = 0, verify_monsters = 0;
+            int verify_icky = 0, verify_room = 0;
+            
+            for (int vy = y1; vy <= y2; vy++) {
+                for (int vx = x1; vx <= x2; vx++) {
+                    if (cave_feat[vy][vx] == FEAT_WALL_OUTER || cave_feat[vy][vx] == FEAT_WALL_INNER) {
+                        verify_walls++;
+                    } else if (cave_feat[vy][vx] == FEAT_FLOOR) {
+                        verify_floors++;
+                    } else if (cave_feat[vy][vx] != FEAT_WALL_EXTRA) {
+                        verify_features++;
+                    }
+                    
+                    if (cave_m_idx[vy][vx] > 0) {
+                        verify_monsters++;
+                    }
+                    
+                    if (cave_info[vy][vx] & CAVE_ICKY) {
+                        verify_icky++;
+                    }
+                    
+                    if (cave_info[vy][vx] & CAVE_ROOM) {
+                        verify_room++;
+                    }
+                }
+            }
+            
+            log_trace("VAULT VERIFICATION IMMEDIATELY AFTER PLACEMENT: Area (%d,%d) to (%d,%d)", 
+                      y1, x1, y2, x2);
+            log_trace("VAULT VERIFICATION: %d walls, %d floors, %d features, %d monsters", 
+                      verify_walls, verify_floors, verify_features, verify_monsters);
+            log_trace("VAULT VERIFICATION: %d CAVE_ICKY, %d CAVE_ROOM flags", 
+                      verify_icky, verify_room);
+            
+            process_quest_vault_area(y, x, qv_ptr);
+            log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) using forced strategy", 
+                     v_type, v_name + qv_ptr->name, y, x);
+            return true;
+        } else {
+            log_trace("Quest vault: Failed to place vault '%s' at (%d,%d) even with forced strategy", 
+                     v_name + qv_ptr->name, y, x);
+            /* Try a few more strategic locations before giving up */
+            for (int attempts = 0; attempts < 10; attempts++) {
+                y = center_y + rand_range(-p_ptr->cur_map_hgt/4, p_ptr->cur_map_hgt/4);
+                x = center_x + rand_range(-p_ptr->cur_map_wid/4, p_ptr->cur_map_wid/4);
+                y = MAX(qv_ptr->hgt/2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt/2 - 3));
+                x = MAX(qv_ptr->wid/2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid/2 - 3));
+                
+                if (place_room_forced(y, x, qv_ptr)) {
+                    /* Mark that quest vault was placed in this attempt */
+                    qv_placed_this_level = true;  /* Track for integrity checks */
+                    
+                    /* DEBUGGING: Verify vault actually exists at coordinates immediately after placement */
+                    int y1 = y - qv_ptr->hgt / 2;
+                    int x1 = x - qv_ptr->wid / 2;
+                    int y2 = y1 + qv_ptr->hgt - 1;
+                    int x2 = x1 + qv_ptr->wid - 1;
+                    
+                    int verify_walls = 0, verify_floors = 0, verify_features = 0, verify_monsters = 0;
+                    int verify_icky = 0, verify_room = 0;
+                    
+                    for (int vy = y1; vy <= y2; vy++) {
+                        for (int vx = x1; vx <= x2; vx++) {
+                            if (cave_feat[vy][vx] == FEAT_WALL_OUTER || cave_feat[vy][vx] == FEAT_WALL_INNER) {
+                                verify_walls++;
+                            } else if (cave_feat[vy][vx] == FEAT_FLOOR) {
+                                verify_floors++;
+                            } else if (cave_feat[vy][vx] != FEAT_WALL_EXTRA) {
+                                verify_features++;
+                            }
+                            
+                            if (cave_m_idx[vy][vx] > 0) {
+                                verify_monsters++;
+                            }
+                            
+                            if (cave_info[vy][vx] & CAVE_ICKY) {
+                                verify_icky++;
+                            }
+                            
+                            if (cave_info[vy][vx] & CAVE_ROOM) {
+                                verify_room++;
+                            }
+                        }
+                    }
+                    
+                    log_trace("VAULT VERIFICATION (FALLBACK) IMMEDIATELY AFTER PLACEMENT: Area (%d,%d) to (%d,%d)", 
+                              y1, x1, y2, x2);
+                    log_trace("VAULT VERIFICATION (FALLBACK): %d walls, %d floors, %d features, %d monsters", 
+                              verify_walls, verify_floors, verify_features, verify_monsters);
+                    log_trace("VAULT VERIFICATION (FALLBACK): %d CAVE_ICKY, %d CAVE_ROOM flags", 
+                              verify_icky, verify_room);
+                    
+                    process_quest_vault_area(y, x, qv_ptr);
+                    log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) using fallback attempt %d", 
+                             v_type, v_name + qv_ptr->name, y, x, attempts + 1);
+                    return true;
+                }
             }
         }
     }
     
-    log_trace("Quest vault: No type %d quest vault could be placed", v_type);
+    log_trace("Quest vault: No type %d quest vault could be placed even with forced strategy", v_type);
     return false;
 }
 
@@ -3961,11 +4363,13 @@ static bool cave_gen(void)
 
     int is_guaranteed_forge_level = false;
     
-    /* Track quest vaults placed this level (for validation) */
-    static bool quest_vault_attempted_this_level = false;
-    quest_vault_attempted_this_level = false; /* Reset for each level */
-
-    /* Hack - variables for allocations */
+    /* Reset quest vault monitoring variables for this level */
+    qv_placed_this_level = false;
+    qv_stored_y1 = qv_stored_x1 = qv_stored_y2 = qv_stored_x2 = -1;
+    
+    /* Debug: Log entry into cave_gen */
+    log_trace("cave_gen: Starting level generation (quest_vault_used=%s)", 
+              p_ptr->quest_vault_used ? "true" : "false");
     s16b mon_gen, obj_room_gen;
 
     dun_data dun_body;
@@ -4039,14 +4443,23 @@ static bool cave_gen(void)
             msg_format("succeeded.");
     }
 
-    /* Quest vault determination - ONCE per level before any room generation */
+    /* Quest vault determination - Allow re-placement during level regeneration */
+    log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%s, force_forge=%s, qv_placed_this_level=%s)", 
+              p_ptr->quest_vault_used ? "true" : "false", 
+              p_ptr->force_forge ? "true" : "false",
+              qv_placed_this_level ? "true" : "false");
+    log_trace("Quest vault: Starting quest vault check (quest_vault_used=%s, force_forge=%s)", 
+              p_ptr->quest_vault_used ? "true" : "false", 
+              p_ptr->force_forge ? "true" : "false");
+              
+    /* QUEST VAULT REGENERATION FIX: Allow quest vault re-placement during regeneration */
+    /* Quest vaults can be placed if: */
+    /* 1. quest_vault_used is false (haven't successfully completed a quest vault this run), OR */
+    /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
     if (!p_ptr->quest_vault_used)
     {
-        if (quest_vault_attempted_this_level) {
-            log_trace("Quest vault: ERROR - Quest vault already attempted this level!");
-            return false;
-        }
-        quest_vault_attempted_this_level = true;
+        /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
+        /* to allow quest vault re-placement during level regeneration */
         
         /* Check if any quest is already active */
         if (p_ptr->quest_reserved[0] || 
@@ -4100,7 +4513,7 @@ static bool cave_gen(void)
     }
     else
     {
-        log_trace("Quest vault: Already used this run, skipping quest vault check");
+        log_trace("Quest vault: Already used this run, skipping quest vault check (quest_vault_used=1)");
     }
 
     /* Build some rooms */
@@ -4156,16 +4569,25 @@ static bool cave_gen(void)
     /*set the permanent walls*/
     set_perm_boundry();
 
+    /* Log final room count for debugging */
+    log_trace("Room generation completed: %d rooms generated (quest_vault_placed=%s)", 
+              dun->cent_n, qv_placed_this_level ? "true" : "false");
+
     /*start over on all levels with less than two rooms due to inevitable
      * crash*/
+    /* QUEST VAULT FIX: Use original room requirement, quest vault regeneration will be handled differently */
     if (dun->cent_n < ROOM_MIN)
     {
         if (cheat_room)
-            msg_format("Not enough rooms.");
+            msg_format("Not enough rooms (%d < %d).", dun->cent_n, ROOM_MIN);
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
+        log_trace("Level generation failed: Only %d rooms generated, minimum %d required", dun->cent_n, ROOM_MIN);
         return (false);
     }
+
+    /* DEBUGGING: Check if quest vault still exists after room generation */
+    check_quest_vault_integrity("AFTER_ROOM_GENERATION");
 
     /* make the tunnels */
     /* Sil - This has been changed considerably */
@@ -4175,8 +4597,12 @@ static bool cave_gen(void)
             msg_format("Couldn't connect the rooms.");
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
+        log_trace("Level generation failed: connect_rooms_stairs() returned false");
         return (false);
     }
+
+    /* DEBUGGING: Check if quest vault still exists after tunnel making */
+    check_quest_vault_integrity("AFTER_TUNNEL_GENERATION");
 
     /* randomise the doors (except those in vaults) */
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
@@ -4192,6 +4618,9 @@ static bool cave_gen(void)
             }
         }
 
+    /* DEBUGGING: Check if quest vault still exists after door randomization */
+    check_quest_vault_integrity("AFTER_DOOR_RANDOMIZATION");
+
     /* place the stairs, traps, rubble, secret doors, and player */
     if (!place_rubble_player())
     {
@@ -4199,6 +4628,7 @@ static bool cave_gen(void)
             msg_format("Couldn't place, rubble, or player.");
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
+        log_trace("Level generation failed: place_rubble_player() returned false");
         return (false);
     }
 
@@ -4230,39 +4660,8 @@ static bool cave_gen(void)
             msg_format("Failed connectivity.");
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
+        log_trace("Level generation failed: check_connectivity() returned false");
         return (false);
-    }
-
-    /* Validate quest vault connectivity if one was placed */
-    if (p_ptr->quest_reserved[0] && (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT || 
-                                    p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)) {
-        bool quest_vault_connected = false;
-        
-        /* Check if the quest vault area is reachable from the player start position */
-        if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT) {
-            /* Check connectivity to Mandos vault */
-            /* Simple check: if area is part of a room, it should be connected */
-            if (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_ROOM)) {
-                quest_vault_connected = true;
-            }
-            log_trace("Quest vault connectivity: Mandos vault at (%d,%d) connected=%s", 
-                     p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, 
-                     quest_vault_connected ? "true" : "false");
-        }
-        
-        if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT) {
-            /* Check connectivity to Aule forge */
-            if (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_ROOM)) {
-                quest_vault_connected = true;
-            }
-            log_trace("Quest vault connectivity: Aule forge at (%d,%d) connected=%s", 
-                     p_ptr->aule_forge_y, p_ptr->aule_forge_x, 
-                     quest_vault_connected ? "true" : "false");
-        }
-        
-        if (!quest_vault_connected) {
-            log_trace("Quest vault: WARNING - Quest vault may not be properly connected to dungeon");
-        }
     }
 
     /* Put some objects in rooms */
@@ -4436,31 +4835,6 @@ static bool cave_gen(void)
     }
 
     p_ptr->force_forge = false;
-
-#if DEBUG_QUEST_VAULT
-    /* Final quest vault state check */
-    qv_capture();
-    qv_dump("final");
-    qv_compare();
-    
-    /* Log final connectivity status */
-    if (p_ptr->quest_reserved[0]) {
-        if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT) {
-            bool is_connected = (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_ROOM)) != 0;
-            bool is_visible = (cave_info[p_ptr->mandos_vault_y][p_ptr->mandos_vault_x] & (CAVE_MARK | CAVE_SEEN)) != 0;
-            log_trace("Quest vault FINAL: Mandos at (%d,%d) - connected=%s, visible=%s", 
-                     p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, 
-                     is_connected ? "true" : "false", is_visible ? "true" : "false");
-        }
-        if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT) {
-            bool is_connected = (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_ROOM)) != 0;
-            bool is_visible = (cave_info[p_ptr->aule_forge_y][p_ptr->aule_forge_x] & (CAVE_MARK | CAVE_SEEN)) != 0;
-            log_trace("Quest vault FINAL: Aule forge at (%d,%d) - connected=%s, visible=%s", 
-                     p_ptr->aule_forge_y, p_ptr->aule_forge_x, 
-                     is_connected ? "true" : "false", is_visible ? "true" : "false");
-        }
-    }
-#endif
 
     return (true);
 }
@@ -4644,6 +5018,9 @@ void unring_a_bell(void)
         }
     }
 
+    /* DEBUGGING: Final check if quest vault still exists at end of generation */
+    check_quest_vault_integrity("END_OF_GENERATION");
+
     // If there is a greater vault...
     if (g_vault_name[0] != '\0')
     {
@@ -4748,8 +5125,19 @@ if (playerturn == 0) {
     while (true)
     {
         bool okay = true;
+        bool quest_vault_placed_this_attempt = false; /* Track if quest vault placed in this attempt */
 
         cptr why = NULL;
+        
+        /* QUEST VAULT REGENERATION DEBUG: Log each regeneration attempt */
+        log_trace("QUEST VAULT FIX: Starting level generation attempt (quest_vault_used=%s)",
+                  p_ptr->quest_vault_used ? "true" : "false");
+
+        /* Reset pending quest state changes at the start of each generation attempt */
+        reset_pending_quest_states();
+        
+        /* Reset quest states that may have been set during previous failed attempts */
+        reset_quest_vault_states();
 
         /* Paranoia: Check that cave_color is allocated */
         if (!cave_color)
@@ -4842,9 +5230,21 @@ if (playerturn == 0) {
         {
             /* Make a dungeon, or report the failure to make one*/
             if (cave_gen())
+            {
                 okay = true;
+                /* Check if quest vault was placed during this level generation */
+                if (qv_placed_this_level) {
+                    quest_vault_placed_this_attempt = true;
+                }
+                /* Also check if we have pending quest state changes that indicate a quest vault was placed */
+                if (pending_quest_states.has_aule_change || pending_quest_states.has_mandos_change) {
+                    quest_vault_placed_this_attempt = true;
+                }
+            }
             else
+            {
                 okay = false;
+            }
         }
 
         /*message*/
@@ -4930,11 +5330,34 @@ if (playerturn == 0) {
 
         /* Accept */
         if (okay)
+        {
+            /* QUEST VAULT REGENERATION FIX: Apply pending quest state changes when level generation is COMPLETELY successful */
+            apply_pending_quest_states();
+            
+            /* QUEST VAULT REGENERATION FIX: Only mark quest_vault_used when level generation is COMPLETELY successful */
+            /* This ensures quest vaults can be re-placed during regeneration attempts */
+            if (quest_vault_placed_this_attempt) {
+                p_ptr->quest_vault_used = 1;
+                log_trace("QUEST VAULT FIX: Level completely successful - setting quest_vault_used = 1");
+            } else {
+                log_trace("QUEST VAULT FIX: Level successful but no quest vault placed this attempt");
+            }
+            log_trace("QUEST VAULT FIX: Breaking from regeneration loop with successful level");
             break;
+        }
 
         /* Message */
         if (why)
+        {
             msg_format("Generation failed (%s)", why);
+            log_trace("QUEST VAULT FIX: Level generation failed (%s), regenerating (quest_vault_used=%s)",
+                      why, p_ptr->quest_vault_used ? "true" : "false");
+        }
+        else
+        {
+            log_trace("QUEST VAULT FIX: Level generation failed (unknown reason), regenerating (quest_vault_used=%s)",
+                      p_ptr->quest_vault_used ? "true" : "false");
+        }
 
         // Undo unique things!
         unring_a_bell();

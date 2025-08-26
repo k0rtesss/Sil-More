@@ -2189,21 +2189,23 @@ void choose_difficulty_level(void)
 /*  Quest completion tracking functions                               */
 /* ================================================================== */
 
-/* Check if a specific quest is completed in ANY metarun */
+/* Check if a specific quest is completed in the CURRENT metarun */
 bool metarun_is_quest_completed(u32b quest_flag)
 {
-    int i;
-    
-    /* Check all previous metaruns for quest completion */
-    for (i = 0; i < metarun_max; i++) {
-        if (metaruns[i].completed_quests & quest_flag) {
-            log_trace("Metarun quest check: Found quest 0x%x completed in metarun[%d] (id=%d)", 
-                      quest_flag, i, metaruns[i].id);
-            return true;
-        }
+    /* Only check the current metarun, not all metaruns */
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_trace("Metarun quest check: Invalid current_run=%d, metarun_max=%d", current_run, metarun_max);
+        return false;
     }
     
-    log_trace("Metarun quest check: Quest 0x%x not found in any of %d metaruns", quest_flag, metarun_max);
+    if (metaruns[current_run].completed_quests & quest_flag) {
+        log_trace("Metarun quest check: Found quest 0x%x completed in current metarun[%d] (id=%d)", 
+                  quest_flag, current_run, metaruns[current_run].id);
+        return true;
+    }
+    
+    log_trace("Metarun quest check: Quest 0x%x not completed in current metarun[%d] (id=%d)", 
+              quest_flag, current_run, metaruns[current_run].id);
     return false;
 }
 
@@ -2240,30 +2242,30 @@ void metarun_check_and_update_quests(void)
     log_trace("Metarun quest check: current_run=%d, tulkas=%d, aule=%d, mandos=%d", 
               current_run, p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
     
-    /* Check Tulkas quest completion */
-    if (p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE || p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED) {
+    /* Check Tulkas quest completion - only mark as metarun-complete when REWARDED */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_REWARDED) {
         if (!metarun_is_quest_completed(METARUN_QUEST_TULKAS)) {
-            log_trace("Metarun: Marking Tulkas quest as completed (was %d)", p_ptr->tulkas_quest);
+            log_trace("Metarun: Marking Tulkas quest as completed (rewarded, was %d)", p_ptr->tulkas_quest);
             metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
         } else {
             log_trace("Metarun: Tulkas quest already marked as completed");
         }
     }
     
-    /* Check Aule quest completion */
-    if (p_ptr->aule_quest == AULE_QUEST_SUCCESS || p_ptr->aule_quest == AULE_QUEST_REWARDED) {
+    /* Check Aule quest completion - only mark as metarun-complete when REWARDED */
+    if (p_ptr->aule_quest == AULE_QUEST_REWARDED) {
         if (!metarun_is_quest_completed(METARUN_QUEST_AULE)) {
-            log_trace("Metarun: Marking Aule quest as completed");
+            log_trace("Metarun: Marking Aule quest as completed (rewarded)");
             metarun_mark_quest_completed(METARUN_QUEST_AULE);
         } else {
             log_trace("Metarun: Aule quest already marked as completed");
         }
     }
 
-    /* Check Mandos quest completion */
-    if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS || p_ptr->mandos_quest == MANDOS_QUEST_REWARDED) {
+    /* Check Mandos quest completion - only mark as metarun-complete when REWARDED */
+    if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED) {
         if (!metarun_is_quest_completed(METARUN_QUEST_MANDOS)) {
-            log_trace("Metarun: Marking Mandos quest as completed");
+            log_trace("Metarun: Marking Mandos quest as completed (rewarded)");
             metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
         } else {
             log_trace("Metarun: Mandos quest already marked as completed");

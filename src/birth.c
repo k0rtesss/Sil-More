@@ -438,6 +438,16 @@ void player_wipe(void)
     p_ptr->mandos_reserved = 0;
     
     p_ptr->quest_vault_used = 0;
+    
+    /* Restore metarun-completed quest states after wiping - only for living characters */
+    if (character_loaded && !p_ptr->is_dead) {
+        /* Need to call metarun restore again since we just wiped quest states */
+        extern void metarun_restore_quest_states(void);
+        metarun_restore_quest_states();
+        log_trace("Birth: Restored metarun quest states after player_wipe() for living character");
+    } else if (character_loaded_dead || p_ptr->is_dead) {
+        log_trace("Birth: Skipping metarun quest restoration for dead character");
+    }
     for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag */
 
     /*re-set the thefts counter*/
