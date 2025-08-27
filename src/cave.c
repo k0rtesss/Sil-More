@@ -1526,7 +1526,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
 
 #if DEPTH_BASED_WALLS
             /* Apply style-based wall/vein graphics for non-ASCII graphics */
-            if (!graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL))
+            if (!graphics_are_ascii() && (feat >= FEAT_WALL_HEAD && feat <= FEAT_WALL_TAIL) && feat != FEAT_RUBBLE)
             {
                 /* Get the cave color for this location */
                 byte color_value = cave_color[y][x];
