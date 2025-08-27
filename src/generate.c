@@ -4408,12 +4408,14 @@ static bool cave_gen(void)
     if (cheat_room)
         msg_format("Forge count is %d.", p_ptr->forge_count);
 
-    // guarantee a forge at 100, 300, 500
+    // guarantee a forge at levels 2, 6, 10 (exactly at those levels, not beyond)
     if (p_ptr->fixed_forge_count < 3)
     {
         int next_guaranteed_forge_level = 2 + (p_ptr->fixed_forge_count * 4);
-        is_guaranteed_forge_level
-            = next_guaranteed_forge_level <= (p_ptr->depth);
+        is_guaranteed_forge_level = (next_guaranteed_forge_level == p_ptr->depth);
+        log_trace("Forge forcing check: fixed_forge_count=%d, target_level=%d, current_depth=%d, forcing=%s", 
+                 p_ptr->fixed_forge_count, next_guaranteed_forge_level, p_ptr->depth, 
+                 is_guaranteed_forge_level ? "true" : "false");
     }
 
     if (cheat_room)
@@ -4758,6 +4760,7 @@ static bool cave_gen(void)
                         if (place_monster_one(try_y, try_x, R_IDX_TULKAS, true, true, NULL))
                         {
                             p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
+                            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
                             tulkas_spawned = true;
                             log_trace("Tulkas spawned near player at (%d, %d), player at (%d, %d), quest state: %d", 
                                      try_y, try_x, player_y, player_x, p_ptr->tulkas_quest);

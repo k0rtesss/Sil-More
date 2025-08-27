@@ -26,14 +26,20 @@ extern bool saving_throw(monster_type* m_ptr, int resistance)
     else
         difficulty = monster_skill(m_ptr, S_WIL);
 
+    int original_difficulty = difficulty;
     difficulty -= 10 * resistance;
+
+    log_trace("SAVING THROW DEBUG: original_difficulty=%d, resistance=%d, adjusted_difficulty=%d, player_will=%d", 
+              original_difficulty, resistance, difficulty, player_score);
 
     if (skill_check(m_ptr, difficulty, player_score, PLAYER) > 0)
     {
+        log_trace("SAVING THROW DEBUG: SAVE FAILED - skill check result > 0");
         return (false);
     }
     else
     {
+        log_trace("SAVING THROW DEBUG: SAVE SUCCEEDED - skill check result <= 0");
         return (true);
     }
 }
@@ -41,7 +47,7 @@ extern bool saving_throw(monster_type* m_ptr, int resistance)
 // Auxilliary function for the allow_player functions
 bool allow_player_aux(monster_type* m_ptr, int player_flag, u32b ident_flag)
 {
-    bool resistance = 0;
+    int resistance = 0;  // Fixed: Changed from bool to int  //XXX is it correct
 
     if (player_flag > 0)
     {
@@ -52,7 +58,12 @@ bool allow_player_aux(monster_type* m_ptr, int player_flag, u32b ident_flag)
         resistance = player_flag;
     }
 
-    if (saving_throw(m_ptr, resistance))
+    log_trace("RESIST DEBUG: allow_player_aux called with player_flag=%d, resistance=%d", player_flag, resistance);
+
+    bool save_result = saving_throw(m_ptr, resistance);
+    log_trace("RESIST DEBUG: saving_throw returned %s", save_result ? "SUCCESS" : "FAILED");
+
+    if (save_result)
         return (false);
 
     // Don't have the right resists or failed the save
@@ -165,9 +176,15 @@ bool allow_player_confusion(monster_type* m_ptr)
 {
     /* Turin house resistance check first */
     if (turin_resist_bad_effect())
+    {
+        log_trace("CONFUSION DEBUG: Turin house resisted confusion");
         return (false);
+    }
     
-    return (allow_player_aux(m_ptr, p_ptr->resist_confu, TR2_RES_CONFU));
+    bool result = allow_player_aux(m_ptr, p_ptr->resist_confu, TR2_RES_CONFU);
+    log_trace("CONFUSION DEBUG: allow_player_confusion called with resist_confu=%d, result=%s", 
+              p_ptr->resist_confu, result ? "ALLOW CONFUSION" : "RESIST CONFUSION");
+    return result;
 }
 
 /*

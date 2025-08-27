@@ -3528,18 +3528,39 @@ int object_difficulty(object_type* o_ptr)
     if ((o_ptr->tval == TV_ARROW) && (o_ptr->number == 1))
         dif /= 2;
 
-    // Deal with masterpiece
+    // Deal with masterpiece and Aule's Forge
     int effective_skill = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
-    if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]) {
-        effective_skill += p_ptr->skill_base[S_SMT];
-    }
-    // Aule's Forge special ability grants an extra 2 difficulty points beyond Masterpiece
+    
     if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
-        effective_skill += 2;
-    }
-    if (dif > effective_skill && p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
-    {
-        smithing_cost.drain += dif - effective_skill;
+        // Aule's Forge: supersedes Masterpiece, allows burning base skill for 2x difficulty allowance
+        int max_aule_difficulty = effective_skill + (p_ptr->skill_base[S_SMT] * 2);
+        if (dif > effective_skill) {
+            if (dif <= max_aule_difficulty) {
+                // Can craft this with Aule's Forge - drain base skill efficiently
+                int excess = dif - effective_skill;
+                smithing_cost.drain += (excess + 1) / 2; // drain 1 skill for every 2 excess points
+                log_trace("ABILITY DEBUG: Aule's Forge drain - base_skill: %d, skill_use: %d, effective: %d, max_aule: %d, difficulty: %d, excess: %d, drain: %d", 
+                         p_ptr->skill_base[S_SMT], p_ptr->skill_use[S_SMT], effective_skill, max_aule_difficulty, dif, excess, (excess + 1) / 2);
+            } else {
+                // Too difficult even with Aule's Forge
+                smithing_cost.drain += p_ptr->skill_base[S_SMT] + (dif - max_aule_difficulty);
+                log_trace("ABILITY DEBUG: Aule's Forge insufficient - max possible: %d, difficulty: %d", max_aule_difficulty, dif);
+            }
+        } else {
+            log_trace("ABILITY DEBUG: Aule's Forge active - no drain needed (difficulty %d <= effective skill %d)", dif, effective_skill);
+        }
+    } else if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]) {
+        // Regular Masterpiece ability - allows burning base skill for 1x difficulty allowance
+        int max_masterpiece_difficulty = effective_skill + p_ptr->skill_base[S_SMT];
+        if (dif > effective_skill) {
+            if (dif <= max_masterpiece_difficulty) {
+                // Can craft this with Masterpiece - drain base skill normally
+                smithing_cost.drain += dif - effective_skill;
+            } else {
+                // Too difficult even with Masterpiece
+                smithing_cost.drain += p_ptr->skill_base[S_SMT] + (dif - max_masterpiece_difficulty);
+            }
+        }
     }
 
     // determine which additional smithing abilities would be required
@@ -3665,10 +3686,18 @@ int too_difficult(object_type* o_ptr)
     int ability = p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px);
     int dif = object_difficulty(o_ptr);
 
-    if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE])
+    if (p_ptr->have_ability[S_SPC][SPC_AULE]) {
+        // Aule's Forge: can craft up to skill_use + (skill_base * 2)
+        int max_aule_difficulty = ability + (p_ptr->skill_base[S_SMT] * 2);
+        log_trace("ABILITY DEBUG: Aule's Forge too_difficult check - max possible: %d, difficulty: %d", max_aule_difficulty, dif);
+        if (max_aule_difficulty >= dif)
+            return (false);
+        else
+            return (true);
+    } else if (p_ptr->active_ability[S_SMT][SMT_MASTERPIECE]) {
+        // Masterpiece: can craft up to skill_use + skill_base
         ability += p_ptr->skill_base[S_SMT];
-    if (p_ptr->have_ability[S_SPC][SPC_AULE])
-        ability += 2; // extra mastery margin
+    }
 
     if (ability < dif)
         return (true);

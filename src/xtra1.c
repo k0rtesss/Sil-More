@@ -2670,18 +2670,41 @@ static void calc_bonuses(void)
     }
 
     // Mandos' Doom special ability grants immunity to fear, hallucination,
-    // entrancement, rage and stun (implemented as high resistance + clear)
+    // entrancement, rage, stun and confusion (implemented as high resistance + clear)
     if (p_ptr->have_ability[S_SPC][SPC_MANDOS]) {
         p_ptr->resist_fear += 100; // effectively immune
         p_ptr->resist_hallu += 100;
         p_ptr->resist_stun += 100;
-        p_ptr->resist_confu += 1; // confusion not specified? keep minimal
+        p_ptr->resist_confu += 100; // added confusion immunity
+        log_trace("ABILITY DEBUG: Mandos' Doom active - granting mental immunities (fear+100, hallu+100, stun+100, confu+100). Total resist_confu: %d", p_ptr->resist_confu);
         // Clear timed effects each turn
-        if (p_ptr->afraid) p_ptr->afraid = 0;
-        if (p_ptr->image) p_ptr->image = 0;
-        if (p_ptr->entranced) p_ptr->entranced = 0;
-        if (p_ptr->rage) p_ptr->rage = 0;
-        if (p_ptr->stun) p_ptr->stun = 0;
+        if (p_ptr->afraid) {
+            (void)set_afraid(0);
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared fear effect");
+        }
+        if (p_ptr->image) {
+            p_ptr->image = 0;  // No set_image function found
+            p_ptr->redraw |= (PR_MAP);  // Manually trigger redraw for hallucination
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared hallucination effect");
+        }
+        if (p_ptr->entranced) {
+            (void)set_entranced(0);
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared entrancement effect");
+        }
+        if (p_ptr->rage) {
+            (void)set_rage(0);
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared rage effect");
+        }
+        if (p_ptr->stun) {
+            (void)set_stun(0);
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared stun effect");
+        }
+        if (p_ptr->confused) {
+            (void)set_confused(0);
+            log_trace("ABILITY DEBUG: Mandos' Doom - cleared confusion effect");
+        }
+    } else {
+        log_trace("ABILITY DEBUG: Mandos' Doom NOT active - have_ability[S_SPC][SPC_MANDOS] = %d", p_ptr->have_ability[S_SPC][SPC_MANDOS]);
     }
 
     /*** Handle stats ***/
