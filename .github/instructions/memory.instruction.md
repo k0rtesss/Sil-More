@@ -189,6 +189,160 @@ copy sil.exe ..
 
 The quest system is now architecturally sound and ready for future expansion.
 
+## Planned Redesign: Oath System Overhaul (Proposal Pending Approval)
+
+### Summary
+Convert Oaths from a selectable Will ability (WIL_OATH) into a pre-run, unlockable meta-choice tied to quest completions. Each Valar quest permanently unlocks (for the remainder of the current metarun and all subsequent runs within it) a corresponding Oath that can be chosen only at character creation. Breaking an Oath removes its benefits, applies a curse penalty, and permanently bans that Oath for the rest of the metarun (and optionally future metaruns – decision point).
+
+### Current State (Baseline)
+1. Oath exists as `WIL_OATH` (index 6 in Will abilities). Player purchases ability, then chooses one of Mercy / Silence / Iron (flags: `OATH_MERCY_FLAG`, etc.).
+2. Data fields:
+  - `p_ptr->oath_type` (byte) active oath id (1=Mercy,2=Silence,3=Iron)
+  - `p_ptr->oaths_broken` (bitfield of OATH_*_FLAG)
+3. Rewards (static): Mercy +1 Grace, Silence +1 Strength, Iron +2 Con (applied while oath kept & not invalidated).
+4. Oath selection UI lives in abilities purchase flow (cmd4.c) and can be selected mid-run after gaining the WIL ability.
+5. Persistence: Broken oath flags persist only inside the run; no meta unlocking logic presently.
+
+### Target Vision
+1. No Oaths available in a brand-new metarun before **any** Valar quest has been completed.
+2. Completing a quest unlocks a specific Oath for selection at creation of the NEXT character (not retroactively in current character):
+  - Mandos quest → unlocks Iron Oath
+  - Aule quest → unlocks Mercy Oath
+  - Tulkas quest → unlocks Silence Oath
+3. Birth Screen: If unlocked, player may choose at most one Oath (or none). Not an XP purchase; purely a toggle like a challenge modifier.
+4. Oaths become part of Special (S_SPC) category logically (granted state) BUT chosen only at birth — displayed in character sheet & bonus calculations like other specials.
+5. Breaking an Oath immediately:
+  - Removes all Oath-derived stat bonuses & any derived secondary effects
+  - Applies ONE curse (design choice: (a) random metarun curse draw, (b) fixed “Oathbreaker” curse, (c) player picks from revealed options). Default recommendation: Fixed new curse type for clarity.
+  - Sets broken flag persistently in metarun so that specific Oath cannot be selected again in later runs of same metarun.
+6. Optional Extension (Decision): If an Oath is broken, permanently ban it across *future metaruns* for score narrative continuity OR keep restriction scoped to current metarun only.
+7. Song / ability synergies referencing `chosen_oath()` still work, but sourcing moves from Will ability presence to birth selection metadata.
+
+### Data Model Changes
+Add to persistent metarun structure (metarun.c / metarun.h):
+```
+u8 unlocked_oaths;  // bitwise: MERCY=1, SILENCE=2, IRON=4
+u8 banned_oaths;    // broken (cannot pick again this metarun)
+```
+At birth, allowed_oaths = unlocked_oaths & ~banned_oaths.
+
+Per character (player_type):
+```
+byte oath_type;      // retained (0 none, 1 mercy, 2 silence, 3 iron)
+u8 oath_state;       // optional: ACTIVE=1, BROKEN=2 (or rely on oaths_broken bitfield)
+u8 oaths_broken;     // keep for intra-run triggers & legacy save compat
+```
+Deprecate XP purchase path for `WIL_OATH`:
+ - Maintain WIL_OATH constant for save compatibility but hide from menu / ignore if loaded.
+ - Migration: If an existing save has WIL_OATH purchased, auto-convert to chosen oath at load (if at birth stage) or leave as legacy until run ends.
+
+### Persistence & Migration
+1. Extend metarun save block to include new oath bitmasks (version gate with defaults zero).
+2. On quest reward finalize (REWARDED state), set corresponding bit in `unlocked_oaths`.
+3. On oath break event, set bit in both `p_ptr->oaths_broken` and metarun `banned_oaths`.
+4. Loader: If old save with active oath via Will ability: map to new field; if broken flags exist, copy into banned_oaths only if appropriate (decision: do not retro-ban across metarun unless break occurred earlier in same metarun).
+
+### Unlock Mapping Table
+| Quest Flag | Metarun Constant | Oath Bit | Oath ID | Notes |
+|------------|------------------|---------|---------|-------|
+| METARUN_QUEST_MANDOS | Mandos | IRON (4) | 3 | Thematic: Doom / resolve → Iron |
+| METARUN_QUEST_AULE   | Aule   | MERCY (1) | 1 | Craft humility / restraint |
+| METARUN_QUEST_TULKAS | Tulkas | SILENCE (2) | 2 | Discipline after martial prowess |
+
+### Birth UI Changes
+Add new panel after stat allocation & prior to abilities purchase:
+```
+Choose an Oath (optional):
+ a) None
+ b) Mercy   (Unlocked)  – to leave Angband without shedding blood of Men or Elves  (+1 Gra)
+ c) Silence (Locked/Unlocked) – to leave as you came, grim and silent (+1 Str)
+ d) Iron    (Locked/Unlocked) – none shall daunt you from facing Morgoth (+2 Con)
+```
+Locked entries greyed. Broken (banned) entries marked “(Broken – unavailable)”.
+
+### Bonus Application Path
+Move stat bonuses from `calc_bonuses()` Will ability branch to a new oath bonus section keyed by `p_ptr->oath_type` and not invalidated unless broken.
+
+### Breaking Logic Hook Points
+Current triggers (example: attacking invalid target for Mercy, singing for Silence, ascending without Silmaril for Iron). Rewire these to:
+1. Check `p_ptr->oath_type` matches relevant oath
+2. Confirm not already broken (bit not set)
+3. Prompt confirmation (existing UI) then:
+  - Set broken bit(s)
+  - Apply curse: invoke `apply_oathbreaker_curse()` (new) or existing curse assignment
+  - Force recalculation of bonuses & redraw
+  - Log meta note & update metarun banned mask
+
+### Curse Design Options (Decision Points)
+Option A (Simple): Single new curse “Oathbreaker”: -1 all stats, -5% score multiplier
+Option B (Random Draw): Add one random metarun curse (reuses existing curse pipeline)
+Option C (Targeted): Specific penalty per oath broken (e.g., Mercy → permanent -Grace, Silence → -Song skill, Iron → -Con)
+Recommendation: Start with Option B for variability or Option A for clarity. (Need confirmation.)
+
+### Backward Compatibility Strategy
+1. Leave WIL_OATH constant; hide from acquisition menu by filtering where abilities enumerated (skip if `abilitynum == WIL_OATH`).
+2. Loader: If `p_ptr->active_ability[S_WIL][WIL_OATH]` set, derive `p_ptr->oath_type` from existing selection logic (already stored) and ignore Will slot thereafter.
+3. Save writer: Stop writing WIL_OATH active flag (or always write 0) after version bump; retain reader tolerance.
+4. Version gating macro in defines or a new savefile minor version increment constant.
+
+### Removal / Refactor Targets
+- cmd4.c: Remove oath purchase path from Will ability screen; migrate oath_menu() to birth flow file (birth.c).
+- defines.h: Mark WIL_OATH as deprecated (comment) but keep numeric value.
+- xtra1.c / cmd1.c / cmd2.c: Replace `p_ptr->active_ability[S_WIL][WIL_OATH]` checks with `p_ptr->oath_type != 0`.
+- New utils: `bool oath_unlocked(int id); bool oath_banned(int id);` for clarity.
+
+### Edge Cases
+1. Player completes quest mid-run then dies before next run → Oath becomes available for next character (OK).
+2. Player breaks an Oath then dies same floor → Ban persists (metarun banned flag saved during death finalization path).
+3. Multiple quests completed before any oath chosen → Multiple oaths available at next birth (choose only one).
+4. Old save with active oath and later code expects metarun unlock bit: at load, set unlock bit corresponding to existing oath for remainder of metarun to avoid regression.
+5. Score / leaderboard: Consider adding tag “Oath: Mercy (Kept)” or “Oath: Iron (Broken)” to record.
+
+### Implementation Phases (Proposed)
+1. Data Layer: Extend metarun struct + save/load + version bump.
+2. Birth UI: Inject oath selection panel (reuse oath_menu visuals adjusted for locked/unlocked/banned states).
+3. Ability Removal: Hide WIL_OATH from skill purchase menus; migrate bonuses.
+4. Unlock Hooks: On quest REWARDED events set metarun unlocked bit.
+5. Breaking Flow: Centralize oath breaking into helper; add curse application.
+6. Refactor Checks: Replace all `p_ptr->active_ability[S_WIL][WIL_OATH]` gate conditions.
+7. Migration & Compatibility: Implement loader shim; test legacy saves.
+8. QA / Logging: Add trace logs for unlocks, selection, breaks, persistence.
+9. Documentation: Update README, ability.txt (remove old ability), add new section in memory & gameplay docs.
+
+### Metrics / Testing Plan
+Automated / manual tests:
+1. Start fresh metarun: confirm no oaths appear.
+2. Complete Mandos quest → die → new character: Iron option appears only.
+3. Complete second quest in same run before death → next birth shows two oaths.
+4. Choose Silence → break it → verify curse applied, bonuses removed, banned bit set; next new character cannot choose Silence.
+5. Legacy save with active oath loads: no crash; oath recognized; WIL_OATH not shown in menu.
+
+### APPROVED DECISIONS (User Confirmed)
+1. **Curse model**: Option B - Random metarun curse draw (reuses existing curse pipeline)
+2. **Ban scope**: Current metarun only - future metaruns never affected by broken oaths
+3. **Bonus values**: Keep existing (+1 Gra, +1 Str, +2 Con)
+4. **Unlock timing**: Next run only (not mid-run adoption)
+5. **Score multiplier**: None (keep simple)
+6. **UI placement**: After character selection but BEFORE stat allocation 
+7. **Theming**: Add Tolkien thematic texts to oath descriptions
+
+### Implementation Status: APPROVED - PROCEEDING
+
+### Risks & Mitigations
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Save incompatibility | Player saves corrupted | Version-gated fields, default zeros, robust loader checks |
+| Hidden WIL_OATH breaks scripts | Null pointer or logic gap | Leave constant + compatibility shim |
+| Forgotten checks referencing active_ability | Inconsistent bonuses/removals | Grep for WIL_OATH & active_ability usage; comprehensive replacement pass |
+| Curse stacking imbalance | Difficulty spike | Random curse system already balanced |
+| UI confusion at birth | Player uncertainty | Clear locked/banned labels & Tolkien thematic text |
+
+### Estimated Effort
+~6–8 focused hours (data model + UI + refactor + testing) excluding balance iteration.
+
+### Implementation Plan: EXECUTING NOW
+
+
 # Sil-More Project Memory & Knowledge Base
 
 ## Project Overview

@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "metarun.h"
 
 bool graphics_are_ascii()
 {
@@ -3882,6 +3883,40 @@ bool abort_for_mercy(monster_type* m_ptr)
     return false;
 }
 
+/*
+ * Apply consequences when an oath is broken:
+ * 1. Remove oath bonuses (recalculate stats)
+ * 2. Apply a random metarun curse
+ * 3. Ban the oath for the rest of this metarun
+ */
+void apply_oath_breaking_curse(int oath_id)
+{
+    char oath_names[4][20] = {"", "Mercy", "Silence", "Iron"};
+    
+    if (oath_id < 1 || oath_id > 3) return;
+    
+    log_trace("Applying oath breaking consequences for oath %d (%s)", oath_id, oath_names[oath_id]);
+    
+    /* Remove oath bonuses by recalculating */
+    p_ptr->update |= (PU_BONUS);
+    p_ptr->redraw |= (PR_STATE);
+    
+    /* Apply a random metarun curse using the existing system */
+    /* Pick a random curse between 0-31 (the curse system supports 32 curses) */
+    int selected_curse = rand_int(32);
+    
+    /* Add one stack of the selected curse */
+    add_curse_stack(selected_curse);
+    msg_print("The weight of broken faith burdens you with an ancient curse!");
+    log_trace("Applied random curse %d for breaking oath", selected_curse);
+    
+    /* Ban this oath for the rest of the metarun */
+    metarun_ban_oath(oath_id);
+    
+    msg_format("Your oath of %s is forever broken in this age.", oath_names[oath_id]);
+    log_trace("Banned oath %d (%s) from future selection in this metarun", oath_id, oath_names[oath_id]);
+}
+
 void break_mercy_oath(monster_type* m_ptr, int damage)
 {
     // Unseen enemies are okay to kill
@@ -3897,6 +3932,9 @@ void break_mercy_oath(monster_type* m_ptr, int damage)
         {
             msg_print("You break your oath of mercy.");
             do_cmd_note("Broke your oath", p_ptr->depth);
+            
+            /* Apply oath breaking consequences */
+            apply_oath_breaking_curse(OATH_MERCY);
         }
         p_ptr->oaths_broken |= OATH_MERCY_FLAG;
     }

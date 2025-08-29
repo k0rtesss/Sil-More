@@ -776,6 +776,9 @@ void do_cmd_change_song()
                     log_info("Player broke oath of silence to sing");
                     msg_print("You break your oath of silence.");
                     do_cmd_note("Broke your oath", p_ptr->depth);
+                    
+                    /* Apply oath breaking consequences */
+                    apply_oath_breaking_curse(OATH_SILENCE);
                 }
                 else
                 {
@@ -1331,6 +1334,10 @@ int abilities_menu2(int skilltype, int* highlight)
 
         /* For special abilities, only show granted abilities */
         if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            continue;
+
+        /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
+        if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
             continue;
 
         // Determine the appropriate colour

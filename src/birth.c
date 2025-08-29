@@ -1582,6 +1582,162 @@ NavResult character_creation(void)
 }
 
 /*
+ * Oath selection screen with Tolkien thematic descriptions
+ */
+static NavResult select_oath(void)
+{
+    int available_mask = get_available_oaths_mask();
+    
+    /* If no oaths are available, skip oath selection */
+    if (available_mask == 0) {
+        p_ptr->oath_type = 0; /* No oath */
+        log_debug("No oaths available, skipping oath selection");
+        return NAV_OK;
+    }
+    
+    /* Oath descriptions with Tolkien thematics */
+    char *oath_names[4] = {
+        "None",
+        "Mercy",
+        "Silence", 
+        "Iron"
+    };
+    
+    char *oath_tolkien_desc[4] = {
+        "Walk free of binding words",
+        "\"Let no blood of the Children stain thy blade in these halls of sorrow\"",
+        "\"In silence came I, and in silence shall I depart, as befits the wise\"",
+        "\"Though darkness gather and Balrogs rise, I shall not yield nor turn aside\""
+    };
+    
+    char *oath_restrictions[4] = {
+        "",
+        "You may not attack Men or Elves",
+        "You may not sing",
+        "You may not ascend without a Silmaril"
+    };
+    
+    char *oath_rewards[4] = {
+        "",
+        "+1 Grace", 
+        "+1 Strength",
+        "+2 Constitution"
+    };
+    
+    int highlight = 1; /* Start highlighting first available oath */
+    int choice = 0;
+    
+    /* Find first available oath to highlight */
+    for (int i = 1; i <= 3; i++) {
+        if (available_mask & (1 << (i - 1))) {
+            highlight = i;
+            break;
+        }
+    }
+    
+    while (true) {
+        /* Clear screen */
+        Term_clear();
+        
+        /* Title */
+        Term_putstr(2, 1, -1, TERM_L_BLUE, "Choose your Oath:");
+        Term_putstr(2, 2, -1, TERM_SLATE, "Oaths are sacred vows that grant power but bind your actions.");
+        Term_putstr(2, 3, -1, TERM_SLATE, "Breaking an oath brings curse and shame.");
+        
+        /* Instructions */
+        Term_putstr(2, 20, -1, TERM_SLATE, "2/8 -move   6/Enter -select   4/ESC -back");
+        
+        /* Display oath options */
+        for (int i = 0; i <= 3; i++) {
+            int y = 6 + i * 3;
+            byte color = TERM_SLATE;
+            char option_char = 'a' + i;
+            
+            if (i == 0) {
+                /* None option - always available */
+                color = (highlight == i) ? TERM_L_BLUE : TERM_WHITE;
+                Term_putstr(4, y, -1, color, format("%c) %s", option_char, oath_names[i]));
+                if (highlight == i) {
+                    Term_putstr(6, y + 1, -1, TERM_SLATE, "No binding oath constrains your path.");
+                }
+            } else {
+                /* Check if this oath is available */
+                if (available_mask & (1 << (i - 1))) {
+                    color = (highlight == i) ? TERM_L_BLUE : TERM_WHITE;
+                    Term_putstr(4, y, -1, color, format("%c) %s (Unlocked)", option_char, oath_names[i]));
+                    if (highlight == i) {
+                        Term_putstr(6, y + 1, -1, TERM_YELLOW, oath_tolkien_desc[i]);
+                        Term_putstr(6, y + 2, -1, TERM_SLATE, format("Reward: %s", oath_rewards[i]));
+                        if (strlen(oath_restrictions[i]) > 0) {
+                            Term_putstr(6, y + 3, -1, TERM_L_RED, format("Restriction: %s", oath_restrictions[i]));
+                        }
+                    }
+                } else {
+                    color = TERM_L_DARK;
+                    Term_putstr(4, y, -1, color, format("%c) %s (Locked)", option_char, oath_names[i]));
+                    if (highlight == i) {
+                        Term_putstr(6, y + 1, -1, TERM_L_DARK, "Complete the corresponding Valar quest to unlock this oath.");
+                    }
+                }
+            }
+        }
+        
+        /* Get input */
+        char key = inkey();
+        
+        /* Handle input */
+        if (key == ESCAPE || key == '4') {
+            return NAV_BACK; /* Go back to character creation */
+        }
+        
+        if (key == '\r' || key == '\n' || key == '6') {
+            /* Select current highlighted option */
+            if (highlight == 0 || (available_mask & (1 << (highlight - 1)))) {
+                choice = highlight;
+                break;
+            }
+        }
+        
+        if (key >= 'a' && key <= 'd') {
+            int selected = key - 'a';
+            if (selected == 0 || (available_mask & (1 << (selected - 1)))) {
+                choice = selected;
+                break;
+            }
+        }
+        
+        if (key == '2' || key == '8') {
+            /* Move highlight */
+            int direction = (key == '2') ? 1 : -1;
+            int new_highlight = highlight;
+            
+            do {
+                new_highlight += direction;
+                if (new_highlight < 0) new_highlight = 3;
+                if (new_highlight > 3) new_highlight = 0;
+                
+                /* Check if this option is valid */
+                if (new_highlight == 0 || (available_mask & (1 << (new_highlight - 1)))) {
+                    highlight = new_highlight;
+                    break;
+                }
+            } while (new_highlight != highlight);
+        }
+    }
+    
+    /* Set the chosen oath */
+    p_ptr->oath_type = choice;
+    
+    if (choice == 0) {
+        log_debug("No oath selected");
+    } else {
+        log_debug("Oath selected: %s (%d)", oath_names[choice], choice);
+    }
+    
+    return NAV_OK;
+}
+
+/*
  * Initial stat costs.
  */
 static const int birth_stat_costs[11]
@@ -2032,6 +2188,12 @@ static NavResult player_birth_aux(void)
     p_ptr->wt = 0;
     p_ptr->ht = 0;
     p_ptr->age = 0; 
+
+    /* Oath selection (after character creation, before stats) */
+    log_debug("Entering oath selection");
+    NavResult oath_result = select_oath();
+    if (oath_result != NAV_OK) return oath_result;
+    log_debug("Oath selection completed");
 
     /* Point-based flow */
     for (;;)

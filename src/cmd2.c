@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "metarun.h"
 
 /*
  * Determines the shallowest a player is allowed to go.
@@ -128,6 +129,7 @@ void do_cmd_go_up(void)
         {
             msg_print("You break your oath of iron.");
             do_cmd_note("Broke your oath", p_ptr->depth);
+            apply_oath_breaking_curse(OATH_IRON);
         }
         else
         {

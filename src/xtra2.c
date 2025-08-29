@@ -5756,6 +5756,9 @@ void tulkas_quest_interaction(void)
         p_ptr->tulkas_prize_a_idx = 0;
         p_ptr->tulkas_quest_complete = 0;
         
+        /* Unlock Silence oath for future characters in this metarun */
+        metarun_unlock_oath(OATH_SILENCE);
+        
         msg_print("Tulkas appears with a great laugh of triumph!");
         msg_print("'Well fought, warrior! You have proven your valor in battle.'");
         msg_print("'Take this gift, forged in the deeps of time before the world's making.'");
@@ -6022,6 +6025,9 @@ void aule_quest_interaction(void)
         /* Change quest state to prevent repeated interactions */
         p_ptr->aule_quest = AULE_QUEST_REWARDED;
         
+        /* Unlock Mercy oath for future characters in this metarun */
+        metarun_unlock_oath(OATH_MERCY);
+        
         msg_print("The knowledge of divine craftsmanship flows through you!");
         msg_print("Aule smiles with approval and returns to his eternal labors.");
         
@@ -6146,6 +6152,9 @@ void mandos_quest_interaction(void)
         
         /* Change quest state to prevent repeated interactions */
         p_ptr->mandos_quest = MANDOS_QUEST_REWARDED;
+        
+        /* Unlock Iron oath for future characters in this metarun */
+        metarun_unlock_oath(OATH_IRON);
         
         msg_print("The power of the Doomsman flows through you, protecting your mind!");
         msg_print("Mandos bows deeply and fades into shadow, his task complete.");

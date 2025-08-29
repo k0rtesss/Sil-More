@@ -82,7 +82,12 @@ typedef struct metarun
 
     /* ----- quest completion tracking --------------------------- */
     u32b completed_quests;      /* Bitmask of completed quests (bit 0=Tulkas, bit 1=Aule, etc.) */
-    byte quest_reserved[15];    /* Reserved for future quest expansion */
+    
+    /* ----- oath system tracking -------------------------------- */
+    byte unlocked_oaths;        /* Bitmask of oaths unlocked this metarun (1=Mercy, 2=Silence, 4=Iron) */
+    byte banned_oaths;          /* Bitmask of oaths broken/banned this metarun (cannot select again) */
+    
+    byte quest_reserved[13];    /* Reserved for future quest expansion (reduced from 15 to accommodate oath fields) */
 
 } metarun;
 
@@ -118,6 +123,15 @@ bool metarun_is_quest_completed(u32b quest_flag);   /* Check if quest is complet
 void metarun_mark_quest_completed(u32b quest_flag); /* Mark quest as completed */
 void metarun_check_and_update_quests(void);         /* Check current character quests and update metarun */
 void metarun_restore_quest_states(void);            /* Restore quest states from metarun after character load */
+
+/* ------------------------------------------------------------------ */
+/*  Oath system tracking                                              */
+/* ------------------------------------------------------------------ */
+bool oath_unlocked(int oath_id);                    /* Check if oath is unlocked in current metarun */
+bool oath_banned(int oath_id);                      /* Check if oath is banned in current metarun */
+void metarun_unlock_oath(int oath_id);               /* Unlock oath in current metarun */
+void metarun_ban_oath(int oath_id);                  /* Ban oath in current metarun */
+int get_available_oaths_mask(void);                 /* Get bitmask of oaths available for selection */
 
 /* ------------------------------------------------------------------ */
 /*  Persistent Settings                                               */

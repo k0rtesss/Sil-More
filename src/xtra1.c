@@ -2552,13 +2552,14 @@ static void calc_bonuses(void)
         }
     }
 
-    if (p_ptr->active_ability[S_WIL][WIL_OATH])
+    /* Oath bonuses (new system - based on oath_type, not Will ability) */
+    if (p_ptr->oath_type != 0 && !oath_invalid(p_ptr->oath_type))
     {
-        if (chosen_oath(OATH_IRON) && !oath_invalid(OATH_IRON))
-            p_ptr->stat_misc_mod[A_CON]+=2;
-        else if (chosen_oath(OATH_SILENCE) && !oath_invalid(OATH_SILENCE))
+        if (p_ptr->oath_type == OATH_IRON)
+            p_ptr->stat_misc_mod[A_CON] += 2;
+        else if (p_ptr->oath_type == OATH_SILENCE)
             p_ptr->stat_misc_mod[A_STR]++;
-        else if (chosen_oath(OATH_MERCY) && !oath_invalid(OATH_MERCY))
+        else if (p_ptr->oath_type == OATH_MERCY)
             p_ptr->stat_misc_mod[A_GRA]++;
     }
 
@@ -3380,7 +3381,7 @@ void redraw_stuff(void)
         return;
 
     // log_trace("redraw_stuff: character_icky=%d, character_generated=%s", 
-              character_icky, character_generated ? "true" : "false");
+            //   character_icky, character_generated ? "true" : "false");
 
     /* Character is in "icky" mode, no screen updates */
     if (character_icky && !p_ptr->is_dead) {

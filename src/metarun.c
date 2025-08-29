@@ -2312,3 +2312,102 @@ void metarun_restore_quest_states(void)
     log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
 }
+
+/* ------------------------------------------------------------------ */
+/*  Oath system tracking                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Check if an oath is unlocked in the current metarun
+ */
+bool oath_unlocked(int oath_id)
+{
+    if (current_run < 0 || current_run >= metarun_max) return false;
+    if (oath_id < 1 || oath_id > 3) return false;
+    
+    byte oath_bit = (1 << (oath_id - 1)); /* Convert 1-3 to bits 1,2,4 */
+    return (metaruns[current_run].unlocked_oaths & oath_bit) != 0;
+}
+
+/*
+ * Check if an oath is banned in the current metarun
+ */
+bool oath_banned(int oath_id)
+{
+    if (current_run < 0 || current_run >= metarun_max) return false;
+    if (oath_id < 1 || oath_id > 3) return false;
+    
+    byte oath_bit = (1 << (oath_id - 1)); /* Convert 1-3 to bits 1,2,4 */
+    return (metaruns[current_run].banned_oaths & oath_bit) != 0;
+}
+
+/*
+ * Unlock an oath in the current metarun
+ */
+void metarun_unlock_oath(int oath_id)
+{
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_trace("Oath unlock: Invalid current_run=%d, metarun_max=%d", current_run, metarun_max);
+        return;
+    }
+    if (oath_id < 1 || oath_id > 3) {
+        log_trace("Oath unlock: Invalid oath_id=%d", oath_id);
+        return;
+    }
+    
+    byte oath_bit = (1 << (oath_id - 1)); /* Convert 1-3 to bits 1,2,4 */
+    
+    /* Update both the global metar and the metaruns array */
+    metar.unlocked_oaths |= oath_bit;
+    metaruns[current_run].unlocked_oaths |= oath_bit;
+    
+    log_trace("Oath unlock: Unlocked oath %d (bit %d) in metarun[%d], unlocked_oaths=0x%02X", 
+              oath_id, oath_bit, current_run, metaruns[current_run].unlocked_oaths);
+    
+    /* Save immediately to persist the change */
+    save_metaruns();
+}
+
+/*
+ * Ban an oath in the current metarun (when broken)
+ */
+void metarun_ban_oath(int oath_id)
+{
+    if (current_run < 0 || current_run >= metarun_max) {
+        log_trace("Oath ban: Invalid current_run=%d, metarun_max=%d", current_run, metarun_max);
+        return;
+    }
+    if (oath_id < 1 || oath_id > 3) {
+        log_trace("Oath ban: Invalid oath_id=%d", oath_id);
+        return;
+    }
+    
+    byte oath_bit = (1 << (oath_id - 1)); /* Convert 1-3 to bits 1,2,4 */
+    
+    /* Update both the global metar and the metaruns array */
+    metar.banned_oaths |= oath_bit;
+    metaruns[current_run].banned_oaths |= oath_bit;
+    
+    log_trace("Oath ban: Banned oath %d (bit %d) in metarun[%d], banned_oaths=0x%02X", 
+              oath_id, oath_bit, current_run, metaruns[current_run].banned_oaths);
+    
+    /* Save immediately to persist the change */
+    save_metaruns();
+}
+
+/*
+ * Get bitmask of oaths available for selection (unlocked but not banned)
+ */
+int get_available_oaths_mask(void)
+{
+    if (current_run < 0 || current_run >= metarun_max) return 0;
+    
+    byte unlocked = metaruns[current_run].unlocked_oaths;
+    byte banned = metaruns[current_run].banned_oaths;
+    byte available = unlocked & ~banned;
+    
+    log_trace("Oath availability: unlocked=0x%02X, banned=0x%02X, available=0x%02X", 
+              unlocked, banned, available);
+    
+    return available;
+}
