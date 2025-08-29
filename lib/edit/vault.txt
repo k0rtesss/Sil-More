@@ -2609,7 +2609,7 @@ D:#########
 N:400:the Tomb of the King
 X:7:8:1
 S:60:1
-F:NO_ROTATION | QUEST |TEST
+F:NO_ROTATION | QUEST
 D:  ###                           
 D: ##W##   #############    ##$$$$
 D:##...## ##W###....+..##  ##;...$

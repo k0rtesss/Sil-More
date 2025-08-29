@@ -7,36 +7,25 @@ Secondly, it uses a system of metaruns, where consequtive runs are connected int
 
 # Road Map
 
-## Release of alpha 0.7 (Storyline updates) (done)
-
-- Balance tweaks
-- Add unique RHF flags
-  * Earendil
-  * Turin (done)
-  * Celeborn
-  * Maedhros (done)
-- New heroes
-  * Eol (done) 
-- Dynamic tile system (done)
--- Wall tiles (done)
--- Floor tiles (done)
--- Doors (done)
-- Unique style for each depth (done)
-- Level entrance message depending on the style (done)
-- Difficulty levels for current run (done) 
-- Automatic load if run is not finished (done)
-
-## Release of beta 0.8 (Visual update)
+## Release of beta 0.8 (Visual update) (done)
 
 - SDL 
 - Quest systems
-- Simple Valar -> kill -> Artefact quest
--- Update to oath system
-- More Vaults
-- More monsters
-
+-- Tulkas -> kill unique - get artifact (done)
+-- Quest vault implementation (done)
+-- Mandos -> kill specific -> get ability (done)
+-- Aule -> forge -> get ability (done)
+-- Niena
+-- Manwe
+-- Este
+-- Orome
+- Update to oath system
+-- After completed quest you get oaths
+- Bug fixes (ongoing) (save names)
 ## Release of beta 0.9 
 
+- More Vaults
+- More monsters
 - Change Score to Character database
 - Multiple runs support 
 
@@ -85,6 +74,25 @@ Secondly, it uses a system of metaruns, where consequtive runs are connected int
   * Score menu (done) 
   * Final menu (done) 
 - Flavor ideas for final menus (done) 
+
+## Release of alpha 0.7 (Storyline updates) (done)
+
+- Balance tweaks
+- Add unique RHF flags
+  * Earendil
+  * Turin (done)
+  * Celeborn
+  * Maedhros (done)
+- New heroes
+  * Eol (done) 
+- Dynamic tile system (done)
+-- Wall tiles (done)
+-- Floor tiles (done)
+-- Doors (done)
+- Unique style for each depth (done)
+- Level entrance message depending on the style (done)
+- Difficulty levels for current run (done) 
+- Automatic load if run is not finished (done)
 
 
 # Compiling Instructions 

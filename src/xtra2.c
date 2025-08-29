@@ -2003,24 +2003,38 @@ extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
     object_type object_type_body;
     artefact_type* a_ptr = &a_info[name1];
 
+    log_trace("create_chosen_artefact: Creating artifact %d at (%d,%d), identify=%s", name1, y, x, identify ? "true" : "false");
+
     // Don't generate it if one has already been generated
-    if (a_ptr->cur_num > 0)
+    if (a_ptr->cur_num > 0) {
+        log_trace("create_chosen_artefact: Artifact %d already exists (cur_num=%d)", name1, a_ptr->cur_num);
         return;
+    }
 
     // Don't generate it if it's reserved for Tulkas quest (unless this IS the quest reward)
     if (valar_reserved_artifacts && valar_reserved_artifacts[name1] && 
-        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
+        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE) {
+        log_trace("create_chosen_artefact: Artifact %d is reserved for Tulkas quest", name1);
         return;
+    }
 
     // Don't generate it in no-artefact games, with one obvious exception
-    if (birth_no_artefacts && (name1 != ART_MORGOTH_3))
+    if (birth_no_artefacts && (name1 != ART_MORGOTH_3)) {
+        log_trace("create_chosen_artefact: Skipping artifact %d due to no-artifacts birth option", name1);
         return;
+    }
+
+    log_trace("create_chosen_artefact: All checks passed, creating artifact %d", name1);
 
     /* Get local object */
     i_ptr = &object_type_body;
 
+    log_trace("create_chosen_artefact: Preparing base object for artifact %d (tval=%d, sval=%d)", name1, a_ptr->tval, a_ptr->sval);
+
     /* Mega-Hack -- Prepare the base object for the artefact */
     object_prep(i_ptr, lookup_kind(a_ptr->tval, a_ptr->sval));
+
+    log_trace("create_chosen_artefact: Base object prepared, applying artifact magic");
 
     /* Mega-Hack -- Mark this item as the artefact */
     i_ptr->name1 = name1;
@@ -2028,15 +2042,23 @@ extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
     /* Mega-Hack -- Actually create the artefact */
     apply_magic(i_ptr, -1, true, true, true, true);
 
+    log_trace("create_chosen_artefact: Magic applied successfully");
+
     // Identify it if desired
     if (identify)
     {
+        log_trace("create_chosen_artefact: Identifying artifact %d", name1);
         object_aware(i_ptr);
         object_known(i_ptr);
+        log_trace("create_chosen_artefact: Artifact identified");
     }
+
+    log_trace("create_chosen_artefact: About to drop artifact %d at (%d,%d)", name1, y, x);
 
     /* Drop it in the dungeon */
     drop_near(i_ptr, -1, y, x);
+    
+    log_trace("create_chosen_artefact: Successfully created and dropped artifact %d", name1);
 }
 
 /*
@@ -5714,11 +5736,21 @@ void tulkas_quest_interaction(void)
             return;
         }
         
+        log_trace("About to create artifact %d at position (%d,%d)", p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px);
+        
         /* Give the artifact reward */
         create_chosen_artefact(p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px, true);
         
+        log_trace("Successfully created artifact %d", p_ptr->tulkas_prize_a_idx);
+        
         /* Clear quest state */
-        valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
+        if (valar_reserved_artifacts && p_ptr->tulkas_prize_a_idx > 0 && p_ptr->tulkas_prize_a_idx < z_info->art_max) {
+            valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
+            log_trace("Cleared reservation for artifact %d", p_ptr->tulkas_prize_a_idx);
+        } else {
+            log_trace("Skipping reservation clear: valar_reserved_artifacts=%p, artifact_idx=%d, art_max=%d", 
+                     valar_reserved_artifacts, p_ptr->tulkas_prize_a_idx, z_info->art_max);
+        }
         p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
         p_ptr->tulkas_target_r_idx = 0;
         p_ptr->tulkas_prize_a_idx = 0;

@@ -108,27 +108,47 @@ static void reset_quest_vault_states(void) {
     /* Only reset quest states if they were set at the current level during quest vault placement */
     /* This prevents interfering with quests that were legitimately started on other levels */
     
-    bool reset_reservation = false;
+    log_trace("Quest vault regeneration: START - depth=%d, quest_reserved[0]=%d", 
+              p_ptr->depth, p_ptr->quest_reserved[0]);
+    log_trace("Quest vault regeneration: Aule state=%d level=%d, Mandos state=%d level=%d, Tulkas state=%d", 
+              p_ptr->aule_quest, p_ptr->aule_level, p_ptr->mandos_quest, p_ptr->mandos_level, p_ptr->tulkas_quest);
+    log_trace("Quest vault regeneration: Pending changes - aule=%s mandos=%s", 
+              pending_quest_states.has_aule_change ? "yes" : "no", 
+              pending_quest_states.has_mandos_change ? "yes" : "no");
     
+    /* Reset vault-based quests (Aule, Mandos) */
     if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT && p_ptr->aule_level == p_ptr->depth) {
         log_trace("Quest vault regeneration: Resetting Aule quest from FORGE_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
         p_ptr->aule_level = 0;
-        reset_reservation = true;
     }
     
     if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT && p_ptr->mandos_level == p_ptr->depth) {
         log_trace("Quest vault regeneration: Resetting Mandos quest from GIVER_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
         p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
         p_ptr->mandos_level = 0;
-        reset_reservation = true;
     }
     
-    /* Reset quest reservation if we reset any quest states at this level */
-    if (reset_reservation && p_ptr->quest_reserved[0]) {
-        log_trace("Quest vault regeneration: Resetting quest_reserved[0] from 1 to 0");
-        p_ptr->quest_reserved[0] = 0;
+    /* Reset entrance-based quests (Tulkas) - these don't store level but spawn during this generation */
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT) {
+        log_trace("Quest vault regeneration: Resetting Tulkas quest from GIVER_PRESENT to NOT_STARTED");
+        p_ptr->tulkas_quest = TULKAS_QUEST_NOT_STARTED;
+        /* Clear any Tulkas-related quest data */
+        p_ptr->tulkas_target_r_idx = 0;
+        p_ptr->tulkas_prize_a_idx = 0;
     }
+    
+    /* Always reset quest reservation during regeneration since we're starting fresh */
+    /* The reservation system prevents multiple quests during a SINGLE generation attempt, */
+    /* not across regeneration attempts */
+    if (p_ptr->quest_reserved[0]) {
+        log_trace("Quest vault regeneration: Resetting quest_reserved[0] from 1 to 0 (fresh generation attempt)");
+        p_ptr->quest_reserved[0] = 0;
+    } else {
+        log_trace("Quest vault regeneration: quest_reserved[0] already 0, no reset needed");
+    }
+    
+    log_trace("Quest vault regeneration: END - quest_reserved[0]=%d", p_ptr->quest_reserved[0]);
 }
 
 /* Function to apply pending quest state changes when level generation is successful */
@@ -3655,21 +3675,25 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
 #endif
     if (has_forge && has_aule && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED && 
         !metarun_is_quest_completed(METARUN_QUEST_AULE) && !p_ptr->quest_reserved[0]) {
+        /* Immediately reserve quest slot to prevent other quests from spawning */
+        p_ptr->quest_reserved[0] = 1;
         /* Record pending quest state change instead of applying immediately */
         pending_quest_states.has_aule_change = true;
         pending_quest_states.aule_level = p_ptr->depth;
         pending_quest_states.aule_forge_y = p_ptr->aule_forge_y;
         pending_quest_states.aule_forge_x = p_ptr->aule_forge_x;
-        log_trace("Aule quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
+        log_trace("Aule quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0] set to 1", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
     if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED && 
         !metarun_is_quest_completed(METARUN_QUEST_MANDOS) && !p_ptr->quest_reserved[0]) {
+        /* Immediately reserve quest slot to prevent other quests from spawning */
+        p_ptr->quest_reserved[0] = 1;
         /* Record pending quest state change instead of applying immediately */
         pending_quest_states.has_mandos_change = true;
         pending_quest_states.mandos_level = p_ptr->depth;
         pending_quest_states.mandos_vault_y = p_ptr->mandos_vault_y;
         pending_quest_states.mandos_vault_x = p_ptr->mandos_vault_x;
-        log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
+        log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0] set to 1", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
     }
 }
 
@@ -3687,8 +3711,8 @@ static bool build_type6(int y0, int x0, bool force_forge)
         /* Get a random vault record */
         v_ptr = &v_info[rand_int(z_info->v_max)];
 
-        log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
-                  (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
+        // log_trace("Vault selection: Trying vault #%d '%s' (type=%d, depth=%d, rarity=%d, flags=0x%x)",
+        //           (int)(v_ptr - v_info), v_name + v_ptr->name, v_ptr->typ, v_ptr->depth, v_ptr->rarity, v_ptr->flags);
 
         // if forcing a forge, then skip vaults without forges in them
         if (force_forge && !v_ptr->forge)
@@ -3702,7 +3726,7 @@ static bool build_type6(int y0, int x0, bool force_forge)
         if ((tries < 1000) && !(v_ptr->flags & (VLT_TEST))
             && !p_ptr->force_forge)
         {
-            log_trace("Skipping vault - tries=%d, no TEST flag", tries);
+            // log_trace("Skipping vault - tries=%d, no TEST flag", tries);
             continue;
         }
 
@@ -4094,6 +4118,10 @@ static bool try_quest_vault_type(int v_type)
             }
         }
         
+        /* Reserve quest slot immediately to prevent other quest spawning during level generation */
+        log_trace("Quest vault: Requirements passed for vault '%s', reserving quest slot", v_name + qv_ptr->name);
+        p_ptr->quest_reserved[0] = 1;
+        
         /* Use forced placement strategy like forge placement:
          * Pick optimal location near center and use reduced padding */
         
@@ -4223,7 +4251,8 @@ static bool try_quest_vault_type(int v_type)
         }
     }
     
-    log_trace("Quest vault: No type %d quest vault could be placed even with forced strategy", v_type);
+    log_trace("Quest vault: No type %d quest vault could be placed even with forced strategy, resetting quest reservation", v_type);
+    p_ptr->quest_reserved[0] = 0;
     return false;
 }
 
@@ -4710,7 +4739,7 @@ static bool cave_gen(void)
         !p_ptr->quest_reserved[0])  /* Another quest already spawned this run? */
     {
         /* Probability formula: 1/(25-depth) */
-        int spawn_chance = 25 - p_ptr->depth;
+        int spawn_chance = 20 - p_ptr->depth;
         
         if (one_in_(spawn_chance))
         {
@@ -4744,8 +4773,8 @@ static bool cave_gen(void)
                 for (attempts = 0; attempts < 50 && !tulkas_spawned; attempts++)
                 {
                     /* Search in a radius around the player */
-                    int dy = rand_range(-5, 5);
-                    int dx = rand_range(-5, 5);
+                    int dy = rand_range(-2, 2);
+                    int dx = rand_range(-2, 2);
                     int try_y = player_y + dy;
                     int try_x = player_x + dx;
                     

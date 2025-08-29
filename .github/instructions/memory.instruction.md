@@ -4,6 +4,193 @@ applyTo: '**'
 
 # Sil-More Project Memory & Knowledge Base
 
+## Quest System Architecture - Complete Analysis
+
+### Overview
+The Sil-More quest system supports two distinct quest types with different spawning mechanisms and lifecycle management. All quests integrate with a metarun system to prevent respawning across character deaths.
+
+### Quest Types
+
+#### 1. Vault-Based Quests (Aule, Mandos)
+**Spawning Method**: Special vault templates placed during level generation
+**State Management**: Deferred via `pending_quest_states` system
+**Level Storage**: Yes (`aule_level`, `mandos_level`)
+**States**: NOT_STARTED(0) → GIVER_PRESENT(1) → ACTIVE(2) → SUCCESS(3) → REWARDED(4)
+
+**Technical Details**:
+- Placed in `try_quest_vault_type()` during early level generation
+- Use `pending_quest_states` to defer state changes until successful generation
+- Quest states only applied via `apply_pending_quest_states()` on successful level completion
+- Reset during regeneration via `reset_quest_vault_states()` if placed at current level
+
+#### 2. Entrance-Based Quests (Tulkas)
+**Spawning Method**: Monster placement during level generation
+**State Management**: Immediate state application
+**Level Storage**: No (spawns at current level)
+**States**: NOT_STARTED(0) → GIVER_PRESENT(1) → ACTIVE(2) → COMPLETE(3) → REWARDED(4)
+
+**Technical Details**:
+- Spawned in monster placement phase via probability-based placement
+- Quest state set immediately when monster is placed
+- No deferred state system needed
+- Reset during regeneration if in GIVER_PRESENT state
+
+### Quest Reservation System
+**Purpose**: Prevent multiple quests per character run
+**Mechanism**: `p_ptr->quest_reserved[0]` flag
+**Set When**: Immediately upon quest placement/spawning
+**Reset When**: Level regeneration, new character creation
+**Scope**: Per-character run (not persistent across deaths)
+
+### Metarun Integration
+**Purpose**: Prevent quest respawning across character deaths
+**Flags**: METARUN_QUEST_TULKAS, METARUN_QUEST_AULE, METARUN_QUEST_MANDOS
+**Storage**: Persistent file system (`metaruns.dat`)
+**Scope**: Until maximum deaths or silmarils achieved
+
+### Level Generation Integration
+
+#### Phase 1: Quest Vault Placement
+- **When**: Before regular room generation
+- **Function**: `try_quest_vault_type()`
+- **Checks**: Skill requirements, metarun completion, quest reservation
+- **Action**: Immediate `quest_reserved[0] = 1`, deferred state via `pending_quest_states`
+
+#### Phase 2: Monster Placement
+- **When**: After room generation
+- **Function**: Tulkas spawn logic in monster placement
+- **Checks**: Depth range, metarun completion, quest reservation
+- **Action**: Immediate quest state and reservation setting
+
+#### Phase 3: State Application
+- **When**: Successful level generation completion
+- **Function**: `apply_pending_quest_states()`
+- **Action**: Apply deferred vault-based quest states
+
+#### Regeneration Handling
+- **When**: Level generation fails and retries
+- **Function**: `reset_quest_vault_states()`
+- **Action**: Reset all quest states that were set during current level generation
+
+### Quest State Lifecycle
+
+#### Aule Quest (Smithing)
+1. **NOT_STARTED**: Default state
+2. **FORGE_PRESENT**: Forge placed in vault, can be interacted with
+3. **ACTIVE**: Player has started smithing at forge
+4. **SUCCESS**: Player completes smithing requirement
+5. **REWARDED**: Special ability granted, metarun marked complete
+
+#### Mandos Quest (Doom)
+1. **NOT_STARTED**: Default state
+2. **GIVER_PRESENT**: Mandos NPC placed in vault
+3. **ACTIVE**: Player accepts quest from Mandos
+4. **SUCCESS**: Player completes quest objectives
+5. **REWARDED**: Special ability granted, metarun marked complete
+
+#### Tulkas Quest (Champion)
+1. **NOT_STARTED**: Default state
+2. **GIVER_PRESENT**: Tulkas NPC spawned on level
+3. **ACTIVE**: Player accepts quest from Tulkas
+4. **COMPLETE**: Player defeats assigned target
+5. **REWARDED**: Artifact granted, metarun marked complete
+
+### File Structure
+
+#### Core Files
+- **src/generate.c**: Level generation, quest placement, regeneration logic
+- **src/xtra2.c**: Quest interactions, reward systems
+- **src/metarun.c**: Persistent quest completion tracking
+- **src/defines.h**: Quest state constants
+
+#### Key Functions
+- `try_quest_vault_type()`: Vault-based quest placement
+- `reset_quest_vault_states()`: Regeneration quest state cleanup
+- `apply_pending_quest_states()`: Deferred state application
+- `metarun_check_and_update_quests()`: Completion tracking
+
+### Recent Fixes Applied
+
+#### FIXED ISSUE 9: Regeneration Logic - RESOLVED ✅
+
+**PROBLEM**: Quest reservation not reset during level regeneration, blocking quest vault placement
+- **Root Cause**: Complex interaction between immediate reservation and pending quest state system
+- **Specific Issue**: Quest vault placed → `quest_reserved[0] = 1` → level generation fails → pending states never applied → regeneration sees no quest states to reset → keeps reservation = 1 → blocks new quest placement
+- **Log Evidence**: "Quest vault: Skipping - quest already active (tulkas=0, mandos=0, aule=0, reserved=1)"
+
+**Solution Applied**:
+```c
+/* Always reset quest reservation during regeneration since we're starting fresh */
+/* The reservation system prevents multiple quests during a SINGLE generation attempt, */
+/* not across regeneration attempts */
+if (p_ptr->quest_reserved[0]) {
+    log_trace("Quest vault regeneration: Resetting quest_reserved[0] from 1 to 0 (fresh generation attempt)");
+    p_ptr->quest_reserved[0] = 0;
+}
+```
+
+**System Behavior After Fix**:
+- ✅ Quest reservation always reset during regeneration (fresh start principle)
+- ✅ Quest vault placement no longer blocked after failed generation attempts
+- ✅ Reservation system correctly scoped to single generation attempt
+- ✅ All quest types properly handled during regeneration
+
+**Files Modified**: `src/generate.c` - Simplified `reset_quest_vault_states()` with always-reset policy
+
+**Compilation Instructions**: 
+```bash
+cd src && C:\Soft\cygwin\bin\bash.exe -l -c "cd /cygdrive/c/Users/efrem/Documents/GitHub/sil-qh/src && make -f Makefile.cyg"
+copy sil.exe ..
+```
+
+### Architecture Benefits
+
+#### Scalability
+- **Vault-Based Quests**: Easy to add new quests via vault templates
+- **Entrance-Based Quests**: Flexible monster-based quest spawning
+- **Unified Reservation**: Single system prevents quest conflicts
+- **Metarun Integration**: Automatic persistence across character deaths
+
+#### Robustness
+- **Deferred State Management**: Prevents quest state corruption during failed generation
+- **Comprehensive Reset Logic**: Handles all quest types during regeneration
+- **State Validation**: Quest interactions validate current states
+- **Debug Instrumentation**: Extensive logging for troubleshooting
+
+#### Maintainability
+- **Clear Separation**: Vault vs entrance-based quest distinction
+- **Centralized Logic**: Quest placement concentrated in generate.c
+- **Consistent Patterns**: Unified state machine across quest types
+- **Documentation**: Comprehensive state tracking and lifecycle management
+
+### Adding New Quests
+
+#### For Vault-Based Quests:
+1. Create vault template in data files
+2. Add quest state constants to defines.h
+3. Add skill/requirement checks to `try_quest_vault_type()`
+4. Add pending state handling to `pending_quest_states` structure
+5. Add quest state reset logic to `reset_quest_vault_states()`
+6. Add metarun flag and completion tracking
+
+#### For Entrance-Based Quests:
+1. Add quest state constants to defines.h  
+2. Add spawn logic to monster placement phase
+3. Add quest state reset logic to `reset_quest_vault_states()`
+4. Add metarun flag and completion tracking
+5. Implement quest interaction functions
+
+### Current Status
+- **All Quest Types**: Working with proper regeneration support
+- **Dual Quest Bug**: Fixed via reservation system  
+- **Regeneration Logic**: Fixed for all quest types
+- **Debug Infrastructure**: Comprehensive logging available
+- **Tulkas Reward Bug**: Pending investigation (debug logging added)
+
+The quest system is now architecturally sound and ready for future expansion.
+
+# Sil-More Project Memory & Knowledge Base
+
 ## Project Overview
 Sil-Morë is a Tolkien-themed ASCII roguelike game forked from Sil, which itself descends from Angband. The game features stealth mechanics, Tolkien lore integration, and a complex quest system involving the Valar (Tulkas, Aule, Mandos).
 

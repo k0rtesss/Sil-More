@@ -3279,7 +3279,7 @@ void update_stuff(void)
 
     /* Update stuff */
     if (!p_ptr->update) {
-        log_trace("update_stuff: no updates needed");
+        // log_trace("update_stuff: no updates needed");
         return;
     }
 
@@ -3288,35 +3288,35 @@ void update_stuff(void)
     if (p_ptr->update & (PU_BONUS))
     {
         p_ptr->update &= ~(PU_BONUS);
-        log_trace("update_stuff: calculating bonuses");
+        // log_trace("update_stuff: calculating bonuses");
         calc_bonuses();
     }
 
     if (p_ptr->update & (PU_HP))
     {
         p_ptr->update &= ~(PU_HP);
-        log_trace("update_stuff: calculating hitpoints");
+        // log_trace("update_stuff: calculating hitpoints");
         calc_hitpoints();
     }
 
     if (p_ptr->update & (PU_MANA))
     {
         p_ptr->update &= ~(PU_MANA);
-        log_trace("update_stuff: calculating voice/mana");
+        // log_trace("update_stuff: calculating voice/mana");
         calc_voice();
     }
 
     /* Character is not ready yet, no screen updates */
     if (!character_generated) {
-        log_trace("update_stuff: character not generated yet, skipping screen updates");
+        // log_trace("update_stuff: character not generated yet, skipping screen updates");
         return;
     }
 
-    log_trace("update_stuff: character_icky=%d", character_icky);
+    // log_trace("update_stuff: character_icky=%d", character_icky);
 
     /* Character is in "icky" mode, no screen updates */
     if (character_icky) {
-        log_trace("update_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
+        // log_trace("update_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
         return;
     }
 
@@ -3355,11 +3355,11 @@ void update_stuff(void)
     }
 
     /* Check quest completion status for metarun tracking */
-    log_trace("update_stuff: About to call metarun_check_and_update_quests()");
+    // log_trace("update_stuff: About to call metarun_check_and_update_quests()");
     metarun_check_and_update_quests();
-    log_trace("update_stuff: Finished calling metarun_check_and_update_quests()");
+    // log_trace("update_stuff: Finished calling metarun_check_and_update_quests()");
 
-    log_trace("update_stuff: completed all updates");
+    // log_trace("update_stuff: completed all updates");
 }
 
 /*
@@ -3369,22 +3369,22 @@ void redraw_stuff(void)
 {
     /* Redraw stuff */
     if (!p_ptr->redraw) {
-        log_trace("redraw_stuff: no redraws needed");
+        // log_trace("redraw_stuff: no redraws needed");
         return;
     }
 
-    log_trace("redraw_stuff: processing redraws 0x%08X", p_ptr->redraw);
+    // log_trace("redraw_stuff: processing redraws 0x%08X", p_ptr->redraw);
 
     /* Character is not ready yet, no screen updates */
     if (!character_generated)
         return;
 
-    log_trace("redraw_stuff: character_icky=%d, character_generated=%s", 
+    // log_trace("redraw_stuff: character_icky=%d, character_generated=%s", 
               character_icky, character_generated ? "true" : "false");
 
     /* Character is in "icky" mode, no screen updates */
     if (character_icky && !p_ptr->is_dead) {
-        log_trace("redraw_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
+        // log_trace("redraw_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
         return;
     }
 
@@ -3563,7 +3563,7 @@ void redraw_stuff(void)
         prt_terrain();
     }
 
-    log_trace("redraw_stuff: completed all redraws");
+    // log_trace("redraw_stuff: completed all redraws");
 }
 
 /*
@@ -3577,7 +3577,7 @@ void window_stuff(void)
 
     /* Nothing to do */
     if (!p_ptr->window) {
-        log_trace("window_stuff: no window updates needed");
+        // log_trace("window_stuff: no window updates needed");
         return;
     }
 
@@ -3650,7 +3650,7 @@ void window_stuff(void)
         fix_monster();
     }
 
-    log_trace("window_stuff: completed all window updates");
+    // log_trace("window_stuff: completed all window updates");
 }
 
 /*
