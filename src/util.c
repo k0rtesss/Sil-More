@@ -233,7 +233,7 @@ errr path_parse(char* buf, size_t max, cptr file)
  *
  * This filename is always in "system-specific" form.
  */
-static errr path_temp(char* buf, size_t max)
+errr path_temp(char* buf, size_t max)
 {
     cptr s;
 

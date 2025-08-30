@@ -5528,7 +5528,7 @@ static int select_tulkas_quest_prize(int target_level)
     int i;
     int valid_prizes[100];
     int count = 0;
-    int max_artifact_level = target_level + 5; /* Not more than 5 levels deeper */
+    int max_artifact_level = target_level + 6; /* Not more than 6 levels deeper */
     
     log_trace("select_tulkas_quest_prize: target_level=%d, max_artifact_level=%d, z_info=%p, art_max=%d", 
               target_level, max_artifact_level, z_info, z_info ? z_info->art_max : -1);
@@ -5541,8 +5541,20 @@ static int select_tulkas_quest_prize(int target_level)
     
     if (!valar_reserved_artifacts)
     {
-        log_trace("valar_reserved_artifacts is NULL!");
-        return 0;
+        log_trace("valar_reserved_artifacts is NULL! Initializing...");
+        
+        /* Initialize the array if it doesn't exist */
+        if (z_info && z_info->art_max > 0) {
+            C_MAKE(valar_reserved_artifacts, z_info->art_max, bool);
+            for (int j = 0; j < z_info->art_max; j++) {
+                valar_reserved_artifacts[j] = false;
+            }
+            log_trace("Initialized valar_reserved_artifacts with %d entries", z_info->art_max);
+        } else {
+            log_error("Cannot initialize valar_reserved_artifacts: z_info=%p, art_max=%d", 
+                     z_info, z_info ? z_info->art_max : -1);
+            return 0;
+        }
     }
     
     /* First pass: Look for artifacts with rarity >= 10 within depth constraint */
@@ -5591,6 +5603,38 @@ static int select_tulkas_quest_prize(int target_level)
                 valid_prizes[count] = i;
                 count++;
                 if (count >= 100) break; /* Safety limit */
+            }
+        }
+        
+        /* Third pass: If still no artifacts, take highest level artifact available */
+        if (count == 0)
+        {
+            log_trace("No artifacts found with rarity >= 10, looking for highest level artifact");
+            int best_artifact = 0;
+            int best_level = 0;
+            
+            for (i = 1; i < z_info->art_max; i++)
+            {
+                artefact_type* a_ptr = &a_info[i];
+                
+                if (!a_ptr) continue;
+                
+                /* Must be high rarity and not yet created, ignore level constraint */
+                if ((a_ptr->rarity >= 10) &&
+                    (a_ptr->cur_num == 0) &&
+                    !valar_reserved_artifacts[i] &&
+                    (a_ptr->level > best_level))
+                {
+                    best_artifact = i;
+                    best_level = a_ptr->level;
+                }
+            }
+            
+            if (best_artifact > 0)
+            {
+                valid_prizes[0] = best_artifact;
+                count = 1;
+                log_trace("Selected highest level artifact: %d (level %d)", best_artifact, best_level);
             }
         }
         
@@ -5647,6 +5691,7 @@ void tulkas_quest_interaction(void)
             return;
         }
         
+        /* Select prize artifact that is 5 levels higher than the target monster */
         prize_a_idx = select_tulkas_quest_prize(r_ptr->level);
         if (prize_a_idx == 0 || prize_a_idx >= z_info->art_max)
         {
@@ -5775,15 +5820,14 @@ void check_tulkas_quest_interaction(void)
 {
     int i, y, x;
     
-    log_trace("check_tulkas_quest_interaction called, quest state: %d", p_ptr->tulkas_quest);
-    
     /* Only check if quest is in appropriate state */
     if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
         p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
     {
-        log_trace("Quest not in correct state, returning");
         return;
     }
+    
+    log_trace("check_tulkas_quest_interaction: checking adjacency, quest state: %d", p_ptr->tulkas_quest);
     
     /* Check all adjacent squares for Tulkas */
     for (i = 1; i < 9; i++)
@@ -5791,42 +5835,27 @@ void check_tulkas_quest_interaction(void)
         y = p_ptr->py + ddy[i];
         x = p_ptr->px + ddx[i];
         
-        log_trace("Checking adjacent square %d: (%d,%d)", i, y, x);
-        
         /* Check bounds */
-        if (!in_bounds(y, x)) 
-        {
-            log_trace("Square out of bounds");
-            continue;
-        }
+        if (!in_bounds(y, x)) continue;
         
         /* Check for monster */
         if (cave_m_idx[y][x] > 0)
         {
             int m_idx = cave_m_idx[y][x];
-            log_trace("Found monster at index %d", m_idx);
             
-            if (m_idx >= mon_max)
-            {
-                log_trace("Monster index %d >= mon_max %d, skipping", m_idx, mon_max);
-                continue;
-            }
+            if (m_idx >= mon_max) continue;
             
             monster_type* m_ptr = &mon_list[m_idx];
-            
-            log_trace("Monster r_idx: %d, checking against R_IDX_TULKAS: %d", m_ptr->r_idx, R_IDX_TULKAS);
             
             /* Check if it's Tulkas */
             if (m_ptr->r_idx == R_IDX_TULKAS)
             {
-                log_trace("Found Tulkas, calling interaction");
+                log_trace("Found Tulkas adjacent, calling interaction");
                 tulkas_quest_interaction();
                 return;
             }
         }
     }
-    
-    log_trace("No Tulkas found adjacent");
 }
 
 /*
@@ -5894,22 +5923,21 @@ void check_aule_quest_interaction(void)
 {
     int i, y, x;
     
-    log_trace("check_aule_quest_interaction called, quest state: %d", p_ptr->aule_quest);
-    
     /* Only check if quest is in appropriate state */
-    if (p_ptr->aule_quest != AULE_QUEST_FORGE_PRESENT && 
+    if (p_ptr->aule_quest != AULE_QUEST_NOT_STARTED &&
+        p_ptr->aule_quest != AULE_QUEST_FORGE_PRESENT && 
         p_ptr->aule_quest != AULE_QUEST_SUCCESS)
     {
-        log_trace("Quest not in correct state, returning");
         return;
     }
     
     /* Skip interaction if quest already rewarded */
     if (p_ptr->aule_quest == AULE_QUEST_REWARDED)
     {
-        log_trace("Quest already rewarded, skipping interaction");
         return;
     }
+    
+    log_trace("check_aule_quest_interaction: checking adjacency, quest state: %d", p_ptr->aule_quest);
     
     /* Check all adjacent squares for Aule */
     for (i = 1; i < 9; i++)
@@ -5917,35 +5945,22 @@ void check_aule_quest_interaction(void)
         y = p_ptr->py + ddy[i];
         x = p_ptr->px + ddx[i];
         
-        log_trace("Checking adjacent square %d: (%d,%d)", i, y, x);
-        
         /* Check bounds */
-        if (!in_bounds(y, x)) 
-        {
-            log_trace("Square out of bounds");
-            continue;
-        }
+        if (!in_bounds(y, x)) continue;
         
         /* Check for monster */
         if (cave_m_idx[y][x] > 0)
         {
             int m_idx = cave_m_idx[y][x];
-            log_trace("Found monster at index %d", m_idx);
             
-            if (m_idx >= mon_max)
-            {
-                log_trace("Monster index %d >= mon_max %d, skipping", m_idx, mon_max);
-                continue;
-            }
+            if (m_idx >= mon_max) continue;
             
             monster_type* m_ptr = &mon_list[m_idx];
-            
-            log_trace("Monster r_idx: %d, checking against R_IDX_AULE: %d", m_ptr->r_idx, R_IDX_AULE);
             
             /* Check if it's Aule */
             if (m_ptr->r_idx == R_IDX_AULE)
             {
-                log_trace("Found Aule, calling interaction");
+                log_trace("Found Aule adjacent, calling interaction");
                 aule_quest_interaction();
                 return;
             }

@@ -598,6 +598,9 @@
  */
 #define SPC_MANDOS 0
 #define SPC_AULE 1
+#define SPC_OATH_MERCY 2
+#define SPC_OATH_SILENCE 3
+#define SPC_OATH_IRON 4
 
 /*
  * Attack Types

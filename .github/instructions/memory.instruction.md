@@ -4,6 +4,73 @@ applyTo: '**'
 
 # Sil-More Project Memory & Knowledge Base
 
+## Oath System - Complete Implementation & Recent Bug Fixes
+
+### Overview
+The oath system has been converted from Will abilities to Special abilities that unlock through quest completion and are selected at character birth.
+
+### System Architecture
+**Data Storage**: 
+- `metarun.unlocked_oaths` - tracks which oaths are available (bit mask)
+- `metarun.banned_oaths` - tracks which oaths are permanently banned (bit mask)
+- `p_ptr->oath_type` - current character's selected oath (1=Mercy, 2=Silence, 3=Iron)
+
+**Special Abilities**:
+- `SPC_OATH_MERCY` (2) - grants +1 Grace, breaks on killing helpless foes
+- `SPC_OATH_SILENCE` (3) - grants +1 Strength, breaks on singing
+- `SPC_OATH_IRON` (4) - grants +2 Constitution, breaks on fleeing without Silmaril
+
+### Major Bug Fixes Completed (August 2025)
+
+#### Issue #1: Character Screen Bug in Oath Breaking
+**Problem**: When breaking an oath, character movement screen was broken due to `character_icky` imbalance
+**Solution**: Added missing `screen_load()` call in `choose_escape_curses_ui()` function in `src/metarun.c`
+**Status**: ✅ FIXED
+
+#### Issue #2: Curse Selection Count 
+**Problem**: When breaking oath, player was getting all 3 curses instead of choosing 1 out of 3
+**Solution**: Changed parameter from 3 to 1 in `choose_escape_curses_ui(1, chosen_curses)` call in `src/cmd1.c`
+**Status**: ✅ FIXED
+
+#### Issue #3: Duplicate Death Saves
+**Problem**: Multiple save operations during character death were breaking metarun logic
+**Solution**: Added static flag protection with proper cleanup in `close_game_aux()` function in `src/files.c`
+**Status**: ✅ FIXED - Critical bug affecting suicide saves and score database entry
+
+#### Issue #4: Ability Menu Navigation
+**Problem**: Menu navigation skipped letters due to using total ability count instead of visible count
+**Solution**: Comprehensive refactoring of `abilities_menu2()` function in `src/cmd4.c`:
+- Added `visible_count` tracking for sequential letter assignment
+- Added `visible_abilities[]` array to map display letters to actual ability indices  
+- Updated arrow key navigation to use `visible_count` instead of `options`
+- Fixed key handling to properly map letters to visible abilities
+**Status**: ✅ FIXED
+
+#### Issue #5: Broken Oath Display
+**Problem**: Broken oaths were not shown in oath selection screen with menacing text
+**Solution**: Enhanced oath selection in `src/birth.c`:
+- Display broken oaths with "(BROKEN)" label in red text
+- Show menacing Tolkien-style descriptions when broken oaths are highlighted
+- Allow navigation to broken oaths (but prevent selection)
+- Fixed UI layout issues with button positioning
+**Status**: ✅ FIXED
+
+#### Issue #6: Tulkas Quest Artifact Rewards
+**Problem**: `valar_reserved_artifacts` array was NULL, preventing artifact rewards
+**Solution**: Added safety initialization in Tulkas quest code when array is NULL
+**Status**: ✅ FIXED - Now initializes array if missing during quest interactions
+
+### Oath Lifecycle
+1. **Quest Completion**: Unlocks oath for future characters (`metarun_unlock_oath()`)
+2. **Birth Selection**: Choose from available oaths, grants special ability
+3. **Active Benefits**: Stat bonuses applied via special abilities
+4. **Breaking**: Disables special ability, applies random curse, bans oath permanently
+
+### Quest-to-Oath Mapping
+- Tulkas Quest → Oath of Silence (no corresponding special ability, artifact reward only)
+- Aule Quest → Oath of Mercy (corresponds to Aule's Forge)
+- Mandos Quest → Oath of Iron (corresponds to Mandos' Doom)
+
 ## Quest System Architecture - Complete Analysis
 
 ### Overview
@@ -47,6 +114,10 @@ The Sil-More quest system supports two distinct quest types with different spawn
 **Flags**: METARUN_QUEST_TULKAS, METARUN_QUEST_AULE, METARUN_QUEST_MANDOS
 **Storage**: Persistent file system (`metaruns.dat`)
 **Scope**: Until maximum deaths or silmarils achieved
+
+### Tulkas Quest Enhancement
+**Target Level**: +5 levels to target monster for increased difficulty
+**Artifact Reward**: Enhanced artifacts for more challenging targets
 
 ### Level Generation Integration
 
@@ -326,7 +397,25 @@ Automated / manual tests:
 6. **UI placement**: After character selection but BEFORE stat allocation 
 7. **Theming**: Add Tolkien thematic texts to oath descriptions
 
-### Implementation Status: APPROVED - PROCEEDING
+### Implementation Status: COMPILATION SUCCESS ✅
+
+**FIXED**: All compilation errors resolved:
+1. ✅ `show_file` function call - fixed parameter count from 4 to 3
+2. ✅ `oath_unlocked` / `oath_banned` - fixed function names from `metarun_check_oath_*` to correct names  
+3. ✅ `path_temp` - made function public and added declaration to externs.h
+4. ✅ `choose_escape_curses_ui` - made function public (was static in metarun.c)
+
+**COMPILATION SUCCESSFUL**: All oath system functions now compile without errors
+
+**IMPLEMENTATION COMPLETE**: 
+- Core oath system data model ✅
+- Birth UI for oath selection ✅ 
+- Metarun persistence (unlock/ban tracking) ✅
+- Quest completion → oath unlocking ✅
+- Oath breaking → curse selection ✅ (random metarun curse draw)
+- Knowledge menu oath status display ✅
+
+**READY FOR TESTING**: Full oath lifecycle now implemented and functional
 
 ### Risks & Mitigations
 | Risk | Impact | Mitigation |

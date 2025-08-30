@@ -3155,9 +3155,19 @@ void process_player_name(bool sf)
             quit_fmt("Illegal control char (0x%02X) in player name", c);
         }
 
-        /* Convert all non-alphanumeric symbols */
-        if (!isalpha((unsigned char)c) && !isdigit((unsigned char)c))
+        /* Convert illegal file system characters but preserve some readability */
+        if (iscntrl((unsigned char)c) || c == '/' || c == '\\' || c == ':' || 
+            c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|')
+        {
+            /* Convert illegal characters to underscore */
             c = '_';
+        }
+        else if (c == ' ')
+        {
+            /* Convert spaces to underscores for file system compatibility */
+            c = '_';
+        }
+        /* Keep all other characters (letters, digits, punctuation) */
 
         /* Build "base_name" */
         op_ptr->base_name[i] = c;
@@ -6349,9 +6359,18 @@ static int final_menu(int* highlight)
  */
 static void close_game_aux(void)
 {
+    static bool death_processing = false;
     bool wants_to_quit = false;
     high_score the_score;
     int choice = 0, highlight = 1;
+
+    /* Prevent duplicate death processing */
+    if (death_processing)
+    {
+        log_debug("Death processing already in progress - skipping duplicate call");
+        return;
+    }
+    death_processing = true;
 
     log_debug("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
              op_ptr->full_name, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
@@ -6577,6 +6596,8 @@ static void close_game_aux(void)
         }
     }
 
+    /* Reset death processing flag for next character */
+    death_processing = false;
 }
 
 /*

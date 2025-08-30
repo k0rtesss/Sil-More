@@ -986,7 +986,7 @@ static cptr curse_display_name(int idx)
  * number of curses actually chosen and fills `out` with their indices.
  * The display is cleared afterwards so we can start narrative fresh.
  */
-static int choose_escape_curses_ui(int n, int out[3])
+int choose_escape_curses_ui(int n, int out[3])
 {
     // int rolls = any_curse_flag_active(CUR_NOCHOICE) ? 1 : n;
     int taken = 0;
@@ -1022,6 +1022,9 @@ static int choose_escape_curses_ui(int n, int out[3])
 
     /* Wipe the menu clutter so narrative starts clean */
     Term_clear();
+    
+    /* Restore screen state to fix character_icky imbalance */
+    screen_load();
     
     /* Avoid unused variable warning */
     (void)fast_forward;

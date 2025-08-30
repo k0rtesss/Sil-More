@@ -3897,18 +3897,37 @@ void apply_oath_breaking_curse(int oath_id)
     
     log_trace("Applying oath breaking consequences for oath %d (%s)", oath_id, oath_names[oath_id]);
     
+    /* Disable the corresponding special ability */
+    if (oath_id == OATH_MERCY) {
+        p_ptr->active_ability[S_SPC][SPC_OATH_MERCY] = false;
+    }
+    else if (oath_id == OATH_SILENCE) {
+        p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE] = false;
+    }
+    else if (oath_id == OATH_IRON) {
+        p_ptr->active_ability[S_SPC][SPC_OATH_IRON] = false;
+    }
+    
     /* Remove oath bonuses by recalculating */
     p_ptr->update |= (PU_BONUS);
     p_ptr->redraw |= (PR_STATE);
     
-    /* Apply a random metarun curse using the existing system */
-    /* Pick a random curse between 0-31 (the curse system supports 32 curses) */
-    int selected_curse = rand_int(32);
+    /* Let the player choose 1 curse from 3 options using the escape UI */
+    int chosen_curses[3];
+    int num_chosen = choose_escape_curses_ui(1, chosen_curses);
     
-    /* Add one stack of the selected curse */
-    add_curse_stack(selected_curse);
-    msg_print("The weight of broken faith burdens you with an ancient curse!");
-    log_trace("Applied random curse %d for breaking oath", selected_curse);
+    if (num_chosen > 0) {
+        /* Apply the chosen curse */
+        add_curse_stack(chosen_curses[0]);
+        msg_print("The weight of broken faith burdens you with an ancient curse!");
+        log_trace("Applied chosen curse %d for breaking oath", chosen_curses[0]);
+    } else {
+        /* Fallback to random curse if UI failed */
+        int selected_curse = rand_int(32);
+        add_curse_stack(selected_curse);
+        msg_print("The weight of broken faith burdens you with an ancient curse!");
+        log_trace("Applied fallback random curse %d for breaking oath", selected_curse);
+    }
     
     /* Ban this oath for the rest of the metarun */
     metarun_ban_oath(oath_id);

@@ -2505,6 +2505,9 @@ static void calc_bonuses(void)
     /* Clear the old item granted abilities */
     for (i = 0; i < S_MAX; i++)
     {
+        /* Skip special abilities - they persist once granted */
+        if (i == S_SPC) continue;
+        
         for (j = 0; j < ABILITIES_MAX; j++)
         {
             if (!p_ptr->have_ability[i][j])
@@ -2552,16 +2555,13 @@ static void calc_bonuses(void)
         }
     }
 
-    /* Oath bonuses (new system - based on oath_type, not Will ability) */
-    if (p_ptr->oath_type != 0 && !oath_invalid(p_ptr->oath_type))
-    {
-        if (p_ptr->oath_type == OATH_IRON)
-            p_ptr->stat_misc_mod[A_CON] += 2;
-        else if (p_ptr->oath_type == OATH_SILENCE)
-            p_ptr->stat_misc_mod[A_STR]++;
-        else if (p_ptr->oath_type == OATH_MERCY)
-            p_ptr->stat_misc_mod[A_GRA]++;
-    }
+    /* Oath bonuses (granted by special oath abilities, disabled if oath is broken) */
+    if (p_ptr->active_ability[S_SPC][SPC_OATH_IRON] && !oath_invalid(OATH_IRON))
+        p_ptr->stat_misc_mod[A_CON] += 2;
+    if (p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE] && !oath_invalid(OATH_SILENCE))
+        p_ptr->stat_misc_mod[A_STR]++;
+    if (p_ptr->active_ability[S_SPC][SPC_OATH_MERCY] && !oath_invalid(OATH_MERCY))
+        p_ptr->stat_misc_mod[A_GRA]++;
 
     if (p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK])
     {

@@ -708,4 +708,13 @@ D:Grants immunity to fear, hallucination, trance, rage, stun and confusion. Awar
 N:161:Aule's Forge
 I:8:1:0
 D:Grants superior mastery at the forge: counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece.
+N:162:Oath of Mercy
+I:8:2:0
+D:A sacred vow to spare the defeated. Grants +1 Grace but breaks if you slay a helpless foe.
+N:163:Oath of Silence
+I:8:3:0
+D:A warrior's vow of action over words. Grants +1 Strength but breaks if you sing any song.
+N:164:Oath of Iron
+I:8:4:0
+D:An unbreakable resolve to claim a Silmaril. Grants +2 Constitution but breaks if you flee without one.
 

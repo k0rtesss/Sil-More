@@ -1645,11 +1645,11 @@ static NavResult select_oath(void)
         Term_putstr(2, 3, -1, TERM_SLATE, "Breaking an oath brings curse and shame.");
         
         /* Instructions */
-        Term_putstr(2, 20, -1, TERM_SLATE, "2/8 -move   6/Enter -select   4/ESC -back");
+        Term_putstr(2, 23, -1, TERM_SLATE, "2/8 -move   Enter -select   ESC -back");
         
-        /* Display oath options */
+        /* Display oath options with proper spacing */
         for (int i = 0; i <= 3; i++) {
-            int y = 6 + i * 3;
+            int y = 6 + i * 4; /* Increased spacing from 3 to 4 lines */
             byte color = TERM_SLATE;
             char option_char = 'a' + i;
             
@@ -1661,8 +1661,17 @@ static NavResult select_oath(void)
                     Term_putstr(6, y + 1, -1, TERM_SLATE, "No binding oath constrains your path.");
                 }
             } else {
+                /* Check if this oath is banned (broken) */
+                if (oath_banned(i)) {
+                    color = TERM_L_RED;
+                    Term_putstr(4, y, -1, color, format("%c) %s (BROKEN)", option_char, oath_names[i]));
+                    /* Always show menacing text for broken oaths */
+                    Term_putstr(6, y + 1, -1, TERM_RED, "\"Thy oath lies shattered, thy word worthless as dust.\"");
+                    Term_putstr(6, y + 2, -1, TERM_L_RED, "\"No Valar shall hear thy voice, no light shall guide thy path.\"");
+                    Term_putstr(6, y + 3, -1, TERM_RED, "Forever art thou marked as oathbreaker in this age.");
+                }
                 /* Check if this oath is available */
-                if (available_mask & (1 << (i - 1))) {
+                else if (available_mask & (1 << (i - 1))) {
                     color = (highlight == i) ? TERM_L_BLUE : TERM_WHITE;
                     Term_putstr(4, y, -1, color, format("%c) %s (Unlocked)", option_char, oath_names[i]));
                     if (highlight == i) {
@@ -1692,7 +1701,7 @@ static NavResult select_oath(void)
         
         if (key == '\r' || key == '\n' || key == '6') {
             /* Select current highlighted option */
-            if (highlight == 0 || (available_mask & (1 << (highlight - 1)))) {
+            if (highlight == 0 || ((available_mask & (1 << (highlight - 1))) && !oath_banned(highlight))) {
                 choice = highlight;
                 break;
             }
@@ -1700,7 +1709,7 @@ static NavResult select_oath(void)
         
         if (key >= 'a' && key <= 'd') {
             int selected = key - 'a';
-            if (selected == 0 || (available_mask & (1 << (selected - 1)))) {
+            if (selected == 0 || ((available_mask & (1 << (selected - 1))) && !oath_banned(selected))) {
                 choice = selected;
                 break;
             }
@@ -1716,8 +1725,10 @@ static NavResult select_oath(void)
                 if (new_highlight < 0) new_highlight = 3;
                 if (new_highlight > 3) new_highlight = 0;
                 
-                /* Check if this option is valid */
-                if (new_highlight == 0 || (available_mask & (1 << (new_highlight - 1)))) {
+                /* Check if this option can be displayed (selectable or banned for display) */
+                if (new_highlight == 0 || 
+                    (available_mask & (1 << (new_highlight - 1))) || 
+                    oath_banned(new_highlight)) {
                     highlight = new_highlight;
                     break;
                 }
@@ -1727,6 +1738,20 @@ static NavResult select_oath(void)
     
     /* Set the chosen oath */
     p_ptr->oath_type = choice;
+    
+    /* Grant corresponding oath special ability */
+    if (choice == OATH_MERCY) {
+        p_ptr->have_ability[S_SPC][SPC_OATH_MERCY] = true;
+        p_ptr->active_ability[S_SPC][SPC_OATH_MERCY] = true;
+    }
+    else if (choice == OATH_SILENCE) {
+        p_ptr->have_ability[S_SPC][SPC_OATH_SILENCE] = true;
+        p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE] = true;
+    }
+    else if (choice == OATH_IRON) {
+        p_ptr->have_ability[S_SPC][SPC_OATH_IRON] = true;
+        p_ptr->active_ability[S_SPC][SPC_OATH_IRON] = true;
+    }
     
     if (choice == 0) {
         log_debug("No oath selected");
