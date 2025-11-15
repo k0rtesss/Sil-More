@@ -499,7 +499,7 @@ if(MINGW)
   target_link_options(sil-more PRIVATE -mwindows)
 endif()
 
-target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core sil-legacy-compat)
+target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core sil-legacy-compat m)
 
 if(BUILD_TESTING)
   add_executable(sil-phase01-tests

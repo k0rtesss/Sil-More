@@ -9,6 +9,11 @@
  *   - character dump and miniature screenshot helpers
  */
 
+#ifndef WINDOWS
+#define _DEFAULT_SOURCE  /* For DT_DIR and other POSIX extensions */
+#define _BSD_SOURCE      /* For setregid on older systems */
+#endif
+
 #include "angband.h"
 #include "app/app-session.h"
 #include "blitz.h"
@@ -37,8 +42,6 @@
 #include <windows.h>
 #include <direct.h>  /* For _mkdir */
 #else
-#define _DEFAULT_SOURCE  /* For DT_DIR and other POSIX extensions */
-#define _BSD_SOURCE      /* For setregid on older systems */
 #include <sys/stat.h>  /* For mkdir */
 #include <dirent.h>    /* For directory operations */
 #include <unistd.h>    /* For setregid, getgid, etc. */
