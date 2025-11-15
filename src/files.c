@@ -1,4 +1,4 @@
-/* File: files.c */
+﻿/* File: files.c */
 
 /*
  * Transitional facade after the WP71 score/runtime split.
@@ -32,6 +32,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#ifdef WINDOWS
+#include <windows.h>
+#include <direct.h>  /* For _mkdir */
+#else
+#define _DEFAULT_SOURCE  /* For DT_DIR and other POSIX extensions */
+#define _BSD_SOURCE      /* For setregid on older systems */
+#include <sys/stat.h>  /* For mkdir */
+#include <dirent.h>    /* For directory operations */
+#include <unistd.h>    /* For setregid, getgid, etc. */
+#include <signal.h>    /* For kill, SIGSTOP */
+#endif
 
 /* Mini screenshot buffers (local to this module) */
 static char mini_screenshot_char[7][7];
