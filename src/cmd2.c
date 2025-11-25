@@ -22,24 +22,35 @@ static byte mandos_second_state(void)
     return quest_get_state(QUEST_ID_MANDOS_TRAITOR);
 }
 
+static byte mandos_third_state(void)
+{
+    return quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+}
+
 static bool mandos_any_active(void)
 {
     byte second = mandos_second_state();
+    byte third = mandos_third_state();
     return (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED) ||
-           (second >= QUEST_STATE_ACTIVE && second < QUEST_STATE_REWARDED);
+           (second >= QUEST_STATE_ACTIVE && second < QUEST_STATE_REWARDED) ||
+           (third >= QUEST_STATE_ACTIVE && third < QUEST_STATE_REWARDED);
 }
 
 static bool mandos_any_giver_present(void)
 {
     byte second = mandos_second_state();
+    byte third = mandos_third_state();
     return p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT ||
-           second == QUEST_STATE_GIVER_PRESENT;
+           second == QUEST_STATE_GIVER_PRESENT ||
+           third == QUEST_STATE_GIVER_PRESENT;
 }
 
 static void mandos_reset_all_states(void)
 {
     p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
     quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_NOT_STARTED);
+    quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_NOT_STARTED);
+    p_ptr->mandos_level = 0;
 }
 
 /*

@@ -478,6 +478,8 @@ void player_wipe(void)
     p_ptr->mandos_monsters_remaining = 0;
     p_ptr->mandos_level = 0;
     p_ptr->mandos_reserved = 0;
+    p_ptr->mandos_resurrection_primed = 0;
+    p_ptr->mandos_resurrection_used = 0;
     
     /* Niena quest init */
     p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
@@ -1805,7 +1807,7 @@ static int display_wrapped_text(cptr text, int start_col, int start_row, int max
     return row - start_row;
 }
 
-#define DISCONNECTED_STAIRS_COST 5000
+#define DISCONNECTED_STAIRS_COST 0
 
 /*
  * Challenge selection (currently only disconnected stairs, unlocked via Mandos)
@@ -1828,12 +1830,14 @@ static NavResult select_challenge_modifiers(void)
 
     Term_clear();
     Term_putstr(2, 2, -1, TERM_L_BLUE, "Challenge Mode");
-    Term_putstr(2, 4, -1, TERM_WHITE, "Disconnected stairs (costs 5000 XP)");
+    Term_putstr(2, 4, -1, TERM_WHITE, "Disconnected stairs (no XP cost)");
     Term_putstr(2, 5, -1, TERM_SLATE, "Stairs do not connect back; expect one-way descents.");
 
-    char buf[64];
-    strnfmt(buf, sizeof(buf), "Available XP: %d", p_ptr->new_exp);
-    Term_putstr(2, 7, -1, TERM_SLATE, buf);
+    if (DISCONNECTED_STAIRS_COST > 0) {
+        char buf[64];
+        strnfmt(buf, sizeof(buf), "Available XP: %d", p_ptr->new_exp);
+        Term_putstr(2, 7, -1, TERM_SLATE, buf);
+    }
     Term_putstr(2, 9, -1, TERM_SLATE, "Press 'y' to enable, 'n' to skip, ESC to go back.");
 
     while (true) {
@@ -1846,12 +1850,14 @@ static NavResult select_challenge_modifiers(void)
             return NAV_OK;
         }
         if (key == 'y' || key == 'Y' || key == '\r' || key == '\n' || key == ' ') {
-            if (p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
+            if (DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
                 bell("Not enough experience to enable disconnected stairs.");
                 continue;
             }
-            p_ptr->new_exp -= DISCONNECTED_STAIRS_COST;
-            p_ptr->exp -= DISCONNECTED_STAIRS_COST;
+            if (DISCONNECTED_STAIRS_COST > 0) {
+                p_ptr->new_exp -= DISCONNECTED_STAIRS_COST;
+                p_ptr->exp -= DISCONNECTED_STAIRS_COST;
+            }
             op_ptr->opt[OPT_birth_discon_stair] = true;
             op_ptr->opt[OPT_adult_discon_stair] = true;
             log_debug("Challenge selection: disconnected stairs enabled (cost %d XP)", DISCONNECTED_STAIRS_COST);

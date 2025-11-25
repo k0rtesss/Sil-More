@@ -181,24 +181,46 @@ W:A hush falls as the last shadow fades. A voice like distant starlight speaks: 
 W:"Choose now one lamp of blessing, and bear it through the night. If you would keep its radiance, swear the Oath of Light and shun all shadowed gear."
 
 # Mandos' Doom - Second Judgment
-Q:7:Mandos, Doom of the Traitor
+Q:7:Mandos, Doom of the Easterlings
 Z:Mandos
 J:2
-T:The Doomsman sends you to judge the betrayer of Gondolin
-C:Seek the Den of Maeglin the Traitor and end his false life
+T:The Doomsman sends you to break the Easterling traitors
+C:Storm the Easterling Fortress and slay Ulfang the Black and Uldor the Accursed
 O:3
 L:2
 Y:0
 R:mandos_second_quest
 M:METARUN_QUEST_MANDOS_TRAITOR
 H:DISCONNECTED
-E:DEPTH_RANGE:17:19
+E:DEPTH_RANGE:10:13
 S:0:0:1:0
 A:8:0
-I:The chill of Mandos' presence settles once more upon you, but his gaze is sharper than before.
+I:The chill of Mandos' presence settles once more upon you, heavy as iron.
 I:
-I:"Another spirit clings to the halls of Angband, steeped in treachery. Maeglin, betrayer of Gondolin, walks again in these depths."
-I:"Track him to his den and end the false life he has stolen. Only then shall his doom be sealed."
+I:"Two mortal kings turned traitor dwell in these depths--Ulfang the Black and his son Uldor the Accursed."
+I:"They have raised an Easterling fortress in service to the Enemy. Judge them in their own hall and end their line."
+W:The clamor of arms falls silent as the Easterling lords lie dead amid their garrison.
+W:
+W:"The traitors of the East are cast down. Take again the doom I set upon you, and walk the paths that lie beyond the known stairs."
+
+# Mandos' Doom - Final Judgment
+Q:8:Mandos, Doom of the Betrayer
+Z:Mandos
+J:3
+T:The Doomsman bids you end the hidden traitor
+C:Seek the Den of Maeglin the Traitor and end his false life
+O:3
+L:1
+Y:0
+R:mandos_third_quest
+M:METARUN_QUEST_MANDOS_BETRAYER
+E:DEPTH_RANGE:17:19
+S:0:0:1:0
+A:0:0
+I:The voice of Mandos returns, colder still, now that you have endured his challenge.
+I:
+I:"The betrayer of Gondolin yet walks below. Hunt Maeglin to his den in the deep places between the seventeenth and nineteenth delvings."
+I:"There deliver final judgment, and I shall answer with a gift beyond doom--a single return from death's gate."
 W:As Maeglin falls, the air stills. Mandos steps from shadow, the weight of ancient judgment in his eyes.
 W:
-W:"The betrayer meets his fate at last. Take again the doom I set upon you, and walk the paths that lie beyond the known stairs."
+W:"The betrayer meets his fate at last. Carry this reprieve I grant: once only, death shall loosen its hold at your call."

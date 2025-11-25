@@ -2901,10 +2901,21 @@ bool quest_monster_spawn_okay(int r_idx)
         case R_IDX_MANDOS:
             /* Mandos only spawns in special vaults/quest contexts */
             return false;
+        case R_IDX_ULDOR:
+        case R_IDX_ULFANG:
+            /* Easterling quest targets only spawn in their fortress */
+            if (quest_get_state(QUEST_ID_MANDOS_TRAITOR) < QUEST_STATE_REWARDED) return false;
+            return true;
+        case R_IDX_MAEGLIN:
+            /* Maeglin is locked to the third Mandos quest until completed */
+            if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED) return false;
+            return true;
         default:
             /* All other monsters can spawn normally */
             return true;
     }
+
+    return true;
 }
 
 /*

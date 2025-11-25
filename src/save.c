@@ -1224,6 +1224,8 @@ static void wr_extra(void)
     wr_byte(p_ptr->mandos_monsters_remaining);
     wr_s16b(p_ptr->mandos_level);
     wr_s16b(p_ptr->mandos_reserved);
+    wr_byte(p_ptr->mandos_resurrection_primed);
+    wr_byte(p_ptr->mandos_resurrection_used);
     /* Niena quest fields */
     wr_byte(p_ptr->niena_quest);
     wr_byte(p_ptr->niena_monsters_seen);

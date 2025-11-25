@@ -11,3 +11,8 @@
 - Restored metarun backward compatibility: loader now accepts smaller current-version records (e.g., 0.9.1.3) by copying compact entries into the expanded struct instead of zeroing them.
 - Simplified metarun loading: removed non-versioned detection; loader now assumes versioned files (0.9.0+) and rejects unsupported entry sizes.
 - Added explicit 0.9.1.x compact metarun converter (8 quest slots) so quest counters and blessing pools load correctly after the quest slot expansion.
+- Reworked Mandos quest chain: second quest now targets Ulfang and Uldor in the new Easterling Fortress quest vault (depth 10–13, Mandos present, both uniques gated to the vault); third quest “Doom of the Betrayer” added (depth 17–19 Maeglin vault, non-blocking) with metarun flagging and quest state plumbing.
+- Added Mandos resurrection reward flow: third quest grants one metarun resurrection charge, bindable from the quest status menu and consumed via a primed one-time death intercept; save/load/birth initialize new bytes and metarun quest_reserved slot 0 stores the charge.
+- Added disconnected-challenge completion unlock message using the quest typewriter UI after metarun narratives; third quest availability now gated on challenge completion and prior Mandos traitor completion.
+- Prevented third Mandos quest vaults from consuming the global quest vault budget while keeping vault integrity tracking; blocked Ulfang/Uldor/Maeglin spawns outside their quest contexts.
+- Disconnected-stairs challenge selection is now free; Mandos' Doom remains a quest reward but becomes purchasable for 5000 XP after completing the challenge, with purchase UI and description updated accordingly.

@@ -1263,6 +1263,7 @@ extern cptr quest_display_title(int quest_id);
 extern cptr* extract_quest_init_texts(int quest_idx, int* count);
 extern cptr* extract_quest_completion_texts(int quest_idx, int* count);
 extern void free_quest_texts(cptr* texts);
+extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color);
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);

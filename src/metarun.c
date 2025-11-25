@@ -62,14 +62,23 @@ static int popcount32(u32b value)
 
 bool metarun_challenge_disconnected_unlocked(void)
 {
-    const metarun *current = metarun_current();
+    metarun *current = metarun_current_mutable();
     if (!current) {
         log_debug("metarun_challenge_disconnected_unlocked: no current metarun");
         return false;
     }
-    bool unlocked = (current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_DISCON_FLAG) != 0;
-    log_debug("metarun_challenge_disconnected_unlocked: flag byte=0x%02x, unlocked=%d", 
-              current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX], unlocked);
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = (*flags & METARUN_CHALLENGE_DISCON_FLAG) != 0;
+
+    /* Backfill unlock if the Mandos traitor quest was already completed before the flag existed */
+    if (!unlocked && metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR) > 0) {
+        log_debug("metarun_challenge_disconnected_unlocked: retro-unlocking from quest completion");
+        *flags |= METARUN_CHALLENGE_DISCON_FLAG;
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_disconnected_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
     return unlocked;
 }
 
@@ -127,6 +136,58 @@ void metarun_mark_challenge_completed(int challenge_id)
     if (*slot < 255) (*slot)++;
     save_metaruns();
     log_debug("metarun_mark_challenge_completed: challenge %d completions now %d", challenge_id, *slot);
+}
+
+int metarun_mandos_resurrection_charges(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 || METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(current->quest_reserved))
+        return 0;
+    return current->quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+}
+
+void metarun_add_mandos_resurrection_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_add_mandos_resurrection_charge: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 || METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_add_mandos_resurrection_charge: invalid slot %d", METARUN_SLOT_MANDOS_RES_CHARGES);
+        return;
+    }
+    byte *slot = &current->quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+    if (*slot >= 1) {
+        log_debug("metarun_add_mandos_resurrection_charge: charge already present (%d)", *slot);
+        return;
+    }
+    *slot = 1;
+    save_metaruns();
+    log_debug("metarun_add_mandos_resurrection_charge: granted charge, slot now %d", *slot);
+}
+
+bool metarun_consume_mandos_resurrection_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_consume_mandos_resurrection_charge: no current metarun");
+        return false;
+    }
+    if (METARUN_SLOT_MANDOS_RES_CHARGES < 0 || METARUN_SLOT_MANDOS_RES_CHARGES >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_consume_mandos_resurrection_charge: invalid slot %d", METARUN_SLOT_MANDOS_RES_CHARGES);
+        return false;
+    }
+    byte *slot = &current->quest_reserved[METARUN_SLOT_MANDOS_RES_CHARGES];
+    if (*slot == 0) {
+        log_debug("metarun_consume_mandos_resurrection_charge: no charges to consume");
+        return false;
+    }
+    (*slot)--;
+    save_metaruns();
+    log_debug("metarun_consume_mandos_resurrection_charge: charge consumed, slot now %d", *slot);
+    return true;
 }
 
 /* ----------------------- accessors --------------------------- */
@@ -2310,6 +2371,17 @@ static void show_completed_quests_summary(void)
     screen_load();
 }
 
+static void show_mandos_third_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the challenge of disconnected stairs.",
+        "Mandos acknowledges your feat and sets a final doom:",
+        "Seek Maeglin's hidden vault between delvings seventeen and nineteen and end his false life.",
+        "This third quest stands apart and will not bar other callings."
+    };
+    quest_typewriter_menu("Mandos' Final Doom", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+}
+
 /* ------------------------------------------------------------------
  * metarun_update_on_exit() – v5, 30 Jul 2025
  * ------------------------------------------------------------------
@@ -2343,11 +2415,8 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     log_info("Metarun update: died=%s, escaped=%s, sil_count=%d, final_score=%ld", 
              died ? "true" : "false", escaped ? "true" : "false", sil_count, (long)final_score);
     int blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
-
-    /* Track challenge completions (per run) */
-    if (op_ptr && op_ptr->opt[OPT_adult_discon_stair]) {
-        metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
-    }
+    bool challenge_mode = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
+    bool challenge_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
     u32b character_flags = c_info[p_ptr->pcharacter].flags;
@@ -2390,6 +2459,11 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
         screen_load();
 
+        if (challenge_mode) {
+            metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
+            challenge_success = true;
+        }
+
         byte awarded = (sil_count < 3) ? 3 : sil_count;
         metarun_gain_silmarils(awarded);
         log_info("Metarun: Morgoth victory awarded %d Silmarils (total now %d)",
@@ -2398,6 +2472,11 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         compute_blessing_pool();
         announce_blessing_gain(blessing_points_before);
         blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
+        if (challenge_success &&
+            quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
+            metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
+            show_mandos_third_unlock_message();
+        }
         check_run_end();
         metarun_save_persistent_settings();
         save_metaruns();
@@ -2814,6 +2893,16 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
     /* Restore the saved play-screen only after every narrative beat */
     screen_load();
+
+    if (challenge_mode) {
+        metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
+        challenge_success = true;
+    }
+    if (challenge_success &&
+        quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
+        metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
+        show_mandos_third_unlock_message();
+    }
 
     compute_blessing_pool();
     announce_blessing_gain(blessing_points_before);

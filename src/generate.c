@@ -92,6 +92,10 @@ static vault_monster_spec vault_monster_table[] = {
     {'C', "9cbdbb88fd4f59dc", 0, false, true, true},
     {'H', "c790972955718680", 0, false, true, false},
     {'@', "4acd2c9fcc5cd6e5", 0, false, true, false},
+    {'w', "0e401610ae33a21f", 0, false, false, true},
+    {'x', "7ed54d5976d25b3e", 0, false, false, true},
+    {'h', "66eda88da3bb69b9", 0, false, false, true},
+    {'u', "e7c39145ef0dc35d", 0, false, false, true},
     {'o', "88ef7547642967b2", 0, false, true, false},
     {'O', "2c739cdb1be99f2c", 0, false, true, false},
     {'Z', "05f49e29acf49a93", 0, false, true, true},
@@ -256,6 +260,33 @@ static bool mandos_second_stage_ready(void)
     return true;
 }
 
+static bool mandos_third_stage_ready(void)
+{
+    int traitor_count = metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR);
+    int third_cap = quest_completion_cap(QUEST_ID_MANDOS_BETRAYER);
+    if (third_cap < 1) third_cap = METARUN_QUEST_COMPLETION_CAP;
+    int third_count = metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER);
+
+    quest_type* third_q = (QUEST_ID_MANDOS_BETRAYER > 0 && QUEST_ID_MANDOS_BETRAYER < z_info->quest_max) ? &quest_info[QUEST_ID_MANDOS_BETRAYER] : NULL;
+    byte mandos_oath = third_q ? third_q->oath_id : 0;
+    bool oath_active = (mandos_oath > 0 && p_ptr && p_ptr->oath_type == mandos_oath && !oath_invalid(mandos_oath));
+
+    if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) >= QUEST_STATE_REWARDED) return false;
+    if (!oath_active) return false;
+    if (traitor_count < 1) return false;
+    if (third_count >= third_cap) return false;
+    if (metarun_challenge_completion_count(CHALLENGE_DISCONNECTED) <= 0) return false;
+
+    return true;
+}
+
+static bool is_easterling_quest_vault(vault_type *v)
+{
+    if (!v) return false;
+    const char *name = v_name + v->name;
+    return (strstr(name, "Easterling Fortress") != NULL);
+}
+
 static bool is_maeglin_quest_vault(vault_type *v)
 {
     if (!v) return false;
@@ -418,6 +449,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->mandos_quest;
     } else if (SDL_strcasecmp(actual_name, "mandos_second_quest") == 0) {
         return &p_ptr->vala_quest_stage2[VALA_MANDOS - 1];
+    } else if (SDL_strcasecmp(actual_name, "mandos_third_quest") == 0) {
+        return &p_ptr->vala_quest_stage3[VALA_MANDOS - 1];
     } else if (SDL_strcasecmp(actual_name, "niena_quest") == 0) {
         return &p_ptr->niena_quest;
     } else if (SDL_strcasecmp(actual_name, "orome_quest") == 0) {
@@ -444,6 +477,9 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_MANDOS;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_MANDOS_TRAITOR") == 0) {
         return METARUN_QUEST_MANDOS_TRAITOR;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_MANDOS_THIRD") == 0 ||
+               SDL_strcasecmp(actual_id, "METARUN_QUEST_MANDOS_BETRAYER") == 0) {
+        return METARUN_QUEST_MANDOS_BETRAYER;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_NIENA") == 0) {
         return METARUN_QUEST_NIENA;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_OROME") == 0) {
@@ -759,8 +795,9 @@ static void reset_quest_vault_states(void) {
     log_trace("Quest vault regeneration: START - depth=%d, quest_reserved[0]=%d", 
               p_ptr->depth, p_ptr->quest_reserved[0]);
     byte mandos_second = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
-    log_trace("Quest vault regeneration: Aule state=%d level=%d, Mandos state=%d level=%d (second=%d), Tulkas state=%d", 
-              p_ptr->aule_quest, p_ptr->aule_level, p_ptr->mandos_quest, p_ptr->mandos_level, mandos_second, p_ptr->tulkas_quest);
+    byte mandos_third = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+    log_trace("Quest vault regeneration: Aule state=%d level=%d, Mandos state=%d level=%d (second=%d third=%d), Tulkas state=%d", 
+              p_ptr->aule_quest, p_ptr->aule_level, p_ptr->mandos_quest, p_ptr->mandos_level, mandos_second, mandos_third, p_ptr->tulkas_quest);
     log_trace("Quest vault regeneration: Pending changes - aule=%s mandos=%s", 
               pending_quest_states.has_aule_change ? "yes" : "no", 
               pending_quest_states.has_mandos_change ? "yes" : "no");
@@ -780,6 +817,11 @@ static void reset_quest_vault_states(void) {
     if (mandos_second == QUEST_STATE_GIVER_PRESENT && p_ptr->mandos_level == p_ptr->depth) {
         log_trace("Quest vault regeneration: Resetting Mandos second quest from GIVER_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
         quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_NOT_STARTED);
+        p_ptr->mandos_level = 0;
+    }
+    if (mandos_third == QUEST_STATE_GIVER_PRESENT && p_ptr->mandos_level == p_ptr->depth) {
+        log_trace("Quest vault regeneration: Resetting Mandos third quest from GIVER_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
+        quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_NOT_STARTED);
         p_ptr->mandos_level = 0;
     }
     
@@ -849,12 +891,17 @@ static void apply_pending_quest_states(void) {
         p_ptr->mandos_level = pending_quest_states.mandos_level;
         int next_state = pending_quest_states.mandos_next_state;
         if (next_state == 0) next_state = QUEST_STATE_GIVER_PRESENT;
+        bool nonblocking = (pending_quest_states.mandos_quest_id == QUEST_ID_MANDOS_BETRAYER);
         if (pending_quest_states.mandos_quest_id == QUEST_ID_MANDOS) {
             p_ptr->mandos_quest = next_state;
         } else if (pending_quest_states.mandos_quest_id == QUEST_ID_MANDOS_TRAITOR) {
             quest_set_state(pending_quest_states.mandos_quest_id, next_state);
+        } else if (pending_quest_states.mandos_quest_id == QUEST_ID_MANDOS_BETRAYER) {
+            quest_set_state(pending_quest_states.mandos_quest_id, next_state);
         }
-        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        if (!nonblocking) {
+            p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        }
         log_trace("Mandos quest: state %d APPLIED (deferred from quest vault) for quest_id=%d at %d,%d depth=%d", 
                   next_state, pending_quest_states.mandos_quest_id,
                   pending_quest_states.mandos_vault_y, pending_quest_states.mandos_vault_x, pending_quest_states.mandos_level);
@@ -5464,6 +5511,30 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 place_vault_monster_token('@', y, x);
                 break;
             }
+            /* Easterling warrior */
+            case 'w':
+            {
+                place_vault_monster_token('w', y, x);
+                break;
+            }
+            /* Easterling archer */
+            case 'x':
+            {
+                place_vault_monster_token('x', y, x);
+                break;
+            }
+            /* Ulfang the Black */
+            case 'h':
+            {
+                place_vault_monster_token('h', y, x);
+                break;
+            }
+            /* Uldor the Accursed */
+            case 'u':
+            {
+                place_vault_monster_token('u', y, x);
+                break;
+            }
 
             /* orc champion */
             case 'o':
@@ -6495,19 +6566,31 @@ static void process_quest_vault_area(int y0, int x0, vault_type *qv) {
         pending_quest_states.aule_forge_x = p_ptr->aule_forge_x;
         log_trace("Aule quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0] set to 1", p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
     }
-    if (has_mandos && p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED && 
-        !quest_metarun_blocked(QUEST_ID_MANDOS, METARUN_QUEST_MANDOS) && !p_ptr->quest_reserved[0]) {
-        /* Immediately reserve quest slot to prevent other quests from spawning */
-        p_ptr->quest_reserved[0] = 1;
-        /* Record pending quest state change instead of applying immediately */
-        pending_quest_states.has_mandos_change = true;
-        pending_quest_states.mandos_level = p_ptr->depth;
-        pending_quest_states.mandos_vault_y = p_ptr->mandos_vault_y;
-        pending_quest_states.mandos_vault_x = p_ptr->mandos_vault_x;
-        if (pending_quest_states.mandos_next_state == 0) {
-            pending_quest_states.mandos_next_state = MANDOS_QUEST_GIVER_PRESENT;
+    if (has_mandos) {
+        int mandos_target = pending_quest_states.mandos_quest_id ? pending_quest_states.mandos_quest_id : QUEST_ID_MANDOS;
+        u32b mandos_flag = quest_metarun_flag(mandos_target);
+        byte mandos_state = (mandos_target == QUEST_ID_MANDOS) ? p_ptr->mandos_quest : quest_get_state(mandos_target);
+        bool nonblocking = (mandos_target == QUEST_ID_MANDOS_BETRAYER);
+
+        if (mandos_state == QUEST_STATE_NOT_STARTED && (!p_ptr->quest_reserved[0] || nonblocking)) {
+            if (mandos_flag && quest_metarun_blocked(mandos_target, mandos_flag)) {
+                log_trace("Mandos quest: blocked during vault processing (quest_id=%d)", mandos_target);
+            } else {
+                if (!nonblocking) {
+                    p_ptr->quest_reserved[0] = 1;
+                }
+                /* Record pending quest state change instead of applying immediately */
+                pending_quest_states.has_mandos_change = true;
+                pending_quest_states.mandos_level = p_ptr->depth;
+                pending_quest_states.mandos_vault_y = p_ptr->mandos_vault_y;
+                pending_quest_states.mandos_vault_x = p_ptr->mandos_vault_x;
+                if (pending_quest_states.mandos_next_state == 0) {
+                    pending_quest_states.mandos_next_state = MANDOS_QUEST_GIVER_PRESENT;
+                }
+                log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0]=%d", 
+                          p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth, p_ptr->quest_reserved[0]);
+            }
         }
-        log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0] set to 1", p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth);
     }
 }
 
@@ -6982,12 +7065,14 @@ static bool try_quest_vault_type(int v_type)
     int y, x;
     int mandos_completions = metarun_quest_completion_count(METARUN_QUEST_MANDOS);
     bool mandos_second_available = mandos_second_stage_ready();
+    bool mandos_third_available = mandos_third_stage_ready();
     bool mandos_first_available = (mandos_completions == 0);
     
     log_trace("Quest vault: Attempting type %d quest vault with forced placement strategy", v_type);
     
     for (i = 0; i < z_info->v_max; i++)
     {
+        bool reserve_slot_for_this = true;
         qv_ptr = &v_info[i];
         if (qv_ptr->typ != v_type) continue;
         if (!(qv_ptr->flags & VLT_QUEST)) continue;
@@ -7031,44 +7116,78 @@ static bool try_quest_vault_type(int v_type)
         
         /* Check Mandos requirements */
         if (vault_template_has_mandos(qv_ptr)) {
+            bool is_easterling = is_easterling_quest_vault(qv_ptr);
             bool is_maeglin = is_maeglin_quest_vault(qv_ptr);
-            int mandos_quest_id = is_maeglin ? QUEST_ID_MANDOS_TRAITOR : QUEST_ID_MANDOS;
-            u32b mandos_flag = is_maeglin ? METARUN_QUEST_MANDOS_TRAITOR : METARUN_QUEST_MANDOS;
-            byte mandos_state = is_maeglin ? quest_get_state(QUEST_ID_MANDOS_TRAITOR) : p_ptr->mandos_quest;
+            int mandos_stage = is_maeglin ? 3 : (is_easterling ? 2 : 1);
+            int mandos_quest_id = (mandos_stage == 3) ? QUEST_ID_MANDOS_BETRAYER :
+                                  (mandos_stage == 2) ? QUEST_ID_MANDOS_TRAITOR : QUEST_ID_MANDOS;
+            u32b mandos_flag = (mandos_stage == 3) ? METARUN_QUEST_MANDOS_BETRAYER :
+                               (mandos_stage == 2) ? METARUN_QUEST_MANDOS_TRAITOR : METARUN_QUEST_MANDOS;
+            byte mandos_state = (mandos_stage == 1) ? p_ptr->mandos_quest : quest_get_state(mandos_quest_id);
+            bool uses_reserve = (mandos_stage < 3);
 
-            log_trace("Quest vault: Checking Mandos vault '%s' - quest_id=%d state=%d, quest_reserved[0]=%d", 
-                     v_name + qv_ptr->name, mandos_quest_id, mandos_state, p_ptr->quest_reserved[0]);
-            if (is_maeglin && (p_ptr->depth < 17 || p_ptr->depth > 19)) {
-                log_trace("Quest vault: Mandos second quest '%s' skipped - depth %d outside 17-19", v_name + qv_ptr->name, p_ptr->depth);
+            log_trace("Quest vault: Checking Mandos vault '%s' - quest_id=%d stage=%d state=%d, quest_reserved[0]=%d", 
+                     v_name + qv_ptr->name, mandos_quest_id, mandos_stage, mandos_state, p_ptr->quest_reserved[0]);
+            if (mandos_stage == 2 && (p_ptr->depth < 10 || p_ptr->depth > 13)) {
+                log_trace("Quest vault: Mandos second quest '%s' skipped - depth %d outside 10-13", v_name + qv_ptr->name, p_ptr->depth);
+                continue;
+            }
+            if (mandos_stage == 3 && (p_ptr->depth < 17 || p_ptr->depth > 19)) {
+                log_trace("Quest vault: Mandos third quest '%s' skipped - depth %d outside 17-19", v_name + qv_ptr->name, p_ptr->depth);
                 continue;
             }
             if (mandos_state != QUEST_STATE_NOT_STARTED) {
                 log_trace("Quest vault: Mandos vault skipped (quest state %d)", mandos_state);
                 continue;
             }
-            if (is_maeglin && !mandos_second_available) {
+            if (mandos_stage == 2 && !mandos_second_available) {
                 log_trace("Quest vault: Mandos second quest skipped (requirements not met)");
                 continue;
             }
-            if (!is_maeglin && !mandos_first_available) {
-                log_trace("Quest vault: Mandos first quest skipped - second quest is pending");
+            if (mandos_stage == 3 && !mandos_third_available) {
+                log_trace("Quest vault: Mandos third quest skipped (requirements not met)");
+                continue;
+            }
+            if (mandos_stage == 1 && !mandos_first_available) {
+                log_trace("Quest vault: Mandos first quest skipped - later quest is pending");
                 continue;
             }
             if (quest_metarun_blocked(mandos_quest_id, mandos_flag)) {
                 log_trace("Quest vault: Mandos vault skipped (quest blocked by metarun)");
                 continue;
             }
-            if (p_ptr->quest_reserved[0]) {
+            if (mandos_stage == 2) {
+                monster_race *ulf = &r_info[R_IDX_ULFANG];
+                monster_race *uld = &r_info[R_IDX_ULDOR];
+                if (ulf->max_num == 0 || uld->max_num == 0 || ulf->cur_num > 0 || uld->cur_num > 0) {
+                    log_trace("Quest vault: Mandos second quest skipped - traitors unavailable (ulf max=%d cur=%d, uld max=%d cur=%d)", 
+                              ulf->max_num, ulf->cur_num, uld->max_num, uld->cur_num);
+                    continue;
+                }
+            }
+            if (mandos_stage == 3) {
+                monster_race *mae = &r_info[R_IDX_MAEGLIN];
+                if (mae->max_num == 0 || mae->cur_num > 0) {
+                    log_trace("Quest vault: Mandos third quest skipped - Maeglin unavailable (max=%d cur=%d)", mae->max_num, mae->cur_num);
+                    continue;
+                }
+            }
+            if (uses_reserve && p_ptr->quest_reserved[0]) {
                 log_trace("Quest vault: Mandos vault skipped (another quest already spawned this run)");
                 continue;
             }
             pending_quest_states.mandos_quest_id = mandos_quest_id;
             pending_quest_states.mandos_next_state = QUEST_STATE_GIVER_PRESENT;
+            reserve_slot_for_this = uses_reserve;
         }
         
         /* Reserve quest slot immediately to prevent other quest spawning during level generation */
-        log_trace("Quest vault: Requirements passed for vault '%s', reserving quest slot", v_name + qv_ptr->name);
-        p_ptr->quest_reserved[0] = 1;
+        if (reserve_slot_for_this) {
+            log_trace("Quest vault: Requirements passed for vault '%s', reserving quest slot", v_name + qv_ptr->name);
+            p_ptr->quest_reserved[0] = 1;
+        } else {
+            log_trace("Quest vault: Requirements passed for vault '%s', quest slot not reserved (non-blocking quest)", v_name + qv_ptr->name);
+        }
         
         /* Use forced placement strategy like forge placement:
          * Pick optimal location near center and use reduced padding */
@@ -8719,7 +8838,11 @@ if (playerturn == 0) {
                     quest_vault_placed_this_attempt = true;
                 }
                 /* Also check if we have pending quest state changes that indicate a quest vault was placed */
-                if (pending_quest_states.has_aule_change || pending_quest_states.has_mandos_change || pending_quest_states.has_varda_change) {
+                bool mandos_nonblocking = (pending_quest_states.has_mandos_change &&
+                                           pending_quest_states.mandos_quest_id == QUEST_ID_MANDOS_BETRAYER);
+                if (pending_quest_states.has_aule_change ||
+                    pending_quest_states.has_varda_change ||
+                    (pending_quest_states.has_mandos_change && !mandos_nonblocking)) {
                     quest_vault_placed_this_attempt = true;
                 }
             }

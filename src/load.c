@@ -1371,6 +1371,13 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->mandos_monsters_remaining);
     rd_s16b(&p_ptr->mandos_level);
     rd_s16b(&p_ptr->mandos_reserved);
+    if (savefile_version_at_least(0, 9, 1, 5)) {
+        rd_byte(&p_ptr->mandos_resurrection_primed);
+        rd_byte(&p_ptr->mandos_resurrection_used);
+    } else {
+        p_ptr->mandos_resurrection_primed = 0;
+        p_ptr->mandos_resurrection_used = 0;
+    }
     rd_byte(&p_ptr->niena_quest);
     rd_byte(&p_ptr->niena_monsters_seen);
     rd_byte(&p_ptr->niena_monsters_killed);

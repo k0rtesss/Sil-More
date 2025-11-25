@@ -1290,6 +1290,8 @@ struct player_type
     byte mandos_monsters_remaining; /* Number of monsters left to clear */
     s16b mandos_level;         /* Dungeon depth where vault resides */
     s16b mandos_reserved;      /* padding */
+    byte mandos_resurrection_primed; /* Mandos resurrection primed for this hero */
+    byte mandos_resurrection_used;   /* Mandos resurrection already consumed */
     /* Niena quest tracking */
     byte niena_quest;          /* Niena quest state (NIENA_QUEST_*) */
     byte niena_monsters_seen;  /* Number of monsters seen during quest */

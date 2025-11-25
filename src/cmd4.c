@@ -34,6 +34,8 @@ extern struct sound_config g_sound_config;
 /*used for knowledge display*/
 #define BROWSER_ROWS 16
 
+#define MANDOS_DOOM_PURCHASE_COST 5000
+
 /*
  *  Header and footer marker string for pref file dumps
  */
@@ -539,6 +541,11 @@ void add_random_curse(object_type *o_ptr)
         if (o_ptr->dd) o_ptr->dd = MAX(1, o_ptr->dd - 1);
         if (o_ptr->pd) o_ptr->pd = MAX(1, o_ptr->pd - 1);
     }
+}
+
+static bool mandos_doom_purchase_unlocked(void)
+{
+    return metarun_challenge_completion_count(CHALLENGE_DISCONNECTED) > 0;
 }
 
 
@@ -2258,7 +2265,36 @@ int abilities_menu2(int skilltype, int* highlight)
                     Term_putstr(COL_DESCRIPTION + 2, desc_row + 2, -1, TERM_GREEN, buf);
                 }
 
-                if (skilltype == S_SPC)
+                if (skilltype == S_SPC && b_ptr->abilitynum == SPC_MANDOS && !p_ptr->have_ability[S_SPC][SPC_MANDOS])
+                {
+                    int extra_lines = 0;
+                    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
+                    {
+                        extra_lines = b_ptr->prereqs; /* may be 0 */
+                    }
+                    else if (b_ptr->prereqs > 0)
+                    {
+                        extra_lines = 1; /* Quick Study printed a single line */
+                    }
+
+                    int price_row = desc_row + 2 + extra_lines; /* next free row */
+                    if (!mandos_doom_purchase_unlocked())
+                    {
+                        Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                            "Complete the disconnected stairs challenge to unlock purchase (5000 XP).");
+                    }
+                    else
+                    {
+                        Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+
+                        strnfmt(buf, 80, "%d experience (you have %d)", MANDOS_DOOM_PURCHASE_COST,
+                            p_ptr->new_exp);
+
+                        byte price_attr = (MANDOS_DOOM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                        Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                    }
+                }
+                else if (skilltype == S_SPC)
                 {
                     // Special abilities cannot be purchased; show as granted only
                 }
@@ -2601,19 +2637,37 @@ void do_cmd_ability_screen(void)
                 {
                     if (!p_ptr->have_ability[skilltype][abilitynum])
                     {
-                        // Special abilities cannot be purchased
-                        if (skilltype == S_SPC) {
+                        bool mandos_special = (skilltype == S_SPC && abilitynum == SPC_MANDOS);
+                        int exp_cost = -1;
+                        skip_purchase = false;
+
+                        if (mandos_special)
+                        {
+                            if (!mandos_doom_purchase_unlocked())
+                            {
+                                bell("Complete the disconnected stairs challenge to purchase Mandos' Doom.");
+                                continue;
+                            }
+                            exp_cost = MANDOS_DOOM_PURCHASE_COST;
+                        }
+                        else if (skilltype == S_SPC)
+                        {
                             bell("This special ability cannot be purchased.");
                             continue;
                         }
-                        if (prereqs(skilltype, abilitynum))
+                        else if (!prereqs(skilltype, abilitynum))
+                        {
+                            bell("You do not meet the prerequisites for this ability.");
+                            continue;
+                        }
+                        else
                         {
                             // Normalize flag check to 0 or 1
                             int is_free = (c_info[p_ptr->pcharacter].flags & RHF_FREE) ? 1 : 0;
                             int unit_cost = 500 - 200 * is_free;
 
                             // Calculate base cost
-                            int exp_cost = (abilities_in_skill(skilltype) + 1) * unit_cost;
+                            exp_cost = (abilities_in_skill(skilltype) + 1) * unit_cost;
 
                             // Subtract free abilities granted by affinity
                             exp_cost -= unit_cost * affinity_level(skilltype);
@@ -2625,20 +2679,21 @@ void do_cmd_ability_screen(void)
                             // Clamp to zero
                             if (exp_cost < 0)
                                 exp_cost = 0;
+                        }
 
-                            if (exp_cost > p_ptr->new_exp)
-                            {
-                                bell("You do not have enough experience to "
-                                     "acquire this "
-                                     "ability.");
-                            }
-                            else
-                            {
-                                // special menu for bane
-                                if ((skilltype == S_PER)
-                                    && (abilitynum == PER_BANE))
-                                {
-                                    while (!return_to_abilities)
+                        if (exp_cost > p_ptr->new_exp)
+                        {
+                            bell("You do not have enough experience to "
+                                 "acquire this "
+                                 "ability.");
+                            continue;
+                        }
+
+                        // special menu for bane
+                        if ((skilltype == S_PER)
+                            && (abilitynum == PER_BANE))
+                        {
+                            while (!return_to_abilities)
                                     {
                                         skip_purchase = false;
 
@@ -2807,11 +2862,6 @@ void do_cmd_ability_screen(void)
                                 banechoice = -1;
                                 oathchoice = -1;
                             }
-                        }
-                        else
-                        {
-                            bell("Insufficient prerequisites for ability!");
-                        }
                     }
 
                     // if you already have the ability...
@@ -2883,8 +2933,7 @@ void do_cmd_ability_screen(void)
                         p_ptr->update |= (PU_BONUS);
                         p_ptr->update |= (PU_MANA);
                     }
-                }
-                else if (abilitynum == ABILITIES_MAX)
+                if (abilitynum == ABILITIES_MAX)
                 {
                     return_to_skills = true;
                 }

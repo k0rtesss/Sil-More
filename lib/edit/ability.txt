@@ -706,7 +706,7 @@ T:35:0:99  # Cloak
 
 N:160:Mandos' Doom
 I:8:0:0
-D:Bearing Mandos' Doom, the prophecy that shadowed the Noldor in their exile, yet granting unyielding resolve, this provides immunity to fear, hallucination, trance, rage, stun and confusion. Awarded by quest; cannot be purchased.
+D:Bearing Mandos' Doom, the prophecy that shadowed the Noldor in their exile, yet granting unyielding resolve, this provides immunity to fear, hallucination, trance, rage, stun and confusion. Granted by Mandos' quests, and after completing the disconnected-stairs challenge it may be purchased for 5000 XP on later runs.
 N:161:Aule's Forge
 I:8:1:0
 D:Harnessing Aule's Forge, the creative fire of the Smith of the Valar who shaped the dwarves in secret, this grants superior mastery at the forge: counts as Masterpiece with +2 extra difficulty allowance. Supersedes Masterpiece.

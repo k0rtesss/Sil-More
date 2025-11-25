@@ -52,6 +52,45 @@ static bool death_spectator_mode = false;
 static bool death_spectator_command_allowed(int command);
 static void death_spectator_prepare_display(void);
 bool death_spectator_active(void);
+
+static bool try_mandos_resurrection(void)
+{
+    if (!p_ptr || !p_ptr->mandos_resurrection_primed || p_ptr->mandos_resurrection_used) return false;
+
+    p_ptr->mandos_resurrection_used = 1;
+    p_ptr->mandos_resurrection_primed = 0;
+    p_ptr->is_dead = false;
+
+    /* Restore hit points and voice */
+    p_ptr->chp = p_ptr->mhp;
+    p_ptr->chp_frac = 0;
+    p_ptr->csp = p_ptr->msp;
+    p_ptr->csp_frac = 0;
+
+    /* Clear adverse effects */
+    (void)set_blind(0);
+    (void)set_confused(0);
+    (void)set_poisoned(0);
+    (void)set_afraid(0);
+    (void)set_entranced(0);
+    (void)set_image(0);
+    (void)set_stun(0);
+    (void)set_cut(0);
+    (void)res_stat(A_STR, 20);
+    (void)res_stat(A_CON, 20);
+    (void)res_stat(A_DEX, 20);
+    (void)res_stat(A_GRA, 20);
+
+    /* Prevent starvation */
+    (void)set_food(PY_FOOD_FULL - 1);
+
+    SDL_strlcpy(p_ptr->died_from, "Mandos' reprieve", sizeof(p_ptr->died_from));
+    p_ptr->leaving = true;
+
+    msg_print("Mandos' judgment is stayed; you are returned for one more attempt.");
+    log_info("Mandos resurrection triggered - character restored and priming cleared");
+    return true;
+}
 /*
  * Return a "feeling" (or NULL) about an item.  Method 1 (Weak).
  * Sil - this method can't distinguish artefacts from ego items
@@ -3902,6 +3941,9 @@ PlayResult play_game(void)
         {
             log_info("Player '%s' died at level %d, turn %d.",
                 op_ptr->base_name, p_ptr->depth, turn);
+            if (try_mandos_resurrection()) {
+                continue;
+            }
             /* Mega-Hack -- Allow player to cheat death */
             if ((p_ptr->wizard || (p_ptr->noscore & 0x0008) || cheat_live)
                 && !get_check("Die? "))

@@ -33,9 +33,13 @@
 #define METARUN_QUEST_OROME    (1UL << 4)   /* Orome quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
 #define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6) /* Mandos second quest completed */
+#define METARUN_QUEST_MANDOS_BETRAYER (1UL << 7) /* Mandos third quest completed */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
+
+/* quest_reserved[] slots */
+#define METARUN_SLOT_MANDOS_RES_CHARGES 0   /* Stored resurrection charges from Mandos' final quest */
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
@@ -178,6 +182,9 @@ int metarun_quest_completion_count(u32b quest_flag); /* How many times quest com
 void metarun_mark_quest_completed(u32b quest_flag); /* Mark quest as completed */
 void metarun_check_and_update_quests(void);         /* Check current character quests and update metarun */
 void metarun_restore_quest_states(void);            /* Restore quest states from metarun after character load */
+int metarun_mandos_resurrection_charges(void);      /* Stored Mandos resurrection charges */
+void metarun_add_mandos_resurrection_charge(void);  /* Grant a Mandos resurrection charge (max 1) */
+bool metarun_consume_mandos_resurrection_charge(void); /* Spend a Mandos resurrection charge */
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask); /* Expand quest mask into counters */
 void metarun_clamp_and_sync_quests(metarun *m);     /* Clamp counters and sync mask */
 int metarun_total_quest_completions(const metarun *m); /* Aggregate quest completion total */

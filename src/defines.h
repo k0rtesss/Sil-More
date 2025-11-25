@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 4   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 5   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.1.x saves */
 
@@ -254,8 +254,10 @@
 #define R_IDX_ORC_CHAMPION 81
 #define R_IDX_ORC_CAPTAIN 91
 #define R_IDX_BARROW_WIGHT 112
+#define R_IDX_ULDOR 115
 #define R_IDX_ALDOR 117
 #define R_IDX_EASTERLING_SPY 121
+#define R_IDX_ULFANG 125
 #define R_IDX_OATHWRAITH 153
 #define R_IDX_CAT_WARRIOR 154
 #define R_IDX_YOUNG_COLD_DRAKE 164
@@ -3603,10 +3605,14 @@
 #define MANDOS_QUEST_ACTIVE 2         /* Accepted quest: must clear all monsters from vault */
 #define MANDOS_QUEST_SUCCESS 3        /* Cleared all monsters (reward granted) */
 #define MANDOS_QUEST_REWARDED 4       /* Reward given, quest fully complete */
-#define MANDOS_QUEST_SECOND_GIVER_PRESENT QUEST_STATE_GIVER_PRESENT  /* Entered Den of Maeglin with Mandos */
-#define MANDOS_QUEST_SECOND_ACTIVE         QUEST_STATE_ACTIVE        /* Accepted second quest: slay Maeglin */
-#define MANDOS_QUEST_SECOND_SUCCESS        QUEST_STATE_SUCCESS       /* Maeglin slain */
+#define MANDOS_QUEST_SECOND_GIVER_PRESENT QUEST_STATE_GIVER_PRESENT  /* Entered Easterling Fortress with Mandos */
+#define MANDOS_QUEST_SECOND_ACTIVE         QUEST_STATE_ACTIVE        /* Accepted second quest: slay Ulfang and Uldor */
+#define MANDOS_QUEST_SECOND_SUCCESS        QUEST_STATE_SUCCESS       /* Easterling traitors slain */
 #define MANDOS_QUEST_SECOND_REWARDED       QUEST_STATE_REWARDED      /* Second quest rewarded */
+#define MANDOS_QUEST_THIRD_GIVER_PRESENT   QUEST_STATE_GIVER_PRESENT /* Entered third Mandos vault */
+#define MANDOS_QUEST_THIRD_ACTIVE          QUEST_STATE_ACTIVE        /* Accepted third quest: slay Maeglin */
+#define MANDOS_QUEST_THIRD_SUCCESS         QUEST_STATE_SUCCESS       /* Maeglin slain for third quest */
+#define MANDOS_QUEST_THIRD_REWARDED        QUEST_STATE_REWARDED      /* Third quest rewarded */
 
 /* States for the Niena mercy quest */
 #define NIENA_QUEST_NOT_STARTED 0
@@ -3673,7 +3679,8 @@ typedef struct quest_mapping {
 #define QUEST_ID_NIENA   4  /* Nienna quest in quest.txt */
 #define QUEST_ID_OROME   5  /* Orome quest in quest.txt */
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
-#define QUEST_ID_MANDOS_TRAITOR 7  /* Second Mandos quest (Maeglin) */
+#define QUEST_ID_MANDOS_TRAITOR 7  /* Second Mandos quest (Easterling traitors) */
+#define QUEST_ID_MANDOS_BETRAYER 8  /* Third Mandos quest (Maeglin) */
 
 /* Generic quest state helpers for multi-stage quests */
 #define QUEST_STATE_NOT_STARTED    0
@@ -3692,7 +3699,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_NIENA,  "Niena, Lady of Pity" },
     { QUEST_ID_OROME,  "Orome the Hunter" },
     { QUEST_ID_VARDA,  "Varda, Lady of the Stars" },
-    { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Traitor" }
+    { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Easterlings" },
+    { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))

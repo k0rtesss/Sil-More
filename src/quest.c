@@ -23,10 +23,11 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_MANDOS_TRAITOR,
     METARUN_QUEST_NIENA,
     METARUN_QUEST_OROME,
-    METARUN_QUEST_VARDA
+    METARUN_QUEST_VARDA,
+    METARUN_QUEST_MANDOS_BETRAYER
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -46,6 +47,7 @@ static int quest_id_from_slot(int slot)
         case 4: return QUEST_ID_NIENA;
         case 5: return QUEST_ID_OROME;
         case 6: return QUEST_ID_VARDA;
+        case 7: return QUEST_ID_MANDOS_BETRAYER;
         default: return 0;
     }
 }
@@ -111,6 +113,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_AULE: return METARUN_QUEST_AULE;
         case QUEST_ID_MANDOS: return METARUN_QUEST_MANDOS;
         case QUEST_ID_MANDOS_TRAITOR: return METARUN_QUEST_MANDOS_TRAITOR;
+        case QUEST_ID_MANDOS_BETRAYER: return METARUN_QUEST_MANDOS_BETRAYER;
         case QUEST_ID_NIENA: return METARUN_QUEST_NIENA;
         case QUEST_ID_OROME: return METARUN_QUEST_OROME;
         case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
@@ -344,6 +347,12 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Mandos second quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_MANDOS_TRAITOR);
     }
+    byte mandos_third_state = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+    if (mandos_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_BETRAYER)) {
+        log_trace("Metarun: Marking Mandos third quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS_BETRAYER);
+    }
 
     if (p_ptr->niena_quest == NIENA_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_NIENA)) {
         log_trace("Metarun: Marking Nienna quest as completed (rewarded)");
@@ -406,6 +415,13 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_TRAITOR);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) > 0) {
+        if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Mandos third quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_BETRAYER);
+    }
     
     /* Restore Niena quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_NIENA) > 0) {
@@ -435,8 +451,8 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d), Niena: %d, Orome: %d, Varda: %d",
+    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d, Orome: %d, Varda: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest,
-              quest_get_state(QUEST_ID_MANDOS_TRAITOR),
+              quest_get_state(QUEST_ID_MANDOS_TRAITOR), quest_get_state(QUEST_ID_MANDOS_BETRAYER),
               p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
 }
