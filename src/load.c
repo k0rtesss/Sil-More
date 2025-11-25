@@ -1398,9 +1398,32 @@ static errr rd_extra(void)
         p_ptr->varda_reserved = 0;
         p_ptr->varda_level = 0;
     }
+    if (savefile_version_at_least(0, 9, 1, 4)) {
+        for (int qi = 0; qi < VALA_MAX; qi++) rd_byte(&p_ptr->vala_quest_stage2[qi]);
+        for (int qi = 0; qi < VALA_MAX; qi++) rd_byte(&p_ptr->vala_quest_stage3[qi]);
+    } else {
+        for (int qi = 0; qi < VALA_MAX; qi++) {
+            p_ptr->vala_quest_stage2[qi] = QUEST_STATE_NOT_STARTED;
+            p_ptr->vala_quest_stage3[qi] = QUEST_STATE_NOT_STARTED;
+        }
+        /* Migrate legacy Mandos second quest states stored in mandos_quest */
+        if (p_ptr->mandos_quest > MANDOS_QUEST_REWARDED) {
+            byte legacy = p_ptr->mandos_quest;
+            byte migrated = QUEST_STATE_NOT_STARTED;
+            if (legacy == 5) migrated = QUEST_STATE_GIVER_PRESENT;
+            else if (legacy == 6) migrated = QUEST_STATE_ACTIVE;
+            else if (legacy == 7) migrated = QUEST_STATE_SUCCESS;
+            else if (legacy == 8) migrated = QUEST_STATE_REWARDED;
+            p_ptr->vala_quest_stage2[VALA_MANDOS - 1] = migrated;
+            if (legacy >= 5) p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+            log_info("LOAD: migrated legacy Mandos second quest state %d -> %d", legacy, migrated);
+        }
+    }
     rd_byte(&p_ptr->quest_vault_used);
-    /* quest_reserved array grew in 0.9.1.3; read available bytes safely */
-    int quest_reserved_len = savefile_version_at_least(0, 9, 1, 3) ? 15 : 12;
+    /* quest_reserved array grew in 0.9.1.3 and again in 0.9.1.4; read available bytes safely */
+    int quest_reserved_len = 12;
+    if (savefile_version_at_least(0, 9, 1, 4)) quest_reserved_len = QUEST_SLOT_MAX;
+    else if (savefile_version_at_least(0, 9, 1, 3)) quest_reserved_len = 15;
     for (int qi = 0; qi < quest_reserved_len && qi < (int)N_ELEMENTS(p_ptr->quest_reserved); qi++) {
         rd_byte(&p_ptr->quest_reserved[qi]);
     }

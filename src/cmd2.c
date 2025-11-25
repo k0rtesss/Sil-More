@@ -17,6 +17,31 @@
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
 
+static byte mandos_second_state(void)
+{
+    return quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+}
+
+static bool mandos_any_active(void)
+{
+    byte second = mandos_second_state();
+    return (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED) ||
+           (second >= QUEST_STATE_ACTIVE && second < QUEST_STATE_REWARDED);
+}
+
+static bool mandos_any_giver_present(void)
+{
+    byte second = mandos_second_state();
+    return p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT ||
+           second == QUEST_STATE_GIVER_PRESENT;
+}
+
+static void mandos_reset_all_states(void)
+{
+    p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+    quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_NOT_STARTED);
+}
+
 /*
  * Determines the shallowest a player is allowed to go.
  * As time goes on, they are forced deeper and deeper.
@@ -174,7 +199,7 @@ void do_cmd_go_up(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (mandos_any_active())
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -424,15 +449,15 @@ void do_cmd_go_up(void)
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    /* Reset mandos quests if active */
+    if (mandos_any_active())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (mandos_any_giver_present())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
     }
 
     /* Reset Varda quest if she was waiting on the previous level */
@@ -446,6 +471,7 @@ void do_cmd_go_up(void)
             p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
+            mandos_second_state() == QUEST_STATE_NOT_STARTED &&
             p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED)
         {
             p_ptr->quest_reserved[0] = 0;
@@ -523,7 +549,7 @@ void do_cmd_go_down(void)
     }
 
     // warn player if they have an active Mandos quest and are trying to leave
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    if (mandos_any_active())
     {
         msg_print("The spirits in the tomb grow restless as you prepare to leave...");
         msg_print("Abandoning the tomb will mean failure of Mandos' quest.");
@@ -650,6 +676,7 @@ void do_cmd_go_down(void)
             p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
+            mandos_second_state() == QUEST_STATE_NOT_STARTED &&
             p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED)
         {
             p_ptr->quest_reserved[0] = 0;
@@ -667,15 +694,15 @@ void do_cmd_go_down(void)
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
     }
 
-    /* Reset mandos quest if active */
-    if (p_ptr->mandos_quest >= MANDOS_QUEST_ACTIVE && p_ptr->mandos_quest < MANDOS_QUEST_REWARDED)
+    /* Reset mandos quests if active */
+    if (mandos_any_active())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
         msg_print("You have abandoned the tomb. Mandos' quest is lost.");
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
+    else if (mandos_any_giver_present())
     {
-        p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
+        mandos_reset_all_states();
     }
 
     /* Reset niena quest if active */

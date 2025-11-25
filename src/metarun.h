@@ -30,9 +30,10 @@
 #define METARUN_QUEST_AULE     (1UL << 1)   /* Aule quest completed   */
 #define METARUN_QUEST_MANDOS   (1UL << 2)   /* Mandos quest completed */
 #define METARUN_QUEST_NIENA    (1UL << 3)   /* Niena quest completed  */
-#define METARUN_QUEST_OROME    (1UL << 4)   /* Oromë quest completed  */
+#define METARUN_QUEST_OROME    (1UL << 4)   /* Orome quest completed  */
 #define METARUN_QUEST_VARDA    (1UL << 5)   /* Varda quest completed  */
-#define METARUN_QUEST_SLOT_MAX 8            /* Max quest slots tracked in metarun */
+#define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6) /* Mandos second quest completed */
+#define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
 
@@ -180,6 +181,10 @@ void metarun_restore_quest_states(void);            /* Restore quest states from
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask); /* Expand quest mask into counters */
 void metarun_clamp_and_sync_quests(metarun *m);     /* Clamp counters and sync mask */
 int metarun_total_quest_completions(const metarun *m); /* Aggregate quest completion total */
+bool metarun_challenge_disconnected_unlocked(void); /* Has the disconnected stair challenge been unlocked? */
+void metarun_unlock_challenge_disconnected(void);   /* Unlock the disconnected stair challenge for this metarun */
+int metarun_challenge_completion_count(int challenge_id); /* How many times a challenge run finished */
+void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished challenge run */
 
 /* ------------------------------------------------------------------ */
 /*  Oath system tracking                                              */

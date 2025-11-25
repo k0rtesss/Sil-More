@@ -52,7 +52,7 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.1.3"
+#define VERSION_STRING "0.9.1.4"
 /*
  * Version components (0.9.1.3).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 3   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 4   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.1.x saves */
 
@@ -262,6 +262,7 @@
 #define R_IDX_CAT_ASSASSIN 175
 #define R_IDX_YOUNG_FIRE_DRAKE 181
 #define R_IDX_TROLL_GUARD 192
+#define R_IDX_MAEGLIN 196
 #define R_IDX_SILENT_WATCHER 203
 #define R_IDX_GOTHMOG 241 // the location of Gothmog
 #define R_IDX_UNGOLIANT 242 // the location of Ungoliant
@@ -3602,6 +3603,10 @@
 #define MANDOS_QUEST_ACTIVE 2         /* Accepted quest: must clear all monsters from vault */
 #define MANDOS_QUEST_SUCCESS 3        /* Cleared all monsters (reward granted) */
 #define MANDOS_QUEST_REWARDED 4       /* Reward given, quest fully complete */
+#define MANDOS_QUEST_SECOND_GIVER_PRESENT QUEST_STATE_GIVER_PRESENT  /* Entered Den of Maeglin with Mandos */
+#define MANDOS_QUEST_SECOND_ACTIVE         QUEST_STATE_ACTIVE        /* Accepted second quest: slay Maeglin */
+#define MANDOS_QUEST_SECOND_SUCCESS        QUEST_STATE_SUCCESS       /* Maeglin slain */
+#define MANDOS_QUEST_SECOND_REWARDED       QUEST_STATE_REWARDED      /* Second quest rewarded */
 
 /* States for the Niena mercy quest */
 #define NIENA_QUEST_NOT_STARTED 0
@@ -3651,13 +3656,33 @@ typedef struct quest_mapping {
     /* Add quest-specific state constants or function pointers here as needed */
 } quest_mapping;
 
+#define VALA_TULKAS 1
+#define VALA_AULE   2
+#define VALA_MANDOS 3
+#define VALA_NIENNA 4
+#define VALA_OROME  5
+#define VALA_VARDA  6
+#define VALA_MAX    6
+#define VALA_STAGES 3
+#define QUEST_SLOT_MAX 24  /* runtime quest state slots (capacity for future quests) */
+
 /* Quest ID mappings - modify this to add new quests */
 #define QUEST_ID_TULKAS  1  /* Tulkas quest in quest.txt */
 #define QUEST_ID_AULE    2  /* Aule quest in quest.txt */
 #define QUEST_ID_MANDOS  3  /* Mandos quest in quest.txt */
-#define QUEST_ID_NIENA   4  /* Niena quest in quest.txt */
+#define QUEST_ID_NIENA   4  /* Nienna quest in quest.txt */
 #define QUEST_ID_OROME   5  /* Orome quest in quest.txt */
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
+#define QUEST_ID_MANDOS_TRAITOR 7  /* Second Mandos quest (Maeglin) */
+
+/* Generic quest state helpers for multi-stage quests */
+#define QUEST_STATE_NOT_STARTED    0
+#define QUEST_STATE_GIVER_PRESENT  1
+#define QUEST_STATE_ACTIVE         2
+#define QUEST_STATE_SUCCESS        3
+#define QUEST_STATE_REWARDED       4
+#define QUEST_FLAG_GLOBAL          0x01  /* Global quest: can be completed any run, not locked to chain */
+#define QUEST_FLAG_OPTIONAL_CHAIN  0x02  /* Do not require previous stage completion */
 
 /* Quest mapping table - used by extract_quest_init_texts() and related functions */
 static const quest_mapping quest_id_map[] = {
@@ -3666,10 +3691,16 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_MANDOS, "Mandos the Doomsman" },
     { QUEST_ID_NIENA,  "Niena, Lady of Pity" },
     { QUEST_ID_OROME,  "Orome the Hunter" },
-    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" }
+    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" },
+    { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Traitor" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
+
+/* Challenge identifiers (metarun-level tracking) */
+#define CHALLENGE_NONE            0
+#define CHALLENGE_DISCONNECTED    1
+#define CHALLENGE_MAX_TRACKED     4
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

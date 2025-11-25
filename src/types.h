@@ -871,6 +871,10 @@ struct quest_type
     u32b completion_text; /* Completion text (W:) (offset) */
     u32b title_text; /* Title text (T:) (offset) */
     u32b challenge_text; /* Challenge text (C:) (offset) */
+    byte vala_id;   /* Owning Vala (V: field, VALA_*) */
+    byte sequence;  /* Quest position in the Vala's chain (S: field, 1-3) */
+    byte quest_flags; /* Flags from F: (global, chain rules, etc.) */
+    byte challenge_unlock; /* Challenge ID unlocked on completion (H: field) */
     
     byte quest_num; /* Quest index (TULKAS, AULE, MANDOS, NIENA) */
     byte difficulty; /* Difficulty level */
@@ -883,6 +887,7 @@ struct quest_type
     byte skill_bonus; /* Skill bonus amount (K: field second part) */
     byte ability_type; /* Special ability type (A: field first part) */
     byte ability_id; /* Special ability ID (A: field second part) */
+    byte completion_cap; /* Maximum completions allowed per metarun (L: field) */
     
     /* Quest State Mapping (V: and M: fields) */
     u32b quest_state_var; /* Quest state variable name (V: field) (offset) */
@@ -1308,9 +1313,12 @@ struct player_type
     byte varda_vault_placed;   /* Flag: bastion successfully placed this run */
     byte varda_reserved;       /* padding */
     s16b varda_level;          /* Depth where bastion was placed (for regen) */
+    /* Additional Valar quest stages (2 and 3) */
+    byte vala_quest_stage2[VALA_MAX]; /* Second-stage quest states per Vala */
+    byte vala_quest_stage3[VALA_MAX]; /* Third-stage quest states per Vala */
     /* Generic quest/vault tracking */
     byte quest_vault_used;     /* Has a quest-designated vault generated this game */
-    byte quest_reserved[15];   /* quest_reserved[0] = any quest spawned flag (run-wide); quest_reserved[1..6] mark quest completions recorded this run */
+    byte quest_reserved[QUEST_SLOT_MAX];   /* quest_reserved[0] = any quest spawned flag (run-wide); quest_reserved[1..n] mark quest completions recorded this run */
 };
 
 /* scores.raw header version == core game version (no independent bumping) */

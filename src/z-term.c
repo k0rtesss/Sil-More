@@ -515,8 +515,7 @@ void Term_queue_char(int x, int y, byte a, char c, byte ta, char tc)
             nsf |= STORY_FLAG_CELL_ALIGN;
     }
     if (nsf) {
-        log_trace("Term_queue_char: story-font ACTIVE y=%d x=%d char='%c' attr=%d story_flag=0x%02x",
-                  y, x, c, a, nsf);
+        // log_trace("Term_queue_char: story-font ACTIVE y=%d x=%d char='%c' attr=%d story_flag=0x%02x", y, x, c, a, nsf);
     }
     if ((oa == a) && (oc == c) && (ota == ta) && (otc == tc) && (osf == nsf))
         return;
@@ -571,8 +570,7 @@ void Term_queue_chars(int x, int y, int n, byte a, cptr s)
             nsf |= STORY_FLAG_CELL_ALIGN;
     }
     if (nsf && n > 0) {
-        log_trace("Term_queue_chars: story-font ACTIVE y=%d x=%d n=%d text='%.*s' story_flag=0x%02x",
-                  y, x, n, n, s, nsf);
+        // log_trace("Term_queue_chars: story-font ACTIVE y=%d x=%d n=%d text='%.*s' story_flag=0x%02x", y, x, n, n, s, nsf);
     }
 
     /* Queue the attr/chars */

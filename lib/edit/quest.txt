@@ -10,6 +10,8 @@
 # Y: Quest type (0=vault-based, 1=roulet-based)
 # R: Variable name for quest state (e.g., "tulkas_quest", "aule_quest")
 # M: Metarun quest ID (e.g., METARUN_QUEST_TULKAS, METARUN_QUEST_AULE)
+# Z: Vala owner (Tulkas, Aule, Mandos, Nienna, Orome, Varda)
+# J: Quest sequence (1-3) within that Vala
 # S: Stat bonuses (str:dex:con:gra)
 # K: Skill bonuses (skill:bonus pairs)
 # A: Special abilities granted
@@ -21,10 +23,13 @@ V:0.9.1
 
 # Quest of Tulkas the Strong
 Q:1:Tulkas the Strong
+Z:Tulkas
+J:1
 T:The Strong One tests your mettle in combat
 C:Hunt down the named creature of shadow, [monster name], and return victorious
 O:5
 E:DEPTH_RANGE:6:19
+L:7
 Y:1
 R:tulkas_quest
 M:METARUN_QUEST_TULKAS
@@ -48,9 +53,12 @@ W:"Take this prize—wrought ere the Sun and Moon first rose—and wield it well
 
 # Quest of Aule the Smith
 Q:2:Aule the Smith
+Z:Aule
+J:1
 T:The Maker challenges you to prove your craft
 C:At Aule’s forge, create a masterwork of worth and purpose (25 difficulty at least)
 O:4
+L:7
 Y:0
 R:aule_quest
 M:METARUN_QUEST_AULE
@@ -72,9 +80,12 @@ W:"You are worthy of my blessing. May your arm never tire at the anvil, and may 
 
 # Quest of Mandos the Doomsman
 Q:3:Mandos the Doomsman
+Z:Mandos
+J:1
 T:The Doomsman bids you release a bound spirit
 C:Unmake the false body and free Brodda’s spirit to Mandos’s judgment
 O:3
+L:2
 Y:0
 R:mandos_quest
 M:METARUN_QUEST_MANDOS
@@ -94,10 +105,13 @@ W:"Accept now this gift: a spirit shielded from the great fears that unman the h
 
 # Quest of Nienna, Lady of Pity
 Q:4:Nienna, Lady of Pity
+Z:Nienna
+J:1
 T:The Lady of Pity tests your compassion
 C:Find the downward stair without taking a life
 O:1
 E:DEPTH_RANGE:14:25
+L:7
 Y:1
 R:niena_quest
 M:METARUN_QUEST_NIENA
@@ -116,11 +130,14 @@ W:"You have chosen pity over violence. You have walked through fear and left beh
 W:"For the mercy you have shown to the lost, I grant you this blessing: may your path be shrouded in silence when compassion is your guide."
 
 # Quest of Orome, the Great Hunter  
-Q:5:Orome, the Great Hunter
+Q:5:Orome, the Great Hunter  
+Z:Orome
+J:1
 T:The Great Hunter tests your skill in the hunt
 C:Hunt down the foul kindreds throughout your journey: 100 wolves, 80 spiders, 60 serpents, or 30 vampires
 O:2
 E:DEPTH_RANGE:2:10
+L:7
 Y:1
 R:orome_quest
 M:METARUN_QUEST_OROME
@@ -142,9 +159,12 @@ W:"You have shown a focused purpose, a will that lets deeds speak louder than wo
 
 # Quest of Varda, Lady of the Stars
 Q:6:Varda, Lady of the Stars
+Z:Varda
+J:1
 T:The Star-kindler bids you cleanse the shadows
 C:Find and slay Duruin, least of the balrogs, within his Bastion of shadow
 O:6
+L:1
 E:DEPTH_RANGE:1:3
 Y:1
 R:varda_quest
@@ -159,3 +179,26 @@ I:"Seek out that stronghold. Break his hold on the stolen light and cast his fol
 I:"Do this, and I will lay a choice of bright gifts before you, and teach you the oath that keeps the flame within."
 W:A hush falls as the last shadow fades. A voice like distant starlight speaks: "Well done. The stolen light is free, and the Bastion is empty of whispers."
 W:"Choose now one lamp of blessing, and bear it through the night. If you would keep its radiance, swear the Oath of Light and shun all shadowed gear."
+
+# Mandos' Doom - Second Judgment
+Q:7:Mandos, Doom of the Traitor
+Z:Mandos
+J:2
+T:The Doomsman sends you to judge the betrayer of Gondolin
+C:Seek the Den of Maeglin the Traitor and end his false life
+O:3
+L:2
+Y:0
+R:mandos_second_quest
+M:METARUN_QUEST_MANDOS_TRAITOR
+H:DISCONNECTED
+E:DEPTH_RANGE:17:19
+S:0:0:1:0
+A:8:0
+I:The chill of Mandos' presence settles once more upon you, but his gaze is sharper than before.
+I:
+I:"Another spirit clings to the halls of Angband, steeped in treachery. Maeglin, betrayer of Gondolin, walks again in these depths."
+I:"Track him to his den and end the false life he has stolen. Only then shall his doom be sealed."
+W:As Maeglin falls, the air stills. Mandos steps from shadow, the weight of ancient judgment in his eyes.
+W:
+W:"The betrayer meets his fate at last. Take again the doom I set upon you, and walk the paths that lie beyond the known stairs."

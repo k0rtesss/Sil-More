@@ -20,12 +20,13 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_TULKAS,
     METARUN_QUEST_AULE,
     METARUN_QUEST_MANDOS,
+    METARUN_QUEST_MANDOS_TRAITOR,
     METARUN_QUEST_NIENA,
     METARUN_QUEST_OROME,
     METARUN_QUEST_VARDA
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_VARDA)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -33,6 +34,119 @@ static int quest_slot_from_flag(u32b quest_flag)
         if (quest_flag == metarun_known_quest_flags[i]) return (int)i;
     }
     return -1;
+}
+
+static int quest_id_from_slot(int slot)
+{
+    switch (slot) {
+        case 0: return QUEST_ID_TULKAS;
+        case 1: return QUEST_ID_AULE;
+        case 2: return QUEST_ID_MANDOS;
+        case 3: return QUEST_ID_MANDOS_TRAITOR;
+        case 4: return QUEST_ID_NIENA;
+        case 5: return QUEST_ID_OROME;
+        case 6: return QUEST_ID_VARDA;
+        default: return 0;
+    }
+}
+
+static byte* quest_state_slot(int quest_id)
+{
+    if (!p_ptr || quest_id <= 0) return NULL;
+    if (!z_info || quest_id >= z_info->quest_max) return NULL;
+    if (!quest_info) return NULL;
+
+    quest_type* q_ptr = &quest_info[quest_id];
+    int vala_idx = (q_ptr->vala_id > 0) ? (q_ptr->vala_id - 1) : -1;
+    int stage = (q_ptr->sequence > 0) ? q_ptr->sequence : 1;
+
+    if (stage == 1) {
+        switch (q_ptr->vala_id) {
+            case VALA_TULKAS: return &p_ptr->tulkas_quest;
+            case VALA_AULE:   return &p_ptr->aule_quest;
+            case VALA_MANDOS: return &p_ptr->mandos_quest;
+            case VALA_NIENNA: return &p_ptr->niena_quest;
+            case VALA_OROME:  return &p_ptr->orome_quest;
+            case VALA_VARDA:  return &p_ptr->varda_quest;
+            default: break;
+        }
+    } else if (stage == 2) {
+        if (vala_idx >= 0 && vala_idx < VALA_MAX) return &p_ptr->vala_quest_stage2[vala_idx];
+    } else if (stage == 3) {
+        if (vala_idx >= 0 && vala_idx < VALA_MAX) return &p_ptr->vala_quest_stage3[vala_idx];
+    }
+
+    return NULL;
+}
+
+byte quest_get_state(int quest_id)
+{
+    byte* slot = quest_state_slot(quest_id);
+    return slot ? *slot : QUEST_STATE_NOT_STARTED;
+}
+
+void quest_set_state(int quest_id, byte state)
+{
+    byte* slot = quest_state_slot(quest_id);
+    if (slot) *slot = state;
+}
+
+int quest_id_for_vala_stage(int vala_id, int stage)
+{
+    if (!z_info || !quest_info) return 0;
+    for (int i = 1; i < z_info->quest_max; i++) {
+        quest_type* q_ptr = &quest_info[i];
+        if (!q_ptr->name) continue;
+        if (q_ptr->vala_id != vala_id) continue;
+        int q_stage = q_ptr->sequence ? q_ptr->sequence : 1;
+        if (q_stage == stage) return i;
+    }
+    return 0;
+}
+
+u32b quest_metarun_flag(int quest_id)
+{
+    switch (quest_id) {
+        case QUEST_ID_TULKAS: return METARUN_QUEST_TULKAS;
+        case QUEST_ID_AULE: return METARUN_QUEST_AULE;
+        case QUEST_ID_MANDOS: return METARUN_QUEST_MANDOS;
+        case QUEST_ID_MANDOS_TRAITOR: return METARUN_QUEST_MANDOS_TRAITOR;
+        case QUEST_ID_NIENA: return METARUN_QUEST_NIENA;
+        case QUEST_ID_OROME: return METARUN_QUEST_OROME;
+        case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
+        default: return 0;
+    }
+}
+
+cptr quest_display_title(int quest_id)
+{
+    static char fallback[32];
+
+    if (!z_info || quest_id <= 0 || quest_id >= z_info->quest_max || !quest_info)
+        return "Unknown quest";
+
+    quest_type* q_ptr = &quest_info[quest_id];
+    if (q_ptr->title_text && q_text) {
+        return q_text + q_ptr->title_text;
+    }
+    if (q_ptr->name && q_text) {
+        return q_text + q_ptr->name;
+    }
+
+    strnfmt(fallback, sizeof(fallback), "Quest %d", quest_id);
+    return fallback;
+}
+
+int quest_completion_cap(int quest_idx)
+{
+    if (!z_info || quest_idx <= 0 || quest_idx >= z_info->quest_max || !quest_info)
+        return METARUN_QUEST_COMPLETION_CAP;
+
+    quest_type *q_ptr = &quest_info[quest_idx];
+    byte cap = q_ptr->completion_cap;
+    if (cap == 0) return METARUN_QUEST_COMPLETION_CAP;
+    if (cap > METARUN_QUEST_COMPLETION_CAP) return METARUN_QUEST_COMPLETION_CAP;
+    return cap;
 }
 
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask)
@@ -54,9 +168,12 @@ void metarun_clamp_and_sync_quests(metarun *m)
 
     for (size_t i = 0; i < METARUN_QUEST_SLOT_MAX; i++) {
         byte count = m->quest_completion_counts[i];
-        if (count > METARUN_QUEST_COMPLETION_CAP) {
+        int quest_id = quest_id_from_slot((int)i);
+        int cap = quest_completion_cap(quest_id);
+        if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+        if (count > cap) count = (byte)cap;
+        if (count > METARUN_QUEST_COMPLETION_CAP)
             count = METARUN_QUEST_COMPLETION_CAP;
-        }
 
         if (i < N_ELEMENTS(metarun_known_quest_flags)) {
             if (count > 0) {
@@ -160,7 +277,10 @@ void metarun_mark_quest_completed(u32b quest_flag)
 
     if (slot >= 0 && slot < METARUN_QUEST_SLOT_MAX) {
         byte current = metar.quest_completion_counts[slot];
-        if (current < METARUN_QUEST_COMPLETION_CAP) {
+        int quest_id = quest_id_from_slot(slot);
+        int cap = quest_completion_cap(quest_id);
+        if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+        if (current < cap) {
             metar.quest_completion_counts[slot] = current + 1;
             changed = true;
         }
@@ -212,9 +332,17 @@ void metarun_check_and_update_quests(void)
         metarun_mark_quest_completed(METARUN_QUEST_AULE);
     }
 
-    if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS)) {
+    if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS)) {
         log_trace("Metarun: Marking Mandos quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+    }
+
+    byte mandos_second_state = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+    if (mandos_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_TRAITOR)) {
+        log_trace("Metarun: Marking Mandos second quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_MANDOS_TRAITOR);
     }
 
     if (p_ptr->niena_quest == NIENA_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_NIENA)) {
@@ -271,6 +399,13 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR) > 0) {
+        if (quest_get_state(QUEST_ID_MANDOS_TRAITOR) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Mandos second quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_MANDOS_TRAITOR);
+    }
     
     /* Restore Niena quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_NIENA) > 0) {
@@ -300,6 +435,8 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d, Niena: %d, Orome: %d, Varda: %d",
-              p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
+    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d), Niena: %d, Orome: %d, Varda: %d",
+              p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest,
+              quest_get_state(QUEST_ID_MANDOS_TRAITOR),
+              p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->varda_quest);
 }

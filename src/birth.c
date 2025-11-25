@@ -494,13 +494,17 @@ void player_wipe(void)
     p_ptr->varda_vault_placed = 0;
     p_ptr->varda_reserved = 0;
     p_ptr->varda_level = 0;
+    for (i = 0; i < VALA_MAX; i++) {
+        p_ptr->vala_quest_stage2[i] = QUEST_STATE_NOT_STARTED;
+        p_ptr->vala_quest_stage3[i] = QUEST_STATE_NOT_STARTED;
+    }
     
     p_ptr->quest_vault_used = 0;
     
     /* Quest states should always start at NOT_STARTED for new characters */
     /* Metarun completion is checked separately via metarun_is_quest_completed() */
     log_trace("Birth: All quest states initialized to NOT_STARTED for new character");
-    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..6] = per-run quest completion markers */
+    for (i = 0; i < QUEST_SLOT_MAX; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..n] = per-run quest completion markers */
 
     /*re-set the thefts counter*/
     recent_failed_thefts = 0;
@@ -1801,6 +1805,61 @@ static int display_wrapped_text(cptr text, int start_col, int start_row, int max
     return row - start_row;
 }
 
+#define DISCONNECTED_STAIRS_COST 5000
+
+/*
+ * Challenge selection (currently only disconnected stairs, unlocked via Mandos)
+ */
+static NavResult select_challenge_modifiers(void)
+{
+    /* If challenge isn't unlocked, ensure it's off and skip */
+    log_debug("select_challenge_modifiers: checking if challenge is unlocked");
+    if (!metarun_challenge_disconnected_unlocked()) {
+        log_debug("select_challenge_modifiers: challenge NOT unlocked, skipping selection");
+        op_ptr->opt[OPT_birth_discon_stair] = false;
+        op_ptr->opt[OPT_adult_discon_stair] = false;
+        return NAV_OK;
+    }
+    log_debug("select_challenge_modifiers: challenge IS unlocked, showing selection screen");
+
+    /* Default to off each character */
+    op_ptr->opt[OPT_birth_discon_stair] = false;
+    op_ptr->opt[OPT_adult_discon_stair] = false;
+
+    Term_clear();
+    Term_putstr(2, 2, -1, TERM_L_BLUE, "Challenge Mode");
+    Term_putstr(2, 4, -1, TERM_WHITE, "Disconnected stairs (costs 5000 XP)");
+    Term_putstr(2, 5, -1, TERM_SLATE, "Stairs do not connect back; expect one-way descents.");
+
+    char buf[64];
+    strnfmt(buf, sizeof(buf), "Available XP: %d", p_ptr->new_exp);
+    Term_putstr(2, 7, -1, TERM_SLATE, buf);
+    Term_putstr(2, 9, -1, TERM_SLATE, "Press 'y' to enable, 'n' to skip, ESC to go back.");
+
+    while (true) {
+        char key = inkey();
+        if (key == ESCAPE) {
+            return NAV_BACK;
+        }
+        if (key == 'n' || key == 'N') {
+            log_debug("Challenge selection: disconnected stairs declined");
+            return NAV_OK;
+        }
+        if (key == 'y' || key == 'Y' || key == '\r' || key == '\n' || key == ' ') {
+            if (p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
+                bell("Not enough experience to enable disconnected stairs.");
+                continue;
+            }
+            p_ptr->new_exp -= DISCONNECTED_STAIRS_COST;
+            p_ptr->exp -= DISCONNECTED_STAIRS_COST;
+            op_ptr->opt[OPT_birth_discon_stair] = true;
+            op_ptr->opt[OPT_adult_discon_stair] = true;
+            log_debug("Challenge selection: disconnected stairs enabled (cost %d XP)", DISCONNECTED_STAIRS_COST);
+            return NAV_OK;
+        }
+    }
+}
+
 /*
  * Oath selection screen with three-column layout following abilities_menu2 pattern
  */
@@ -2598,6 +2657,12 @@ static NavResult player_birth_aux(void)
     p_ptr->wt = 0;
     p_ptr->ht = 0;
     p_ptr->age = 0;
+
+    /* Challenge selection (before oath selection) */
+    log_debug("Entering challenge selection");
+    NavResult challenge_result = select_challenge_modifiers();
+    if (challenge_result != NAV_OK) return challenge_result;
+    log_debug("Challenge selection completed");
 
     /* Oath selection (after character creation, before tutorial/stats) */
     log_debug("Entering oath selection");

@@ -14,6 +14,16 @@
 #include "player/killer.h"
 #include "metarun.h"
 
+static byte mandos_second_state(void)
+{
+    return quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+}
+
+static void mandos_set_second_state(byte state)
+{
+    quest_set_state(QUEST_ID_MANDOS_TRAITOR, state);
+}
+
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
     /* When story font is enabled, use story_print_text which handles proportional rendering */
@@ -6029,14 +6039,16 @@ bool check_quest_eligibility(int quest_idx, int depth)
     /* 1. Quest not already completed in current metarun unless oath override applies */
     u32b metarun_flag = get_metarun_quest_flag(quest_idx);
     int metarun_count = metarun_flag ? metarun_quest_completion_count(metarun_flag) : 0;
+    int completion_cap = quest_completion_cap(quest_idx);
+    if (completion_cap < 1) completion_cap = METARUN_QUEST_COMPLETION_CAP;
     bool oath_override = false;
     if (q_ptr->oath_id > 0 && p_ptr && p_ptr->oath_type == q_ptr->oath_id && !oath_invalid(q_ptr->oath_id)) {
         oath_override = true;
     }
     
     if (metarun_flag) {
-        if (metarun_count >= METARUN_QUEST_COMPLETION_CAP) {
-            log_trace("Quest %d eligibility: METARUN_CAP (%d/%d) = FAIL", quest_idx, metarun_count, METARUN_QUEST_COMPLETION_CAP);
+        if (metarun_count >= completion_cap) {
+            log_trace("Quest %d eligibility: METARUN_CAP (%d/%d) = FAIL", quest_idx, metarun_count, completion_cap);
             return false;
         }
         if (metarun_count > 0 && !oath_override) {
@@ -6300,9 +6312,10 @@ static cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool
             previous,
             (previous == 1 ? "" : "s"));
 
-    cptr* new_texts = mem_alloc_array(*count + 1, cptr);
+    cptr* new_texts = mem_alloc_array(*count + 2, cptr); /* +2: one for new text, one for NULL terminator */
     new_texts[0] = str_dup(repeat_line);
     for (int i = 0; i < *count; i++) new_texts[i + 1] = texts[i];
+    new_texts[*count + 1] = NULL; /* Ensure NULL terminator */
     mem_free_null(texts); /* free only the array container; strings move to new_texts */
     (*count)++;
     return new_texts;
@@ -6757,11 +6770,9 @@ void free_quest_texts(cptr* texts)
     
     if (!texts) return;
     
-    /* Free individual strings */
-    for (i = 0; i < 20; i++) { /* Same max as in extract functions */
-        if (texts[i]) {
-            str_free((char*)texts[i]);
-        }
+    /* Free individual strings - loop until NULL terminator */
+    for (i = 0; texts[i] != NULL; i++) {
+        str_free((char*)texts[i]);
     }
     
     /* Free the array */
@@ -6928,49 +6939,51 @@ void do_cmd_quest_status(void)
         any_quests = true;
         cptr mandos_status;
         byte color;
-        
-        cptr quest_title = get_quest_title(QUEST_ID_MANDOS);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_MANDOS);
+        byte mandos_second = mandos_second_state();
+        bool show_second = (mandos_second != QUEST_STATE_NOT_STARTED);
+        int mandos_display_id = show_second ? QUEST_ID_MANDOS_TRAITOR : QUEST_ID_MANDOS;
+        byte mandos_state = show_second ? mandos_second : p_ptr->mandos_quest;
+        cptr quest_title = get_quest_title(mandos_display_id);
+        cptr quest_challenge = get_quest_challenge(mandos_display_id);
         
         Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
         
-        switch (p_ptr->mandos_quest) {
-            case MANDOS_QUEST_GIVER_PRESENT:
-                mandos_status = "Available - Enter the tomb";
+        switch (mandos_state) {
+            case QUEST_STATE_GIVER_PRESENT:
+                mandos_status = show_second ? "Available - Seek Maeglin" : "Available - Enter the tomb";
                 color = TERM_L_BLUE;
                 Term_putstr(col + 2, row++, -1, color, mandos_status);
                 Term_putstr(col + 2, row++, -1, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(mandos_display_id));
                 Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
                 break;
-            case MANDOS_QUEST_ACTIVE:
+            case QUEST_STATE_ACTIVE:
                 mandos_status = "Active";
                 color = TERM_WHITE;
                 Term_putstr(col + 2, row++, -1, color, mandos_status);
                 display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(mandos_display_id));
                 display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
                 break;
-            case MANDOS_QUEST_SUCCESS:
+            case QUEST_STATE_SUCCESS:
                 mandos_status = "Complete - Return for reward";
                 color = TERM_L_GREEN;
                 Term_putstr(col + 2, row++, -1, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(mandos_display_id));
                 Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
                 break;
-            case MANDOS_QUEST_REWARDED:
-                /* Universal quest attribution logic:
-                 * If quest state is REWARDED, it was completed by this character */
+            case QUEST_STATE_REWARDED:
                 mandos_status = "Completed by this character";
                 color = TERM_L_GREEN;
                 Term_putstr(col + 2, row++, -1, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_MANDOS));
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(mandos_display_id));
                 display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
                 break;
             default:
-                mandos_status = "Unknown status";
-                color = TERM_SLATE;
+                mandos_status = "Not started";
+                color = TERM_L_DARK;
                 Term_putstr(col + 2, row++, -1, color, mandos_status);
+                break;
         }
         row++;
     }
@@ -7250,9 +7263,12 @@ void do_cmd_quest_status(void)
  */
 static void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color)
 {
+    if (!texts || total_texts <= 0) return;
+
     int wid, h;
     const int indent = 2;
     bool skipped = false;
+    bool abort_dialog = false;
     
     /* Get terminal size */
     Term_get_size(&wid, &h);
@@ -7313,14 +7329,14 @@ static void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
         
         col = 0;
         
-        /* Print this string with proper word wrapping and typewriter effect */
-        int i = 0;
-        while (s[i]) {
-            /* Handle explicit newlines */
-            if (s[i] == '\n') {
-                row++;
-                col = 0;
-                i++;
+            /* Print this string with proper word wrapping and typewriter effect */
+            int i = 0;
+            while (s[i] && !abort_dialog) {
+                /* Handle explicit newlines */
+                if (s[i] == '\n') {
+                    row++;
+                    col = 0;
+                    i++;
                 continue;
             }
             
@@ -7367,6 +7383,10 @@ static void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
                         Term_inkey(&check_key, false, true);
                         if (check_key == ESCAPE || check_key == '\n' || check_key == '\r') {
                             skipped = true;
+                            if (check_key == ESCAPE) {
+                                abort_dialog = true;
+                                break;
+                            }
                             /* Print rest of current word instantly */
                             for (int k = j; k < word_start + word_len; k++) {
                                 Term_putch(indent + col, row, text_color, s[k]);
@@ -7423,17 +7443,19 @@ static void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
         
         /* 400ms pause after each line of text (unless skipped) */
         if (!skipped) Term_xtra(TERM_XTRA_DELAY, 400);
+
+        if (abort_dialog) break;
     }
     
     /* Refresh screen to show all text if skipped */
     if (skipped) Term_fresh();
     
+    /* Flush any queued keypresses that accumulated during the typewriter effect */
+    Term_flush();
+    
     /* Final prompt */
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
     inkey();
-    
-    /* Flush any queued keypresses that accumulated during the typewriter effect */
-    Term_flush();
     
     Term_clear();
     screen_load();
@@ -8483,150 +8505,220 @@ void mandos_quest_interaction(void)
         return;
     }
     
-    /* Safety check - ensure valid quest state */
-    if (p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
-        p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
-        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS &&
-        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
+    byte mandos_second = mandos_second_state();
+
+    switch (mandos_second)
     {
-        log_trace("mandos_quest_interaction called with invalid quest state: %d", p_ptr->mandos_quest);
-        return;
-    }
-    
-    if (p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT)
-    {
-        log_trace("Starting Mandos quest interaction - assigning Brodda quest");
-        
-        /* Set quest state */
-        p_ptr->mandos_quest = MANDOS_QUEST_ACTIVE;
-        p_ptr->mandos_level = p_ptr->depth;
-        
-        /* Only remove quest giver for roulette-based quests (Y:1) */
-        quest_type* q_ptr = &quest_info[3]; /* Mandos is quest index 3 */
-        if (q_ptr->quest_type == 1) { /* Y:1 = roulette-based */
-            remove_quest_giver(R_IDX_MANDOS);
-            log_trace("Mandos quest giver removed (roulette-based quest)");
-        } else {
-            log_trace("Mandos quest giver NOT removed (vault-based quest)");
-        }
-        
-        /* Extract initialization texts from quest data */
-        int text_count = 0;
-        cptr* init_texts = extract_quest_init_texts(3, &text_count); /* Mandos is quest index 3 */
-        init_texts = prepend_repeat_context(QUEST_ID_MANDOS, init_texts, &text_count, false);
-        
-        if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Mandos the Doomsman", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
-            free_quest_texts(init_texts);
-        } else {
-            /* Fallback to simple message if text extraction fails */
-            cptr fallback_texts[] = {
-                "Mandos speaks with the authority of the Valar:",
-                "'Slay Brodda the Easterling and prove your worth.'"
-            };
-            quest_typewriter_menu("Mandos the Doomsman", fallback_texts, 2, TERM_L_DARK, TERM_WHITE);
-        }
-        
-        log_trace("Mandos quest activated - player must slay Brodda");
-    }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE)
-    {
-        /* Check if Brodda is dead */
-        if (is_brodda_dead())
+        case QUEST_STATE_GIVER_PRESENT:
         {
-            p_ptr->mandos_quest = MANDOS_QUEST_SUCCESS;
-            
-            /* Extract completion texts from quest data */
+            log_trace("Mandos second quest interaction - assigning Maeglin quest");
+
+            mandos_set_second_state(QUEST_STATE_ACTIVE);
+            p_ptr->mandos_level = p_ptr->depth;
+
+            int text_count = 0;
+            cptr* init_texts = extract_quest_init_texts(QUEST_ID_MANDOS_TRAITOR, &text_count);
+            init_texts = prepend_repeat_context(QUEST_ID_MANDOS_TRAITOR, init_texts, &text_count, false);
+
+            if (init_texts && text_count > 0) {
+                quest_typewriter_menu("Mandos, Doom of the Traitor", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
+                free_quest_texts(init_texts);
+            } else {
+                cptr fallback_texts[] = {
+                    "Mandos fixes you with a colder gaze than before:",
+                    "'Maeglin, betrayer of Gondolin, stalks these halls. End his stolen life.'"
+                };
+                quest_typewriter_menu("Mandos, Doom of the Traitor", fallback_texts, 2, TERM_L_DARK, TERM_WHITE);
+            }
+
+            log_trace("Mandos quest activated - player must slay Maeglin");
+            return;
+        }
+        case QUEST_STATE_ACTIVE:
+        {
+            /* Quest is active - remind player to hunt Maeglin */
+            msg_print("Mandos' voice is iron:");
+            msg_print("'Maeglin's treachery stains these halls still.");
+            msg_print("Find him in his den and end his false life.'");
+            return;
+        }
+        case QUEST_STATE_SUCCESS:
+        {
+            log_trace("Mandos second quest completed - granting reward and challenge unlock");
+
             int completion_count = 0;
-            cptr* completion_texts = extract_quest_completion_texts(3, &completion_count); /* Mandos is quest index 3 */
-            completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
-            
+            cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_MANDOS_TRAITOR, &completion_count);
+            completion_texts = prepend_repeat_context(QUEST_ID_MANDOS_TRAITOR, completion_texts, &completion_count, true);
+
             if (completion_texts && completion_count > 0) {
-                quest_typewriter_menu("Justice Served", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+                quest_typewriter_menu("Quest Reward", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
                 free_quest_texts(completion_texts);
             } else {
-                /* Fallback to simple message if text extraction fails */
                 cptr fallback_texts[] = {
-                    "Mandos nods with solemn approval:",
-                    "'Justice has been served. The path forward opens.'"
+                    "Mandos' judgment falls like a blade:",
+                    "'Carry my doom again, and tread the paths where no stair will guide you.'"
                 };
-                quest_typewriter_menu("Justice Served", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+                quest_typewriter_menu("Quest Reward", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
             }
+
+            metarun_mark_quest_completed(METARUN_QUEST_MANDOS_TRAITOR);
+            mandos_set_second_state(QUEST_STATE_REWARDED);
+
+            int oath_id = get_quest_oath_id(QUEST_ID_MANDOS_TRAITOR);
+            if (oath_id > 0) {
+                metarun_unlock_oath(oath_id);
+            }
+
+            apply_quest_rewards(QUEST_ID_MANDOS_TRAITOR);
             
-            log_trace("Mandos quest completed successfully");
+            /* Unlock challenge for this metarun */
+            log_debug("CHALLENGE UNLOCK: About to call metarun_unlock_challenge_disconnected()");
+            metarun_unlock_challenge_disconnected();
+            log_debug("CHALLENGE UNLOCK: metarun_unlock_challenge_disconnected() completed");
+            msg_print("Mandos offers you a grimmer road: the challenge of disconnected stairs is now unlocked.");
+            msg_print("You may choose this challenge when creating your next character.");
+
+            remove_quest_giver(R_IDX_MANDOS);
+            log_trace("Mandos second quest reward given and challenge unlocked");
+            return;
         }
-        else
+        case QUEST_STATE_REWARDED:
         {
-            msg_print("Mandos gazes at you with penetrating eyes:");
-            msg_print("'Brodda the Easterling still draws breath within these halls.");
-            msg_print("Until his tyranny is ended, you may not pass beyond.'");
-            msg_print("");
-            msg_print("'Remember - he who ruled Dor-lómin with an iron fist");
-            msg_print("must face the justice he denied to others.'");
+            log_trace("Mandos second quest already rewarded - giving acknowledgment");
+            msg_print("Mandos inclines his head:");
+            msg_print("'The traitor's doom is sealed. Walk the deep places as you will.'");
+            return;
         }
+        default:
+            break;
     }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS)
+
+    switch (p_ptr->mandos_quest)
     {
-        log_trace("Mandos quest already completed - giving special ability reward");
-        
-        /* We'll show the same completion texts again since this is the reward phase */
-        int completion_count = 0;
-        cptr* completion_texts = extract_quest_completion_texts(3, &completion_count); /* Mandos is quest index 3 */
-        completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
-        
-        if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Quest Reward", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
-            free_quest_texts(completion_texts);
-        } else {
-            /* Fallback to simple message if text extraction fails */
-            cptr fallback_texts[] = {
-                "Mandos acknowledges you with respect:",
-                "'Accept the gift of my protection from mortal fears.'"
-            };
-            quest_typewriter_menu("Quest Reward", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+        case MANDOS_QUEST_GIVER_PRESENT:
+        {
+            log_trace("Mandos quest interaction - assigning tomb quest");
+
+            p_ptr->mandos_quest = MANDOS_QUEST_ACTIVE;
+            p_ptr->mandos_level = p_ptr->depth;
+
+            bool mandos_present = is_quest_giver_present(R_IDX_MANDOS);
+            remove_quest_giver(R_IDX_MANDOS);
+            if (!mandos_present) {
+                log_trace("Mandos quest giver NOT removed (vault-based quest)");
+            }
+
+            int text_count = 0;
+            cptr* init_texts = extract_quest_init_texts(QUEST_ID_MANDOS, &text_count);
+            init_texts = prepend_repeat_context(QUEST_ID_MANDOS, init_texts, &text_count, false);
+
+            if (init_texts && text_count > 0) {
+                quest_typewriter_menu("Mandos the Doomsman", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
+                free_quest_texts(init_texts);
+            } else {
+                cptr fallback_texts[] = {
+                    "Mandos speaks with the authority of the Valar:",
+                    "'Slay Brodda the Easterling and prove your worth.'"
+                };
+                quest_typewriter_menu("Mandos the Doomsman", fallback_texts, 2, TERM_L_DARK, TERM_WHITE);
+            }
+
+            log_trace("Mandos quest activated - player must slay Brodda");
+            break;
         }
-        
-        /* Mark quest as completed in metarun */
-        metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
-        log_trace("Mandos quest: marked as completed in metarun");
-        
-        /* Change quest state to prevent repeated interactions */
-        p_ptr->mandos_quest = MANDOS_QUEST_REWARDED;
-        
-        /* Unlock oath for future characters in this metarun */
-        int oath_id = get_quest_oath_id(3); /* Mandos is quest index 3 */
-        if (oath_id > 0) {
-            metarun_unlock_oath(oath_id);
+        case MANDOS_QUEST_ACTIVE:
+        {
+            if (is_brodda_dead())
+            {
+                p_ptr->mandos_quest = MANDOS_QUEST_SUCCESS;
+
+                int completion_count = 0;
+                cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_MANDOS, &completion_count);
+                completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
+
+                if (completion_texts && completion_count > 0) {
+                    quest_typewriter_menu("Justice Served", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+                    free_quest_texts(completion_texts);
+                } else {
+                    cptr fallback_texts[] = {
+                        "Mandos nods with solemn approval:",
+                        "'Justice has been served. The path forward opens.'"
+                    };
+                    quest_typewriter_menu("Justice Served", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+                }
+
+                log_trace("Mandos quest completed successfully");
+            }
+            else
+            {
+                msg_print("Mandos gazes at you with penetrating eyes:");
+                msg_print("'Brodda the Easterling still draws breath within these halls.");
+                msg_print("Until his tyranny is ended, you may not pass beyond.'");
+                msg_print("");
+                msg_print("'Remember - he who ruled Dor-lomin with an iron fist");
+                msg_print("must face the justice he denied to others.'");
+            }
+            break;
         }
-        
-        /* Apply quest rewards from quest.txt data */
-        apply_quest_rewards(3); /* Mandos is quest index 3 */
-        
-        msg_print("Mandos bows deeply and fades into shadow, his task complete.");
-        
-        /* Remove the quest giver after giving reward */
-        remove_quest_giver(R_IDX_MANDOS);
-        
-        log_trace("Mandos quest reward given");
-    }
-    else if (p_ptr->mandos_quest == MANDOS_QUEST_REWARDED)
-    {
-        log_trace("Mandos quest already rewarded - giving acknowledgment");
-        msg_print("Mandos nods with solemn respect:");
-        msg_print("'The task is done, and the doom has been fulfilled.'");
-        msg_print("'Your path continues ever deeper into the halls of Mandos.'");
+        case MANDOS_QUEST_SUCCESS:
+        {
+            log_trace("Mandos quest already completed - giving special ability reward");
+
+            int completion_count = 0;
+            cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_MANDOS, &completion_count);
+            completion_texts = prepend_repeat_context(QUEST_ID_MANDOS, completion_texts, &completion_count, true);
+
+            if (completion_texts && completion_count > 0) {
+                quest_typewriter_menu("Quest Reward", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+                free_quest_texts(completion_texts);
+            } else {
+                cptr fallback_texts[] = {
+                    "Mandos acknowledges you with respect:",
+                    "'Accept the gift of my protection from mortal fears.'"
+                };
+                quest_typewriter_menu("Quest Reward", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
+            }
+
+            metarun_mark_quest_completed(METARUN_QUEST_MANDOS);
+            log_trace("Mandos quest: marked as completed in metarun");
+
+            p_ptr->mandos_quest = MANDOS_QUEST_REWARDED;
+
+            int oath_id = get_quest_oath_id(QUEST_ID_MANDOS);
+            if (oath_id > 0) {
+                metarun_unlock_oath(oath_id);
+            }
+
+            apply_quest_rewards(QUEST_ID_MANDOS);
+
+            msg_print("Mandos bows deeply and fades into shadow, his task complete.");
+            remove_quest_giver(R_IDX_MANDOS);
+
+            log_trace("Mandos quest reward given");
+            break;
+        }
+        case MANDOS_QUEST_REWARDED:
+        {
+            log_trace("Mandos quest already rewarded - giving acknowledgment");
+            msg_print("Mandos nods with solemn respect:");
+            msg_print("'The task is done, and the doom has been fulfilled.'");
+            msg_print("'Your path continues ever deeper into the halls of Mandos.'");
+            break;
+        }
+        default:
+            log_trace("mandos_quest_interaction called with invalid quest state: %d", p_ptr->mandos_quest);
+            break;
     }
 }
 
-/*
- * Check if player is adjacent to Mandos and handle interaction
- */
+/* Check if player is adjacent to Mandos and handle interaction */
 void check_mandos_quest_interaction(void)
 {
     int i, y, x;
     static s32b last_interaction_turn = -1;
     
-    log_trace("check_mandos_quest_interaction called, quest state: %d, turn: %d", p_ptr->mandos_quest, turn);
+    byte mandos_second = mandos_second_state();
+    log_trace("check_mandos_quest_interaction called, quest state: %d (second=%d), turn: %d", p_ptr->mandos_quest, mandos_second, turn);
     
     /* Prevent multiple interactions in the same turn */
     if (last_interaction_turn == turn)
@@ -8636,13 +8728,19 @@ void check_mandos_quest_interaction(void)
     }
     
     /* Only check if quest is in appropriate state */
-    if (p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED &&
-        p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
-        p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
-        p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS &&
-        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
+    bool primary_ok = (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED ||
+                       p_ptr->mandos_quest == MANDOS_QUEST_GIVER_PRESENT ||
+                       p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE ||
+                       p_ptr->mandos_quest == MANDOS_QUEST_SUCCESS ||
+                       p_ptr->mandos_quest == MANDOS_QUEST_REWARDED);
+    bool second_ok = (mandos_second == QUEST_STATE_NOT_STARTED ||
+                      mandos_second == QUEST_STATE_GIVER_PRESENT ||
+                      mandos_second == QUEST_STATE_ACTIVE ||
+                      mandos_second == QUEST_STATE_SUCCESS ||
+                      mandos_second == QUEST_STATE_REWARDED);
+    if (!primary_ok && !second_ok)
     {
-        log_trace("Quest not in correct state (%d), returning", p_ptr->mandos_quest);
+        log_trace("Quest not in correct state (primary=%d, second=%d), returning", p_ptr->mandos_quest, mandos_second);
         return;
     }
     
@@ -8674,6 +8772,8 @@ void check_mandos_quest_interaction(void)
  */
 void check_mandos_quest_completion(int r_idx)
 {
+    byte mandos_second = mandos_second_state();
+
     if (p_ptr->mandos_quest == MANDOS_QUEST_ACTIVE)
     {
         log_trace("Mandos quest: Checking completion after death of r_idx %d", r_idx);
@@ -8688,6 +8788,20 @@ void check_mandos_quest_completion(int r_idx)
             msg_print("Return to Mandos the Doomsman to claim your reward.");
             
             log_trace("Mandos quest completed - Brodda slain");
+        }
+    }
+    else if (mandos_second == QUEST_STATE_ACTIVE)
+    {
+        log_trace("Mandos second quest: Checking completion after death of r_idx %d", r_idx);
+
+        if (r_idx == R_IDX_MAEGLIN)
+        {
+            mandos_set_second_state(QUEST_STATE_SUCCESS);
+
+            msg_print("Maeglin falls, his treachery ended at last.");
+            msg_print("Return to Mandos to seal his doom and claim your reward.");
+
+            log_trace("Mandos second quest completed - Maeglin slain");
         }
     }
 }
@@ -9228,6 +9342,7 @@ void grant_unique_bane_ability(void)
     p_ptr->update |= (PU_BONUS);
     handle_stuff();
 }
+
 
 
 

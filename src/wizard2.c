@@ -2315,6 +2315,15 @@ void do_cmd_debug(void)
         do_cmd_debug_orome_status();
         break;
     }
+    
+    /* Unlock disconnected stairs challenge */
+    case '5':
+    {
+        metarun_unlock_challenge_disconnected();
+        msg_print("Disconnected stairs challenge unlocked for this metarun.");
+        log_debug("Wizard command: manually unlocked disconnected stairs challenge");
+        break;
+    }
 
     /* Oops */
     default:

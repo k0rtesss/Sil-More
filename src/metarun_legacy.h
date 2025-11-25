@@ -112,9 +112,46 @@ typedef struct metarun_v8 {
 #define METARUN_V10_SIZE (sizeof(metarun_v10))
 #define METARUN_V9_SIZE (sizeof(metarun_v9))
 #define METARUN_V8_SIZE (sizeof(metarun_v8))
+#define METARUN_V11_QUEST_SLOTS 8
+/* Compact 0.9.1.x layout before quest slot expansion (8 quest counters) */
+typedef struct metarun_v11_compact {
+    u32b id;
+    byte type;
+    byte deaths;
+    byte silmarils;
+    u32b last_played;
+    u32b score;
+    u32b best_run_score;
+    int8_t curse_stacks[METAR_CURSE_SLOTS];
+    u64b curses_seen;
+    u32b persistent_options[8];
+    byte persistent_delay_factor;
+    byte persistent_hitpoint_warn;
+    u32b persistent_window_flags[ANGBAND_TERM_MAX];
+    byte persistent_options_initialized;
+    u32b completed_quests;
+    byte quest_completion_counts[METARUN_V11_QUEST_SLOTS];
+    byte unlocked_oaths;
+    byte banned_oaths;
+    byte max_difficulty_reached;
+    byte quest_reserved[12];
+    u32b fallen_score_total;
+    u32b fallen_score_pool;
+    s16b blessing_points;
+    u16b blessing_points_spent;
+    u16b major_blessings;
+    byte alive_characters;
+    byte pending_blessing_choices[3];
+    byte pending_blessing_count;
+    byte blessing_threshold_mode;
+    byte reserved_runtime[31];
+} metarun_v11_compact;
+
+#define METARUN_V11_COMPACT_SIZE (sizeof(metarun_v11_compact))
 
 void metarun_from_v10(metarun *dst, const metarun_v10 *src);
 void metarun_from_v9(metarun *dst, const metarun_v9 *src);
 void metarun_from_v8(metarun *dst, const metarun_v8 *src);
+void metarun_from_v11_compact(metarun *dst, const metarun_v11_compact *src);
 
 #endif /* METARUN_LEGACY_H */

@@ -5349,6 +5349,14 @@ errr parse_quest_info(char* buf, header* head)
         /* Store the name */
         if (!(quest_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
+
+        quest_ptr->quest_num = (byte)i;
+        quest_ptr->vala_id = 0;
+        quest_ptr->sequence = 1;
+        quest_ptr->quest_flags = 0;
+        quest_ptr->challenge_unlock = 0;
+        /* Default completion cap to global metarun cap unless overridden by L: */
+        quest_ptr->completion_cap = METARUN_QUEST_COMPLETION_CAP;
     }
 
     /* Process 'T' for "Title text" */
@@ -5371,6 +5379,92 @@ errr parse_quest_info(char* buf, header* head)
         /* Store challenge text in dedicated field */
         if (!add_text(&(quest_ptr->challenge_text), head, buf + 2))
             return (PARSE_ERROR_OUT_OF_MEMORY);
+    }
+
+    /* Process 'Z' for "Vala owner" */
+    else if (buf[0] == 'Z')
+    {
+        /* There better be a current quest_ptr */
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        char vala_name[32];
+        int vala_id = 0;
+
+        /* Allow numeric or name-based identifiers */
+        if (1 == sscanf(buf + 2, "%d", &vala_id))
+        {
+            /* already parsed */
+        }
+        else if (1 == sscanf(buf + 2, "%31s", vala_name))
+        {
+            if (SDL_strcasecmp(vala_name, "Tulkas") == 0) vala_id = VALA_TULKAS;
+            else if (SDL_strcasecmp(vala_name, "Aule") == 0) vala_id = VALA_AULE;
+            else if (SDL_strcasecmp(vala_name, "Mandos") == 0) vala_id = VALA_MANDOS;
+            else if (SDL_strcasecmp(vala_name, "Nienna") == 0 || SDL_strcasecmp(vala_name, "Niena") == 0) vala_id = VALA_NIENNA;
+            else if (SDL_strcasecmp(vala_name, "Orome") == 0 || SDL_strcasecmp(vala_name, "Oromë") == 0) vala_id = VALA_OROME;
+            else if (SDL_strcasecmp(vala_name, "Varda") == 0) vala_id = VALA_VARDA;
+        }
+
+        if (vala_id < 0 || vala_id > VALA_MAX) vala_id = 0;
+        quest_ptr->vala_id = (byte)vala_id;
+    }
+
+    /* Process 'J' for "Sequence position" (1-3 within the Vala line) */
+    else if (buf[0] == 'J')
+    {
+        /* There better be a current quest_ptr */
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        int seq = atoi(buf + 2);
+        if (seq < 1) seq = 1;
+        if (seq > VALA_STAGES) seq = VALA_STAGES;
+        quest_ptr->sequence = (byte)seq;
+    }
+
+    /* Process 'F' for "Flags" */
+    else if (buf[0] == 'F')
+    {
+        /* There better be a current quest_ptr */
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        char flagbuf[128];
+        quest_ptr->quest_flags = 0;
+
+        SDL_strlcpy(flagbuf, buf + 2, sizeof(flagbuf));
+        char *token = strtok(flagbuf, " |,:;");
+        while (token)
+        {
+            if (SDL_strcasecmp(token, "GLOBAL") == 0)
+                quest_ptr->quest_flags |= QUEST_FLAG_GLOBAL;
+            else if (SDL_strcasecmp(token, "OPTIONAL_CHAIN") == 0 || SDL_strcasecmp(token, "NO_CHAIN") == 0)
+                quest_ptr->quest_flags |= QUEST_FLAG_OPTIONAL_CHAIN;
+            token = strtok(NULL, " |,:;");
+        }
+    }
+
+    /* Process 'H' for "Challenge unlock" */
+    else if (buf[0] == 'H')
+    {
+        /* There better be a current quest_ptr */
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        char name[32];
+        int challenge_id = 0;
+
+        if (1 == sscanf(buf + 2, "%d", &challenge_id))
+        {
+            /* parsed numeric */
+        }
+        else if (1 == sscanf(buf + 2, "%31s", name))
+        {
+            if (SDL_strcasecmp(name, "DISCONNECTED") == 0 || SDL_strcasecmp(name, "DISCON") == 0)
+                challenge_id = CHALLENGE_DISCONNECTED;
+        }
+
+        if (challenge_id < 0 || challenge_id > CHALLENGE_MAX_TRACKED)
+            challenge_id = 0;
+
+        quest_ptr->challenge_unlock = (byte)challenge_id;
     }
 
     /* Process 'Y' for "quest tYpe" */
@@ -5595,6 +5689,23 @@ errr parse_quest_info(char* buf, header* head)
         /* Save the values in the new ability fields */
         quest_ptr->ability_type = ability_type;
         quest_ptr->ability_id = ability_id;
+    }
+
+    /* Process 'L' for "Limit" (maximum completions per metarun) */
+    else if (buf[0] == 'L')
+    {
+        int cap;
+
+        /* There better be a current quest_ptr */
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        cap = atoi(buf + 2);
+        if (cap <= 0)
+            cap = METARUN_QUEST_COMPLETION_CAP;
+        else if (cap > METARUN_QUEST_COMPLETION_CAP)
+            cap = METARUN_QUEST_COMPLETION_CAP;
+
+        quest_ptr->completion_cap = (byte)cap;
     }
 
     /* Process 'D' for "Description" */
