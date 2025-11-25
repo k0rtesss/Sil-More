@@ -1392,6 +1392,11 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->orome_spiders_killed);
     rd_s16b(&p_ptr->orome_serpents_killed);
     rd_s16b(&p_ptr->orome_vampires_killed);
+    if (savefile_version_at_least(0, 9, 1, 6)) {
+        rd_s16b(&p_ptr->orome_dragons_killed);
+    } else {
+        p_ptr->orome_dragons_killed = 0;
+    }
     if (savefile_has_varda_quest) {
         rd_byte(&p_ptr->varda_quest);
         rd_byte(&p_ptr->varda_vault_ready);

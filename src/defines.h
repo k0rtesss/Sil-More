@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 5   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 6   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.1.x saves */
 
@@ -635,6 +635,7 @@
 #define SPC_OATH_VALOROUS 7  /* Oath of the Valorous Heart */
 #define SPC_UNIQUE_BANE 8  /* Enhanced effectiveness against unique monsters */
 #define SPC_OATH_LIGHT 9   /* Oath of Light */
+#define SPC_OROME_WRAITH 10 /* Wraith of Orome */
 
 /*
  * Attack Types
@@ -2637,6 +2638,8 @@
 // xxx birth_preserve
 #define OPT_birth_discon_stair (OPT_BIRTH + 3)
 #define OPT_birth_ironman (OPT_BIRTH + 4)
+/* Slot +5 free (was birth_no_stores) repurposed for single-stair challenge */
+#define OPT_birth_single_stair (OPT_BIRTH + 5)
 // xxx birth_no_stores
 #define OPT_birth_no_artefacts (OPT_BIRTH + 6)
 #define OPT_birth_fixed_exp (OPT_BIRTH + 7)
@@ -2661,6 +2664,8 @@
 // xxx adult_preserve
 #define OPT_adult_discon_stair (OPT_ADULT + 3)
 #define OPT_adult_ironman (OPT_ADULT + 4)
+/* Slot +5 free (was adult_no_stores) repurposed for single-stair challenge */
+#define OPT_adult_single_stair (OPT_ADULT + 5)
 // xxx adult_no_stores
 #define OPT_adult_no_artefacts (OPT_ADULT + 6)
 // xxx adult_rand_artefacts
@@ -2777,6 +2782,7 @@
 // xxx birth_maximize
 // xxx birth_preserve
 #define birth_discon_stair op_ptr->opt[OPT_birth_discon_stair]
+#define birth_single_stair op_ptr->opt[OPT_birth_single_stair]
 #define birth_ironman op_ptr->opt[OPT_birth_ironman]
 // xxx birth_no_stores
 #define birth_no_artefacts op_ptr->opt[OPT_birth_no_artefacts]
@@ -2809,6 +2815,7 @@
 // xxx adult_maximize
 // xxx adult_preserve
 #define adult_discon_stair op_ptr->opt[OPT_adult_discon_stair]
+#define adult_single_stair op_ptr->opt[OPT_adult_single_stair]
 #define adult_ironman op_ptr->opt[OPT_adult_ironman]
 // xxx adult_no_stores
 #define adult_no_artefacts op_ptr->opt[OPT_adult_no_artefacts]
@@ -3681,6 +3688,7 @@ typedef struct quest_mapping {
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
 #define QUEST_ID_MANDOS_TRAITOR 7  /* Second Mandos quest (Easterling traitors) */
 #define QUEST_ID_MANDOS_BETRAYER 8  /* Third Mandos quest (Maeglin) */
+#define QUEST_ID_OROME_DRAGONS 9  /* Orome second quest - dragon hunt */
 
 /* Generic quest state helpers for multi-stage quests */
 #define QUEST_STATE_NOT_STARTED    0
@@ -3700,7 +3708,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_OROME,  "Orome the Hunter" },
     { QUEST_ID_VARDA,  "Varda, Lady of the Stars" },
     { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Easterlings" },
-    { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" }
+    { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" },
+    { QUEST_ID_OROME_DRAGONS, "Orome, Warden of the Drakes" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
@@ -3708,6 +3717,7 @@ static const quest_mapping quest_id_map[] = {
 /* Challenge identifiers (metarun-level tracking) */
 #define CHALLENGE_NONE            0
 #define CHALLENGE_DISCONNECTED    1
+#define CHALLENGE_SINGLE_STAIR    2
 #define CHALLENGE_MAX_TRACKED     4
 
 //Defines for number of heroes

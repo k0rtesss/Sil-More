@@ -5459,6 +5459,8 @@ errr parse_quest_info(char* buf, header* head)
         {
             if (SDL_strcasecmp(name, "DISCONNECTED") == 0 || SDL_strcasecmp(name, "DISCON") == 0)
                 challenge_id = CHALLENGE_DISCONNECTED;
+            else if (SDL_strcasecmp(name, "SINGLE_STAIR") == 0 || SDL_strcasecmp(name, "SINGLE") == 0)
+                challenge_id = CHALLENGE_SINGLE_STAIR;
         }
 
         if (challenge_id < 0 || challenge_id > CHALLENGE_MAX_TRACKED)

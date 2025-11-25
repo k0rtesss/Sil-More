@@ -34,6 +34,28 @@ static void mandos_set_third_state(byte state)
     quest_set_state(QUEST_ID_MANDOS_BETRAYER, state);
 }
 
+static byte orome_second_state(void)
+{
+    return quest_get_state(QUEST_ID_OROME_DRAGONS);
+}
+
+static void orome_set_second_state(byte state)
+{
+    quest_set_state(QUEST_ID_OROME_DRAGONS, state);
+}
+
+static bool is_dragon_hatchling(const monster_race* r_ptr)
+{
+    if (!r_ptr || !(r_ptr->flags3 & RF3_DRAGON)) return false;
+    if (r_ptr->name && r_name) {
+        cptr name = r_name + r_ptr->name;
+        if (strstr(name, "hatchling") != NULL) return true;
+    }
+    return false;
+}
+
+#define OROME_DRAGON_KILL_TARGET 10
+
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
     /* When story font is enabled, use story_print_text which handles proportional rendering */
@@ -2485,7 +2507,7 @@ void monster_death(int m_idx)
                  p_ptr->niena_monsters_killed, p_ptr->niena_monsters_seen);
     }
 
-    /* Track monster death for Oromë hunting quest - global kill counting */
+    /* Track monster death for Orome hunting quest - global kill counting */
     if (p_ptr->orome_quest >= OROME_QUEST_ACTIVE) {
         bool target_killed = false;
         
@@ -2493,21 +2515,21 @@ void monster_death(int m_idx)
         if (r_ptr->flags3 & RF3_WOLF) {
             p_ptr->orome_wolves_killed++;
             target_killed = true;
-            log_trace("Oromë quest: Wolf killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
+            log_trace("Orome quest: Wolf killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
                      p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
         }
         if (r_ptr->flags3 & RF3_SPIDER) {
             p_ptr->orome_spiders_killed++;
             target_killed = true;
-            log_trace("Oromë quest: Spider killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
+            log_trace("Orome quest: Spider killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
                      p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
         }
         if (r_ptr->flags3 & RF3_SERPENT) {
             p_ptr->orome_serpents_killed++;
             target_killed = true;
-            log_trace("Oromë quest: Serpent killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
+            log_trace("Orome quest: Serpent killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
                      p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
         }
@@ -2515,13 +2537,30 @@ void monster_death(int m_idx)
         if (r_ptr->d_char == 'v') {
             p_ptr->orome_vampires_killed++;
             target_killed = true;
-            log_trace("Oromë quest: Vampire killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
+            log_trace("Orome quest: Vampire killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
                      p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
         }
         
         if (target_killed) {
-            log_trace("Oromë quest: Hunt target monster killed, checking for completion thresholds...");
+            log_trace("Orome quest: Hunt target monster killed, checking for completion thresholds...");
+        }
+    }
+
+    byte orome_dragon_state = orome_second_state();
+    if (orome_dragon_state == QUEST_STATE_ACTIVE) {
+        if ((r_ptr->flags3 & RF3_DRAGON) && !is_dragon_hatchling(r_ptr)) {
+            p_ptr->orome_dragons_killed++;
+            log_trace("Orome dragon quest: Dragon killed (dragons=%d)", p_ptr->orome_dragons_killed);
+
+            if (p_ptr->orome_dragons_killed >= OROME_DRAGON_KILL_TARGET) {
+                orome_set_second_state(QUEST_STATE_SUCCESS);
+
+                msg_format("You have laid low %d mighty dragons. The Huntsman will want this tale.", p_ptr->orome_dragons_killed);
+                msg_print("Wait for Orome to return and bestow his drake-slayer's reward.");
+
+                log_trace("Orome dragon quest completed - dragons=%d (target=%d)", p_ptr->orome_dragons_killed, OROME_DRAGON_KILL_TARGET);
+            }
         }
     }
 
@@ -5917,6 +5956,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_MANDOS_THIRD") || streq(metarun_id, "METARUN_QUEST_MANDOS_BETRAYER")) return METARUN_QUEST_MANDOS_BETRAYER;
     if (streq(metarun_id, "METARUN_QUEST_NIENA")) return METARUN_QUEST_NIENA;
     if (streq(metarun_id, "METARUN_QUEST_OROME")) return METARUN_QUEST_OROME;
+    if (streq(metarun_id, "METARUN_QUEST_OROME_DRAGONS")) return METARUN_QUEST_OROME_DRAGONS;
     if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
     
     /* Unknown or future quest */
@@ -6082,6 +6122,16 @@ bool check_quest_eligibility(int quest_idx, int depth)
         case 4: /* Niena */
             if (p_ptr->niena_quest != NIENA_QUEST_NOT_STARTED) {
                 log_trace("Quest %d eligibility: NIENA_ALREADY_STARTED = FAIL", quest_idx);
+                return false;
+            }
+            break;
+        case QUEST_ID_OROME_DRAGONS:
+            if (orome_second_state() != QUEST_STATE_NOT_STARTED) {
+                log_trace("Quest %d eligibility: OROME_DRAGON_ALREADY_STARTED = FAIL", quest_idx);
+                return false;
+            }
+            if (metarun_quest_completion_count(METARUN_QUEST_OROME) <= 0) {
+                log_trace("Quest %d eligibility: OROME_DRAGON_REQUIRES_FIRST_COMPLETION = FAIL", quest_idx);
                 return false;
             }
             break;
@@ -7165,7 +7215,7 @@ void do_cmd_quest_status(void)
         row++;
     }
 
-    /* Check Oromë quest */
+    /* Check Orome quest */
     if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED) {
         any_quests = true;
         cptr orome_status;
@@ -7178,8 +7228,7 @@ void do_cmd_quest_status(void)
         
         switch (p_ptr->orome_quest) {
             case OROME_QUEST_GIVER_PRESENT:
-                orome_status = "Available - Oromë awaits";
-                color = TERM_L_BLUE;
+                orome_status = "Available - Orome awaits";
                 Term_putstr(col + 2, row++, -1, color, orome_status);
                 display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
                 strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
@@ -7231,6 +7280,59 @@ void do_cmd_quest_status(void)
                 orome_status = "Unknown status";
                 color = TERM_SLATE;
                 Term_putstr(col + 2, row++, -1, color, orome_status);
+        }
+        row++;
+    }
+
+    byte orome_dragon_state = orome_second_state();
+    if (orome_dragon_state != QUEST_STATE_NOT_STARTED) {
+        any_quests = true;
+        cptr orome_status;
+        byte color;
+
+        cptr quest_title = get_quest_title(QUEST_ID_OROME_DRAGONS);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_OROME_DRAGONS);
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        switch (orome_dragon_state) {
+            case QUEST_STATE_GIVER_PRESENT:
+                orome_status = "Available - Orome stalks the drakes";
+                color = TERM_L_BLUE;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME_DRAGONS));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_ACTIVE:
+                orome_status = "Active - Slay ten dragons (no hatchlings)";
+                color = TERM_WHITE;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Drakes felled: %d/%d", p_ptr->orome_dragons_killed, OROME_DRAGON_KILL_TARGET);
+                display_wrapped_text(col + 4, &row, buf, TERM_SLATE, wid);
+                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME_DRAGONS));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_SUCCESS:
+                orome_status = "Complete - Return for reward";
+                color = TERM_L_GREEN;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME_DRAGONS));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_REWARDED:
+                orome_status = "Completed by this character";
+                color = TERM_L_GREEN;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_OROME_DRAGONS));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            default:
+                orome_status = "Unknown status";
+                color = TERM_SLATE;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                break;
         }
         row++;
     }
@@ -7371,6 +7473,17 @@ void do_cmd_quest_status(void)
         cptr oath_name = get_oath_name_from_id(quest_info[5].oath_id);
         char status_text[150];
         strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, orome_completed);
+        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
+    }
+    int orome_dragon_completed = metarun_quest_completion_count(METARUN_QUEST_OROME_DRAGONS);
+    if (orome_dragon_completed > 0 && orome_dragon_state != QUEST_STATE_REWARDED) {
+        if (!has_previous_completions) {
+            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
+            has_previous_completions = true;
+        }
+        cptr quest_title = get_quest_title(QUEST_ID_OROME_DRAGONS);
+        char status_text[150];
+        strnfmt(status_text, sizeof(status_text), "%s (metarun x%d)", quest_title, orome_dragon_completed);
         display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
     }
     int varda_completed = metarun_quest_completion_count(METARUN_QUEST_VARDA);
@@ -9084,7 +9197,7 @@ void check_mandos_quest_completion(int r_idx)
 }
 
 /*
- * Handle quest completion checking for Oromë hunting quest
+ * Handle quest completion checking for Orome hunting quests
  */
 void check_orome_quest_completion(void)
 {
@@ -9093,7 +9206,7 @@ void check_orome_quest_completion(void)
         bool quest_complete = false;
         cptr monster_name = "";
         int kill_count = 0;
-        
+
         if (p_ptr->orome_wolves_killed >= 100) {
             quest_complete = true;
             monster_name = "wolves";
@@ -9114,19 +9227,33 @@ void check_orome_quest_completion(void)
             monster_name = "vampires";
             kill_count = p_ptr->orome_vampires_killed;
         }
-        
+
         if (quest_complete) {
             p_ptr->orome_quest = OROME_QUEST_SUCCESS;
-            
-            msg_format("The hunt is complete! You have slain %d %s, proving your prowess!", 
+
+            msg_format("The hunt is complete! You have slain %d %s, proving your prowess!",
                        kill_count, monster_name);
-            msg_print("Oromë the Huntsman will be pleased with your mastery.");
-            msg_print("Seek him out to claim your reward - the knowledge of Unique Bane!");
-            
-            log_trace("Oromë quest completed - %d %s slain (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
+            msg_print("Orome the Huntsman will be pleased with your mastery.");
+            msg_print("Seek him out to claim your reward - the Wraith of Orome!");
+
+            log_trace("Orome quest completed - %d %s slain (wolves=%d, spiders=%d, serpents=%d, vampires=%d)",
                      kill_count, monster_name,
-                     p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
+                     p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+        }
+    }
+
+    byte orome_dragon_state = orome_second_state();
+    if (orome_dragon_state == QUEST_STATE_ACTIVE) {
+        if (p_ptr->orome_dragons_killed >= OROME_DRAGON_KILL_TARGET) {
+            orome_set_second_state(QUEST_STATE_SUCCESS);
+
+            msg_format("You have laid low %d mighty dragons. The Huntsman will want this tale.",
+                       p_ptr->orome_dragons_killed);
+            msg_print("Wait for Orome to return and bestow his drake-slayer's reward.");
+
+            log_trace("Orome dragon quest completed - dragons=%d (target=%d)",
+                     p_ptr->orome_dragons_killed, OROME_DRAGON_KILL_TARGET);
         }
     }
 }
@@ -9390,7 +9517,7 @@ void check_niena_quest_completion(void)
 }
 
 /*
- * Handle interaction with Oromë for the hunting quest
+ * Handle interaction with Orome for the hunting quests
  */
 void orome_quest_interaction(void)
 {
@@ -9401,33 +9528,121 @@ void orome_quest_interaction(void)
     }
     last_interaction_turn = turn;
     
-    /* Safety check - ensure valid quest state */
-    if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT && 
-        p_ptr->orome_quest != OROME_QUEST_SUCCESS)
+    byte dragon_state = orome_second_state();
+    bool primary_ok = (p_ptr->orome_quest == OROME_QUEST_GIVER_PRESENT ||
+                       p_ptr->orome_quest == OROME_QUEST_SUCCESS);
+    bool dragon_ok = (dragon_state == QUEST_STATE_GIVER_PRESENT ||
+                      dragon_state == QUEST_STATE_ACTIVE ||
+                      dragon_state == QUEST_STATE_SUCCESS ||
+                      dragon_state == QUEST_STATE_REWARDED);
+    
+    if (!primary_ok && !dragon_ok)
     {
-        log_trace("orome_quest_interaction called with invalid quest state: %d", p_ptr->orome_quest);
+        log_trace("orome_quest_interaction called with invalid quest state: base=%d, dragon=%d", p_ptr->orome_quest, dragon_state);
         return;
     }
-    
+
+    if (dragon_ok) {
+        switch (dragon_state) {
+            case QUEST_STATE_GIVER_PRESENT:
+            {
+                log_trace("Orome dragon quest interaction - offering drake hunt");
+                
+                /* Extract initialization texts from quest data */
+                int text_count = 0;
+                cptr* init_texts = extract_quest_init_texts(QUEST_ID_OROME_DRAGONS, &text_count);
+                init_texts = prepend_repeat_context(QUEST_ID_OROME_DRAGONS, init_texts, &text_count, false);
+                
+                if (init_texts && text_count > 0) {
+                    quest_typewriter_menu("Orome, Warden of the Drakes", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+                    free_quest_texts(init_texts);
+                } else {
+                    cptr fallback_texts[] = {
+                        "The Valaroma rings again, fierce and clear:",
+                        "\"You broke the lesser beasts. Now bring down ten great dragons � no hatchlings.\""
+                    };
+                    quest_typewriter_menu("Orome, Warden of the Drakes", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+                }
+                
+                orome_set_second_state(QUEST_STATE_ACTIVE);
+                p_ptr->orome_dragons_killed = 0;
+                p_ptr->quest_reserved[0] = 1;
+                remove_quest_giver(R_IDX_OROME);
+                
+                msg_print("Hunt ten dragons of renown. Return when the drake-lords fall.");
+                log_trace("Orome dragon quest started - kills reset");
+                return;
+            }
+            case QUEST_STATE_ACTIVE:
+            {
+                msg_print("Orome's voice rides the wind: 'Ten great dragons. No hatchlings. Keep the count.'");
+                msg_format("Drakes slain: %d of %d.", p_ptr->orome_dragons_killed, OROME_DRAGON_KILL_TARGET);
+                return;
+            }
+            case QUEST_STATE_SUCCESS:
+            {
+                log_trace("Orome dragon quest completed - granting reward and challenge unlock");
+                
+                /* Extract completion texts from quest data */
+                int completion_count = 0;
+                cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_OROME_DRAGONS, &completion_count);
+                completion_texts = prepend_repeat_context(QUEST_ID_OROME_DRAGONS, completion_texts, &completion_count, true);
+                
+                if (completion_texts && completion_count > 0) {
+                    quest_typewriter_menu("Orome, Warden of the Drakes", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+                    free_quest_texts(completion_texts);
+                } else {
+                    cptr fallback_texts[] = {
+                        "Orome appears, satisfied:",
+                        "\"Well struck. The great worms flee your horn. Carry my wraith and walk the lone stair.\""
+                    };
+                    quest_typewriter_menu("Orome, Warden of the Drakes", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+                }
+                
+                apply_quest_rewards(QUEST_ID_OROME_DRAGONS);
+                metarun_mark_quest_completed(METARUN_QUEST_OROME_DRAGONS);
+                orome_set_second_state(QUEST_STATE_REWARDED);
+                
+                int oath_id = get_quest_oath_id(QUEST_ID_OROME_DRAGONS);
+                if (oath_id > 0) {
+                    metarun_unlock_oath(oath_id);
+                }
+                
+                metarun_unlock_challenge_single_stair();
+                msg_print("You have unlocked the single-stair challenge for future heroes.");
+                remove_quest_giver(R_IDX_OROME);
+                return;
+            }
+            case QUEST_STATE_REWARDED:
+            {
+                log_trace("Orome dragon quest already rewarded - giving acknowledgment");
+                msg_print("Orome nods; the drakes still whisper of your hunt.");
+                return;
+            }
+            default:
+                break;
+        }
+    }
+
     if (p_ptr->orome_quest == OROME_QUEST_GIVER_PRESENT)
     {
-        log_trace("Starting Oromë quest interaction - offering hunting quest");
+        log_trace("Starting Orome quest interaction - offering hunting quest");
         
         /* Extract initialization texts from quest data */
         int text_count = 0;
-        cptr* init_texts = extract_quest_init_texts(5, &text_count); /* Oromë is quest index 5 */
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_OROME, &text_count); /* Orome is quest index 5 */
         init_texts = prepend_repeat_context(QUEST_ID_OROME, init_texts, &text_count, false);
         
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Oromë the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Orome the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(init_texts);
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Oromë the Huntsman regards you with keen eyes:",
-                "'Prove your skill as a hunter. The dark creatures multiply.'"
+                "Orome the Huntsman regards you with keen eyes:",
+                "\"Prove your skill as a hunter. The dark creatures multiply.\""
             };
-            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Orome the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
         
         /* Determine hunt target based on dungeon depth */
@@ -9457,36 +9672,37 @@ void orome_quest_interaction(void)
         p_ptr->orome_quest = OROME_QUEST_ACTIVE;
         p_ptr->orome_target_count = target_count;
         p_ptr->orome_killed_count = 0;
+        p_ptr->quest_reserved[0] = 1;
         
         /* Remove the quest giver now that quest is accepted */
         remove_quest_giver(R_IDX_OROME);
         
         msg_format("You must hunt and slay %d %s to prove your prowess.", target_count, target_name);
         msg_print("Return when the hunt is complete to claim your reward.");
-        msg_print("Oromë fades into the wild, but his presence lingers in your soul.");
+        msg_print("Orome fades into the wild, but his presence lingers in your soul.");
         
-        log_trace("Oromë quest started - hunt %d %s at depth %d", 
+        log_trace("Orome quest started - hunt %d %s at depth %d", 
                  target_count, target_name, depth);
     }
     else if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
     {
-        log_trace("Completing Oromë quest - giving Unique Bane reward");
+        log_trace("Completing Orome quest - granting Wraith of Orome");
         
         /* Extract completion texts from quest data */
         int completion_count = 0;
-        cptr* completion_texts = extract_quest_completion_texts(5, &completion_count); /* Oromë is quest index 5 */
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_OROME, &completion_count); /* Orome is quest index 5 */
         completion_texts = prepend_repeat_context(QUEST_ID_OROME, completion_texts, &completion_count, true);
         
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Oromë the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Orome the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts);
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Oromë appears with a proud smile!",
-                "'You have proven yourself a true hunter of the wild.'"
+                "Orome appears with a proud smile!",
+                "\"You hunt as my own. Take the Wraith of Orome and let rage sharpen every grace.\""
             };
-            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Orome the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
         
         /* Show the specific numbers after the main dialogue */
@@ -9496,20 +9712,20 @@ void orome_quest_interaction(void)
         
         msg_format("You have slain %d %s as commanded.", 
                   p_ptr->orome_target_count, monster_name);
-        msg_print("You learn the secret of hunting unique creatures!");
+        msg_print("Your rage now quickens every strength instead of dulling grace.");
         
         /* Clear quest state */
         p_ptr->orome_quest = OROME_QUEST_REWARDED;
         log_trace("Orome reward: Quest state set to REWARDED (%d)", OROME_QUEST_REWARDED);
         
         /* Apply quest rewards from quest.txt data */
-        apply_quest_rewards(5); /* Oromë is quest index 5 */
+        apply_quest_rewards(QUEST_ID_OROME); /* Orome is quest index 5 */
         
         /* Mark quest as completed in metarun */
         metarun_mark_quest_completed(METARUN_QUEST_OROME);
         
         /* Unlock oath for future characters in this metarun */
-        int oath_id = get_quest_oath_id(5); /* Oromë is quest index 5 */
+        int oath_id = get_quest_oath_id(QUEST_ID_OROME); /* Orome is quest index 5 */
         if (oath_id > 0) {
             metarun_unlock_oath(oath_id);
             msg_format("The %s is now available for future characters in this lineage!", 
@@ -9519,25 +9735,29 @@ void orome_quest_interaction(void)
         /* Remove the quest giver after giving reward */
         remove_quest_giver(R_IDX_OROME);
         
-        log_trace("Oromë quest completed - Unique Bane granted, oath unlocked");
+        log_trace("Orome quest completed - Wraith of Orome granted, oath unlocked");
     }
 }
 
 /*
- * Check if player should interact with Oromë
+ * Check if player should interact with Orome
  */
 void check_orome_quest_interaction(void)
 {
-    /* Only check if quest can be started or completed */
-    if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT && 
-        p_ptr->orome_quest != OROME_QUEST_SUCCESS) {
+    int y, x;
+    byte dragon_state = orome_second_state();
+    
+    /* Only check if a quest is ready to start or finish */
+    if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT &&
+        p_ptr->orome_quest != OROME_QUEST_SUCCESS &&
+        dragon_state != QUEST_STATE_GIVER_PRESENT &&
+        dragon_state != QUEST_STATE_SUCCESS) {
         return;
     }
+
+    log_trace("check_orome_quest_interaction: checking adjacency, quest state: %d, dragon_state: %d", p_ptr->orome_quest, dragon_state);
     
-    log_trace("check_orome_quest_interaction: checking adjacency, quest state: %d", p_ptr->orome_quest);
-    
-    /* Check for adjacent Oromë */
-    int y, x;
+    /* Check for adjacent Orome */
     for (y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
     {
         for (x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
@@ -9547,7 +9767,7 @@ void check_orome_quest_interaction(void)
                 monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
                 if (m_ptr->r_idx == R_IDX_OROME)
                 {
-                    log_trace("Found Oromë adjacent - triggering interaction");
+                    log_trace("Found Orome adjacent - triggering interaction");
                     orome_quest_interaction();
                     return;
                 }
@@ -9555,10 +9775,10 @@ void check_orome_quest_interaction(void)
         }
     }
     
-    /* If quest is completed but Oromë isn't adjacent, try to spawn him */
-    if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
+    /* If quest is completed but Orome is not adjacent, try to spawn him */
+    if (p_ptr->orome_quest == OROME_QUEST_SUCCESS || dragon_state == QUEST_STATE_SUCCESS)
     {
-        log_trace("Oromë quest complete but no Oromë found - trying to spawn");
+        log_trace("Orome quest complete but no Orome found - trying to spawn");
         
         /* Try to find a suitable spot near the player */
         for (y = p_ptr->py - 3; y <= p_ptr->py + 3; y++)
@@ -9570,20 +9790,19 @@ void check_orome_quest_interaction(void)
                 {
                     if (place_monster_one(y, x, R_IDX_OROME, true, true, NULL))
                     {
-                        msg_print("Oromë the Huntsman materializes nearby, ready to honor your success!");
-                        log_trace("Successfully spawned Oromë for quest completion");
+                        msg_print("Orome materializes nearby, ready to honor your success!");
+                        log_trace("Successfully spawned Orome for quest completion");
                         return;
                     }
                 }
             }
         }
         
-        log_trace("Failed to spawn Oromë for quest completion - will complete anyway");
+        log_trace("Failed to spawn Orome for quest completion - will complete anyway");
         /* Complete the quest directly if spawning fails */
         orome_quest_interaction();
     }
 }
-
 /*
  * Grant the unique bane special ability to the player
  * This function can be called from quests, debug commands, or other rewards

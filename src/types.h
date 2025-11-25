@@ -1309,6 +1309,7 @@ struct player_type
     s16b orome_spiders_killed; /* Total spiders killed (any type) */
     s16b orome_serpents_killed; /* Total serpents killed (any type) */
     s16b orome_vampires_killed; /* Total vampires killed (any type) */
+    s16b orome_dragons_killed; /* Total dragons killed (non-hatchling) */
     /* Varda quest tracking */
     byte varda_quest;          /* Varda quest state (VARDA_QUEST_*) */
     byte varda_vault_ready;    /* Flag: should force Duruin Bastion on this level */

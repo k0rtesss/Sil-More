@@ -282,7 +282,8 @@ cptr option_text[OPT_MAX] = {
     NULL, /* xxx birth_maximize */
     "birth_discon_stair", /* OPT_birth_discon_stair */
     "birth_ironman", /* OPT_birth_ironman */
-    NULL, "birth_no_artefacts", /* OPT_birth_no_artefacts */
+    "birth_single_stair", /* OPT_birth_single_stair */
+    "birth_no_artefacts", /* OPT_birth_no_artefacts */
     "birth_fixed_exp", /* OPT_birth_fixed_exp */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -345,6 +346,7 @@ cptr option_text[OPT_MAX] = {
     NULL, /* xxx adult_maximize */
     "adult_discon_stair", /* OPT_adult_discon_stair */
     "adult_ironman", /* OPT_adult_ironman */
+    "adult_single_stair", /* OPT_adult_single_stair */
     NULL, /* xxx adult_no_stores */
     "adult_no_artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
@@ -545,7 +547,8 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* xxx birth_maximize */
     "Disconnected stairs", /* OPT_birth_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_birth_ironman */
-    NULL, "No artefacts", /* OPT_birth_no_artefacts */
+    "Single stair (one up / one down)", /* OPT_birth_single_stair */
+    "No artefacts", /* OPT_birth_no_artefacts */
     "Fixed XP - gain 50K at start and nothing after", /* OPT_birth_fixed_exp */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -608,6 +611,7 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* xxx adult_maximize */
     "Disconnected stairs", /* OPT_adult_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_adult_ironman */
+    "Single stair (one up / one down)", /* OPT_adult_single_stair */
     NULL, /* xxx adult_no_stores */
     "No artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
@@ -810,7 +814,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx birth_maximize */
     false, /* OPT_birth_discon_stair */
     false, /* OPT_birth_ironman */
-    false, /* xxx */
+    false, /* OPT_birth_single_stair */
     false, /* OPT_birth_no_artefacts */
     false, /* OPT_birth_fixed_exp */
     false, /* xxx */
@@ -874,6 +878,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx adult_maximize */
     false, /* OPT_adult_discon_stair */
     false, /* OPT_adult_ironman */
+    false, /* OPT_adult_single_stair */
     false, /* xxx adult_no_stores */
     false, /* OPT_adult_no_artefacts */
     false, /* xxx adult_rand_artefacts */
@@ -973,8 +978,8 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Birth ***/
 
-    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_no_artefacts,
-        OPT_birth_fixed_exp, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_single_stair, OPT_birth_no_artefacts,
+        OPT_birth_fixed_exp, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 

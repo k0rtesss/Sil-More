@@ -16,3 +16,8 @@
 - Added disconnected-challenge completion unlock message using the quest typewriter UI after metarun narratives; third quest availability now gated on challenge completion and prior Mandos traitor completion.
 - Prevented third Mandos quest vaults from consuming the global quest vault budget while keeping vault integrity tracking; blocked Ulfang/Uldor/Maeglin spawns outside their quest contexts.
 - Disconnected-stairs challenge selection is now free; Mandos' Doom remains a quest reward but becomes purchasable for 5000 XP after completing the challenge, with purchase UI and description updated accordingly.
+- Updated Orome quest line: first quest now grants the Wraith of Orome ability (rage +1 all stats), moved Unique Bane to the Tulkas reward text/A:8:8, and added a second roulette quest 'Orome, Warden of the Drakes' (kill 10 non-hatchling dragons).
+- Added metarun/saveload plumbing for the dragon quest (new quest ID/flag, stage-2 state slot, orome_dragons_killed save field, version 0.9.1.6 bump) and quest/status UI blocks for the new stage.
+- Implemented single-stair challenge: unlock on Orome dragon reward (metarun flag + retro unlock), birth toggle gated by unlock alongside disconnected stairs, run completion tracking, and metarun challenge summary updates.
+- Dungeon generation honors adult_single_stair by placing exactly one up + one down stair (respecting shafts on-the-run) instead of the normal stair budget.
+- Challenge selection screen now supports disconnected + single stair toggles; option tables include new birth/adult single-stair option, and quest parser understands H:SINGLE_STAIR unlocks.

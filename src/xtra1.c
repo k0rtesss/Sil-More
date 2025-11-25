@@ -3288,10 +3288,18 @@ static void calc_bonuses(void)
     /* Temporary "Rage" */
     if (p_ptr->rage)
     {
-        p_ptr->stat_misc_mod[A_STR] += 1;
-        p_ptr->stat_misc_mod[A_DEX] -= 1;
-        p_ptr->stat_misc_mod[A_CON] += 1;
-        p_ptr->stat_misc_mod[A_GRA] -= 1;
+        if (p_ptr->active_ability[S_SPC][SPC_OROME_WRAITH]) {
+            /* Huntsman's wraith: rage sharpens every stat */
+            p_ptr->stat_misc_mod[A_STR] += 1;
+            p_ptr->stat_misc_mod[A_DEX] += 1;
+            p_ptr->stat_misc_mod[A_CON] += 1;
+            p_ptr->stat_misc_mod[A_GRA] += 1;
+        } else {
+            p_ptr->stat_misc_mod[A_STR] += 1;
+            p_ptr->stat_misc_mod[A_DEX] -= 1;
+            p_ptr->stat_misc_mod[A_CON] += 1;
+            p_ptr->stat_misc_mod[A_GRA] -= 1;
+        }
     }
 
     /* Temporary Strength */

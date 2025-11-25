@@ -39,6 +39,7 @@
 #define CURSE_MENU_LINES  3
 #define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
 #define METARUN_CHALLENGE_DISCON_FLAG 0x01
+#define METARUN_CHALLENGE_SINGLE_FLAG 0x02
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
@@ -102,6 +103,50 @@ void metarun_unlock_challenge_disconnected(void)
     log_debug("metarun_unlock_challenge_disconnected: after unlock, flag byte=0x%02x", *flags);
     save_metaruns();
     log_debug("metarun_unlock_challenge_disconnected: metaruns saved");
+}
+
+bool metarun_challenge_single_stair_unlocked(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_challenge_single_stair_unlocked: no current metarun");
+        return false;
+    }
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = (*flags & METARUN_CHALLENGE_SINGLE_FLAG) != 0;
+
+    /* Retro-unlock if the drake quest was already completed before this flag existed */
+    if (!unlocked && metarun_quest_completion_count(METARUN_QUEST_OROME_DRAGONS) > 0) {
+        log_debug("metarun_challenge_single_stair_unlocked: retro-unlocking from quest completion");
+        *flags |= METARUN_CHALLENGE_SINGLE_FLAG;
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_single_stair_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_single_stair(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_unlock_challenge_single_stair: no current metarun!");
+        return;
+    }
+
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    log_debug("metarun_unlock_challenge_single_stair: before unlock, flag byte=0x%02x", *flags);
+
+    if ((*flags & METARUN_CHALLENGE_SINGLE_FLAG) != 0) {
+        log_debug("metarun_unlock_challenge_single_stair: already unlocked, skipping");
+        return;
+    }
+
+    *flags |= METARUN_CHALLENGE_SINGLE_FLAG;
+    log_debug("metarun_unlock_challenge_single_stair: after unlock, flag byte=0x%02x", *flags);
+    save_metaruns();
+    log_debug("metarun_unlock_challenge_single_stair: metaruns saved");
 }
 
 static byte* challenge_count_slot(int challenge_id)
@@ -2313,6 +2358,7 @@ static const char* challenge_display_name(int challenge_id)
 {
     switch (challenge_id) {
         case CHALLENGE_DISCONNECTED: return "Disconnected stairs";
+        case CHALLENGE_SINGLE_STAIR: return "Single stair";
         default: return "Unknown challenge";
     }
 }
@@ -2365,6 +2411,9 @@ static void show_completed_quests_summary(void)
     int dis_count = metarun_challenge_completion_count(CHALLENGE_DISCONNECTED);
     strnfmt(line, sizeof(line), "Disconnected stairs: completed %d time%s", dis_count, (dis_count == 1) ? "" : "s");
     Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int single_count = metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR);
+    strnfmt(line, sizeof(line), "Single stair: completed %d time%s", single_count, (single_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
 
     Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
     inkey();
@@ -2415,8 +2464,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     log_info("Metarun update: died=%s, escaped=%s, sil_count=%d, final_score=%ld", 
              died ? "true" : "false", escaped ? "true" : "false", sil_count, (long)final_score);
     int blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
-    bool challenge_mode = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
-    bool challenge_success = false;
+    bool challenge_disconnected = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
+    bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
+    bool challenge_disconnected_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
     u32b character_flags = c_info[p_ptr->pcharacter].flags;
@@ -2459,9 +2509,12 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
         screen_load();
 
-        if (challenge_mode) {
+        if (challenge_disconnected) {
             metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
-            challenge_success = true;
+            challenge_disconnected_success = true;
+        }
+        if (challenge_single_stair) {
+            metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
         }
 
         byte awarded = (sil_count < 3) ? 3 : sil_count;
@@ -2472,7 +2525,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         compute_blessing_pool();
         announce_blessing_gain(blessing_points_before);
         blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
-        if (challenge_success &&
+        if (challenge_disconnected_success &&
             quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
             metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
             show_mandos_third_unlock_message();
@@ -2894,11 +2947,14 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     /* Restore the saved play-screen only after every narrative beat */
     screen_load();
 
-    if (challenge_mode) {
+    if (challenge_disconnected) {
         metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
-        challenge_success = true;
+        challenge_disconnected_success = true;
     }
-    if (challenge_success &&
+    if (challenge_single_stair) {
+        metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
+    }
+    if (challenge_disconnected_success &&
         quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
         metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
         show_mandos_third_unlock_message();

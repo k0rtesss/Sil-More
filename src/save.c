@@ -1242,6 +1242,7 @@ static void wr_extra(void)
     wr_s16b(p_ptr->orome_spiders_killed);
     wr_s16b(p_ptr->orome_serpents_killed);
     wr_s16b(p_ptr->orome_vampires_killed);
+    wr_s16b(p_ptr->orome_dragons_killed);
     /* Varda quest fields */
     wr_byte(p_ptr->varda_quest);
     wr_byte(p_ptr->varda_vault_ready);

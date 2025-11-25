@@ -162,6 +162,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SPC_OATH_VALOROUS] = "Oath of the Valorous Heart",
         [SPC_UNIQUE_BANE] = "Unique Bane", /* Enhanced effectiveness against unique monsters */
         [SPC_OATH_LIGHT] = "Oath of Light",
+        [SPC_OROME_WRAITH] = "Wraith of Orome",
     },
 };
 
@@ -490,6 +491,7 @@ void player_wipe(void)
     p_ptr->orome_killed_count = 0;
     p_ptr->orome_target_type = 0;
     p_ptr->orome_target_count = 0;
+    p_ptr->orome_dragons_killed = 0;
     /* Varda quest init */
     p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
     p_ptr->varda_vault_ready = 0;
@@ -1810,57 +1812,92 @@ static int display_wrapped_text(cptr text, int start_col, int start_row, int max
 #define DISCONNECTED_STAIRS_COST 0
 
 /*
- * Challenge selection (currently only disconnected stairs, unlocked via Mandos)
+ * Challenge selection (disconnected stairs, single stair)
  */
 static NavResult select_challenge_modifiers(void)
 {
-    /* If challenge isn't unlocked, ensure it's off and skip */
-    log_debug("select_challenge_modifiers: checking if challenge is unlocked");
-    if (!metarun_challenge_disconnected_unlocked()) {
-        log_debug("select_challenge_modifiers: challenge NOT unlocked, skipping selection");
-        op_ptr->opt[OPT_birth_discon_stair] = false;
-        op_ptr->opt[OPT_adult_discon_stair] = false;
-        return NAV_OK;
-    }
-    log_debug("select_challenge_modifiers: challenge IS unlocked, showing selection screen");
+    bool dis_unlocked = metarun_challenge_disconnected_unlocked();
+    bool single_unlocked = metarun_challenge_single_stair_unlocked();
 
     /* Default to off each character */
     op_ptr->opt[OPT_birth_discon_stair] = false;
     op_ptr->opt[OPT_adult_discon_stair] = false;
+    op_ptr->opt[OPT_birth_single_stair] = false;
+    op_ptr->opt[OPT_adult_single_stair] = false;
 
-    Term_clear();
-    Term_putstr(2, 2, -1, TERM_L_BLUE, "Challenge Mode");
-    Term_putstr(2, 4, -1, TERM_WHITE, "Disconnected stairs (no XP cost)");
-    Term_putstr(2, 5, -1, TERM_SLATE, "Stairs do not connect back; expect one-way descents.");
-
-    if (DISCONNECTED_STAIRS_COST > 0) {
-        char buf[64];
-        strnfmt(buf, sizeof(buf), "Available XP: %d", p_ptr->new_exp);
-        Term_putstr(2, 7, -1, TERM_SLATE, buf);
+    /* If nothing is unlocked, skip */
+    if (!dis_unlocked && !single_unlocked) {
+        log_debug("select_challenge_modifiers: no unlocked challenges, skipping");
+        return NAV_OK;
     }
-    Term_putstr(2, 9, -1, TERM_SLATE, "Press 'y' to enable, 'n' to skip, ESC to go back.");
+
+    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d)", dis_unlocked, single_unlocked);
+
+    bool enable_dis = false;
+    bool enable_single = false;
 
     while (true) {
+        Term_clear();
+        Term_putstr(2, 2, -1, TERM_L_BLUE, "Challenge Mode");
+
+        int row = 4;
+        if (dis_unlocked) {
+            Term_putstr(2, row++, -1, TERM_WHITE, "d) Disconnected stairs");
+            Term_putstr(4, row++, -1, TERM_SLATE, "Stairs do not connect back; expect one-way descents.");
+            Term_putstr(4, row++, -1, enable_dis ? TERM_L_GREEN : TERM_L_DARK,
+                        enable_dis ? "Enabled" : "Disabled");
+            row++;
+            if (DISCONNECTED_STAIRS_COST > 0) {
+                char buf[64];
+                strnfmt(buf, sizeof(buf), "XP cost: %d (available %d)", DISCONNECTED_STAIRS_COST, p_ptr->new_exp);
+                Term_putstr(4, row++, -1, TERM_SLATE, buf);
+                row++;
+            }
+        }
+
+        if (single_unlocked) {
+            Term_putstr(2, row++, -1, TERM_WHITE, "s) Single stair");
+            Term_putstr(4, row++, -1, TERM_SLATE, "Exactly one up stair and one down stair on each level.");
+            Term_putstr(4, row++, -1, enable_single ? TERM_L_GREEN : TERM_L_DARK,
+                        enable_single ? "Enabled" : "Disabled");
+            row++;
+        }
+
+        Term_putstr(2, row++, -1, TERM_SLATE, "Press letter to toggle, Enter to confirm, 'n' to skip, ESC to go back.");
+
         char key = inkey();
         if (key == ESCAPE) {
             return NAV_BACK;
         }
         if (key == 'n' || key == 'N') {
-            log_debug("Challenge selection: disconnected stairs declined");
+            log_debug("Challenge selection: all challenges declined");
             return NAV_OK;
         }
-        if (key == 'y' || key == 'Y' || key == '\r' || key == '\n' || key == ' ') {
-            if (DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
+        if (dis_unlocked && (key == 'd' || key == 'D')) {
+            enable_dis = !enable_dis;
+            continue;
+        }
+        if (single_unlocked && (key == 's' || key == 'S')) {
+            enable_single = !enable_single;
+            continue;
+        }
+        if (key == '\r' || key == '\n' || key == ' ') {
+            if (enable_dis && DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
                 bell("Not enough experience to enable disconnected stairs.");
                 continue;
             }
-            if (DISCONNECTED_STAIRS_COST > 0) {
+            if (enable_dis && DISCONNECTED_STAIRS_COST > 0) {
                 p_ptr->new_exp -= DISCONNECTED_STAIRS_COST;
                 p_ptr->exp -= DISCONNECTED_STAIRS_COST;
             }
-            op_ptr->opt[OPT_birth_discon_stair] = true;
-            op_ptr->opt[OPT_adult_discon_stair] = true;
-            log_debug("Challenge selection: disconnected stairs enabled (cost %d XP)", DISCONNECTED_STAIRS_COST);
+
+            op_ptr->opt[OPT_birth_discon_stair] = enable_dis;
+            op_ptr->opt[OPT_adult_discon_stair] = enable_dis;
+            op_ptr->opt[OPT_birth_single_stair] = enable_single;
+            op_ptr->opt[OPT_adult_single_stair] = enable_single;
+
+            log_debug("Challenge selection: disconnected=%d, single_stair=%d (cost %d XP applied=%d)",
+                      enable_dis, enable_single, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
             return NAV_OK;
         }
     }

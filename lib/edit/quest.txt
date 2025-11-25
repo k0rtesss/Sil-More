@@ -35,6 +35,7 @@ R:tulkas_quest
 M:METARUN_QUEST_TULKAS
 P:LINEAR_DECAY:27:0:0:0
 S:1:0:0:0
+A:8:8
 I:The air trembles as if with distant thunder, and a great, booming laugh echoes in the stone halls.
 I:Before you stands Tulkas the Strong, his eyes bright with challenge.
 I:
@@ -49,7 +50,8 @@ W:A mighty laugh rings out, shaking dust from the ceiling. Tulkas appears before
 W:
 W:"A glorious fight! I felt the earth shake with the fall of your foe!"
 W:"You have proven your might and shown courage worthy of the songs of old."
-W:"Take this prize—wrought ere the Sun and Moon first rose—and wield it well!"
+W:"Take this prize -- wrought ere the Sun and Moon first rose -- and wield it well!"
+W:"Along with it, take the hunter's lore of Unique Bane, that mighty foes may find no refuge from your wrath."
 
 # Quest of Aule the Smith
 Q:2:Aule the Smith
@@ -143,7 +145,7 @@ R:orome_quest
 M:METARUN_QUEST_OROME
 P:LINEAR_INTERPOLATE:0.05:0.125:0:0
 S:0:1:0:0
-A:8:8
+A:8:10
 I:The air grows wild and clean, smelling of ancient forests under a starlit sky. Suddenly, the clear, mighty blast of a great horn, the Valaróma, echoes from the walls, shaking the very stones and sending a tremor of fear through all evil things. Before you sits a majestic lord upon a great white steed, his face filled with the vigour of the chase. It is Orome, the Huntsman of the Valar.
 I:
 I:"Hail, hunter! I have heard the echo of your deeds in these sunless caverns, but the shadows here run too deep. The foulest kindreds of the Great Enemy have made their lairs throughout this realm: the fell wolves in their packs, the venomous spawn of the Great Spider, the cold serpents of the deep, and the blood-drinking horrors of the night."
@@ -153,7 +155,7 @@ W:As the last of your chosen prey falls, the triumphant sound of the Valaróma r
 W:
 W:"A mighty hunt indeed! The shadows recede, and the foul things of the dark have learned to fear you. You have the eye of a true hunter and a spirit that does not quail before the beasts of night."
 W:
-W:"For this service, I grant you the Hunter's Insight. Henceforth, with every unique and mighty foe you overcome, your understanding of their fell nature shall deepen. Their strengths will reveal their flaws to your eyes, and your arm will strike ever truer against their kind. The more you kill, the greater your mastery shall become."
+W:"For this service, I grant you the Wraith of Orome. When the fury of the hunt comes upon you, it will quicken every strength and grace rather than dull your hand or heart."
 W:
 W:"You have shown a focused purpose, a will that lets deeds speak louder than words. Such resolve makes you worthy to swear an oath of silence, should you choose such a path in a life to come."
 
@@ -224,3 +226,30 @@ I:"There deliver final judgment, and I shall answer with a gift beyond doom--a s
 W:As Maeglin falls, the air stills. Mandos steps from shadow, the weight of ancient judgment in his eyes.
 W:
 W:"The betrayer meets his fate at last. Carry this reprieve I grant: once only, death shall loosen its hold at your call."
+
+# Quest of Orome, Warden of the Drakes
+Q:9:Orome, Warden of the Drakes
+Z:Orome
+J:2
+T:The Huntsman challenges you to break the great drakes
+C:Slay ten dragons of renown (no hatchlings) and return to Orome
+O:2
+L:7
+Y:1
+R:orome_second_quest
+M:METARUN_QUEST_OROME_DRAGONS
+H:SINGLE_STAIR
+E:DEPTH_RANGE:14:25
+P:LINEAR_INTERPOLATE:0.05:0.10:0:0
+S:0:0:0:0
+A:8:10
+I:The clear call of the Valaroma rolls again through the deep halls. Orome rides from shadow with eyes alight.
+I:
+I:"You have proven yourself among the lesser beasts. Now hunt the great worms that brood in these depths."
+I:"Slay ten dragons of renown -- no hatchlings, but the great drakes and their ancient kin. Break their terror and return to me."
+W:The air shimmers with heat and dread as the last dragon falls. Orome appears, satisfied by the ruin of its kin.
+W:
+W:"Well struck! The lords of flame and frost have learned to flee your horn."
+W:"Keep the Wraith of Orome to carry you through such fury, and I unlock a harsher path for your line: a challenge of lone stairs, one way up and one way down upon each delving."
+W:
+W:"Choose it if you would test the mettle of your heirs."

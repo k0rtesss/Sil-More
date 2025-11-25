@@ -736,3 +736,6 @@ N:169:Oath of Light
 I:8:9:0
 D:Swearing the Oath of Light, as those who keep Varda's stars burning in the depths, you refuse any gear that dims your glow. While the oath holds, your inner light shines two steps brighter.
 
+N:170:Wraith of Orome
+I:8:10:0
+D:Taking on the Wraith of Orome, the wild fey aspect of the Huntsman, your battle-rage sharpens every gift. When raging, each of your stats rises by one instead of gaining strength and constitution while losing grace and dexterity.
