@@ -479,6 +479,7 @@ void do_cmd_go_up(void)
         if (p_ptr->quest_reserved[0] &&
             p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED &&
             p_ptr->niena_quest == NIENA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_NIENA_MORGOTH) == QUEST_STATE_NOT_STARTED &&
             p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
@@ -684,6 +685,7 @@ void do_cmd_go_down(void)
         if (p_ptr->quest_reserved[0] &&
             p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED &&
             p_ptr->niena_quest == NIENA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_NIENA_MORGOTH) == QUEST_STATE_NOT_STARTED &&
             p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
@@ -5885,4 +5887,3 @@ void do_cmd_throw_from_slot(int slot)
     throw_pending_slot = slot;
     do_cmd_throw(false);
 }
-

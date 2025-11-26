@@ -253,3 +253,49 @@ W:"Well struck! The lords of flame and frost have learned to flee your horn."
 W:"Keep the Wraith of Orome to carry you through such fury, and I unlock a harsher path for your line: a challenge of lone stairs, one way up and one way down upon each delving."
 W:
 W:"Choose it if you would test the mettle of your heirs."
+
+# Quest of Orome, the Great Hunt
+Q:10:Orome, Hunt of the Great
+Z:Orome
+J:3
+T:The Huntsman sets a long hunt
+C:Slay Orome's marked foes across your delvings: Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil
+O:2
+L:1
+Y:0
+R:orome_third_quest
+M:METARUN_QUEST_OROME_GREAT_HUNT
+F:GLOBAL
+S:0:0:0:0
+A:8:11
+I:After you survive the lone-stair challenge, the clear call of the Valaroma returns, closer than before.
+I:
+I:"Some prey still prowl beneath the earth: Scatha the Worm, Smaug the Golden, Draugluin, Gostir, Shelob, Thuringwethil."
+I:"Hunt them down across every delving. This charge binds you and all your heirs until the last of them falls."
+W:The final mark is slain. The Valaroma rings once more and Orome's presence thunders in your bones.
+W:
+W:"Your line has answered every horn-blast. Take this rhythm of bow and spear--two arrows struck true will drive your next spear home with doubled wrath."
+W:"Let those who follow you claim it for 5000 experience if they would walk the Huntsman's path."
+
+# Quest of Nienna, Mercy in Angband
+Q:11:Nienna's Mercy in Angband
+Z:Nienna
+J:2
+T:Nienna bids you steal a Silmaril without striking Morgoth
+C:Escape from Morgoth's hall with a Silmaril without attacking him at all—not even with your own area attacks. Wounds from monsters do not count against you.
+O:1
+L:1
+Y:0
+R:niena_second_quest
+M:METARUN_QUEST_NIENA_MORGOTH
+H:FIXED_50K
+E:DEPTH_RANGE:20:20
+S:0:0:0:0
+A:0:0
+I:In the shadow of the throne, Nienna waits with eyes full of sorrow and resolve.
+I:"Take a Silmaril from Morgoth's crown, yet lay no blow upon him—not blade, arrow, song, nor blast."
+I:"Even the sweep of your power must spare him; only the malice of his servants is counted not against you."
+I:"I lend you my Gift of Mercy for this task. Tread softly and bring the light out of these pits."
+W:As you flee the pits with the Silmaril, Nienna's presence soothes your racing heart.
+W:"You have stolen light without striking the Black Foe. Mercy has endured in Angband."
+W:"I open a harsher road for your line: the fixed 50,000 experience challenge, and my Gift may be learned thereafter for 5000 experience."

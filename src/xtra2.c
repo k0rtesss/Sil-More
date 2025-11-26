@@ -14,6 +14,9 @@
 #include "player/killer.h"
 #include "metarun.h"
 
+/* Forward declarations for Nienna's Morgoth-hall quest */
+void niena_mark_morgoth_attack(void);
+
 static byte mandos_second_state(void)
 {
     return quest_get_state(QUEST_ID_MANDOS_TRAITOR);
@@ -32,6 +35,16 @@ static byte mandos_third_state(void)
 static void mandos_set_third_state(byte state)
 {
     quest_set_state(QUEST_ID_MANDOS_BETRAYER, state);
+}
+
+static byte niena_second_state(void)
+{
+    return quest_get_state(QUEST_ID_NIENA_MORGOTH);
+}
+
+static void niena_set_second_state(byte state)
+{
+    quest_set_state(QUEST_ID_NIENA_MORGOTH, state);
 }
 
 static byte orome_second_state(void)
@@ -2793,6 +2806,11 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 {
     monster_type* m_ptr = &mon_list[m_idx];
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
+
+    /* Track Nienna's mercy quest if the player harms Morgoth */
+    if (m_ptr->r_idx == R_IDX_MORGOTH && who < 0) {
+        niena_mark_morgoth_attack();
+    }
 
     /* Redraw (later) if needed */
     if (p_ptr->health_who == m_idx)
@@ -6385,7 +6403,7 @@ static cptr get_quest_title(int quest_idx);
 static cptr get_oath_name_from_id(byte oath_id);
 
 /* Prepend a repeat-attempt context line when returning to a Valar quest under an oath */
-static cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion)
+cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion)
 {
     if (!texts || !count || quest_idx <= 0 || quest_idx >= z_info->quest_max) return texts;
 
@@ -6782,6 +6800,10 @@ static cptr get_quest_reward_text(int quest_idx)
     }
     if (quest_idx == QUEST_ID_MANDOS_BETRAYER) {
         SDL_strlcpy(reward_buf, "Earn one Mandos resurrection charge (usable once via the quest menu)", sizeof(reward_buf));
+        return reward_buf;
+    }
+    if (quest_idx == QUEST_ID_NIENA_MORGOTH) {
+        SDL_strlcpy(reward_buf, "Unlock the fixed 50k XP challenge; enables purchasing Nienna's Gift of Mercy for 5000 XP", sizeof(reward_buf));
         return reward_buf;
     }
     
@@ -7248,6 +7270,61 @@ void do_cmd_quest_status(void)
                 niena_status = "Unknown status";
                 color = TERM_SLATE;
                 Term_putstr(col + 2, row++, -1, color, niena_status);
+        }
+        row++;
+    }
+
+    byte niena_morgoth = niena_second_state();
+    bool show_niena_morgoth = (niena_morgoth != QUEST_STATE_NOT_STARTED);
+    if (!show_niena_morgoth && metarun_challenge_fixed_exp_unlocked()) {
+        /* Show as available if the challenge/quest has been unlocked before */
+        show_niena_morgoth = true;
+        niena_morgoth = QUEST_STATE_GIVER_PRESENT;
+    }
+    if (show_niena_morgoth) {
+        any_quests = true;
+        cptr quest_title = get_quest_title(QUEST_ID_NIENA_MORGOTH);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_NIENA_MORGOTH);
+        cptr status = NULL;
+        byte color = TERM_SLATE;
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        switch (niena_morgoth) {
+            case QUEST_STATE_GIVER_PRESENT:
+                status = "Available in Morgoth's hall (Oath of Mercy)";
+                color = TERM_L_BLUE;
+                Term_putstr(col + 2, row++, -1, color, status);
+                display_wrapped_text(col + 2, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA_MORGOTH));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_ACTIVE:
+                if (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) {
+                    status = "Failed - you struck Morgoth";
+                    color = TERM_RED;
+                    Term_putstr(col + 2, row++, -1, color, status);
+                } else {
+                    status = "Active - escape with a Silmaril without attacking";
+                    color = TERM_WHITE;
+                    Term_putstr(col + 2, row++, -1, color, status);
+                    display_wrapped_text(col + 2, &row, quest_challenge, TERM_SLATE, wid);
+                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA_MORGOTH));
+                    display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                }
+                break;
+            case QUEST_STATE_REWARDED:
+                status = "Completed by this character";
+                color = TERM_L_GREEN;
+                Term_putstr(col + 2, row++, -1, color, status);
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_NIENA_MORGOTH));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+            default:
+                status = "Not started";
+                color = TERM_L_DARK;
+                Term_putstr(col + 2, row++, -1, color, status);
+                break;
         }
         row++;
     }
@@ -9410,6 +9487,124 @@ void check_orome_quest_completion(int r_idx)
 
 
 /*
+ * Handle interaction with Niena for the Morgoth-hall mercy quest
+ */
+void niena_revoke_temp_mercy_gift(bool silent)
+{
+    if (!(p_ptr->niena_reserved & NIENA_FLAG_MERCY_GIFT_TEMP)) return;
+
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MERCY_GIFT_TEMP);
+    p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = false;
+    p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = false;
+    p_ptr->innate_ability[S_SPC][SPC_NIENA_MERCY] = false;
+
+    if (!silent) {
+        msg_print("Nienna's Gift of Mercy fades from you.");
+    }
+
+    p_ptr->update |= (PU_BONUS);
+    handle_stuff();
+}
+
+static void grant_niena_mercy_gift_for_morgoth(void)
+{
+    p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = true;
+    if (!p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY]) {
+        p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = true;
+        p_ptr->innate_ability[S_SPC][SPC_NIENA_MERCY] = true;
+        p_ptr->niena_reserved |= NIENA_FLAG_MERCY_GIFT_TEMP;
+        ability_log_record_gain(S_SPC, SPC_NIENA_MERCY);
+        msg_print("Nienna bestows her Gift of Mercy to aid your theft.");
+    }
+    p_ptr->update |= (PU_BONUS);
+    handle_stuff();
+}
+
+void niena_mark_morgoth_attack(void)
+{
+    if (niena_second_state() != QUEST_STATE_ACTIVE) return;
+    if (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) return;
+
+    p_ptr->niena_reserved |= NIENA_FLAG_MORGOTH_ATTACKED;
+    msg_print("By striking Morgoth you have broken Nienna's charge of mercy.");
+    log_trace("Niena Morgoth quest: player attacked Morgoth, marking failure");
+
+    /* Withdraw the temporary Gift if it was granted for this quest */
+    niena_revoke_temp_mercy_gift(false);
+}
+
+static void niena_morgoth_interaction(void)
+{
+    static int last_interaction_turn_morgoth = -1;
+    if (last_interaction_turn_morgoth == turn) {
+        return; /* Already handled this turn */
+    }
+    last_interaction_turn_morgoth = turn;
+
+    if (niena_second_state() != QUEST_STATE_GIVER_PRESENT) {
+        log_trace("niena_morgoth_interaction called with state=%d", niena_second_state());
+        return;
+    }
+
+    log_trace("Starting Niena Morgoth quest interaction");
+
+    int text_count = 0;
+    cptr* init_texts = extract_quest_init_texts(QUEST_ID_NIENA_MORGOTH, &text_count);
+    init_texts = prepend_repeat_context(QUEST_ID_NIENA_MORGOTH, init_texts, &text_count, false);
+
+    if (init_texts && text_count > 0) {
+        quest_typewriter_menu("Niena, Lady of Pity", init_texts, text_count, TERM_L_BLUE, TERM_WHITE);
+        free_quest_texts(init_texts);
+    } else {
+        cptr fallback_texts[] = {
+            "Niena stands amidst the darkness of Angband, grief and resolve mingled:",
+            "'Take a Silmaril from Morgoth's crown, yet do not raise your hand against him.'",
+            "'Not even your sweeping songs or shattering blasts may touch him. The wounds of monsters are not counted against you.'",
+            "'Go with mercy; I lend you my Gift to soften your steps.'"
+        };
+        quest_typewriter_menu("Niena, Lady of Pity", fallback_texts, 4, TERM_L_BLUE, TERM_WHITE);
+    }
+
+    niena_set_second_state(QUEST_STATE_ACTIVE);
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED);
+    p_ptr->niena_level = p_ptr->depth;
+    p_ptr->quest_reserved[0] = 1;
+
+    grant_niena_mercy_gift_for_morgoth();
+    remove_quest_giver(R_IDX_NIENA);
+
+    msg_print("Do not strike Morgoth with any attack—melee, song, or area effect. Only his servants may harm him.");
+}
+
+/*
+ * Check if player is adjacent to Niena for the Morgoth-hall quest
+ */
+void check_niena_morgoth_interaction(void)
+{
+    if (niena_second_state() != QUEST_STATE_GIVER_PRESENT) return;
+
+    for (int y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
+    {
+        for (int x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
+        {
+            if (y == p_ptr->py && x == p_ptr->px) continue;
+            if (!in_bounds(y, x)) continue;
+
+            if (cave_m_idx[y][x] > 0)
+            {
+                monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
+                
+                if (m_ptr->r_idx == R_IDX_NIENA)
+                {
+                    niena_morgoth_interaction();
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/*
  * Handle interaction with Niena for the mercy quest
  */
 void niena_quest_interaction(void)
@@ -9989,16 +10184,6 @@ void grant_unique_bane_ability(void)
     p_ptr->update |= (PU_BONUS);
     handle_stuff();
 }
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -4788,6 +4788,10 @@ void py_attack_aux(int y, int x, int attack_type)
     m_ptr = &mon_list[m_idx];
     r_ptr = &r_info[m_ptr->r_idx];
 
+    if (m_ptr->r_idx == R_IDX_MORGOTH) {
+        niena_mark_morgoth_attack();
+    }
+
     /*possibly update the monster health bar*/
     if (p_ptr->health_who == cave_m_idx[y][x])
         p_ptr->redraw |= (PR_HEALTHBAR);
@@ -6853,7 +6857,6 @@ void run_step(int dir)
     /* Move the player */
     move_player(p_ptr->run_cur_dir);
 }
-
 
 
 

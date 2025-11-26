@@ -26,10 +26,11 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_VARDA,
     METARUN_QUEST_MANDOS_BETRAYER,
     METARUN_QUEST_OROME_DRAGONS,
-    METARUN_QUEST_OROME_GREAT_HUNT
+    METARUN_QUEST_OROME_GREAT_HUNT,
+    METARUN_QUEST_NIENA_MORGOTH
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA | METARUN_QUEST_NIENA_MORGOTH)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -52,6 +53,7 @@ static int quest_id_from_slot(int slot)
         case 7: return QUEST_ID_MANDOS_BETRAYER;
         case 8: return QUEST_ID_OROME_DRAGONS;
         case 9: return QUEST_ID_OROME_GREAT_HUNT;
+        case 10: return QUEST_ID_NIENA_MORGOTH;
         default: return 0;
     }
 }
@@ -123,6 +125,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_OROME_DRAGONS: return METARUN_QUEST_OROME_DRAGONS;
         case QUEST_ID_OROME_GREAT_HUNT: return METARUN_QUEST_OROME_GREAT_HUNT;
         case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
+        case QUEST_ID_NIENA_MORGOTH: return METARUN_QUEST_NIENA_MORGOTH;
         default: return 0;
     }
 }
@@ -364,6 +367,12 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Nienna quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_NIENA);
     }
+    byte niena_second_state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (niena_second_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_NIENA_MORGOTH)) {
+        log_trace("Metarun: Marking Nienna Morgoth quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_NIENA_MORGOTH);
+    }
 
     if (p_ptr->orome_quest == OROME_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_OROME)) {
         log_trace("Metarun: Marking Orome quest as completed (rewarded)");
@@ -449,6 +458,13 @@ void metarun_restore_quest_states(void)
             log_trace("Metarun restore: Niena quest set to REWARDED (%d)", NIENA_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0) {
+        if (quest_get_state(QUEST_ID_NIENA_MORGOTH) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Nienna Morgoth quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_NIENA_MORGOTH);
     }
     
     /* Restore Orome quest state */

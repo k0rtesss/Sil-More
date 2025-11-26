@@ -2525,6 +2525,11 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 prt = damroll(armor_dice, armor_sides);
                 net_dam = damage - prt;
 
+                /* Any player-triggered quake that strikes Morgoth counts as an attack */
+                if (who < 0 && m_ptr->r_idx == R_IDX_MORGOTH) {
+                    niena_mark_morgoth_attack();
+                }
+
                 // apply damage after protection
                 if (net_dam > 0)
                 {
@@ -3411,7 +3416,6 @@ int do_ident_item(int item, object_type* o_ptr)
 
     return (squelch);
 }
-
 
 
 

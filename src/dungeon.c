@@ -565,6 +565,7 @@ static void process_world(void)
 
     /* Check for Niena quest interaction every turn */
     check_niena_quest_interaction();
+    check_niena_morgoth_interaction();
 
     /* Check for Oromë quest interaction every turn */
     check_orome_quest_interaction();
@@ -4046,7 +4047,6 @@ PlayResult play_game(void)
         return PLAY_DONE;
     }
 }
-
 
 
 

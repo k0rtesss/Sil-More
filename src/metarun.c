@@ -40,6 +40,7 @@
 #define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
 #define METARUN_CHALLENGE_DISCON_FLAG 0x01
 #define METARUN_CHALLENGE_SINGLE_FLAG 0x02
+#define METARUN_CHALLENGE_FIXED_FLAG 0x04
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
@@ -147,6 +148,52 @@ void metarun_unlock_challenge_single_stair(void)
     log_debug("metarun_unlock_challenge_single_stair: after unlock, flag byte=0x%02x", *flags);
     save_metaruns();
     log_debug("metarun_unlock_challenge_single_stair: metaruns saved");
+}
+
+bool metarun_challenge_fixed_exp_unlocked(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_challenge_fixed_exp_unlocked: no current metarun");
+        return false;
+    }
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = (*flags & METARUN_CHALLENGE_FIXED_FLAG) != 0;
+
+    /* Retro-unlock if the Nienna Morgoth-hall quest was already completed before the flag existed */
+    if (!unlocked &&
+        (metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0)) {
+        log_debug("metarun_challenge_fixed_exp_unlocked: retro-unlocking from prior completion");
+        *flags |= METARUN_CHALLENGE_FIXED_FLAG;
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_fixed_exp_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_fixed_exp(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_unlock_challenge_fixed_exp: no current metarun!");
+        return;
+    }
+
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    log_debug("metarun_unlock_challenge_fixed_exp: before unlock, flag byte=0x%02x", *flags);
+
+    if ((*flags & METARUN_CHALLENGE_FIXED_FLAG) != 0) {
+        log_debug("metarun_unlock_challenge_fixed_exp: already unlocked, skipping");
+        return;
+    }
+
+    *flags |= METARUN_CHALLENGE_FIXED_FLAG;
+    log_debug("metarun_unlock_challenge_fixed_exp: after unlock, flag byte=0x%02x", *flags);
+    save_metaruns();
+    log_debug("metarun_unlock_challenge_fixed_exp: metaruns saved");
 }
 
 static byte* challenge_count_slot(int challenge_id)
@@ -2418,6 +2465,7 @@ static const char* challenge_display_name(int challenge_id)
     switch (challenge_id) {
         case CHALLENGE_DISCONNECTED: return "Disconnected stairs";
         case CHALLENGE_SINGLE_STAIR: return "Single stair";
+        case CHALLENGE_FIXED_50K_XP: return "Fixed 50k XP";
         default: return "Unknown challenge";
     }
 }
@@ -2473,6 +2521,9 @@ static void show_completed_quests_summary(void)
     int single_count = metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR);
     strnfmt(line, sizeof(line), "Single stair: completed %d time%s", single_count, (single_count == 1) ? "" : "s");
     Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int fixed_count = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    strnfmt(line, sizeof(line), "Fixed 50k XP: completed %d time%s", fixed_count, (fixed_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
 
     Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
     inkey();
@@ -2524,6 +2575,65 @@ static void maybe_unlock_orome_great_hunt(bool challenge_single_stair_active)
     show_orome_great_hunt_unlock_message();
 }
 
+static void show_niena_mercy_unlock_message(void)
+{
+    const char *lines[] = {
+        "You completed the fixed 50,000 XP challenge.",
+        "Nienna smiles through tears: her Gift of Mercy may now be learned for 5000 experience.",
+        "Find it in the Special abilities list if you would carry her pity into future delvings."
+    };
+    quest_typewriter_menu("Nienna's Gift of Mercy", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+}
+
+static void maybe_unlock_niena_mercy_purchase(bool challenge_fixed_active, int fixed_count_before)
+{
+    if (!challenge_fixed_active) return;
+    if (fixed_count_before > 0) return; /* Already unlocked */
+    int fixed_after = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    if (fixed_after <= fixed_count_before) return;
+    show_niena_mercy_unlock_message();
+}
+
+static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
+{
+    byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (state != QUEST_STATE_ACTIVE) return;
+
+    bool violated = (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) != 0;
+    if (!escaped_with_sils || violated) {
+        if (violated) {
+            msg_print("You struck Morgoth; Nienna's mercy quest is lost.");
+        }
+        quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_NOT_STARTED);
+        niena_revoke_temp_mercy_gift(true);
+        p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED);
+        return;
+    }
+
+    int completion_count = 0;
+    cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_MORGOTH, &completion_count);
+    completion_texts = prepend_repeat_context(QUEST_ID_NIENA_MORGOTH, completion_texts, &completion_count, true);
+
+    if (completion_texts && completion_count > 0) {
+        quest_typewriter_menu("Nienna's Mercy", completion_texts, completion_count, TERM_L_BLUE, TERM_WHITE);
+        free_quest_texts(completion_texts);
+    } else {
+        const char *fallback[] = {
+            "Nienna's presence returns as you escape with the Silmaril, untouched by your hand.",
+            "'Your restraint has spared even the Black Foe a blow. Carry this mercy into the tales to come.'"
+        };
+        quest_typewriter_menu("Nienna's Mercy", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+    }
+
+    quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_REWARDED);
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED);
+    niena_revoke_temp_mercy_gift(true);
+    metarun_mark_quest_completed(METARUN_QUEST_NIENA_MORGOTH);
+    metarun_unlock_challenge_fixed_exp();
+    p_ptr->quest_reserved[0] = 1;
+    msg_print("The fixed 50k XP challenge is now unlocked.");
+}
+
 /* ------------------------------------------------------------------
  * metarun_update_on_exit() – v5, 30 Jul 2025
  * ------------------------------------------------------------------
@@ -2559,6 +2669,8 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     int blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
     bool challenge_disconnected = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
     bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
+    bool challenge_fixed_exp = (op_ptr && op_ptr->opt[OPT_birth_fixed_exp] && metarun_challenge_fixed_exp_unlocked());
+    int fixed_challenge_before = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
     bool challenge_disconnected_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
@@ -2572,6 +2684,8 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool escaped_with_sils = escaped && (sil_count > 0);
     bool fast_forward = false; // Track if user wants to skip fade effects
     bool morgoth_victory = (p_ptr->morgoth_slain && !escaped && !died);
+
+    resolve_niena_morgoth_quest_on_exit(escaped_with_sils);
 
     /* Treat as a death unless Eru intervenes */
     if (died && !has_gift_eru)
@@ -2609,6 +2723,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         if (challenge_single_stair) {
             metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
         }
+        if (challenge_fixed_exp) {
+            metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
+        }
 
         byte awarded = (sil_count < 3) ? 3 : sil_count;
         metarun_gain_silmarils(awarded);
@@ -2624,6 +2741,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
             show_mandos_third_unlock_message();
         }
         maybe_unlock_orome_great_hunt(challenge_single_stair);
+        maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
         check_run_end();
         metarun_save_persistent_settings();
         save_metaruns();
@@ -3048,12 +3166,16 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     if (challenge_single_stair) {
         metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
     }
+    if (challenge_fixed_exp) {
+        metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
+    }
     if (challenge_disconnected_success &&
         quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
         metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
         show_mandos_third_unlock_message();
     }
     maybe_unlock_orome_great_hunt(challenge_single_stair);
+    maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
 
     compute_blessing_pool();
     announce_blessing_gain(blessing_points_before);

@@ -1822,23 +1822,26 @@ static NavResult select_challenge_modifiers(void)
 {
     bool dis_unlocked = metarun_challenge_disconnected_unlocked();
     bool single_unlocked = metarun_challenge_single_stair_unlocked();
+    bool fixed_unlocked = metarun_challenge_fixed_exp_unlocked();
 
     /* Default to off each character */
     op_ptr->opt[OPT_birth_discon_stair] = false;
     op_ptr->opt[OPT_adult_discon_stair] = false;
     op_ptr->opt[OPT_birth_single_stair] = false;
     op_ptr->opt[OPT_adult_single_stair] = false;
+    op_ptr->opt[OPT_birth_fixed_exp] = false;
 
     /* If nothing is unlocked, skip */
-    if (!dis_unlocked && !single_unlocked) {
+    if (!dis_unlocked && !single_unlocked && !fixed_unlocked) {
         log_debug("select_challenge_modifiers: no unlocked challenges, skipping");
         return NAV_OK;
     }
 
-    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d)", dis_unlocked, single_unlocked);
+    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d)", dis_unlocked, single_unlocked, fixed_unlocked);
 
     bool enable_dis = false;
     bool enable_single = false;
+    bool enable_fixed = false;
 
     while (true) {
         Term_clear();
@@ -1866,6 +1869,13 @@ static NavResult select_challenge_modifiers(void)
                         enable_single ? "Enabled" : "Disabled");
             row++;
         }
+        if (fixed_unlocked) {
+            Term_putstr(2, row++, -1, TERM_WHITE, "f) Fixed 50k XP");
+            Term_putstr(4, row++, -1, TERM_SLATE, "Begin with 50,000 experience and gain nothing further.");
+            Term_putstr(4, row++, -1, enable_fixed ? TERM_L_GREEN : TERM_L_DARK,
+                        enable_fixed ? "Enabled" : "Disabled");
+            row++;
+        }
 
         Term_putstr(2, row++, -1, TERM_SLATE, "Press letter to toggle, Enter to confirm, 'n' to skip, ESC to go back.");
 
@@ -1885,6 +1895,10 @@ static NavResult select_challenge_modifiers(void)
             enable_single = !enable_single;
             continue;
         }
+        if (fixed_unlocked && (key == 'f' || key == 'F')) {
+            enable_fixed = !enable_fixed;
+            continue;
+        }
         if (key == '\r' || key == '\n' || key == ' ') {
             if (enable_dis && DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
                 bell("Not enough experience to enable disconnected stairs.");
@@ -1899,9 +1913,10 @@ static NavResult select_challenge_modifiers(void)
             op_ptr->opt[OPT_adult_discon_stair] = enable_dis;
             op_ptr->opt[OPT_birth_single_stair] = enable_single;
             op_ptr->opt[OPT_adult_single_stair] = enable_single;
+            op_ptr->opt[OPT_birth_fixed_exp] = enable_fixed;
 
-            log_debug("Challenge selection: disconnected=%d, single_stair=%d (cost %d XP applied=%d)",
-                      enable_dis, enable_single, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
+            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d (cost %d XP applied=%d)",
+                      enable_dis, enable_single, enable_fixed, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
             return NAV_OK;
         }
     }
@@ -2823,10 +2838,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
-
-
-
 
 
 

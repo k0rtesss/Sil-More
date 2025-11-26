@@ -5461,6 +5461,8 @@ errr parse_quest_info(char* buf, header* head)
                 challenge_id = CHALLENGE_DISCONNECTED;
             else if (SDL_strcasecmp(name, "SINGLE_STAIR") == 0 || SDL_strcasecmp(name, "SINGLE") == 0)
                 challenge_id = CHALLENGE_SINGLE_STAIR;
+            else if (SDL_strcasecmp(name, "FIXED_50K") == 0 || SDL_strcasecmp(name, "FIXED_XP") == 0 || SDL_strcasecmp(name, "FIXED") == 0)
+                challenge_id = CHALLENGE_FIXED_50K_XP;
         }
 
         if (challenge_id < 0 || challenge_id > CHALLENGE_MAX_TRACKED)
@@ -6107,7 +6109,6 @@ errr parse_oath_info(char* buf, header* head)
 #else /* ALLOW_TEMPLATES */
 
 #endif /* ALLOW_TEMPLATES */
-
 
 
 

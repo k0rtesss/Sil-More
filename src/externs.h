@@ -1263,6 +1263,7 @@ extern cptr quest_display_title(int quest_id);
 extern cptr* extract_quest_init_texts(int quest_idx, int* count);
 extern cptr* extract_quest_completion_texts(int quest_idx, int* count);
 extern void free_quest_texts(cptr* texts);
+extern cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion);
 extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color);
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
@@ -1283,6 +1284,9 @@ extern int quest_completion_cap(int quest_idx);
 extern void niena_quest_interaction(void);
 extern void check_niena_quest_interaction(void);
 extern void check_niena_quest_completion(void);
+extern void check_niena_morgoth_interaction(void);
+extern void niena_mark_morgoth_attack(void);
+extern void niena_revoke_temp_mercy_gift(bool silent);
 extern void check_orome_quest_completion(int r_idx);
 extern void orome_quest_interaction(void);
 extern void check_orome_quest_interaction(void);
@@ -1415,6 +1419,3 @@ extern void sdl_story_font_set_grid(bool grid);
 extern bool sdl_is_story_font_grid(void);
 extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_get_cell_width(void);
-
-
-

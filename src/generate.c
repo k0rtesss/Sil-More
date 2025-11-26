@@ -8557,6 +8557,76 @@ static void gates_gen(void)
 }
 
 /*
+ * Spawn Niena for the Morgoth-hall mercy quest when conditions are met.
+ */
+static bool spawn_niena_morgoth_hall(void)
+{
+    byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    bool has_pending_giver = (state == QUEST_STATE_GIVER_PRESENT);
+
+    /* Only spawn if not started yet or giver should be present */
+    if (state != QUEST_STATE_NOT_STARTED && !has_pending_giver) {
+        return false;
+    }
+
+    /* Respect the one-quest-per-run block unless this quest is already pending */
+    if (!has_pending_giver && p_ptr->quest_reserved[0]) {
+        log_trace("Niena Morgoth quest: blocked by quest_reserved[0]");
+        return false;
+    }
+
+    /* Require active, unbroken Oath of Mercy */
+    if (p_ptr->oath_type != OATH_MERCY || oath_invalid(OATH_MERCY)) {
+        log_trace("Niena Morgoth quest: Oath of Mercy not active or broken");
+        return false;
+    }
+
+    /* Skip if the original Niena quest is still running */
+    if (p_ptr->niena_quest != NIENA_QUEST_NOT_STARTED &&
+        p_ptr->niena_quest != NIENA_QUEST_REWARDED) {
+        log_trace("Niena Morgoth quest: primary Niena quest in progress (%d)", p_ptr->niena_quest);
+        return false;
+    }
+
+    /* Require general eligibility (depth range, metarun cap, etc.) */
+    if (!check_quest_eligibility(QUEST_ID_NIENA_MORGOTH, p_ptr->depth)) {
+        log_trace("Niena Morgoth quest: eligibility check failed");
+        return false;
+    }
+
+    /* Do not double-place Niena */
+    if (is_quest_giver_present(R_IDX_NIENA)) {
+        log_trace("Niena Morgoth quest: quest giver already present");
+        return false;
+    }
+
+    bool placed = false;
+    for (int attempt = 0; attempt < 50 && !placed; attempt++) {
+        int y = p_ptr->py + rand_range(-2, 2);
+        int x = p_ptr->px + rand_range(-2, 2);
+
+        if (in_bounds_fully(y, x) && cave_floor_bold(y, x) && cave_m_idx[y][x] == 0) {
+            if (place_monster_one(y, x, R_IDX_NIENA, true, true, NULL)) {
+                placed = true;
+                log_trace("Niena Morgoth quest: placed giver at (%d,%d)", y, x);
+            }
+        }
+    }
+
+    if (!placed) {
+        log_trace("Niena Morgoth quest: failed to place giver near player");
+        return false;
+    }
+
+    quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_GIVER_PRESENT);
+    p_ptr->niena_level = p_ptr->depth;
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED | NIENA_FLAG_MERCY_GIFT_TEMP);
+    p_ptr->quest_reserved[0] = 1;
+
+    return true;
+}
+
+/*
  * Create the level containing Morgoth's throne room
  */
 static void throne_gen(void)
@@ -8872,6 +8942,7 @@ if (playerturn == 0) {
         else if (p_ptr->depth == MORGOTH_DEPTH)
         {
             throne_gen();
+            (void)spawn_niena_morgoth_hall();
 
             /* Hack -- Clear stairs request */
             p_ptr->create_stair = 0;

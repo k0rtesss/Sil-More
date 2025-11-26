@@ -721,7 +721,7 @@ I:8:4:0
 D:Forging the Oath of Iron, unyielding as Feanor's vow to pursue the Silmarils across the seas, this grants +2 Constitution but breaks if you flee without one.
 N:165:Niena's Gift of Mercy
 I:8:5:0
-D:Receiving Nienna's Gift of Mercy, the pity of the Vala who wept for the world's hurts, this enhances stealth proportional to mercy shown. Grants up to 10 stealth based on (seen-killed)/seen monsters. Awarded by quest; cannot be purchased.
+D:Receiving Nienna's Gift of Mercy, the pity of the Vala who wept for the world's hurts, this enhances stealth proportional to mercy shown. Grants up to 10 stealth based on (seen-killed)/seen monsters. Granted by quest; after the fixed 50k XP challenge it may be purchased for 5000 experience.
 N:166:Oath of the Smith
 I:8:6:0
 D:Binding the Oath of the Smith, as the craftsmen of the Noldor pledged to their own works in Aman, this grants +5 Smithing skill but breaks if you pick up weapons or armor forged by others.
@@ -739,3 +739,7 @@ D:Swearing the Oath of Light, as those who keep Varda's stars burning in the dep
 N:170:Wraith of Orome
 I:8:10:0
 D:Taking on the Wraith of Orome, the wild fey aspect of the Huntsman, your battle-rage sharpens every gift. When raging, each of your stats rises by one instead of gaining strength and constitution while losing grace and dexterity.
+
+N:171:Huntsman's Rhythm
+I:8:11:0
+D:When two arrows strike true in succession, your next successful spear hit will deal double damage. Granted by Orome's great hunt and may be purchased for 5000 experience once unlocked.

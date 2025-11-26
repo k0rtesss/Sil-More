@@ -3635,6 +3635,10 @@
 #define NIENA_QUEST_SUCCESS 3        /* Reached stairs without killing (reward granted) */
 #define NIENA_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 
+/* Flags for Niena's Morgoth-hall quest (stored in niena_reserved) */
+#define NIENA_FLAG_MORGOTH_ATTACKED 0x01  /* Player struck Morgoth during the mercy theft quest */
+#define NIENA_FLAG_MERCY_GIFT_TEMP  0x02  /* Gift of Mercy granted for the Morgoth-hall quest */
+
 /* Oromë quest states */
 #define OROME_QUEST_NOT_STARTED 0
 #define OROME_QUEST_GIVER_PRESENT 1  /* Oromë spawned on hunting grounds level */
@@ -3697,6 +3701,7 @@ typedef struct quest_mapping {
 #define QUEST_ID_MANDOS_BETRAYER 8  /* Third Mandos quest (Maeglin) */
 #define QUEST_ID_OROME_DRAGONS 9  /* Orome second quest - dragon hunt */
 #define QUEST_ID_OROME_GREAT_HUNT 10  /* Orome third quest - great hunt uniques */
+#define QUEST_ID_NIENA_MORGOTH 11  /* Niena second quest - Silmaril without striking Morgoth */
 #define OROME_GREAT_HUNT_TARGET_COUNT 6
 #define OROME_GREAT_HUNT_TARGET_MASK 0x3F
 
@@ -3720,7 +3725,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Easterlings" },
     { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" },
     { QUEST_ID_OROME_DRAGONS, "Orome, Warden of the Drakes" },
-    { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" }
+    { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" },
+    { QUEST_ID_NIENA_MORGOTH, "Nienna's Mercy in Angband" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
@@ -3729,7 +3735,8 @@ static const quest_mapping quest_id_map[] = {
 #define CHALLENGE_NONE            0
 #define CHALLENGE_DISCONNECTED    1
 #define CHALLENGE_SINGLE_STAIR    2
-#define CHALLENGE_MAX_TRACKED     4
+#define CHALLENGE_FIXED_50K_XP    3
+#define CHALLENGE_MAX_TRACKED     5
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

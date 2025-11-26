@@ -37,6 +37,7 @@ extern struct sound_config g_sound_config;
 #define MANDOS_DOOM_PURCHASE_COST 5000
 #define OROME_WRAITH_PURCHASE_COST 5000
 #define OROME_RHYTHM_PURCHASE_COST 5000
+#define NIENA_MERCY_PURCHASE_COST 5000
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -558,6 +559,11 @@ static bool orome_wraith_purchase_unlocked(void)
 static bool huntsman_rhythm_purchase_unlocked(void)
 {
     return metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) > 0;
+}
+
+static bool niena_mercy_purchase_unlocked(void)
+{
+    return metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0;
 }
 
 
@@ -2354,6 +2360,21 @@ int abilities_menu2(int skilltype, int* highlight)
                             Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
                         }
                     }
+                    else if (b_ptr->abilitynum == SPC_NIENA_MERCY && !p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
+                    {
+                        if (!niena_mercy_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete the fixed 50k XP challenge to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", NIENA_MERCY_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (NIENA_MERCY_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
                     else
                     {
                         /* Special abilities cannot be purchased; show as granted only */
@@ -2701,6 +2722,7 @@ void do_cmd_ability_screen(void)
                         bool mandos_special = (skilltype == S_SPC && abilitynum == SPC_MANDOS);
                         bool orome_wraith_special = (skilltype == S_SPC && abilitynum == SPC_OROME_WRAITH);
                         bool orome_rhythm_special = (skilltype == S_SPC && abilitynum == SPC_HUNTSMAN_RHYTHM);
+                        bool niena_mercy_special = (skilltype == S_SPC && abilitynum == SPC_NIENA_MERCY);
                         int exp_cost = -1;
                         skip_purchase = false;
 
@@ -2730,6 +2752,15 @@ void do_cmd_ability_screen(void)
                                 continue;
                             }
                             exp_cost = OROME_RHYTHM_PURCHASE_COST;
+                        }
+                        else if (niena_mercy_special)
+                        {
+                            if (!niena_mercy_purchase_unlocked())
+                            {
+                                bell("Complete the fixed 50k XP challenge to purchase Nienna's Gift of Mercy.");
+                                continue;
+                            }
+                            exp_cost = NIENA_MERCY_PURCHASE_COST;
                         }
                         else if (skilltype == S_SPC)
                         {
@@ -16385,10 +16416,6 @@ void show_unified_sidebar(unified_look_state* state)
     previous_line_count = current_line_count;
     log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
 }
-
-
-
-
 
 
 
