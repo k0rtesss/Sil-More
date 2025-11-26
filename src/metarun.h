@@ -38,6 +38,7 @@
 #define METARUN_QUEST_OROME_GREAT_HUNT (1UL << 9) /* Orome great hunt quest completed */
 #define METARUN_QUEST_NIENA_MORGOTH (1UL << 10) /* Niena's Morgoth-hall mercy quest completed */
 #define METARUN_QUEST_NIENA_PACIFIST (1UL << 11) /* Niena's pacifist escape quest completed */
+#define METARUN_QUEST_TULKAS_ORCS (1UL << 12) /* Tulkas second quest (orc stronghold) */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
@@ -208,6 +209,8 @@ bool metarun_challenge_single_stair_unlocked(void); /* Has the single-stair chal
 void metarun_unlock_challenge_single_stair(void);   /* Unlock the single-stair challenge for this metarun */
 bool metarun_challenge_fixed_exp_unlocked(void);    /* Has the fixed-50k XP challenge been unlocked? */
 void metarun_unlock_challenge_fixed_exp(void);      /* Unlock the fixed-50k XP challenge for this metarun */
+bool metarun_challenge_tulkas_blunt_unlocked(void); /* Has the Tulkas blunt challenge been unlocked? */
+void metarun_unlock_challenge_tulkas_blunt(void);   /* Unlock the Tulkas blunt challenge for this metarun */
 int metarun_challenge_completion_count(int challenge_id); /* How many times a challenge run finished */
 void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished challenge run */
 

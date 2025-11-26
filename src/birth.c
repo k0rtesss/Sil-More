@@ -1823,6 +1823,7 @@ static NavResult select_challenge_modifiers(void)
     bool dis_unlocked = metarun_challenge_disconnected_unlocked();
     bool single_unlocked = metarun_challenge_single_stair_unlocked();
     bool fixed_unlocked = metarun_challenge_fixed_exp_unlocked();
+    bool tulkas_unlocked = metarun_challenge_tulkas_blunt_unlocked();
 
     /* Default to off each character */
     op_ptr->opt[OPT_birth_discon_stair] = false;
@@ -1830,18 +1831,21 @@ static NavResult select_challenge_modifiers(void)
     op_ptr->opt[OPT_birth_single_stair] = false;
     op_ptr->opt[OPT_adult_single_stair] = false;
     op_ptr->opt[OPT_birth_fixed_exp] = false;
+    op_ptr->opt[OPT_birth_tulkas_blunt] = false;
+    op_ptr->opt[OPT_adult_tulkas_blunt] = false;
 
     /* If nothing is unlocked, skip */
-    if (!dis_unlocked && !single_unlocked && !fixed_unlocked) {
+    if (!dis_unlocked && !single_unlocked && !fixed_unlocked && !tulkas_unlocked) {
         log_debug("select_challenge_modifiers: no unlocked challenges, skipping");
         return NAV_OK;
     }
 
-    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d)", dis_unlocked, single_unlocked, fixed_unlocked);
+    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d, tulkas=%d)", dis_unlocked, single_unlocked, fixed_unlocked, tulkas_unlocked);
 
     bool enable_dis = false;
     bool enable_single = false;
     bool enable_fixed = false;
+    bool enable_tulkas = false;
 
     while (true) {
         Term_clear();
@@ -1876,6 +1880,13 @@ static NavResult select_challenge_modifiers(void)
                         enable_fixed ? "Enabled" : "Disabled");
             row++;
         }
+        if (tulkas_unlocked) {
+            Term_putstr(2, row++, -1, TERM_WHITE, "b) Tulkas' blunt-arms");
+            Term_putstr(4, row++, -1, TERM_SLATE, "Only blunt weapons appear; smithing is limited to hammers and tools.");
+            Term_putstr(4, row++, -1, enable_tulkas ? TERM_L_GREEN : TERM_L_DARK,
+                        enable_tulkas ? "Enabled" : "Disabled");
+            row++;
+        }
 
         Term_putstr(2, row++, -1, TERM_SLATE, "Press letter to toggle, Enter to confirm, 'n' to skip, ESC to go back.");
 
@@ -1899,6 +1910,10 @@ static NavResult select_challenge_modifiers(void)
             enable_fixed = !enable_fixed;
             continue;
         }
+        if (tulkas_unlocked && (key == 'b' || key == 'B')) {
+            enable_tulkas = !enable_tulkas;
+            continue;
+        }
         if (key == '\r' || key == '\n' || key == ' ') {
             if (enable_dis && DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
                 bell("Not enough experience to enable disconnected stairs.");
@@ -1914,9 +1929,11 @@ static NavResult select_challenge_modifiers(void)
             op_ptr->opt[OPT_birth_single_stair] = enable_single;
             op_ptr->opt[OPT_adult_single_stair] = enable_single;
             op_ptr->opt[OPT_birth_fixed_exp] = enable_fixed;
+            op_ptr->opt[OPT_birth_tulkas_blunt] = enable_tulkas;
+            op_ptr->opt[OPT_adult_tulkas_blunt] = enable_tulkas;
 
-            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d (cost %d XP applied=%d)",
-                      enable_dis, enable_single, enable_fixed, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
+            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d, tulkas_blunt=%d (cost %d XP applied=%d)",
+                      enable_dis, enable_single, enable_fixed, enable_tulkas, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
             return NAV_OK;
         }
     }
@@ -2838,7 +2855,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
 
 
 

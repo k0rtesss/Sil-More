@@ -285,7 +285,7 @@ cptr option_text[OPT_MAX] = {
     "birth_single_stair", /* OPT_birth_single_stair */
     "birth_no_artefacts", /* OPT_birth_no_artefacts */
     "birth_fixed_exp", /* OPT_birth_fixed_exp */
-    NULL, /* xxx */
+    "birth_tulkas_blunt", /* OPT_birth_tulkas_blunt */
     NULL, /* xxx */
     NULL, /* xxx birth_force_small_lev */
     NULL, /* xxx birth_retain_squelch */
@@ -350,7 +350,7 @@ cptr option_text[OPT_MAX] = {
     NULL, /* xxx adult_no_stores */
     "adult_no_artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
-    NULL, /* xxx adult_no_stacking */
+    "adult_tulkas_blunt", /* OPT_adult_tulkas_blunt */
     NULL, /* xxx adult_auto_notes */
     NULL, /* xxx adult_force_small_lev*/
     NULL, /* xxx adult_retain_squelch */
@@ -550,7 +550,7 @@ cptr option_desc[OPT_MAX] = {
     "Single stair (one up / one down)", /* OPT_birth_single_stair */
     "No artefacts", /* OPT_birth_no_artefacts */
     "Fixed XP - gain 50K at start and nothing after", /* OPT_birth_fixed_exp */
-    NULL, /* xxx */
+    "Tulkas' challenge: blunt weapons only", /* OPT_birth_tulkas_blunt */
     NULL, /* xxx */
     NULL, /* xxx birth_take_notes */
     NULL, /* xxx birth_force_small_lev */
@@ -615,7 +615,7 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* xxx adult_no_stores */
     "No artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
-    NULL, /* xxx adult_adult_no_stacking */
+    "Tulkas' challenge: blunt weapons only", /* OPT_adult_tulkas_blunt */
     NULL, /* xxx adult_take_notes */
     NULL, /* xxx adult_force_small_lev */
     NULL, /* xxx adult_retain_squelch*/
@@ -817,7 +817,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_birth_single_stair */
     false, /* OPT_birth_no_artefacts */
     false, /* OPT_birth_fixed_exp */
-    false, /* xxx */
+    false, /* OPT_birth_tulkas_blunt */
     false, /* xxx */
     false, /* xxx birth_force_small_lev */
     false, /* xxx birth_retain_squelch */
@@ -882,7 +882,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx adult_no_stores */
     false, /* OPT_adult_no_artefacts */
     false, /* xxx adult_rand_artefacts */
-    false, /* xxx adult_no_stacking */
+    false, /* OPT_adult_tulkas_blunt */
     false, /* xxx adult_take_notes */
     false, /* xxx adult_force_small_lev*/
     false, /* xxx adult_retain_squelch */
@@ -979,7 +979,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     /*** Birth ***/
 
     { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_single_stair, OPT_birth_no_artefacts,
-        OPT_birth_fixed_exp, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_birth_fixed_exp, OPT_birth_tulkas_blunt, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 
@@ -1097,5 +1097,3 @@ byte spell_desire_RF4[32][2] = {
     { 0, 100 }, /* RF4_XXX31 */
     { 0, 100 } /* RF4_XXX32 */
 };
-
-

@@ -1212,6 +1212,12 @@ static void wr_extra(void)
     wr_s16b(p_ptr->tulkas_target_r_idx);
     wr_s16b(p_ptr->tulkas_prize_a_idx);
     wr_byte(p_ptr->tulkas_quest_complete);
+    wr_s16b(p_ptr->tulkas_stronghold_level);
+    wr_byte(p_ptr->tulkas_stronghold_placed);
+    wr_byte(p_ptr->tulkas_second_roll_done);
+    wr_byte(p_ptr->tulkas_orc_mask);
+    wr_byte(p_ptr->tulkas_orc_restricted);
+    wr_byte(p_ptr->tulkas_second_spawn_pending);
     /* Aule quest fields */
     wr_byte(p_ptr->aule_quest);
     wr_byte(p_ptr->aule_forge_y);
@@ -2108,7 +2114,6 @@ bool save_player(void)
     }
     return (result);
 }
-
 
 
 

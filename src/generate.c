@@ -119,6 +119,12 @@ static vault_monster_spec vault_monster_table[] = {
     {'j', "d5e4892102e9b48a", 0, false, true, true},  /* Shadow spider */
     {'k', "d2d2f0b7edcf4cf6", 0, false, true, true},  /* Lurking horror */
     {'n', "7783062d13500802", 0, false, true, true},  /* Nightthorn */
+    {'g', "333546bf2a893575", 0, false, true, true}, /* Gorgol, the Butcher */
+    {'b', "d41e3b6bfafb596f", 0, false, true, true}, /* Boldog, the Merciless */
+    {'c', "bf68d49c92c9d98c", 0, false, true, true}, /* Balcmeg, the Relentless */
+    {'l', "f30bbaa9d32572af", 0, false, true, true}, /* Lug, the Grotesque */
+    {'p', "8a1995b8587aa0a2", 0, false, true, true}, /* Orcobal, Champion of the Orcs */
+    {'t', "78d6c2d78e85ea3d", 0, false, true, true}, /* Othrod, the Orc Lord */
 };
 
 static bool place_vault_monster_token(char symbol, int y, int x)
@@ -165,12 +171,16 @@ typedef struct {
     bool has_aule_change;
     bool has_mandos_change;
     bool has_varda_change;
+    bool has_tulkas_change;
     int aule_level;
     int mandos_level;
     int varda_level;
+    int tulkas_level;
     int aule_forge_y, aule_forge_x;
     int mandos_vault_y, mandos_vault_x;
     int varda_vault_y, varda_vault_x;
+    int tulkas_next_state;
+    bool tulkas_spawn_pending;
     int mandos_quest_id;
     int mandos_next_state;
 } pending_quest_states_t;
@@ -197,6 +207,10 @@ static bool data_driven_eligibility_check(int depth, int quest_id);
 static bool tulkas_probability_roll(int depth, int quest_id);
 static bool niena_probability_roll(int depth, int quest_id);
 static void run_quest_lottery(void);
+static void schedule_tulkas_orc_stronghold(void);
+static bool spawn_tulkas_near_player_with_fallback(void);
+static bool vault_template_is_orc_stronghold(vault_type *v);
+static void process_quest_vault_area(int y0, int x0, vault_type *qv);
 
 /* Generic parametric formula-based functions */
 static bool generic_eligibility_check(int depth, int quest_id);
@@ -443,6 +457,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
     
     if (SDL_strcasecmp(actual_name, "tulkas_quest") == 0) {
         return &p_ptr->tulkas_quest;
+    } else if (SDL_strcasecmp(actual_name, "tulkas_second_quest") == 0) {
+        return &p_ptr->vala_quest_stage2[VALA_TULKAS - 1];
     } else if (SDL_strcasecmp(actual_name, "aule_quest") == 0) {
         return &p_ptr->aule_quest;
     } else if (SDL_strcasecmp(actual_name, "mandos_quest") == 0) {
@@ -500,6 +516,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_VARDA;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_NIENA_PACIFIST") == 0) {
         return METARUN_QUEST_NIENA_PACIFIST;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_TULKAS_ORCS") == 0) {
+        return METARUN_QUEST_TULKAS_ORCS;
     }
     
     return 0; /* Unknown metarun quest ID */
@@ -541,7 +559,7 @@ static void init_roulette_quest_registry(void) {
             log_trace("Quest lottery: Quest %d using parametric formula (type=%d)", i, q_ptr->formula_type);
         } else {
             /* For legacy compatibility, map hardcoded functions for known quests */
-            if (i == 1) { /* Tulkas */
+            if (i == QUEST_ID_TULKAS || i == QUEST_ID_TULKAS_ORCS) { /* Tulkas quests */
                 entry->eligibility_check = data_driven_eligibility_check; /* Use data-driven eligibility */
                 entry->probability_roll = tulkas_probability_roll;
                 log_trace("Quest lottery: Quest %d using mixed formula (data-driven eligibility + hardcoded probability)", i);
@@ -585,6 +603,88 @@ static bool tulkas_probability_roll(int depth, int quest_id) {
     }
     
     return won;
+}
+
+/* Schedule the Tulkas orc quest stronghold on a later level */
+static void schedule_tulkas_orc_stronghold(void) {
+    int target_depth = rand_range(8, 10);
+
+    /* Preserve an existing schedule if one somehow already exists */
+    if (p_ptr->tulkas_stronghold_level > 0 && p_ptr->tulkas_stronghold_level <= 10) {
+        log_trace("Tulkas orc quest: schedule already set to depth %d, leaving unchanged", p_ptr->tulkas_stronghold_level);
+        return;
+    }
+
+    p_ptr->tulkas_stronghold_level = target_depth;
+    p_ptr->tulkas_stronghold_placed = 0;
+    p_ptr->tulkas_orc_mask = 0;
+    p_ptr->tulkas_orc_restricted = 1;
+    p_ptr->tulkas_second_spawn_pending = 0;
+    p_ptr->quest_reserved[0] = 1; /* Reserve the quest slot for this run */
+
+    log_trace("Tulkas orc quest: Scheduled Orc Stronghold at depth %d (current depth=%d)", target_depth, p_ptr->depth);
+}
+
+/* Helper to spawn Tulkas near the player with a fallback search */
+static bool spawn_tulkas_near_player_with_fallback(void)
+{
+    /* Check if Tulkas already exists on this level */
+    for (int j = 1; j < mon_max; j++)
+    {
+        monster_type *m_ptr = &mon_list[j];
+        if (m_ptr->r_idx == R_IDX_TULKAS) {
+            log_trace("Tulkas spawn helper: Tulkas already present on level");
+            return true;
+        }
+    }
+
+    int player_y = p_ptr->py;
+    int player_x = p_ptr->px;
+
+    /* Try to spawn in the player's room */
+    for (int attempts = 0; attempts < 50; attempts++)
+    {
+        int dy = rand_range(-2, 2);
+        int dx = rand_range(-2, 2);
+        int try_y = player_y + dy;
+        int try_x = player_x + dx;
+
+        if (try_y <= 0 || try_y >= p_ptr->cur_map_hgt - 1 ||
+            try_x <= 0 || try_x >= p_ptr->cur_map_wid - 1)
+            continue;
+
+        if (!cave_floor_bold(try_y, try_x)) continue;
+        if (!(cave_info[try_y][try_x] & CAVE_ROOM)) continue;
+        if (cave_info[try_y][try_x] & CAVE_ICKY) continue;
+        if (cave_m_idx[try_y][try_x] != 0) continue;
+
+        if (place_monster_one(try_y, try_x, R_IDX_TULKAS, true, true, NULL))
+        {
+            log_trace("Tulkas spawn helper: spawned near player at (%d,%d)", try_y, try_x);
+            return true;
+        }
+    }
+
+    /* Fallback: try any room tile */
+    for (int attempts = 0; attempts < 100; attempts++)
+    {
+        int room_y = rand_int(p_ptr->cur_map_hgt);
+        int room_x = rand_int(p_ptr->cur_map_wid);
+
+        if (!cave_floor_bold(room_y, room_x)) continue;
+        if (!(cave_info[room_y][room_x] & CAVE_ROOM)) continue;
+        if (cave_info[room_y][room_x] & CAVE_ICKY) continue;
+        if (cave_m_idx[room_y][room_x] != 0) continue;
+
+        if (place_monster_one(room_y, room_x, R_IDX_TULKAS, true, true, NULL))
+        {
+            log_trace("Tulkas spawn helper: spawned in fallback room at (%d,%d)", room_y, room_x);
+            return true;
+        }
+    }
+
+    log_trace("Tulkas spawn helper: failed to place Tulkas on this level");
+    return false;
 }
 
 /* Niena-specific probability roll */
@@ -636,9 +736,19 @@ int debug_get_quest_lottery_winner(void) {
 
 static void run_quest_lottery(void) {
     log_trace("Quest lottery: === LOTTERY START === (depth=%d, quest_reserved[0]=%d)", p_ptr->depth, p_ptr->quest_reserved[0]);
+    bool mark_tulkas_second_roll = false;
+    
+    if (!p_ptr->tulkas_second_roll_done &&
+        p_ptr->depth > 4 &&
+        quest_get_state(QUEST_ID_TULKAS_ORCS) == QUEST_STATE_NOT_STARTED &&
+        p_ptr->oath_type == OATH_VALOROUS && !oath_invalid(OATH_VALOROUS) &&
+        tulkas_orc_targets_alive(true)) {
+        mark_tulkas_second_roll = true;
+    }
     
     if (quest_lottery_resolved) {
         log_trace("Quest lottery: Already resolved for this level (winner=%d)", quest_lottery_winner);
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
     
@@ -647,6 +757,7 @@ static void run_quest_lottery(void) {
         log_trace("Quest lottery: SKIPPED - Varda quest in progress (state=%d)", p_ptr->varda_quest);
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
     
@@ -660,6 +771,7 @@ static void run_quest_lottery(void) {
         log_trace("Quest lottery: SKIPPED - player is on the run (no quests spawn during escape)");
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
     
@@ -674,20 +786,25 @@ static void run_quest_lottery(void) {
         log_trace("Quest lottery: BLOCKED - quest slot already reserved (quest_reserved[0]=1), one-quest-per-run enforced");
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
     
-    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED || 
+    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED ||
+        quest_get_state(QUEST_ID_TULKAS_ORCS) > QUEST_STATE_NOT_STARTED ||
+        p_ptr->tulkas_stronghold_level > 0 ||
         p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED ||
         p_ptr->orome_quest > OROME_QUEST_NOT_STARTED ||
         p_ptr->aule_quest > AULE_QUEST_NOT_STARTED ||
         p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED ||
         p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED) {
         
-        log_trace("Quest lottery: SKIPPED - quest already started on this character (tulkas=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d)", 
-                  p_ptr->tulkas_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest);
+        log_trace("Quest lottery: SKIPPED - quest already started on this character (tulkas=%d, tulkas_orcs_state=%d, stronghold_level=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d)", 
+                  p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), p_ptr->tulkas_stronghold_level,
+                  p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest);
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
+        if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
         return;
     }
     
@@ -766,7 +883,14 @@ static void run_quest_lottery(void) {
         log_trace("Quest lottery: Quest %d probability result: %s", entry->quest_id, won_probability ? "WON" : "LOST");
         if (won_probability) {
             quest_lottery_winner = entry->quest_id;
+            
+            if (entry->quest_id == QUEST_ID_TULKAS_ORCS) {
+                log_trace("Quest lottery: Quest %d (Tulkas orc quest) WON - scheduling stronghold placement", entry->quest_id);
+                schedule_tulkas_orc_stronghold();
+            }
+            
             log_trace("Quest lottery: Quest %d WINS the lottery!", entry->quest_id);
+            if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
             return;
         } else {
             log_trace("Quest lottery: Quest %d failed probability roll, continuing to next quest", entry->quest_id);
@@ -775,6 +899,7 @@ static void run_quest_lottery(void) {
     
     /* No quest won the lottery */
     log_trace("Quest lottery: === LOTTERY END === No quest won - level remains quest-free");
+    if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
 }
 
 /* Function to reset pending quest state changes */
@@ -782,15 +907,19 @@ static void reset_pending_quest_states(void) {
     pending_quest_states.has_aule_change = false;
     pending_quest_states.has_mandos_change = false;
     pending_quest_states.has_varda_change = false;
+    pending_quest_states.has_tulkas_change = false;
     pending_quest_states.aule_level = 0;
     pending_quest_states.mandos_level = 0;
     pending_quest_states.varda_level = 0;
+    pending_quest_states.tulkas_level = 0;
     pending_quest_states.aule_forge_y = 0;
     pending_quest_states.aule_forge_x = 0;
     pending_quest_states.varda_vault_y = 0;
     pending_quest_states.varda_vault_x = 0;
     pending_quest_states.mandos_vault_y = 0;
     pending_quest_states.mandos_vault_x = 0;
+    pending_quest_states.tulkas_next_state = 0;
+    pending_quest_states.tulkas_spawn_pending = false;
     pending_quest_states.mandos_quest_id = QUEST_ID_MANDOS;
     pending_quest_states.mandos_next_state = QUEST_STATE_GIVER_PRESENT;
     
@@ -871,6 +1000,8 @@ static void reset_quest_vault_states(void) {
     /* Reset quest states to allow fresh placement attempts, but preserve reservation */
     bool quest_active = (quest_lottery_winner > 0) ||
                         (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED) ||
+                        (quest_get_state(QUEST_ID_TULKAS_ORCS) > QUEST_STATE_NOT_STARTED) ||
+                        (p_ptr->tulkas_stronghold_level > 0) ||
                         (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED) ||
                         (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED) ||
                         (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED) ||
@@ -927,6 +1058,16 @@ static void apply_pending_quest_states(void) {
         p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
         log_trace("Varda quest: Bastion placement APPLIED (deferred) at %d,%d depth=%d", 
                   pending_quest_states.varda_vault_y, pending_quest_states.varda_vault_x, pending_quest_states.varda_level);
+    }
+    if (pending_quest_states.has_tulkas_change) {
+        p_ptr->tulkas_stronghold_level = pending_quest_states.tulkas_level;
+        quest_set_state(QUEST_ID_TULKAS_ORCS, pending_quest_states.tulkas_next_state ? pending_quest_states.tulkas_next_state : QUEST_STATE_GIVER_PRESENT);
+        p_ptr->tulkas_stronghold_placed = 1;
+        p_ptr->tulkas_second_spawn_pending = pending_quest_states.tulkas_spawn_pending ? 1 : p_ptr->tulkas_second_spawn_pending;
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_orc_restricted = 1;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        log_trace("Tulkas orc quest: Stronghold placement APPLIED (deferred) at depth=%d", pending_quest_states.tulkas_level);
     }
     
     /* Reset pending changes after applying them */
@@ -6456,6 +6597,58 @@ static bool try_place_docked_vault(
     return false;
 }
 
+/* Force placement of the Orc Stronghold quest vault when scheduled */
+/* Quest vault monitoring state */
+static int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
+static bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
+
+static bool place_orc_stronghold(void)
+{
+    int i;
+    vault_type* qv_ptr = NULL;
+
+    for (i = 0; i < z_info->v_max; i++)
+    {
+        vault_type* v_ptr = &v_info[i];
+        if (!vault_template_is_orc_stronghold(v_ptr)) continue;
+        qv_ptr = v_ptr;
+        break;
+    }
+
+    if (!qv_ptr) {
+        log_trace("Tulkas orc quest: Orc Stronghold template not found");
+        return false;
+    }
+
+    int center_y = p_ptr->cur_map_hgt / 2;
+    int center_x = p_ptr->cur_map_wid / 2;
+
+    for (int attempts = 0; attempts < 50; attempts++) {
+        int y = center_y + rand_range(-p_ptr->cur_map_hgt / 6, p_ptr->cur_map_hgt / 6);
+        int x = center_x + rand_range(-p_ptr->cur_map_wid / 6, p_ptr->cur_map_wid / 6);
+
+        y = MAX(qv_ptr->hgt / 2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr)) {
+            qv_placed_this_level = true;
+            process_quest_vault_area(y, x, qv_ptr);
+
+            pending_quest_states.has_tulkas_change = true;
+            pending_quest_states.tulkas_level = p_ptr->depth;
+            pending_quest_states.tulkas_next_state = QUEST_STATE_GIVER_PRESENT;
+            pending_quest_states.tulkas_spawn_pending = true;
+
+            log_trace("Tulkas orc quest: Orc Stronghold placed at (%d,%d) depth=%d on attempt %d",
+                      y, x, p_ptr->depth, attempts + 1);
+            return true;
+        }
+    }
+
+    log_trace("Tulkas orc quest: Failed to place Orc Stronghold after 50 attempts");
+    return false;
+}
+
 /*
  * Type 6 -- least vaults (see "vault.txt")
  */
@@ -6487,9 +6680,11 @@ static bool vault_template_has_duruin(vault_type *v) {
     return (strstr(name, "Duruin") != NULL || strstr(name, "Bastion") != NULL);
 }
 
-/* Global variables to store quest vault coordinates for monitoring */
-int qv_stored_y1 = -1, qv_stored_x1 = -1, qv_stored_y2 = -1, qv_stored_x2 = -1;
-bool qv_placed_this_level = false;  /* Track if quest vault actually placed this level */
+static bool vault_template_is_orc_stronghold(vault_type *v) {
+    if (!v) return false;
+    const char *name = v_name + v->name;
+    return (strstr(name, "Orc Stronghold") != NULL);
+}
 
 /* DEBUGGING: Function to check if quest vault still exists at monitored coordinates */
 static void check_quest_vault_integrity(const char* checkpoint_name) {
@@ -7558,6 +7753,7 @@ static bool cave_gen(void)
 
     int is_guaranteed_forge_level = false;
     bool duruin_bastion_forced = false;
+    bool tulkas_stronghold_forced = false;
     
     /* Reset quest vault monitoring variables for this level */
     qv_placed_this_level = false;
@@ -7585,6 +7781,20 @@ static bool cave_gen(void)
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
         p_ptr->varda_vault_ready = 1;
+    }
+
+    /* Tulkas orc quest: force the Orc Stronghold on the scheduled depth */
+    if (p_ptr->tulkas_stronghold_level > 0 &&
+        p_ptr->depth == p_ptr->tulkas_stronghold_level &&
+        !p_ptr->tulkas_stronghold_placed) {
+        log_trace("Quest vault: === ORC STRONGHOLD FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
+        if (!place_orc_stronghold()) {
+            log_trace("Quest vault: === ORC STRONGHOLD FAILED === Regenerating level");
+            return false;
+        }
+        tulkas_stronghold_forced = true;
+        p_ptr->quest_reserved[0] = 1; /* Ensure quest slot stays locked for the run */
+        log_trace("Quest vault: === ORC STRONGHOLD SUCCESS === Placed successfully");
     }
     s16b mon_gen, obj_room_gen;
 
@@ -7725,7 +7935,7 @@ static bool cave_gen(void)
     /* Quest vaults can be placed if: */
     /* 1. quest_vault_used is false (haven't successfully completed a quest vault this run), OR */
     /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
-    if (!p_ptr->quest_vault_used && !duruin_bastion_forced)
+    if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !tulkas_stronghold_forced)
     {
         /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
         /* to allow quest vault re-placement during level regeneration */
@@ -7733,11 +7943,14 @@ static bool cave_gen(void)
         /* Check if any quest is already active - ONE QUEST PER RUN ENFORCEMENT */
         log_trace("Quest vault: Checking one-quest-per-run enforcement:");
         log_trace("Quest vault:   quest_reserved[0]=%d (should block if 1)", p_ptr->quest_reserved[0]);
-        log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d",
-                  p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest);
+        log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d (tulkas_orcs_state=%d)",
+                  p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest,
+                  quest_get_state(QUEST_ID_TULKAS_ORCS));
         
         if (p_ptr->quest_reserved[0] || 
             p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
+            quest_get_state(QUEST_ID_TULKAS_ORCS) != QUEST_STATE_NOT_STARTED ||
+            p_ptr->tulkas_stronghold_level > 0 ||
             p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
             p_ptr->aule_quest != AULE_QUEST_NOT_STARTED ||
             p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED) {
@@ -8125,94 +8338,16 @@ static bool cave_gen(void)
     if (quest_lottery_winner == 1) { /* Tulkas is quest ID 1 */
         log_trace("Tulkas spawn: Tulkas WON the lottery - attempting spawn");
         
-        /* Try to find a room to spawn Tulkas in */
-        int attempts;
-        bool tulkas_spawned = false;
-        
-        log_trace("Tulkas spawn: Lottery winner attempting placement at depth %d", p_ptr->depth);
-        
-        /* Check if Tulkas already exists on this level */
-        bool tulkas_exists = false;
-        int j;
-        for (j = 1; j < mon_max; j++)
+        if (spawn_tulkas_near_player_with_fallback())
         {
-            monster_type *m_ptr = &mon_list[j];
-            if (m_ptr->r_idx == R_IDX_TULKAS)
-                {
-                    tulkas_exists = true;
-                    break;
-                }
-            }
-            
-            if (!tulkas_exists)
-            {
-                /* Try to spawn Tulkas near the player's starting room */
-                int player_y = p_ptr->py;
-                int player_x = p_ptr->px;
-                
-                /* Try to find a spot in the same room as the player first */
-                for (attempts = 0; attempts < 50 && !tulkas_spawned; attempts++)
-                {
-                    /* Search in a radius around the player */
-                    int dy = rand_range(-2, 2);
-                    int dx = rand_range(-2, 2);
-                    int try_y = player_y + dy;
-                    int try_x = player_x + dx;
-                    
-                    /* Must be valid coordinates and a floor in the same room */
-                    if (try_y > 0 && try_y < p_ptr->cur_map_hgt - 1 &&
-                        try_x > 0 && try_x < p_ptr->cur_map_wid - 1 &&
-                        cave_floor_bold(try_y, try_x) && 
-                        (cave_info[try_y][try_x] & CAVE_ROOM) &&
-                        !(cave_info[try_y][try_x] & CAVE_ICKY) &&
-                        cave_m_idx[try_y][try_x] == 0)
-                    {
-                        if (place_monster_one(try_y, try_x, R_IDX_TULKAS, true, true, NULL))
-                        {
-                            p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
-                            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
-                            tulkas_spawned = true;
-                            log_trace("Tulkas spawned near player at (%d, %d), player at (%d, %d), quest state: %d", 
-                                     try_y, try_x, player_y, player_x, p_ptr->tulkas_quest);
-                        }
-                    }
-                }
-                
-                /* If that failed, try any room on the level */
-                if (!tulkas_spawned)
-                {
-                    for (attempts = 0; attempts < 100 && !tulkas_spawned; attempts++)
-                    {
-                        int room_y = rand_int(p_ptr->cur_map_hgt);
-                        int room_x = rand_int(p_ptr->cur_map_wid);
-                        
-                        /* Must be a floor in a room, not in a vault/interesting room */
-                        if (cave_floor_bold(room_y, room_x) && 
-                            (cave_info[room_y][room_x] & CAVE_ROOM) &&
-                            !(cave_info[room_y][room_x] & CAVE_ICKY) &&
-                            cave_m_idx[room_y][room_x] == 0)
-                        {
-                            if (place_monster_one(room_y, room_x, R_IDX_TULKAS, true, true, NULL))
-                            {
-                                p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
-                                p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
-                                tulkas_spawned = true;
-                                log_trace("Tulkas spawned in fallback room at (%d, %d), quest state: %d", 
-                                         room_y, room_x, p_ptr->tulkas_quest);
-                            }
-                        }
-                    }
-                }
-                
-                if (!tulkas_spawned)
-                {
-                    log_trace("Failed to spawn Tulkas in room after all attempts");
-                }
-            }
-            else
-            {
-                log_trace("Tulkas already exists on level, skipping room spawn");
-            }
+            p_ptr->tulkas_quest = TULKAS_QUEST_GIVER_PRESENT;
+            p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
+            log_trace("Tulkas spawn: success, quest state set to %d", p_ptr->tulkas_quest);
+        }
+        else
+        {
+            log_trace("Failed to spawn Tulkas after all attempts");
+        }
     }
 
     /* Check for Niena room-based spawning - LOTTERY SYSTEM */
@@ -9066,6 +9201,20 @@ if (playerturn == 0) {
         {
             /* QUEST VAULT REGENERATION FIX: Apply pending quest state changes when level generation is COMPLETELY successful */
             apply_pending_quest_states();
+
+            /* Spawn Tulkas for the orc stronghold quest if placement was deferred */
+            if (p_ptr->tulkas_second_spawn_pending &&
+                p_ptr->depth == p_ptr->tulkas_stronghold_level &&
+                quest_get_state(QUEST_ID_TULKAS_ORCS) == QUEST_STATE_GIVER_PRESENT)
+            {
+                if (spawn_tulkas_near_player_with_fallback()) {
+                    p_ptr->quest_reserved[0] = 1;
+                    p_ptr->tulkas_second_spawn_pending = 0;
+                    log_trace("Tulkas orc quest: Quest giver spawned after stronghold placement");
+                } else {
+                    log_trace("Tulkas orc quest: Failed to spawn Tulkas after stronghold placement");
+                }
+            }
             
             /* QUEST VAULT REGENERATION FIX: Only mark quest_vault_used when level generation is COMPLETELY successful */
             /* This ensures quest vaults can be re-placed during regeneration attempts */

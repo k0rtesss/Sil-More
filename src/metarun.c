@@ -41,6 +41,7 @@
 #define METARUN_CHALLENGE_DISCON_FLAG 0x01
 #define METARUN_CHALLENGE_SINGLE_FLAG 0x02
 #define METARUN_CHALLENGE_FIXED_FLAG 0x04
+#define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
@@ -194,6 +195,51 @@ void metarun_unlock_challenge_fixed_exp(void)
     log_debug("metarun_unlock_challenge_fixed_exp: after unlock, flag byte=0x%02x", *flags);
     save_metaruns();
     log_debug("metarun_unlock_challenge_fixed_exp: metaruns saved");
+}
+
+bool metarun_challenge_tulkas_blunt_unlocked(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_challenge_tulkas_blunt_unlocked: no current metarun");
+        return false;
+    }
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = (*flags & METARUN_CHALLENGE_TULKAS_BLUNT_FLAG) != 0;
+
+    if (!unlocked &&
+        (metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0)) {
+        log_debug("metarun_challenge_tulkas_blunt_unlocked: retro-unlocking from prior completions");
+        *flags |= METARUN_CHALLENGE_TULKAS_BLUNT_FLAG;
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_tulkas_blunt_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_tulkas_blunt(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_unlock_challenge_tulkas_blunt: no current metarun!");
+        return;
+    }
+
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    log_debug("metarun_unlock_challenge_tulkas_blunt: before unlock, flag byte=0x%02x", *flags);
+
+    if ((*flags & METARUN_CHALLENGE_TULKAS_BLUNT_FLAG) != 0) {
+        log_debug("metarun_unlock_challenge_tulkas_blunt: already unlocked, skipping");
+        return;
+    }
+
+    *flags |= METARUN_CHALLENGE_TULKAS_BLUNT_FLAG;
+    log_debug("metarun_unlock_challenge_tulkas_blunt: after unlock, flag byte=0x%02x", *flags);
+    save_metaruns();
+    log_debug("metarun_unlock_challenge_tulkas_blunt: metaruns saved");
 }
 
 static byte* challenge_count_slot(int challenge_id)
@@ -2545,6 +2591,7 @@ static const char* challenge_display_name(int challenge_id)
         case CHALLENGE_DISCONNECTED: return "Disconnected stairs";
         case CHALLENGE_SINGLE_STAIR: return "Single stair";
         case CHALLENGE_FIXED_50K_XP: return "Fixed 50k XP";
+        case CHALLENGE_TULKAS_BLUNT: return "Tulkas' blunt arms";
         default: return "Unknown challenge";
     }
 }
@@ -2602,6 +2649,9 @@ static void show_completed_quests_summary(void)
     Term_putstr(col, row++, -1, TERM_WHITE, line);
     int fixed_count = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
     strnfmt(line, sizeof(line), "Fixed 50k XP: completed %d time%s", fixed_count, (fixed_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int blunt_count = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
+    strnfmt(line, sizeof(line), "Blunt arms: completed %d time%s", blunt_count, (blunt_count == 1) ? "" : "s");
     Term_putstr(col, row++, -1, TERM_WHITE, line);
 
     Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
@@ -2662,6 +2712,16 @@ static void show_niena_mercy_unlock_message(void)
         "Find it in the Special abilities list if you would carry her pity into future delvings."
     };
     quest_typewriter_menu("Nienna's Gift of Mercy", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+}
+
+static void show_tulkas_blunt_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the blunt-arms challenge.",
+        "Tulkas roars with laughter and offers the lore of Unique Bane to all your line.",
+        "Seek it among your Special abilities for 5000 experience in future delvings."
+    };
+    quest_typewriter_menu("Tulkas' Orc-Bane", lines, N_ELEMENTS(lines), TERM_YELLOW, TERM_WHITE);
 }
 
 static int total_player_kills_this_run(void)
@@ -2811,7 +2871,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool challenge_disconnected = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
     bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
     bool challenge_fixed_exp = (op_ptr && op_ptr->opt[OPT_birth_fixed_exp] && metarun_challenge_fixed_exp_unlocked());
+    bool challenge_tulkas_blunt = (op_ptr && op_ptr->opt[OPT_adult_tulkas_blunt]);
     int fixed_challenge_before = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    int blunt_challenge_before = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
     bool challenge_disconnected_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
@@ -2868,6 +2930,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         if (challenge_fixed_exp) {
             metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
         }
+        if (challenge_tulkas_blunt) {
+            metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
+        }
 
         byte awarded = (sil_count < 3) ? 3 : sil_count;
         metarun_gain_silmarils(awarded);
@@ -2884,6 +2949,10 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         }
         maybe_unlock_orome_great_hunt(challenge_single_stair);
         maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
+        if (challenge_tulkas_blunt &&
+            metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
+            show_tulkas_blunt_unlock_message();
+        }
         check_run_end();
         metarun_save_persistent_settings();
         save_metaruns();
@@ -3311,6 +3380,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     if (challenge_fixed_exp) {
         metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
     }
+    if (challenge_tulkas_blunt) {
+        metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
+    }
     if (challenge_disconnected_success &&
         quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
         metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
@@ -3318,6 +3390,10 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     }
     maybe_unlock_orome_great_hunt(challenge_single_stair);
     maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
+    if (challenge_tulkas_blunt &&
+        metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
+        show_tulkas_blunt_unlock_message();
+    }
 
     compute_blessing_pool();
     announce_blessing_gain(blessing_points_before);

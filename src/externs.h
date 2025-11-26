@@ -1268,6 +1268,10 @@ extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byt
 extern void tulkas_quest_interaction(void);
 extern void check_tulkas_quest_interaction(void);
 extern void check_tulkas_quest_completion(int r_idx);
+extern const int tulkas_orc_targets[];
+extern const size_t tulkas_orc_target_count;
+extern bool tulkas_orc_is_target(int r_idx);
+extern bool tulkas_orc_targets_alive(bool require_unspawned);
 extern void validate_tulkas_quest_on_load(void);
 extern void remove_quest_giver(int quest_giver_r_idx);
 extern bool is_quest_giver_present(int quest_giver_r_idx);

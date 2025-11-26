@@ -32,6 +32,32 @@ static byte mandos_third_state(void)
     return quest_get_state(QUEST_ID_MANDOS_BETRAYER);
 }
 
+/* Tulkas second quest targets (orc uniques) */
+const int tulkas_orc_targets[] = {54, 76, 84, 85, 95, 105};
+const size_t tulkas_orc_target_count = N_ELEMENTS(tulkas_orc_targets);
+
+bool tulkas_orc_is_target(int r_idx)
+{
+    for (size_t i = 0; i < tulkas_orc_target_count; i++) {
+        if (tulkas_orc_targets[i] == r_idx) return true;
+    }
+    return false;
+}
+
+bool tulkas_orc_targets_alive(bool require_unspawned)
+{
+    if (!z_info || !r_info) return false;
+    for (size_t i = 0; i < tulkas_orc_target_count; i++) {
+        int r_idx = tulkas_orc_targets[i];
+        if (r_idx <= 0 || r_idx >= z_info->r_max) return false;
+        monster_race *r_ptr = &r_info[r_idx];
+        if (!r_ptr) return false;
+        if (r_ptr->max_num == 0) return false;
+        if (require_unspawned && r_ptr->cur_num >= r_ptr->max_num) return false;
+    }
+    return true;
+}
+
 static void mandos_set_third_state(byte state)
 {
     quest_set_state(QUEST_ID_MANDOS_BETRAYER, state);
@@ -6106,6 +6132,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_OROME_DRAGONS")) return METARUN_QUEST_OROME_DRAGONS;
     if (streq(metarun_id, "METARUN_QUEST_OROME_GREAT_HUNT")) return METARUN_QUEST_OROME_GREAT_HUNT;
     if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
+    if (streq(metarun_id, "METARUN_QUEST_TULKAS_ORCS")) return METARUN_QUEST_TULKAS_ORCS;
     
     /* Unknown or future quest */
     log_debug("get_metarun_quest_flag: Unknown metarun_quest_id '%s' for quest_idx %d", metarun_id, quest_idx);
@@ -6280,6 +6307,20 @@ bool check_quest_eligibility(int quest_idx, int depth)
             }
             if (metarun_quest_completion_count(METARUN_QUEST_OROME) <= 0) {
                 log_trace("Quest %d eligibility: OROME_DRAGON_REQUIRES_FIRST_COMPLETION = FAIL", quest_idx);
+                return false;
+            }
+            break;
+        case QUEST_ID_TULKAS_ORCS:
+            if (p_ptr->tulkas_second_roll_done) {
+                log_trace("Quest %d eligibility: SECOND_ROLL_ALREADY_USED = FAIL", quest_idx);
+                return false;
+            }
+            if (p_ptr->oath_type != OATH_VALOROUS || oath_invalid(OATH_VALOROUS)) {
+                log_trace("Quest %d eligibility: OATH_VALOROUS not active/valid = FAIL (oath_type=%d)", quest_idx, p_ptr->oath_type);
+                return false;
+            }
+            if (!tulkas_orc_targets_alive(true)) {
+                log_trace("Quest %d eligibility: ORC_TARGETS_NOT_ALL_ALIVE = FAIL", quest_idx);
                 return false;
             }
             break;
@@ -7109,6 +7150,57 @@ void do_cmd_quest_status(void)
                 color = TERM_SLATE;
                 Term_putstr(col + 2, row++, -1, color, tulkas_status);
         }
+        row++;
+    }
+
+    /* Check Tulkas orc quest */
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (tulkas_orc_state > QUEST_STATE_NOT_STARTED) {
+        any_quests = true;
+        cptr quest_title = get_quest_title(QUEST_ID_TULKAS_ORCS);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_TULKAS_ORCS);
+        if (!quest_title) quest_title = "Tulkas, Orc-Bane";
+        if (!quest_challenge) quest_challenge = "Storm the orc captains.";
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        cptr tulkas_status = NULL;
+        byte color = TERM_WHITE;
+        switch (tulkas_orc_state) {
+            case QUEST_STATE_GIVER_PRESENT:
+                tulkas_status = "Available - Stronghold awaits";
+                color = TERM_L_BLUE;
+                break;
+            case QUEST_STATE_ACTIVE: {
+                int slain = 0;
+                for (size_t i = 0; i < tulkas_orc_target_count; i++) {
+                    if (p_ptr->tulkas_orc_mask & (1U << i)) slain++;
+                }
+                tulkas_status = format("Active - captains slain: %d/%zu", slain, tulkas_orc_target_count);
+                color = TERM_ORANGE;
+                break;
+            }
+            case QUEST_STATE_SUCCESS:
+                tulkas_status = "Complete - Return for reward";
+                color = TERM_L_GREEN;
+                break;
+            case QUEST_STATE_REWARDED:
+                tulkas_status = "Completed by this character";
+                color = TERM_L_DARK;
+                break;
+            default:
+                tulkas_status = "Unknown status";
+                color = TERM_SLATE;
+                break;
+        }
+
+        if (tulkas_status) Term_putstr(col + 2, row++, -1, color, tulkas_status);
+
+        cptr processed_challenge = process_quest_placeholders(quest_challenge, QUEST_ID_TULKAS_ORCS);
+        display_wrapped_text(col, &row, processed_challenge, TERM_SLATE, wid);
+
+        strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS_ORCS));
+        display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
         row++;
     }
 
@@ -8447,6 +8539,77 @@ void tulkas_quest_interaction(void)
     }
 }
 
+static void tulkas_orc_quest_interaction(void)
+{
+    byte state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+
+    if (state == QUEST_STATE_GIVER_PRESENT)
+    {
+        int init_count = 0;
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_TULKAS_ORCS, &init_count);
+        if (init_texts && init_count > 0) {
+            quest_typewriter_menu("Quest Accepted: Tulkas, Orc-Bane", init_texts, init_count, TERM_YELLOW, TERM_WHITE);
+            free_quest_texts(init_texts);
+        } else {
+            msg_print("Tulkas names the orc captains and bids you raze their stronghold.");
+        }
+
+        int prize_level = p_ptr->tulkas_stronghold_level > 0 ? (p_ptr->tulkas_stronghold_level + 3) : (p_ptr->depth + 3);
+        int prize_a_idx = select_tulkas_quest_prize(prize_level);
+        p_ptr->tulkas_prize_a_idx = prize_a_idx;
+        if (valar_reserved_artifacts && prize_a_idx > 0 && prize_a_idx < z_info->art_max) {
+            valar_reserved_artifacts[prize_a_idx] = true;
+        }
+
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_orc_restricted = 1;
+        quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_ACTIVE);
+        log_trace("Tulkas orc quest: set to ACTIVE with prize %d and mask reset", p_ptr->tulkas_prize_a_idx);
+    }
+    else if (state == QUEST_STATE_SUCCESS)
+    {
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_TULKAS_ORCS, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_TULKAS_ORCS, completion_texts, &completion_count, true);
+        if (completion_texts && completion_count > 0) {
+            quest_typewriter_menu("Quest Complete: Tulkas, Orc-Bane", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            free_quest_texts(completion_texts);
+        } else {
+            msg_print("Tulkas laughs in triumph as the last orc captain falls.");
+        }
+
+        if (p_ptr->tulkas_prize_a_idx <= 0 || p_ptr->tulkas_prize_a_idx >= z_info->art_max) {
+            int prize_level = p_ptr->tulkas_stronghold_level > 0 ? (p_ptr->tulkas_stronghold_level + 3) : (p_ptr->depth + 3);
+            int prize_a_idx = select_tulkas_quest_prize(prize_level);
+            p_ptr->tulkas_prize_a_idx = prize_a_idx;
+            if (valar_reserved_artifacts && prize_a_idx > 0 && prize_a_idx < z_info->art_max) {
+                valar_reserved_artifacts[prize_a_idx] = true;
+            }
+        }
+
+        if (p_ptr->tulkas_prize_a_idx > 0 && p_ptr->tulkas_prize_a_idx < z_info->art_max) {
+            create_chosen_artefact(p_ptr->tulkas_prize_a_idx, p_ptr->py, p_ptr->px, true);
+            if (valar_reserved_artifacts) {
+                valar_reserved_artifacts[p_ptr->tulkas_prize_a_idx] = false;
+            }
+        }
+
+        apply_quest_rewards(QUEST_ID_TULKAS_ORCS);
+        quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_REWARDED);
+        p_ptr->tulkas_prize_a_idx = 0;
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_second_spawn_pending = 0;
+        p_ptr->tulkas_stronghold_level = 0;
+        p_ptr->tulkas_stronghold_placed = 0;
+        p_ptr->tulkas_orc_restricted = 0;
+
+        metarun_mark_quest_completed(METARUN_QUEST_TULKAS_ORCS);
+        metarun_unlock_challenge_tulkas_blunt();
+        remove_quest_giver(R_IDX_TULKAS);
+        log_trace("Tulkas orc quest completed and rewarded");
+    }
+}
+
 /*
  * Check if player is adjacent to Tulkas and handle interaction
  */
@@ -8454,12 +8617,12 @@ void check_tulkas_quest_interaction(void)
 {
     int i, y, x;
     
-    /* Only check if quest is in appropriate state */
-    if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
-        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
-    {
-        return;
-    }
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    bool tulkas_needed = (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT ||
+                          p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE ||
+                          tulkas_orc_state == QUEST_STATE_GIVER_PRESENT ||
+                          tulkas_orc_state == QUEST_STATE_SUCCESS);
+    if (!tulkas_needed) return;
     
     log_trace("check_tulkas_quest_interaction: checking adjacency, quest state: %d", p_ptr->tulkas_quest);
     
@@ -8485,7 +8648,11 @@ void check_tulkas_quest_interaction(void)
             if (m_ptr->r_idx == R_IDX_TULKAS)
             {
                 log_trace("Found Tulkas adjacent, calling interaction");
-                tulkas_quest_interaction();
+                if (p_ptr->tulkas_quest == TULKAS_QUEST_GIVER_PRESENT || p_ptr->tulkas_quest == TULKAS_QUEST_COMPLETE) {
+                    tulkas_quest_interaction();
+                } else if (tulkas_orc_state == QUEST_STATE_GIVER_PRESENT || tulkas_orc_state == QUEST_STATE_SUCCESS) {
+                    tulkas_orc_quest_interaction();
+                }
                 return;
             }
         }
@@ -8497,6 +8664,41 @@ void check_tulkas_quest_interaction(void)
  */
 void check_tulkas_quest_completion(int r_idx)
 {
+    byte orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (orc_state == QUEST_STATE_ACTIVE && tulkas_orc_is_target(r_idx)) {
+        u32b mask = p_ptr->tulkas_orc_mask;
+        for (size_t i = 0; i < tulkas_orc_target_count; i++) {
+            if (tulkas_orc_targets[i] == r_idx) {
+                mask |= (1U << i);
+                break;
+            }
+        }
+        p_ptr->tulkas_orc_mask = (byte)mask;
+        log_trace("Tulkas orc quest: target %d slain, mask=0x%02x", r_idx, p_ptr->tulkas_orc_mask);
+
+        byte full_mask = (1U << tulkas_orc_target_count) - 1;
+        if (p_ptr->tulkas_orc_mask == full_mask) {
+            quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_SUCCESS);
+            p_ptr->tulkas_second_spawn_pending = 1;
+            msg_print("The last orc captain falls! Seek out Tulkas to claim his oath and reward.");
+
+            /* Spawn Tulkas nearby if possible */
+            for (int y = p_ptr->py - 3; y <= p_ptr->py + 3; y++) {
+                for (int x = p_ptr->px - 3; x <= p_ptr->px + 3; x++) {
+                    if (in_bounds(y, x) && cave_floor_bold(y, x) &&
+                        cave_m_idx[y][x] == 0 && distance(p_ptr->py, p_ptr->px, y, x) >= 2) {
+                        if (place_monster_one(y, x, R_IDX_TULKAS, true, true, NULL)) {
+                            p_ptr->tulkas_second_spawn_pending = 0;
+                            log_trace("Tulkas orc quest: spawned Tulkas near player for reward interaction");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     if (p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE && 
         r_idx == p_ptr->tulkas_target_r_idx)
     {
@@ -8534,51 +8736,72 @@ void validate_tulkas_quest_on_load(void)
 {
     monster_race* r_ptr;
     
-    /* Only validate if quest is in ACTIVE state */
-    if (p_ptr->tulkas_quest != TULKAS_QUEST_ACTIVE)
+    if (p_ptr->tulkas_quest == TULKAS_QUEST_ACTIVE)
     {
-        return;
-    }
-    
-    /* Check if we have a valid target assigned */
-    if (p_ptr->tulkas_target_r_idx <= 0 || p_ptr->tulkas_target_r_idx >= z_info->r_max)
-    {
-        log_trace("validate_tulkas_quest_on_load: Invalid target r_idx=%d, skipping", p_ptr->tulkas_target_r_idx);
-        return;
-    }
-    
-    r_ptr = &r_info[p_ptr->tulkas_target_r_idx];
-    
-    /* Check if the target unique is already dead (max_num == 0) */
-    if (r_ptr->max_num == 0)
-    {
-        log_trace("validate_tulkas_quest_on_load: Target unique %d (%s) is dead (max_num=0), auto-completing quest",
-                 p_ptr->tulkas_target_r_idx, r_name + r_ptr->name);
-        
-        /* Validate we have a valid artifact prize */
-        if (p_ptr->tulkas_prize_a_idx <= 0 || p_ptr->tulkas_prize_a_idx >= z_info->art_max)
+        /* Check if we have a valid target assigned */
+        if (p_ptr->tulkas_target_r_idx <= 0 || p_ptr->tulkas_target_r_idx >= z_info->r_max)
         {
-            log_trace("validate_tulkas_quest_on_load: Invalid prize artifact index: %d, clearing quest", p_ptr->tulkas_prize_a_idx);
-            
-            /* Clear quest state without reward */
-            p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
-            p_ptr->tulkas_target_r_idx = 0;
-            p_ptr->tulkas_prize_a_idx = 0;
-            p_ptr->tulkas_quest_complete = 0;
+            log_trace("validate_tulkas_quest_on_load: Invalid target r_idx=%d, skipping", p_ptr->tulkas_target_r_idx);
             return;
         }
         
-        /* Set quest to COMPLETE state - this will trigger normal completion flow */
-        /* Tulkas will spawn near player on next level generation/turn */
-        p_ptr->tulkas_quest = TULKAS_QUEST_COMPLETE;
-        p_ptr->tulkas_quest_complete = 1;
+        r_ptr = &r_info[p_ptr->tulkas_target_r_idx];
         
-        log_trace("validate_tulkas_quest_on_load: Quest set to COMPLETE state, Tulkas will spawn on next turn");
+        /* Check if the target unique is already dead (max_num == 0) */
+        if (r_ptr->max_num == 0)
+        {
+            log_trace("validate_tulkas_quest_on_load: Target unique %d (%s) is dead (max_num=0), auto-completing quest",
+                     p_ptr->tulkas_target_r_idx, r_name + r_ptr->name);
+            
+            /* Validate we have a valid artifact prize */
+            if (p_ptr->tulkas_prize_a_idx <= 0 || p_ptr->tulkas_prize_a_idx >= z_info->art_max)
+            {
+                log_trace("validate_tulkas_quest_on_load: Invalid prize artifact index: %d, clearing quest", p_ptr->tulkas_prize_a_idx);
+                
+                /* Clear quest state without reward */
+                p_ptr->tulkas_quest = TULKAS_QUEST_REWARDED;
+                p_ptr->tulkas_target_r_idx = 0;
+                p_ptr->tulkas_prize_a_idx = 0;
+                p_ptr->tulkas_quest_complete = 0;
+                return;
+            }
+            
+            /* Set quest to COMPLETE state - this will trigger normal completion flow */
+            /* Tulkas will spawn near player on next level generation/turn */
+            p_ptr->tulkas_quest = TULKAS_QUEST_COMPLETE;
+            p_ptr->tulkas_quest_complete = 1;
+            
+            log_trace("validate_tulkas_quest_on_load: Quest set to COMPLETE state, Tulkas will spawn on next turn");
+        }
+        else
+        {
+            log_trace("validate_tulkas_quest_on_load: Target unique %d (%s) is still alive (max_num=%d)",
+                     p_ptr->tulkas_target_r_idx, r_name + r_ptr->name, r_ptr->max_num);
+        }
     }
-    else
-    {
-        log_trace("validate_tulkas_quest_on_load: Target unique %d (%s) is still alive (max_num=%d)",
-                 p_ptr->tulkas_target_r_idx, r_name + r_ptr->name, r_ptr->max_num);
+
+    /* Validate the second Tulkas quest mask based on current monster state */
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (tulkas_orc_state == QUEST_STATE_ACTIVE || tulkas_orc_state == QUEST_STATE_GIVER_PRESENT) {
+        byte mask = 0;
+        for (size_t i = 0; i < tulkas_orc_target_count; i++) {
+            int idx = tulkas_orc_targets[i];
+            if (idx > 0 && idx < z_info->r_max) {
+                monster_race *orc_r = &r_info[idx];
+                if (orc_r->max_num == 0) {
+                    mask |= (1U << i);
+                }
+            }
+        }
+        p_ptr->tulkas_orc_mask = mask;
+        log_trace("validate_tulkas_quest_on_load: recomputed orc mask=0x%02x (state=%d)", mask, tulkas_orc_state);
+
+        byte full_mask = (1U << tulkas_orc_target_count) - 1;
+        if (mask == full_mask && tulkas_orc_state == QUEST_STATE_ACTIVE) {
+            quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_SUCCESS);
+            p_ptr->tulkas_second_spawn_pending = 1;
+            log_trace("validate_tulkas_quest_on_load: All orc captains dead, setting quest COMPLETE and spawn pending");
+        }
     }
 }
 

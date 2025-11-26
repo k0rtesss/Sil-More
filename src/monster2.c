@@ -2887,6 +2887,11 @@ static int place_monster_idx = 0;
  */
 bool quest_monster_spawn_okay(int r_idx)
 {
+    if (p_ptr && p_ptr->tulkas_orc_restricted && tulkas_orc_is_target(r_idx)) {
+        /* Orc captains are reserved for the Tulkas quest */
+        return false;
+    }
+
     /* Prevent quest monsters from spawning outside their quest contexts */
     switch (r_idx) {
         case R_IDX_TULKAS:
@@ -3876,6 +3881,5 @@ void message_pain(int m_idx, int dam)
 
     // m, w are silent
 }
-
 
 

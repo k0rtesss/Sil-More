@@ -28,10 +28,11 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_OROME_DRAGONS,
     METARUN_QUEST_OROME_GREAT_HUNT,
     METARUN_QUEST_NIENA_MORGOTH,
-    METARUN_QUEST_NIENA_PACIFIST
+    METARUN_QUEST_NIENA_PACIFIST,
+    METARUN_QUEST_TULKAS_ORCS
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA | METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA | METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST | METARUN_QUEST_TULKAS_ORCS)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -56,6 +57,7 @@ static int quest_id_from_slot(int slot)
         case 9: return QUEST_ID_OROME_GREAT_HUNT;
         case 10: return QUEST_ID_NIENA_MORGOTH;
         case 11: return QUEST_ID_NIENA_PACIFIST;
+        case 12: return QUEST_ID_TULKAS_ORCS;
         default: return 0;
     }
 }
@@ -129,6 +131,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
         case QUEST_ID_NIENA_MORGOTH: return METARUN_QUEST_NIENA_MORGOTH;
         case QUEST_ID_NIENA_PACIFIST: return METARUN_QUEST_NIENA_PACIFIST;
+        case QUEST_ID_TULKAS_ORCS: return METARUN_QUEST_TULKAS_ORCS;
         default: return 0;
     }
 }
@@ -341,6 +344,12 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Tulkas quest as completed (rewarded, was %d)", p_ptr->tulkas_quest);
         metarun_mark_quest_completed(METARUN_QUEST_TULKAS);
     }
+    byte tulkas_orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (tulkas_orc_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_ORCS)) {
+        log_trace("Metarun: Marking Tulkas orc quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_TULKAS_ORCS);
+    }
     
     if (p_ptr->aule_quest == AULE_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_AULE)) {
         log_trace("Metarun: Marking Aule quest as completed (rewarded)");
@@ -425,6 +434,13 @@ void metarun_restore_quest_states(void)
             log_trace("Metarun restore: Tulkas quest set to REWARDED (%d)", TULKAS_QUEST_REWARDED);
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS);
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0) {
+        if (quest_get_state(QUEST_ID_TULKAS_ORCS) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Tulkas orc quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_TULKAS_ORCS);
     }
     
     /* Restore Aule quest state */
@@ -529,8 +545,8 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d (2:%d,3:%d), Orome: %d (dragons:%d, hunt:%d), Varda: %d",
-              p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest,
+    log_trace("Metarun restore: Final quest states - Tulkas: %d (orcs:%d), Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d (2:%d,3:%d), Orome: %d (dragons:%d, hunt:%d), Varda: %d",
+              p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), p_ptr->aule_quest, p_ptr->mandos_quest,
               quest_get_state(QUEST_ID_MANDOS_TRAITOR), quest_get_state(QUEST_ID_MANDOS_BETRAYER),
               p_ptr->niena_quest, quest_get_state(QUEST_ID_NIENA_MORGOTH), quest_get_state(QUEST_ID_NIENA_PACIFIST),
               p_ptr->orome_quest,

@@ -3878,6 +3878,32 @@ static bool kind_is_good(int k_idx)
     return (false);
 }
 
+/* Tulkas blunt challenge filters */
+static bool (*blunt_saved_obj_hook)(int k_idx) = NULL;
+
+static bool tulkas_blunt_kind_ok(int k_idx)
+{
+    if (k_idx <= 0 || k_idx >= z_info->k_max) return false;
+    object_kind *k_ptr = &k_info[k_idx];
+    switch (k_ptr->tval)
+    {
+        case TV_SWORD:
+        case TV_POLEARM:
+        case TV_BOW:
+        case TV_ARROW:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static bool tulkas_blunt_obj_filter(int k_idx)
+{
+    if (!tulkas_blunt_kind_ok(k_idx)) return false;
+    if (blunt_saved_obj_hook) return blunt_saved_obj_hook(k_idx);
+    return true;
+}
+
 /*
  * Attempt to make an object (normal or good/great)
  *
@@ -3907,6 +3933,16 @@ bool make_object(object_type* j_ptr, bool good, bool great, int objecttype)
     if (one_in_(prob))
     {
         generated_special = make_artefact_special(j_ptr);
+    }
+
+    if (generated_special && adult_tulkas_blunt)
+    {
+        if (!tulkas_blunt_kind_ok(j_ptr->k_idx))
+        {
+            log_trace("Tulkas blunt challenge: rejecting special artifact k_idx=%d (tval=%d)", j_ptr->k_idx, j_ptr->tval);
+            object_wipe(j_ptr);
+            generated_special = false;
+        }
     }
 
     /* Attempt to generate a special artefact if prob = 0, or a normal object
@@ -3969,6 +4005,11 @@ bool make_object(object_type* j_ptr, bool good, bool great, int objecttype)
                 get_obj_num_hook = kind_is_good;
         }
 
+        if (adult_tulkas_blunt) {
+            blunt_saved_obj_hook = get_obj_num_hook;
+            get_obj_num_hook = tulkas_blunt_obj_filter;
+        }
+
         /* Prepare allocation tabled*/
         get_obj_num_prep();
 
@@ -3977,6 +4018,7 @@ bool make_object(object_type* j_ptr, bool good, bool great, int objecttype)
 
         /* Clear restriction */
         get_obj_num_hook = NULL;
+        blunt_saved_obj_hook = NULL;
 
         /* Handle failure*/
         if (!k_idx)
@@ -6369,4 +6411,3 @@ void check_artifact_visibility(void)
     last_px = px;
     last_py = py;
 }
-

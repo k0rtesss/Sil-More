@@ -1366,6 +1366,21 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->tulkas_target_r_idx);
     rd_s16b(&p_ptr->tulkas_prize_a_idx);
     rd_byte(&p_ptr->tulkas_quest_complete);
+    if (savefile_version_at_least(0, 9, 1, 8)) {
+        rd_s16b(&p_ptr->tulkas_stronghold_level);
+        rd_byte(&p_ptr->tulkas_stronghold_placed);
+        rd_byte(&p_ptr->tulkas_second_roll_done);
+        rd_byte(&p_ptr->tulkas_orc_mask);
+        rd_byte(&p_ptr->tulkas_orc_restricted);
+        rd_byte(&p_ptr->tulkas_second_spawn_pending);
+    } else {
+        p_ptr->tulkas_stronghold_level = 0;
+        p_ptr->tulkas_stronghold_placed = 0;
+        p_ptr->tulkas_second_roll_done = 0;
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_orc_restricted = 0;
+        p_ptr->tulkas_second_spawn_pending = 0;
+    }
     rd_byte(&p_ptr->aule_quest);
     rd_byte(&p_ptr->aule_forge_y);
     rd_byte(&p_ptr->aule_forge_x);
@@ -2968,7 +2983,6 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
-
 
 
 

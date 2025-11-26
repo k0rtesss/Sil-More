@@ -1278,6 +1278,12 @@ struct player_type
     s16b tulkas_target_r_idx; /* Target unique monster for Tulkas quest */
     s16b tulkas_prize_a_idx; /* Artifact prize for Tulkas quest */
     byte tulkas_quest_complete; /* Whether quest is completed but reward not given */
+    s16b tulkas_stronghold_level; /* Scheduled depth for the Orc stronghold */
+    byte tulkas_stronghold_placed; /* Stronghold vault placed on this run */
+    byte tulkas_second_roll_done; /* Rolled the second Tulkas quest trigger */
+    byte tulkas_orc_mask; /* Bitmask of slain quest orcs */
+    byte tulkas_orc_restricted; /* Block orc uniques from spawning outside quest */
+    byte tulkas_second_spawn_pending; /* Pending spawn for Tulkas quest giver */
     /* Aule quest tracking */
     byte aule_quest;           /* Aule quest state (AULE_QUEST_*) */
     byte aule_forge_y;         /* Y coord of Aule's forge (for validation) */
@@ -1533,4 +1539,3 @@ struct flag_name
     int set; /* The set into which the flag is to be sent. */
     u32b flag; /* The flag being set. */
 };
-

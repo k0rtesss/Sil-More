@@ -52,7 +52,7 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.1.4"
+#define VERSION_STRING "0.9.1.8"
 /*
  * Version components (0.9.1.3).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 7   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 8   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.1.x saves */
 
@@ -2650,6 +2650,7 @@
 // xxx birth_no_stores
 #define OPT_birth_no_artefacts (OPT_BIRTH + 6)
 #define OPT_birth_fixed_exp (OPT_BIRTH + 7)
+#define OPT_birth_tulkas_blunt (OPT_BIRTH + 8)
 
 /* xxx xxx */
 #define OPT_cheat_peek (OPT_CHEAT + 0)
@@ -2675,6 +2676,7 @@
 #define OPT_adult_single_stair (OPT_ADULT + 5)
 // xxx adult_no_stores
 #define OPT_adult_no_artefacts (OPT_ADULT + 6)
+#define OPT_adult_tulkas_blunt (OPT_ADULT + 8)
 // xxx adult_rand_artefacts
 // xxx adult_no_stacking
 // xxx adult_take_notes
@@ -2794,6 +2796,7 @@
 // xxx birth_no_stores
 #define birth_no_artefacts op_ptr->opt[OPT_birth_no_artefacts]
 #define birth_fixed_exp op_ptr->opt[OPT_birth_fixed_exp]
+#define birth_tulkas_blunt op_ptr->opt[OPT_birth_tulkas_blunt]
 // xxx birth_retain_squelch
 // xxx birth_no_quests
 // xxx birth_no_player ghosts
@@ -2826,6 +2829,7 @@
 #define adult_ironman op_ptr->opt[OPT_adult_ironman]
 // xxx adult_no_stores
 #define adult_no_artefacts op_ptr->opt[OPT_adult_no_artefacts]
+#define adult_tulkas_blunt op_ptr->opt[OPT_adult_tulkas_blunt]
 
 // Sil: set directly to false at the moment, as they are currently incompatible
 // with Sil
@@ -3704,6 +3708,7 @@ typedef struct quest_mapping {
 #define QUEST_ID_OROME_GREAT_HUNT 10  /* Orome third quest - great hunt uniques */
 #define QUEST_ID_NIENA_MORGOTH 11  /* Niena second quest - Silmaril without striking Morgoth */
 #define QUEST_ID_NIENA_PACIFIST 12 /* Niena third quest - escape without killing */
+#define QUEST_ID_TULKAS_ORCS 13  /* Tulkas second quest - Orc stronghold */
 #define OROME_GREAT_HUNT_TARGET_COUNT 6
 #define OROME_GREAT_HUNT_TARGET_MASK 0x3F
 
@@ -3729,7 +3734,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_OROME_DRAGONS, "Orome, Warden of the Drakes" },
     { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" },
     { QUEST_ID_NIENA_MORGOTH, "Nienna's Mercy in Angband" },
-    { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" }
+    { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" },
+    { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
@@ -3739,7 +3745,8 @@ static const quest_mapping quest_id_map[] = {
 #define CHALLENGE_DISCONNECTED    1
 #define CHALLENGE_SINGLE_STAIR    2
 #define CHALLENGE_FIXED_50K_XP    3
-#define CHALLENGE_MAX_TRACKED     5
+#define CHALLENGE_TULKAS_BLUNT    4
+#define CHALLENGE_MAX_TRACKED     6
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

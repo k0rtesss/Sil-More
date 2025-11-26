@@ -38,6 +38,7 @@ extern struct sound_config g_sound_config;
 #define OROME_WRAITH_PURCHASE_COST 5000
 #define OROME_RHYTHM_PURCHASE_COST 5000
 #define NIENA_MERCY_PURCHASE_COST 5000
+#define UNIQUE_BANE_PURCHASE_COST 5000
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -564,6 +565,11 @@ static bool huntsman_rhythm_purchase_unlocked(void)
 static bool niena_mercy_purchase_unlocked(void)
 {
     return metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0;
+}
+
+static bool unique_bane_purchase_unlocked(void)
+{
+    return metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0;
 }
 
 
@@ -1974,7 +1980,8 @@ int abilities_menu2(int skilltype, int* highlight)
             bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
                                    (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked());
+                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked());
             if (special_visible)
             {
                 if (temp_first_visible == -1)
@@ -2003,10 +2010,11 @@ int abilities_menu2(int skilltype, int* highlight)
                 break;
             }
             if (b_ptr->abilitynum == current_ability_num &&
-                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM)) {
+                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM || b_ptr->abilitynum == SPC_UNIQUE_BANE)) {
                 if ((b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                     (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked())) {
+                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
+                    (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked())) {
                     highlight_is_visible = true;
                     break;
                 }
@@ -2038,7 +2046,8 @@ int abilities_menu2(int skilltype, int* highlight)
             bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
                                    (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked());
+                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked());
             if (!special_visible) continue;
         }
 
@@ -2372,6 +2381,21 @@ int abilities_menu2(int skilltype, int* highlight)
                             Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
                             strnfmt(buf, sizeof(buf), "%d experience (you have %d)", NIENA_MERCY_PURCHASE_COST, p_ptr->new_exp);
                             byte price_attr = (NIENA_MERCY_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
+                    else if (b_ptr->abilitynum == SPC_UNIQUE_BANE && !p_ptr->have_ability[S_SPC][SPC_UNIQUE_BANE])
+                    {
+                        if (!unique_bane_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete Tulkas' blunt-arms challenge to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", UNIQUE_BANE_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (UNIQUE_BANE_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
                             Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
                         }
                     }
@@ -2723,6 +2747,7 @@ void do_cmd_ability_screen(void)
                         bool orome_wraith_special = (skilltype == S_SPC && abilitynum == SPC_OROME_WRAITH);
                         bool orome_rhythm_special = (skilltype == S_SPC && abilitynum == SPC_HUNTSMAN_RHYTHM);
                         bool niena_mercy_special = (skilltype == S_SPC && abilitynum == SPC_NIENA_MERCY);
+                        bool unique_bane_special = (skilltype == S_SPC && abilitynum == SPC_UNIQUE_BANE);
                         int exp_cost = -1;
                         skip_purchase = false;
 
@@ -2761,6 +2786,15 @@ void do_cmd_ability_screen(void)
                                 continue;
                             }
                             exp_cost = NIENA_MERCY_PURCHASE_COST;
+                        }
+                        else if (unique_bane_special)
+                        {
+                            if (!unique_bane_purchase_unlocked())
+                            {
+                                bell("Complete Tulkas' blunt-arms challenge to purchase Unique Bane.");
+                                continue;
+                            }
+                            exp_cost = UNIQUE_BANE_PURCHASE_COST;
                         }
                         else if (skilltype == S_SPC)
                         {
@@ -5437,7 +5471,10 @@ int create_tval_menu_aux(int* highlight)
     int i;
     char buf[80];
     bool valid[MAX_SMITHING_TVALS];
-    byte valid_attr = TERM_WHITE; // default to soothe compilation warnings
+    byte attrs[MAX_SMITHING_TVALS];
+
+    memset(valid, 0, sizeof(valid));
+    for (i = 0; i < MAX_SMITHING_TVALS; i++) attrs[i] = TERM_L_DARK;
 
     // clear the right of the screen
     wipe_screen_from(COL_SMT2);
@@ -5452,29 +5489,44 @@ int create_tval_menu_aux(int* highlight)
     {
         strnfmt(buf, 80, "%c) %s", (char)'a' + i, smithing_tvals[i].desc);
 
+        bool item_valid = false;
+        byte item_attr = TERM_L_DARK;
+
         if (smithing_tvals[i].category == CAT_WEAPON)
         {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
-                ? TERM_WHITE
-                : TERM_RED;
+            bool allowed_weapon = true;
+            if (adult_tulkas_blunt &&
+                smithing_tvals[i].tval != TV_HAFTED &&
+                smithing_tvals[i].tval != TV_DIGGING)
+            {
+                allowed_weapon = false;
+            }
+            if (allowed_weapon) {
+                item_valid = true;
+                item_attr = p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
+                    ? TERM_WHITE
+                    : TERM_RED;
+            }
         }
         if (smithing_tvals[i].category == CAT_ARMOUR)
         {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
+            item_valid = true;
+            item_attr = p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
                 ? TERM_WHITE
                 : TERM_RED;
         }
         if (smithing_tvals[i].category == CAT_JEWELRY)
         {
-            valid[i] = true;
-            valid_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
+            item_valid = true;
+            item_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
                                                                     : TERM_RED;
         }
 
+        valid[i] = item_valid;
+        attrs[i] = item_attr;
+
         Term_putstr(
-            COL_SMT2, i + 2, -1, valid[i] ? valid_attr : TERM_L_DARK, buf);
+            COL_SMT2, i + 2, -1, item_valid ? item_attr : TERM_L_DARK, buf);
     }
 
     // highlight the label
@@ -5501,7 +5553,7 @@ int create_tval_menu_aux(int* highlight)
 
         // move the light blue highlight
         move_displayed_highlight(old_highlight,
-            valid[old_highlight] ? TERM_WHITE : TERM_L_DARK, *highlight,
+            valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK, *highlight,
             COL_SMT2);
 
         if (valid[*highlight - 1])
@@ -5522,19 +5574,39 @@ int create_tval_menu_aux(int* highlight)
     /* Prev item */
     if (ch == '8')
     {
+        int old_highlight = *highlight;
         if (*highlight > 1)
             (*highlight)--;
         else if (*highlight == 1)
             *highlight = MAX_SMITHING_TVALS;
+
+        if (*highlight != old_highlight)
+        {
+            move_displayed_highlight(
+                old_highlight,
+                valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK,
+                *highlight,
+                COL_SMT2);
+        }
     }
 
     /* Next item */
     if (ch == '2')
     {
+        int old_highlight = *highlight;
         if (*highlight < MAX_SMITHING_TVALS)
             (*highlight)++;
         else if (*highlight == MAX_SMITHING_TVALS)
             *highlight = 1;
+
+        if (*highlight != old_highlight)
+        {
+            move_displayed_highlight(
+                old_highlight,
+                valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK,
+                *highlight,
+                COL_SMT2);
+        }
     }
 
     /* Exit */
@@ -16416,7 +16488,3 @@ void show_unified_sidebar(unified_look_state* state)
     previous_line_count = current_line_count;
     log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
 }
-
-
-
-
