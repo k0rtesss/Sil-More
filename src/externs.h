@@ -1292,6 +1292,7 @@ extern void check_niena_morgoth_interaction(void);
 extern void niena_mark_morgoth_attack(void);
 extern void niena_revoke_temp_mercy_gift(bool silent);
 extern void ensure_niena_pacifist_active(void);
+extern void ensure_tulkas_morgoth_active(void);
 extern void check_orome_quest_completion(int r_idx);
 extern void orome_quest_interaction(void);
 extern void check_orome_quest_interaction(void);

@@ -52,7 +52,7 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.1.8"
+#define VERSION_STRING "0.9.1.9"
 /*
  * Version components (0.9.1.3).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 1
-#define VERSION_EXTRA 8   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 9   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.1.x saves */
 
@@ -643,6 +643,7 @@
 #define SPC_OATH_LIGHT 9   /* Oath of Light */
 #define SPC_OROME_WRAITH 10 /* Wraith of Orome */
 #define SPC_HUNTSMAN_RHYTHM 11 /* Two bow hits prime a spear strike */
+#define SPC_TULKAS_WRATH 12 /* Enhanced smite granted by Tulkas' final quest */
 
 /*
  * Attack Types
@@ -3709,6 +3710,7 @@ typedef struct quest_mapping {
 #define QUEST_ID_NIENA_MORGOTH 11  /* Niena second quest - Silmaril without striking Morgoth */
 #define QUEST_ID_NIENA_PACIFIST 12 /* Niena third quest - escape without killing */
 #define QUEST_ID_TULKAS_ORCS 13  /* Tulkas second quest - Orc stronghold */
+#define QUEST_ID_TULKAS_MORGOTH 14 /* Tulkas third quest - Wound Morgoth */
 #define OROME_GREAT_HUNT_TARGET_COUNT 6
 #define OROME_GREAT_HUNT_TARGET_MASK 0x3F
 
@@ -3735,7 +3737,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" },
     { QUEST_ID_NIENA_MORGOTH, "Nienna's Mercy in Angband" },
     { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" },
-    { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" }
+    { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" },
+    { QUEST_ID_TULKAS_MORGOTH, "Tulkas, Black Foe's Scourge" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))

@@ -559,6 +559,7 @@ static void process_world(void)
 
     /* Keep the pacifist quest state synced */
     ensure_niena_pacifist_active();
+    ensure_tulkas_morgoth_active();
 
     /* Check for Tulkas quest interaction every turn */
     check_tulkas_quest_interaction();
@@ -4050,5 +4051,4 @@ PlayResult play_game(void)
         return PLAY_DONE;
     }
 }
-
 

@@ -1284,6 +1284,7 @@ struct player_type
     byte tulkas_orc_mask; /* Bitmask of slain quest orcs */
     byte tulkas_orc_restricted; /* Block orc uniques from spawning outside quest */
     byte tulkas_second_spawn_pending; /* Pending spawn for Tulkas quest giver */
+    byte tulkas_morgoth_progress; /* Highest percent of Morgoth's HP lost to the player */
     /* Aule quest tracking */
     byte aule_quest;           /* Aule quest state (AULE_QUEST_*) */
     byte aule_forge_y;         /* Y coord of Aule's forge (for validation) */

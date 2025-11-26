@@ -164,6 +164,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SPC_OATH_LIGHT] = "Oath of Light",
         [SPC_OROME_WRAITH] = "Wraith of Orome",
         [SPC_HUNTSMAN_RHYTHM] = "Huntsman's Rhythm",
+        [SPC_TULKAS_WRATH] = "Wrath of Tulkas",
     },
 };
 
@@ -2855,7 +2856,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
 
 
 

@@ -1218,6 +1218,7 @@ static void wr_extra(void)
     wr_byte(p_ptr->tulkas_orc_mask);
     wr_byte(p_ptr->tulkas_orc_restricted);
     wr_byte(p_ptr->tulkas_second_spawn_pending);
+    wr_byte(p_ptr->tulkas_morgoth_progress);
     /* Aule quest fields */
     wr_byte(p_ptr->aule_quest);
     wr_byte(p_ptr->aule_forge_y);
@@ -2114,7 +2115,6 @@ bool save_player(void)
     }
     return (result);
 }
-
 
 
 

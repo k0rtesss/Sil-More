@@ -1381,6 +1381,11 @@ static errr rd_extra(void)
         p_ptr->tulkas_orc_restricted = 0;
         p_ptr->tulkas_second_spawn_pending = 0;
     }
+    if (savefile_version_at_least(0, 9, 1, 9)) {
+        rd_byte(&p_ptr->tulkas_morgoth_progress);
+    } else {
+        p_ptr->tulkas_morgoth_progress = 0;
+    }
     rd_byte(&p_ptr->aule_quest);
     rd_byte(&p_ptr->aule_forge_y);
     rd_byte(&p_ptr->aule_forge_x);
@@ -2983,7 +2988,6 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
-
 
 
 

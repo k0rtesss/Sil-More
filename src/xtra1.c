@@ -498,8 +498,9 @@ static void prt_mel(void)
         mod = -1;
 
     /* Melee attacks */
-    int meleeColour
-        = p_ptr->active_ability[S_MEL][MEL_SMITE] ? TERM_L_RED : TERM_L_WHITE;
+    int meleeColour = (p_ptr->active_ability[S_MEL][MEL_SMITE]
+        || p_ptr->active_ability[S_SPC][SPC_TULKAS_WRATH])
+        ? TERM_L_RED : TERM_L_WHITE;
     strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", p_ptr->skill_use[S_MEL],
         p_ptr->mdd, p_ptr->mds);
     c_put_str(meleeColour, buf, ROW_MEL + mod, COL_MEL + 12 - strlen(buf));
@@ -4534,7 +4535,6 @@ void handle_stuff(void)
 
     log_trace("handle_stuff: completed");
 }
-
 
 
 

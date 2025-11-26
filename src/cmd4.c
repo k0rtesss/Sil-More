@@ -39,6 +39,7 @@ extern struct sound_config g_sound_config;
 #define OROME_RHYTHM_PURCHASE_COST 5000
 #define NIENA_MERCY_PURCHASE_COST 5000
 #define UNIQUE_BANE_PURCHASE_COST 5000
+#define TULKAS_WRATH_PURCHASE_COST 5000
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -570,6 +571,11 @@ static bool niena_mercy_purchase_unlocked(void)
 static bool unique_bane_purchase_unlocked(void)
 {
     return metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0;
+}
+
+static bool tulkas_wrath_purchase_unlocked(void)
+{
+    return metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH) > 0;
 }
 
 
@@ -2399,6 +2405,21 @@ int abilities_menu2(int skilltype, int* highlight)
                             Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
                         }
                     }
+                    else if (b_ptr->abilitynum == SPC_TULKAS_WRATH && !p_ptr->have_ability[S_SPC][SPC_TULKAS_WRATH])
+                    {
+                        if (!tulkas_wrath_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Wound Morgoth to half his strength to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", TULKAS_WRATH_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (TULKAS_WRATH_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
                     else
                     {
                         /* Special abilities cannot be purchased; show as granted only */
@@ -2748,8 +2769,15 @@ void do_cmd_ability_screen(void)
                         bool orome_rhythm_special = (skilltype == S_SPC && abilitynum == SPC_HUNTSMAN_RHYTHM);
                         bool niena_mercy_special = (skilltype == S_SPC && abilitynum == SPC_NIENA_MERCY);
                         bool unique_bane_special = (skilltype == S_SPC && abilitynum == SPC_UNIQUE_BANE);
+                        bool tulkas_wrath_special = (skilltype == S_SPC && abilitynum == SPC_TULKAS_WRATH);
                         int exp_cost = -1;
                         skip_purchase = false;
+
+                        if (skilltype == S_MEL && abilitynum == MEL_SMITE && p_ptr->have_ability[S_SPC][SPC_TULKAS_WRATH])
+                        {
+                            bell("Wrath of Tulkas supersedes Smite; you cannot purchase Smite.");
+                            continue;
+                        }
 
                         if (mandos_special)
                         {
@@ -2795,6 +2823,15 @@ void do_cmd_ability_screen(void)
                                 continue;
                             }
                             exp_cost = UNIQUE_BANE_PURCHASE_COST;
+                        }
+                        else if (tulkas_wrath_special)
+                        {
+                            if (!tulkas_wrath_purchase_unlocked())
+                            {
+                                bell("Wound Morgoth to half his strength to purchase Wrath of Tulkas.");
+                                continue;
+                            }
+                            exp_cost = TULKAS_WRATH_PURCHASE_COST;
                         }
                         else if (skilltype == S_SPC)
                         {

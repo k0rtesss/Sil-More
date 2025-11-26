@@ -205,6 +205,30 @@ void ensure_niena_pacifist_active(void)
     }
 }
 
+static byte tulkas_third_state(void)
+{
+    return quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+}
+
+static void tulkas_set_third_state(byte state)
+{
+    quest_set_state(QUEST_ID_TULKAS_MORGOTH, state);
+}
+
+void ensure_tulkas_morgoth_active(void)
+{
+    int cap = quest_completion_cap(QUEST_ID_TULKAS_MORGOTH);
+    if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+    if (metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH) >= cap) return;
+
+    byte state = tulkas_third_state();
+    if (state == QUEST_STATE_NOT_STARTED) {
+        tulkas_set_third_state(QUEST_STATE_ACTIVE);
+        p_ptr->tulkas_morgoth_progress = 0;
+        log_trace("Tulkas Morgoth quest activated for this run");
+    }
+}
+
 static int count_active_curse_stacks(void)
 {
     int active = 0;
@@ -2905,6 +2929,45 @@ s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill)
     return (exp);
 }
 
+static void tulkas_record_morgoth_damage(monster_type* m_ptr)
+{
+    if (!m_ptr || m_ptr->r_idx != R_IDX_MORGOTH) return;
+
+    byte state = tulkas_third_state();
+    if (state >= QUEST_STATE_REWARDED || state == QUEST_STATE_NOT_STARTED) return;
+
+    int maxhp = m_ptr->maxhp;
+    if (maxhp <= 0) return;
+
+    int remaining = m_ptr->hp;
+    if (remaining < 0) remaining = 0;
+
+    int damage_percent = ((maxhp - remaining) * 100 + maxhp / 2) / maxhp;
+    if (damage_percent > 100) damage_percent = 100;
+
+    if (damage_percent > p_ptr->tulkas_morgoth_progress) {
+        p_ptr->tulkas_morgoth_progress = (byte)damage_percent;
+    }
+
+    if (damage_percent >= 50) {
+        if (state < QUEST_STATE_SUCCESS) {
+            tulkas_set_third_state(QUEST_STATE_SUCCESS);
+        }
+        if (tulkas_third_state() < QUEST_STATE_REWARDED) {
+            tulkas_set_third_state(QUEST_STATE_REWARDED);
+            metarun_mark_quest_completed(METARUN_QUEST_TULKAS_MORGOTH);
+            apply_quest_rewards(QUEST_ID_TULKAS_MORGOTH);
+            p_ptr->update |= (PU_BONUS);
+            handle_stuff();
+            msg_print("Tulkas' laughter thunders as Morgoth reels; a deeper smiting fury fills your arms!");
+            do_cmd_note("Wounded Morgoth and claimed Tulkas' smiting wrath.", p_ptr->depth);
+        }
+        if (remaining <= 0 && p_ptr->tulkas_morgoth_progress < 100) {
+            p_ptr->tulkas_morgoth_progress = 100;
+        }
+    }
+}
+
 /*
  * Decrease a monster's hit points, handle monster death.
  *
@@ -2936,6 +2999,11 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
     /* Hurt it */
     m_ptr->hp -= dam;
+
+    /* Track Tulkas' Morgoth quest progress for player-inflicted damage */
+    if (m_ptr->r_idx == R_IDX_MORGOTH && who < 0 && dam > 0) {
+        tulkas_record_morgoth_damage(m_ptr);
+    }
 
     /* It is dead now */
     if (m_ptr->hp <= 0)
@@ -6133,6 +6201,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_OROME_GREAT_HUNT")) return METARUN_QUEST_OROME_GREAT_HUNT;
     if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
     if (streq(metarun_id, "METARUN_QUEST_TULKAS_ORCS")) return METARUN_QUEST_TULKAS_ORCS;
+    if (streq(metarun_id, "METARUN_QUEST_TULKAS_MORGOTH")) return METARUN_QUEST_TULKAS_MORGOTH;
     
     /* Unknown or future quest */
     log_debug("get_metarun_quest_flag: Unknown metarun_quest_id '%s' for quest_idx %d", metarun_id, quest_idx);
@@ -7068,6 +7137,7 @@ void do_cmd_quest_status(void)
 
     /* Ensure always-on quests are initialised before display */
     ensure_niena_pacifist_active();
+    ensure_tulkas_morgoth_active();
 
     log_trace("QUEST STATUS: Player exists, quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
@@ -7201,6 +7271,45 @@ void do_cmd_quest_status(void)
 
         strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS_ORCS));
         display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+        row++;
+    }
+
+    /* Check Tulkas Morgoth quest */
+    byte tulkas_morgoth_state = quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+    int tulkas_morgoth_completed = metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH);
+    int tulkas_morgoth_cap = quest_completion_cap(QUEST_ID_TULKAS_MORGOTH);
+    bool show_tulkas_morgoth = (tulkas_morgoth_state != QUEST_STATE_NOT_STARTED) || tulkas_morgoth_completed > 0;
+    if (show_tulkas_morgoth) {
+        any_quests = true;
+        cptr quest_title = get_quest_title(QUEST_ID_TULKAS_MORGOTH);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_TULKAS_MORGOTH);
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        bool lineage_complete = (tulkas_morgoth_cap > 0 && tulkas_morgoth_completed >= tulkas_morgoth_cap);
+        int progress = p_ptr->tulkas_morgoth_progress;
+        if (progress < 0) progress = 0;
+        if (progress > 100) progress = 100;
+        if (tulkas_morgoth_state >= QUEST_STATE_REWARDED) progress = 100;
+
+        switch (tulkas_morgoth_state) {
+            case QUEST_STATE_REWARDED:
+                Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed by this character");
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_TULKAS_MORGOTH));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+            default:
+                if (lineage_complete) {
+                    Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed earlier in this metarun");
+                    strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_TULKAS_MORGOTH));
+                    display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                } else {
+                    Term_putstr(col + 2, row++, -1, TERM_WHITE, format("Active - Morgoth wounded %d%%", progress));
+                    display_wrapped_text(col + 2, &row, quest_challenge, TERM_SLATE, wid);
+                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS_MORGOTH));
+                    display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                }
+                break;
+        }
         row++;
     }
 

@@ -4776,6 +4776,7 @@ void py_attack_aux(int y, int x, int attack_type)
     bool off_hand_blow = false;
     bool fatal_blow = false;
     bool smite = false;
+    bool tulkas_wrath = false;
     bool huntsman_rhythm = false;
 
     u32b f1, f2, f3; // the weapon's flags
@@ -4964,12 +4965,15 @@ void py_attack_aux(int y, int x, int attack_type)
     /* Attack once for each legal blow */
     while (num++ < blows)
     {
-        smite = two_handed_melee() && p_ptr->active_ability[S_MEL][MEL_SMITE]
+        bool smite_ability = p_ptr->active_ability[S_MEL][MEL_SMITE];
+        bool wrath_ability = p_ptr->active_ability[S_SPC][SPC_TULKAS_WRATH];
+        smite = two_handed_melee() && (smite_ability || wrath_ability)
             && num == 1
             && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
                 || attack_type == ATT_IMPALE
                 || attack_type == ATT_FOLLOW_THROUGH
                 || attack_type == ATT_WHIRLWIND);
+        tulkas_wrath = smite && wrath_ability;
 
         do_knock_back = false;
         knocked = false;
@@ -5197,6 +5201,8 @@ void py_attack_aux(int y, int x, int attack_type)
             // give an extra +2 bonus for using a weapon two-handed
             if (two_handed_melee())
                 effective_strength += 2;
+            if (tulkas_wrath)
+                effective_strength *= 2;
 
             // check whether the effect triggers
             if (p_ptr->active_ability[S_MEL][MEL_KNOCK_BACK]
@@ -6857,6 +6863,4 @@ void run_step(int dir)
     /* Move the player */
     move_player(p_ptr->run_cur_dir);
 }
-
-
 
