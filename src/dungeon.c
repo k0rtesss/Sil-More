@@ -557,6 +557,9 @@ static void process_world(void)
 
     bool was_ghost = false;
 
+    /* Keep the pacifist quest state synced */
+    ensure_niena_pacifist_active();
+
     /* Check for Tulkas quest interaction every turn */
     check_tulkas_quest_interaction();
 
@@ -4047,6 +4050,5 @@ PlayResult play_game(void)
         return PLAY_DONE;
     }
 }
-
 
 

@@ -37,6 +37,7 @@
 #define METARUN_QUEST_OROME_DRAGONS (1UL << 8) /* Orome dragon quest completed */
 #define METARUN_QUEST_OROME_GREAT_HUNT (1UL << 9) /* Orome great hunt quest completed */
 #define METARUN_QUEST_NIENA_MORGOTH (1UL << 10) /* Niena's Morgoth-hall mercy quest completed */
+#define METARUN_QUEST_NIENA_PACIFIST (1UL << 11) /* Niena's pacifist escape quest completed */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
@@ -45,6 +46,7 @@
 #define METARUN_SLOT_MANDOS_RES_CHARGES 0   /* Stored resurrection charges from Mandos' final quest */
 #define METARUN_SLOT_OROME_GREAT_HUNT_MASK 1   /* Bitmask of slain uniques for Orome's great hunt */
 #define METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE 2 /* Flag: Orome great hunt quest is active */
+#define METARUN_SLOT_NIENA_CURSE_CLEANSE 3   /* Stored curse-cleansing charges from Nienna's pacifist quest */
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
@@ -190,6 +192,9 @@ void metarun_restore_quest_states(void);            /* Restore quest states from
 int metarun_mandos_resurrection_charges(void);      /* Stored Mandos resurrection charges */
 void metarun_add_mandos_resurrection_charge(void);  /* Grant a Mandos resurrection charge (max 1) */
 bool metarun_consume_mandos_resurrection_charge(void); /* Spend a Mandos resurrection charge */
+int metarun_niena_curse_cleanses(void);             /* Stored curse-cleansing charges from Nienna's pacifist quest */
+void metarun_add_niena_curse_cleansing_charge(void); /* Grant a Nienna curse-cleansing charge (max 1) */
+bool metarun_consume_niena_curse_cleansing_charge(void); /* Spend a Nienna curse-cleansing charge */
 byte metarun_orome_great_hunt_mask(void);           /* Bitmask of Orome hunt uniques slain across the metarun */
 void metarun_set_orome_great_hunt_mask(byte mask);  /* Persist the Orome hunt kill mask */
 bool metarun_orome_great_hunt_active(void);         /* Whether the Orome hunt quest is active for this metarun */
@@ -292,6 +297,7 @@ void cleanup_old_game_files(void);     /* Clean save/score files on fresh start 
 int  menu_choose_one_curse(int n);      /* weighted picker / poem menu  */
 int  choose_escape_curses_ui(int n, int out[3]); /* interactive curse selection */
 int  choose_oath_breaking_curse_ui(int oath_id); /* oath-specific curse selection with fade */
+int  metarun_clear_positive_curses(void); /* Clear all active curses (keep blessings) */
 void metarun_clear_all_curses(void);   /* zero every curse counter     */
 void add_curse_stack(int idx);         /* +1 stack respecting caps     */
 /* NEW: show a menu of all *known* curses (those with CURSE_SEEN). */

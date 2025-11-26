@@ -47,6 +47,11 @@ static void niena_set_second_state(byte state)
     quest_set_state(QUEST_ID_NIENA_MORGOTH, state);
 }
 
+static byte niena_third_state(void)
+{
+    return quest_get_state(QUEST_ID_NIENA_PACIFIST);
+}
+
 static byte orome_second_state(void)
 {
     return quest_get_state(QUEST_ID_OROME_DRAGONS);
@@ -103,6 +108,88 @@ static int orome_hunt_kill_count(byte mask)
         tmp >>= 1;
     }
     return count;
+}
+
+static int total_player_kills_this_run(void)
+{
+    if (!z_info || !l_list) return 0;
+
+    int total = 0;
+    for (int i = 0; i < z_info->r_max; i++) {
+        int kills = l_list[i].pkills;
+        if (kills > 0) total += kills;
+    }
+
+    return total;
+}
+
+static bool niena_pacifist_failed(void)
+{
+    return (p_ptr->niena_reserved & NIENA_FLAG_PACIFIST_FAILED) != 0;
+}
+
+static void niena_mark_pacifist_failure(const monster_race *r_ptr)
+{
+    /* Skip if quest already complete for this metarun */
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST) >= quest_completion_cap(QUEST_ID_NIENA_PACIFIST)) {
+        return;
+    }
+
+    if (quest_get_state(QUEST_ID_NIENA_PACIFIST) < QUEST_STATE_ACTIVE) {
+        quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
+    }
+
+    if (niena_pacifist_failed()) return;
+
+    p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+
+    const char *name = NULL;
+    bool show_message = (r_ptr != NULL);
+    if (r_ptr && r_ptr->name && r_name) {
+        name = r_name + r_ptr->name;
+    }
+
+    if (name) {
+        log_trace("Niena pacifist quest failed: first kill was %s", name);
+    } else {
+        log_trace("Niena pacifist quest failed: first kill recorded");
+    }
+    if (show_message) {
+        msg_print("Blood has been spilled; Nienna's path of peace is lost for this life.");
+    }
+}
+
+void ensure_niena_pacifist_active(void)
+{
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST) >= quest_completion_cap(QUEST_ID_NIENA_PACIFIST)) {
+        return;
+    }
+
+    byte state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (state == QUEST_STATE_NOT_STARTED) {
+        quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
+        log_trace("Niena pacifist quest activated for this run");
+    }
+
+    if (quest_get_state(QUEST_ID_NIENA_PACIFIST) == QUEST_STATE_ACTIVE && !niena_pacifist_failed()) {
+        if (total_player_kills_this_run() > 0) {
+            /* Legacy saves or missed hooks: mark the failure retroactively */
+            niena_mark_pacifist_failure(NULL);
+        }
+    }
+}
+
+static int count_active_curse_stacks(void)
+{
+    int active = 0;
+    int limit = z_info ? MIN(z_info->cu_max, METAR_CURSE_SLOTS) : METAR_CURSE_SLOTS;
+
+    for (int i = 0; i < limit; i++) {
+        int stacks = CURSE_CURSE_STACK(i);
+        if (stacks > 0) active += stacks;
+    }
+
+    return active;
 }
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
@@ -2554,6 +2641,11 @@ void monster_death(int m_idx)
         p_ptr->niena_monsters_killed++;
         log_trace("Niena quest: Monster killed (total killed=%d, seen=%d)", 
                  p_ptr->niena_monsters_killed, p_ptr->niena_monsters_seen);
+    }
+
+    /* Track the pacifist escape quest - first kill fails it for this life */
+    if (quest_get_state(QUEST_ID_NIENA_PACIFIST) < QUEST_STATE_REWARDED) {
+        niena_mark_pacifist_failure(r_ptr);
     }
 
     /* Track monster death for Orome hunting quest - global kill counting */
@@ -6009,6 +6101,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_MANDOS")) return METARUN_QUEST_MANDOS;
     if (streq(metarun_id, "METARUN_QUEST_MANDOS_THIRD") || streq(metarun_id, "METARUN_QUEST_MANDOS_BETRAYER")) return METARUN_QUEST_MANDOS_BETRAYER;
     if (streq(metarun_id, "METARUN_QUEST_NIENA")) return METARUN_QUEST_NIENA;
+    if (streq(metarun_id, "METARUN_QUEST_NIENA_PACIFIST")) return METARUN_QUEST_NIENA_PACIFIST;
     if (streq(metarun_id, "METARUN_QUEST_OROME")) return METARUN_QUEST_OROME;
     if (streq(metarun_id, "METARUN_QUEST_OROME_DRAGONS")) return METARUN_QUEST_OROME_DRAGONS;
     if (streq(metarun_id, "METARUN_QUEST_OROME_GREAT_HUNT")) return METARUN_QUEST_OROME_GREAT_HUNT;
@@ -6806,6 +6899,10 @@ static cptr get_quest_reward_text(int quest_idx)
         SDL_strlcpy(reward_buf, "Unlock the fixed 50k XP challenge; enables purchasing Nienna's Gift of Mercy for 5000 XP", sizeof(reward_buf));
         return reward_buf;
     }
+    if (quest_idx == QUEST_ID_NIENA_PACIFIST) {
+        SDL_strlcpy(reward_buf, "Gain one charge to cleanse all active curses from the quest menu", sizeof(reward_buf));
+        return reward_buf;
+    }
     
     /* Build reward description from quest data */
     bool has_rewards = false;
@@ -6927,6 +7024,9 @@ void do_cmd_quest_status(void)
         msg_print("No character data available.");
         return;
     }
+
+    /* Ensure always-on quests are initialised before display */
+    ensure_niena_pacifist_active();
 
     log_trace("QUEST STATUS: Player exists, quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
@@ -7329,6 +7429,51 @@ void do_cmd_quest_status(void)
         row++;
     }
 
+    byte niena_pacifist = niena_third_state();
+    if (niena_pacifist != QUEST_STATE_NOT_STARTED ||
+        metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST) > 0) {
+        any_quests = true;
+        int pacifist_kills = total_player_kills_this_run();
+        int pacifist_completed = metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST);
+        int pacifist_cap = quest_completion_cap(QUEST_ID_NIENA_PACIFIST);
+        cptr quest_title = get_quest_title(QUEST_ID_NIENA_PACIFIST);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_NIENA_PACIFIST);
+        bool failed = niena_pacifist_failed() || pacifist_kills > 0;
+        bool lineage_complete = (pacifist_cap > 0 && pacifist_completed >= pacifist_cap);
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        switch (niena_pacifist) {
+            case QUEST_STATE_REWARDED:
+                Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed by this character");
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_NIENA_PACIFIST));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_SUCCESS:
+            case QUEST_STATE_ACTIVE:
+            case QUEST_STATE_GIVER_PRESENT:
+            default:
+                if (lineage_complete && niena_pacifist != QUEST_STATE_REWARDED) {
+                    Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed earlier in this metarun");
+                    strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_NIENA_PACIFIST));
+                    display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                    break;
+                }
+                if (failed) {
+                    strnfmt(buf, sizeof(buf), "Failed this run - %d creature%s slain",
+                            pacifist_kills, (pacifist_kills == 1) ? "" : "s");
+                    Term_putstr(col + 2, row++, -1, TERM_RED, buf);
+                } else {
+                    Term_putstr(col + 2, row++, -1, TERM_WHITE, "Active - escape Angband without killing");
+                    display_wrapped_text(col + 2, &row, quest_challenge, TERM_SLATE, wid);
+                }
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA_PACIFIST));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+        }
+        row++;
+    }
+
     /* Check Orome quest */
     if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED) {
         any_quests = true;
@@ -7634,6 +7779,17 @@ void do_cmd_quest_status(void)
         strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, niena_completed);
         display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
     }
+    int niena_pacifist_completed = metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST);
+    if (niena_pacifist_completed > 0 && quest_get_state(QUEST_ID_NIENA_PACIFIST) != QUEST_STATE_REWARDED) {
+        if (!has_previous_completions) {
+            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
+            has_previous_completions = true;
+        }
+        cptr quest_title = get_quest_title(QUEST_ID_NIENA_PACIFIST);
+        char status_text[150];
+        strnfmt(status_text, sizeof(status_text), "%s (metarun x%d)", quest_title, niena_pacifist_completed);
+        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
+    }
     int orome_completed = metarun_quest_completion_count(METARUN_QUEST_OROME);
     if (orome_completed > 0 && p_ptr->orome_quest != OROME_QUEST_REWARDED) {
         if (!has_previous_completions) {
@@ -7705,11 +7861,38 @@ void do_cmd_quest_status(void)
         row++;
     }
 
+    int cleanse_charges = metarun_niena_curse_cleanses();
+    if (cleanse_charges > 0) {
+        char status_line[80];
+        strnfmt(status_line, sizeof(status_line), "Nienna's Clemency: charges available: %d", cleanse_charges);
+        Term_putstr(col, row++, -1, TERM_L_WHITE, status_line);
+        int active_curse_stacks = count_active_curse_stacks();
+        if (active_curse_stacks > 0) {
+            strnfmt(status_line, sizeof(status_line), "Active curses: %d stack%s - press 'c' to cleanse them.",
+                    active_curse_stacks, (active_curse_stacks == 1) ? "" : "s");
+            display_wrapped_text(col, &row, status_line, TERM_L_DARK, wid);
+        } else {
+            Term_putstr(col, row++, -1, TERM_L_DARK, "No active curses right now; 'c' will cleanse when you are ready.");
+        }
+        row++;
+    }
+
     row++;
-    cptr prompt = (!res_primed && res_charges > 0) ? "Press 'r' to bind, any other key to return." : "Press any key to return.";
+    bool can_bind = (!res_primed && res_charges > 0);
+    bool can_cleanse = (cleanse_charges > 0);
+    cptr prompt = NULL;
+    if (can_bind && can_cleanse) {
+        prompt = "Press 'r' to bind, 'c' to cleanse curses, any other key to return.";
+    } else if (can_bind) {
+        prompt = "Press 'r' to bind, any other key to return.";
+    } else if (can_cleanse) {
+        prompt = "Press 'c' to cleanse curses, any other key to return.";
+    } else {
+        prompt = "Press any key to return.";
+    }
     Term_putstr(col, row, -1, TERM_L_WHITE, prompt);
     char key = inkey();
-    if (!res_primed && res_charges > 0 && (key == 'r' || key == 'R')) {
+    if (can_bind && (key == 'r' || key == 'R')) {
         if (metarun_consume_mandos_resurrection_charge()) {
             p_ptr->mandos_resurrection_primed = 1;
             p_ptr->mandos_resurrection_used = 0;
@@ -7717,6 +7900,27 @@ void do_cmd_quest_status(void)
             msg_print("Mandos binds your spirit to a single return from death.");
             return;
         }
+    } else if (can_cleanse && (key == 'c' || key == 'C')) {
+        screen_load();
+        int active_curse_stacks = count_active_curse_stacks();
+        if (active_curse_stacks <= 0) {
+            msg_print("No curses cling to this run.");
+            return;
+        }
+        if (!metarun_consume_niena_curse_cleansing_charge()) {
+            msg_print("No cleansing charge remains.");
+            return;
+        }
+
+        int removed = metarun_clear_positive_curses();
+        p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA | PU_FORGET_VIEW | PU_UPDATE_VIEW);
+        handle_stuff();
+        if (removed > 0) {
+            msg_print("Nienna's compassion sweeps away every curse.");
+        } else {
+            msg_print("No curses were lifted.");
+        }
+        return;
     }
     
     screen_load();
@@ -10184,6 +10388,3 @@ void grant_unique_bane_ability(void)
     p_ptr->update |= (PU_BONUS);
     handle_stuff();
 }
-
-
-

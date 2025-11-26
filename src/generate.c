@@ -453,6 +453,10 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->vala_quest_stage3[VALA_MANDOS - 1];
     } else if (SDL_strcasecmp(actual_name, "niena_quest") == 0) {
         return &p_ptr->niena_quest;
+    } else if (SDL_strcasecmp(actual_name, "niena_second_quest") == 0) {
+        return &p_ptr->vala_quest_stage2[VALA_NIENNA - 1];
+    } else if (SDL_strcasecmp(actual_name, "niena_third_quest") == 0) {
+        return &p_ptr->vala_quest_stage3[VALA_NIENNA - 1];
     } else if (SDL_strcasecmp(actual_name, "orome_quest") == 0) {
         return &p_ptr->orome_quest;
     } else if (SDL_strcasecmp(actual_name, "orome_second_quest") == 0) {
@@ -494,6 +498,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_OROME_GREAT_HUNT;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA") == 0) {
         return METARUN_QUEST_VARDA;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_NIENA_PACIFIST") == 0) {
+        return METARUN_QUEST_NIENA_PACIFIST;
     }
     
     return 0; /* Unknown metarun quest ID */

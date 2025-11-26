@@ -282,6 +282,58 @@ bool metarun_consume_mandos_resurrection_charge(void)
     return true;
 }
 
+int metarun_niena_curse_cleanses(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 || METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(current->quest_reserved))
+        return 0;
+    return current->quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+}
+
+void metarun_add_niena_curse_cleansing_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 || METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: invalid slot %d", METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return;
+    }
+    byte *slot = &current->quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+    if (*slot >= 1) {
+        log_debug("metarun_add_niena_curse_cleansing_charge: charge already present (%d)", *slot);
+        return;
+    }
+    *slot = 1;
+    save_metaruns();
+    log_debug("metarun_add_niena_curse_cleansing_charge: granted charge, slot now %d", *slot);
+}
+
+bool metarun_consume_niena_curse_cleansing_charge(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: no current metarun");
+        return false;
+    }
+    if (METARUN_SLOT_NIENA_CURSE_CLEANSE < 0 || METARUN_SLOT_NIENA_CURSE_CLEANSE >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: invalid slot %d", METARUN_SLOT_NIENA_CURSE_CLEANSE);
+        return false;
+    }
+    byte *slot = &current->quest_reserved[METARUN_SLOT_NIENA_CURSE_CLEANSE];
+    if (*slot == 0) {
+        log_debug("metarun_consume_niena_curse_cleansing_charge: no charges to consume");
+        return false;
+    }
+    (*slot)--;
+    save_metaruns();
+    log_debug("metarun_consume_niena_curse_cleansing_charge: charge consumed, slot now %d", *slot);
+    return true;
+}
+
 byte metarun_orome_great_hunt_mask(void)
 {
     const metarun *current = metarun_current();
@@ -2148,6 +2200,33 @@ int menu_choose_one_curse(int n)
 
 
 /* ------------------------------------------------------------------ *
+ *  Remove all active curses while leaving blessings intact.         *
+ * ------------------------------------------------------------------ */
+int metarun_clear_positive_curses(void)
+{
+    int removed = 0;
+    int limit = z_info ? MIN(z_info->cu_max, METAR_CURSE_SLOTS) : METAR_CURSE_SLOTS;
+
+    for (int i = 0; i < limit; i++) {
+        int stacks = CURSE_GET(i);
+        if (stacks > 0) {
+            removed += stacks;
+            CURSE_SET(i, 0);
+        }
+    }
+
+    if (removed > 0) {
+        refresh_current_metar_score();
+        if (!sync_current_metarun_slot(false)) {
+            log_warn("metarun_clear_positive_curses: unable to sync current slot");
+        }
+        save_metaruns();
+    }
+
+    return removed;
+}
+
+/* ------------------------------------------------------------------ *
  *  Debug helper – wipe every active curse for the current meta-run.  *
  * ------------------------------------------------------------------ */
 void metarun_clear_all_curses(void)
@@ -2585,6 +2664,19 @@ static void show_niena_mercy_unlock_message(void)
     quest_typewriter_menu("Nienna's Gift of Mercy", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
 }
 
+static int total_player_kills_this_run(void)
+{
+    if (!z_info || !l_list) return 0;
+
+    int total = 0;
+    for (int i = 0; i < z_info->r_max; i++) {
+        int kills = l_list[i].pkills;
+        if (kills > 0) total += kills;
+    }
+
+    return total;
+}
+
 static void maybe_unlock_niena_mercy_purchase(bool challenge_fixed_active, int fixed_count_before)
 {
     if (!challenge_fixed_active) return;
@@ -2632,6 +2724,55 @@ static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
     metarun_unlock_challenge_fixed_exp();
     p_ptr->quest_reserved[0] = 1;
     msg_print("The fixed 50k XP challenge is now unlocked.");
+}
+
+static void resolve_niena_pacifist_quest_on_exit(bool died, bool escaped)
+{
+    int completion_cap = quest_completion_cap(QUEST_ID_NIENA_PACIFIST);
+    if (completion_cap < 1) completion_cap = METARUN_QUEST_COMPLETION_CAP;
+    int completion_count = metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST);
+
+    if (completion_count >= completion_cap) return;
+
+    byte state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    /* Only escapes can finish the quest */
+    if (!escaped || died) {
+        /* If kills accrued, make sure the failure flag is set for logging/UI */
+        if (total_player_kills_this_run() > 0) {
+            p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+        }
+        return;
+    }
+
+    int kills = total_player_kills_this_run();
+    bool failed = (kills > 0) || ((p_ptr->niena_reserved & NIENA_FLAG_PACIFIST_FAILED) != 0);
+    if (failed) {
+        log_trace("Niena pacifist quest not completed - kills=%d, flag=%d", kills, (p_ptr->niena_reserved & NIENA_FLAG_PACIFIST_FAILED));
+        return;
+    }
+
+    int completion_count_text = 0;
+    cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_PACIFIST, &completion_count_text);
+    completion_texts = prepend_repeat_context(QUEST_ID_NIENA_PACIFIST, completion_texts, &completion_count_text, true);
+
+    if (completion_texts && completion_count_text > 0) {
+        quest_typewriter_menu("Nienna, Lady of Pity", completion_texts, completion_count_text, TERM_L_BLUE, TERM_WHITE);
+        free_quest_texts(completion_texts);
+    } else {
+        const char *fallback[] = {
+            "You return to the surface with no blood on your hands.",
+            "Nienna's relief washes over you: the curses that followed you may be lifted once and for all."
+        };
+        quest_typewriter_menu("Nienna, Lady of Pity", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+    }
+
+    quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_REWARDED);
+    p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
+    metarun_mark_quest_completed(METARUN_QUEST_NIENA_PACIFIST);
+    metarun_add_niena_curse_cleansing_charge();
+    msg_print("Nienna grants you a single cleansing; use the quest menu to cast off every curse.");
 }
 
 /* ------------------------------------------------------------------
@@ -2686,6 +2827,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool morgoth_victory = (p_ptr->morgoth_slain && !escaped && !died);
 
     resolve_niena_morgoth_quest_on_exit(escaped_with_sils);
+    resolve_niena_pacifist_quest_on_exit(died, escaped);
 
     /* Treat as a death unless Eru intervenes */
     if (died && !has_gift_eru)
