@@ -1283,7 +1283,7 @@ extern int quest_completion_cap(int quest_idx);
 extern void niena_quest_interaction(void);
 extern void check_niena_quest_interaction(void);
 extern void check_niena_quest_completion(void);
-extern void check_orome_quest_completion(void);
+extern void check_orome_quest_completion(int r_idx);
 extern void orome_quest_interaction(void);
 extern void check_orome_quest_interaction(void);
 extern void grant_unique_bane_ability(void);
@@ -1415,7 +1415,6 @@ extern void sdl_story_font_set_grid(bool grid);
 extern bool sdl_is_story_font_grid(void);
 extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_get_cell_width(void);
-
 
 
 

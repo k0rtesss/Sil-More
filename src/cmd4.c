@@ -35,6 +35,8 @@ extern struct sound_config g_sound_config;
 #define BROWSER_ROWS 16
 
 #define MANDOS_DOOM_PURCHASE_COST 5000
+#define OROME_WRAITH_PURCHASE_COST 5000
+#define OROME_RHYTHM_PURCHASE_COST 5000
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -546,6 +548,16 @@ void add_random_curse(object_type *o_ptr)
 static bool mandos_doom_purchase_unlocked(void)
 {
     return metarun_challenge_completion_count(CHALLENGE_DISCONNECTED) > 0;
+}
+
+static bool orome_wraith_purchase_unlocked(void)
+{
+    return metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR) > 0;
+}
+
+static bool huntsman_rhythm_purchase_unlocked(void)
+{
+    return metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) > 0;
 }
 
 
@@ -1953,7 +1965,11 @@ int abilities_menu2(int skilltype, int* highlight)
             b_ptr = &b_info[i];
             if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
             
-            if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
+                                   (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked());
+            if (special_visible)
             {
                 if (temp_first_visible == -1)
                 {
@@ -1975,16 +1991,25 @@ int abilities_menu2(int skilltype, int* highlight)
                 b_ptr = &b_info[i];
                 if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
                 
-                if (b_ptr->abilitynum == current_ability_num && p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                {
+            if (b_ptr->abilitynum == current_ability_num && p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                highlight_is_visible = true;
+                break;
+            }
+            if (b_ptr->abilitynum == current_ability_num &&
+                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM)) {
+                if ((b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
+                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
+                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked())) {
                     highlight_is_visible = true;
                     break;
                 }
             }
-            
-            if (!highlight_is_visible)
-            {
-                *highlight = temp_first_visible + 1; /* Convert back to 1-based */
+        }
+        
+        if (!highlight_is_visible)
+        {
+            *highlight = temp_first_visible + 1; /* Convert back to 1-based */
             }
         }
     }
@@ -2003,9 +2028,12 @@ int abilities_menu2(int skilltype, int* highlight)
             continue;
 
         /* For special abilities, only show granted abilities */
-        if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-        {
-            continue;
+        if (skilltype == S_SPC) {
+            bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
+                                   (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked());
+            if (!special_visible) continue;
         }
 
         /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
@@ -2265,7 +2293,7 @@ int abilities_menu2(int skilltype, int* highlight)
                     Term_putstr(COL_DESCRIPTION + 2, desc_row + 2, -1, TERM_GREEN, buf);
                 }
 
-                if (skilltype == S_SPC && b_ptr->abilitynum == SPC_MANDOS && !p_ptr->have_ability[S_SPC][SPC_MANDOS])
+                if (skilltype == S_SPC)
                 {
                     int extra_lines = 0;
                     if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
@@ -2278,25 +2306,58 @@ int abilities_menu2(int skilltype, int* highlight)
                     }
 
                     int price_row = desc_row + 2 + extra_lines; /* next free row */
-                    if (!mandos_doom_purchase_unlocked())
+                    if (b_ptr->abilitynum == SPC_MANDOS && !p_ptr->have_ability[S_SPC][SPC_MANDOS])
                     {
-                        Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                            "Complete the disconnected stairs challenge to unlock purchase (5000 XP).");
+                        if (!mandos_doom_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete the disconnected stairs challenge to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+
+                            strnfmt(buf, 80, "%d experience (you have %d)", MANDOS_DOOM_PURCHASE_COST,
+                                p_ptr->new_exp);
+
+                            byte price_attr = (MANDOS_DOOM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
+                    else if (b_ptr->abilitynum == SPC_OROME_WRAITH && !p_ptr->have_ability[S_SPC][SPC_OROME_WRAITH])
+                    {
+                        if (!orome_wraith_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete the single-stair challenge to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", OROME_WRAITH_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (OROME_WRAITH_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
+                    else if (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && !p_ptr->have_ability[S_SPC][SPC_HUNTSMAN_RHYTHM])
+                    {
+                        if (!huntsman_rhythm_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete Orome's great hunt to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", OROME_RHYTHM_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (OROME_RHYTHM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
                     }
                     else
                     {
-                        Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-
-                        strnfmt(buf, 80, "%d experience (you have %d)", MANDOS_DOOM_PURCHASE_COST,
-                            p_ptr->new_exp);
-
-                        byte price_attr = (MANDOS_DOOM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                        Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        /* Special abilities cannot be purchased; show as granted only */
                     }
-                }
-                else if (skilltype == S_SPC)
-                {
-                    // Special abilities cannot be purchased; show as granted only
                 }
                 else if (prereqs(skilltype, b_ptr->abilitynum))
                 {
@@ -2638,6 +2699,8 @@ void do_cmd_ability_screen(void)
                     if (!p_ptr->have_ability[skilltype][abilitynum])
                     {
                         bool mandos_special = (skilltype == S_SPC && abilitynum == SPC_MANDOS);
+                        bool orome_wraith_special = (skilltype == S_SPC && abilitynum == SPC_OROME_WRAITH);
+                        bool orome_rhythm_special = (skilltype == S_SPC && abilitynum == SPC_HUNTSMAN_RHYTHM);
                         int exp_cost = -1;
                         skip_purchase = false;
 
@@ -2649,6 +2712,24 @@ void do_cmd_ability_screen(void)
                                 continue;
                             }
                             exp_cost = MANDOS_DOOM_PURCHASE_COST;
+                        }
+                        else if (orome_wraith_special)
+                        {
+                            if (!orome_wraith_purchase_unlocked())
+                            {
+                                bell("Complete the single-stair challenge to purchase Wraith of Orome.");
+                                continue;
+                            }
+                            exp_cost = OROME_WRAITH_PURCHASE_COST;
+                        }
+                        else if (orome_rhythm_special)
+                        {
+                            if (!huntsman_rhythm_purchase_unlocked())
+                            {
+                                bell("Complete Orome's great hunt to purchase Huntsman's Rhythm.");
+                                continue;
+                            }
+                            exp_cost = OROME_RHYTHM_PURCHASE_COST;
                         }
                         else if (skilltype == S_SPC)
                         {
@@ -16304,11 +16385,6 @@ void show_unified_sidebar(unified_look_state* state)
     previous_line_count = current_line_count;
     log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
 }
-
-
-
-
-
 
 
 

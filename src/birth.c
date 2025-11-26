@@ -163,6 +163,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SPC_UNIQUE_BANE] = "Unique Bane", /* Enhanced effectiveness against unique monsters */
         [SPC_OATH_LIGHT] = "Oath of Light",
         [SPC_OROME_WRAITH] = "Wraith of Orome",
+        [SPC_HUNTSMAN_RHYTHM] = "Huntsman's Rhythm",
     },
 };
 
@@ -455,6 +456,8 @@ void player_wipe(void)
     p_ptr->morgoth_state = 0;
 
     p_ptr->killed_enemy_with_arrow = false;
+    p_ptr->orome_bow_hit_streak = 0;
+    p_ptr->orome_spear_ready = 0;
 
     p_ptr->oath_type = 0;
     p_ptr->oaths_broken = 0;
@@ -492,6 +495,7 @@ void player_wipe(void)
     p_ptr->orome_target_type = 0;
     p_ptr->orome_target_count = 0;
     p_ptr->orome_dragons_killed = 0;
+    p_ptr->orome_great_hunt_mask = 0;
     /* Varda quest init */
     p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
     p_ptr->varda_vault_ready = 0;
@@ -2819,8 +2823,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
-
 
 
 

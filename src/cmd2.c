@@ -4411,6 +4411,11 @@ void do_cmd_fire(int quiver)
     }
 
     p_ptr->killed_enemy_with_arrow = false;
+    bool huntsman_rhythm = p_ptr->active_ability[S_SPC][SPC_HUNTSMAN_RHYTHM];
+    if (!huntsman_rhythm) {
+        p_ptr->orome_bow_hit_streak = 0;
+        p_ptr->orome_spear_ready = 0;
+    }
 
     // set dummy variables to pass to project_path (so it doesn't clobber the
     // real ones)
@@ -4884,6 +4889,28 @@ void do_cmd_fire(int quiver)
                                     m_ptr->slowed + crit_bonus_dice + 1, false);
                             }
                         }
+
+                        if (huntsman_rhythm) {
+                            bool consumed_ready = false;
+                            if (p_ptr->orome_spear_ready) {
+                                /* Next hit was not a spear strike; consume the primed bonus */
+                                p_ptr->orome_spear_ready = 0;
+                                p_ptr->orome_bow_hit_streak = 0;
+                                consumed_ready = true;
+                            }
+                            if (net_dam > 0) {
+                                if (consumed_ready) {
+                                    p_ptr->orome_bow_hit_streak = 1;
+                                } else if (p_ptr->orome_bow_hit_streak < 2) {
+                                    p_ptr->orome_bow_hit_streak++;
+                                }
+                                if (p_ptr->orome_bow_hit_streak >= 2) {
+                                    p_ptr->orome_spear_ready = 1;
+                                }
+                            } else if (!consumed_ready) {
+                                p_ptr->orome_bow_hit_streak = 0;
+                            }
+                        }
                     }
 
                     /* Stop looking if a monster was hit but not pierced */
@@ -4908,6 +4935,10 @@ void do_cmd_fire(int quiver)
                 {
                     // there is at least one target left on the trajectory
                     targets_remaining = true;
+                    if (huntsman_rhythm) {
+                        /* Misses break the streak but do not consume a primed spear strike */
+                        p_ptr->orome_bow_hit_streak = 0;
+                    }
                 }
 
                 /* we have missed a target, but could still hit something (with
@@ -5854,7 +5885,4 @@ void do_cmd_throw_from_slot(int slot)
     throw_pending_slot = slot;
     do_cmd_throw(false);
 }
-
-
-
 

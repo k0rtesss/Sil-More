@@ -35,12 +35,15 @@
 #define METARUN_QUEST_MANDOS_TRAITOR (1UL << 6) /* Mandos second quest completed */
 #define METARUN_QUEST_MANDOS_BETRAYER (1UL << 7) /* Mandos third quest completed */
 #define METARUN_QUEST_OROME_DRAGONS (1UL << 8) /* Orome dragon quest completed */
+#define METARUN_QUEST_OROME_GREAT_HUNT (1UL << 9) /* Orome great hunt quest completed */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
 
 /* quest_reserved[] slots */
 #define METARUN_SLOT_MANDOS_RES_CHARGES 0   /* Stored resurrection charges from Mandos' final quest */
+#define METARUN_SLOT_OROME_GREAT_HUNT_MASK 1   /* Bitmask of slain uniques for Orome's great hunt */
+#define METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE 2 /* Flag: Orome great hunt quest is active */
 
 /* ------------------------------------------------------------------ */
 /*  Meta-run save-record                                              */
@@ -186,6 +189,10 @@ void metarun_restore_quest_states(void);            /* Restore quest states from
 int metarun_mandos_resurrection_charges(void);      /* Stored Mandos resurrection charges */
 void metarun_add_mandos_resurrection_charge(void);  /* Grant a Mandos resurrection charge (max 1) */
 bool metarun_consume_mandos_resurrection_charge(void); /* Spend a Mandos resurrection charge */
+byte metarun_orome_great_hunt_mask(void);           /* Bitmask of Orome hunt uniques slain across the metarun */
+void metarun_set_orome_great_hunt_mask(byte mask);  /* Persist the Orome hunt kill mask */
+bool metarun_orome_great_hunt_active(void);         /* Whether the Orome hunt quest is active for this metarun */
+void metarun_set_orome_great_hunt_active(bool active); /* Toggle the Orome hunt active flag */
 void metarun_seed_quest_counts_from_mask(metarun *m, u32b mask); /* Expand quest mask into counters */
 void metarun_clamp_and_sync_quests(metarun *m);     /* Clamp counters and sync mask */
 int metarun_total_quest_completions(const metarun *m); /* Aggregate quest completion total */

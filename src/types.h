@@ -1266,6 +1266,8 @@ struct player_type
     byte artefacts; /* Number of artefacts generated so far */
 
     bool killed_enemy_with_arrow;
+    byte orome_bow_hit_streak; /* Consecutive archery hits for Huntsman's Rhythm */
+    byte orome_spear_ready;    /* Flag: double-damage spear hit primed */
 
     byte unused1; /* was sex - so unused byte race/character player info */
 
@@ -1310,6 +1312,7 @@ struct player_type
     s16b orome_serpents_killed; /* Total serpents killed (any type) */
     s16b orome_vampires_killed; /* Total vampires killed (any type) */
     s16b orome_dragons_killed; /* Total dragons killed (non-hatchling) */
+    byte orome_great_hunt_mask; /* Bitmask of great hunt uniques slain */
     /* Varda quest tracking */
     byte varda_quest;          /* Varda quest state (VARDA_QUEST_*) */
     byte varda_vault_ready;    /* Flag: should force Duruin Bastion on this level */
@@ -1530,6 +1533,4 @@ struct flag_name
     int set; /* The set into which the flag is to be sent. */
     u32b flag; /* The flag being set. */
 };
-
-
 

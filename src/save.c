@@ -1196,6 +1196,8 @@ static void wr_extra(void)
     wr_byte(p_ptr->crown_shatter_sil3);
 
     wr_byte(p_ptr->killed_enemy_with_arrow ? 1 : 0);
+    wr_byte(p_ptr->orome_bow_hit_streak);
+    wr_byte(p_ptr->orome_spear_ready);
 
     wr_byte(p_ptr->oath_type);
     wr_byte(p_ptr->oaths_broken);
@@ -1243,6 +1245,7 @@ static void wr_extra(void)
     wr_s16b(p_ptr->orome_serpents_killed);
     wr_s16b(p_ptr->orome_vampires_killed);
     wr_s16b(p_ptr->orome_dragons_killed);
+    wr_byte(p_ptr->orome_great_hunt_mask);
     /* Varda quest fields */
     wr_byte(p_ptr->varda_quest);
     wr_byte(p_ptr->varda_vault_ready);
@@ -2105,7 +2108,6 @@ bool save_player(void)
     }
     return (result);
 }
-
 
 
 

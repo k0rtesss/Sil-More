@@ -457,6 +457,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->orome_quest;
     } else if (SDL_strcasecmp(actual_name, "orome_second_quest") == 0) {
         return &p_ptr->vala_quest_stage2[VALA_OROME - 1];
+    } else if (SDL_strcasecmp(actual_name, "orome_third_quest") == 0) {
+        return &p_ptr->vala_quest_stage3[VALA_OROME - 1];
     } else if (SDL_strcasecmp(actual_name, "varda_quest") == 0) {
         return &p_ptr->varda_quest;
     }
@@ -488,6 +490,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_OROME;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_OROME_DRAGONS") == 0) {
         return METARUN_QUEST_OROME_DRAGONS;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_OROME_GREAT_HUNT") == 0) {
+        return METARUN_QUEST_OROME_GREAT_HUNT;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA") == 0) {
         return METARUN_QUEST_VARDA;
     }
@@ -9042,4 +9046,3 @@ if (playerturn == 0) {
 
     // Valar quest doesn't provide map rewards like the old thrall quest
 }
-

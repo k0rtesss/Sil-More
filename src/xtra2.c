@@ -44,6 +44,16 @@ static void orome_set_second_state(byte state)
     quest_set_state(QUEST_ID_OROME_DRAGONS, state);
 }
 
+static byte orome_third_state(void)
+{
+    return quest_get_state(QUEST_ID_OROME_GREAT_HUNT);
+}
+
+static void orome_set_third_state(byte state)
+{
+    quest_set_state(QUEST_ID_OROME_GREAT_HUNT, state);
+}
+
 static bool is_dragon_hatchling(const monster_race* r_ptr)
 {
     if (!r_ptr || !(r_ptr->flags3 & RF3_DRAGON)) return false;
@@ -55,6 +65,32 @@ static bool is_dragon_hatchling(const monster_race* r_ptr)
 }
 
 #define OROME_DRAGON_KILL_TARGET 10
+
+typedef struct {
+    int r_idx;
+    byte bit;
+    const char *name;
+} orome_hunt_target;
+
+static const orome_hunt_target orome_hunt_targets[] = {
+    { R_IDX_SCATHA, 0x01, "Scatha the Worm" },
+    { R_IDX_SMAUG, 0x02, "Smaug the Golden" },
+    { R_IDX_DRAUGLUIN, 0x04, "Draugluin, Sire of Werewolves" },
+    { R_IDX_GOSTIR, 0x08, "Gostir, the Dread Glance" },
+    { R_IDX_SHELOB, 0x10, "Shelob, Spider of Darkness" },
+    { R_IDX_THURINGWETHIL, 0x20, "Thuringwethil, the Vampire Messenger" },
+};
+
+static int orome_hunt_kill_count(byte mask)
+{
+    int count = 0;
+    byte tmp = mask;
+    while (tmp) {
+        if (tmp & 1) count++;
+        tmp >>= 1;
+    }
+    return count;
+}
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
@@ -2610,7 +2646,7 @@ void monster_death(int m_idx)
     check_varda_quest_completion(m_ptr->r_idx);
     
     /* Check for Orome quest completion */
-    check_orome_quest_completion();
+    check_orome_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -5957,6 +5993,7 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_NIENA")) return METARUN_QUEST_NIENA;
     if (streq(metarun_id, "METARUN_QUEST_OROME")) return METARUN_QUEST_OROME;
     if (streq(metarun_id, "METARUN_QUEST_OROME_DRAGONS")) return METARUN_QUEST_OROME_DRAGONS;
+    if (streq(metarun_id, "METARUN_QUEST_OROME_GREAT_HUNT")) return METARUN_QUEST_OROME_GREAT_HUNT;
     if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
     
     /* Unknown or future quest */
@@ -7229,6 +7266,7 @@ void do_cmd_quest_status(void)
         switch (p_ptr->orome_quest) {
             case OROME_QUEST_GIVER_PRESENT:
                 orome_status = "Available - Orome awaits";
+                color = TERM_L_BLUE;
                 Term_putstr(col + 2, row++, -1, color, orome_status);
                 display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
                 strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
@@ -7326,6 +7364,62 @@ void do_cmd_quest_status(void)
                 color = TERM_L_GREEN;
                 Term_putstr(col + 2, row++, -1, color, orome_status);
                 strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_OROME_DRAGONS));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            default:
+                orome_status = "Unknown status";
+                color = TERM_SLATE;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                break;
+        }
+        row++;
+    }
+
+    byte orome_hunt_state = orome_third_state();
+    if (orome_hunt_state != QUEST_STATE_NOT_STARTED) {
+        any_quests = true;
+        cptr orome_status;
+        byte color;
+
+        cptr quest_title = get_quest_title(QUEST_ID_OROME_GREAT_HUNT);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_OROME_GREAT_HUNT);
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        int slain = orome_hunt_kill_count(p_ptr->orome_great_hunt_mask);
+
+        switch (orome_hunt_state) {
+            case QUEST_STATE_GIVER_PRESENT: /* treat as available */
+            case QUEST_STATE_ACTIVE:
+                orome_status = "Active - Hunt the marked foes";
+                color = TERM_WHITE;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Marks slain: %d/%d", slain, OROME_GREAT_HUNT_TARGET_COUNT);
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                for (size_t i = 0; i < N_ELEMENTS(orome_hunt_targets); i++) {
+                    byte attr = (p_ptr->orome_great_hunt_mask & orome_hunt_targets[i].bit) ? TERM_L_GREEN : TERM_SLATE;
+                    display_wrapped_text(col + 4, &row, orome_hunt_targets[i].name, attr, wid);
+                }
+                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME_GREAT_HUNT));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_SUCCESS:
+                orome_status = "Complete - Claim your reward";
+                color = TERM_L_GREEN;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Marks slain: %d/%d", slain, OROME_GREAT_HUNT_TARGET_COUNT);
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME_GREAT_HUNT));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_REWARDED:
+                orome_status = "Completed by this character";
+                color = TERM_L_GREEN;
+                Term_putstr(col + 2, row++, -1, color, orome_status);
+                strnfmt(buf, sizeof(buf), "Marks slain: %d/%d", slain, OROME_GREAT_HUNT_TARGET_COUNT);
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_OROME_GREAT_HUNT));
                 display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
                 break;
             default:
@@ -7484,6 +7578,17 @@ void do_cmd_quest_status(void)
         cptr quest_title = get_quest_title(QUEST_ID_OROME_DRAGONS);
         char status_text[150];
         strnfmt(status_text, sizeof(status_text), "%s (metarun x%d)", quest_title, orome_dragon_completed);
+        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
+    }
+    int orome_hunt_completed = metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT);
+    if (orome_hunt_completed > 0 && orome_third_state() != QUEST_STATE_REWARDED) {
+        if (!has_previous_completions) {
+            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
+            has_previous_completions = true;
+        }
+        cptr quest_title = get_quest_title(QUEST_ID_OROME_GREAT_HUNT);
+        char status_text[150];
+        strnfmt(status_text, sizeof(status_text), "%s (metarun x%d)", quest_title, orome_hunt_completed);
         display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
     }
     int varda_completed = metarun_quest_completion_count(METARUN_QUEST_VARDA);
@@ -9199,7 +9304,7 @@ void check_mandos_quest_completion(int r_idx)
 /*
  * Handle quest completion checking for Orome hunting quests
  */
-void check_orome_quest_completion(void)
+void check_orome_quest_completion(int r_idx)
 {
     if (p_ptr->orome_quest == OROME_QUEST_ACTIVE) {
         /* Check thresholds for each monster type */
@@ -9256,7 +9361,53 @@ void check_orome_quest_completion(void)
                      p_ptr->orome_dragons_killed, OROME_DRAGON_KILL_TARGET);
         }
     }
+
+    byte orome_third = orome_third_state();
+    if (orome_third >= QUEST_STATE_ACTIVE && orome_third < QUEST_STATE_REWARDED) {
+        for (size_t i = 0; i < N_ELEMENTS(orome_hunt_targets); i++) {
+            if (orome_hunt_targets[i].r_idx == r_idx &&
+                !(p_ptr->orome_great_hunt_mask & orome_hunt_targets[i].bit)) {
+                p_ptr->orome_great_hunt_mask |= orome_hunt_targets[i].bit;
+                metarun_set_orome_great_hunt_mask(p_ptr->orome_great_hunt_mask);
+
+                int slain = orome_hunt_kill_count(p_ptr->orome_great_hunt_mask);
+                msg_format("The Valaroma sings: %s is slain (%d/%d).",
+                           orome_hunt_targets[i].name, slain, OROME_GREAT_HUNT_TARGET_COUNT);
+                log_trace("Orome great hunt progress: mask=0x%02x (added %s)",
+                         p_ptr->orome_great_hunt_mask, orome_hunt_targets[i].name);
+                break;
+            }
+        }
+
+        if ((p_ptr->orome_great_hunt_mask & OROME_GREAT_HUNT_TARGET_MASK) == OROME_GREAT_HUNT_TARGET_MASK) {
+            orome_set_third_state(QUEST_STATE_SUCCESS);
+
+            int completion_count = 0;
+            cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_OROME_GREAT_HUNT, &completion_count);
+            completion_texts = prepend_repeat_context(QUEST_ID_OROME_GREAT_HUNT, completion_texts, &completion_count, true);
+
+            if (completion_texts && completion_count > 0) {
+                quest_typewriter_menu("Orome's Great Hunt", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+                free_quest_texts(completion_texts);
+            } else {
+                msg_print("The great hunt is complete! The Valaroma rings triumphant.");
+            }
+
+            msg_print("Huntsman's Rhythm is now unlocked for your line (5000 experience).");
+
+            apply_quest_rewards(QUEST_ID_OROME_GREAT_HUNT);
+            metarun_mark_quest_completed(METARUN_QUEST_OROME_GREAT_HUNT);
+            metarun_set_orome_great_hunt_active(false);
+            orome_set_third_state(QUEST_STATE_REWARDED);
+
+            int oath_id = get_quest_oath_id(QUEST_ID_OROME_GREAT_HUNT);
+            if (oath_id > 0) {
+                metarun_unlock_oath(oath_id);
+            }
+        }
+    }
 }
+
 
 /*
  * Handle interaction with Niena for the mercy quest
@@ -9559,7 +9710,7 @@ void orome_quest_interaction(void)
                 } else {
                     cptr fallback_texts[] = {
                         "The Valaroma rings again, fierce and clear:",
-                        "\"You broke the lesser beasts. Now bring down ten great dragons — no hatchlings.\""
+                        "\"You broke the lesser beasts. Now bring down ten great dragons -- no hatchlings.\""
                     };
                     quest_typewriter_menu("Orome, Warden of the Drakes", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
                 }

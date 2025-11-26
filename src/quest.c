@@ -25,10 +25,11 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_OROME,
     METARUN_QUEST_VARDA,
     METARUN_QUEST_MANDOS_BETRAYER,
-    METARUN_QUEST_OROME_DRAGONS
+    METARUN_QUEST_OROME_DRAGONS,
+    METARUN_QUEST_OROME_GREAT_HUNT
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_VARDA)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -50,6 +51,7 @@ static int quest_id_from_slot(int slot)
         case 6: return QUEST_ID_VARDA;
         case 7: return QUEST_ID_MANDOS_BETRAYER;
         case 8: return QUEST_ID_OROME_DRAGONS;
+        case 9: return QUEST_ID_OROME_GREAT_HUNT;
         default: return 0;
     }
 }
@@ -119,6 +121,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_NIENA: return METARUN_QUEST_NIENA;
         case QUEST_ID_OROME: return METARUN_QUEST_OROME;
         case QUEST_ID_OROME_DRAGONS: return METARUN_QUEST_OROME_DRAGONS;
+        case QUEST_ID_OROME_GREAT_HUNT: return METARUN_QUEST_OROME_GREAT_HUNT;
         case QUEST_ID_VARDA: return METARUN_QUEST_VARDA;
         default: return 0;
     }
@@ -372,6 +375,12 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Orome dragon quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_OROME_DRAGONS);
     }
+    byte orome_third_state = quest_get_state(QUEST_ID_OROME_GREAT_HUNT);
+    if (orome_third_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_OROME_GREAT_HUNT)) {
+        log_trace("Metarun: Marking Orome great hunt quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_OROME_GREAT_HUNT);
+    }
     
     if (p_ptr->varda_quest == VARDA_QUEST_REWARDED && !quest_completion_recorded_for_run(METARUN_QUEST_VARDA)) {
         log_trace("Metarun: Marking Varda quest as completed (rewarded)");
@@ -457,6 +466,27 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME_DRAGONS);
     }
+    p_ptr->orome_great_hunt_mask = metarun_orome_great_hunt_mask();
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) > 0) {
+        if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Orome great hunt quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        metarun_set_orome_great_hunt_active(false);
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_OROME_GREAT_HUNT);
+    }
+    if (metarun_orome_great_hunt_active() &&
+        quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED) {
+        if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE) {
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
+            log_trace("Metarun restore: Orome great hunt quest set to ACTIVE (%d)", QUEST_STATE_ACTIVE);
+        }
+    } else if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) >= QUEST_STATE_ACTIVE &&
+               quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED &&
+               !metarun_orome_great_hunt_active()) {
+        metarun_set_orome_great_hunt_active(true);
+        log_trace("Metarun restore: Backfilled Orome great hunt active flag from quest state");
+    }
     
     /* Restore Varda quest state */
     if (metarun_quest_completion_count(METARUN_QUEST_VARDA) > 0) {
@@ -467,8 +497,10 @@ void metarun_restore_quest_states(void)
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d, Orome: %d (dragons:%d), Varda: %d",
+    log_trace("Metarun restore: Final quest states - Tulkas: %d, Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d, Orome: %d (dragons:%d, hunt:%d), Varda: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest,
               quest_get_state(QUEST_ID_MANDOS_TRAITOR), quest_get_state(QUEST_ID_MANDOS_BETRAYER),
-              p_ptr->niena_quest, p_ptr->orome_quest, quest_get_state(QUEST_ID_OROME_DRAGONS), p_ptr->varda_quest);
+              p_ptr->niena_quest, p_ptr->orome_quest,
+              quest_get_state(QUEST_ID_OROME_DRAGONS), quest_get_state(QUEST_ID_OROME_GREAT_HUNT),
+              p_ptr->varda_quest);
 }

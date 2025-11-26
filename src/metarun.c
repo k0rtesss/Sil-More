@@ -235,6 +235,65 @@ bool metarun_consume_mandos_resurrection_charge(void)
     return true;
 }
 
+byte metarun_orome_great_hunt_mask(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return 0;
+    if (METARUN_SLOT_OROME_GREAT_HUNT_MASK < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_MASK >= (int)N_ELEMENTS(current->quest_reserved)) {
+        return 0;
+    }
+    return current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK];
+}
+
+void metarun_set_orome_great_hunt_mask(byte mask)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_orome_great_hunt_mask: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_OROME_GREAT_HUNT_MASK < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_MASK >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_set_orome_great_hunt_mask: invalid slot %d", METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+        return;
+    }
+    if (current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK] == mask) return;
+    current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_MASK] = mask;
+    save_metaruns();
+    log_debug("metarun_set_orome_great_hunt_mask: mask set to 0x%02x", mask);
+}
+
+bool metarun_orome_great_hunt_active(void)
+{
+    const metarun *current = metarun_current();
+    if (!current) return false;
+    if (METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE >= (int)N_ELEMENTS(current->quest_reserved)) {
+        return false;
+    }
+    return current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] != 0;
+}
+
+void metarun_set_orome_great_hunt_active(bool active)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_set_orome_great_hunt_active: no current metarun");
+        return;
+    }
+    if (METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE < 0 ||
+        METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE >= (int)N_ELEMENTS(current->quest_reserved)) {
+        log_debug("metarun_set_orome_great_hunt_active: invalid slot %d", METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+        return;
+    }
+    byte value = active ? 1 : 0;
+    if (current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] == value) return;
+    current->quest_reserved[METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE] = value;
+    save_metaruns();
+    log_debug("metarun_set_orome_great_hunt_active: active set to %d", value);
+}
+
 /* ----------------------- accessors --------------------------- */
 const metarun *metarun_current(void)
 {
@@ -2431,6 +2490,40 @@ static void show_mandos_third_unlock_message(void)
     quest_typewriter_menu("Mandos' Final Doom", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
 }
 
+static void activate_orome_great_hunt(void)
+{
+    byte mask = metarun_orome_great_hunt_mask();
+    p_ptr->orome_great_hunt_mask = mask;
+    metarun_set_orome_great_hunt_mask(mask);
+    metarun_set_orome_great_hunt_active(true);
+    if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE) {
+        quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
+    }
+    log_trace("Metarun: Orome great hunt activated (mask=0x%02x, state=%d)", mask, quest_get_state(QUEST_ID_OROME_GREAT_HUNT));
+}
+
+static void show_orome_great_hunt_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the single-stair challenge.",
+        "Orome offers the Wraith for purchase and names a hunt that spans your line:",
+        "Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil. Slay them in any delve.",
+        "This hunt runs alongside all other quests until the last mark falls."
+    };
+    quest_typewriter_menu("Orome's Great Hunt", lines, N_ELEMENTS(lines), TERM_GREEN, TERM_WHITE);
+}
+
+static void maybe_unlock_orome_great_hunt(bool challenge_single_stair_active)
+{
+    if (!challenge_single_stair_active) return;
+    if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) >= QUEST_STATE_REWARDED) return;
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) >= quest_completion_cap(QUEST_ID_OROME_GREAT_HUNT)) return;
+    if (metarun_orome_great_hunt_active()) return;
+
+    activate_orome_great_hunt();
+    show_orome_great_hunt_unlock_message();
+}
+
 /* ------------------------------------------------------------------
  * metarun_update_on_exit() – v5, 30 Jul 2025
  * ------------------------------------------------------------------
@@ -2530,6 +2623,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
             metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
             show_mandos_third_unlock_message();
         }
+        maybe_unlock_orome_great_hunt(challenge_single_stair);
         check_run_end();
         metarun_save_persistent_settings();
         save_metaruns();
@@ -2959,6 +3053,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
         show_mandos_third_unlock_message();
     }
+    maybe_unlock_orome_great_hunt(challenge_single_stair);
 
     compute_blessing_pool();
     announce_blessing_gain(blessing_points_before);

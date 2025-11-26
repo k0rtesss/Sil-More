@@ -1336,6 +1336,13 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->crown_shatter_sil3);
 
     rd_bool(&p_ptr->killed_enemy_with_arrow);
+    if (savefile_version_at_least(0, 9, 1, 7)) {
+        rd_byte(&p_ptr->orome_bow_hit_streak);
+        rd_byte(&p_ptr->orome_spear_ready);
+    } else {
+        p_ptr->orome_bow_hit_streak = 0;
+        p_ptr->orome_spear_ready = 0;
+    }
 
     rd_byte(&p_ptr->oath_type);
     rd_byte(&p_ptr->oaths_broken);
@@ -1396,6 +1403,11 @@ static errr rd_extra(void)
         rd_s16b(&p_ptr->orome_dragons_killed);
     } else {
         p_ptr->orome_dragons_killed = 0;
+    }
+    if (savefile_version_at_least(0, 9, 1, 7)) {
+        rd_byte(&p_ptr->orome_great_hunt_mask);
+    } else {
+        p_ptr->orome_great_hunt_mask = 0;
     }
     if (savefile_has_varda_quest) {
         rd_byte(&p_ptr->varda_quest);
@@ -2956,8 +2968,6 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
-
-
 
 
 
