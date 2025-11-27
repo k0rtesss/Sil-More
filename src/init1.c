@@ -5465,6 +5465,8 @@ errr parse_quest_info(char* buf, header* head)
                 challenge_id = CHALLENGE_FIXED_50K_XP;
             else if (SDL_strcasecmp(name, "TULKAS_BLUNT") == 0 || SDL_strcasecmp(name, "BLUNT") == 0 || SDL_strcasecmp(name, "TULKAS") == 0)
                 challenge_id = CHALLENGE_TULKAS_BLUNT;
+            else if (SDL_strcasecmp(name, "TORCHLIGHT") == 0 || SDL_strcasecmp(name, "TORCH") == 0 || SDL_strcasecmp(name, "VARDA_TORCH") == 0)
+                challenge_id = CHALLENGE_TORCHLIGHT;
         }
 
         if (challenge_id < 0 || challenge_id > CHALLENGE_MAX_TRACKED)
@@ -6111,7 +6113,6 @@ errr parse_oath_info(char* buf, header* head)
 #else /* ALLOW_TEMPLATES */
 
 #endif /* ALLOW_TEMPLATES */
-
 
 
 

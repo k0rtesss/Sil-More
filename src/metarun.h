@@ -40,6 +40,7 @@
 #define METARUN_QUEST_NIENA_PACIFIST (1UL << 11) /* Niena's pacifist escape quest completed */
 #define METARUN_QUEST_TULKAS_ORCS (1UL << 12) /* Tulkas second quest (orc stronghold) */
 #define METARUN_QUEST_TULKAS_MORGOTH (1UL << 13) /* Tulkas third quest (wound Morgoth) */
+#define METARUN_QUEST_VARDA_SHADOW (1UL << 14) /* Varda second quest (Shadow Bastion) */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */
@@ -65,7 +66,7 @@
  *   0.9.0.0 - Initial versioned format (quest support)
  *   0.9.0.1 - Persistent blessing choices added
  *   0.9.0.2 - Per-quest completion counters (capped) stored alongside bitmask
- *   0.9.1.9 - Current meta-file version (matches game release)
+ *   0.9.1.10 - Current meta-file version (matches game release)
  */
 #define METARUN_FILE_VERSION_MAJOR VERSION_MAJOR
 #define METARUN_FILE_VERSION_MINOR VERSION_MINOR
@@ -212,6 +213,8 @@ bool metarun_challenge_fixed_exp_unlocked(void);    /* Has the fixed-50k XP chal
 void metarun_unlock_challenge_fixed_exp(void);      /* Unlock the fixed-50k XP challenge for this metarun */
 bool metarun_challenge_tulkas_blunt_unlocked(void); /* Has the Tulkas blunt challenge been unlocked? */
 void metarun_unlock_challenge_tulkas_blunt(void);   /* Unlock the Tulkas blunt challenge for this metarun */
+bool metarun_challenge_torchlight_unlocked(void);   /* Has the Varda torchlight challenge been unlocked? */
+void metarun_unlock_challenge_torchlight(void);     /* Unlock the Varda torchlight challenge for this metarun */
 int metarun_challenge_completion_count(int challenge_id); /* How many times a challenge run finished */
 void metarun_mark_challenge_completed(int challenge_id);  /* Record a finished challenge run */
 

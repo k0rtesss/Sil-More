@@ -171,7 +171,7 @@ E:DEPTH_RANGE:1:3
 Y:1
 R:varda_quest
 M:METARUN_QUEST_VARDA
-P:LINEAR_INTERPOLATE:1.00:0.15:0:0
+P:LINEAR_INTERPOLATE:0.30:0.10:0:0
 S:0:0:0:0
 I:Starlight pierces the gloom, pooling into a calm presence before you. Varda the Kindler regards you with clear, patient eyes.
 I:
@@ -299,3 +299,88 @@ I:"I lend you my Gift of Mercy for this task. Tread softly and bring the light o
 W:As you flee the pits with the Silmaril, Nienna's presence soothes your racing heart.
 W:"You have stolen light without striking the Black Foe. Mercy has endured in Angband."
 W:"I open a harsher road for your line: the fixed 50,000 experience challenge, and my Gift may be learned thereafter for 5000 experience."
+
+# Quest of Nienna, Path of Peace
+Q:12:Nienna's Path of Peace
+Z:Nienna
+J:3
+T:Nienna calls you to escape without bloodshed
+C:Escape Angband without killing a single creature; the first kill ends the vow for that life
+O:1
+F:GLOBAL
+L:1
+Y:0
+R:niena_third_quest
+M:METARUN_QUEST_NIENA_PACIFIST
+I:Before you descend, Nienna's quiet grief settles over the stairs. Her words are soft but unyielding.
+I:"Go down and return without taking a single life. The first blood you spill will break this mercy."
+I:"If you reach the light again unbloodied, I will wash away every curse that clings to your tale."
+W:The air tastes clean as you step into freedom with no blood on your hands. Nienna's relief is a gentle rain.
+W:"Mercy can endure even in the pits of Angband. You may call on me once to sweep away the dooms that shadow you."
+
+# Quest of Tulkas, Orc-Bane
+Q:13:Tulkas, Orc-Bane
+Z:Tulkas
+J:2
+T:Tulkas sends you against the orc lords
+C:Storm the Orc stronghold and slay every marked orc captain: Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod
+O:5
+L:1
+Y:1
+R:tulkas_second_quest
+M:METARUN_QUEST_TULKAS_ORCS
+H:TULKAS_BLUNT
+E:DEPTH_RANGE:5:6
+P:LINEAR_DECAY:27:0:0:0
+S:0:0:0:0
+A:8:8
+I:On your first steps past the shallows, Tulkas meets you in a flurry of motion, laughter booming through the stones.
+I:"The orcs breed bold captains in a stronghold below. Gorgol, Boldog, Balcmeg, Lug, Orcobal, Othrod -- all still draw breath."
+I:"I will seal them in their lair and bar their kind from the tunnels. Hunt them down and break their pride."
+I:"Do this, and I will teach you to scour uniques from the earth and open a harsher challenge for your line."
+W:The last orc captain falls, and the stronghold echoes with silence. Tulkas strides from the dust, grin fierce.
+W:"You have crushed their chiefs and broken their muster."
+W:"Take this prize of war and the hunter's bane, and I unlock a brutal road: a delve where only blunt arms remain."
+
+# Quest of Tulkas, Black Foe's Scourge
+Q:14:Tulkas, Black Foe's Scourge
+Z:Tulkas
+J:3
+T:Tulkas commands you to scar the Black Foe himself
+C:Drive Morgoth to half his strength or lower with your own blows, proving you can shake the Dark Enemy on his throne
+O:5
+F:GLOBAL
+L:1
+Y:0
+R:tulkas_third_quest
+M:METARUN_QUEST_TULKAS_MORGOTH
+S:0:0:0:0
+A:8:12
+I:Even in the shallows you feel Tulkas' mirth and challenge roll like thunder behind you.
+I:"One day you will face the Black Foe. Strike him so that he feels your wrath—halve his might with your own hand."
+I:"Do this, and I will lend you a smiting fury beyond mortal strength."
+W:As your blows stagger Morgoth, laughter like an earthquake rolls through Angband—Tulkas exultant at your defiance.
+W:"Well struck! Let my wrath flow through your smiting hand; the Enemy shall know your strength."
+W:"This fury will be yours to claim in every telling of your line."
+
+# Quest of Varda, Shadow's Bastion
+Q:15:Varda, Shadow's Bastion
+Z:Varda
+J:2
+T:The Star-kindler sends you to break Belegwath's bastion
+C:Face Belegwath, Balrog of Shadow, in his Shadow Bastion beyond the fifteenth delve
+O:6
+L:1
+E:DEPTH_RANGE:1:3
+Y:1
+R:varda_second_quest
+M:METARUN_QUEST_VARDA_SHADOW
+P:LINEAR_INTERPOLATE:0.15:0.05:0:0
+S:0:0:0:0
+A:0:0
+I:Starlight gathers again around you as you carry the Oath of Light. Varda's gaze is steady.
+I:"Belegwath hides deeper in shadowed halls of his own making. I will seed a Shadow Bastion beyond the fifteenth delve."
+I:"Go there and end him. Break his darkness and the stars will answer you with renewed grace."
+W:The Shadow Bastion falls silent as Belegwath is unmade. Varda's voice is clear as dawn.
+W:"You have broken another bastion of darkness. Choose your radiant gift once more, and carry the Queen of the Stars' blessing in your light."
+

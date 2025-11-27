@@ -286,6 +286,7 @@ cptr option_text[OPT_MAX] = {
     "birth_no_artefacts", /* OPT_birth_no_artefacts */
     "birth_fixed_exp", /* OPT_birth_fixed_exp */
     "birth_tulkas_blunt", /* OPT_birth_tulkas_blunt */
+    "birth_torchlight", /* OPT_birth_torchlight */
     NULL, /* xxx */
     NULL, /* xxx birth_force_small_lev */
     NULL, /* xxx birth_retain_squelch */
@@ -351,6 +352,7 @@ cptr option_text[OPT_MAX] = {
     "adult_no_artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
     "adult_tulkas_blunt", /* OPT_adult_tulkas_blunt */
+    "adult_torchlight", /* OPT_adult_torchlight */
     NULL, /* xxx adult_auto_notes */
     NULL, /* xxx adult_force_small_lev*/
     NULL, /* xxx adult_retain_squelch */
@@ -551,7 +553,7 @@ cptr option_desc[OPT_MAX] = {
     "No artefacts", /* OPT_birth_no_artefacts */
     "Fixed XP - gain 50K at start and nothing after", /* OPT_birth_fixed_exp */
     "Tulkas' challenge: blunt weapons only", /* OPT_birth_tulkas_blunt */
-    NULL, /* xxx */
+    "Varda's challenge: torches only", /* OPT_birth_torchlight */
     NULL, /* xxx birth_take_notes */
     NULL, /* xxx birth_force_small_lev */
     NULL, /* xxx birth_retain_squelch*/
@@ -616,7 +618,7 @@ cptr option_desc[OPT_MAX] = {
     "No artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
     "Tulkas' challenge: blunt weapons only", /* OPT_adult_tulkas_blunt */
-    NULL, /* xxx adult_take_notes */
+    "Varda's challenge: torches only", /* OPT_adult_torchlight */
     NULL, /* xxx adult_force_small_lev */
     NULL, /* xxx adult_retain_squelch*/
     NULL, /* xxx adult_no_quests*/
@@ -818,7 +820,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_birth_no_artefacts */
     false, /* OPT_birth_fixed_exp */
     false, /* OPT_birth_tulkas_blunt */
-    false, /* xxx */
+    false, /* OPT_birth_torchlight */
     false, /* xxx birth_force_small_lev */
     false, /* xxx birth_retain_squelch */
     false, /* xxx OPT_birth_no_quests*/
@@ -883,6 +885,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_adult_no_artefacts */
     false, /* xxx adult_rand_artefacts */
     false, /* OPT_adult_tulkas_blunt */
+    false, /* OPT_adult_torchlight */
     false, /* xxx adult_take_notes */
     false, /* xxx adult_force_small_lev*/
     false, /* xxx adult_retain_squelch */
@@ -979,7 +982,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
     /*** Birth ***/
 
     { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_single_stair, OPT_birth_no_artefacts,
-        OPT_birth_fixed_exp, OPT_birth_tulkas_blunt, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_birth_fixed_exp, OPT_birth_tulkas_blunt, OPT_birth_torchlight, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 

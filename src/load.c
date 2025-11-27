@@ -1433,14 +1433,29 @@ static errr rd_extra(void)
         rd_byte(&p_ptr->varda_quest);
         rd_byte(&p_ptr->varda_vault_ready);
         rd_byte(&p_ptr->varda_vault_placed);
-        rd_byte(&p_ptr->varda_reserved);
+        rd_byte(&p_ptr->varda_shadow_restricted);
         rd_s16b(&p_ptr->varda_level);
+        if (savefile_version_at_least(0, 9, 1, 10)) {
+            rd_byte(&p_ptr->varda_shadow_ready);
+            rd_byte(&p_ptr->varda_shadow_placed);
+            rd_byte(&p_ptr->varda_shadow_pad);
+            rd_s16b(&p_ptr->varda_shadow_level);
+        } else {
+            p_ptr->varda_shadow_ready = 0;
+            p_ptr->varda_shadow_placed = 0;
+            p_ptr->varda_shadow_pad = 0;
+            p_ptr->varda_shadow_level = 0;
+        }
     } else {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_vault_ready = 0;
         p_ptr->varda_vault_placed = 0;
-        p_ptr->varda_reserved = 0;
+        p_ptr->varda_shadow_restricted = 0;
         p_ptr->varda_level = 0;
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 0;
+        p_ptr->varda_shadow_pad = 0;
+        p_ptr->varda_shadow_level = 0;
     }
     if (savefile_version_at_least(0, 9, 1, 4)) {
         for (int qi = 0; qi < VALA_MAX; qi++) rd_byte(&p_ptr->vala_quest_stage2[qi]);
@@ -2988,7 +3003,6 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
-
 
 
 

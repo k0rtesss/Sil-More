@@ -730,11 +730,11 @@ I:8:7:0
 D:Upholding the Oath of the Valorous Heart, the honor of heroes like Hurin who fought without quarter, this grants +1 Dexterity but breaks if you attack enemies fleeing in terror.
 N:168:Unique Bane
 I:8:8:0
-D:Possessing Unique Bane, knowledge to exploit weaknesses as Beren learned the vulnerabilities of Carcharoth, this grants +3 attack and evasion when fighting unique monsters. Awarded by quest; cannot be purchased.
+D:Possessing Unique Bane, knowledge to exploit weaknesses as Beren learned the vulnerabilities of Carcharoth, this grants +3 attack and evasion when fighting unique monsters. Awarded by quest; after Tulkas' blunt-arms challenge it may be purchased for 5000 experience.
 
 N:169:Oath of Light
 I:8:9:0
-D:Swearing the Oath of Light, as those who keep Varda's stars burning in the depths, you refuse any gear that dims your glow. While the oath holds, your inner light shines two steps brighter.
+D:Swearing the Oath of Light, as those who keep Varda's stars burning in the depths, you refuse any gear that dims your glow. While the oath holds, your light burns one step brighter without widening its reach.
 
 N:170:Wraith of Orome
 I:8:10:0
@@ -743,3 +743,11 @@ D:Taking on the Wraith of Orome, the wild fey aspect of the Huntsman, your battl
 N:171:Huntsman's Rhythm
 I:8:11:0
 D:When two arrows strike true in succession, your next successful spear hit will deal double damage. Granted by Orome's great hunt and may be purchased for 5000 experience once unlocked.
+
+N:172:Wrath of Tulkas
+I:8:12:0
+D:Tulkas' own fury courses through your smiting blows: they behave as Smite but count your effective strength twice when they land. Awarded for scarring Morgoth; once unlocked it may be purchased for 5000 experience.
+
+N:173:Queen of the Stars
+I:8:13:0
+D:Bearing the Queen of the Stars' favor, your light reaches a step further into the dark. Granted by Varda's quests; after completing her torchlight challenge it may be purchased for 5000 experience on future delvings.

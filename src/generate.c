@@ -114,6 +114,7 @@ static vault_monster_spec vault_monster_table[] = {
     {'U', "c2485b83ba33934d", 0, false, true, true},
     {'G', "7b038638b2981d20", 0, false, true, true},
     {'V', "58d8cf770bfcbe6f", 0, false, true, true},
+    {'S', "bba0d000d9578563", 0, false, false, true}, /* Belegwath, Balrog of Shadow */
     {'B', "9c44dec3f9d6d14c", 0, false, false, true}, /* Duruin, Least of the Balrogs */
     {'q', "ccff426ff2ef0318", 0, false, true, true},  /* Whispering shadow */
     {'j', "d5e4892102e9b48a", 0, false, true, true},  /* Shadow spider */
@@ -171,14 +172,17 @@ typedef struct {
     bool has_aule_change;
     bool has_mandos_change;
     bool has_varda_change;
+    bool has_varda_shadow_change;
     bool has_tulkas_change;
     int aule_level;
     int mandos_level;
     int varda_level;
+    int varda_shadow_level;
     int tulkas_level;
     int aule_forge_y, aule_forge_x;
     int mandos_vault_y, mandos_vault_x;
     int varda_vault_y, varda_vault_x;
+    int varda_shadow_y, varda_shadow_x;
     int tulkas_next_state;
     bool tulkas_spawn_pending;
     int mandos_quest_id;
@@ -467,6 +471,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->vala_quest_stage2[VALA_MANDOS - 1];
     } else if (SDL_strcasecmp(actual_name, "mandos_third_quest") == 0) {
         return &p_ptr->vala_quest_stage3[VALA_MANDOS - 1];
+    } else if (SDL_strcasecmp(actual_name, "varda_second_quest") == 0) {
+        return &p_ptr->vala_quest_stage2[VALA_VARDA - 1];
     } else if (SDL_strcasecmp(actual_name, "niena_quest") == 0) {
         return &p_ptr->niena_quest;
     } else if (SDL_strcasecmp(actual_name, "niena_second_quest") == 0) {
@@ -514,6 +520,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_OROME_GREAT_HUNT;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA") == 0) {
         return METARUN_QUEST_VARDA;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA_SHADOW") == 0) {
+        return METARUN_QUEST_VARDA_SHADOW;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_NIENA_PACIFIST") == 0) {
         return METARUN_QUEST_NIENA_PACIFIST;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_TULKAS_ORCS") == 0) {
@@ -746,6 +754,13 @@ static void run_quest_lottery(void) {
         mark_tulkas_second_roll = true;
     }
     
+    byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+    bool varda_oath_active = (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT));
+    bool varda_oath_unlocked = (p_ptr->varda_quest >= VARDA_QUEST_REWARDED) ||
+                               (metarun_quest_completion_count(METARUN_QUEST_VARDA) > 0);
+    bool varda_followup_ready = (varda_shadow_state == QUEST_STATE_NOT_STARTED &&
+                                 varda_oath_active && varda_oath_unlocked);
+
     if (quest_lottery_resolved) {
         log_trace("Quest lottery: Already resolved for this level (winner=%d)", quest_lottery_winner);
         if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
@@ -753,8 +768,8 @@ static void run_quest_lottery(void) {
     }
     
     /* If Varda quest is active/successful, suppress other roulette quests entirely */
-    if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE) {
-        log_trace("Quest lottery: SKIPPED - Varda quest in progress (state=%d)", p_ptr->varda_quest);
+    if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE || varda_shadow_state >= QUEST_STATE_ACTIVE) {
+        log_trace("Quest lottery: SKIPPED - Varda quest in progress (state=%d shadow_state=%d)", p_ptr->varda_quest, varda_shadow_state);
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
         if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
@@ -777,12 +792,21 @@ static void run_quest_lottery(void) {
     
     /* CRITICAL: Do not run lottery if any quest is already started on this character */
     log_trace("Quest lottery: Checking current quest states before lottery");
-    log_trace("Quest lottery: tulkas=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d", 
-              p_ptr->tulkas_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest);
+    log_trace("Quest lottery: tulkas=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d shadow=%d", 
+              p_ptr->tulkas_quest, p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest, varda_shadow_state);
     log_trace("Quest lottery: quest_reserved[0]=%d (any quest spawned flag - should block all quests if set)", p_ptr->quest_reserved[0]);
+    bool varda_slot_reuse = varda_followup_ready && p_ptr->quest_reserved[0] &&
+        p_ptr->varda_quest == VARDA_QUEST_REWARDED &&
+        p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED &&
+        quest_get_state(QUEST_ID_TULKAS_ORCS) == QUEST_STATE_NOT_STARTED &&
+        p_ptr->tulkas_stronghold_level == 0 &&
+        p_ptr->niena_quest == NIENA_QUEST_NOT_STARTED &&
+        p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
+        p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
+        p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED;
     
     /* Check if any quest slot is already reserved */
-    if (p_ptr->quest_reserved[0]) {
+    if (p_ptr->quest_reserved[0] && !varda_slot_reuse) {
         log_trace("Quest lottery: BLOCKED - quest slot already reserved (quest_reserved[0]=1), one-quest-per-run enforced");
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
@@ -790,6 +814,7 @@ static void run_quest_lottery(void) {
         return;
     }
     
+    bool varda_blocks = (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED) && !varda_slot_reuse;
     if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED ||
         quest_get_state(QUEST_ID_TULKAS_ORCS) > QUEST_STATE_NOT_STARTED ||
         p_ptr->tulkas_stronghold_level > 0 ||
@@ -797,11 +822,12 @@ static void run_quest_lottery(void) {
         p_ptr->orome_quest > OROME_QUEST_NOT_STARTED ||
         p_ptr->aule_quest > AULE_QUEST_NOT_STARTED ||
         p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED ||
-        p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED) {
+        varda_blocks ||
+        varda_shadow_state > QUEST_STATE_NOT_STARTED) {
         
-        log_trace("Quest lottery: SKIPPED - quest already started on this character (tulkas=%d, tulkas_orcs_state=%d, stronghold_level=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d)", 
+        log_trace("Quest lottery: SKIPPED - quest already started on this character (tulkas=%d, tulkas_orcs_state=%d, stronghold_level=%d, niena=%d, orome=%d, aule=%d, mandos=%d, varda=%d, shadow=%d)", 
                   p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), p_ptr->tulkas_stronghold_level,
-                  p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest);
+                  p_ptr->niena_quest, p_ptr->orome_quest, p_ptr->aule_quest, p_ptr->mandos_quest, p_ptr->varda_quest, varda_shadow_state);
         quest_lottery_winner = 0;
         quest_lottery_resolved = true;
         if (mark_tulkas_second_roll) p_ptr->tulkas_second_roll_done = 1;
@@ -907,15 +933,19 @@ static void reset_pending_quest_states(void) {
     pending_quest_states.has_aule_change = false;
     pending_quest_states.has_mandos_change = false;
     pending_quest_states.has_varda_change = false;
+    pending_quest_states.has_varda_shadow_change = false;
     pending_quest_states.has_tulkas_change = false;
     pending_quest_states.aule_level = 0;
     pending_quest_states.mandos_level = 0;
     pending_quest_states.varda_level = 0;
+    pending_quest_states.varda_shadow_level = 0;
     pending_quest_states.tulkas_level = 0;
     pending_quest_states.aule_forge_y = 0;
     pending_quest_states.aule_forge_x = 0;
     pending_quest_states.varda_vault_y = 0;
     pending_quest_states.varda_vault_x = 0;
+    pending_quest_states.varda_shadow_y = 0;
+    pending_quest_states.varda_shadow_x = 0;
     pending_quest_states.mandos_vault_y = 0;
     pending_quest_states.mandos_vault_x = 0;
     pending_quest_states.tulkas_next_state = 0;
@@ -939,6 +969,7 @@ static void reset_quest_vault_states(void) {
               p_ptr->depth, p_ptr->quest_reserved[0]);
     byte mandos_second = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
     byte mandos_third = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+    byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
     log_trace("Quest vault regeneration: Aule state=%d level=%d, Mandos state=%d level=%d (second=%d third=%d), Tulkas state=%d", 
               p_ptr->aule_quest, p_ptr->aule_level, p_ptr->mandos_quest, p_ptr->mandos_level, mandos_second, mandos_third, p_ptr->tulkas_quest);
     log_trace("Quest vault regeneration: Pending changes - aule=%s mandos=%s", 
@@ -992,6 +1023,11 @@ static void reset_quest_vault_states(void) {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_level = 0;
     }
+    if (varda_shadow_state == QUEST_STATE_GIVER_PRESENT && p_ptr->varda_shadow_level == p_ptr->depth) {
+        log_trace("Quest vault regeneration: Resetting Varda shadow quest from GIVER_PRESENT to NOT_STARTED (level %d)", p_ptr->depth);
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_NOT_STARTED);
+        p_ptr->varda_shadow_level = 0;
+    }
     
     /* CRITICAL: Preserve quest lottery result during regeneration */
     /* The lottery determines which quest (if any) owns this level and should persist */
@@ -1006,7 +1042,8 @@ static void reset_quest_vault_states(void) {
                         (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED) ||
                         (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED) ||
                         (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED) ||
-                        (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED);
+                        (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED) ||
+                        (varda_shadow_state > QUEST_STATE_NOT_STARTED);
     
     if (quest_active) {
         /* Keep quest_reserved[0] = 1 since a quest owns this level/run */
@@ -1058,6 +1095,14 @@ static void apply_pending_quest_states(void) {
         p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
         log_trace("Varda quest: Bastion placement APPLIED (deferred) at %d,%d depth=%d", 
                   pending_quest_states.varda_vault_y, pending_quest_states.varda_vault_x, pending_quest_states.varda_level);
+    }
+    if (pending_quest_states.has_varda_shadow_change) {
+        p_ptr->varda_shadow_level = pending_quest_states.varda_shadow_level;
+        p_ptr->varda_shadow_placed = 1;
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->quest_reserved[0] = 1; /* Mark that a quest has spawned this run */
+        log_trace("Varda quest: Shadow Bastion placement APPLIED (deferred) at %d,%d depth=%d",
+                  pending_quest_states.varda_shadow_y, pending_quest_states.varda_shadow_x, pending_quest_states.varda_shadow_level);
     }
     if (pending_quest_states.has_tulkas_change) {
         p_ptr->tulkas_stronghold_level = pending_quest_states.tulkas_level;
@@ -6677,7 +6722,13 @@ static bool vault_template_has_duruin(vault_type *v) {
     if (!v) return false;
     /* Check vault name directly - Duruin Bastion is vault ID 461 */
     const char *name = v_name + v->name;
-    return (strstr(name, "Duruin") != NULL || strstr(name, "Bastion") != NULL);
+    return (strstr(name, "Duruin") != NULL);
+}
+
+static bool vault_template_has_shadow_bastion(vault_type *v) {
+    if (!v) return false;
+    const char *name = v_name + v->name;
+    return (strstr(name, "Shadow Bastion") != NULL);
 }
 
 static bool vault_template_is_orc_stronghold(vault_type *v) {
@@ -7310,6 +7361,71 @@ static bool place_duruin_bastion(void)
     return false;
 }
 
+static bool place_shadow_bastion(void)
+{
+    vault_type* qv_ptr;
+    int y, x;
+
+    log_trace("Varda quest: Attempting to force-place Shadow Bastion at depth %d", p_ptr->depth);
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        qv_ptr = &v_info[i];
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (!vault_template_has_shadow_bastion(qv_ptr)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+
+        log_trace("Varda quest: Found Shadow Bastion vault at index %d: '%s', attempting placement", i, v_name + qv_ptr->name);
+        log_trace("Varda quest: Vault details - typ=%d, hgt=%d, wid=%d, depth=%d, flags=0x%x",
+                  qv_ptr->typ, qv_ptr->hgt, qv_ptr->wid, qv_ptr->depth, qv_ptr->flags);
+
+        p_ptr->quest_reserved[0] = 1;
+
+        int center_y = p_ptr->cur_map_hgt / 2;
+        int center_x = p_ptr->cur_map_wid / 2;
+
+        y = center_y + rand_range(-p_ptr->cur_map_hgt/6, p_ptr->cur_map_hgt/6);
+        x = center_x + rand_range(-p_ptr->cur_map_wid/6, p_ptr->cur_map_wid/6);
+        y = MAX(qv_ptr->hgt/2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt/2 - 3));
+        x = MAX(qv_ptr->wid/2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid/2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr)) {
+            qv_placed_this_level = true;
+            process_quest_vault_area(y, x, qv_ptr);
+            pending_quest_states.has_varda_shadow_change = true;
+            pending_quest_states.varda_shadow_level = p_ptr->depth;
+            pending_quest_states.varda_shadow_y = y;
+            pending_quest_states.varda_shadow_x = x;
+            log_trace("Varda quest: Shadow Bastion placed at (%d,%d)", y, x);
+            return true;
+        }
+
+        for (int attempts = 0; attempts < 10; attempts++) {
+            y = center_y + rand_range(-p_ptr->cur_map_hgt/4, p_ptr->cur_map_hgt/4);
+            x = center_x + rand_range(-p_ptr->cur_map_wid/4, p_ptr->cur_map_wid/4);
+            y = MAX(qv_ptr->hgt/2 + 3, MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt/2 - 3));
+            x = MAX(qv_ptr->wid/2 + 3, MIN(x, p_ptr->cur_map_wid - qv_ptr->wid/2 - 3));
+
+            if (place_room_forced(y, x, qv_ptr)) {
+                qv_placed_this_level = true;
+                process_quest_vault_area(y, x, qv_ptr);
+                pending_quest_states.has_varda_shadow_change = true;
+                pending_quest_states.varda_shadow_level = p_ptr->depth;
+                pending_quest_states.varda_shadow_y = y;
+                pending_quest_states.varda_shadow_x = x;
+                log_trace("Varda quest: Shadow Bastion placed on fallback attempt %d at (%d,%d)", attempts + 1, y, x);
+                return true;
+            }
+        }
+
+        log_trace("Varda quest: Shadow Bastion placement failed after all attempts, returning false");
+        return false;
+    }
+
+    log_trace("Varda quest: Failed to find Shadow Bastion vault template at depth %d", p_ptr->depth);
+    return false;
+}
+
 static bool try_quest_vault_type(int v_type)
 {
     int i;
@@ -7329,7 +7445,7 @@ static bool try_quest_vault_type(int v_type)
         if (qv_ptr->typ != v_type) continue;
         if (!(qv_ptr->flags & VLT_QUEST)) continue;
         if (qv_ptr->depth > p_ptr->depth) continue;
-        if (vault_template_has_duruin(qv_ptr)) {
+        if (vault_template_has_duruin(qv_ptr) || vault_template_has_shadow_bastion(qv_ptr)) {
             log_trace("Quest vault: Skipping Duruin Bastion in generic placement path (quest-only)");
             continue;
         }
@@ -7753,6 +7869,7 @@ static bool cave_gen(void)
 
     int is_guaranteed_forge_level = false;
     bool duruin_bastion_forced = false;
+    bool shadow_bastion_forced = false;
     bool tulkas_stronghold_forced = false;
     
     /* Reset quest vault monitoring variables for this level */
@@ -7761,6 +7878,7 @@ static bool cave_gen(void)
     
     /* Run quest lottery once per level to determine which quest (if any) gets this level */
     run_quest_lottery();
+    byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
     
     /* Debug: Log entry into cave_gen */
     log_trace("cave_gen: Starting level generation (quest_vault_used=%s, lottery_winner=%d)", 
@@ -7781,6 +7899,12 @@ static bool cave_gen(void)
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
         p_ptr->varda_vault_ready = 1;
+    }
+    if (varda_shadow_state == QUEST_STATE_ACTIVE && !p_ptr->varda_shadow_placed && p_ptr->depth > 15) {
+        if (!p_ptr->varda_shadow_ready) {
+            log_trace("Varda shadow quest: Crossing 750ft, setting shadow_bastion_ready at depth %d", p_ptr->depth);
+        }
+        p_ptr->varda_shadow_ready = 1;
     }
 
     /* Tulkas orc quest: force the Orc Stronghold on the scheduled depth */
@@ -7930,12 +8054,26 @@ static bool cave_gen(void)
         log_trace("Quest vault: Varda quest ACTIVE but bastion not ready (vault_ready=%d, vault_placed=%d)",
                   p_ptr->varda_vault_ready, p_ptr->varda_vault_placed);
     }
+    log_trace("Quest vault check: shadow_ready=%d, shadow_state=%d, shadow_placed=%d",
+              p_ptr->varda_shadow_ready, varda_shadow_state, p_ptr->varda_shadow_placed);
+    if (p_ptr->varda_shadow_ready && varda_shadow_state == QUEST_STATE_ACTIVE && !p_ptr->varda_shadow_placed) {
+        log_trace("Quest vault: === SHADOW BASTION FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
+        if (!place_shadow_bastion()) {
+            log_trace("Quest vault: === SHADOW BASTION FAILED === Regenerating level");
+            return false;
+        }
+        log_trace("Quest vault: === SHADOW BASTION SUCCESS === Placed successfully");
+        shadow_bastion_forced = true;
+    } else if (varda_shadow_state == QUEST_STATE_ACTIVE) {
+        log_trace("Quest vault: Varda shadow quest ACTIVE but bastion not ready (vault_ready=%d, vault_placed=%d)",
+                  p_ptr->varda_shadow_ready, p_ptr->varda_shadow_placed);
+    }
               
     /* QUEST VAULT REGENERATION FIX: Allow quest vault re-placement during regeneration */
     /* Quest vaults can be placed if: */
     /* 1. quest_vault_used is false (haven't successfully completed a quest vault this run), OR */
     /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
-    if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !tulkas_stronghold_forced)
+    if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !shadow_bastion_forced && !tulkas_stronghold_forced)
     {
         /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
         /* to allow quest vault re-placement during level regeneration */
@@ -7943,9 +8081,9 @@ static bool cave_gen(void)
         /* Check if any quest is already active - ONE QUEST PER RUN ENFORCEMENT */
         log_trace("Quest vault: Checking one-quest-per-run enforcement:");
         log_trace("Quest vault:   quest_reserved[0]=%d (should block if 1)", p_ptr->quest_reserved[0]);
-        log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d (tulkas_orcs_state=%d)",
+        log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d shadow=%d (tulkas_orcs_state=%d)",
                   p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest,
-                  quest_get_state(QUEST_ID_TULKAS_ORCS));
+                  quest_get_state(QUEST_ID_VARDA_SHADOW), quest_get_state(QUEST_ID_TULKAS_ORCS));
         
         if (p_ptr->quest_reserved[0] || 
             p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
@@ -7953,7 +8091,8 @@ static bool cave_gen(void)
             p_ptr->tulkas_stronghold_level > 0 ||
             p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
             p_ptr->aule_quest != AULE_QUEST_NOT_STARTED ||
-            p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED) {
+            p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED ||
+            quest_get_state(QUEST_ID_VARDA_SHADOW) != QUEST_STATE_NOT_STARTED) {
             log_trace("Quest vault: === BLOCKED === Quest already active - one quest per run enforced (tulkas=%d, mandos=%d, aule=%d, varda=%d, reserved=%d)", 
                      p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest, p_ptr->quest_reserved[0]);
             /* Don't place any quest vaults - skip to end */
@@ -8240,13 +8379,14 @@ static bool cave_gen(void)
     }
     
     /* Check for Varda quest spawning - lottery-based */
-    log_trace("Varda spawn check: lottery_winner=%d (QUEST_ID_VARDA=%d), depth=%d, varda_quest=%d", 
-              quest_lottery_winner, QUEST_ID_VARDA, p_ptr->depth, p_ptr->varda_quest);
+    log_trace("Varda spawn check: lottery_winner=%d (QUEST_ID_VARDA=%d), depth=%d, varda_quest=%d, shadow_state=%d", 
+              quest_lottery_winner, QUEST_ID_VARDA, p_ptr->depth, p_ptr->varda_quest, varda_shadow_state);
     
-    if (quest_lottery_winner == QUEST_ID_VARDA) { /* Varda is quest ID 6 */
-        log_trace("Varda spawn: === VARDA WON LOTTERY === Attempting spawn at depth %d", p_ptr->depth);
-        log_trace("Varda spawn: Current state - varda_quest=%d, quest_reserved[0]=%d", 
-                  p_ptr->varda_quest, p_ptr->quest_reserved[0]);
+    if (quest_lottery_winner == QUEST_ID_VARDA || quest_lottery_winner == QUEST_ID_VARDA_SHADOW) {
+        bool shadow_quest = (quest_lottery_winner == QUEST_ID_VARDA_SHADOW);
+        log_trace("Varda spawn: === VARDA WON LOTTERY === Attempting spawn at depth %d for quest %d", p_ptr->depth, quest_lottery_winner);
+        log_trace("Varda spawn: Current state - varda_quest=%d, shadow_state=%d, quest_reserved[0]=%d", 
+                  p_ptr->varda_quest, varda_shadow_state, p_ptr->quest_reserved[0]);
         
         /* Safety: enforce early-depth requirement even if data is misconfigured */
         if (p_ptr->depth > 3) {
@@ -8303,12 +8443,21 @@ static bool cave_gen(void)
                 
                 if (place_monster_one(try_y, try_x, R_IDX_VARDA, true, true, NULL))
                 {
-                    p_ptr->varda_quest = VARDA_QUEST_GIVER_PRESENT;
+                    if (shadow_quest) {
+                        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_GIVER_PRESENT);
+                        p_ptr->varda_shadow_level = p_ptr->depth;
+                    } else {
+                        p_ptr->varda_quest = VARDA_QUEST_GIVER_PRESENT;
+                        p_ptr->varda_level = p_ptr->depth;
+                    }
                     p_ptr->quest_reserved[0] = 1; /* Mark any quest spawned */
-                    p_ptr->varda_level = p_ptr->depth;
                     varda_spawned = true;
                     log_trace("Varda spawn: === SUCCESS === Placed at (%d,%d) on sunlight tile", try_y, try_x);
-                    log_trace("Varda spawn: Quest state set to GIVER_PRESENT (%d), quest_reserved[0]=1", p_ptr->varda_quest);
+                    if (shadow_quest) {
+                        log_trace("Varda spawn: Shadow quest state set to GIVER_PRESENT, quest_reserved[0]=1");
+                    } else {
+                        log_trace("Varda spawn: Quest state set to GIVER_PRESENT (%d), quest_reserved[0]=1", p_ptr->varda_quest);
+                    }
                 }
             }
             

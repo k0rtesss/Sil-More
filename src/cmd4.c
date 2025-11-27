@@ -40,6 +40,7 @@ extern struct sound_config g_sound_config;
 #define NIENA_MERCY_PURCHASE_COST 5000
 #define UNIQUE_BANE_PURCHASE_COST 5000
 #define TULKAS_WRATH_PURCHASE_COST 5000
+#define QUEEN_STARS_PURCHASE_COST 5000
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -576,6 +577,11 @@ static bool unique_bane_purchase_unlocked(void)
 static bool tulkas_wrath_purchase_unlocked(void)
 {
     return metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH) > 0;
+}
+
+static bool queen_of_stars_purchase_unlocked(void)
+{
+    return metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT) > 0;
 }
 
 
@@ -1854,6 +1860,13 @@ int abilities_menu1(int* highlight)
     if (p_ptr->have_ability[S_SPC][SPC_UNIQUE_BANE]) {
         show_special = true;
     }
+    if (!show_special &&
+        (mandos_doom_purchase_unlocked() || orome_wraith_purchase_unlocked() ||
+         huntsman_rhythm_purchase_unlocked() || niena_mercy_purchase_unlocked() ||
+         unique_bane_purchase_unlocked() || tulkas_wrath_purchase_unlocked() ||
+         queen_of_stars_purchase_unlocked())) {
+        show_special = true;
+    }
     
     if (!show_special) {
         options = S_MAX - 1; // hide Special category
@@ -1987,7 +2000,8 @@ int abilities_menu2(int skilltype, int* highlight)
                                    (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked());
+                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked());
             if (special_visible)
             {
                 if (temp_first_visible == -1)
@@ -2016,11 +2030,12 @@ int abilities_menu2(int skilltype, int* highlight)
                 break;
             }
             if (b_ptr->abilitynum == current_ability_num &&
-                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM || b_ptr->abilitynum == SPC_UNIQUE_BANE)) {
+                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM || b_ptr->abilitynum == SPC_UNIQUE_BANE || b_ptr->abilitynum == SPC_QUEEN_STARS)) {
                 if ((b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                     (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
                     (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked())) {
+                    (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
+                    (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked())) {
                     highlight_is_visible = true;
                     break;
                 }
@@ -2053,7 +2068,8 @@ int abilities_menu2(int skilltype, int* highlight)
                                    (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
                                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked());
+                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
+                                   (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked());
             if (!special_visible) continue;
         }
 
@@ -2402,6 +2418,21 @@ int abilities_menu2(int skilltype, int* highlight)
                             Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
                             strnfmt(buf, sizeof(buf), "%d experience (you have %d)", UNIQUE_BANE_PURCHASE_COST, p_ptr->new_exp);
                             byte price_attr = (UNIQUE_BANE_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
+                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
+                        }
+                    }
+                    else if (b_ptr->abilitynum == SPC_QUEEN_STARS && !p_ptr->have_ability[S_SPC][SPC_QUEEN_STARS])
+                    {
+                        if (!queen_of_stars_purchase_unlocked())
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
+                                "Complete Varda's torches-only challenge to unlock purchase (5000 XP).");
+                        }
+                        else
+                        {
+                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
+                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", QUEEN_STARS_PURCHASE_COST, p_ptr->new_exp);
+                            byte price_attr = (QUEEN_STARS_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
                             Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
                         }
                     }
@@ -2770,6 +2801,7 @@ void do_cmd_ability_screen(void)
                         bool niena_mercy_special = (skilltype == S_SPC && abilitynum == SPC_NIENA_MERCY);
                         bool unique_bane_special = (skilltype == S_SPC && abilitynum == SPC_UNIQUE_BANE);
                         bool tulkas_wrath_special = (skilltype == S_SPC && abilitynum == SPC_TULKAS_WRATH);
+                        bool queen_stars_special = (skilltype == S_SPC && abilitynum == SPC_QUEEN_STARS);
                         int exp_cost = -1;
                         skip_purchase = false;
 
@@ -2832,6 +2864,15 @@ void do_cmd_ability_screen(void)
                                 continue;
                             }
                             exp_cost = TULKAS_WRATH_PURCHASE_COST;
+                        }
+                        else if (queen_stars_special)
+                        {
+                            if (!queen_of_stars_purchase_unlocked())
+                            {
+                                bell("Complete Varda's torches-only challenge to purchase Queen of the Stars.");
+                                continue;
+                            }
+                            exp_cost = QUEEN_STARS_PURCHASE_COST;
                         }
                         else if (skilltype == S_SPC)
                         {
@@ -5558,6 +5599,11 @@ int create_tval_menu_aux(int* highlight)
             item_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
                                                                     : TERM_RED;
         }
+        if (smithing_tvals[i].tval == TV_LIGHT && adult_torchlight)
+        {
+            item_valid = false;
+            item_attr = TERM_L_DARK;
+        }
 
         valid[i] = item_valid;
         attrs[i] = item_attr;
@@ -5675,7 +5721,12 @@ void create_tval_menu(void)
 
         if (choice >= 1)
         {
-            if (create_sval_menu(smithing_tvals[choice - 1].tval))
+            int tval = smithing_tvals[choice - 1].tval;
+            if (adult_torchlight && tval == TV_LIGHT) {
+                bell("Varda's torches-only challenge forbids crafting light sources.");
+                continue;
+            }
+            if (create_sval_menu(tval))
             {
                 leave_menu = true;
             }

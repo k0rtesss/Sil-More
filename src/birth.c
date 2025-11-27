@@ -165,6 +165,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SPC_OROME_WRAITH] = "Wraith of Orome",
         [SPC_HUNTSMAN_RHYTHM] = "Huntsman's Rhythm",
         [SPC_TULKAS_WRATH] = "Wrath of Tulkas",
+        [SPC_QUEEN_STARS] = "Queen of the Stars",
     },
 };
 
@@ -501,8 +502,12 @@ void player_wipe(void)
     p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
     p_ptr->varda_vault_ready = 0;
     p_ptr->varda_vault_placed = 0;
-    p_ptr->varda_reserved = 0;
+    p_ptr->varda_shadow_restricted = 0;
     p_ptr->varda_level = 0;
+    p_ptr->varda_shadow_ready = 0;
+    p_ptr->varda_shadow_placed = 0;
+    p_ptr->varda_shadow_pad = 0;
+    p_ptr->varda_shadow_level = 0;
     for (i = 0; i < VALA_MAX; i++) {
         p_ptr->vala_quest_stage2[i] = QUEST_STATE_NOT_STARTED;
         p_ptr->vala_quest_stage3[i] = QUEST_STATE_NOT_STARTED;
@@ -1825,6 +1830,7 @@ static NavResult select_challenge_modifiers(void)
     bool single_unlocked = metarun_challenge_single_stair_unlocked();
     bool fixed_unlocked = metarun_challenge_fixed_exp_unlocked();
     bool tulkas_unlocked = metarun_challenge_tulkas_blunt_unlocked();
+    bool torch_unlocked = metarun_challenge_torchlight_unlocked();
 
     /* Default to off each character */
     op_ptr->opt[OPT_birth_discon_stair] = false;
@@ -1834,19 +1840,22 @@ static NavResult select_challenge_modifiers(void)
     op_ptr->opt[OPT_birth_fixed_exp] = false;
     op_ptr->opt[OPT_birth_tulkas_blunt] = false;
     op_ptr->opt[OPT_adult_tulkas_blunt] = false;
+    op_ptr->opt[OPT_birth_torchlight] = false;
+    op_ptr->opt[OPT_adult_torchlight] = false;
 
     /* If nothing is unlocked, skip */
-    if (!dis_unlocked && !single_unlocked && !fixed_unlocked && !tulkas_unlocked) {
+    if (!dis_unlocked && !single_unlocked && !fixed_unlocked && !tulkas_unlocked && !torch_unlocked) {
         log_debug("select_challenge_modifiers: no unlocked challenges, skipping");
         return NAV_OK;
     }
 
-    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d, tulkas=%d)", dis_unlocked, single_unlocked, fixed_unlocked, tulkas_unlocked);
+    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d, tulkas=%d, torch=%d)", dis_unlocked, single_unlocked, fixed_unlocked, tulkas_unlocked, torch_unlocked);
 
     bool enable_dis = false;
     bool enable_single = false;
     bool enable_fixed = false;
     bool enable_tulkas = false;
+    bool enable_torchlight = false;
 
     while (true) {
         Term_clear();
@@ -1888,6 +1897,13 @@ static NavResult select_challenge_modifiers(void)
                         enable_tulkas ? "Enabled" : "Disabled");
             row++;
         }
+        if (torch_unlocked) {
+            Term_putstr(2, row++, -1, TERM_WHITE, "t) Varda's torches-only");
+            Term_putstr(4, row++, -1, TERM_SLATE, "Only wooden torches appear as lights; smiths cannot craft light sources.");
+            Term_putstr(4, row++, -1, enable_torchlight ? TERM_L_GREEN : TERM_L_DARK,
+                        enable_torchlight ? "Enabled" : "Disabled");
+            row++;
+        }
 
         Term_putstr(2, row++, -1, TERM_SLATE, "Press letter to toggle, Enter to confirm, 'n' to skip, ESC to go back.");
 
@@ -1915,6 +1931,10 @@ static NavResult select_challenge_modifiers(void)
             enable_tulkas = !enable_tulkas;
             continue;
         }
+        if (torch_unlocked && (key == 't' || key == 'T')) {
+            enable_torchlight = !enable_torchlight;
+            continue;
+        }
         if (key == '\r' || key == '\n' || key == ' ') {
             if (enable_dis && DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
                 bell("Not enough experience to enable disconnected stairs.");
@@ -1932,9 +1952,11 @@ static NavResult select_challenge_modifiers(void)
             op_ptr->opt[OPT_birth_fixed_exp] = enable_fixed;
             op_ptr->opt[OPT_birth_tulkas_blunt] = enable_tulkas;
             op_ptr->opt[OPT_adult_tulkas_blunt] = enable_tulkas;
+            op_ptr->opt[OPT_birth_torchlight] = enable_torchlight;
+            op_ptr->opt[OPT_adult_torchlight] = enable_torchlight;
 
-            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d, tulkas_blunt=%d (cost %d XP applied=%d)",
-                      enable_dis, enable_single, enable_fixed, enable_tulkas, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
+            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d, tulkas_blunt=%d, torch=%d (cost %d XP applied=%d)",
+                      enable_dis, enable_single, enable_fixed, enable_tulkas, enable_torchlight, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
             return NAV_OK;
         }
     }
@@ -2856,9 +2878,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
-
-
 
 
 

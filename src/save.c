@@ -1257,8 +1257,12 @@ static void wr_extra(void)
     wr_byte(p_ptr->varda_quest);
     wr_byte(p_ptr->varda_vault_ready);
     wr_byte(p_ptr->varda_vault_placed);
-    wr_byte(p_ptr->varda_reserved);
+    wr_byte(p_ptr->varda_shadow_restricted);
     wr_s16b(p_ptr->varda_level);
+    wr_byte(p_ptr->varda_shadow_ready);
+    wr_byte(p_ptr->varda_shadow_placed);
+    wr_byte(p_ptr->varda_shadow_pad);
+    wr_s16b(p_ptr->varda_shadow_level);
     for (i = 0; i < VALA_MAX; i++) wr_byte(p_ptr->vala_quest_stage2[i]);
     for (i = 0; i < VALA_MAX; i++) wr_byte(p_ptr->vala_quest_stage3[i]);
     wr_byte(p_ptr->quest_vault_used);
@@ -2115,7 +2119,6 @@ bool save_player(void)
     }
     return (result);
 }
-
 
 
 

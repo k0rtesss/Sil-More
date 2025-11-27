@@ -2389,10 +2389,12 @@ void calc_torch(void)
         p_ptr->cur_light += ability_bonus(S_SNG, SNG_TREES);
     }
 
-    /* Oath of Light reward */
-    if (p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] && !oath_invalid(OATH_LIGHT))
+    /* Oath of Light reward handled as light power (no radius change) */
+
+    /* Queen of the Stars: extend light radius */
+    if (p_ptr->active_ability[S_SPC][SPC_QUEEN_STARS])
     {
-        p_ptr->cur_light += 2;
+        p_ptr->cur_light += 1;
     }
 
     /* Update the visuals */
@@ -4535,7 +4537,6 @@ void handle_stuff(void)
 
     log_trace("handle_stuff: completed");
 }
-
 
 
 

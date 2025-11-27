@@ -42,6 +42,7 @@
 #define METARUN_CHALLENGE_SINGLE_FLAG 0x02
 #define METARUN_CHALLENGE_FIXED_FLAG 0x04
 #define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
+#define METARUN_CHALLENGE_TORCHLIGHT_FLAG 0x10
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
@@ -240,6 +241,50 @@ void metarun_unlock_challenge_tulkas_blunt(void)
     log_debug("metarun_unlock_challenge_tulkas_blunt: after unlock, flag byte=0x%02x", *flags);
     save_metaruns();
     log_debug("metarun_unlock_challenge_tulkas_blunt: metaruns saved");
+}
+
+bool metarun_challenge_torchlight_unlocked(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_challenge_torchlight_unlocked: no current metarun");
+        return false;
+    }
+
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    bool unlocked = (*flags & METARUN_CHALLENGE_TORCHLIGHT_FLAG) != 0;
+
+    if (!unlocked && metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT) > 0) {
+        log_debug("metarun_challenge_torchlight_unlocked: retro-unlocking from prior completions");
+        *flags |= METARUN_CHALLENGE_TORCHLIGHT_FLAG;
+        save_metaruns();
+        unlocked = true;
+    }
+
+    log_debug("metarun_challenge_torchlight_unlocked: flag byte=0x%02x, unlocked=%d", *flags, unlocked);
+    return unlocked;
+}
+
+void metarun_unlock_challenge_torchlight(void)
+{
+    metarun *current = metarun_current_mutable();
+    if (!current) {
+        log_debug("metarun_unlock_challenge_torchlight: no current metarun!");
+        return;
+    }
+
+    byte *flags = &current->reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    log_debug("metarun_unlock_challenge_torchlight: before unlock, flag byte=0x%02x", *flags);
+
+    if ((*flags & METARUN_CHALLENGE_TORCHLIGHT_FLAG) != 0) {
+        log_debug("metarun_unlock_challenge_torchlight: already unlocked, skipping");
+        return;
+    }
+
+    *flags |= METARUN_CHALLENGE_TORCHLIGHT_FLAG;
+    log_debug("metarun_unlock_challenge_torchlight: after unlock, flag byte=0x%02x", *flags);
+    save_metaruns();
+    log_debug("metarun_unlock_challenge_torchlight: metaruns saved");
 }
 
 static byte* challenge_count_slot(int challenge_id)
@@ -2592,6 +2637,7 @@ static const char* challenge_display_name(int challenge_id)
         case CHALLENGE_SINGLE_STAIR: return "Single stair";
         case CHALLENGE_FIXED_50K_XP: return "Fixed 50k XP";
         case CHALLENGE_TULKAS_BLUNT: return "Tulkas' blunt arms";
+        case CHALLENGE_TORCHLIGHT: return "Varda's torches-only";
         default: return "Unknown challenge";
     }
 }
@@ -2652,6 +2698,9 @@ static void show_completed_quests_summary(void)
     Term_putstr(col, row++, -1, TERM_WHITE, line);
     int blunt_count = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
     strnfmt(line, sizeof(line), "Blunt arms: completed %d time%s", blunt_count, (blunt_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int torch_count = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
+    strnfmt(line, sizeof(line), "Torches-only: completed %d time%s", torch_count, (torch_count == 1) ? "" : "s");
     Term_putstr(col, row++, -1, TERM_WHITE, line);
 
     Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
@@ -2724,6 +2773,16 @@ static void show_tulkas_blunt_unlock_message(void)
     quest_typewriter_menu("Tulkas' Orc-Bane", lines, N_ELEMENTS(lines), TERM_YELLOW, TERM_WHITE);
 }
 
+static void show_torchlight_unlock_message(void)
+{
+    const char *lines[] = {
+        "You conquered Varda's torches-only challenge.",
+        "The Queen of the Stars will now teach her radiance to any who pay 5000 experience.",
+        "Find Queen of the Stars among your Special abilities in future delves."
+    };
+    quest_typewriter_menu("Queen of the Stars", lines, N_ELEMENTS(lines), TERM_WHITE, TERM_L_BLUE);
+}
+
 static int total_player_kills_this_run(void)
 {
     if (!z_info || !l_list) return 0;
@@ -2744,6 +2803,15 @@ static void maybe_unlock_niena_mercy_purchase(bool challenge_fixed_active, int f
     int fixed_after = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
     if (fixed_after <= fixed_count_before) return;
     show_niena_mercy_unlock_message();
+}
+
+static void maybe_unlock_queen_of_stars_purchase(bool challenge_torch_active, int torch_count_before)
+{
+    if (!challenge_torch_active) return;
+    if (torch_count_before > 0) return; /* Already unlocked */
+    int torch_after = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
+    if (torch_after <= torch_count_before) return;
+    show_torchlight_unlock_message();
 }
 
 static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
@@ -2872,8 +2940,10 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
     bool challenge_fixed_exp = (op_ptr && op_ptr->opt[OPT_birth_fixed_exp] && metarun_challenge_fixed_exp_unlocked());
     bool challenge_tulkas_blunt = (op_ptr && op_ptr->opt[OPT_adult_tulkas_blunt]);
+    bool challenge_torchlight = (op_ptr && op_ptr->opt[OPT_adult_torchlight] && metarun_challenge_torchlight_unlocked());
     int fixed_challenge_before = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
     int blunt_challenge_before = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
+    int torchlight_challenge_before = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
     bool challenge_disconnected_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
@@ -2933,6 +3003,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         if (challenge_tulkas_blunt) {
             metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
         }
+        if (challenge_torchlight) {
+            metarun_mark_challenge_completed(CHALLENGE_TORCHLIGHT);
+        }
 
         byte awarded = (sil_count < 3) ? 3 : sil_count;
         metarun_gain_silmarils(awarded);
@@ -2952,6 +3025,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         if (challenge_tulkas_blunt &&
             metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
             show_tulkas_blunt_unlock_message();
+        }
+        if (challenge_torchlight) {
+            maybe_unlock_queen_of_stars_purchase(challenge_torchlight, torchlight_challenge_before);
         }
         check_run_end();
         metarun_save_persistent_settings();
@@ -3383,6 +3459,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     if (challenge_tulkas_blunt) {
         metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
     }
+    if (challenge_torchlight) {
+        metarun_mark_challenge_completed(CHALLENGE_TORCHLIGHT);
+    }
     if (challenge_disconnected_success &&
         quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
         metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
@@ -3393,6 +3472,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     if (challenge_tulkas_blunt &&
         metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
         show_tulkas_blunt_unlock_message();
+    }
+    if (challenge_torchlight) {
+        maybe_unlock_queen_of_stars_purchase(challenge_torchlight, torchlight_challenge_before);
     }
 
     compute_blessing_pool();

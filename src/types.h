@@ -1324,8 +1324,12 @@ struct player_type
     byte varda_quest;          /* Varda quest state (VARDA_QUEST_*) */
     byte varda_vault_ready;    /* Flag: should force Duruin Bastion on this level */
     byte varda_vault_placed;   /* Flag: bastion successfully placed this run */
-    byte varda_reserved;       /* padding */
+    byte varda_shadow_restricted; /* Block Belegwath from spawning outside his quest */
     s16b varda_level;          /* Depth where bastion was placed (for regen) */
+    byte varda_shadow_ready;   /* Flag: should force Shadow Bastion on this level */
+    byte varda_shadow_placed;  /* Flag: Shadow Bastion successfully placed this run */
+    byte varda_shadow_pad;     /* padding */
+    s16b varda_shadow_level;   /* Depth where Shadow Bastion was placed */
     /* Additional Valar quest stages (2 and 3) */
     byte vala_quest_stage2[VALA_MAX]; /* Second-stage quest states per Vala */
     byte vala_quest_stage3[VALA_MAX]; /* Third-stage quest states per Vala */

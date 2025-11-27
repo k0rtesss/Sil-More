@@ -2891,6 +2891,10 @@ bool quest_monster_spawn_okay(int r_idx)
         /* Orc captains are reserved for the Tulkas quest */
         return false;
     }
+    if (p_ptr && p_ptr->varda_shadow_restricted && r_idx == R_IDX_BELEGWATH) {
+        /* Belegwath is reserved for Varda's shadow quest */
+        return false;
+    }
 
     /* Prevent quest monsters from spawning outside their quest contexts */
     switch (r_idx) {
@@ -3881,5 +3885,4 @@ void message_pain(int m_idx, int dam)
 
     // m, w are silent
 }
-
 

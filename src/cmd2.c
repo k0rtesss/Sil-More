@@ -484,7 +484,31 @@ void do_cmd_go_up(void)
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
             mandos_second_state() == QUEST_STATE_NOT_STARTED &&
-            p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED)
+            p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_NOT_STARTED)
+        {
+            p_ptr->quest_reserved[0] = 0;
+        }
+    }
+
+    byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+    if (varda_shadow_state == QUEST_STATE_GIVER_PRESENT && p_ptr->varda_shadow_level == p_ptr->depth)
+    {
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_NOT_STARTED);
+        p_ptr->varda_shadow_level = 0;
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 0;
+        p_ptr->varda_shadow_restricted = 0;
+        if (p_ptr->quest_reserved[0] &&
+            p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED &&
+            p_ptr->niena_quest == NIENA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_NIENA_MORGOTH) == QUEST_STATE_NOT_STARTED &&
+            p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
+            p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
+            p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
+            mandos_second_state() == QUEST_STATE_NOT_STARTED &&
+            p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_NOT_STARTED)
         {
             p_ptr->quest_reserved[0] = 0;
         }
@@ -690,9 +714,35 @@ void do_cmd_go_down(void)
             p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
             p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
             mandos_second_state() == QUEST_STATE_NOT_STARTED &&
-            p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED)
+            p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED &&
+            quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_NOT_STARTED)
         {
             p_ptr->quest_reserved[0] = 0;
+        }
+    }
+
+    {
+        byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+        if (varda_shadow_state == QUEST_STATE_GIVER_PRESENT && p_ptr->varda_shadow_level == p_ptr->depth)
+        {
+            quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_NOT_STARTED);
+            p_ptr->varda_shadow_level = 0;
+            p_ptr->varda_shadow_ready = 0;
+            p_ptr->varda_shadow_placed = 0;
+            p_ptr->varda_shadow_restricted = 0;
+            if (p_ptr->quest_reserved[0] &&
+                p_ptr->tulkas_quest == TULKAS_QUEST_NOT_STARTED &&
+                p_ptr->niena_quest == NIENA_QUEST_NOT_STARTED &&
+                quest_get_state(QUEST_ID_NIENA_MORGOTH) == QUEST_STATE_NOT_STARTED &&
+                p_ptr->orome_quest == OROME_QUEST_NOT_STARTED &&
+                p_ptr->aule_quest == AULE_QUEST_NOT_STARTED &&
+                p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED &&
+                mandos_second_state() == QUEST_STATE_NOT_STARTED &&
+                p_ptr->varda_quest == VARDA_QUEST_NOT_STARTED &&
+                quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_NOT_STARTED)
+            {
+                p_ptr->quest_reserved[0] = 0;
+            }
         }
     }
 

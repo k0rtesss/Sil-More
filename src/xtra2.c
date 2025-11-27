@@ -6994,7 +6994,11 @@ static cptr get_quest_reward_text(int quest_idx)
     
     /* Varda reward description */
     if (quest_idx == QUEST_ID_VARDA) {
-        SDL_strlcpy(reward_buf, "Choose one radiant artefact and unlock the Oath of Light (+2 light radius)", sizeof(reward_buf));
+        SDL_strlcpy(reward_buf, "Choose one radiant artefact, gain Queen of the Stars (+1 light radius), and unlock the Oath of Light (+1 light power)", sizeof(reward_buf));
+        return reward_buf;
+    }
+    if (quest_idx == QUEST_ID_VARDA_SHADOW) {
+        SDL_strlcpy(reward_buf, "Choose one radiant artefact and the Queen of the Stars blessing again (+1 light radius, Oath light power)", sizeof(reward_buf));
         return reward_buf;
     }
     if (quest_idx == QUEST_ID_MANDOS_TRAITOR) {
@@ -7902,6 +7906,43 @@ void do_cmd_quest_status(void)
                 varda_status = "Unknown status";
                 color = TERM_SLATE;
                 Term_putstr(col + 2, row++, -1, color, varda_status);
+        }
+        row++;
+    }
+    byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+    if (varda_shadow_state > QUEST_STATE_NOT_STARTED) {
+        any_quests = true;
+        cptr quest_title = get_quest_title(QUEST_ID_VARDA_SHADOW);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_VARDA_SHADOW);
+        if (!quest_title) quest_title = "Varda's Shadow Quest";
+        if (!quest_challenge) quest_challenge = "Unknown challenge";
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+        switch (varda_shadow_state) {
+            case QUEST_STATE_GIVER_PRESENT:
+                Term_putstr(col + 2, row++, -1, TERM_L_BLUE, "Available - Varda waits in sunlight");
+                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA_SHADOW));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_ACTIVE:
+                Term_putstr(col + 2, row++, -1, TERM_WHITE, "Active - Seek Belegwath's bastion");
+                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA_SHADOW));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_SUCCESS:
+                Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Complete - Claim Varda's blessing");
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA_SHADOW));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_REWARDED:
+                Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed by this character");
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_VARDA_SHADOW));
+                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
+                break;
+            default:
+                Term_putstr(col + 2, row++, -1, TERM_SLATE, "Unknown status");
+                break;
         }
         row++;
     }
@@ -9103,7 +9144,24 @@ static int prompt_varda_reward_choice_menu(const int* choices, int choice_count,
     return selected_artifact;
 }
 
-static bool grant_varda_reward(cptr* completion_texts, int completion_count)
+static void grant_queen_of_stars_ability(void)
+{
+    log_trace("grant_queen_of_stars_ability: have=%d active=%d",
+              p_ptr->have_ability[S_SPC][SPC_QUEEN_STARS],
+              p_ptr->active_ability[S_SPC][SPC_QUEEN_STARS]);
+    if (p_ptr->have_ability[S_SPC][SPC_QUEEN_STARS]) {
+        msg_print("You already shine with the Queen of the Stars' grace.");
+        return;
+    }
+
+    p_ptr->have_ability[S_SPC][SPC_QUEEN_STARS] = true;
+    p_ptr->active_ability[S_SPC][SPC_QUEEN_STARS] = true;
+    msg_print("Starlight crowns your steps; your light reaches farther.");
+    p_ptr->update |= (PU_BONUS);
+    handle_stuff();
+}
+
+static bool grant_varda_reward(bool shadow_quest, cptr* completion_texts, int completion_count)
 {
     int choices[3] = {0};
     int available = build_varda_reward_options(choices, (int)N_ELEMENTS(choices));
@@ -9122,19 +9180,31 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 
     create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
     msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
-    p_ptr->varda_quest = VARDA_QUEST_REWARDED;
+    grant_queen_of_stars_ability();
     p_ptr->quest_reserved[0] = 1;
-    p_ptr->varda_vault_ready = 0;
-    p_ptr->varda_vault_placed = 1;
-
-    metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     metarun_unlock_oath(OATH_LIGHT);
-    do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
+
+    if (shadow_quest) {
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_REWARDED);
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 1;
+        p_ptr->varda_shadow_restricted = 0;
+        p_ptr->varda_shadow_level = p_ptr->depth;
+        metarun_mark_quest_completed(METARUN_QUEST_VARDA_SHADOW);
+        do_cmd_note("Varda blessed me with a radiant artefact and the Queen of the Stars.", p_ptr->depth);
+        metarun_unlock_challenge_torchlight();
+    } else {
+        p_ptr->varda_quest = VARDA_QUEST_REWARDED;
+        p_ptr->varda_vault_ready = 0;
+        p_ptr->varda_vault_placed = 1;
+        metarun_mark_quest_completed(METARUN_QUEST_VARDA);
+        do_cmd_note("Varda blessed me with a radiant artefact, the Queen of the Stars, and the Oath of Light.", p_ptr->depth);
+    }
 
     return true;
 }
 
-static void try_place_varda_near_player(void)
+static void try_place_varda_near_player(bool shadow_quest)
 {
     /* Avoid double-spawning */
     for (int i = 1; i < mon_max; i++) {
@@ -9156,7 +9226,11 @@ static void try_place_varda_near_player(void)
                 if (cave_feat[y][x] == FEAT_FLOOR) {
                     cave_set_feat(y, x, FEAT_SUNLIGHT);
                 }
-                p_ptr->varda_level = p_ptr->depth;
+                if (shadow_quest) {
+                    p_ptr->varda_shadow_level = p_ptr->depth;
+                } else {
+                    p_ptr->varda_level = p_ptr->depth;
+                }
                 log_trace("Varda reward: placed quest giver at (%d,%d)", y, x);
                 return;
             }
@@ -9164,7 +9238,11 @@ static void try_place_varda_near_player(void)
     }
 
     /* Mark this depth as attempted even if placement failed, to avoid infinite spawn loops */
-    p_ptr->varda_level = p_ptr->depth;
+    if (shadow_quest) {
+        p_ptr->varda_shadow_level = p_ptr->depth;
+    } else {
+        p_ptr->varda_level = p_ptr->depth;
+    }
     log_trace("Varda reward: failed to place quest giver near player (no valid space), will retry on new depth");
 }
 
@@ -9175,7 +9253,16 @@ void check_varda_quest_completion(int r_idx)
         p_ptr->varda_vault_ready = 0;
         p_ptr->varda_level = p_ptr->depth;
         msg_print("Duruin falls. The Bastion's shadows unravel under starlight!");
-        try_place_varda_near_player();
+        try_place_varda_near_player(false);
+    }
+
+    if (quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_ACTIVE && r_idx == R_IDX_BELEGWATH) {
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_SUCCESS);
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_level = p_ptr->depth;
+        p_ptr->quest_reserved[0] = 1;
+        msg_print("Belegwath falls. The Shadow Bastion shatters under the returning light!");
+        try_place_varda_near_player(true);
     }
 }
 
@@ -9184,6 +9271,72 @@ void varda_quest_interaction(void)
     static s32b last_interaction_turn = -1;
     if (last_interaction_turn == turn) return;
     last_interaction_turn = turn;
+
+    byte shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+
+    if (shadow_state == QUEST_STATE_GIVER_PRESENT) {
+        log_trace("Varda shadow quest: accepting quest");
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_ACTIVE);
+        p_ptr->quest_reserved[0] = 1;
+        p_ptr->varda_shadow_level = p_ptr->depth;
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 0;
+        p_ptr->varda_shadow_restricted = 1;
+
+        remove_quest_giver(R_IDX_VARDA);
+
+        int text_count = 0;
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_VARDA_SHADOW, &text_count);
+        init_texts = prepend_repeat_context(QUEST_ID_VARDA_SHADOW, init_texts, &text_count, false);
+        if (init_texts && text_count > 0) {
+            quest_typewriter_menu("Varda, Lady of the Stars", init_texts, text_count, TERM_WHITE, TERM_L_BLUE);
+            free_quest_texts(init_texts);
+        } else {
+            cptr fallback[] = {
+                "Varda's voice softens, bright with resolve:",
+                "\"Belegwath's bastion of shadow waits beyond the fifteenth delve. Break it open to the light.\""
+            };
+            quest_typewriter_menu("Varda, Lady of the Stars", fallback, 2, TERM_WHITE, TERM_L_BLUE);
+        }
+
+        do_cmd_note("Varda sent me to break Belegwath's Shadow Bastion.", p_ptr->depth);
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_ACTIVE) {
+        msg_print("Varda's whisper: \"Find Belegwath's shadow bastion beyond fifteen delvings.\"");
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_SUCCESS) {
+        log_trace("Varda shadow quest: delivering reward");
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_VARDA_SHADOW, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_VARDA_SHADOW, completion_texts, &completion_count, true);
+
+        cptr fallback[] = {
+            "Varda's starlight flares in approval:",
+            "\"The shadowed bastion is broken. Choose your blessing again.\""
+        };
+        cptr* texts_to_use = (completion_texts && completion_count > 0) ? completion_texts : fallback;
+        int text_count = (completion_texts && completion_count > 0) ? completion_count : 2;
+
+        bool rewarded = grant_varda_reward(true, texts_to_use, text_count);
+
+        if (completion_texts) {
+            free_quest_texts(completion_texts);
+        }
+
+        if (rewarded) {
+            remove_quest_giver(R_IDX_VARDA);
+        }
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_REWARDED) {
+        msg_print("Varda's blessing deepens your light.");
+        return;
+    }
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
         log_trace("Varda quest: accepting quest");
@@ -9232,7 +9385,7 @@ void varda_quest_interaction(void)
         int text_count = (completion_texts && completion_count > 0) ? completion_count : 2;
         
         /* Display quest completion and reward selection in one integrated menu */
-        bool rewarded = grant_varda_reward(texts_to_use, text_count);
+        bool rewarded = grant_varda_reward(false, texts_to_use, text_count);
         
         if (completion_texts) {
             free_quest_texts(completion_texts);
@@ -9253,7 +9406,10 @@ void check_varda_quest_interaction(void)
 {
     int i, y, x;
 
-    if (p_ptr->varda_quest < VARDA_QUEST_GIVER_PRESENT || p_ptr->varda_quest > VARDA_QUEST_SUCCESS) return;
+    byte shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+    bool varda_needed = (p_ptr->varda_quest >= VARDA_QUEST_GIVER_PRESENT && p_ptr->varda_quest <= VARDA_QUEST_SUCCESS) ||
+                        (shadow_state >= QUEST_STATE_GIVER_PRESENT && shadow_state <= QUEST_STATE_SUCCESS);
+    if (!varda_needed) return;
 
     for (i = 1; i < 9; i++) {
         y = p_ptr->py + ddy[i];
@@ -9276,7 +9432,11 @@ void check_varda_quest_interaction(void)
     /* Only attempt placement once per depth to avoid infinite spawn loops */
     if (p_ptr->varda_quest == VARDA_QUEST_SUCCESS && p_ptr->varda_level != p_ptr->depth) {
         log_trace("Varda quest: success state without nearby quest giver - attempting to place Varda");
-        try_place_varda_near_player();
+        try_place_varda_near_player(false);
+    }
+    if (shadow_state == QUEST_STATE_SUCCESS && p_ptr->varda_shadow_level != p_ptr->depth) {
+        log_trace("Varda shadow quest: success state without nearby quest giver - attempting to place Varda");
+        try_place_varda_near_player(true);
     }
 }
 
