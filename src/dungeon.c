@@ -1006,6 +1006,10 @@ static void process_command(void)
     case '\t':
     {
         do_cmd_ability_screen();
+        
+        /* Force full redraw after screen_load() restored old content */
+        p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_MAP | PR_EXP);
+        handle_stuff();
         break;
     }
 
@@ -1288,6 +1292,10 @@ static void process_command(void)
         
         /* Load screen */
         screen_load();
+        
+        /* Force full redraw after screen_load() restored old content */
+        p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_MAP | PR_EXP);
+        handle_stuff();
         break;
     }
 

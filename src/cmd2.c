@@ -59,7 +59,7 @@ static void mandos_reset_all_states(void)
  */
 int min_depth(void)
 {
-    int min_depth_value = min_depth_counter / 100000 + 1;
+    int min_depth_value = min_depth_counter / 200000 + 1;
 
     // bounds on the base
     if (min_depth_value < 1)
