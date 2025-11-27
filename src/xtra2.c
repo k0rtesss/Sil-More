@@ -229,6 +229,76 @@ void ensure_tulkas_morgoth_active(void)
     }
 }
 
+static byte varda_third_state(void)
+{
+    return quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+}
+
+static void varda_set_third_state(byte state)
+{
+    quest_set_state(QUEST_ID_VARDA_UNGOLIANT, state);
+}
+
+static void complete_varda_ungoliant_quest(bool quiet_autocomplete)
+{
+    if (varda_third_state() >= QUEST_STATE_REWARDED) return;
+
+    varda_set_third_state(QUEST_STATE_SUCCESS);
+
+    int completion_count = 0;
+    cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_VARDA_UNGOLIANT, &completion_count);
+    completion_texts = prepend_repeat_context(QUEST_ID_VARDA_UNGOLIANT, completion_texts, &completion_count, true);
+
+    cptr fallback[] = {
+        "Ungoliant's darkness unravels under the returning stars.",
+        "\"Your line shall not enter the deeps empty-handed again. Each new tale may begin with a relic of your choosing.\""
+    };
+    cptr* texts_to_use = (completion_texts && completion_count > 0) ? completion_texts : fallback;
+    int text_count = (completion_texts && completion_count > 0) ? completion_count : (int)N_ELEMENTS(fallback);
+
+    if (!quiet_autocomplete) {
+        quest_typewriter_menu("Varda, Lady of the Stars", texts_to_use, text_count, TERM_WHITE, TERM_L_BLUE);
+    } else {
+        for (int i = 0; i < text_count; i++) {
+            if (texts_to_use[i] && texts_to_use[i][0] != '\0') {
+                msg_print(texts_to_use[i]);
+            }
+        }
+    }
+
+    if (completion_texts) {
+        free_quest_texts(completion_texts);
+    }
+
+    varda_set_third_state(QUEST_STATE_REWARDED);
+    metarun_mark_quest_completed(METARUN_QUEST_VARDA_UNGOLIANT);
+    do_cmd_note("Ungoliant is unmade; Varda grants a relic choice at the start of each run.", p_ptr->depth);
+    msg_print("Ungoliant falls; Varda binds your line to starlit relics at each beginning.");
+}
+
+void ensure_varda_ungoliant_active(void)
+{
+    int cap = quest_completion_cap(QUEST_ID_VARDA_UNGOLIANT);
+    if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT) >= cap) return;
+
+    byte state = varda_third_state();
+    if (state == QUEST_STATE_NOT_STARTED) {
+        varda_set_third_state(QUEST_STATE_ACTIVE);
+        log_trace("Varda Ungoliant quest activated for this run");
+    }
+
+    /* If Ungoliant is already dead (legacy saves), resolve the quest immediately */
+    if (varda_third_state() < QUEST_STATE_REWARDED &&
+        z_info && r_info && R_IDX_UNGOLIANT > 0 && R_IDX_UNGOLIANT < z_info->r_max) {
+        monster_race* u_ptr = &r_info[R_IDX_UNGOLIANT];
+        if (u_ptr && u_ptr->max_num == 0) {
+            log_trace("Varda Ungoliant quest: Ungoliant already dead, auto-completing quest");
+            complete_varda_ungoliant_quest(true);
+        }
+    }
+}
+
 static int count_active_curse_stacks(void)
 {
     int active = 0;
@@ -6200,6 +6270,8 @@ static u32b get_metarun_quest_flag(int quest_idx)
     if (streq(metarun_id, "METARUN_QUEST_OROME_DRAGONS")) return METARUN_QUEST_OROME_DRAGONS;
     if (streq(metarun_id, "METARUN_QUEST_OROME_GREAT_HUNT")) return METARUN_QUEST_OROME_GREAT_HUNT;
     if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
+    if (streq(metarun_id, "METARUN_QUEST_VARDA_SHADOW")) return METARUN_QUEST_VARDA_SHADOW;
+    if (streq(metarun_id, "METARUN_QUEST_VARDA_UNGOLIANT")) return METARUN_QUEST_VARDA_UNGOLIANT;
     if (streq(metarun_id, "METARUN_QUEST_TULKAS_ORCS")) return METARUN_QUEST_TULKAS_ORCS;
     if (streq(metarun_id, "METARUN_QUEST_TULKAS_MORGOTH")) return METARUN_QUEST_TULKAS_MORGOTH;
     
@@ -6999,6 +7071,10 @@ static cptr get_quest_reward_text(int quest_idx)
     }
     if (quest_idx == QUEST_ID_VARDA_SHADOW) {
         SDL_strlcpy(reward_buf, "Choose one radiant artefact and the Queen of the Stars blessing again (+1 light radius, Oath light power)", sizeof(reward_buf));
+        return reward_buf;
+    }
+    if (quest_idx == QUEST_ID_VARDA_UNGOLIANT) {
+        SDL_strlcpy(reward_buf, "Every new run begins with your choice of one of three artefacts", sizeof(reward_buf));
         return reward_buf;
     }
     if (quest_idx == QUEST_ID_MANDOS_TRAITOR) {
@@ -7942,6 +8018,44 @@ void do_cmd_quest_status(void)
                 break;
             default:
                 Term_putstr(col + 2, row++, -1, TERM_SLATE, "Unknown status");
+                break;
+        }
+        row++;
+    }
+
+    byte varda_ungol_state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+    int varda_ungol_completed = metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT);
+    if (varda_ungol_state != QUEST_STATE_NOT_STARTED || varda_ungol_completed > 0) {
+        any_quests = true;
+        cptr quest_title = get_quest_title(QUEST_ID_VARDA_UNGOLIANT);
+        cptr quest_challenge = get_quest_challenge(QUEST_ID_VARDA_UNGOLIANT);
+        if (!quest_title) quest_title = "Varda's Ungoliant Quest";
+        if (!quest_challenge) quest_challenge = "Hunt Ungoliant, the Gloomweaver";
+        int cap = quest_completion_cap(QUEST_ID_VARDA_UNGOLIANT);
+        bool lineage_complete = (cap > 0 && varda_ungol_completed >= cap);
+
+        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
+
+        switch (varda_ungol_state) {
+            case QUEST_STATE_REWARDED:
+                Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed by this character");
+                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_VARDA_UNGOLIANT));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                break;
+            case QUEST_STATE_SUCCESS:
+            case QUEST_STATE_ACTIVE:
+            case QUEST_STATE_GIVER_PRESENT:
+            default:
+                if (lineage_complete && varda_ungol_state != QUEST_STATE_REWARDED) {
+                    Term_putstr(col + 2, row++, -1, TERM_L_GREEN, "Completed earlier in this metarun");
+                    strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_VARDA_UNGOLIANT));
+                    display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
+                    break;
+                }
+                Term_putstr(col + 2, row++, -1, TERM_WHITE, "Active - Hunt Ungoliant");
+                display_wrapped_text(col + 2, &row, quest_challenge, TERM_SLATE, wid);
+                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA_UNGOLIANT));
+                display_wrapped_text(col + 2, &row, buf, TERM_SLATE, wid);
                 break;
         }
         row++;
@@ -9263,6 +9377,10 @@ void check_varda_quest_completion(int r_idx)
         p_ptr->quest_reserved[0] = 1;
         msg_print("Belegwath falls. The Shadow Bastion shatters under the returning light!");
         try_place_varda_near_player(true);
+    }
+
+    if (varda_third_state() == QUEST_STATE_ACTIVE && r_idx == R_IDX_UNGOLIANT) {
+        complete_varda_ungoliant_quest(false);
     }
 }
 

@@ -615,28 +615,27 @@ static void give_start_items(const start_item *list)
     }
 }
 
-static void grant_starting_artifact(void)
+static int collect_starting_artifacts(int* candidates, int max_candidates, int level_cap)
 {
-    int candidates[512];
-    int count = 0;
+    if (!candidates || max_candidates <= 0 || !z_info) return 0;
 
-    for (int i = 1; i < z_info->art_max && count < (int)N_ELEMENTS(candidates); i++) {
+    int count = 0;
+    for (int i = 1; i < z_info->art_max && count < max_candidates; i++) {
         artefact_type *a_ptr = &a_info[i];
         if (!a_ptr->name[0]) continue;
         if (a_ptr->cur_num > 0) continue;
-        if (a_ptr->level > 10) continue;
+        if (a_ptr->level > level_cap) continue;
         if (valar_reserved_artifacts && valar_reserved_artifacts[i]) continue;
         candidates[count++] = i;
     }
+    return count;
+}
 
-    if (count == 0) {
-        log_info("No early artefacts available for starting blessing.");
-        return;
-    }
+static void award_starting_artifact(int art_idx)
+{
+    if (!z_info || art_idx <= 0 || art_idx >= z_info->art_max) return;
 
-    int art_idx = candidates[rand_int(count)];
     artefact_type *a_ptr = &a_info[art_idx];
-
     object_type object_type_body;
     object_type *o_ptr = &object_type_body;
     object_prep(o_ptr, lookup_kind(a_ptr->tval, a_ptr->sval));
@@ -649,6 +648,128 @@ static void grant_starting_artifact(void)
     if (valar_reserved_artifacts) valar_reserved_artifacts[art_idx] = true;
 
     log_info("Starting artefact granted: %s (idx=%d)", a_ptr->name, art_idx);
+}
+
+static void grant_starting_artifact(void)
+{
+    int candidates[512];
+    int count = collect_starting_artifacts(candidates, (int)N_ELEMENTS(candidates), 10);
+
+    if (count == 0) {
+        log_info("No early artefacts available for starting blessing.");
+        return;
+    }
+
+    int art_idx = candidates[rand_int(count)];
+    award_starting_artifact(art_idx);
+}
+
+static void describe_start_artifact_choice(int a_idx, char* buf, size_t buf_len)
+{
+    artefact_type* a_ptr = &a_info[a_idx];
+    object_type temp_obj;
+    object_wipe(&temp_obj);
+
+    s16b k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
+    if (k_idx > 0) {
+        object_prep(&temp_obj, k_idx);
+        temp_obj.name1 = a_idx;
+        temp_obj.ident |= IDENT_KNOWN;
+        object_desc(buf, buf_len, &temp_obj, true, 0);
+    } else if (a_ptr->name[0] != '\0') {
+        SDL_strlcpy(buf, a_ptr->name, buf_len);
+    } else {
+        SDL_strlcpy(buf, "an artefact", buf_len);
+    }
+}
+
+static int prompt_start_artifact_choice(const int* choices, int choice_count)
+{
+    if (!choices || choice_count <= 0) return 0;
+
+    int selection = 0;
+    int chosen_idx = 0;
+
+    int wid, hgt;
+    Term_get_size(&wid, &hgt);
+
+    screen_save();
+    while (true) {
+        Term_clear();
+
+        int row = 1;
+        cptr title = "Starlit Heirlooms";
+        Term_putstr((wid - (int)strlen(title)) / 2, row, -1, TERM_L_BLUE, title);
+        row += 2;
+
+        Term_putstr(2, row++, -1, TERM_WHITE, "Varda lays out relics for your line. Choose one to begin this run.");
+        row++;
+
+        char desc[140];
+        for (int i = 0; i < choice_count && row < hgt - 2; i++) {
+            describe_start_artifact_choice(choices[i], desc, sizeof(desc));
+            byte attr = (i == selection) ? TERM_YELLOW : TERM_L_WHITE;
+            char marker = (i == selection) ? '>' : ' ';
+            char line_buf[160];
+            strnfmt(line_buf, sizeof(line_buf), "%c %c) %s", marker, 'a' + i, desc);
+            Term_putstr(2, row++, -1, attr, line_buf);
+        }
+
+        Term_putstr(2, hgt - 2, -1, TERM_L_DARK, "Arrows/+/- move   Enter/Space choose   Letter picks   ESC skips");
+        Term_fresh();
+
+        char key = inkey();
+        if (key == ESCAPE) break;
+        else if (key == '\r' || key == '\n' || key == ' ' || key == '6') {
+            chosen_idx = choices[selection];
+            break;
+        } else if (key == '8' || key == 'k' || key == '-') {
+            selection = (selection + choice_count - 1) % choice_count;
+        } else if (key == '2' || key == 'j' || key == '+') {
+            selection = (selection + 1) % choice_count;
+        } else if (key >= 'a' && key < 'a' + choice_count) {
+            chosen_idx = choices[key - 'a'];
+            break;
+        } else if (key >= 'A' && key < 'A' + choice_count) {
+            chosen_idx = choices[key - 'A'];
+            break;
+        }
+    }
+    screen_load();
+    return chosen_idx;
+}
+
+static void maybe_offer_varda_starting_artifact(void)
+{
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT) <= 0) return;
+
+    int candidates[512];
+    int candidate_count = collect_starting_artifacts(candidates, (int)N_ELEMENTS(candidates), 15);
+    if (candidate_count <= 0) {
+        log_info("Ungoliant reward: no eligible starting artefacts available.");
+        return;
+    }
+
+    /* Shuffle candidate list */
+    for (int i = candidate_count - 1; i > 0; i--) {
+        int swap_idx = rand_int(i + 1);
+        int tmp = candidates[i];
+        candidates[i] = candidates[swap_idx];
+        candidates[swap_idx] = tmp;
+    }
+
+    int choice_count = MIN(3, candidate_count);
+    int choices[3];
+    for (int i = 0; i < choice_count; i++) {
+        choices[i] = candidates[i];
+    }
+
+    int selected = prompt_start_artifact_choice(choices, choice_count);
+    if (selected > 0) {
+        award_starting_artifact(selected);
+    } else {
+        msg_print("The heirlooms remain for another beginning.");
+    }
 }
 
 static void player_outfit(void)
@@ -674,6 +795,8 @@ static void player_outfit(void)
     give_start_items(rp_ptr->start_items);   /* race first  */
     log_debug("Giving starting items for character: %s", c_name + current_character_profile->name);
     give_start_items(current_character_profile->start_items);   /* character kit */
+
+    maybe_offer_varda_starting_artifact();
 
     if (metarun_has_major_blessing_effect(METARUN_MAJOR_EFFECT_START_ARTIFACT)) {
         grant_starting_artifact();
@@ -2878,7 +3001,3 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
-
-
-

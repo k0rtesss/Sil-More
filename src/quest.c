@@ -31,10 +31,11 @@ static const u32b metarun_known_quest_flags[] = {
     METARUN_QUEST_NIENA_PACIFIST,
     METARUN_QUEST_TULKAS_ORCS,
     METARUN_QUEST_TULKAS_MORGOTH,
-    METARUN_QUEST_VARDA_SHADOW
+    METARUN_QUEST_VARDA_SHADOW,
+    METARUN_QUEST_VARDA_UNGOLIANT
 };
 
-#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA | METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST | METARUN_QUEST_TULKAS_ORCS | METARUN_QUEST_TULKAS_MORGOTH | METARUN_QUEST_VARDA_SHADOW)
+#define METARUN_KNOWN_QUEST_MASK (METARUN_QUEST_TULKAS | METARUN_QUEST_AULE | METARUN_QUEST_MANDOS | METARUN_QUEST_MANDOS_TRAITOR | METARUN_QUEST_MANDOS_BETRAYER | METARUN_QUEST_NIENA | METARUN_QUEST_OROME | METARUN_QUEST_OROME_DRAGONS | METARUN_QUEST_OROME_GREAT_HUNT | METARUN_QUEST_VARDA | METARUN_QUEST_NIENA_MORGOTH | METARUN_QUEST_NIENA_PACIFIST | METARUN_QUEST_TULKAS_ORCS | METARUN_QUEST_TULKAS_MORGOTH | METARUN_QUEST_VARDA_SHADOW | METARUN_QUEST_VARDA_UNGOLIANT)
 
 static int quest_slot_from_flag(u32b quest_flag)
 {
@@ -62,6 +63,7 @@ static int quest_id_from_slot(int slot)
         case 12: return QUEST_ID_TULKAS_ORCS;
         case 13: return QUEST_ID_TULKAS_MORGOTH;
         case 14: return QUEST_ID_VARDA_SHADOW;
+        case 15: return QUEST_ID_VARDA_UNGOLIANT;
         default: return 0;
     }
 }
@@ -138,6 +140,7 @@ u32b quest_metarun_flag(int quest_id)
         case QUEST_ID_TULKAS_ORCS: return METARUN_QUEST_TULKAS_ORCS;
         case QUEST_ID_TULKAS_MORGOTH: return METARUN_QUEST_TULKAS_MORGOTH;
         case QUEST_ID_VARDA_SHADOW: return METARUN_QUEST_VARDA_SHADOW;
+        case QUEST_ID_VARDA_UNGOLIANT: return METARUN_QUEST_VARDA_UNGOLIANT;
         default: return 0;
     }
 }
@@ -425,6 +428,12 @@ void metarun_check_and_update_quests(void)
         log_trace("Metarun: Marking Varda quest as completed (rewarded)");
         metarun_mark_quest_completed(METARUN_QUEST_VARDA);
     }
+    byte varda_ungoliant_state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+    if (varda_ungoliant_state == QUEST_STATE_REWARDED &&
+        !quest_completion_recorded_for_run(METARUN_QUEST_VARDA_UNGOLIANT)) {
+        log_trace("Metarun: Marking Varda Ungoliant quest as completed (rewarded)");
+        metarun_mark_quest_completed(METARUN_QUEST_VARDA_UNGOLIANT);
+    }
 }
 
 void metarun_restore_quest_states(void)
@@ -566,12 +575,19 @@ void metarun_restore_quest_states(void)
         }
         mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA);
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT) > 0) {
+        if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) < QUEST_STATE_REWARDED) {
+            quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_REWARDED);
+            log_trace("Metarun restore: Varda Ungoliant quest set to REWARDED (%d)", QUEST_STATE_REWARDED);
+        }
+        mark_quest_completion_recorded_for_run(METARUN_QUEST_VARDA_UNGOLIANT);
+    }
     
-    log_trace("Metarun restore: Final quest states - Tulkas: %d (orcs:%d, morgoth:%d), Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d (2:%d,3:%d), Orome: %d (dragons:%d, hunt:%d), Varda: %d",
+    log_trace("Metarun restore: Final quest states - Tulkas: %d (orcs:%d, morgoth:%d), Aule: %d, Mandos: %d (2:%d,3:%d), Niena: %d (2:%d,3:%d), Orome: %d (dragons:%d, hunt:%d), Varda: %d (shadow:%d, ungoliant:%d)",
               p_ptr->tulkas_quest, quest_get_state(QUEST_ID_TULKAS_ORCS), quest_get_state(QUEST_ID_TULKAS_MORGOTH), p_ptr->aule_quest, p_ptr->mandos_quest,
               quest_get_state(QUEST_ID_MANDOS_TRAITOR), quest_get_state(QUEST_ID_MANDOS_BETRAYER),
               p_ptr->niena_quest, quest_get_state(QUEST_ID_NIENA_MORGOTH), quest_get_state(QUEST_ID_NIENA_PACIFIST),
               p_ptr->orome_quest,
               quest_get_state(QUEST_ID_OROME_DRAGONS), quest_get_state(QUEST_ID_OROME_GREAT_HUNT),
-              p_ptr->varda_quest);
+              p_ptr->varda_quest, quest_get_state(QUEST_ID_VARDA_SHADOW), quest_get_state(QUEST_ID_VARDA_UNGOLIANT));
 }

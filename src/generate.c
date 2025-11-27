@@ -473,6 +473,8 @@ static byte* get_quest_state_ptr(u32b var_name_offset) {
         return &p_ptr->vala_quest_stage3[VALA_MANDOS - 1];
     } else if (SDL_strcasecmp(actual_name, "varda_second_quest") == 0) {
         return &p_ptr->vala_quest_stage2[VALA_VARDA - 1];
+    } else if (SDL_strcasecmp(actual_name, "varda_third_quest") == 0) {
+        return &p_ptr->vala_quest_stage3[VALA_VARDA - 1];
     } else if (SDL_strcasecmp(actual_name, "niena_quest") == 0) {
         return &p_ptr->niena_quest;
     } else if (SDL_strcasecmp(actual_name, "niena_second_quest") == 0) {
@@ -522,6 +524,8 @@ static int get_metarun_quest_id(u32b id_name_offset) {
         return METARUN_QUEST_VARDA;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA_SHADOW") == 0) {
         return METARUN_QUEST_VARDA_SHADOW;
+    } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_VARDA_UNGOLIANT") == 0) {
+        return METARUN_QUEST_VARDA_UNGOLIANT;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_NIENA_PACIFIST") == 0) {
         return METARUN_QUEST_NIENA_PACIFIST;
     } else if (SDL_strcasecmp(actual_id, "METARUN_QUEST_TULKAS_ORCS") == 0) {

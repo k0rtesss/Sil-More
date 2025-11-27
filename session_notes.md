@@ -43,3 +43,5 @@
 - Introduced torchlight challenge (torches-only lights) unlocked by completing the shadow quest: birth/adult options, metarun flag, completion messaging, object generation filter to torches/mallorn only (artefact lights allowed), and smithing menu guard against crafting lights.
 - Queen of the Stars can be purchased for 5000 XP after completing the torchlight challenge; ability UI shows unlock/cost and is visible when unlocked, special menu now appears for purchase-only unlocks.
 - Build: `cmake --build build` succeeds (existing warnings about unused params/initializer sizing in tables.c remain).
+- Added third Varda quest “Gloomweaver's Doom” (Q:16) targeting Ungoliant with global state in vala_quest_stage3, new metarun flag/quest ID mapping, save/load/quest.txt wiring, quest UI, and auto-completion when Ungoliant is already dead.
+- Added metarun reward flow: runs after completing the Ungoliant quest start with a 1-of-3 early artefact choice (birth menu, shared start-artifact helpers, level cap 15), reusing reserved artefact tracking; quest completion now marks metarun flag and informs future-run reward.

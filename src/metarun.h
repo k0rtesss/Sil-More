@@ -41,6 +41,7 @@
 #define METARUN_QUEST_TULKAS_ORCS (1UL << 12) /* Tulkas second quest (orc stronghold) */
 #define METARUN_QUEST_TULKAS_MORGOTH (1UL << 13) /* Tulkas third quest (wound Morgoth) */
 #define METARUN_QUEST_VARDA_SHADOW (1UL << 14) /* Varda second quest (Shadow Bastion) */
+#define METARUN_QUEST_VARDA_UNGOLIANT (1UL << 15) /* Varda third quest (Ungoliant hunt) */
 #define METARUN_QUEST_SLOT_MAX 24           /* Max quest slots tracked in metarun */
 #define METARUN_QUEST_COMPLETION_CAP 7      /* Max times a quest counts per metarun */
 /* Additional quests can be added as (1UL << 5), (1UL << 6), etc.   */

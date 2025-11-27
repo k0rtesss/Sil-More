@@ -3718,6 +3718,7 @@ typedef struct quest_mapping {
 #define QUEST_ID_TULKAS_ORCS 13  /* Tulkas second quest - Orc stronghold */
 #define QUEST_ID_TULKAS_MORGOTH 14 /* Tulkas third quest - Wound Morgoth */
 #define QUEST_ID_VARDA_SHADOW 15 /* Varda second quest - Shadow Bastion */
+#define QUEST_ID_VARDA_UNGOLIANT 16 /* Varda third quest - Ungoliant hunt */
 #define OROME_GREAT_HUNT_TARGET_COUNT 6
 #define OROME_GREAT_HUNT_TARGET_MASK 0x3F
 
@@ -3746,7 +3747,8 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" },
     { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" },
     { QUEST_ID_TULKAS_MORGOTH, "Tulkas, Black Foe's Scourge" },
-    { QUEST_ID_VARDA_SHADOW, "Varda, Shadow's Bastion" }
+    { QUEST_ID_VARDA_SHADOW, "Varda, Shadow's Bastion" },
+    { QUEST_ID_VARDA_UNGOLIANT, "Varda, Gloomweaver's Doom" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
