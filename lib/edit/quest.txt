@@ -384,3 +384,22 @@ I:"Go there and end him. Break his darkness and the stars will answer you with r
 W:The Shadow Bastion falls silent as Belegwath is unmade. Varda's voice is clear as dawn.
 W:"You have broken another bastion of darkness. Choose your radiant gift once more, and carry the Queen of the Stars' blessing in your light."
 
+# Quest of Varda, Gloomweaver's Doom
+Q:16:Varda, Gloomweaver's Doom
+Z:Varda
+J:3
+T:The Star-kindler commands you to end Ungoliant's unlight
+C:Seek out and slay Ungoliant, the Gloomweaver, ending her unlight forever
+O:6
+F:GLOBAL
+L:1
+Y:0
+R:varda_third_quest
+M:METARUN_QUEST_VARDA_UNGOLIANT
+S:0:0:0:0
+I:Starlight gathers once more, sharper than before. Varda's gaze fixes upon deeper darkness.
+I:"Ungoliant still drinks the light of the stars. Hunt her. When she is unmade, your line will never enter the dark unarmed."
+I:"Each new telling shall begin with a relic of your choosing, drawn from light reclaimed."
+W:Ungoliant's unlight gutters and dies, starlight flooding the void she left. Varda's voice is a clear, distant bell.
+W:"Her hunger is ended. Henceforth, every new venture of your line will begin with a relic chosen under starlight."
+W:"Carry it well, and remember: the Queen of Stars sees the first steps as surely as the last."
