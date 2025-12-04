@@ -11753,31 +11753,6 @@ static bool cave_gen(void)
                     log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
                 }
                 
-                /* Try to place a quest vault */
-                if (quest_vault_roll >= 8)
-                {
-                    if (place_quest_vault())
-                    {
-                        log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
-                    }
-                    else
-                    {
-                        log_trace("Quest vault: Failed to place quest vault (place_quest_vault returned false)");
-                    }
-                }
-                else
-                {
-                    log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
-                }
-                
-                if (quest_vault_placed)
-                {
-                    log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
-                }
-                else
-                {
-                    log_trace("Quest vault: No quest vault placed this level");
-                }
             }
         }
         else if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE)
@@ -12466,6 +12441,8 @@ static bool cave_gen(void)
     gen_log_flush();
 
     return (true);
+}
+
 }
 
 /*
