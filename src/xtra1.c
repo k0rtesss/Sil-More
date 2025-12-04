@@ -3106,8 +3106,6 @@ static void calc_bonuses(void)
 
         // add the abilities
         int ability_count = o_ptr->abilities;
-        if (throwing_quiver && ability_count > 1)
-            ability_count = 1;
         for (j = 0; j < ability_count; j++)
         {
             p_ptr->have_ability[o_ptr->skilltype[j]][o_ptr->abilitynum[j]]
@@ -3503,17 +3501,20 @@ static void calc_bonuses(void)
         p_ptr->skill_misc_mod[S_STL] -= 3;
     }
 
-    // sprinting speed the player up
-    if (sprinting())
-    {
-        p_ptr->pspeed += 1;
-    }
-
-    /* Speed must lie between 1 and 3 */
+    /* Speed must lie between 1 and 4 */
     if (p_ptr->pspeed < 1)
         p_ptr->pspeed = 1;
-    if (p_ptr->pspeed > 3)
-        p_ptr->pspeed = 3;
+    else if (p_ptr->pspeed > 4)
+        p_ptr->pspeed = 4;
+
+    /* Sprinting bonus: only applies if speed < 3, so it caps at 3 */
+    if (sprinting())
+    {
+        if (p_ptr->pspeed < 3)
+        {
+            p_ptr->pspeed += 1;
+        }
+    }
 
     // Increase food consumption if actively regenerating
     if (p_ptr->regenerate

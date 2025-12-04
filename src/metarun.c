@@ -35,6 +35,10 @@
 /*  metarun.c : quick-and-dirty logger                             */
 /* --------------------------------------------------------------- */
 
+/* Enable this to delete old save/score files on fresh metarun start.
+ * Currently disabled to prevent accidental data loss during debugging. */
+/* #define METARUN_CLEANUP_OLD_FILES */
+
 /* =========================  constants  ========================= */
 #define CURSE_MENU_LINES  3
 #define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
@@ -612,20 +616,18 @@ static void update_blessing_ledger(metarun *m)
     m->fallen_score_pool = remainder;
 }
 
-/* Keep blessing values consistent and non-negative after ledger recompute */
+/* Rebuild blessing_points from fallen_score_total.
+ * Does NOT clamp blessing_points_spent - that value must be preserved from save.
+ * Clamping of spent vs earned happens only at spend-time, not at load-time. */
 void metarun_sanitize_blessing_economy(metarun *m)
 {
     if (!m) return;
 
-    /* Rebuild derived fields from totals */
+    /* Rebuild blessing_points from fallen_score_total */
     update_blessing_ledger(m);
 
-    if (m->blessing_points < 0) m->blessing_points = 0;
-
-    u16b earned = (u16b)m->blessing_points;
-    if (m->blessing_points_spent > earned) {
-        m->blessing_points_spent = earned;
-    }
+    /* blessing_points CAN be negative - that's valid
+     * blessing_points_spent is preserved exactly as loaded */
 }
 
 void metarun_clear_blessing_runtime_fields(metarun *m)
@@ -1133,6 +1135,10 @@ static void adjust_blessing_threshold_menu(void);
  */
 void cleanup_old_game_files(void)
 {
+#ifndef METARUN_CLEANUP_OLD_FILES
+    log_info("*** FRESH STARTUP CLEANUP DISABLED (METARUN_CLEANUP_OLD_FILES not defined) ***");
+    return;
+#else
     log_info("*** FRESH STARTUP CLEANUP STARTING ***");
     
     /* Use the correct save directory - ANGBAND_DIR_SAVE points to lib/save */
@@ -1335,6 +1341,7 @@ void cleanup_old_game_files(void)
     }
     
     log_info("*** FRESH STARTUP CLEANUP COMPLETED ***");
+#endif /* METARUN_CLEANUP_OLD_FILES */
 }
 
 errr load_metaruns(bool create_if_missing)
@@ -1399,7 +1406,7 @@ errr load_metaruns(bool create_if_missing)
     else log_info("Loading existing metarun file: %s", fn);
     if (!fd) return -1;
 
-    /* Versioned file only */
+    /* All metarun files are versioned (v0.9.0+) */
     Sint64 file_size_64 = sdl_size(fd);
     int file_size = (file_size_64 > 0) ? (int)file_size_64 : 0;
     const char *recovery_reason = NULL;

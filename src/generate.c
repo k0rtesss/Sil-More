@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "gen-log.h"
 #include "metarun.h"
 #include <SDL3/SDL.h>
 /* Ensure C library prototypes are visible for tools */
@@ -1213,6 +1214,9 @@ static void apply_pending_quest_states(void) {
 
 bool allow_uniques;
 
+/* Debug generation logging - set to 1 to show generation info in game messages */
+#define DEBUG_GENERATION_LOG 1
+
 /*
  * Maximal number of room types
  */
@@ -1334,7 +1338,8 @@ typedef enum quadrant_mode {
     QUAD_MODE_CAVEY,
     QUAD_MODE_RUINED,
     QUAD_MODE_LABYRINTH,  /* Twisting corridors and small chambers */
-    QUAD_MODE_CHASM       /* Large open areas with pillars and bridges */
+    QUAD_MODE_CHASM,      /* Large open areas with pillars and bridges */
+    QUAD_MODE_BIG_CAVE    /* Single large cavern filling most of the partition */
 } quadrant_mode_t;
 
 typedef enum density_level {
@@ -1342,6 +1347,110 @@ typedef enum density_level {
     DENSITY_NORMAL,       /* Standard amount */
     DENSITY_DENSE         /* More rooms/carvings */
 } density_level_t;
+
+/* Persist the chosen partition grid for later passes (connectivity, stair guarantees) */
+static int current_partition_rows = 0;
+static int current_partition_cols = 0;
+static int current_partition_count = 0;
+
+/* Track labyrinth partition count for boosting monsters and stairs in mazes */
+static int current_labyrinth_partitions = 0;
+
+/* Morgoth throne room placement state for the current generation attempt */
+static bool morgoth_level_active = false;
+static bool morgoth_partition_reserved = false;
+static int morgoth_partition_index = -1;
+static rectangle morgoth_partition_bounds;
+static int morgoth_vault_center_y = 0;
+static int morgoth_vault_center_x = 0;
+
+static bool morgoth_region_active(void)
+{
+    return morgoth_level_active && morgoth_partition_reserved;
+}
+
+static bool coord_in_morgoth_region(int y, int x, int margin)
+{
+    if (!morgoth_region_active())
+        return false;
+
+    return (y >= morgoth_partition_bounds.y1 - margin)
+        && (y <= morgoth_partition_bounds.y2 + margin)
+        && (x >= morgoth_partition_bounds.x1 - margin)
+        && (x <= morgoth_partition_bounds.x2 + margin);
+}
+
+/* Axis-aligned segment vs. Morgoth region intersection */
+static bool morgoth_segment_blocked(int y1, int x1, int y2, int x2, int margin)
+{
+    if (!morgoth_region_active())
+        return false;
+
+    /* Quick reject if both points are completely outside in same half-plane */
+    if (y1 < morgoth_partition_bounds.y1 - margin && y2 < morgoth_partition_bounds.y1 - margin)
+        return false;
+    if (y1 > morgoth_partition_bounds.y2 + margin && y2 > morgoth_partition_bounds.y2 + margin)
+        return false;
+    if (x1 < morgoth_partition_bounds.x1 - margin && x2 < morgoth_partition_bounds.x1 - margin)
+        return false;
+    if (x1 > morgoth_partition_bounds.x2 + margin && x2 > morgoth_partition_bounds.x2 + margin)
+        return false;
+
+    /* Horizontal segment */
+    if (y1 == y2)
+    {
+        int y = y1;
+        int xa = MIN(x1, x2);
+        int xb = MAX(x1, x2);
+        int rx1 = morgoth_partition_bounds.x1 - margin;
+        int rx2 = morgoth_partition_bounds.x2 + margin;
+        int ry1 = morgoth_partition_bounds.y1 - margin;
+        int ry2 = morgoth_partition_bounds.y2 + margin;
+        if (y >= ry1 && y <= ry2 && xb >= rx1 && xa <= rx2)
+            return true;
+    }
+
+    /* Vertical segment */
+    if (x1 == x2)
+    {
+        int x = x1;
+        int ya = MIN(y1, y2);
+        int yb = MAX(y1, y2);
+        int rx1 = morgoth_partition_bounds.x1 - margin;
+        int rx2 = morgoth_partition_bounds.x2 + margin;
+        int ry1 = morgoth_partition_bounds.y1 - margin;
+        int ry2 = morgoth_partition_bounds.y2 + margin;
+        if (x >= rx1 && x <= rx2 && yb >= ry1 && ya <= ry2)
+            return true;
+    }
+
+    return false;
+}
+
+/* After placing Morgoth's vault, seal the rest of the reserved partition with permanent walls */
+static void seal_morgoth_partition(void)
+{
+    if (!morgoth_region_active())
+        return;
+
+    int y1 = morgoth_partition_bounds.y1;
+    int y2 = morgoth_partition_bounds.y2;
+    int x1 = morgoth_partition_bounds.x1;
+    int x2 = morgoth_partition_bounds.x2;
+
+    for (int y = y1; y <= y2; ++y)
+    {
+        for (int x = x1; x <= x2; ++x)
+        {
+            /* Preserve the vault area and entry tunnels we flagged as CAVE_G_VAULT */
+            if (cave_info[y][x] & CAVE_G_VAULT)
+                continue;
+
+            cave_set_feat(y, x, FEAT_WALL_PERM);
+            cave_info[y][x] &= ~(CAVE_ROOM | CAVE_ICKY);
+        }
+    }
+}
 
 static bool room_kind_is_vault(byte kind)
 {
@@ -1362,6 +1471,191 @@ static bool area_is_basic_granite(int y1, int x1, int y2, int x2)
         }
     }
     return true;
+}
+
+static void remember_partition_grid(int rows, int cols, int count)
+{
+    current_partition_rows = rows;
+    current_partition_cols = cols;
+    current_partition_count = count;
+}
+
+static void reset_morgoth_layout_state(bool active)
+{
+    morgoth_level_active = active;
+    morgoth_partition_reserved = false;
+    morgoth_partition_index = -1;
+    morgoth_partition_bounds.y1 = 0;
+    morgoth_partition_bounds.y2 = 0;
+    morgoth_partition_bounds.x1 = 0;
+    morgoth_partition_bounds.x2 = 0;
+    morgoth_vault_center_y = 0;
+    morgoth_vault_center_x = 0;
+}
+
+static void fallback_partition_grid_from_blocks(int blocks, int *rows, int *cols)
+{
+    /* Mirror the choices in apply_quadrant_generation_modes but without randomness */
+    if (blocks <= 8) {
+        *rows = 3; *cols = 2;
+    } else if (blocks <= 10) {
+        *rows = 3; *cols = 3;
+    } else if (blocks == 11) {
+        *rows = 4; *cols = 3;
+    } else if (blocks <= 13) {
+        *rows = 4; *cols = 4;
+    } else if (blocks == 14) {
+        *rows = 5; *cols = 4;
+    } else {
+        *rows = 5; *cols = 5;
+    }
+}
+
+/* Quick scan to see if a region is already reserved/occupied heavily (quest vaults, prefab icky) */
+static bool area_is_reserved_or_dense(int y1, int y2, int x1, int x2, int *floor_pct_out, int *icky_pct_out)
+{
+    int tiles = 0, icky = 0, floors = 0;
+    for (int y = y1; y <= y2; ++y) {
+        for (int x = x1; x <= x2; ++x) {
+            if (!in_bounds_fully(y, x)) continue;
+            tiles++;
+            if (cave_info[y][x] & CAVE_ICKY) icky++;
+            if (cave_floor_bold(y, x)) floors++;
+        }
+    }
+    int floor_pct = (tiles > 0) ? (floors * 100) / tiles : 0;
+    int icky_pct = (tiles > 0) ? (icky * 100) / tiles : 0;
+    if (floor_pct_out) *floor_pct_out = floor_pct;
+    if (icky_pct_out) *icky_pct_out = icky_pct;
+
+    /* Only treat as reserved if the area is heavily occupied */
+    if (floor_pct >= 80) return true;       /* >80% carved already */
+    if (icky_pct >= 60) return true;        /* quest/vault dominates area */
+    return false;
+}
+
+/* Bounded placement helper used by partitions (prototype for early use) */
+static bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2);
+
+/* Partition helper: compute bounds for a given partition index */
+static bool compute_partition_bounds(int pi, int rows, int cols, int *y1, int *y2, int *x1, int *x2)
+{
+    if (rows <= 0 || cols <= 0)
+        return false;
+    int total = rows * cols;
+    if (pi < 0 || pi >= total)
+        return false;
+
+    int row = pi / cols;
+    int col = pi % cols;
+
+    int ly1 = (row * p_ptr->cur_map_hgt / rows);
+    int ly2 = ((row + 1) * p_ptr->cur_map_hgt / rows);
+    int lx1 = (col * p_ptr->cur_map_wid / cols);
+    int lx2 = ((col + 1) * p_ptr->cur_map_wid / cols);
+
+    if (ly1 < 1) ly1 = 1;
+    if (lx1 < 1) lx1 = 1;
+    if (ly2 >= p_ptr->cur_map_hgt - 1) ly2 = p_ptr->cur_map_hgt - 2;
+    if (lx2 >= p_ptr->cur_map_wid - 1) lx2 = p_ptr->cur_map_wid - 2;
+
+    *y1 = ly1;
+    *y2 = ly2;
+    *x1 = lx1;
+    *x2 = lx2;
+    return true;
+}
+
+/* Gentle scaling helper: add ~50% per size tier (caps explosive growth) */
+static int scaled_attempts(int base, int area_factor)
+{
+    if (area_factor <= 1) return base;
+    int extra = (base + 1) / 2;
+    return base + extra * (area_factor - 1);
+}
+
+/* Ensure modes with few exits expose boundary openings.
+ * FIXED: Only create openings on sides that border other partitions, not map edges.
+ * This prevents dead-end corridors at the map boundary. */
+static void ensure_partition_boundary_openings(int y1, int y2, int x1, int x2, int openings)
+{
+    /* Determine which sides border other partitions (not map edge) */
+    bool can_open_top = (y1 > 5);     /* Top side borders another partition */
+    bool can_open_bot = (y2 < p_ptr->cur_map_hgt - 5);  /* Bottom side borders another partition */
+    bool can_open_left = (x1 > 5);    /* Left side borders another partition */
+    bool can_open_right = (x2 < p_ptr->cur_map_wid - 5); /* Right side borders another partition */
+    
+    int valid_sides[4];
+    int valid_count = 0;
+    if (can_open_top) valid_sides[valid_count++] = 0;
+    if (can_open_bot) valid_sides[valid_count++] = 1;
+    if (can_open_left) valid_sides[valid_count++] = 2;
+    if (can_open_right) valid_sides[valid_count++] = 3;
+    
+    if (valid_count == 0)
+        return;  /* No valid sides to open (corner partition at map edge) */
+    
+    for (int i = 0; i < openings; ++i)
+    {
+        int side = valid_sides[rand_int(valid_count)];
+        int y = rand_range(y1 + 2, y2 - 2);
+        int x = rand_range(x1 + 2, x2 - 2);
+
+        switch (side)
+        {
+        case 0: y = y1; break;         /* top */
+        case 1: y = y2; break;         /* bottom */
+        case 2: x = x1; break;         /* left */
+        case 3: x = x2; break;         /* right */
+        }
+
+        if (in_bounds_fully(y, x) && cave_feat[y][x] != FEAT_WALL_PERM)
+        {
+            cave_set_feat(y, x, FEAT_FLOOR);
+        }
+    }
+}
+
+static quadrant_mode_t pick_weighted_mode(const int *weights, int count)
+{
+    int total = 0;
+    for (int i = 0; i < count; ++i)
+        total += MAX(0, weights[i]);
+    if (total <= 0)
+        return QUAD_MODE_ROOMY;
+    int roll = rand_int(total);
+    for (int i = 0; i < count; ++i) {
+        int w = MAX(0, weights[i]);
+        if (roll < w)
+            return (quadrant_mode_t)i;
+        roll -= w;
+    }
+    return QUAD_MODE_ROOMY;
+}
+
+/* Budget-aware placement helper with limited retries */
+static bool place_room_with_budget(int typ, int y1, int y2, int x1, int x2, int max_tries, int depth,
+    int *budget_t6, int *budget_t7, int *budget_t8, int *used_t6, int *used_t7, int *used_t8)
+{
+    int actual = typ;
+    (void)depth; /* unused after removing GV promotion */
+
+    if (actual == 8 && (!budget_t8 || *budget_t8 <= 0))
+        actual = (budget_t7 && *budget_t7 > 0) ? 7 : ((budget_t6 && *budget_t6 > 0) ? 6 : 2);
+    if (actual == 7 && budget_t7 && *budget_t7 <= 0)
+        actual = (budget_t6 && *budget_t6 > 0) ? 6 : 2;
+    if (actual == 6 && budget_t6 && *budget_t6 <= 0)
+        actual = 2;  /* downgrade to simple cross room if out of budget */
+
+    for (int attempt = 0; attempt < max_tries; ++attempt) {
+        if (room_build_in_bounds(actual, y1, y2, x1, x2)) {
+            if (actual == 6 && budget_t6 && *budget_t6 > 0) { (*budget_t6)--; if (used_t6) (*used_t6)++; }
+            else if (actual == 7 && budget_t7 && *budget_t7 > 0) { (*budget_t7)--; if (used_t7) (*used_t7)++; }
+            else if (actual == 8 && budget_t8 && *budget_t8 > 0) { (*budget_t8)--; if (used_t8) (*used_t8)++; }
+            return true;
+        }
+    }
+    return false;
 }
 
 /* Decode a style index from the color encoding at (y,x); returns -1 if none */
@@ -1437,6 +1731,17 @@ static bool build_type1(int y0, int x0);
 static void seed_ca_blob_anchors(void);
 static void seed_bsp_slice_anchors(void);
 static void apply_quadrant_generation_modes(void);
+static void ensure_partition_connectivity(void);
+static void repair_all_outer_walls(void);
+static bool carve_chasm_with_bridges(int y_min, int y_max, int x_min, int x_max);
+static int dungeon_pieces(void);
+static void clamp_to_interior(int *y, int *x, int margin);
+static int partition_index_from_point(int y, int x, int rows, int cols);
+static int room_connection_degree(int room_idx);
+static bool connect_rooms_with_logging(int r1, int r2, const char *tag, bool allow_desperate);
+static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate);
+static bool compute_partition_bounds(int pi, int rows, int cols, int *y1, int *y2, int *x1, int *x2);
+static void connect_partition_hubs(void);
 
 /* Attempt to place a prefab vault/room as a generation anchor */
 static bool place_prefab_anchor_of_type(int typ, bool require_neighbor)
@@ -1533,24 +1838,27 @@ static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2)
             if (feat < FEAT_WALL_EXTRA || feat > FEAT_WALL_SOLID)
                 continue;
             
-            /* Check if adjacent to at least one floor tile */
-            bool adj_floor = false;
-            for (int dy = -1; dy <= 1 && !adj_floor; ++dy)
+            /* Check if adjacent to at least one cave floor tile (CAVE_ROOM) */
+            bool adj_cave_floor = false;
+            for (int dy = -1; dy <= 1 && !adj_cave_floor; ++dy)
             {
-                for (int dx = -1; dx <= 1 && !adj_floor; ++dx)
+                for (int dx = -1; dx <= 1 && !adj_cave_floor; ++dx)
                 {
                     if (dy == 0 && dx == 0)
                         continue;
                     int ny = gy + dy, nx = gx + dx;
-                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx))
-                        adj_floor = true;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        adj_cave_floor = true;
                 }
             }
             
-            /* If adjacent to floor, ~30% chance to become quartz vein */
-            if (adj_floor && (rand_int(100) < 30))
+            /* If adjacent to cave floor, ~30% chance to become quartz vein */
+            if (adj_cave_floor && (rand_int(100) < 30))
             {
                 cave_set_feat(gy, gx, FEAT_QUARTZ);
+                /* Mark as part of a room so tunneling can detect cave quartz */
+                cave_info[gy][gx] |= CAVE_ROOM;
                 vein_count++;
             }
         }
@@ -1560,6 +1868,60 @@ static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2)
     {
         log_trace("scatter_quartz_veins: placed %d veins in bounds (%d,%d)-(%d,%d)",
                   vein_count, y1, x1, y2, x2);
+    }
+}
+
+/* Scatter mithril pieces in cave areas.
+ * Chance increases with depth. Only places items on empty floor tiles. */
+static void scatter_cave_gems_in_bounds(int y1, int y2, int x1, int x2, bool is_big_cave)
+{
+    int depth = p_ptr->depth;
+    int mithril_placed = 0;
+    
+    /* Mithril only appears at depth 12+ */
+    if (depth < 12) return;
+    
+    /* Only 1 mithril per cave area maximum */
+    int max_mithril = 1;
+    
+    /* Very low chance: 1% base + depth/20, capped at 3% */
+    /* This is checked once per cave area, not per tile */
+    int spawn_chance = 1 + (depth / 20);
+    if (spawn_chance > 3) spawn_chance = 3;
+    
+    /* Big caves have slightly better odds */
+    if (is_big_cave) spawn_chance += 1;
+    
+    /* Single roll to determine if this cave gets mithril */
+    if (rand_int(100) >= spawn_chance) return;
+    
+    /* Try to place the mithril on a random floor tile */
+    for (int attempt = 0; attempt < 50 && mithril_placed < max_mithril; ++attempt)
+    {
+        int gy = rand_range(y1, y2);
+        int gx = rand_range(x1, x2);
+        if (!in_bounds_fully(gy, gx)) continue;
+        if (!cave_floor_bold(gy, gx)) continue;
+        if (cave_o_idx[gy][gx] != 0) continue;  /* Already has object */
+        
+        /* Create mithril piece */
+        object_type object_type_body;
+        object_type *i_ptr = &object_type_body;
+        object_wipe(i_ptr);
+        
+        s16b k_idx = lookup_kind(TV_METAL, SV_METAL_MITHRIL);
+        if (k_idx > 0)
+        {
+            object_prep(i_ptr, k_idx);
+            drop_near(i_ptr, -1, gy, gx);
+            mithril_placed++;
+        }
+    }
+    
+    if (mithril_placed > 0)
+    {
+        log_trace("scatter_cave_mithril: placed %d mithril in bounds (%d,%d)-(%d,%d) depth=%d",
+                  mithril_placed, y1, x1, y2, x2, depth);
     }
 }
 
@@ -1745,6 +2107,38 @@ static bool carve_ca_blob_anchor(void)
     if (floor_count < 8)
         return false;
 
+    /* Set outer walls around floor tiles so tunnels can connect */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx))
+                continue;
+            if (cave_floor_bold(gy, gx))
+                continue;
+            /* Check if this wall borders any floor */
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0)
+                        continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                    {
+                        borders_floor = true;
+                    }
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+            }
+        }
+    }
+
     /* Pick a center on a floor tile */
     int cy = min_y, cx = min_x;
     for (int tries = 0; tries < 200; ++tries)
@@ -1774,6 +2168,8 @@ static bool carve_ca_blob_anchor(void)
     scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
 
     log_trace("CA blob anchor: carved floor_count=%d bounds=(%d,%d)-(%d,%d) center=(%d,%d)",
+        floor_count, min_y, min_x, max_y, max_x, cy, cx);
+    genlog_anchor("CA_BLOB: carved %d floor tiles at (%d,%d)-(%d,%d), center=(%d,%d)",
         floor_count, min_y, min_x, max_y, max_x, cy, cx);
     return true;
 }
@@ -1938,14 +2334,72 @@ static bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_m
         }
     }
 
+    /* Set outer walls around floor tiles so tunnels can connect */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx))
+                continue;
+            if (cave_floor_bold(gy, gx))
+                continue;
+            /* Check if this wall borders any floor */
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0)
+                        continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                    {
+                        borders_floor = true;
+                    }
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+            }
+        }
+    }
+
+    /* Pick center - prefer floor tile adjacent to outer wall for tunnel connectivity */
     int cy = min_y, cx = min_x;
-    for (int tries = 0; tries < 200; ++tries)
+    bool found_edge = false;
+    for (int tries = 0; tries < 200 && !found_edge; ++tries)
     {
         int ty = rand_range(min_y, max_y);
         int tx = rand_range(min_x, max_x);
-        if (cave_floor_bold(ty, tx))
+        if (!cave_floor_bold(ty, tx)) continue;
+        
+        for (int dy = -1; dy <= 1 && !found_edge; ++dy)
         {
-            cy = ty; cx = tx; break;
+            for (int dx = -1; dx <= 1 && !found_edge; ++dx)
+            {
+                if (dy == 0 && dx == 0) continue;
+                if (in_bounds_fully(ty + dy, tx + dx) && 
+                    cave_feat[ty + dy][tx + dx] == FEAT_WALL_OUTER)
+                {
+                    cy = ty; cx = tx;
+                    found_edge = true;
+                }
+            }
+        }
+    }
+    /* Fallback: any floor tile */
+    if (!found_edge)
+    {
+        for (int tries = 0; tries < 100; ++tries)
+        {
+            int ty = rand_range(min_y, max_y);
+            int tx = rand_range(min_x, max_x);
+            if (cave_floor_bold(ty, tx))
+            {
+                cy = ty; cx = tx; break;
+            }
         }
     }
 
@@ -1964,6 +2418,1141 @@ static bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_m
     scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
 
     log_trace("CA blob (bounded) anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) floors=%d", min_y, min_x, max_y, max_x, cy, cx, floor_count);
+    return true;
+}
+
+/* Carve a large cave filling most of the given bounds, using cellular automata */
+static bool carve_big_cave_bounds(int y_min, int y_max, int x_min, int x_max)
+{
+    if (dun->cent_n >= room_capacity_limit())
+    {
+        genlog_anchor("BIG_CAVE: rejected - room capacity limit reached");
+        return false;
+    }
+    
+    /* Big caves need substantial space */
+    int avail_h = y_max - y_min;
+    int avail_w = x_max - x_min;
+    if (avail_h < 15 || avail_w < 20)
+    {
+        genlog_anchor("BIG_CAVE: rejected - bounds too small (%d,%d)-(%d,%d), avail=%dx%d",
+                      y_min, x_min, y_max, x_max, avail_h, avail_w);
+        return false;
+    }
+    
+    /* Use larger margins to leave room for other features in partition */
+    int margin_y1 = rand_range(4, MAX(8, avail_h / 3));
+    int margin_y2 = rand_range(4, MAX(8, avail_h / 3));
+    int margin_x1 = rand_range(4, MAX(8, avail_w / 3));
+    int margin_x2 = rand_range(4, MAX(8, avail_w / 3));
+    int y1 = y_min + margin_y1;
+    int x1 = x_min + margin_x1;
+    int y2 = y_max - margin_y2;
+    int x2 = x_max - margin_x2;
+    int h = y2 - y1 + 1;
+    int w = x2 - x1 + 1;
+    
+    if (h < 10 || w < 12)
+    {
+        genlog_anchor("BIG_CAVE: rejected - after margins too small: h=%d w=%d",
+                      h, w);
+        return false;
+    }
+    
+    /* Check area is basic granite */
+    for (int y = y1 - 1; y <= y2 + 1; ++y)
+    {
+        for (int x = x1 - 1; x <= x2 + 1; ++x)
+        {
+            if (in_bounds_fully(y, x) && cave_floor_bold(y, x))
+            {
+                genlog_anchor("BIG_CAVE: rejected - floor already exists at (%d,%d) in bounds (%d,%d)-(%d,%d)",
+                              y, x, y1, x1, y2, x2);
+                return false;
+            }
+        }
+    }
+    
+    /* Limit grid size */
+    if (h > 50 || w > 60)
+    {
+        h = MIN(h, 50);
+        w = MIN(w, 60);
+        y2 = y1 + h - 1;
+        x2 = x1 + w - 1;
+    }
+    
+    /* Use multiple overlapping CA blobs to create one large organic cave */
+    /* This approach creates natural irregular shapes instead of rectangles */
+    int floor_count = 0;
+    int min_y = y2, max_y = y1, min_x = x2, max_x = x1;
+    
+    /* Number of blob centers based on area */
+    int num_centers = 3 + (h * w) / 200;
+    if (num_centers > 8) num_centers = 8;
+    
+    /* Generate random center points for blob nuclei */
+    int centers_y[8], centers_x[8];
+    for (int c = 0; c < num_centers; ++c)
+    {
+        centers_y[c] = rand_range(y1 + 2, y2 - 2);
+        centers_x[c] = rand_range(x1 + 2, x2 - 2);
+    }
+    
+    /* Carve floor by distance from nearest center with noise */
+    for (int gy = y1; gy <= y2; ++gy)
+    {
+        for (int gx = x1; gx <= x2; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            
+            /* Find distance to nearest center */
+            int min_dist = 9999;
+            for (int c = 0; c < num_centers; ++c)
+            {
+                int dy = ABS(gy - centers_y[c]);
+                int dx = ABS(gx - centers_x[c]);
+                int dist = dy + dx;  /* Manhattan distance */
+                if (dist < min_dist) min_dist = dist;
+            }
+            
+            /* Carve floor based on distance with randomness for organic edges */
+            int threshold = (h + w) / 4;  /* Base carve radius */
+            int noise = rand_int(threshold / 2);  /* Add randomness */
+            
+            if (min_dist < threshold - noise)
+            {
+                cave_set_feat(gy, gx, FEAT_FLOOR);
+                cave_info[gy][gx] |= CAVE_ROOM;
+                floor_count++;
+                if (gy < min_y) min_y = gy;
+                if (gy > max_y) max_y = gy;
+                if (gx < min_x) min_x = gx;
+                if (gx > max_x) max_x = gx;
+            }
+        }
+    }
+    
+    /* Smooth the edges with a CA pass */
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int gy = min_y; gy <= max_y; ++gy)
+        {
+            for (int gx = min_x; gx <= max_x; ++gx)
+            {
+                if (!in_bounds_fully(gy, gx)) continue;
+                if (cave_floor_bold(gy, gx)) continue;
+                
+                /* Count floor neighbors */
+                int adj = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if ((dy || dx) && in_bounds_fully(gy+dy, gx+dx) && cave_floor_bold(gy+dy, gx+dx))
+                            adj++;
+                
+                /* Fill in isolated wall cells surrounded by floor */
+                if (adj >= 6)
+                {
+                    cave_set_feat(gy, gx, FEAT_FLOOR);
+                    cave_info[gy][gx] |= CAVE_ROOM;
+                    floor_count++;
+                }
+            }
+        }
+    }
+    
+    /* Erode some edge floor tiles for more irregular shape */
+    for (int gy = min_y; gy <= max_y; ++gy)
+    {
+        for (int gx = min_x; gx <= max_x; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (!cave_floor_bold(gy, gx)) continue;
+            
+            /* Count wall neighbors */
+            int walls = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                    if ((dy || dx) && in_bounds_fully(gy+dy, gx+dx) && !cave_floor_bold(gy+dy, gx+dx))
+                        walls++;
+            
+            /* Erode edge tiles randomly */
+            if (walls >= 3 && one_in_(3))
+            {
+                cave_set_feat(gy, gx, FEAT_WALL_EXTRA);
+                cave_info[gy][gx] &= ~CAVE_ROOM;
+                floor_count--;
+            }
+        }
+    }
+    
+    /* Recalculate bounds after erosion */
+    min_y = y2; max_y = y1; min_x = x2; max_x = x1;
+    for (int gy = y1; gy <= y2; ++gy)
+    {
+        for (int gx = x1; gx <= x2; ++gx)
+        {
+            if (cave_floor_bold(gy, gx) && (cave_info[gy][gx] & CAVE_ROOM))
+            {
+                if (gy < min_y) min_y = gy;
+                if (gy > max_y) max_y = gy;
+                if (gx < min_x) min_x = gx;
+                if (gx > max_x) max_x = gx;
+            }
+        }
+    }
+    
+    if (floor_count < 40)
+        return false;
+    
+    /* Add some internal pillars for visual interest */
+    int pillar_count = floor_count / 60;
+    for (int p = 0; p < pillar_count; ++p)
+    {
+        for (int tries = 0; tries < 20; ++tries)
+        {
+            int py = rand_range(min_y + 2, max_y - 2);
+            int px = rand_range(min_x + 2, max_x - 2);
+            if (cave_floor_bold(py, px))
+            {
+                bool all_floor = true;
+                for (int dy = -1; dy <= 1 && all_floor; ++dy)
+                    for (int dx = -1; dx <= 1 && all_floor; ++dx)
+                        if (!cave_floor_bold(py + dy, px + dx))
+                            all_floor = false;
+                if (all_floor)
+                {
+                    cave_set_feat(py, px, FEAT_WALL_EXTRA);
+                    break;
+                }
+            }
+        }
+    }
+    
+    /* Set outer walls */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (cave_floor_bold(gy, gx)) continue;
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0) continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        borders_floor = true;
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+        }
+    }
+    
+    /* Pick center - prefer floor tile adjacent to outer wall for tunnel connectivity */
+    int cy = (min_y + max_y) / 2, cx = (min_x + max_x) / 2;
+    bool found_edge = false;
+    for (int tries = 0; tries < 200 && !found_edge; ++tries)
+    {
+        int ty = rand_range(min_y, max_y);
+        int tx = rand_range(min_x, max_x);
+        if (!cave_floor_bold(ty, tx)) continue;
+        
+        for (int dy = -1; dy <= 1 && !found_edge; ++dy)
+        {
+            for (int dx = -1; dx <= 1 && !found_edge; ++dx)
+            {
+                if (dy == 0 && dx == 0) continue;
+                if (in_bounds_fully(ty + dy, tx + dx) && 
+                    cave_feat[ty + dy][tx + dx] == FEAT_WALL_OUTER)
+                {
+                    cy = ty; cx = tx;
+                    found_edge = true;
+                }
+            }
+        }
+    }
+    /* Fallback: any floor tile */
+    if (!found_edge)
+    {
+        for (int tries = 0; tries < 100; ++tries)
+        {
+            int ty = rand_range(min_y, max_y);
+            int tx = rand_range(min_x, max_x);
+            if (cave_floor_bold(ty, tx))
+            {
+                cy = ty; cx = tx; break;
+            }
+        }
+    }
+    
+    int idx = dun->cent_n++;
+    dun->cent[idx].y = cy;
+    dun->cent[idx].x = cx;
+    dun->corner[idx].y1 = min_y;
+    dun->corner[idx].x1 = min_x;
+    dun->corner[idx].y2 = max_y;
+    dun->corner[idx].x2 = max_x;
+    dun->kind[idx] = ROOM_KIND_CLASSIC;
+    dun->is_quest[idx] = false;
+    mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, false);
+    
+    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
+    scatter_cave_gems_in_bounds(min_y, max_y, min_x, max_x, true);  /* Big cave gets extra gems */
+    
+    log_trace("Big cave anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) edge=%d floors=%d pillars=%d",
+        min_y, min_x, max_y, max_x, cy, cx, found_edge, floor_count, pillar_count);
+    genlog_anchor("BIG_CAVE: bounds=(%d,%d)-(%d,%d), %d floor tiles, %d pillars",
+        min_y, min_x, max_y, max_x, floor_count, pillar_count);
+    return true;
+}
+
+/* Carve a chasm area with organic cave shape and islands connected by bridges */
+static bool carve_chasm_with_bridges(int y_min, int y_max, int x_min, int x_max)
+{
+    if (dun->cent_n >= room_capacity_limit())
+    {
+        genlog_anchor("CHASM: rejected - room capacity limit reached");
+        return false;
+    }
+    
+    int avail_h = y_max - y_min;
+    int avail_w = x_max - x_min;
+    if (avail_h < 16 || avail_w < 20)
+    {
+        genlog_anchor("CHASM: rejected - bounds too small (%d,%d)-(%d,%d), avail=%dx%d",
+                      y_min, x_min, y_max, x_max, avail_h, avail_w);
+        return false;
+    }
+    
+    /* Use variable margins to create organic outer boundary */
+    int h = avail_h;
+    int w = avail_w;
+    int y1 = y_min;
+    int x1 = x_min;
+    int y2 = y_max;
+    int x2 = x_max;
+    
+    /* Check area is basic granite */
+    for (int y = y1; y <= y2; ++y)
+    {
+        for (int x = x1; x <= x2; ++x)
+        {
+            if (in_bounds_fully(y, x) && cave_floor_bold(y, x))
+            {
+                genlog_anchor("CHASM: rejected - floor already exists at (%d,%d) in bounds (%d,%d)-(%d,%d)",
+                              y, x, y1, x1, y2, x2);
+                return false;
+            }
+        }
+    }
+    
+    /* 
+     * CHASM GENERATION APPROACH:
+     * 1. Use CA to create organic cave boundary (not rectangular)
+     * 2. Create multiple platform islands within the cave
+     * 3. Fill non-platform areas with chasms
+     * 4. Connect platforms with narrow bridges
+     */
+    
+    /* Track what's inside the cave vs wall, and what's platform vs chasm */
+    bool* is_cave = mem_alloc_array(h * w, bool);
+    bool* is_platform = mem_alloc_array(h * w, bool);
+    if (!is_cave || !is_platform) 
+    {
+        if (is_cave) mem_free(is_cave);
+        if (is_platform) mem_free(is_platform);
+        return false;
+    }
+    
+    /* Initialize: seed cave shape with multi-center distance + noise */
+    int num_cave_centers = 3 + rand_int(3);  /* 3-5 centers for cave shape */
+    int cave_cy[6], cave_cx[6];
+    for (int c = 0; c < num_cave_centers; ++c)
+    {
+        cave_cy[c] = rand_range(h / 4, 3 * h / 4);
+        cave_cx[c] = rand_range(w / 4, 3 * w / 4);
+    }
+    
+    /* Carve organic cave shape using distance from centers + noise */
+    int base_radius = (h + w) / 5;
+    for (int ly = 0; ly < h; ++ly)
+    {
+        for (int lx = 0; lx < w; ++lx)
+        {
+            /* Find distance to nearest center */
+            int min_dist = 9999;
+            for (int c = 0; c < num_cave_centers; ++c)
+            {
+                int dy = ABS(ly - cave_cy[c]);
+                int dx = ABS(lx - cave_cx[c]);
+                int dist = dy + (dx * 2 / 3);  /* Wider horizontally */
+                if (dist < min_dist) min_dist = dist;
+            }
+            
+            /* Cave extends with noise for organic edges */
+            int threshold = base_radius + rand_int(base_radius / 2) - rand_int(base_radius / 3);
+            is_cave[ly * w + lx] = (min_dist < threshold);
+            is_platform[ly * w + lx] = false;
+        }
+    }
+    
+    /* CA smoothing for organic cave boundary */
+    bool* next_cave = mem_alloc_array(h * w, bool);
+    if (!next_cave) { mem_free(is_cave); mem_free(is_platform); return false; }
+    
+    for (int step = 0; step < 3; ++step)
+    {
+        for (int ly = 0; ly < h; ++ly)
+        {
+            for (int lx = 0; lx < w; ++lx)
+            {
+                int neighbors = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                {
+                    for (int dx = -1; dx <= 1; ++dx)
+                    {
+                        if (dy == 0 && dx == 0) continue;
+                        int ny = ly + dy, nx = lx + dx;
+                        if (ny < 0 || nx < 0 || ny >= h || nx >= w)
+                            neighbors += 0;  /* Edges are wall */
+                        else if (is_cave[ny * w + nx])
+                            neighbors++;
+                    }
+                }
+                /* Cave survives with 4+ neighbors, born with 5+ */
+                next_cave[ly * w + lx] = is_cave[ly * w + lx] ? (neighbors >= 4) : (neighbors >= 5);
+            }
+        }
+        for (int i = 0; i < h * w; ++i) is_cave[i] = next_cave[i];
+    }
+    mem_free(next_cave);
+    
+    /* Ensure cave doesn't touch absolute edges */
+    for (int ly = 0; ly < h; ++ly)
+    {
+        for (int lx = 0; lx < w; ++lx)
+        {
+            if (ly < 2 || ly >= h - 2 || lx < 2 || lx >= w - 2)
+                is_cave[ly * w + lx] = false;
+        }
+    }
+    
+    /* Now create 5-9 platform islands within the cave area */
+    int num_platforms = rand_range(5, 9);
+    int plat_cy[10], plat_cx[10], plat_radius[10];
+    int platforms_placed = 0;
+    
+    for (int attempt = 0; attempt < 300 && platforms_placed < num_platforms; ++attempt)
+    {
+        int py = rand_range(4, h - 5);
+        int px = rand_range(5, w - 6);
+        
+        /* Must be inside cave */
+        if (!is_cave[py * w + px]) continue;
+        
+        /* Check distance from other platforms */
+        bool too_close = false;
+        int min_sep = 5 + rand_int(3);  /* Variable separation */
+        for (int i = 0; i < platforms_placed; ++i)
+        {
+            int dist = ABS(py - plat_cy[i]) + ABS(px - plat_cx[i]);
+            if (dist < min_sep)
+            {
+                too_close = true;
+                break;
+            }
+        }
+        if (too_close) continue;
+        
+        plat_cy[platforms_placed] = py;
+        plat_cx[platforms_placed] = px;
+        plat_radius[platforms_placed] = rand_range(2, 4);
+        platforms_placed++;
+    }
+    
+    /* Create organic platform shapes */
+    for (int p = 0; p < platforms_placed; ++p)
+    {
+        int cy = plat_cy[p];
+        int cx = plat_cx[p];
+        int base_r = plat_radius[p];
+        
+        for (int ly = 0; ly < h; ++ly)
+        {
+            for (int lx = 0; lx < w; ++lx)
+            {
+                if (!is_cave[ly * w + lx]) continue;
+                
+                int dy = ABS(ly - cy);
+                int dx = ABS(lx - cx);
+                int dist = dy + (dx * 2 / 3);
+                
+                int threshold = base_r + rand_int(2);
+                if (dist <= threshold)
+                    is_platform[ly * w + lx] = true;
+            }
+        }
+    }
+    
+    /* Extend platforms organically */
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        for (int ly = 1; ly < h - 1; ++ly)
+        {
+            for (int lx = 1; lx < w - 1; ++lx)
+            {
+                if (!is_cave[ly * w + lx]) continue;
+                if (is_platform[ly * w + lx]) continue;
+                
+                int adj = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if ((dy || dx) && is_platform[(ly+dy) * w + (lx+dx)])
+                            adj++;
+                
+                if (adj >= 3 && one_in_(3))
+                    is_platform[ly * w + lx] = true;
+            }
+        }
+    }
+    
+    /* Add sparse edge nubs instead of a full floor ring to avoid easy perimeter walkways */
+    for (int ly = 0; ly < h; ++ly)
+    {
+        for (int lx = 0; lx < w; ++lx)
+        {
+            if (!is_cave[ly * w + lx]) continue;
+
+            /* Check if adjacent to non-cave (wall) */
+            bool edge_of_cave = false;
+            int adj_platforms = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+            {
+                for (int dx = -1; dx <= 1; ++dx)
+                {
+                    if (dy == 0 && dx == 0) continue;
+                    int ny = ly + dy, nx = lx + dx;
+                    if (ny < 0 || nx < 0 || ny >= h || nx >= w || !is_cave[ny * w + nx])
+                        edge_of_cave = true;
+                    else if (is_platform[ny * w + nx])
+                        adj_platforms++;
+                }
+            }
+            /* Only add occasional nubs where platforms are already nearby to prevent a continuous ring */
+            if (edge_of_cave && !is_platform[ly * w + lx] && adj_platforms >= 2 && one_in_(4))
+            {
+                is_platform[ly * w + lx] = true;
+            }
+        }
+    }
+
+    /* Apply to cave: inside cave + platform = floor, inside cave + !platform = chasm */
+    int floor_count = 0;
+    int chasm_count = 0;
+    for (int gy = y1; gy <= y2; ++gy)
+    {
+        for (int gx = x1; gx <= x2; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            int ly = gy - y1, lx = gx - x1;
+            
+            if (!is_cave[ly * w + lx])
+                continue;  /* Leave as granite wall */
+            
+            if (is_platform[ly * w + lx])
+            {
+                cave_set_feat(gy, gx, FEAT_FLOOR);
+                cave_info[gy][gx] |= CAVE_ROOM | CAVE_CHASM_AREA;
+                floor_count++;
+            }
+            else
+            {
+                cave_set_feat(gy, gx, FEAT_CHASM);
+                cave_info[gy][gx] |= CAVE_CHASM_AREA;
+                chasm_count++;
+            }
+        }
+    }
+    
+    /* Now connect platforms with bridges (MST-style) */
+    int global_plat_y[10], global_plat_x[10];
+    for (int p = 0; p < platforms_placed; ++p)
+    {
+        global_plat_y[p] = y1 + plat_cy[p];
+        global_plat_x[p] = x1 + plat_cx[p];
+    }
+    
+    bool* connected = mem_alloc_array(platforms_placed, bool);
+    if (!connected) { mem_free(is_cave); mem_free(is_platform); return false; }
+    for (int i = 0; i < platforms_placed; ++i) connected[i] = false;
+    if (platforms_placed > 0) connected[0] = true;
+    
+    int bridges_built = 0;
+    for (int iter = 0; iter < platforms_placed; ++iter)
+    {
+        int best_from = -1, best_to = -1, best_dist = 9999;
+        
+        for (int i = 0; i < platforms_placed; ++i)
+        {
+            if (!connected[i]) continue;
+            for (int j = 0; j < platforms_placed; ++j)
+            {
+                if (connected[j]) continue;
+                int dist = distance(global_plat_y[i], global_plat_x[i],
+                                   global_plat_y[j], global_plat_x[j]);
+                if (dist < best_dist)
+                {
+                    best_dist = dist;
+                    best_from = i;
+                    best_to = j;
+                }
+            }
+        }
+        
+        if (best_to < 0) break;
+        
+        int sy = global_plat_y[best_from];
+        int sx = global_plat_x[best_from];
+        int ey = global_plat_y[best_to];
+        int ex = global_plat_x[best_to];
+        
+        /* L-shaped bridge */
+        if (one_in_(2))
+        {
+            int x_lo = MIN(sx, ex), x_hi = MAX(sx, ex);
+            for (int gx = x_lo; gx <= x_hi; ++gx)
+                if (in_bounds_fully(sy, gx) && cave_feat[sy][gx] == FEAT_CHASM)
+                {
+                    cave_set_feat(sy, gx, FEAT_FLOOR);
+                    cave_info[sy][gx] |= CAVE_ROOM;
+                }
+            int y_lo = MIN(sy, ey), y_hi = MAX(sy, ey);
+            for (int gy = y_lo; gy <= y_hi; ++gy)
+                if (in_bounds_fully(gy, ex) && cave_feat[gy][ex] == FEAT_CHASM)
+                {
+                    cave_set_feat(gy, ex, FEAT_FLOOR);
+                    cave_info[gy][ex] |= CAVE_ROOM;
+                }
+        }
+        else
+        {
+            int y_lo = MIN(sy, ey), y_hi = MAX(sy, ey);
+            for (int gy = y_lo; gy <= y_hi; ++gy)
+                if (in_bounds_fully(gy, sx) && cave_feat[gy][sx] == FEAT_CHASM)
+                {
+                    cave_set_feat(gy, sx, FEAT_FLOOR);
+                    cave_info[gy][sx] |= CAVE_ROOM;
+                }
+            int x_lo = MIN(sx, ex), x_hi = MAX(sx, ex);
+            for (int gx = x_lo; gx <= x_hi; ++gx)
+                if (in_bounds_fully(ey, gx) && cave_feat[ey][gx] == FEAT_CHASM)
+                {
+                    cave_set_feat(ey, gx, FEAT_FLOOR);
+                    cave_info[ey][gx] |= CAVE_ROOM;
+                }
+        }
+        
+        connected[best_to] = true;
+        bridges_built++;
+    }
+    
+    mem_free(connected);
+    mem_free(is_cave);
+    mem_free(is_platform);
+    
+    /* Track bounds of just the floor tiles (not chasm) for proper tunnel connectivity */
+    int floor_min_y = y2, floor_max_y = y1, floor_min_x = x2, floor_max_x = x1;
+    for (int gy = y1; gy <= y2; ++gy)
+    {
+        for (int gx = x1; gx <= x2; ++gx)
+        {
+            if (cave_floor_bold(gy, gx))
+            {
+                if (gy < floor_min_y) floor_min_y = gy;
+                if (gy > floor_max_y) floor_max_y = gy;
+                if (gx < floor_min_x) floor_min_x = gx;
+                if (gx > floor_max_x) floor_max_x = gx;
+            }
+        }
+    }
+    
+    /* Set outer walls ONLY around floor tiles (not chasm) for proper tunnel connectivity */
+    for (int gy = floor_min_y - 1; gy <= floor_max_y + 1; ++gy)
+    {
+        for (int gx = floor_min_x - 1; gx <= floor_max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (cave_floor_bold(gy, gx)) continue;
+            if (cave_feat[gy][gx] == FEAT_CHASM) continue;  /* Don't convert chasm */
+            if (cave_feat[gy][gx] != FEAT_WALL_EXTRA) continue;
+            
+            /* Only set outer wall if bordering actual floor (not chasm) */
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0) continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx) &&
+                        (cave_info[ny][nx] & CAVE_ROOM))
+                        borders_floor = true;
+                }
+            }
+            if (borders_floor)
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+        }
+    }
+    
+    /* Find center on a floor tile near an outer wall (better for tunnel connectivity) */
+    int cy = (floor_min_y + floor_max_y) / 2;
+    int cx = (floor_min_x + floor_max_x) / 2;
+    
+    /* First try: find floor tile adjacent to outer wall */
+    bool found_edge = false;
+    for (int tries = 0; tries < 200 && !found_edge; ++tries)
+    {
+        int ty = rand_range(floor_min_y, floor_max_y);
+        int tx = rand_range(floor_min_x, floor_max_x);
+        if (!cave_floor_bold(ty, tx)) continue;
+        
+        /* Check if adjacent to outer wall */
+        for (int dy = -1; dy <= 1 && !found_edge; ++dy)
+        {
+            for (int dx = -1; dx <= 1 && !found_edge; ++dx)
+            {
+                if (dy == 0 && dx == 0) continue;
+                if (in_bounds_fully(ty + dy, tx + dx) && 
+                    cave_feat[ty + dy][tx + dx] == FEAT_WALL_OUTER)
+                {
+                    cy = ty; cx = tx;
+                    found_edge = true;
+                }
+            }
+        }
+    }
+    
+    /* Fallback: any floor tile */
+    if (!found_edge)
+    {
+        for (int tries = 0; tries < 100; ++tries)
+        {
+            int ty = rand_range(floor_min_y, floor_max_y);
+            int tx = rand_range(floor_min_x, floor_max_x);
+            if (cave_floor_bold(ty, tx))
+            {
+                cy = ty; cx = tx;
+                break;
+            }
+        }
+    }
+    
+    int idx = dun->cent_n++;
+    dun->cent[idx].y = cy;
+    dun->cent[idx].x = cx;
+    /* Use floor bounds, not full chasm bounds, for tunnel connectivity */
+    dun->corner[idx].y1 = floor_min_y;
+    dun->corner[idx].x1 = floor_min_x;
+    dun->corner[idx].y2 = floor_max_y;
+    dun->corner[idx].x2 = floor_max_x;
+    dun->kind[idx] = ROOM_KIND_CLASSIC;
+    dun->is_quest[idx] = false;
+    mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, false);
+    
+    log_trace("Chasm organic: %d platforms, %d bridges, %d chasm tiles, floor=(%d,%d)-(%d,%d) center=(%d,%d)",
+        platforms_placed, bridges_built, chasm_count, floor_min_y, floor_min_x, floor_max_y, floor_max_x, cy, cx);
+    genlog_anchor("CHASM: %d platforms, %d bridges, %d chasm tiles at (%d,%d)-(%d,%d)",
+        platforms_placed, bridges_built, chasm_count, floor_min_y, floor_min_x, floor_max_y, floor_max_x);
+    return true;
+}
+
+/* Carve a labyrinth-style maze with organic shape using cellular automata */
+static bool carve_labyrinth_bounds(int y_min, int y_max, int x_min, int x_max)
+{
+    if (dun->cent_n >= room_capacity_limit())
+    {
+        genlog_anchor("LABYRINTH: rejected - room capacity limit reached");
+        return false;
+    }
+    
+    int avail_h = y_max - y_min;
+    int avail_w = x_max - x_min;
+    if (avail_h < 10 || avail_w < 12)
+    {
+        genlog_anchor("LABYRINTH: rejected - bounds too small (%d,%d)-(%d,%d), avail=%dx%d",
+                      y_min, x_min, y_max, x_max, avail_h, avail_w);
+        return false;
+    }
+    
+    /* Use larger margins to leave room for other features in partition */
+    int margin_y = rand_range(4, MAX(6, avail_h / 4));
+    int margin_x = rand_range(4, MAX(6, avail_w / 4));
+    int y1 = y_min + margin_y;
+    int x1 = x_min + margin_x;
+    int y2 = y_max - margin_y;
+    int x2 = x_max - margin_x;
+    int h = y2 - y1 + 1;
+    int w = x2 - x1 + 1;
+    
+    if (h < 8 || w < 10)
+    {
+        genlog_anchor("LABYRINTH: rejected - after margins too small: h=%d w=%d (margins y=%d x=%d)",
+                      h, w, margin_y, margin_x);
+        return false;
+    }
+    
+    /* Check area is basic granite - if floor exists, another partition already carved here */
+    for (int y = y1; y <= y2; ++y)
+    {
+        for (int x = x1; x <= x2; ++x)
+        {
+            if (in_bounds_fully(y, x) && cave_floor_bold(y, x))
+            {
+                genlog_anchor("LABYRINTH: rejected - floor already exists at (%d,%d) in bounds (%d,%d)-(%d,%d)",
+                              y, x, y1, x1, y2, x2);
+                return false;
+            }
+        }
+    }
+    
+    /* Use CA to create organic boundary mask */
+    if (h > 50) h = 50;
+    if (w > 60) w = 60;
+    y2 = y1 + h - 1;
+    x2 = x1 + w - 1;
+    
+    bool* mask = mem_alloc_array(h * w, bool);
+    if (!mask) return false;
+    
+    /* Seed with 60% fill for corridors */
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            mask[y * w + x] = (rand_int(100) < 60);
+    
+    /* CA smoothing to create organic boundary */
+    bool* next = mem_alloc_array(h * w, bool);
+    if (!next) { mem_free(mask); return false; }
+    
+    for (int step = 0; step < 3; ++step)
+    {
+        for (int y = 0; y < h; ++y)
+        {
+            for (int x = 0; x < w; ++x)
+            {
+                int neighbors = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                    {
+                        if (dy == 0 && dx == 0) continue;
+                        int ny = y + dy, nx = x + dx;
+                        if (ny < 0 || nx < 0 || ny >= h || nx >= w)
+                            neighbors++;
+                        else if (mask[ny * w + nx])
+                            neighbors++;
+                    }
+                next[y * w + x] = (neighbors >= 4);
+            }
+        }
+        for (int i = 0; i < h * w; ++i) mask[i] = next[i];
+    }
+    mem_free(next);
+    
+    /* Carve corridors in a grid pattern, but only within the organic mask */
+    int floor_count = 0;
+    int min_y = y2, max_y = y1, min_x = x2, max_x = x1;
+    int corridor_spacing = 3;
+    
+    /* Horizontal corridors */
+    for (int ly = 1; ly < h - 1; ly += corridor_spacing)
+    {
+        for (int lx = 0; lx < w; ++lx)
+        {
+            if (!mask[ly * w + lx]) continue;
+            int gy = y1 + ly;
+            int gx = x1 + lx;
+            if (in_bounds_fully(gy, gx) && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_FLOOR);
+                cave_info[gy][gx] |= CAVE_ROOM;
+                floor_count++;
+                if (gy < min_y) min_y = gy;
+                if (gy > max_y) max_y = gy;
+                if (gx < min_x) min_x = gx;
+                if (gx > max_x) max_x = gx;
+            }
+        }
+    }
+    
+    /* Vertical corridors */
+    for (int lx = 1; lx < w - 1; lx += corridor_spacing)
+    {
+        for (int ly = 0; ly < h; ++ly)
+        {
+            if (!mask[ly * w + lx]) continue;
+            int gy = y1 + ly;
+            int gx = x1 + lx;
+            if (in_bounds_fully(gy, gx) && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_FLOOR);
+                cave_info[gy][gx] |= CAVE_ROOM;
+                floor_count++;
+                if (gy < min_y) min_y = gy;
+                if (gy > max_y) max_y = gy;
+                if (gx < min_x) min_x = gx;
+                if (gx > max_x) max_x = gx;
+            }
+        }
+    }
+    
+    mem_free(mask);
+    
+    /* Block some corridor segments to create dead ends */
+    for (int ly = 1; ly < h - 1; ly += corridor_spacing)
+    {
+        for (int lx = 1; lx < w - 1; lx += corridor_spacing)
+        {
+            int gy = y1 + ly;
+            int gx = x1 + lx;
+            if (!in_bounds_fully(gy, gx) || !cave_floor_bold(gy, gx))
+                continue;
+            
+            if (rand_int(100) < 45)
+            {
+                int block_dir = rand_int(4);
+                int dy = (block_dir == 0) ? -1 : (block_dir == 1) ? 1 : 0;
+                int dx = (block_dir == 2) ? -1 : (block_dir == 3) ? 1 : 0;
+                
+                for (int step = 1; step < corridor_spacing; ++step)
+                {
+                    int ny = gy + dy * step;
+                    int nx = gx + dx * step;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx))
+                    {
+                        cave_set_feat(ny, nx, FEAT_WALL_EXTRA);
+                        cave_info[ny][nx] &= ~CAVE_ROOM;
+                        floor_count--;
+                    }
+                }
+            }
+        }
+    }
+    
+    /* Add chambers at some intersections */
+    int chamber_count = rand_range(2, 5);
+    for (int c = 0; c < chamber_count; ++c)
+    {
+        int cy = rand_range(min_y + 2, max_y - 2);
+        int cx = rand_range(min_x + 2, max_x - 2);
+        if (!cave_floor_bold(cy, cx)) continue;
+        
+        int ch_h = rand_range(2, 4);
+        int ch_w = rand_range(2, 5);
+        
+        for (int dy = -ch_h; dy <= ch_h; ++dy)
+        {
+            for (int dx = -ch_w; dx <= ch_w; ++dx)
+            {
+                int ty = cy + dy;
+                int tx = cx + dx;
+                if (!in_bounds_fully(ty, tx)) continue;
+                if (cave_feat[ty][tx] != FEAT_WALL_EXTRA) continue;
+                
+                cave_set_feat(ty, tx, FEAT_FLOOR);
+                cave_info[ty][tx] |= CAVE_ROOM;
+                floor_count++;
+                if (ty < min_y) min_y = ty;
+                if (ty > max_y) max_y = ty;
+                if (tx < min_x) min_x = tx;
+                if (tx > max_x) max_x = tx;
+            }
+        }
+    }
+    
+    if (floor_count < 25)
+        return false;
+    
+    /* Set outer walls */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (cave_floor_bold(gy, gx)) continue;
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0) continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                        borders_floor = true;
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+        }
+    }
+    
+    /* Pick center - prefer floor tile adjacent to outer wall for tunnel connectivity */
+    int center_y = (min_y + max_y) / 2, center_x = (min_x + max_x) / 2;
+    bool found_edge = false;
+    for (int tries = 0; tries < 200 && !found_edge; ++tries)
+    {
+        int ty = rand_range(min_y, max_y);
+        int tx = rand_range(min_x, max_x);
+        if (!cave_floor_bold(ty, tx)) continue;
+        
+        for (int dy = -1; dy <= 1 && !found_edge; ++dy)
+        {
+            for (int dx = -1; dx <= 1 && !found_edge; ++dx)
+            {
+                if (dy == 0 && dx == 0) continue;
+                if (in_bounds_fully(ty + dy, tx + dx) && 
+                    cave_feat[ty + dy][tx + dx] == FEAT_WALL_OUTER)
+                {
+                    center_y = ty; center_x = tx;
+                    found_edge = true;
+                }
+            }
+        }
+    }
+    /* Fallback: any floor tile */
+    if (!found_edge)
+    {
+        for (int tries = 0; tries < 100; ++tries)
+        {
+            int ty = rand_range(min_y, max_y);
+            int tx = rand_range(min_x, max_x);
+            if (cave_floor_bold(ty, tx))
+            {
+                center_y = ty; center_x = tx; break;
+            }
+        }
+    }
+    
+    int idx = dun->cent_n++;
+    dun->cent[idx].y = center_y;
+    dun->cent[idx].x = center_x;
+    dun->corner[idx].y1 = min_y;
+    dun->corner[idx].x1 = min_x;
+    dun->corner[idx].y2 = max_y;
+    dun->corner[idx].x2 = max_x;
+    dun->kind[idx] = ROOM_KIND_CLASSIC;
+    dun->is_quest[idx] = false;
+    mark_room_anchor_meta(idx, LAYOUT_ANCHOR_BSP_SLICE, false);
+    
+    /* === LABYRINTH MONSTER SPAWNING === */
+    /* Place monsters directly inside the labyrinth - scale with floor count */
+    /* Approximately 1 monster per 15 floor tiles */
+    int lab_monsters = floor_count / 15;
+    if (lab_monsters < 2) lab_monsters = 2;
+    if (lab_monsters > 8) lab_monsters = 8;
+    int monsters_placed = 0;
+    
+    for (int m = 0; m < lab_monsters; ++m)
+    {
+        for (int tries = 0; tries < 50; ++tries)
+        {
+            int my = rand_range(min_y, max_y);
+            int mx = rand_range(min_x, max_x);
+            if (!in_bounds_fully(my, mx)) continue;
+            if (!cave_floor_bold(my, mx)) continue;
+            if (cave_m_idx[my][mx] != 0) continue;  /* Already has monster */
+            if (cave_o_idx[my][mx] != 0) continue;  /* Has object */
+            
+            /* Place a monster (sleeping, grouped, not vault) */
+            if (place_monster(my, mx, true, true, false))
+            {
+                monsters_placed++;
+                break;
+            }
+        }
+    }
+    
+    /* === LABYRINTH SKELETON SPAWNING === */
+    /* Place skeleton items in the labyrinth - those who got lost before you */
+    /* Scale with floor count: 1 skeleton per 25 floor tiles, min 2, max 6 */
+    int lab_skeletons = floor_count / 25;
+    if (lab_skeletons < 2) lab_skeletons = 2;
+    if (lab_skeletons > 6) lab_skeletons = 6;
+    int skeletons_placed = 0;
+    
+    for (int sk = 0; sk < lab_skeletons; ++sk)
+    {
+        for (int tries = 0; tries < 50; ++tries)
+        {
+            int sy = rand_range(min_y, max_y);
+            int sx = rand_range(min_x, max_x);
+            if (!in_bounds_fully(sy, sx)) continue;
+            if (!cave_floor_bold(sy, sx)) continue;
+            if (cave_o_idx[sy][sx] != 0) continue;  /* Already has object */
+            
+            /* Create and place a skeleton */
+            object_type object_type_body;
+            object_type *i_ptr = &object_type_body;
+            object_wipe(i_ptr);
+            
+            /* Mix of human and elf skeletons, more elves */
+            s16b k_idx;
+            if (one_in_(3))
+                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_HUMAN);
+            else
+                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ELF);
+            
+            object_prep(i_ptr, k_idx);
+            i_ptr->pval = 1;  /* Skeleton level */
+            
+            drop_near(i_ptr, -1, sy, sx);
+            skeletons_placed++;
+            break;
+        }
+    }
+    
+    /* === LABYRINTH STAIR PLACEMENT === */
+    /* Place 1-2 stairs inside the labyrinth for navigation */
+    int lab_stairs = 1 + (floor_count > 60 ? 1 : 0);
+    int stairs_placed = 0;
+    
+    for (int s = 0; s < lab_stairs; ++s)
+    {
+        for (int tries = 0; tries < 50; ++tries)
+        {
+            int sy = rand_range(min_y, max_y);
+            int sx = rand_range(min_x, max_x);
+            if (!in_bounds_fully(sy, sx)) continue;
+            if (!cave_naked_bold(sy, sx)) continue;
+            if (!cave_floor_bold(sy, sx)) continue;
+            
+            /* Avoid placing next to doors */
+            if (cave_feat[sy - 1][sx] == FEAT_DOOR_HEAD) continue;
+            if (cave_feat[sy + 1][sx] == FEAT_DOOR_HEAD) continue;
+            if (cave_feat[sy][sx - 1] == FEAT_DOOR_HEAD) continue;
+            if (cave_feat[sy][sx + 1] == FEAT_DOOR_HEAD) continue;
+            
+            /* Alternate between up and down stairs */
+            int feat = (s % 2 == 0) ? FEAT_MORE : FEAT_LESS;
+            
+            /* At surface, only down; at Morgoth depth, only up */
+            if (p_ptr->depth == 0) feat = FEAT_MORE;
+            else if (p_ptr->depth >= MORGOTH_DEPTH) feat = FEAT_LESS;
+            
+            cave_set_feat(sy, sx, feat);
+            stairs_placed++;
+            break;
+        }
+    }
+    
+    log_trace("Labyrinth anchor (organic): bounds=(%d,%d)-(%d,%d) center=(%d,%d) edge=%d floors=%d chambers=%d monsters=%d skeletons=%d stairs=%d",
+        min_y, min_x, max_y, max_x, center_y, center_x, found_edge, floor_count, chamber_count, monsters_placed, skeletons_placed, stairs_placed);
+    genlog_anchor("LABYRINTH: bounds=(%d,%d)-(%d,%d), %d floor tiles, %d chambers, %d monsters, %d skeletons, %d stairs",
+        min_y, min_x, max_y, max_x, floor_count, chamber_count, monsters_placed, skeletons_placed, stairs_placed);
     return true;
 }
 
@@ -2080,6 +3669,38 @@ static bool carve_bsp_slice_anchor(void)
         }
     }
 
+    /* Set outer walls around floor tiles so tunnels can connect */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx))
+                continue;
+            if (cave_floor_bold(gy, gx))
+                continue;
+            /* Check if this wall borders any floor */
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0)
+                        continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                    {
+                        borders_floor = true;
+                    }
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+            }
+        }
+    }
+
     int idx = dun->cent_n++;
     dun->cent[idx].y = cy;
     dun->cent[idx].x = cx;
@@ -2093,6 +3714,7 @@ static bool carve_bsp_slice_anchor(void)
 
     log_trace("BSP slice anchor: carved floor_count=%d bounds=(%d,%d)-(%d,%d) center=(%d,%d) rects=%d",
         floor_count, min_y, min_x, max_y, max_x, cy, cx, rect_count);
+    return true;
     return true;
 }
 
@@ -2183,6 +3805,38 @@ static bool carve_bsp_slice_anchor_bounds(int y_min, int y_max, int x_min, int x
         }
     }
 
+    /* Set outer walls around floor tiles so tunnels can connect */
+    for (int gy = min_y - 1; gy <= max_y + 1; ++gy)
+    {
+        for (int gx = min_x - 1; gx <= max_x + 1; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx))
+                continue;
+            if (cave_floor_bold(gy, gx))
+                continue;
+            /* Check if this wall borders any floor */
+            bool borders_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0)
+                        continue;
+                    int ny = gy + dy, nx = gx + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                    {
+                        borders_floor = true;
+                    }
+                }
+            }
+            if (borders_floor && cave_feat[gy][gx] == FEAT_WALL_EXTRA)
+            {
+                cave_set_feat(gy, gx, FEAT_WALL_OUTER);
+            }
+        }
+    }
+
     int idx = dun->cent_n++;
     dun->cent[idx].y = cy;
     dun->cent[idx].x = cx;
@@ -2235,140 +3889,452 @@ static bool room_build_in_bounds(int typ, int y1, int y2, int x1, int x2)
     }
 }
 
+/* Place rooms in randomized order within a partition */
+static void place_rooms_randomized(int y1, int y2, int x1, int x2, int depth,
+                                   int t1_count, int t2_count, int t6_count, int t7_count,
+                                   int *budget_t6, int *budget_t7, int *budget_t8,
+                                   int *used_t6, int *used_t7, int *used_t8)
+{
+    /* Build an array of all room placements needed */
+    int total = t1_count + t2_count + t6_count + t7_count;
+    if (total <= 0) return;
+    if (total > 50) total = 50;  /* Safety cap */
+    
+    int room_types[50];
+    int idx = 0;
+    for (int i = 0; i < t1_count && idx < 50; ++i) room_types[idx++] = 1;
+    for (int i = 0; i < t2_count && idx < 50; ++i) room_types[idx++] = 2;
+    for (int i = 0; i < t6_count && idx < 50; ++i) room_types[idx++] = 6;
+    for (int i = 0; i < t7_count && idx < 50; ++i) room_types[idx++] = 7;
+    
+    /* Fisher-Yates shuffle */
+    for (int i = total - 1; i > 0; --i)
+    {
+        int j = rand_int(i + 1);
+        int temp = room_types[i];
+        room_types[i] = room_types[j];
+        room_types[j] = temp;
+    }
+    
+    /* Place rooms in shuffled order */
+    for (int i = 0; i < total; ++i)
+    {
+        int typ = room_types[i];
+        int priority = (typ >= 6) ? 3 : 2;
+        place_room_with_budget(typ, y1, y2, x1, x2, priority, depth,
+                               budget_t6, budget_t7, budget_t8,
+                               used_t6, used_t7, used_t8);
+    }
+}
+
+/* Smallest depth at which a non-quest greater vault can appear */
+static int min_nonquest_gv_depth(void)
+{
+    static int cached_min_depth = -1;
+    if (cached_min_depth >= 0)
+        return cached_min_depth;
+
+    int min_depth = 127; /* high sentinel */
+    for (int i = 0; i < z_info->v_max; ++i)
+    {
+        vault_type *v_ptr = &v_info[i];
+        if (v_ptr->typ != 8)
+            continue;
+        if (v_ptr->flags & VLT_QUEST)
+            continue;
+        if (v_ptr->depth < min_depth)
+            min_depth = v_ptr->depth;
+    }
+
+    /* Fallback to old gating depth if no candidates are present */
+    if (min_depth == 127)
+        min_depth = 15;
+
+    cached_min_depth = min_depth;
+    return cached_min_depth;
+}
+
+/* Roll whether this level should reserve a greater vault slot based on vault rarities */
+static bool gv_level_roll_allows(int depth, int *out_candidates)
+{
+    int candidate_count = 0;
+    bool passed = false;
+
+    for (int i = 0; i < z_info->v_max; ++i)
+    {
+        vault_type *v_ptr = &v_info[i];
+        if (v_ptr->typ != 8) continue;
+        if (v_ptr->flags & VLT_QUEST) continue;
+        if (v_ptr->depth > depth) continue;
+
+        /* Skip already-used greater vaults to mirror build_type8 checks */
+        bool repeated = false;
+        for (int j = 0; j < MAX_GREATER_VAULTS; ++j)
+        {
+            if (p_ptr->greater_vaults[j] == i)
+            {
+                repeated = true;
+                break;
+            }
+        }
+        if (repeated) continue;
+
+        candidate_count++;
+        if (!passed && one_in_(v_ptr->rarity))
+        {
+            passed = true;
+        }
+    }
+
+    if (out_candidates) *out_candidates = candidate_count;
+
+    if (candidate_count == 0)
+    {
+        genlog_partition("GV roll: depth=%d -> no eligible type8 templates (used or quest-only)", depth);
+        return false;
+    }
+
+    if (passed)
+    {
+        genlog_partition("GV roll: depth=%d candidates=%d -> PASS (reserve GV this level)", depth, candidate_count);
+    }
+    else
+    {
+        genlog_partition("GV roll: depth=%d candidates=%d -> FAIL (no GV this level)", depth, candidate_count);
+    }
+
+    return passed;
+}
+
+/* Check whether a partition is fully interior (no map-border contact) */
+static bool partition_is_interior(int row, int col, int rows, int cols)
+{
+    return (row > 0) && (row < rows - 1) && (col > 0) && (col < cols - 1);
+}
+
+/* Pick the partition whose centre is closest to the map centre, preferring interior slots */
+static int choose_central_partition_index(int rows, int cols)
+{
+    if (rows <= 0 || cols <= 0)
+        return -1;
+
+    int best_idx = -1;
+    int best_score = 1 << 30;
+    int map_cy = p_ptr->cur_map_hgt / 2;
+    int map_cx = p_ptr->cur_map_wid / 2;
+
+    for (int row = 0; row < rows; ++row)
+    {
+        for (int col = 0; col < cols; ++col)
+        {
+            int pi = row * cols + col;
+            int y1, y2, x1, x2;
+            if (!compute_partition_bounds(pi, rows, cols, &y1, &y2, &x1, &x2))
+                continue;
+
+            int cy = (y1 + y2) / 2;
+            int cx = (x1 + x2) / 2;
+            int dist = distance(map_cy, map_cx, cy, cx);
+            int penalty = partition_is_interior(row, col, rows, cols) ? 0 : 10000;
+            int score = dist + penalty;
+
+            if (score < best_score)
+            {
+                best_score = score;
+                best_idx = pi;
+            }
+        }
+    }
+
+    return best_idx;
+}
+
+/* Try to drop a greater vault inside the provided partition bounds */
+static bool place_gv_in_partition(int y1, int y2, int x1, int x2, int *budget_t8, int *used_t8)
+{
+    if (!budget_t8 || *budget_t8 <= 0)
+        return false;
+
+    /* Can only have one greater vault per level */
+    if (g_vault_name[0] != '\0')
+        return false;
+
+    bool placed = false;
+    for (int attempt = 0; attempt < 3 && !placed; ++attempt)
+    {
+        placed = room_build_in_bounds(8, y1, y2, x1, x2);
+    }
+
+    if (placed)
+    {
+        (*budget_t8)--;
+        if (used_t8)
+            (*used_t8)++;
+    }
+
+    return placed;
+}
+
 /* Dynamic partition-based generation mix */
 static void apply_quadrant_generation_modes(void)
 {
     /* Determine partition grid based on level size (in blocks) */
     int blocks = p_ptr->cur_map_hgt / PANEL_HGT;  /* Square levels, so hgt == wid */
     int partition_count;
-    int grid_size;  /* 2x2 or 3x3 */
+    int grid_rows, grid_cols;
+    int depth = p_ptr->depth;
     
-    if (blocks <= 10)
+    /* Partition scaling - REDUCED partition counts for larger anchors.
+     * Each partition should be at least ~40 tiles per side to fit big caves/chasms.
+     * 
+     * Old scaling created 33x33 partitions on 15-block maps - too small for anchors
+     * that need 25+ effective space after margins.
+     * 
+     * New scaling:
+     * 8 blocks (88x88)   -> 4 partitions (2x2) = 44x44 each
+     * 9-10 blocks        -> 6 partitions (2x3 or 3x2) = ~44-50 each
+     * 11-12 blocks       -> 9 partitions (3x3) = ~40-44 each  
+     * 13-14 blocks       -> 12 partitions (3x4 or 4x3) = ~38-44 each
+     * 15+ blocks (165+)  -> 16 partitions (4x4) = ~41 each
+     */
+    if (blocks <= 8)
     {
-        /* Small to medium levels: 4 partitions (2x2 grid) */
         partition_count = 4;
-        grid_size = 2;
-        log_trace("Level size %d blocks: using 2x2 partition grid (4 zones)", blocks);
+        grid_rows = 2; grid_cols = 2;
     }
-    else
+    else if (blocks <= 10)
     {
-        /* Large levels: 9 partitions (3x3 grid) */
+        partition_count = 6;
+        if (one_in_(2)) { grid_rows = 3; grid_cols = 2; }
+        else { grid_rows = 2; grid_cols = 3; }
+    }
+    else if (blocks <= 12)
+    {
         partition_count = 9;
-        grid_size = 3;
-        log_trace("Level size %d blocks: using 3x3 partition grid (9 zones)", blocks);
+        grid_rows = 3; grid_cols = 3;
+    }
+    else if (blocks <= 14)
+    {
+        partition_count = 12;
+        if (one_in_(2)) { grid_rows = 3; grid_cols = 4; }
+        else { grid_rows = 4; grid_cols = 3; }
+    }
+    else  /* blocks >= 15 */
+    {
+        partition_count = 16;
+        grid_rows = 4; grid_cols = 4;
+    }
+
+    remember_partition_grid(grid_rows, grid_cols, partition_count);
+    
+    log_trace("Level size %d blocks: using %dx%d partition grid (%d zones)", 
+              blocks, grid_rows, grid_cols, partition_count);
+    
+    /* Generation log: partition grid setup */
+    genlog_partition("Grid setup: %d blocks -> %dx%d grid (%d partitions), depth=%d",
+                     blocks, grid_rows, grid_cols, partition_count, depth);
+    
+    /* Allocate mode, style, and density arrays - max 25 partitions now */
+    quadrant_mode_t modes[25];
+    int partition_styles[25];
+    density_level_t densities[25];
+    int gv_partition = -1;
+    int gv_min_depth = min_nonquest_gv_depth();
+    int gv_candidate_count = 0;
+    bool gv_level_allowed = (depth >= gv_min_depth) && gv_level_roll_allows(depth, &gv_candidate_count);
+    if (!gv_level_allowed && depth < gv_min_depth) {
+        genlog_partition("GV roll: depth=%d below minimum %d -> no GV this level", depth, gv_min_depth);
+    }
+    if (morgoth_level_active) {
+        gv_level_allowed = false; /* Morgoth's throne room replaces normal GVs */
+        morgoth_partition_index = choose_central_partition_index(grid_rows, grid_cols);
+        genlog_partition("Morgoth level: reserving central partition idx=%d (grid %dx%d)", morgoth_partition_index, grid_rows, grid_cols);
+    }
+
+    /* Depth-aware vault budgets (soft caps; clamped to remaining capacity) */
+    /* BOOSTED: More rooms and vaults per partition for denser levels */
+    int budget_t6 = MIN(room_capacity_limit(), MAX(20, partition_count * 3 + depth));
+    int budget_t7 = (depth >= 4) ? MIN(room_capacity_limit(), MAX(6, partition_count + depth / 2)) : 0;
+    int budget_t8 = gv_level_allowed ? 1 : 0;
+    if (morgoth_level_active) {
+        budget_t8 = 0;
+    }
+    int capacity_remaining = room_capacity_limit() - dun->cent_n;
+    if (budget_t8 > capacity_remaining)
+        budget_t8 = capacity_remaining;
+
+    /* Reserve space for the dedicated GV attempt before scaling other budgets */
+    int capacity_for_regular = capacity_remaining - budget_t8;
+    if (capacity_for_regular < 0)
+        capacity_for_regular = 0;
+
+    int budget_total = budget_t6 + budget_t7;
+    if (budget_total > capacity_for_regular && budget_total > 0) {
+        /* Scale budgets down to fit remaining slots (GV slot already reserved) */
+        budget_t6 = (budget_t6 * capacity_for_regular) / budget_total;
+        budget_t7 = (budget_t7 * capacity_for_regular) / budget_total;
+        if (budget_t6 + budget_t7 < capacity_for_regular) {
+            budget_t6 = MIN(capacity_for_regular, budget_t6 + 1); /* keep at least one */
+        }
+    } else if (capacity_for_regular == 0) {
+        budget_t6 = 0;
+        budget_t7 = 0;
     }
     
-    /* Allocate mode, style, and density arrays */
-    quadrant_mode_t modes[9];  /* Max 9 partitions */
-    int partition_styles[9];
-    density_level_t densities[9];  /* Density variation per partition */
+    /* Mode pool for random selection */
+    int mode_weights[6];
+    mode_weights[QUAD_MODE_ROOMY]     = 25;                   /* Constant - always good chance */
+    mode_weights[QUAD_MODE_CAVEY]     = 18 + blocks / 2;
+    mode_weights[QUAD_MODE_RUINED]    = 16;                   /* Constant - general purpose */
+    mode_weights[QUAD_MODE_LABYRINTH] = 10 + depth / 5;       /* slight boost */
+    mode_weights[QUAD_MODE_CHASM]     = 10 + depth / 6 + blocks / 3; /* more CHASM */
+    mode_weights[QUAD_MODE_BIG_CAVE]  = 9 + depth / 6 + blocks / 4;
     
-    /* Initialize all partitions to ROOMY */
-    for (int i = 0; i < partition_count; ++i)
+    /* Guarantee minimum ROOMY and CAVEY partitions based on partition count */
+    /* ROOMY provides reliable standard rooms that connect well */
+    int guaranteed_roomy = 1 + partition_count / 5;  /* At least 1 ROOMY, +1 per 5 partitions */
+    int guaranteed_cavey = partition_count / 8;      /* 0 for small, 1+ for larger */
+    
+    /* Initialize with guaranteed modes first */
+    int idx = 0;
+    for (int i = 0; i < guaranteed_roomy && idx < partition_count; ++i, ++idx)
+        modes[idx] = QUAD_MODE_ROOMY;
+    for (int i = 0; i < guaranteed_cavey && idx < partition_count; ++i, ++idx)
+        modes[idx] = QUAD_MODE_CAVEY;
+    
+    /* Fill remaining with random modes */
+    for (; idx < partition_count; ++idx)
     {
-        modes[i] = QUAD_MODE_ROOMY;
+        modes[idx] = pick_weighted_mode(mode_weights, N_ELEMENTS(mode_weights));
     }
     
-    if (partition_count == 4)
+    /* Shuffle all partitions */
+    for (int i = partition_count - 1; i > 0; --i)
     {
-        /* Small levels (4 partitions): Guaranteed ROOMY + CAVEY, others random */
-        
-        /* First two partitions: ROOMY and CAVEY (guaranteed) */
-        modes[0] = QUAD_MODE_ROOMY;
-        modes[1] = QUAD_MODE_CAVEY;
-        
-        /* Remaining two partitions: random from all modes */
-        int mode_pool[] = {QUAD_MODE_ROOMY, QUAD_MODE_CAVEY, QUAD_MODE_RUINED, 
-                          QUAD_MODE_LABYRINTH, QUAD_MODE_CHASM};
-        int pool_size = 5;
-        
-        for (int i = 2; i < partition_count; ++i)
-        {
-            int pick = rand_int(pool_size);
-            modes[i] = mode_pool[pick];
-        }
-        
-        /* Shuffle all partitions so ROOMY/CAVEY aren't always in same positions */
-        for (int i = partition_count - 1; i > 0; --i)
-        {
-            int j = rand_int(i + 1);
-            quadrant_mode_t temp = modes[i];
-            modes[i] = modes[j];
-            modes[j] = temp;
-        }
-        
-        log_trace("4-partition level: ROOMY + CAVEY guaranteed, others randomized");
+        int j = rand_int(i + 1);
+        quadrant_mode_t temp = modes[i];
+        modes[i] = modes[j];
+        modes[j] = temp;
     }
-    else  /* partition_count == 9 */
-    {
-        /* Large levels (9 partitions): Guaranteed 2x ROOMY + CAVEY, others random */
-        
-        /* First three partitions: 2x ROOMY and CAVEY (guaranteed) */
-        modes[0] = QUAD_MODE_ROOMY;
-        modes[1] = QUAD_MODE_ROOMY;
-        modes[2] = QUAD_MODE_CAVEY;
-        
-        /* Remaining 6 partitions: mix of modes with variety */
-        int mode_pool[] = {QUAD_MODE_ROOMY, QUAD_MODE_CAVEY, QUAD_MODE_RUINED, 
-                          QUAD_MODE_LABYRINTH, QUAD_MODE_CHASM};
-        int pool_size = 5;
-        
-        for (int i = 3; i < partition_count; ++i)
-        {
-            /* Weighted selection: favor variety but allow repeats */
-            int pick = rand_int(pool_size);
-            modes[i] = mode_pool[pick];
-        }
-        
-        /* Shuffle all partitions */
-        for (int i = partition_count - 1; i > 0; --i)
-        {
-            int j = rand_int(i + 1);
-            quadrant_mode_t temp = modes[i];
-            modes[i] = modes[j];
-            modes[j] = temp;
-        }
-        
-        log_trace("9-partition level: 2x ROOMY + CAVEY guaranteed, others randomized");
-    }
+    
+    log_trace("%d-partition level: %d ROOMY + %d CAVEY guaranteed, others randomized",
+              partition_count, guaranteed_roomy, guaranteed_cavey);
+    
+    genlog_partition("Mode guarantees: %d ROOMY + %d CAVEY required, %d random",
+                     guaranteed_roomy, guaranteed_cavey, partition_count - guaranteed_roomy - guaranteed_cavey);
     
     /* Pick a random visual style and density for each partition */
     for (int i = 0; i < partition_count; ++i)
     {
         partition_styles[i] = styles_pick_random_from_level();
-        
-        /* Randomly assign density with weighted distribution */
+
+        /* Depth-aware density distribution */
+        int dense_chance = MIN(60, 20 + depth * 2 + partition_count);
+        int sparse_chance = MAX(10, 45 - depth * 2);
+        int normal_chance = 100 - dense_chance - sparse_chance;
+        if (normal_chance < 10) {
+            /* Rebalance if extremes crowd out normal */
+            int deficit = 10 - normal_chance;
+            sparse_chance = MAX(5, sparse_chance - deficit / 2);
+            dense_chance = MAX(5, dense_chance - deficit / 2);
+            normal_chance = 100 - dense_chance - sparse_chance;
+        }
+
         int density_roll = rand_int(100);
-        if (density_roll < 25)
-            densities[i] = DENSITY_SPARSE;   /* 25% chance */
-        else if (density_roll < 75)
-            densities[i] = DENSITY_NORMAL;   /* 50% chance */
+        if (density_roll < sparse_chance)
+            densities[i] = DENSITY_SPARSE;
+        else if (density_roll < sparse_chance + normal_chance)
+            densities[i] = DENSITY_NORMAL;
         else
-            densities[i] = DENSITY_DENSE;    /* 25% chance */
-        
-        log_trace("Partition %d: mode=%d style=%d density=%d", i, modes[i], partition_styles[i], densities[i]);
+            densities[i] = DENSITY_DENSE;
     }
     
-    /* Apply modes to each partition */
+    /* Pre-roll for a dedicated greater vault partition (must be interior) */
+    if (budget_t8 > 0)
+    {
+        int gv_candidates[25];
+        int gv_interior_count = 0;
+        for (int row = 0; row < grid_rows; ++row)
+        {
+            for (int col = 0; col < grid_cols; ++col)
+            {
+                if (!partition_is_interior(row, col, grid_rows, grid_cols))
+                    continue;
+                int idx = row * grid_cols + col;
+                if (idx >= partition_count || gv_interior_count >= 25)
+                    continue;
+                gv_candidates[gv_interior_count++] = idx;
+            }
+        }
+
+        if (gv_interior_count > 0)
+        {
+            gv_partition = gv_candidates[rand_int(gv_interior_count)];
+            int gv_row = gv_partition / grid_cols;
+            int gv_col = gv_partition % grid_cols;
+            log_trace("Greater vault partition: %d interior options -> reserve partition %d (row=%d col=%d grid %dx%d)",
+                      gv_interior_count, gv_partition, gv_row, gv_col, grid_rows, grid_cols);
+            genlog_partition("GV partition reserved (rarity passed): depth=%d min_depth=%d interior=%d -> (%d,%d) idx=%d grid=%dx%d",
+                             depth, gv_min_depth, gv_interior_count, gv_row, gv_col, gv_partition, grid_rows, grid_cols);
+        }
+        else
+        {
+            log_trace("Greater vault partition: no eligible interior partitions for %dx%d grid",
+                      grid_rows, grid_cols);
+            genlog_partition("GV partition skipped: no interior partitions for grid %dx%d (depth=%d)", grid_rows, grid_cols, depth);
+            gv_partition = -1;
+            budget_t8 = 0; /* No dedicated slot this level */
+        }
+    }
+    
+    /* Mode name strings for logging */
+    const char *mode_str[] = {"ROOMY", "CAVEY", "RUINED", "LABYRINTH", "CHASM", "BIG_CAVE"};
+    const char *density_str[] = {"SPARSE", "NORMAL", "DENSE"};
+    int used_t6 = 0, used_t7 = 0, used_t8 = 0;
+    bool gv_partition_attempted = false;
+    int partitions_skipped = 0;
+    int skipped_soft_fill = 0;
+    int skip_cap = MAX(2, partition_count / 5); /* cap outright skips to keep coverage */
+
+    /* Track which partitions have been processed */
+    bool partition_done[25];
+    for (int i = 0; i < 25; ++i)
+        partition_done[i] = false;
+
+    /* TWO-PASS PROCESSING:
+     * Pass 1: Process special modes (LABYRINTH, CHASM, BIG_CAVE) first.
+     *         These need clear space for anchor carving, so they must run
+     *         before ROOMY/CAVEY can place rooms that encroach on neighbors.
+     * Pass 2: Process remaining modes (ROOMY, CAVEY, RUINED).
+     */
+    genlog_partition("Processing special modes first (LABYRINTH, CHASM, BIG_CAVE) to ensure clear space");
+    
+    /* Pass 1: Special modes only */
     for (int pi = 0; pi < partition_count; ++pi)
     {
+        quadrant_mode_t mode = modes[pi];
+        bool is_gv_partition = (pi == gv_partition);
+        bool is_special_mode = (mode == QUAD_MODE_LABYRINTH || mode == QUAD_MODE_CHASM || mode == QUAD_MODE_BIG_CAVE);
+        if (!is_gv_partition && !is_special_mode)
+            continue;  /* Skip non-special modes for now */
+
         if (dun->cent_n >= room_capacity_limit())
         {
             log_trace("Partition gen: room capacity reached (%d/%d), skipping remaining partitions",
                       dun->cent_n, room_capacity_limit());
             break;
         }
-        /* Calculate partition boundaries based on grid size.
-         * Use overlapping boundaries to avoid visible seams between partitions.
-         * Each partition extends to include the boundary line with its neighbor. */
-        int row = pi / grid_size;
-        int col = pi % grid_size;
+
+        /* Calculate partition boundaries based on grid */
+        int before_cent = dun->cent_n;
+        int row = pi / grid_cols;
+        int col = pi % grid_cols;
         
-        /* Calculate boundaries with overlap: later partitions overwrite edges */
-        int y1 = (row * p_ptr->cur_map_hgt / grid_size);
-        int y2 = ((row + 1) * p_ptr->cur_map_hgt / grid_size);
-        int x1 = (col * p_ptr->cur_map_wid / grid_size);
-        int x2 = ((col + 1) * p_ptr->cur_map_wid / grid_size);
+        /* Calculate boundaries */
+        int y1 = (row * p_ptr->cur_map_hgt / grid_rows);
+        int y2 = ((row + 1) * p_ptr->cur_map_hgt / grid_rows);
+        int x1 = (col * p_ptr->cur_map_wid / grid_cols);
+        int x2 = ((col + 1) * p_ptr->cur_map_wid / grid_cols);
         
         /* Ensure we don't go out of bounds */
         if (y1 < 1) y1 = 1;
@@ -2376,19 +4342,56 @@ static void apply_quadrant_generation_modes(void)
         if (y2 >= p_ptr->cur_map_hgt - 1) y2 = p_ptr->cur_map_hgt - 2;
         if (x2 >= p_ptr->cur_map_wid - 1) x2 = p_ptr->cur_map_wid - 2;
         
-        quadrant_mode_t mode = modes[pi];
+        bool is_morgoth_partition = (morgoth_level_active && pi == morgoth_partition_index);
+        if (is_morgoth_partition)
+        {
+            morgoth_partition_bounds.y1 = y1;
+            morgoth_partition_bounds.y2 = y2;
+            morgoth_partition_bounds.x1 = x1;
+            morgoth_partition_bounds.x2 = x2;
+            morgoth_vault_center_y = (y1 + y2) / 2;
+            morgoth_vault_center_x = (x1 + x2) / 2;
+            morgoth_partition_reserved = true;
+            partition_done[pi] = true;
+            genlog_partition("Morgoth partition reserved at idx=%d bounds=(%d,%d)-(%d,%d)", pi, y1, x1, y2, x2);
+            continue;
+        }
+
+        /* mode already declared at loop start for the continue check */
         int style_idx = partition_styles[pi];
         density_level_t density = densities[pi];
+        int area = (y2 - y1 + 1) * (x2 - x1 + 1);
+        int area_factor = MAX(1, MIN(3, (area + 1100) / 1200));
+        int floor_pct = 0, icky_pct = 0;
+        bool reserved = area_is_reserved_or_dense(y1, y2, x1, x2, &floor_pct, &icky_pct);
+
+        log_trace("Partition %d [%d,%d] (pass 1%s): mode=%s density=%s bounds=(%d,%d)-(%d,%d) area=%d floor=%d%% icky=%d%%",
+                  pi, row, col, is_gv_partition ? " GV" : "", mode_str[mode], density_str[density], y1, x1, y2, x2, area, floor_pct, icky_pct);
+
+        if (reserved && partitions_skipped >= skip_cap) {
+            /* Too many skips already: fall back to a light recipe instead of skipping */
+            log_trace("Partition %d [%d,%d]: reserved but skip_cap reached; using soft-fill", pi, row, col);
+            reserved = false;
+            skipped_soft_fill++;
+            /* Downgrade density to sparse to reduce conflicts */
+            density = DENSITY_SPARSE;
+        }
+
+        if (reserved) {
+            log_trace("Partition %d [%d,%d]: skipping (reserved/quest/icky overlap)", pi, row, col);
+            if (is_gv_partition) {
+                gv_partition = -1;
+                budget_t8 = 0;
+            }
+            partitions_skipped++;
+            continue;
+        }
 
         /* Apply the partition's visual style to its granite walls.
-         * Use a jagged/organic boundary instead of a straight line by
-         * randomizing whether edge tiles get styled (creating a natural blend). */
+         * Use a jagged/organic boundary instead of a straight line. */
         if (style_idx >= 0)
         {
-            /* Calculate the boundary threshold for organic edge blending.
-             * Tiles within 'blend_zone' of the edge have a chance to not be styled,
-             * allowing neighbor partition's style to show through. */
-            int blend_zone = 3;  /* How many tiles wide the transition zone is */
+            int blend_zone = 3;
             
             for (int y = y1; y <= y2; ++y)
             {
@@ -2397,22 +4400,18 @@ static void apply_quadrant_generation_modes(void)
                     if (cave_feat[y][x] != FEAT_WALL_EXTRA)
                         continue;
                     
-                    /* Calculate distance from each edge */
                     int dist_top = y - y1;
                     int dist_bot = y2 - y;
                     int dist_left = x - x1;
                     int dist_right = x2 - x;
                     int dist_edge = MIN(MIN(dist_top, dist_bot), MIN(dist_left, dist_right));
                     
-                    /* Tiles well inside the partition always get styled */
                     if (dist_edge >= blend_zone)
                     {
                         cave_set_feat_with_color(y, x, FEAT_WALL_EXTRA, style_idx);
                     }
                     else
                     {
-                        /* Edge tiles: probability decreases as we approach boundary.
-                         * dist_edge=0 -> 20% chance, dist_edge=2 -> 87% chance */
                         int chance = 20 + (dist_edge * 67 / blend_zone);
                         if (rand_int(100) < chance)
                         {
@@ -2423,100 +4422,1040 @@ static void apply_quadrant_generation_modes(void)
             }
         }
 
+        if (is_gv_partition)
+        {
+            gv_partition_attempted = true;
+            bool placed_gv = place_gv_in_partition(y1, y2, x1, x2, &budget_t8, &used_t8);
+            if (placed_gv)
+            {
+                log_trace("Partition %d [%d,%d]: placed greater vault within bounds (%d,%d)-(%d,%d)",
+                          pi, row, col, y1, x1, y2, x2);
+                genlog_partition("GV placed in partition [%d,%d] idx=%d bounds=(%d,%d)-(%d,%d) remaining_t8=%d",
+                                 row, col, pi, y1, x1, y2, x2, budget_t8);
+                partition_done[pi] = true;
+                continue;
+            }
+
+            log_trace("Partition %d [%d,%d]: greater vault placement failed, falling back to mode logic",
+                      pi, row, col);
+            genlog_partition("GV placement failed in partition [%d,%d] idx=%d bounds=(%d,%d)-(%d,%d); disabling GV for this attempt",
+                             row, col, pi, y1, x1, y2, x2);
+            gv_partition = -1;
+            budget_t8 = 0;
+            if (!is_special_mode)
+                continue;
+        }
+
+        /* PARTITION MODE TYPES:
+         * - ROOMY: Traditional dungeon - balanced mix of all room types
+         * - CAVEY: Natural cave system with CA blobs and minimal rooms
+         * - RUINED: Ancient carved BSP passages with rooms
+         * - LABYRINTH: Maze corridors with chambers
+         * - CHASM: Platforms over chasms connected by bridges
+         * - BIG_CAVE: Single massive irregular cavern with rooms inside
+         */
         switch (mode)
         {
         case QUAD_MODE_CAVEY:
             {
-                int blob_count = (density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2;
+                /* Natural cave system: CA blobs with quartz veins */
+                int area = (y2 - y1) * (x2 - x1);
+                int base_blobs = 2 + area / 400;  /* Scale with partition size */
+                int blob_count = (density == DENSITY_SPARSE) ? base_blobs : 
+                                 (density == DENSITY_DENSE) ? base_blobs + 2 : base_blobs + 1;
+                if (blob_count > 6) blob_count = 6;
+                
                 for (int b = 0; b < blob_count; ++b)
                     carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
-                room_build_in_bounds(6, y1, y2, x1, x2); /* interesting */
-                if (density != DENSITY_SPARSE)
-                    room_build_in_bounds(7, y1, y2, x1, x2); /* lesser vault */
+                
+                /* Scatter quartz veins for natural cave look */
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                
+                /* Scatter gems and mithril in cave areas - normal cave bonus */
+                scatter_cave_gems_in_bounds(y1, y2, x1, x2, false);
+                
+                /* Caves with rooms scattered inside */
+                /* Sparse: T1=2 T2=1 T6=2 T7=0 | Normal: T1=2 T2=2 T6=2 T7=1 | Dense: T1=2 T2=3 T6=3 T7=1 */
+                int std_count = scaled_attempts(2, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 1 : 1, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
             break;
         case QUAD_MODE_RUINED:
             {
-                int carve_count = (density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1;
+                /* Ancient carved passages with rubble and broken walls */
+                int area = (y2 - y1) * (x2 - x1);
+                int base_carves = 4 + area / 500;
+                int carve_count = (density == DENSITY_SPARSE) ? base_carves :
+                                  (density == DENSITY_DENSE) ? base_carves + 4 : base_carves + 2;
+                if (carve_count > 10) carve_count = 10;
+                
                 for (int b = 0; b < carve_count; ++b)
                     carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
-                if (density != DENSITY_SPARSE)
-                    room_build_in_bounds(7, y1, y2, x1, x2);
-                room_build_in_bounds(2, y1, y2, x1, x2);
-                if (density == DENSITY_DENSE)
-                    room_build_in_bounds(1, y1, y2, x1, x2);
+                
+                /* Add rubble to carved floor tiles (5-10-15% based on density) */
+                int rubble_chance = (density == DENSITY_SPARSE) ? 5 : 
+                                    (density == DENSITY_DENSE) ? 15 : 10;
+                for (int gy = y1; gy <= y2; ++gy)
+                {
+                    for (int gx = x1; gx <= x2; ++gx)
+                    {
+                        if (!in_bounds_fully(gy, gx)) continue;
+                        if (!cave_floor_bold(gy, gx)) continue;
+                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
+                        if (rand_int(100) < rubble_chance)
+                            cave_set_feat(gy, gx, FEAT_RUBBLE);
+                    }
+                }
+                
+                /* Add broken wall segments (convert some outer walls to floor with rubble) */
+                for (int gy = y1 + 2; gy <= y2 - 2; ++gy)
+                {
+                    for (int gx = x1 + 2; gx <= x2 - 2; ++gx)
+                    {
+                        if (!in_bounds_fully(gy, gx)) continue;
+                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
+                        if (cave_feat[gy][gx] != FEAT_WALL_OUTER) continue;
+                        if (rand_int(100) < 30)
+                        {
+                            cave_set_feat(gy, gx, FEAT_FLOOR);
+                            cave_info[gy][gx] |= CAVE_ROOM;
+                            if (one_in_(2))
+                                cave_set_feat(gy, gx, FEAT_RUBBLE);
+                        }
+                    }
+                }
+                
+                /* Ruined passages with rooms and vaults */
+                /* Sparse: T1=1 T2=1 T6=1 T7=0 | Normal: T1=1 T2=1 T6=2 T7=1 | Dense: T1=2 T2=2 T6=3 T7=2 */
+                int std_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
             break;
         case QUAD_MODE_LABYRINTH:
             {
-                /* Dense maze of twisting corridors */
-                int maze_count = (density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3;
-                for (int b = 0; b < maze_count; ++b)
-                    carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
-                /* Add small chambers scattered throughout */
-                int room_count = (density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2;
-                for (int r = 0; r < room_count; ++r)
-                    room_build_in_bounds(1, y1, y2, x1, x2);
-                if (density != DENSITY_SPARSE)
-                    room_build_in_bounds(6, y1, y2, x1, x2);
+                /* Maze corridors - oppressive, fewer rooms */
+                bool carved = carve_labyrinth_bounds(y1, y2, x1, x2);
+                if (!carved)
+                {
+                    /* Fallback: more BSP slices for maze-like feel */
+                    int maze_count = (density == DENSITY_SPARSE) ? 6 : 
+                                     (density == DENSITY_DENSE) ? 12 : 8;
+                    for (int b = 0; b < maze_count; ++b)
+                        carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
+                }
+                
+                /* Add some dead-end interest: occasional rubble in corridors */
+                for (int gy = y1; gy <= y2; ++gy)
+                {
+                    for (int gx = x1; gx <= x2; ++gx)
+                    {
+                        if (!in_bounds_fully(gy, gx)) continue;
+                        if (!cave_floor_bold(gy, gx)) continue;
+                        /* Very low rubble chance for claustrophobic feel */
+                        if (one_in_(40))
+                            cave_set_feat(gy, gx, FEAT_RUBBLE);
+                    }
+                }
+                
+                /* Labyrinth with chambers and vaults */
+                /* Sparse: T1=1 T2=0 T6=1 T7=0 | Normal: T1=1 T2=1 T6=1 T7=0 | Dense: T1=1 T2=1 T6=2 T7=1 */
+                int std_count = scaled_attempts(1, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : 1, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 1 : 0, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
             break;
         case QUAD_MODE_CHASM:
             {
-                /* Large open cavern with pillars */
-                int blob_count = (density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2;
-                for (int b = 0; b < blob_count; ++b)
-                    carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
-                /* Add pillared rooms for structure */
-                room_build_in_bounds(1, y1, y2, x1, x2);  /* May create pillars */
-                if (density != DENSITY_SPARSE)
-                    room_build_in_bounds(2, y1, y2, x1, x2);  /* Cross-shaped */
-                if (density == DENSITY_DENSE)
-                    room_build_in_bounds(1, y1, y2, x1, x2);  /* Additional structure */
+                /* Chasm with platforms connected by bridges - no additional rooms */
+                if (!carve_chasm_with_bridges(y1, y2, x1, x2))
+                {
+                    /* Fallback: use CA blobs if chasm fails */
+                    int blob_count = (density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3;
+                    for (int b = 0; b < blob_count; ++b)
+                        carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                }
+                /* No rooms - the chasm IS the feature */
+            }
+            break;
+        case QUAD_MODE_BIG_CAVE:
+            {
+                /* Single massive cavern - the cave IS the room */
+                bool carved = carve_big_cave_bounds(y1, y2, x1, x2);
+                if (!carved)
+                {
+                    /* Fallback: many overlapping blobs */
+                    int blob_count = (density == DENSITY_SPARSE) ? 5 : 
+                                     (density == DENSITY_DENSE) ? 10 : 7;
+                    for (int b = 0; b < blob_count; ++b)
+                        carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                }
+                
+                /* Add quartz veins for natural cave look */
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                
+                /* Add internal pillars/boulders for visual interest (density-scaled) */
+                int pillar_target = (density == DENSITY_SPARSE) ? 3 : 
+                                    (density == DENSITY_DENSE) ? 10 : 6;
+                int pillars_placed = 0;
+                for (int tries = 0; tries < 100 && pillars_placed < pillar_target; ++tries)
+                {
+                    int py = rand_range(y1 + 3, y2 - 3);
+                    int px = rand_range(x1 + 3, x2 - 3);
+                    if (!in_bounds_fully(py, px)) continue;
+                    if (!cave_floor_bold(py, px)) continue;
+                    
+                    /* Check all neighbors are floor */
+                    bool all_floor = true;
+                    for (int dy = -1; dy <= 1 && all_floor; ++dy)
+                        for (int dx = -1; dx <= 1 && all_floor; ++dx)
+                            if (!cave_floor_bold(py + dy, px + dx))
+                                all_floor = false;
+                    
+                    if (all_floor)
+                    {
+                        cave_set_feat(py, px, FEAT_WALL_EXTRA);
+                        pillars_placed++;
+                    }
+                }
+                
+                /* Add some simple rooms scattered in the big cave */
+                /* Sparse: T1=1 T6=1 | Normal: T1=1 T6=1 | Dense: T1=1 T6=2 */
+                int std_count = scaled_attempts(1, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, 0, int_count, 0,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
             break;
         case QUAD_MODE_ROOMY:
         default:
             {
-                int basic_count = (density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2;
-                for (int r = 0; r < basic_count; ++r)
-                    room_build_in_bounds(1, y1, y2, x1, x2);
-                if (density != DENSITY_SPARSE)
-                    room_build_in_bounds(6, y1, y2, x1, x2);
-                if (density == DENSITY_DENSE)
-                    room_build_in_bounds(7, y1, y2, x1, x2);
+                /* Traditional dungeon - packed with rooms and vaults */
+                /* Sparse: T1=2 T2=1 T6=2 T7=1 | Normal: T1=3 T2=2 T6=3 T7=2 | Dense: T1=4 T2=3 T6=4 T7=3 */
+                int std_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
             break;
         }
+
+        /* Add boundary openings for hard-to-exit modes */
+        if (mode == QUAD_MODE_CHASM || mode == QUAD_MODE_BIG_CAVE || mode == QUAD_MODE_LABYRINTH)
+        {
+            ensure_partition_boundary_openings(y1, y2, x1, x2, 3);
+        }
+
+        /* Per-partition fallback: if nothing landed, drop a simple room to avoid voids */
+        if (dun->cent_n == before_cent)
+        {
+            if (room_build_in_bounds(1, y1, y2, x1, x2) || room_build_in_bounds(2, y1, y2, x1, x2))
+                log_trace("Partition %d [%d,%d]: fallback simple room placed", pi, row, col);
+        }
+        
+        /* Mark partition as done */
+        partition_done[pi] = true;
+    }
+
+    /* Pass 2: Process remaining non-special modes (ROOMY, CAVEY, RUINED) */
+    genlog_partition("Pass 2: Processing standard modes (ROOMY, CAVEY, RUINED)");
+    for (int pi = 0; pi < partition_count; ++pi)
+    {
+        if (partition_done[pi])
+            continue;  /* Already processed in Pass 1 */
+
+        if (dun->cent_n >= room_capacity_limit())
+        {
+            log_trace("Partition gen: room capacity reached (%d/%d), skipping remaining partitions",
+                      dun->cent_n, room_capacity_limit());
+            break;
+        }
+
+        /* Calculate partition boundaries based on grid */
+        int before_cent = dun->cent_n;
+        int row = pi / grid_cols;
+        int col = pi % grid_cols;
+        
+        /* Calculate boundaries */
+        int y1 = (row * p_ptr->cur_map_hgt / grid_rows);
+        int y2 = ((row + 1) * p_ptr->cur_map_hgt / grid_rows);
+        int x1 = (col * p_ptr->cur_map_wid / grid_cols);
+        int x2 = ((col + 1) * p_ptr->cur_map_wid / grid_cols);
+        
+        /* Ensure we don't go out of bounds */
+        if (y1 < 1) y1 = 1;
+        if (x1 < 1) x1 = 1;
+        if (y2 >= p_ptr->cur_map_hgt - 1) y2 = p_ptr->cur_map_hgt - 2;
+        if (x2 >= p_ptr->cur_map_wid - 1) x2 = p_ptr->cur_map_wid - 2;
+        
+        quadrant_mode_t mode = modes[pi];
+        density_level_t density = densities[pi];
+        int area = (y2 - y1 + 1) * (x2 - x1 + 1);
+        int area_factor = MAX(1, MIN(3, (area + 1100) / 1200));
+        int floor_pct = 0, icky_pct = 0;
+        bool reserved = area_is_reserved_or_dense(y1, y2, x1, x2, &floor_pct, &icky_pct);
+
+        log_trace("Partition %d [%d,%d] (pass 2): mode=%s density=%s bounds=(%d,%d)-(%d,%d)",
+                  pi, row, col, mode_str[mode], density_str[density], y1, x1, y2, x2);
+
+        if (reserved && partitions_skipped >= skip_cap) {
+            reserved = false;
+            skipped_soft_fill++;
+            density = DENSITY_SPARSE;
+        }
+
+        if (reserved) {
+            log_trace("Partition %d [%d,%d]: skipping (reserved/quest/icky overlap)", pi, row, col);
+            partitions_skipped++;
+            continue;
+        }
+
+        /* Process the partition based on its mode (standard modes only here) */
+        switch (mode)
+        {
+        case QUAD_MODE_CAVEY:
+            {
+                int blob_count = 2 + (y2 - y1) * (x2 - x1) / 400;
+                if (blob_count > 6) blob_count = 6;
+                for (int b = 0; b < blob_count; ++b)
+                    carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                int std_count = scaled_attempts(2, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_DENSE) ? 4 : (density == DENSITY_SPARSE) ? 2 : 3, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 1 : 1, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+            }
+            break;
+        case QUAD_MODE_RUINED:
+            {
+                int carve_count = 3 + (y2 - y1) * (x2 - x1) / 500;
+                if (carve_count > 10) carve_count = 10;
+                for (int b = 0; b < carve_count; ++b)
+                    carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
+                
+                /* Add rubble to carved floor tiles (5-10-15% based on density) */
+                int rubble_chance = (density == DENSITY_SPARSE) ? 5 : 
+                                    (density == DENSITY_DENSE) ? 15 : 10;
+                for (int gy = y1; gy <= y2; ++gy)
+                {
+                    for (int gx = x1; gx <= x2; ++gx)
+                    {
+                        if (!in_bounds_fully(gy, gx)) continue;
+                        if (!cave_floor_bold(gy, gx)) continue;
+                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
+                        if (rand_int(100) < rubble_chance)
+                            cave_set_feat(gy, gx, FEAT_RUBBLE);
+                    }
+                }
+                
+                /* Add broken wall segments */
+                for (int gy = y1 + 2; gy <= y2 - 2; ++gy)
+                {
+                    for (int gx = x1 + 2; gx <= x2 - 2; ++gx)
+                    {
+                        if (!in_bounds_fully(gy, gx)) continue;
+                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
+                        if (cave_feat[gy][gx] != FEAT_WALL_OUTER) continue;
+                        if (rand_int(100) < 30)
+                        {
+                            cave_set_feat(gy, gx, FEAT_FLOOR);
+                            cave_info[gy][gx] |= CAVE_ROOM;
+                            if (one_in_(2))
+                                cave_set_feat(gy, gx, FEAT_RUBBLE);
+                        }
+                    }
+                }
+                
+                int std_count = scaled_attempts(1, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : 1, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_DENSE) ? 2 : 1, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_DENSE) ? 1 : 0, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+            }
+            break;
+        default:
+            {
+                /* ROOMY or fallback: Traditional dungeon */
+                int std_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
+                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3, area_factor);
+                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3, area_factor);
+                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
+                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+            }
+            break;
+        }
+
+        /* Per-partition fallback */
+        if (dun->cent_n == before_cent)
+        {
+            if (room_build_in_bounds(1, y1, y2, x1, x2) || room_build_in_bounds(2, y1, y2, x1, x2))
+                log_trace("Partition %d [%d,%d]: fallback simple room placed", pi, row, col);
+        }
+    }
+
+    /* Log partition generation summary */
+    log_debug("Generation summary: %d blocks, %dx%d grid (%d partitions), %d rooms created",
+              blocks, grid_rows, grid_cols, partition_count, dun->cent_n);
+    log_debug("Partition budgets: used t6=%d/t7=%d/t8=%d remaining t6=%d t7=%d t8=%d skipped_parts=%d soft_fill=%d",
+              used_t6, used_t7, used_t8, budget_t6, budget_t7, budget_t8, partitions_skipped, skipped_soft_fill);
+    log_trace("Greater vault partition summary: attempted=%s placed=%d",
+              gv_partition_attempted ? "yes" : "no", used_t8);
+    
+    /* Detailed generation log summary */
+    genlog_summary("Partition phase complete: %d rooms from %d partitions (%d skipped, %d soft-fill skipped)",
+                   dun->cent_n, partition_count, partitions_skipped, skipped_soft_fill);
+    genlog_summary("Room budgets - T6: %d used / T7: %d used / T8: %d used",
+                   used_t6, used_t7, used_t8);
+    
+    /* Log mode distribution and persist labyrinth count for monster/stair bonuses */
+    {
+        int mode_counts[6] = {0};
+        for (int mi = 0; mi < partition_count; ++mi)
+            mode_counts[modes[mi]]++;
+        current_labyrinth_partitions = mode_counts[QUAD_MODE_LABYRINTH];
+        genlog_partition("Mode distribution: ROOMY=%d CAVEY=%d RUINED=%d LABYRINTH=%d CHASM=%d BIG_CAVE=%d",
+                         mode_counts[0], mode_counts[1], mode_counts[2],
+                         mode_counts[3], mode_counts[4], mode_counts[5]);
     }
     
-    /* Log partition generation summary */
+#if DEBUG_GENERATION_LOG
+    /* Also show in game messages if debug is enabled */
+    msg_format("Gen: %d blocks, %dx%d grid (%d parts), %d rooms",
+               blocks, grid_rows, grid_cols, partition_count, dun->cent_n);
+    
+    /* Build a summary of partition modes */
+    int mode_counts[6] = {0};
+    for (int i = 0; i < partition_count; ++i)
+        mode_counts[modes[i]]++;
+    
+    msg_format("Modes: R:%d C:%d U:%d L:%d H:%d B:%d",
+               mode_counts[0], mode_counts[1], mode_counts[2],
+               mode_counts[3], mode_counts[4], mode_counts[5]);
+#endif
+}
+
+/* Carve connection corridors at partition boundaries to ensure inter-partition connectivity.
+ * This helps when caves/labyrinths in adjacent partitions don't naturally connect.
+ * IMPROVED: Now searches deeper into partitions (15 tiles) and carves longer corridors (8 tiles).
+ * Also tries multiple x/y positions per boundary segment. */
+static void ensure_partition_connectivity(void)
+{
+    int blocks = p_ptr->cur_map_hgt / PANEL_HGT;
+    int grid_rows = current_partition_rows;
+    int grid_cols = current_partition_cols;
+    
+    /* Reuse the grid chosen during generation; fall back if unavailable */
+    if (grid_rows <= 0 || grid_cols <= 0) {
+        fallback_partition_grid_from_blocks(blocks, &grid_rows, &grid_cols);
+    }
+    
+    int connections_added = 0;
+    const int SEARCH_DEPTH = 15;  /* How far into partition to look for floor (was 5) */
+    const int CORRIDOR_LEN = 8;   /* How long the carved corridor is (was 3) */
+    const int ATTEMPTS_PER_SEGMENT = 3;  /* Try multiple positions per boundary segment */
+    
+    genlog_connect("ensure_partition_connectivity: %dx%d grid, searching %d deep, carving %d long",
+                   grid_rows, grid_cols, SEARCH_DEPTH, CORRIDOR_LEN);
+    
+    /* Create horizontal boundary connections (between rows) */
+    for (int row = 0; row < grid_rows - 1; ++row)
     {
-        const char *mode_str[] = {"ROOMY", "CAVEY", "RUINED", "LABYRINTH", "CHASM"};
-        const char *density_str[] = {"SPARSE", "NORMAL", "DENSE"};
+        int boundary_y = ((row + 1) * p_ptr->cur_map_hgt / grid_rows);
         
-        if (partition_count == 4)
+        for (int col = 0; col < grid_cols; ++col)
         {
-            log_debug("Partition generation (2x2): [0]=%s/%s [1]=%s/%s [2]=%s/%s [3]=%s/%s",
-                     mode_str[modes[0]], density_str[densities[0]],
-                     mode_str[modes[1]], density_str[densities[1]],
-                     mode_str[modes[2]], density_str[densities[2]],
-                     mode_str[modes[3]], density_str[densities[3]]);
+            int x1 = (col * p_ptr->cur_map_wid / grid_cols) + 2;
+            int x2 = ((col + 1) * p_ptr->cur_map_wid / grid_cols) - 2;
+            
+            /* Try multiple x positions for better coverage */
+            for (int attempt = 0; attempt < ATTEMPTS_PER_SEGMENT; ++attempt)
+            {
+                int cx = rand_range(x1 + 2, x2 - 2);
+                
+                /* Find nearest floor above and below the boundary */
+                int floor_above_y = -1, floor_above_x = -1;
+                int floor_below_y = -1, floor_below_x = -1;
+                
+                for (int dx = -5; dx <= 5; ++dx)
+                {
+                    int tx = cx + dx;
+                    if (tx < 1 || tx >= p_ptr->cur_map_wid - 1) continue;
+                    
+                    for (int dy = 1; dy <= SEARCH_DEPTH; ++dy)
+                    {
+                        if (floor_above_y < 0 && in_bounds_fully(boundary_y - dy, tx) 
+                            && cave_floor_bold(boundary_y - dy, tx))
+                        {
+                            floor_above_y = boundary_y - dy;
+                            floor_above_x = tx;
+                        }
+                        if (floor_below_y < 0 && in_bounds_fully(boundary_y + dy, tx) 
+                            && cave_floor_bold(boundary_y + dy, tx))
+                        {
+                            floor_below_y = boundary_y + dy;
+                            floor_below_x = tx;
+                        }
+                    }
+                }
+                
+                /* If both partitions have floor nearby, check if connection needed */
+                if (floor_above_y >= 0 && floor_below_y >= 0)
+                {
+                    /* Check if boundary is already connected */
+                    bool boundary_connected = false;
+                    for (int dx = -3; dx <= 3; ++dx)
+                    {
+                        int tx = cx + dx;
+                        for (int dy = -2; dy <= 2; ++dy)
+                        {
+                            if (in_bounds_fully(boundary_y + dy, tx) && cave_floor_bold(boundary_y + dy, tx))
+                            {
+                                boundary_connected = true;
+                                break;
+                            }
+                        }
+                        if (boundary_connected) break;
+                    }
+                    
+                    if (!boundary_connected)
+                    {
+                        /* Carve from floor_above to floor_below through the boundary */
+                        int mid_x = (floor_above_x + floor_below_x) / 2;
+                        
+                        /* Carve vertical corridor centered on boundary */
+                        for (int dy = -CORRIDOR_LEN; dy <= CORRIDOR_LEN; ++dy)
+                        {
+                            int ty = boundary_y + dy;
+                            if (in_bounds_fully(ty, mid_x) && 
+                                (cave_feat[ty][mid_x] == FEAT_WALL_EXTRA || cave_feat[ty][mid_x] == FEAT_WALL_OUTER))
+                            {
+                                cave_set_feat(ty, mid_x, FEAT_FLOOR);
+                            }
+                        }
+                        connections_added++;
+                        genlog_connect("H-boundary row=%d col=%d: carved at x=%d from y=%d to y=%d",
+                                       row, col, mid_x, boundary_y - CORRIDOR_LEN, boundary_y + CORRIDOR_LEN);
+                        break;  /* Only one connection per segment needed */
+                    }
+                }
+            }
         }
-        else if (partition_count == 9)
+    }
+    
+    /* Create vertical boundary connections (between columns) */
+    for (int col = 0; col < grid_cols - 1; ++col)
+    {
+        int boundary_x = ((col + 1) * p_ptr->cur_map_wid / grid_cols);
+        
+        for (int row = 0; row < grid_rows; ++row)
         {
-            log_debug("Partition generation (3x3): [0]=%s/%s [1]=%s/%s [2]=%s/%s [3]=%s/%s [4]=%s/%s "
-                     "[5]=%s/%s [6]=%s/%s [7]=%s/%s [8]=%s/%s",
-                     mode_str[modes[0]], density_str[densities[0]],
-                     mode_str[modes[1]], density_str[densities[1]],
-                     mode_str[modes[2]], density_str[densities[2]],
-                     mode_str[modes[3]], density_str[densities[3]],
-                     mode_str[modes[4]], density_str[densities[4]],
-                     mode_str[modes[5]], density_str[densities[5]],
-                     mode_str[modes[6]], density_str[densities[6]],
-                     mode_str[modes[7]], density_str[densities[7]],
-                     mode_str[modes[8]], density_str[densities[8]]);
+            int y1 = (row * p_ptr->cur_map_hgt / grid_rows) + 2;
+            int y2 = ((row + 1) * p_ptr->cur_map_hgt / grid_rows) - 2;
+            
+            for (int attempt = 0; attempt < ATTEMPTS_PER_SEGMENT; ++attempt)
+            {
+                int cy = rand_range(y1 + 2, y2 - 2);
+                
+                int floor_left_y = -1, floor_left_x = -1;
+                int floor_right_y = -1, floor_right_x = -1;
+                
+                for (int dy = -5; dy <= 5; ++dy)
+                {
+                    int ty = cy + dy;
+                    if (ty < 1 || ty >= p_ptr->cur_map_hgt - 1) continue;
+                    
+                    for (int dx = 1; dx <= SEARCH_DEPTH; ++dx)
+                    {
+                        if (floor_left_x < 0 && in_bounds_fully(ty, boundary_x - dx) 
+                            && cave_floor_bold(ty, boundary_x - dx))
+                        {
+                            floor_left_y = ty;
+                            floor_left_x = boundary_x - dx;
+                        }
+                        if (floor_right_x < 0 && in_bounds_fully(ty, boundary_x + dx) 
+                            && cave_floor_bold(ty, boundary_x + dx))
+                        {
+                            floor_right_y = ty;
+                            floor_right_x = boundary_x + dx;
+                        }
+                    }
+                }
+                
+                if (floor_left_x >= 0 && floor_right_x >= 0)
+                {
+                    bool boundary_connected = false;
+                    for (int dy = -3; dy <= 3; ++dy)
+                    {
+                        int ty = cy + dy;
+                        for (int dx = -2; dx <= 2; ++dx)
+                        {
+                            if (in_bounds_fully(ty, boundary_x + dx) && cave_floor_bold(ty, boundary_x + dx))
+                            {
+                                boundary_connected = true;
+                                break;
+                            }
+                        }
+                        if (boundary_connected) break;
+                    }
+                    
+                    if (!boundary_connected)
+                    {
+                        int mid_y = (floor_left_y + floor_right_y) / 2;
+                        
+                        for (int dx = -CORRIDOR_LEN; dx <= CORRIDOR_LEN; ++dx)
+                        {
+                            int tx = boundary_x + dx;
+                            if (in_bounds_fully(mid_y, tx) && 
+                                (cave_feat[mid_y][tx] == FEAT_WALL_EXTRA || cave_feat[mid_y][tx] == FEAT_WALL_OUTER))
+                            {
+                                cave_set_feat(mid_y, tx, FEAT_FLOOR);
+                            }
+                        }
+                        connections_added++;
+                        genlog_connect("V-boundary row=%d col=%d: carved at y=%d from x=%d to x=%d",
+                                       row, col, mid_y, boundary_x - CORRIDOR_LEN, boundary_x + CORRIDOR_LEN);
+                        break;
+                    }
+                }
+            }
         }
+    }
+    
+    if (connections_added > 0)
+    {
+        log_trace("Partition connectivity: added %d boundary connections", connections_added);
+        genlog_connect("Partition connectivity: added %d boundary connections total", connections_added);
+    }
+    else
+    {
+        genlog_connect("Partition connectivity: no new connections needed");
+    }
+}
+
+typedef struct {
+    rectangle bounds;
+    coord center;
+    int rooms[CENT_MAX];
+    int room_count;
+    int hub_room;
+} partition_link_data_t;
+
+static int partition_index_from_point(int y, int x, int rows, int cols)
+{
+    if (rows <= 0 || cols <= 0) return -1;
+    int row = (y * rows) / p_ptr->cur_map_hgt;
+    int col = (x * cols) / p_ptr->cur_map_wid;
+    if (row < 0) row = 0; if (col < 0) col = 0;
+    if (row >= rows) row = rows - 1;
+    if (col >= cols) col = cols - 1;
+    return row * cols + col;
+}
+
+static int room_connection_degree(int room_idx)
+{
+    if (room_idx < 0 || room_idx >= dun->cent_n)
+        return 0;
+    int deg = 0;
+    for (int i = 0; i < dun->cent_n; ++i)
+    {
+        if (dun->connection[room_idx][i])
+            deg++;
+    }
+    return deg;
+}
+
+static bool connect_rooms_with_logging(int r1, int r2, const char *tag, bool allow_desperate)
+{
+    if (r1 < 0 || r2 < 0 || r1 == r2)
+        return false;
+
+    if (dun->connection[r1][r2])
+        return true;
+
+    bool ok = connect_two_rooms(r1, r2, true, false);
+    if (!ok && allow_desperate)
+        ok = connect_two_rooms(r1, r2, true, true);
+
+    if (ok && tag)
+    {
+        int dist = distance(dun->cent[r1].y, dun->cent[r1].x, dun->cent[r2].y, dun->cent[r2].x);
+        genlog_connect("%s: linked room %d -> %d (dist=%d)", tag, r1, r2, dist);
+    }
+    return ok;
+}
+
+static void seed_partition_adjacency(const int *room_to_part, int part_count, bool adj[25][25], int degree[25])
+{
+    for (int i = 0; i < part_count; ++i)
+        degree[i] = 0;
+
+    for (int i = 0; i < part_count; ++i)
+        for (int j = 0; j < part_count; ++j)
+            adj[i][j] = false;
+
+    for (int a = 0; a < dun->cent_n; ++a)
+    {
+        int pa = (a < CENT_MAX) ? room_to_part[a] : -1;
+        if (pa < 0 || pa >= part_count) continue;
+
+        for (int b = a + 1; b < dun->cent_n; ++b)
+        {
+            if (!dun->connection[a][b]) continue;
+            int pb = (b < CENT_MAX) ? room_to_part[b] : -1;
+            if (pb < 0 || pb >= part_count || pb == pa) continue;
+            if (!adj[pa][pb])
+            {
+                adj[pa][pb] = adj[pb][pa] = true;
+                degree[pa]++;
+                degree[pb]++;
+            }
+        }
+    }
+}
+
+static void mark_partition_edge(int p1, int p2, bool adj[25][25], int degree[25])
+{
+    if (p1 < 0 || p2 < 0 || p1 >= 25 || p2 >= 25 || p1 == p2)
+        return;
+    if (!adj[p1][p2])
+    {
+        adj[p1][p2] = adj[p2][p1] = true;
+        degree[p1]++;
+        degree[p2]++;
+    }
+}
+
+static int choose_partition_hub(const partition_link_data_t *part)
+{
+    int best = -1;
+    int best_rank = -1;
+    int best_area = -1;
+    int best_dist = 999999;
+
+    int limit = MIN(part->room_count, CENT_MAX);
+    for (int i = 0; i < limit; ++i)
+    {
+        int r = part->rooms[i];
+        int area = (dun->corner[r].y2 - dun->corner[r].y1 + 1) *
+                   (dun->corner[r].x2 - dun->corner[r].x1 + 1);
+        int dist = distance(dun->cent[r].y, dun->cent[r].x, part->center.y, part->center.x);
+        int rank = room_anchor_requires_neighbor[r] ? 2 :
+                   (room_anchor_kind[r] != LAYOUT_ANCHOR_NONE ? 1 : 0);
+
+        if (rank > best_rank ||
+            (rank == best_rank && area > best_area) ||
+            (rank == best_rank && area == best_area && dist < best_dist))
+        {
+            best = r;
+            best_rank = rank;
+            best_area = area;
+            best_dist = dist;
+        }
+    }
+    return best;
+}
+
+static int find_anchor_target(int src, const int *room_to_part, const bool *skip, int part_count)
+{
+    int src_part = (src >= 0 && src < CENT_MAX) ? room_to_part[src] : -1;
+    int src_piece = (src >= 0 && src < dun->cent_n) ? dun->piece[src] : -1;
+    int best = -1;
+    int best_tier = 10;
+    int best_dist = 999999;
+
+    for (int r = 0; r < dun->cent_n; ++r)
+    {
+        if (r == src) continue;
+        if (skip && skip[r]) continue;
+        if (dun->connection[src][r]) continue;
+
+        int tier = 2;
+        if (src_piece > 0 && dun->piece[r] > 0 && dun->piece[r] != src_piece)
+            tier = 0;
+        else if (room_to_part && r < CENT_MAX && room_to_part[r] != src_part)
+            tier = 1;
+
+        if (part_count > 0 && room_to_part && (room_to_part[r] < 0 || room_to_part[r] >= part_count))
+            continue;
+
+        int dist = distance(dun->cent[src].y, dun->cent[src].x, dun->cent[r].y, dun->cent[r].x);
+        if (tier < best_tier || (tier == best_tier && dist < best_dist))
+        {
+            best_tier = tier;
+            best_dist = dist;
+            best = r;
+        }
+    }
+    return best;
+}
+
+static void connect_anchor_backbone(const int *room_to_part, int part_count)
+{
+    if (layout_anchor_count <= 0 || dun->cent_n <= 0)
+        return;
+
+    (void)dungeon_pieces();
+
+    int anchors_linked = 0;
+    int anchors_considered = 0;
+
+    for (int i = 0; i < layout_anchor_count; ++i)
+    {
+        int r = layout_anchors[i].room_slot;
+        if (r < 0 || r >= dun->cent_n)
+            continue;
+
+        anchors_considered++;
+        int area = (dun->corner[r].y2 - dun->corner[r].y1 + 1) *
+                   (dun->corner[r].x2 - dun->corner[r].x1 + 1);
+        int target_degree = 1;
+        if (layout_anchors[i].requires_neighbor)
+            target_degree = 2;
+        if (area >= 600)
+            target_degree = MAX(target_degree, 2);
+        if (area >= 900)
+            target_degree = MAX(target_degree, 3);
+
+        int deg = room_connection_degree(r);
+        bool tried[CENT_MAX];
+        for (int t = 0; t < CENT_MAX; ++t) tried[t] = false;
+
+        int attempts = 0;
+        while (deg < target_degree && attempts < 8)
+        {
+            attempts++;
+            int target = find_anchor_target(r, room_to_part, tried, part_count);
+            if (target < 0)
+                break;
+
+            tried[target] = true;
+            if (connect_rooms_with_logging(r, target, "Anchor backbone", true))
+            {
+                anchors_linked++;
+                deg++;
+                (void)dungeon_pieces();
+            }
+        }
+    }
+
+    if (anchors_linked > 0)
+    {
+        genlog_connect("Anchor backbone: linked %d/%d anchors to reduce isolation", anchors_linked, anchors_considered);
+    }
+}
+
+/* Add connective tissue between partitions by linking a representative room in each partition,
+ * then ensure special anchors have multiple exits to avoid dead ends. */
+static void connect_partition_hubs(void)
+{
+    int blocks = p_ptr->cur_map_hgt / PANEL_HGT;
+    int rows = current_partition_rows;
+    int cols = current_partition_cols;
+    int count = current_partition_count;
+
+    if (rows <= 0 || cols <= 0) {
+        fallback_partition_grid_from_blocks(blocks, &rows, &cols);
+        count = rows * cols;
+    }
+    if (count <= 1 || rows <= 0 || cols <= 0)
+        return;
+
+    partition_link_data_t parts[25];
+    int room_to_part[CENT_MAX];
+    for (int i = 0; i < CENT_MAX; ++i) room_to_part[i] = -1;
+
+    for (int pi = 0; pi < count && pi < 25; ++pi)
+    {
+        parts[pi].room_count = 0;
+        parts[pi].hub_room = -1;
+        int y1, y2, x1, x2;
+        if (compute_partition_bounds(pi, rows, cols, &y1, &y2, &x1, &x2))
+        {
+            parts[pi].bounds.y1 = y1;
+            parts[pi].bounds.y2 = y2;
+            parts[pi].bounds.x1 = x1;
+            parts[pi].bounds.x2 = x2;
+            parts[pi].center.y = (y1 + y2) / 2;
+            parts[pi].center.x = (x1 + x2) / 2;
+        }
+    }
+
+    for (int r = 0; r < dun->cent_n && r < CENT_MAX; ++r)
+    {
+        int pi = partition_index_from_point(dun->cent[r].y, dun->cent[r].x, rows, cols);
+        room_to_part[r] = pi;
+        if (pi < 0 || pi >= count || pi >= 25)
+            continue;
+        int idx = parts[pi].room_count++;
+        if (idx < CENT_MAX)
+            parts[pi].rooms[idx] = r;
+    }
+
+    for (int pi = 0; pi < count && pi < 25; ++pi)
+        parts[pi].hub_room = choose_partition_hub(&parts[pi]);
+
+    bool adj[25][25];
+    int degree[25];
+    seed_partition_adjacency(room_to_part, count, adj, degree);
+
+    int links = 0;
+    for (int row = 0; row < rows; ++row)
+    {
+        for (int col = 0; col < cols; ++col)
+        {
+            int idx = row * cols + col;
+            int hub_here = (idx < 25) ? parts[idx].hub_room : -1;
+            if (hub_here < 0)
+                continue;
+
+            if (col + 1 < cols)
+            {
+                int idx_r = row * cols + (col + 1);
+                int hub_right = parts[idx_r].hub_room;
+                if (hub_right >= 0 && connect_rooms_with_logging(hub_here, hub_right, "Partition backbone H", true))
+                {
+                    mark_partition_edge(idx, idx_r, adj, degree);
+                    links++;
+                }
+            }
+
+            if (row + 1 < rows)
+            {
+                int idx_d = (row + 1) * cols + col;
+                int hub_down = parts[idx_d].hub_room;
+                if (hub_down >= 0 && connect_rooms_with_logging(hub_here, hub_down, "Partition backbone V", true))
+                {
+                    mark_partition_edge(idx, idx_d, adj, degree);
+                    links++;
+                }
+            }
+
+            if (col + 1 < cols && row + 1 < rows)
+            {
+                int idx_dr = (row + 1) * cols + (col + 1);
+                int hub_diag = parts[idx_dr].hub_room;
+                if (hub_diag >= 0 && connect_rooms_with_logging(hub_here, hub_diag, "Partition backbone D", true))
+                {
+                    mark_partition_edge(idx, idx_dr, adj, degree);
+                    links++;
+                }
+            }
+        }
+    }
+
+    int target_degree = (count >= 3) ? 2 : 1;
+    for (int pi = 0; pi < count && pi < 25; ++pi)
+    {
+        if (parts[pi].hub_room < 0)
+            continue;
+        if (degree[pi] >= target_degree)
+            continue;
+
+        int attempts = 0;
+        while (degree[pi] < target_degree && attempts < count)
+        {
+            attempts++;
+            int best = -1;
+            int best_dist = 999999;
+            for (int pj = 0; pj < count && pj < 25; ++pj)
+            {
+                if (pj == pi) continue;
+                if (parts[pj].hub_room < 0) continue;
+                if (adj[pi][pj]) continue;
+                int dist = distance(parts[pi].center.y, parts[pi].center.x, parts[pj].center.y, parts[pj].center.x);
+                if (dist < best_dist)
+                {
+                    best_dist = dist;
+                    best = pj;
+                }
+            }
+
+            if (best < 0)
+                break;
+
+            if (connect_rooms_with_logging(parts[pi].hub_room, parts[best].hub_room, "Partition backbone fill", true))
+            {
+                mark_partition_edge(pi, best, adj, degree);
+                links++;
+            }
+            else
+            {
+                adj[pi][best] = adj[best][pi] = true;
+            }
+        }
+    }
+
+    if (links > 0)
+        log_trace("Partition hub pass: added %d backbone links (grid %dx%d)", links, rows, cols);
+
+    connect_anchor_backbone(room_to_part, count);
+}
+
+/* Anchor-aware connector: link nearby anchors to reduce isolation without over-saturating tunnels. */
+/* Repair all outer walls after generation - critical for tunnel connectivity.
+ * This fixes cases where overlapping room/cave generation overwrote WALL_OUTER
+ * tiles back to WALL_EXTRA, breaking tunnel connection logic. */
+static void repair_all_outer_walls(void)
+{
+    int repaired = 0;
+    
+    /* Scan entire map for wall tiles that border CAVE_ROOM floor */
+    for (int y = 1; y < p_ptr->cur_map_hgt - 1; ++y)
+    {
+        for (int x = 1; x < p_ptr->cur_map_wid - 1; ++x)
+        {
+            /* Skip if already floor or already outer wall */
+            if (cave_floor_bold(y, x))
+                continue;
+            if (cave_feat[y][x] == FEAT_WALL_OUTER)
+                continue;
+            if (cave_feat[y][x] != FEAT_WALL_EXTRA)
+                continue;
+            
+            /* Check if this wall borders any CAVE_ROOM floor */
+            bool borders_room_floor = false;
+            for (int dy = -1; dy <= 1 && !borders_room_floor; ++dy)
+            {
+                for (int dx = -1; dx <= 1 && !borders_room_floor; ++dx)
+                {
+                    if (dy == 0 && dx == 0)
+                        continue;
+                    int ny = y + dy, nx = x + dx;
+                    if (in_bounds_fully(ny, nx) && cave_floor_bold(ny, nx)
+                        && (cave_info[ny][nx] & CAVE_ROOM))
+                    {
+                        borders_room_floor = true;
+                    }
+                }
+            }
+            
+            if (borders_room_floor)
+            {
+                cave_set_feat(y, x, FEAT_WALL_OUTER);
+                repaired++;
+            }
+        }
+    }
+    
+    if (repaired > 0)
+    {
+        log_trace("repair_all_outer_walls: converted %d WALL_EXTRA to WALL_OUTER", repaired);
     }
 }
 
@@ -3439,22 +6378,27 @@ static bool h_tunnel_ok(
     if ((cave_feat[y][x1] == FEAT_WALL_OUTER)
         || (cave_feat[y][x2] == FEAT_WALL_OUTER))
         return (false);
-    /* Don't dig L-corridors when the corner is too close to empty space */
+    /* Don't dig L-corridors when the corner is too close to non-room empty space.
+     * But allow corners near CAVE_ROOM floor (from caves, chasms, etc.) */
     if (!(cave_info[y][x_lo] & (CAVE_ROOM)))
     {
-        if ((cave_feat[y - 1][x_lo - 1] == FEAT_FLOOR)
-            || (cave_feat[y + 1][x_lo - 1] == FEAT_FLOOR))
-        {
+        bool blocked_lo = false;
+        if (cave_feat[y - 1][x_lo - 1] == FEAT_FLOOR && !(cave_info[y - 1][x_lo - 1] & CAVE_ROOM))
+            blocked_lo = true;
+        if (cave_feat[y + 1][x_lo - 1] == FEAT_FLOOR && !(cave_info[y + 1][x_lo - 1] & CAVE_ROOM))
+            blocked_lo = true;
+        if (blocked_lo)
             return (false);
-        }
     }
     if (!(cave_info[y][x_hi] & (CAVE_ROOM)))
     {
-        if ((cave_feat[y - 1][x_hi + 1] == FEAT_FLOOR)
-            || (cave_feat[y + 1][x_hi + 1] == FEAT_FLOOR))
-        {
+        bool blocked_hi = false;
+        if (cave_feat[y - 1][x_hi + 1] == FEAT_FLOOR && !(cave_info[y - 1][x_hi + 1] & CAVE_ROOM))
+            blocked_hi = true;
+        if (cave_feat[y + 1][x_hi + 1] == FEAT_FLOOR && !(cave_info[y + 1][x_hi + 1] & CAVE_ROOM))
+            blocked_hi = true;
+        if (blocked_hi)
             return (false);
-        }
     }
 
     /* test each location in the corridor */
@@ -3542,12 +6486,18 @@ static bool h_tunnel_ok(
         }
 
         /* abort if the tunnel would have floor beside it at some point outside
-         * a room */
-        if (((cave_feat[y + 1][x] == FEAT_FLOOR)
-                || (cave_feat[y - 1][x] == FEAT_FLOOR))
-            && !(cave_info[y][x] & (CAVE_ROOM)))
+         * a room, UNLESS that adjacent floor is part of a CAVE_ROOM (cave edges) */
+        if (!(cave_info[y][x] & (CAVE_ROOM)))
         {
-            return (false);
+            bool has_non_room_floor_adj = false;
+            if (cave_feat[y + 1][x] == FEAT_FLOOR && !(cave_info[y + 1][x] & CAVE_ROOM))
+                has_non_room_floor_adj = true;
+            if (cave_feat[y - 1][x] == FEAT_FLOOR && !(cave_info[y - 1][x] & CAVE_ROOM))
+                has_non_room_floor_adj = true;
+            if (has_non_room_floor_adj)
+            {
+                return (false);
+            }
         }
     }
     if (tentative && (changes != desired_changes))
@@ -3574,22 +6524,27 @@ static bool v_tunnel_ok(
     if ((cave_feat[y1][x] == FEAT_WALL_OUTER)
         || (cave_feat[y2][x] == FEAT_WALL_OUTER))
         return (false);
-    /* Don't dig L-corridors when the corner is too close to empty space */
+    /* Don't dig L-corridors when the corner is too close to non-room empty space.
+     * But allow corners near CAVE_ROOM floor (from caves, chasms, etc.) */
     if (!(cave_info[y_lo][x] & (CAVE_ROOM)))
     {
-        if ((cave_feat[y_lo - 1][x - 1] == FEAT_FLOOR)
-            || (cave_feat[y_lo - 1][x + 1] == FEAT_FLOOR))
-        {
+        bool blocked_lo = false;
+        if (cave_feat[y_lo - 1][x - 1] == FEAT_FLOOR && !(cave_info[y_lo - 1][x - 1] & CAVE_ROOM))
+            blocked_lo = true;
+        if (cave_feat[y_lo - 1][x + 1] == FEAT_FLOOR && !(cave_info[y_lo - 1][x + 1] & CAVE_ROOM))
+            blocked_lo = true;
+        if (blocked_lo)
             return (false);
-        }
     }
     if (!(cave_info[y_hi][x] & (CAVE_ROOM)))
     {
-        if ((cave_feat[y_hi + 1][x - 1] == FEAT_FLOOR)
-            || (cave_feat[y_hi + 1][x + 1] == FEAT_FLOOR))
-        {
+        bool blocked_hi = false;
+        if (cave_feat[y_hi + 1][x - 1] == FEAT_FLOOR && !(cave_info[y_hi + 1][x - 1] & CAVE_ROOM))
+            blocked_hi = true;
+        if (cave_feat[y_hi + 1][x + 1] == FEAT_FLOOR && !(cave_info[y_hi + 1][x + 1] & CAVE_ROOM))
+            blocked_hi = true;
+        if (blocked_hi)
             return (false);
-        }
     }
 
     /* test each location in the corridor */
@@ -3675,12 +6630,18 @@ static bool v_tunnel_ok(
         }
 
         /* abort if the tunnel would have floor beside it at some point outside
-         * a room */
-        if (((cave_feat[y][x + 1] == FEAT_FLOOR)
-                || (cave_feat[y][x - 1] == FEAT_FLOOR))
-            && !(cave_info[y][x] & (CAVE_ROOM)))
+         * a room, UNLESS that adjacent floor is part of a CAVE_ROOM (cave edges) */
+        if (!(cave_info[y][x] & (CAVE_ROOM)))
         {
-            return (false);
+            bool has_non_room_floor_adj = false;
+            if (cave_feat[y][x + 1] == FEAT_FLOOR && !(cave_info[y][x + 1] & CAVE_ROOM))
+                has_non_room_floor_adj = true;
+            if (cave_feat[y][x - 1] == FEAT_FLOOR && !(cave_info[y][x - 1] & CAVE_ROOM))
+                has_non_room_floor_adj = true;
+            if (has_non_room_floor_adj)
+            {
+                return (false);
+            }
         }
     }
     if (tentative && (changes != desired_changes))
@@ -3711,10 +6672,6 @@ static tunnel_profile choose_tunnel_profile(bool tentative)
 {
     tunnel_profile profile = TUNNEL_PROFILE_NORMAL;
 
-    /* Keep early levels tight and readable */
-    if (p_ptr->depth < 7)
-        return profile;
-
     /* On shallow branches, fall back to narrow connectors */
     if (tentative)
         ; /* allow style variation even on tentative digs */
@@ -3724,26 +6681,38 @@ static tunnel_profile choose_tunnel_profile(bool tentative)
     byte style_group = (sidx >= 0 && style_info) ? style_info[sidx].group : 0;
     bool style_grand = (style_group >= 4); /* warmer/darker palettes get a bump */
 
-    /* Medium halls show up occasionally once the dungeon opens up */
-    int medium_rarity = style_grand ? 9 : 13;    /* lower is more common */
-    int grand_rarity = style_grand ? 14 : 20;
+    /* Variable tunnel widths at any depth, probability scales with depth */
+    /* Base rarity values (lower = more common) */
+    int medium_rarity, grand_rarity;
+    
     if (depth >= 20)
     {
-        medium_rarity = style_grand ? 6 : 9;
-        grand_rarity = style_grand ? 9 : 14;
+        medium_rarity = style_grand ? 5 : 7;
+        grand_rarity = style_grand ? 8 : 12;
     }
     else if (depth >= 12)
     {
-        medium_rarity = style_grand ? 8 : 12;
-        grand_rarity = style_grand ? 13 : 20;
+        medium_rarity = style_grand ? 7 : 10;
+        grand_rarity = style_grand ? 11 : 16;
+    }
+    else if (depth >= 7)
+    {
+        medium_rarity = style_grand ? 10 : 14;
+        grand_rarity = style_grand ? 16 : 22;
+    }
+    else
+    {
+        /* Even early levels can have occasional wider corridors */
+        medium_rarity = style_grand ? 16 : 20;
+        grand_rarity = style_grand ? 25 : 30;
     }
 
-    if ((depth >= 12) && one_in_(grand_rarity))
+    if (one_in_(grand_rarity))
     {
         profile.width = 3;
         profile.treatment = one_in_(3) ? TUNNEL_TREAT_PILLARS : TUNNEL_TREAT_NICHES;
     }
-    else if ((depth >= 10) && one_in_(medium_rarity))
+    else if (one_in_(medium_rarity))
     {
         profile.width = one_in_(4) ? 3 : 2;
         profile.side_bias = one_in_(2) ? 1 : -1;
@@ -4039,6 +7008,7 @@ static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate)
     int r1y, r1x, r1y1, r1x1, r1y2, r1x2;
     int r2y, r2x, r2y1, r2x1, r2y2, r2x2;
     bool success;
+    int morgoth_margin = 1;
 
     /* Allow long corridor spans across 3x3 partitions on 15x15 block maps */
     int base_limit_x = MAX(50, (p_ptr->cur_map_wid * 2) / 3); /* ~110 on 165x165 */
@@ -4059,6 +7029,13 @@ static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate)
     r2x1 = dun->corner[r2].x1;
     r2y2 = dun->corner[r2].y2;
     r2x2 = dun->corner[r2].x2;
+
+    if (morgoth_region_active())
+    {
+        /* Skip any corridor that would cross the throne room partition */
+        if (morgoth_segment_blocked(r1y, r1x, r2y, r2x, morgoth_margin))
+            return false;
+    }
 
     /* if the rooms are too far apart, then just give up immediately */
     // look at total distance of room centres
@@ -4103,6 +7080,8 @@ static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate)
                         // crash:
                         // http://angband.oook.cz/ladder-show.php?id=13070
 
+        if (morgoth_segment_blocked(r1y, x, r2y, x, morgoth_margin))
+            return false;
         success = build_tunnel(r1, r2, r1y, x, r2y, x, tentative);
     }
     /* if horizontal overlap */
@@ -4113,6 +7092,8 @@ static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate)
                 r2y2)); // Sil-x: one of these two lines has somehow caused a
                         // crash
 
+        if (morgoth_segment_blocked(y, r1x, y, r2x, morgoth_margin))
+            return false;
         success = build_tunnel(r1, r2, y, r1x, y, r2x, tentative);
     }
 
@@ -4128,6 +7109,15 @@ static bool connect_two_rooms(int r1, int r2, bool tentative, bool desperate)
             return (false);
         if (MIN(ABS(r1y - r2y1), ABS(r1y - r2y2)) > distance_limity - 2)
             return (false);
+
+        if (morgoth_segment_blocked(r1y, r1x, r1y, r2x, morgoth_margin))
+            return false;
+        if (morgoth_segment_blocked(r1y, r2x, r2y, r2x, morgoth_margin))
+            return false;
+        if (morgoth_segment_blocked(r1y, r1x, r2y, r1x, morgoth_margin))
+            return false;
+        if (morgoth_segment_blocked(r2y, r1x, r2y, r2x, morgoth_margin))
+            return false;
 
         success = build_tunnel(r1, r2, r1y, r1x, r2y, r2x, tentative);
     }
@@ -4177,6 +7167,11 @@ static bool connect_room_to_corridor(int r)
                 success = false;
                 done = true;
             }
+            else if (coord_in_morgoth_region(y, x, 1))
+            {
+                success = false;
+                done = true;
+            }
 
             // it has intercepted a tunnel!
             else if ((cave_feat[y][x] == FEAT_FLOOR)
@@ -4218,6 +7213,11 @@ static bool connect_room_to_corridor(int r)
             // abort if the tunnel leaves the map or passes through a door
             if (!in_bounds(y, x) || (ABS(x - rx) > length)
                 || cave_any_closed_door_bold(y, x))
+            {
+                success = false;
+                done = true;
+            }
+            else if (coord_in_morgoth_region(y, x, 1))
             {
                 success = false;
                 done = true;
@@ -4504,6 +7504,18 @@ static bool place_rubble_player(void)
     return (true);
 }
 
+/* Clamp a coordinate to stay inside the map by a small margin to avoid edge-digging. */
+static void clamp_to_interior(int *y, int *x, int margin)
+{
+    if (!y || !x) return;
+    if (*y < margin) *y = margin;
+    if (*x < margin) *x = margin;
+    if (*y > p_ptr->cur_map_hgt - margin - 1)
+        *y = p_ptr->cur_map_hgt - margin - 1;
+    if (*x > p_ptr->cur_map_wid - margin - 1)
+        *x = p_ptr->cur_map_wid - margin - 1;
+}
+
 /*
  *  Make sure that the level is sufficiently connected.
  */
@@ -4514,6 +7526,33 @@ bool check_connectivity(void)
     int y, x;
 
     // Reset the array used for checking connectivity
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+            cave_access[y][x] = false;
+
+    /* Log which room centers are unreachable before rescue attempts */
+    flood_access(p_ptr->py, p_ptr->px, cave_access, true);
+    int unreachable_rooms = 0;
+    for (int i = 0; i < dun->cent_n; ++i)
+    {
+        int ry = dun->cent[i].y;
+        int rx = dun->cent[i].x;
+        if (in_bounds_fully(ry, rx) && !cave_access[ry][rx])
+        {
+            unreachable_rooms++;
+            genlog_connect("UNREACHABLE ROOM #%d at (%d,%d) bounds=(%d,%d)-(%d,%d)",
+                           i, ry, rx, 
+                           dun->corner[i].y1, dun->corner[i].x1,
+                           dun->corner[i].y2, dun->corner[i].x2);
+        }
+    }
+    if (unreachable_rooms > 0)
+    {
+        genlog_fail("PRE-RESCUE: %d/%d rooms unreachable from player at (%d,%d)",
+                    unreachable_rooms, dun->cent_n, p_ptr->py, p_ptr->px);
+    }
+    
+    /* Reset for rescue loop */
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
             cave_access[y][x] = false;
@@ -4549,22 +7588,44 @@ bool check_connectivity(void)
             return false;
         }
 
-        /* Find the nearest reachable passable tile */
+        /* Find the nearest reachable passable tile that would create a meaningful connection.
+         * Prioritize tiles that are at least 4 tiles away to avoid useless short stubs
+         * that just connect adjacent tiles on the same feature edge. */
         int best_y = -1, best_x = -1, best_d = 9999;
+        int fallback_y = -1, fallback_x = -1, fallback_d = 9999;
+        
         for (int yy = 1; yy < p_ptr->cur_map_hgt - 1; ++yy)
         {
             for (int xx = 1; xx < p_ptr->cur_map_wid - 1; ++xx)
             {
                 if (!cave_access[yy][xx]) continue;
                 if (!player_passable(yy, xx, true)) continue;
+                if (coord_in_morgoth_region(yy, xx, 1)) continue;
                 int d = ABS(yy - sample_y) + ABS(xx - sample_x);
-                if (d < best_d)
+                
+                /* Prefer connections of distance >= 4 to avoid short useless stubs */
+                if (d >= 4 && d < best_d)
                 {
                     best_d = d;
                     best_y = yy;
                     best_x = xx;
                 }
+                /* Track fallback for any distance */
+                if (d < fallback_d)
+                {
+                    fallback_d = d;
+                    fallback_y = yy;
+                    fallback_x = xx;
+                }
             }
+        }
+        
+        /* Use fallback if no good distance found */
+        if (best_y < 0 || best_x < 0)
+        {
+            best_y = fallback_y;
+            best_x = fallback_x;
+            best_d = fallback_d;
         }
 
         if (best_y < 0 || best_x < 0)
@@ -4573,26 +7634,99 @@ bool check_connectivity(void)
             return false;
         }
 
-        /* Dig a straight-ish Bresenham tunnel between the two points */
+        /* Dig an L-shaped orthogonal tunnel (no diagonal) between the two points.
+         * Randomly choose whether to go horizontal-first or vertical-first. */
         int y0 = sample_y, x0 = sample_x, y1 = best_y, x1 = best_x;
-        int dy = ABS(y1 - y0), sx = (x0 < x1) ? 1 : -1;
-        int dx = ABS(x1 - x0), sy = (y0 < y1) ? 1 : -1;
-        int err = (dx > dy ? dx : -dy) / 2;
+        clamp_to_interior(&y0, &x0, 2);
+        clamp_to_interior(&y1, &x1, 2);
         int cy = y0, cx = x0;
-        while (true)
+        bool horiz_first = one_in_(2);
+        bool path_ok = true;
+        
+        if (horiz_first)
         {
-            if (in_bounds_fully(cy, cx) && cave_feat[cy][cx] != FEAT_WALL_PERM)
+            /* Horizontal leg first */
+            int sx = (x0 < x1) ? 1 : -1;
+            while (cx != x1)
             {
-                if (!cave_floor_bold(cy, cx))
-                    cave_set_feat(cy, cx, FEAT_FLOOR);
+                if (coord_in_morgoth_region(cy, cx, 1))
+                {
+                    path_ok = false;
+                    break;
+                }
+                if (in_bounds_fully(cy, cx) && cave_feat[cy][cx] != FEAT_WALL_PERM)
+                {
+                    if (!cave_floor_bold(cy, cx))
+                        cave_set_feat(cy, cx, FEAT_FLOOR);
+                }
+                cx += sx;
             }
-            if (cy == y1 && cx == x1) break;
-            int e2 = err;
-            if (e2 > -dx) { err -= dy; cx += sx; }
-            if (e2 < dy)  { err += dx; cy += sy; }
+            if (!path_ok) continue;
+            /* Vertical leg */
+            int sy = (y0 < y1) ? 1 : -1;
+            while (cy != y1)
+            {
+                if (coord_in_morgoth_region(cy, cx, 1))
+                {
+                    path_ok = false;
+                    break;
+                }
+                if (in_bounds_fully(cy, cx) && cave_feat[cy][cx] != FEAT_WALL_PERM)
+                {
+                    if (!cave_floor_bold(cy, cx))
+                        cave_set_feat(cy, cx, FEAT_FLOOR);
+                }
+                cy += sy;
+            }
+            if (!path_ok) continue;
         }
-        log_trace("check_connectivity: dug rescue tunnel from (%d,%d) to nearest reachable (%d,%d), dist=%d (unreachable=%d, attempt=%d)",
+        else
+        {
+            /* Vertical leg first */
+            int sy = (y0 < y1) ? 1 : -1;
+            while (cy != y1)
+            {
+                if (coord_in_morgoth_region(cy, cx, 1))
+                {
+                    path_ok = false;
+                    break;
+                }
+                if (in_bounds_fully(cy, cx) && cave_feat[cy][cx] != FEAT_WALL_PERM)
+                {
+                    if (!cave_floor_bold(cy, cx))
+                        cave_set_feat(cy, cx, FEAT_FLOOR);
+                }
+                cy += sy;
+            }
+            if (!path_ok) continue;
+            /* Horizontal leg */
+            int sx = (x0 < x1) ? 1 : -1;
+            while (cx != x1)
+            {
+                if (coord_in_morgoth_region(cy, cx, 1))
+                {
+                    path_ok = false;
+                    break;
+                }
+                if (in_bounds_fully(cy, cx) && cave_feat[cy][cx] != FEAT_WALL_PERM)
+                {
+                    if (!cave_floor_bold(cy, cx))
+                        cave_set_feat(cy, cx, FEAT_FLOOR);
+                }
+                cx += sx;
+            }
+            if (!path_ok) continue;
+        }
+        /* Final destination tile */
+        if (in_bounds_fully(y1, x1) && cave_feat[y1][x1] != FEAT_WALL_PERM)
+        {
+            if (!cave_floor_bold(y1, x1))
+                cave_set_feat(y1, x1, FEAT_FLOOR);
+        }
+        log_trace("check_connectivity: dug L-shaped rescue tunnel from (%d,%d) to nearest reachable (%d,%d), dist=%d (unreachable=%d, attempt=%d)",
                   sample_y, sample_x, best_y, best_x, best_d, unreachable, rescue_attempts);
+        genlog_connect("RESCUE TUNNEL: L-shaped from (%d,%d) to (%d,%d), dist=%d",
+                       sample_y, sample_x, best_y, best_x, best_d);
 
         /* Clear and loop to re-check connectivity */
         for (y = 0; y < p_ptr->cur_map_hgt; y++)
@@ -4604,6 +7738,11 @@ bool check_connectivity(void)
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
         for (x = 0; x < p_ptr->cur_map_wid; x++)
             cave_access[y][x] = false;
+
+    if (p_ptr->depth >= MORGOTH_DEPTH)
+    {
+        return (true);
+    }
 
     if (p_ptr->create_stair == FEAT_MORE
         || p_ptr->create_stair == FEAT_MORE_SHAFT)
@@ -4664,50 +7803,14 @@ static bool connect_rooms_stairs(void)
     bool joined;
     bool anchor_linked_any = false;
     bool single_stair_mode = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
+    bool no_down_stairs = (p_ptr->depth >= MORGOTH_DEPTH);
 
-    /* Pre-pass: ensure neighbor-required anchors get at least one connection */
-    for (int a = 0; a < layout_anchor_count; ++a)
-    {
-        layout_anchor_t *anchor = &layout_anchors[a];
-        if (anchor->room_slot < 0 || anchor->room_slot >= dun->cent_n)
-            continue;
-        if (!anchor->requires_neighbor)
-            continue;
-
-        int best_idx = -1;
-        int best_dist = 9999;
-        for (int b = 0; b < layout_anchor_count; ++b)
-        {
-            if (a == b)
-                continue;
-            layout_anchor_t *other = &layout_anchors[b];
-            if (other->room_slot < 0 || other->room_slot >= dun->cent_n)
-                continue;
-            int dist = distance(anchor->center.y, anchor->center.x, other->center.y, other->center.x);
-            if (dist < best_dist)
-            {
-                best_dist = dist;
-                best_idx = other->room_slot;
-            }
-        }
-
-        if (best_idx >= 0 && !dun->connection[anchor->room_slot][best_idx])
-        {
-            if (connect_two_rooms(anchor->room_slot, best_idx, true, true))
-            {
-                anchor->neighbor_linked = true;
-                anchor_linked_any = true;
-            }
-        }
-    }
-
-    if (anchor_linked_any)
-    {
-        log_trace("Anchor pre-pass: connected neighbor-required anchors where needed");
-    }
+    /* Add backbone links across partition neighbors */
+    connect_partition_hubs();
 
     // Phase 1:
     // connect each room to the closest room (if not already connected)
+    // Try normal mode first, then desperate mode if that fails
 
     for (r1 = 0; r1 < dun->cent_n; r1++)
     {
@@ -4731,7 +7834,39 @@ static bool connect_rooms_stairs(void)
         /* connect the rooms, if not already connected */
         if (!(dun->connection[r1][r_closest]))
         {
-            (void)connect_two_rooms(r1, r_closest, true, false);
+            /* Try normal mode first, then desperate mode */
+            if (!connect_two_rooms(r1, r_closest, true, false))
+            {
+                (void)connect_two_rooms(r1, r_closest, true, true);
+            }
+        }
+    }
+    
+    // Phase 1.5: Connect to second-closest room as well for redundancy
+    for (r1 = 0; r1 < dun->cent_n; r1++)
+    {
+        int closest1 = -1, closest2 = -1;
+        int dist1 = 99999, dist2 = 99999;
+        
+        for (r2 = 0; r2 < dun->cent_n; r2++)
+        {
+            if (r2 == r1) continue;
+            d = distance(dun->cent[r1].y, dun->cent[r1].x, dun->cent[r2].y, dun->cent[r2].x);
+            if (d < dist1)
+            {
+                dist2 = dist1; closest2 = closest1;
+                dist1 = d; closest1 = r2;
+            }
+            else if (d < dist2)
+            {
+                dist2 = d; closest2 = r2;
+            }
+        }
+        
+        /* Try to connect to second-closest if not already connected */
+        if (closest2 >= 0 && !(dun->connection[r1][closest2]))
+        {
+            (void)connect_two_rooms(r1, closest2, true, false);
         }
     }
 
@@ -4804,6 +7939,117 @@ static bool connect_rooms_stairs(void)
         pieces = dungeon_pieces();
     }
 
+    /* Phase 3.5: L-shaped corridor fallback before force-connect.
+     * Try carving clean L-shaped corridors between disconnected pieces.
+     * This produces better-looking results than diagonal Bresenham carving. */
+    if (pieces > 1)
+    {
+        int l_connects = 0;
+        for (int attempt = 0; attempt < 100 && pieces > 1; ++attempt)
+        {
+            /* Find the nearest pair of rooms from different pieces */
+            int best_a = -1, best_b = -1;
+            int best_dist = 999999;
+            
+            for (int ra = 0; ra < dun->cent_n; ++ra)
+            {
+                for (int rb = ra + 1; rb < dun->cent_n; ++rb)
+                {
+                    if (dun->piece[ra] == dun->piece[rb])
+                        continue;
+                    if (dun->connection[ra][rb])
+                        continue;
+                    
+                    int dist = distance(dun->cent[ra].y, dun->cent[ra].x,
+                                        dun->cent[rb].y, dun->cent[rb].x);
+                    if (dist < best_dist)
+                    {
+                        best_dist = dist;
+                        best_a = ra;
+                        best_b = rb;
+                    }
+                }
+            }
+            
+            if (best_a < 0 || best_b < 0)
+                break;
+            
+            int y0 = dun->cent[best_a].y, x0 = dun->cent[best_a].x;
+            int y1 = dun->cent[best_b].y, x1 = dun->cent[best_b].x;
+            
+            /* Try L-shaped corridor (horizontal then vertical, or vice versa) */
+            bool carved = false;
+            for (int dir = 0; dir < 2 && !carved; ++dir)
+            {
+                bool valid = true;
+                int corner_y = (dir == 0) ? y0 : y1;
+                int corner_x = (dir == 0) ? x1 : x0;
+                
+                /* Check if the L-path is carveable (no permanent walls) */
+                int min_x = MIN(x0, x1), max_x = MAX(x0, x1);
+                int min_y = MIN(y0, y1), max_y = MAX(y0, y1);
+                
+                /* Check horizontal leg */
+                int leg_y = (dir == 0) ? y0 : y1;
+                for (int tx = min_x; tx <= max_x && valid; ++tx)
+                {
+                    if (!in_bounds_fully(leg_y, tx) || cave_feat[leg_y][tx] == FEAT_WALL_PERM)
+                        valid = false;
+                    if (coord_in_morgoth_region(leg_y, tx, 1))
+                        valid = false;
+                }
+                
+                /* Check vertical leg */
+                int leg_x = (dir == 0) ? x1 : x0;
+                for (int ty = min_y; ty <= max_y && valid; ++ty)
+                {
+                    if (!in_bounds_fully(ty, leg_x) || cave_feat[ty][leg_x] == FEAT_WALL_PERM)
+                        valid = false;
+                    if (coord_in_morgoth_region(ty, leg_x, 1))
+                        valid = false;
+                }
+                
+                if (valid)
+                {
+                    /* Carve horizontal leg */
+                    for (int tx = min_x; tx <= max_x; ++tx)
+                    {
+                        if (coord_in_morgoth_region(leg_y, tx, 1))
+                        {
+                            valid = false;
+                            break;
+                        }
+                        if (!cave_floor_bold(leg_y, tx))
+                            cave_set_feat(leg_y, tx, FEAT_FLOOR);
+                    }
+                    if (!valid) continue;
+                    /* Carve vertical leg */
+                    for (int ty = min_y; ty <= max_y; ++ty)
+                    {
+                        if (coord_in_morgoth_region(ty, leg_x, 1))
+                        {
+                            valid = false;
+                            break;
+                        }
+                        if (!cave_floor_bold(ty, leg_x))
+                            cave_set_feat(ty, leg_x, FEAT_FLOOR);
+                    }
+                    if (!valid) continue;
+                    
+                    dun->connection[best_a][best_b] = true;
+                    dun->connection[best_b][best_a] = true;
+                    carved = true;
+                    l_connects++;
+                }
+            }
+            
+            pieces = dungeon_pieces();
+        }
+        
+        if (l_connects > 0)
+            log_trace("connect_rooms_stairs: L-shaped fallback carved %d connections, pieces now %d", l_connects, pieces);
+    }
+
     /* Last resort: forcibly connect distinct pieces by digging a straight corridor
      * ignoring tunnel safety checks (but respecting permanent walls). This handles
      * adjacent-but-unconnected rooms/vaults seen on dense maps.
@@ -4852,8 +8098,14 @@ static bool connect_rooms_stairs(void)
             int dx = ABS(x1 - x0), sy = (y0 < y1) ? 1 : -1;
             int err = (dx > dy ? dx : -dy) / 2;
             int y = y0, x = x0;
+            bool aborted = false;
             while (true)
             {
+                if (coord_in_morgoth_region(y, x, 1))
+                {
+                    aborted = true;
+                    break;
+                }
                 if (in_bounds_fully(y, x) && cave_feat[y][x] != FEAT_WALL_PERM)
                 {
                     if (!cave_floor_bold(y, x))
@@ -4865,8 +8117,11 @@ static bool connect_rooms_stairs(void)
                 if (e2 < dy)  { err += dx; y += sy; }
             }
 
-            dun->connection[a][b] = dun->connection[b][a] = true;
-            pieces = dungeon_pieces();
+            if (!aborted)
+            {
+                dun->connection[a][b] = dun->connection[b][a] = true;
+                pieces = dungeon_pieces();
+            }
         }
 
         log_trace("connect_rooms_stairs: forced-connect phase reduced pieces to %d", pieces);
@@ -4915,17 +8170,27 @@ static bool connect_rooms_stairs(void)
 
         log_trace("connect_rooms_stairs: single stair mode placed one up and one down (feat up=%d, down=%d)", up_feat, down_feat);
     } else {
-        /* Calculate number of stairs based on map size: 4 for 66x66, 15 for 165x165 */
-        /* Linear interpolation: stairs = 4 + (size - 66) * (15 - 4) / (165 - 66) */
+        /* Calculate number of stairs based on map size: 2 for 66x66, 8 for 165x165 */
+        /* Linear interpolation: stairs = 2 + (size - 66) * (8 - 2) / (165 - 66) */
         int map_size = (p_ptr->cur_map_hgt + p_ptr->cur_map_wid) / 2;  /* Average dimension */
-        stairs = 4 + ((map_size - 66) * 11) / 99;  /* 11 = (15-4), 99 = (165-66) */
-        if (stairs < 4) stairs = 4;   /* Minimum 4 */
-        if (stairs > 15) stairs = 15;  /* Maximum 15 */
+        stairs = 2 + ((map_size - 66) * 6) / 99;  /* 6 = (8-2), 99 = (165-66) */
+        if (stairs < 2) stairs = 2;   /* Minimum 2 */
+        if (stairs > 8) stairs = 8;  /* Maximum 8 */
+        
+        /* Labyrinth bonus: +1 stair per labyrinth partition (more escape routes in mazes) */
+        if (current_labyrinth_partitions > 0)
+        {
+            int stair_bonus = current_labyrinth_partitions;
+            stairs += stair_bonus;
+            if (stairs > 12) stairs = 12;  /* Cap at 12 total */
+            log_trace("Labyrinth stair bonus: +%d stairs from %d labyrinth partitions (total=%d)",
+                      stair_bonus, current_labyrinth_partitions, stairs);
+        }
         
         log_trace("Map size %d leads to %d stairs each direction", map_size, stairs);
 
         /* Determine partition count for guaranteed stair placement */
-        int partition_count = (map_size <= 80) ? 4 : 9;
+        int partition_count = (map_size <= 80) ? 2 : 3;  /* Reduced from 4/9 to match lower stair count */
 
         /* Place guaranteed stairs: at least one up and one down per partition */
         int down_placed = 0;
@@ -4947,24 +8212,27 @@ static bool connect_rooms_stairs(void)
             if (y2 >= p_ptr->cur_map_hgt - 1) y2 = p_ptr->cur_map_hgt - 2;
             if (x2 >= p_ptr->cur_map_wid - 1) x2 = p_ptr->cur_map_wid - 2;
             
-            /* Place one down stair in this partition */
-            for (int attempt = 0; attempt < 100; ++attempt)
+            /* Place one down stair in this partition (unless final level) */
+            if (!no_down_stairs)
             {
-                int yy = rand_range(y1, y2);
-                int xx = rand_range(x1, x2);
-                
-                if (cave_naked_bold(yy, xx) && cave_floor_bold(yy, xx) &&
-                    cave_feat[yy - 1][xx] != FEAT_DOOR_HEAD &&
-                    cave_feat[yy][xx - 1] != FEAT_DOOR_HEAD &&
-                    cave_feat[yy + 1][xx] != FEAT_DOOR_HEAD &&
-                    cave_feat[yy][xx + 1] != FEAT_DOOR_HEAD)
+                for (int attempt = 0; attempt < 100; ++attempt)
                 {
-                    int feat = (p_ptr->on_the_run) ? FEAT_MORE_SHAFT : 
-                              (down_placed == 0 || p_ptr->depth >= MORGOTH_DEPTH) ? FEAT_MORE : 
-                              choose_down_stairs();
-                    cave_set_feat(yy, xx, feat);
-                    down_placed++;
-                    break;
+                    int yy = rand_range(y1, y2);
+                    int xx = rand_range(x1, x2);
+                    
+                    if (cave_naked_bold(yy, xx) && cave_floor_bold(yy, xx) &&
+                        cave_feat[yy - 1][xx] != FEAT_DOOR_HEAD &&
+                        cave_feat[yy][xx - 1] != FEAT_DOOR_HEAD &&
+                        cave_feat[yy + 1][xx] != FEAT_DOOR_HEAD &&
+                        cave_feat[yy][xx + 1] != FEAT_DOOR_HEAD)
+                    {
+                        int feat = (p_ptr->on_the_run) ? FEAT_MORE_SHAFT : 
+                                  (down_placed == 0 || p_ptr->depth >= MORGOTH_DEPTH) ? FEAT_MORE : 
+                                  choose_down_stairs();
+                        cave_set_feat(yy, xx, feat);
+                        down_placed++;
+                        break;
+                    }
                 }
             }
             
@@ -4980,20 +8248,15 @@ static bool connect_rooms_stairs(void)
                     cave_feat[yy + 1][xx] != FEAT_DOOR_HEAD &&
                     cave_feat[yy][xx + 1] != FEAT_DOOR_HEAD)
                 {
-                    int feat = (p_ptr->on_the_run && p_ptr->depth >= 2) ? FEAT_LESS_SHAFT :
-                              (up_placed == 0 || !p_ptr->depth) ? FEAT_LESS :
-                              choose_up_stairs();
-                    cave_set_feat(yy, xx, feat);
+                    cave_set_feat(yy, xx, (p_ptr->on_the_run && p_ptr->depth >= 2) ? FEAT_LESS_SHAFT : FEAT_LESS);
                     up_placed++;
                     break;
                 }
             }
         }
-        
-        log_trace("Guaranteed partition stairs: %d down, %d up placed", down_placed, up_placed);
 
         /* Second pass: place remaining stairs randomly across the map */
-        int down_remaining = stairs - down_placed;
+        int down_remaining = no_down_stairs ? 0 : (stairs - down_placed);
         int up_remaining = stairs - up_placed;
         
         /* Place remaining down stairs */
@@ -5005,6 +8268,9 @@ static bool connect_rooms_stairs(void)
         
         initial_down = p_ptr->on_the_run ? FEAT_MORE_SHAFT : FEAT_MORE;
         
+        if (no_down_stairs)
+            down_stairs = 0;
+
         if (down_stairs > 0 && !(alloc_stairs(initial_down, down_stairs)))
         {
             if (cheat_room)
@@ -5012,14 +8278,14 @@ static bool connect_rooms_stairs(void)
             log_trace("connect_rooms_stairs failed: Could not place %d remaining down stairs", down_stairs);
             return (false);
         }
-
+        
         /* Place remaining up stairs */
         int up_stairs = up_remaining;
         if (p_ptr->on_the_run && p_ptr->depth >= 2)
             up_stairs *= 2;
         if ((p_ptr->create_stair == FEAT_LESS) || (p_ptr->create_stair == FEAT_LESS_SHAFT))
             up_stairs--;
-        
+            
         initial_up = (p_ptr->on_the_run && p_ptr->depth >= 2) ? FEAT_LESS_SHAFT : FEAT_LESS;
         
         if (up_stairs > 0 && !(alloc_stairs(initial_up, up_stairs)))
@@ -5032,6 +8298,7 @@ static bool connect_rooms_stairs(void)
         
         log_trace("Total stairs placed: %d down, %d up", down_placed + down_stairs, up_placed + up_stairs);
     }
+
 
     /* Hack -- Add some quartz streamers */
     for (i = 0; i < DUN_STR_QUA; i++)
@@ -6600,6 +9867,12 @@ static bool try_place_docked_vault(
         return false;
     }
 
+    /* Never dock Morgoth's throne room */
+    if (v_ptr->typ == 9)
+    {
+        return false;
+    }
+
     if (v_ptr->flags & (VLT_QUEST))
     {
         return false;
@@ -6615,7 +9888,7 @@ static bool try_place_docked_vault(
     int vault_count = 0;
     for (int i = 0; i < dun->cent_n; ++i)
     {
-        if (room_kind_is_vault(dun->kind[i]) && !dun->is_quest[i])
+        if (room_kind_is_vault(dun->kind[i]) && !dun->is_quest[i] && dun->kind[i] != 9)
         {
             vault_indices[vault_count++] = i;
         }
@@ -6746,7 +10019,92 @@ static bool try_place_docked_vault(
             {
                 place_closed_door(contact_y, contact_x);
             }
-            cave_set_feat(new_y, new_x, FEAT_FLOOR);
+
+            /* Carve through walls in BOTH vaults to ensure passability.
+             * We need to carve into the docked vault AND into the base vault,
+             * since either side may have thick walls at the contact point. */
+            int dy = 0, dx = 0;
+            if (dir == VAULT_DOCK_EAST) dx = 1;
+            else if (dir == VAULT_DOCK_WEST) dx = -1;
+            else if (dir == VAULT_DOCK_SOUTH) dy = 1;
+            else dy = -1;
+
+            /* Carve in both directions from the door */
+            for (int side = 0; side < 2; ++side)
+            {
+                int carve_dy, carve_dx, start_y, start_x;
+                
+                if (side == 0)
+                {
+                    /* Carve into the docked vault */
+                    carve_dy = dy;
+                    carve_dx = dx;
+                    start_y = new_y;
+                    start_x = new_x;
+                }
+                else
+                {
+                    /* Carve into the base vault (opposite direction) */
+                    carve_dy = -dy;
+                    carve_dx = -dx;
+                    start_y = contact_y - dy;
+                    start_x = contact_x - dx;
+                }
+                
+                int carve_y = start_y;
+                int carve_x = start_x;
+                int max_carve = 6;
+                bool found_floor = false;
+                
+                for (int c = 0; c < max_carve; ++c)
+                {
+                    int feat = cave_feat[carve_y][carve_x];
+                    if (feat == FEAT_FLOOR || feature_is_any_door(feat))
+                    {
+                        found_floor = true;
+                        break;
+                    }
+                    if (!(cave_info[carve_y][carve_x] & CAVE_ICKY))
+                        break;
+                    cave_set_feat(carve_y, carve_x, FEAT_FLOOR);
+                    carve_y += carve_dy;
+                    carve_x += carve_dx;
+                }
+                
+                /* If straight carve didn't find floor, search perpendicular */
+                if (!found_floor)
+                {
+                    int perp_dy = (carve_dy == 0) ? 1 : 0;
+                    int perp_dx = (carve_dx == 0) ? 1 : 0;
+                    int search_radius = 8;
+                    
+                    for (int sign = -1; sign <= 1; sign += 2)
+                    {
+                        for (int dist = 1; dist <= search_radius; ++dist)
+                        {
+                            int check_y = carve_y + sign * perp_dy * dist;
+                            int check_x = carve_x + sign * perp_dx * dist;
+                            
+                            if (!(cave_info[check_y][check_x] & CAVE_ICKY))
+                                break;
+                            
+                            int feat = cave_feat[check_y][check_x];
+                            if (feat == FEAT_FLOOR || feature_is_any_door(feat))
+                            {
+                                for (int d = 1; d < dist; ++d)
+                                {
+                                    int path_y = carve_y + sign * perp_dy * d;
+                                    int path_x = carve_x + sign * perp_dx * d;
+                                    cave_set_feat(path_y, path_x, FEAT_FLOOR);
+                                }
+                                found_floor = true;
+                                break;
+                            }
+                        }
+                        if (found_floor) break;
+                    }
+                }
+            }
 
             good_item_flag = true;
 
@@ -7266,7 +10624,7 @@ static bool build_type8(int y0, int x0)
 /*
  * Type 9 -- Morgoth's vault (see "vault.txt")
  */
-static bool build_type9(int y0, int x0)
+static bool build_type9(int y0, int x0, vault_type** used_vault)
 {
     vault_type* v_ptr;
     int tries = 0;
@@ -7290,6 +10648,9 @@ static bool build_type9(int y0, int x0)
         }
     }
 
+    if (used_vault)
+        *used_vault = v_ptr;
+
     /* Try building the vault */
     if (!build_vault(y0, x0, v_ptr, false))
     {
@@ -7306,6 +10667,104 @@ static bool build_type9(int y0, int x0)
     }
 
     return (true);
+}
+
+/* Carve two 3-wide tunnels from the north face of the throne room up toward the partition edge */
+static void carve_morgoth_entry_tunnels(const vault_type* v_ptr, int y0, int x0)
+{
+    if (!v_ptr)
+        return;
+
+    int top_y = y0 - v_ptr->hgt / 2;
+    int left_x = x0 - v_ptr->wid / 2;
+    int right_x = left_x + v_ptr->wid - 1;
+
+    /* Collect contiguous '$' runs on the top row (stored as FEAT_WALL_OUTER) */
+    int seg_start[4];
+    int seg_end[4];
+    int segs = 0;
+
+    for (int x = left_x; x <= right_x; x++)
+    {
+        if (cave_feat[top_y][x] == FEAT_WALL_OUTER)
+        {
+            if (segs == 0 || x != seg_end[segs - 1] + 1)
+            {
+                if (segs >= 4)
+                    break;
+                seg_start[segs] = seg_end[segs] = x;
+                segs++;
+            }
+            else
+            {
+                seg_end[segs - 1] = x;
+            }
+        }
+    }
+
+    if (segs == 0)
+        return;
+
+    int tunnel_limit = morgoth_partition_reserved ? morgoth_partition_bounds.y1 - 2 : top_y - 20;
+    if (tunnel_limit < 1)
+        tunnel_limit = 1;
+    if (tunnel_limit > top_y)
+        tunnel_limit = top_y;
+
+    for (int s = 0; s < segs; s++)
+    {
+        int center_x = (seg_start[s] + seg_end[s]) / 2;
+        int x1 = MAX(left_x + 1, center_x - 1);
+        int x2 = MIN(right_x - 1, center_x + 1);
+
+        for (int y = top_y; y >= tunnel_limit; y--)
+        {
+            bool joined_open_area = false;
+
+            for (int x = x1; x <= x2; x++)
+            {
+                if (!in_bounds_fully(y, x))
+                    continue;
+
+                if (cave_feat[y][x] == FEAT_WALL_PERM)
+                    continue;
+
+                if (cave_floor_bold(y, x) && !(cave_info[y][x] & CAVE_ICKY))
+                    joined_open_area = true;
+
+                cave_set_feat(y, x, FEAT_FLOOR);
+                cave_info[y][x] |= (CAVE_ROOM | CAVE_ICKY | CAVE_G_VAULT);
+            }
+
+            if (joined_open_area && y < top_y)
+                break;
+        }
+    }
+}
+
+/* Force-place Morgoth's throne room in the reserved central partition */
+static bool place_morgoth_throne_room(void)
+{
+    vault_type* v_ptr = NULL;
+
+    if (!morgoth_partition_reserved)
+    {
+        log_trace("Morgoth level: no reserved partition recorded for throne room placement");
+        return false;
+    }
+
+    int cy = (morgoth_vault_center_y > 0) ? morgoth_vault_center_y : p_ptr->cur_map_hgt / 2;
+    int cx = (morgoth_vault_center_x > 0) ? morgoth_vault_center_x : p_ptr->cur_map_wid / 2;
+
+    if (!build_type9(cy, cx, &v_ptr))
+    {
+        log_trace("Morgoth level: failed to build throne room at (%d,%d)", cy, cx);
+        return false;
+    }
+
+    carve_morgoth_entry_tunnels(v_ptr, cy, cx);
+    seal_morgoth_partition();
+    return true;
 }
 
 /*
@@ -7993,13 +11452,23 @@ static bool cave_gen(void)
     bool duruin_bastion_forced = false;
     bool shadow_bastion_forced = false;
     bool tulkas_stronghold_forced = false;
+    bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
+
+    reset_morgoth_layout_state(is_morgoth_level);
+    
+    /* Reset labyrinth partition counter for this level */
+    current_labyrinth_partitions = 0;
     
     /* Reset quest vault monitoring variables for this level */
     qv_placed_this_level = false;
     qv_stored_y1 = qv_stored_x1 = qv_stored_y2 = qv_stored_x2 = -1;
     
     /* Run quest lottery once per level to determine which quest (if any) gets this level */
-    run_quest_lottery();
+    if (is_morgoth_level) {
+        quest_lottery_winner = 0;
+    } else {
+        run_quest_lottery();
+    }
     byte varda_shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
     
     /* Debug: Log entry into cave_gen */
@@ -8007,7 +11476,7 @@ static bool cave_gen(void)
               p_ptr->quest_vault_used ? "true" : "false", quest_lottery_winner);
     
     /* Varda quest reserves the run to avoid other quest content until complete */
-    if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE && !p_ptr->quest_reserved[0]) {
+    if (!is_morgoth_level && p_ptr->varda_quest >= VARDA_QUEST_ACTIVE && !p_ptr->quest_reserved[0]) {
         p_ptr->quest_reserved[0] = 1;
         log_trace("Varda quest: === QUEST SLOT RESERVED === Active Varda quest reserves slot (state=%d)", p_ptr->varda_quest);
     }
@@ -8016,7 +11485,7 @@ static bool cave_gen(void)
               p_ptr->quest_reserved[0], p_ptr->varda_quest, quest_lottery_winner);
     
     /* Varda quest: flag forced bastion placement on first level deeper than 500ft */
-    if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
+    if (!is_morgoth_level && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed && p_ptr->depth > 10) {
         if (!p_ptr->varda_vault_ready) {
             log_trace("Varda quest: Crossing 500ft, setting bastion_ready at depth %d", p_ptr->depth);
         }
@@ -8053,11 +11522,10 @@ static bool cave_gen(void)
     /* Generate square levels: 4*11 to 15*11 (44x44 to 165x165) */
     /* Probability increases with depth, larger sizes more probable */
     
-    // Base size: 4 blocks minimum
+    // Base size: 6 blocks minimum (increased from 4)
     // Size increases with depth, with bias toward larger sizes
     // Formula: Use multiple dice rolls and take the maximum (biases upward)
-    // At depth 19: average ~13 blocks, size 15 achievable (~15% chance)
-    int base_size = 3;
+    int base_size = 7;  // Increased from 4 for larger level sizes
     int depth_factor = p_ptr->depth + dieroll(15);  // Higher ceiling (1-15)
     int bonus1 = depth_factor / 3;  // First roll
     int bonus2 = (p_ptr->depth + dieroll(12)) / 3;  // Second roll
@@ -8065,7 +11533,7 @@ static bool cave_gen(void)
     
     l = base_size + depth_bonus;
     if (l > 15) l = 15;  // Hard cap at 15 blocks (165x165)
-    if (l < 6) l = 6;    // Hard floor at 6 blocks (66x66)
+    if (l < 8) l = 8;    // Hard floor at 8 blocks (88x88)
 
     // Square levels: same dimension for both height and width
     p_ptr->cur_map_hgt = l * (PANEL_HGT);
@@ -8075,6 +11543,13 @@ static bool cave_gen(void)
     room_attempts = l * l * l * 2;
     log_trace("cave_gen: SQUARE map size set to %dx%d (l=%d blocks) room_attempts=%d", 
               p_ptr->cur_map_wid, p_ptr->cur_map_hgt, l, room_attempts);
+    
+    /* Generation log: level start */
+    gen_log_level_start(p_ptr->depth, p_ptr->cur_map_hgt, p_ptr->cur_map_wid);
+    genlog_summary("Level %d generation starting: %dx%d map (%d blocks), %d room attempts",
+                   p_ptr->depth, p_ptr->cur_map_hgt, p_ptr->cur_map_wid, l, room_attempts);
+    genlog_quest("Quest lottery winner=%d, quest_vault_used=%s, varda_quest=%d",
+                 quest_lottery_winner, p_ptr->quest_vault_used ? "yes" : "no", p_ptr->varda_quest);
 
     /* Initialize level style weights and start with basic granite */
     styles_init_for_level();
@@ -8109,11 +11584,11 @@ static bool cave_gen(void)
     if (cheat_room)
         msg_format("Forge count is %d.", p_ptr->forge_count);
 
-    // guarantee a forge at levels 2, 6, 10 (exactly at those levels, not beyond)
+    // guarantee a forge at first entrance to levels 2, 6, 10 (or below if skipped via shaft)
     if (p_ptr->fixed_forge_count < 3)
     {
         int next_guaranteed_forge_level = 2 + (p_ptr->fixed_forge_count * 4);
-        is_guaranteed_forge_level = (next_guaranteed_forge_level == p_ptr->depth);
+        is_guaranteed_forge_level = (next_guaranteed_forge_level <= p_ptr->depth);
         log_trace("Forge forcing check: fixed_forge_count=%d, target_level=%d, current_depth=%d, forcing=%s", 
                  p_ptr->fixed_forge_count, next_guaranteed_forge_level, p_ptr->depth, 
                  is_guaranteed_forge_level ? "true" : "false");
@@ -8197,103 +11672,152 @@ static bool cave_gen(void)
     /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
     if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !shadow_bastion_forced && !tulkas_stronghold_forced)
     {
-        /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
-        /* to allow quest vault re-placement during level regeneration */
+    /* Quest vault determination - Allow re-placement during level regeneration */
+    log_trace("Quest vault: ENTERING quest vault logic check (quest_vault_used=%s, force_forge=%s, qv_placed_this_level=%s)", 
+              p_ptr->quest_vault_used ? "true" : "false", 
+              p_ptr->force_forge ? "true" : "false",
+              qv_placed_this_level ? "true" : "false");
+    log_trace("Quest vault: Starting quest vault check (quest_vault_used=%s, force_forge=%s)", 
+              p_ptr->quest_vault_used ? "true" : "false", 
+              p_ptr->force_forge ? "true" : "false");
+    
+    if (!is_morgoth_level)
+    {
+        /* If Varda's quest is active and the bastion is due, force its placement first */
+        log_trace("Quest vault check: varda_vault_ready=%d, varda_quest=%d (ACTIVE=%d), varda_vault_placed=%d",
+                  p_ptr->varda_vault_ready, p_ptr->varda_quest, VARDA_QUEST_ACTIVE, p_ptr->varda_vault_placed);
         
-        /* Check if any quest is already active - ONE QUEST PER RUN ENFORCEMENT */
-        log_trace("Quest vault: Checking one-quest-per-run enforcement:");
-        log_trace("Quest vault:   quest_reserved[0]=%d (should block if 1)", p_ptr->quest_reserved[0]);
-        log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d shadow=%d (tulkas_orcs_state=%d)",
-                  p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest,
-                  quest_get_state(QUEST_ID_VARDA_SHADOW), quest_get_state(QUEST_ID_TULKAS_ORCS));
-        
-        if (p_ptr->quest_reserved[0] || 
-            p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
-            quest_get_state(QUEST_ID_TULKAS_ORCS) != QUEST_STATE_NOT_STARTED ||
-            p_ptr->tulkas_stronghold_level > 0 ||
-            p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
-            p_ptr->aule_quest != AULE_QUEST_NOT_STARTED ||
-            p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED ||
-            quest_get_state(QUEST_ID_VARDA_SHADOW) != QUEST_STATE_NOT_STARTED) {
-            log_trace("Quest vault: === BLOCKED === Quest already active - one quest per run enforced (tulkas=%d, mandos=%d, aule=%d, varda=%d, reserved=%d)", 
-                     p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest, p_ptr->quest_reserved[0]);
-            /* Don't place any quest vaults - skip to end */
-        } else {
-            int quest_vault_roll = dieroll(p_ptr->depth + 5);
-            log_trace("Quest vault: Level determination roll = %d", quest_vault_roll);
+        if (p_ptr->varda_vault_ready && p_ptr->varda_quest == VARDA_QUEST_ACTIVE && !p_ptr->varda_vault_placed) {
+            log_trace("Quest vault: === DURUIN BASTION FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
+            if (!place_duruin_bastion()) {
+                log_trace("Quest vault: === DURUIN BASTION FAILED === Regenerating level");
+                return false;
+            }
+            log_trace("Quest vault: === DURUIN BASTION SUCCESS === Placed successfully");
+            duruin_bastion_forced = true;
+        } else if (p_ptr->varda_quest == VARDA_QUEST_ACTIVE) {
+            log_trace("Quest vault: Varda quest ACTIVE but bastion not ready (vault_ready=%d, vault_placed=%d)",
+                      p_ptr->varda_vault_ready, p_ptr->varda_vault_placed);
+        }
 
-            if (one_in_(5))
-            {
-                int bonus = dieroll(5);
-                quest_vault_roll += bonus;
-                log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
+        log_trace("Quest vault check: shadow_ready=%d, shadow_state=%d, shadow_placed=%d",
+                  p_ptr->varda_shadow_ready, quest_get_state(QUEST_ID_VARDA_SHADOW), p_ptr->varda_shadow_placed);
+        if (p_ptr->varda_shadow_ready && quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_ACTIVE && !p_ptr->varda_shadow_placed) {
+            log_trace("Quest vault: === SHADOW BASTION FORCE PLACEMENT === Starting at depth %d", p_ptr->depth);
+            if (!place_shadow_bastion()) {
+                log_trace("Quest vault: === SHADOW BASTION FAILED === Regenerating level");
+                return false;
             }
+            log_trace("Quest vault: === SHADOW BASTION SUCCESS === Placed successfully");
+            shadow_bastion_forced = true;
+        } else if (quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_ACTIVE) {
+            log_trace("Quest vault: Varda shadow quest ACTIVE but bastion not ready (vault_ready=%d, vault_placed=%d)",
+                      p_ptr->varda_shadow_ready, p_ptr->varda_shadow_placed);
+        }
+                  
+        /* QUEST VAULT REGENERATION FIX: Allow quest vault re-placement during regeneration */
+        /* Quest vaults can be placed if: */
+        /* 1. quest_vault_used is false (haven't successfully completed a quest vault this run), OR */
+        /* 2. We're in a regeneration scenario (quest vault was placed before but level failed) */
+        if (!p_ptr->quest_vault_used && !duruin_bastion_forced && !shadow_bastion_forced && !tulkas_stronghold_forced)
+        {
+            /* QUEST VAULT REGENERATION FIX: Remove the quest_vault_attempted_this_level check */
+            /* to allow quest vault re-placement during level regeneration */
+            
+            /* Check if any quest is already active - ONE QUEST PER RUN ENFORCEMENT */
+            log_trace("Quest vault: Checking one-quest-per-run enforcement:");
+            log_trace("Quest vault:   quest_reserved[0]=%d (should block if 1)", p_ptr->quest_reserved[0]);
+            log_trace("Quest vault:   tulkas=%d, mandos=%d, aule=%d, varda=%d shadow=%d (tulkas_orcs_state=%d)",
+                      p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest,
+                      quest_get_state(QUEST_ID_VARDA_SHADOW), quest_get_state(QUEST_ID_TULKAS_ORCS));
+            
+            if (p_ptr->quest_reserved[0] || 
+                p_ptr->tulkas_quest != TULKAS_QUEST_NOT_STARTED ||
+                quest_get_state(QUEST_ID_TULKAS_ORCS) != QUEST_STATE_NOT_STARTED ||
+                p_ptr->tulkas_stronghold_level > 0 ||
+                p_ptr->mandos_quest != MANDOS_QUEST_NOT_STARTED ||
+                p_ptr->aule_quest != AULE_QUEST_NOT_STARTED ||
+                p_ptr->varda_quest != VARDA_QUEST_NOT_STARTED ||
+                quest_get_state(QUEST_ID_VARDA_SHADOW) != QUEST_STATE_NOT_STARTED) {
+                log_trace("Quest vault: === BLOCKED === Quest already active - one quest per run enforced (tulkas=%d, mandos=%d, aule=%d, varda=%d, reserved=%d)", 
+                         p_ptr->tulkas_quest, p_ptr->mandos_quest, p_ptr->aule_quest, p_ptr->varda_quest, p_ptr->quest_reserved[0]);
+                /* Don't place any quest vaults - skip to end */
+            } else {
+                int quest_vault_roll = dieroll(p_ptr->depth + 5);
+                log_trace("Quest vault: Level determination roll = %d", quest_vault_roll);
 
-            bool quest_vault_placed = false;
-            
-            if (quest_vault_roll >= 18)
-            {
-                log_trace("Quest vault: Hit greater vault threshold (%d >= 18), trying quest vaults 8->7->6", quest_vault_roll);
-                quest_vault_placed = try_quest_vault_type(8) || try_quest_vault_type(7) || try_quest_vault_type(6);
-                
-                if (!quest_vault_placed) {
-                    log_trace("Quest vault: === FAILED TO PLACE REQUIRED QUEST VAULT === Regenerating level");
-                    return false; /* Force regeneration to guarantee quest vault spawns */
+                if (one_in_(5))
+                {
+                    int bonus = dieroll(5);
+                    quest_vault_roll += bonus;
+                    log_trace("Quest vault: Bonus roll (+%d) = %d total", bonus, quest_vault_roll);
                 }
-            }
-            else if (quest_vault_roll >= 13)
-            {
-                log_trace("Quest vault: Hit lesser vault threshold (%d >= 13), trying quest vaults 7->6", quest_vault_roll);
-                quest_vault_placed = try_quest_vault_type(7) || try_quest_vault_type(6);
                 
-                if (!quest_vault_placed) {
-                    log_trace("Quest vault: === FAILED TO PLACE REQUIRED QUEST VAULT === Regenerating level");
-                    return false; /* Force regeneration to guarantee quest vault spawns */
+                /* Try to place a quest vault */
+                if (quest_vault_roll >= 8)
+                {
+                    if (place_quest_vault())
+                    {
+                        log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
+                    }
+                    else
+                    {
+                        log_trace("Quest vault: Failed to place quest vault (place_quest_vault returned false)");
+                    }
                 }
-            }
-            else if (quest_vault_roll >= 8)
-            {
-                log_trace("Quest vault: Hit interesting room threshold (%d >= 8), trying quest vault 6", quest_vault_roll);
-                quest_vault_placed = try_quest_vault_type(6);
+                else
+                {
+                    log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
+                }
                 
-                if (!quest_vault_placed) {
-                    log_trace("Quest vault: === FAILED TO PLACE REQUIRED QUEST VAULT === Regenerating level");
-                    return false; /* Force regeneration to guarantee quest vault spawns */
+                if (quest_vault_placed)
+                {
+                    log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
                 }
-            }
-            else
-            {
-                log_trace("Quest vault: Roll too low (%d < 8), no quest vault this level", quest_vault_roll);
-            }
-            
-            if (quest_vault_placed)
-            {
-                log_trace("Quest vault: Successfully placed quest vault, no more quest vaults this run");
-            }
-            else
-            {
-                log_trace("Quest vault: No quest vault placed this level");
+                else
+                {
+                    log_trace("Quest vault: No quest vault placed this level");
+                }
             }
         }
+        else if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE)
+        {
+            log_trace("Quest vault: === VARDA QUEST BLOCKS === No other quest vaults allowed while Varda quest active (state=%d)", p_ptr->varda_quest);
+        }
+        else if (duruin_bastion_forced)
+        {
+            log_trace("Quest vault: Bastion already placed for Varda quest, skipping other quest vault attempts this level");
+        }
+        else
+        {
+            log_trace("Quest vault: Already used this run, skipping quest vault check (quest_vault_used=1)");
+        }
     }
-    else if (p_ptr->varda_quest >= VARDA_QUEST_ACTIVE)
-    {
-        log_trace("Quest vault: === VARDA QUEST BLOCKS === No other quest vaults allowed while Varda quest active (state=%d)", p_ptr->varda_quest);
-    }
-    else if (duruin_bastion_forced)
-    {
-        log_trace("Quest vault: Bastion already placed for Varda quest, skipping other quest vault attempts this level");
-    }
-    else
-    {
-        log_trace("Quest vault: Already used this run, skipping quest vault check (quest_vault_used=1)");
-    }
+
 
     /* Seed a handful of prefab anchors up front to diversify layout */
     seed_prefab_anchors();
-    /* Apply quadrant generation modes before the global room loop */
+    /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
+    /* DISABLED: ensure_partition_connectivity() was creating dead-end corridors.
+     * The corridor system and rescue tunnels handle connectivity instead. */
+    /* Repair all outer walls - critical fix for tunnel connectivity after overlapping generation */
+    repair_all_outer_walls();
 
+    /* Reserve and place Morgoth's throne room when generating the final level */
+    if (morgoth_level_active)
+    {
+        if (!morgoth_partition_reserved || !place_morgoth_throne_room())
+        {
+            log_trace("Morgoth level: throne room placement failed (reserved=%s)", morgoth_partition_reserved ? "true" : "false");
+            return false;
+        }
+    }
+
+    /* Room saturation loop DISABLED - partition system handles room generation
+     * The old approach saturated the map with random rooms which conflicted with
+     * the partition-based generation that already creates themed areas. */
+#if 0
     /* Build some rooms */
     int failed_in_row = 0;
     for (i = 0; i < room_attempts; i++)
@@ -8366,14 +11890,20 @@ static bool cave_gen(void)
             break;
         }
     }
+#endif
 
     /*set the permanent walls*/
     set_perm_boundry();
 
+    /* Post-partition seeders DISABLED - partition system already handles these
+     * CA blob and BSP slice anchors were duplicating work the partitions do */
+#if 0
     /* Carve CA blob anchors into remaining granite */
     seed_ca_blob_anchors();
     /* Add BSP-slice anchors for rectangular-but-offset caverns */
     seed_bsp_slice_anchors();
+#endif
+
     /* If generation stalled, force a couple of simple rooms to avoid regen loops */
     ensure_minimum_rooms();
 
@@ -8393,6 +11923,8 @@ static bool cave_gen(void)
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: Only %d rooms generated, minimum %d required", dun->cent_n, ROOM_MIN);
+        genlog_fail("NOT ENOUGH ROOMS: %d generated, minimum %d required", dun->cent_n, ROOM_MIN);
+        gen_log_level_end(false, dun->cent_n, 1);
         return (false);
     }
 
@@ -8408,6 +11940,8 @@ static bool cave_gen(void)
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: connect_rooms_stairs() returned false");
+        genlog_fail("CONNECTIVITY FAILED: connect_rooms_stairs() could not link rooms (rooms=%d)", dun->cent_n);
+        gen_log_level_end(false, dun->cent_n, 1);
         return (false);
     }
 
@@ -8429,6 +11963,21 @@ static bool cave_gen(void)
         }
     squash_double_doors();
 
+    if (morgoth_level_active)
+    {
+        for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        {
+            for (x = 0; x < p_ptr->cur_map_wid; x++)
+            {
+                if ((cave_feat[y][x] == FEAT_MORE)
+                    || (cave_feat[y][x] == FEAT_MORE_SHAFT))
+                {
+                    cave_set_feat(y, x, FEAT_LESS);
+                }
+            }
+        }
+    }
+
     /* DEBUGGING: Check if quest vault still exists after door randomization */
     check_quest_vault_integrity("AFTER_DOOR_RANDOMIZATION");
 
@@ -8440,6 +11989,8 @@ static bool cave_gen(void)
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: place_rubble_player() returned false");
+        genlog_fail("PLACEMENT FAILED: place_rubble_player() could not place stairs/player");
+        gen_log_level_end(false, dun->cent_n, 1);
         return (false);
     }
 
@@ -8457,6 +12008,9 @@ static bool cave_gen(void)
         mon_gen = (dun->cent_n + dieroll(dun->cent_n)) / 2;
     }
 
+    /* Note: Labyrinth monsters are now placed directly inside the labyrinth
+     * during carve_labyrinth_bounds() instead of as a global bonus */
+
         /* meta-run curse: more monsters */
     {
         int stacks = curse_flag_count_cur(CUR_MON_NUM);
@@ -8472,6 +12026,8 @@ static bool cave_gen(void)
         if (p_ptr->force_forge)
             p_ptr->fixed_forge_count--;
         log_trace("Level generation failed: check_connectivity() returned false");
+        genlog_fail("CONNECTIVITY CHECK FAILED: level has unreachable areas (rooms=%d)", dun->cent_n);
+        gen_log_level_end(false, dun->cent_n, 1);
         return (false);
     }
 
@@ -8513,6 +12069,8 @@ static bool cave_gen(void)
         /* Safety: enforce early-depth requirement even if data is misconfigured */
         if (p_ptr->depth > 3) {
             log_trace("Varda spawn: FAILED - depth %d exceeds allowed range 1-3", p_ptr->depth);
+            genlog_quest("VARDA SPAWN FAILED: depth %d > 3, forcing regeneration", p_ptr->depth);
+            gen_log_level_end(false, dun->cent_n, 1);
             return false; /* Force regeneration until early depth is honored */
         }
         
@@ -8633,6 +12191,8 @@ static bool cave_gen(void)
         /* Check level size requirement: must be maximum size (l >= 5) */
         if (l < 5) {
             log_trace("Niena spawn: FAILED - level too small (l=%d, need l>=5)", l);
+            genlog_quest("NIENA SPAWN FAILED: level size %d < 5, forcing regeneration", l);
+            gen_log_level_end(false, dun->cent_n, 1);
             return false; /* Force regeneration until we get a big enough level */
         }
         
@@ -8642,6 +12202,8 @@ static bool cave_gen(void)
         
         if (min_stair_dist < 87) {
             log_trace("Niena spawn: FAILED - stairs too close (distance=%d, need >=87)", min_stair_dist);
+            genlog_quest("NIENA SPAWN FAILED: stair distance %d < 87, forcing regeneration", min_stair_dist);
+            gen_log_level_end(false, dun->cent_n, 1);
             return false; /* Force regeneration until stairs are far enough apart */
         }
         
@@ -8897,6 +12459,12 @@ static bool cave_gen(void)
 
     p_ptr->force_forge = false;
 
+    /* Level generation successful - log completion */
+    genlog_summary("Level %d generation COMPLETE: %d rooms, quest_lottery=%d",
+                   p_ptr->depth, dun->cent_n, quest_lottery_winner);
+    gen_log_level_end(true, dun->cent_n, 1);
+    gen_log_flush();
+
     return (true);
 }
 
@@ -9063,7 +12631,7 @@ static void throne_gen(void)
     /*set the permanent walls*/
     set_perm_boundry();
 
-    build_type9(16, 38);
+    build_type9(16, 38, NULL);
 
     /* Find an up staircase */
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
@@ -9186,6 +12754,7 @@ void unring_a_bell(void)
 void generate_cave(void)
 {
     int y, x, i;
+    bool is_morgoth_level = (p_ptr->depth == MORGOTH_DEPTH);
 
     log_info("generate_cave: Function entry - about to start");
     log_debug("generate_cave: Starting cave generation");
@@ -9201,6 +12770,9 @@ void generate_cave(void)
 
     /*allow uniques to be generated everywhere but in nests/pits*/
     allow_uniques = true;
+
+    /* Never carry the throne-room truce between levels */
+    p_ptr->truce = false;
 
     /* Restrict quest monsters from spawning outside their quest contexts */
     get_mon_num_hook = quest_monster_spawn_okay;
@@ -9350,15 +12922,6 @@ if (playerturn == 0) {
             p_ptr->create_stair = 0;
         }
 
-        /* Build Morgoth's throne room */
-        else if (p_ptr->depth == MORGOTH_DEPTH)
-        {
-            throne_gen();
-            (void)spawn_niena_morgoth_hall();
-
-            /* Hack -- Clear stairs request */
-            p_ptr->create_stair = 0;
-        }
 
         /* Build a real level */
         else
@@ -9367,6 +12930,12 @@ if (playerturn == 0) {
             if (cave_gen())
             {
                 okay = true;
+                if (is_morgoth_level)
+                {
+                    /* Use the built-in vault staircases only */
+                    p_ptr->create_stair = 0;
+                    (void)spawn_niena_morgoth_hall();
+                }
                 /* Check if quest vault was placed during this level generation */
                 if (qv_placed_this_level) {
                     quest_vault_placed_this_attempt = true;
