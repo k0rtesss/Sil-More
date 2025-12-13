@@ -264,7 +264,7 @@ static flag_name info_flags[] = {
     { "STAND_FAST", TR3, TR3_STAND_FAST }, { "ACCURATE", TR3, TR3_ACCURATE },
     { "CUMBERSOME", TR3, TR3_CUMBERSOME },
     { "AVOID_TRAPS", TR3, TR3_AVOID_TRAPS }, { "MEDIC", TR3, TR3_MEDIC },
-    { "TR3XXX6", TR3, TR3_TR3XXX6 }, { "TR3XXX7", TR3, TR3_TR3XXX7 },
+    { "STAR_IRON", TR3, TR3_STAR_IRON }, { "TR3XXX7", TR3, TR3_TR3XXX7 },
     { "TR3XXX8", TR3, TR3_TR3XXX8 }, { "TR3XXX9", TR3, TR3_TR3XXX9 },
     { "TR3XX10", TR3, TR3_TR3XX10 }, { "NO_SMITHING", TR3, TR3_NO_SMITHING },
     { "MITHRIL", TR3, TR3_MITHRIL }, { "AXE", TR3, TR3_AXE },
@@ -1129,6 +1129,11 @@ errr parse_z_info(char* buf, header* head)
     else if (buf[2] == 'Z')
     {
         z_info->style_max = (u16b)atoi(buf + 4);
+    }
+    else if (buf[2] == 'X')
+    {
+        z_info->skeleton_note_max = (u16b)atoi(buf + 4);
+        log_debug("Parsed skeleton_note_max (M:X): %d", z_info->skeleton_note_max);
     }
     else
     {
@@ -2068,38 +2073,47 @@ errr parse_k_info(char* buf, header* head)
     /* Process 'A' for "Allocation" (one line only) */
     else if (buf[0] == 'A')
     {
-        int i;
-
         /* There better be a current k_ptr */
         if (!k_ptr)
             return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
-        /* XXX Simply read each number following a colon */
-        for (i = 0, s = buf + 1; s && (s[0] == ':') && s[1]; ++i)
+        /* Reset explicit allocation count */
+        k_ptr->alloc_count = 0;
+
+        /* Read each number following a colon */
+        for (s = buf + 1; s && (s[0] == ':') && s[1];)
         {
             /* Sanity check */
-            if (i > 3)
+            if (k_ptr->alloc_count > 3)
                 return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
 
-            /* Default chance */
-            k_ptr->chance[i] = 1;
-
-            /* Store the attack damage index */
-            k_ptr->locale[i] = atoi(s + 1);
+            int depth = atoi(s + 1);
+            int rarity = 1;
 
             /* Find the slash */
             t = strchr(s + 1, '/');
 
             /* Find the next colon */
-            s = strchr(s + 1, ':');
+            char* next = strchr(s + 1, ':');
 
             /* If the slash is "nearby", use it */
-            if (t && (!s || t < s))
-            {
-                int chance = atoi(t + 1);
-                if (chance > 0)
-                    k_ptr->chance[i] = chance;
-            }
+            if (t && (!next || t < next))
+                rarity = atoi(t + 1);
+
+            if (rarity < 0)
+                rarity = 0;
+
+            /* Store legacy locale/chance for compatibility */
+            k_ptr->locale[k_ptr->alloc_count] = (byte)depth;
+            k_ptr->chance[k_ptr->alloc_count] = (byte)rarity;
+
+            /* Store explicit allocation entries (supporting zero rarity) */
+            k_ptr->alloc_depth[k_ptr->alloc_count] = (byte)depth;
+            k_ptr->alloc_prob[k_ptr->alloc_count] = (byte)rarity;
+            k_ptr->alloc_count++;
+
+            /* Advance to next colon (if any) */
+            s = next;
         }
     }
 
@@ -3054,6 +3068,180 @@ errr parse_n_info(char* buf, header* head)
     }
 }
 
+static byte skeleton_note_parse_sval_token(const char* tok, bool* ok)
+{
+    if (ok)
+        *ok = false;
+    if (!tok || !*tok)
+        return 0;
+    if (streq(tok, "ELF"))
+    {
+        if (ok) *ok = true;
+        return SV_SKELETON_ELF;
+    }
+    if (streq(tok, "HUMAN"))
+    {
+        if (ok) *ok = true;
+        return SV_SKELETON_HUMAN;
+    }
+    if (streq(tok, "ORC"))
+    {
+        if (ok) *ok = true;
+        return SV_SKELETON_ORC;
+    }
+    if (streq(tok, "ANY"))
+    {
+        if (ok) *ok = true;
+        return 0;
+    }
+    return 0;
+}
+
+static byte skeleton_note_parse_hint_token(const char* tok)
+{
+    if (!tok)
+        return SKEL_HINT_NONE;
+    if (streq(tok, "GREAT_VAULT"))
+        return SKEL_HINT_GREAT_VAULT;
+    if (streq(tok, "VAULT_ARTIFACT"))
+        return SKEL_HINT_VAULT_ARTIFACT;
+    if (streq(tok, "DOMINANT"))
+        return SKEL_HINT_DOMINANT_PARTITION;
+    if (streq(tok, "PARTITION"))
+        return SKEL_HINT_PARTITION_PRESENCE;
+    if (streq(tok, "SIZE"))
+        return SKEL_HINT_LEVEL_SIZE;
+    if (streq(tok, "UNIQUE"))
+        return SKEL_HINT_UNIQUE_MONSTER;
+    if (streq(tok, "TIP"))
+        return SKEL_HINT_TIP;
+    return SKEL_HINT_NONE;
+}
+
+/*
+ * Parse skeleton_note.txt
+ *
+ * Formats:
+ *   O:<SVAL>:<weight>:<text>
+ *   C:<SVAL>:<weight>:<text>
+ *   M:<SVAL>:<HINT>:<weight>:<text>
+ *
+ * SVAL may be ELF/HUMAN/ORC/ANY
+ * HINT may be GREAT_VAULT/VAULT_ARTIFACT/DOMINANT/PARTITION/SIZE
+ * Weight is optional (defaults to 100) and clamped to a byte.
+ */
+errr parse_skeleton_note_info(char* buf, header* head)
+{
+    static int next_idx = 0;
+    skeleton_note_role role = SKELETON_NOTE_ROLE_NONE;
+    char buf_copy[1024];
+
+    strnfmt(buf_copy, sizeof(buf_copy), "%s", buf);
+
+    /* Reset per-file */
+    if (error_idx < 0)
+        next_idx = 0;
+
+    if (!buf[0] || buf[0] == '#')
+        return 0;
+
+    if (buf[0] == 'O')
+        role = SKELETON_NOTE_ROLE_OPENING;
+    else if (buf[0] == 'C')
+        role = SKELETON_NOTE_ROLE_SIGNOFF;
+    else if (buf[0] == 'M')
+        role = SKELETON_NOTE_ROLE_HINT;
+    else
+        return PARSE_ERROR_UNDEFINED_DIRECTIVE;
+
+    if (next_idx >= head->info_num)
+        return PARSE_ERROR_TOO_MANY_ENTRIES;
+
+    skeleton_note_template* note = (skeleton_note_template*)head->info_ptr + next_idx;
+
+    char* cursor = buf + 2;
+    char* sval_tok = cursor;
+    char* sep = strchr(cursor, ':');
+    if (!sep)
+    {
+        log_error("skeleton_note.txt: missing sval separator on line %d (buf='%s')",
+            error_line, buf_copy);
+        return PARSE_ERROR_GENERIC;
+    }
+    *sep = '\0';
+    cursor = sep + 1;
+
+    bool valid_sval = false;
+    byte sval = skeleton_note_parse_sval_token(sval_tok, &valid_sval);
+    if (!valid_sval)
+    {
+        log_error("skeleton_note.txt: invalid sval '%s' on line %d (buf='%s')",
+            sval_tok, error_line, buf_copy);
+        return PARSE_ERROR_GENERIC;
+    }
+
+    byte hint = SKEL_HINT_NONE;
+    if (role == SKELETON_NOTE_ROLE_HINT)
+    {
+        char* hint_tok = cursor;
+        sep = strchr(cursor, ':');
+        if (!sep)
+        {
+            log_error("skeleton_note.txt: missing hint separator on line %d (buf='%s')",
+                error_line, buf_copy);
+            return PARSE_ERROR_GENERIC;
+        }
+        *sep = '\0';
+        cursor = sep + 1;
+        hint = skeleton_note_parse_hint_token(hint_tok);
+        if (hint == SKEL_HINT_NONE)
+        {
+            log_error("skeleton_note.txt: invalid hint '%s' on line %d (buf='%s')",
+                hint_tok, error_line, buf_copy);
+            return PARSE_ERROR_INVALID_FLAG;
+        }
+    }
+
+    long weight = 100;
+    sep = strchr(cursor, ':');
+    if (sep)
+    {
+        *sep = '\0';
+        weight = atol(cursor);
+        cursor = sep + 1;
+    }
+    else
+    {
+        cursor = cursor;
+    }
+
+    if (weight < 0 || weight > 255)
+    {
+        log_error("skeleton_note.txt: weight out of bounds (%ld) on line %d (buf='%s')",
+            weight, error_line, buf_copy);
+        return PARSE_ERROR_OUT_OF_BOUNDS;
+    }
+
+    if (!cursor || cursor[0] == '\0')
+    {
+        log_error("skeleton_note.txt: missing text payload on line %d (buf='%s')",
+            error_line, buf_copy);
+        return PARSE_ERROR_GENERIC;
+    }
+
+    note->sval = sval;
+    note->hint = hint;
+    note->role = role;
+    note->weight = (byte)weight;
+
+    if (!add_text(&note->text, head, cursor))
+        return PARSE_ERROR_OUT_OF_MEMORY;
+
+    next_idx++;
+    error_idx = next_idx;
+    return 0;
+}
+
 /*
  * Grab one flag in a special item_type from a textual string
  */
@@ -3121,6 +3309,9 @@ errr parse_e_info(char* buf, header* head)
 
         /* Start with the first of the tval indices */
         cur_t = 0;
+
+        /* Reset allocation tracking */
+        e_ptr->alloc_count = 0;
     }
 
     /* Process 'W' for "More Info" (one line only) */
@@ -3144,6 +3335,38 @@ errr parse_e_info(char* buf, header* head)
         e_ptr->rarity = rarity;
         e_ptr->max_level = max_level;
         e_ptr->cost = cost;
+    }
+
+    /* Process 'A' for "Allocation" (one line only) */
+    else if (buf[0] == 'A')
+    {
+        /* There better be a current e_ptr */
+        if (!e_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        /* Reset explicit allocation count */
+        e_ptr->alloc_count = 0;
+
+        for (s = buf + 1; s && (s[0] == ':') && s[1];)
+        {
+            if (e_ptr->alloc_count > 3)
+                return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
+
+            int depth = atoi(s + 1);
+            int rarity = 1;
+            t = strchr(s + 1, '/');
+            char* next = strchr(s + 1, ':');
+            if (t && (!next || t < next))
+                rarity = atoi(t + 1);
+            if (rarity < 0)
+                rarity = 0;
+
+            e_ptr->alloc_depth[e_ptr->alloc_count] = (byte)depth;
+            e_ptr->alloc_prob[e_ptr->alloc_count] = (byte)rarity;
+            e_ptr->alloc_count++;
+
+            s = next;
+        }
     }
 
     /* Process 'T' for "Types allowed" (up to three lines) */

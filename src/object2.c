@@ -59,7 +59,7 @@ static bool object_is_truly_two_handed(const object_type* o_ptr)
                 || (o_ptr->sval == SV_GREAT_AXE);
         case TV_SWORD:
             return (o_ptr->sval == SV_GREAT_SWORD)
-                || (o_ptr->sval == SV_MITHRIL_GREAT_SWORD);
+                || (o_ptr->sval == SV_STAR_IRON_GREAT_SWORD);
         default:
             break;
     }
@@ -3131,12 +3131,6 @@ void apply_magic(object_type* o_ptr, int lev, bool okay, bool good, bool great,
         return;
     }
 
-    if (k_ptr->flags3 & (TR3_MORE_SPECIAL))
-    {
-        if (percent_chance(50))
-            special = true;
-    }
-
     /* Apply magic */
     switch (o_ptr->tval)
     {
@@ -3923,7 +3917,7 @@ static bool torchlight_obj_filter(int k_idx)
 }
 
 /*
- * Attempt to make an object (normal or good/great)
+ * Attempt to make an object (normal or weighted quality)
  *
  * This routine plays nasty games to generate the "special artefacts".
  *
@@ -3931,189 +3925,21 @@ static bool torchlight_obj_filter(int k_idx)
  *
  * We assume that the given object has been "wiped".
  */
-bool make_object(object_type* j_ptr, bool good, bool great, int objecttype)
+bool make_object(object_type* j_ptr, drop_quality quality, int objecttype)
 {
-    int prob, base;
-    bool generated_special = false;
-
-    /* Chance of "special object" */
-    prob = ((good || great) ? 10 : 1000);
-
-    /*better chance to check special artefacts if there is a jewelery theme*/
-    if (objecttype == DROP_TYPE_JEWELRY)
-        prob /= 2;
-
-    /* Base level for the object */
-    base = ((good || great) ? (object_level + 3) : object_level);
-
-    // There is a one in prob chance of generating a "special artefact", such as
-    // Barahir
-    if (one_in_(prob))
-    {
-        generated_special = make_artefact_special(j_ptr);
-    }
-
-    if (generated_special && adult_tulkas_blunt)
-    {
-        if (!tulkas_blunt_kind_ok(j_ptr->k_idx))
-        {
-            log_trace("Tulkas blunt challenge: rejecting special artifact k_idx=%d (tval=%d)", j_ptr->k_idx, j_ptr->tval);
-            object_wipe(j_ptr);
-            generated_special = false;
-        }
-    }
-
-    /* Attempt to generate a special artefact if prob = 0, or a normal object
-     * if not.
-     */
-    if (!generated_special)
-    {
-        int k_idx;
-
-        // unlike the others, this type can be overridden by 'great' and 'good'
-        if (objecttype == DROP_TYPE_NOT_DAMAGED)
-            get_obj_num_hook = kind_is_not_damaged;
-
-        /*
-         * Next check if it is a themed drop, and
-         * only include objects from a pre-set theme.  But, it can be
-         * called from anywhere.
-         * First check to skip all these checks when unnecessary.
-         */
-        if ((good) || (great) || (objecttype > DROP_TYPE_NOT_DAMAGED))
-        {
-            if (objecttype == DROP_TYPE_POTION)
-                get_obj_num_hook = kind_is_potion;
-            else if (objecttype == DROP_TYPE_STAFF)
-                get_obj_num_hook = kind_is_staff;
-            else if (objecttype == DROP_TYPE_SHIELD)
-                get_obj_num_hook = kind_is_shield;
-            else if (objecttype == DROP_TYPE_WEAPON)
-                get_obj_num_hook = kind_is_weapon;
-            else if (objecttype == DROP_TYPE_ARMOR)
-                get_obj_num_hook = kind_is_armor;
-            else if (objecttype == DROP_TYPE_BOOTS)
-                get_obj_num_hook = kind_is_boots;
-            else if (objecttype == DROP_TYPE_BOW)
-                get_obj_num_hook = kind_is_bow;
-            else if (objecttype == DROP_TYPE_CLOAK)
-                get_obj_num_hook = kind_is_cloak;
-            else if (objecttype == DROP_TYPE_GLOVES)
-                get_obj_num_hook = kind_is_gloves;
-            else if (objecttype == DROP_TYPE_EDGED)
-                get_obj_num_hook = kind_is_edged;
-            else if (objecttype == DROP_TYPE_POLEARM)
-                get_obj_num_hook = kind_is_polearm;
-            else if (objecttype == DROP_TYPE_HEADGEAR)
-                get_obj_num_hook = kind_is_headgear;
-            else if (objecttype == DROP_TYPE_JEWELRY)
-                get_obj_num_hook = kind_is_jewelry;
-            else if (objecttype == DROP_TYPE_CHEST)
-                get_obj_num_hook = kind_is_chest;
-            else if (objecttype == DROP_TYPE_DAMAGED)
-                get_obj_num_hook = kind_is_damaged_item;
-
-            /*
-             *	If it isn't a chest, check good and great flags.
-             *  They each now have their own templates.
-             */
-            else if (great)
-                get_obj_num_hook = kind_is_great;
-            else if (good)
-                get_obj_num_hook = kind_is_good;
-        }
-
-        if (adult_tulkas_blunt) {
-            blunt_saved_obj_hook = get_obj_num_hook;
-            get_obj_num_hook = tulkas_blunt_obj_filter;
-        }
-        if (adult_torchlight) {
-            torch_saved_obj_hook = get_obj_num_hook;
-            get_obj_num_hook = torchlight_obj_filter;
-        }
-
-        /* Prepare allocation tabled*/
-        get_obj_num_prep();
-
-        /* Pick a random object */
-        k_idx = get_obj_num(base);
-
-        /* Clear restriction */
-        get_obj_num_hook = NULL;
-        blunt_saved_obj_hook = NULL;
-        torch_saved_obj_hook = NULL;
-
-        /* Handle failure*/
-        if (!k_idx)
-            return (false);
-
-        /* Prepare the object */
-        object_prep(j_ptr, k_idx);
-    }
-
-    /* Hack -- generate multiple arrows or pieces of mithril */
-    switch (j_ptr->tval)
-    {
-    case TV_ARROW:
-    {
-        int depth_adjust = MORGOTH_DEPTH - p_ptr->depth;
-
-        object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-        object_type* q2_ptr = &inventory[INVEN_QUIVER2];
-
-        j_ptr->number = 20 + damroll(1, 10 + depth_adjust);
-
-        if ((q1_ptr->number + q2_ptr->number) < 20)
-        {
-            j_ptr->number *= 2;
-        }
-
-        /* Cap arrows to the quiver limit of 48 */
-        if (j_ptr->number > 48)
-            j_ptr->number = 48;
-
-        break;
-    }
-
-    case TV_METAL:
-    {
-        j_ptr->number = damroll(2, 40);
-        break;
-    }
-    }
-
-    if (objecttype != DROP_TYPE_DAMAGED)
-    {
-        /* Apply magic (allow artefacts) */
-        if (generated_special)
-        {
-            // allow INSTA_ARTs
-            apply_magic(j_ptr, object_level, true, good, great, true);
-        }
-        else
-        {
-            // don't allow INSTA_ARTs
-            apply_magic(j_ptr, object_level, true, good, great, false);
-        }
-    }
-
-    // apply the autoinscription (if any)
-    apply_autoinscription(j_ptr);
-
-    /* Notice "okay" out-of-depth objects */
+    int depth = object_level;
+    if (!drop_generate_object(depth, quality, objecttype, true, j_ptr))
+        return false;
+    /* Rating boost for out-of-depth finds */
     if (!cursed_p(j_ptr) && !broken_p(j_ptr)
         && (k_info[j_ptr->k_idx].level > p_ptr->depth))
     {
-        /* Rating increase */
         rating += (k_info[j_ptr->k_idx].level - p_ptr->depth);
-
-        /* Cheat -- peek at items */
         if (cheat_peek)
             object_mention(j_ptr);
     }
 
-    /* Success */
-    return (true);
+    return true;
 }
 
 /*
@@ -4611,12 +4437,14 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
 }
 
 /*
- * Scatter some "great" objects near the player
+ * Scatter some weighted-quality objects near the player
  */
-void acquirement(int y1, int x1, int num, bool great)
+void acquirement(int y1, int x1, int num, drop_quality quality)
 {
     object_type* i_ptr;
     object_type object_type_body;
+    drop_quality spawn_quality =
+        (quality < DROP_QUALITY_GOOD) ? DROP_QUALITY_GOOD : quality;
 
     /* Acquirement */
     while (num--)
@@ -4627,8 +4455,8 @@ void acquirement(int y1, int x1, int num, bool great)
         /* Wipe the object */
         object_wipe(i_ptr);
 
-        /* Make a good (or great) object (if possible) */
-        if (!make_object(i_ptr, true, great, DROP_TYPE_NOT_DAMAGED))
+        /* Make a good-or-better object (if possible) */
+        if (!make_object(i_ptr, spawn_quality, DROP_TYPE_NOT_DAMAGED))
             continue;
 
         /* Drop the object */
@@ -4637,9 +4465,10 @@ void acquirement(int y1, int x1, int num, bool great)
 }
 
 /*
- * Attempt to place an object (normal or good/great) at the given location.
+ * Attempt to place an object (normal or weighted quality) at the given location.
  */
-void place_object(int y, int x, bool good, bool great, int droptype)
+void place_object(int y, int x, drop_quality quality, int droptype,
+    bool allow_artefacts)
 {
     object_type* i_ptr;
     object_type object_type_body;
@@ -4659,7 +4488,8 @@ void place_object(int y, int x, bool good, bool great, int droptype)
     object_wipe(i_ptr);
 
     /* Make an object (if possible) */
-    while (!make_object(i_ptr, good, great, droptype))
+    int depth = object_level;
+    while (!drop_generate_object(depth, quality, droptype, allow_artefacts, i_ptr))
         continue;
 
     /* Give it to the floor */

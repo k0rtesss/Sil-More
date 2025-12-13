@@ -2576,14 +2576,17 @@ void drop_loot(monster_type* m_ptr)
         // Normally just go for a torch
         else
         {
-            /* Hack	-- Give the player an object */
-            /* Get the object_kind */
-            s16b k_idx = lookup_kind(TV_LIGHT, SV_LIGHT_TORCH);
-
-            /* Prepare the item */
-            object_prep(i_ptr, k_idx);
-
-            i_ptr->timeout = rand_range(500, 3000);
+            /* Use unified misc/torches drop logic (A: schedule gating + min-depth penalty). */
+            int depth_cap = (p_ptr->depth > 0) ? p_ptr->depth : 1;
+            int gen_depth = MIN(r_ptr->level, depth_cap);
+            if (!drop_generate_object(gen_depth, DROP_QUALITY_NORMAL, DROP_TYPE_TORCHES,
+                    false, i_ptr))
+            {
+                /* Fallback: always try to give a basic torch */
+                s16b k_idx = lookup_kind(TV_LIGHT, SV_LIGHT_TORCH);
+                object_prep(i_ptr, k_idx);
+                apply_magic(i_ptr, gen_depth, false, false, false, false);
+            }
         }
 
         /* Assume seen XXX XXX XXX */
@@ -2596,8 +2599,11 @@ void drop_loot(monster_type* m_ptr)
         number--;
     }
 
-    /* Use the monster's level */
-    object_level = r_ptr->level;
+    /* Use the monster's level, but cap to dungeon depth so A: schedule gates
+     * are enforced by the current level (prevents early lantern/jewel drops). */
+    int depth_cap = (p_ptr->depth > 0) ? p_ptr->depth : 1;
+    object_level = MIN(r_ptr->level, depth_cap);
+    drop_quality quality = drop_quality_from_flags(good, great);
 
     /* Drop some objects */
     for (j = 0; j < number; j++)
@@ -2611,12 +2617,13 @@ void drop_loot(monster_type* m_ptr)
         /* Make Object */
         if (chest)
         {
-            if (!make_object(i_ptr, good, great, DROP_TYPE_CHEST))
+            if (!make_object(i_ptr, quality, DROP_TYPE_CHEST))
                 continue;
         }
 
         /* Make an object */
-        else if (!make_object(i_ptr, good, great, DROP_TYPE_NOT_DAMAGED))
+        else if (!make_object(
+                     i_ptr, quality, DROP_TYPE_NOT_DAMAGED))
             continue;
 
         /* Assume seen XXX XXX XXX */

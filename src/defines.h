@@ -54,7 +54,7 @@
 /* Formalized new fork versioning (canonical source for all modules) */
 #define VERSION_STRING "0.9.1.10"
 /*
- * Version components (0.9.1.3).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.1.10).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
@@ -196,6 +196,12 @@
  */
 #define MAX_DEPTH 128
 #define MORGOTH_DEPTH 20
+
+/*
+ * Ego item indices for special handling
+ */
+#define EGO_FLICKERING_SHADOW 135  /* Jinx ego: of Flickering Shadow */
+#define EGO_GRACE 75 /* Ego: of Grace (lesser jewels / mithril helms) */
 
 /*
  * Depth-based wall graphics configuration
@@ -595,6 +601,7 @@
 #define SMT_ARTEFACT 5
 #define SMT_MASTERPIECE 6
 #define SMT_GRA 7
+#define SMT_ALLOY_MASTERY 8
 
 /*
  * Songs
@@ -1189,6 +1196,7 @@
 #define DROP_TYPE_DIGGING 16
 
 #define DROP_TYPE_DAMAGED 17
+#define DROP_TYPE_TORCHES 18
 
 /*** Object "tval" and "sval" codes ***/
 
@@ -1208,7 +1216,7 @@
 
 #define TV_NOTE 2 /* ~ Tutorial notes                      */
 #define TV_SKELETON 3 /* ~ Skeletons                           */
-#define TV_METAL 4 /* ~ Piece of mithril                    */
+#define TV_METAL 4 /* ~ Piece of special metal (mithril, star iron) */
 #define TV_CHEST 7 /* ~ Chests                              */
 #define TV_ARROW 17 /* - Arrows                     */
 #define TV_BOW 19 /* { Bows                                */
@@ -1242,6 +1250,7 @@
 
 /* The "sval" codes for TV_METAL */
 #define SV_METAL_MITHRIL 0 /*  */
+#define SV_METAL_STAR_IRON 1 /*  */
 
 /* The "sval" codes for TV_ARROW */
 #define SV_NORMAL_ARROW 1 /*  */
@@ -1277,7 +1286,8 @@
 #define SV_BASTARD_SWORD 21 /* 3d3 */
 #define SV_GREAT_SWORD 25 /* 3d5 */
 #define SV_MITHRIL_LONG_SWORD 28 /* 2d5 */
-#define SV_MITHRIL_GREAT_SWORD 30 /* 3d6 */
+#define SV_STAR_IRON_GREAT_SWORD 30 /* 3d6 */
+#define SV_MITHRIL_GREAT_SWORD SV_STAR_IRON_GREAT_SWORD /* Backwards compatibility */
 
 /* The "sval" codes for TV_SHIELD */
 #define SV_BROKEN_SHIELD 1
@@ -1923,7 +1933,7 @@
 #define TR3_CUMBERSOME 0x00000010L /* No critical hits */
 #define TR3_AVOID_TRAPS 0x00000020L /* Do not trigger traps */
 #define TR3_MEDIC 0x00000040L /* xxx */
-#define TR3_TR3XXX6 0x00000080L /* xxx */
+#define TR3_STAR_IRON 0x00000080L /* Item made out of star iron */
 #define TR3_TR3XXX7 0x00000100L /* xxx */
 #define TR3_TR3XXX8 0x00000200L /* xxx */
 #define TR3_TR3XXX9 0x00000400L /* xxx */

@@ -56,7 +56,7 @@ static bool sword_is_great(const object_type* weapon)
     switch (weapon->sval)
     {
     case SV_GREAT_SWORD:
-    case SV_MITHRIL_GREAT_SWORD:
+    case SV_STAR_IRON_GREAT_SWORD:
         return true;
     default:
         return false;
@@ -1256,6 +1256,7 @@ extern void ident(object_type* o_ptr)
 extern void ident_on_wield(object_type* o_ptr)
 {
     u32b f1, f2, f3;
+    u32b orig_f1;
 
     bool notice = false;
 
@@ -1265,6 +1266,7 @@ extern void ident_on_wield(object_type* o_ptr)
 
     /* Get the flags */
     object_flags(o_ptr, &f1, &f2, &f3);
+    orig_f1 = f1;
 
     // Ignore previously identified items
     if (object_known_p(o_ptr))
@@ -1317,6 +1319,14 @@ extern void ident_on_wield(object_type* o_ptr)
         f1 &= ~(k_ptr->flags1);
         f2 &= ~(k_ptr->flags2);
         f3 &= ~(k_ptr->flags3);
+
+        /*
+         * If a special/artefact modifies pval on a base that already has a pval
+         * flag (e.g. Shadow Cloak has STEALTH), stripping base flags would hide
+         * the effect and prevent auto-identification on wear.
+         */
+        if (o_ptr->pval != k_ptr->pval)
+            f1 |= (orig_f1 & k_ptr->flags1 & TR1_PVAL_MASK);
     }
 
     if (f2 & (TR2_DARKNESS))
@@ -6863,4 +6873,3 @@ void run_step(int dir)
     /* Move the player */
     move_player(p_ptr->run_cur_dir);
 }
-

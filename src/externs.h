@@ -28,6 +28,50 @@ extern cptr macro_modifier_name[MAX_MACRO_MOD];
 extern cptr macro_trigger_name[MAX_MACRO_TRIGGER];
 extern cptr macro_trigger_keycode[2][MAX_MACRO_TRIGGER];
 
+#ifndef LEVEL_LAYOUT_INFO_DEFINED
+#define LEVEL_LAYOUT_INFO_DEFINED
+typedef enum
+{
+    LEVEL_PART_NONE = 0,
+    LEVEL_PART_ROOMY,
+    LEVEL_PART_CAVEY,
+    LEVEL_PART_RUINED,
+    LEVEL_PART_LABYRINTH,
+    LEVEL_PART_CHASM,
+    LEVEL_PART_BIG_CAVE,
+    LEVEL_PART_MAX
+} level_partition_kind;
+
+typedef struct
+{
+    int map_wid;
+    int map_hgt;
+    int partition_rows;
+    int partition_cols;
+    int partition_count;
+    int labyrinth_parts;
+    int big_cave_parts;
+    int chasm_parts;
+    level_partition_kind dominant_kind;
+} level_layout_info;
+#endif
+
+#ifndef SKELETON_NOTE_STATE_SAVE_DEFINED
+#define SKELETON_NOTE_STATE_SAVE_DEFINED
+#define SKELETON_NOTE_SEEN_MAX 8
+
+typedef struct skeleton_note_state_save {
+    s16b level_depth;
+    s16b note_cap;
+    s16b notes_shown;
+    s16b map_wid;
+    s16b map_hgt;
+    byte hint_used_mask;
+    byte seen_count;
+    s16b seen_ids[SKELETON_NOTE_SEEN_MAX];
+} skeleton_note_state_save;
+#endif
+
 /* tables.c */
 extern const s16b ddd[9];
 extern const s16b ddx[10];
@@ -226,6 +270,8 @@ extern char* flavor_name;
 extern char* flavor_text;
 extern names_type* n_info;
 extern style_type* style_info;
+extern skeleton_note_template* skeleton_note_info;
+extern char* skeleton_note_text;
 /* Default vein tile accessors (defined in init1.c) */
 byte get_default_vein_row(void);
 byte get_default_vein_col(void);
@@ -683,6 +729,10 @@ extern void place_monster_by_flag(
 extern void place_random_stairs(int y, int x);
 extern byte get_nest_theme(int nestlevel);
 extern byte get_pit_theme(int pitlevel);
+extern void level_layout_info_current(level_layout_info* out);
+extern void skeleton_note_level_reset(void);
+extern void skeleton_note_get_state(skeleton_note_state_save* out);
+extern void skeleton_note_set_state(const skeleton_note_state_save* in);
 extern void generate_cave(void);
 
 #ifdef ALLOW_DEBUG
@@ -871,17 +921,58 @@ extern void object_into_special(object_type* o_ptr, int lev, bool smithing);
 extern void check_artifact_visibility(void);
 extern void apply_magic(object_type* o_ptr, int lev, bool okay, bool good,
     bool great, bool allow_insta);
+#ifndef DROP_QUALITY_T_DEFINED
+#define DROP_QUALITY_T_DEFINED
+typedef enum
+{
+    DROP_QUALITY_NORMAL = 0,
+    DROP_QUALITY_GOOD = 1,
+    DROP_QUALITY_GREAT = 2,
+    DROP_QUALITY_SUPERB = 3
+} drop_quality;
+#endif
+#define DROP_BONUS_GOOD 5
+#define DROP_BONUS_GREAT 10
+#define DROP_BONUS_SUPERB 15
+#ifndef DROP_PROFILE_T_DEFINED
+#define DROP_PROFILE_T_DEFINED
+typedef struct
+{
+    int weight_weapon;
+    int weight_armor;
+    int weight_jewelry;
+    int weight_supply;
+    int supply_potion;
+    int supply_herb;
+    int supply_gem;
+    int supply_staff;
+    int supply_misc;
+} drop_profile;
+#endif
+extern drop_quality drop_quality_from_flags(bool good, bool great);
+extern void drop_profile_default(drop_profile* profile);
+extern void drop_system_init(void);
+extern bool drop_generate_object(int depth, drop_quality quality, int droptype,
+    bool allow_artefacts, object_type* out);
+extern bool drop_generate_object_with_bonus(
+    int depth, drop_quality quality, int droptype, int extra_bonus,
+    bool allow_artefacts, object_type* out);
+extern bool drop_generate_object_profiled(int depth, drop_quality quality,
+    int droptype, int extra_bonus, bool allow_artefacts,
+    const drop_profile* profile, object_type* out);
 extern bool make_object(
-    object_type* j_ptr, bool good, bool great, int objecttype);
+    object_type* j_ptr, drop_quality quality, int objecttype);
 extern bool prep_object_theme(int themetype);
 extern s16b floor_carry(int y, int x, object_type* j_ptr);
 extern void drop_near(object_type* j_ptr, int chance, int y, int x);
-extern void acquirement(int y1, int x1, int num, bool great);
-extern void place_object(int y, int x, bool good, bool great, int droptype);
+extern void acquirement(int y1, int x1, int num, drop_quality quality);
+extern void place_object(int y, int x, drop_quality quality, int droptype,
+    bool allow_artefacts);
 extern void place_trap(int y, int x);
 extern void reveal_trap(int y, int x);
 extern void place_secret_door(int y, int x);
 extern void place_closed_door(int y, int x);
+
 extern void place_random_door(int y, int x);
 extern void place_forge(int y, int x);
 extern void inven_item_charges(int item);

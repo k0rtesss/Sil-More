@@ -552,6 +552,57 @@ static void recharged_notice(object_type* o_ptr)
 }
 
 /*
+ * Scan for artifacts within 22 tiles of player and mark them as seen.
+ * This allows players to skip full exploration while still tracking artifacts.
+ * Only scans the area that changed (player moved or objects shifted).
+ */
+static void scan_artifacts_near_player(void)
+{
+    int py = p_ptr->py;
+    int px = p_ptr->px;
+    int radius = 22;
+    
+    /* Scan 44x44 area centered on player */
+    for (int dy = -radius; dy <= radius; dy++)
+    {
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            int y = py + dy;
+            int x = px + dx;
+            
+            /* Skip out of bounds */
+            if (!in_bounds(y, x))
+                continue;
+            
+            /* Check for objects at this location */
+            s16b this_o_idx = cave_o_idx[y][x];
+            
+            while (this_o_idx)
+            {
+                object_type* o_ptr = &o_list[this_o_idx];
+                
+                /* If this is an artifact that hasn't been marked seen yet */
+                if (o_ptr->name1 && !a_info[o_ptr->name1].seen)
+                {
+                    a_info[o_ptr->name1].seen = 1;
+                    
+                    /* Optional: log for debugging */
+                    if (cheat_peek)
+                    {
+                        char o_name[80];
+                        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+                        msg_format("Artifact marked as seen: %s", o_name);
+                    }
+                }
+                
+                /* Next object in this square */
+                this_o_idx = o_ptr->next_o_idx;
+            }
+        }
+    }
+}
+
+/*
  * Handle certain things once every 10 game turns
  */
 static void process_world(void)
@@ -3212,6 +3263,9 @@ static void dungeon(void)
                 process_player();
                 log_trace("[LOOP] process_player end: combat_number=%d old=%d", combat_number, combat_number_old);
                 
+                /* Scan for artifacts near player and mark as seen */
+                scan_artifacts_near_player();
+                
                 /* Set combat rolls window flag after player actions complete */
                 if (combat_number > 0) {
                     p_ptr->window |= (PW_COMBAT_ROLLS);
@@ -3837,6 +3891,9 @@ PlayResult play_game(void)
 
     /* Flavor the objects */
     flavor_init();
+
+    /* Build or load the drop catalog (needs flavored kinds) */
+    drop_system_init();
 
     /* Reset visuals */
     reset_visuals(true);

@@ -127,6 +127,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SMT_EXPERTISE]     = "Expertise",
         [SMT_ARTEFACT]      = "Artifice",
         [SMT_MASTERPIECE]   = "Masterpiece",
+        [SMT_ALLOY_MASTERY] = "Alloy mastery",
         [SMT_GRA]           = NULL,
     },
     [S_SNG] = {
@@ -389,6 +390,7 @@ void player_wipe(void)
 
         a_ptr->cur_num = 0;
         a_ptr->found_num = 0;
+        a_ptr->seen = 0;
     }
     
     /* Initialize Valar artifact reservation array */

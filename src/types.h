@@ -90,6 +90,7 @@ typedef struct autoinscription autoinscription;
 typedef struct style_type style_type;
 typedef struct quest_type quest_type;
 typedef struct oath_type oath_type;
+typedef struct skeleton_note_template skeleton_note_template;
 
 /**** Available structs ****/
 
@@ -126,6 +127,35 @@ struct maxima
     u16b art_self_made_max; /* Max number of self-made artefacts */
     u16b rt_max;           /* ↑ total run-type records                         */
     u16b style_max;        /* Max size for "style_info[]" */
+    u16b skeleton_note_max; /* Max size for skeleton note templates */
+};
+
+typedef enum skeleton_note_role {
+    SKELETON_NOTE_ROLE_NONE = 0,
+    SKELETON_NOTE_ROLE_OPENING = 1,
+    SKELETON_NOTE_ROLE_SIGNOFF = 2,
+    SKELETON_NOTE_ROLE_HINT = 3
+} skeleton_note_role;
+
+typedef enum skeleton_hint_kind {
+    SKEL_HINT_NONE = 0,
+    SKEL_HINT_GREAT_VAULT,
+    SKEL_HINT_VAULT_ARTIFACT,
+    SKEL_HINT_DOMINANT_PARTITION,
+    SKEL_HINT_PARTITION_PRESENCE,
+    SKEL_HINT_LEVEL_SIZE,
+    SKEL_HINT_UNIQUE_MONSTER,
+    SKEL_HINT_TIP,
+    SKEL_HINT_MAX
+} skeleton_hint_kind;
+
+struct skeleton_note_template
+{
+    byte sval;   /* Skeleton sval */
+    byte hint;   /* skeleton_hint_kind or 0 for openings/signoffs */
+    byte role;   /* skeleton_note_role */
+    byte weight; /* Selection weight */
+    u32b text;   /* Text offset */
 };
 
 /*
@@ -180,6 +210,9 @@ struct object_kind
 
     byte locale[4]; /* Allocation level(s) */
     byte chance[4]; /* Allocation chance(s) */
+    byte alloc_count; /* Number of explicit allocation entries (supports zero rarity) */
+    byte alloc_depth[4]; /* Allocation depth thresholds (from A: lines) */
+    byte alloc_prob[4]; /* Allocation rarity values (can be zero) */
 
     byte abilities; // Number of abilities
     byte skilltype[4]; // Skill-types for the granted abilities
@@ -266,6 +299,7 @@ struct artefact_type
     byte cur_num; /* Number created (0 or 1) */
     byte found_num; /* Number found (0 or 1) */
     byte max_num; /* Unused (should be "1") */
+    byte seen; /* Seen by player (within 22 tile radius) */
 
     byte activation; /* Activation to use */
     u16b time; /* Activation time */
@@ -296,6 +330,9 @@ struct ego_item_type
     byte level; /* Minimum level */
     byte max_level; /* Maximum level */
     byte rarity; /* Object rarity */
+    byte alloc_count; /* Number of explicit allocation entries (supports zero rarity) */
+    byte alloc_depth[4]; /* Allocation depth thresholds (from A: lines) */
+    byte alloc_prob[4]; /* Allocation rarity values (can be zero) */
 
     byte tval[EGO_TVALS_MAX]; /* Legal tval */
     byte min_sval[EGO_TVALS_MAX]; /* Minimum legal sval */

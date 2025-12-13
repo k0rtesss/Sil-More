@@ -1348,10 +1348,19 @@ typedef enum density_level {
     DENSITY_DENSE         /* More rooms/carvings */
 } density_level_t;
 
+#define LABYRINTH_START_DEPTH 7
+#define BIG_CAVE_START_DEPTH 10
+#define CHASM_START_DEPTH 14
+#define SPECIAL_CAP_STEP 5
+#define SPECIAL_CAP_MAX 3
+/* Special-mode depth gates and caps (tweak to rebalance rarity) */
+
 /* Persist the chosen partition grid for later passes (connectivity, stair guarantees) */
 static int current_partition_rows = 0;
 static int current_partition_cols = 0;
 static int current_partition_count = 0;
+static quadrant_mode_t current_partition_modes[25];
+static density_level_t current_partition_densities[25];
 
 /* Track labyrinth partition count for boosting monsters and stairs in mazes */
 static int current_labyrinth_partitions = 0;
@@ -1478,6 +1487,22 @@ static void remember_partition_grid(int rows, int cols, int count)
     current_partition_rows = rows;
     current_partition_cols = cols;
     current_partition_count = count;
+    for (int i = 0; i < 25; ++i)
+    {
+        current_partition_modes[i] = QUAD_MODE_ROOMY;
+        current_partition_densities[i] = DENSITY_NORMAL;
+    }
+}
+
+static void record_partition_metadata(
+    const quadrant_mode_t* modes, const density_level_t* densities, int count)
+{
+    int capped = MIN(count, 25);
+    for (int i = 0; i < capped; ++i)
+    {
+        current_partition_modes[i] = modes[i];
+        current_partition_densities[i] = densities[i];
+    }
 }
 
 static void reset_morgoth_layout_state(bool active)
@@ -1631,6 +1656,74 @@ static quadrant_mode_t pick_weighted_mode(const int *weights, int count)
         roll -= w;
     }
     return QUAD_MODE_ROOMY;
+}
+
+static int special_mode_start_depth(quadrant_mode_t mode)
+{
+    switch (mode)
+    {
+    case QUAD_MODE_LABYRINTH:
+        return LABYRINTH_START_DEPTH;
+    case QUAD_MODE_BIG_CAVE:
+        return BIG_CAVE_START_DEPTH;
+    case QUAD_MODE_CHASM:
+        return CHASM_START_DEPTH;
+    default:
+        return 0;
+    }
+}
+
+static int mode_cap_for_depth(
+    quadrant_mode_t mode, int depth, int partition_count)
+{
+    int start = special_mode_start_depth(mode);
+    if (start <= 0)
+        return partition_count;
+    if (depth < start)
+        return 0;
+
+    int cap = 1 + (depth - start) / SPECIAL_CAP_STEP;
+    if (cap > SPECIAL_CAP_MAX)
+        cap = SPECIAL_CAP_MAX;
+    return cap;
+}
+
+static int mode_weight_for_depth(quadrant_mode_t mode, int depth, int blocks,
+    const int* mode_counts, int partition_count)
+{
+    int cap = mode_cap_for_depth(mode, depth, partition_count);
+    if (cap == 0)
+        return 0;
+    if (mode_counts && mode_counts[mode] >= cap)
+        return 0;
+
+    (void)blocks; /* No longer used for scaling */
+
+    switch (mode)
+    {
+    case QUAD_MODE_ROOMY:
+        return 25;
+    case QUAD_MODE_CAVEY:
+        /* Increase up to depth 12, then decrease */
+        if (depth <= 12)
+            return 15 + depth;  /* 15 at depth 0, 27 at depth 12 */
+        else
+            return MAX(5, 27 - (depth - 12));  /* Decrease after 12, minimum 5 */
+    case QUAD_MODE_RUINED:
+        /* Decrease with depth */
+        return MAX(5, 15 + 10 - depth);  /* 25 at depth 0, decreases to minimum 5 */
+    case QUAD_MODE_LABYRINTH:
+        /* Increase with depth (starts at depth 7) */
+        return 10 + MAX(0, depth - LABYRINTH_START_DEPTH);
+    case QUAD_MODE_BIG_CAVE:
+        /* Increase with depth (starts at depth 10) */
+        return 8 + MAX(0, depth - BIG_CAVE_START_DEPTH);
+    case QUAD_MODE_CHASM:
+        /* Increase with depth (starts at depth 14) */
+        return 8 + MAX(0, depth - CHASM_START_DEPTH);
+    default:
+        return 0;
+    }
 }
 
 /* Budget-aware placement helper with limited retries */
@@ -1821,7 +1914,7 @@ static void seed_prefab_anchors(void)
 
 /* Scatter quartz veins around CA blob edges to give a natural cave-like appearance.
  * Converts some wall tiles adjacent to floors into quartz veins. */
-static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2)
+static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2, u16b info_flag)
 {
     int vein_count = 0;
     
@@ -1858,7 +1951,7 @@ static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2)
             {
                 cave_set_feat(gy, gx, FEAT_QUARTZ);
                 /* Mark as part of a room so tunneling can detect cave quartz */
-                cave_info[gy][gx] |= CAVE_ROOM;
+                cave_info[gy][gx] |= (CAVE_ROOM | info_flag);
                 vein_count++;
             }
         }
@@ -1871,57 +1964,205 @@ static void scatter_quartz_veins_in_bounds(int y1, int y2, int x1, int x2)
     }
 }
 
-/* Scatter mithril pieces in cave areas.
- * Chance increases with depth. Only places items on empty floor tiles. */
-static void scatter_cave_gems_in_bounds(int y1, int y2, int x1, int x2, bool is_big_cave)
+/* Scatter mithril pieces and gem caches in cave areas.
+ * Chance increases with depth and blob count. Only places items on empty floor tiles. */
+static void scatter_cave_gems_in_bounds(int y1, int y2, int x1, int x2, bool is_big_cave, int blob_count)
 {
     int depth = p_ptr->depth;
     int mithril_placed = 0;
+    int gem_placed = 0;
+    bool allow_mithril = (depth >= 8);
+    int blob_factor = MAX(1, blob_count);
+    int blob_bonus = blob_factor - 1;
     
-    /* Mithril only appears at depth 12+ */
-    if (depth < 12) return;
-    
-    /* Only 1 mithril per cave area maximum */
-    int max_mithril = 1;
-    
-    /* Very low chance: 1% base + depth/20, capped at 3% */
-    /* This is checked once per cave area, not per tile */
-    int spawn_chance = 1 + (depth / 20);
-    if (spawn_chance > 3) spawn_chance = 3;
-    
-    /* Big caves have slightly better odds */
-    if (is_big_cave) spawn_chance += 1;
-    
-    /* Single roll to determine if this cave gets mithril */
-    if (rand_int(100) >= spawn_chance) return;
-    
-    /* Try to place the mithril on a random floor tile */
-    for (int attempt = 0; attempt < 50 && mithril_placed < max_mithril; ++attempt)
+    if (allow_mithril)
     {
-        int gy = rand_range(y1, y2);
-        int gx = rand_range(x1, x2);
-        if (!in_bounds_fully(gy, gx)) continue;
-        if (!cave_floor_bold(gy, gx)) continue;
-        if (cave_o_idx[gy][gx] != 0) continue;  /* Already has object */
+        /* Up to 3 mithril chunks in small caves, 2 in big caves */
+        int max_mithril = is_big_cave ? 2 : MIN(3, 1 + (blob_factor + 1) / 2);
         
-        /* Create mithril piece */
-        object_type object_type_body;
-        object_type *i_ptr = &object_type_body;
-        object_wipe(i_ptr);
+        /* Higher chance: 15% base + depth/5, scaled by blob_factor, capped */
+        int spawn_chance = 15 + (depth / 5) + 5 * (blob_factor - 1);
+        int spawn_cap = is_big_cave ? 45 : 60;
+        if (spawn_chance > spawn_cap) spawn_chance = spawn_cap;
+
+        /* Big caves have worse odds; regular caves keep the baseline */
+        if (is_big_cave)
+            spawn_chance = MAX(1, spawn_chance - 2);
+
+        bool try_mithril = (rand_int(100) < spawn_chance);
         
-        s16b k_idx = lookup_kind(TV_METAL, SV_METAL_MITHRIL);
-        if (k_idx > 0)
+        /* Try to place the mithril on a random floor tile */
+        for (int attempt = 0; try_mithril && attempt < 50 && mithril_placed < max_mithril; ++attempt)
         {
-            object_prep(i_ptr, k_idx);
-            drop_near(i_ptr, -1, gy, gx);
-            mithril_placed++;
+            int gy = rand_range(y1, y2);
+            int gx = rand_range(x1, x2);
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (!cave_floor_bold(gy, gx)) continue;
+            if (cave_o_idx[gy][gx] != 0) continue;  /* Already has object */
+            
+            /* Create mithril piece */
+            object_type object_type_body;
+            object_type *i_ptr = &object_type_body;
+            object_wipe(i_ptr);
+            
+            s16b k_idx = lookup_kind(TV_METAL, SV_METAL_MITHRIL);
+            if (k_idx > 0)
+            {
+                object_prep(i_ptr, k_idx);
+                drop_near(i_ptr, -1, gy, gx);
+                mithril_placed++;
+            }
         }
     }
     
-    if (mithril_placed > 0)
+    /* Try to place up to 2 gem caches (rarer in big caves) - scale with blob count */
+    int gem_base_chance = is_big_cave ? 45 : 60;
+    int gem_chance = gem_base_chance + 6 * blob_bonus;
+    if (gem_chance > 90) gem_chance = 90;
+    int gem_targets = is_big_cave ? 2 : MIN(3, 1 + (blob_factor + 1) / 2);
+    int gems_tried = 0;
+    while (gems_tried < gem_targets && rand_int(100) < gem_chance)
     {
-        log_trace("scatter_cave_mithril: placed %d mithril in bounds (%d,%d)-(%d,%d) depth=%d",
-                  mithril_placed, y1, x1, y2, x2, depth);
+        gems_tried++;
+        for (int attempt = 0; attempt < 60 && gem_placed < gem_targets; ++attempt)
+        {
+            int gy = rand_range(y1, y2);
+            int gx = rand_range(x1, x2);
+            if (!in_bounds_fully(gy, gx)) continue;
+            if (!cave_floor_bold(gy, gx)) continue;
+            if (cave_o_idx[gy][gx] != 0) continue;
+
+            object_type object_type_body;
+            object_type *i_ptr = &object_type_body;
+            object_wipe(i_ptr);
+
+            drop_profile gem_profile;
+            drop_profile_default(&gem_profile);
+            gem_profile.weight_weapon = 0;
+            gem_profile.weight_armor = 0;
+            gem_profile.weight_jewelry = 0;
+            gem_profile.weight_supply = 120;
+            gem_profile.supply_potion = 3;
+            gem_profile.supply_herb = 3;
+            gem_profile.supply_gem = 40;
+            gem_profile.supply_staff = 4;
+            gem_profile.supply_misc = 2;
+
+            if (drop_generate_object_profiled(depth, DROP_QUALITY_NORMAL,
+                    DROP_TYPE_STAFF, 0, false, &gem_profile, i_ptr))
+            {
+                drop_near(i_ptr, -1, gy, gx);
+                gem_placed++;
+                break;
+            }
+        }
+    }
+
+    /* Scatter torches; both wooden and mallorn in small caves only, max 2 together */
+    if (!is_big_cave)
+    {
+        int torch_chance = 35;
+        int torch_max = 2;
+        int torch_placed = 0;
+        if (rand_int(100) < torch_chance)
+        {
+            for (int attempt = 0; attempt < 80 && torch_placed < torch_max; ++attempt)
+            {
+                int gy = rand_range(y1, y2);
+                int gx = rand_range(x1, x2);
+                if (!in_bounds_fully(gy, gx)) continue;
+                if (!cave_floor_bold(gy, gx)) continue;
+                if (cave_o_idx[gy][gx] != 0) continue;
+
+                object_type object_type_body;
+                object_type *i_ptr = &object_type_body;
+                object_wipe(i_ptr);
+
+                if (drop_generate_object(depth, DROP_QUALITY_NORMAL, DROP_TYPE_TORCHES,
+                        false, i_ptr))
+                {
+                    drop_near(i_ptr, -1, gy, gx);
+                    torch_placed++;
+                }
+            }
+        }
+    }
+
+    if (mithril_placed > 0 || gem_placed > 0)
+    {
+        log_trace("scatter_cave_mithril: mithril=%d gems=%d bounds (%d,%d)-(%d,%d) depth=%d",
+                  mithril_placed, gem_placed, y1, x1, y2, x2, depth);
+    }
+}
+
+static bool bounds_have_chasm_tag(int y1, int y2, int x1, int x2)
+{
+    for (int gy = y1; gy <= y2; ++gy)
+    {
+        for (int gx = x1; gx <= x2; ++gx)
+        {
+            if (!in_bounds_fully(gy, gx))
+                continue;
+            if (cave_floor_bold(gy, gx) && (cave_info[gy][gx] & CAVE_CHASM_AREA))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Scatter star-iron pieces across chasm partitions (on floor tiles only). */
+static void scatter_chasm_star_iron_in_bounds(int y1, int y2, int x1, int x2)
+{
+    int depth = p_ptr->depth;
+    if (depth < 8)
+        return;
+
+    int area = (y2 - y1 + 1) * (x2 - x1 + 1);
+    int size_factor = MAX(1, area / 500);
+    if (size_factor > 4) size_factor = 4;
+    bool require_chasm_tag = bounds_have_chasm_tag(y1, y2, x1, x2);
+
+    /* Up to 4 chunks, scaled by partition size */
+    int max_chunks = MIN(4, 1 + size_factor);
+
+    /* Depth-scaled chance, mirroring mithril cave logic */
+    int spawn_chance = 16 + (depth / 5) + 6 * (size_factor - 1);
+    int spawn_cap = 55;
+    if (spawn_chance > spawn_cap)
+        spawn_chance = spawn_cap;
+
+    int placed = 0;
+    bool try_star = (rand_int(100) < spawn_chance);
+    for (int attempt = 0; try_star && attempt < 60 && placed < max_chunks; ++attempt)
+    {
+        int gy = rand_range(y1, y2);
+        int gx = rand_range(x1, x2);
+        if (!in_bounds_fully(gy, gx))
+            continue;
+        if (!cave_floor_bold(gy, gx))
+            continue;
+        /* Only drop inside the chasm partition when tagged */
+        if (require_chasm_tag && !(cave_info[gy][gx] & CAVE_CHASM_AREA))
+            continue;
+        if (cave_o_idx[gy][gx] != 0)
+            continue;
+
+        s16b k_idx = lookup_kind(TV_METAL, SV_METAL_STAR_IRON);
+        if (k_idx <= 0)
+            break;
+
+        object_type object_type_body;
+        object_type *i_ptr = &object_type_body;
+        object_wipe(i_ptr);
+        object_prep(i_ptr, k_idx);
+        drop_near(i_ptr, -1, gy, gx);
+        placed++;
+    }
+
+    if (placed > 0)
+    {
+        log_trace("scatter_chasm_star_iron: pieces=%d bounds (%d,%d)-(%d,%d) depth=%d",
+                  placed, y1, x1, y2, x2, depth);
     }
 }
 
@@ -2165,7 +2406,7 @@ static bool carve_ca_blob_anchor(void)
     mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, one_in_(3));
 
     /* Scatter quartz veins around the cave walls for natural appearance */
-    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
+    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x, 0);
 
     log_trace("CA blob anchor: carved floor_count=%d bounds=(%d,%d)-(%d,%d) center=(%d,%d)",
         floor_count, min_y, min_x, max_y, max_x, cy, cx);
@@ -2415,7 +2656,7 @@ static bool carve_ca_blob_anchor_bounds(int y_min, int y_max, int x_min, int x_m
     mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, one_in_(4));
 
     /* Scatter quartz veins around the cave walls for natural appearance */
-    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
+    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x, 0);
 
     log_trace("CA blob (bounded) anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) floors=%d", min_y, min_x, max_y, max_x, cy, cx, floor_count);
     return true;
@@ -2701,8 +2942,9 @@ static bool carve_big_cave_bounds(int y_min, int y_max, int x_min, int x_max)
     dun->is_quest[idx] = false;
     mark_room_anchor_meta(idx, LAYOUT_ANCHOR_CA_BLOB, false);
     
-    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x);
-    scatter_cave_gems_in_bounds(min_y, max_y, min_x, max_x, true);  /* Big cave gets extra gems */
+    scatter_quartz_veins_in_bounds(min_y, max_y, min_x, max_x, 0);
+    /* Treat the big cave as a few merged blobs for loot scaling */
+    scatter_cave_gems_in_bounds(min_y, max_y, min_x, max_x, true, 3);  /* Big cave gets extra gems */
     
     log_trace("Big cave anchor: bounds=(%d,%d)-(%d,%d) center=(%d,%d) edge=%d floors=%d pillars=%d",
         min_y, min_x, max_y, max_x, cy, cx, found_edge, floor_count, pillar_count);
@@ -3499,12 +3741,17 @@ static bool carve_labyrinth_bounds(int y_min, int y_max, int x_min, int x_max)
             object_type *i_ptr = &object_type_body;
             object_wipe(i_ptr);
             
-            /* Mix of human and elf skeletons, more elves */
+            /* Mix of human/elf/orc skeletons: favor human+elf, orcs rare in labyrinth */
             s16b k_idx;
-            if (one_in_(3))
-                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_HUMAN);
-            else
-                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ELF);
+            {
+                int roll = rand_int(100); /* 0-99 */
+                if (roll < 30) /* 30% */
+                    k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_HUMAN);
+                else if (roll < 90) /* 60% */
+                    k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ELF);
+                else /* 10% */
+                    k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ORC);
+            }
             
             object_prep(i_ptr, k_idx);
             i_ptr->pval = 1;  /* Skeleton level */
@@ -4075,6 +4322,75 @@ static bool place_gv_in_partition(int y1, int y2, int x1, int x2, int *budget_t8
     return placed;
 }
 
+/* Place a chest in a random floor location within partition bounds */
+static void place_chest_in_partition(
+    int y1, int y2, int x1, int x2, bool wooden_only)
+{
+    int attempts = 0;
+    int max_attempts = 100;
+    
+    while (attempts < max_attempts)
+    {
+        int cy = rand_range(y1 + 1, y2 - 1);
+        int cx = rand_range(x1 + 1, x2 - 1);
+        
+        if (!in_bounds_fully(cy, cx))
+        {
+            attempts++;
+            continue;
+        }
+        
+        /* Must be floor (not chasm), not occupied, and not in a vault */
+        if (cave_empty_bold(cy, cx) && !cave_o_idx[cy][cx] && 
+            !(cave_info[cy][cx] & CAVE_G_VAULT))
+        {
+            object_type object_type_body;
+            object_type* i_ptr = &object_type_body;
+            object_wipe(i_ptr);
+
+            int depth = p_ptr->depth;
+            if (!drop_generate_object(
+                    depth, DROP_QUALITY_NORMAL, DROP_TYPE_CHEST, true, i_ptr))
+            {
+                attempts++;
+                continue;
+            }
+
+            if (wooden_only && i_ptr->tval == TV_CHEST)
+            {
+                bool is_large = (i_ptr->sval >= SV_CHEST_MIN_LARGE);
+                bool use_steel = one_in_(4); /* 25% steel, otherwise wooden */
+                int wooden_sval =
+                    is_large ? SV_CHEST_LARGE_WOODEN : SV_CHEST_SMALL_WOODEN;
+                int steel_sval =
+                    is_large ? SV_CHEST_LARGE_STEEL : SV_CHEST_SMALL_STEEL;
+                int target_sval = use_steel ? steel_sval : wooden_sval;
+                int k_idx = lookup_kind(TV_CHEST, target_sval);
+                if (k_idx)
+                {
+                    s16b old_pval = i_ptr->pval;
+                    byte old_xtra1 = i_ptr->xtra1;
+                    object_prep(i_ptr, k_idx);
+                    i_ptr->pval = old_pval;
+                    i_ptr->xtra1 = old_xtra1;
+                    apply_autoinscription(i_ptr);
+                }
+            }
+
+            if (!floor_carry(cy, cx, i_ptr))
+            {
+                a_info[i_ptr->name1].cur_num = 0;
+            }
+            genlog_anchor("Placed chest in partition at (%d,%d)", cy, cx);
+            return;
+        }
+        
+        attempts++;
+    }
+    
+    genlog_anchor("Failed to place chest in partition after %d attempts", max_attempts);
+}
+
 /* Dynamic partition-based generation mix */
 static void apply_quadrant_generation_modes(void)
 {
@@ -4181,15 +4497,7 @@ static void apply_quadrant_generation_modes(void)
         budget_t7 = 0;
     }
     
-    /* Mode pool for random selection */
-    int mode_weights[6];
-    mode_weights[QUAD_MODE_ROOMY]     = 25;                   /* Constant - always good chance */
-    mode_weights[QUAD_MODE_CAVEY]     = 18 + blocks / 2;
-    mode_weights[QUAD_MODE_RUINED]    = 16;                   /* Constant - general purpose */
-    mode_weights[QUAD_MODE_LABYRINTH] = 10 + depth / 5;       /* slight boost */
-    mode_weights[QUAD_MODE_CHASM]     = 10 + depth / 6 + blocks / 3; /* more CHASM */
-    mode_weights[QUAD_MODE_BIG_CAVE]  = 9 + depth / 6 + blocks / 4;
-    
+    int mode_counts[6] = {0};
     /* Guarantee minimum ROOMY and CAVEY partitions based on partition count */
     /* ROOMY provides reliable standard rooms that connect well */
     int guaranteed_roomy = 1 + partition_count / 5;  /* At least 1 ROOMY, +1 per 5 partitions */
@@ -4198,14 +4506,27 @@ static void apply_quadrant_generation_modes(void)
     /* Initialize with guaranteed modes first */
     int idx = 0;
     for (int i = 0; i < guaranteed_roomy && idx < partition_count; ++i, ++idx)
+    {
         modes[idx] = QUAD_MODE_ROOMY;
+        mode_counts[QUAD_MODE_ROOMY]++;
+    }
     for (int i = 0; i < guaranteed_cavey && idx < partition_count; ++i, ++idx)
+    {
         modes[idx] = QUAD_MODE_CAVEY;
+        mode_counts[QUAD_MODE_CAVEY]++;
+    }
     
     /* Fill remaining with random modes */
     for (; idx < partition_count; ++idx)
     {
-        modes[idx] = pick_weighted_mode(mode_weights, N_ELEMENTS(mode_weights));
+        int weights[6];
+        for (int m = 0; m < 6; ++m)
+        {
+            weights[m] = mode_weight_for_depth(
+                (quadrant_mode_t)m, depth, blocks, mode_counts, partition_count);
+        }
+        modes[idx] = pick_weighted_mode(weights, N_ELEMENTS(weights));
+        mode_counts[modes[idx]]++;
     }
     
     /* Shuffle all partitions */
@@ -4228,17 +4549,10 @@ static void apply_quadrant_generation_modes(void)
     {
         partition_styles[i] = styles_pick_random_from_level();
 
-        /* Depth-aware density distribution */
-        int dense_chance = MIN(60, 20 + depth * 2 + partition_count);
-        int sparse_chance = MAX(10, 45 - depth * 2);
-        int normal_chance = 100 - dense_chance - sparse_chance;
-        if (normal_chance < 10) {
-            /* Rebalance if extremes crowd out normal */
-            int deficit = 10 - normal_chance;
-            sparse_chance = MAX(5, sparse_chance - deficit / 2);
-            dense_chance = MAX(5, dense_chance - deficit / 2);
-            normal_chance = 100 - dense_chance - sparse_chance;
-        }
+        /* Fixed density distribution: 30% sparse, 40% normal, 30% dense */
+        int sparse_chance = 30;
+        int normal_chance = 40;
+        int dense_chance = 30;
 
         int density_roll = rand_int(100);
         if (density_roll < sparse_chance)
@@ -4248,6 +4562,8 @@ static void apply_quadrant_generation_modes(void)
         else
             densities[i] = DENSITY_DENSE;
     }
+
+    record_partition_metadata(modes, densities, partition_count);
     
     /* Pre-roll for a dedicated greater vault partition (must be interior) */
     if (budget_t8 > 0)
@@ -4461,18 +4777,21 @@ static void apply_quadrant_generation_modes(void)
                 /* Natural cave system: CA blobs with quartz veins */
                 int area = (y2 - y1) * (x2 - x1);
                 int base_blobs = 2 + area / 400;  /* Scale with partition size */
-                int blob_count = (density == DENSITY_SPARSE) ? base_blobs : 
-                                 (density == DENSITY_DENSE) ? base_blobs + 2 : base_blobs + 1;
-                if (blob_count > 6) blob_count = 6;
+                int blob_target = (density == DENSITY_SPARSE) ? base_blobs : 
+                                  (density == DENSITY_DENSE) ? base_blobs + 2 : base_blobs + 1;
+                if (blob_target > 6) blob_target = 6;
+                int carved_blobs = 0;
                 
-                for (int b = 0; b < blob_count; ++b)
-                    carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                for (int b = 0; b < blob_target; ++b)
+                    if (carve_ca_blob_anchor_bounds(y1, y2, x1, x2))
+                        carved_blobs++;
                 
                 /* Scatter quartz veins for natural cave look */
-                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2, 0);
                 
                 /* Scatter gems and mithril in cave areas - normal cave bonus */
-                scatter_cave_gems_in_bounds(y1, y2, x1, x2, false);
+                int blob_for_loot = (carved_blobs > 0) ? carved_blobs : blob_target;
+                scatter_cave_gems_in_bounds(y1, y2, x1, x2, false, blob_for_loot);
                 
                 /* Caves with rooms scattered inside */
                 /* Sparse: T1=2 T2=1 T6=2 T7=0 | Normal: T1=2 T2=2 T6=2 T7=1 | Dense: T1=2 T2=3 T6=3 T7=1 */
@@ -4480,61 +4799,6 @@ static void apply_quadrant_generation_modes(void)
                 int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
                 int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
                 int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 1 : 1, area_factor);
-                place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
-                                       &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
-            }
-            break;
-        case QUAD_MODE_RUINED:
-            {
-                /* Ancient carved passages with rubble and broken walls */
-                int area = (y2 - y1) * (x2 - x1);
-                int base_carves = 4 + area / 500;
-                int carve_count = (density == DENSITY_SPARSE) ? base_carves :
-                                  (density == DENSITY_DENSE) ? base_carves + 4 : base_carves + 2;
-                if (carve_count > 10) carve_count = 10;
-                
-                for (int b = 0; b < carve_count; ++b)
-                    carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
-                
-                /* Add rubble to carved floor tiles (5-10-15% based on density) */
-                int rubble_chance = (density == DENSITY_SPARSE) ? 5 : 
-                                    (density == DENSITY_DENSE) ? 15 : 10;
-                for (int gy = y1; gy <= y2; ++gy)
-                {
-                    for (int gx = x1; gx <= x2; ++gx)
-                    {
-                        if (!in_bounds_fully(gy, gx)) continue;
-                        if (!cave_floor_bold(gy, gx)) continue;
-                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
-                        if (rand_int(100) < rubble_chance)
-                            cave_set_feat(gy, gx, FEAT_RUBBLE);
-                    }
-                }
-                
-                /* Add broken wall segments (convert some outer walls to floor with rubble) */
-                for (int gy = y1 + 2; gy <= y2 - 2; ++gy)
-                {
-                    for (int gx = x1 + 2; gx <= x2 - 2; ++gx)
-                    {
-                        if (!in_bounds_fully(gy, gx)) continue;
-                        if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve greater vaults only */
-                        if (cave_feat[gy][gx] != FEAT_WALL_OUTER) continue;
-                        if (rand_int(100) < 30)
-                        {
-                            cave_set_feat(gy, gx, FEAT_FLOOR);
-                            cave_info[gy][gx] |= CAVE_ROOM;
-                            if (one_in_(2))
-                                cave_set_feat(gy, gx, FEAT_RUBBLE);
-                        }
-                    }
-                }
-                
-                /* Ruined passages with rooms and vaults */
-                /* Sparse: T1=1 T2=1 T6=1 T7=0 | Normal: T1=1 T2=1 T6=2 T7=1 | Dense: T1=2 T2=2 T6=3 T7=2 */
-                int std_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
-                int cross_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
-                int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 3 : 2, area_factor);
-                int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
                 place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
                                        &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
             }
@@ -4550,6 +4814,8 @@ static void apply_quadrant_generation_modes(void)
                                      (density == DENSITY_DENSE) ? 12 : 8;
                     for (int b = 0; b < maze_count; ++b)
                         carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
+                    /* Update partition mode to match fallback generation (use RUINED for BSP slices) */
+                    current_partition_modes[pi] = QUAD_MODE_RUINED;
                 }
                 
                 /* Add some dead-end interest: occasional rubble in corridors */
@@ -4573,36 +4839,61 @@ static void apply_quadrant_generation_modes(void)
                 int vault_count = scaled_attempts((density == DENSITY_SPARSE) ? 0 : (density == DENSITY_DENSE) ? 1 : 0, area_factor);
                 place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
                                        &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+                
+                /* Place 1 chest in labyrinth partition ONLY if it actually carved */
+                if (carved)
+                    place_chest_in_partition(y1, y2, x1, x2, false);
             }
             break;
         case QUAD_MODE_CHASM:
             {
                 /* Chasm with platforms connected by bridges - no additional rooms */
-                if (!carve_chasm_with_bridges(y1, y2, x1, x2))
+                bool chasm_carved = carve_chasm_with_bridges(y1, y2, x1, x2);
+                if (!chasm_carved)
                 {
-                    /* Fallback: use CA blobs if chasm fails */
+                    /* Fallback: use CA blobs to keep the open feel */
                     int blob_count = (density == DENSITY_SPARSE) ? 2 : (density == DENSITY_DENSE) ? 4 : 3;
                     for (int b = 0; b < blob_count; ++b)
                         carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                    /* Update partition mode to match fallback generation */
+                    current_partition_modes[pi] = QUAD_MODE_CAVEY;
                 }
-                /* No rooms - the chasm IS the feature */
+
+                /* Veins in chasm walls for mining (tagged for star-iron drops) */
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2, CAVE_CHASM_AREA);
+                /* Scatter rare star-iron pieces onto whatever ground exists */
+                scatter_chasm_star_iron_in_bounds(y1, y2, x1, x2);
+
+                /* Place 1 chest in chasm partition ONLY if it actually carved */
+                if (chasm_carved)
+                    place_chest_in_partition(y1, y2, x1, x2, false);
             }
             break;
         case QUAD_MODE_BIG_CAVE:
             {
                 /* Single massive cavern - the cave IS the room */
                 bool carved = carve_big_cave_bounds(y1, y2, x1, x2);
+                int blob_count = 0;
+                int carved_blobs = 0;
                 if (!carved)
                 {
                     /* Fallback: many overlapping blobs */
-                    int blob_count = (density == DENSITY_SPARSE) ? 5 : 
-                                     (density == DENSITY_DENSE) ? 10 : 7;
+                    blob_count = (density == DENSITY_SPARSE) ? 5 : 
+                                 (density == DENSITY_DENSE) ? 10 : 7;
                     for (int b = 0; b < blob_count; ++b)
-                        carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
+                        if (carve_ca_blob_anchor_bounds(y1, y2, x1, x2))
+                            carved_blobs++;
+                    /* Update partition mode to match fallback generation */
+                    current_partition_modes[pi] = QUAD_MODE_CAVEY;
                 }
                 
                 /* Add quartz veins for natural cave look */
-                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2, 0);
+                if (!carved)
+                {
+                    int blob_for_loot = (carved_blobs > 0) ? carved_blobs : blob_count;
+                    scatter_cave_gems_in_bounds(y1, y2, x1, x2, true, MAX(1, blob_for_loot));
+                }
                 
                 /* Add internal pillars/boulders for visual interest (density-scaled) */
                 int pillar_target = (density == DENSITY_SPARSE) ? 3 : 
@@ -4635,6 +4926,9 @@ static void apply_quadrant_generation_modes(void)
                 int int_count = scaled_attempts((density == DENSITY_DENSE) ? 2 : 1, area_factor);
                 place_rooms_randomized(y1, y2, x1, x2, depth, std_count, 0, int_count, 0,
                                        &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+
+                /* Guarantee a single chest in big caves (75% wood, 25% steel) */
+                place_chest_in_partition(y1, y2, x1, x2, true);
             }
             break;
         case QUAD_MODE_ROOMY:
@@ -4727,11 +5021,15 @@ static void apply_quadrant_generation_modes(void)
         {
         case QUAD_MODE_CAVEY:
             {
-                int blob_count = 2 + (y2 - y1) * (x2 - x1) / 400;
-                if (blob_count > 6) blob_count = 6;
-                for (int b = 0; b < blob_count; ++b)
-                    carve_ca_blob_anchor_bounds(y1, y2, x1, x2);
-                scatter_quartz_veins_in_bounds(y1, y2, x1, x2);
+                int blob_target = 2 + (y2 - y1) * (x2 - x1) / 400;
+                if (blob_target > 6) blob_target = 6;
+                int carved_blobs = 0;
+                for (int b = 0; b < blob_target; ++b)
+                    if (carve_ca_blob_anchor_bounds(y1, y2, x1, x2))
+                        carved_blobs++;
+                scatter_quartz_veins_in_bounds(y1, y2, x1, x2, 0);
+                int blob_for_loot = (carved_blobs > 0) ? carved_blobs : blob_target;
+                scatter_cave_gems_in_bounds(y1, y2, x1, x2, false, blob_for_loot);
                 int std_count = scaled_attempts(2, area_factor);
                 int cross_count = scaled_attempts((density == DENSITY_DENSE) ? 4 : (density == DENSITY_SPARSE) ? 2 : 3, area_factor);
                 int int_count = scaled_attempts((density == DENSITY_SPARSE) ? 1 : (density == DENSITY_DENSE) ? 2 : 1, area_factor);
@@ -4748,8 +5046,8 @@ static void apply_quadrant_generation_modes(void)
                     carve_bsp_slice_anchor_bounds(y1, y2, x1, x2);
                 
                 /* Add rubble to carved floor tiles (5-10-15% based on density) */
-                int rubble_chance = (density == DENSITY_SPARSE) ? 5 : 
-                                    (density == DENSITY_DENSE) ? 15 : 10;
+                int rubble_chance = (density == DENSITY_SPARSE) ? 3 : 
+                                    (density == DENSITY_DENSE) ? 10 : 7;
                 for (int gy = y1; gy <= y2; ++gy)
                 {
                     for (int gx = x1; gx <= x2; ++gx)
@@ -4786,6 +5084,70 @@ static void apply_quadrant_generation_modes(void)
                 int vault_count = scaled_attempts((density == DENSITY_DENSE) ? 1 : 0, area_factor);
                 place_rooms_randomized(y1, y2, x1, x2, depth, std_count, cross_count, int_count, vault_count,
                                        &budget_t6, &budget_t7, &budget_t8, &used_t6, &used_t7, &used_t8);
+                
+                /* === RUINED SKELETON SPAWNING === */
+                /* After rubble and rooms are created, spawn skeleton items.
+                 * Use floor_count / 15, clamp 3..10 (denser than labyrinth).
+                 */
+                {
+                    int floor_count = 0;
+                    for (int gy = y1; gy <= y2; ++gy)
+                    {
+                        for (int gx = x1; gx <= x2; ++gx)
+                        {
+                            if (!in_bounds_fully(gy, gx)) continue;
+                            if (!cave_floor_bold(gy, gx)) continue;
+                            if (cave_info[gy][gx] & CAVE_G_VAULT) continue; /* preserve vaults */
+                            floor_count++;
+                        }
+                    }
+
+                    int ru_skeletons = floor_count / 15;
+                    if (ru_skeletons < 3) ru_skeletons = 3;
+                    if (ru_skeletons > 10) ru_skeletons = 10;
+                    
+                    genlog_anchor("RUINED partition bounds=(%d,%d)-(%d,%d) floor_count=%d target_skeletons=%d",
+                                  y1, x1, y2, x2, floor_count, ru_skeletons);
+
+                    int skeletons_placed = 0;
+                    for (int sk = 0; sk < ru_skeletons; ++sk)
+                    {
+                        for (int tries = 0; tries < 50; ++tries)
+                        {
+                            int sy = rand_range(y1, y2);
+                            int sx = rand_range(x1, x2);
+                            if (!in_bounds_fully(sy, sx)) continue;
+                            if (!cave_floor_bold(sy, sx)) continue;
+                            /* Don't bury skeletons under rubble */
+                            if (cave_feat[sy][sx] == FEAT_RUBBLE) continue;
+                            if (cave_o_idx[sy][sx] != 0) continue;  /* Already has object */
+
+                            object_type object_type_body;
+                            object_type *i_ptr = &object_type_body;
+                            object_wipe(i_ptr);
+
+                            s16b k_idx;
+                            int roll = rand_int(100);
+                            if (roll < 60) /* 60% orc */
+                                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ORC);
+                            else if (roll < 80) /* 20% human */
+                                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_HUMAN);
+                            else /* 20% elf */
+                                k_idx = lookup_kind(TV_SKELETON, SV_SKELETON_ELF);
+
+                            object_prep(i_ptr, k_idx);
+                            i_ptr->pval = 1;  /* Skeleton level */
+
+                            drop_near(i_ptr, -1, sy, sx);
+                            skeletons_placed++;
+                            break;
+                        }
+                    }
+
+                    if (skeletons_placed > 0)
+                        genlog_anchor("RUINED partition: placed %d skeletons in bounds (%d,%d)-(%d,%d)",
+                                      skeletons_placed, y1, x1, y2, x2);
+                }
             }
             break;
         default:
@@ -4805,7 +5167,11 @@ static void apply_quadrant_generation_modes(void)
         if (dun->cent_n == before_cent)
         {
             if (room_build_in_bounds(1, y1, y2, x1, x2) || room_build_in_bounds(2, y1, y2, x1, x2))
+            {
                 log_trace("Partition %d [%d,%d]: fallback simple room placed", pi, row, col);
+                /* Update partition mode to ROOMY since we fell back to standard rooms */
+                current_partition_modes[pi] = QUAD_MODE_ROOMY;
+            }
         }
     }
 
@@ -4825,13 +5191,13 @@ static void apply_quadrant_generation_modes(void)
     
     /* Log mode distribution and persist labyrinth count for monster/stair bonuses */
     {
-        int mode_counts[6] = {0};
+        int mode_counts_summary[6] = {0};
         for (int mi = 0; mi < partition_count; ++mi)
-            mode_counts[modes[mi]]++;
-        current_labyrinth_partitions = mode_counts[QUAD_MODE_LABYRINTH];
+            mode_counts_summary[modes[mi]]++;
+        current_labyrinth_partitions = mode_counts_summary[QUAD_MODE_LABYRINTH];
         genlog_partition("Mode distribution: ROOMY=%d CAVEY=%d RUINED=%d LABYRINTH=%d CHASM=%d BIG_CAVE=%d",
-                         mode_counts[0], mode_counts[1], mode_counts[2],
-                         mode_counts[3], mode_counts[4], mode_counts[5]);
+                         mode_counts_summary[0], mode_counts_summary[1], mode_counts_summary[2],
+                         mode_counts_summary[3], mode_counts_summary[4], mode_counts_summary[5]);
     }
     
 #if DEBUG_GENERATION_LOG
@@ -4840,13 +5206,13 @@ static void apply_quadrant_generation_modes(void)
                blocks, grid_rows, grid_cols, partition_count, dun->cent_n);
     
     /* Build a summary of partition modes */
-    int mode_counts[6] = {0};
+    int mode_counts_debug[6] = {0};
     for (int i = 0; i < partition_count; ++i)
-        mode_counts[modes[i]]++;
+        mode_counts_debug[modes[i]]++;
     
     msg_format("Modes: R:%d C:%d U:%d L:%d H:%d B:%d",
-               mode_counts[0], mode_counts[1], mode_counts[2],
-               mode_counts[3], mode_counts[4], mode_counts[5]);
+               mode_counts_debug[0], mode_counts_debug[1], mode_counts_debug[2],
+               mode_counts_debug[3], mode_counts_debug[4], mode_counts_debug[5]);
 #endif
 }
 
@@ -5877,6 +6243,257 @@ void place_item_randomly(int tval, int sval, bool close)
     drop_near(i_ptr, 0, y, x);
 }
 
+/* Mode-specific drop tuning for partition floor/corridor scatter */
+typedef struct partition_drop_profile {
+    bool allow_floor_drops;
+    int reroll_chance; /* percentage chance to re-roll placement in this partition */
+    drop_profile profile;
+} partition_drop_profile;
+
+static quadrant_mode_t partition_mode_for_point(int y, int x)
+{
+    int pi = partition_index_from_point(
+        y, x, current_partition_rows, current_partition_cols);
+    if (pi >= 0 && pi < current_partition_count)
+        return current_partition_modes[pi];
+    return QUAD_MODE_ROOMY;
+}
+
+/* Helper to find which room (if any) contains a given point */
+static int room_index_for_point(int y, int x)
+{
+    for (int i = 0; i < dun->cent_n; ++i)
+    {
+        if (y >= dun->corner[i].y1 && y <= dun->corner[i].y2 &&
+            x >= dun->corner[i].x1 && x <= dun->corner[i].x2)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Determine appropriate drop mode for a location based on room type */
+static quadrant_mode_t drop_mode_for_point(int y, int x)
+{
+    /* Check if point is within a room */
+    int room_idx = room_index_for_point(y, x);
+    if (room_idx >= 0)
+    {
+        /* CA_BLOB rooms use CAVEY drops */
+        if (room_anchor_kind[room_idx] == LAYOUT_ANCHOR_CA_BLOB)
+            return QUAD_MODE_CAVEY;
+        
+        /* Regular rooms use ROOMY drops */
+        if (cave_info[y][x] & CAVE_ROOM)
+            return QUAD_MODE_ROOMY;
+    }
+    
+    /* Fall back to partition mode for corridors and other areas */
+    return partition_mode_for_point(y, x);
+}
+
+static level_partition_kind partition_kind_from_mode(quadrant_mode_t mode)
+{
+    switch (mode)
+    {
+    case QUAD_MODE_ROOMY:
+        return LEVEL_PART_ROOMY;
+    case QUAD_MODE_CAVEY:
+        return LEVEL_PART_CAVEY;
+    case QUAD_MODE_RUINED:
+        return LEVEL_PART_RUINED;
+    case QUAD_MODE_LABYRINTH:
+        return LEVEL_PART_LABYRINTH;
+    case QUAD_MODE_CHASM:
+        return LEVEL_PART_CHASM;
+    case QUAD_MODE_BIG_CAVE:
+        return LEVEL_PART_BIG_CAVE;
+    default:
+        return LEVEL_PART_NONE;
+    }
+}
+
+void level_layout_info_current(level_layout_info* out)
+{
+    if (!out)
+        return;
+
+    memset(out, 0, sizeof(*out));
+
+    out->map_wid = p_ptr->cur_map_wid;
+    out->map_hgt = p_ptr->cur_map_hgt;
+    out->partition_rows = current_partition_rows;
+    out->partition_cols = current_partition_cols;
+    out->partition_count = current_partition_count;
+
+    int area_by_kind[LEVEL_PART_MAX] = {0};
+
+    for (int i = 0; i < current_partition_count; ++i)
+    {
+        level_partition_kind kind = partition_kind_from_mode(current_partition_modes[i]);
+        int y1 = 0, y2 = 0, x1 = 0, x2 = 0;
+        int area = 0;
+
+        if (compute_partition_bounds(
+                i, current_partition_rows, current_partition_cols, &y1, &y2, &x1, &x2))
+        {
+            area = (y2 - y1 + 1) * (x2 - x1 + 1);
+        }
+
+        if (kind == LEVEL_PART_LABYRINTH)
+            out->labyrinth_parts++;
+        else if (kind == LEVEL_PART_BIG_CAVE)
+            out->big_cave_parts++;
+        else if (kind == LEVEL_PART_CHASM)
+            out->chasm_parts++;
+
+        if (kind > LEVEL_PART_NONE && kind < LEVEL_PART_MAX)
+            area_by_kind[kind] += area;
+    }
+
+    const level_partition_kind preference[] = {LEVEL_PART_LABYRINTH,
+        LEVEL_PART_BIG_CAVE, LEVEL_PART_CHASM, LEVEL_PART_RUINED,
+        LEVEL_PART_CAVEY, LEVEL_PART_ROOMY};
+
+    int dominant_area = 0;
+    level_partition_kind dominant_kind = LEVEL_PART_NONE;
+    for (size_t i = 0; i < N_ELEMENTS(preference); ++i)
+    {
+        level_partition_kind kind = preference[i];
+        int area = area_by_kind[kind];
+        if (area > dominant_area)
+        {
+            dominant_area = area;
+            dominant_kind = kind;
+        }
+    }
+
+    out->dominant_kind = dominant_kind;
+}
+
+static partition_drop_profile partition_drop_profile_for_mode(quadrant_mode_t mode)
+{
+    partition_drop_profile prof;
+    prof.allow_floor_drops = true;
+    prof.reroll_chance = 0;
+    drop_profile_default(&prof.profile);
+
+    switch (mode)
+    {
+    case QUAD_MODE_ROOMY:
+        /* Default (ROOMY) — 40:30:10:20 */
+        prof.profile.weight_weapon = 40;
+        prof.profile.weight_armor = 30;
+        prof.profile.weight_jewelry = 10;
+        prof.profile.weight_supply = 20;
+        prof.profile.supply_potion = 1;
+        prof.profile.supply_herb = 1;
+        prof.profile.supply_gem = 1;
+        prof.profile.supply_staff = 1;
+        prof.profile.supply_misc = 1;
+        break;
+    case QUAD_MODE_LABYRINTH:
+        /* LABYRINTH - 0:0:35:65 */
+        prof.profile.weight_weapon = 0;
+        prof.profile.weight_armor = 0;
+        prof.profile.weight_jewelry = 35;
+        prof.profile.weight_supply = 65;
+        prof.profile.supply_potion = 15;
+        prof.profile.supply_herb = 2;
+        prof.profile.supply_gem = 2;
+        prof.profile.supply_staff = 15;
+        prof.profile.supply_misc = 5;
+        break;
+    case QUAD_MODE_RUINED:
+        /* RUINED 40:35:0:25 */
+        prof.profile.weight_weapon = 40;
+        prof.profile.weight_armor = 35;
+        prof.profile.weight_jewelry = 0;
+        prof.profile.weight_supply = 25;
+        prof.profile.supply_potion = 7;
+        prof.profile.supply_herb = 2;
+        prof.profile.supply_gem = 1;
+        prof.profile.supply_staff = 3;
+        prof.profile.supply_misc = 20; /* torches, horns, arrows */
+        break;
+    case QUAD_MODE_CAVEY:
+        prof.allow_floor_drops = false;
+        break;
+    case QUAD_MODE_BIG_CAVE:
+        /* BIG_CAVE 20:20:15:45 (half usual drops) */
+        prof.reroll_chance = 50;
+        prof.profile.weight_weapon = 20;
+        prof.profile.weight_armor = 20;
+        prof.profile.weight_jewelry = 15;
+        prof.profile.weight_supply = 45;
+        prof.profile.supply_potion = 1;
+        prof.profile.supply_herb = 3;
+        prof.profile.supply_gem = 2;
+        prof.profile.supply_staff = 1;
+        prof.profile.supply_misc = 1;
+        break;
+    case QUAD_MODE_CHASM:
+        /* CHASM 40:30:20:10 */
+        prof.profile.weight_weapon = 40;
+        prof.profile.weight_armor = 30;
+        prof.profile.weight_jewelry = 20;
+        prof.profile.weight_supply = 10;
+        prof.profile.supply_potion = 1;
+        prof.profile.supply_herb = 1;
+        prof.profile.supply_gem = 1;
+        prof.profile.supply_staff = 1;
+        prof.profile.supply_misc = 1;
+        break;
+    default:
+        break;
+    }
+
+    return prof;
+}
+
+static void place_object_with_profile_params(
+    int y, int x, drop_quality quality, int droptype, bool allow_artefacts,
+    const partition_drop_profile* prof);
+
+static void place_object_with_profile(
+    int y, int x, const partition_drop_profile* prof)
+{
+    place_object_with_profile_params(
+        y, x, DROP_QUALITY_NORMAL, DROP_TYPE_UNTHEMED, false, prof);
+}
+
+static void place_object_with_profile_params(
+    int y, int x, drop_quality quality, int droptype, bool allow_artefacts,
+    const partition_drop_profile* prof)
+{
+    if (!in_bounds(y, x))
+        return;
+    if (!cave_clean_bold(y, x))
+        return;
+
+    object_type object_type_body;
+    object_type* i_ptr = &object_type_body;
+    object_wipe(i_ptr);
+
+    int depth = object_level;
+    int attempts = 0;
+    const drop_profile* dp = (prof) ? &prof->profile : NULL;
+
+    while (!drop_generate_object_profiled(depth, quality,
+               droptype, 0, allow_artefacts, dp, i_ptr))
+    {
+        attempts++;
+        if (attempts > 200)
+            return;
+    }
+
+    if (!floor_carry(y, x, i_ptr))
+    {
+        a_info[i_ptr->name1].cur_num = 0;
+    }
+}
+
 /*
  * Allocates some objects (using "place" and "type")
  */
@@ -5887,6 +6504,8 @@ static void alloc_object(int set, int typ, int num, bool out_of_sight)
     /* Place some objects */
     for (k = 0; k < num; k++)
     {
+        partition_drop_profile active_profile =
+            partition_drop_profile_for_mode(QUAD_MODE_ROOMY);
         /* Pick a "legal" spot */
         for (i = 0; i < 10000; i++)
         {
@@ -5917,6 +6536,18 @@ static void alloc_object(int set, int typ, int num, bool out_of_sight)
                 && (distance(p_ptr->py, p_ptr->px, y, x) <= MAX_SIGHT))
                 continue;
 
+            /* Enforce room-type and partition-specific drop behaviour */
+            quadrant_mode_t mode = drop_mode_for_point(y, x);
+            active_profile = partition_drop_profile_for_mode(mode);
+            if (typ == ALLOC_TYP_OBJECT)
+            {
+                if (!active_profile.allow_floor_drops)
+                    continue;
+                if (active_profile.reroll_chance > 0
+                    && rand_int(100) < active_profile.reroll_chance)
+                    continue;
+            }
+
             /* Accept it */
             break;
         }
@@ -5936,7 +6567,7 @@ static void alloc_object(int set, int typ, int num, bool out_of_sight)
 
         case ALLOC_TYP_OBJECT:
         {
-            place_object(y, x, false, false, DROP_TYPE_UNTHEMED);
+            place_object_with_profile(y, x, &active_profile);
             break;
         }
         }
@@ -8529,7 +9160,8 @@ static bool build_type2(int y0, int x0)
                     cave_set_feat(y, x, FEAT_WALL_INNER);
                 }
             }
-            place_object(y0, x0, false, false, DROP_TYPE_CHEST);
+            place_object(
+                y0, x0, DROP_QUALITY_NORMAL, DROP_TYPE_CHEST, true);
         }
         break;
     }
@@ -9043,7 +9675,11 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             case '*':
             {
                 object_level = p_ptr->depth + dieroll(4);
-                place_object(y, x, false, false, DROP_TYPE_NOT_DAMAGED);
+                partition_drop_profile active_profile =
+                    partition_drop_profile_for_mode(drop_mode_for_point(y, x));
+                place_object_with_profile_params(
+                    y, x, DROP_QUALITY_NORMAL, DROP_TYPE_NOT_DAMAGED, true,
+                    &active_profile);
                 object_level = original_object_level;
                 break;
             }
@@ -9052,7 +9688,11 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
             case '&':
             {
                 object_level = p_ptr->depth + dieroll(4);
-                place_object(y, x, true, false, DROP_TYPE_NOT_DAMAGED);
+                partition_drop_profile active_profile =
+                    partition_drop_profile_for_mode(drop_mode_for_point(y, x));
+                place_object_with_profile_params(
+                    y, x, DROP_QUALITY_GOOD, DROP_TYPE_NOT_DAMAGED, true,
+                    &active_profile);
                 object_level = original_object_level;
                 break;
             }
@@ -9066,7 +9706,11 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                     object_level = p_ptr->depth + 4;
                 ;
 
-                place_object(y, x, false, false, DROP_TYPE_CHEST);
+                partition_drop_profile active_profile =
+                    partition_drop_profile_for_mode(drop_mode_for_point(y, x));
+                place_object_with_profile_params(
+                    y, x, DROP_QUALITY_NORMAL, DROP_TYPE_CHEST, true,
+                    &active_profile);
                 object_level = original_object_level;
                 break;
             }
@@ -9117,7 +9761,11 @@ static bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d)
                 if (r >= 2)
                 {
                     object_level = p_ptr->depth + 1;
-                    place_object(y, x, false, false, DROP_TYPE_UNTHEMED);
+                    partition_drop_profile active_profile =
+                        partition_drop_profile_for_mode(drop_mode_for_point(y, x));
+                    place_object_with_profile_params(
+                        y, x, DROP_QUALITY_NORMAL, DROP_TYPE_UNTHEMED, true,
+                        &active_profile);
                     object_level = original_object_level;
                 }
                 break;
@@ -12006,16 +12654,19 @@ static bool cave_gen(void)
         return (false);
     }
 
-    /* Put some objects in rooms */
-    obj_room_gen = 3 * mon_gen / 4;
+    /* Put some objects in rooms (new ratio: 1/2 of mon_gen) */
+    /* Previously used 3/4; user requested 1/2 */
+    obj_room_gen = mon_gen / 2;
     if (obj_room_gen > 0)
     {
         // currently ignoring the above...
         alloc_object(ALLOC_SET_ROOM, ALLOC_TYP_OBJECT, obj_room_gen, false);
+        log_trace("Room objects: placed %d objects in rooms", obj_room_gen);
     }
 
-    /* Put some objects in corridors (especially for labyrinth/maze levels) */
-    int obj_corr_gen = mon_gen / 3;  /* ~33% of monster count */
+    /* Put some objects in corridors (new ratio: 1/4 of mon_gen) */
+    /* Previously used 1/3; user requested 1/4 */
+    int obj_corr_gen = mon_gen / 4;  /* ~25% of monster count */
     if (obj_corr_gen > 0)
     {
         alloc_object(ALLOC_SET_CORR, ALLOC_TYP_OBJECT, obj_corr_gen, false);
@@ -13073,6 +13724,9 @@ if (playerturn == 0) {
 
     /* Reset the number of traps on the level. */
     num_trap_on_level = 0;
+
+    /* Reset per-level skeleton note limits once the layout is finalized */
+    skeleton_note_level_reset();
 
     /* Note any forges generated -- have to do this here in case generation
      * fails earlier */
