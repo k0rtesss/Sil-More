@@ -4,6 +4,7 @@
 - `src/generate.c`: adjacent big partitions (LABYRINTH/BIG_CAVE/CHASM) now get a boundary-doorway fallback when standard `connect_two_rooms()` tunneling fails in open areas; digs a straight connector across the shared boundary (outer walls become doors, extra walls become floor) and marks the hub rooms connected.
 - Generation logging: new `[CONNECT] Big partition boundary:` entries record the carved connector coordinates (useful for debugging `generation.txt`).
 - Build: `build-cmake.bat` successful (SDL3 standard + portable).
+- Merge cleanup: resolved conflicts preferring incoming branch, then fixed quest save/load layout + missing quest helper symbols so `build-cmake.bat` links cleanly.
 
 ## 2025-12-14: Unified Look + Spawn Balancing
 - `src/object1.c`: mode-4 shortening now splits non-ego “X of Y” items (rings/potions/staves/gems/horns/herbs) so l-view names follow the same rule as ego items (e.g., “Ring Frost” instead of “Ring of Frost”).

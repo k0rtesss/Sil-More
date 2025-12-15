@@ -464,6 +464,13 @@ void player_wipe(void)
     p_ptr->tulkas_target_r_idx = 0;
     p_ptr->tulkas_prize_a_idx = 0;
     p_ptr->tulkas_quest_complete = 0;
+    p_ptr->tulkas_stronghold_level = 0;
+    p_ptr->tulkas_stronghold_placed = 0;
+    p_ptr->tulkas_second_roll_done = 0;
+    p_ptr->tulkas_orc_mask = 0;
+    p_ptr->tulkas_orc_restricted = 0;
+    p_ptr->tulkas_second_spawn_pending = 0;
+    p_ptr->tulkas_morgoth_progress = 0;
 
     /* Aule quest init */
     p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
@@ -480,29 +487,51 @@ void player_wipe(void)
     p_ptr->mandos_monsters_remaining = 0;
     p_ptr->mandos_level = 0;
     p_ptr->mandos_reserved = 0;
+    p_ptr->mandos_resurrection_primed = 0;
+    p_ptr->mandos_resurrection_used = 0;
     
     /* Niena quest init */
     p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
+    p_ptr->niena_monsters_seen = 0;
+    p_ptr->niena_monsters_killed = 0;
+    p_ptr->niena_reserved = 0;
     p_ptr->niena_level = 0;
+    p_ptr->niena_reserved2 = 0;
     
     /* Orome quest init */
     p_ptr->orome_quest = OROME_QUEST_NOT_STARTED;
     p_ptr->orome_killed_count = 0;
     p_ptr->orome_target_type = 0;
     p_ptr->orome_target_count = 0;
+    p_ptr->orome_wolves_killed = 0;
+    p_ptr->orome_spiders_killed = 0;
+    p_ptr->orome_serpents_killed = 0;
+    p_ptr->orome_vampires_killed = 0;
+    p_ptr->orome_dragons_killed = 0;
+    p_ptr->orome_great_hunt_mask = 0;
     /* Varda quest init */
     p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
     p_ptr->varda_vault_ready = 0;
     p_ptr->varda_vault_placed = 0;
-    p_ptr->varda_reserved = 0;
+    p_ptr->varda_shadow_restricted = 0;
     p_ptr->varda_level = 0;
+    p_ptr->varda_shadow_ready = 0;
+    p_ptr->varda_shadow_placed = 0;
+    p_ptr->varda_shadow_pad = 0;
+    p_ptr->varda_shadow_level = 0;
+
+    for (i = 0; i < VALA_MAX; i++)
+    {
+        p_ptr->vala_quest_stage2[i] = 0;
+        p_ptr->vala_quest_stage3[i] = 0;
+    }
     
     p_ptr->quest_vault_used = 0;
     
     /* Quest states should always start at NOT_STARTED for new characters */
     /* Metarun completion is checked separately via metarun_is_quest_completed() */
     log_trace("Birth: All quest states initialized to NOT_STARTED for new character");
-    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..6] = per-run quest completion markers */
+    for (i = 0; i < (int)N_ELEMENTS(p_ptr->quest_reserved); i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..n] = per-run quest completion markers */
 
     /*re-set the thefts counter*/
     recent_failed_thefts = 0;
@@ -2713,7 +2742,6 @@ NavResult player_birth()
 
     return NAV_OK;
 }
-
 
 
 

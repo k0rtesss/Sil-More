@@ -1210,6 +1210,15 @@ static void wr_extra(void)
     wr_s16b(p_ptr->tulkas_target_r_idx);
     wr_s16b(p_ptr->tulkas_prize_a_idx);
     wr_byte(p_ptr->tulkas_quest_complete);
+#if VERSION_EXTRA >= 10
+    wr_s16b(p_ptr->tulkas_stronghold_level);
+    wr_byte(p_ptr->tulkas_stronghold_placed);
+    wr_byte(p_ptr->tulkas_second_roll_done);
+    wr_byte(p_ptr->tulkas_orc_mask);
+    wr_byte(p_ptr->tulkas_orc_restricted);
+    wr_byte(p_ptr->tulkas_second_spawn_pending);
+    wr_byte(p_ptr->tulkas_morgoth_progress);
+#endif
     /* Aule quest fields */
     wr_byte(p_ptr->aule_quest);
     wr_byte(p_ptr->aule_forge_y);
@@ -1224,6 +1233,10 @@ static void wr_extra(void)
     wr_byte(p_ptr->mandos_monsters_remaining);
     wr_s16b(p_ptr->mandos_level);
     wr_s16b(p_ptr->mandos_reserved);
+#if VERSION_EXTRA >= 10
+    wr_byte(p_ptr->mandos_resurrection_primed);
+    wr_byte(p_ptr->mandos_resurrection_used);
+#endif
     /* Niena quest fields */
     wr_byte(p_ptr->niena_quest);
     wr_byte(p_ptr->niena_monsters_seen);
@@ -1240,14 +1253,33 @@ static void wr_extra(void)
     wr_s16b(p_ptr->orome_spiders_killed);
     wr_s16b(p_ptr->orome_serpents_killed);
     wr_s16b(p_ptr->orome_vampires_killed);
+#if VERSION_EXTRA >= 10
+    wr_s16b(p_ptr->orome_dragons_killed);
+    wr_byte(p_ptr->orome_great_hunt_mask);
+#endif
     /* Varda quest fields */
     wr_byte(p_ptr->varda_quest);
     wr_byte(p_ptr->varda_vault_ready);
     wr_byte(p_ptr->varda_vault_placed);
-    wr_byte(p_ptr->varda_reserved);
+#if VERSION_EXTRA >= 10
+    wr_byte(p_ptr->varda_shadow_restricted);
+#endif
     wr_s16b(p_ptr->varda_level);
+#if VERSION_EXTRA >= 10
+    wr_byte(p_ptr->varda_shadow_ready);
+    wr_byte(p_ptr->varda_shadow_placed);
+    wr_byte(p_ptr->varda_shadow_pad);
+    wr_s16b(p_ptr->varda_shadow_level);
+
+    for (i = 0; i < VALA_MAX; i++) wr_byte(p_ptr->vala_quest_stage2[i]);
+    for (i = 0; i < VALA_MAX; i++) wr_byte(p_ptr->vala_quest_stage3[i]);
+#endif
     wr_byte(p_ptr->quest_vault_used);
+#if VERSION_EXTRA >= 10
+    for (i = 0; i < (int)N_ELEMENTS(p_ptr->quest_reserved); i++) wr_byte(p_ptr->quest_reserved[i]);
+#else
     for (i = 0; i < 15; i++) wr_byte(p_ptr->quest_reserved[i]);
+#endif
 #else
     /* Older versions (<=0.8.5) had no quest block; do not write marker */
 #endif
@@ -2119,9 +2151,6 @@ bool save_player(void)
     }
     return (result);
 }
-
-
-
 
 
 

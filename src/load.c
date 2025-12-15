@@ -1386,6 +1386,26 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->tulkas_target_r_idx);
     rd_s16b(&p_ptr->tulkas_prize_a_idx);
     rd_byte(&p_ptr->tulkas_quest_complete);
+    if (savefile_version_at_least(0, 9, 1, 10))
+    {
+        rd_s16b(&p_ptr->tulkas_stronghold_level);
+        rd_byte(&p_ptr->tulkas_stronghold_placed);
+        rd_byte(&p_ptr->tulkas_second_roll_done);
+        rd_byte(&p_ptr->tulkas_orc_mask);
+        rd_byte(&p_ptr->tulkas_orc_restricted);
+        rd_byte(&p_ptr->tulkas_second_spawn_pending);
+        rd_byte(&p_ptr->tulkas_morgoth_progress);
+    }
+    else
+    {
+        p_ptr->tulkas_stronghold_level = 0;
+        p_ptr->tulkas_stronghold_placed = 0;
+        p_ptr->tulkas_second_roll_done = 0;
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_orc_restricted = 0;
+        p_ptr->tulkas_second_spawn_pending = 0;
+        p_ptr->tulkas_morgoth_progress = 0;
+    }
     rd_byte(&p_ptr->aule_quest);
     rd_byte(&p_ptr->aule_forge_y);
     rd_byte(&p_ptr->aule_forge_x);
@@ -1398,6 +1418,16 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->mandos_monsters_remaining);
     rd_s16b(&p_ptr->mandos_level);
     rd_s16b(&p_ptr->mandos_reserved);
+    if (savefile_version_at_least(0, 9, 1, 10))
+    {
+        rd_byte(&p_ptr->mandos_resurrection_primed);
+        rd_byte(&p_ptr->mandos_resurrection_used);
+    }
+    else
+    {
+        p_ptr->mandos_resurrection_primed = 0;
+        p_ptr->mandos_resurrection_used = 0;
+    }
     rd_byte(&p_ptr->niena_quest);
     rd_byte(&p_ptr->niena_monsters_seen);
     rd_byte(&p_ptr->niena_monsters_killed);
@@ -1412,22 +1442,66 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->orome_spiders_killed);
     rd_s16b(&p_ptr->orome_serpents_killed);
     rd_s16b(&p_ptr->orome_vampires_killed);
+    if (savefile_version_at_least(0, 9, 1, 10))
+    {
+        rd_s16b(&p_ptr->orome_dragons_killed);
+        rd_byte(&p_ptr->orome_great_hunt_mask);
+    }
+    else
+    {
+        p_ptr->orome_dragons_killed = 0;
+        p_ptr->orome_great_hunt_mask = 0;
+    }
     if (savefile_has_varda_quest) {
         rd_byte(&p_ptr->varda_quest);
         rd_byte(&p_ptr->varda_vault_ready);
         rd_byte(&p_ptr->varda_vault_placed);
-        rd_byte(&p_ptr->varda_reserved);
+        rd_byte(&p_ptr->varda_shadow_restricted);
         rd_s16b(&p_ptr->varda_level);
+        if (savefile_version_at_least(0, 9, 1, 10))
+        {
+            rd_byte(&p_ptr->varda_shadow_ready);
+            rd_byte(&p_ptr->varda_shadow_placed);
+            rd_byte(&p_ptr->varda_shadow_pad);
+            rd_s16b(&p_ptr->varda_shadow_level);
+        }
+        else
+        {
+            p_ptr->varda_shadow_ready = 0;
+            p_ptr->varda_shadow_placed = 0;
+            p_ptr->varda_shadow_pad = 0;
+            p_ptr->varda_shadow_level = 0;
+        }
     } else {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_vault_ready = 0;
         p_ptr->varda_vault_placed = 0;
-        p_ptr->varda_reserved = 0;
+        p_ptr->varda_shadow_restricted = 0;
         p_ptr->varda_level = 0;
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 0;
+        p_ptr->varda_shadow_pad = 0;
+        p_ptr->varda_shadow_level = 0;
     }
+
+    if (savefile_version_at_least(0, 9, 1, 10))
+    {
+        for (int vi = 0; vi < VALA_MAX; vi++) rd_byte(&p_ptr->vala_quest_stage2[vi]);
+        for (int vi = 0; vi < VALA_MAX; vi++) rd_byte(&p_ptr->vala_quest_stage3[vi]);
+    }
+    else
+    {
+        for (int vi = 0; vi < VALA_MAX; vi++)
+        {
+            p_ptr->vala_quest_stage2[vi] = 0;
+            p_ptr->vala_quest_stage3[vi] = 0;
+        }
+    }
+
     rd_byte(&p_ptr->quest_vault_used);
     /* quest_reserved array grew in 0.9.1.3; read available bytes safely */
-    int quest_reserved_len = savefile_version_at_least(0, 9, 1, 3) ? 15 : 12;
+    int quest_reserved_len = savefile_version_at_least(0, 9, 1, 10) ? (int)N_ELEMENTS(p_ptr->quest_reserved) :
+        (savefile_version_at_least(0, 9, 1, 3) ? 15 : 12);
     for (int qi = 0; qi < quest_reserved_len && qi < (int)N_ELEMENTS(p_ptr->quest_reserved); qi++) {
         rd_byte(&p_ptr->quest_reserved[qi]);
     }
@@ -2995,7 +3069,6 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
-
 
 
 

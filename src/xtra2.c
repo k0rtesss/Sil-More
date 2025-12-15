@@ -2560,7 +2560,7 @@ void monster_death(int m_idx)
     check_varda_quest_completion(m_ptr->r_idx);
     
     /* Check for Orome quest completion */
-    check_orome_quest_completion();
+    check_orome_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -6286,7 +6286,7 @@ static cptr get_quest_title(int quest_idx);
 static cptr get_oath_name_from_id(byte oath_id);
 
 /* Prepend a repeat-attempt context line when returning to a Valar quest under an oath */
-static cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion)
+cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion)
 {
     if (!texts || !count || quest_idx <= 0 || quest_idx >= z_info->quest_max) return texts;
 
@@ -7259,7 +7259,7 @@ void do_cmd_quest_status(void)
  * Quest typewriter menu function - displays quest dialog with typewriter effect
  * Based on print_story_intro() style
  */
-static void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color)
+void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color)
 {
     int wid, h;
     const int indent = 2;
@@ -7540,6 +7540,214 @@ bool spawn_quest_giver_near_player(int quest_giver_r_idx)
     
     log_trace("Failed to spawn quest giver near player");
     return false;
+}
+
+const int tulkas_orc_targets[] = { 54, 76, 84, 85, 95, 105 };
+const size_t tulkas_orc_target_count = sizeof(tulkas_orc_targets) / sizeof(tulkas_orc_targets[0]);
+
+bool tulkas_orc_is_target(int r_idx)
+{
+    for (size_t i = 0; i < tulkas_orc_target_count; i++)
+    {
+        if (tulkas_orc_targets[i] == r_idx) return true;
+    }
+    return false;
+}
+
+bool tulkas_orc_targets_alive(bool require_unspawned)
+{
+    if (!z_info || !r_info || !l_list) return false;
+
+    for (size_t i = 0; i < tulkas_orc_target_count; i++)
+    {
+        int r_idx = tulkas_orc_targets[i];
+        if (r_idx <= 0 || r_idx >= z_info->r_max) return false;
+
+        const monster_race* r_ptr = &r_info[r_idx];
+        const monster_lore* l_ptr = &l_list[r_idx];
+
+        if (!(r_ptr->flags1 & RF1_UNIQUE)) return false;
+        if (r_ptr->max_num == 0) return false;
+
+        if (require_unspawned)
+        {
+            if (l_ptr->psights > 0 || l_ptr->pkills > 0) return false;
+        }
+    }
+
+    return true;
+}
+
+static int total_player_kills_this_run_local(void)
+{
+    if (!z_info || !l_list) return 0;
+
+    int total = 0;
+    for (int i = 0; i < z_info->r_max; i++)
+    {
+        int kills = l_list[i].pkills;
+        if (kills > 0) total += kills;
+    }
+
+    return total;
+}
+
+void niena_mark_morgoth_attack(void)
+{
+    if (quest_get_state(QUEST_ID_NIENA_MORGOTH) != QUEST_STATE_ACTIVE) return;
+    if (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) return;
+
+    p_ptr->niena_reserved |= NIENA_FLAG_MORGOTH_ATTACKED;
+    msg_print("Nienna's mercy recoils: you have struck Morgoth.");
+}
+
+void niena_revoke_temp_mercy_gift(bool silent)
+{
+    if (!(p_ptr->niena_reserved & NIENA_FLAG_MERCY_GIFT_TEMP)) return;
+
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MERCY_GIFT_TEMP);
+    p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = false;
+    p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = false;
+
+    p_ptr->update |= (PU_BONUS);
+    p_ptr->redraw |= (PR_BASIC);
+
+    if (!silent)
+    {
+        msg_print("Nienna's borrowed mercy fades.");
+    }
+}
+
+void check_niena_morgoth_interaction(void)
+{
+    int y, x;
+    monster_type* m_ptr;
+
+    byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (state != QUEST_STATE_GIVER_PRESENT) return;
+
+    for (y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
+    {
+        for (x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
+        {
+            if (y == p_ptr->py && x == p_ptr->px) continue;
+            if (!in_bounds(y, x)) continue;
+            if (cave_m_idx[y][x] <= 0) continue;
+
+            m_ptr = &mon_list[cave_m_idx[y][x]];
+            if (m_ptr->r_idx != R_IDX_NIENA) continue;
+
+            int text_count = 0;
+            cptr* init_texts = extract_quest_init_texts(QUEST_ID_NIENA_MORGOTH, &text_count);
+            init_texts = prepend_repeat_context(QUEST_ID_NIENA_MORGOTH, init_texts, &text_count, false);
+
+            if (init_texts && text_count > 0)
+            {
+                quest_typewriter_menu("Nienna's Mercy", init_texts, text_count, TERM_L_BLUE, TERM_WHITE);
+                free_quest_texts(init_texts);
+            }
+            else
+            {
+                const char* fallback[] = {
+                    "In the shadow of the throne, Nienna waits with eyes full of sorrow and resolve.",
+                    "'Take a Silmaril from Morgoth's crown, yet lay no blow upon him.'"
+                };
+                quest_typewriter_menu("Nienna's Mercy", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+            }
+
+            if (!p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
+            {
+                p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = true;
+                p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = true;
+                p_ptr->niena_reserved |= NIENA_FLAG_MERCY_GIFT_TEMP;
+                p_ptr->update |= (PU_BONUS);
+                handle_stuff();
+            }
+
+            quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_ACTIVE);
+            remove_quest_giver(R_IDX_NIENA);
+            return;
+        }
+    }
+}
+
+void ensure_niena_pacifist_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0 ||
+        quest_get_state(QUEST_ID_NIENA_MORGOTH) >= QUEST_STATE_REWARDED;
+
+    if (!unlocked)
+    {
+        p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
+        p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
+    }
+
+    if (quest_get_state(QUEST_ID_NIENA_PACIFIST) == QUEST_STATE_ACTIVE &&
+        total_player_kills_this_run_local() > 0)
+    {
+        p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+    }
+}
+
+void ensure_tulkas_morgoth_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool oath_active = (p_ptr->oath_type == OATH_VALOROUS && !oath_invalid(OATH_VALOROUS));
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0 ||
+        quest_get_state(QUEST_ID_TULKAS_ORCS) >= QUEST_STATE_REWARDED;
+
+    if (!oath_active || !unlocked)
+    {
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_ACTIVE);
+        p_ptr->tulkas_morgoth_progress = 0;
+    }
+}
+
+void ensure_varda_ungoliant_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool oath_active = (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT));
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_VARDA_SHADOW) > 0 ||
+        quest_get_state(QUEST_ID_VARDA_SHADOW) >= QUEST_STATE_REWARDED ||
+        metarun_quest_completion_count(METARUN_QUEST_VARDA) > 0 ||
+        p_ptr->varda_quest >= VARDA_QUEST_REWARDED;
+
+    if (!oath_active || !unlocked)
+    {
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_ACTIVE);
+    }
+
+    if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) == QUEST_STATE_ACTIVE &&
+        r_info[R_IDX_UNGOLIANT].max_num == 0)
+    {
+        quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_REWARDED);
+    }
 }
 
 /*
@@ -8706,8 +8914,9 @@ void check_mandos_quest_completion(int r_idx)
 /*
  * Handle quest completion checking for Oromë hunting quest
  */
-void check_orome_quest_completion(void)
+void check_orome_quest_completion(int r_idx)
 {
+    (void)r_idx;
     if (p_ptr->orome_quest == OROME_QUEST_ACTIVE) {
         /* Check thresholds for each monster type */
         bool quest_complete = false;
@@ -9239,6 +9448,4 @@ void grant_unique_bane_ability(void)
     p_ptr->update |= (PU_BONUS);
     handle_stuff();
 }
-
-
 
