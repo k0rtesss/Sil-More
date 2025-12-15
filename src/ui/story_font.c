@@ -17,9 +17,13 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
     /* Convert column-based wrap to pixel width */
     int cell_width = sdl_get_cell_width();
     int wrap_pixels = wrap_cols * cell_width;
+    int indent_pixels = indent * cell_width;
+    int space_pixels = sdl_story_font_text_width(" ", 1);
+    if (space_pixels <= 0)
+        space_pixels = cell_width;
 
     int lines = 1;
-    int x = indent;
+    int x_pixels = indent_pixels;
     cptr s = str;
 
     while (*s)
@@ -27,7 +31,7 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
         /* Handle newlines */
         if (*s == '\n')
         {
-            x = indent;
+            x_pixels = indent_pixels;
             lines++;
             s++;
             continue;
@@ -36,10 +40,10 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
         /* Skip leading spaces */
         while (*s == ' ')
         {
-            x++;
-            if (x >= wrap_cols)
+            x_pixels += space_pixels;
+            if (x_pixels >= wrap_pixels)
             {
-                x = indent;
+                x_pixels = indent_pixels;
                 lines++;
             }
             s++;
@@ -59,22 +63,15 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
 
         /* Measure the word in pixels */
         int word_pixels = sdl_story_font_text_width(word_start, word_chars);
-        int current_pixels = x * cell_width;
-
         /* Check if word fits on current line */
-        if (x > indent && (current_pixels + word_pixels) > wrap_pixels)
+        if (x_pixels > indent_pixels && (x_pixels + word_pixels) > wrap_pixels)
         {
-            x = indent;
+            x_pixels = indent_pixels;
             lines++;
         }
 
-        /* Account for the word's width in columns (approximate) */
-        x += word_chars;
-        if (x >= wrap_cols)
-        {
-            x = indent;
-            lines++;
-        }
+        /* Advance by the word's pixel width */
+        x_pixels += word_pixels;
 
         /* Move past the word */
         s += word_chars;
@@ -83,10 +80,56 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
     return lines;
 }
 
-bool story_inventory_enabled(void) { return story_inventory_lists; }
-bool story_equipment_enabled(void) { return story_equipment_lists; }
+static bool story_term_is_main(void)
+{
+    return (Term && term_screen && (Term == term_screen));
+}
+
+bool story_inventory_enabled(void)
+{
+    return story_term_is_main() ? story_inventory_lists : story_inventory_lists_pane;
+}
+
+bool story_equipment_enabled(void)
+{
+    return story_term_is_main() ? story_equipment_lists : story_equipment_lists_pane;
+}
+
 bool story_look_enabled(void) { return story_display_lists; }
 bool story_character_enabled(void) { return story_character_sheet; }
+
+bool story_monster_desc_enabled(void)
+{
+    return story_term_is_main() ? story_monster_desc_main : story_monster_desc_pane;
+}
+
+void story_font_term_push(bool active, bool grid, story_font_term_state* prev)
+{
+    if (!prev)
+        return;
+
+    prev->t = Term;
+    prev->active = (Term ? Term->story_font_active : false);
+    prev->grid = (Term ? Term->story_font_grid : false);
+
+    if (Term)
+    {
+        Term->story_font_active = active;
+        Term->story_font_grid = grid;
+    }
+}
+
+void story_font_term_pop(story_font_term_state* prev)
+{
+    if (!prev)
+        return;
+
+    if (prev->t && Term == prev->t)
+    {
+        Term->story_font_active = prev->active;
+        Term->story_font_grid = prev->grid;
+    }
+}
 
 void text_out_to_screen_story(byte a, cptr str)
 {
@@ -105,13 +148,17 @@ void text_out_to_screen_story(byte a, cptr str)
 
     int cell_width = sdl_get_cell_width();
     int wrap_pixels = wrap_cols * cell_width;
+    int indent_pixels = text_out_indent * cell_width;
+    int space_pixels = sdl_story_font_text_width(" ", 1);
+    if (space_pixels <= 0)
+        space_pixels = cell_width;
 
     log_trace("=== text_out_to_screen_story START ===");
     log_trace("Story wrapping: wid=%d, wrap_cols=%d, cell_width=%d, wrap_pixels=%d", wid, wrap_cols, cell_width,
         wrap_pixels);
     log_trace("Initial cursor: x=%d, y=%d, text_out_indent=%d, text='%.50s'", x, y, text_out_indent, str);
 
-    int current_x_pixels = text_out_indent * cell_width;
+    int current_x_pixels = indent_pixels;
 
     s = str;
     while (*s)
@@ -119,7 +166,7 @@ void text_out_to_screen_story(byte a, cptr str)
         if (*s == '\n')
         {
             x = text_out_indent;
-            current_x_pixels = text_out_indent * cell_width;
+            current_x_pixels = indent_pixels;
             y++;
             Term_erase(x, y, 255);
             s++;
@@ -130,7 +177,7 @@ void text_out_to_screen_story(byte a, cptr str)
         {
             Term_addch(a, ' ');
             x++;
-            current_x_pixels += cell_width;
+            current_x_pixels += space_pixels;
             s++;
         }
 
@@ -155,7 +202,7 @@ void text_out_to_screen_story(byte a, cptr str)
         if (exceeds_pixels || exceeds_columns)
         {
             x = text_out_indent;
-            current_x_pixels = text_out_indent * cell_width;
+            current_x_pixels = indent_pixels;
             y++;
             Term_erase(x, y, 255);
             log_trace("Wrapped to next line, x=%d, current_x_pixels=%d", x, current_x_pixels);
@@ -192,11 +239,12 @@ static void story_print_text_internal(int row, int col, int max_cols, byte attr,
         log_trace("story_print_text: text_out_indent (BEFORE)=%d, text_out_wrap (BEFORE)=%d", text_out_indent,
             text_out_wrap);
 
-        bool previous_grid = sdl_is_story_font_grid();
+        bool previous_grid = (Term ? Term->story_font_grid : false);
         bool restore_grid = false;
         if (force_grid != previous_grid)
         {
-            sdl_story_font_set_grid(force_grid);
+            if (Term)
+                Term->story_font_grid = force_grid;
             restore_grid = true;
         }
 
@@ -230,8 +278,8 @@ static void story_print_text_internal(int row, int col, int max_cols, byte attr,
         text_out_wrap = old_wrap;
         text_out_hook = old_hook;
 
-        if (restore_grid)
-            sdl_story_font_set_grid(previous_grid);
+        if (restore_grid && Term)
+            Term->story_font_grid = previous_grid;
         return;
     }
 
@@ -255,17 +303,10 @@ void story_print_mono(int row, int col, byte attr, cptr text)
     if (!text)
         text = "";
 
-    bool reenable_story = false;
-    if (sdl_is_story_font_enabled())
-    {
-        sdl_story_font_disable();
-        reenable_story = true;
-    }
-
+    story_font_term_state prev;
+    story_font_term_push(false, (Term ? Term->story_font_grid : false), &prev);
     c_put_str(attr, text, row, col);
-
-    if (reenable_story)
-        sdl_story_font_enable();
+    story_font_term_pop(&prev);
 }
 
 void story_fill_rect(int row, int col, int width_cols, byte attr)

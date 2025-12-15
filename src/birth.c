@@ -163,10 +163,6 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SPC_OATH_VALOROUS] = "Oath of the Valorous Heart",
         [SPC_UNIQUE_BANE] = "Unique Bane", /* Enhanced effectiveness against unique monsters */
         [SPC_OATH_LIGHT] = "Oath of Light",
-        [SPC_OROME_WRAITH] = "Wraith of Orome",
-        [SPC_HUNTSMAN_RHYTHM] = "Huntsman's Rhythm",
-        [SPC_TULKAS_WRATH] = "Wrath of Tulkas",
-        [SPC_QUEEN_STARS] = "Queen of the Stars",
     },
 };
 
@@ -460,8 +456,6 @@ void player_wipe(void)
     p_ptr->morgoth_state = 0;
 
     p_ptr->killed_enemy_with_arrow = false;
-    p_ptr->orome_bow_hit_streak = 0;
-    p_ptr->orome_spear_ready = 0;
 
     p_ptr->oath_type = 0;
     p_ptr->oaths_broken = 0;
@@ -486,8 +480,6 @@ void player_wipe(void)
     p_ptr->mandos_monsters_remaining = 0;
     p_ptr->mandos_level = 0;
     p_ptr->mandos_reserved = 0;
-    p_ptr->mandos_resurrection_primed = 0;
-    p_ptr->mandos_resurrection_used = 0;
     
     /* Niena quest init */
     p_ptr->niena_quest = NIENA_QUEST_NOT_STARTED;
@@ -498,29 +490,19 @@ void player_wipe(void)
     p_ptr->orome_killed_count = 0;
     p_ptr->orome_target_type = 0;
     p_ptr->orome_target_count = 0;
-    p_ptr->orome_dragons_killed = 0;
-    p_ptr->orome_great_hunt_mask = 0;
     /* Varda quest init */
     p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
     p_ptr->varda_vault_ready = 0;
     p_ptr->varda_vault_placed = 0;
-    p_ptr->varda_shadow_restricted = 0;
+    p_ptr->varda_reserved = 0;
     p_ptr->varda_level = 0;
-    p_ptr->varda_shadow_ready = 0;
-    p_ptr->varda_shadow_placed = 0;
-    p_ptr->varda_shadow_pad = 0;
-    p_ptr->varda_shadow_level = 0;
-    for (i = 0; i < VALA_MAX; i++) {
-        p_ptr->vala_quest_stage2[i] = QUEST_STATE_NOT_STARTED;
-        p_ptr->vala_quest_stage3[i] = QUEST_STATE_NOT_STARTED;
-    }
     
     p_ptr->quest_vault_used = 0;
     
     /* Quest states should always start at NOT_STARTED for new characters */
     /* Metarun completion is checked separately via metarun_is_quest_completed() */
     log_trace("Birth: All quest states initialized to NOT_STARTED for new character");
-    for (i = 0; i < QUEST_SLOT_MAX; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..n] = per-run quest completion markers */
+    for (i = 0; i < 15; i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..6] = per-run quest completion markers */
 
     /*re-set the thefts counter*/
     recent_failed_thefts = 0;
@@ -617,27 +599,28 @@ static void give_start_items(const start_item *list)
     }
 }
 
-static int collect_starting_artifacts(int* candidates, int max_candidates, int level_cap)
+static void grant_starting_artifact(void)
 {
-    if (!candidates || max_candidates <= 0 || !z_info) return 0;
-
+    int candidates[512];
     int count = 0;
-    for (int i = 1; i < z_info->art_max && count < max_candidates; i++) {
+
+    for (int i = 1; i < z_info->art_max && count < (int)N_ELEMENTS(candidates); i++) {
         artefact_type *a_ptr = &a_info[i];
         if (!a_ptr->name[0]) continue;
         if (a_ptr->cur_num > 0) continue;
-        if (a_ptr->level > level_cap) continue;
+        if (a_ptr->level > 10) continue;
         if (valar_reserved_artifacts && valar_reserved_artifacts[i]) continue;
         candidates[count++] = i;
     }
-    return count;
-}
 
-static void award_starting_artifact(int art_idx)
-{
-    if (!z_info || art_idx <= 0 || art_idx >= z_info->art_max) return;
+    if (count == 0) {
+        log_info("No early artefacts available for starting blessing.");
+        return;
+    }
 
+    int art_idx = candidates[rand_int(count)];
     artefact_type *a_ptr = &a_info[art_idx];
+
     object_type object_type_body;
     object_type *o_ptr = &object_type_body;
     object_prep(o_ptr, lookup_kind(a_ptr->tval, a_ptr->sval));
@@ -650,128 +633,6 @@ static void award_starting_artifact(int art_idx)
     if (valar_reserved_artifacts) valar_reserved_artifacts[art_idx] = true;
 
     log_info("Starting artefact granted: %s (idx=%d)", a_ptr->name, art_idx);
-}
-
-static void grant_starting_artifact(void)
-{
-    int candidates[512];
-    int count = collect_starting_artifacts(candidates, (int)N_ELEMENTS(candidates), 10);
-
-    if (count == 0) {
-        log_info("No early artefacts available for starting blessing.");
-        return;
-    }
-
-    int art_idx = candidates[rand_int(count)];
-    award_starting_artifact(art_idx);
-}
-
-static void describe_start_artifact_choice(int a_idx, char* buf, size_t buf_len)
-{
-    artefact_type* a_ptr = &a_info[a_idx];
-    object_type temp_obj;
-    object_wipe(&temp_obj);
-
-    s16b k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
-    if (k_idx > 0) {
-        object_prep(&temp_obj, k_idx);
-        temp_obj.name1 = a_idx;
-        temp_obj.ident |= IDENT_KNOWN;
-        object_desc(buf, buf_len, &temp_obj, true, 0);
-    } else if (a_ptr->name[0] != '\0') {
-        SDL_strlcpy(buf, a_ptr->name, buf_len);
-    } else {
-        SDL_strlcpy(buf, "an artefact", buf_len);
-    }
-}
-
-static int prompt_start_artifact_choice(const int* choices, int choice_count)
-{
-    if (!choices || choice_count <= 0) return 0;
-
-    int selection = 0;
-    int chosen_idx = 0;
-
-    int wid, hgt;
-    Term_get_size(&wid, &hgt);
-
-    screen_save();
-    while (true) {
-        Term_clear();
-
-        int row = 1;
-        cptr title = "Starlit Heirlooms";
-        Term_putstr((wid - (int)strlen(title)) / 2, row, -1, TERM_L_BLUE, title);
-        row += 2;
-
-        Term_putstr(2, row++, -1, TERM_WHITE, "Varda lays out relics for your line. Choose one to begin this run.");
-        row++;
-
-        char desc[140];
-        for (int i = 0; i < choice_count && row < hgt - 2; i++) {
-            describe_start_artifact_choice(choices[i], desc, sizeof(desc));
-            byte attr = (i == selection) ? TERM_YELLOW : TERM_L_WHITE;
-            char marker = (i == selection) ? '>' : ' ';
-            char line_buf[160];
-            strnfmt(line_buf, sizeof(line_buf), "%c %c) %s", marker, 'a' + i, desc);
-            Term_putstr(2, row++, -1, attr, line_buf);
-        }
-
-        Term_putstr(2, hgt - 2, -1, TERM_L_DARK, "Arrows/+/- move   Enter/Space choose   Letter picks   ESC skips");
-        Term_fresh();
-
-        char key = inkey();
-        if (key == ESCAPE) break;
-        else if (key == '\r' || key == '\n' || key == ' ' || key == '6') {
-            chosen_idx = choices[selection];
-            break;
-        } else if (key == '8' || key == 'k' || key == '-') {
-            selection = (selection + choice_count - 1) % choice_count;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            selection = (selection + 1) % choice_count;
-        } else if (key >= 'a' && key < 'a' + choice_count) {
-            chosen_idx = choices[key - 'a'];
-            break;
-        } else if (key >= 'A' && key < 'A' + choice_count) {
-            chosen_idx = choices[key - 'A'];
-            break;
-        }
-    }
-    screen_load();
-    return chosen_idx;
-}
-
-static void maybe_offer_varda_starting_artifact(void)
-{
-    if (metarun_quest_completion_count(METARUN_QUEST_VARDA_UNGOLIANT) <= 0) return;
-
-    int candidates[512];
-    int candidate_count = collect_starting_artifacts(candidates, (int)N_ELEMENTS(candidates), 15);
-    if (candidate_count <= 0) {
-        log_info("Ungoliant reward: no eligible starting artefacts available.");
-        return;
-    }
-
-    /* Shuffle candidate list */
-    for (int i = candidate_count - 1; i > 0; i--) {
-        int swap_idx = rand_int(i + 1);
-        int tmp = candidates[i];
-        candidates[i] = candidates[swap_idx];
-        candidates[swap_idx] = tmp;
-    }
-
-    int choice_count = MIN(3, candidate_count);
-    int choices[3];
-    for (int i = 0; i < choice_count; i++) {
-        choices[i] = candidates[i];
-    }
-
-    int selected = prompt_start_artifact_choice(choices, choice_count);
-    if (selected > 0) {
-        award_starting_artifact(selected);
-    } else {
-        msg_print("The heirlooms remain for another beginning.");
-    }
 }
 
 static void player_outfit(void)
@@ -797,8 +658,6 @@ static void player_outfit(void)
     give_start_items(rp_ptr->start_items);   /* race first  */
     log_debug("Giving starting items for character: %s", c_name + current_character_profile->name);
     give_start_items(current_character_profile->start_items);   /* character kit */
-
-    maybe_offer_varda_starting_artifact();
 
     if (metarun_has_major_blessing_effect(METARUN_MAJOR_EFFECT_START_ARTIFACT)) {
         grant_starting_artifact();
@@ -1590,14 +1449,14 @@ static void character_aux_hook(birth_menu c_str)
     int legend_row = 10; /* Row 10 as requested (moved up one row) */
     
     /* Count alive heroes by power level across ALL races */
-    int power_counts[5] = {0, 0, 0, 0, 0};  /* weak, average, powerful, very powerful, mighty */
+    int power_counts[4] = {0, 0, 0, 0};  /* weak, fair, strong, mighty (P:3/P:4) */
     for (int i = 0; i < z_info->c_max; i++)
     {
         /* Count only characters that are NOT dead (alive) */
         if (highscore_dead(c_name + c_info[i].name) == 0)  /* If NOT dead (alive) */
         {
             byte power = c_info[i].power;
-            if (power >= 0 && power <= 4)
+            if (power <= 4)
             {
                 if (power == 4)
                     power_counts[3]++;  /* P:4 counts toward "Mighty" (same group as P:3) */
@@ -1832,7 +1691,7 @@ NavResult character_creation(void)
     }
     
     /* Ensure main_combat_rolls has a valid value for existing saves */
-    if (op_ptr->main_combat_rolls < 0 || op_ptr->main_combat_rolls > 3)
+    if (op_ptr->main_combat_rolls > 3)
     {
         op_ptr->main_combat_rolls = 0;  /* Default to 0 lines */
     }
@@ -1942,149 +1801,6 @@ static int display_wrapped_text(cptr text, int start_col, int start_row, int max
     }
     
     return row - start_row;
-}
-
-#define DISCONNECTED_STAIRS_COST 0
-
-/*
- * Challenge selection (disconnected stairs, single stair)
- */
-static NavResult select_challenge_modifiers(void)
-{
-    bool dis_unlocked = metarun_challenge_disconnected_unlocked();
-    bool single_unlocked = metarun_challenge_single_stair_unlocked();
-    bool fixed_unlocked = metarun_challenge_fixed_exp_unlocked();
-    bool tulkas_unlocked = metarun_challenge_tulkas_blunt_unlocked();
-    bool torch_unlocked = metarun_challenge_torchlight_unlocked();
-
-    /* Default to off each character */
-    op_ptr->opt[OPT_birth_discon_stair] = false;
-    op_ptr->opt[OPT_adult_discon_stair] = false;
-    op_ptr->opt[OPT_birth_single_stair] = false;
-    op_ptr->opt[OPT_adult_single_stair] = false;
-    op_ptr->opt[OPT_birth_fixed_exp] = false;
-    op_ptr->opt[OPT_birth_tulkas_blunt] = false;
-    op_ptr->opt[OPT_adult_tulkas_blunt] = false;
-    op_ptr->opt[OPT_birth_torchlight] = false;
-    op_ptr->opt[OPT_adult_torchlight] = false;
-
-    /* If nothing is unlocked, skip */
-    if (!dis_unlocked && !single_unlocked && !fixed_unlocked && !tulkas_unlocked && !torch_unlocked) {
-        log_debug("select_challenge_modifiers: no unlocked challenges, skipping");
-        return NAV_OK;
-    }
-
-    log_debug("select_challenge_modifiers: showing challenge selection (dis=%d, single=%d, fixed=%d, tulkas=%d, torch=%d)", dis_unlocked, single_unlocked, fixed_unlocked, tulkas_unlocked, torch_unlocked);
-
-    bool enable_dis = false;
-    bool enable_single = false;
-    bool enable_fixed = false;
-    bool enable_tulkas = false;
-    bool enable_torchlight = false;
-
-    while (true) {
-        Term_clear();
-        Term_putstr(2, 2, -1, TERM_L_BLUE, "Challenge Mode");
-
-        int row = 4;
-        if (dis_unlocked) {
-            Term_putstr(2, row++, -1, TERM_WHITE, "d) Disconnected stairs");
-            Term_putstr(4, row++, -1, TERM_SLATE, "Stairs do not connect back; expect one-way descents.");
-            Term_putstr(4, row++, -1, enable_dis ? TERM_L_GREEN : TERM_L_DARK,
-                        enable_dis ? "Enabled" : "Disabled");
-            row++;
-            if (DISCONNECTED_STAIRS_COST > 0) {
-                char buf[64];
-                strnfmt(buf, sizeof(buf), "XP cost: %d (available %d)", DISCONNECTED_STAIRS_COST, p_ptr->new_exp);
-                Term_putstr(4, row++, -1, TERM_SLATE, buf);
-                row++;
-            }
-        }
-
-        if (single_unlocked) {
-            Term_putstr(2, row++, -1, TERM_WHITE, "s) Single stair");
-            Term_putstr(4, row++, -1, TERM_SLATE, "Exactly one up stair and one down stair on each level.");
-            Term_putstr(4, row++, -1, enable_single ? TERM_L_GREEN : TERM_L_DARK,
-                        enable_single ? "Enabled" : "Disabled");
-            row++;
-        }
-        if (fixed_unlocked) {
-            Term_putstr(2, row++, -1, TERM_WHITE, "f) Fixed 50k XP");
-            Term_putstr(4, row++, -1, TERM_SLATE, "Begin with 50,000 experience and gain nothing further.");
-            Term_putstr(4, row++, -1, enable_fixed ? TERM_L_GREEN : TERM_L_DARK,
-                        enable_fixed ? "Enabled" : "Disabled");
-            row++;
-        }
-        if (tulkas_unlocked) {
-            Term_putstr(2, row++, -1, TERM_WHITE, "b) Tulkas' blunt-arms");
-            Term_putstr(4, row++, -1, TERM_SLATE, "Only blunt weapons appear; smithing is limited to hammers and tools.");
-            Term_putstr(4, row++, -1, enable_tulkas ? TERM_L_GREEN : TERM_L_DARK,
-                        enable_tulkas ? "Enabled" : "Disabled");
-            row++;
-        }
-        if (torch_unlocked) {
-            Term_putstr(2, row++, -1, TERM_WHITE, "t) Varda's torches-only");
-            Term_putstr(4, row++, -1, TERM_SLATE, "Only wooden torches appear as lights; smiths cannot craft light sources.");
-            Term_putstr(4, row++, -1, enable_torchlight ? TERM_L_GREEN : TERM_L_DARK,
-                        enable_torchlight ? "Enabled" : "Disabled");
-            row++;
-        }
-
-        Term_putstr(2, row++, -1, TERM_SLATE, "Press letter to toggle, Enter to confirm, 'n' to skip, ESC to go back.");
-
-        char key = inkey();
-        if (key == ESCAPE) {
-            return NAV_BACK;
-        }
-        if (key == 'n' || key == 'N') {
-            log_debug("Challenge selection: all challenges declined");
-            return NAV_OK;
-        }
-        if (dis_unlocked && (key == 'd' || key == 'D')) {
-            enable_dis = !enable_dis;
-            continue;
-        }
-        if (single_unlocked && (key == 's' || key == 'S')) {
-            enable_single = !enable_single;
-            continue;
-        }
-        if (fixed_unlocked && (key == 'f' || key == 'F')) {
-            enable_fixed = !enable_fixed;
-            continue;
-        }
-        if (tulkas_unlocked && (key == 'b' || key == 'B')) {
-            enable_tulkas = !enable_tulkas;
-            continue;
-        }
-        if (torch_unlocked && (key == 't' || key == 'T')) {
-            enable_torchlight = !enable_torchlight;
-            continue;
-        }
-        if (key == '\r' || key == '\n' || key == ' ') {
-            if (enable_dis && DISCONNECTED_STAIRS_COST > 0 && p_ptr->new_exp < DISCONNECTED_STAIRS_COST) {
-                bell("Not enough experience to enable disconnected stairs.");
-                continue;
-            }
-            if (enable_dis && DISCONNECTED_STAIRS_COST > 0) {
-                p_ptr->new_exp -= DISCONNECTED_STAIRS_COST;
-                p_ptr->exp -= DISCONNECTED_STAIRS_COST;
-            }
-
-            op_ptr->opt[OPT_birth_discon_stair] = enable_dis;
-            op_ptr->opt[OPT_adult_discon_stair] = enable_dis;
-            op_ptr->opt[OPT_birth_single_stair] = enable_single;
-            op_ptr->opt[OPT_adult_single_stair] = enable_single;
-            op_ptr->opt[OPT_birth_fixed_exp] = enable_fixed;
-            op_ptr->opt[OPT_birth_tulkas_blunt] = enable_tulkas;
-            op_ptr->opt[OPT_adult_tulkas_blunt] = enable_tulkas;
-            op_ptr->opt[OPT_birth_torchlight] = enable_torchlight;
-            op_ptr->opt[OPT_adult_torchlight] = enable_torchlight;
-
-            log_debug("Challenge selection: disconnected=%d, single_stair=%d, fixed=%d, tulkas_blunt=%d, torch=%d (cost %d XP applied=%d)",
-                      enable_dis, enable_single, enable_fixed, enable_tulkas, enable_torchlight, DISCONNECTED_STAIRS_COST, (enable_dis && DISCONNECTED_STAIRS_COST > 0));
-            return NAV_OK;
-        }
-    }
 }
 
 /*
@@ -2885,12 +2601,6 @@ static NavResult player_birth_aux(void)
     p_ptr->ht = 0;
     p_ptr->age = 0;
 
-    /* Challenge selection (before oath selection) */
-    log_debug("Entering challenge selection");
-    NavResult challenge_result = select_challenge_modifiers();
-    if (challenge_result != NAV_OK) return challenge_result;
-    log_debug("Challenge selection completed");
-
     /* Oath selection (after character creation, before tutorial/stats) */
     log_debug("Entering oath selection");
     NavResult oath_result = select_oath();
@@ -3003,3 +2713,17 @@ NavResult player_birth()
 
     return NAV_OK;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

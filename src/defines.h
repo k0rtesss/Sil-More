@@ -122,20 +122,25 @@
 #define SCREEN_WID ((Term->wid - COL_MAP - 1) / (use_bigtile ? 2 : 1))
 
 /*
+ * Maximum level size in blocks (each block is PANEL_HGT x PANEL_WID_FIXED)
+ */
+#define MAX_LEVEL_BLOCKS 21
+
+/*
  * Number of grids in each dungeon (horizontally)
  * Must be a multiple of SCREEN_HGT
  * Must be less or equal to 256
- * Note: Now supports square levels up to 15*11 = 165
+ * Note: Now supports square levels up to MAX_LEVEL_BLOCKS*11 = 21*11 = 231
  */
-#define MAX_DUNGEON_HGT (15 * 11)
+#define MAX_DUNGEON_HGT (MAX_LEVEL_BLOCKS * 11)
 
 /*
  * Number of grids in each dungeon (vertically)
  * Must be a multiple of SCREEN_WID
  * Must be less or equal to 256
- * Note: Now supports square levels up to 15*11 = 165
+ * Note: Now supports square levels up to MAX_LEVEL_BLOCKS*11 = 21*11 = 231
  */
-#define MAX_DUNGEON_WID (15 * 11)
+#define MAX_DUNGEON_WID (MAX_LEVEL_BLOCKS * 11)
 
 /*
  * Max number of rooms in dungeon.
@@ -310,8 +315,9 @@
 /*
  * The maximum number of monsters that fit on one level.
  * Used to be in limits.txt but was needed for array indexing.
+ * Increased from 500 to 750 to support larger levels (up to 21x21 blocks = 231x231 grids)
  */
-#define MAX_MONSTERS 500
+#define MAX_MONSTERS 750
 
 /*
  * The maximum number of independent groups of wandering monsters on one level.
@@ -2649,6 +2655,10 @@
 #define OPT_story_lists_equip 78
 #define OPT_display_hits 79
 #define OPT_story_character_sheet 80
+#define OPT_story_lists_inven_pane 81
+#define OPT_story_lists_equip_pane 82
+#define OPT_story_monster_desc 83
+#define OPT_story_monster_desc_pane 84
 // xxx
 // xxx
 // xxx
@@ -2795,6 +2805,10 @@
 #define story_display_lists op_ptr->opt[OPT_story_lists]
 #define story_inventory_lists op_ptr->opt[OPT_story_lists_inven]
 #define story_equipment_lists op_ptr->opt[OPT_story_lists_equip]
+#define story_inventory_lists_pane op_ptr->opt[OPT_story_lists_inven_pane]
+#define story_equipment_lists_pane op_ptr->opt[OPT_story_lists_equip_pane]
+#define story_monster_desc_main op_ptr->opt[OPT_story_monster_desc]
+#define story_monster_desc_pane op_ptr->opt[OPT_story_monster_desc_pane]
 #define display_hits op_ptr->opt[OPT_display_hits]
 #define story_character_sheet op_ptr->opt[OPT_story_character_sheet]
 // xxx
@@ -3783,6 +3797,7 @@ enum unified_sidebar_object_group {
     LOOK_GROUP_ARTIFACT = 0,
     LOOK_GROUP_WEAPON,
     LOOK_GROUP_ARMOUR,
+    LOOK_GROUP_JEWELRY,
     LOOK_GROUP_HERBS,
     LOOK_GROUP_POTIONS,
     LOOK_GROUP_GEMS,
@@ -3798,6 +3813,7 @@ typedef struct unified_look_state {
     int cursor_y, cursor_x;           /* Map cursor position */
     int selected_entity;              /* Currently highlighted sidebar entity (-1 if none) */
     bool show_monsters, show_objects; /* Sidebar visibility toggles */
+    int object_group_filter;          /* Object filter: -1=all, 0..LOOK_GROUP_COUNT-1=group */
     bool limit_objects_top_five;      /* Limit object groups to top five entries */
     int display_mode;                 /* Navigation mode (0=manual, 1=entity) */
     int highlighted_y, highlighted_x; /* Currently highlighted entity coordinates */

@@ -124,8 +124,10 @@ static bool savefile_version_supported(void)
     /* Enforce the minimum extra value for the current release series. */
     if (sf_major == VERSION_MAJOR && sf_minor == VERSION_MINOR && sf_patch == VERSION_PATCH)
     {
+#if MIN_VERSION_EXTRA > 0
         if (sf_extra < MIN_VERSION_EXTRA)
             return false;
+#endif
     }
 
     return true;
@@ -568,6 +570,28 @@ static errr rd_item(object_type* o_ptr)
         /* Get the new artefact weight */
         o_ptr->weight = a_ptr->weight;
 
+        /* Ensure artefact-granted abilities are present (some generators may omit them). */
+        for (int ai = 0; ai < a_ptr->abilities && o_ptr->abilities < (int)N_ELEMENTS(o_ptr->skilltype); ai++)
+        {
+            bool found = false;
+            for (int oi = 0; oi < o_ptr->abilities; oi++)
+            {
+                if (o_ptr->skilltype[oi] == a_ptr->skilltype[ai]
+                    && o_ptr->abilitynum[oi] == a_ptr->abilitynum[ai])
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                int idx = o_ptr->abilities;
+                o_ptr->skilltype[idx] = a_ptr->skilltype[ai];
+                o_ptr->abilitynum[idx] = a_ptr->abilitynum[ai];
+                o_ptr->abilities++;
+            }
+        }
+
         /* Hack -- extract the "broken" flag */
         if (!a_ptr->cost)
             o_ptr->ident |= (IDENT_BROKEN);
@@ -933,8 +957,8 @@ static void rd_options(void)
     rd_byte(&b);
     op_ptr->main_combat_rolls = b;
     /* Ensure it's in valid range */
-    if (op_ptr->main_combat_rolls < 0 || op_ptr->main_combat_rolls > 4)
-        op_ptr->main_combat_rolls = 1;
+    if (op_ptr->main_combat_rolls > 3)
+        op_ptr->main_combat_rolls = 0;
     /* Skip 7 remaining spare bytes */
     strip_bytes(7);
 
@@ -1339,13 +1363,6 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->crown_shatter_sil3);
 
     rd_bool(&p_ptr->killed_enemy_with_arrow);
-    if (savefile_version_at_least(0, 9, 1, 7)) {
-        rd_byte(&p_ptr->orome_bow_hit_streak);
-        rd_byte(&p_ptr->orome_spear_ready);
-    } else {
-        p_ptr->orome_bow_hit_streak = 0;
-        p_ptr->orome_spear_ready = 0;
-    }
 
     rd_byte(&p_ptr->oath_type);
     rd_byte(&p_ptr->oaths_broken);
@@ -1369,26 +1386,6 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->tulkas_target_r_idx);
     rd_s16b(&p_ptr->tulkas_prize_a_idx);
     rd_byte(&p_ptr->tulkas_quest_complete);
-    if (savefile_version_at_least(0, 9, 1, 8)) {
-        rd_s16b(&p_ptr->tulkas_stronghold_level);
-        rd_byte(&p_ptr->tulkas_stronghold_placed);
-        rd_byte(&p_ptr->tulkas_second_roll_done);
-        rd_byte(&p_ptr->tulkas_orc_mask);
-        rd_byte(&p_ptr->tulkas_orc_restricted);
-        rd_byte(&p_ptr->tulkas_second_spawn_pending);
-    } else {
-        p_ptr->tulkas_stronghold_level = 0;
-        p_ptr->tulkas_stronghold_placed = 0;
-        p_ptr->tulkas_second_roll_done = 0;
-        p_ptr->tulkas_orc_mask = 0;
-        p_ptr->tulkas_orc_restricted = 0;
-        p_ptr->tulkas_second_spawn_pending = 0;
-    }
-    if (savefile_version_at_least(0, 9, 1, 9)) {
-        rd_byte(&p_ptr->tulkas_morgoth_progress);
-    } else {
-        p_ptr->tulkas_morgoth_progress = 0;
-    }
     rd_byte(&p_ptr->aule_quest);
     rd_byte(&p_ptr->aule_forge_y);
     rd_byte(&p_ptr->aule_forge_x);
@@ -1401,13 +1398,6 @@ static errr rd_extra(void)
     rd_byte(&p_ptr->mandos_monsters_remaining);
     rd_s16b(&p_ptr->mandos_level);
     rd_s16b(&p_ptr->mandos_reserved);
-    if (savefile_version_at_least(0, 9, 1, 5)) {
-        rd_byte(&p_ptr->mandos_resurrection_primed);
-        rd_byte(&p_ptr->mandos_resurrection_used);
-    } else {
-        p_ptr->mandos_resurrection_primed = 0;
-        p_ptr->mandos_resurrection_used = 0;
-    }
     rd_byte(&p_ptr->niena_quest);
     rd_byte(&p_ptr->niena_monsters_seen);
     rd_byte(&p_ptr->niena_monsters_killed);
@@ -1422,70 +1412,22 @@ static errr rd_extra(void)
     rd_s16b(&p_ptr->orome_spiders_killed);
     rd_s16b(&p_ptr->orome_serpents_killed);
     rd_s16b(&p_ptr->orome_vampires_killed);
-    if (savefile_version_at_least(0, 9, 1, 6)) {
-        rd_s16b(&p_ptr->orome_dragons_killed);
-    } else {
-        p_ptr->orome_dragons_killed = 0;
-    }
-    if (savefile_version_at_least(0, 9, 1, 7)) {
-        rd_byte(&p_ptr->orome_great_hunt_mask);
-    } else {
-        p_ptr->orome_great_hunt_mask = 0;
-    }
     if (savefile_has_varda_quest) {
         rd_byte(&p_ptr->varda_quest);
         rd_byte(&p_ptr->varda_vault_ready);
         rd_byte(&p_ptr->varda_vault_placed);
-        rd_byte(&p_ptr->varda_shadow_restricted);
+        rd_byte(&p_ptr->varda_reserved);
         rd_s16b(&p_ptr->varda_level);
-        if (savefile_version_at_least(0, 9, 1, 10)) {
-            rd_byte(&p_ptr->varda_shadow_ready);
-            rd_byte(&p_ptr->varda_shadow_placed);
-            rd_byte(&p_ptr->varda_shadow_pad);
-            rd_s16b(&p_ptr->varda_shadow_level);
-        } else {
-            p_ptr->varda_shadow_ready = 0;
-            p_ptr->varda_shadow_placed = 0;
-            p_ptr->varda_shadow_pad = 0;
-            p_ptr->varda_shadow_level = 0;
-        }
     } else {
         p_ptr->varda_quest = VARDA_QUEST_NOT_STARTED;
         p_ptr->varda_vault_ready = 0;
         p_ptr->varda_vault_placed = 0;
-        p_ptr->varda_shadow_restricted = 0;
+        p_ptr->varda_reserved = 0;
         p_ptr->varda_level = 0;
-        p_ptr->varda_shadow_ready = 0;
-        p_ptr->varda_shadow_placed = 0;
-        p_ptr->varda_shadow_pad = 0;
-        p_ptr->varda_shadow_level = 0;
-    }
-    if (savefile_version_at_least(0, 9, 1, 4)) {
-        for (int qi = 0; qi < VALA_MAX; qi++) rd_byte(&p_ptr->vala_quest_stage2[qi]);
-        for (int qi = 0; qi < VALA_MAX; qi++) rd_byte(&p_ptr->vala_quest_stage3[qi]);
-    } else {
-        for (int qi = 0; qi < VALA_MAX; qi++) {
-            p_ptr->vala_quest_stage2[qi] = QUEST_STATE_NOT_STARTED;
-            p_ptr->vala_quest_stage3[qi] = QUEST_STATE_NOT_STARTED;
-        }
-        /* Migrate legacy Mandos second quest states stored in mandos_quest */
-        if (p_ptr->mandos_quest > MANDOS_QUEST_REWARDED) {
-            byte legacy = p_ptr->mandos_quest;
-            byte migrated = QUEST_STATE_NOT_STARTED;
-            if (legacy == 5) migrated = QUEST_STATE_GIVER_PRESENT;
-            else if (legacy == 6) migrated = QUEST_STATE_ACTIVE;
-            else if (legacy == 7) migrated = QUEST_STATE_SUCCESS;
-            else if (legacy == 8) migrated = QUEST_STATE_REWARDED;
-            p_ptr->vala_quest_stage2[VALA_MANDOS - 1] = migrated;
-            if (legacy >= 5) p_ptr->mandos_quest = MANDOS_QUEST_NOT_STARTED;
-            log_info("LOAD: migrated legacy Mandos second quest state %d -> %d", legacy, migrated);
-        }
     }
     rd_byte(&p_ptr->quest_vault_used);
-    /* quest_reserved array grew in 0.9.1.3 and again in 0.9.1.4; read available bytes safely */
-    int quest_reserved_len = 12;
-    if (savefile_version_at_least(0, 9, 1, 4)) quest_reserved_len = QUEST_SLOT_MAX;
-    else if (savefile_version_at_least(0, 9, 1, 3)) quest_reserved_len = 15;
+    /* quest_reserved array grew in 0.9.1.3; read available bytes safely */
+    int quest_reserved_len = savefile_version_at_least(0, 9, 1, 3) ? 15 : 12;
     for (int qi = 0; qi < quest_reserved_len && qi < (int)N_ELEMENTS(p_ptr->quest_reserved); qi++) {
         rd_byte(&p_ptr->quest_reserved[qi]);
     }
@@ -3053,6 +2995,9 @@ bool load_player(void)
     /* Oops */
     return (false);
 }
+
+
+
 
 
 

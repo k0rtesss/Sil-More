@@ -34,13 +34,9 @@ extern struct sound_config g_sound_config;
 /*used for knowledge display*/
 #define BROWSER_ROWS 16
 
-#define MANDOS_DOOM_PURCHASE_COST 5000
-#define OROME_WRAITH_PURCHASE_COST 5000
-#define OROME_RHYTHM_PURCHASE_COST 5000
-#define NIENA_MERCY_PURCHASE_COST 5000
-#define UNIQUE_BANE_PURCHASE_COST 5000
-#define TULKAS_WRATH_PURCHASE_COST 5000
-#define QUEEN_STARS_PURCHASE_COST 5000
+/* Option changes that affect list rendering should refresh subwindows immediately. */
+static void redraw_inven_equip_subwindows(void);
+static void redraw_monster_subwindows(void);
 
 /*
  *  Header and footer marker string for pref file dumps
@@ -557,41 +553,6 @@ void add_random_curse(object_type *o_ptr)
         if (o_ptr->dd) o_ptr->dd = MAX(1, o_ptr->dd - 1);
         if (o_ptr->pd) o_ptr->pd = MAX(1, o_ptr->pd - 1);
     }
-}
-
-static bool mandos_doom_purchase_unlocked(void)
-{
-    return metarun_challenge_completion_count(CHALLENGE_DISCONNECTED) > 0;
-}
-
-static bool orome_wraith_purchase_unlocked(void)
-{
-    return metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR) > 0;
-}
-
-static bool huntsman_rhythm_purchase_unlocked(void)
-{
-    return metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) > 0;
-}
-
-static bool niena_mercy_purchase_unlocked(void)
-{
-    return metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0;
-}
-
-static bool unique_bane_purchase_unlocked(void)
-{
-    return metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0;
-}
-
-static bool tulkas_wrath_purchase_unlocked(void)
-{
-    return metarun_quest_completion_count(METARUN_QUEST_TULKAS_MORGOTH) > 0;
-}
-
-static bool queen_of_stars_purchase_unlocked(void)
-{
-    return metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT) > 0;
 }
 
 
@@ -1870,13 +1831,6 @@ int abilities_menu1(int* highlight)
     if (p_ptr->have_ability[S_SPC][SPC_UNIQUE_BANE]) {
         show_special = true;
     }
-    if (!show_special &&
-        (mandos_doom_purchase_unlocked() || orome_wraith_purchase_unlocked() ||
-         huntsman_rhythm_purchase_unlocked() || niena_mercy_purchase_unlocked() ||
-         unique_bane_purchase_unlocked() || tulkas_wrath_purchase_unlocked() ||
-         queen_of_stars_purchase_unlocked())) {
-        show_special = true;
-    }
     
     if (!show_special) {
         options = S_MAX - 1; // hide Special category
@@ -2006,13 +1960,7 @@ int abilities_menu2(int skilltype, int* highlight)
             b_ptr = &b_info[i];
             if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
             
-            bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
-                                   (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked());
-            if (special_visible)
+            if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
             {
                 if (temp_first_visible == -1)
                 {
@@ -2034,27 +1982,16 @@ int abilities_menu2(int skilltype, int* highlight)
                 b_ptr = &b_info[i];
                 if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
                 
-            if (b_ptr->abilitynum == current_ability_num && p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-            {
-                highlight_is_visible = true;
-                break;
-            }
-            if (b_ptr->abilitynum == current_ability_num &&
-                (b_ptr->abilitynum == SPC_MANDOS || b_ptr->abilitynum == SPC_OROME_WRAITH || b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM || b_ptr->abilitynum == SPC_UNIQUE_BANE || b_ptr->abilitynum == SPC_QUEEN_STARS)) {
-                if ((b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
-                    (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked())) {
+                if (b_ptr->abilitynum == current_ability_num && p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+                {
                     highlight_is_visible = true;
                     break;
                 }
             }
-        }
-        
-        if (!highlight_is_visible)
-        {
-            *highlight = temp_first_visible + 1; /* Convert back to 1-based */
+            
+            if (!highlight_is_visible)
+            {
+                *highlight = temp_first_visible + 1; /* Convert back to 1-based */
             }
         }
     }
@@ -2073,14 +2010,9 @@ int abilities_menu2(int skilltype, int* highlight)
             continue;
 
         /* For special abilities, only show granted abilities */
-        if (skilltype == S_SPC) {
-            bool special_visible = p_ptr->have_ability[skilltype][b_ptr->abilitynum] ||
-                                   (b_ptr->abilitynum == SPC_MANDOS && mandos_doom_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_OROME_WRAITH && orome_wraith_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && huntsman_rhythm_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_UNIQUE_BANE && unique_bane_purchase_unlocked()) ||
-                                   (b_ptr->abilitynum == SPC_QUEEN_STARS && queen_of_stars_purchase_unlocked());
-            if (!special_visible) continue;
+        if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+        {
+            continue;
         }
 
         /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
@@ -2169,7 +2101,7 @@ int abilities_menu2(int skilltype, int* highlight)
             Term_putstr(COL_ABILITY, display_row, -1, TERM_L_BLUE, buf);
 
             // print the description of the highlighted ability
-            if (b_ptr->text >= 0)
+            /* (ability_type::text is an offset, so it's always non-negative) */
             {
                 /* Check if this is a broken oath ability and use Q: text instead */
                 char* description_text = NULL;
@@ -2342,129 +2274,7 @@ int abilities_menu2(int skilltype, int* highlight)
 
                 if (skilltype == S_SPC)
                 {
-                    int extra_lines = 0;
-                    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
-                    {
-                        extra_lines = b_ptr->prereqs; /* may be 0 */
-                    }
-                    else if (b_ptr->prereqs > 0)
-                    {
-                        extra_lines = 1; /* Quick Study printed a single line */
-                    }
-
-                    int price_row = desc_row + 2 + extra_lines; /* next free row */
-                    if (b_ptr->abilitynum == SPC_MANDOS && !p_ptr->have_ability[S_SPC][SPC_MANDOS])
-                    {
-                        if (!mandos_doom_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete the disconnected stairs challenge to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-
-                            strnfmt(buf, 80, "%d experience (you have %d)", MANDOS_DOOM_PURCHASE_COST,
-                                p_ptr->new_exp);
-
-                            byte price_attr = (MANDOS_DOOM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_OROME_WRAITH && !p_ptr->have_ability[S_SPC][SPC_OROME_WRAITH])
-                    {
-                        if (!orome_wraith_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete the single-stair challenge to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", OROME_WRAITH_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (OROME_WRAITH_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_HUNTSMAN_RHYTHM && !p_ptr->have_ability[S_SPC][SPC_HUNTSMAN_RHYTHM])
-                    {
-                        if (!huntsman_rhythm_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete Orome's great hunt to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", OROME_RHYTHM_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (OROME_RHYTHM_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_NIENA_MERCY && !p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
-                    {
-                        if (!niena_mercy_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete the fixed 50k XP challenge to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", NIENA_MERCY_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (NIENA_MERCY_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_UNIQUE_BANE && !p_ptr->have_ability[S_SPC][SPC_UNIQUE_BANE])
-                    {
-                        if (!unique_bane_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete Tulkas' blunt-arms challenge to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", UNIQUE_BANE_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (UNIQUE_BANE_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_QUEEN_STARS && !p_ptr->have_ability[S_SPC][SPC_QUEEN_STARS])
-                    {
-                        if (!queen_of_stars_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Complete Varda's torches-only challenge to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", QUEEN_STARS_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (QUEEN_STARS_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else if (b_ptr->abilitynum == SPC_TULKAS_WRATH && !p_ptr->have_ability[S_SPC][SPC_TULKAS_WRATH])
-                    {
-                        if (!tulkas_wrath_purchase_unlocked())
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_SLATE,
-                                "Wound Morgoth to half his strength to unlock purchase (5000 XP).");
-                        }
-                        else
-                        {
-                            Term_putstr(COL_DESCRIPTION, price_row, -1, TERM_YELLOW, "Current price:");
-                            strnfmt(buf, sizeof(buf), "%d experience (you have %d)", TULKAS_WRATH_PURCHASE_COST, p_ptr->new_exp);
-                            byte price_attr = (TULKAS_WRATH_PURCHASE_COST <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK;
-                            Term_putstr(COL_DESCRIPTION + 2, price_row + 1, -1, price_attr, buf);
-                        }
-                    }
-                    else
-                    {
-                        /* Special abilities cannot be purchased; show as granted only */
-                    }
+                    // Special abilities cannot be purchased; show as granted only
                 }
                 else if (prereqs(skilltype, b_ptr->abilitynum))
                 {
@@ -2805,103 +2615,19 @@ void do_cmd_ability_screen(void)
                 {
                     if (!p_ptr->have_ability[skilltype][abilitynum])
                     {
-                        bool mandos_special = (skilltype == S_SPC && abilitynum == SPC_MANDOS);
-                        bool orome_wraith_special = (skilltype == S_SPC && abilitynum == SPC_OROME_WRAITH);
-                        bool orome_rhythm_special = (skilltype == S_SPC && abilitynum == SPC_HUNTSMAN_RHYTHM);
-                        bool niena_mercy_special = (skilltype == S_SPC && abilitynum == SPC_NIENA_MERCY);
-                        bool unique_bane_special = (skilltype == S_SPC && abilitynum == SPC_UNIQUE_BANE);
-                        bool tulkas_wrath_special = (skilltype == S_SPC && abilitynum == SPC_TULKAS_WRATH);
-                        bool queen_stars_special = (skilltype == S_SPC && abilitynum == SPC_QUEEN_STARS);
-                        int exp_cost = -1;
-                        skip_purchase = false;
-
-                        if (skilltype == S_MEL && abilitynum == MEL_SMITE && p_ptr->have_ability[S_SPC][SPC_TULKAS_WRATH])
-                        {
-                            bell("Wrath of Tulkas supersedes Smite; you cannot purchase Smite.");
-                            continue;
-                        }
-
-                        if (mandos_special)
-                        {
-                            if (!mandos_doom_purchase_unlocked())
-                            {
-                                bell("Complete the disconnected stairs challenge to purchase Mandos' Doom.");
-                                continue;
-                            }
-                            exp_cost = MANDOS_DOOM_PURCHASE_COST;
-                        }
-                        else if (orome_wraith_special)
-                        {
-                            if (!orome_wraith_purchase_unlocked())
-                            {
-                                bell("Complete the single-stair challenge to purchase Wraith of Orome.");
-                                continue;
-                            }
-                            exp_cost = OROME_WRAITH_PURCHASE_COST;
-                        }
-                        else if (orome_rhythm_special)
-                        {
-                            if (!huntsman_rhythm_purchase_unlocked())
-                            {
-                                bell("Complete Orome's great hunt to purchase Huntsman's Rhythm.");
-                                continue;
-                            }
-                            exp_cost = OROME_RHYTHM_PURCHASE_COST;
-                        }
-                        else if (niena_mercy_special)
-                        {
-                            if (!niena_mercy_purchase_unlocked())
-                            {
-                                bell("Complete the fixed 50k XP challenge to purchase Nienna's Gift of Mercy.");
-                                continue;
-                            }
-                            exp_cost = NIENA_MERCY_PURCHASE_COST;
-                        }
-                        else if (unique_bane_special)
-                        {
-                            if (!unique_bane_purchase_unlocked())
-                            {
-                                bell("Complete Tulkas' blunt-arms challenge to purchase Unique Bane.");
-                                continue;
-                            }
-                            exp_cost = UNIQUE_BANE_PURCHASE_COST;
-                        }
-                        else if (tulkas_wrath_special)
-                        {
-                            if (!tulkas_wrath_purchase_unlocked())
-                            {
-                                bell("Wound Morgoth to half his strength to purchase Wrath of Tulkas.");
-                                continue;
-                            }
-                            exp_cost = TULKAS_WRATH_PURCHASE_COST;
-                        }
-                        else if (queen_stars_special)
-                        {
-                            if (!queen_of_stars_purchase_unlocked())
-                            {
-                                bell("Complete Varda's torches-only challenge to purchase Queen of the Stars.");
-                                continue;
-                            }
-                            exp_cost = QUEEN_STARS_PURCHASE_COST;
-                        }
-                        else if (skilltype == S_SPC)
-                        {
+                        // Special abilities cannot be purchased
+                        if (skilltype == S_SPC) {
                             bell("This special ability cannot be purchased.");
                             continue;
                         }
-                        else if (!prereqs(skilltype, abilitynum))
-                        {
-                            bell("You do not meet the prerequisites for this ability.");
-                            continue;
-                        }
-                        else
+                        if (prereqs(skilltype, abilitynum))
                         {
                             // Normalize flag check to 0 or 1
                             int is_free = (c_info[p_ptr->pcharacter].flags & RHF_FREE) ? 1 : 0;
                             int unit_cost = 500 - 200 * is_free;
 
                             // Calculate base cost
-                            exp_cost = (abilities_in_skill(skilltype) + 1) * unit_cost;
+                            int exp_cost = (abilities_in_skill(skilltype) + 1) * unit_cost;
 
                             // Subtract free abilities granted by affinity
                             exp_cost -= unit_cost * affinity_level(skilltype);
@@ -2913,21 +2639,20 @@ void do_cmd_ability_screen(void)
                             // Clamp to zero
                             if (exp_cost < 0)
                                 exp_cost = 0;
-                        }
 
-                        if (exp_cost > p_ptr->new_exp)
-                        {
-                            bell("You do not have enough experience to "
-                                 "acquire this "
-                                 "ability.");
-                            continue;
-                        }
-
-                        // special menu for bane
-                        if ((skilltype == S_PER)
-                            && (abilitynum == PER_BANE))
-                        {
-                            while (!return_to_abilities)
+                            if (exp_cost > p_ptr->new_exp)
+                            {
+                                bell("You do not have enough experience to "
+                                     "acquire this "
+                                     "ability.");
+                            }
+                            else
+                            {
+                                // special menu for bane
+                                if ((skilltype == S_PER)
+                                    && (abilitynum == PER_BANE))
+                                {
+                                    while (!return_to_abilities)
                                     {
                                         skip_purchase = false;
 
@@ -3096,6 +2821,11 @@ void do_cmd_ability_screen(void)
                                 banechoice = -1;
                                 oathchoice = -1;
                             }
+                        }
+                        else
+                        {
+                            bell("Insufficient prerequisites for ability!");
+                        }
                     }
 
                     // if you already have the ability...
@@ -3167,7 +2897,8 @@ void do_cmd_ability_screen(void)
                         p_ptr->update |= (PU_BONUS);
                         p_ptr->update |= (PU_MANA);
                     }
-                if (abilitynum == ABILITIES_MAX)
+                }
+                else if (abilitynum == ABILITIES_MAX)
                 {
                     return_to_skills = true;
                 }
@@ -4130,7 +3861,7 @@ void move_displayed_highlight(
     Term_putstr(col, new_highlight + 1, -1, TERM_L_BLUE, buf);
 }
 
-bool melt_mithril_item(int item_num)
+bool melt_metal_item(int item_num)
 {
     int number = 0;
     int item, i;
@@ -4142,8 +3873,8 @@ bool melt_mithril_item(int item_num)
 
         object_flags(o_ptr, &f1, &f2, &f3);
 
-        /* Skip mithril items that can't be melted (Gamil-forged) */
-        if ((f3 & TR3_MITHRIL) && !(o_ptr->ident & IDENT_CANT_MELT))
+        /* Skip metal items that can't be melted (Gamil-forged) */
+        if ((f3 & (TR3_MITHRIL | TR3_STAR_IRON)) && !(o_ptr->ident & IDENT_CANT_MELT))
         {
             number += 1;
         }
@@ -4184,12 +3915,19 @@ bool melt_mithril_item(int item_num)
                 int slot;
                 object_type* i_ptr;
                 object_type object_type_body;
+                int metal_sval;
+
+                // Determine which metal type to create
+                if (f3 & TR3_STAR_IRON)
+                    metal_sval = SV_METAL_STAR_IRON;
+                else
+                    metal_sval = SV_METAL_MITHRIL;
 
                 // Get local object
                 i_ptr = &object_type_body;
 
-                // Prepare the base object for the mithril
-                object_prep(i_ptr, lookup_kind(TV_METAL, SV_METAL_MITHRIL));
+                // Prepare the base object for the metal
+                object_prep(i_ptr, lookup_kind(TV_METAL, metal_sval));
 
                 // set the appropriate quantity
                 i_ptr->number = o_ptr->weight;
@@ -4214,9 +3952,9 @@ bool melt_mithril_item(int item_num)
                     // decrease the main stack
                     i_ptr->number -= 99;
 
-                    // Prepare the base object for the mithril
+                    // Prepare the base object for the metal
                     object_prep(
-                        i_ptr2, lookup_kind(TV_METAL, SV_METAL_MITHRIL));
+                        i_ptr2, lookup_kind(TV_METAL, metal_sval));
 
                     // increase the new stack
                     i_ptr2->number = 99;
@@ -5774,10 +5512,7 @@ int create_tval_menu_aux(int* highlight)
     int i;
     char buf[80];
     bool valid[MAX_SMITHING_TVALS];
-    byte attrs[MAX_SMITHING_TVALS];
-
-    memset(valid, 0, sizeof(valid));
-    for (i = 0; i < MAX_SMITHING_TVALS; i++) attrs[i] = TERM_L_DARK;
+    byte valid_attr = TERM_WHITE; // default to soothe compilation warnings
 
     // clear the right of the screen
     wipe_screen_from(COL_SMT2);
@@ -5793,49 +5528,29 @@ int create_tval_menu_aux(int* highlight)
     {
         strnfmt(buf, 80, "%c) %s", (char)'a' + i, smithing_tvals[i].desc);
 
-        bool item_valid = false;
-        byte item_attr = TERM_L_DARK;
-
         if (smithing_tvals[i].category == CAT_WEAPON)
         {
-            bool allowed_weapon = true;
-            if (adult_tulkas_blunt &&
-                smithing_tvals[i].tval != TV_HAFTED &&
-                smithing_tvals[i].tval != TV_DIGGING)
-            {
-                allowed_weapon = false;
-            }
-            if (allowed_weapon) {
-                item_valid = true;
-                item_attr = p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
-                    ? TERM_WHITE
-                    : TERM_RED;
-            }
+            valid[i] = true;
+            valid_attr = p_ptr->active_ability[S_SMT][SMT_WEAPONSMITH]
+                ? TERM_WHITE
+                : TERM_RED;
         }
         if (smithing_tvals[i].category == CAT_ARMOUR)
         {
-            item_valid = true;
-            item_attr = p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
+            valid[i] = true;
+            valid_attr = p_ptr->active_ability[S_SMT][SMT_ARMOURSMITH]
                 ? TERM_WHITE
                 : TERM_RED;
         }
         if (smithing_tvals[i].category == CAT_JEWELRY)
         {
-            item_valid = true;
-            item_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
+            valid[i] = true;
+            valid_attr = p_ptr->active_ability[S_SMT][SMT_JEWELLER] ? TERM_WHITE
                                                                     : TERM_RED;
         }
-        if (smithing_tvals[i].tval == TV_LIGHT && adult_torchlight)
-        {
-            item_valid = false;
-            item_attr = TERM_L_DARK;
-        }
-
-        valid[i] = item_valid;
-        attrs[i] = item_attr;
 
         Term_putstr(
-            COL_SMT2, i + 2, -1, item_valid ? item_attr : TERM_L_DARK, buf);
+            COL_SMT2, i + 2, -1, valid[i] ? valid_attr : TERM_L_DARK, buf);
     }
 
     // highlight the label
@@ -5862,7 +5577,7 @@ int create_tval_menu_aux(int* highlight)
 
         // move the light blue highlight
         move_displayed_highlight(old_highlight,
-            valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK, *highlight,
+            valid[old_highlight] ? TERM_WHITE : TERM_L_DARK, *highlight,
             COL_SMT2);
 
         if (valid[*highlight - 1])
@@ -5883,39 +5598,19 @@ int create_tval_menu_aux(int* highlight)
     /* Prev item */
     if (ch == '8')
     {
-        int old_highlight = *highlight;
         if (*highlight > 1)
             (*highlight)--;
         else if (*highlight == 1)
             *highlight = MAX_SMITHING_TVALS;
-
-        if (*highlight != old_highlight)
-        {
-            move_displayed_highlight(
-                old_highlight,
-                valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK,
-                *highlight,
-                COL_SMT2);
-        }
     }
 
     /* Next item */
     if (ch == '2')
     {
-        int old_highlight = *highlight;
         if (*highlight < MAX_SMITHING_TVALS)
             (*highlight)++;
         else if (*highlight == MAX_SMITHING_TVALS)
             *highlight = 1;
-
-        if (*highlight != old_highlight)
-        {
-            move_displayed_highlight(
-                old_highlight,
-                valid[old_highlight - 1] ? attrs[old_highlight - 1] : TERM_L_DARK,
-                *highlight,
-                COL_SMT2);
-        }
     }
 
     /* Exit */
@@ -5947,12 +5642,7 @@ void create_tval_menu(void)
 
         if (choice >= 1)
         {
-            int tval = smithing_tvals[choice - 1].tval;
-            if (adult_torchlight && tval == TV_LIGHT) {
-                bell("Varda's torches-only challenge forbids crafting light sources.");
-                continue;
-            }
-            if (create_sval_menu(tval))
+            if (create_sval_menu(smithing_tvals[choice - 1].tval))
             {
                 leave_menu = true;
             }
@@ -7579,9 +7269,8 @@ int melt_menu_aux(int* highlight)
 
         object_flags(o_ptr, &f1, &f2, &f3);
         
-        /* ignore mithril items that carry the �can�t melt� tag         */
-        if ((f3 & TR3_MITHRIL) && !(o_ptr->ident & IDENT_CANT_MELT))
-
+        /* ignore metal items that carry the "can't melt" tag */
+        if ((f3 & (TR3_MITHRIL | TR3_STAR_IRON)) && !(o_ptr->ident & IDENT_CANT_MELT))
         {
             object_desc(desc, 80, o_ptr, false, 2);
             strnfmt(buf, 80, "%c) %s", (char)'a' + num, desc);
@@ -7659,7 +7348,7 @@ int melt_menu_aux(int* highlight)
 }
 
 /*
- * Produces the menu for melting down mithril items into pieces of mithril.
+ * Produces the menu for melting down mithril and star-iron items into their metal pieces.
  */
 void melt_menu(void)
 {
@@ -7678,7 +7367,7 @@ void melt_menu(void)
 
         if (choice >= 1)
         {
-            if (melt_mithril_item(choice))
+            if (melt_metal_item(choice))
             {
                 leave_menu = true;
             }
@@ -9261,6 +8950,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                 else
                 {
                     op_ptr->opt[opt[k]] = !op_ptr->opt[opt[k]];
+                    if (opt[k] == OPT_story_lists_inven_pane || opt[k] == OPT_story_lists_equip_pane)
+                        redraw_inven_equip_subwindows();
+                    if (opt[k] == OPT_story_monster_desc_pane)
+                        redraw_monster_subwindows();
                 }
             }
             break;
@@ -9324,6 +9017,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                 else
                 {
                     op_ptr->opt[opt[k]] = true;
+                    if (opt[k] == OPT_story_lists_inven_pane || opt[k] == OPT_story_lists_equip_pane)
+                        redraw_inven_equip_subwindows();
+                    if (opt[k] == OPT_story_monster_desc_pane)
+                        redraw_monster_subwindows();
                 }
             }
             break;
@@ -9387,6 +9084,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                 else
                 {
                     op_ptr->opt[opt[k]] = false;
+                    if (opt[k] == OPT_story_lists_inven_pane || opt[k] == OPT_story_lists_equip_pane)
+                        redraw_inven_equip_subwindows();
+                    if (opt[k] == OPT_story_monster_desc_pane)
+                        redraw_monster_subwindows();
                 }
             }
             break;
@@ -16082,6 +15783,12 @@ static int unified_sidebar_object_group(const object_type* o_ptr)
     case TV_MAIL:
         return LOOK_GROUP_ARMOUR;
 
+    case TV_RING:
+    case TV_AMULET:
+    case TV_HORN:
+    case TV_STAFF:
+        return LOOK_GROUP_JEWELRY;
+
     case TV_EASTER:
         return LOOK_GROUP_HERBS;
 
@@ -16098,6 +15805,62 @@ static int unified_sidebar_object_group(const object_type* o_ptr)
     }
 
     return LOOK_GROUP_OTHER;
+}
+
+static void redraw_inven_equip_subwindows(void)
+{
+    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
+    {
+        term* old = Term;
+
+        if (!angband_term[j])
+            continue;
+
+        /* Don't overwrite the current options/menu term. */
+        if (angband_term[j] == old)
+            continue;
+
+        u32b flags = op_ptr->window_flag[j];
+        if (!(flags & (PW_INVEN | PW_EQUIP)))
+            continue;
+
+        Term_activate(angband_term[j]);
+
+        if (flags & PW_INVEN)
+            display_inven();
+        if (flags & PW_EQUIP)
+            display_equip();
+
+        Term_fresh();
+        Term_activate(old);
+    }
+}
+
+static void redraw_monster_subwindows(void)
+{
+    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
+    {
+        term* old = Term;
+
+        if (!angband_term[j])
+            continue;
+
+        /* Don't overwrite the current options/menu term. */
+        if (angband_term[j] == old)
+            continue;
+
+        u32b flags = op_ptr->window_flag[j];
+        if (!(flags & (PW_MONSTER)))
+            continue;
+
+        Term_activate(angband_term[j]);
+
+        if (p_ptr->monster_race_idx)
+            display_roff(p_ptr->monster_race_idx, NULL);
+
+        Term_fresh();
+        Term_activate(old);
+    }
 }
 
 static void sidebar_trim_spaces(char* s)
@@ -16627,7 +16390,24 @@ void show_unified_sidebar(unified_look_state* state)
     /* Show objects section */
     if (state->show_objects)
     {
-        c_put_str(TERM_WHITE, "OBJECTS:     ", line++, sidebar_col);  /* Odd length to keep sidebar width */
+        const char* filter_tag = "ALL";
+        switch (state->object_group_filter)
+        {
+        case LOOK_GROUP_ARTIFACT:   filter_tag = "ART"; break;
+        case LOOK_GROUP_WEAPON:     filter_tag = "WEAP"; break;
+        case LOOK_GROUP_ARMOUR:     filter_tag = "ARM"; break;
+        case LOOK_GROUP_JEWELRY:    filter_tag = "JEWL"; break;
+        case LOOK_GROUP_HERBS:      filter_tag = "HERB"; break;
+        case LOOK_GROUP_POTIONS:    filter_tag = "POT"; break;
+        case LOOK_GROUP_GEMS:       filter_tag = "GEM"; break;
+        case LOOK_GROUP_CONSUMABLE: filter_tag = "CONS"; break;
+        case LOOK_GROUP_OTHER:      filter_tag = "OTHER"; break;
+        default:                    filter_tag = "ALL"; break;
+        }
+
+        char header_buf[32];
+        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s", filter_tag);
+        c_put_str(TERM_WHITE, header_buf, line++, sidebar_col);
         
         /* Get object list */
         get_sorted_target_list(TARGET_LIST_OBJECT, 0);
@@ -16674,6 +16454,8 @@ void show_unified_sidebar(unified_look_state* state)
             entry->difficulty = object_difficulty(o_ptr);
             entry->level = k_info[o_ptr->k_idx].level;
             entry->group = unified_sidebar_object_group(o_ptr);
+            if (state->object_group_filter >= 0 && entry->group != state->object_group_filter)
+                continue;
             entry->distance = distance(p_ptr->py, p_ptr->px, entry->y, entry->x);
             entry->original_index = i;
 
@@ -16690,41 +16472,32 @@ void show_unified_sidebar(unified_look_state* state)
                     should_swap = (b->group < a->group);
                 }
                 else {
-                    switch (a->group) {
-                    case LOOK_GROUP_ARTIFACT:
-                    case LOOK_GROUP_WEAPON:
-                    case LOOK_GROUP_ARMOUR:
+                    bool a_known = object_known_p(a->o_ptr) ? true : false;
+                    bool b_known = object_known_p(b->o_ptr) ? true : false;
+
+                    /* Identified items first; then difficulty for identified, proximity for unidentified */
+                    if (a_known != b_known)
+                    {
+                        should_swap = (b_known && !a_known);
+                    }
+                    else if (!a_known)
+                    {
+                        if (b->distance < a->distance)
+                            should_swap = true;
+                        else if ((b->distance == a->distance) && (b->original_index < a->original_index))
+                            should_swap = true;
+                    }
+                    else
+                    {
                         if (b->difficulty > a->difficulty)
                             should_swap = true;
-                        else if ((b->difficulty == a->difficulty) && (b->level > a->level))
+                        else if ((b->difficulty == a->difficulty) && (b->distance < a->distance))
                             should_swap = true;
-                        else if ((b->difficulty == a->difficulty) && (b->level == a->level)
-                                 && (b->distance < a->distance))
+                        else if ((b->difficulty == a->difficulty) && (b->distance == a->distance)
+                                 && (b->original_index < a->original_index))
                             should_swap = true;
-                        else if ((b->difficulty == a->difficulty) && (b->level == a->level)
-                                 && (b->distance == a->distance) && (b->original_index < a->original_index))
-                            should_swap = true;
-                        break;
-
-                    case LOOK_GROUP_HERBS:
-                    case LOOK_GROUP_POTIONS:
-                    case LOOK_GROUP_GEMS:
-                    case LOOK_GROUP_CONSUMABLE:
-                    case LOOK_GROUP_OTHER:
-                        if (b->level > a->level)
-                            should_swap = true;
-                        else if ((b->level == a->level) && (b->difficulty > a->difficulty))
-                            should_swap = true;
-                        else if ((b->level == a->level) && (b->difficulty == a->difficulty)
-                                 && (b->distance < a->distance))
-                            should_swap = true;
-                        else if ((b->level == a->level) && (b->difficulty == a->difficulty)
-                                 && (b->distance == a->distance) && (b->original_index < a->original_index))
-                            should_swap = true;
-                        break;
                     }
                 }
-
                 if (should_swap) {
                     sorted_object temp = objects[i];
                     objects[i] = objects[j];

@@ -61,7 +61,7 @@ static const s16b jinx_egos[] = {
 
 static const char* DROP_RAW_FILE = "drops";
 static const u32b DROP_RAW_MAGIC = 0x44525053; /* 'DRPS' */
-static const u32b DROP_RAW_VERSION = 6;
+static const u32b DROP_RAW_VERSION = 9;
 
 typedef struct
 {
@@ -296,10 +296,18 @@ static int schedule_max_depth_cap(const byte* depths, const byte* rarities, int 
         if (rarities[i] > 0)
             last_positive = i;
     }
-    if (last_positive >= 0 && last_positive + 1 < count && rarities[last_positive + 1] == 0)
-        return depths[last_positive + 1] - 1;
+
     if (last_positive < 0)
         return -1; /* all zero rarities */
+
+    /* If the schedule transitions to zero after the last positive entry,
+     * treat that as an inclusive max-depth marker (i.e. cap at that depth). */
+    for (int i = last_positive + 1; i < count; i++)
+    {
+        if (rarities[i] == 0)
+            return depths[i];
+    }
+
     return 0; /* no cap */
 }
 
@@ -308,6 +316,11 @@ static int rarity_from_schedule(const byte* depths, const byte* rarities, int co
 {
     if (count <= 0)
         return default_rarity;
+
+    /* Trailing zero-rarity entries are treated as max-depth markers, not an
+     * in-band rarity override at that exact depth. */
+    while (count > 1 && rarities[count - 1] == 0)
+        count--;
 
     int first_depth = depths[0];
     if (first_depth > 0 && depth < first_depth)
@@ -328,11 +341,23 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
     const byte* ego_depths, const byte* ego_rarities, int ego_count,
     byte* out_depths, byte* out_rarities)
 {
+    int base_cap = schedule_max_depth_cap(base_depths, base_rarities, base_count);
+    int ego_cap = schedule_max_depth_cap(ego_depths, ego_rarities, ego_count);
+    int combined_cap = 0;
+    if (base_cap > 0 && ego_cap > 0)
+        combined_cap = MIN(base_cap, ego_cap);
+    else if (base_cap > 0)
+        combined_cap = base_cap;
+    else if (ego_cap > 0)
+        combined_cap = ego_cap;
+
     byte merged[DROP_ALLOC_MAX];
     int merged_count = 0;
 
     for (int i = 0; i < base_count && merged_count < DROP_ALLOC_MAX; i++)
     {
+        if (combined_cap > 0 && base_depths[i] > combined_cap)
+            continue;
         bool exists = false;
         for (int j = 0; j < merged_count; j++)
         {
@@ -348,6 +373,8 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
 
     for (int i = 0; i < ego_count && merged_count < DROP_ALLOC_MAX; i++)
     {
+        if (combined_cap > 0 && ego_depths[i] > combined_cap)
+            continue;
         bool exists = false;
         for (int j = 0; j < merged_count; j++)
         {
@@ -378,6 +405,8 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
     for (int i = 0; i < merged_count && out_count < DROP_ALLOC_MAX; i++)
     {
         int depth = merged[i];
+        if (combined_cap > 0 && depth > combined_cap)
+            continue;
         int base_r = rarity_from_schedule(base_depths, base_rarities, base_count, depth, 1);
         int ego_r = rarity_from_schedule(ego_depths, ego_rarities, ego_count, depth, 1);
         int combined = base_r * ego_r;
@@ -389,6 +418,16 @@ static int combine_allocations(const byte* base_depths, const byte* base_raritie
             out_rarities[out_count] = (byte)MIN(combined, 255);
             out_count++;
         }
+    }
+
+    /* Preserve inclusive max-depth markers (A:.../0) so max_depth caps apply to combined entries.
+     * This intentionally allows duplicate depths (e.g. depth=6 rarity=X then depth=6 rarity=0),
+     * with the trailing 0 treated as a cap marker by schedule_max_depth_cap(). */
+    if (combined_cap > 0 && out_count < DROP_ALLOC_MAX)
+    {
+        out_depths[out_count] = (byte)combined_cap;
+        out_rarities[out_count] = 0;
+        out_count++;
     }
 
     return out_count;
@@ -1399,6 +1438,15 @@ static void build_artifact_variants(int a_idx)
     if (a_ptr->flags3 & (TR3_LIGHT_CURSE))
         v.ident |= (IDENT_CURSED);
 
+    /* Copy artefact-granted abilities (mirrors object_into_artefact()). */
+    for (int i = 0; i < a_ptr->abilities && v.abilities < (int)N_ELEMENTS(v.skilltype); i++)
+    {
+        int idx = v.abilities;
+        v.skilltype[idx] = a_ptr->skilltype[i];
+        v.abilitynum[idx] = a_ptr->abilitynum[i];
+        v.abilities++;
+    }
+
     object_kind* k_ptr = &k_info[k_idx];
     drop_category cat = drop_category_for_kind(k_ptr);
     if (cat == DROP_CAT_MAX)
@@ -1575,8 +1623,11 @@ typedef enum
 typedef struct
 {
     drop_category cat;
+    u32b cat_mask; /* allowed categories (bitmask of DROP_CAT_*) */
+    drop_quality quality;
     int depth;        /* Generation depth (object_level) */
     int legal_depth;  /* Depth cap for allocation legality */
+    int min_depth_penalty_depth; /* Depth used only for min-depth difficulty penalty */
     int difficulty_bonus;
     bool is_supply;
     int droptype;
@@ -1762,6 +1813,7 @@ static bool collect_candidate_entries(
     size_t count = 0;
     int gen_depth = req->depth;
     int depth = req->legal_depth;
+    int penalty_depth = req->min_depth_penalty_depth;
     
     /* DEBUG: Count what filters are rejecting items */
     int filter_artifact = 0, filter_droptype = 0, filter_category = 0;
@@ -1775,7 +1827,7 @@ static bool collect_candidate_entries(
         if (e.group_kind == DROP_GROUP_ARTIFACT)
         {
             /* Skip artefacts if not allowed by the drop request */
-            if (!req->allow_artefacts) {
+            if (!req->allow_artefacts || req->quality < DROP_QUALITY_GREAT) {
                 filter_artifact++;
                 continue;
             }
@@ -1799,7 +1851,7 @@ static bool collect_candidate_entries(
             continue;
         }
 
-        if (e.category != req->cat) {
+        if ((req->cat_mask & (1U << e.category)) == 0) {
             filter_category++;
             continue;
         }
@@ -1821,8 +1873,8 @@ static bool collect_candidate_entries(
             continue;
 
         int effective_dif = e.difficulty;
-        if (depth < e.min_depth)
-            effective_dif += 2 * (e.min_depth - depth);
+        if (penalty_depth < e.min_depth)
+            effective_dif += 2 * (e.min_depth - penalty_depth);
 
         if (req->is_supply)
         {
@@ -1860,8 +1912,8 @@ static bool collect_candidate_entries(
         {
             drop_entry* e = &buf[i];
             int effective_dif = e->difficulty;
-            if (depth < e->min_depth)
-                effective_dif += 2 * (e->min_depth - depth);
+            if (penalty_depth < e->min_depth)
+                effective_dif += 2 * (e->min_depth - penalty_depth);
             int rarity_at_depth = drop_entry_rarity_at_depth(e, depth);
             int weight_at_depth = group_rarity_at_depth(e, depth);
             
@@ -1884,12 +1936,16 @@ static int drop_entry_rarity_at_depth(const drop_entry* e, int depth)
     if (!e || e->num_allocations == 0)
         return 1;
 
+    int count = e->num_allocations;
+    while (count > 1 && e->alloc_rarity[count - 1] == 0)
+        count--;
+
     int first_depth = e->alloc_depth[0];
     if (first_depth > 0 && depth < first_depth)
         return 0;
 
     int rarity = e->alloc_rarity[0];
-    for (int i = 1; i < e->num_allocations; i++)
+    for (int i = 1; i < count; i++)
     {
         if (depth >= e->alloc_depth[i])
             rarity = e->alloc_rarity[i];
@@ -2155,8 +2211,9 @@ static void log_drop_attempt(const drop_request* req, size_t strict_count,
     int group_kind = -1;
     if (chosen)
     {
-        if (req->depth < chosen->min_depth)
-            effective_dif = chosen->difficulty + 2 * (chosen->min_depth - req->depth);
+        if (req->min_depth_penalty_depth < chosen->min_depth)
+            effective_dif = chosen->difficulty
+                + 2 * (chosen->min_depth - req->min_depth_penalty_depth);
         else
             effective_dif = chosen->difficulty;
 
@@ -2168,18 +2225,22 @@ static void log_drop_attempt(const drop_request* req, size_t strict_count,
     }
 
     gen_log_write("DROP",
-        "depth=%d cat=%s droptype=%d supply=%s roll=%d band=%d..%d bonus=%d "
+        "depth=%d cat=%s droptype=%d supply=%s target=%d band=%d..%d bonus=%d "
+        "legal_depth=%d penalty_depth=%d cat_mask=0x%x "
         "strict=%zu relaxed=%zu used_relaxed=%s fallback=%s "
         "chosen_k=%d a_idx=%d e_idx=%d base_dif=%d eff_dif=%d min_depth=%d "
         "max_depth=%d rarity_at_depth=%d group_kind=%d",
-        req->depth, drop_category_name(req->cat), req->droptype,
+        req->depth,
+        chosen ? drop_category_name(chosen->category) : drop_category_name(req->cat),
+        req->droptype,
         req->is_supply ? "yes" : "no", req->base_roll, req->lower, req->upper,
-        req->difficulty_bonus, strict_count, relaxed_count,
+        req->difficulty_bonus, req->legal_depth, req->min_depth_penalty_depth,
+        (unsigned)req->cat_mask, strict_count, relaxed_count,
         used_relaxed ? "yes" : "no", fallback ? "yes" : "no",
         chosen ? chosen->obj.k_idx : -1, a_idx, e_idx,
         chosen ? chosen->difficulty : -1, effective_dif,
         chosen ? chosen->min_depth : -1, chosen ? chosen->max_depth : -1,
-        chosen ? group_rarity_at_depth(chosen, req->depth) : 0, group_kind);
+        chosen ? group_rarity_at_depth(chosen, req->legal_depth) : 0, group_kind);
 }
 
 /*
@@ -2258,9 +2319,9 @@ static bool try_apply_jinx(object_type* o_ptr, int depth)
  * Generate a chest according to game design specifications:
  * - 50/50 chance small or large
  * - 50% wooden (good), 35% steel (great), 15% jewelled (superb)  
- * - Chests add 4 levels to depth for drop calculation
+ * - Chest contents add +5 levels when opened (handled in chest_death())
  */
-static bool generate_chest(int depth, object_type* out)
+static bool generate_chest(int depth, const drop_profile* profile, object_type* out)
 {
     /* 50/50 chance for small vs large */
     bool is_large = one_in_(2);
@@ -2309,27 +2370,16 @@ static bool generate_chest(int depth, object_type* out)
     /* Create the chest object */
     object_prep(out, k_idx);
     
-    /* Set chest level (pval) = depth + 4 as per specification */
-    out->pval = depth + 4;
+    /* Set chest level (pval) at generation time; opening adds +4 for contents. */
+    out->pval = depth;
     if (out->pval > 25)
         out->pval = 25;
     if (out->pval < 1)
         out->pval = 1;
     
-    /* Set chest theme for contents (matching logic from object2.c) */
-    int theme_roll = rand_int(100);
-    if (theme_roll < 5)
-        out->xtra1 = 1;  /* CHEST_ARMOUR */
-    else if (theme_roll < 10)
-        out->xtra1 = 2;  /* CHEST_WEAPONS */
-    else if (theme_roll < 15)
-        out->xtra1 = 3;  /* CHEST_POTIONS */
-    else if (theme_roll < 20)
-        out->xtra1 = 4;  /* CHEST_STAVES */
-    else if (theme_roll < 25)
-        out->xtra1 = 5;  /* CHEST_JEWELLERY */
-    else
-        out->xtra1 = 0;  /* CHEST_MIXED = default */
+    /* Chest contents are generated at open time, not stored as a theme. */
+    (void)profile;
+    out->xtra1 = 0;
     
     if (gen_log_initialized)
     {
@@ -2351,22 +2401,59 @@ bool drop_generate_object(int depth, drop_quality quality, int droptype,
         depth, quality, droptype, 0, allow_artefacts, NULL, out);
 }
 
+static drop_entry* drop_try_pick(drop_request* req, int legal_depth,
+    drop_entry** candidates, size_t* cand_count, size_t* strict_count,
+    bool fallback)
+{
+    mem_free_null(*candidates);
+    *candidates = NULL;
+    *cand_count = 0;
+    *strict_count = 0;
+
+    if (!collect_candidate_entries(req, false, candidates, cand_count))
+    {
+        *strict_count = *cand_count;
+        log_drop_attempt(req, *strict_count, 0, NULL, false, fallback);
+        return NULL;
+    }
+    *strict_count = *cand_count;
+
+    drop_entry* chosen = NULL;
+    if (*cand_count > 0)
+    {
+        if (req->is_supply)
+        {
+            chosen = choose_supply_entry(*candidates, *cand_count, legal_depth, req);
+        }
+        else
+        {
+            drop_group* groups = mem_alloc_array(*cand_count, drop_group);
+            int group_cap = (int)(*cand_count);
+            int group_count = group_cap;
+            if (build_groups(*candidates, *cand_count, groups, &group_count))
+            {
+                drop_group* grp = choose_group(groups, group_count, *candidates, legal_depth);
+                chosen = choose_entry_from_group(*candidates, grp);
+            }
+            mem_free_null(groups);
+        }
+    }
+
+    log_drop_attempt(req, *strict_count, 0, chosen, false, fallback);
+    return chosen;
+}
+
 static bool drop_generate_object_internal(int depth, drop_quality quality,
-    int droptype, int extra_bonus, bool allow_artefacts,
+    int min_depth_penalty_depth, int droptype, int extra_bonus, bool allow_artefacts,
     const drop_profile* profile, object_type* out)
 {
+    if (min_depth_penalty_depth < 1)
+        min_depth_penalty_depth = 1;
+
     /* Handle chest generation specially */
     if (droptype == DROP_TYPE_CHEST)
     {
-        /* Chests also respect legal depth cap */
-        int legal_depth = depth;
-        if (p_ptr)
-        {
-            int current_depth = (p_ptr->depth > 0) ? p_ptr->depth : 1;
-            if (legal_depth > current_depth)
-                legal_depth = current_depth;
-        }
-        return generate_chest(legal_depth, out);
+        return generate_chest(depth, profile, out);
     }
     
     drop_request req;
@@ -2381,18 +2468,22 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
     }
 
     req.depth = gen_depth;
+    req.quality = quality;
     req.legal_depth = legal_depth;
+    req.min_depth_penalty_depth = min_depth_penalty_depth;
     req.difficulty_bonus = extra_bonus + drop_quality_bonus(quality);
     req.is_supply = false;
     req.droptype = droptype;
     req.allow_artefacts = allow_artefacts;
-    int roll1 = dieroll(30);
-    int roll2 = dieroll(30);
+    /* New difficulty formula: 1.25*Depth - 24 + min(1d40,1d40) */
+    int roll1 = dieroll(40);
+    int roll2 = dieroll(40);
     int min_roll = MIN(roll1, roll2);
-    int base_calc = (int)(1.70 * depth) + min_roll - 23;
+    int base_calc = (int)(1.25 * depth) - 24 + min_roll;
     req.base_roll = base_calc + req.difficulty_bonus;
     req.lower = req.base_roll - 2;
     req.upper = req.base_roll + 2;
+    req.cat_mask = 0;
 
     if (gen_log_initialized)
     {
@@ -2433,10 +2524,13 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         break;
     default:
         req.cat = roll_category(&req);
+        req.cat_mask = (1U << req.cat);
         break;
     }
     if (req.cat == DROP_CAT_SUPPLY)
         req.is_supply = true;
+    if (req.cat_mask == 0)
+        req.cat_mask = (1U << req.cat);
 
     if (droptype == DROP_TYPE_TORCHES)
     {
@@ -2450,62 +2544,88 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
     drop_entry* candidates = NULL;
     size_t cand_count = 0;
     size_t strict_count = 0;
-    size_t relaxed_count = 0;
-    bool used_relaxed = false;
-    bool attempted_fallback = false;
     drop_entry* chosen = NULL;
 
-    /* Try widening difficulty bands across 5 attempts */
-    for (int attempt = 0; attempt < 5 && !chosen; attempt++)
+    if (!req.is_supply && req.upper < 0)
     {
-        if (attempt > 0)
+        if (gen_log_initialized)
         {
-            /* Widen the band by 1 each attempt */
-            req.lower = req.base_roll - 2 - attempt;
-            req.upper = req.base_roll + 2 + attempt;
+            gen_log_write("DROP_SKIP",
+                "depth=%d droptype=%d target=%d band=%d..%d (upper<0)",
+                depth, droptype, req.base_roll, req.lower, req.upper);
         }
-
         mem_free_null(candidates);
-        candidates = NULL;
-        cand_count = 0;
-        strict_count = 0;
-        relaxed_count = 0;
-        used_relaxed = false;
+        return false;
+    }
 
-        /* Always use strict filtering - never fall back to relaxed mode */
-        if (collect_candidate_entries(&req, false, &candidates, &cand_count))
-        {
-            strict_count = cand_count;
-        }
-        else
-        {
-            strict_count = cand_count;
-            /* No candidates found with this band width - continue to next attempt */
-            continue;
-        }
+    bool partition_driven_cat = false;
+    switch (droptype)
+    {
+    case DROP_TYPE_WEAPON:
+    case DROP_TYPE_EDGED:
+    case DROP_TYPE_POLEARM:
+    case DROP_TYPE_BOW:
+    case DROP_TYPE_DIGGING:
+    case DROP_TYPE_ARMOR:
+    case DROP_TYPE_SHIELD:
+    case DROP_TYPE_BOOTS:
+    case DROP_TYPE_CLOAK:
+    case DROP_TYPE_GLOVES:
+    case DROP_TYPE_HEADGEAR:
+    case DROP_TYPE_JEWELRY:
+    case DROP_TYPE_POTION:
+    case DROP_TYPE_STAFF:
+    case DROP_TYPE_TORCHES:
+        partition_driven_cat = false;
+        break;
+    default:
+        partition_driven_cat = true;
+        break;
+    }
 
-        if (cand_count > 0)
+    /* Initial attempt */
+    chosen = drop_try_pick(&req, legal_depth, &candidates, &cand_count, &strict_count, false);
+
+    /* If the band is empty, add categories by partition probability (difficulty categories only). */
+    if (!chosen && !req.is_supply && partition_driven_cat
+        && (req.cat == DROP_CAT_WEAPON || req.cat == DROP_CAT_ARMOR
+            || req.cat == DROP_CAT_JEWELRY))
+    {
+        drop_category cats[3] = { DROP_CAT_WEAPON, DROP_CAT_ARMOR, DROP_CAT_JEWELRY };
+        for (int i = 0; i < 3; i++)
         {
-            if (req.is_supply || req.cat == DROP_CAT_SUPPLY)
+            for (int j = i + 1; j < 3; j++)
             {
-                chosen = choose_supply_entry(candidates, cand_count, legal_depth, &req);
-            }
-            else
-            {
-                drop_group* groups = mem_alloc_array(cand_count, drop_group);
-                int group_cap = (int)cand_count;
-                int group_count = group_cap;
-                if (build_groups(candidates, cand_count, groups, &group_count))
+                int wi = MAX(0, req.cat_weights[cats[i]]);
+                int wj = MAX(0, req.cat_weights[cats[j]]);
+                if (wj > wi)
                 {
-                    drop_group* grp = choose_group(groups, group_count, candidates, legal_depth);
-                    chosen = choose_entry_from_group(candidates, grp);
+                    drop_category tmp = cats[i];
+                    cats[i] = cats[j];
+                    cats[j] = tmp;
                 }
-                mem_free_null(groups);
             }
         }
 
-        log_drop_attempt(&req, strict_count, relaxed_count, chosen, used_relaxed,
-            attempted_fallback && attempt == 1);
+        for (int i = 0; i < 3 && !chosen; i++)
+        {
+            drop_category cat = cats[i];
+            int w = MAX(0, req.cat_weights[cat]);
+            if (w <= 0)
+                continue;
+            if (req.cat_mask & (1U << cat))
+                continue;
+
+            req.cat_mask |= (1U << cat);
+            chosen = drop_try_pick(&req, legal_depth, &candidates, &cand_count, &strict_count, true);
+        }
+    }
+
+    /* If still empty, relax the band downward until something exists. */
+    while (!chosen && !req.is_supply && req.lower > 0)
+    {
+        req.lower--;
+        chosen = drop_try_pick(&req, legal_depth, &candidates, &cand_count, &strict_count, true);
     }
 
     bool ok = (chosen != NULL);
@@ -2553,7 +2673,7 @@ bool drop_generate_object_with_bonus(int depth, drop_quality quality,
     int droptype, int extra_bonus, bool allow_artefacts, object_type* out)
 {
     return drop_generate_object_internal(
-        depth, quality, droptype, extra_bonus, allow_artefacts, NULL, out);
+        depth, depth, quality, droptype, extra_bonus, allow_artefacts, NULL, out);
 }
 
 bool drop_generate_object_profiled(int depth, drop_quality quality,
@@ -2561,5 +2681,21 @@ bool drop_generate_object_profiled(int depth, drop_quality quality,
     const drop_profile* profile, object_type* out)
 {
     return drop_generate_object_internal(
-        depth, quality, droptype, extra_bonus, allow_artefacts, profile, out);
+        depth, depth, quality, droptype, extra_bonus, allow_artefacts, profile, out);
+}
+
+bool drop_generate_object_with_bonus_depths(int depth, int min_depth_penalty_depth,
+    drop_quality quality, int droptype, int extra_bonus, bool allow_artefacts,
+    object_type* out)
+{
+    return drop_generate_object_internal(depth, min_depth_penalty_depth, quality,
+        droptype, extra_bonus, allow_artefacts, NULL, out);
+}
+
+bool drop_generate_object_profiled_depths(int depth, int min_depth_penalty_depth,
+    drop_quality quality, int droptype, int extra_bonus, bool allow_artefacts,
+    const drop_profile* profile, object_type* out)
+{
+    return drop_generate_object_internal(depth, min_depth_penalty_depth, quality,
+        droptype, extra_bonus, allow_artefacts, profile, out);
 }

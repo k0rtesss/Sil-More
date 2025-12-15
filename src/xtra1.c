@@ -498,9 +498,8 @@ static void prt_mel(void)
         mod = -1;
 
     /* Melee attacks */
-    int meleeColour = (p_ptr->active_ability[S_MEL][MEL_SMITE]
-        || p_ptr->active_ability[S_SPC][SPC_TULKAS_WRATH])
-        ? TERM_L_RED : TERM_L_WHITE;
+    int meleeColour
+        = p_ptr->active_ability[S_MEL][MEL_SMITE] ? TERM_L_RED : TERM_L_WHITE;
     strnfmt(buf, sizeof(buf), "(%+d,%dd%d)", p_ptr->skill_use[S_MEL],
         p_ptr->mdd, p_ptr->mds);
     c_put_str(meleeColour, buf, ROW_MEL + mod, COL_MEL + 12 - strlen(buf));
@@ -2155,7 +2154,7 @@ int hate_level(int y, int x, int multiplier)
 /*
  * Determine whether a melee weapon is glowing in response to nearby enemies
  */
-bool weapon_glows(object_type* o_ptr)
+bool weapon_glows(const object_type* o_ptr)
 {
     int total_hate = 0;
     int i;
@@ -2384,12 +2383,10 @@ void calc_torch(void)
         p_ptr->cur_light += ability_bonus(S_SNG, SNG_TREES);
     }
 
-    /* Oath of Light reward handled as light power (no radius change) */
-
-    /* Queen of the Stars: extend light radius */
-    if (p_ptr->active_ability[S_SPC][SPC_QUEEN_STARS])
+    /* Oath of Light reward */
+    if (p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] && !oath_invalid(OATH_LIGHT))
     {
-        p_ptr->cur_light += 1;
+        p_ptr->cur_light += 2;
     }
 
     /* Update the visuals */
@@ -3287,18 +3284,10 @@ static void calc_bonuses(void)
     /* Temporary "Rage" */
     if (p_ptr->rage)
     {
-        if (p_ptr->active_ability[S_SPC][SPC_OROME_WRAITH]) {
-            /* Huntsman's wraith: rage sharpens every stat */
-            p_ptr->stat_misc_mod[A_STR] += 1;
-            p_ptr->stat_misc_mod[A_DEX] += 1;
-            p_ptr->stat_misc_mod[A_CON] += 1;
-            p_ptr->stat_misc_mod[A_GRA] += 1;
-        } else {
-            p_ptr->stat_misc_mod[A_STR] += 1;
-            p_ptr->stat_misc_mod[A_DEX] -= 1;
-            p_ptr->stat_misc_mod[A_CON] += 1;
-            p_ptr->stat_misc_mod[A_GRA] -= 1;
-        }
+        p_ptr->stat_misc_mod[A_STR] += 1;
+        p_ptr->stat_misc_mod[A_DEX] -= 1;
+        p_ptr->stat_misc_mod[A_CON] += 1;
+        p_ptr->stat_misc_mod[A_GRA] -= 1;
     }
 
     /* Temporary Strength */
@@ -4542,6 +4531,7 @@ void handle_stuff(void)
 
     log_trace("handle_stuff: completed");
 }
+
 
 
 
