@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(/c/Windows/System32/cmd.exe /c build-cmake.bat)",
+      "Bash(ls:*)",
+      "Read(//c/Users/efrem/Documents/GitHub/sil-qh/**)",
+      "Bash(sort:*)",
+      "Read(//c/Users/efrem/Documents/GitHub/sil-qh/lib/**)",
+      "Bash(cmd /c build-cmake.bat)",
+      "Bash(cmd //c build-cmake.bat)",
+      "Bash(cmake --build:*)",
+      "Bash(python scripts/convert_pref_to_tiles.py:*)",
+      "Bash(python scripts/add_tiles_to_datafiles.py:*)",
+      "Bash(python:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\efrem\\Documents\\GitHub\\sil-qh\\lib\\edit"
+    ]
+  }
+}

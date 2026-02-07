@@ -31,14 +31,14 @@ S:0:0:0:0
 # Oath of Mercy
 O:1:Oath of Mercy  
 T:To spare the Children of Iluvatar
-D:A solemn vow to leave Angband without shedding the blood of Man or Elf, showing mercy even to those who might oppose you. This oath reflects the compassion of Niena the Mourner.
+D:A solemn vow to leave Angband without shedding the blood of Man or Elf, showing mercy even to those who might oppose you. This oath reflects the compassion of Nienna, Lady of Pity.
 P:I swear to leave Angband without shedding blood of Man or Elf, showing mercy to all Children of Iluvatar I encounter.
 F:Attack or harm Men or Elves in any way
 R:+1 Grace - Divine favor for your merciful heart
 A:8:2
 S:0:0:0:1
 B:Cannot attack creatures with RF3_MAN or RF3_ELF flags
-U:Complete the Quest of Niena the Mourner
+U:Complete the Quest of Nienna, Lady of Pity
 C:Your hand stays its course. The life before you is one of the Children of Ilúvatar. To strike them down is to stain your very soul and forsake the compassion you swore to uphold. Are you certain you wish to break your Oath of Mercy?
 M:The light of pity leaves your eyes, replaced by the shadow of wrath. The weight of this life taken settles upon you, a curse of your own making.
 E:The echo of your mercy is now a mockery. Your Oath of Mercy is forever broken, a testament to the compassion you have cast aside in this age.
