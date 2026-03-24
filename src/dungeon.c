@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "object/object-ui-select.h"
 #include "blitz.h"
 #include "externs.h"
 #include "log/log.h"

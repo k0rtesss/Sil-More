@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
+#include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"

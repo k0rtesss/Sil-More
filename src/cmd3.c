@@ -12,6 +12,8 @@
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "object/object-ui-enhanced.h"
+#include "object/object-ui-select.h"
 
 /*
  * Helper function to determine the equip sound based on item type

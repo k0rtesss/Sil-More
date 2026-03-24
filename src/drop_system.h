@@ -3,9 +3,8 @@
 /*
  * Transitional public API for the drop-system split.
  *
- * The implementation still lives in src/drop_system.c for now. This header
- * centralizes the shared drop declarations so later module moves do not need
- * to grow externs.h.
+ * The implementation now lives across src/drop/ with this header keeping the
+ * shared declarations out of externs.h.
  */
 
 #ifndef INCLUDED_DROP_SYSTEM_H

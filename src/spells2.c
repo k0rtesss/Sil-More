@@ -13,6 +13,7 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "object/object-ui-identify.h"
 #include "supplies.h"
 
 // Function declarations

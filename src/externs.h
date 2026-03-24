@@ -830,7 +830,6 @@ extern bool object_info_out(const object_type* o_ptr);
 extern void note_info_screen(const object_type* o_ptr);
 extern void object_info_screen(const object_type* o_ptr);
 extern void object_info_screen_multi(const object_type** objects, const char** headings, int count);
-extern void describe_item_with_comparisons(int item_index, bool include_comparisons);
 
 /* object1.c */
 extern bool easter_time(void);
@@ -871,12 +870,8 @@ extern void display_inven(void);
 extern void display_equip(void);
 extern void show_inven(void);
 extern void show_equip(void);
-extern void show_inven_enhanced(void);
 extern void inventory_menu_set_include_equip(bool include);
-extern void show_equip_enhanced(void);
 extern void show_floor(const int* floor_list, int floor_num);
-extern void toggle_inven_equip(void);
-extern bool get_item(int* cp, cptr pmt, cptr str, int mode);
 extern bool player_can_treat_as_throwing(const object_type* o_ptr);
 extern bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
 extern bool weapon_is_impale_eligible(const object_type* o_ptr);
@@ -1074,7 +1069,6 @@ extern bool item_tester_hook_light_with_fuel(const object_type* o_ptr);
 extern bool item_tester_hook_enchantable_amulet(const object_type* o_ptr);
 extern int do_ident_item(int item, object_type* o_ptr);
 extern bool ident_spell(bool include_floor);
-extern bool display_unified_identify_menu(bool include_floor, int* out_item, object_type** out_object);
 extern bool item_tester_hook_recharge(const object_type* o_ptr);
 extern void recharge_staff_wand(object_type* o_ptr, int lev, int num);
 extern bool recharge(int num);
@@ -1452,21 +1446,6 @@ extern int  any_curse_flag_active(u32b flag); /* CUR-only */
 
 // init1.c
 extern void dbg_show_active_flags(void);
-
-// Enhanced menu system globals
-#define ENHANCED_ACTION_NONE 0
-#define ENHANCED_ACTION_SWITCH 1
-#define ENHANCED_ACTION_EXAMINE 2
-#define ENHANCED_ACTION_USE 3
-#define ENHANCED_ACTION_DROP 4
-#define ENHANCED_ACTION_SUPPLIES 5
-
-extern int enhanced_menu_action;
-extern int enhanced_inventory_selected_item;
-extern int enhanced_equip_action;
-extern int enhanced_equipment_selected_item;
-extern char current_menu_command;
-extern int current_menu_state;
 
 /* SDL pane configuration functions (main-sdl.c) */
 extern void get_sdl_config_info(char* buf, size_t size);

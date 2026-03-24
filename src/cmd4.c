@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "object/object-ui-select.h"
 #include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"

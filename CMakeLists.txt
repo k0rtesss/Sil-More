@@ -103,20 +103,44 @@ set(SIL_MORE_SOURCES_INIT
 )
 
 set(SIL_MORE_SOURCES_LEVEL_GENERATION
-    src/generate.c
     src/gen-log.c
     src/level-generation/level-generation-big-cave.c
+    src/level-generation/level-generation-connectivity.c
+    src/level-generation/level-generation-layout-anchors.c
+    src/level-generation/level-generation-layout.c
     src/level-generation/level-generation-layout-morgoth.c
     src/level-generation/level-generation-quests.c
+    src/level-generation/level-generation-rooms.c
     src/level-generation/level-generation-state.c
     src/level-generation/level-generation-terrain.c
+    src/level-generation/level-generation.c
+)
+
+set(SIL_MORE_SOURCES_DROP
+    src/drop/drop-system-catalog.c
+    src/drop/drop-system-difficulty.c
+    src/drop/drop-system-selection.c
+    src/drop_system.c
 )
 
 set(SIL_MORE_SOURCES_OBJECT
-    src/drop_system.c
     src/obj-info.c
-    src/object1.c
-    src/object2.c
+    src/object/object-allocation.c
+    src/object/object-desc.c
+    src/object/object-display.c
+    src/object/object-flags.c
+    src/object/object-flavor.c
+    src/object/object-inventory.c
+    src/object/object-knowledge.c
+    src/object/object-list.c
+    src/object/object-make.c
+    src/object/object-place.c
+    src/object/object-slot.c
+    src/object/object-ui-display.c
+    src/object/object-ui-enhanced.c
+    src/object/object-ui-identify.c
+    src/object/object-ui-select.c
+    src/object/object-util.c
     src/use-obj.c
 )
 
@@ -194,6 +218,7 @@ set(SIL_MORE_SOURCES
     ${SIL_MORE_SOURCES_CMD}
     ${SIL_MORE_SOURCES_INIT}
     ${SIL_MORE_SOURCES_LEVEL_GENERATION}
+    ${SIL_MORE_SOURCES_DROP}
     ${SIL_MORE_SOURCES_OBJECT}
     ${SIL_MORE_SOURCES_MONSTER_AND_COMBAT}
     ${SIL_MORE_SOURCES_PLAYER}
