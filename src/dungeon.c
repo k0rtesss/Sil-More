@@ -1136,6 +1136,10 @@ static void process_world(void)
 
     bool was_ghost = false;
 
+    ensure_niena_pacifist_active();
+    ensure_tulkas_morgoth_active();
+    ensure_varda_ungoliant_active();
+
     /* Check for Tulkas quest interaction every turn */
     check_tulkas_quest_interaction();
 
@@ -1144,6 +1148,7 @@ static void process_world(void)
 
     /* Check for Niena quest interaction every turn */
     check_niena_quest_interaction();
+    check_niena_morgoth_interaction();
 
     /* Check for Orome quest interaction every turn */
     check_orome_quest_interaction();

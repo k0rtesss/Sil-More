@@ -4094,6 +4094,11 @@ static bool project_m(
         if (!seen)
             note_dies = "";
 
+        /* Any player-sourced effect that touches Morgoth breaks Nienna's charge */
+        if (who < 0 && m_ptr->r_idx == R_IDX_MORGOTH) {
+            niena_mark_morgoth_attack();
+        }
+
         /* Check for oath breaking before applying damage */
         if (who < 0 && dam > 0) // Player-caused damage
         {

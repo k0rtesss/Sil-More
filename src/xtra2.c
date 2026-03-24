@@ -14,6 +14,10 @@
 #include "player/killer.h"
 #include "metarun.h"
 
+static cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion);
+static void grant_followup_quest_rewards(int quest_id);
+static int orome_great_hunt_bit_for_target(int r_idx);
+
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
     /* When story font is enabled, use story_print_text which handles proportional rendering */
@@ -2629,6 +2633,47 @@ void maybe_update_morgoth_state_from_hp(monster_type* m_ptr)
     anger_morgoth(target_state);
 }
 
+static void maybe_complete_tulkas_morgoth_quest(monster_type* m_ptr)
+{
+    int hp_lost_percent;
+    int completion_count = 0;
+    cptr* completion_texts;
+
+    if (!m_ptr || m_ptr->r_idx != R_IDX_MORGOTH || m_ptr->maxhp <= 0)
+        return;
+    if (quest_get_state(QUEST_ID_TULKAS_MORGOTH) != QUEST_STATE_ACTIVE)
+        return;
+
+    hp_lost_percent = ((m_ptr->maxhp - m_ptr->hp) * 100) / m_ptr->maxhp;
+    if (hp_lost_percent < 0)
+        hp_lost_percent = 0;
+    if (hp_lost_percent > 100)
+        hp_lost_percent = 100;
+
+    if (hp_lost_percent > p_ptr->tulkas_morgoth_progress) {
+        p_ptr->tulkas_morgoth_progress = hp_lost_percent;
+    }
+    if (hp_lost_percent < 50)
+        return;
+
+    completion_texts = extract_quest_completion_texts(QUEST_ID_TULKAS_MORGOTH, &completion_count);
+    completion_texts = prepend_repeat_context(QUEST_ID_TULKAS_MORGOTH, completion_texts, &completion_count, true);
+
+    if (completion_texts && completion_count > 0) {
+        quest_typewriter_menu("Tulkas, Black Foe's Scourge", completion_texts, completion_count, TERM_YELLOW, TERM_WHITE);
+        free_quest_texts(completion_texts, completion_count);
+    } else {
+        cptr fallback[] = {
+            "Morgoth reels beneath your blows as laughter like an earthquake rolls through Angband.",
+            "'Well struck!' cries Tulkas. 'The Black Foe has felt your wrath upon his throne.'"
+        };
+        quest_typewriter_menu("Tulkas, Black Foe's Scourge", fallback, N_ELEMENTS(fallback), TERM_YELLOW, TERM_WHITE);
+    }
+
+    quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_REWARDED);
+    grant_followup_quest_rewards(QUEST_ID_TULKAS_MORGOTH);
+}
+
 static void fail_niena_quest(void)
 {
     p_ptr->niena_quest = NIENA_QUEST_FAILED;
@@ -2670,65 +2715,80 @@ void monster_death(int m_idx)
         fail_niena_quest();
     }
 
-    /* Track monster death for Orome hunting quest - global kill counting */
-    if (p_ptr->orome_quest >= OROME_QUEST_ACTIVE) {
-        bool target_killed = false;
-        
-        /* Check if killed monster matches any hunt target type */
-        if (r_ptr->flags3 & RF3_WOLF) {
-            p_ptr->orome_wolves_killed++;
-            target_killed = true;
-            log_trace("Orome quest: Wolf killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
-                     p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
-                     p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
-        }
-        /* Spider check: exclude trivial 'hatchling' variants from the Orome count */
-        if (r_ptr->flags3 & RF3_SPIDER) {
-            bool is_hatchling = false;
-            if (r_ptr->name)
-            {
-                const char* rname = r_name + r_ptr->name;
-                /* Case-insensitive substring search for "hatchling" */
-                for (const char* p = rname; *p; p++)
+    /* Track monster death for Orome's later hunts */
+    {
+        bool first_hunt_active = (p_ptr->orome_quest >= OROME_QUEST_ACTIVE && p_ptr->orome_quest < OROME_QUEST_REWARDED);
+        bool dragon_hunt_active = (quest_get_state(QUEST_ID_OROME_DRAGONS) >= QUEST_STATE_ACTIVE &&
+                                   quest_get_state(QUEST_ID_OROME_DRAGONS) < QUEST_STATE_REWARDED);
+        bool great_hunt_active = (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) >= QUEST_STATE_ACTIVE &&
+                                  quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_REWARDED);
+
+        if (first_hunt_active || dragon_hunt_active || great_hunt_active) {
+            bool target_killed = false;
+
+            if (first_hunt_active && (r_ptr->flags3 & RF3_WOLF)) {
+                p_ptr->orome_wolves_killed++;
+                target_killed = true;
+                log_trace("Orome quest: Wolf killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)",
+                         p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
+                         p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+            }
+            if (first_hunt_active && (r_ptr->flags3 & RF3_SPIDER)) {
+                bool is_hatchling = false;
+                if (r_ptr->name)
                 {
-                    if (SDL_strncasecmp(p, "hatchling", 9) == 0)
+                    const char* rname = r_name + r_ptr->name;
+                    for (const char* p = rname; *p; p++)
                     {
-                        is_hatchling = true;
-                        break;
+                        if (SDL_strncasecmp(p, "hatchling", 9) == 0)
+                        {
+                            is_hatchling = true;
+                            break;
+                        }
                     }
+                }
+
+                if (!is_hatchling)
+                {
+                    p_ptr->orome_spiders_killed++;
+                    target_killed = true;
+                    log_trace("Orome quest: Spider killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)",
+                             p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
+                             p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+                }
+            }
+            if (first_hunt_active && (r_ptr->flags3 & RF3_SERPENT)) {
+                p_ptr->orome_serpents_killed++;
+                target_killed = true;
+                log_trace("Orome quest: Serpent killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)",
+                         p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
+                         p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+            }
+            if (first_hunt_active && (r_ptr->flags3 & RF3_VAMPIRE)) {
+                p_ptr->orome_vampires_killed++;
+                target_killed = true;
+                log_trace("Orome quest: Vampire killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)",
+                         p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed,
+                         p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+            }
+            if (dragon_hunt_active && (r_ptr->flags3 & RF3_DRAGON)) {
+                p_ptr->orome_dragons_killed++;
+                target_killed = true;
+                log_trace("Orome dragons quest: Dragon slain (count=%d)", p_ptr->orome_dragons_killed);
+            }
+            if (great_hunt_active) {
+                int hunt_bit = orome_great_hunt_bit_for_target(m_ptr->r_idx);
+                if (hunt_bit && !(p_ptr->orome_great_hunt_mask & hunt_bit)) {
+                    p_ptr->orome_great_hunt_mask |= hunt_bit;
+                    metarun_set_orome_great_hunt_mask(p_ptr->orome_great_hunt_mask);
+                    target_killed = true;
+                    log_trace("Orome great hunt: target %d slain (mask=0x%02x)", m_ptr->r_idx, p_ptr->orome_great_hunt_mask);
                 }
             }
 
-            if (!is_hatchling)
-            {
-                p_ptr->orome_spiders_killed++;
-                target_killed = true;
-                log_trace("Orome quest: Spider killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
-                         p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
-                         p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+            if (target_killed) {
+                log_trace("Orome quest: Hunt target monster killed, checking for completion thresholds...");
             }
-            else
-            {
-                log_trace("Orome quest: Spider hatchling excluded from spider count (name='%s')", (r_ptr->name ? (r_name + r_ptr->name) : "<unnamed>"));
-            }
-        }
-        if (r_ptr->flags3 & RF3_SERPENT) {
-            p_ptr->orome_serpents_killed++;
-            target_killed = true;
-            log_trace("Orome quest: Serpent killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
-                     p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
-                     p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
-        }
-        if (r_ptr->flags3 & RF3_VAMPIRE) {
-            p_ptr->orome_vampires_killed++;
-            target_killed = true;
-            log_trace("Orome quest: Vampire killed (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
-                     p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
-                     p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
-        }
-        
-        if (target_killed) {
-            log_trace("Orome quest: Hunt target monster killed, checking for completion thresholds...");
         }
     }
 
@@ -2778,7 +2838,7 @@ void monster_death(int m_idx)
     check_varda_quest_completion(m_ptr->r_idx);
     
     /* Check for Orome quest completion */
-    check_orome_quest_completion();
+    check_orome_quest_completion(m_ptr->r_idx);
 
     /* Give some experience for the kill */
     new_exp = adjusted_mon_exp(r_ptr, true);
@@ -2947,6 +3007,10 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
     if (dam > 0)
         maybe_update_morgoth_state_from_hp(m_ptr);
+    if (dam > 0 && who < 0 && m_ptr->r_idx == R_IDX_MORGOTH) {
+        niena_mark_morgoth_attack();
+        maybe_complete_tulkas_morgoth_quest(m_ptr);
+    }
 
     /* It is dead now */
     if (m_ptr->hp <= 0)
@@ -6281,29 +6345,7 @@ static int select_tulkas_quest_prize(int target_level)
  */
 static u32b get_metarun_quest_flag(int quest_idx)
 {
-    quest_type* q_ptr;
-    const char* metarun_id;
-    
-    /* Validate quest index */
-    if (quest_idx <= 0 || quest_idx >= z_info->quest_max) return 0;
-    
-    q_ptr = &quest_info[quest_idx];
-    
-    /* Get the metarun quest ID string from the M: field */
-    if (q_ptr->metarun_quest_id == 0) return 0;
-    metarun_id = quest_name_text + q_ptr->metarun_quest_id;
-    
-    /* Map the string to the corresponding flag value */
-    if (streq(metarun_id, "METARUN_QUEST_TULKAS")) return METARUN_QUEST_TULKAS;
-    if (streq(metarun_id, "METARUN_QUEST_AULE")) return METARUN_QUEST_AULE;
-    if (streq(metarun_id, "METARUN_QUEST_MANDOS")) return METARUN_QUEST_MANDOS;
-    if (streq(metarun_id, "METARUN_QUEST_NIENA")) return METARUN_QUEST_NIENA;
-    if (streq(metarun_id, "METARUN_QUEST_OROME")) return METARUN_QUEST_OROME;
-    if (streq(metarun_id, "METARUN_QUEST_VARDA")) return METARUN_QUEST_VARDA;
-    
-    /* Unknown or future quest */
-    log_debug("get_metarun_quest_flag: Unknown metarun_quest_id '%s' for quest_idx %d", metarun_id, quest_idx);
-    return 0;
+    return quest_metarun_flag(quest_idx);
 }
 
 /*
@@ -6460,8 +6502,9 @@ bool check_quest_eligibility(int quest_idx, int depth)
     }
     
     if (metarun_flag) {
-        if (metarun_count >= METARUN_QUEST_COMPLETION_CAP) {
-            log_trace("Quest %d eligibility: METARUN_CAP (%d/%d) = FAIL", quest_idx, metarun_count, METARUN_QUEST_COMPLETION_CAP);
+        int completion_cap = quest_completion_cap(quest_idx);
+        if (metarun_count >= completion_cap) {
+            log_trace("Quest %d eligibility: METARUN_CAP (%d/%d) = FAIL", quest_idx, metarun_count, completion_cap);
             return false;
         }
         if (metarun_count > 0 && !oath_override) {
@@ -7961,6 +8004,302 @@ bool spawn_quest_giver_near_player(int quest_giver_r_idx)
     return false;
 }
 
+static const int tulkas_orc_targets[] = { 54, 76, 84, 85, 95, 105 };
+static const size_t tulkas_orc_target_count = N_ELEMENTS(tulkas_orc_targets);
+
+static const int orome_great_hunt_targets[] = {
+    R_IDX_SCATHA,
+    R_IDX_SMAUG,
+    R_IDX_DRAUGLUIN,
+    R_IDX_GOSTIR,
+    R_IDX_SHELOB,
+    R_IDX_THURINGWETHIL
+};
+static const size_t orome_great_hunt_target_count = N_ELEMENTS(orome_great_hunt_targets);
+
+static void unlock_quest_completion_challenge(int quest_id)
+{
+    int challenge_id = 0;
+
+    if (quest_id > 0 && quest_id < z_info->quest_max) {
+        challenge_id = quest_info[quest_id].challenge_unlock;
+    }
+
+    /* Varda's shadow quest unlocks the torchlight challenge in practice. */
+    if (quest_id == QUEST_ID_VARDA_SHADOW && challenge_id == 0) {
+        challenge_id = CHALLENGE_TORCHLIGHT;
+    }
+
+    switch (challenge_id)
+    {
+    case CHALLENGE_DISCONNECTED:
+        if (!metarun_challenge_disconnected_unlocked()) {
+            metarun_unlock_challenge_disconnected();
+            msg_print("The disconnected-stair challenge is now unlocked.");
+        }
+        break;
+    case CHALLENGE_SINGLE_STAIR:
+        if (!metarun_challenge_single_stair_unlocked()) {
+            metarun_unlock_challenge_single_stair();
+            msg_print("The single-stair challenge is now unlocked.");
+        }
+        break;
+    case CHALLENGE_FIXED_50K_XP:
+        if (!metarun_challenge_fixed_exp_unlocked()) {
+            metarun_unlock_challenge_fixed_exp();
+            msg_print("The fixed 50k XP challenge is now unlocked.");
+        }
+        break;
+    case CHALLENGE_TULKAS_BLUNT:
+        if (!metarun_challenge_tulkas_blunt_unlocked()) {
+            metarun_unlock_challenge_tulkas_blunt();
+            msg_print("The blunt-arms challenge is now unlocked.");
+        }
+        break;
+    case CHALLENGE_TORCHLIGHT:
+        if (!metarun_challenge_torchlight_unlocked()) {
+            metarun_unlock_challenge_torchlight();
+            msg_print("The torches-only challenge is now unlocked.");
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void grant_followup_quest_rewards(int quest_id)
+{
+    u32b quest_flag = quest_metarun_flag(quest_id);
+    int oath_id = get_quest_oath_id(quest_id);
+
+    if (quest_flag) {
+        metarun_mark_quest_completed(quest_flag);
+    }
+    if (oath_id > 0) {
+        metarun_unlock_oath(oath_id);
+    }
+
+    apply_quest_rewards(quest_id);
+    unlock_quest_completion_challenge(quest_id);
+}
+
+static int orome_great_hunt_bit_for_target(int r_idx)
+{
+    for (size_t i = 0; i < orome_great_hunt_target_count; i++)
+    {
+        if (orome_great_hunt_targets[i] == r_idx) {
+            return (1 << i);
+        }
+    }
+
+    return 0;
+}
+
+bool tulkas_orc_is_target(int r_idx)
+{
+    for (size_t i = 0; i < tulkas_orc_target_count; i++)
+    {
+        if (tulkas_orc_targets[i] == r_idx) return true;
+    }
+    return false;
+}
+
+bool tulkas_orc_targets_alive(bool require_unspawned)
+{
+    if (!z_info || !r_info || !l_list) return false;
+
+    for (size_t i = 0; i < tulkas_orc_target_count; i++)
+    {
+        int r_idx = tulkas_orc_targets[i];
+        if (r_idx <= 0 || r_idx >= z_info->r_max) return false;
+
+        const monster_race* r_ptr = &r_info[r_idx];
+        const monster_lore* l_ptr = &l_list[r_idx];
+
+        if (!(r_ptr->flags1 & RF1_UNIQUE)) return false;
+        if (r_ptr->max_num == 0) return false;
+
+        if (require_unspawned)
+        {
+            if (l_ptr->psights > 0 || l_ptr->pkills > 0) return false;
+        }
+    }
+
+    return true;
+}
+
+static int total_player_kills_this_run_local(void)
+{
+    if (!z_info || !l_list) return 0;
+
+    int total = 0;
+    for (int i = 0; i < z_info->r_max; i++)
+    {
+        int kills = l_list[i].pkills;
+        if (kills > 0) total += kills;
+    }
+
+    return total;
+}
+
+void niena_mark_morgoth_attack(void)
+{
+    if (quest_get_state(QUEST_ID_NIENA_MORGOTH) != QUEST_STATE_ACTIVE) return;
+    if (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) return;
+
+    p_ptr->niena_reserved |= NIENA_FLAG_MORGOTH_ATTACKED;
+    msg_print("Nienna's mercy recoils: you have struck Morgoth.");
+}
+
+void niena_revoke_temp_mercy_gift(bool silent)
+{
+    if (!(p_ptr->niena_reserved & NIENA_FLAG_MERCY_GIFT_TEMP)) return;
+
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MERCY_GIFT_TEMP);
+    p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = false;
+    p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = false;
+
+    p_ptr->update |= (PU_BONUS);
+    p_ptr->redraw |= (PR_BASIC);
+
+    if (!silent)
+    {
+        msg_print("Nienna's borrowed mercy fades.");
+    }
+}
+
+void check_niena_morgoth_interaction(void)
+{
+    int y, x;
+    monster_type* m_ptr;
+
+    byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (state != QUEST_STATE_GIVER_PRESENT) return;
+
+    for (y = p_ptr->py - 1; y <= p_ptr->py + 1; y++)
+    {
+        for (x = p_ptr->px - 1; x <= p_ptr->px + 1; x++)
+        {
+            if (y == p_ptr->py && x == p_ptr->px) continue;
+            if (!in_bounds(y, x)) continue;
+            if (cave_m_idx[y][x] <= 0) continue;
+
+            m_ptr = &mon_list[cave_m_idx[y][x]];
+            if (m_ptr->r_idx != R_IDX_NIENA) continue;
+
+            int text_count = 0;
+            cptr* init_texts = extract_quest_init_texts(QUEST_ID_NIENA_MORGOTH, &text_count);
+            init_texts = prepend_repeat_context(QUEST_ID_NIENA_MORGOTH, init_texts, &text_count, false);
+
+            if (init_texts && text_count > 0)
+            {
+                quest_typewriter_menu("Nienna's Mercy", init_texts, text_count, TERM_L_BLUE, TERM_WHITE);
+                free_quest_texts(init_texts, text_count);
+            }
+            else
+            {
+                const char* fallback[] = {
+                    "In the shadow of the throne, Nienna waits with eyes full of sorrow and resolve.",
+                    "'Take a Silmaril from Morgoth's crown, yet lay no blow upon him.'"
+                };
+                quest_typewriter_menu("Nienna's Mercy", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+            }
+
+            if (!p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
+            {
+                p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY] = true;
+                p_ptr->active_ability[S_SPC][SPC_NIENA_MERCY] = true;
+                p_ptr->niena_reserved |= NIENA_FLAG_MERCY_GIFT_TEMP;
+                p_ptr->update |= (PU_BONUS);
+                handle_stuff();
+            }
+
+            quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_ACTIVE);
+            remove_quest_giver(R_IDX_NIENA);
+            return;
+        }
+    }
+}
+
+void ensure_niena_pacifist_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0 ||
+        quest_get_state(QUEST_ID_NIENA_MORGOTH) >= QUEST_STATE_REWARDED;
+
+    if (!unlocked)
+    {
+        p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_ACTIVE);
+        p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
+    }
+
+    if (quest_get_state(QUEST_ID_NIENA_PACIFIST) == QUEST_STATE_ACTIVE &&
+        total_player_kills_this_run_local() > 0)
+    {
+        p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+    }
+}
+
+void ensure_tulkas_morgoth_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_TULKAS_MORGOTH);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool oath_active = (p_ptr->oath_type == OATH_VALOROUS && !oath_invalid(OATH_VALOROUS));
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0 ||
+        quest_get_state(QUEST_ID_TULKAS_ORCS) >= QUEST_STATE_REWARDED;
+
+    if (!oath_active || !unlocked)
+    {
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_TULKAS_MORGOTH, QUEST_STATE_ACTIVE);
+        p_ptr->tulkas_morgoth_progress = 0;
+    }
+}
+
+void ensure_varda_ungoliant_active(void)
+{
+    byte state = quest_get_state(QUEST_ID_VARDA_UNGOLIANT);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    bool oath_active = (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT));
+    bool unlocked = metarun_quest_completion_count(METARUN_QUEST_VARDA_SHADOW) > 0 ||
+        quest_get_state(QUEST_ID_VARDA_SHADOW) >= QUEST_STATE_REWARDED ||
+        metarun_quest_completion_count(METARUN_QUEST_VARDA) > 0 ||
+        p_ptr->varda_quest >= VARDA_QUEST_REWARDED;
+
+    if (!oath_active || !unlocked)
+    {
+        if (state != QUEST_STATE_NOT_STARTED) quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_NOT_STARTED);
+        return;
+    }
+
+    if (state == QUEST_STATE_NOT_STARTED)
+    {
+        quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_ACTIVE);
+    }
+
+    if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) == QUEST_STATE_ACTIVE &&
+        r_info[R_IDX_UNGOLIANT].max_num == 0)
+    {
+        quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_REWARDED);
+    }
+}
+
 static void tulkas_quest_decline(cptr message)
 {
     if (message) {
@@ -7983,6 +8322,7 @@ void tulkas_quest_interaction(void)
     int target_r_idx, prize_a_idx;
     monster_race* r_ptr;
     artefact_type* a_ptr;
+    byte orc_state;
     
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
@@ -7990,6 +8330,55 @@ void tulkas_quest_interaction(void)
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
+    if (orc_state == QUEST_STATE_GIVER_PRESENT)
+    {
+        int text_count = 0;
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_TULKAS_ORCS, &text_count);
+        init_texts = prepend_repeat_context(QUEST_ID_TULKAS_ORCS, init_texts, &text_count, false);
+
+        quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_ACTIVE);
+        p_ptr->tulkas_orc_mask = 0;
+        p_ptr->tulkas_orc_restricted = 1;
+        remove_quest_giver(R_IDX_TULKAS);
+
+        if (init_texts && text_count > 0) {
+            quest_typewriter_menu("Tulkas, Orc-Bane", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
+            free_quest_texts(init_texts, text_count);
+        } else {
+            cptr fallback[] = {
+                "Tulkas laughs like thunder in the stronghold's halls.",
+                "'Break every captain in this den and leave not one of them standing.'"
+            };
+            quest_typewriter_menu("Tulkas, Orc-Bane", fallback, N_ELEMENTS(fallback), TERM_YELLOW, TERM_WHITE);
+        }
+        return;
+    }
+    if (orc_state == QUEST_STATE_SUCCESS)
+    {
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_TULKAS_ORCS, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_TULKAS_ORCS, completion_texts, &completion_count, true);
+
+        quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_REWARDED);
+        p_ptr->tulkas_orc_restricted = 0;
+        remove_quest_giver(R_IDX_TULKAS);
+
+        if (completion_texts && completion_count > 0) {
+            quest_typewriter_menu("Tulkas, Orc-Bane", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            free_quest_texts(completion_texts, completion_count);
+        } else {
+            cptr fallback[] = {
+                "Tulkas strides from the dust of the broken stronghold.",
+                "'You have crushed every captain and broken the orcs' pride.'"
+            };
+            quest_typewriter_menu("Tulkas, Orc-Bane", fallback, N_ELEMENTS(fallback), TERM_L_GREEN, TERM_WHITE);
+        }
+
+        grant_followup_quest_rewards(QUEST_ID_TULKAS_ORCS);
+        return;
+    }
     
     /* Safety check - ensure valid quest state */
     if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
@@ -8204,10 +8593,13 @@ void tulkas_quest_interaction(void)
 void check_tulkas_quest_interaction(void)
 {
     int i, y, x;
+    byte orc_state = quest_get_state(QUEST_ID_TULKAS_ORCS);
     
     /* Only check if quest is in appropriate state */
     if (p_ptr->tulkas_quest != TULKAS_QUEST_GIVER_PRESENT && 
-        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE)
+        p_ptr->tulkas_quest != TULKAS_QUEST_COMPLETE &&
+        orc_state != QUEST_STATE_GIVER_PRESENT &&
+        orc_state != QUEST_STATE_SUCCESS)
     {
         return;
     }
@@ -8241,6 +8633,11 @@ void check_tulkas_quest_interaction(void)
             }
         }
     }
+
+    if (orc_state == QUEST_STATE_SUCCESS && !is_quest_giver_present(R_IDX_TULKAS))
+    {
+        spawn_quest_giver_near_player(R_IDX_TULKAS);
+    }
 }
 
 /*
@@ -8272,6 +8669,25 @@ void check_tulkas_quest_completion(int r_idx)
                     return;
                 }
             }
+        }
+    }
+
+    if (quest_get_state(QUEST_ID_TULKAS_ORCS) == QUEST_STATE_ACTIVE && tulkas_orc_is_target(r_idx))
+    {
+        for (size_t i = 0; i < tulkas_orc_target_count; i++)
+        {
+            if (tulkas_orc_targets[i] == r_idx) {
+                p_ptr->tulkas_orc_mask |= (1 << i);
+                break;
+            }
+        }
+
+        if ((byte)p_ptr->tulkas_orc_mask == (byte)((1 << tulkas_orc_target_count) - 1))
+        {
+            quest_set_state(QUEST_ID_TULKAS_ORCS, QUEST_STATE_SUCCESS);
+            p_ptr->tulkas_orc_restricted = 0;
+            msg_print("The last orc captain falls. Seek out Tulkas to claim your reward.");
+            spawn_quest_giver_near_player(R_IDX_TULKAS);
         }
     }
 }
@@ -8526,7 +8942,7 @@ static int prompt_varda_reward_choice_menu(const int* choices, int choice_count,
     return selected_artifact;
 }
 
-static bool grant_varda_reward(cptr* completion_texts, int completion_count)
+static bool grant_varda_reward(int quest_id, cptr* completion_texts, int completion_count)
 {
     int choices[3] = {0};
     int available = build_varda_reward_options(choices, (int)N_ELEMENTS(choices));
@@ -8545,14 +8961,21 @@ static bool grant_varda_reward(cptr* completion_texts, int completion_count)
 
     create_chosen_artefact(selected, p_ptr->py, p_ptr->px, true);
     msg_print("Starlight gathers at your feet, coalescing into a shining relic.");
-    p_ptr->varda_quest = VARDA_QUEST_REWARDED;
     p_ptr->quest_reserved[0] = 1;
-    p_ptr->varda_vault_ready = 0;
-    p_ptr->varda_vault_placed = 1;
+    if (quest_id == QUEST_ID_VARDA_SHADOW) {
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_REWARDED);
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_placed = 1;
+        p_ptr->varda_shadow_restricted = 0;
+        do_cmd_note("Varda blessed me with a radiant artefact after Belegwath's fall.", p_ptr->depth);
+    } else {
+        p_ptr->varda_quest = VARDA_QUEST_REWARDED;
+        p_ptr->varda_vault_ready = 0;
+        p_ptr->varda_vault_placed = 1;
+        do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
+    }
 
-    metarun_mark_quest_completed(METARUN_QUEST_VARDA);
-    metarun_unlock_oath(OATH_LIGHT);
-    do_cmd_note("Varda blessed me with a radiant artefact and the Oath of Light.", p_ptr->depth);
+    grant_followup_quest_rewards(quest_id);
 
     return true;
 }
@@ -8612,13 +9035,101 @@ void check_varda_quest_completion(int r_idx)
         msg_print("Duruin falls. The Bastion's shadows unravel under starlight!");
         try_place_varda_near_player();
     }
+
+    if (quest_get_state(QUEST_ID_VARDA_SHADOW) == QUEST_STATE_ACTIVE && r_idx == R_IDX_BELEGWATH) {
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_SUCCESS);
+        p_ptr->varda_shadow_ready = 0;
+        p_ptr->varda_shadow_restricted = 0;
+        p_ptr->varda_level = p_ptr->depth;
+        msg_print("Belegwath falls. The Shadow Bastion breaks beneath returning starlight!");
+        try_place_varda_near_player();
+    }
+
+    if (quest_get_state(QUEST_ID_VARDA_UNGOLIANT) == QUEST_STATE_ACTIVE && r_idx == R_IDX_UNGOLIANT) {
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_VARDA_UNGOLIANT, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_VARDA_UNGOLIANT, completion_texts, &completion_count, true);
+
+        if (completion_texts && completion_count > 0) {
+            quest_typewriter_menu("Varda, Gloomweaver's Doom", completion_texts, completion_count, TERM_WHITE, TERM_L_BLUE);
+            free_quest_texts(completion_texts, completion_count);
+        } else {
+            cptr fallback[] = {
+                "Ungoliant's unlight gutters and dies before Varda's stars.",
+                "The Queen of the Stars marks the doom complete."
+            };
+            quest_typewriter_menu("Varda, Gloomweaver's Doom", fallback, N_ELEMENTS(fallback), TERM_WHITE, TERM_L_BLUE);
+        }
+
+        quest_set_state(QUEST_ID_VARDA_UNGOLIANT, QUEST_STATE_REWARDED);
+        grant_followup_quest_rewards(QUEST_ID_VARDA_UNGOLIANT);
+    }
 }
 
 void varda_quest_interaction(void)
 {
     static s32b last_interaction_turn = -1;
+    byte shadow_state;
     if (last_interaction_turn == turn) return;
     last_interaction_turn = turn;
+
+    shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
+
+    if (shadow_state == QUEST_STATE_GIVER_PRESENT) {
+        int text_count = 0;
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_VARDA_SHADOW, &text_count);
+        init_texts = prepend_repeat_context(QUEST_ID_VARDA_SHADOW, init_texts, &text_count, false);
+
+        quest_set_state(QUEST_ID_VARDA_SHADOW, QUEST_STATE_ACTIVE);
+        p_ptr->quest_reserved[0] = 1;
+        p_ptr->varda_shadow_restricted = 1;
+        remove_quest_giver(R_IDX_VARDA);
+
+        if (init_texts && text_count > 0) {
+            quest_typewriter_menu("Varda, Shadow's Bastion", init_texts, text_count, TERM_WHITE, TERM_L_BLUE);
+            free_quest_texts(init_texts, text_count);
+        } else {
+            cptr fallback[] = {
+                "Varda's gaze is clear even in the deep dark.",
+                "\"Go down and break Belegwath's Shadow Bastion beneath the stars.\""
+            };
+            quest_typewriter_menu("Varda, Shadow's Bastion", fallback, N_ELEMENTS(fallback), TERM_WHITE, TERM_L_BLUE);
+        }
+
+        do_cmd_note("Varda sent me to destroy Belegwath in his Shadow Bastion.", p_ptr->depth);
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_ACTIVE) {
+        msg_print("Varda's whisper: \"Belegwath's bastion waits beyond the fifteenth delving.\"");
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_SUCCESS) {
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_VARDA_SHADOW, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_VARDA_SHADOW, completion_texts, &completion_count, true);
+        cptr fallback[] = {
+            "Varda's voice rings clear through the shattered shadow:",
+            "\"Choose your radiant gift anew, and carry the stars deeper still.\""
+        };
+        cptr* texts_to_use = (completion_texts && completion_count > 0) ? completion_texts : fallback;
+        int text_count = (completion_texts && completion_count > 0) ? completion_count : 2;
+        bool rewarded = grant_varda_reward(QUEST_ID_VARDA_SHADOW, texts_to_use, text_count);
+
+        if (completion_texts) {
+            free_quest_texts(completion_texts, completion_count);
+        }
+        if (rewarded) {
+            remove_quest_giver(R_IDX_VARDA);
+        }
+        return;
+    }
+
+    if (shadow_state == QUEST_STATE_REWARDED) {
+        msg_print("Varda's deeper blessing still shines in your wake.");
+        return;
+    }
 
     if (p_ptr->varda_quest == VARDA_QUEST_GIVER_PRESENT) {
         log_trace("Varda quest: accepting quest");
@@ -8667,7 +9178,7 @@ void varda_quest_interaction(void)
         int text_count = (completion_texts && completion_count > 0) ? completion_count : 2;
         
         /* Display quest completion and reward selection in one integrated menu */
-        bool rewarded = grant_varda_reward(texts_to_use, text_count);
+        bool rewarded = grant_varda_reward(QUEST_ID_VARDA, texts_to_use, text_count);
         
         if (completion_texts) {
             free_quest_texts(completion_texts, completion_count);
@@ -8687,8 +9198,12 @@ void varda_quest_interaction(void)
 void check_varda_quest_interaction(void)
 {
     int i, y, x;
+    byte shadow_state = quest_get_state(QUEST_ID_VARDA_SHADOW);
 
-    if (p_ptr->varda_quest < VARDA_QUEST_GIVER_PRESENT || p_ptr->varda_quest > VARDA_QUEST_SUCCESS) return;
+    if ((p_ptr->varda_quest < VARDA_QUEST_GIVER_PRESENT || p_ptr->varda_quest > VARDA_QUEST_SUCCESS) &&
+        shadow_state != QUEST_STATE_GIVER_PRESENT &&
+        shadow_state != QUEST_STATE_ACTIVE &&
+        shadow_state != QUEST_STATE_SUCCESS) return;
 
     for (i = 1; i < 9; i++) {
         y = p_ptr->py + ddy[i];
@@ -8709,7 +9224,8 @@ void check_varda_quest_interaction(void)
 
     /* If Varda should be present for a reward but isn't adjacent, try to place her */
     /* Only attempt placement once per depth to avoid infinite spawn loops */
-    if (p_ptr->varda_quest == VARDA_QUEST_SUCCESS && p_ptr->varda_level != p_ptr->depth) {
+    if ((p_ptr->varda_quest == VARDA_QUEST_SUCCESS || shadow_state == QUEST_STATE_SUCCESS) &&
+        p_ptr->varda_level != p_ptr->depth) {
         log_trace("Varda quest: success state without nearby quest giver - attempting to place Varda");
         try_place_varda_near_player();
     }
@@ -8922,12 +9438,77 @@ void aule_quest_interaction(void)
  */
 void mandos_quest_interaction(void)
 {
+    byte second_state;
+    byte third_state;
+
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    second_state = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+    third_state = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
+
+    if (second_state == QUEST_STATE_GIVER_PRESENT || third_state == QUEST_STATE_GIVER_PRESENT)
+    {
+        int quest_id = (third_state == QUEST_STATE_GIVER_PRESENT) ? QUEST_ID_MANDOS_BETRAYER : QUEST_ID_MANDOS_TRAITOR;
+        int text_count = 0;
+        cptr* init_texts = extract_quest_init_texts(quest_id, &text_count);
+        init_texts = prepend_repeat_context(quest_id, init_texts, &text_count, false);
+
+        quest_set_state(quest_id, QUEST_STATE_ACTIVE);
+
+        if (init_texts && text_count > 0) {
+            quest_typewriter_menu("Mandos the Doomsman", init_texts, text_count, TERM_L_DARK, TERM_WHITE);
+            free_quest_texts(init_texts, text_count);
+        } else {
+            cptr fallback[] = {
+                "Mandos speaks with the chill certainty of doom.",
+                "'Fulfil the judgment I have laid upon these traitors.'"
+            };
+            quest_typewriter_menu("Mandos the Doomsman", fallback, N_ELEMENTS(fallback), TERM_L_DARK, TERM_WHITE);
+        }
+        return;
+    }
+
+    if (second_state == QUEST_STATE_ACTIVE) {
+        msg_print("Mandos intones: \"Ulfang and Uldor still await their doom in the fortress below.\"");
+        return;
+    }
+    if (third_state == QUEST_STATE_ACTIVE) {
+        msg_print("Mandos intones: \"Maeglin still hides from his judgment in the deep places.\"");
+        return;
+    }
+    if (second_state == QUEST_STATE_SUCCESS || third_state == QUEST_STATE_SUCCESS)
+    {
+        int quest_id = (third_state == QUEST_STATE_SUCCESS) ? QUEST_ID_MANDOS_BETRAYER : QUEST_ID_MANDOS_TRAITOR;
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(quest_id, &completion_count);
+        completion_texts = prepend_repeat_context(quest_id, completion_texts, &completion_count, true);
+
+        quest_set_state(quest_id, QUEST_STATE_REWARDED);
+
+        if (completion_texts && completion_count > 0) {
+            quest_typewriter_menu("Mandos the Doomsman", completion_texts, completion_count, TERM_L_GREEN, TERM_WHITE);
+            free_quest_texts(completion_texts, completion_count);
+        } else {
+            cptr fallback[] = {
+                "Mandos's judgment is fulfilled, and the chamber falls still.",
+                "'The doom appointed has been carried out.'"
+            };
+            quest_typewriter_menu("Mandos the Doomsman", fallback, N_ELEMENTS(fallback), TERM_L_GREEN, TERM_WHITE);
+        }
+
+        grant_followup_quest_rewards(quest_id);
+        remove_quest_giver(R_IDX_MANDOS);
+        return;
+    }
+    if (second_state == QUEST_STATE_REWARDED || third_state == QUEST_STATE_REWARDED) {
+        msg_print("Mandos regards you in silence, as one whose doom has already been spoken.");
+        return;
+    }
     
     /* Handle first encounter - initialize quest */
     if (p_ptr->mandos_quest == MANDOS_QUEST_NOT_STARTED)
@@ -9082,6 +9663,8 @@ void mandos_quest_interaction(void)
 void check_mandos_quest_interaction(void)
 {
     int i, y, x;
+    byte second_state = quest_get_state(QUEST_ID_MANDOS_TRAITOR);
+    byte third_state = quest_get_state(QUEST_ID_MANDOS_BETRAYER);
     static s32b last_interaction_turn = -1;
     
     log_trace("check_mandos_quest_interaction called, quest state: %d, turn: %d", p_ptr->mandos_quest, turn);
@@ -9098,7 +9681,15 @@ void check_mandos_quest_interaction(void)
         p_ptr->mandos_quest != MANDOS_QUEST_GIVER_PRESENT && 
         p_ptr->mandos_quest != MANDOS_QUEST_ACTIVE &&
         p_ptr->mandos_quest != MANDOS_QUEST_SUCCESS &&
-        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
+        p_ptr->mandos_quest != MANDOS_QUEST_REWARDED &&
+        second_state != QUEST_STATE_GIVER_PRESENT &&
+        second_state != QUEST_STATE_ACTIVE &&
+        second_state != QUEST_STATE_SUCCESS &&
+        second_state != QUEST_STATE_REWARDED &&
+        third_state != QUEST_STATE_GIVER_PRESENT &&
+        third_state != QUEST_STATE_ACTIVE &&
+        third_state != QUEST_STATE_SUCCESS &&
+        third_state != QUEST_STATE_REWARDED)
     {
         log_trace("Quest not in correct state (%d), returning", p_ptr->mandos_quest);
         return;
@@ -9158,12 +9749,38 @@ void check_mandos_quest_completion(int r_idx)
             log_trace("Mandos quest completed - Brodda slain");
         }
     }
+
+    if (quest_get_state(QUEST_ID_MANDOS_TRAITOR) == QUEST_STATE_ACTIVE)
+    {
+        bool last_traitor = false;
+
+        if (r_idx == R_IDX_ULFANG && r_info[R_IDX_ULDOR].max_num == 0)
+            last_traitor = true;
+        if (r_idx == R_IDX_ULDOR && r_info[R_IDX_ULFANG].max_num == 0)
+            last_traitor = true;
+
+        if (last_traitor)
+        {
+            quest_set_state(QUEST_ID_MANDOS_TRAITOR, QUEST_STATE_SUCCESS);
+            msg_print("The Easterling lords are fallen. Mandos waits to pronounce their doom complete.");
+            if (!is_quest_giver_present(R_IDX_MANDOS))
+                spawn_quest_giver_near_player(R_IDX_MANDOS);
+        }
+    }
+
+    if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) == QUEST_STATE_ACTIVE && r_idx == R_IDX_MAEGLIN)
+    {
+        quest_set_state(QUEST_ID_MANDOS_BETRAYER, QUEST_STATE_SUCCESS);
+        msg_print("Maeglin the betrayer is cast down. Seek out Mandos for the final judgment.");
+        if (!is_quest_giver_present(R_IDX_MANDOS))
+            spawn_quest_giver_near_player(R_IDX_MANDOS);
+    }
 }
 
 /*
  * Handle quest completion checking for Orome hunting quest
  */
-void check_orome_quest_completion(void)
+void check_orome_quest_completion(int r_idx)
 {
     if (p_ptr->orome_quest == OROME_QUEST_ACTIVE) {
         /* Check thresholds for each monster type */
@@ -9204,6 +9821,44 @@ void check_orome_quest_completion(void)
                      kill_count, monster_name,
                      p_ptr->orome_wolves_killed, p_ptr->orome_spiders_killed, 
                      p_ptr->orome_serpents_killed, p_ptr->orome_vampires_killed);
+        }
+    }
+
+    if (quest_get_state(QUEST_ID_OROME_DRAGONS) == QUEST_STATE_ACTIVE &&
+        p_ptr->orome_dragons_killed >= 10) {
+        quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_SUCCESS);
+        msg_format("The dragon hunt is complete! You have slain %d mighty dragons.", p_ptr->orome_dragons_killed);
+        if (!is_quest_giver_present(R_IDX_OROME))
+            spawn_quest_giver_near_player(R_IDX_OROME);
+    }
+
+    if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) == QUEST_STATE_ACTIVE) {
+        byte all_targets_mask = (byte)((1 << orome_great_hunt_target_count) - 1);
+        int hunt_bit = orome_great_hunt_bit_for_target(r_idx);
+
+        if (hunt_bit) {
+            log_trace("Orome great hunt progress: mask=0x%02x after slaying target %d", p_ptr->orome_great_hunt_mask, r_idx);
+        }
+
+        if ((p_ptr->orome_great_hunt_mask & all_targets_mask) == all_targets_mask) {
+            int completion_count = 0;
+            cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_OROME_GREAT_HUNT, &completion_count);
+            completion_texts = prepend_repeat_context(QUEST_ID_OROME_GREAT_HUNT, completion_texts, &completion_count, true);
+
+            if (completion_texts && completion_count > 0) {
+                quest_typewriter_menu("Orome, Hunt of the Great", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+                free_quest_texts(completion_texts, completion_count);
+            } else {
+                cptr fallback[] = {
+                    "The last of Orome's marked prey falls at last.",
+                    "The Valaroma rings once more, and the great hunt is ended."
+                };
+                quest_typewriter_menu("Orome, Hunt of the Great", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+            }
+
+            quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_REWARDED);
+            metarun_set_orome_great_hunt_active(false);
+            grant_followup_quest_rewards(QUEST_ID_OROME_GREAT_HUNT);
         }
     }
 }
@@ -9472,12 +10127,61 @@ void check_niena_quest_completion(void)
  */
 void orome_quest_interaction(void)
 {
+    byte dragon_state;
+
     /* Prevent multiple interactions in the same turn */
     static int last_interaction_turn = -1;
     if (last_interaction_turn == turn) {
         return; /* Already handled this turn */
     }
     last_interaction_turn = turn;
+
+    dragon_state = quest_get_state(QUEST_ID_OROME_DRAGONS);
+    if (dragon_state == QUEST_STATE_GIVER_PRESENT)
+    {
+        int text_count = 0;
+        cptr* init_texts = extract_quest_init_texts(QUEST_ID_OROME_DRAGONS, &text_count);
+        init_texts = prepend_repeat_context(QUEST_ID_OROME_DRAGONS, init_texts, &text_count, false);
+
+        quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_ACTIVE);
+        p_ptr->orome_dragons_killed = 0;
+        remove_quest_giver(R_IDX_OROME);
+
+        if (init_texts && text_count > 0) {
+            quest_typewriter_menu("Orome, Warden of the Drakes", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+            free_quest_texts(init_texts, text_count);
+        } else {
+            cptr fallback[] = {
+                "Orome's horn-call echoes like fire through the deep halls.",
+                "'Slay ten mighty dragons and return to me, hunter.'"
+            };
+            quest_typewriter_menu("Orome, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+        }
+        return;
+    }
+    if (dragon_state == QUEST_STATE_SUCCESS)
+    {
+        int completion_count = 0;
+        cptr* completion_texts = extract_quest_completion_texts(QUEST_ID_OROME_DRAGONS, &completion_count);
+        completion_texts = prepend_repeat_context(QUEST_ID_OROME_DRAGONS, completion_texts, &completion_count, true);
+
+        quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_REWARDED);
+
+        if (completion_texts && completion_count > 0) {
+            quest_typewriter_menu("Orome, Warden of the Drakes", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+            free_quest_texts(completion_texts, completion_count);
+        } else {
+            cptr fallback[] = {
+                "Orome appears amid the fading terror of the drakes.",
+                "'The mightiest worms have learned to fear your name.'"
+            };
+            quest_typewriter_menu("Orome, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+        }
+
+        grant_followup_quest_rewards(QUEST_ID_OROME_DRAGONS);
+        remove_quest_giver(R_IDX_OROME);
+        return;
+    }
     
     /* Safety check - ensure valid quest state */
     if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT && 
@@ -9606,9 +10310,13 @@ void orome_quest_interaction(void)
  */
 void check_orome_quest_interaction(void)
 {
+    byte dragon_state = quest_get_state(QUEST_ID_OROME_DRAGONS);
+
     /* Only check if quest can be started or completed */
     if (p_ptr->orome_quest != OROME_QUEST_GIVER_PRESENT && 
-        p_ptr->orome_quest != OROME_QUEST_SUCCESS) {
+        p_ptr->orome_quest != OROME_QUEST_SUCCESS &&
+        dragon_state != QUEST_STATE_GIVER_PRESENT &&
+        dragon_state != QUEST_STATE_SUCCESS) {
         return;
     }
     
@@ -9634,7 +10342,7 @@ void check_orome_quest_interaction(void)
     }
     
     /* If quest is completed but Orome isn't adjacent, try to spawn him */
-    if (p_ptr->orome_quest == OROME_QUEST_SUCCESS)
+    if (p_ptr->orome_quest == OROME_QUEST_SUCCESS || dragon_state == QUEST_STATE_SUCCESS)
     {
         log_trace("Orome quest complete but no Orome found - trying to spawn");
         

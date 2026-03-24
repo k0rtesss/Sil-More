@@ -284,10 +284,11 @@ cptr option_text[OPT_MAX] = {
     NULL, /* xxx birth_maximize */
     "birth_discon_stair", /* OPT_birth_discon_stair */
     "birth_ironman", /* OPT_birth_ironman */
-    NULL, "birth_no_artefacts", /* OPT_birth_no_artefacts */
+    "birth_single_stair", /* OPT_birth_single_stair */
+    "birth_no_artefacts", /* OPT_birth_no_artefacts */
     "birth_fixed_exp", /* OPT_birth_fixed_exp */
-    NULL, /* xxx */
-    NULL, /* xxx */
+    "birth_tulkas_blunt", /* OPT_birth_tulkas_blunt */
+    "birth_torchlight", /* OPT_birth_torchlight */
     NULL, /* xxx birth_force_small_lev */
     NULL, /* xxx birth_retain_squelch */
     NULL, /* xxx birth_no_quests*/
@@ -347,11 +348,11 @@ cptr option_text[OPT_MAX] = {
     NULL, /* xxx adult_maximize */
     "adult_discon_stair", /* OPT_adult_discon_stair */
     "adult_ironman", /* OPT_adult_ironman */
-    NULL, /* xxx adult_no_stores */
+    "adult_single_stair", /* OPT_adult_single_stair */
     "adult_no_artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
-    NULL, /* xxx adult_no_stacking */
-    NULL, /* xxx adult_auto_notes */
+    "adult_tulkas_blunt", /* OPT_adult_tulkas_blunt */
+    "adult_torchlight", /* OPT_adult_torchlight */
     NULL, /* xxx adult_force_small_lev*/
     NULL, /* xxx adult_retain_squelch */
     NULL, /* xxx adult_no_quests*/
@@ -526,10 +527,11 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* xxx birth_maximize */
     "Disconnected stairs", /* OPT_birth_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_birth_ironman */
-    NULL, "No artefacts", /* OPT_birth_no_artefacts */
+    "Single stair (one up / one down)", /* OPT_birth_single_stair */
+    "No artefacts", /* OPT_birth_no_artefacts */
     "Fixed XP - gain 50K at start and nothing after", /* OPT_birth_fixed_exp */
-    NULL, /* xxx */
-    NULL, /* xxx */
+    "Tulkas' challenge: blunt weapons only", /* OPT_birth_tulkas_blunt */
+    "Varda's challenge: torches only", /* OPT_birth_torchlight */
     NULL, /* xxx birth_take_notes */
     NULL, /* xxx birth_force_small_lev */
     NULL, /* xxx birth_retain_squelch*/
@@ -589,11 +591,11 @@ cptr option_desc[OPT_MAX] = {
     NULL, /* xxx adult_maximize */
     "Disconnected stairs", /* OPT_adult_discon_stair */
     "Straight down (no up stairs until endgame)", /* OPT_adult_ironman */
-    NULL, /* xxx adult_no_stores */
+    "Single stair (one up / one down)", /* OPT_adult_single_stair */
     "No artefacts", /* OPT_adult_no_artefacts */
     NULL, /* xxx adult_rand_artefacts */
-    NULL, /* xxx adult_adult_no_stacking */
-    NULL, /* xxx adult_take_notes */
+    "Tulkas' challenge: blunt weapons only", /* OPT_adult_tulkas_blunt */
+    "Varda's challenge: torches only", /* OPT_adult_torchlight */
     NULL, /* xxx adult_force_small_lev */
     NULL, /* xxx adult_retain_squelch*/
     NULL, /* xxx adult_no_quests*/
@@ -790,11 +792,11 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx birth_maximize */
     false, /* OPT_birth_discon_stair */
     false, /* OPT_birth_ironman */
-    false, /* xxx */
+    false, /* OPT_birth_single_stair */
     false, /* OPT_birth_no_artefacts */
     false, /* OPT_birth_fixed_exp */
-    false, /* xxx */
-    false, /* xxx */
+    false, /* OPT_birth_tulkas_blunt */
+    false, /* OPT_birth_torchlight */
     false, /* xxx birth_force_small_lev */
     false, /* xxx birth_retain_squelch */
     false, /* xxx OPT_birth_no_quests*/
@@ -854,11 +856,11 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx adult_maximize */
     false, /* OPT_adult_discon_stair */
     false, /* OPT_adult_ironman */
-    false, /* xxx adult_no_stores */
+    false, /* OPT_adult_single_stair */
     false, /* OPT_adult_no_artefacts */
     false, /* xxx adult_rand_artefacts */
-    false, /* xxx adult_no_stacking */
-    false, /* xxx adult_take_notes */
+    false, /* OPT_adult_tulkas_blunt */
+    false, /* OPT_adult_torchlight */
     false, /* xxx adult_force_small_lev*/
     false, /* xxx adult_retain_squelch */
     false, /* xxx OPT_adult_no_quests */
@@ -959,8 +961,8 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Birth ***/
 
-    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_no_artefacts,
-        OPT_birth_fixed_exp, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+    { OPT_birth_discon_stair, OPT_birth_ironman, OPT_birth_single_stair, OPT_birth_no_artefacts,
+        OPT_birth_fixed_exp, OPT_birth_tulkas_blunt, OPT_birth_torchlight, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE },
 

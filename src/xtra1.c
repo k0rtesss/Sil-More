@@ -3351,6 +3351,10 @@ void calc_torch(void)
     {
         p_ptr->cur_light += 1;
     }
+    if (p_ptr->active_ability[S_SPC][SPC_QUEEN_STARS])
+    {
+        p_ptr->cur_light += 1;
+    }
 
     /* Update the visuals */
     p_ptr->update |= (PU_UPDATE_VIEW);
@@ -4250,10 +4254,20 @@ static void calc_bonuses(void)
     /* Temporary "Rage" */
     if (p_ptr->rage)
     {
-        p_ptr->stat_misc_mod[A_STR] += 1;
-        p_ptr->stat_misc_mod[A_DEX] -= 1;
-        p_ptr->stat_misc_mod[A_CON] += 1;
-        p_ptr->stat_misc_mod[A_GRA] -= 1;
+        if (p_ptr->active_ability[S_SPC][SPC_OROME_WRAITH])
+        {
+            p_ptr->stat_misc_mod[A_STR] += 1;
+            p_ptr->stat_misc_mod[A_DEX] += 1;
+            p_ptr->stat_misc_mod[A_CON] += 1;
+            p_ptr->stat_misc_mod[A_GRA] += 1;
+        }
+        else
+        {
+            p_ptr->stat_misc_mod[A_STR] += 1;
+            p_ptr->stat_misc_mod[A_DEX] -= 1;
+            p_ptr->stat_misc_mod[A_CON] += 1;
+            p_ptr->stat_misc_mod[A_GRA] -= 1;
+        }
     }
 
     /* Temporary Strength */

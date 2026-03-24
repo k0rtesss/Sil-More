@@ -2978,6 +2978,15 @@ static int place_monster_idx = 0;
  */
 bool quest_monster_spawn_okay(int r_idx)
 {
+    if (p_ptr && p_ptr->tulkas_orc_restricted && tulkas_orc_is_target(r_idx)) {
+        /* Orc captains are reserved for the Tulkas quest */
+        return false;
+    }
+    if (p_ptr && p_ptr->varda_shadow_restricted && r_idx == R_IDX_BELEGWATH) {
+        /* Belegwath is reserved for Varda's shadow quest */
+        return false;
+    }
+
     /* Prevent quest monsters from spawning outside their quest contexts */
     switch (r_idx) {
         case R_IDX_TULKAS:
@@ -2992,6 +3001,15 @@ bool quest_monster_spawn_okay(int r_idx)
         case R_IDX_MANDOS:
             /* Mandos only spawns in special vaults/quest contexts */
             return false;
+        case R_IDX_ULDOR:
+        case R_IDX_ULFANG:
+            /* Easterling quest targets only spawn in their fortress */
+            if (quest_get_state(QUEST_ID_MANDOS_TRAITOR) < QUEST_STATE_REWARDED) return false;
+            return true;
+        case R_IDX_MAEGLIN:
+            /* Maeglin is locked to the third Mandos quest until completed */
+            if (quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED) return false;
+            return true;
         default:
             /* All other monsters can spawn normally */
             return true;

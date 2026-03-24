@@ -3082,6 +3082,11 @@ void earthquake(int cy, int cx, int pit_y, int pit_x, int r, int who)
                 {
                     bool killed = false;
 
+                    /* Any player-triggered quake that strikes Morgoth counts as an attack */
+                    if (who < 0 && m_ptr->r_idx == R_IDX_MORGOTH) {
+                        niena_mark_morgoth_attack();
+                    }
+
                     // message for each visible monster
                     if (m_ptr->ml)
                         msg_format("%^s is hit by falling debris.", m_name);

@@ -60,7 +60,7 @@
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
 #define VERSION_PATCH 5
-#define VERSION_EXTRA 7   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_EXTRA 8   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -263,21 +263,31 @@
 #define R_IDX_NIENA 6
 #define R_IDX_OROME 332
 #define R_IDX_DURUIN 126
+#define R_IDX_BELEGWATH 166
 #define R_IDX_VARDA 321
 #define R_IDX_SPIDER_HATCHLING 32
 #define R_IDX_ORC_ARCHER 51
 #define R_IDX_ORC_CHAMPION 81
 #define R_IDX_ORC_CAPTAIN 91
 #define R_IDX_BARROW_WIGHT 112
+#define R_IDX_ULDOR 115
 #define R_IDX_ALDOR 117
 #define R_IDX_EASTERLING_SPY 121
+#define R_IDX_ULFANG 125
 #define R_IDX_OATHWRAITH 153
 #define R_IDX_CAT_WARRIOR 154
 #define R_IDX_YOUNG_COLD_DRAKE 164
 #define R_IDX_CAT_ASSASSIN 175
+#define R_IDX_SCATHA 176
 #define R_IDX_YOUNG_FIRE_DRAKE 181
 #define R_IDX_TROLL_GUARD 192
+#define R_IDX_SMAUG 195
+#define R_IDX_MAEGLIN 196
 #define R_IDX_SILENT_WATCHER 203
+#define R_IDX_DRAUGLUIN 205
+#define R_IDX_GOSTIR 215
+#define R_IDX_SHELOB 224
+#define R_IDX_THURINGWETHIL 234
 #define R_IDX_GOTHMOG 241 // the location of Gothmog
 #define R_IDX_UNGOLIANT 242 // the location of Ungoliant
 #define R_IDX_GLAURUNG 243 // the location of Glaurung
@@ -677,6 +687,10 @@
 #define SPC_OATH_VALOROUS 7  /* Oath of the Valorous Heart */
 #define SPC_UNIQUE_BANE 8  /* Enhanced effectiveness against unique monsters */
 #define SPC_OATH_LIGHT 9   /* Oath of Light */
+#define SPC_OROME_WRAITH 10 /* Wraith of Orome */
+#define SPC_HUNTSMAN_RHYTHM 11 /* Orome's Huntsman's Rhythm */
+#define SPC_TULKAS_WRATH 12 /* Wrath of Tulkas */
+#define SPC_QUEEN_STARS 13 /* Queen of the Stars */
 
 /*
  * Attack Types
@@ -2790,9 +2804,12 @@
 // xxx birth_preserve
 #define OPT_birth_discon_stair (OPT_BIRTH + 3)
 #define OPT_birth_ironman (OPT_BIRTH + 4)
+#define OPT_birth_single_stair (OPT_BIRTH + 5)
 // xxx birth_no_stores
 #define OPT_birth_no_artefacts (OPT_BIRTH + 6)
 #define OPT_birth_fixed_exp (OPT_BIRTH + 7)
+#define OPT_birth_tulkas_blunt (OPT_BIRTH + 8)
+#define OPT_birth_torchlight (OPT_BIRTH + 9)
 
 /* xxx xxx */
 #define OPT_cheat_peek (OPT_CHEAT + 0)
@@ -2814,9 +2831,12 @@
 // xxx adult_preserve
 #define OPT_adult_discon_stair (OPT_ADULT + 3)
 #define OPT_adult_ironman (OPT_ADULT + 4)
+#define OPT_adult_single_stair (OPT_ADULT + 5)
 // xxx adult_no_stores
 #define OPT_adult_no_artefacts (OPT_ADULT + 6)
 // xxx adult_rand_artefacts
+#define OPT_adult_tulkas_blunt (OPT_ADULT + 8)
+#define OPT_adult_torchlight (OPT_ADULT + 9)
 // xxx adult_no_stacking
 // xxx adult_take_notes
 // xxx adult_force_small_lev
@@ -2968,9 +2988,12 @@
 // xxx birth_preserve
 #define birth_discon_stair op_ptr->opt[OPT_birth_discon_stair]
 #define birth_ironman op_ptr->opt[OPT_birth_ironman]
+#define birth_single_stair op_ptr->opt[OPT_birth_single_stair]
 // xxx birth_no_stores
 #define birth_no_artefacts op_ptr->opt[OPT_birth_no_artefacts]
 #define birth_fixed_exp op_ptr->opt[OPT_birth_fixed_exp]
+#define birth_tulkas_blunt op_ptr->opt[OPT_birth_tulkas_blunt]
+#define birth_torchlight op_ptr->opt[OPT_birth_torchlight]
 // xxx birth_retain_squelch
 // xxx birth_no_quests
 // xxx birth_no_player ghosts
@@ -3000,12 +3023,16 @@
 // xxx adult_preserve
 #define adult_discon_stair op_ptr->opt[OPT_adult_discon_stair]
 #define adult_ironman op_ptr->opt[OPT_adult_ironman]
+#define adult_single_stair op_ptr->opt[OPT_adult_single_stair]
 // xxx adult_no_stores
 #define adult_no_artefacts op_ptr->opt[OPT_adult_no_artefacts]
 
 // Sil: set directly to false at the moment, as they are currently incompatible
 // with Sil
 #define adult_rand_artefacts false
+
+#define adult_tulkas_blunt op_ptr->opt[OPT_adult_tulkas_blunt]
+#define adult_torchlight op_ptr->opt[OPT_adult_torchlight]
 
 // xxx adult_no_stacking
 // xxx adult_take_notes
@@ -3823,6 +3850,11 @@
 #define NIENA_QUEST_REWARDED 4       /* Reward given, quest fully complete */
 #define NIENA_QUEST_FAILED 5         /* Failed by taking a life during the quest */
 
+/* Flags for Niena's later quests (stored in niena_reserved) */
+#define NIENA_FLAG_MORGOTH_ATTACKED 0x01  /* Player struck Morgoth during the mercy theft quest */
+#define NIENA_FLAG_MERCY_GIFT_TEMP  0x02  /* Temporary Gift of Mercy granted for the Morgoth quest */
+#define NIENA_FLAG_PACIFIST_FAILED  0x04  /* Pacifist escape quest failed this run */
+
 /* Orome quest states */
 #define OROME_QUEST_NOT_STARTED 0
 #define OROME_QUEST_GIVER_PRESENT 1  /* Orome spawned on hunting grounds level */
@@ -3864,6 +3896,16 @@ typedef struct quest_mapping {
     /* Add quest-specific state constants or function pointers here as needed */
 } quest_mapping;
 
+#define VALA_TULKAS 1
+#define VALA_AULE   2
+#define VALA_MANDOS 3
+#define VALA_NIENNA 4
+#define VALA_OROME  5
+#define VALA_VARDA  6
+#define VALA_MAX    6
+#define VALA_STAGES 3
+#define QUEST_SLOT_MAX 24  /* Runtime quest state slots */
+
 /* Quest ID mappings - modify this to add new quests */
 #define QUEST_ID_TULKAS  1  /* Tulkas quest in quest.txt */
 #define QUEST_ID_AULE    2  /* Aule quest in quest.txt */
@@ -3871,6 +3913,29 @@ typedef struct quest_mapping {
 #define QUEST_ID_NIENA   4  /* Niena quest in quest.txt */
 #define QUEST_ID_OROME   5  /* Orome quest in quest.txt */
 #define QUEST_ID_VARDA   6  /* Varda quest in quest.txt */
+#define QUEST_ID_MANDOS_TRAITOR 7  /* Mandos second quest */
+#define QUEST_ID_MANDOS_BETRAYER 8  /* Mandos third quest */
+#define QUEST_ID_OROME_DRAGONS 9  /* Orome second quest */
+#define QUEST_ID_OROME_GREAT_HUNT 10  /* Orome third quest */
+#define QUEST_ID_NIENA_MORGOTH 11  /* Niena second quest */
+#define QUEST_ID_NIENA_PACIFIST 12  /* Niena third quest */
+#define QUEST_ID_TULKAS_ORCS 13  /* Tulkas second quest */
+#define QUEST_ID_TULKAS_MORGOTH 14  /* Tulkas third quest */
+#define QUEST_ID_VARDA_SHADOW 15  /* Varda second quest */
+#define QUEST_ID_VARDA_UNGOLIANT 16  /* Varda third quest */
+
+#define OROME_GREAT_HUNT_TARGET_COUNT 6
+#define OROME_GREAT_HUNT_TARGET_MASK 0x3F
+
+/* Generic quest state helpers for multi-stage quests */
+#define QUEST_STATE_NOT_STARTED    0
+#define QUEST_STATE_GIVER_PRESENT  1
+#define QUEST_STATE_ACTIVE         2
+#define QUEST_STATE_SUCCESS        3
+#define QUEST_STATE_REWARDED       4
+
+#define QUEST_FLAG_GLOBAL          0x01
+#define QUEST_FLAG_OPTIONAL_CHAIN  0x02
 
 /* Quest mapping table - used by extract_quest_init_texts() and related functions */
 static const quest_mapping quest_id_map[] = {
@@ -3879,10 +3944,29 @@ static const quest_mapping quest_id_map[] = {
     { QUEST_ID_MANDOS, "Mandos the Doomsman" },
     { QUEST_ID_NIENA,  "Niena, Lady of Pity" },
     { QUEST_ID_OROME,  "Orome the Hunter" },
-    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" }
+    { QUEST_ID_VARDA,  "Varda, Lady of the Stars" },
+    { QUEST_ID_MANDOS_TRAITOR, "Mandos, Doom of the Easterlings" },
+    { QUEST_ID_MANDOS_BETRAYER, "Mandos, Doom of the Betrayer" },
+    { QUEST_ID_OROME_DRAGONS, "Orome, Warden of the Drakes" },
+    { QUEST_ID_OROME_GREAT_HUNT, "Orome, Hunt of the Great" },
+    { QUEST_ID_NIENA_MORGOTH, "Nienna's Mercy in Angband" },
+    { QUEST_ID_NIENA_PACIFIST, "Nienna's Path of Peace" },
+    { QUEST_ID_TULKAS_ORCS, "Tulkas, Orc-Bane" },
+    { QUEST_ID_TULKAS_MORGOTH, "Tulkas, Black Foe's Scourge" },
+    { QUEST_ID_VARDA_SHADOW, "Varda, Shadow's Bastion" },
+    { QUEST_ID_VARDA_UNGOLIANT, "Varda, Gloomweaver's Doom" }
 };
 
 #define QUEST_COUNT (sizeof(quest_id_map) / sizeof(quest_id_map[0]))
+
+/* Challenge identifiers tracked at the metarun level */
+#define CHALLENGE_NONE            0
+#define CHALLENGE_DISCONNECTED    1
+#define CHALLENGE_SINGLE_STAIR    2
+#define CHALLENGE_FIXED_50K_XP    3
+#define CHALLENGE_TULKAS_BLUNT    4
+#define CHALLENGE_TORCHLIGHT      5
+#define CHALLENGE_MAX_TRACKED     7
 
 //Defines for number of heroes
 #define FLAG_COUNT 64

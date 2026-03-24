@@ -6739,6 +6739,13 @@ errr parse_quest_info(char* buf, header* head)
         /* Point at the "info" */
         quest_ptr = (quest_type*)head->info_ptr + i;
 
+        quest_ptr->quest_num = (byte)i;
+        quest_ptr->vala_id = 0;
+        quest_ptr->sequence = 1;
+        quest_ptr->quest_flags = 0;
+        quest_ptr->challenge_unlock = 0;
+        quest_ptr->completion_cap = 0;
+
         /* Store the name */
         if (!(quest_ptr->name = add_name(head, s)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
@@ -6764,6 +6771,112 @@ errr parse_quest_info(char* buf, header* head)
         /* Store challenge text in dedicated field */
         if (!add_text(&(quest_ptr->challenge_text), head, buf + 2))
             return (PARSE_ERROR_OUT_OF_MEMORY);
+    }
+
+    /* Process 'Z' for "Vala owner" */
+    else if (buf[0] == 'Z')
+    {
+        char vala_name[32];
+        int vala_id = 0;
+
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 == sscanf(buf + 2, "%d", &vala_id))
+        {
+            /* Numeric Vala id parsed directly. */
+        }
+        else if (1 == sscanf(buf + 2, "%31s", vala_name))
+        {
+            if (SDL_strcasecmp(vala_name, "Tulkas") == 0) vala_id = VALA_TULKAS;
+            else if (SDL_strcasecmp(vala_name, "Aule") == 0) vala_id = VALA_AULE;
+            else if (SDL_strcasecmp(vala_name, "Mandos") == 0) vala_id = VALA_MANDOS;
+            else if (SDL_strcasecmp(vala_name, "Nienna") == 0 || SDL_strcasecmp(vala_name, "Niena") == 0) vala_id = VALA_NIENNA;
+            else if (SDL_strcasecmp(vala_name, "Orome") == 0) vala_id = VALA_OROME;
+            else if (SDL_strcasecmp(vala_name, "Varda") == 0) vala_id = VALA_VARDA;
+        }
+
+        if (vala_id < 0 || vala_id > VALA_MAX) vala_id = 0;
+        quest_ptr->vala_id = (byte)vala_id;
+    }
+
+    /* Process 'J' for "sequence" within a Vala quest chain */
+    else if (buf[0] == 'J')
+    {
+        int seq;
+
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        seq = atoi(buf + 2);
+        if (seq < 1) seq = 1;
+        if (seq > VALA_STAGES) seq = VALA_STAGES;
+        quest_ptr->sequence = (byte)seq;
+    }
+
+    /* Process 'F' for "quest Flags" */
+    else if (buf[0] == 'F')
+    {
+        char flagbuf[128];
+        char *token;
+
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        quest_ptr->quest_flags = 0;
+        SDL_strlcpy(flagbuf, buf + 2, sizeof(flagbuf));
+        token = strtok(flagbuf, " |,:;");
+        while (token)
+        {
+            if (SDL_strcasecmp(token, "GLOBAL") == 0)
+                quest_ptr->quest_flags |= QUEST_FLAG_GLOBAL;
+            else if (SDL_strcasecmp(token, "OPTIONAL_CHAIN") == 0 ||
+                     SDL_strcasecmp(token, "NO_CHAIN") == 0)
+                quest_ptr->quest_flags |= QUEST_FLAG_OPTIONAL_CHAIN;
+            token = strtok(NULL, " |,:;");
+        }
+    }
+
+    /* Process 'H' for "Challenge unlock" */
+    else if (buf[0] == 'H')
+    {
+        char challenge_name[32];
+        int challenge_id = 0;
+
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 == sscanf(buf + 2, "%d", &challenge_id))
+        {
+            /* Numeric challenge id parsed directly. */
+        }
+        else if (1 == sscanf(buf + 2, "%31s", challenge_name))
+        {
+            if (SDL_strcasecmp(challenge_name, "DISCONNECTED") == 0 || SDL_strcasecmp(challenge_name, "DISCON") == 0)
+                challenge_id = CHALLENGE_DISCONNECTED;
+            else if (SDL_strcasecmp(challenge_name, "SINGLE_STAIR") == 0 || SDL_strcasecmp(challenge_name, "SINGLE") == 0)
+                challenge_id = CHALLENGE_SINGLE_STAIR;
+            else if (SDL_strcasecmp(challenge_name, "FIXED_50K") == 0 || SDL_strcasecmp(challenge_name, "FIXED_50K_XP") == 0 || SDL_strcasecmp(challenge_name, "FIXED_XP") == 0)
+                challenge_id = CHALLENGE_FIXED_50K_XP;
+            else if (SDL_strcasecmp(challenge_name, "TULKAS_BLUNT") == 0 || SDL_strcasecmp(challenge_name, "BLUNT") == 0)
+                challenge_id = CHALLENGE_TULKAS_BLUNT;
+            else if (SDL_strcasecmp(challenge_name, "TORCHLIGHT") == 0 || SDL_strcasecmp(challenge_name, "TORCH") == 0)
+                challenge_id = CHALLENGE_TORCHLIGHT;
+        }
+
+        if (challenge_id < 0 || challenge_id > CHALLENGE_MAX_TRACKED)
+            challenge_id = 0;
+
+        quest_ptr->challenge_unlock = (byte)challenge_id;
+    }
+
+    /* Process 'L' for "completion cap" */
+    else if (buf[0] == 'L')
+    {
+        int cap;
+
+        if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        cap = atoi(buf + 2);
+        if (cap < 0) cap = 0;
+        if (cap > 255) cap = 255;
+        quest_ptr->completion_cap = (byte)cap;
     }
 
     /* Process 'Y' for "quest tYpe" */

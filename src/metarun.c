@@ -42,6 +42,13 @@
 
 /* =========================  constants  ========================= */
 #define CURSE_MENU_LINES  3
+#define METARUN_RUNTIME_CHALLENGE_FLAGS_IDX 0
+#define METARUN_CHALLENGE_DISCON_FLAG 0x01
+#define METARUN_CHALLENGE_SINGLE_FLAG 0x02
+#define METARUN_CHALLENGE_FIXED_FLAG 0x04
+#define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
+#define METARUN_CHALLENGE_TORCHLIGHT_FLAG 0x10
+#define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
 static metarun *metaruns    = NULL;
@@ -60,6 +67,286 @@ static int popcount32(u32b value)
         count++;
     }
     return count;
+}
+
+static bool metarun_runtime_ready(void)
+{
+    return metarun_current_index() >= 0;
+}
+
+static byte* challenge_count_slot(int challenge_id)
+{
+    int idx;
+
+    if (challenge_id <= CHALLENGE_NONE || challenge_id > CHALLENGE_MAX_TRACKED)
+        return NULL;
+
+    idx = METARUN_RUNTIME_CHALLENGE_COUNT_BASE + (challenge_id - 1);
+    if (idx < 0 || idx >= (int)N_ELEMENTS(metar.reserved_runtime))
+        return NULL;
+
+    return &metar.reserved_runtime[idx];
+}
+
+static byte* metarun_quest_reserved_slot(int slot)
+{
+    if (slot < 0 || slot >= (int)N_ELEMENTS(metar.quest_reserved))
+        return NULL;
+    return &metar.quest_reserved[slot];
+}
+
+bool metarun_challenge_disconnected_unlocked(void)
+{
+    byte flags;
+
+    if (!metarun_runtime_ready()) return false;
+
+    flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    if (!(flags & METARUN_CHALLENGE_DISCON_FLAG) &&
+        metarun_quest_completion_count(METARUN_QUEST_MANDOS_TRAITOR) > 0) {
+        metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_DISCON_FLAG;
+        save_metaruns();
+        flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    }
+
+    return (flags & METARUN_CHALLENGE_DISCON_FLAG) != 0;
+}
+
+void metarun_unlock_challenge_disconnected(void)
+{
+    if (!metarun_runtime_ready()) return;
+    if (metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_DISCON_FLAG) return;
+
+    metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_DISCON_FLAG;
+    save_metaruns();
+}
+
+bool metarun_challenge_single_stair_unlocked(void)
+{
+    byte flags;
+
+    if (!metarun_runtime_ready()) return false;
+
+    flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    if (!(flags & METARUN_CHALLENGE_SINGLE_FLAG) &&
+        metarun_quest_completion_count(METARUN_QUEST_OROME_DRAGONS) > 0) {
+        metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_SINGLE_FLAG;
+        save_metaruns();
+        flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    }
+
+    return (flags & METARUN_CHALLENGE_SINGLE_FLAG) != 0;
+}
+
+void metarun_unlock_challenge_single_stair(void)
+{
+    if (!metarun_runtime_ready()) return;
+    if (metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_SINGLE_FLAG) return;
+
+    metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_SINGLE_FLAG;
+    save_metaruns();
+}
+
+bool metarun_challenge_fixed_exp_unlocked(void)
+{
+    byte flags;
+
+    if (!metarun_runtime_ready()) return false;
+
+    flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    if (!(flags & METARUN_CHALLENGE_FIXED_FLAG) &&
+        (metarun_quest_completion_count(METARUN_QUEST_NIENA_MORGOTH) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP) > 0)) {
+        metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_FIXED_FLAG;
+        save_metaruns();
+        flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    }
+
+    return (flags & METARUN_CHALLENGE_FIXED_FLAG) != 0;
+}
+
+void metarun_unlock_challenge_fixed_exp(void)
+{
+    if (!metarun_runtime_ready()) return;
+    if (metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_FIXED_FLAG) return;
+
+    metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_FIXED_FLAG;
+    save_metaruns();
+}
+
+bool metarun_challenge_tulkas_blunt_unlocked(void)
+{
+    byte flags;
+
+    if (!metarun_runtime_ready()) return false;
+
+    flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    if (!(flags & METARUN_CHALLENGE_TULKAS_BLUNT_FLAG) &&
+        (metarun_quest_completion_count(METARUN_QUEST_TULKAS_ORCS) > 0 ||
+         metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > 0)) {
+        metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_TULKAS_BLUNT_FLAG;
+        save_metaruns();
+        flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    }
+
+    return (flags & METARUN_CHALLENGE_TULKAS_BLUNT_FLAG) != 0;
+}
+
+void metarun_unlock_challenge_tulkas_blunt(void)
+{
+    if (!metarun_runtime_ready()) return;
+    if (metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_TULKAS_BLUNT_FLAG) return;
+
+    metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_TULKAS_BLUNT_FLAG;
+    save_metaruns();
+}
+
+bool metarun_challenge_torchlight_unlocked(void)
+{
+    byte flags;
+
+    if (!metarun_runtime_ready()) return false;
+
+    flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    if (!(flags & METARUN_CHALLENGE_TORCHLIGHT_FLAG) &&
+        metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT) > 0) {
+        metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_TORCHLIGHT_FLAG;
+        save_metaruns();
+        flags = metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX];
+    }
+
+    return (flags & METARUN_CHALLENGE_TORCHLIGHT_FLAG) != 0;
+}
+
+void metarun_unlock_challenge_torchlight(void)
+{
+    if (!metarun_runtime_ready()) return;
+    if (metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] & METARUN_CHALLENGE_TORCHLIGHT_FLAG) return;
+
+    metar.reserved_runtime[METARUN_RUNTIME_CHALLENGE_FLAGS_IDX] |= METARUN_CHALLENGE_TORCHLIGHT_FLAG;
+    save_metaruns();
+}
+
+int metarun_challenge_completion_count(int challenge_id)
+{
+    byte *slot = challenge_count_slot(challenge_id);
+    if (!metarun_runtime_ready() || !slot) return 0;
+    return *slot;
+}
+
+void metarun_mark_challenge_completed(int challenge_id)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return;
+
+    slot = challenge_count_slot(challenge_id);
+    if (!slot) return;
+    if (*slot < 255) (*slot)++;
+    save_metaruns();
+}
+
+int metarun_mandos_resurrection_charges(void)
+{
+    byte *slot = metarun_quest_reserved_slot(METARUN_SLOT_MANDOS_RES_CHARGES);
+    if (!metarun_runtime_ready() || !slot) return 0;
+    return *slot;
+}
+
+void metarun_add_mandos_resurrection_charge(void)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_MANDOS_RES_CHARGES);
+    if (!slot || *slot >= 1) return;
+    *slot = 1;
+    save_metaruns();
+}
+
+bool metarun_consume_mandos_resurrection_charge(void)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return false;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_MANDOS_RES_CHARGES);
+    if (!slot || *slot == 0) return false;
+    (*slot)--;
+    save_metaruns();
+    return true;
+}
+
+int metarun_niena_curse_cleanses(void)
+{
+    byte *slot = metarun_quest_reserved_slot(METARUN_SLOT_NIENA_CURSE_CLEANSE);
+    if (!metarun_runtime_ready() || !slot) return 0;
+    return *slot;
+}
+
+void metarun_add_niena_curse_cleansing_charge(void)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_NIENA_CURSE_CLEANSE);
+    if (!slot || *slot >= 1) return;
+    *slot = 1;
+    save_metaruns();
+}
+
+bool metarun_consume_niena_curse_cleansing_charge(void)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return false;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_NIENA_CURSE_CLEANSE);
+    if (!slot || *slot == 0) return false;
+    (*slot)--;
+    save_metaruns();
+    return true;
+}
+
+byte metarun_orome_great_hunt_mask(void)
+{
+    byte *slot = metarun_quest_reserved_slot(METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+    if (!metarun_runtime_ready() || !slot) return 0;
+    return *slot;
+}
+
+void metarun_set_orome_great_hunt_mask(byte mask)
+{
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_OROME_GREAT_HUNT_MASK);
+    if (!slot || *slot == mask) return;
+    *slot = mask;
+    save_metaruns();
+}
+
+bool metarun_orome_great_hunt_active(void)
+{
+    byte *slot = metarun_quest_reserved_slot(METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+    if (!metarun_runtime_ready() || !slot) return false;
+    return *slot != 0;
+}
+
+void metarun_set_orome_great_hunt_active(bool active)
+{
+    byte value = active ? 1 : 0;
+    byte *slot;
+
+    if (!metarun_runtime_ready()) return;
+
+    slot = metarun_quest_reserved_slot(METARUN_SLOT_OROME_GREAT_HUNT_ACTIVE);
+    if (!slot || *slot == value) return;
+    *slot = value;
+    save_metaruns();
 }
 
 static void metarun_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
@@ -2209,6 +2496,275 @@ static void wait_prompt(prompt_t id) {         /* tiny wrapper */
     wait_for_keypress_with_prompt(prompt_text[id]);
 }
 
+static const char* challenge_display_name(int challenge_id)
+{
+    switch (challenge_id) {
+        case CHALLENGE_DISCONNECTED: return "Disconnected stairs";
+        case CHALLENGE_SINGLE_STAIR: return "Single stair";
+        case CHALLENGE_FIXED_50K_XP: return "Fixed 50k XP";
+        case CHALLENGE_TULKAS_BLUNT: return "Tulkas' blunt arms";
+        case CHALLENGE_TORCHLIGHT: return "Varda's torches-only";
+        default: return "Unknown challenge";
+    }
+}
+
+static void show_completed_quests_summary(void)
+{
+    int term_height, term_width;
+    Term_get_size(&term_width, &term_height);
+
+    screen_save();
+    Term_clear();
+
+    int row = 1;
+    int col = 2;
+    char line[120];
+    bool any = false;
+
+    Term_putstr(col, row++, -1, TERM_YELLOW, "Completed Quests (this metarun)");
+
+    if (z_info && quest_info) {
+        for (int i = 1; i < z_info->quest_max && row < term_height - 3; i++) {
+            quest_type *q_ptr = &quest_info[i];
+            if (!q_ptr->name) continue;
+            u32b flag = quest_metarun_flag(i);
+            if (!flag) continue;
+            int count = metarun_quest_completion_count(flag);
+            if (count <= 0) continue;
+            any = true;
+
+            cptr title = quest_display_title(i);
+            strnfmt(line, sizeof(line), "%-34.34s x%d", title ? title : "Quest", count);
+            Term_putstr(col, row++, -1, TERM_WHITE, line);
+
+            if (q_ptr->challenge_unlock) {
+                int ch_id = q_ptr->challenge_unlock;
+                int ch_count = metarun_challenge_completion_count(ch_id);
+                cptr cname = challenge_display_name(ch_id);
+                strnfmt(line, sizeof(line), "  Unlocks: %s (completed %d)", cname, ch_count);
+                Term_putstr(col, row++, -1, TERM_L_DARK, line);
+            }
+        }
+    }
+
+    if (!any) {
+        Term_putstr(col, row++, -1, TERM_L_DARK, "No quests completed yet in this metarun.");
+    }
+
+    /* Challenge summary */
+    Term_putstr(col, row++, -1, TERM_YELLOW, "Challenges");
+    int dis_count = metarun_challenge_completion_count(CHALLENGE_DISCONNECTED);
+    strnfmt(line, sizeof(line), "Disconnected stairs: completed %d time%s", dis_count, (dis_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int single_count = metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR);
+    strnfmt(line, sizeof(line), "Single stair: completed %d time%s", single_count, (single_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int fixed_count = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    strnfmt(line, sizeof(line), "Fixed 50k XP: completed %d time%s", fixed_count, (fixed_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int blunt_count = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
+    strnfmt(line, sizeof(line), "Blunt arms: completed %d time%s", blunt_count, (blunt_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+    int torch_count = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
+    strnfmt(line, sizeof(line), "Torches-only: completed %d time%s", torch_count, (torch_count == 1) ? "" : "s");
+    Term_putstr(col, row++, -1, TERM_WHITE, line);
+
+    Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
+    inkey();
+    screen_load();
+}
+
+static void show_mandos_third_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the challenge of disconnected stairs.",
+        "Mandos acknowledges your feat and sets a final doom:",
+        "Seek Maeglin's hidden vault between delvings seventeen and nineteen and end his false life.",
+        "This third quest stands apart and will not bar other callings."
+    };
+    quest_typewriter_menu("Mandos' Final Doom", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+}
+
+static void activate_orome_great_hunt(void)
+{
+    byte mask = metarun_orome_great_hunt_mask();
+    p_ptr->orome_great_hunt_mask = mask;
+    metarun_set_orome_great_hunt_mask(mask);
+    metarun_set_orome_great_hunt_active(true);
+    if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) < QUEST_STATE_ACTIVE) {
+        quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_ACTIVE);
+    }
+    log_trace("Metarun: Orome great hunt activated (mask=0x%02x, state=%d)", mask, quest_get_state(QUEST_ID_OROME_GREAT_HUNT));
+}
+
+static void show_orome_great_hunt_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the single-stair challenge.",
+        "Orome offers the Wraith for purchase and names a hunt that spans your line:",
+        "Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil. Slay them in any delve.",
+        "This hunt runs alongside all other quests until the last mark falls."
+    };
+    quest_typewriter_menu("Orome's Great Hunt", lines, N_ELEMENTS(lines), TERM_GREEN, TERM_WHITE);
+}
+
+static void maybe_unlock_orome_great_hunt(bool challenge_single_stair_active)
+{
+    if (!challenge_single_stair_active) return;
+    if (quest_get_state(QUEST_ID_OROME_GREAT_HUNT) >= QUEST_STATE_REWARDED) return;
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME_GREAT_HUNT) >= quest_completion_cap(QUEST_ID_OROME_GREAT_HUNT)) return;
+    if (metarun_orome_great_hunt_active()) return;
+
+    activate_orome_great_hunt();
+    show_orome_great_hunt_unlock_message();
+}
+
+static void show_niena_mercy_unlock_message(void)
+{
+    const char *lines[] = {
+        "You completed the fixed 50,000 XP challenge.",
+        "Nienna smiles through tears: her Gift of Mercy may now be learned for 5000 experience.",
+        "Find it in the Special abilities list if you would carry her pity into future delvings."
+    };
+    quest_typewriter_menu("Nienna's Gift of Mercy", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+}
+
+static void show_tulkas_blunt_unlock_message(void)
+{
+    const char *lines[] = {
+        "You endured the blunt-arms challenge.",
+        "Tulkas roars with laughter and offers the lore of Unique Bane to all your line.",
+        "Seek it among your Special abilities for 5000 experience in future delvings."
+    };
+    quest_typewriter_menu("Tulkas' Orc-Bane", lines, N_ELEMENTS(lines), TERM_YELLOW, TERM_WHITE);
+}
+
+static void show_torchlight_unlock_message(void)
+{
+    const char *lines[] = {
+        "You conquered Varda's torches-only challenge.",
+        "The Queen of the Stars will now teach her radiance to any who pay 5000 experience.",
+        "Find Queen of the Stars among your Special abilities in future delves."
+    };
+    quest_typewriter_menu("Queen of the Stars", lines, N_ELEMENTS(lines), TERM_WHITE, TERM_L_BLUE);
+}
+
+static int total_player_kills_this_run(void)
+{
+    if (!z_info || !l_list) return 0;
+
+    int total = 0;
+    for (int i = 0; i < z_info->r_max; i++) {
+        int kills = l_list[i].pkills;
+        if (kills > 0) total += kills;
+    }
+
+    return total;
+}
+
+static void maybe_unlock_niena_mercy_purchase(bool challenge_fixed_active, int fixed_count_before)
+{
+    if (!challenge_fixed_active) return;
+    if (fixed_count_before > 0) return; /* Already unlocked */
+    int fixed_after = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    if (fixed_after <= fixed_count_before) return;
+    show_niena_mercy_unlock_message();
+}
+
+static void maybe_unlock_queen_of_stars_purchase(bool challenge_torch_active, int torch_count_before)
+{
+    if (!challenge_torch_active) return;
+    if (torch_count_before > 0) return; /* Already unlocked */
+    int torch_after = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
+    if (torch_after <= torch_count_before) return;
+    show_torchlight_unlock_message();
+}
+
+static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
+{
+    byte state = quest_get_state(QUEST_ID_NIENA_MORGOTH);
+    if (state != QUEST_STATE_ACTIVE) return;
+
+    bool violated = (p_ptr->niena_reserved & NIENA_FLAG_MORGOTH_ATTACKED) != 0;
+    if (!escaped_with_sils || violated) {
+        if (violated) {
+            msg_print("You struck Morgoth; Nienna's mercy quest is lost.");
+        }
+        quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_NOT_STARTED);
+        niena_revoke_temp_mercy_gift(true);
+        p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED);
+        return;
+    }
+
+    int completion_count = 0;
+    cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_MORGOTH, &completion_count);
+    if (completion_texts && completion_count > 0) {
+        quest_typewriter_menu("Nienna's Mercy", completion_texts, completion_count, TERM_L_BLUE, TERM_WHITE);
+        free_quest_texts(completion_texts, completion_count);
+    } else {
+        const char *fallback[] = {
+            "Nienna's presence returns as you escape with the Silmaril, untouched by your hand.",
+            "'Your restraint has spared even the Black Foe a blow. Carry this mercy into the tales to come.'"
+        };
+        quest_typewriter_menu("Nienna's Mercy", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+    }
+
+    quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_REWARDED);
+    p_ptr->niena_reserved &= ~(NIENA_FLAG_MORGOTH_ATTACKED);
+    niena_revoke_temp_mercy_gift(true);
+    metarun_mark_quest_completed(METARUN_QUEST_NIENA_MORGOTH);
+    metarun_unlock_challenge_fixed_exp();
+    p_ptr->quest_reserved[0] = 1;
+    msg_print("The fixed 50k XP challenge is now unlocked.");
+}
+
+static void resolve_nienia_pacifist_quest_on_exit(bool died, bool escaped)
+{
+    int completion_cap = quest_completion_cap(QUEST_ID_NIENA_PACIFIST);
+    if (completion_cap < 1) completion_cap = METARUN_QUEST_COMPLETION_CAP;
+    int completion_count = metarun_quest_completion_count(METARUN_QUEST_NIENA_PACIFIST);
+
+    if (completion_count >= completion_cap) return;
+
+    byte state = quest_get_state(QUEST_ID_NIENA_PACIFIST);
+    if (state >= QUEST_STATE_REWARDED) return;
+
+    /* Only escapes can finish the quest */
+    if (!escaped || died) {
+        /* If kills accrued, make sure the failure flag is set for logging/UI */
+        if (total_player_kills_this_run() > 0) {
+            p_ptr->niena_reserved |= NIENA_FLAG_PACIFIST_FAILED;
+        }
+        return;
+    }
+
+    int kills = total_player_kills_this_run();
+    bool failed = (kills > 0) || ((p_ptr->niena_reserved & NIENA_FLAG_PACIFIST_FAILED) != 0);
+    if (failed) {
+        log_trace("Niena pacifist quest not completed - kills=%d, flag=%d", kills, (p_ptr->niena_reserved & NIENA_FLAG_PACIFIST_FAILED));
+        return;
+    }
+
+    int completion_count_text = 0;
+    cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_PACIFIST, &completion_count_text);
+    if (completion_texts && completion_count_text > 0) {
+        quest_typewriter_menu("Nienna, Lady of Pity", completion_texts, completion_count_text, TERM_L_BLUE, TERM_WHITE);
+        free_quest_texts(completion_texts, completion_count_text);
+    } else {
+        const char *fallback[] = {
+            "You return to the surface with no blood on your hands.",
+            "Nienna's relief washes over you: the curses that followed you may be lifted once and for all."
+        };
+        quest_typewriter_menu("Nienna, Lady of Pity", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+    }
+
+    quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_REWARDED);
+    p_ptr->niena_reserved &= ~NIENA_FLAG_PACIFIST_FAILED;
+    metarun_mark_quest_completed(METARUN_QUEST_NIENA_PACIFIST);
+    metarun_add_niena_curse_cleansing_charge();
+    msg_print("Nienna grants you a single cleansing; use the quest menu to cast off every curse.");
+}
+
 /* ------------------------------------------------------------------
  * metarun_update_on_exit() – v5, 30 Jul 2025
  * ------------------------------------------------------------------
@@ -2255,6 +2811,15 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     log_info("Metarun update: died=%s, escaped=%s, sil_count=%d, final_score=%ld", 
              died ? "true" : "false", escaped ? "true" : "false", sil_count, (long)final_score);
     int blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
+    bool challenge_disconnected = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
+    bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);
+    bool challenge_fixed_exp = (op_ptr && op_ptr->opt[OPT_birth_fixed_exp] && metarun_challenge_fixed_exp_unlocked());
+    bool challenge_tulkas_blunt = (op_ptr && op_ptr->opt[OPT_adult_tulkas_blunt]);
+    bool challenge_torchlight = (op_ptr && op_ptr->opt[OPT_adult_torchlight] && metarun_challenge_torchlight_unlocked());
+    int fixed_challenge_before = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
+    int blunt_challenge_before = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
+    int torchlight_challenge_before = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
+    bool challenge_disconnected_success = false;
              
     /* -------- Lineage flags -------------------------------------- */
     u32b character_flags = c_info[p_ptr->pcharacter].flags;
@@ -2267,6 +2832,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool escaped_with_sils = escaped && (sil_count > 0);
     bool fast_forward = false; // Track if user wants to skip fade effects
     bool morgoth_victory = (p_ptr->morgoth_slain && !escaped && !died);
+
+    resolve_niena_morgoth_quest_on_exit(escaped_with_sils);
+    resolve_nienia_pacifist_quest_on_exit(died, escaped);
 
     /* Treat as a death unless Eru intervenes */
     if (died && !has_gift_eru)
@@ -2297,6 +2865,23 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
         screen_load();
 
+        if (challenge_disconnected) {
+            metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
+            challenge_disconnected_success = true;
+        }
+        if (challenge_single_stair) {
+            metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
+        }
+        if (challenge_fixed_exp) {
+            metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
+        }
+        if (challenge_tulkas_blunt) {
+            metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
+        }
+        if (challenge_torchlight) {
+            metarun_mark_challenge_completed(CHALLENGE_TORCHLIGHT);
+        }
+
         byte awarded = (sil_count < 3) ? 3 : sil_count;
         metarun_gain_silmarils(awarded);
         log_info("Metarun: Morgoth victory awarded %d Silmarils (total now %d)",
@@ -2305,6 +2890,20 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         compute_blessing_pool();
         announce_blessing_gain(blessing_points_before);
         blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
+        if (challenge_disconnected_success &&
+            quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
+            metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
+            show_mandos_third_unlock_message();
+        }
+        maybe_unlock_orome_great_hunt(challenge_single_stair);
+        maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
+        if (challenge_tulkas_blunt &&
+            metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
+            show_tulkas_blunt_unlock_message();
+        }
+        if (challenge_torchlight) {
+            maybe_unlock_queen_of_stars_purchase(challenge_torchlight, torchlight_challenge_before);
+        }
         check_run_end();
         metarun_save_persistent_settings();
         save_metaruns();
@@ -2725,6 +3324,37 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
     /* Restore the saved play-screen only after every narrative beat */
     screen_load();
+
+    if (challenge_disconnected) {
+        metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
+        challenge_disconnected_success = true;
+    }
+    if (challenge_single_stair) {
+        metarun_mark_challenge_completed(CHALLENGE_SINGLE_STAIR);
+    }
+    if (challenge_fixed_exp) {
+        metarun_mark_challenge_completed(CHALLENGE_FIXED_50K_XP);
+    }
+    if (challenge_tulkas_blunt) {
+        metarun_mark_challenge_completed(CHALLENGE_TULKAS_BLUNT);
+    }
+    if (challenge_torchlight) {
+        metarun_mark_challenge_completed(CHALLENGE_TORCHLIGHT);
+    }
+    if (challenge_disconnected_success &&
+        quest_get_state(QUEST_ID_MANDOS_BETRAYER) < QUEST_STATE_REWARDED &&
+        metarun_quest_completion_count(METARUN_QUEST_MANDOS_BETRAYER) < quest_completion_cap(QUEST_ID_MANDOS_BETRAYER)) {
+        show_mandos_third_unlock_message();
+    }
+    maybe_unlock_orome_great_hunt(challenge_single_stair);
+    maybe_unlock_niena_mercy_purchase(challenge_fixed_exp, fixed_challenge_before);
+    if (challenge_tulkas_blunt &&
+        metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT) > blunt_challenge_before) {
+        show_tulkas_blunt_unlock_message();
+    }
+    if (challenge_torchlight) {
+        maybe_unlock_queen_of_stars_purchase(challenge_torchlight, torchlight_challenge_before);
+    }
 
     compute_blessing_pool();
     announce_blessing_gain(blessing_points_before);
@@ -5084,6 +5714,11 @@ void print_metarun_stats(void)
         /* Show history only */
         screen_load();
         list_metaruns();
+        print_metarun_stats();
+        return;
+    } else if (key == 't' || key == 'T') {
+        screen_load();
+        show_completed_quests_summary();
         print_metarun_stats();
         return;
     } else if ((key == 'x' || key == 'X') && blitz_enabled) {

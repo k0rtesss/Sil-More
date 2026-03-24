@@ -65,6 +65,14 @@ static bool sword_is_great(const object_type* weapon)
     }
 }
 
+static bool weapon_is_spear(const object_type* weapon)
+{
+    if (!weapon || weapon->tval != TV_POLEARM)
+        return false;
+
+    return (weapon->sval == SV_SPEAR || weapon->sval == SV_GREAT_SPEAR);
+}
+
 static u16b weapon_sound_message_type(const object_type* weapon, bool hit)
 {
     u16b fallback = hit ? MSG_HIT : MSG_MISS;
@@ -5199,6 +5207,8 @@ void py_attack_aux(int y, int x, int attack_type)
     bool off_hand_blow = false;
     bool fatal_blow = false;
     bool smite = false;
+    bool tulkas_wrath = false;
+    bool huntsman_rhythm = false;
 
     u32b f1, f2, f3, f4; // the weapon's flags
 
@@ -5209,6 +5219,10 @@ void py_attack_aux(int y, int x, int attack_type)
     m_idx = cave_m_idx[y][x];
     m_ptr = &mon_list[m_idx];
     r_ptr = &r_info[m_ptr->r_idx];
+
+    if (m_ptr->r_idx == R_IDX_MORGOTH) {
+        niena_mark_morgoth_attack();
+    }
 
     /*possibly update the monster health bar*/
     if (p_ptr->health_who == cave_m_idx[y][x])
@@ -5258,6 +5272,11 @@ void py_attack_aux(int y, int x, int attack_type)
 
     /* Get the weapon */
     o_ptr = &inventory[INVEN_WIELD];
+    huntsman_rhythm = p_ptr->active_ability[S_SPC][SPC_HUNTSMAN_RHYTHM];
+    if (!huntsman_rhythm) {
+        p_ptr->orome_spear_ready = 0;
+        p_ptr->orome_bow_hit_streak = 0;
+    }
 
     /* Handle player fear */
     if (p_ptr->afraid)
@@ -5390,12 +5409,17 @@ void py_attack_aux(int y, int x, int attack_type)
     /* Attack once for each legal blow */
     while (num++ < blows)
     {
-        smite = two_handed_melee() && p_ptr->active_ability[S_MEL][MEL_SMITE]
-            && num == 1
-            && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
-                || attack_type == ATT_IMPALE
-                || attack_type == ATT_FOLLOW_THROUGH
-                || attack_type == ATT_WHIRLWIND);
+        {
+            bool smite_ability = p_ptr->active_ability[S_MEL][MEL_SMITE];
+            bool wrath_ability = p_ptr->active_ability[S_SPC][SPC_TULKAS_WRATH];
+            smite = two_handed_melee() && (smite_ability || wrath_ability)
+                && num == 1
+                && (attack_type == ATT_MAIN || attack_type == ATT_FLANKING
+                    || attack_type == ATT_IMPALE
+                    || attack_type == ATT_FOLLOW_THROUGH
+                    || attack_type == ATT_WHIRLWIND);
+            tulkas_wrath = smite && wrath_ability;
+        }
 
         do_knock_back = false;
         knocked = false;
@@ -5546,6 +5570,34 @@ void py_attack_aux(int y, int x, int attack_type)
             if (net_dam < 0)
                 net_dam = 0;
 
+            if (huntsman_rhythm)
+            {
+                bool spear_ready = (p_ptr->orome_spear_ready != 0);
+                bool spear_weapon = weapon_is_spear(o_ptr);
+
+                if (spear_ready)
+                {
+                    if (spear_weapon)
+                    {
+                        net_dam *= 2;
+                        msg_print("Your spear strike follows the rhythm of the hunt!");
+                    }
+
+                    p_ptr->orome_spear_ready = 0;
+                    p_ptr->orome_bow_hit_streak = 0;
+                }
+                else
+                {
+                    /* Any melee hit breaks the bow streak even if no primed strike */
+                    p_ptr->orome_bow_hit_streak = 0;
+                }
+            }
+            else
+            {
+                p_ptr->orome_spear_ready = 0;
+                p_ptr->orome_bow_hit_streak = 0;
+            }
+
             break_mercy_oath(m_ptr, net_dam);
             break_valorous_oath(m_ptr, net_dam, attack_type, -1);  // -1 indicates player damage
 
@@ -5616,6 +5668,9 @@ void py_attack_aux(int y, int x, int attack_type)
             // give an extra +2 bonus for using a weapon two-handed
             if (two_handed_melee())
                 effective_strength += 2;
+
+            if (tulkas_wrath)
+                effective_strength *= 2;
 
             // check whether the effect triggers
             if (p_ptr->active_ability[S_MEL][MEL_KNOCK_BACK]
@@ -5795,6 +5850,17 @@ void py_attack_aux(int y, int x, int attack_type)
             {
                 msg_print(
                     "(It is very hard to dodge or attack from within a web.)");
+            }
+
+            if (huntsman_rhythm)
+            {
+                /* Misses break the streak but keep any primed strike waiting */
+                p_ptr->orome_bow_hit_streak = 0;
+            }
+            else
+            {
+                p_ptr->orome_spear_ready = 0;
+                p_ptr->orome_bow_hit_streak = 0;
             }
 
             // allow for ripostes
