@@ -21,7 +21,10 @@
 #include "level-generation/level-generation.h"
 #include "score/score_io.h"
 #include "score/score_ui.h"
+#include "signals.h"
 #include "smithing/smithing.h"
+#include "ui/ui-file-viewer.h"
+#include "ui/ui-help.h"
 #include "ui/story_font.h"
 // extern FILE *log_file;
 extern int max_macrotrigger;
@@ -681,9 +684,6 @@ extern void display_player_compact_stats_skills_highlighted(int selected_skill);
 extern void display_player_compact_stats_skills_highlighted_stat(int selected_stat);
 extern void display_character_tutorial(void);
 extern errr file_character(cptr name, bool full);
-extern bool show_buffer(cptr name, int line);
-extern bool show_file(cptr name, cptr what, int line);
-extern void do_cmd_help(void);
 extern void process_player_name(bool sf);
 extern bool get_name(void);
 extern void do_cmd_escape(int);
@@ -700,12 +700,6 @@ extern errr create_score(high_score* the_score);
 extern int score_points(const high_score* score);
 extern int score_count_alive_entries(void);
 extern u32b score_sum_dead_points(void);
-#ifdef HANDLE_SIGNALS
-extern void (*(*signal_aux)(int, void (*)(int)))(int);
-#endif
-extern void signals_ignore_tstp(void);
-extern void signals_handle_tstp(void);
-extern void signals_init(void);
 extern void mini_screenshot(void);
 extern void prt_mini_screenshot(int col, int row);
 extern int silmarils_possessed(void);
@@ -1592,5 +1586,3 @@ extern void sdl_story_font_set_grid(bool grid);
 extern bool sdl_is_story_font_grid(void);
 extern int sdl_story_font_text_width(cptr text, int len);
 extern int sdl_get_cell_width(void);
-extern void binding_action_label(int binding, char* buf, size_t buflen);
-extern void binding_action_short(int binding, char* buf, size_t buflen);

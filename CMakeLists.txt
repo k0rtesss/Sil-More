@@ -90,8 +90,14 @@ set(SIL_MORE_SOURCES_CMD
 set(SIL_MORE_SOURCES_INIT
     src/init/init-flags.c
     src/init/init-object-bonuses.c
+    src/init/init-parse-limits.c
     src/init/init-parse-monster.c
+    src/init/init-parse-partition.c
+    src/init/init-parse-runtypes.c
+    src/init/init-parse-terrain.c
+    src/init/init-parse-vault.c
     src/init/init-parser-core.c
+    src/init/init-style.c
     src/init1.c
     src/init2.c
 )
@@ -99,6 +105,11 @@ set(SIL_MORE_SOURCES_INIT
 set(SIL_MORE_SOURCES_LEVEL_GENERATION
     src/generate.c
     src/gen-log.c
+    src/level-generation/level-generation-big-cave.c
+    src/level-generation/level-generation-layout-morgoth.c
+    src/level-generation/level-generation-quests.c
+    src/level-generation/level-generation-state.c
+    src/level-generation/level-generation-terrain.c
 )
 
 set(SIL_MORE_SOURCES_OBJECT
@@ -112,6 +123,7 @@ set(SIL_MORE_SOURCES_OBJECT
 set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
     src/melee1.c
     src/melee2.c
+    src/monster-death.c
     src/monster1.c
     src/monster2.c
     src/spells1.c
@@ -119,7 +131,14 @@ set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
 )
 
 set(SIL_MORE_SOURCES_PLAYER
+    src/player/ability_log.c
+    src/player/encumbrance.c
+    src/player/identification.c
     src/player/killer.c
+    src/player/weapon_stats.c
+    src/player-status.c
+    src/player-xp.c
+    src/targeting.c
     src/thrall_quest.c
     src/xtra1.c
     src/xtra2.c
@@ -146,7 +165,10 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/main.c
     src/main-sdl.c
     src/pane.c
+    src/signals.c
     src/ui/colors.c
+    src/ui/ui-file-viewer.c
+    src/ui/ui-help.c
     src/ui/story_font.c
 )
 
