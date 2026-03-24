@@ -91,14 +91,26 @@ set(SIL_MORE_SOURCES_INIT
     src/init/init-flags.c
     src/init/init-object-bonuses.c
     src/init/init-parse-limits.c
-    src/init/init-parse-monster.c
     src/init/init-parse-partition.c
     src/init/init-parse-runtypes.c
-    src/init/init-parse-terrain.c
-    src/init/init-parse-vault.c
     src/init/init-parser-core.c
     src/init/init-style.c
-    src/init1.c
+    src/init/init-parse-terrain.c
+    src/init/init-parse-object-kind.c
+    src/init/init-parse-vault.c
+    src/init/init-parse-ability.c
+    src/init/init-parse-artefact.c
+    src/init/init-parse-names.c
+    src/init/init-parse-skeleton-notes.c
+    src/init/init-parse-ego.c
+    src/init/init-parse-monster.c
+    src/init/init-parse-player.c
+    src/init/init-parse-stores.c
+    src/init/init-parse-curses.c
+    src/init/init-parse-major-blessings.c
+    src/init/init-parse-flavor.c
+    src/init/init-parse-effects.c
+    src/init/init-parse-quests.c
     src/init2.c
 )
 

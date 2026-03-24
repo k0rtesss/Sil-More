@@ -3,8 +3,8 @@
 """
 Calculate smithing difficulty for each artefact in artefact.txt and special.txt
 
-Based on the REAL object_difficulty() function in src/cmd4.c (lines 3980+)
-which includes proper costs for flags like slays, brands, sharpness, etc.
+Based on the smithing-difficulty logic in src/drop/drop-system-difficulty.c,
+including the costs for flags like slays, brands, sharpness, and related bonuses.
 """
 
 import re
@@ -420,7 +420,8 @@ def parse_special_file(filepath):
 
 def calculate_difficulty(art):
     """
-    Calculate smithing difficulty using the REAL formula from src/cmd4.c object_difficulty().
+    Calculate smithing difficulty using the engine formula from
+    src/drop/drop-system-difficulty.c.
     This accounts for all flags, slays, brands, sharpness, etc.
     
     For normal items: Use the actual stats from the generated variant.
@@ -507,11 +508,11 @@ def calculate_difficulty(art):
     if tval not in [45, 40]:  # Not ring or amulet
         dif_inc += base_level // 2
 
-    # Horn items add (level - 1) difficulty (cmd4.c:4593-4613)
+    # Horn items add (level - 1) difficulty (see drop-system-difficulty.c)
     if tval == 47:  # TV_HORN
         dif_inc += base_level - 1
 
-    # Weight factor calculation (cmd4.c:4663-4671)
+    # Weight factor calculation (see drop-system-difficulty.c)
     # Unusual weight items (lighter or heavier than base) get difficulty bonus
     item_weight = art.get('weight', 0)
     base_weight = get_base_weight(tval, sval)
@@ -1610,7 +1611,8 @@ def generate_dual_ego_variants(specials_raw, objects):
                 combined_rarity = combined_schedule[0][1] if combined_schedule else 0
                 _obj_name_d = clean_obj_name(obj['name'])
 
-                # Range math mirrors src/drop_system.c: build_ego_combo_variants().
+                # Range math mirrors src/drop/drop-system-catalog.c:
+                # build_ego_combo_variants().
                 att_min = obj['att'] \
                     + smithing_step_from_ego_bonus_py(prefix['max_att']) \
                     + smithing_step_from_ego_bonus_py(suffix['max_att'])
@@ -1742,7 +1744,7 @@ def generate_dual_ego_variants(specials_raw, objects):
 def get_base_flags(tval, sval):
     """Get base flags for items from object.txt that should be subtracted."""
     # For non-jewelry items, base flags don't count toward difficulty
-    # But TUNNEL and STEALTH are added back in (see cmd4.c lines 4072-4077)
+    # But TUNNEL and STEALTH are added back in (see drop-system-difficulty.c)
     base_flags = {
         # Digging tools have TUNNEL flag
         (20, 1): {'TUNNEL'},  # Shovel
@@ -2259,7 +2261,7 @@ def main(argv=None):
     
     print()
     print("=" * 120)
-    print("DIFFICULTY FORMULA (from src/cmd4.c object_difficulty()):")
+    print("DIFFICULTY FORMULA (from src/drop/drop-system-difficulty.c):")
     print("  - Base item level / 2")
     print("  - Attack bonus: weapons +3/point, others +6/point; negatives reduce at half rate")
     print("  - Evasion bonus: +6/point armor, +9/point others; negatives reduce at half rate")

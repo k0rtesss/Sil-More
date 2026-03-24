@@ -6,7 +6,7 @@ High-signal repo guidance for coding agents (Codex CLI, Copilot, etc.). This is 
 - Language: C17 (see `CMakeLists.txt`).
 - Primary frontend: SDL3 (`src/main-sdl.c`).
 - Data model: text templates in `lib/edit/` compiled into `ANGBAND_DIR_DATA` at runtime (standard: `<user-root>/data/`, portable: `lib/data/`).
-- Fork-specific pillars: metaruns + scoring DB (`src/metarun.c`, `src/score/`), drop system (`src/drop_system.c`), SDL config (`sil_sdl.json`) + sound config (`sound.json`).
+- Fork-specific pillars: metaruns + scoring DB (`src/metarun.c`, `src/score/`), drop system (`src/drop/`, thin facade in `src/drop_system.c`), SDL config (`sil_sdl.json`) + sound config (`sound.json`).
 
 ## Repo Map (Where Things Live)
 - `src/`: engine + frontend
@@ -81,8 +81,8 @@ These templates drive gameplay content (monsters, vaults, objects, terrain, ques
 - Sound system: `src/sdl-sound.c` + `src/sound-config.c` read `sound.json` and map events (see `angband_sound_name[]` in `src/variable.c`).
 - Metaruns: `src/metarun.c` and metarun cleanup in `src/files.c`.
 - Score/DB layer: `src/score/` (see `docs/score_system_overhaul.md`).
-- Drop system: `src/drop_system.c` caches to `ANGBAND_DIR_DATA/drops.raw` and regenerates when relevant edit files change.
-  - **Smithing Difficulty Sync**: Changes to the difficulty calculation algorithm in `src/drop_system.c` MUST be synchronized with `scripts/calc_artefact_difficulty.py`. Both files implement the same `object_difficulty()` logic. When updating penalty flags, bonuses, or multipliers, update both files identically to keep the analysis tool in sync with the engine.
+- Drop system: `src/drop_system.c` is the thin public facade; the active catalog/difficulty/selection implementation lives under `src/drop/`, caches to `ANGBAND_DIR_DATA/drops.raw`, and regenerates when relevant edit files change.
+  - **Smithing Difficulty Sync**: Changes to the difficulty calculation algorithm in `src/drop/drop-system-difficulty.c` MUST be synchronized with `scripts/calc_artefact_difficulty.py`. Both files implement the same smithing-difficulty logic. When updating penalty flags, bonuses, or multipliers, update both files identically to keep the analysis tool in sync with the engine.
 - Combat history viewer: `src/melee1.c:do_cmd_combat_history()` (hooked from `src/cmd4.c`).
 - Unified look: `src/cmd3.c:do_cmd_unified_look()` and sidebar in `src/cmd4.c:show_unified_sidebar()`.
 

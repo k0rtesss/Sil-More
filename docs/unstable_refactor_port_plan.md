@@ -4,17 +4,18 @@
 Port the structural refactor already proven on `unstable` into `quests-and-refactor` without losing the newer gameplay, Android, quest, UI, and drop-system work on the current branch. After the unstable structure is in place, continue past unstable to finish the job: shrink `externs.h`, localize globals from `variable.c`, and separate core game code from SDL-facing code so the codebase is safer for Android now and iOS later.
 
 ## Current Status
-- Status date: 2026-03-24.
+- Status date: 2026-03-25.
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
   - Transitional subsystem headers now own the first extracted declaration blocks for `drop`, `level-generation`, and `smithing` instead of keeping those blocks inline in `externs.h`.
-- `Phase 2` is substantially landed through `WP14`, with `WP11` now structurally complete:
+- `Phase 2` is substantially landed through `WP14`, with both `WP10` and `WP11` now structurally complete:
   - `src/init/init-parser-core.c` now owns `parse_tile_line()`, `init_info_txt()`, `add_text()`, and `add_name()`.
   - `src/init/init-flags.c` now owns `info_flags`, `grab_one_flag()`, and `dbg_show_active_flags()`.
   - `src/init/init-object-bonuses.c` now owns the shared object/artefact/ego stat-skill bonus parsing helpers that were previously embedded in `init1.c`.
   - `src/init/init-parse-monster.c` now owns `parse_r_info()` and its local monster flag/blow parsing helpers.
-  - `src/init1.c` has already been reduced by those extractions and now includes `init/init-parse-internal.h` for shared parser helpers.
+  - `src/init/init-parse-object-kind.c`, `init-parse-ability.c`, `init-parse-artefact.c`, `init-parse-names.c`, `init-parse-skeleton-notes.c`, `init-parse-ego.c`, `init-parse-player.c`, `init-parse-stores.c`, `init-parse-curses.c`, `init-parse-major-blessings.c`, `init-parse-flavor.c`, `init-parse-effects.c`, and `init-parse-quests.c` are now live.
+  - `src/init1.c` is now reduced to the legacy note form used on `unstable` and is no longer built.
   - `src/signals.c`, `src/ui/ui-file-viewer.c`, and `src/ui/ui-help.c` now own the `files.c` breakout covered by `WP12`.
   - `src/targeting.c`, `src/player-status.c`, `src/player-xp.c`, and `src/monster-death.c` now own the `xtra2.c` breakout covered by `WP13`.
   - `src/player/ability_log.c`, `src/player/encumbrance.c`, `src/player/identification.c`, and `src/player/weapon_stats.c` now own the `xtra1.c` breakout covered by `WP14`.
@@ -23,16 +24,16 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/level-generation/level-generation-layout.c` now owns `room_kind_is_vault()`, `record_partition_metadata()`, `fallback_partition_grid_from_blocks()`, `area_is_reserved_or_dense()`, `compute_partition_bounds()`, `level_has_chasm_partition()`, `apply_chasm_partition_tags()`, `apply_partition_and_room_glow_rules()`, `scaled_attempts()`, `pick_weighted_mode()`, `mode_weight_for_depth()`, `room_build_in_bounds()`, `place_room_with_budget()`, `cave_set_feat_style()`, `scatter_quartz_veins_in_bounds()`, `bounds_have_chasm_tag()`, `carve_ca_blob_anchor_bounds()`, `carve_bsp_slice_anchor_bounds()`, `prune_big_cave_detached_components()`, and `carve_big_cave_bounds()`, with those helpers no longer duplicated in `level-generation.c`.
   - `src/level-generation/level-generation-big-cave.c`, `level-generation-connectivity.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-rooms.c`, `level-generation-screen.c`, `level-generation-state.c`, and `level-generation-terrain.c` are now live.
   - `src/level-generation/level-generation.c` is now reduced to the intended top-level driver/orchestration layer (`cave_gen()`, `gates_gen()`, `throne_gen()`, `spawn_niena_morgoth_hall()`, `unring_a_bell()`, and `generate_cave()`), matching the role that `unstable` kept in its final `level-generation.c`.
-- `Phase 3` object foundations are now structurally landed through `WP21` in the working tree:
+- `Phase 3` object and drop foundations are now structurally landed through `WP22` in the working tree:
   - `src/object/object-desc.[ch]`, `object-display.[ch]`, `object-flavor.[ch]`, `object-flags.[ch]`, `object-slot.[ch]`, `object-util.[ch]`, and `object-ui-display.[ch]` now own the first mechanical extractions from `object1.c`, including the classic inventory/equipment/floor list rendering path.
   - `src/object/object-ui-enhanced.[ch]`, `object-ui-identify.[ch]`, and `object-ui-select.[ch]` now own the larger object UI flow from `object1.c`, including the enhanced inventory/equipment menus, the unified identify menu, and the `get_item()`/selection path.
   - `src/object/object-allocation.c`, `object-inventory.c`, `object-knowledge.c`, `object-list.c`, `object-make.c`, and `object-place.c` now own the former `object2.c` monolith, and `object2.c` is reduced to a legacy note outside the build.
+  - `src/drop/drop-system-catalog.c`, `drop-system-difficulty.c`, and `drop-system-selection.c` now own the former `drop_system.c` monolith, `src/drop_system.c` is reduced to the intended thin facade, and `src/drop_system.h` now carries the public drop API outside the old inline `externs.h` declaration block.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
-  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, and again after landing `level-generation-screen.c` plus the final state/helper moves.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, and again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25.
 - Not started yet:
-  - The remaining `WP10` parser extractions.
-  - `WP22`, `WP30`, `WP40`, `WP41`, `WP42`, `WP50`, and `WP99`.
+  - `WP30`, `WP40`, `WP41`, `WP42`, `WP50`, and `WP99`.
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -179,8 +180,8 @@ Done when:
 Goal: land the splits that create clear ownership and do not heavily depend on each other.
 
 Status:
-- In progress as of 2026-03-24.
-- `WP10` has started; `init-parser-core.c`, `init-flags.c`, `init-object-bonuses.c`, and `init-parse-monster.c` have already been extracted from `init1.c`.
+- In progress as of 2026-03-25.
+- `WP10` is structurally landed: the remaining parser modules now live under `src/init/`, `init1.c` is reduced to the legacy note, and the build compiles without `init1.c`.
 - `WP11` is structurally landed: `level-generation-layout-anchors.c`, `level-generation-layout.c`, `level-generation-connectivity.c`, `level-generation-rooms.c`, `level-generation-screen.c`, `level-generation-big-cave.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-state.c`, and `level-generation-terrain.c` are now live, and `level-generation.c` is reduced to the intended top-level driver/gates flow.
 - `WP12`, `WP13`, and `WP14` are structurally landed in the working tree and compile on the current branch.
 
@@ -207,7 +208,7 @@ Tasks:
 - Port the `object2.c` split next.
 - Port the `drop_system.c` split into `src/drop/`.
 - Keep shared object/drop declarations out of `externs.h`; move them into `object/*.h` and `drop_system.h`.
-- Keep the smithing-analysis sync rule in place: if `object_difficulty()` changes, update `scripts/calc_artefact_difficulty.py` in the same changeset.
+- Keep the smithing-analysis sync rule in place: if the smithing difficulty logic in `src/drop/drop-system-difficulty.c` changes, update `scripts/calc_artefact_difficulty.py` in the same changeset.
 
 Done when:
 - Object description, UI display, allocation, creation, placement, and drop selection live in explicit modules.
@@ -331,14 +332,15 @@ These can be run in parallel once `WP01` lands, as long as write sets stay disjo
 | WP50 | core/frontend split | `CMakeLists.txt`, SDL-facing files | WP10-WP42 |
 
 Current parallel package status:
-- `WP10`: in progress; parser-core, flag/debug helpers, shared object-bonus parsing helpers, and the monster parser have already been landed in the working tree.
+- `WP10`: completed in the working tree on 2026-03-25; the full `src/init/` parser split is landed and `init1.c` is reduced to a legacy note outside the build.
 - `WP11`: completed in the working tree on 2026-03-25; the remaining `level-generation.c` file is now only the intended top-level driver/orchestration layer.
 - `WP12`: completed in the working tree on 2026-03-24.
 - `WP13`: completed in the working tree on 2026-03-24.
 - `WP14`: completed in the working tree on 2026-03-24.
 - `WP20`: completed in the working tree on 2026-03-24; `object1.c` has been reduced to a legacy note and removed from the build.
 - `WP21`: completed in the working tree on 2026-03-24; `object2.c` has been reduced to a legacy note and the split object2 modules are active in the build.
-- `WP22`, `WP30`, `WP40`, `WP41`, `WP42`, `WP50`: not started.
+- `WP22`: completed in the working tree on 2026-03-25; the split drop catalog/difficulty/selection modules are active in the build, `drop_system.c` is reduced to the intended thin facade, and the public drop API now lives in `drop_system.h`.
+- `WP30`, `WP40`, `WP41`, `WP42`, `WP50`: not started.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -378,9 +380,8 @@ Current parallel package status:
 
 ## Recommended Immediate Start
 1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. Finish the remaining `WP10` parser moves.
-3. Move to `WP22` and `WP30`, with `WP20` and `WP21` now structurally landed in the working tree.
-4. After object/cmd foundations settle, run `WP40`, `WP41`, and `WP42`.
+2. Move to `WP30`, with `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
+3. After object/cmd foundations settle, run `WP40`, `WP41`, and `WP42`.
 5. Reserve `WP99` and `WP50` for the main integrator.
 
 This order keeps the highest-conflict object/combat/UI work off the table until the repo already has the target directory structure and narrower headers.
