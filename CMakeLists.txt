@@ -79,12 +79,25 @@ set(SIL_MORE_SOURCES_CORE
 )
 
 set(SIL_MORE_SOURCES_CMD
-    src/cmd1.c
-    src/cmd2.c
-    src/cmd3.c
     src/cmd4.c
-    src/cmd5.c
-    src/cmd6.c
+    src/cmd/combat/cmd-combat-rolls.c
+    src/cmd/combat/cmd-combat.c
+    src/cmd/combat/cmd-ranged.c
+    src/cmd/item/cmd-fletchery.c
+    src/cmd/item/cmd-identify.c
+    src/cmd/item/cmd-item-activate.c
+    src/cmd/item/cmd-item-core.c
+    src/cmd/item/cmd-item-drop.c
+    src/cmd/item/cmd-item-utility.c
+    src/cmd/item/cmd-pickup.c
+    src/cmd/monster/cmd-monster-alert.c
+    src/cmd/movement/cmd-movement.c
+    src/cmd/movement/cmd-search.c
+    src/cmd/movement/cmd-travel.c
+    src/cmd/ui/cmd-ui-look.c
+    src/cmd/ui/cmd-ui-object-display.c
+    src/cmd/ui/cmd-ui-query.c
+    src/cmd/world/cmd-interact.c
 )
 
 set(SIL_MORE_SOURCES_INIT

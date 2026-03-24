@@ -29,11 +29,16 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/object/object-ui-enhanced.[ch]`, `object-ui-identify.[ch]`, and `object-ui-select.[ch]` now own the larger object UI flow from `object1.c`, including the enhanced inventory/equipment menus, the unified identify menu, and the `get_item()`/selection path.
   - `src/object/object-allocation.c`, `object-inventory.c`, `object-knowledge.c`, `object-list.c`, `object-make.c`, and `object-place.c` now own the former `object2.c` monolith, and `object2.c` is reduced to a legacy note outside the build.
   - `src/drop/drop-system-catalog.c`, `drop-system-difficulty.c`, and `drop-system-selection.c` now own the former `drop_system.c` monolith, `src/drop_system.c` is reduced to the intended thin facade, and `src/drop_system.h` now carries the public drop API outside the old inline `externs.h` declaration block.
+- `Phase 4` command work is now structurally complete through `WP30` in the working tree:
+  - `src/cmd/combat/cmd-combat-rolls.c`, `cmd-combat.c`, and `cmd-ranged.c` now own the former `cmd1.c`/`cmd2.c` combat command flow.
+  - `src/cmd/item/cmd-fletchery.c`, `cmd-identify.c`, `cmd-item-activate.c`, `cmd-item-core.c`, `cmd-item-drop.c`, `cmd-item-utility.c`, and `cmd-pickup.c` now own the former item command flow from `cmd1.c`, `cmd2.c`, `cmd3.c`, and `cmd6.c`.
+  - `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/movement/cmd-movement.c`, `cmd-search.c`, `cmd-travel.c`, `src/cmd/ui/cmd-ui-look.c`, `cmd-ui-object-display.c`, `cmd-ui-query.c`, and `src/cmd/world/cmd-interact.c` now own the remaining command families from the old monoliths.
+  - `src/cmd1.c`, `src/cmd2.c`, `src/cmd3.c`, `src/cmd5.c`, and `src/cmd6.c` are now reduced to legacy notes outside the build.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
-  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, and again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
 - Not started yet:
-  - `WP30`, `WP40`, `WP41`, `WP42`, `WP50`, and `WP99`.
+  - `WP40`, `WP41`, `WP42`, `WP50`, and `WP99`.
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -340,7 +345,8 @@ Current parallel package status:
 - `WP20`: completed in the working tree on 2026-03-24; `object1.c` has been reduced to a legacy note and removed from the build.
 - `WP21`: completed in the working tree on 2026-03-24; `object2.c` has been reduced to a legacy note and the split object2 modules are active in the build.
 - `WP22`: completed in the working tree on 2026-03-25; the split drop catalog/difficulty/selection modules are active in the build, `drop_system.c` is reduced to the intended thin facade, and the public drop API now lives in `drop_system.h`.
-- `WP30`, `WP40`, `WP41`, `WP42`, `WP50`: not started.
+- `WP30`: completed in the working tree on 2026-03-25; the full `src/cmd/*` split is active in the build, and `cmd1.c`, `cmd2.c`, `cmd3.c`, `cmd5.c`, and `cmd6.c` are reduced to legacy notes outside the build.
+- `WP40`, `WP41`, `WP42`, `WP50`: not started.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -380,8 +386,8 @@ Current parallel package status:
 
 ## Recommended Immediate Start
 1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. Move to `WP30`, with `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
-3. After object/cmd foundations settle, run `WP40`, `WP41`, and `WP42`.
+2. Move to `WP40`, with `WP30`, `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
+3. After the smithing split lands, continue with `WP41` and `WP42`.
 5. Reserve `WP99` and `WP50` for the main integrator.
 
 This order keeps the highest-conflict object/combat/UI work off the table until the repo already has the target directory structure and narrower headers.
