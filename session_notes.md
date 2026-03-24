@@ -1,5 +1,18 @@
 # Session notes
 
+## 2026-03-24: Unstable refactor port roadmap
+- Added `docs/unstable_refactor_port_plan.md` as the working roadmap for porting the refactor from `unstable` onto `quests-and-refactor`.
+- Plan basis:
+  - branch heads studied: `quests-and-refactor` `750b4e601b1c2afba2ec7f573763e1a2ed22e367`, `unstable` `ce8d936796ba509c6aedf661f45f9e9e3eab8da9`
+  - merge base: `4ab3ad887a6e2fc5746d45c6977305c7e9af52e4`
+  - current monolith hotspots include `src/cmd4.c` at 20,357 lines and `src/generate.c` at 17,554 lines
+  - current global surface includes `src/externs.h` at 1,752 lines with about 1,414 `extern` declarations and `src/variable.c` at 789 lines with about 217 global definitions
+  - unstable already proves the subsystem split pattern (`cmd/`, `object/`, `player/`, `init/`, `level-generation/`, `melee/`, `spell/`, `smithing/`, `drop/`, `ui/`) but still leaves `externs.h` and `variable.c` larger than the intended end state
+- Recommended execution model in the roadmap:
+  - recreate unstable's file boundaries on the current branch rather than cherry-picking the old refactor commits
+  - run low-conflict splits first (`init/`, `level-generation/`, `files`, `xtra1`, `xtra2`)
+  - follow with object/drop and command work, then smithing/spells/melee, then final global-state and core/frontend cleanup
+
 ## 2026-03-18: Deterministic guaranteed artefact monster drops
 - Updated `src/drop_system.c`, `src/object2.c`, and `src/externs.h` so the guaranteed artefact path now selects from eligible artefact catalog entries directly instead of repeatedly sampling the general drop pool and hoping one roll lands on an artefact.
 - Root issue: `make_guaranteed_artefact()` only retried normal weighted generation up to 1024 times, so `RF3_DROP_ARTEFACT` monsters could still fail to produce an artefact when the artefact share of the candidate pool was too small.

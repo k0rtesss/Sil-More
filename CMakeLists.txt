@@ -55,74 +55,132 @@ endif()
 
 add_subdirectory(src/log)
 
-set(SIL_MORE_SOURCES
+# Transitional subsystem groupings for the unstable refactor port.
+# Keep the compiled source set unchanged until each split lands.
+set(SIL_MORE_SOURCES_CORE
     src/blitz.c
     src/birth.c
     src/cave.c
     src/cJSON.c
+    src/dungeon.c
+    src/format.c
+    src/item_set.c
+    src/quest.c
+    src/randart.c
+    src/rng.c
+    src/squelch.c
+    src/supplies.c
+    src/tables.c
+    src/util.c
+    src/variable.c
+    src/wizard1.c
+    src/wizard2.c
+    src/z-term.c
+)
+
+set(SIL_MORE_SOURCES_CMD
     src/cmd1.c
     src/cmd2.c
     src/cmd3.c
     src/cmd4.c
     src/cmd5.c
     src/cmd6.c
-    src/dungeon.c
-    src/files.c
-    src/format.c
-    src/generate.c
-    src/gen-log.c
+)
+
+set(SIL_MORE_SOURCES_INIT
+    src/init/init-flags.c
+    src/init/init-object-bonuses.c
+    src/init/init-parse-monster.c
+    src/init/init-parser-core.c
     src/init1.c
     src/init2.c
-    src/item_set.c
-    src/load.c
-    src/main.c
-    src/main-sdl.c
-    src/melee1.c
-    src/melee2.c
-    src/metarun.c
-    src/metarun_legacy.c
-    src/quest.c
-    src/monster1.c
-    src/monster2.c
+)
+
+set(SIL_MORE_SOURCES_LEVEL_GENERATION
+    src/generate.c
+    src/gen-log.c
+)
+
+set(SIL_MORE_SOURCES_OBJECT
+    src/drop_system.c
     src/obj-info.c
     src/object1.c
     src/object2.c
-    src/drop_system.c
-    src/thrall_quest.c
+    src/use-obj.c
+)
+
+set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
+    src/melee1.c
+    src/melee2.c
+    src/monster1.c
+    src/monster2.c
+    src/spells1.c
+    src/spells2.c
+)
+
+set(SIL_MORE_SOURCES_PLAYER
     src/player/killer.c
-    src/pane.c
-    src/randart.c
-    src/rng.c
+    src/thrall_quest.c
+    src/xtra1.c
+    src/xtra2.c
+)
+
+set(SIL_MORE_SOURCES_SAVE_AND_META
+    src/load.c
+    src/metarun.c
+    src/metarun_legacy.c
     src/save.c
+)
+
+set(SIL_MORE_SOURCES_SCORE
     src/score/score_io.c
     src/score/score_logic.c
     src/score/score_guid.c
     src/score/score_artefact.c
     src/score/score_runs.c
     src/score/score_ui.c
+)
+
+set(SIL_MORE_SOURCES_FRONTEND
+    src/files.c
+    src/main.c
+    src/main-sdl.c
+    src/pane.c
+    src/ui/colors.c
+    src/ui/story_font.c
+)
+
+set(SIL_MORE_SOURCES_PLATFORM
+    src/fs/io_sdl.c
+    src/fs/path.c
     src/sdl-config.c
     src/sdl-sound.c
     src/sound-config.c
-    src/fs/io_sdl.c
-    src/fs/path.c
-    src/ui/colors.c
-    src/ui/story_font.c
+)
+
+set(SIL_MORE_SOURCES_LOG
     src/log/bootstrap.c
     src/log/fatal.c
-    src/spells1.c
-    src/spells2.c
-    src/squelch.c
-    src/supplies.c
-    src/tables.c
-    src/use-obj.c
-    src/util.c
-    src/variable.c
-    src/wizard1.c
-    src/wizard2.c
-    src/xtra1.c
-    src/xtra2.c
-    src/z-term.c
+)
+
+set(SIL_MORE_SOURCES_SUPPORT
     src/support/strl.c
+)
+
+set(SIL_MORE_SOURCES
+    ${SIL_MORE_SOURCES_CORE}
+    ${SIL_MORE_SOURCES_CMD}
+    ${SIL_MORE_SOURCES_INIT}
+    ${SIL_MORE_SOURCES_LEVEL_GENERATION}
+    ${SIL_MORE_SOURCES_OBJECT}
+    ${SIL_MORE_SOURCES_MONSTER_AND_COMBAT}
+    ${SIL_MORE_SOURCES_PLAYER}
+    ${SIL_MORE_SOURCES_SAVE_AND_META}
+    ${SIL_MORE_SOURCES_SCORE}
+    ${SIL_MORE_SOURCES_FRONTEND}
+    ${SIL_MORE_SOURCES_PLATFORM}
+    ${SIL_MORE_SOURCES_LOG}
+    ${SIL_MORE_SOURCES_SUPPORT}
 )
 
 if(ANDROID)
