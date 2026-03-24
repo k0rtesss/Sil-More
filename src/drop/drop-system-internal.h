@@ -1,7 +1,7 @@
 /* File: drop-system-internal.h */
 
 /*
- * Internal declarations shared by the drop-system split.
+ * Internal declarations shared by the active drop catalog/selection split.
  */
 
 #ifndef INCLUDED_DROP_SYSTEM_INTERNAL_H

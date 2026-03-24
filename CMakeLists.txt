@@ -111,6 +111,7 @@ set(SIL_MORE_SOURCES_LEVEL_GENERATION
     src/level-generation/level-generation-layout-morgoth.c
     src/level-generation/level-generation-quests.c
     src/level-generation/level-generation-rooms.c
+    src/level-generation/level-generation-screen.c
     src/level-generation/level-generation-state.c
     src/level-generation/level-generation-terrain.c
     src/level-generation/level-generation.c

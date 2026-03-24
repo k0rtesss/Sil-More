@@ -9,7 +9,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
   - Transitional subsystem headers now own the first extracted declaration blocks for `drop`, `level-generation`, and `smithing` instead of keeping those blocks inline in `externs.h`.
-- `Phase 2` is substantially landed through `WP14`, with `WP11` still partial:
+- `Phase 2` is substantially landed through `WP14`, with `WP11` now structurally complete:
   - `src/init/init-parser-core.c` now owns `parse_tile_line()`, `init_info_txt()`, `add_text()`, and `add_name()`.
   - `src/init/init-flags.c` now owns `info_flags`, `grab_one_flag()`, and `dbg_show_active_flags()`.
   - `src/init/init-object-bonuses.c` now owns the shared object/artefact/ego stat-skill bonus parsing helpers that were previously embedded in `init1.c`.
@@ -21,17 +21,17 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/level-generation/level-generation.c` now replaces `src/generate.c` in the build as the active remaining level-generation core.
   - `src/level-generation/level-generation-layout-anchors.c` now owns `style_at_color()`, `layout_anchor_reset()`, `mark_room_anchor_meta()`, `layout_anchor_capture_existing_rooms()`, and `seed_prefab_anchors()`.
   - `src/level-generation/level-generation-layout.c` now owns `room_kind_is_vault()`, `record_partition_metadata()`, `fallback_partition_grid_from_blocks()`, `area_is_reserved_or_dense()`, `compute_partition_bounds()`, `level_has_chasm_partition()`, `apply_chasm_partition_tags()`, `apply_partition_and_room_glow_rules()`, `scaled_attempts()`, `pick_weighted_mode()`, `mode_weight_for_depth()`, `room_build_in_bounds()`, `place_room_with_budget()`, `cave_set_feat_style()`, `scatter_quartz_veins_in_bounds()`, `bounds_have_chasm_tag()`, `carve_ca_blob_anchor_bounds()`, `carve_bsp_slice_anchor_bounds()`, `prune_big_cave_detached_components()`, and `carve_big_cave_bounds()`, with those helpers no longer duplicated in `level-generation.c`.
-  - `src/level-generation/level-generation-big-cave.c`, `level-generation-connectivity.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-rooms.c`, `level-generation-state.c`, and `level-generation-terrain.c` are now live.
-  - `WP11` is still incomplete because `level-generation.c` still carries the remaining layout/planning core, generation-screen support, and the final layout helpers that unstable had already pushed farther into `level-generation-layout.c`.
+  - `src/level-generation/level-generation-big-cave.c`, `level-generation-connectivity.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-rooms.c`, `level-generation-screen.c`, `level-generation-state.c`, and `level-generation-terrain.c` are now live.
+  - `src/level-generation/level-generation.c` is now reduced to the intended top-level driver/orchestration layer (`cave_gen()`, `gates_gen()`, `throne_gen()`, `spawn_niena_morgoth_hall()`, `unring_a_bell()`, and `generate_cave()`), matching the role that `unstable` kept in its final `level-generation.c`.
 - `Phase 3` object foundations are now structurally landed through `WP21` in the working tree:
   - `src/object/object-desc.[ch]`, `object-display.[ch]`, `object-flavor.[ch]`, `object-flags.[ch]`, `object-slot.[ch]`, `object-util.[ch]`, and `object-ui-display.[ch]` now own the first mechanical extractions from `object1.c`, including the classic inventory/equipment/floor list rendering path.
   - `src/object/object-ui-enhanced.[ch]`, `object-ui-identify.[ch]`, and `object-ui-select.[ch]` now own the larger object UI flow from `object1.c`, including the enhanced inventory/equipment menus, the unified identify menu, and the `get_item()`/selection path.
   - `src/object/object-allocation.c`, `object-inventory.c`, `object-knowledge.c`, `object-list.c`, `object-make.c`, and `object-place.c` now own the former `object2.c` monolith, and `object2.c` is reduced to a legacy note outside the build.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
-  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, and again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, and again after landing `level-generation-screen.c` plus the final state/helper moves.
 - Not started yet:
-  - The remaining `WP10` parser extractions and the remaining `WP11` level-generation extractions.
+  - The remaining `WP10` parser extractions.
   - `WP22`, `WP30`, `WP40`, `WP41`, `WP42`, `WP50`, and `WP99`.
 
 ## Branch Facts
@@ -181,7 +181,7 @@ Goal: land the splits that create clear ownership and do not heavily depend on e
 Status:
 - In progress as of 2026-03-24.
 - `WP10` has started; `init-parser-core.c`, `init-flags.c`, `init-object-bonuses.c`, and `init-parse-monster.c` have already been extracted from `init1.c`.
-- `WP11` is partially landed: `level-generation.c` is now the active remaining core under `src/level-generation/`, `level-generation-layout-anchors.c` and `level-generation-layout.c` are live, `level-generation-connectivity.c` and `level-generation-rooms.c` are now live, and `level-generation-big-cave.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-state.c`, and `level-generation-terrain.c` are live, but `level-generation.c` still carries the remaining layout/planning and generation-screen work.
+- `WP11` is structurally landed: `level-generation-layout-anchors.c`, `level-generation-layout.c`, `level-generation-connectivity.c`, `level-generation-rooms.c`, `level-generation-screen.c`, `level-generation-big-cave.c`, `level-generation-layout-morgoth.c`, `level-generation-quests.c`, `level-generation-state.c`, and `level-generation-terrain.c` are now live, and `level-generation.c` is reduced to the intended top-level driver/gates flow.
 - `WP12`, `WP13`, and `WP14` are structurally landed in the working tree and compile on the current branch.
 
 Recommended order:
@@ -332,7 +332,7 @@ These can be run in parallel once `WP01` lands, as long as write sets stay disjo
 
 Current parallel package status:
 - `WP10`: in progress; parser-core, flag/debug helpers, shared object-bonus parsing helpers, and the monster parser have already been landed in the working tree.
-- `WP11`: in progress; `level-generation-connectivity.c` and `level-generation-rooms.c` are now landed, `level-generation.c` is smaller, and the remaining work is the leftover layout/planning helpers and generation-screen support still embedded in `level-generation.c`.
+- `WP11`: completed in the working tree on 2026-03-25; the remaining `level-generation.c` file is now only the intended top-level driver/orchestration layer.
 - `WP12`: completed in the working tree on 2026-03-24.
 - `WP13`: completed in the working tree on 2026-03-24.
 - `WP14`: completed in the working tree on 2026-03-24.
@@ -378,7 +378,7 @@ Current parallel package status:
 
 ## Recommended Immediate Start
 1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. Finish the remaining `WP10` parser moves and the remaining `WP11` level-generation moves.
+2. Finish the remaining `WP10` parser moves.
 3. Move to `WP22` and `WP30`, with `WP20` and `WP21` now structurally landed in the working tree.
 4. After object/cmd foundations settle, run `WP40`, `WP41`, and `WP42`.
 5. Reserve `WP99` and `WP50` for the main integrator.

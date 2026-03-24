@@ -99,6 +99,19 @@ typedef enum density_level
     DENSITY_DENSE
 } density_level_t;
 
+typedef enum level_gen_screen_stage
+{
+    LEVEL_GEN_STAGE_PLANNING = 0,
+    LEVEL_GEN_STAGE_FOUNDATIONS,
+    LEVEL_GEN_STAGE_SHAPING,
+    LEVEL_GEN_STAGE_LINKING,
+    LEVEL_GEN_STAGE_ENTRY,
+    LEVEL_GEN_STAGE_TREASURE,
+    LEVEL_GEN_STAGE_MONSTERS,
+    LEVEL_GEN_STAGE_FINALIZING,
+    LEVEL_GEN_STAGE_COUNT
+} level_gen_screen_stage_t;
+
 typedef struct partition_drop_profile
 {
     bool allow_floor_drops;
@@ -217,9 +230,12 @@ extern bool compute_partition_bounds(int pi, int rows, int cols,
 extern bool level_has_chasm_partition(void);
 extern void apply_chasm_partition_tags(void);
 extern void apply_partition_and_room_glow_rules(void);
+extern void apply_quadrant_generation_modes(void);
 extern void remember_partition_grid(int rows, int cols, int count);
 extern int partition_index_from_point(int y, int x, int rows, int cols);
 extern void connect_partition_hubs(void);
+extern void repair_all_outer_walls(void);
+extern void ensure_minimum_rooms(void);
 extern int scaled_attempts(int base, int area_factor);
 extern quadrant_mode_t pick_weighted_mode(const int *weights, int count);
 extern int mode_weight_for_depth(quadrant_mode_t mode, int depth, int blocks,
@@ -254,6 +270,18 @@ extern int current_partition_bridge_styles[25];
 extern bool g_big_cave_type_rule_set[32];
 extern int g_big_cave_type_weight[32][BIG_CAVE_TYPE_MAX];
 extern int current_labyrinth_partitions;
+extern bool cached_gv_level_roll_resolved;
+extern bool cached_gv_level_roll_allowed;
+extern int cached_gv_level_roll_candidates;
+extern char level_gen_debug_last_greater_vault_name[80];
+extern void level_gen_screen_begin(void);
+extern void level_gen_screen_start_attempt(void);
+extern void level_gen_screen_set_stage(level_gen_screen_stage_t stage,
+    cptr detail);
+extern void level_gen_screen_note_failure(cptr reason);
+extern void level_gen_screen_finish(bool success);
+extern cptr level_gen_screen_last_failure(void);
+extern cptr level_gen_debug_last_quest_vault_name_current(void);
 
 extern bool morgoth_level_active;
 extern bool morgoth_partition_reserved;
@@ -307,6 +335,9 @@ extern bool generation_escape_tunnel_bold(int y, int x);
 extern void mark_generation_escape_tunnel(int y, int x);
 extern bool tunnel_should_mark_escape(int r1, int r2);
 extern void init_partition_chest_recipe(partition_chest_recipe* recipe);
+extern void set_partition_chest_recipe(partition_population_meta* meta, int slot,
+    int chest_mode, int wooden_pct, int steel_pct, int jewel_pct,
+    partition_chest_anchor_pref anchor_pref);
 extern int build_partition_population_plans(
     partition_population_plan* plans, int max_plans);
 extern bool partition_monster_pass_skips_plan(
