@@ -3608,6 +3608,20 @@ static int unified_sidebar_object_group(const object_type* o_ptr)
     return LOOK_GROUP_OTHER;
 }
 
+static bool unified_look_can_show_monster_at(int y, int x)
+{
+    int m_idx = cave_m_idx[y][x];
+
+    return (m_idx > 0) && mon_list[m_idx].ml && grid_info_is_available(y, x);
+}
+
+static bool unified_look_can_show_marked_object_at(int y, int x)
+{
+    int o_idx = cave_o_idx[y][x];
+
+    return (o_idx > 0) && o_list[o_idx].marked && grid_info_is_available(y, x);
+}
+
 static int unified_look_count_visible_entities(unified_look_state* state)
 {
     int total_entities = 0;
@@ -3622,7 +3636,7 @@ static int unified_look_count_visible_entities(unified_look_state* state)
             int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
 
             if (!m_idx) continue;
-            if (!mon_list[m_idx].ml) continue;
+            if (!unified_look_can_show_monster_at(temp_y[i], temp_x[i])) continue;
 
             total_entities++;
         }
@@ -3638,6 +3652,9 @@ static int unified_look_count_visible_entities(unified_look_state* state)
         {
             int o_idx = cave_o_idx[temp_y[i]][temp_x[i]];
             if (!o_idx)
+                continue;
+
+            if (!grid_info_is_available(temp_y[i], temp_x[i]))
                 continue;
 
             object_type* o_ptr = &o_list[o_idx];
@@ -3679,6 +3696,9 @@ static int unified_look_count_visible_objects_for_group(unified_look_state* stat
     {
         int o_idx = cave_o_idx[temp_y[i]][temp_x[i]];
         if (!o_idx)
+            continue;
+
+        if (!grid_info_is_available(temp_y[i], temp_x[i]))
             continue;
 
         object_type* o_ptr = &o_list[o_idx];
@@ -3839,7 +3859,8 @@ void do_cmd_unified_look(void)
     
     /* Track monster health at initial cursor position for left sidebar display */
     int initial_m_idx = cave_m_idx[state.cursor_y][state.cursor_x];
-    if (initial_m_idx > 0 && mon_list[initial_m_idx].ml)
+    if ((initial_m_idx > 0)
+        && unified_look_can_show_monster_at(state.cursor_y, state.cursor_x))
     {
         /* Track this monster for health display */
         health_track(initial_m_idx);
@@ -3872,7 +3893,8 @@ void do_cmd_unified_look(void)
             /* Track monster health at current cursor position for left sidebar display */
             /* This handles Tab cycling and any other cursor position updates */
             int cursor_m_idx = cave_m_idx[state.cursor_y][state.cursor_x];
-            if (cursor_m_idx > 0 && mon_list[cursor_m_idx].ml)
+            if ((cursor_m_idx > 0)
+                && unified_look_can_show_monster_at(state.cursor_y, state.cursor_x))
             {
                 /* Track this monster for health display */
                 health_track(cursor_m_idx);
@@ -3896,13 +3918,13 @@ void do_cmd_unified_look(void)
                 int cursor_m_idx = cave_m_idx[y][x];
                 int cursor_o_idx = cave_o_idx[y][x];
                 int feat = cave_feat[y][x];
-                bool has_visible_monster = (cursor_m_idx > 0) && (mon_list[cursor_m_idx].ml);
-                bool has_marked_object = (cursor_o_idx > 0) && (o_list[cursor_o_idx].marked);
+                bool has_visible_monster = unified_look_can_show_monster_at(y, x);
+                bool has_marked_object = unified_look_can_show_marked_object_at(y, x);
                 bool has_known_feature = false;
                 cptr feature_name = NULL;
                 
                 /* Check for known/revealed features (traps, doors, stairs, shafts) */
-                if (cave_info[y][x] & (CAVE_MARK))
+                if (grid_info_is_available(y, x) && (cave_info[y][x] & (CAVE_MARK)))
                 {
                     /* Traps */
                     if (feat >= FEAT_TRAP_HEAD && feat <= FEAT_TRAP_TAIL)
@@ -4179,7 +4201,8 @@ void do_cmd_unified_look(void)
                         log_trace("EXAMINATION: Highlighted entity is monster, examining monster %d", cursor_m_idx);
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         log_trace("EXAMINATION: Monster ml=%d", m_ptr->ml);
-                        if (m_ptr->ml)
+                        if (unified_look_can_show_monster_at(state.highlighted_y,
+                                state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
                             /* Save screen */
@@ -4200,7 +4223,9 @@ void do_cmd_unified_look(void)
                             log_trace("EXAMINATION: Monster not visible (ml=0), skipping examination");
                         }
                     }
-                    else if (state.highlighted_entity_type == 2 && cursor_o_idx > 0)
+                    else if ((state.highlighted_entity_type == 2)
+                        && unified_look_can_show_marked_object_at(
+                            state.highlighted_y, state.highlighted_x))
                     {
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
@@ -4252,7 +4277,8 @@ void do_cmd_unified_look(void)
                         /* Monster examination */
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         log_trace("EXAMINATION: Monster ml=%d", m_ptr->ml);
-                        if (m_ptr->ml)
+                        if (unified_look_can_show_monster_at(state.highlighted_y,
+                                state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
                             /* Save screen */
@@ -4287,8 +4313,8 @@ void do_cmd_unified_look(void)
                     
                     int cursor_m_idx = cave_m_idx[y][x];
                     int cursor_o_idx = cave_o_idx[y][x];
-                    bool has_visible_monster = (cursor_m_idx > 0) && (mon_list[cursor_m_idx].ml);
-                    bool has_object = (cursor_o_idx > 0);
+                    bool has_visible_monster = unified_look_can_show_monster_at(y, x);
+                    bool has_object = unified_look_can_show_marked_object_at(y, x);
                     
                     log_trace("EXAMINATION: Cursor position (%d,%d) - has_visible_monster=%d, has_object=%d", 
                              y, x, has_visible_monster, has_object);
@@ -4485,7 +4511,9 @@ command_key:
                         
                         /* Track monster health at cursor position for left sidebar display */
                         int m_idx = cave_m_idx[state.cursor_y][state.cursor_x];
-                        if (m_idx > 0 && mon_list[m_idx].ml)
+                        if ((m_idx > 0)
+                            && unified_look_can_show_monster_at(state.cursor_y,
+                                state.cursor_x))
                         {
                             /* Track this monster for health display */
                             health_track(m_idx);
@@ -4577,7 +4605,9 @@ command_key:
                             
                             /* Track monster health at cursor position for left sidebar display */
                             int m_idx = cave_m_idx[state.cursor_y][state.cursor_x];
-                            if (m_idx > 0 && mon_list[m_idx].ml)
+                            if ((m_idx > 0)
+                                && unified_look_can_show_monster_at(state.cursor_y,
+                                    state.cursor_x))
                             {
                                 /* Track this monster for health display */
                                 health_track(m_idx);
@@ -4711,7 +4741,8 @@ command_key:
                         log_trace("EXAMINATION: Highlighted entity is monster, examining monster %d", cursor_m_idx);
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         log_trace("EXAMINATION: Monster ml=%d", m_ptr->ml);
-                        if (m_ptr->ml)
+                        if (unified_look_can_show_monster_at(state.highlighted_y,
+                                state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
                             /* Save screen */
@@ -4732,7 +4763,9 @@ command_key:
                             log_trace("EXAMINATION: Monster not visible (ml=0), skipping examination");
                         }
                     }
-                    else if (state.highlighted_entity_type == 2 && cursor_o_idx > 0)
+                    else if ((state.highlighted_entity_type == 2)
+                        && unified_look_can_show_marked_object_at(
+                            state.highlighted_y, state.highlighted_x))
                     {
                         /* Object was highlighted - examine object */
                         log_trace("EXAMINATION: Highlighted entity is object, examining object %d", cursor_o_idx);
@@ -4784,7 +4817,8 @@ command_key:
                         /* Monster examination */
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
                         log_trace("EXAMINATION: Monster ml=%d", m_ptr->ml);
-                        if (m_ptr->ml)
+                        if (unified_look_can_show_monster_at(state.highlighted_y,
+                                state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
                             /* Save screen */
@@ -4819,8 +4853,8 @@ command_key:
                     
                     int cursor_m_idx = cave_m_idx[y][x];
                     int cursor_o_idx = cave_o_idx[y][x];
-                    bool has_visible_monster = (cursor_m_idx > 0) && (mon_list[cursor_m_idx].ml);
-                    bool has_object = (cursor_o_idx > 0);
+                    bool has_visible_monster = unified_look_can_show_monster_at(y, x);
+                    bool has_object = unified_look_can_show_marked_object_at(y, x);
                     
                     log_trace("EXAMINATION: Cursor position (%d,%d) - has_visible_monster=%d, has_object=%d", 
                              y, x, has_visible_monster, has_object);
@@ -5091,7 +5125,7 @@ command_key:
                 }
                 
                 int m_idx = cave_m_idx[target_y][target_x];
-                if (m_idx > 0)
+                if ((m_idx > 0) && unified_look_can_show_monster_at(target_y, target_x))
                 {
                     /* Set target to the monster */
                     target_set_monster(m_idx);
