@@ -1,5 +1,31 @@
 # Session notes
 
+## 2026-03-25: WP71E-WP71G score/runtime/files completion
+- Completed the remaining `WP71` slices and finished the `files.c` breakup:
+  - `src/score/score-entry.[ch]` now own score creation, live-preview, score submission, first-time-player detection, and the kinslayer score-entry path
+  - `clear_scorefile()` now lives in `src/score/score_io.c`
+  - `src/runtime/runtime-game.[ch]` now own save/close/panic/autoload/metarun lifecycle flow
+  - `src/files.c` is reduced to the small remaining privilege/escape/dump/screenshot facade
+- Updated direct callers to include the new score/runtime headers instead of relying on the old broad `externs.h` declarations.
+- Current size snapshot after this slice:
+  - `src/files.c`: 586 lines
+  - `src/externs.h`: 1,346 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: Android toolchain setup
+- Installed Android build prerequisites on the Windows host for the repo Android project:
+  - installed Android Studio to `C:\Program Files\Android\Android Studio`
+  - bootstrapped SDK command-line tools under `C:\Users\efrem\AppData\Local\Android\Sdk\cmdline-tools\latest`
+  - installed SDK packages: `platform-tools`, `platforms;android-34`, `build-tools;34.0.0`, `cmake;3.22.1`, `ndk;26.3.11579264`
+  - Gradle auto-installed and successfully built with `ndk;25.1.8937393`; local config was aligned to that verified NDK line for the repo Android workflow
+  - persisted user environment variables: `ANDROID_SDK_ROOT`, `ANDROID_HOME`, `ANDROID_NDK_HOME`, `JAVA_HOME`, plus PATH entries for Java, `platform-tools`, and `sdkmanager`
+  - added ignored `android/local.properties` pointing Gradle at the local SDK root for immediate workspace builds
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\build-android-apk.ps1 -Config Debug` succeeded.
+  - Output APK: `android\app\build\outputs\apk\debug\app-debug.apk`
+
 ## 2026-03-25: WP71B character-screen extraction from files
 - Completed the `WP71B` slice by moving the character-sheet, compact-layout, and tutorial rendering path out of `src/files.c`:
   - `src/ui/ui-character-screen.[ch]` now own `display_player()`, compact character-sheet paging/scrolling, and `display_character_tutorial()`

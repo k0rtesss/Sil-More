@@ -20,6 +20,7 @@
 
 #include "main.h"
 #include "log/log.h"
+#include "runtime/runtime-game.h"
 #include "runtime-cli.h"
 #include "sdl-sound.h"
 

@@ -5,6 +5,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "main-sdl.h"
+#include "score/score_entry.h"
 #include "score/score_io.h"
 #include "score/score_logic.h"
 #include "score/score_runs.h"

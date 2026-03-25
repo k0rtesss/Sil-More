@@ -248,6 +248,7 @@ set(SIL_MORE_SOURCES_SAVE_AND_META
 
 set(SIL_MORE_SOURCES_SCORE
     src/score/score_io.c
+    src/score/score_entry.c
     src/score/score_logic.c
     src/score/score_guid.c
     src/score/score_artefact.c
@@ -259,6 +260,10 @@ set(SIL_MORE_SOURCES_FS
     src/fs/pref-files.c
     src/fs/pref-time.c
     src/fs/savefile-name.c
+)
+
+set(SIL_MORE_SOURCES_RUNTIME
+    src/runtime/runtime-game.c
 )
 
 set(SIL_MORE_SOURCES_FRONTEND
@@ -314,6 +319,7 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_SAVE_AND_META}
     ${SIL_MORE_SOURCES_SCORE}
     ${SIL_MORE_SOURCES_FS}
+    ${SIL_MORE_SOURCES_RUNTIME}
     ${SIL_MORE_SOURCES_FRONTEND}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}

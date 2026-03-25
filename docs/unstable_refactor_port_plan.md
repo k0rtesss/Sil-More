@@ -26,12 +26,15 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `WP71B` is now landed in the working tree: `src/ui/ui-character-screen.[ch]` now owns the character sheet, compact-layout rendering, and character-sheet tutorial flow extracted from `src/files.c`, while the legacy block is excluded in place until the later `files.c` cleanup slices finish
   - `WP71C` is now landed in the working tree: `src/fs/savefile-name.[ch]` owns `process_player_name()` and `src/ui/ui-character-name.[ch]` owns `get_name()`
   - `WP71D` is now landed in the working tree: `src/ui/ui-story.[ch]` plus `src/ui/ui-death.[ch]` now own the story, tomb, and death/victory presentation helpers extracted from `src/files.c`
+  - `WP71E` is now landed in the working tree: `src/score/score-entry.[ch]` now own `create_score()`, `build_live_preview_score()`, `highscore_is_empty()`, and the remaining score-entry helpers such as the kinslayer scorefile path
+  - `WP71F` is now landed in the working tree: `src/runtime/runtime-game.[ch]` now own the save/close/panic/autoload/metarun lifecycle flow that used to live in `src/files.c`
+  - `WP71G` is now landed in the working tree: `src/files.c` is reduced to a 586-line facade that only keeps the privilege helpers, escape/suicide commands, and character-dump/mini-screenshot helpers
   - a follow-on utility slice is also landed: `comma_number()` / `atomonth()` now live in `src/format.c`, and `silmarils_possessed()` / `has_iron_crown()` now live in `src/player/player-resources.c`
-  - the remaining active large-file bottleneck is `src/files.c` at 7,158 lines; `src/cmd4.c` is now down to 291 lines
+  - there is no remaining active giant frontend monolith; `src/files.c` is down to 586 lines and `src/cmd4.c` is down to 291 lines
   - the current header/global surface is still above the intended end state:
-    - `src/externs.h`: 1,360 lines and 1,116 `extern` declarations
+    - `src/externs.h`: 1,346 lines and 1,103 `extern` declarations
     - `src/variable.c`: 916 lines
-  - the next real ownership wave is the remaining `WP71E`-`WP71G` slices, then `WP80+`
+  - the next real ownership wave is now `WP80+`
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -109,6 +112,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71A` on 2026-03-25.
 - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71B` on 2026-03-25.
 - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71C` on 2026-03-25.
+- `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing the remaining `WP71E`-`WP71G` score/runtime/files cleanup on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after the follow-on `files.c` utility extraction on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP70` on 2026-03-25.
 
@@ -119,7 +123,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - standard and portable builds both pass on the new target layout
 - The broader refactor is not complete:
   - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
-  - the remaining architectural blocker is `WP71` (`src/files.c`)
+  - the `WP71` `files.c` split is now complete and no longer blocks the next cleanup wave
   - `externs.h` and `variable.c` still need a second cleanup pass after those ownership moves land
 - Priority judgement for the next wave:
   - extract the non-UI gameplay helpers out of `src/cmd4.c` before splitting the remaining menu/UI command families
@@ -562,6 +566,9 @@ These are the recommended continuation packages after the unstable-port mileston
 - `WP71B`: completed in the working tree on 2026-03-25; `src/ui/ui-character-screen.[ch]` now owns the extracted character-sheet, compact-layout, and tutorial rendering path, direct callers now include the new UI header, and the old `files.c` block is excluded while the wider `files.c` breakup continues.
 - `WP71C`: completed in the working tree on 2026-03-25; `src/fs/savefile-name.[ch]` now owns `process_player_name()`, `src/ui/ui-character-name.[ch]` now owns `get_name()`, and `files.c` no longer owns the player-name/savefile prompt path.
 - `WP71D`: completed in the working tree on 2026-03-25; `src/ui/ui-story.[ch]` plus `src/ui/ui-death.[ch]` now own the extracted story, tomb, and death/victory presentation helpers from `src/files.c`.
+- `WP71E`: completed in the working tree on 2026-03-25; `src/score/score-entry.[ch]` now own score creation/live-preview/submission ownership plus the remaining score-entry helpers that used to live in `src/files.c`, and `clear_scorefile()` now lives in `src/score/score_io.c`.
+- `WP71F`: completed in the working tree on 2026-03-25; `src/runtime/runtime-game.[ch]` now own the save/close/panic/autoload/metarun lifecycle flow that used to live in `src/files.c`.
+- `WP71G`: completed in the working tree on 2026-03-25; `src/files.c` is now reduced to the small privilege/escape/dump/screenshot facade, and the former score/runtime ownership no longer lives there.
 
 | ID | Scope | Main files | Depends on |
 | --- | --- | --- | --- |
@@ -608,9 +615,8 @@ Detailed `WP71` split sequence:
 - `WP71G`: reduce `src/files.c` to a small facade or legacy note and replace its `externs.h` block with narrow subsystem headers.
 
 Recommended execution order for the next wave:
-- With `WP70` and `WP71A`-`WP71D` landed, continue with `WP71E`, then `WP71F` / `WP71G`, so the remaining score and lifecycle work follows the new `ui-character-screen`, `ui-story`, and `ui-death` ownership boundaries instead of broad `files.c` internals.
-- Land `WP71E` before the final `WP71F` lifecycle split so close-game/save code uses the settled score API.
-- Do not reopen `WP60`-`WP63` except for fallout fixes directly caused by `WP70` / `WP71`.
+- With `WP70` and `WP71` now complete, move directly into `WP80`, then `WP81`, then `WP90`.
+- Do not reopen `WP60`-`WP63` or `WP71` except for fallout fixes directly caused by later cleanup.
 
 ### Next-Wave Serial Packages
 These are best kept with the main integrator after the next parallel wave lands.
@@ -659,7 +665,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. With `WP70` and `WP71A`-`WP71D` landed, continue `WP71E`, then `WP71F` / `WP71G`, so `files.c` follows `cmd4.c` out of the active monolith set through score and lifecycle ownership instead of broad UI catch-all code.
-2. Reserve `WP80`, `WP81`, and `WP90` for the main integrator after `files.c` is reduced to a small facade or legacy note.
+1. With `WP70` and `WP71` complete, start `WP80` and use the new `score/`, `runtime/`, `fs/`, and `ui/` ownership boundaries to keep shrinking `externs.h` and `variable.c`.
+2. Reserve `WP81` and `WP90` for the main integrator after the `WP80` header/global cleanup settles.
 
 This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

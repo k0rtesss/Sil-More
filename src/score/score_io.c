@@ -6,11 +6,14 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "metarun.h"
+#include "score/score_entry.h"
 #include "score/score_logic.h"
 
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
+#include <time.h>
 
 bool build_current_score_path(char* buf, size_t len)
 {
@@ -1005,6 +1008,68 @@ int highscore_dead(char* name)
 
     if (opened_here) { SDL_CloseIO(highscore_fd); highscore_fd = NULL; }
     return 0;
+}
+
+void clear_scorefile(void)
+{
+    char cur_path[1024];
+    bool was_open = (highscore_fd != NULL);
+
+    build_current_score_path(cur_path, sizeof(cur_path));
+
+    if (was_open) {
+        SDL_CloseIO(highscore_fd);
+        highscore_fd = NULL;
+    }
+
+    {
+        safe_setuid_grab();
+        int fd_probe = open(cur_path, O_RDONLY);
+        off_t sz = -1;
+        if (fd_probe >= 0) {
+            sz = lseek(fd_probe, 0, SEEK_END);
+            close(fd_probe);
+        }
+        safe_setuid_drop();
+
+        if (sz > 0) {
+            time_t now = time(NULL);
+            struct tm* lt = localtime(&now);
+            char stamp[32];
+            if (lt)
+                strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", lt);
+            else
+                SDL_strlcpy(stamp, "unknown", sizeof stamp);
+
+            char arch_leaf[128];
+            strnfmt(arch_leaf, sizeof arch_leaf, "scores-%s-%08u.raw",
+                stamp, (unsigned)metar.id);
+
+            char arch_path[1024];
+            path_build(arch_path, sizeof arch_path, ANGBAND_DIR_APEX, arch_leaf);
+
+            safe_setuid_grab();
+            int rn = rename(cur_path, arch_path);
+            safe_setuid_drop();
+            if (rn != 0)
+                (void)fd_kill(cur_path);
+        }
+        else {
+            (void)fd_kill(cur_path);
+        }
+    }
+
+    safe_setuid_grab();
+    SDL_IOStream* fd_new = sdl_fmake(cur_path, 0644);
+    if (fd_new)
+        sdl_fclose(fd_new);
+    safe_setuid_drop();
+
+    if (was_open) {
+        safe_setuid_grab();
+        highscore_fd = score_file_open(cur_path, O_RDWR);
+        safe_setuid_drop();
+    }
 }
 
 static const char* file_mode_from_flags(int mode)

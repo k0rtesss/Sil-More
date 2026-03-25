@@ -16,6 +16,7 @@
 #include "main-sdl.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "score/score_entry.h"
 #include "ui/ui-character-screen.h"
 #include "z-term.h"
 

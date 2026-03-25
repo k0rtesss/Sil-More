@@ -21,6 +21,7 @@ extern struct sound_config g_sound_config;
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "runtime/runtime-game.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"

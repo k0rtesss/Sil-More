@@ -296,15 +296,9 @@ extern bool g_labyrinth_view_active;
 extern bool skill_gain_in_progress;
 extern bool save_game_quietly;
 extern bool stop_stealth_mode;
-extern bool death_processing_in_progress(void);
 
 extern metarun metar;
 extern int meta_fd;
-/* metarun/score helpers */
-extern void clear_scorefile(void);
-extern bool autoload_alive_from_scores(void);
-extern void metarun_finalize_scores_and_saves(void);
-extern void backup_and_clear_saves(void);
 
 /*
  * Rage and labyrinth partitions both suppress remembered-grid information.
@@ -687,12 +681,7 @@ extern void process_player_name(bool sf);
 extern bool get_name(void);
 extern void do_cmd_escape(int);
 extern void do_cmd_suicide(void);
-extern void do_cmd_save_game(void);
 extern int highscore_dead(char* name);
-extern bool highscore_is_empty();
-extern void close_game(void);
-extern void exit_game_panic(void);
-extern errr create_score(high_score* the_score);
 extern int score_points(const high_score* score);
 extern int score_count_alive_entries(void);
 extern u32b score_sum_dead_points(void);
@@ -704,9 +693,6 @@ extern int meta_write(const metarun*);
 extern errr meta_read(metarun*);
 extern int meta_seek(int i);
 extern int meta_fill(bool);
-extern const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll);
-extern void clear_scorefile(void);
-extern bool autoload_alive_from_scores(void);
 
 /* init2.c */
 extern void init_file_paths(char* path);

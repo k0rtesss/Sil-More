@@ -16,6 +16,9 @@
 #include "main-sdl.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
+#include "runtime/runtime-game.h"
+#include "score/score_entry.h"
+#include "score/score_io.h"
 #include "ui/ui-story.h"
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */

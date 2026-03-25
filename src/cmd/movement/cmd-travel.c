@@ -15,6 +15,7 @@
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "player/killer.h"
+#include "runtime/runtime-game.h"
 #include "metarun.h"
 
 #define MIN_DEPTH_COUNTER_STEP 180000

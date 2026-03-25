@@ -10,6 +10,7 @@
 #include "init/init-parse-internal.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "score/score_io.h"
 
 #ifdef ALLOW_TEMPLATES
 

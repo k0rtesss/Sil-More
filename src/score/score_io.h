@@ -44,5 +44,6 @@ u32b score_sum_dead_points(void);
 int highscore_add(struct high_score* score);
 void upsert_live_score_on_save(void);
 int highscore_dead(char* name);
+void clear_scorefile(void);
 
 #endif /* INCLUDED_SCORE_IO_H */
