@@ -1,0 +1,1482 @@
+/* File: melee/melee-combat-display.c */
+
+/*
+ * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
+ *
+ * This software may be copied and distributed for educational, research,
+ * and not for profit purposes provided that this copyright and statement
+ * are included in all such copies.  Other copyrights may also apply.
+ */
+
+/*
+ * Combat roll tracking, display, and history.
+ * Split from melee1.c for better code organization.
+ */
+
+#include "angband.h"
+#include "externs.h"
+#include "log/log.h"
+#include "melee/melee-attack.h"
+#include "melee/melee-combat-display.h"
+
+static int  original_main_combat_rolls = -1;
+static bool main_combat_rolls_deferral_active = false;
+static bool main_combat_rolls_restored = false;
+
+static void maybe_restore_main_combat_rolls(void)
+{
+    if (main_combat_rolls_deferral_active && !main_combat_rolls_restored) {
+        if (op_ptr->main_combat_rolls == 0 && original_main_combat_rolls > 0) {
+            op_ptr->main_combat_rolls = original_main_combat_rolls;
+            main_combat_rolls_restored = true;
+            main_combat_rolls_deferral_active = false;
+            p_ptr->redraw |= (PR_MAP); /* recompute SCREEN_HGT */
+            log_trace("maybe_restore_main_combat_rolls: restored to %d", op_ptr->main_combat_rolls);
+        }
+    }
+}
+
+void new_combat_round(void)
+{
+    int i;
+
+    log_trace("[ROUND] new_combat_round: ENTER turns_since_combat=%d, combat_number=%d, combat_number_old=%d", turns_since_combat, combat_number, combat_number_old);
+    if (combat_number != 0)
+        combat_number_old = combat_number;
+    combat_number = 0;
+    turns_since_combat++;
+
+    /* Add the previous round to combat history before we lose it */
+    add_combat_round_to_history();
+
+    log_trace("[ROUND] new_combat_round: after inc, turns_since_combat=%d", turns_since_combat);
+    if (turns_since_combat == 1)
+    {
+        // copy previous round's rolls into old round's rolls
+        log_trace("[ROUND] copy current->old: combat_number_old(before)=%d", combat_number_old);
+        for (i = 0; i < MAX_COMBAT_ROLLS; i++)
+        {
+            memcpy(&combat_rolls[1][i], &combat_rolls[0][i], sizeof(combat_roll));
+            log_trace("[ROUND]   copied i=%d att_type=%d att=%d evn=%d dam=%d prot=%d atk=%c def=%c", i,
+                      combat_rolls[1][i].att_type,
+                      combat_rolls[1][i].att,
+                      combat_rolls[1][i].evn,
+                      combat_rolls[1][i].dam,
+                      combat_rolls[1][i].prot,
+                      combat_rolls[1][i].attacker_char,
+                      combat_rolls[1][i].defender_char);
+        }
+    }
+    else if (turns_since_combat == 11)
+    {
+        // reset old round's rolls
+        combat_number_old = 0;
+        for (i = 0; i < MAX_COMBAT_ROLLS; i++)
+        {
+            combat_rolls[1][i].att_type = COMBAT_ROLL_NONE;
+        }
+    }
+
+    // reset new round's rolls
+    for (i = 0; i < MAX_COMBAT_ROLLS; i++)
+    {
+        combat_rolls[0][i].att_type = COMBAT_ROLL_NONE;
+    }
+    log_trace("[ROUND] new_combat_round: EXIT turns_since_combat=%d, combat_number=%d, combat_number_old=%d", turns_since_combat, combat_number, combat_number_old);
+}
+
+/*
+ * Update combat roll table part 1 (the attack rolls)
+ */
+void update_combat_rolls1(const monster_type* m_ptr1,
+    const monster_type* m_ptr2, bool vis, int att, int att_roll, int evn,
+    int evn_roll)
+{
+    /* Ensure we restore deferred main_combat_rolls before recording first roll */
+    maybe_restore_main_combat_rolls();
+    monster_race* r_ptr1;
+    monster_race* r_ptr2;
+
+    if (m_ptr1 == PLAYER)
+    {
+        r_ptr1 = &r_info[0];
+    }
+    else if (m_ptr1 == NULL)
+    {
+        // hack for traps hitting you
+        r_ptr1 = NULL;
+    }
+    else if (p_ptr->image)
+    {
+        r_ptr1 = &r_info[m_ptr1->image_r_idx];
+    }
+    else
+    {
+        r_ptr1 = &r_info[m_ptr1->r_idx];
+    }
+
+    if (m_ptr2 == PLAYER)
+    {
+        r_ptr2 = &r_info[0];
+    }
+    else if (m_ptr2 == NULL)
+    {
+        // hack for attacking Morgoth's crown
+        r_ptr2 = NULL;
+    }
+    else if (p_ptr->image)
+    {
+        r_ptr2 = &r_info[m_ptr2->image_r_idx];
+    }
+    else
+    {
+        r_ptr2 = &r_info[m_ptr2->r_idx];
+    }
+
+    log_trace("[ROLL1] enter: combat_number=%d old=%d turns_since_combat=%d", combat_number, combat_number_old, turns_since_combat);
+    if (combat_number < MAX_COMBAT_ROLLS)
+    {
+        combat_rolls[0][combat_number].att_type = COMBAT_ROLL_ROLL;
+
+        if (m_ptr1 == NULL)
+        {
+            combat_rolls[0][combat_number].attacker_char
+                = combat_roll_special_char;
+            combat_rolls[0][combat_number].attacker_attr
+                = combat_roll_special_attr;
+            combat_rolls[0][combat_number].is_attacker_player = false;
+        }
+        else if (vis || (m_ptr1 == PLAYER))
+        {
+            if (m_ptr1 == PLAYER)
+            {
+                /* Player appearance */
+                combat_rolls[0][combat_number].is_attacker_player = true;
+                if (graphics_are_ascii())
+                {
+                    combat_rolls[0][combat_number].attacker_char = r_ptr1->d_char;
+                    combat_rolls[0][combat_number].attacker_attr = r_ptr1->d_attr;
+                }
+                else
+                {
+                    /* In graphics mode, use race sprite with equipment offset */
+                    monster_race* player_r_ptr = &r_info[p_ptr->prace];
+                    combat_rolls[0][combat_number].attacker_char = player_r_ptr->x_char + player_tile_offset();
+                    combat_rolls[0][combat_number].attacker_attr = player_r_ptr->x_attr;
+                }
+            }
+            else
+            {
+                /* Monster appearance */
+                combat_rolls[0][combat_number].is_attacker_player = false;
+                combat_rolls[0][combat_number].attacker_char = graphics_are_ascii() ? r_ptr1->d_char : r_ptr1->x_char;
+
+                if (p_ptr->rage)
+                {
+                    combat_rolls[0][combat_number].attacker_attr = TERM_RED;
+                }
+                else
+                {
+                    combat_rolls[0][combat_number].attacker_attr = graphics_are_ascii() ? r_ptr1->d_attr : r_ptr1->x_attr;
+                }
+            }
+        }
+        else
+        {
+            combat_rolls[0][combat_number].is_attacker_player = false;
+            combat_rolls[0][combat_number].attacker_char = '?';
+            combat_rolls[0][combat_number].attacker_attr = TERM_SLATE;
+        }
+
+        // hack for Iron Crown
+        if (m_ptr2 == NULL)
+        {
+            combat_rolls[0][combat_number].defender_char = ']';
+            combat_rolls[0][combat_number].defender_attr = TERM_L_DARK;
+            combat_rolls[0][combat_number].is_defender_player = false;
+        }
+        else if (vis || (m_ptr2 == PLAYER))
+        {
+            if (m_ptr2 == PLAYER)
+            {
+                /* Player appearance */
+                combat_rolls[0][combat_number].is_defender_player = true;
+                if (graphics_are_ascii())
+                {
+                    combat_rolls[0][combat_number].defender_char = r_ptr2->d_char;
+                    combat_rolls[0][combat_number].defender_attr = r_ptr2->d_attr;
+                }
+                else
+                {
+                    /* In graphics mode, use race sprite with equipment offset */
+                    monster_race* player_r_ptr = &r_info[p_ptr->prace];
+                    combat_rolls[0][combat_number].defender_char = player_r_ptr->x_char + player_tile_offset();
+                    combat_rolls[0][combat_number].defender_attr = player_r_ptr->x_attr;
+                }
+            }
+            else
+            {
+                /* Monster appearance */
+                combat_rolls[0][combat_number].is_defender_player = false;
+                combat_rolls[0][combat_number].defender_char = graphics_are_ascii() ? r_ptr2->d_char : r_ptr2->x_char;
+
+                if (p_ptr->rage)
+                {
+                    combat_rolls[0][combat_number].defender_attr = TERM_RED;
+                }
+                else
+                {
+                    combat_rolls[0][combat_number].defender_attr = graphics_are_ascii() ? r_ptr2->d_attr : r_ptr2->x_attr;
+                }
+            }
+        }
+        else
+        {
+            combat_rolls[0][combat_number].is_defender_player = false;
+            combat_rolls[0][combat_number].defender_char = '?';
+            combat_rolls[0][combat_number].defender_attr = TERM_SLATE;
+        }
+
+        combat_rolls[0][combat_number].att = att;
+        combat_rolls[0][combat_number].att_roll = att_roll;
+        combat_rolls[0][combat_number].evn = evn;
+        combat_rolls[0][combat_number].evn_roll = evn_roll;
+
+    log_trace("[ROLL1] added at index=%d atk=%c def=%c att=%d ar=%d evn=%d er=%d", combat_number,
+          combat_rolls[0][combat_number].attacker_char,
+          combat_rolls[0][combat_number].defender_char,
+          combat_rolls[0][combat_number].att,
+          combat_rolls[0][combat_number].att_roll,
+          combat_rolls[0][combat_number].evn,
+          combat_rolls[0][combat_number].evn_roll);
+    combat_number++;
+    turns_since_combat = 0;
+    log_trace("[ROLL1] exit: combat_number=%d old=%d", combat_number, combat_number_old);
+    }
+
+    /* Window stuff - DO NOT set flag here; wait for update_combat_rolls2() to complete the data */
+    /* p_ptr->window |= (PW_COMBAT_ROLLS); */
+}
+
+/*
+ * Update combat roll table part 1b (the attack when there is no roll made -- eg
+ * breath attack)
+ */
+void update_combat_rolls1b(
+    const monster_type* m_ptr1, const monster_type* m_ptr2, bool vis)
+{
+    /* Ensure we restore deferred main_combat_rolls before recording first roll */
+    maybe_restore_main_combat_rolls();
+    monster_race* r_ptr1;
+    monster_race* r_ptr2;
+
+    if (m_ptr1 == PLAYER)
+    {
+        r_ptr1 = &r_info[0];
+    }
+    else if (m_ptr1 == NULL)
+    {
+        // hack for traps hitting you
+        r_ptr1 = NULL;
+    }
+    else if (p_ptr->image)
+    {
+        r_ptr1 = &r_info[m_ptr1->image_r_idx];
+    }
+    else
+    {
+        r_ptr1 = &r_info[m_ptr1->r_idx];
+    }
+
+    if (m_ptr2 == PLAYER)
+    {
+        r_ptr2 = &r_info[0];
+    }
+    else if (p_ptr->image)
+    {
+        r_ptr2 = &r_info[m_ptr2->image_r_idx];
+    }
+    else
+    {
+        r_ptr2 = &r_info[m_ptr2->r_idx];
+    }
+
+    log_trace("[ROLL1B] enter: combat_number=%d old=%d turns_since_combat=%d", combat_number, combat_number_old, turns_since_combat);
+    if (combat_number < MAX_COMBAT_ROLLS)
+    {
+        combat_rolls[0][combat_number].att_type = COMBAT_ROLL_AUTO;
+
+        if (m_ptr1 == NULL)
+        {
+            combat_rolls[0][combat_number].attacker_char
+                = combat_roll_special_char;
+            combat_rolls[0][combat_number].attacker_attr
+                = combat_roll_special_attr;
+            combat_rolls[0][combat_number].is_attacker_player = false;
+        }
+        else if (vis || (m_ptr1 == PLAYER))
+        {
+            if (m_ptr1 == PLAYER)
+            {
+                /* Player appearance */
+                combat_rolls[0][combat_number].is_attacker_player = true;
+                if (graphics_are_ascii())
+                {
+                    combat_rolls[0][combat_number].attacker_char = r_ptr1->d_char;
+                    combat_rolls[0][combat_number].attacker_attr = r_ptr1->d_attr;
+                }
+                else
+                {
+                    /* In graphics mode, use race sprite with equipment offset */
+                    monster_race* player_r_ptr = &r_info[p_ptr->prace];
+                    combat_rolls[0][combat_number].attacker_char = player_r_ptr->x_char + player_tile_offset();
+                    combat_rolls[0][combat_number].attacker_attr = player_r_ptr->x_attr;
+                }
+            }
+            else
+            {
+                /* Monster appearance */
+                combat_rolls[0][combat_number].is_attacker_player = false;
+                combat_rolls[0][combat_number].attacker_char = graphics_are_ascii() ? r_ptr1->d_char : r_ptr1->x_char;
+
+                if (p_ptr->rage)
+                {
+                    combat_rolls[0][combat_number].attacker_attr = TERM_RED;
+                }
+                else
+                {
+                    combat_rolls[0][combat_number].attacker_attr = graphics_are_ascii() ? r_ptr1->d_attr : r_ptr1->x_attr;
+                }
+            }
+        }
+        else
+        {
+            combat_rolls[0][combat_number].is_attacker_player = false;
+            combat_rolls[0][combat_number].attacker_char = '?';
+            combat_rolls[0][combat_number].attacker_attr = TERM_SLATE;
+        }
+
+        if (vis || (m_ptr2 == PLAYER))
+        {
+            if (m_ptr2 == PLAYER)
+            {
+                /* Player appearance */
+                combat_rolls[0][combat_number].is_defender_player = true;
+                if (graphics_are_ascii())
+                {
+                    combat_rolls[0][combat_number].defender_char = r_ptr2->d_char;
+                    combat_rolls[0][combat_number].defender_attr = r_ptr2->d_attr;
+                }
+                else
+                {
+                    /* In graphics mode, use race sprite with equipment offset */
+                    monster_race* player_r_ptr = &r_info[p_ptr->prace];
+                    combat_rolls[0][combat_number].defender_char = player_r_ptr->x_char + player_tile_offset();
+                    combat_rolls[0][combat_number].defender_attr = player_r_ptr->x_attr;
+                }
+            }
+            else
+            {
+                /* Monster appearance */
+                combat_rolls[0][combat_number].is_defender_player = false;
+                combat_rolls[0][combat_number].defender_char = graphics_are_ascii() ? r_ptr2->d_char : r_ptr2->x_char;
+
+                if (p_ptr->rage)
+                {
+                    combat_rolls[0][combat_number].defender_attr = TERM_RED;
+                }
+                else
+                {
+                    combat_rolls[0][combat_number].defender_attr = graphics_are_ascii() ? r_ptr2->d_attr : r_ptr2->x_attr;
+                }
+            }
+        }
+        else
+        {
+            combat_rolls[0][combat_number].is_defender_player = false;
+            combat_rolls[0][combat_number].defender_char = '?';
+            combat_rolls[0][combat_number].defender_attr = TERM_SLATE;
+        }
+
+    log_trace("[ROLL1B] added index=%d atk=%c def=%c (AUTO)", combat_number,
+          combat_rolls[0][combat_number].attacker_char,
+          combat_rolls[0][combat_number].defender_char);
+    combat_number++;
+    turns_since_combat = 0;
+    log_trace("[ROLL1B] exit: combat_number=%d old=%d", combat_number, combat_number_old);
+    }
+
+    /* Window stuff - DO NOT set flag here; defer to main loop to avoid mid-combat updates */
+    /* p_ptr->window |= (PW_COMBAT_ROLLS); */
+}
+
+/*
+ * Update combat roll table part 2 (the damage rolls)
+ */
+void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
+    int prt_percent, int dam_type, bool melee)
+{
+    /* Ensure we restore deferred main_combat_rolls before completing roll */
+    maybe_restore_main_combat_rolls();
+    log_trace("[ROLL2] enter: combat_number=%d old=%d last_index=%d", combat_number, combat_number_old, combat_number - 1);
+    if (combat_number - 1 < MAX_COMBAT_ROLLS)
+    {
+        combat_rolls[0][combat_number - 1].dam_type = dam_type;
+        combat_rolls[0][combat_number - 1].dd = dd;
+        combat_rolls[0][combat_number - 1].ds = ds;
+        combat_rolls[0][combat_number - 1].dam = dam;
+        combat_rolls[0][combat_number - 1].pd = pd;
+        combat_rolls[0][combat_number - 1].ps = ps;
+        combat_rolls[0][combat_number - 1].prot = prot;
+        combat_rolls[0][combat_number - 1].prt_percent = prt_percent;
+        combat_rolls[0][combat_number - 1].melee = melee;
+        log_trace("[ROLL2] filled index=%d dd=%d ds=%d dam=%d pd=%d ps=%d prot=%d prt%%=%d melee=%d", 
+                  combat_number - 1, dd, ds, dam, pd, ps, prot, prt_percent, melee);
+
+        // deal with protection for the player
+        // this hackishly uses the pd and ps to store the min and max prot for
+        // the player
+        if (pd == -1)
+        {
+            // use the protection values for pure elemental types if there was
+            // no attack roll
+            if (combat_rolls[0][combat_number - 1].att_type == COMBAT_ROLL_AUTO)
+            {
+                combat_rolls[0][combat_number - 1].pd = p_min(dam_type, melee);
+                combat_rolls[0][combat_number - 1].ps = p_max(dam_type, melee);
+            }
+            // otherwise use the normal protection values
+            else
+            {
+                combat_rolls[0][combat_number - 1].pd = p_min(GF_HURT, melee);
+                combat_rolls[0][combat_number - 1].ps = p_max(GF_HURT, melee);
+            }
+    }
+    log_trace("[ROLL2] exit: index=%d done", combat_number - 1);
+    }
+    
+    /* Window stuff - DO NOT set flag here; defer to main loop to avoid mid-combat updates */
+    /* p_ptr->window |= (PW_COMBAT_ROLLS); */
+}
+
+/*
+ * Display combat rolls in a window
+ */
+
+typedef struct combat_display_entry
+{
+    int round;
+    int index;
+} combat_display_entry;
+
+static int collect_combat_display_entries(combat_display_entry* ordered, int max_entries)
+{
+    int count = 0;
+
+    for (int round = 0; round < 2; round++)
+    {
+        int combat_num_for_round = (round == 0) ? combat_number : combat_number_old;
+        if (combat_num_for_round <= 0)
+            continue;
+
+        int player_indices[MAX_COMBAT_ROLLS];
+        int monster_indices[MAX_COMBAT_ROLLS];
+        int player_count = 0;
+        int monster_count = 0;
+
+        for (int idx = combat_num_for_round - 1; idx >= 0; idx--)
+        {
+            if (combat_rolls[round][idx].att_type == COMBAT_ROLL_NONE)
+                continue;
+
+            if (combat_rolls[round][idx].is_attacker_player)
+            {
+                if (player_count < MAX_COMBAT_ROLLS)
+                    player_indices[player_count++] = idx;
+            }
+            else
+            {
+                if (monster_count < MAX_COMBAT_ROLLS)
+                    monster_indices[monster_count++] = idx;
+            }
+        }
+
+        for (int i = 0; (i < player_count) && (count < max_entries); i++)
+        {
+            ordered[count].round = round;
+            ordered[count].index = player_indices[i];
+            count++;
+        }
+
+        for (int i = 0; (i < monster_count) && (count < max_entries); i++)
+        {
+            ordered[count].round = round;
+            ordered[count].index = monster_indices[i];
+            count++;
+        }
+    }
+
+    return count;
+}
+
+static void draw_combat_roll_line(int row, int base_col_offset,
+    const combat_roll* roll)
+{
+    char buf[80];
+    int net_att = 0;
+    int net_dam;
+    int a_att;
+    int a_evn;
+    int a_hit;
+    int a_dam_roll;
+    int a_prot_roll;
+    int a_net_dam = TERM_L_RED;
+    int res = 1;
+
+    log_trace("draw_combat_roll_line: row=%d att_type=%d attacker=%c defender=%c",
+        row, roll->att_type, roll->attacker_char, roll->defender_char);
+
+    if (roll->is_defender_player)
+    {
+        switch (roll->dam_type)
+        {
+        case GF_FIRE:
+            res = resist_fire();
+            break;
+        case GF_COLD:
+            res = resist_cold();
+            break;
+        case GF_POIS:
+            res = resist_pois();
+            a_net_dam = TERM_GREEN;
+            break;
+        case GF_DARK:
+            res = resist_dark();
+            break;
+        default:
+            res = 1;
+            a_net_dam = TERM_L_RED;
+            break;
+        }
+    }
+
+    if (roll->is_attacker_player)
+    {
+        a_att = TERM_L_BLUE;
+        a_evn = TERM_WHITE;
+        a_hit = TERM_L_RED;
+        a_dam_roll = TERM_L_BLUE;
+        if (roll->prt_percent >= 100)
+            a_prot_roll = TERM_WHITE;
+        else if (roll->prt_percent >= 1)
+            a_prot_roll = TERM_SLATE;
+        else
+            a_prot_roll = TERM_DARK;
+    }
+    else
+    {
+        a_att = TERM_WHITE;
+        a_evn = TERM_L_BLUE;
+        a_hit = TERM_L_RED;
+        a_dam_roll = TERM_WHITE;
+        if (roll->prt_percent >= 100)
+            a_prot_roll = TERM_L_BLUE;
+        else if (roll->prt_percent >= 1)
+            a_prot_roll = TERM_BLUE;
+        else
+            a_prot_roll = TERM_DARK;
+    }
+
+    Term_putstr(base_col_offset, row, 1, TERM_WHITE, " ");
+    Term_queue_char(base_col_offset + 1, row,
+        roll->attacker_attr, roll->attacker_char, 0, 0);
+    if (use_bigtile && !graphics_are_ascii())
+    {
+        if ((roll->attacker_attr & 0x80) && ((byte)roll->attacker_char & 0x80))
+            Term_queue_char(base_col_offset + 2, row, 255, -1, 0, 0);
+        else
+            Term_queue_char(base_col_offset + 2, row, TERM_WHITE, ' ', 0, 0);
+    }
+
+    int tile_offset = (use_bigtile && !graphics_are_ascii()) ? 1 : 0;
+    int base_col = base_col_offset + 2 + tile_offset;
+
+    if (roll->att_type == COMBAT_ROLL_ROLL)
+    {
+        int col = base_col;
+
+        if (roll->att < 10)
+        {
+            strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
+        }
+        Term_putstr(col, row, -1, a_att, buf);
+        col += 6;
+
+        strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
+        Term_putstr(col, row, -1, a_att, buf);
+        col += 4;
+
+        net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
+        if (net_att > 0)
+        {
+            strnfmt(buf, sizeof(buf), "%4d", net_att);
+            Term_putstr(col, row, -1, a_hit, buf);
+        }
+        else
+        {
+            Term_putstr(col, row, -1, TERM_SLATE, "   -");
+        }
+        col += 4;
+
+        strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
+        Term_putstr(col, row, -1, a_evn, buf);
+        col += 4;
+
+        if (roll->evn < 10)
+        {
+            strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
+        }
+        Term_putstr(col, row, -1, a_evn, buf);
+        col += 7;
+
+        Term_putstr(col, row, 1, TERM_WHITE, " ");
+        col += 1;
+
+        Term_queue_char(col, row,
+            roll->defender_attr, roll->defender_char, 0, 0);
+        if (use_bigtile && !graphics_are_ascii())
+        {
+            if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
+                Term_queue_char(col + 1, row, 255, -1, 0, 0);
+            else
+                Term_queue_char(col + 1, row, TERM_WHITE, ' ', 0, 0);
+            col += 2;
+        }
+        else
+        {
+            col += 1;
+        }
+
+        int damage_col = base_col + 25 + 1;
+        if (use_bigtile && !graphics_are_ascii())
+            damage_col += 2;
+        else
+            damage_col += 1;
+
+        if ((net_att > 0) || (roll->att_type == COMBAT_ROLL_AUTO))
+        {
+            Term_putstr(damage_col, row, -1, TERM_L_DARK, "  ->");
+            damage_col += 4;
+
+            if (roll->ds < 10)
+            {
+                strnfmt(buf, sizeof(buf), "   (%dd%d) ", roll->dd, roll->ds);
+            }
+            else
+            {
+                strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+            }
+            Term_putstr(damage_col, row, -1, a_dam_roll, buf);
+            damage_col += 9;
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+            Term_putstr(damage_col, row, -1, a_dam_roll, buf);
+            damage_col += 4;
+
+            net_dam = roll->dam - roll->prot;
+            if (net_dam < 0)
+                net_dam = 0;
+
+            if (net_dam > 0)
+            {
+                strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                Term_addstr(-1, a_net_dam, buf);
+            }
+            else
+            {
+                Term_addstr(-1, TERM_SLATE, "   -");
+            }
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+            Term_addstr(-1, a_prot_roll, buf);
+
+            log_debug("COMBAT_ROLL_ROLL protection: is_defender_player=%d",
+                roll->is_defender_player);
+
+            if (roll->is_defender_player)
+            {
+                strnfmt(buf, sizeof(buf), "  [%d-%d]", (roll->pd * roll->prt_percent) / 100,
+                    (roll->ps * roll->prt_percent) / 100);
+                Term_addstr(-1, a_prot_roll, buf);
+            }
+            else
+            {
+                if ((roll->ps < 1) || (roll->pd < 1))
+                {
+                    SDL_strlcpy(buf, "        ", sizeof(buf));
+                    Term_addstr(-1, a_prot_roll, buf);
+                }
+                else if (roll->ps < 10)
+                {
+                    strnfmt(buf, sizeof(buf), "   [%dd%d]", roll->pd, roll->ps);
+                    Term_addstr(-1, a_prot_roll, buf);
+                }
+                else
+                {
+                    strnfmt(buf, sizeof(buf), "  [%dd%d]", roll->pd, roll->ps);
+                    Term_addstr(-1, a_prot_roll, buf);
+                }
+                if ((roll->prt_percent > 0) && (roll->prt_percent < 100))
+                {
+                    strnfmt(buf, sizeof(buf), " (%d%%)", roll->prt_percent);
+                    Term_addstr(-1, a_prot_roll, buf);
+                }
+            }
+        }
+    }
+    else if (roll->att_type == COMBAT_ROLL_AUTO)
+    {
+        int col = base_col;
+        Term_putstr(col, row, -1, TERM_L_DARK,
+            "                         ");
+        col += 25;
+
+        Term_putstr(col, row, 1, TERM_WHITE, " ");
+        col += 1;
+
+        Term_queue_char(col, row,
+            roll->defender_attr, roll->defender_char, 0, 0);
+        if (use_bigtile && !graphics_are_ascii())
+        {
+            if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
+                Term_queue_char(col + 1, row, 255, -1, 0, 0);
+            else
+                Term_queue_char(col + 1, row, TERM_WHITE, ' ', 0, 0);
+            col += 2;
+        }
+        else
+        {
+            col += 1;
+        }
+
+        int damage_col = base_col + 25 + 1;
+        if (use_bigtile && !graphics_are_ascii())
+            damage_col += 2;
+        else
+            damage_col += 1;
+
+        int net_auto;
+        if (roll->melee)
+            net_auto = roll->dam - roll->prot;
+        else if (res > 0)
+            net_auto = (roll->dam / res) - roll->prot;
+        else
+            net_auto = (roll->dam * (-res)) - roll->prot;
+
+        Term_putstr(damage_col, row, -1, TERM_L_DARK, "  ->");
+        damage_col += 4;
+
+        if (roll->ds < 10)
+        {
+            strnfmt(buf, sizeof(buf), "   (%dd%d) ", roll->dd, roll->ds);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+        }
+        Term_putstr(damage_col, row, -1, a_dam_roll, buf);
+        damage_col += 9;
+
+        strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+        Term_putstr(damage_col, row, -1, a_dam_roll, buf);
+        damage_col += 4;
+
+        if (net_auto > 0)
+        {
+            strnfmt(buf, sizeof(buf), "%4d", net_auto);
+            Term_addstr(-1, a_net_dam, buf);
+        }
+        else
+        {
+            Term_addstr(-1, TERM_SLATE, "   -");
+        }
+
+        strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+        Term_addstr(-1, a_prot_roll, buf);
+
+        log_debug("COMBAT_ROLL_AUTO protection: is_defender_player=%d",
+            roll->is_defender_player);
+
+        if (roll->is_defender_player)
+        {
+            if (!(roll->melee))
+            {
+                if (res > 1)
+                {
+                    strnfmt(buf, sizeof(buf), "  1/%d then", res);
+                    Term_addstr(-1, TERM_L_BLUE, buf);
+                }
+                else if (res < 0)
+                {
+                    strnfmt(buf, sizeof(buf), "  x%d then", -res);
+                    Term_addstr(-1, TERM_L_BLUE, buf);
+                }
+            }
+
+            strnfmt(buf, sizeof(buf), "  [%d-%d]", roll->pd, roll->ps);
+            Term_addstr(-1, a_prot_roll, buf);
+        }
+        else
+        {
+            if ((roll->ps < 1) || (roll->pd < 1))
+            {
+                SDL_strlcpy(buf, "        ", sizeof(buf));
+                Term_addstr(-1, a_prot_roll, buf);
+            }
+            else if (roll->ps < 10)
+            {
+                strnfmt(buf, sizeof(buf), "   [%dd%d]", roll->pd, roll->ps);
+                Term_addstr(-1, a_prot_roll, buf);
+            }
+            else
+            {
+                strnfmt(buf, sizeof(buf), "  [%dd%d]", roll->pd, roll->ps);
+                Term_addstr(-1, a_prot_roll, buf);
+            }
+            if ((roll->prt_percent > 0) && (roll->prt_percent < 100))
+            {
+                strnfmt(buf, sizeof(buf), " (%d%%)", roll->prt_percent);
+                Term_addstr(-1, a_prot_roll, buf);
+            }
+        }
+    }
+}
+
+void display_combat_rolls(void)
+{
+
+    int i;
+
+    log_trace("display_combat_rolls: Starting - combat_number=%d, combat_number_old=%d",
+        combat_number, combat_number_old);
+
+    for (i = 0; i < Term->hgt; i++)
+    {
+        Term_erase(0, i, 255);
+    }
+
+    combat_display_entry ordered[MAX_COMBAT_ROLLS * 2];
+    int total_entries = collect_combat_display_entries(ordered, MAX_COMBAT_ROLLS * 2);
+    int entries_to_show = MIN(total_entries, Term->hgt);
+
+    for (int entry_idx = 0; entry_idx < entries_to_show; entry_idx++)
+    {
+        int round = ordered[entry_idx].round;
+        int idx = ordered[entry_idx].index;
+
+        draw_combat_roll_line(entry_idx, 0, &combat_rolls[round][idx]);
+    }
+}
+
+
+/*
+ * Clear all 4 combat rolls lines in main terminal (used when settings change)
+ */
+void clear_main_combat_rolls_area(void)
+{
+    int i;
+    const int col_offset = COL_MAP; /* align with display offset */
+    /* Clear all 4 possible lines (one row up from bottom to avoid status line) */
+    for (i = 0; i < 4; i++)
+    {
+        Term_putstr(col_offset, Term->hgt - 4 - 1 + i, 65, TERM_WHITE, "                                                                 ");
+    }
+}
+
+/*
+ * Add the current combat round to the history buffer
+ */
+void add_combat_round_to_history(void)
+{
+    int i;
+    
+    /* Only add if there were actual combat rolls this round */
+    if (combat_number_old == 0) {
+        return;
+    }
+
+    /* Get next position in circular buffer */
+    combat_history_head = (combat_history_head + 1) % MAX_COMBAT_HISTORY;
+    
+    /* Update count if we haven't filled the buffer yet */
+    if (combat_history_count < MAX_COMBAT_HISTORY) {
+        combat_history_count++;
+    }
+    
+    /* Store the combat round data */
+    combat_history[combat_history_head].turn_count = turn;
+    combat_history[combat_history_head].num_rolls = combat_number_old;
+    
+    /* Copy the combat rolls from the previous round */
+    for (i = 0; i < combat_number_old && i < MAX_COMBAT_ROLLS; i++) {
+        memcpy(&combat_history[combat_history_head].rolls[i], &combat_rolls[1][i], sizeof(combat_roll));
+    }
+}
+
+/*
+ * Display combat history menu similar to message log
+ */
+void do_cmd_combat_history(void)
+{
+    char ch;
+    int i, j, n, q;
+    int wid, hgt;
+    char shower[80];
+    char finder[80];
+    char buf[120];
+    
+    /* Wipe finder */
+    SDL_strlcpy(finder, "", sizeof(finder));
+    
+    /* Wipe shower */
+    SDL_strlcpy(shower, "", sizeof(shower));
+    
+    /* Count total combat rolls across all history */
+    n = 0;
+    for (i = 0; i < combat_history_count; i++) {
+        n += combat_history[i].num_rolls;
+    }
+    
+    /* Start on first roll */
+    i = 0;
+    
+    /* Start at leftmost edge */
+    q = 0;
+    
+    /* Get size */
+    Term_get_size(&wid, &hgt);
+    
+    /* Save screen */
+    screen_save();
+    
+    /* Process requests until done */
+    while (1) {
+        /* Clear screen */
+        Term_clear();
+        
+        /* Calculate rolls to display */
+        int rolls_to_show = hgt - 4;
+        
+        /* Display combat rolls */
+        for (j = 0; (j < rolls_to_show) && (i + j < n); j++) {
+            /* Find which history entry and which roll within that entry */
+            int total_rolls = 0;
+            int history_idx = -1;
+            int roll_idx = -1;
+            
+            /* Walk through history from newest to oldest to find the roll at index (i + j) */
+            for (int h = 0; h < combat_history_count; h++) {
+                int hist_idx = (combat_history_head - h + MAX_COMBAT_HISTORY) % MAX_COMBAT_HISTORY;
+                
+                if (total_rolls + combat_history[hist_idx].num_rolls > i + j) {
+                    history_idx = hist_idx;
+                    roll_idx = (i + j) - total_rolls;
+                    break;
+                }
+                total_rolls += combat_history[hist_idx].num_rolls;
+            }
+            
+            if (history_idx == -1 || roll_idx == -1) continue;
+            
+            combat_history_round* round = &combat_history[history_idx];
+            combat_roll* roll = &round->rolls[roll_idx];
+            
+            /* Skip empty rolls */
+            if (roll->att_type == COMBAT_ROLL_NONE) continue;
+            
+            /* Format the combat roll with proper colors and alignment */
+            
+            /* Set up color scheme like display_combat_rolls */
+            int a_att, a_evn, a_hit, a_dam_roll, a_prot_roll, a_net_dam;
+            
+            /* Determine if player attack or monster attack */
+            bool is_player_attack = (roll->attacker_char == r_info[0].d_char) &&
+                                   (roll->attacker_attr == r_info[0].d_attr);
+            
+            if (is_player_attack) {
+                a_att = TERM_L_BLUE;
+                a_evn = TERM_WHITE;
+                a_hit = TERM_L_RED;
+                a_dam_roll = TERM_L_BLUE;
+                a_net_dam = TERM_L_RED;
+                if (roll->prt_percent >= 100)
+                    a_prot_roll = TERM_WHITE;
+                else if (roll->prt_percent >= 1)
+                    a_prot_roll = TERM_SLATE;
+                else
+                    a_prot_roll = TERM_DARK;
+            } else {
+                a_att = TERM_WHITE;
+                a_evn = TERM_L_BLUE;
+                a_hit = TERM_L_RED;
+                a_dam_roll = TERM_WHITE;
+                a_net_dam = TERM_L_RED;
+                if (roll->prt_percent >= 100)
+                    a_prot_roll = TERM_L_BLUE;
+                else if (roll->prt_percent >= 1)
+                    a_prot_roll = TERM_BLUE;
+                else
+                    a_prot_roll = TERM_DARK;
+            }
+            
+            /* Start building the line with proper formatting */
+            int line_y = hgt - 3 - j;
+            int col = 0;
+            
+            /* Apply horizontal scroll to starting column */
+            col = -q;
+            
+            /* Add turn indicator for first roll of each turn */
+            if (roll_idx == 0) {
+                strnfmt(buf, sizeof(buf), "Turn %d:", round->turn_count);
+                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, buf);
+                col += 9; /* "Turn XXXXX:" is about 9-10 chars */
+            } else {
+                col += 9; /* Same spacing for continuation rolls */
+            }
+            
+            /* Display like combat rolls window - attacker symbol */
+            if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+            col += 1;
+            if (col >= 0) {
+                Term_queue_char(col, line_y, roll->attacker_attr, roll->attacker_char, 0, 0);
+                if (use_bigtile && !graphics_are_ascii())
+                {
+                    if ((roll->attacker_attr & 0x80) && ((byte)roll->attacker_char & 0x80))
+                        Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                    else
+                        Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
+                }
+            }
+            col += 1;
+            if (use_bigtile && !graphics_are_ascii()) col += 1;
+            
+            /* Attack roll section */
+            if (roll->att_type == COMBAT_ROLL_ROLL) {
+                /* Attack bonus */
+                if (roll->att < 10) {
+                    strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
+                } else {
+                    strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
+                }
+                if (col >= 0) Term_putstr(col, line_y, -1, a_att, buf);
+                col += strlen(buf);
+                
+                /* Attack total */
+                strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
+                if (col >= 0) Term_putstr(col, line_y, -1, a_att, buf);
+                col += 4;
+                
+                /* Net attack (hit calculation) */
+                int net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
+                if (net_att > 0) {
+                    strnfmt(buf, sizeof(buf), "%4d", net_att);
+                    if (col >= 0) Term_putstr(col, line_y, -1, a_hit, buf);
+                } else {
+                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+                }
+                col += 4;
+                
+                /* Evasion total */
+                strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
+                if (col >= 0) Term_putstr(col, line_y, -1, a_evn, buf);
+                col += 4;
+                
+                /* Evasion bonus */
+                if (roll->evn < 10) {
+                    strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
+                } else {
+                    strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
+                }
+                if (col >= 0) Term_putstr(col, line_y, -1, a_evn, buf);
+                col += strlen(buf);
+                
+                /* Defender symbol */
+                if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+                col += 1;
+                if (col >= 0) {
+                    Term_queue_char(col, line_y, roll->defender_attr, roll->defender_char, 0, 0);
+                    if (use_bigtile && !graphics_are_ascii())
+                    {
+                        if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
+                            Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                        else
+                            Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
+                    }
+                }
+                col += 1;
+                if (use_bigtile && !graphics_are_ascii()) col += 1;
+                
+                /* Damage section (only if hit) */
+                if (net_att > 0) {
+                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
+                    col += 4;
+                    
+                    /* Damage dice */
+                    if (roll->ds < 10) {
+                        strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
+                    } else {
+                        strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+                    }
+                    if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                    col += strlen(buf);
+                    
+                    /* Damage total */
+                    strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+                    if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                    col += 4;
+                    
+                    /* Net damage */
+                    int net_dam = roll->dam - roll->prot;
+                    if (net_dam < 0) net_dam = 0;
+                    
+                    if (net_dam > 0) {
+                        strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                        if (col >= 0) Term_putstr(col, line_y, -1, a_net_dam, buf);
+                    } else {
+                        if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+                    }
+                    col += 4;
+                    
+                    /* Protection */
+                    strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+                    if (col >= 0) Term_putstr(col, line_y, -1, a_prot_roll, buf);
+                    col += 4;
+                }
+                
+            } else if (roll->att_type == COMBAT_ROLL_AUTO) {
+                /* Auto-hit attacks */
+                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "                         ");
+                col += 25;
+                
+                /* Defender symbol */
+                if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+                col += 1;
+                if (col >= 0) {
+                    Term_queue_char(col, line_y, roll->defender_attr, roll->defender_char, 0, 0);
+                    if (use_bigtile && !graphics_are_ascii())
+                    {
+                        if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
+                            Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                        else
+                            Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
+                    }
+                }
+                col += 1;
+                if (use_bigtile && !graphics_are_ascii()) col += 1;
+                
+                /* Damage section */
+                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
+                col += 4;
+                
+                /* Damage dice */
+                if (roll->ds < 10) {
+                    strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
+                } else {
+                    strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+                }
+                if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                col += strlen(buf);
+                
+                /* Damage total */
+                strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+                if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                col += 4;
+                
+                /* Net damage */
+                int net_dam = roll->dam - roll->prot;
+                if (net_dam < 0) net_dam = 0;
+                
+                if (net_dam > 0) {
+                    strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                    if (col >= 0) Term_putstr(col, line_y, -1, a_net_dam, buf);
+                } else {
+                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+                }
+                col += 4;
+                
+                /* Protection */
+                strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+                if (col >= 0) Term_putstr(col, line_y, -1, a_prot_roll, buf);
+                col += 4;
+            }
+        }
+        
+        /* Display header */
+        prt(format("Combat History (%d-%d of %d rolls), Offset %d", 
+                   i, i + j - 1, n, q), 0, 0);
+        
+        /* Display prompt */
+        prt("[Press 'p' for older, 'n' for newer, '=' to highlight, '/' to search, or ESCAPE]", hgt - 1, 0);
+        
+        /* Get a command */
+        ch = inkey();
+        
+        /* Exit on Escape */
+        if (ch == ESCAPE) break;
+        
+        /* Handle navigation and search same as messages */
+        j = i; /* Save old index */
+        
+        /* Horizontal scroll */
+        if (ch == '4') {
+            q = (q >= wid / 2) ? (q - wid / 2) : 0;
+            continue;
+        }
+        if (ch == '6') {
+            q = q + wid / 2;
+            continue;
+        }
+        
+        /* Search functionality */
+        if (ch == '=') {
+            prt("Show: ", hgt - 1, 0);
+            if (!askfor_aux(shower, sizeof(shower))) continue;
+            continue;
+        }
+        if (ch == '/') {
+            s16b z;
+            prt("Find: ", hgt - 1, 0);
+            if (!askfor_aux(finder, sizeof(finder))) continue;
+            SDL_strlcpy(shower, finder, sizeof(shower));
+            
+            /* Search through combat rolls */
+            for (z = i + 1; z < n; z++) {
+                /* Find the roll at index z and check if it matches */
+                int total_rolls = 0;
+                bool found = false;
+                
+                for (int h = 0; h < combat_history_count; h++) {
+                    int hist_idx = (combat_history_head - h + MAX_COMBAT_HISTORY) % MAX_COMBAT_HISTORY;
+                    
+                    if (total_rolls + combat_history[hist_idx].num_rolls > z) {
+                        int r_idx = z - total_rolls;
+                        combat_roll* search_roll = &combat_history[hist_idx].rolls[r_idx];
+                        
+                        /* Create search string for this roll */
+                        char search_buf[120];
+                        strnfmt(search_buf, sizeof(search_buf), "Turn %d %c (%+d) (%dd%d)",
+                                combat_history[hist_idx].turn_count,
+                                search_roll->attacker_char,
+                                search_roll->att,
+                                search_roll->dd, search_roll->ds);
+                        
+                        if (strstr(search_buf, finder)) {
+                            i = z;
+                            found = true;
+                            break;
+                        }
+                        break;
+                    }
+                    total_rolls += combat_history[hist_idx].num_rolls;
+                }
+                
+                if (found) break;
+            }
+        }
+        
+        /* Navigation */
+        if ((ch == 'p') || (ch == KTRL('P')) || (ch == ' ')) {
+            if (i + 20 < n) i += 20;
+        }
+        if (ch == '+') {
+            if (i + 10 < n) i += 10;
+        }
+        if ((ch == '8') || (ch == '\n') || (ch == '\r')) {
+            if (i + 1 < n) i += 1;
+        }
+        if ((ch == 'n') || (ch == KTRL('N'))) {
+            i = (i >= 20) ? (i - 20) : 0;
+        }
+        if (ch == '-') {
+            i = (i >= 10) ? (i - 10) : 0;
+        }
+        if (ch == '2') {
+            i = (i >= 1) ? (i - 1) : 0;
+        }
+        
+        /* Error if no change */
+        if (i == j) bell(NULL);
+    }
+    
+    /* Restore screen */
+    screen_load();
+}
+
+/*
+ * Display detailed combat rolls for a specific round
+ */
+void display_combat_round_details(combat_history_round* round)
+{
+    int i;
+    char buf[120];
+    
+    /* Save screen */
+    screen_save();
+    
+    /* Clear screen */
+    Term_clear();
+    
+    /* Display header */
+    strnfmt(buf, sizeof(buf), "Combat Details - Turn %d (%d roll%s)", 
+            round->turn_count, round->num_rolls, 
+            (round->num_rolls == 1) ? "" : "s");
+    prt(buf, 0, 0);
+    
+    /* Display each combat roll using similar logic to display_combat_rolls */
+    int line = 2;
+    int player_attacks = 0;
+    int monster_attacks = 0;
+    
+    /* Count player attacks first */
+    int total_player_attacks = 0;
+    for (i = 0; i < round->num_rolls; i++) {
+        if ((round->rolls[i].attacker_char == r_info[0].d_char) &&
+            (round->rolls[i].attacker_attr == r_info[0].d_attr)) {
+            total_player_attacks++;
+        }
+    }
+    
+    /* Display each roll */
+    for (i = 0; i < round->num_rolls; i++) {
+        combat_roll* roll = &round->rolls[i];
+        
+        /* Skip empty rolls */
+        if (roll->att_type == COMBAT_ROLL_NONE) continue;
+        
+        /* Determine line position based on attacker */
+        if ((roll->attacker_char == r_info[0].d_char) &&
+            (roll->attacker_attr == r_info[0].d_attr)) {
+            /* Player attack */
+            player_attacks++;
+            line = 1 + player_attacks;
+        } else {
+            /* Monster attack */
+            monster_attacks++;
+            line = 2 + total_player_attacks + monster_attacks;
+            if (total_player_attacks == 0) line--;
+        }
+        
+        /* Build and display the combat roll line */
+        char roll_line[120];
+        roll_line[0] = '\0';
+        
+        /* Attacker symbol */
+        strnfmt(buf, sizeof(buf), " %c", roll->attacker_char);
+        SDL_strlcat(roll_line, buf, sizeof(roll_line));
+        
+        /* Attack roll info */
+        if (roll->att_type == COMBAT_ROLL_ROLL) {
+            strnfmt(buf, sizeof(buf), " (%+d)%4d %4d %4d [%+d] %c",
+                    roll->att, roll->att + roll->att_roll,
+                    (roll->att_roll + roll->att - roll->evn_roll - roll->evn > 0) ?
+                        roll->att_roll + roll->att - roll->evn_roll - roll->evn : 0,
+                    roll->evn + roll->evn_roll, roll->evn, roll->defender_char);
+            SDL_strlcat(roll_line, buf, sizeof(roll_line));
+            
+            /* Damage info */
+            if (roll->att_roll + roll->att - roll->evn_roll - roll->evn > 0) {
+                int net_dam = roll->dam - roll->prot;
+                if (net_dam < 0) net_dam = 0;
+                strnfmt(buf, sizeof(buf), " -> (%dd%d) %4d %4d %4d",
+                        roll->dd, roll->ds, roll->dam, net_dam, roll->prot);
+                SDL_strlcat(roll_line, buf, sizeof(roll_line));
+            }
+        } else if (roll->att_type == COMBAT_ROLL_AUTO) {
+            strnfmt(buf, sizeof(buf), "                         %c -> (%dd%d) %4d",
+                    roll->defender_char, roll->dd, roll->ds, roll->dam);
+            SDL_strlcat(roll_line, buf, sizeof(roll_line));
+            
+            int net_dam = roll->dam - roll->prot;
+            if (net_dam < 0) net_dam = 0;
+            strnfmt(buf, sizeof(buf), " %4d %4d", net_dam, roll->prot);
+            SDL_strlcat(roll_line, buf, sizeof(roll_line));
+        }
+        
+        /* Display the line */
+        prt(roll_line, line, 0);
+    }
+    
+    /* Display instructions */
+    prt("[Press any key to return]", Term->hgt - 1, 0);
+    
+    /* Wait for input */
+    inkey();
+    
+    /* Restore screen */
+    screen_load();
+}
+
+/*
+ * Display recent combat rolls in the main terminal's bottom rows
+ */
+void display_main_combat_rolls(void)
+{
+
+    int i;
+    int num_lines = op_ptr->main_combat_rolls;
+
+    if (original_main_combat_rolls == -1) {
+        original_main_combat_rolls = num_lines;
+        if (original_main_combat_rolls > 0) {
+            op_ptr->main_combat_rolls = 0;
+            num_lines = 0;
+            main_combat_rolls_deferral_active = true;
+            log_trace("display_main_combat_rolls: deferring initial lines (saved %d)", original_main_combat_rolls);
+        }
+    }
+
+    log_trace("display_main_combat_rolls: Starting - combat_number=%d, combat_number_old=%d, num_lines=%d",
+        combat_number, combat_number_old, num_lines);
+
+    const int col_offset = COL_MAP;
+
+    for (i = 0; i < num_lines; i++)
+    {
+        Term_putstr(col_offset, Term->hgt - num_lines - 1 + i, 65, TERM_WHITE,
+            "                                                                 ");
+    }
+
+    if (num_lines == 0)
+        return;
+
+    if (combat_number == 0 && combat_number_old == 0)
+        return;
+
+    int start_row = Term->hgt - num_lines - 1;
+
+    combat_display_entry ordered[MAX_COMBAT_ROLLS * 2];
+    int total_entries = collect_combat_display_entries(ordered, MAX_COMBAT_ROLLS * 2);
+    int entries_to_show = MIN(num_lines, total_entries);
+
+    for (int entry_idx = 0; entry_idx < entries_to_show; entry_idx++)
+    {
+        int round = ordered[entry_idx].round;
+        int idx = ordered[entry_idx].index;
+        int row = start_row + entry_idx;
+
+        draw_combat_roll_line(row, col_offset, &combat_rolls[round][idx]);
+    }
+}
+
+
+
+

@@ -34,16 +34,19 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/cmd/item/cmd-fletchery.c`, `cmd-identify.c`, `cmd-item-activate.c`, `cmd-item-core.c`, `cmd-item-drop.c`, `cmd-item-utility.c`, and `cmd-pickup.c` now own the former item command flow from `cmd1.c`, `cmd2.c`, `cmd3.c`, and `cmd6.c`.
   - `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/movement/cmd-movement.c`, `cmd-search.c`, `cmd-travel.c`, `src/cmd/ui/cmd-ui-look.c`, `cmd-ui-object-display.c`, `cmd-ui-query.c`, and `src/cmd/world/cmd-interact.c` now own the remaining command families from the old monoliths.
   - `src/cmd1.c`, `src/cmd2.c`, `src/cmd3.c`, `src/cmd5.c`, and `src/cmd6.c` are now reduced to legacy notes outside the build.
-- `Phase 5` is now structurally started through `WP40` in the working tree:
+- `Phase 5` is now structurally complete through `WP42` in the working tree:
   - `src/smithing/smithing-state.c`, `smithing-materials.c`, `smithing-difficulty.c`, `smithing-cost.c`, and `smithing-item.c` now own the smithing state, alloy/material helpers, difficulty/cost logic, artefact-finalization helpers, and create/finalize path that previously lived inside `cmd4.c`.
   - `src/ui/smithing/ui-smithing-screen.c` now owns the active smithing UI flow from the current branch, including the create/enchant/artefact/numbers/melt/repair-reforge screens.
   - `src/cmd4.c` no longer owns smithing and is reduced to the remaining non-smithing menu/UI code.
+  - `src/spell/spell-damage.c`, `spell-detection.c`, `spell-monster.c`, `spell-projection.c`, `spell-teleport.c`, `spell-terrain.c`, and `spell-utility.c`, plus `src/player/player-songs.c`, `player-song-disguise.c`, `player-song-duels.c`, `player-song-effects.c`, `player-calc.c`, and `src/game-event.c`, now own the former `spells1.c`/`spells2.c` monoliths plus the extracted player-song/player-calc/game-event helpers; `spells1.c` and `spells2.c` are reduced to legacy notes outside the build.
+  - `src/melee/melee-attack.c`, `melee-combat-display.c`, `melee-movement.c`, `melee-process.c`, and `melee-util.c` now own the former `melee1.c`/`melee2.c` monoliths, and `melee1.c` plus `melee2.c` are reduced to legacy notes outside the build.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the active `WP40` smithing split on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the active `WP41` spell/player-song split and revalidating the `WP42` melee split on 2026-03-25.
 - Not started yet:
-  - `WP41`, `WP42`, `WP50`, and `WP99`.
+  - `WP50` and `WP99`.
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -352,7 +355,9 @@ Current parallel package status:
 - `WP22`: completed in the working tree on 2026-03-25; the split drop catalog/difficulty/selection modules are active in the build, `drop_system.c` is reduced to the intended thin facade, and the public drop API now lives in `drop_system.h`.
 - `WP30`: completed in the working tree on 2026-03-25; the full `src/cmd/*` split is active in the build, and `cmd1.c`, `cmd2.c`, `cmd3.c`, `cmd5.c`, and `cmd6.c` are reduced to legacy notes outside the build.
 - `WP40`: completed in the working tree on 2026-03-25; smithing no longer lives in `cmd4.c`, the split smithing core now builds from `src/smithing/`, and the current branch's create/enchant/artefact/numbers/melt/repair-reforge UI now runs from `src/ui/smithing/ui-smithing-screen.c`.
-- `WP41`, `WP42`, `WP50`: not started.
+- `WP41`: completed in the working tree on 2026-03-25; the split spell/player-song/player-calc/game-event modules are active in the build, and `spells1.c` plus `spells2.c` are reduced to legacy notes outside the build.
+- `WP42`: completed in the working tree on 2026-03-25; the full `src/melee/*` split is active in the build, and `melee1.c` plus `melee2.c` are reduced to legacy notes outside the build.
+- `WP50`: not started.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -392,7 +397,7 @@ Current parallel package status:
 
 ## Recommended Immediate Start
 1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. Move to `WP41` and `WP42`, with `WP30`, `WP40`, `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
-3. Reserve `WP99` and `WP50` for the main integrator.
+2. Move to `WP50`, with `WP30`, `WP40`, `WP41`, `WP42`, `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
+3. Reserve `WP99` for the main integrator.
 
 This order keeps the highest-conflict object/combat/UI work off the table until the repo already has the target directory structure and narrower headers.

@@ -18,11 +18,19 @@
  */
 #include "h-basic.h"
 #include "drop_system.h"
+#include "game-event.h"
 #include "level-generation/level-generation.h"
+#include "melee/melee.h"
+#include "player/player-calc.h"
+#include "player/player-song-disguise.h"
+#include "player/player-song-duels.h"
+#include "player/player-song-effects.h"
+#include "player/player-songs.h"
 #include "score/score_io.h"
 #include "score/score_ui.h"
 #include "signals.h"
 #include "smithing/smithing.h"
+#include "spell/spell.h"
 #include "ui/ui-file-viewer.h"
 #include "ui/ui-help.h"
 #include "ui/story_font.h"
@@ -745,47 +753,6 @@ extern void cleanup_angband(void);
 /* load.c */
 extern bool load_player(void);
 extern bool load_meta(void);
-
-/* melee1.c */
-extern int protection_roll(int typ, bool melee);
-extern int p_min(int typ, bool melee);
-extern int p_max(int typ, bool melee);
-extern int get_sides(int attack);
-extern int dodging_bonus(void);
-extern bool make_attack_normal(monster_type* m_ptr);
-extern bool make_attack_ranged(monster_type* m_ptr, int attack);
-extern void mon_cloud(int m_idx, int typ, int dd, int ds, int dif, int rad);
-extern void cloud_surround(int r_idx, int* typ, int* dd, int* ds, int* rad);
-extern void shriek(monster_type* m_ptr);
-extern void new_combat_round(void);
-extern void update_combat_rolls1(const monster_type* m_ptr1,
-    const monster_type* m_ptr2, bool vis, int att, int att_roll, int evn,
-    int evn_roll);
-extern void update_combat_rolls1b(
-    const monster_type* m_ptr1, const monster_type* m_ptr2, bool vis);
-extern void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps,
-    int prot, int prt_percent, int dam_type, bool melee);
-extern void display_combat_rolls(void);
-extern void display_main_combat_rolls(void);
-extern void clear_main_combat_rolls_area(void);
-extern void add_combat_round_to_history(void);
-extern void do_cmd_combat_history(void);
-extern void display_combat_round_details(combat_history_round* round);
-extern void do_betrayal_ring_amulet();
-
-/* melee2.c */
-extern bool attacker_at(int y, int x);
-extern int adj_mon_count(int y, int x);
-extern int get_scent(int y, int x);
-extern bool cave_exist_mon(
-    monster_race* r_ptr, int y, int x, bool occupied_ok, bool can_dig);
-extern int cave_passable_mon(monster_type* m_ptr, int y, int x, bool* bash);
-extern void tell_allies(int y, int x, u32b flag);
-extern void process_monsters(s16b minimum_energy);
-extern void calc_morale(monster_type* m_ptr);
-extern void calc_stance(monster_type* m_ptr);
-extern void monster_perception(
-    bool player_centered, bool main_roll, int difficulty);
 
 /* monster1.c */
 extern void describe_monster(

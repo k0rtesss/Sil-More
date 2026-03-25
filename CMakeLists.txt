@@ -64,6 +64,7 @@ set(SIL_MORE_SOURCES_CORE
     src/cJSON.c
     src/dungeon.c
     src/format.c
+    src/game-event.c
     src/item_set.c
     src/quest.c
     src/randart.c
@@ -171,17 +172,33 @@ set(SIL_MORE_SOURCES_OBJECT
 )
 
 set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
-    src/melee1.c
-    src/melee2.c
+    src/melee/melee-attack.c
+    src/melee/melee-combat-display.c
+    src/melee/melee-movement.c
+    src/melee/melee-process.c
+    src/melee/melee-util.c
     src/monster-death.c
     src/monster1.c
     src/monster2.c
-    src/spells1.c
-    src/spells2.c
+)
+
+set(SIL_MORE_SOURCES_SPELL
+    src/spell/spell-damage.c
+    src/spell/spell-detection.c
+    src/spell/spell-monster.c
+    src/spell/spell-projection.c
+    src/spell/spell-teleport.c
+    src/spell/spell-terrain.c
+    src/spell/spell-utility.c
 )
 
 set(SIL_MORE_SOURCES_PLAYER
     src/player/ability_log.c
+    src/player/player-calc.c
+    src/player/player-song-disguise.c
+    src/player/player-song-duels.c
+    src/player/player-song-effects.c
+    src/player/player-songs.c
     src/player/encumbrance.c
     src/player/identification.c
     src/player/killer.c
@@ -256,6 +273,7 @@ set(SIL_MORE_SOURCES
     ${SIL_MORE_SOURCES_DROP}
     ${SIL_MORE_SOURCES_OBJECT}
     ${SIL_MORE_SOURCES_MONSTER_AND_COMBAT}
+    ${SIL_MORE_SOURCES_SPELL}
     ${SIL_MORE_SOURCES_PLAYER}
     ${SIL_MORE_SOURCES_SMITHING}
     ${SIL_MORE_SOURCES_SAVE_AND_META}

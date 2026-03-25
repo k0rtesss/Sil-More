@@ -1,12 +1,16 @@
 /* File: melee.h */
 
 /*
- * Transitional public header for the future melee split.
+ * Public umbrella header for the split melee subsystem.
  */
 
 #ifndef INCLUDED_MELEE_H
 #define INCLUDED_MELEE_H
 
-#include "h-basic.h"
+#include "melee-attack.h"
+#include "melee-combat-display.h"
+#include "melee-movement.h"
+#include "melee-process.h"
+#include "melee-util.h"
 
 #endif /* INCLUDED_MELEE_H */
