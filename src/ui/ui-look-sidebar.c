@@ -1,0 +1,1065 @@
+/* File: ui-look-sidebar.c */
+
+/*
+ * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
+ *
+ * This software may be copied and distributed for educational, research,
+ * and not for profit purposes provided that this copyright and statement
+ * are included in all such copies.  Other copyrights may also apply.
+ */
+#include "angband.h"
+#include "externs.h"
+#include "log/log.h"
+#include "ui-look-sidebar.h"
+#include <ctype.h>
+
+static int unified_sidebar_object_group(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return LOOK_GROUP_OTHER;
+
+    if (artefact_p(o_ptr))
+        return LOOK_GROUP_ARTIFACT;
+
+    switch (o_ptr->tval)
+    {
+    case TV_HAFTED:
+    case TV_POLEARM:
+    case TV_SWORD:
+    case TV_BOW:
+    case TV_DIGGING:
+    case TV_ARROW:
+        return LOOK_GROUP_WEAPON;
+
+    case TV_BOOTS:
+    case TV_GLOVES:
+    case TV_HELM:
+    case TV_CROWN:
+    case TV_SHIELD:
+    case TV_CLOAK:
+    case TV_SOFT_ARMOR:
+    case TV_MAIL:
+        return LOOK_GROUP_ARMOUR;
+
+    case TV_RING:
+    case TV_AMULET:
+    case TV_HORN:
+    case TV_STAFF:
+        return LOOK_GROUP_JEWELRY;
+
+    case TV_EASTER:
+        return LOOK_GROUP_HERBS;
+
+    case TV_POTION:
+        return LOOK_GROUP_POTIONS;
+
+    case TV_GEM:
+        return LOOK_GROUP_GEMS;
+
+    case TV_FOOD:
+        if (o_ptr->sval < SV_FOOD_MIN_FOOD)
+            return LOOK_GROUP_CONSUMABLE;
+        break;
+    }
+
+    return LOOK_GROUP_OTHER;
+}
+
+typedef struct unified_sidebar_sorted_object {
+    int o_idx;
+    int y, x;
+    object_type* o_ptr;
+    bool is_artifact;
+    int difficulty;
+    int level;
+    int group;
+    int distance;
+    int original_index;
+} unified_sidebar_sorted_object;
+
+static bool unified_sidebar_object_should_swap(
+    const unified_sidebar_sorted_object* a,
+    const unified_sidebar_sorted_object* b)
+{
+    bool sort_by_difficulty_only = look_objects_sort_by_difficulty ? true : false;
+    bool a_known = object_known_p(a->o_ptr) ? true : false;
+    bool b_known = object_known_p(b->o_ptr) ? true : false;
+
+    if (!sort_by_difficulty_only && a->group != b->group)
+        return (b->group < a->group);
+
+    /* Unidentified items stay at the top of the section/list. */
+    if (a_known != b_known)
+        return (!b_known && a_known);
+
+    if (!a_known)
+    {
+        if (b->distance < a->distance)
+            return true;
+        if ((b->distance == a->distance) && (b->original_index < a->original_index))
+            return true;
+        return false;
+    }
+
+    if (b->difficulty > a->difficulty)
+        return true;
+    if ((b->difficulty == a->difficulty) && (b->distance < a->distance))
+        return true;
+    if ((b->difficulty == a->difficulty) && (b->distance == a->distance)
+        && (b->original_index < a->original_index))
+        return true;
+
+    return false;
+}
+
+static int unified_sidebar_collect_sorted_objects(const unified_look_state* state,
+    unified_sidebar_sorted_object objects[], int max_objects)
+{
+    int i;
+    int valid_objects = 0;
+
+    if (!state || !objects || (max_objects <= 0))
+        return 0;
+
+    get_sorted_target_list(TARGET_LIST_OBJECT, 0);
+
+    for (i = 0; (i < temp_n) && (valid_objects < max_objects); i++)
+    {
+        int o_idx = cave_o_idx[temp_y[i]][temp_x[i]];
+        object_type* o_ptr;
+        unified_sidebar_sorted_object* entry;
+
+        if (!o_idx)
+            continue;
+
+        if (!grid_info_is_available(temp_y[i], temp_x[i]))
+            continue;
+
+        o_ptr = &o_list[o_idx];
+
+        /* Only show marked (memorized) objects that the player has actually seen. */
+        if (!o_ptr->marked)
+            continue;
+
+        if ((o_ptr->tval == TV_ARROW) && (o_ptr->number < 10))
+            continue;
+
+        entry = &objects[valid_objects];
+        entry->o_idx = o_idx;
+        entry->y = temp_y[i];
+        entry->x = temp_x[i];
+        entry->o_ptr = o_ptr;
+        entry->is_artifact = artefact_p(o_ptr) ? true : false;
+        entry->difficulty = object_difficulty(o_ptr);
+        entry->level = k_info[o_ptr->k_idx].level;
+        entry->group = unified_sidebar_object_group(o_ptr);
+        if ((state->object_group_filter >= 0)
+            && (entry->group != state->object_group_filter))
+            continue;
+        entry->distance = distance(p_ptr->py, p_ptr->px, entry->y, entry->x);
+        entry->original_index = i;
+
+        valid_objects++;
+    }
+
+    for (i = 0; i < valid_objects - 1; i++) {
+        for (int j = i + 1; j < valid_objects; j++) {
+            if (unified_sidebar_object_should_swap(&objects[i], &objects[j]))
+            {
+                unified_sidebar_sorted_object temp = objects[i];
+                objects[i] = objects[j];
+                objects[j] = temp;
+            }
+        }
+    }
+
+    return valid_objects;
+}
+
+int unified_look_find_cursor_selection(const unified_look_state* state, int cursor_y,
+    int cursor_x)
+{
+    int i;
+    int entity_index = 0;
+
+    if (!state)
+        return -1;
+
+    if (state->show_monsters)
+    {
+        get_sorted_target_list(TARGET_LIST_MONSTER, 0);
+
+        for (i = 0; i < temp_n; i++)
+        {
+            int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
+
+            if (!m_idx)
+                continue;
+            if (!grid_info_is_available(temp_y[i], temp_x[i]))
+                continue;
+            if (!mon_list[m_idx].ml)
+                continue;
+
+            if ((temp_y[i] == cursor_y) && (temp_x[i] == cursor_x))
+                return entity_index;
+
+            entity_index++;
+        }
+    }
+
+    if (state->show_objects)
+    {
+        int group_display_counts[LOOK_GROUP_COUNT] = {0};
+        get_sorted_target_list(TARGET_LIST_OBJECT, 0);
+        int object_capacity = (temp_n > 0) ? temp_n : 1;
+        unified_sidebar_sorted_object objects[object_capacity];
+        int valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
+            object_capacity);
+
+        for (i = 0; i < valid_objects; i++)
+        {
+            unified_sidebar_sorted_object* entry = &objects[i];
+
+            if (state->limit_objects_top_five
+                && (group_display_counts[entry->group] >= 5))
+                continue;
+
+            group_display_counts[entry->group]++;
+
+            if ((entry->y == cursor_y) && (entry->x == cursor_x))
+                return entity_index;
+
+            entity_index++;
+        }
+    }
+
+    return -1;
+}
+
+void redraw_inven_equip_subwindows(void)
+{
+    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
+    {
+        term* old = Term;
+
+        if (!angband_term[j])
+            continue;
+
+        /* Don't overwrite the current options/menu term. */
+        if (angband_term[j] == old)
+            continue;
+
+        u32b flags = op_ptr->window_flag[j];
+        if (!(flags & (PW_INVEN | PW_EQUIP)))
+            continue;
+
+        Term_activate(angband_term[j]);
+
+        if (flags & PW_INVEN)
+            display_inven();
+        if (flags & PW_EQUIP)
+            display_equip();
+
+        Term_fresh();
+        Term_activate(old);
+    }
+}
+
+void redraw_monster_subwindows(void)
+{
+    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
+    {
+        term* old = Term;
+
+        if (!angband_term[j])
+            continue;
+
+        /* Don't overwrite the current options/menu term. */
+        if (angband_term[j] == old)
+            continue;
+
+        u32b flags = op_ptr->window_flag[j];
+        if (!(flags & (PW_MONSTER)))
+            continue;
+
+        Term_activate(angband_term[j]);
+
+        if (p_ptr->monster_race_idx)
+            display_roff(p_ptr->monster_race_idx, NULL);
+
+        Term_fresh();
+        Term_activate(old);
+    }
+}
+
+static void sidebar_trim_spaces(char* s)
+{
+    if (!s) return;
+
+    char* start = s;
+    while (*start && isspace((unsigned char)*start))
+        ++start;
+
+    if (start != s)
+        memmove(s, start, strlen(start) + 1);
+
+    size_t len = strlen(s);
+    while (len > 0 && isspace((unsigned char)s[len - 1]))
+        s[--len] = '\0';
+}
+
+static int sidebar_find_stats_pos(const char* s)
+{
+    if (!s) return -1;
+    
+    /* Stats section typically appears after the item name, preceded by a space.
+     * Format: "Item Name (dice) [bonus] <pval> {inscription}"
+     * We search for the first space-delimited bracket that looks like stats.
+     */
+    
+    int first_stats_pos = -1;
+    
+    /* Look for the first bracket that follows a space or starts the string */
+    for (int i = 0; s[i]; ++i)
+    {
+        char c = s[i];
+        
+        /* Found a potential stats delimiter */
+        if (c == '(' || c == '[' || c == '<' || c == '{')
+        {
+            /* Check if this is preceded by a space (or is at start) */
+            if (i == 0 || s[i-1] == ' ')
+            {
+                /* This looks like the start of stats section */
+                first_stats_pos = i;
+                break;
+            }
+            /* If preceded by a letter/digit, it might be part of the name */
+            /* Keep searching */
+        }
+    }
+    
+    /* If we found stats position at start (i==0), that means NO base name!
+     * This shouldn't happen with properly formatted object_desc output.
+     * If it does, we should treat the whole thing as base name, not stats.
+     */
+    if (first_stats_pos == 0)
+    {
+        log_trace("sidebar_find_stats_pos: stats at position 0 for '%s' - treating as name", s);
+        return -1;
+    }
+    
+    return first_stats_pos;
+}
+
+static void sidebar_compact_name(const char* src, int max_len, char* dest, size_t dest_sz)
+{
+    if (!dest_sz) return;
+    dest[0] = 0;
+
+    if (!src) return;
+
+    int src_len = (int)strlen(src);
+    if (max_len < 1)
+    {
+        log_trace("sidebar_compact_name: max_len < 1 for src='%s'", src);
+        return;
+    }
+
+    if (src_len <= max_len)
+    {
+        strnfmt(dest, dest_sz, "%s", src);
+        log_trace("sidebar_compact_name: no shortening needed src='%s' len=%d max=%d", src, src_len, max_len);
+        return;
+    }
+
+    int stats_pos = sidebar_find_stats_pos(src);
+    log_trace("sidebar_compact_name: shortening src='%s' len=%d max=%d stats_pos=%d", src, src_len, max_len, stats_pos);
+
+    if (stats_pos < 0)
+    {
+        strnfmt(dest, dest_sz, "%.*s", max_len, src);
+        sidebar_trim_spaces(dest);
+        log_trace("sidebar_compact_name: no stats segment, result='%s'", dest);
+        return;
+    }
+
+    int stats_len = src_len - stats_pos;
+    
+    /* If stats are very long and would fill the whole space,
+     * prioritize showing at least SOME of the base name rather than stats-only.
+     */
+    if (stats_len >= max_len)
+    {
+        /* Try to show at least a portion of the base name, even if truncated */
+        int base_space = max_len / 2; /* Give half space to name */
+        if (base_space < 3) base_space = 3; /* Minimum name chars */
+        if (base_space > stats_pos) base_space = stats_pos; /* Don't exceed available name */
+        
+        int stats_space = max_len - base_space;
+        if (stats_space < 3) stats_space = 3; /* Minimum stats chars */
+        
+        /* Extract truncated base name */
+        char base_truncated[64];
+        strnfmt(base_truncated, sizeof(base_truncated), "%.*s", base_space, src);
+        sidebar_trim_spaces(base_truncated);
+        
+        /* Extract beginning of stats */
+        char stats_truncated[64];
+        strnfmt(stats_truncated, sizeof(stats_truncated), "%.*s", stats_space, src + stats_pos);
+        
+        /* Combine them */
+        if (base_truncated[0])
+        {
+            strnfmt(dest, dest_sz, "%s %s", base_truncated, stats_truncated);
+        }
+        else
+        {
+            strnfmt(dest, dest_sz, "%s", stats_truncated);
+        }
+        sidebar_trim_spaces(dest);
+        log_trace("sidebar_compact_name: long stats, showing truncated name+stats result='%s'", dest);
+        return;
+    }
+
+    int base_space = max_len - stats_len;
+    if (base_space < 0) base_space = 0;
+
+    char base_full[128];
+    char base_compact[128];
+    base_full[0] = 0;
+    base_compact[0] = 0;
+
+    if (stats_pos > 0)
+    {
+        strnfmt(base_full, sizeof(base_full), "%.*s", stats_pos, src);
+        sidebar_trim_spaces(base_full);
+    }
+
+    if (base_space > 0 && base_full[0])
+    {
+        int base_full_len = (int)strlen(base_full);
+        if (base_full_len <= base_space)
+        {
+            SDL_strlcpy(base_compact, base_full, sizeof(base_compact));
+        }
+        else
+        {
+            const char* word_start[16];
+            int word_len[16];
+            int word_count = 0;
+            const char* p = base_full;
+
+            while (*p && word_count < 16)
+            {
+                while (*p && isspace((unsigned char)*p))
+                    ++p;
+                if (!*p)
+                    break;
+
+                word_start[word_count] = p;
+                const char* q = p;
+                while (*q && !isspace((unsigned char)*q))
+                    ++q;
+                word_len[word_count] = (int)(q - p);
+                ++word_count;
+                p = q;
+            }
+
+            int remaining = base_space;
+            bool first_word = true;
+
+            for (int i = 0; i < word_count && remaining > 0; ++i)
+            {
+                int needed_space = first_word ? 0 : 1;
+                if (remaining <= needed_space)
+                    break;
+
+                if (!first_word)
+                {
+                    SDL_strlcat(base_compact, " ", sizeof(base_compact));
+                    --remaining;
+                }
+
+                int take = word_len[i];
+                if (take > remaining)
+                {
+                    if (first_word)
+                    {
+                        take = remaining;
+                        if (take > 0)
+                        {
+                            char temp[64];
+                            strnfmt(temp, sizeof(temp), "%.*s", take, word_start[i]);
+                            SDL_strlcat(base_compact, temp, sizeof(base_compact));
+                            remaining -= take;
+                        }
+                    }
+                    else if (remaining > 1)
+                    {
+                        char temp[64];
+                        int partial = remaining;
+                        strnfmt(temp, sizeof(temp), "%.*s", partial, word_start[i]);
+                        SDL_strlcat(base_compact, temp, sizeof(base_compact));
+                        remaining = 0;
+                    }
+                    else
+                    {
+                        size_t len = strlen(base_compact);
+                        if (len && base_compact[len - 1] == ' ')
+                            base_compact[len - 1] = '\0';
+                        break;
+                    }
+                }
+                else
+                {
+                    char temp[64];
+                    strnfmt(temp, sizeof(temp), "%.*s", take, word_start[i]);
+                    SDL_strlcat(base_compact, temp, sizeof(base_compact));
+                    remaining -= take;
+                }
+
+                first_word = false;
+            }
+
+            sidebar_trim_spaces(base_compact);
+
+            if (!base_compact[0] && base_space > 0)
+            {
+                int take = (base_space < base_full_len) ? base_space : base_full_len;
+                strnfmt(base_compact, sizeof(base_compact), "%.*s", take, base_full);
+                sidebar_trim_spaces(base_compact);
+            }
+        }
+    }
+
+    dest[0] = 0;
+    if (base_compact[0])
+    {
+        SDL_strlcpy(dest, base_compact, dest_sz);
+        size_t len = strlen(dest);
+        if (len && dest[len - 1] != ' ')
+            SDL_strlcat(dest, " ", dest_sz);
+    }
+
+    SDL_strlcat(dest, src + stats_pos, dest_sz);
+    sidebar_trim_spaces(dest);
+    log_trace("sidebar_compact_name: combined result='%s'", dest);
+}
+
+/*
+ * Show unified sidebar with monsters and objects
+ */
+void show_unified_sidebar(unified_look_state* state)
+{
+    int sidebar_col = 0; /* Left side of screen - column 0 */
+    int line = 1;
+    int i;
+    int monster_count = 0;
+    int object_count = 0;
+    char clear_line[256];
+    int clear_width;
+    char entity_char[2];
+    entity_char[1] = '\0';
+    static int previous_line_count = 0; /* Track previous display size */
+    static int prev_name_len[256];
+    const int prev_array_capacity = (int)(sizeof(prev_name_len) / sizeof(prev_name_len[0]));
+    bool has_sidebar_selection;
+
+    
+    /* Get terminal height and calculate available space */
+    int term_hgt = Term->hgt;
+    int max_display_line = term_hgt - 2; /* Leave space for bottom line */
+    
+    /* Calculate layout positions once for both monsters and objects */
+    int term_wid = Term->wid;
+    int available_width = term_wid - sidebar_col - 3;
+    int name_width = available_width - 8 - 3 - 2; /* -2 for spaces */
+    
+    /* Adjust for bigtile mode - pictogram takes extra space */
+    if (use_bigtile) {
+        name_width = name_width - 1;  /* Reduce name width by 1 for bigtile */
+    }
+    
+    if (name_width < 4) name_width = 4; /* minimum name width */
+    
+    /* Calculate exact positions */
+    int pictogram_col = sidebar_col;
+    int name_col = sidebar_col + 2;  /* Name starts right after pictogram (at column 2) */
+    
+    /* Prepare clearing string */
+    clear_width = Term->wid - (sidebar_col - 1);
+    if (clear_width > 255) clear_width = 255;
+    memset(clear_line, ' ', clear_width);
+    clear_line[clear_width] = '\0';
+    
+    log_trace("show_unified_sidebar: previous_line_count=%d, term_hgt=%d, max_display_line=%d", 
+              previous_line_count, term_hgt, max_display_line);
+    log_trace("show_unified_sidebar: sidebar_col=%d, Term->wid=%d, clear_start=%d, clear_width=%d", 
+              sidebar_col, Term->wid, sidebar_col - 1, clear_width);
+    log_trace("show_unified_sidebar: show_monsters=%d, show_objects=%d", 
+              state->show_monsters ? 1 : 0, state->show_objects ? 1 : 0);
+
+    if ((state->look_mode == 0) && !state->in_sidebar_mode
+        && (state->selected_entity < 0)
+        && ((state->cursor_y != p_ptr->py) || (state->cursor_x != p_ptr->px)))
+    {
+        if (state->highlighted_y >= 0 && state->highlighted_x >= 0)
+        {
+            highlight_entity_on_map(state->highlighted_y, state->highlighted_x, false);
+        }
+
+        state->highlighted_y = -1;
+        state->highlighted_x = -1;
+        state->highlighted_entity_type = 0;
+        previous_line_count = 0;
+        memset(prev_name_len, 0, sizeof(prev_name_len));
+        return;
+    }
+
+    has_sidebar_selection = (state->selected_entity >= 0)
+        && (state->in_sidebar_mode || (state->look_mode == 0));
+    
+    /* Don't clear anything - let screen_save/screen_load handle restoration */
+    log_trace("show_unified_sidebar: skipping clear - letting screen management handle it");
+    
+    /* Show monsters section */
+    if (state->show_monsters)
+    {
+        log_trace("show_unified_sidebar: displaying MONSTERS header at line %d", line);
+        c_put_str(TERM_WHITE, "MONSTERS:    ", line++, sidebar_col);
+        
+        /* Get monster list */
+        get_sorted_target_list(TARGET_LIST_MONSTER, 0);
+        
+        for (i = 0; i < temp_n && line < max_display_line; i++)
+        {
+            int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
+            monster_type* m_ptr = &mon_list[m_idx];
+            monster_race* r_ptr = &r_info[m_ptr->r_idx];
+            char m_name[40];
+            char morale_text[8];
+            
+            /* Show only visible monsters on screen (like the [ monsters menu) */
+            /* Skip empty monster slots */
+            if (!m_idx) continue;
+
+            if (!grid_info_is_available(temp_y[i], temp_x[i])) continue;
+
+            /* Skip monsters that are not visible to the player */
+            if (!m_ptr->ml) continue;
+            
+            /* Generate monster name without articles using race name function */
+            monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
+            
+            /* Create HP bar with asterisks */
+            int hp_len = 0;
+            if (m_ptr->maxhp > 0) {
+                hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
+            }
+            char hp_bar[10];
+            
+            /* Build health bar with status indicators */
+            if (m_ptr->confused && m_ptr->stunned)
+            {
+                strncpy(hp_bar, "cscscscs", hp_len);
+            }
+            else if (m_ptr->confused)
+            {
+                strncpy(hp_bar, "cccccccc", hp_len);
+            }
+            else if (m_ptr->stunned)
+            {
+                strncpy(hp_bar, "ssssssss", hp_len);
+            }
+            else
+            {
+                strncpy(hp_bar, "********", hp_len);
+            }
+            hp_bar[hp_len] = '\0';
+            
+            /* Create morale number with proper color */
+            int morale_color = TERM_WHITE;
+            int morale_num = 0;
+            
+            if (m_ptr->alertness < ALERTNESS_UNWARY)
+            {
+                morale_color = TERM_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else if (m_ptr->alertness < ALERTNESS_ALERT)
+            {
+                morale_color = TERM_L_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else
+            {
+                /* Get proper morale display using alertness function */
+                char dummy_text[20];
+                if (!get_alertness_text(m_ptr, sizeof(dummy_text), dummy_text, &morale_color))
+                {
+                    /* Fallback if stance not initialized - use white and calculate from morale */
+                    morale_color = TERM_WHITE;
+                }
+                
+                /* Calculate morale number */
+                if (m_ptr->morale >= 0)
+                    morale_num = (m_ptr->morale + 9) / 10;
+                else
+                    morale_num = m_ptr->morale / 10;
+            }
+            
+            strnfmt(morale_text, sizeof(morale_text), "%d", morale_num);
+            
+            /* Use pictogram (tile) appropriate for graphics mode */
+            entity_char[0] = monster_char(r_ptr);
+            
+            /* Build the complete display string: name + health + morale */
+            char display_name[128];
+            char hp_display[12];
+            char morale_display[12];
+            
+            /* Format health and morale as compact strings */
+            strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
+            strnfmt(morale_display, sizeof(morale_display), " %s", morale_text);
+            
+            /* Calculate available width for the whole line */
+            int available_width = term_wid - name_col - 2;
+            if (available_width < 10) available_width = 10;
+            
+            int hp_display_len = (int)strlen(hp_display);
+            int morale_display_len = (int)strlen(morale_display);
+            int max_name_len = available_width - hp_display_len - morale_display_len;
+            if (max_name_len < 4) max_name_len = 4;
+            if (max_name_len > (int)sizeof(display_name) - hp_display_len - morale_display_len - 1)
+                max_name_len = (int)sizeof(display_name) - hp_display_len - morale_display_len - 1;
+            
+            /* Truncate monster name if needed */
+            char truncated_name[80];
+            memset(truncated_name, 0, sizeof(truncated_name));
+            SDL_strlcpy(truncated_name, m_name, sizeof(truncated_name));
+            if (strlen(truncated_name) > (size_t)max_name_len) {
+                truncated_name[max_name_len] = '\0';
+            }
+            
+            /* Build complete display string: name + health (without morale) */
+            SDL_strlcpy(display_name, truncated_name, sizeof(display_name));
+            SDL_strlcat(display_name, hp_display, sizeof(display_name));
+            
+            int name_hp_len = (int)strlen(display_name);
+            int total_span = name_hp_len + morale_display_len;
+            if (use_bigtile)
+            {
+                const int min_sidebar_span = 13;
+                if (total_span < min_sidebar_span)
+                {
+                    int pad_needed = min_sidebar_span - total_span;
+
+                    while (pad_needed > 0 && name_hp_len + 1 < (int)sizeof(display_name))
+                    {
+                        display_name[name_hp_len++] = ' ';
+                        pad_needed--;
+                    }
+                    display_name[name_hp_len] = '\0';
+                    total_span = name_hp_len + morale_display_len;
+
+                    while (pad_needed > 0 && morale_display_len + 1 < (int)sizeof(morale_display))
+                    {
+                        morale_display[morale_display_len++] = ' ';
+                        pad_needed--;
+                    }
+                    morale_display[morale_display_len] = '\0';
+                    total_span = name_hp_len + morale_display_len;
+                }
+
+                if ((total_span % 2) == 0)
+                {
+                    if (morale_display_len + 1 < (int)sizeof(morale_display))
+                    {
+                        morale_display[morale_display_len++] = ' ';
+                        morale_display[morale_display_len] = '\0';
+                    }
+                    else if (name_hp_len + 1 < (int)sizeof(display_name))
+                    {
+                        display_name[name_hp_len++] = ' ';
+                        display_name[name_hp_len] = '\0';
+                    }
+                    total_span = name_hp_len + morale_display_len;
+                }
+            }
+            
+            /* Calculate column for morale display */
+            int morale_col = name_col + name_hp_len;
+            
+            /* Highlight if selected with cursor-style highlighting only */
+            bool highlight_this_monster = (has_sidebar_selection
+                && (state->selected_entity == monster_count));
+            
+            if (highlight_this_monster)
+            {
+                log_trace("Highlighting monster %d at (%d,%d)", monster_count, temp_y[i], temp_x[i]);
+                
+                /* Clear only the exact area where text will be displayed */
+                Term_erase(pictogram_col, line, 2);  /* Clear pictogram area (1-2 chars) */
+                
+                /* Show pictogram in natural color */
+                c_put_str(monster_attr(r_ptr), entity_char, line, pictogram_col);
+                if (use_bigtile)
+                {
+                    Term_putch(pictogram_col + 1, line, 255, -1);
+                }
+                
+                /* Display name+health in highlighted color */
+                Term_putstr(name_col, line, name_hp_len, TERM_L_BLUE, display_name);
+                
+                /* Display morale in highlighted color (overrides morale_color when highlighted) */
+                Term_putstr(morale_col, line, morale_display_len, TERM_L_BLUE, morale_display);
+                
+                /* Update highlighted position and cursor */
+                state->highlighted_y = temp_y[i];
+                state->highlighted_x = temp_x[i];
+                state->highlighted_entity_type = 1; /* Monster */
+                state->cursor_y = temp_y[i];
+                state->cursor_x = temp_x[i];
+                highlight_entity_on_map_type(temp_y[i], temp_x[i], true, 1); /* Prefer monster display */
+            }
+            else
+            {
+                /* Clear only the exact area where text will be displayed */
+                Term_erase(pictogram_col, line, 2);  /* Clear pictogram area (1-2 chars) */
+                
+                /* Normal display - show pictogram and name with proper colors */
+                c_put_str(monster_attr(r_ptr), entity_char, line, pictogram_col);
+                if (use_bigtile)
+                {
+                    Term_putch(pictogram_col + 1, line, 255, -1);
+                }
+                
+                /* Display name+health in white */
+                Term_putstr(name_col, line, name_hp_len, TERM_WHITE, display_name);
+                
+                /* Display morale in its proper color */
+                Term_putstr(morale_col, line, morale_display_len, morale_color, morale_display);
+            }
+            
+            line++;
+            monster_count++;
+        }
+    }
+    
+    /* Show objects section */
+    if (state->show_objects)
+    {
+        const char* filter_tag = "ALL";
+        switch (state->object_group_filter)
+        {
+        case LOOK_GROUP_ARTIFACT:   filter_tag = "ART"; break;
+        case LOOK_GROUP_WEAPON:     filter_tag = "WEAP"; break;
+        case LOOK_GROUP_ARMOUR:     filter_tag = "ARM"; break;
+        case LOOK_GROUP_JEWELRY:    filter_tag = "JEWL"; break;
+        case LOOK_GROUP_HERBS:      filter_tag = "HERB"; break;
+        case LOOK_GROUP_POTIONS:    filter_tag = "POT"; break;
+        case LOOK_GROUP_GEMS:       filter_tag = "GEM"; break;
+        case LOOK_GROUP_CONSUMABLE: filter_tag = "CONS"; break;
+        case LOOK_GROUP_OTHER:      filter_tag = "OTHER"; break;
+        default:                    filter_tag = "ALL"; break;
+        }
+
+        char header_buf[32];
+        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s", filter_tag);
+        c_put_str(TERM_WHITE, header_buf, line++, sidebar_col);
+        
+        get_sorted_target_list(TARGET_LIST_OBJECT, 0);
+        int object_capacity = (temp_n > 0) ? temp_n : 1;
+        unified_sidebar_sorted_object objects[object_capacity];
+        int valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
+            object_capacity);
+
+        int group_display_counts[LOOK_GROUP_COUNT] = {0};
+        int object_start = (state->show_monsters) ? monster_count : 0;
+        for (i = 0; i < valid_objects && line < max_display_line; i++)
+        {
+            unified_sidebar_sorted_object* entry = &objects[i];
+            object_type* o_ptr = entry->o_ptr;
+            char o_name[60];
+            char name_source[80];
+            byte base_color = TERM_WHITE;
+
+            if (state->limit_objects_top_five && group_display_counts[entry->group] >= 5)
+                continue;
+
+            group_display_counts[entry->group]++;
+
+            /* Generate object name with stats but without articles (mode 4) 
+             * Mode 4 applies shortening logic that sidebar_compact_name expects.
+             * Fixed mode 4 to never produce stats-only output.
+             */
+            object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 4);
+
+            SDL_strlcpy(name_source, o_name, sizeof(name_source));
+            /* Only show asterisk for artifacts that are identified */
+            if (entry->is_artifact && object_known_p(o_ptr))
+            {
+                size_t len = strlen(name_source);
+                if (len + 1 < sizeof(name_source))
+                {
+                    memmove(name_source + 1, name_source, len + 1);
+                    name_source[0] = '*';
+                }
+            }
+
+            base_color = weapon_glows(o_ptr) 
+                ? object_display_color(o_ptr, TERM_L_BLUE) 
+                : object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+
+            entity_char[0] = object_char(o_ptr);
+
+            int weight_total = o_ptr->weight * o_ptr->number;
+            char weight_buf[16];
+            strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d", weight_total / 10, weight_total % 10);
+
+            char smith_buf[16];
+            smith_buf[0] = '\0';
+            if (op_ptr->opt[OPT_show_smithing_difficulty_look]
+                && object_known_p(o_ptr)
+                && object_uses_smithing_difficulty(o_ptr))
+            {
+                int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
+                int sd = object_smithing_difficulty(o_ptr);
+                int wr = object_weight_rarity(o_ptr, depth);
+                strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
+            }
+
+            /* Calculate available width for name + weight (+ optional smithing debug) */
+            int available_name_width = term_wid - name_col - 2; /* Leave some margin */
+            if (available_name_width < 10) available_name_width = 10;
+            
+            int weight_len = (int)strlen(weight_buf);
+            int smith_len = (int)strlen(smith_buf);
+            int max_name_len = available_name_width - weight_len - smith_len - 1; /* Reserve space for suffixes */
+            if (max_name_len < 4) max_name_len = 4;
+
+            char display_name[128];
+            if (max_name_len > (int)sizeof(display_name) - weight_len - 1) 
+                max_name_len = (int)sizeof(display_name) - weight_len - 1;
+
+            sidebar_compact_name(name_source, max_name_len, display_name, sizeof(display_name));
+            
+            /* Append weight right after name */
+            SDL_strlcat(display_name, weight_buf, sizeof(display_name));
+
+            /* Append optional smithing debug right after weight */
+            if (smith_buf[0])
+                SDL_strlcat(display_name, smith_buf, sizeof(display_name));
+            int final_name_len = (int)strlen(display_name);
+            int original_name_len = (int)strlen(name_source);
+            bool shortened = (original_name_len != final_name_len) || (original_name_len > max_name_len);
+            log_trace("sidebar object: idx=%d name='%s' compact='%s' color=%d orig_len=%d compact_len=%d max_len=%d name_col=%d weight_len=%d shortened=%d",
+                entry->o_idx, name_source, display_name, base_color, original_name_len, final_name_len, max_name_len, name_col, weight_len, shortened ? 1 : 0);
+
+            if (use_bigtile)
+            {
+                const int min_sidebar_span = 13;
+                if (final_name_len < min_sidebar_span)
+                {
+                    int pad_needed = min_sidebar_span - final_name_len;
+                    while (pad_needed > 0 && final_name_len + 1 < (int)sizeof(display_name))
+                    {
+                        display_name[final_name_len++] = ' ';
+                        pad_needed--;
+                    }
+                    display_name[final_name_len] = '\0';
+                }
+
+                if ((final_name_len % 2) == 0 && (final_name_len + 1 < (int)sizeof(display_name)))
+                {
+                    display_name[final_name_len++] = ' ';
+                    display_name[final_name_len] = '\0';
+                }
+            }
+
+            int row_index = line;
+            if (row_index < 0) row_index = 0;
+            if (row_index >= prev_array_capacity) row_index = prev_array_capacity - 1;
+
+            int old_name_len = prev_name_len[row_index];
+            if (old_name_len > final_name_len)
+            {
+                int diff = old_name_len - final_name_len;
+                if (diff > 0)
+                {
+                    char blank[128];
+                    if (diff >= (int)sizeof(blank)) diff = (int)sizeof(blank) - 1;
+                    memset(blank, ' ', diff);
+                    blank[diff] = '\0';
+                    Term_putstr(name_col + final_name_len, line, diff, TERM_WHITE, blank);
+                }
+            }
+
+            bool highlight_this_object = (has_sidebar_selection
+                && (state->selected_entity == (object_start + object_count)));
+
+            byte name_attr = highlight_this_object ? TERM_L_BLUE : base_color;
+
+            if (highlight_this_object)
+            {
+                log_trace("Highlighting object %d at (%d,%d)", object_start + object_count, entry->y, entry->x);
+
+                Term_erase(pictogram_col, line, 2);
+                
+                c_put_str(object_attr(o_ptr), entity_char, line, pictogram_col);
+                if (use_bigtile)
+                {
+                    Term_putch(pictogram_col + 1, line, 255, -1);
+                }
+                
+                Term_putstr(name_col, line, final_name_len, name_attr, display_name);
+
+                state->highlighted_y = entry->y;
+                state->highlighted_x = entry->x;
+                state->highlighted_entity_type = 2; /* Object */
+                state->cursor_y = entry->y;
+                state->cursor_x = entry->x;
+                highlight_entity_on_map_type(entry->y, entry->x, true, 2); /* Prefer object display */
+            }
+            else
+            {
+                Term_erase(pictogram_col, line, 2);
+                
+                c_put_str(object_attr(o_ptr), entity_char, line, pictogram_col);
+                if (use_bigtile)
+                {
+                    Term_putch(pictogram_col + 1, line, 255, -1);
+                }
+                
+                Term_putstr(name_col, line, final_name_len, name_attr, display_name);
+            }
+
+            prev_name_len[row_index] = final_name_len;
+
+            line++;
+            object_count++;
+        for (int idx = line; idx < prev_array_capacity && idx <= previous_line_count; ++idx)
+        {
+            prev_name_len[idx] = 0;
+        }
+
+        }
+    }
+
+    /* Save current line count for next clearing operation */
+    int current_line_count = line - 1;
+    
+    log_trace("show_unified_sidebar: current_line_count=%d, previous_line_count=%d", 
+              current_line_count, previous_line_count);
+    
+    /* If the new display is shorter than the previous one, don't clear - let screen_load handle it */
+    if (previous_line_count > current_line_count)
+    {
+        log_trace("show_unified_sidebar: display got shorter (%d->%d) but not clearing - screen_load will restore", 
+                  previous_line_count, current_line_count);
+    }
+    
+    previous_line_count = current_line_count;
+    log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
+}

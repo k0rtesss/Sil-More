@@ -408,9 +408,6 @@ extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);
 extern void styles_set_loaded_level_primary(int sidx);
-extern void print_fade_centered(cptr text);
-extern void print_fade_centered_at_row(cptr text, int row_start, bool fade_in,
-    bool line_delay);
 /* Persisted door-style variant choices for consistency across save/load */
 extern int styles_get_choice_capacity(void);
 extern void styles_copy_level_door_choices(byte* out_buf, int max_n);
@@ -685,19 +682,10 @@ extern errr process_pref_file_command(char* buf);
 extern errr process_pref_file(cptr name);
 extern errr check_time(void);
 extern errr check_time_init(void);
-extern void display_player_stat_info(int row, int col);
-extern void display_player_xtra_info(int mode);
-extern void display_player(int mode);
-extern void display_player_compact_set_scroll(int scroll);
-extern int display_player_compact_get_max_scroll(void);
-extern void display_player_compact_stats_skills_highlighted(int selected_skill);
-extern void display_player_compact_stats_skills_highlighted_stat(int selected_stat);
-extern void display_character_tutorial(void);
 extern errr file_character(cptr name, bool full);
 extern void process_player_name(bool sf);
 extern bool get_name(void);
 extern void do_cmd_escape(int);
-extern void do_cmd_morgoth_victory(void);
 extern void do_cmd_suicide(void);
 extern void do_cmd_save_game(void);
 extern int highscore_dead(char* name);
@@ -716,9 +704,6 @@ extern int meta_write(const metarun*);
 extern errr meta_read(metarun*);
 extern int meta_seek(int i);
 extern int meta_fill(bool);
-extern void print_story(int last_parts, bool fade_in);
-/* Generic fade-in line printer for arbitrary text */
-extern void print_fade_line(cptr text, int row, int indent);
 extern const char *kinslayer_try_kill(uint8_t n_sils, bool do_roll);
 extern void clear_scorefile(void);
 extern bool autoload_alive_from_scores(void);
@@ -1368,3 +1353,8 @@ extern void dbg_show_active_flags(void);
 extern bool g_hide_left_panel;
 extern byte g_hidden_left_panel_overlay_rows;
 extern byte g_hidden_left_panel_overlay_widths[16];
+extern void print_fade_centered(cptr text);
+extern void print_fade_centered_at_row(cptr text, int row_start, bool fade_in,
+    bool line_delay);
+extern void do_cmd_morgoth_victory(void);
+extern void print_story(int last_parts, bool fade_in);

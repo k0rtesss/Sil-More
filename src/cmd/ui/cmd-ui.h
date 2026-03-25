@@ -9,4 +9,8 @@
 
 #include "h-basic.h"
 
+int cmd_ui_knowledge_last_page(void);
+void controller_prompt_label(int binding, const char* fallback, char* buf,
+    size_t buflen);
+
 #endif /* INCLUDED_CMD_UI_H */

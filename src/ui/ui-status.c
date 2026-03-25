@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "externs.h"
 
+#include "ui/ui-character-screen.h"
 #include "ui/ui-status.h"
 
 #include "log/log.h"

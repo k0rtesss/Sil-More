@@ -16,6 +16,7 @@
 #include "main-sdl.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
+#include "ui/ui-story.h"
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */
 #include "supplies.h"

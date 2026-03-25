@@ -18,6 +18,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"
+#include "ui/ui-death.h"
 
 cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_completion);
 void grant_followup_quest_rewards(int quest_id);

@@ -5,6 +5,7 @@
 
 #include "fs/savefile-name.h"
 #include "log/log.h"
+#include "ui/ui-character-screen.h"
 #include "ui/ui-character-name.h"
 
 #define INSTRUCT_ROW 21

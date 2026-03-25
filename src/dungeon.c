@@ -18,6 +18,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_runs.h"
+#include "ui/ui-story.h"
 #include "score/score_ui.h"
 #include "sdl-sound.h"
 #include "z-term.h"

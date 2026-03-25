@@ -14,6 +14,7 @@
 #include "main-sdl.h"
 #include "metarun.h"
 #include "object/object-ui-enhanced.h"
+#include "ui/ui-look-sidebar.h"
 
 void do_cmd_target(void)
 {

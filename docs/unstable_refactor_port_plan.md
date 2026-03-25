@@ -20,15 +20,18 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeds on the current tree.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` also succeeds on the current tree.
 - The unstable-port milestone is structurally landed, but the overall refactor is not finished completely yet:
+  - `WP70` is now landed in the working tree: `src/cmd/ui/cmd-ui-character.c`, `cmd-ui-abilities.c`, `cmd-ui-main-menu.c`, `cmd-ui-settings.c`, `cmd-ui-knowledge.c`, `cmd-ui-nearby.c`, and `src/ui/ui-look-sidebar.[ch]` now own the remaining `cmd4.c` menu/UI families, and `src/cmd4.c` is reduced to the redraw/note/version/feeling/ghost remainder
   - `WP70A` is now landed in the working tree: `src/player/player-abilities.[ch]`, `player-oaths.[ch]`, and `player-bane.[ch]` now own the first gameplay-helper extraction out of `src/cmd4.c`
   - `WP71A` is now landed in the working tree: `src/fs/pref-files.[ch]` plus `src/fs/pref-time.[ch]` now own the pref/time logic extracted from `src/files.c`
+  - `WP71B` is now landed in the working tree: `src/ui/ui-character-screen.[ch]` now owns the character sheet, compact-layout rendering, and character-sheet tutorial flow extracted from `src/files.c`, while the legacy block is excluded in place until the later `files.c` cleanup slices finish
   - `WP71C` is now landed in the working tree: `src/fs/savefile-name.[ch]` owns `process_player_name()` and `src/ui/ui-character-name.[ch]` owns `get_name()`
+  - `WP71D` is now landed in the working tree: `src/ui/ui-story.[ch]` plus `src/ui/ui-death.[ch]` now own the story, tomb, and death/victory presentation helpers extracted from `src/files.c`
   - a follow-on utility slice is also landed: `comma_number()` / `atomonth()` now live in `src/format.c`, and `silmarils_possessed()` / `has_iron_crown()` now live in `src/player/player-resources.c`
-  - the remaining active large-file bottlenecks are `src/cmd4.c` at 16,125 lines and `src/files.c` at 8,041 lines
+  - the remaining active large-file bottleneck is `src/files.c` at 7,158 lines; `src/cmd4.c` is now down to 291 lines
   - the current header/global surface is still above the intended end state:
-    - `src/externs.h`: 1,373 lines and 1,128 `extern` declarations
+    - `src/externs.h`: 1,360 lines and 1,116 `extern` declarations
     - `src/variable.c`: 916 lines
-  - the next real ownership wave is the remaining `WP70B`-`WP70H` slices plus `WP71B`-`WP71G`, then `WP80+`
+  - the next real ownership wave is the remaining `WP71E`-`WP71G` slices, then `WP80+`
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -103,9 +106,11 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing `WP61` on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again during the 2026-03-25 current-tree revalidation that confirmed `WP60`-`WP63` are still landed and that `cmd4.c` plus `files.c` remain the last big live monoliths.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP70A` on 2026-03-25.
-  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71A` on 2026-03-25.
-  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71C` on 2026-03-25.
+- `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71A` on 2026-03-25.
+- `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71B` on 2026-03-25.
+- `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71C` on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after the follow-on `files.c` utility extraction on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP70` on 2026-03-25.
 
 ## Completion Assessment
 - The original unstable-port objective is effectively complete as an intermediate architecture:
@@ -114,7 +119,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - standard and portable builds both pass on the new target layout
 - The broader refactor is not complete:
   - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
-  - the remaining architectural blockers are `WP70` (`src/cmd4.c`) and `WP71` (`src/files.c`)
+  - the remaining architectural blocker is `WP71` (`src/files.c`)
   - `externs.h` and `variable.c` still need a second cleanup pass after those ownership moves land
 - Priority judgement for the next wave:
   - extract the non-UI gameplay helpers out of `src/cmd4.c` before splitting the remaining menu/UI command families
@@ -551,9 +556,12 @@ These are the recommended continuation packages after the unstable-port mileston
 - `WP61`: completed in the working tree on 2026-03-25; `xtra2` no longer depends on a body include, the live code now sits in `src/game-event.c` plus `src/quest/*`, `src/xtra2.c` is a legacy note outside the build, and standard plus portable incremental builds both pass.
 - `WP62`: completed in the working tree on 2026-03-25; `spells1` no longer depends on a body include, the live code now sits in `src/spell/*` plus `src/player/player-song-*.c`, and `src/spell/spells1-body.inc` has been removed from the tree.
 - `WP63`: completed in the working tree on 2026-03-25; `spells2` no longer depends on a body include, the live code now sits in the owning split spell modules, and `src/spell/spells2-body.inc` has been removed from the tree.
+- `WP70`: completed in the working tree on 2026-03-25; `src/cmd/ui/cmd-ui-character.c`, `cmd-ui-abilities.c`, `cmd-ui-main-menu.c`, `cmd-ui-settings.c`, `cmd-ui-knowledge.c`, `cmd-ui-nearby.c`, and `src/ui/ui-look-sidebar.[ch]` now own the remaining active `cmd4.c` command/UI families, and `src/cmd4.c` is reduced to the redraw/note/version/feeling/ghost remainder.
 - `WP70A`: completed in the working tree on 2026-03-25; the first gameplay-helper eviction out of `src/cmd4.c` is live in `src/player/player-abilities.[ch]`, `src/player/player-oaths.[ch]`, and `src/player/player-bane.[ch]`, while the remaining bane/oath/ability menus stay in `cmd4.c` for the later UI-family splits.
 - `WP71A`: completed in the working tree on 2026-03-25; `src/fs/pref-files.[ch]` plus `src/fs/pref-time.[ch]` now own the extracted pref/time logic, and the old `files.c` block is now excluded while the wider `files.c` breakup continues.
+- `WP71B`: completed in the working tree on 2026-03-25; `src/ui/ui-character-screen.[ch]` now owns the extracted character-sheet, compact-layout, and tutorial rendering path, direct callers now include the new UI header, and the old `files.c` block is excluded while the wider `files.c` breakup continues.
 - `WP71C`: completed in the working tree on 2026-03-25; `src/fs/savefile-name.[ch]` now owns `process_player_name()`, `src/ui/ui-character-name.[ch]` now owns `get_name()`, and `files.c` no longer owns the player-name/savefile prompt path.
+- `WP71D`: completed in the working tree on 2026-03-25; `src/ui/ui-story.[ch]` plus `src/ui/ui-death.[ch]` now own the extracted story, tomb, and death/victory presentation helpers from `src/files.c`.
 
 | ID | Scope | Main files | Depends on |
 | --- | --- | --- | --- |
@@ -600,8 +608,7 @@ Detailed `WP71` split sequence:
 - `WP71G`: reduce `src/files.c` to a small facade or legacy note and replace its `externs.h` block with narrow subsystem headers.
 
 Recommended execution order for the next wave:
-- With `WP70A`, `WP71A`, and `WP71C` landed, start `WP71B`, then move into `WP70B` / `WP70C` so the character/ability UI split consumes the new subsystem headers instead of broad `files.c` / `cmd4.c` internals.
-- Treat `WP70B` as dependent on `WP71B` if `do_cmd_character_sheet()` switches to a new character-screen UI header.
+- With `WP70` and `WP71A`-`WP71D` landed, continue with `WP71E`, then `WP71F` / `WP71G`, so the remaining score and lifecycle work follows the new `ui-character-screen`, `ui-story`, and `ui-death` ownership boundaries instead of broad `files.c` internals.
 - Land `WP71E` before the final `WP71F` lifecycle split so close-game/save code uses the settled score API.
 - Do not reopen `WP60`-`WP63` except for fallout fixes directly caused by `WP70` / `WP71`.
 
@@ -652,8 +659,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. With `WP70A`, `WP71A`, and `WP71C` landed, start `WP71B`, then move into `WP70B` / `WP70C` so the next wave keeps building on stable subsystem headers.
-2. Continue with the remaining `WP70*` / `WP71*` slices in parallel only when their write sets are disjoint.
-3. Reserve `WP80`, `WP81`, and `WP90` for the main integrator after `cmd4.c` and `files.c` are reduced to small facades or legacy notes.
+1. With `WP70` and `WP71A`-`WP71D` landed, continue `WP71E`, then `WP71F` / `WP71G`, so `files.c` follows `cmd4.c` out of the active monolith set through score and lifecycle ownership instead of broad UI catch-all code.
+2. Reserve `WP80`, `WP81`, and `WP90` for the main integrator after `files.c` is reduced to a small facade or legacy note.
 
 This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

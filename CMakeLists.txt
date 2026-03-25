@@ -96,9 +96,15 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/movement/cmd-movement.c
     src/cmd/movement/cmd-search.c
     src/cmd/movement/cmd-travel.c
+    src/cmd/ui/cmd-ui-abilities.c
+    src/cmd/ui/cmd-ui-character.c
+    src/cmd/ui/cmd-ui-knowledge.c
     src/cmd/ui/cmd-ui-look.c
+    src/cmd/ui/cmd-ui-main-menu.c
+    src/cmd/ui/cmd-ui-nearby.c
     src/cmd/ui/cmd-ui-object-display.c
     src/cmd/ui/cmd-ui-query.c
+    src/cmd/ui/cmd-ui-settings.c
     src/cmd/world/cmd-interact.c
 )
 
@@ -260,8 +266,12 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/signals.c
     src/ui/colors.c
     src/ui/ui-character-name.c
+    src/ui/ui-character-screen.c
+    src/ui/ui-death.c
     src/ui/ui-file-viewer.c
     src/ui/ui-help.c
+    src/ui/ui-look-sidebar.c
+    src/ui/ui-story.c
     src/ui/ui-status.c
     src/ui/story_font.c
 )

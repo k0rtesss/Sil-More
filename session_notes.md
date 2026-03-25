@@ -1,5 +1,33 @@
 # Session notes
 
+## 2026-03-25: WP71B character-screen extraction from files
+- Completed the `WP71B` slice by moving the character-sheet, compact-layout, and tutorial rendering path out of `src/files.c`:
+  - `src/ui/ui-character-screen.[ch]` now own `display_player()`, compact character-sheet paging/scrolling, and `display_character_tutorial()`
+  - direct callers now include `ui-character-screen.h` instead of relying on `externs.h`
+  - the old `files.c` character-screen block is excluded in place while the remaining `files.c` cleanup slices continue
+- Updated `CMakeLists.txt` so the new UI module builds as part of `sil-core`.
+- Trimmed the moved character-screen declarations from `src/externs.h`.
+- Current size snapshot after this slice:
+  - `src/files.c`: 7,166 lines
+  - `src/ui/ui-character-screen.c`: 3,466 lines
+  - `src/externs.h`: 1,360 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: WP71D story and death UI extraction from files
+- Completed the `WP71D` slice by moving the remaining story and death/victory presentation helpers out of `src/files.c`:
+  - `src/ui/ui-story.[ch]` now own `print_story()` plus the shared story/banner fade helpers used by dungeon and metarun flows
+  - `src/ui/ui-death.[ch]` now own `do_cmd_morgoth_victory()` plus the tomb, post-run character-info, and final-menu presentation helpers used by the death flow
+- Updated `CMakeLists.txt` so the new UI modules build as part of `sil-core`.
+- Added narrow `ui-story` / `ui-death` headers at the direct call sites while keeping the legacy `externs.h` declarations in place for compatibility with concurrent command-split work still in progress.
+- Current size snapshot after this slice:
+  - `src/files.c`: 7,158 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded immediately after landing the `WP71D` split.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded immediately after landing the `WP71D` split.
+  - Follow-on revalidation later in the same session was blocked by unrelated concurrent `WP70` command-split files now entering the build (`src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-settings.c`).
+
 ## 2026-03-25: files.c utility extraction follow-on
 - Landed a smaller follow-on `files.c` reduction after `WP71C`:
   - moved `comma_number()` and `atomonth()` into `src/format.c` / `src/format.h`
@@ -8663,3 +8691,9 @@ The script now fully matches the game's drop generation logic for all item types
 ## 2026-03-19: TR4_SUBTLETY_THROW active-skill gate
 - `src/cmd1.c`: keep the thrown Subtlety crit bonus gated on active `MEL_CONTROL` only, so item-granted Subtlety still works while the weapon flag itself does not grant the ability.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-03-25: WP70 cmd4 split completion
+- Completed the remaining `WP70` command/UI breakup by moving the live `cmd4.c` families into `src/cmd/ui/cmd-ui-character.c`, `cmd-ui-abilities.c`, `cmd-ui-main-menu.c`, `cmd-ui-settings.c`, `cmd-ui-knowledge.c`, `cmd-ui-nearby.c`, and `src/ui/ui-look-sidebar.[ch]`.
+- `src/cmd4.c` now keeps only the redraw/note/version/feeling/ghost remainder; the former character, song/ability, menu/message, settings, knowledge, nearby, and unified-look-sidebar ownership is no longer in the monolith.
+- `CMakeLists.txt` now builds the new `cmd/ui` modules plus `src/ui/ui-look-sidebar.c`, and `src/cmd/ui/cmd-ui.h` plus `src/ui/ui-look-sidebar.h` provide the narrow shared surfaces needed by the split.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded.

@@ -1,0 +1,3686 @@
+/* File: cmd-ui-knowledge.c */
+
+/*
+ * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
+ *
+ * This software may be copied and distributed for educational, research,
+ * and not for profit purposes provided that this copyright and statement
+ * are included in all such copies.  Other copyrights may also apply.
+ */
+#include "angband.h"
+#include "main-sdl.h"
+#include "object/object-ui-select.h"
+#include "player/player-abilities.h"
+#include "player/player-bane.h"
+#include "player/player-oaths.h"
+#include "sound-config.h"
+#include "sdl-sound.h"
+
+extern struct sound_config g_sound_config;
+#include "externs.h"
+#include "fs/io_sdl.h"
+#include "fs/path.h"
+#include "log/log.h"
+#include <ctype.h>
+#include "h-define.h"
+#include "metarun.h"
+#include "score/score_artefact.h"
+#include "score/score_guid.h"
+#include "cmd-ui.h"
+
+typedef struct knowledge_browser_layout knowledge_browser_layout;
+typedef struct knowledge_browser_state knowledge_browser_state;
+
+#define BROWSER_ROWS 16
+
+typedef struct monster_list_entry monster_list_entry;
+/*
+ * Structure for building monster "lists"
+ */
+struct monster_list_entry
+{
+    s16b r_idx; /* Monster race index */
+
+    byte amount;
+};
+
+typedef struct object_list_entry object_list_entry;
+struct object_list_entry
+{
+    enum
+    {
+        OBJ_NONE,
+        OBJ_NORMAL,
+        OBJ_SPECIAL
+    } type;
+    int idx;
+    int e_idx;
+    int tval, sval;
+};
+
+typedef struct supply_list_entry supply_list_entry;
+
+struct supply_list_entry
+{
+    int item_idx;   /* First inventory slot containing this kind */
+    int k_idx;      /* Object kind index */
+    int total;      /* Total quantity across the pack */
+    int supply_idx; /* Index inside the supply cache (-1 if not present) */
+};
+
+struct knowledge_browser_layout
+{
+    int term_wid;
+    int term_hgt;
+    int title_row;
+    int tabs_row;
+    int header_row;
+    int divider_row;
+    int list_row;
+    int list_rows;
+    int status_row;
+    int prompt_row;
+    int group_col;
+    int group_w;
+    int divider_col;
+    int list_col;
+    int list_w;
+};
+
+struct knowledge_browser_state
+{
+    int column[4];
+    int group_cur[4];
+    int group_top[4];
+    int entry_cur[4];
+    int entry_top[4];
+    bool tabs_focus;
+};
+
+static int g_knowledge_last_page = KNOWLEDGE_PAGE_ARTEFACTS;
+
+static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
+    "Herbs",
+    "Potions",
+    "Gems",
+    NULL
+};
+
+int cmd_ui_knowledge_last_page(void)
+{
+    return g_knowledge_last_page;
+}
+
+
+static bool supplies_menu_use_entry(supply_list_entry* entry)
+{
+    if (!entry || entry->supply_idx < 0)
+        return false;
+
+    object_type* o_ptr = supplies_entry_at(entry->supply_idx);
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    supplies_begin_action(entry->supply_idx);
+
+    switch (o_ptr->tval)
+    {
+    case TV_FOOD:
+        do_cmd_eat_food(o_ptr, SUPPLIES_INDEX);
+        break;
+    case TV_POTION:
+        do_cmd_quaff_potion(o_ptr, SUPPLIES_INDEX);
+        break;
+    case TV_STAFF:
+        do_cmd_activate_staff(o_ptr, SUPPLIES_INDEX);
+        break;
+    case TV_GEM:
+        do_cmd_use_gem(o_ptr, SUPPLIES_INDEX);
+        break;
+    default:
+        supplies_end_action();
+        bell("Cannot use that item here!");
+        msg_print("Cannot use that item here.");
+        return false;
+    }
+
+    supplies_end_action();
+    return true;
+}
+
+static bool supplies_menu_drop_entry(supply_list_entry* entry)
+{
+    if (!entry || entry->supply_idx < 0)
+        return false;
+
+    object_type* o_ptr = supplies_entry_at(entry->supply_idx);
+    if (!o_ptr || !o_ptr->k_idx)
+        return false;
+
+    int max_amt = o_ptr->number;
+    if (max_amt <= 0)
+        return false;
+
+    int actual_amt = get_quantity(NULL, max_amt);
+    if (actual_amt <= 0)
+        return false;
+    supplies_begin_action(entry->supply_idx);
+    bool dropped = supplies_drop_amount(entry->supply_idx, actual_amt);
+    supplies_end_action();
+
+    if (dropped)
+        handle_stuff();
+
+    return dropped;
+}
+
+/*display the notes file*/
+void do_cmd_knowledge_notes(void) { show_buffer(notes_buffer, 0); }
+
+/*
+ * Display oath status information
+ */
+void do_cmd_knowledge_oaths(void)
+{
+    SDL_IOStream* fff;
+    char file_name[1024];
+    
+    /* Temporary file */
+    if (!path_temp(file_name, sizeof(file_name)))
+        return;
+
+    /* Open a new file */
+    fff = sdl_fopen(file_name, "w");
+
+    /* File type is "TEXT" */
+    FILE_TYPE(FILE_TYPE_TEXT);
+
+    /* Scan the oaths */
+    SDL_IOprintf(fff, "Oath Status\n\n");
+    
+    /* Check current character oath */
+    if (p_ptr->have_ability[S_SPC][SPC_OATH_MERCY])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_MERCY])
+            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Broken)\n\n");
+    }
+    else if (p_ptr->have_ability[S_SPC][SPC_OATH_SILENCE])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE])
+            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Broken)\n\n");
+    }
+    else if (p_ptr->have_ability[S_SPC][SPC_OATH_IRON])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_IRON])
+            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Broken)\n\n");
+    }
+    else if (p_ptr->have_ability[S_SPC][SPC_OATH_SMITH])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_SMITH])
+            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Broken)\n\n");
+    }
+    else if (p_ptr->have_ability[S_SPC][SPC_OATH_VALOROUS])
+    {
+        if (p_ptr->active_ability[S_SPC][SPC_OATH_VALOROUS])
+            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Active)\n\n");
+        else
+            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Broken)\n\n");
+    }
+    else
+    {
+        SDL_IOprintf(fff, "Current Oath: None\n\n");
+    }
+    
+    /* Display metarun oath status */
+    SDL_IOprintf(fff, "Metarun Oath Status:\n");
+    
+    /* Check unlocked oaths */
+    bool has_unlocked = false;
+    if (oath_unlocked(OATH_MERCY)) 
+    {
+        SDL_IOprintf(fff, "  Oath of Mercy: Unlocked");
+        if (oath_banned(OATH_MERCY))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
+    
+    if (oath_unlocked(OATH_SILENCE)) 
+    {
+        SDL_IOprintf(fff, "  Oath of Silence: Unlocked");
+        if (oath_banned(OATH_SILENCE))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
+    
+    if (oath_unlocked(OATH_IRON)) 
+    {
+        SDL_IOprintf(fff, "  Oath of Iron: Unlocked");
+        if (oath_banned(OATH_IRON))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
+    
+    if (oath_unlocked(OATH_SMITH)) 
+    {
+        SDL_IOprintf(fff, "  Oath of the Smith: Unlocked");
+        if (oath_banned(OATH_SMITH))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
+    
+    if (oath_unlocked(OATH_VALOROUS)) 
+    {
+        SDL_IOprintf(fff, "  Oath of Valorous Heart: Unlocked");
+        if (oath_banned(OATH_VALOROUS))
+            SDL_IOprintf(fff, " (Banned this run)");
+        SDL_IOprintf(fff, "\n");
+        has_unlocked = true;
+    }
+    
+    if (!has_unlocked)
+    {
+        SDL_IOprintf(fff, "  No oaths unlocked yet.\n");
+        SDL_IOprintf(fff, "  Complete Valar quests to unlock new oaths.\n");
+    }
+    
+    /* Close the file */
+    sdl_fclose(fff);
+
+    /* Display the file contents */
+    show_file(file_name, "Oath Status", 0);
+
+    /* Remove the file */
+    fd_kill(file_name);
+}
+
+/*
+ * Description of each object group.
+ */
+static cptr object_group_text[]
+    = { "Herbs", "Potions", "Rings", "Amulets", "Staves", "Horns", "Swords",
+          "Axes & Polearms", "Blunt Weapons", "Diggers", "Bows",
+          //	"Arrows",
+          "Light Sources", "Soft Armour", "Mail", "Shields", "Cloaks", "Gloves",
+          "Helms", "Crowns", "Boots", "Chests", NULL };
+
+/*
+ * TVALs of items in each group
+ */
+static byte object_group_tval[] = { TV_FOOD, TV_POTION, TV_RING, TV_AMULET,
+    TV_STAFF, TV_HORN, TV_SWORD, TV_POLEARM, TV_HAFTED, TV_DIGGING, TV_BOW,
+    //	TV_ARROW,
+    TV_LIGHT, TV_SOFT_ARMOR, TV_MAIL, TV_SHIELD, TV_CLOAK, TV_GLOVES, TV_HELM,
+    TV_CROWN, TV_BOOTS, TV_CHEST, 0 };
+
+/*
+ * Build a list of objects indexes in the given group. Return the number
+ * of objects in the group. object_idx[] must be one element larger than the
+ * largest number of objects that will be collected.
+ *  (Incorporates some code from jdh)
+ */
+static int collect_objects(int grp_cur, object_list_entry object_idx[])
+{
+    int i, j, k, object_cnt = 0;
+    int max_sval = -1;
+
+    /* Get a list of x_char in this group */
+    byte group_tval = object_group_tval[grp_cur];
+
+    /* Check every object */
+    for (i = 0; i < z_info->k_max; i++)
+    {
+        /* Access the object type */
+        object_kind* k_ptr = &k_info[i];
+
+        /*used to check for allocation*/
+        k = 0;
+
+        /* Skip empty objects */
+        if (!k_ptr->name)
+            continue;
+
+        /* Skip items with no distribution (including special artefacts) */
+        /* Scan allocation pairs */
+        for (j = 0; j < 4; j++)
+        {
+            /*add the rarity, if there is one*/
+            k += k_ptr->chance[j];
+        }
+        /*not in allocation table*/
+        if (!(k))
+            continue;
+
+        /* Require objects ever seen*/
+        // if (!(k_ptr->aware && k_ptr->everseen)) continue;
+        if (!(k_ptr->everseen))
+            continue;
+
+        /* Check for object in the group */
+        if (k_ptr->tval == group_tval)
+        {
+            /* Save the highest sval in the group for later */
+            if (k_ptr->sval > max_sval)
+            {
+                max_sval = k_ptr->sval;
+            }
+
+            /* Add the object type */
+            if (object_idx)
+            {
+                object_idx[object_cnt].type = OBJ_NORMAL;
+                object_idx[object_cnt].idx = i;
+            }
+
+            object_cnt++;
+        }
+    }
+
+    /* Add special items to the list */
+    /* Skip this part if we don't know any normal items */
+    for (i = 0; object_cnt > 0 && i < z_info->e_max; i++)
+    {
+        /* Access the object type */
+        ego_item_type* e_ptr = &e_info[i];
+
+        /* Skip empty objects */
+        if (!e_ptr->name)
+            continue;
+
+        /* Require objects ever seen*/
+        if (!(e_ptr->everseen))
+            continue;
+
+        /* Check for object in the group */
+        for (j = 0; j < EGO_TVALS_MAX; j++)
+        {
+            if (e_ptr->tval[j] == group_tval)
+            {
+                if (object_idx)
+                {
+                    object_idx[object_cnt].type = OBJ_SPECIAL;
+                    object_idx[object_cnt].idx = -1;
+                    object_idx[object_cnt].e_idx = i;
+                    object_idx[object_cnt].tval = group_tval;
+                    object_idx[object_cnt].sval = -1;
+                }
+                object_cnt++;
+
+                break;
+            }
+        }
+    }
+
+    /* Terminate the list */
+    if (object_idx)
+        object_idx[object_cnt].type = OBJ_NONE;
+
+    /* Return the number of object types */
+    return object_cnt;
+}
+
+/*
+ * Build a list of artefact indexes in the given group. Return the number
+ * of eligible artefacts in that group.
+ */
+static int collect_artefacts(int grp_cur, int object_idx[])
+{
+    int i, object_cnt = 0;
+    bool* okay;
+    bool know_all = cheat_know;
+
+    /* Get a list of x_char in this group */
+    byte group_tval = object_group_tval[grp_cur];
+
+    /*make a list of artefacts not found*/
+    /* Allocate the "object_idx" array */
+    okay = mem_alloc_array(z_info->art_max, bool);
+
+    /* Default first,  */
+    for (i = 0; i < z_info->art_max; i++)
+    {
+        artefact_type* a_ptr = &a_info[i];
+        bool revealed = (a_ptr->seen & ART_SEEN_REVEALED) != 0;
+
+        /*start with false*/
+        okay[i] = false;
+
+        /* Skip "empty" artefacts */
+        if (a_ptr->tval + a_ptr->sval == 0)
+            continue;
+
+        /* Skip "unfound" artefacts, unless in wizard mode, cheating,
+         * or revealed via quests/lore. */
+        if (!know_all && !p_ptr->wizard && !a_ptr->found_num && !revealed)
+            continue;
+
+        /* Skip "ungenerated" artefacts, unless cheating or quest-revealed. */
+        if (!know_all && !revealed && !a_ptr->cur_num)
+            continue;
+
+        /* Skip the later versions of the Iron Crown */
+        if ((i == ART_MORGOTH_0) || (i == ART_MORGOTH_1)
+            || (i == ART_MORGOTH_2))
+            continue;
+
+        /* Skip the special smithing template artefacts */
+        if ((i >= ART_ULTIMATE) && (i <= z_info->art_norm_max))
+            continue;
+
+        /*assume all created artefacts are good at this point*/
+        okay[i] = true;
+    }
+
+    /* Finally, go through the list of artefacts and categorize the good ones */
+    for (i = 0; i < z_info->art_max; i++)
+    {
+        /* Access the artefact */
+        artefact_type* a_ptr = &a_info[i];
+
+        /* Skip empty artefacts */
+        if (a_ptr->tval + a_ptr->sval == 0)
+            continue;
+
+        /* Require artefacts ever seen*/
+        if (okay[i] == false)
+            continue;
+
+        /* Check for race in the group */
+        if (a_ptr->tval == group_tval)
+        {
+            /* Add the race */
+            object_idx[object_cnt++] = i;
+        }
+    }
+
+    /* Terminate the list */
+    object_idx[object_cnt] = 0;
+
+    /*clear the array*/
+    mem_free_null(okay);
+
+    /* Return the number of races */
+    return object_cnt;
+}
+
+static bool supply_kind_matches(int group, int tval, int sval)
+{
+    switch (group)
+    {
+    case SUPPLY_GROUP_HERBS:
+        return (tval == TV_FOOD) && (sval <= SV_FOOD_SICKNESS);
+    case SUPPLY_GROUP_POTIONS:
+        return (tval == TV_POTION);
+    case SUPPLY_GROUP_GEMS:
+        return (tval == TV_GEM);
+    default:
+        return false;
+    }
+}
+
+static bool supply_item_matches(int group, const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return false;
+
+    return supply_kind_matches(group, o_ptr->tval, o_ptr->sval);
+}
+
+static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
+{
+    int i;
+
+    for (i = 0; i < SUPPLY_GROUP_MAX; i++)
+        totals[i] = 0;
+
+    for (i = 0; i < INVEN_PACK; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+
+        if (!o_ptr->k_idx)
+            continue;
+
+        if ((o_ptr->tval == TV_FOOD) && (o_ptr->sval <= SV_FOOD_SICKNESS))
+            totals[SUPPLY_GROUP_HERBS] += o_ptr->number;
+        else if (o_ptr->tval == TV_POTION)
+            totals[SUPPLY_GROUP_POTIONS] += o_ptr->number;
+        else if (o_ptr->tval == TV_GEM)
+            totals[SUPPLY_GROUP_GEMS] += o_ptr->number;
+    }
+
+    for (i = 0; i < supplies_entry_count(); i++)
+    {
+        object_type* s_ptr = supplies_entry_at(i);
+        if (!s_ptr || !s_ptr->k_idx)
+            continue;
+
+        if ((s_ptr->tval == TV_FOOD) && (s_ptr->sval <= SV_FOOD_SICKNESS))
+            totals[SUPPLY_GROUP_HERBS] += s_ptr->number;
+        else if (s_ptr->tval == TV_POTION)
+            totals[SUPPLY_GROUP_POTIONS] += s_ptr->number;
+        else if (s_ptr->tval == TV_GEM)
+            totals[SUPPLY_GROUP_GEMS] += s_ptr->number;
+    }
+}
+
+static bool supply_kind_is_known(const object_kind* k_ptr)
+{
+    if (!k_ptr)
+        return false;
+
+    if (cheat_know || p_ptr->wizard)
+        return true;
+
+    return k_ptr->aware || k_ptr->everseen || k_ptr->tried;
+}
+
+static int collect_supply_entries(int group_idx, supply_list_entry entries[])
+{
+    int count = 0;
+    int capacity = z_info->k_max;
+    int i;
+
+    if (!entries)
+        return 0;
+
+    memset(entries, 0, sizeof(supply_list_entry) * capacity);
+
+    /* Aggregate carried items first */
+    for (i = 0; i < INVEN_PACK; i++)
+    {
+        object_type* o_ptr = &inventory[i];
+        int j;
+
+        if (!o_ptr->k_idx)
+            continue;
+
+        if (!supply_item_matches(group_idx, o_ptr))
+            continue;
+
+        int value = o_ptr->number;
+
+        for (j = 0; j < count; j++)
+        {
+            if (entries[j].k_idx == o_ptr->k_idx)
+            {
+                entries[j].total += value;
+                if (entries[j].item_idx < 0)
+                    entries[j].item_idx = i;
+                break;
+            }
+        }
+
+        if (j == count)
+        {
+            if (count >= capacity)
+                break;
+
+            entries[count].k_idx = o_ptr->k_idx;
+            entries[count].item_idx = i;
+            entries[count].total = value;
+            entries[count].supply_idx = -1;
+            count++;
+        }
+    }
+
+    /* Aggregate supplies from the cache */
+    for (i = 0; i < supplies_entry_count(); i++)
+    {
+        object_type* s_ptr = supplies_entry_at(i);
+        int j;
+
+        if (!s_ptr || !s_ptr->k_idx)
+            continue;
+
+        if (!supply_item_matches(group_idx, s_ptr))
+            continue;
+
+        int value = s_ptr->number;
+
+        for (j = 0; j < count; j++)
+        {
+            if (entries[j].k_idx == s_ptr->k_idx)
+            {
+                entries[j].total += value;
+                if (entries[j].item_idx < 0)
+                    entries[j].item_idx = SUPPLIES_INDEX;
+                entries[j].supply_idx = i;
+                break;
+            }
+        }
+
+        if (j == count)
+        {
+            if (count >= capacity)
+                break;
+
+            entries[count].k_idx = s_ptr->k_idx;
+            entries[count].item_idx = SUPPLIES_INDEX;
+            entries[count].total = value;
+            entries[count].supply_idx = i;
+            count++;
+        }
+    }
+
+    /* Add known kinds even when none are carried */
+    for (i = 0; i < z_info->k_max; i++)
+    {
+        object_kind* k_ptr = &k_info[i];
+        int j;
+
+        if (!k_ptr->name)
+            continue;
+
+        if (!supply_kind_matches(group_idx, k_ptr->tval, k_ptr->sval))
+            continue;
+
+        if (!supply_kind_is_known(k_ptr))
+            continue;
+
+        for (j = 0; j < count; j++)
+        {
+            if (entries[j].k_idx == i)
+                break;
+        }
+
+        if (j == count)
+        {
+            if (count >= capacity)
+                break;
+
+            entries[count].k_idx = i;
+            entries[count].item_idx = -1;
+            entries[count].total = 0;
+            entries[count].supply_idx = -1;
+            count++;
+        }
+    }
+
+    if (count < capacity)
+    {
+        entries[count].k_idx = -1;
+        entries[count].item_idx = -1;
+        entries[count].total = 0;
+        entries[count].supply_idx = -1;
+    }
+
+    return count;
+}
+
+static byte get_supply_item_color(int k_idx, bool aware)
+{
+    object_kind* k_ptr;
+
+    if (k_idx < 0 || k_idx >= z_info->k_max)
+        return TERM_WHITE;
+
+    k_ptr = &k_info[k_idx];
+
+    /* Unidentified items all use slate color */
+    if (!aware)
+        return TERM_SLATE;
+
+    /* Color by specific item type */
+    switch (k_ptr->tval)
+    {
+        case TV_FOOD: /* Herbs */
+            switch (k_ptr->sval)
+            {
+                case SV_FOOD_RAGE:         return TERM_RED;    /* Red for rage */
+                case SV_FOOD_SUSTENANCE:   return TERM_GREEN;    /* Green for sustenance */
+                case SV_FOOD_TERROR:       return TERM_VIOLET;   /* Violet for fear */
+                case SV_FOOD_HEALING:      return TERM_L_GREEN;  /* Light green for healing */
+                case SV_FOOD_RESTORATION:  return TERM_BLUE;     /* Blue for restoration */
+                case SV_FOOD_HUNGER:       return TERM_UMBER;    /* Brown for hunger */
+                case SV_FOOD_VISIONS:      return TERM_L_UMBER;  /* Light brown for visions */
+                case SV_FOOD_ENTRANCEMENT: return TERM_VIOLET;   /* Violet for entrancement */
+                case SV_FOOD_WEAKNESS:     return TERM_SLATE;    /* Grey for weakness */
+                case SV_FOOD_SICKNESS:     return TERM_L_DARK;   /* Dark grey for sickness */
+                default:                   return TERM_WHITE;
+            }
+
+        case TV_POTION:
+            switch (k_ptr->sval)
+            {
+                case SV_POTION_MIRUVOR:          return TERM_WHITE;  /* White for Miruvor */
+                case SV_POTION_ORCISH_LIQUOR:    return TERM_UMBER;    /* Brown for liquor */
+                case SV_POTION_ESGALDUIN:        return TERM_VIOLET;   /* Violet for Esgalduin */
+                case SV_POTION_CLARITY:          return TERM_L_UMBER;  /* Light brown for clarity */
+                case SV_POTION_HEALING:          return TERM_L_GREEN;  /* Light green for healing */
+                case SV_POTION_VOICE:            return TERM_L_BLUE;  /* White for voice */
+                case SV_POTION_true_SIGHT:       return TERM_BLUE;     /* Blue for true sight */
+                case SV_POTION_ANTIDOTE:         return TERM_GREEN;    /* Green for antidote */
+                case SV_POTION_QUICKNESS:        return TERM_ORANGE;  /* Light brown for speed */
+                case SV_POTION_ELEM_RESISTANCE:  return TERM_L_BLUE;   /* Orange for resistance */
+                case SV_POTION_STR:              return TERM_RED;      /* Red for strength */
+                case SV_POTION_DEX:              return TERM_GREEN;    /* Green for dexterity */
+                case SV_POTION_CON:              return TERM_L_RED;     /* Blue for constitution */
+                case SV_POTION_GRA:              return TERM_BLUE;   /* Violet for grace */
+                case SV_POTION_SLOWNESS:         return TERM_SLATE;    /* Grey for slowness */
+                case SV_POTION_POISON:           return TERM_L_DARK;   /* Dark for poison */
+                case SV_POTION_BLINDNESS:        return TERM_L_DARK;   /* Dark for blindness */
+                case SV_POTION_CONFUSION:        return TERM_SLATE;    /* Grey for confusion */
+                case SV_POTION_DEC_DEX:          return TERM_SLATE;    /* Grey for decrease dex */
+                case SV_POTION_DEC_GRA:          return TERM_SLATE;    /* Grey for decrease grace */
+                default:                         return TERM_WHITE;
+            }
+
+        case TV_GEM:
+            switch (k_ptr->sval)
+            {
+                case SV_GEM_FREEDOM:         return TERM_WHITE;  /* White for freedom */
+                case SV_GEM_LIGHT:           return TERM_ORANGE;   /* Orange for light */
+                case SV_GEM_SANCTITY:        return TERM_L_UMBER;  /* Light brown for sanctity */
+                case SV_GEM_UNDERSTANDING:   return TERM_BLUE;     /* Blue for understanding */
+                case SV_GEM_REVELATIONS:     return TERM_L_BLUE;   /* Violet for revelations */
+                case SV_GEM_TREASURES:       return TERM_ORANGE;   /* Orange for treasures */
+                case SV_GEM_FOES:            return TERM_RED;      /* Red for foes */
+                case SV_GEM_SELF_KNOWLEDGE:  return TERM_GREEN;  /* Light green for self-knowledge */
+                case SV_GEM_WARDING:         return TERM_VIOLET;  /* Light brown for warding */
+                case SV_GEM_RECHARGING:      return TERM_BLUE;     /* Blue for recharging */
+                case SV_GEM_SHADOWS:         return TERM_L_DARK;   /* Dark for shadows */
+                default:                     return TERM_WHITE;
+            }
+
+        default:
+            return TERM_WHITE;
+    }
+}
+
+static void display_supply_group_list(int col, int row, int wid, int per_page,
+    int grp_idx[], int grp_cur, int grp_top, int group_totals[])
+{
+    int i;
+    int total_col = col + wid - 3;
+
+    for (i = 0; i < per_page && (grp_idx[i] >= 0); i++)
+    {
+        int grp = grp_idx[grp_top + i];
+        byte base_color;
+        byte attr;
+        char buf[8];
+
+        /* Assign color based on group type */
+        switch (grp)
+        {
+            case SUPPLY_GROUP_HERBS:   base_color = TERM_GREEN; break;
+            case SUPPLY_GROUP_POTIONS: base_color = TERM_VIOLET;  break;
+            case SUPPLY_GROUP_GEMS:    base_color = TERM_BLUE;    break;
+            default:                   base_color = TERM_WHITE;   break;
+        }
+
+        /* Highlight cursor with white, dim if empty */
+        if (grp_top + i == grp_cur)
+            attr = TERM_L_WHITE;
+        else if (group_totals[grp] == 0)
+            attr = TERM_L_DARK;
+        else
+            attr = base_color;
+
+        Term_erase(col, row + i, wid);
+        c_put_str(attr, supply_group_text[grp], row + i, col);
+
+        strnfmt(buf, sizeof(buf), "%3d", group_totals[grp]);
+        c_put_str(attr, buf, row + i, total_col);
+    }
+}
+
+static void display_supply_list(int col, int row, int per_page,
+    supply_list_entry entries[], int entry_cnt, int entry_cur, int entry_top,
+    int count_col, int sym_col, int current_group, int column)
+{
+    int i;
+
+    (void)current_group; /* Not used since we color by specific item type now */
+
+    for (i = 0; i < per_page; i++)
+    {
+        int idx = entry_top + i;
+        int y = row + i;
+
+        Term_erase(col, y, 255);
+
+        if (idx >= entry_cnt)
+            continue;
+
+        supply_list_entry* entry = &entries[idx];
+        object_type* o_ptr;
+        object_type fake;
+        object_kind* k_ptr;
+        bool aware;
+        byte base_attr, cursor_attr, attr;
+        byte sym_attr;
+        char sym_char;
+        char name[80];
+        char count_buf[8];
+
+        if (entry->k_idx < 0 || entry->k_idx >= z_info->k_max)
+            continue;
+
+        k_ptr = &k_info[entry->k_idx];
+        aware = k_ptr->aware;
+        /* Items with 0 count should be grey */
+        if (entry->total == 0)
+        {
+            base_attr = TERM_L_DARK;
+            cursor_attr = TERM_SLATE;
+        }
+        else
+        {
+            /* Get color based on specific item type */
+            base_attr = get_supply_item_color(entry->k_idx, aware);
+            cursor_attr = aware ? TERM_L_WHITE : TERM_WHITE;
+        }
+        /* Only highlight when right panel is active (column == 1) */
+        attr = (column == 1 && idx == entry_cur) ? cursor_attr : base_attr;
+
+        if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+        {
+            o_ptr = &inventory[entry->item_idx];
+        }
+        else
+        {
+            object_wipe(&fake);
+            object_prep(&fake, entry->k_idx);
+            if (aware)
+                fake.ident |= IDENT_KNOWN;
+            fake.number = (entry->total > 0) ? entry->total : 1;
+            o_ptr = &fake;
+        }
+
+        object_desc(name, sizeof(name), o_ptr, true, 3);
+        c_prt(attr, name, y, col);
+
+        strnfmt(count_buf, sizeof(count_buf), "x%-3d", entry->total);
+        c_put_str(attr, count_buf, y, count_col);
+
+        sym_attr = object_attr(o_ptr);
+        sym_char = object_char(o_ptr);
+        Term_putch(sym_col, y, sym_attr, sym_char);
+        if (use_bigtile)
+        {
+            if (sym_attr & 0x80)
+                Term_putch(sym_col + 1, y, 255, -1);
+            else
+                Term_putch(sym_col + 1, y, 0, ' ');
+        }
+    }
+
+    for (; i < per_page; i++)
+    {
+        Term_erase(col, row + i, 255);
+    }
+}
+
+/*
+ * Move the cursor in a browser window
+ */
+static void browser_cursor_with_rows(char ch, int* column, int* grp_cur,
+    int grp_cnt, int* list_cur, int list_cnt, int page_rows)
+{
+    int d;
+    int col = *column;
+    int grp = *grp_cur;
+    int list = *list_cur;
+    int page_jump = (page_rows > 0) ? page_rows : BROWSER_ROWS;
+
+    /* Extract direction */
+    d = target_dir(ch);
+
+    if (!d)
+        return;
+
+    /* Diagonals - hack */
+    if ((ddx[d] > 0) && ddy[d])
+    {
+        /* Browse group list */
+        if (!col)
+        {
+            int old_grp = grp;
+
+            /* Move up or down */
+            grp += ddy[d] * page_jump;
+
+            /* Verify */
+            if (grp >= grp_cnt)
+                grp = grp_cnt - 1;
+            if (grp < 0)
+                grp = 0;
+            if (grp != old_grp)
+                list = 0;
+        }
+
+        /* Browse sub-list list */
+        else
+        {
+            /* Move up or down */
+            list += ddy[d] * page_jump;
+
+            /* Verify */
+            if (list >= list_cnt)
+                list = list_cnt - 1;
+            if (list < 0)
+                list = 0;
+        }
+
+        (*grp_cur) = grp;
+        (*list_cur) = list;
+
+        return;
+    }
+
+    if (ddx[d])
+    {
+        col += ddx[d];
+        if (col < 0)
+            col = 0;
+        if (col > 1)
+            col = 1;
+
+        (*column) = col;
+
+        return;
+    }
+
+    /* Browse group list */
+    if (!col)
+    {
+        int old_grp = grp;
+
+        /* Move up or down */
+        grp += ddy[d];
+
+        /* Verify */
+        if (grp >= grp_cnt)
+            grp = grp_cnt - 1;
+        if (grp < 0)
+            grp = 0;
+        if (grp != old_grp)
+            list = 0;
+    }
+
+    /* Browse sub-list list */
+    else
+    {
+        /* Move up or down */
+        list += ddy[d];
+
+        /* Verify */
+        if (list >= list_cnt)
+            list = list_cnt - 1;
+        if (list < 0)
+            list = 0;
+    }
+
+    (*grp_cur) = grp;
+    (*list_cur) = list;
+}
+
+/*
+ * Hack -- Create a "forged" artefact
+ */
+static bool prepare_fake_artefact(object_type* o_ptr, byte name1)
+{
+    s16b i;
+
+    artefact_type* a_ptr = &a_info[name1];
+
+    /* Ignore "empty" artefacts */
+    if (a_ptr->tval + a_ptr->sval == 0)
+        return false;
+
+    /* Get the "kind" index */
+    i = lookup_kind(a_ptr->tval, a_ptr->sval);
+
+    /* Oops */
+    if (!i)
+        return (false);
+
+    /* Create the artefact */
+    object_prep(o_ptr, i);
+
+    /* Save the name */
+    o_ptr->name1 = name1;
+
+    /* Extract the fields */
+    o_ptr->pval = a_ptr->pval;
+    o_ptr->att = a_ptr->att;
+    o_ptr->dd = a_ptr->dd;
+    o_ptr->ds = a_ptr->ds;
+    o_ptr->evn = a_ptr->evn;
+    o_ptr->pd = a_ptr->pd;
+    o_ptr->ps = a_ptr->ps;
+    o_ptr->weight = a_ptr->weight;
+
+    memcpy(o_ptr->stat_bonus, a_ptr->stat_bonus, sizeof(o_ptr->stat_bonus));
+    memcpy(o_ptr->skill_bonus, a_ptr->skill_bonus, sizeof(o_ptr->skill_bonus));
+
+    // add the abilities
+    for (i = 0; i < a_ptr->abilities; i++)
+    {
+        o_ptr->skilltype[i + o_ptr->abilities] = a_ptr->skilltype[i];
+        o_ptr->abilitynum[i + o_ptr->abilities] = a_ptr->abilitynum[i];
+        o_ptr->bane_type[i + o_ptr->abilities] = a_ptr->bane_type[i];
+    }
+    o_ptr->abilities += a_ptr->abilities;
+
+    /*identify it*/
+    object_known(o_ptr);
+
+    /*make it a spoiler item*/
+    o_ptr->ident |= IDENT_SPOIL;
+
+    /* Hack -- extract the "cursed" flag */
+    if (a_ptr->flags3 & (TR3_LIGHT_CURSE | TR3_HEAVY_CURSE | TR3_PERMA_CURSE))
+        o_ptr->ident |= (IDENT_CURSED);
+
+    /* Success */
+    return (true);
+}
+
+/*
+ * Describe fake artefact
+ */
+void desc_art_fake(int a_idx)
+{
+    object_type* i_ptr;
+    object_type object_type_body;
+
+    /* Get local object */
+    i_ptr = &object_type_body;
+
+    /* Wipe the object */
+    object_wipe(i_ptr);
+
+    /* Make fake artefact */
+    prepare_fake_artefact(i_ptr, a_idx);
+
+    /* Hack -- Handle stuff */
+    handle_stuff();
+
+    /* Reset the cursor */
+    Term_gotoxy(0, 0);
+
+    object_info_screen(i_ptr);
+}
+
+/*
+ * Display known artefacts
+ */
+void do_cmd_knowledge_artefacts(void)
+{
+    log_debug("Player opened artifacts knowledge screen");
+    do_cmd_knowledge_browser_page(KNOWLEDGE_PAGE_ARTEFACTS);
+}
+
+/*
+ * Description of each monster group.
+ */
+static cptr monster_group_text[] = { "Uniques", /*All uniques, all letters*/
+    /*Unused*/ /*'a'*/
+    /*Unused*/ /*'A'*/
+    "Bats & Birds", /*'b'*/
+    /*Unused*/ /*'B'*/
+    /*Unused*/ /*'c'*/
+    "Canines", /*'C'*/
+    "Young Dragons", /*'d'*/
+    "Great Dragons", /*'D'*/
+    /*Unused*/ /*'e'*/
+    /*Unused*/ /*'E'*/
+    "Felines", /*'f'*/
+    /*Unused*/ /*'F'*/
+    /*Unused*/ /*'g'*/
+    "Giants", /*'G'*/
+    /*Unused*/ /*'h'*/
+    "Horrors", /*'H'*/
+    /*Unused*/ /*'i'*/
+    "Insects", /*'I'*/
+    /*Unused*/ /*'j'*/
+    /*Unused*/ /*'J'*/
+    /*Unused*/ /*'k'*/
+    /*Unused*/ /*'K'*/
+    /*Unused*/ /*'l'*/
+    /*Unused*/ /*'L'*/
+    "Young Spiders", /*'m'*/
+    "Spiders", /*'M'*/
+    /*Unused*/ /*'n'*/
+    "Nameless Things", /*'N'*/
+    "Orcs", /*'o'*/
+    /*Unused*/ /*'O'*/
+    /*Unused*/ /*'p'*/
+    /*Unused*/ /*'P'*/
+    /*Unused*/ /*'q'*/
+    /*Unused*/ /*'Q'*/
+    /*Unused*/ /*'r'*/
+    "Raukar", /*'R'*/
+    "Serpents", /*'s'*/
+    "Ancient Serpents", /*'S'*/
+    /*Unused*/ /*'t'*/
+    "Trolls", /*'T'*/
+    /*Unused*/ /*'u'*/
+    /*Unused*/ /*'U'*/
+    "Vampires", /*'v'*/
+    "Valar", /*'V'*/
+    "Creeping Shadows", /*'w'*/
+    "Wights and Wraiths", /*'W'*/
+    /*Unused*/ /*'x'*/
+    /*Unused*/ /*'X'*/
+    /*Unused*/ /*'y'*/
+    /*Unused*/ /*'Y'*/
+    /*Unused*/ /*'Z'*/
+    /*Unused*/ /*'Z'*/
+    "Plants", /*'&'*/
+    "People", /*'@'*/
+    NULL };
+
+/*
+ * Symbols of monsters in each group. Note the "Uniques" group
+ * is handled differently.
+ */
+static cptr monster_group_char[] = { (char*)-1L,
+    /*"a", Unused*/
+    /*"A", Unused*/
+    "b",
+    /*"B", Unused*/
+    /*"c", Unused*/
+    "C", "d", "D",
+    /*"e", Unused*/
+    /*"E", Unused*/
+    "f",
+    /*"F", Unused*/
+    /*"g", Unused*/
+    "G",
+    /*"h", Unused*/
+    "H",
+    /*"i", Unused*/
+    "I",
+    /*"j", Unused*/
+    /*"J", Unused*/
+    /*"k", Unused*/
+    /*"K", Unused*/
+    /*"l", Unused*/
+    /*"L", Unused*/
+    "m", "M",
+    /*"n", Unused*/
+    "N", "o",
+    /*"O", Unused*/
+    /*"p", Unused*/
+    /*"P", Unused*/
+    /*"q", Unused*/
+    /*"Q", Unused*/
+    /*"r", Unused*/
+    "R", "s", "S",
+    /*"t", Unused*/
+    "T",
+    /*"u", Unused*/
+    /*"U", Unused*/
+    "v", "V", "w", "W",
+    /*"x", Unused*/
+    /*"X", Unused*/
+    /*"y", Unused*/
+    /*"Y", Unused*/
+    /*"z", Unused*/
+    /*"Z", Unused*/
+    "&", // plants
+    "@", // human/elf/dwarf
+    NULL };
+
+/*
+ * Build a list of monster indexes in the given group. Return the number
+ * of monsters in the group.
+ */
+static int collect_monsters(int grp_cur, monster_list_entry* mon_idx, int mode)
+{
+    int i, mon_count = 0;
+
+    /* Get a list of x_char in this group */
+    cptr group_char = monster_group_char[grp_cur];
+
+    /* XXX Hack -- Check if this is the "Uniques" group */
+    bool grp_unique = (monster_group_char[grp_cur] == (char*)-1L);
+
+    /* Check every race */
+    for (i = 1; i < z_info->r_max; i++)
+    {
+        /* Access the race */
+        monster_race* r_ptr = &r_info[i];
+        monster_lore* l_ptr = &l_list[i];
+
+        /* Is this a unique? */
+        bool unique = (r_ptr->flags1 & (RF1_UNIQUE));
+
+        /* Skip empty race */
+        if (!r_ptr->name)
+            continue;
+
+        if (grp_unique && !(unique))
+            continue;
+
+        /* Require known monsters */
+        if (!(mode & 0x02) && (!cheat_know) && (!know_monster_info)
+            && (!(l_ptr->tsights)))
+            continue;
+
+        // Ignore monsters that can't be generated
+        if (r_ptr->level > 25)
+            continue;
+
+        /* Check for race in the group */
+        if ((grp_unique) || (strchr(group_char, r_ptr->d_char)))
+        {
+            /* Add the race */
+            mon_idx[mon_count++].r_idx = i;
+
+            /* XXX Hack -- Just checking for non-empty group */
+            if (mode & 0x01)
+                break;
+        }
+    }
+
+    /* Terminate the list */
+    mon_idx[mon_count].r_idx = 0;
+
+    /* Return the number of races */
+    return (mon_count);
+}
+
+#if 0
+/*
+ * Display the monsters in a group.
+ */
+static void display_monster_list(int col, int row, int per_page,
+    monster_list_entry* mon_idx, int mon_cur, int mon_top, int grp_cur)
+{
+    int i;
+
+    u32b known_uniques, dead_uniques, slay_count;
+
+    /* Start with 0 kills*/
+    known_uniques = dead_uniques = slay_count = 0;
+
+    /* Count up monster kill counts */
+    for (i = 1; i < z_info->r_max - 1; i++)
+    {
+        monster_race* r_ptr = &r_info[i];
+        monster_lore* l_ptr = &l_list[i];
+
+        // skip monsters that cannot be generated
+        if ((r_ptr->rarity == 0) || (r_ptr->level > 25))
+            continue;
+
+        /* Require non-unique monsters */
+        if (r_ptr->flags1 & RF1_UNIQUE)
+        {
+            /*Count if we have seen the unique*/
+            if (l_ptr->tsights)
+            {
+                known_uniques++;
+
+                /*Count if the unique is dead*/
+                if (r_ptr->max_num == 0)
+                {
+                    dead_uniques++;
+                    slay_count++;
+                }
+            }
+
+            // increase the uniques count anyway for forewarned or cheaters
+            else if (know_monster_info || cheat_know)
+            {
+                known_uniques++;
+            }
+        }
+
+        /* Collect "appropriate" monsters */
+        else
+            slay_count += l_ptr->pkills;
+    }
+
+    /* Display lines until done */
+    for (i = 0; i < per_page && mon_idx[i].r_idx; i++)
+    {
+        byte attr;
+
+        /* Get the race index */
+        int r_idx = mon_idx[mon_top + i].r_idx;
+
+        /* Access the race */
+        monster_race* r_ptr = &r_info[r_idx];
+        monster_lore* l_ptr = &l_list[r_idx];
+
+        char race_name[80];
+
+        /* Get the monster race name (singular)*/
+        monster_desc_race(race_name, sizeof(race_name), r_idx);
+
+        /* Choose a color */
+        attr = ((i + mon_top == mon_cur) ? TERM_L_BLUE : TERM_WHITE);
+
+        /* Display the name */
+        c_prt(attr, race_name, row + i, col);
+
+        if (cheat_know)
+        {
+            c_prt(attr, format("%d", r_idx), row + i, 60);
+        }
+
+        /* Display symbol */
+        Term_putch(68, row + i, r_ptr->x_attr, r_ptr->x_char);
+        if (use_bigtile)
+        {
+            if ((byte)(r_ptr->x_attr) & 0x80)
+                Term_putch(69, row + i, 255, -1);
+            else
+                Term_putch(69, row + i, 0, ' ');
+        }
+
+        /* Display kills */
+        if (r_ptr->flags1 & (RF1_UNIQUE))
+        {
+            /*use alive/dead for uniques*/
+            put_str(format("%s", (r_ptr->max_num == 0) ? " dead" : "alive"),
+                row + i, 73);
+        }
+        else
+            put_str(format("%5d", l_ptr->pkills), row + i, 73);
+    }
+
+    /* Clear remaining lines */
+    for (; i < per_page; i++)
+    {
+        Term_erase(col, row + i, 255);
+    }
+
+    /*Clear the monster count line*/
+    Term_erase(0, 22, 255);
+
+    if (monster_group_char[grp_cur] != (char*)-1L)
+    {
+        c_put_str(TERM_L_BLUE,
+            format("Total Creatures Slain: %d. ", slay_count), 22, col + 2);
+    }
+    else
+    {
+        c_put_str(TERM_L_BLUE,
+            format("Known Uniques: %d, Slain Uniques: %d.", known_uniques,
+                dead_uniques),
+            22, col + 2);
+    }
+}
+#endif
+
+/*
+ * Display known monsters.
+ */
+void do_cmd_knowledge_monsters(void)
+{
+    do_cmd_knowledge_browser_page(KNOWLEDGE_PAGE_MONSTERS);
+}
+
+/*
+ * Add a pval so the object descriptions don't look strange*
+ */
+void apply_magic_fake(object_type* o_ptr)
+{
+    s16b old_pval = o_ptr->pval;
+
+    /* Analyze type */
+    switch (o_ptr->tval)
+    {
+    case TV_DIGGING:
+    {
+        if (o_ptr->pval < 1)
+            o_ptr->pval = 1;
+        break;
+    }
+
+    /*many rings need a pval*/
+    case TV_RING:
+    {
+        /* Analyze */
+        switch (o_ptr->sval)
+        {
+        /* Strength, Dexterity */
+        case SV_RING_STR:
+        case SV_RING_DEX:
+        {
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+
+            break;
+        }
+
+        /* Ring of Accuracy */
+        case SV_RING_ACCURACY:
+        {
+            /* Bonus to hit */
+            if (o_ptr->att < 1)
+                o_ptr->att = 1;
+
+            break;
+        }
+
+        /* Ring of Evasion */
+        case SV_RING_EVASION:
+        {
+            /* Bonus to evasion */
+            if (o_ptr->evn < 1)
+                o_ptr->evn = 1;
+
+            break;
+        }
+
+        /* Ring of Secrets */
+        case SV_RING_SECRETS:
+        {
+            /* Bonus to perception */
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+
+            break;
+        }
+
+        /* Ring of Ered Luin */
+        case SV_RING_ERED_LUIN:
+        {
+            /* Bonus to will */
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+            break;
+        }
+
+        /* Ring of the Laiquendi */
+        case SV_RING_LAIQUENDI:
+        {
+            /* Bonus to stealth and archery */
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+            break;
+        }
+        }
+
+        /*break for TVAL-Rings*/
+        break;
+    }
+
+    case TV_AMULET:
+    {
+        /* Analyze */
+        switch (o_ptr->sval)
+        {
+        /* Various amulets */
+        case SV_AMULET_CON:
+        case SV_AMULET_GRA:
+        {
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+            break;
+        }
+
+        /* Amulet of Protection */
+        case SV_AMULET_PROTECTION:
+        {
+            if (o_ptr->pd < 1)
+                o_ptr->pd = 1;
+            if (o_ptr->ps < 1)
+                o_ptr->ps = 1;
+            break;
+        }
+
+        /* Amulet of the Blessed Realm */
+        case SV_AMULET_BLESSED_REALM:
+        {
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+            break;
+        }
+
+        /* Amulet of the Vigilant Eye */
+        case SV_AMULET_VIGILANT_EYE:
+        {
+            if (o_ptr->pval < 1)
+                o_ptr->pval = 1;
+            break;
+        }
+
+        default:
+            break;
+        }
+        /*break for TVAL-Amulets*/
+        break;
+    }
+
+    case TV_LIGHT:
+    {
+        /* Analyze */
+        switch (o_ptr->sval)
+        {
+        case SV_LIGHT_TORCH:
+        case SV_LIGHT_MALLORN:
+        case SV_LIGHT_LANTERN:
+        {
+            o_ptr->timeout = 0;
+
+            break;
+        }
+        }
+        /*break for TVAL-Lights*/
+        break;
+    }
+
+    /*give them one charge*/
+    case TV_STAFF:
+    {
+        if (o_ptr->pval < 1)
+            o_ptr->pval = 1;
+
+        break;
+    }
+    }
+
+    int pval_delta = (int)o_ptr->pval - (int)old_pval;
+    if (pval_delta != 0)
+        object_apply_pval_delta_with_mask(o_ptr, object_pval_flags1(o_ptr), pval_delta);
+}
+
+/*
+ * Describe fake object
+ */
+static void desc_obj_fake(int k_idx)
+{
+    object_type* i_ptr;
+    object_type object_type_body;
+
+    /* Get local object */
+    i_ptr = &object_type_body;
+
+    /* Wipe the object */
+    object_wipe(i_ptr);
+
+    /* Create the object */
+    object_prep(i_ptr, k_idx);
+
+    /*add minimum bonuses so the descriptions don't look strange*/
+    apply_magic_fake(i_ptr);
+
+    /* It's fully known */
+    i_ptr->ident |= IDENT_KNOWN;
+
+    /* Hack -- Handle stuff */
+    handle_stuff();
+
+    /* Reset the cursor */
+    Term_gotoxy(0, 0);
+
+    object_info_screen(i_ptr);
+}
+
+#if 0
+/*
+ * Display the objects in a group. (Incorporates some code from jdh)
+ */
+static void display_object_list(int col, int row, int per_page,
+    object_list_entry object_idx[], int object_cur, int object_top)
+{
+    int i;
+
+    /* Display lines until done */
+    for (i = 0; i < per_page && object_idx[i].type != OBJ_NONE; i++)
+    {
+        char buf[80];
+
+        /* Get the object index */
+        int oidx = object_top + i;
+        object_list_entry* obj = &object_idx[oidx];
+        object_kind* k_ptr;
+        ego_item_type* e_ptr;
+        byte attr, cursor;
+
+        switch (obj->type)
+        {
+        case OBJ_NORMAL:
+            /* Access the object */
+            k_ptr = &k_info[obj->idx];
+
+            /* Choose a color */
+            attr = ((k_ptr->aware) ? TERM_WHITE : TERM_SLATE);
+            cursor = ((k_ptr->aware) ? TERM_L_BLUE : TERM_BLUE);
+            attr = ((oidx == object_cur) ? cursor : attr);
+
+            /* Acquire the basic "name" of the object*/
+            strip_name(buf, obj->idx);
+
+            /* Display the name */
+            c_prt(attr, buf, row + i, col);
+
+            if (cheat_know)
+                c_prt(attr, format("%d", obj->idx), row + i, 70);
+
+            if (k_ptr->aware)
+            {
+                /* Obtain attr/char */
+                byte a = k_ptr->flavor ? (flavor_info[k_ptr->flavor].x_attr)
+                                       : k_ptr->d_attr;
+                byte c = k_ptr->flavor ? (flavor_info[k_ptr->flavor].x_char)
+                                       : k_ptr->d_char;
+
+                /* Display symbol */
+                Term_putch(76, row + i, a, c);
+            }
+
+            break;
+
+        case OBJ_SPECIAL:
+            e_ptr = &e_info[obj->e_idx];
+
+            /* Choose a color */
+            attr = ((e_ptr->aware) ? TERM_WHITE : TERM_SLATE);
+            cursor = ((e_ptr->aware) ? TERM_L_BLUE : TERM_BLUE);
+            attr = ((oidx == object_cur) ? cursor : attr);
+
+            if (obj->sval == -1)
+            {
+                buf[0] = '\0';
+                snprintf(buf, sizeof(buf), "  %s", &e_name[e_ptr->name]);
+            }
+            else
+            {
+                int j;
+                char buf2[80];
+
+                /* Find the specific type */
+                buf[0] = '\0';
+                buf2[0] = '\0';
+                for (j = 0; j < z_info->k_max; ++j)
+                {
+                    if ((k_info[j].tval == obj->tval)
+                        && (k_info[j].sval == obj->sval))
+                    {
+                        strip_name(buf2, j);
+                        break;
+                    }
+                }
+
+                snprintf(buf, sizeof(buf), "%s %s", buf2, &e_name[e_ptr->name]);
+            }
+
+            c_prt(attr, buf, row + i, col);
+
+            break;
+
+        case OBJ_NONE:
+        default:
+            break;
+        }
+    }
+
+    /* Clear remaining lines */
+    for (; i < per_page; i++)
+    {
+        Term_erase(col, row + i, 255);
+    }
+}
+#endif
+
+static cptr knowledge_page_name(int page)
+{
+    switch (page)
+    {
+    case KNOWLEDGE_PAGE_ARTEFACTS:
+        return "Artefacts";
+    case KNOWLEDGE_PAGE_OBJECTS:
+        return "Objects";
+    case KNOWLEDGE_PAGE_MONSTERS:
+        return "Monsters";
+    case KNOWLEDGE_PAGE_CURSES:
+        return "Curses";
+    default:
+        return "Known";
+    }
+}
+
+static int knowledge_normalize_page(int page)
+{
+    if (page < KNOWLEDGE_PAGE_ARTEFACTS || page > KNOWLEDGE_PAGE_CURSES)
+        return g_knowledge_last_page;
+
+    return page;
+}
+
+static cptr knowledge_tab_label(int page)
+{
+    static const cptr labels[] = {
+        "Arts",
+        "Objs",
+        "Mons",
+        "Curses"
+    };
+
+    if (page < KNOWLEDGE_PAGE_ARTEFACTS || page > KNOWLEDGE_PAGE_CURSES)
+        return "";
+
+    return labels[page];
+}
+
+static int knowledge_tab_col(int page)
+{
+    int i;
+    int col = 0;
+
+    for (i = KNOWLEDGE_PAGE_ARTEFACTS; i < page; i++)
+        col += (int)strlen(knowledge_tab_label(i)) + 1;
+
+    return col;
+}
+
+static void knowledge_init_layout(knowledge_browser_layout* layout,
+    int max_group_len, bool has_groups)
+{
+    int min_group_w = 8;
+    int min_list_w = 16;
+
+    Term_get_size(&layout->term_wid, &layout->term_hgt);
+
+    if (layout->term_wid < 1)
+        layout->term_wid = 80;
+    if (layout->term_hgt < 1)
+        layout->term_hgt = 24;
+
+    layout->title_row = 0;
+    layout->tabs_row = (layout->term_hgt > 1) ? 1 : 0;
+    layout->header_row = (layout->term_hgt > 2) ? 2 : layout->tabs_row;
+    layout->divider_row = (layout->term_hgt > 3) ? 3 : layout->header_row;
+    layout->list_row = layout->divider_row + 1;
+    layout->prompt_row = layout->term_hgt - 1;
+    layout->status_row = (layout->prompt_row > layout->list_row)
+        ? (layout->prompt_row - 1)
+        : layout->prompt_row;
+    layout->list_rows = layout->status_row - layout->list_row;
+    if (layout->list_rows < 1)
+        layout->list_rows = 1;
+
+    if (!has_groups)
+    {
+        layout->group_col = 0;
+        layout->group_w = 0;
+        layout->divider_col = -1;
+        layout->list_col = 0;
+        layout->list_w = layout->term_wid;
+        return;
+    }
+
+    layout->group_col = 0;
+    layout->group_w = max_group_len;
+    if (layout->group_w < 10)
+        layout->group_w = 10;
+    if (layout->group_w > layout->term_wid / 3)
+        layout->group_w = layout->term_wid / 3;
+    if (layout->group_w < min_group_w)
+        layout->group_w = min_group_w;
+
+    while ((layout->group_w > min_group_w)
+        && (layout->term_wid - (layout->group_w + 3) < min_list_w))
+    {
+        layout->group_w--;
+    }
+
+    if (layout->term_wid - (layout->group_w + 3) < min_list_w)
+    {
+        layout->group_w = layout->term_wid - min_list_w - 3;
+        if (layout->group_w < min_group_w)
+            layout->group_w = min_group_w;
+    }
+
+    layout->divider_col = layout->group_w + 1;
+    layout->list_col = layout->divider_col + 2;
+    layout->list_w = layout->term_wid - layout->list_col;
+    if (layout->list_w < 1)
+        layout->list_w = 1;
+}
+
+static void knowledge_draw_tabs(const knowledge_browser_layout* layout, int page,
+    bool tabs_focus)
+{
+    int i;
+    int col = 0;
+
+    Term_erase(0, layout->tabs_row, 255);
+
+    for (i = KNOWLEDGE_PAGE_ARTEFACTS; i <= KNOWLEDGE_PAGE_CURSES; i++)
+    {
+        cptr label = knowledge_tab_label(i);
+        byte attr = TERM_SLATE;
+        int remaining = layout->term_wid - col;
+        int len;
+
+        if (remaining <= 0)
+            break;
+
+        if (i == page)
+            attr = tabs_focus ? TERM_YELLOW : TERM_L_BLUE;
+
+        len = (int)strlen(label);
+        Term_putstr(col, layout->tabs_row, remaining, attr, label);
+        col += len;
+
+        if ((i < KNOWLEDGE_PAGE_CURSES) && (col < layout->term_wid))
+        {
+            Term_putstr(col, layout->tabs_row, layout->term_wid - col,
+                TERM_SLATE, " ");
+            col++;
+        }
+    }
+}
+
+static void knowledge_draw_frame(const knowledge_browser_layout* layout, int page,
+    bool has_groups, cptr list_label, bool tabs_focus)
+{
+    int i;
+    char title[64];
+    char page_buf[16];
+
+    Term_clear();
+
+    strnfmt(title, sizeof(title), "Known lore - %s", knowledge_page_name(page));
+    Term_putstr(0, layout->title_row, layout->term_wid, TERM_L_WHITE + TERM_SHADE,
+        title);
+
+    strnfmt(page_buf, sizeof(page_buf), "%d/4", page + 1);
+    if ((int)strlen(page_buf) < layout->term_wid)
+    {
+        int page_col = layout->term_wid - (int)strlen(page_buf);
+        Term_putstr(page_col, layout->title_row, layout->term_wid - page_col,
+            TERM_SLATE, page_buf);
+    }
+
+    knowledge_draw_tabs(layout, page, tabs_focus);
+
+    Term_erase(0, layout->header_row, 255);
+    if (has_groups)
+    {
+        Term_putstr(layout->group_col, layout->header_row, layout->group_w,
+            TERM_SLATE, "Group");
+        Term_putstr(layout->list_col, layout->header_row, layout->list_w,
+            TERM_SLATE, list_label);
+    }
+    else
+    {
+        Term_putstr(0, layout->header_row, layout->term_wid, TERM_SLATE,
+            list_label);
+    }
+
+    for (i = 0; i < layout->term_wid; i++)
+    {
+        Term_putch(i, layout->divider_row, TERM_L_DARK, '=');
+    }
+
+    if (has_groups && layout->divider_col >= 0)
+    {
+        for (i = 0; i < layout->list_rows; i++)
+        {
+            Term_putch(layout->divider_col, layout->list_row + i, TERM_L_DARK, '|');
+        }
+    }
+
+    if (layout->status_row != layout->prompt_row)
+        Term_erase(0, layout->status_row, 255);
+    Term_erase(0, layout->prompt_row, 255);
+}
+
+static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
+{
+    char prompt[128];
+
+    if (steamdeck_controls_active())
+    {
+        char prev_label[16];
+        char next_label[16];
+        char confirm_label[16];
+        char recall_label[16];
+        char back_label[16];
+
+        controller_prompt_label('e', "L1", prev_label, sizeof(prev_label));
+        controller_prompt_label('i', "R1", next_label, sizeof(next_label));
+        controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        controller_prompt_label(steamdeck_info_key(), "RS", recall_label,
+            sizeof(recall_label));
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(prompt, sizeof(prompt),
+            "D-pad move  [%s/%s] page  [%s/%s] recall  [%s] back",
+            prev_label, next_label, confirm_label, recall_label, back_label);
+        Term_putstr(0, layout->prompt_row, layout->term_wid, TERM_L_DARK, prompt);
+    }
+    else
+    {
+        SDL_strlcpy(prompt, "Dir move  e/i page  Up at top=tabs  Space/r recall  Esc",
+            sizeof(prompt));
+        Term_putstr(0, layout->prompt_row, layout->term_wid, TERM_SLATE, prompt);
+    }
+}
+
+static void knowledge_clamp_group_state(int* column, int* grp_cur, int* grp_top,
+    int grp_cnt, int* entry_cur, int* entry_top, int entry_cnt, int per_page)
+{
+    if (grp_cnt <= 0)
+    {
+        *column = 0;
+        *grp_cur = 0;
+        *grp_top = 0;
+        *entry_cur = 0;
+        *entry_top = 0;
+        return;
+    }
+
+    if (*grp_cur >= grp_cnt)
+        *grp_cur = grp_cnt - 1;
+    if (*grp_cur < 0)
+        *grp_cur = 0;
+    if (*grp_top > *grp_cur)
+        *grp_top = *grp_cur;
+    if (*grp_cur >= *grp_top + per_page)
+        *grp_top = *grp_cur - per_page + 1;
+    if (*grp_top < 0)
+        *grp_top = 0;
+
+    if (entry_cnt <= 0)
+    {
+        *column = 0;
+        *entry_cur = 0;
+        *entry_top = 0;
+    }
+    else
+    {
+        if (*entry_cur >= entry_cnt)
+            *entry_cur = entry_cnt - 1;
+        if (*entry_cur < 0)
+            *entry_cur = 0;
+        if (*entry_top > *entry_cur)
+            *entry_top = *entry_cur;
+        if (*entry_cur >= *entry_top + per_page)
+            *entry_top = *entry_cur - per_page + 1;
+        if (*entry_top < 0)
+            *entry_top = 0;
+    }
+
+    if (*column < 0)
+        *column = 0;
+    if (*column > 1)
+        *column = 1;
+    if (entry_cnt <= 0)
+        *column = 0;
+}
+
+static void knowledge_clamp_list_state(int* cur, int* top, int count, int per_page)
+{
+    if (count <= 0)
+    {
+        *cur = 0;
+        *top = 0;
+        return;
+    }
+
+    if (*cur >= count)
+        *cur = count - 1;
+    if (*cur < 0)
+        *cur = 0;
+    if (*top > *cur)
+        *top = *cur;
+    if (*cur >= *top + per_page)
+        *top = *cur - per_page + 1;
+    if (*top < 0)
+        *top = 0;
+}
+
+static void knowledge_display_groups(const knowledge_browser_layout* layout,
+    int grp_idx[], cptr group_text[], int grp_cnt, int grp_cur, int grp_top)
+{
+    int i;
+
+    for (i = 0; i < layout->list_rows; i++)
+    {
+        int y = layout->list_row + i;
+        int idx = grp_top + i;
+
+        Term_erase(layout->group_col, y, layout->group_w);
+
+        if (idx >= grp_cnt)
+            continue;
+
+        Term_putstr(layout->group_col, y, layout->group_w,
+            (idx == grp_cur) ? TERM_L_BLUE : TERM_WHITE,
+            group_text[grp_idx[idx]]);
+    }
+}
+
+static void knowledge_display_artefacts(const knowledge_browser_layout* layout,
+    int artefact_idx[], int artefact_cnt, int artefact_cur, int artefact_top)
+{
+    bool show_debug = cheat_know && (layout->term_wid >= 78);
+    int idx_col = layout->term_wid - 12;
+    int dep_col = layout->term_wid - 8;
+    int rar_col = layout->term_wid - 4;
+    int name_w = layout->list_w;
+    int i;
+
+    if (show_debug)
+    {
+        name_w = idx_col - layout->list_col - 1;
+        if (name_w < 12)
+            show_debug = false;
+    }
+
+    if (show_debug)
+    {
+        Term_putstr(idx_col, layout->header_row, 3, TERM_SLATE, "Idx");
+        Term_putstr(dep_col, layout->header_row, 3, TERM_SLATE, "Dep");
+        Term_putstr(rar_col, layout->header_row, 3, TERM_SLATE, "Rar");
+    }
+
+    for (i = 0; i < layout->list_rows; i++)
+    {
+        int row = layout->list_row + i;
+        int idx = artefact_top + i;
+        object_type object_type_body;
+        object_type* i_ptr = &object_type_body;
+        char o_name[80];
+        byte attr;
+
+        Term_erase(layout->list_col, row, 255);
+
+        if (idx >= artefact_cnt)
+            continue;
+
+        attr = (idx == artefact_cur) ? TERM_L_BLUE : TERM_WHITE;
+        object_wipe(i_ptr);
+        prepare_fake_artefact(i_ptr, artefact_idx[idx]);
+        object_desc(o_name, sizeof(o_name), i_ptr, true, 0);
+        Term_putstr(layout->list_col, row, name_w, attr, o_name);
+
+        if (show_debug)
+        {
+            artefact_type* a_ptr = &a_info[artefact_idx[idx]];
+            c_prt(attr, format("%3d", artefact_idx[idx]), row, idx_col);
+            c_prt(attr, format("%3d", a_ptr->level), row, dep_col);
+            c_prt(attr, format("%3d", a_ptr->rarity), row, rar_col);
+        }
+    }
+}
+
+static void knowledge_display_objects(const knowledge_browser_layout* layout,
+    object_list_entry object_idx[], int object_cnt, int object_cur, int object_top)
+{
+    bool show_idx = cheat_know && (layout->term_wid >= 70);
+    bool show_sym = (layout->term_wid >= 44);
+    int idx_col = layout->term_wid - 5;
+    int sym_col = layout->term_wid - (use_bigtile ? 2 : 1);
+    int name_w = layout->list_w;
+    int i;
+
+    if (show_idx)
+    {
+        name_w = idx_col - layout->list_col - 1;
+        if (name_w < 12)
+            show_idx = false;
+    }
+
+    if (show_sym)
+    {
+        int sym_name_w = sym_col - layout->list_col - 1;
+        if (sym_name_w < name_w)
+            name_w = sym_name_w;
+        if (name_w < 12)
+            show_sym = false;
+    }
+
+    if (show_idx)
+        Term_putstr(idx_col, layout->header_row, 3, TERM_SLATE, "Idx");
+    if (show_sym)
+        Term_putstr(sym_col, layout->header_row, 3, TERM_SLATE, "Sym");
+
+    for (i = 0; i < layout->list_rows; i++)
+    {
+        int row = layout->list_row + i;
+        int oidx = object_top + i;
+        object_list_entry* obj;
+        object_kind* k_ptr;
+        ego_item_type* e_ptr;
+        byte attr;
+        byte cursor;
+        char buf[80];
+
+        Term_erase(layout->list_col, row, 255);
+
+        if (oidx >= object_cnt)
+            continue;
+
+        obj = &object_idx[oidx];
+
+        switch (obj->type)
+        {
+        case OBJ_NORMAL:
+            k_ptr = &k_info[obj->idx];
+            attr = k_ptr->aware ? TERM_WHITE : TERM_SLATE;
+            cursor = k_ptr->aware ? TERM_L_BLUE : TERM_BLUE;
+            attr = (oidx == object_cur) ? cursor : attr;
+
+            strip_name(buf, obj->idx);
+            Term_putstr(layout->list_col, row, name_w, attr, buf);
+
+            if (show_idx)
+                c_prt(attr, format("%d", obj->idx), row, idx_col);
+
+            if (show_sym && k_ptr->aware)
+            {
+                byte a = k_ptr->flavor ? flavor_info[k_ptr->flavor].x_attr : k_ptr->d_attr;
+                byte c = k_ptr->flavor ? flavor_info[k_ptr->flavor].x_char : k_ptr->d_char;
+                Term_putch(sym_col, row, a, c);
+                if (use_bigtile)
+                {
+                    if (a & 0x80)
+                        Term_putch(sym_col + 1, row, 255, -1);
+                    else
+                        Term_putch(sym_col + 1, row, 0, ' ');
+                }
+            }
+            break;
+
+        case OBJ_SPECIAL:
+            e_ptr = &e_info[obj->e_idx];
+            attr = e_ptr->aware ? TERM_WHITE : TERM_SLATE;
+            cursor = e_ptr->aware ? TERM_L_BLUE : TERM_BLUE;
+            attr = (oidx == object_cur) ? cursor : attr;
+
+            if (obj->sval == -1)
+            {
+                strnfmt(buf, sizeof(buf), "  %s", &e_name[e_ptr->name]);
+            }
+            else
+            {
+                int j;
+                char buf2[80];
+
+                buf[0] = '\0';
+                buf2[0] = '\0';
+                for (j = 0; j < z_info->k_max; ++j)
+                {
+                    if ((k_info[j].tval == obj->tval) && (k_info[j].sval == obj->sval))
+                    {
+                        strip_name(buf2, j);
+                        break;
+                    }
+                }
+
+                strnfmt(buf, sizeof(buf), "%s %s", buf2, &e_name[e_ptr->name]);
+            }
+
+            Term_putstr(layout->list_col, row, name_w, attr, buf);
+            break;
+
+        case OBJ_NONE:
+        default:
+            break;
+        }
+    }
+}
+
+static void knowledge_monster_summary(char* buf, size_t buflen, int grp_cur)
+{
+    int i;
+    u32b known_uniques = 0;
+    u32b dead_uniques = 0;
+    u32b slay_count = 0;
+
+    for (i = 1; i < z_info->r_max - 1; i++)
+    {
+        monster_race* r_ptr = &r_info[i];
+        monster_lore* l_ptr = &l_list[i];
+
+        if ((r_ptr->rarity == 0) || (r_ptr->level > 25))
+            continue;
+
+        if (r_ptr->flags1 & RF1_UNIQUE)
+        {
+            if (l_ptr->tsights)
+            {
+                known_uniques++;
+                if (r_ptr->max_num == 0)
+                {
+                    dead_uniques++;
+                    slay_count++;
+                }
+            }
+            else if (know_monster_info || cheat_know)
+            {
+                known_uniques++;
+            }
+        }
+        else
+        {
+            slay_count += l_ptr->pkills;
+        }
+    }
+
+    if (monster_group_char[grp_cur] != (char*)-1L)
+    {
+        strnfmt(buf, buflen, "Total creatures slain: %u.", (unsigned)slay_count);
+    }
+    else
+    {
+        strnfmt(buf, buflen, "Known uniques: %u, slain uniques: %u.",
+            (unsigned)known_uniques, (unsigned)dead_uniques);
+    }
+}
+
+static void knowledge_display_monsters(const knowledge_browser_layout* layout,
+    monster_list_entry mon_idx[], int mon_cnt, int mon_cur, int mon_top)
+{
+    bool show_sym = (layout->term_wid >= 44);
+    bool show_kills = (layout->term_wid >= 56);
+    int kills_col = layout->term_wid - 5;
+    int sym_col = show_kills ? (kills_col - 2) : (layout->term_wid - (use_bigtile ? 2 : 1));
+    int name_w = layout->list_w;
+    int i;
+
+    if (show_sym)
+    {
+        int sym_name_w = sym_col - layout->list_col - 1;
+        if (sym_name_w < name_w)
+            name_w = sym_name_w;
+        if (name_w < 12)
+            show_sym = false;
+    }
+
+    if (show_sym)
+        Term_putstr(sym_col, layout->header_row, 3, TERM_SLATE, "Sym");
+    if (show_kills)
+        Term_putstr(kills_col, layout->header_row, 5, TERM_SLATE, "Kills");
+
+    for (i = 0; i < layout->list_rows; i++)
+    {
+        int row = layout->list_row + i;
+        int idx = mon_top + i;
+        int r_idx;
+        monster_race* r_ptr;
+        monster_lore* l_ptr;
+        byte attr;
+        char race_name[80];
+
+        Term_erase(layout->list_col, row, 255);
+
+        if (idx >= mon_cnt)
+            continue;
+
+        r_idx = mon_idx[idx].r_idx;
+        r_ptr = &r_info[r_idx];
+        l_ptr = &l_list[r_idx];
+        attr = (idx == mon_cur) ? TERM_L_BLUE : TERM_WHITE;
+
+        monster_desc_race(race_name, sizeof(race_name), r_idx);
+        Term_putstr(layout->list_col, row, name_w, attr, race_name);
+
+        if (show_sym)
+        {
+            Term_putch(sym_col, row, r_ptr->x_attr, r_ptr->x_char);
+            if (use_bigtile)
+            {
+                if ((byte)(r_ptr->x_attr) & 0x80)
+                    Term_putch(sym_col + 1, row, 255, -1);
+                else
+                    Term_putch(sym_col + 1, row, 0, ' ');
+            }
+        }
+
+        if (show_kills)
+        {
+            if (r_ptr->flags1 & RF1_UNIQUE)
+                put_str((r_ptr->max_num == 0) ? " dead" : "alive", row, kills_col);
+            else
+                put_str(format("%5d", l_ptr->pkills), row, kills_col);
+        }
+    }
+}
+
+static int knowledge_collect_curses(int curse_idx[])
+{
+    int id;
+    int count = 0;
+
+    for (id = 0; id < (int)z_info->cu_max; id++)
+    {
+        if (CURSE_SEEN(id))
+            curse_idx[count++] = id;
+    }
+
+    return count;
+}
+
+static cptr knowledge_curse_display_name(int idx)
+{
+    cptr raw = cu_name + cu_info[idx].name;
+
+    if (strncmp(raw, "Curse of ", 9) == 0)
+        raw += 9;
+    else if (strncmp(raw, "Burden of ", 10) == 0)
+        raw += 10;
+    else if (strncmp(raw, "Sorrow of ", 10) == 0)
+        raw += 10;
+    else if (strncmp(raw, "Doom of ", 8) == 0)
+        raw += 8;
+
+    return raw;
+}
+
+static cptr knowledge_blessing_display_name(int idx)
+{
+    if (cu_info[idx].blessing_name)
+    {
+        cptr raw = cu_name + cu_info[idx].blessing_name;
+
+        if (strncmp(raw, "Blessing of ", 12) == 0)
+            raw += 12;
+
+        return raw;
+    }
+
+    return knowledge_curse_display_name(idx);
+}
+
+static void knowledge_display_curses(const knowledge_browser_layout* layout,
+    int curse_idx[], int curse_cnt, int curse_cur, int curse_top)
+{
+    int i;
+
+    for (i = 0; i < layout->list_rows; i++)
+    {
+        int row = layout->list_row + i;
+        int idx = curse_top + i;
+        int id;
+        byte attr;
+
+        Term_erase(0, row, 255);
+
+        if (idx >= curse_cnt)
+            continue;
+
+        id = curse_idx[idx];
+        attr = (idx == curse_cur) ? TERM_L_BLUE : TERM_L_RED;
+        Term_putstr(0, row, layout->term_wid, attr,
+            knowledge_curse_display_name(id));
+    }
+}
+
+static void knowledge_detail_prompt(int row, bool steamdeck, cptr title,
+    cptr accept_label)
+{
+    Term_erase(0, row, 255);
+    if (steamdeck)
+    {
+        char hint_buf[48];
+        strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
+        Term_putstr(1, row, -1, TERM_L_WHITE, hint_buf);
+    }
+    else
+    {
+        Term_putstr(1, row, -1, TERM_L_WHITE, "(press any key)");
+    }
+
+    (void)inkey();
+    Term_clear();
+    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, title);
+}
+
+static void knowledge_show_curse_detail(int curse_id)
+{
+    int row = 2;
+    int wrap_width = Term->wid - 4;
+    int page_limit = Term->hgt - 3;
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    curse_type* c = &cu_info[curse_id];
+    cptr cname = cu_name + c->name;
+    cptr cdesc = cu_text + c->text;
+    cptr cpower = cu_text + c->power;
+    cptr bname = knowledge_blessing_display_name(curse_id);
+    cptr bdesc = (c->blessing_text) ? (cu_text + c->blessing_text) : "";
+    cptr bpower = (c->blessing_power) ? (cu_text + c->blessing_power) : "";
+    bool has_blessing_text = bdesc && *bdesc;
+    bool has_blessing_effect = bpower && *bpower;
+    bool has_blessing_info = has_blessing_text || has_blessing_effect
+        || (c->blessing_name != 0);
+    char effect_line[256];
+
+    if (wrap_width < 20)
+        wrap_width = 20;
+
+    if (steamdeck)
+    {
+        controller_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+
+    screen_save();
+    Term_clear();
+    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, "Known Curse:");
+
+    text_out_hook = text_out_to_screen;
+    text_out_wrap = wrap_width;
+
+    c_put_str(TERM_L_RED, cname, row++, 1);
+
+    if (row + count_wrapped_lines(cdesc, text_out_wrap, 3) >= page_limit)
+        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+    Term_gotoxy(3, row);
+    text_out_c(TERM_WHITE, cdesc);
+    row += count_wrapped_lines(cdesc, text_out_wrap, 3);
+
+    strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
+        (*cpower) ? cpower : "[no additional effect listed]");
+    if (row + count_wrapped_lines(effect_line, text_out_wrap, 3) >= page_limit)
+        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+    Term_gotoxy(3, row);
+    text_out_c(TERM_RED, "Effect: ");
+    text_out_c(TERM_L_DARK, (*cpower) ? cpower : "[no additional effect listed]");
+    row += count_wrapped_lines(effect_line, text_out_wrap, 3);
+
+    row++;
+
+    if (has_blessing_info)
+    {
+        char blessing_line[256];
+
+        if (row + 1 >= page_limit)
+            knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+
+        Term_putstr(3, row++, -1, TERM_L_GREEN, format("Blessing: %s", bname));
+
+        if (has_blessing_text)
+        {
+            if (row + count_wrapped_lines(bdesc, text_out_wrap, 5) >= page_limit)
+                knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+                    accept_label);
+            Term_gotoxy(5, row);
+            text_out_c(TERM_WHITE, bdesc);
+            row += count_wrapped_lines(bdesc, text_out_wrap, 5);
+        }
+
+        strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
+            has_blessing_effect ? bpower : "[no additional effect listed]");
+        if (row + count_wrapped_lines(blessing_line, text_out_wrap, 5) >= page_limit)
+            knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+                accept_label);
+        Term_gotoxy(5, row);
+        text_out_c(TERM_L_GREEN, "Effect: ");
+        text_out_c(TERM_WHITE,
+            has_blessing_effect ? bpower : "[no additional effect listed]");
+        row += count_wrapped_lines(blessing_line, text_out_wrap, 5);
+    }
+
+    if (row + 1 >= Term->hgt)
+        row = Term->hgt - 2;
+
+    knowledge_detail_prompt(row + 1, steamdeck, "Known Curse:", accept_label);
+    screen_load();
+}
+
+static bool knowledge_handle_page_input(char ch, int* page)
+{
+    int next_page = *page;
+
+    switch (ch)
+    {
+    case 'A':
+    case 'a':
+        next_page = KNOWLEDGE_PAGE_ARTEFACTS;
+        break;
+    case 'B':
+    case 'b':
+        next_page = KNOWLEDGE_PAGE_OBJECTS;
+        break;
+    case 'N':
+    case 'n':
+        next_page = KNOWLEDGE_PAGE_MONSTERS;
+        break;
+    case 'U':
+    case 'u':
+        next_page = KNOWLEDGE_PAGE_CURSES;
+        break;
+    case '\t':
+    case ']':
+    case 'I':
+    case 'i':
+        next_page = (*page + 1) % 4;
+        break;
+    case '[':
+    case 'E':
+    case 'e':
+        next_page = (*page + 3) % 4;
+        break;
+    default:
+        return false;
+    }
+
+    *page = next_page;
+    g_knowledge_last_page = next_page;
+    return true;
+}
+
+static bool knowledge_handle_tab_navigation(char ch, int* page, bool* tabs_focus,
+    bool can_focus_tabs)
+{
+    int d = target_dir(ch);
+
+    if (!*tabs_focus)
+    {
+        if (can_focus_tabs && d && !ddx[d] && (ddy[d] < 0))
+        {
+            *tabs_focus = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    if (d)
+    {
+        if (ddx[d] > 0)
+        {
+            *page = (*page + 1) % 4;
+            g_knowledge_last_page = *page;
+            return true;
+        }
+        if (ddx[d] < 0)
+        {
+            *page = (*page + 3) % 4;
+            g_knowledge_last_page = *page;
+            return true;
+        }
+        if (ddy[d] > 0)
+        {
+            *tabs_focus = false;
+            return true;
+        }
+        if (ddy[d] < 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool knowledge_is_recall_input(int ch)
+{
+    int confirm_key = steamdeck_confirm_key();
+
+    if (ch == ' ' || ch == 'R' || ch == 'r' || ch == 'X' || ch == 'x'
+        || ch == INPUT_BIND_CONFIRM)
+    {
+        return true;
+    }
+
+    if (confirm_key != GAMEPAD_BIND_NONE && ch == confirm_key)
+        return true;
+
+    return false;
+}
+
+void do_cmd_knowledge_browser_page(int page)
+{
+    int i;
+    int artefact_grp_idx[100];
+    int object_grp_idx[100];
+    int monster_grp_idx[100];
+    int* artefact_idx = mem_alloc_array(z_info->art_max, int);
+    object_list_entry* object_idx =
+        mem_alloc_array(z_info->k_max + z_info->e_max + 1, object_list_entry);
+    monster_list_entry* mon_idx =
+        mem_alloc_array(z_info->r_max, monster_list_entry);
+    int* curse_idx = mem_alloc_array(z_info->cu_max, int);
+    int artefact_grp_cnt = 0;
+    int object_grp_cnt = 0;
+    int monster_grp_cnt = 0;
+    int artefact_group_w = 0;
+    int object_group_w = 0;
+    int monster_group_w = 0;
+    int curse_cnt = 0;
+    int artefact_old = -1;
+    int object_old = -1;
+    int monster_old = -1;
+    knowledge_browser_state state = { 0 };
+    bool done = false;
+
+    page = knowledge_normalize_page(page);
+    g_knowledge_last_page = page;
+
+    FILE_TYPE(FILE_TYPE_TEXT);
+
+    extern int g_banner_force_redraw_remaining;
+    if (g_banner_force_redraw_remaining > 0)
+    {
+        g_banner_force_redraw_remaining = 0;
+        do_cmd_redraw();
+    }
+
+    for (i = 0; object_group_text[i] != NULL; i++)
+    {
+        int len = (int)strlen(object_group_text[i]);
+
+        if (len > artefact_group_w)
+            artefact_group_w = len;
+        if (len > object_group_w)
+            object_group_w = len;
+
+        if (collect_artefacts(i, artefact_idx))
+            artefact_grp_idx[artefact_grp_cnt++] = i;
+        if (collect_objects(i, NULL))
+            object_grp_idx[object_grp_cnt++] = i;
+    }
+
+    for (i = 0; monster_group_text[i] != NULL; i++)
+    {
+        int len = (int)strlen(monster_group_text[i]);
+
+        if (len > monster_group_w)
+            monster_group_w = len;
+        if ((monster_group_char[i] == (char*)-1L)
+            || collect_monsters(i, mon_idx, 0x01))
+        {
+            monster_grp_idx[monster_grp_cnt++] = i;
+        }
+    }
+
+    curse_cnt = knowledge_collect_curses(curse_idx);
+
+    screen_save();
+
+    while (!done)
+    {
+        knowledge_browser_layout layout;
+        int ch;
+
+        switch (page)
+        {
+        case KNOWLEDGE_PAGE_ARTEFACTS:
+        {
+            int artefact_cnt = 0;
+            int selected_artefact = -1;
+            char status[96];
+
+            knowledge_init_layout(&layout, artefact_group_w, true);
+            if (artefact_grp_cnt > 0)
+                artefact_cnt = collect_artefacts(
+                    artefact_grp_idx[state.group_cur[page]], artefact_idx);
+            knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
+                &state.group_top[page], artefact_grp_cnt, &state.entry_cur[page],
+                &state.entry_top[page], artefact_cnt, layout.list_rows);
+            if (artefact_grp_cnt > 0)
+                artefact_cnt = collect_artefacts(
+                    artefact_grp_idx[state.group_cur[page]], artefact_idx);
+
+            knowledge_draw_frame(&layout, page, true, "Artefact",
+                state.tabs_focus);
+            knowledge_display_groups(&layout, artefact_grp_idx, object_group_text,
+                artefact_grp_cnt, state.group_cur[page], state.group_top[page]);
+            knowledge_display_artefacts(&layout, artefact_idx, artefact_cnt,
+                state.entry_cur[page], state.entry_top[page]);
+
+            if (artefact_cnt > 0)
+            {
+                selected_artefact = artefact_idx[state.entry_cur[page]];
+                strnfmt(status, sizeof(status), "%d artefact%s in %s.",
+                    artefact_cnt, (artefact_cnt == 1) ? "" : "s",
+                    object_group_text[artefact_grp_idx[state.group_cur[page]]]);
+            }
+            else
+            {
+                SDL_strlcpy(status, "No known artefacts yet.", sizeof(status));
+            }
+            if (layout.status_row != layout.prompt_row)
+                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
+            knowledge_draw_prompt(&layout);
+
+            if (selected_artefact != artefact_old)
+            {
+                handle_stuff();
+                artefact_old = selected_artefact;
+            }
+
+            if (state.tabs_focus)
+            {
+                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+            }
+            else if (artefact_grp_cnt > 0)
+            {
+                if (state.column[page] == 0)
+                    Term_gotoxy(0, layout.list_row
+                        + (state.group_cur[page] - state.group_top[page]));
+                else
+                    Term_gotoxy(layout.list_col, layout.list_row
+                        + (state.entry_cur[page] - state.entry_top[page]));
+            }
+
+            ch = inkey();
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+
+            if (knowledge_handle_tab_navigation((char)ch, &page,
+                &state.tabs_focus,
+                (artefact_grp_cnt <= 0) || ((state.column[page] == 0)
+                    ? (state.group_cur[page] == 0)
+                    : (state.entry_cur[page] == 0))))
+            {
+                break;
+            }
+
+            if (knowledge_handle_page_input((char)ch, &page))
+                break;
+
+            if (knowledge_is_recall_input(ch))
+            {
+                if (artefact_cnt > 0)
+                    desc_art_fake(artefact_idx[state.entry_cur[page]]);
+                else
+                    bell("Nothing to recall.");
+                break;
+            }
+
+            switch (ch)
+            {
+            case ESCAPE:
+                done = true;
+                break;
+
+            default:
+                browser_cursor_with_rows((char)ch, &state.column[page],
+                    &state.group_cur[page], artefact_grp_cnt,
+                    &state.entry_cur[page], artefact_cnt, layout.list_rows);
+                break;
+            }
+            break;
+        }
+
+        case KNOWLEDGE_PAGE_OBJECTS:
+        {
+            int object_cnt = 0;
+            int tracked_kind = 0;
+            char status[112];
+
+            knowledge_init_layout(&layout, object_group_w, true);
+            if (object_grp_cnt > 0)
+                object_cnt = collect_objects(
+                    object_grp_idx[state.group_cur[page]], object_idx);
+            knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
+                &state.group_top[page], object_grp_cnt, &state.entry_cur[page],
+                &state.entry_top[page], object_cnt, layout.list_rows);
+            if (object_grp_cnt > 0)
+                object_cnt = collect_objects(
+                    object_grp_idx[state.group_cur[page]], object_idx);
+
+            knowledge_draw_frame(&layout, page, true, "Object",
+                state.tabs_focus);
+            knowledge_display_groups(&layout, object_grp_idx, object_group_text,
+                object_grp_cnt, state.group_cur[page], state.group_top[page]);
+            knowledge_display_objects(&layout, object_idx, object_cnt,
+                state.entry_cur[page], state.entry_top[page]);
+
+            if ((object_cnt > 0)
+                && (object_idx[state.entry_cur[page]].type == OBJ_NORMAL))
+            {
+                tracked_kind = object_idx[state.entry_cur[page]].idx;
+            }
+
+            if (object_cnt > 0)
+            {
+                object_list_entry* obj = &object_idx[state.entry_cur[page]];
+                if ((obj->type == OBJ_NORMAL) && k_info[obj->idx].aware)
+                {
+                    strnfmt(status, sizeof(status), "%d object%s in %s. Recall available.",
+                        object_cnt, (object_cnt == 1) ? "" : "s",
+                        object_group_text[object_grp_idx[state.group_cur[page]]]);
+                }
+                else
+                {
+                    strnfmt(status, sizeof(status),
+                        "%d object%s in %s. Recall works for identified base items.",
+                        object_cnt, (object_cnt == 1) ? "" : "s",
+                        object_group_text[object_grp_idx[state.group_cur[page]]]);
+                }
+            }
+            else
+            {
+                SDL_strlcpy(status, "No known objects yet.", sizeof(status));
+            }
+            if (layout.status_row != layout.prompt_row)
+                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
+            knowledge_draw_prompt(&layout);
+
+            if (tracked_kind != object_old)
+            {
+                object_kind_track(tracked_kind);
+                handle_stuff();
+                object_old = tracked_kind;
+            }
+
+            if (state.tabs_focus)
+            {
+                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+            }
+            else if (object_grp_cnt > 0)
+            {
+                if (state.column[page] == 0)
+                    Term_gotoxy(0, layout.list_row
+                        + (state.group_cur[page] - state.group_top[page]));
+                else
+                    Term_gotoxy(layout.list_col, layout.list_row
+                        + (state.entry_cur[page] - state.entry_top[page]));
+            }
+
+            ch = inkey();
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+
+            if (knowledge_handle_tab_navigation((char)ch, &page,
+                &state.tabs_focus,
+                (object_grp_cnt <= 0) || ((state.column[page] == 0)
+                    ? (state.group_cur[page] == 0)
+                    : (state.entry_cur[page] == 0))))
+            {
+                break;
+            }
+
+            if (knowledge_handle_page_input((char)ch, &page))
+                break;
+
+            if (knowledge_is_recall_input(ch))
+            {
+                if ((object_cnt > 0)
+                    && (object_idx[state.entry_cur[page]].type == OBJ_NORMAL)
+                    && k_info[object_idx[state.entry_cur[page]].idx].aware)
+                {
+                    desc_obj_fake(object_idx[state.entry_cur[page]].idx);
+                }
+                else
+                {
+                    bell("Nothing to recall.");
+                }
+                break;
+            }
+
+            switch (ch)
+            {
+            case ESCAPE:
+                done = true;
+                break;
+
+            default:
+                browser_cursor_with_rows((char)ch, &state.column[page],
+                    &state.group_cur[page], object_grp_cnt,
+                    &state.entry_cur[page], object_cnt, layout.list_rows);
+                break;
+            }
+            break;
+        }
+
+        case KNOWLEDGE_PAGE_MONSTERS:
+        {
+            int monster_cnt = 0;
+            int selected_r_idx = 0;
+            char status[96];
+
+            knowledge_init_layout(&layout, monster_group_w, true);
+            if (monster_grp_cnt > 0)
+                monster_cnt = collect_monsters(
+                    monster_grp_idx[state.group_cur[page]], mon_idx, 0x00);
+            knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
+                &state.group_top[page], monster_grp_cnt, &state.entry_cur[page],
+                &state.entry_top[page], monster_cnt, layout.list_rows);
+            if (monster_grp_cnt > 0)
+                monster_cnt = collect_monsters(
+                    monster_grp_idx[state.group_cur[page]], mon_idx, 0x00);
+
+            knowledge_draw_frame(&layout, page, true, "Monster",
+                state.tabs_focus);
+            knowledge_display_groups(&layout, monster_grp_idx, monster_group_text,
+                monster_grp_cnt, state.group_cur[page], state.group_top[page]);
+            knowledge_display_monsters(&layout, mon_idx, monster_cnt,
+                state.entry_cur[page], state.entry_top[page]);
+
+            if (monster_cnt > 0)
+            {
+                selected_r_idx = mon_idx[state.entry_cur[page]].r_idx;
+                knowledge_monster_summary(status, sizeof(status),
+                    monster_grp_idx[state.group_cur[page]]);
+            }
+            else
+            {
+                SDL_strlcpy(status, "No known monsters in this group yet.",
+                    sizeof(status));
+            }
+            if (layout.status_row != layout.prompt_row)
+                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
+            knowledge_draw_prompt(&layout);
+
+            if (selected_r_idx != monster_old)
+            {
+                monster_race_track(selected_r_idx);
+                handle_stuff();
+                monster_old = selected_r_idx;
+            }
+
+            if (state.tabs_focus)
+            {
+                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+            }
+            else if (monster_grp_cnt > 0)
+            {
+                if (state.column[page] == 0)
+                    Term_gotoxy(0, layout.list_row
+                        + (state.group_cur[page] - state.group_top[page]));
+                else
+                    Term_gotoxy(layout.list_col, layout.list_row
+                        + (state.entry_cur[page] - state.entry_top[page]));
+            }
+
+            ch = inkey();
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+
+            if (knowledge_handle_tab_navigation((char)ch, &page,
+                &state.tabs_focus,
+                (monster_grp_cnt <= 0) || ((state.column[page] == 0)
+                    ? (state.group_cur[page] == 0)
+                    : (state.entry_cur[page] == 0))))
+            {
+                break;
+            }
+
+            if (knowledge_handle_page_input((char)ch, &page))
+                break;
+
+            if (knowledge_is_recall_input(ch))
+            {
+                if (monster_cnt > 0)
+                {
+                    screen_roff(mon_idx[state.entry_cur[page]].r_idx, NULL);
+                    (void)inkey();
+                }
+                else
+                {
+                    bell("Nothing to recall.");
+                }
+                break;
+            }
+
+            switch (ch)
+            {
+            case ESCAPE:
+                done = true;
+                break;
+
+            default:
+                browser_cursor_with_rows((char)ch, &state.column[page],
+                    &state.group_cur[page], monster_grp_cnt,
+                    &state.entry_cur[page], monster_cnt, layout.list_rows);
+                break;
+            }
+            break;
+        }
+
+        case KNOWLEDGE_PAGE_CURSES:
+        default:
+        {
+            char status[256];
+
+            knowledge_init_layout(&layout, 0, false);
+            knowledge_clamp_list_state(&state.entry_cur[page], &state.entry_top[page],
+                curse_cnt, layout.list_rows);
+            knowledge_draw_frame(&layout, page, false, "Known curses",
+                state.tabs_focus);
+            knowledge_display_curses(&layout, curse_idx, curse_cnt,
+                state.entry_cur[page], state.entry_top[page]);
+
+            if (curse_cnt > 0)
+            {
+                curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
+                cptr cpower = cu_text + c->power;
+                strnfmt(status, sizeof(status), "Effect: %s",
+                    (*cpower) ? cpower : "[no additional effect listed]");
+            }
+            else
+            {
+                SDL_strlcpy(status, "No known curses yet.", sizeof(status));
+            }
+            if (layout.status_row != layout.prompt_row)
+                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
+            knowledge_draw_prompt(&layout);
+
+            if (state.tabs_focus)
+            {
+                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+            }
+            else if (curse_cnt > 0)
+            {
+                Term_gotoxy(0, layout.list_row
+                    + (state.entry_cur[page] - state.entry_top[page]));
+            }
+
+            ch = inkey();
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+
+            if (knowledge_handle_tab_navigation((char)ch, &page,
+                &state.tabs_focus, (curse_cnt <= 0) || (state.entry_cur[page] == 0)))
+            {
+                break;
+            }
+
+            if (knowledge_handle_page_input((char)ch, &page))
+                break;
+
+            if (knowledge_is_recall_input(ch))
+            {
+                if (curse_cnt > 0)
+                    knowledge_show_curse_detail(curse_idx[state.entry_cur[page]]);
+                else
+                    bell("Nothing to recall.");
+                break;
+            }
+
+            switch (ch)
+            {
+            case ESCAPE:
+                done = true;
+                break;
+
+            default:
+            {
+                int d = target_dir(ch);
+                int page_jump = (layout.list_rows > 0) ? layout.list_rows : 1;
+
+                if (curse_cnt <= 0)
+                {
+                    state.entry_cur[page] = 0;
+                    break;
+                }
+
+                if (!d)
+                    break;
+
+                if (ddx[d] && ddy[d])
+                    state.entry_cur[page] += ddy[d] * page_jump;
+                else if (ddy[d])
+                    state.entry_cur[page] += ddy[d];
+
+                if (state.entry_cur[page] < 0)
+                    state.entry_cur[page] = 0;
+                if (state.entry_cur[page] >= curse_cnt)
+                    state.entry_cur[page] = curse_cnt - 1;
+                break;
+            }
+            }
+            break;
+        }
+        }
+    }
+
+    mem_free_null(curse_idx);
+    mem_free_null(mon_idx);
+    mem_free_null(object_idx);
+    mem_free_null(artefact_idx);
+
+    screen_load();
+}
+
+/*
+ * Display known objects
+ */
+bool do_cmd_knowledge_supplies(const supply_menu_request* request)
+{
+    int i;
+    int max = 0;
+    int grp_cnt = SUPPLY_GROUP_MAX;
+    int grp_idx[SUPPLY_GROUP_MAX + 1];
+    int group_totals[SUPPLY_GROUP_MAX];
+    supply_list_entry* entries;
+    int grp_cur = 0;
+    int grp_top = 0;
+    int entry_cur = 0;
+    int entry_top = 0;
+    int column = 0;
+    bool flag = false;
+    bool redraw = true;
+    supply_menu_action forced_action = SUPPLY_MENU_ACTION_NONE;
+    bool hotkey_mode = false;
+    bool acted = false;
+    bool refresh_after_close = false;
+
+    if (request)
+    {
+        forced_action = request->action;
+        hotkey_mode = request->hotkey_mode;
+        if (request->focus_group && request->group >= 0 && request->group < SUPPLY_GROUP_MAX)
+            grp_cur = request->group;
+        if (forced_action != SUPPLY_MENU_ACTION_NONE)
+            column = 1;
+    }
+
+    for (i = 0; i < SUPPLY_GROUP_MAX; i++)
+    {
+        int len = strlen(supply_group_text[i]) + 5;
+        if (len > max)
+            max = len;
+        grp_idx[i] = i;
+    }
+    grp_idx[grp_cnt] = -1;
+    max += 2;
+
+    entries = mem_alloc_array(z_info->k_max, supply_list_entry);
+
+    screen_save();
+
+    while (!flag)
+    {
+        int entry_cnt;
+        knowledge_browser_layout layout;
+        int count_col;
+        int sym_col;
+        int used_weight;
+        int max_weight;
+        char weight_buf[80];
+
+        compute_supply_group_totals(group_totals);
+        knowledge_init_layout(&layout, max, true);
+        count_col = layout.term_wid - 6;
+        sym_col = layout.term_wid - (use_bigtile ? 2 : 1);
+        used_weight = supplies_total_weight();
+        max_weight = supplies_current_weight_cap();
+        strnfmt(weight_buf, sizeof(weight_buf),
+            "Supply weight: %d.%1d/%d.%1d lb used",
+            used_weight / 10, used_weight % 10,
+            max_weight / 10, max_weight % 10);
+
+        if (count_col <= layout.list_col + 8)
+            count_col = layout.list_col + 8;
+        if (sym_col <= count_col + 4)
+            sym_col = count_col + 4;
+        if (sym_col >= layout.term_wid)
+            sym_col = layout.term_wid - (use_bigtile ? 2 : 1);
+        if (count_col >= sym_col)
+            count_col = sym_col - 4;
+
+        if (grp_cur >= grp_cnt)
+            grp_cur = grp_cnt - 1;
+        if (grp_cur < 0)
+            grp_cur = 0;
+
+        entry_cnt = collect_supply_entries(grp_idx[grp_cur], entries);
+
+        if (entry_cnt == 0)
+        {
+            entry_cur = 0;
+            entry_top = 0;
+            if (column)
+                column = 0;
+        }
+        else
+        {
+            if (entry_cur >= entry_cnt)
+                entry_cur = entry_cnt - 1;
+            if (entry_cur < 0)
+                entry_cur = 0;
+
+            if (entry_cur < entry_top)
+                entry_top = entry_cur;
+            if (entry_cur >= entry_top + layout.list_rows)
+                entry_top = entry_cur - layout.list_rows + 1;
+            if (entry_top < 0)
+                entry_top = 0;
+        }
+
+        if (grp_cur < grp_top)
+            grp_top = grp_cur;
+        if (grp_cur >= grp_top + layout.list_rows)
+            grp_top = grp_cur - layout.list_rows + 1;
+        if (grp_top < 0)
+            grp_top = 0;
+
+        if (redraw)
+        {
+            Term_clear();
+            Term_putstr(0, layout.title_row, layout.term_wid, TERM_L_WHITE + TERM_SHADE,
+                "Supplies - Herbs, Potions, Gems");
+            Term_putstr(0, layout.tabs_row, layout.term_wid, TERM_SLATE, weight_buf);
+            Term_putstr(0, layout.header_row, layout.group_w, TERM_SLATE, "Group");
+            Term_putstr(layout.list_col, layout.header_row, layout.list_w, TERM_SLATE,
+                "Name");
+            Term_putstr(count_col, layout.header_row, 3, TERM_SLATE, "Qty");
+            Term_putstr(sym_col, layout.header_row, 3, TERM_SLATE, "Sym");
+
+            for (i = 0; i < layout.term_wid; i++)
+                Term_putch(i, layout.divider_row, TERM_L_DARK, '=');
+
+            for (i = 0; i < layout.list_rows; i++)
+                Term_putch(layout.divider_col, layout.list_row + i, TERM_L_DARK, '|');
+
+            redraw = false;
+        }
+
+        display_supply_group_list(0, layout.list_row, layout.group_w, layout.list_rows, grp_idx,
+            grp_cur, grp_top, group_totals);
+        display_supply_list(layout.list_col, layout.list_row, layout.list_rows,
+            entries, entry_cnt, entry_cur, entry_top, count_col, sym_col,
+            grp_idx[grp_cur], column);
+
+        /* Bottom bar: grey text with white first letters */
+        Term_erase(0, layout.prompt_row, 255);
+        if (steamdeck_controls_active()) {
+            char recall_label[16];
+            char use_label[16];
+            char confirm_label[16];
+            char drop_label[16];
+            char back_label[16];
+            char prompt_buf[160];
+
+            /* Steam Deck UI: RS Right=recall, X=use, A=confirm, d=drop, B=back */
+            controller_prompt_label(steamdeck_info_key(), "RS Right", recall_label, sizeof(recall_label));
+            controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
+            controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
+            controller_prompt_label('d', "d", drop_label, sizeof(drop_label));
+            controller_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
+
+            strnfmt(prompt_buf, sizeof(prompt_buf),
+                "D-pad move  [%s] recall  [%s/%s] use  [%s] drop  [%s] back",
+                recall_label, use_label, confirm_label, drop_label, back_label);
+            Term_putstr(1, layout.prompt_row, -1, TERM_L_DARK, prompt_buf);
+        } else {
+            Term_putstr(0, layout.prompt_row, layout.term_wid, TERM_SLATE,
+                "Dir move  r recall  u/Space use  d drop  Esc");
+        }
+
+        if (!column)
+            Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
+        else if (entry_cnt)
+            Term_gotoxy(layout.list_col, layout.list_row + (entry_cur - entry_top));
+        else
+            Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
+
+        char ch = inkey();
+        if (steamdeck_controls_active() && ch == steamdeck_back_key())
+            ch = ESCAPE;
+
+        if ((ch == '\r' || ch == '\n' || (steamdeck_controls_active() && ch == steamdeck_confirm_key())) && column && entry_cnt)
+        {
+            if (forced_action == SUPPLY_MENU_ACTION_USE)
+                ch = 'u';
+            else if (forced_action == SUPPLY_MENU_ACTION_DROP)
+                ch = 'd';
+        }
+
+        switch (ch)
+        {
+        case ESCAPE:
+            flag = true;
+            break;
+
+        case 'R':
+        case 'r':
+        case 'X':
+        case 'x':
+            if (!column && entry_cnt)
+            {
+                column = 1;
+            }
+            else if (column && entry_cnt)
+            {
+                supply_list_entry* entry = &entries[entry_cur];
+                if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+                {
+                    object_info_screen(&inventory[entry->item_idx]);
+                    redraw = true;
+                }
+                else if (entry->k_idx >= 0)
+                {
+                    object_kind* k_ptr = &k_info[entry->k_idx];
+                    if (k_ptr->aware)
+                    {
+                        desc_obj_fake(entry->k_idx);
+                        redraw = true;
+                    }
+                    else
+                    {
+                        bell("You have not identified that yet.");
+                        msg_print("You have not identified that yet.");
+                    }
+                }
+            }
+            break;
+
+        case 'u':
+        case 'U':
+        case ' ':
+            if (!column && entry_cnt)
+            {
+                column = 1;
+            }
+            else if (column && entry_cnt)
+            {
+                supply_list_entry* entry = &entries[entry_cur];
+                bool handled = false;
+
+                if (death_spectator_active())
+                {
+                    msg_print("You can no longer take that action.");
+                    break;
+                }
+
+                if (entry->item_idx == SUPPLIES_INDEX && entry->supply_idx >= 0)
+                {
+                    handled = supplies_menu_use_entry(entry);
+                }
+                else if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+                {
+                    object_type* o_ptr = &inventory[entry->item_idx];
+
+                    switch (o_ptr->tval)
+                    {
+                    case TV_FOOD:
+                        do_cmd_eat_food(o_ptr, entry->item_idx);
+                        handled = true;
+                        break;
+                    case TV_POTION:
+                        do_cmd_quaff_potion(o_ptr, entry->item_idx);
+                        handled = true;
+                        break;
+                    case TV_STAFF:
+                        do_cmd_activate_staff(o_ptr, entry->item_idx);
+                        handled = true;
+                        break;
+                    case TV_GEM:
+                        do_cmd_use_gem(o_ptr, entry->item_idx);
+                        handled = true;
+                        break;
+                    default:
+                        bell("Cannot use that item here!");
+                        break;
+                    }
+
+                    if (handled)
+                        handle_stuff();
+                }
+                else
+                {
+                    bell("You do not have any of that item.");
+                    msg_print("You do not have any of that item.");
+                }
+
+                if (handled)
+                {
+                    acted = true;
+                    redraw = true;
+                    refresh_after_close = true;
+                    if (hotkey_mode || forced_action == SUPPLY_MENU_ACTION_USE)
+                        flag = true;
+                }
+            }
+            break;
+
+        case 'd':
+        case 'D':
+            if (!column && entry_cnt)
+            {
+                column = 1;
+            }
+            else if (column && entry_cnt)
+            {
+                supply_list_entry* entry = &entries[entry_cur];
+                bool dropped = false;
+
+                if (death_spectator_active())
+                {
+                    msg_print("You can no longer take that action.");
+                    break;
+                }
+
+                if (entry->item_idx == SUPPLIES_INDEX && entry->supply_idx >= 0)
+                {
+                    dropped = supplies_menu_drop_entry(entry);
+                }
+                else if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+                {
+                    do_cmd_drop_item_by_index(entry->item_idx);
+                    dropped = true;
+                }
+                else
+                {
+                    bell("Nothing to drop here.");
+                    msg_print("Nothing to drop here.");
+                }
+
+                if (dropped)
+                {
+                    acted = true;
+                    redraw = true;
+                    handle_stuff();
+                    refresh_after_close = true;
+                    if (hotkey_mode || forced_action == SUPPLY_MENU_ACTION_DROP)
+                        flag = true;
+                }
+            }
+            break;
+
+        default:
+            browser_cursor_with_rows(ch, &column, &grp_cur, grp_cnt, &entry_cur,
+                entry_cnt, layout.list_rows);
+            break;
+        }
+    }
+
+    mem_free_null(entries);
+    screen_load();
+
+    if (refresh_after_close)
+    {
+        p_ptr->redraw |= (PR_MAP);
+        p_ptr->window |= (PW_MESSAGE);
+        handle_stuff();
+        Term_fresh();
+    }
+
+    return acted;
+}
+
+void do_cmd_knowledge_objects(void)
+{
+    do_cmd_knowledge_browser_page(KNOWLEDGE_PAGE_OBJECTS);
+}
+
+/*
+ * Display kill counts
+ */
+void do_cmd_knowledge_kills(void)
+{
+    int n, i;
+
+    SDL_IOStream* fff;
+
+    char file_name[1024];
+
+    u16b* who;
+    //	u16b why = 4;
+
+    /* Temporary file */
+    fff = sdl_fopen_temp(file_name, sizeof(file_name));
+
+    /* Failure */
+    if (!fff)
+        return;
+
+    /* Allocate the "who" array */
+    who = mem_alloc_array(z_info->r_max, u16b);
+
+    /* Collect matching monsters */
+    for (n = 0, i = 1; i < z_info->r_max - 1; i++)
+    {
+        // monster_race *r_ptr = &r_info[i];
+        monster_lore* l_ptr = &l_list[i];
+
+        /* Require non-unique monsters */
+        // if (r_ptr->flags1 & RF1_UNIQUE) continue;
+
+        /* Collect "appropriate" monsters */
+        if (l_ptr->pkills > 0)
+            who[n++] = i;
+    }
+
+    /* Select the sort method */
+    // ang_sort_comp = ang_sort_comp_hook;
+    // ang_sort_swap = ang_sort_swap_hook;
+
+    /* Sort by kills (and level) */
+    // ang_sort(who, &why, n);
+
+    /* Print the monsters (highest kill counts first) */
+    for (i = n - 1; i >= 0; i--)
+    {
+        monster_race* r_ptr = &r_info[who[i]];
+        monster_lore* l_ptr = &l_list[who[i]];
+
+        if (r_ptr->flags1 & (RF1_UNIQUE))
+        {
+            /* Print a message */
+            SDL_IOprintf(fff, "         %-40s\n", (r_name + r_ptr->name));
+        }
+        else
+        {
+            /* Print a message */
+            SDL_IOprintf(
+                fff, "  %5d  %-40s\n", l_ptr->pkills, (r_name + r_ptr->name));
+        }
+    }
+
+    /* Free the "who" array */
+    mem_free_null(who);
+
+    /* Close the file */
+    sdl_fclose(fff);
+
+    /* Display the file contents */
+    show_file(file_name, "Kill counts", 0);
+
+    /* Remove the file */
+    fd_kill(file_name);
+}
+
+/*
+ * Interact with "knowledge"
+ */
+void do_cmd_knowledge(void)
+{
+    char ch;
+
+    /* File type is "TEXT" */
+    FILE_TYPE(FILE_TYPE_TEXT);
+
+    /* Clear any active banner before opening knowledge menu */
+    extern int g_banner_force_redraw_remaining;
+    if (g_banner_force_redraw_remaining > 0) {
+        g_banner_force_redraw_remaining = 0;
+        do_cmd_redraw();
+    }
+
+    /* Save screen */
+    screen_save();
+
+    /* Interact until done */
+    while (1)
+    {
+        /* Clear screen */
+        Term_clear();
+
+        /* Ask for a choice */
+        prt("Display current knowledge", 2, 0);
+
+        /* Give some choices */
+        prt("(1) Display known lore browser", 4, 5);
+        prt("(2) Display supplies overview", 5, 5);
+        prt("(3) Display names of the fallen", 6, 5);
+        prt("(4) Display kill counts", 7, 5);
+
+        /*allow the player to see the notes taken if that option is selected*/
+        c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
+        prt("(6) Display oath status", 9, 5);
+
+        /* Prompt */
+        prt("Command: ", 11, 0);
+
+        /* Prompt */
+        ch = inkey();
+
+        /* Done */
+        if (ch == ESCAPE)
+            break;
+
+        /* Known lore browser */
+        if (ch == '1')
+        {
+            do_cmd_knowledge_browser_page(g_knowledge_last_page);
+        }
+
+        /* Scores */
+        else if (ch == '2')
+        {
+            do_cmd_knowledge_supplies(NULL);
+        }
+
+        /* Scores */
+        else if (ch == '3')
+        {
+            show_scores_interactive(true);
+        }
+
+        /* Kill counts */
+        else if (ch == '4')
+        {
+            do_cmd_knowledge_kills();
+        }
+
+        /* Notes file, if one exists */
+        else if (ch == '5')
+        {
+            /* Spawn */
+            do_cmd_knowledge_notes();
+        }
+
+        /* Oath status */
+        else if (ch == '6')
+        {
+            do_cmd_knowledge_oaths();
+        }
+
+        /* Unknown option */
+        else
+        {
+            bell("Illegal command for knowledge!");
+        }
+
+        /* Flush messages */
+        message_flush();
+    }
+
+    /* Load screen */
+    screen_load();
+}
+

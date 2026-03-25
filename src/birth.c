@@ -15,8 +15,9 @@
 #include "log/log.h"
 #include "main-sdl.h"
 #include "player/killer.h"
-#include "z-term.h"
 #include "metarun.h"
+#include "ui/ui-character-screen.h"
+#include "z-term.h"
 
 /* Three-column layout constants (same as cmd4.c) */
 #define COL_SKILL 2
@@ -930,7 +931,7 @@ static bool birth_show_compact_description_after_assignment(bool steamdeck)
         if (hgt < 1)
             hgt = 24;
 
-        display_player(100);
+        display_player(DISPLAY_PLAYER_MODE_COMPACT_DESC_FLAGS);
 
         prompt_row = hgt - 1;
         if (prompt_row < 0)
