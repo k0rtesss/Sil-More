@@ -196,6 +196,7 @@ set(SIL_MORE_SOURCES_SPELL
 set(SIL_MORE_SOURCES_PLAYER
     src/player/ability_log.c
     src/player/player-calc.c
+    src/player/player-resources.c
     src/player/player-song-disguise.c
     src/player/player-song-duels.c
     src/player/player-song-effects.c
@@ -208,8 +209,16 @@ set(SIL_MORE_SOURCES_PLAYER
     src/player-xp.c
     src/targeting.c
     src/thrall_quest.c
-    src/xtra1.c
-    src/xtra2.c
+)
+
+set(SIL_MORE_SOURCES_QUEST
+    src/quest/quest-niena.c
+    src/quest/quest-orome.c
+    src/quest/quest-rewards.c
+    src/quest/quest-tulkas.c
+    src/quest/quest-ui.c
+    src/quest/quest-valar.c
+    src/quest/quest-varda.c
 )
 
 set(SIL_MORE_SOURCES_SMITHING
@@ -243,6 +252,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/colors.c
     src/ui/ui-file-viewer.c
     src/ui/ui-help.c
+    src/ui/ui-status.c
     src/ui/story_font.c
 )
 
@@ -279,6 +289,7 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_MONSTER_AND_COMBAT}
     ${SIL_MORE_SOURCES_SPELL}
     ${SIL_MORE_SOURCES_PLAYER}
+    ${SIL_MORE_SOURCES_QUEST}
     ${SIL_MORE_SOURCES_SMITHING}
     ${SIL_MORE_SOURCES_SAVE_AND_META}
     ${SIL_MORE_SOURCES_SCORE}

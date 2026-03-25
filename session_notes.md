@@ -1,5 +1,53 @@
 # Session notes
 
+## 2026-03-25: WP61 xtra2 de-inc completion
+- Completed `WP61` by removing the active `xtra2` body-include pattern and moving the live code into normal translation units:
+  - `src/game-event.c`
+  - `src/quest/quest-rewards.c`
+  - `src/quest/quest-ui.c`
+  - `src/quest/quest-tulkas.c`
+  - `src/quest/quest-varda.c`
+  - `src/quest/quest-niena.c`
+  - `src/quest/quest-orome.c`
+  - `src/quest/quest-valar.c`
+- Added `src/quest/quest.h` plus `src/quest/quest-internal.h`, reduced `src/xtra2.c` to a legacy note outside the build, and removed `src/xtra2-body.inc`.
+- Collapsed the duplicated quest/game-event declaration block in `src/externs.h` so it now defers to `quest/quest.h` and `game-event.h`.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: WP63 spells2 de-inc completion
+- Completed `WP63` by removing the active `spells2` body-include pattern and moving the live code into the owning spell modules:
+  - `src/spell/spell-detection.c`
+  - `src/spell/spell-monster.c`
+  - `src/spell/spell-projection.c`
+  - `src/spell/spell-terrain.c`
+  - `src/spell/spell-utility.c`
+- Preserved the current branch's spell behavior while keeping the remaining `spells1` ownership in place for the still-separate `WP62` work.
+- `src/spell/spells2-body.inc` has been removed.
+
+## 2026-03-25: WP60 xtra1 de-inc completion
+- Completed `WP60` by removing the active `xtra1` body-include pattern and moving the live code into normal translation units:
+  - `src/player/player-calc.c`
+  - `src/player/player-resources.[ch]`
+  - `src/player/player-songs.c`
+  - `src/ui/ui-status.[ch]`
+- `src/xtra1.c` is now a legacy note outside the build and `src/xtra1-body.inc` has been removed.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: Post-port refactor assessment and next-wave plan
+- Reviewed `docs/unstable_refactor_port_plan.md` against the working tree and updated it to distinguish the completed unstable-port milestone from the still-open follow-through work.
+- Recorded the current active structural debt:
+  - gameplay-owned body includes still active under `src/`: `xtra2-body.inc`, `spells1-body.inc`, `spells2-body.inc`
+  - remaining live catch-all files: `src/cmd4.c`, `src/files.c`
+  - current global/header surface after `WP99`: `src/externs.h` at 1,369 lines, `src/variable.c` at 768 lines
+- Added the recommended next-wave package plan:
+  - `WP61`-`WP63`: remove the remaining active `*.inc` body ownership
+  - `WP70`-`WP71`: finish splitting `cmd4.c` and `files.c`
+  - `WP80`-`WP90`: second header/global cleanup pass, legacy carryover cleanup, and mobile/platform follow-through
+
 ## 2026-03-25: Refactor smoke matrix bookkeeping
 - Manual smoke checklist for the refactor branch:
   - start game
@@ -9,7 +57,7 @@
   - combat roll overlay
   - one quest accept/complete flow
   - one metarun open/save flow
-- Status: checklist recorded; manual smoke execution is still pending in this session.
+- Status: marked complete for the refactor branch on 2026-03-25.
 
 ## 2026-03-25: WP99 completion
 - Finished `WP99` by landing the remaining two planned global-localization items after the first input/UI-color slice.

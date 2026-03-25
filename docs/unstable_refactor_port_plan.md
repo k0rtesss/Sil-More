@@ -5,6 +5,16 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 
 ## Current Status
 - Status date: 2026-03-25.
+- The unstable-port milestone is structurally landed, but the overall refactor is not finished completely yet:
+  - `Phase 8` is still open in practice.
+  - Refactor-generated gameplay body includes under `src/` have now been eliminated:
+    - `src/xtra1-body.inc`, `src/xtra2-body.inc`, `src/spell/spells1-body.inc`, and `src/spell/spells2-body.inc` have all been removed from the working tree.
+  - Remaining active large files worth splitting after the unstable port:
+    - `src/cmd4.c`: 14,226 lines
+    - `src/files.c`: 7,118 lines
+  - Current header/global surface is improved from the original baseline, but still above the intended end state:
+    - `src/externs.h`: 1,369 lines and about 1,181 `extern` declarations
+    - `src/variable.c`: 768 lines
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -52,6 +62,14 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/ui/colors.c` now owns the background-color policy behind `ui_colors_use_backgrounds()`, so `cave.c` no longer reads `use_background_colors` directly.
   - `src/runtime-cli.[ch]` now own the runtime CLI flag state, so the old `arg_*` globals no longer live in `variable.c` / `externs.h`.
   - `src/project-path.h` plus the new `projectable_with_ignore()` path now replace the old `project_path_ignore*` globals with per-call projectile masking for monster ranged-position scoring.
+- `WP60` is now structurally complete in the working tree:
+  - `src/player/player-calc.c`, `src/player/player-resources.c`, `src/player/player-songs.c`, and `src/ui/ui-status.c` now own the former active `xtra1` body sections as normal translation units.
+  - `src/xtra1.c` is now reduced to a legacy note outside the build.
+  - `src/xtra1-body.inc` has been removed from the tree.
+- `WP61` is now structurally complete in the working tree:
+  - `src/game-event.c` plus `src/quest/quest-rewards.c`, `quest-ui.c`, `quest-tulkas.c`, `quest-varda.c`, `quest-niena.c`, `quest-orome.c`, and `quest-valar.c` now own the former active `xtra2` body sections as normal translation units.
+  - `src/xtra2.c` is now reduced to a legacy note outside the build.
+  - `src/xtra2-body.inc` has been removed from the tree.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
@@ -62,6 +80,22 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after starting the first `WP99` header/global cleanup slice on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing the remaining `WP99` projectile-path/runtime-CLI cleanup on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
   - `.\build-cmake.bat` succeeded again after completing `WP99` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing `WP61` on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
+
+## Completion Assessment
+- The original unstable-port objective is effectively complete as an intermediate architecture:
+  - the grouped subsystem build graph is live
+  - most former monolith entry files are already reduced to legacy notes outside the build
+  - standard and portable builds both pass on the new target layout
+- The broader refactor is not complete:
+  - the body-include cleanup wave is complete, but the last large ownership bottlenecks are still `src/cmd4.c` and `src/files.c`
+  - the last big live catch-all files are still `src/cmd4.c` and `src/files.c`
+  - `externs.h` and `variable.c` are smaller, but still too broad for the intended subsystem ownership model
+- Priority judgement for the next wave:
+  - finish splitting the still-live catch-all files first
+  - then run the next aggressive header/global cleanup pass
+- Lower priority:
+  - excluded legacy carryover files such as `src/generate.c` should be cleaned up later, after active build code no longer depends on transitional bodies or wrappers
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -71,7 +105,21 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - Consequence: do not blindly cherry-pick unstable refactor commits. Use them as a structural reference and port each subsystem onto the current branch with three-way diffing.
 
 ## Evidence From The Current Tree
-- Biggest monoliths on the current branch:
+- Remaining active refactor debt as of 2026-03-25:
+  - Active refactor-generated code-body includes:
+    - none under `src/`
+  - Legacy note wrappers now outside the build:
+    - `src/xtra1.c`
+    - `src/xtra2.c`
+  - Largest active built catch-all files:
+    - `src/cmd4.c`: 14,226 lines
+    - `src/files.c`: 7,118 lines
+  - Largest excluded legacy carryover file still present in the tree:
+    - `src/generate.c`: 16,132 lines
+  - Current global/header surface after `WP99`:
+    - `src/externs.h`: 1,369 lines and about 1,181 `extern` declarations
+    - `src/variable.c`: 768 lines
+- Original baseline hotspot snapshot that motivated the port:
   - `src/cmd4.c`: 20,357 lines
   - `src/generate.c`: 17,554 lines
   - `src/files.c`: 9,413 lines
@@ -112,6 +160,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 8. Keep gameplay logic free of SDL/UI details wherever possible. Mobile work depends on that boundary.
 9. One subagent owns one write set. Avoid overlapping edits to the same subsystem.
 10. Each work package ends with a compiling build and a focused smoke test before the next wave lands.
+11. Do not introduce new code-bearing `*.inc` files under `src/`. The current body includes are transitional debt to remove, not a pattern to extend.
 
 ## Target Architecture
 
@@ -126,12 +175,13 @@ Use the unstable layout as the baseline and keep growing it:
 | `object2.c` | `src/object/object-allocation.c`, `object-inventory.c`, `object-knowledge.c`, `object-list.c`, `object-make.c`, `object-place.c` |
 | `drop_system.c` | `src/drop/drop-system-catalog.c`, `drop-system-difficulty.c`, `drop-system-selection.c` plus a thin `drop_system.c` facade if still needed |
 | `init1.c` | `src/init/` parser and loader modules |
-| `files.c` | `src/signals.c`, `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c`, keep non-UI filesystem logic in `files.c` or move later to a clearer module |
-| `xtra1.c` | `src/player/ability_log.c`, `encumbrance.c`, `identification.c`, `weapon_stats.c` |
-| `xtra2.c` | `src/targeting.c`, `src/player-status.c`, `src/player-xp.c`, `src/monster-death.c` |
-| `spells1.c`, `spells2.c` | `src/spell/` plus `src/player/player-songs*.c`, `player-calc.c`, `game-event.c` |
+| `files.c` | `src/signals.c`, `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c`, then split the remaining non-UI filesystem/runtime work into clearer `src/fs/`, `src/ui/`, and score/runtime-owned modules |
+| `xtra1.c` | `src/player/ability_log.c`, `encumbrance.c`, `identification.c`, `weapon_stats.c`, then finish the remainder in `src/player/player-resources.c` and `src/ui/ui-status.c` |
+| `xtra2.c` | `src/targeting.c`, `src/player-status.c`, `src/player-xp.c`, `src/monster-death.c`, `src/game-event.c`, then finish the remaining quest/UI code under a new `src/quest/` directory |
+| `spells1.c`, `spells2.c` | `src/spell/` plus `src/player/player-songs*.c`, `player-calc.c`, `game-event.c`, with the temporary `spells*-body.inc` ownership removed into normal translation units |
 | `melee1.c`, `melee2.c` | `src/melee/` |
 | `ui/ui-smithing.c` | `src/smithing/` and `src/ui/smithing/` |
+| `cmd4.c` | additional `src/cmd/ui/` family files plus `src/ui/` render/support helpers instead of one catch-all command/UI source |
 
 ### Header Layout Target
 - Public headers only for real subsystem APIs.
@@ -319,10 +369,98 @@ Done when:
 Goal: delete transitional glue once the architecture is stable.
 
 Tasks:
-- Remove compatibility wrappers that only existed during the move.
+- Remove refactor-generated `*.inc` body includes by moving each section into real owning `.c` files.
+- Reduce or delete compatibility wrappers that only existed to include those transitional bodies.
+- Split the remaining active catch-all files that still block ownership (`cmd4.c`, `files.c`).
 - Collapse duplicated declarations that exist in both `externs.h` and new subsystem headers.
 - Tighten `const` correctness and return types.
 - Trim any empty or one-function modules that do not deserve their own file after the dust settles.
+- Convert excluded legacy carryover monoliths into true notes only after active code no longer depends on transitional bodies.
+
+Done when:
+- No code-bearing `*.inc` file remains under `src/`.
+- `cmd4.c` and `files.c` are reduced to small facades or legacy notes.
+- Transitional declaration duplication is removed from `externs.h`.
+
+### Phase 9: De-Inc The Active Split Modules
+Goal: replace the temporary include-body refactor pattern with normal C translation units and clear subsystem ownership.
+
+Tasks:
+- `xtra1` remainder:
+  - Move status-line, frame, redraw, and `handle_stuff()` ownership into `src/ui/`.
+  - Move `calc_voice()`, `calc_hitpoints()`, `calc_torch()`, and other player-resource calculations into dedicated `src/player/` modules.
+  - Delete `src/xtra1-body.inc` and reduce `src/xtra1.c` to a note or remove it from the build.
+- `xtra2` remainder:
+  - Move quest interaction, quest reward, and quest UI/typewriter logic into a new `src/quest/` directory with narrow headers.
+  - Keep only genuinely generic narrative/event helpers in `src/game-event.c`.
+  - Delete `src/xtra2-body.inc` and reduce `src/xtra2.c` to a note or remove it from the build.
+- `spells1`/`spells2` remainder:
+  - Move each body section into the owning `src/spell/*.c` or `src/player/player-song*.c` file.
+  - Add one `spell-internal.h` private header only if shared private declarations are truly needed.
+  - Delete `src/spell/spells1-body.inc` and `src/spell/spells2-body.inc`.
+
+Rules:
+- This phase is mechanical first. No gameplay rebalance mixed into the move.
+- Prefer real private headers plus `static` helpers over macro-selected body includes.
+- Preserve mobile-friendly boundaries: no SDL leakage back into gameplay modules.
+
+Done when:
+- `rg --files -g '*.inc' src` no longer returns gameplay-owned code-body includes.
+
+### Phase 10: Finish The Remaining Live Monolith Splits
+Goal: remove the last large active files that still own too many unrelated behaviors.
+
+Tasks:
+- Split `src/cmd4.c` into additional `src/cmd/ui/` families, likely:
+  - `cmd-ui-character.c`
+  - `cmd-ui-abilities.c`
+  - `cmd-ui-main-menu.c`
+  - `cmd-ui-options.c`
+  - `cmd-ui-keybinds.c`
+  - `cmd-ui-knowledge.c`
+  - `cmd-ui-visuals.c`
+  - `cmd-ui-nearby.c`
+- Move pure rendering helpers out of command files into `src/ui/` when they no longer need command-state ownership.
+- Split `src/files.c` by concern:
+  - `src/fs/` for pref-file parsing and path/file helpers
+  - `src/ui/` for character/tutorial/story/tomb screens
+  - score/runtime-owned modules for score entry, close-game, and metarun/save cleanup flow
+
+Validation focus:
+- character sheet and compact layouts
+- options/keybind/controller menus
+- knowledge browser and nearby-object/monster views
+- story/tomb/death flow
+- save/close-game path
+
+Done when:
+- `cmd4.c` is no longer a general UI catch-all.
+- `files.c` no longer mixes pref parsing, player display, story screens, score entry, and shutdown flow in one file.
+
+### Phase 11: Header And Global Cleanup Round 2
+Goal: capitalize on the real module ownership created by Phases 9 and 10.
+
+Tasks:
+- Remove declarations from `externs.h` that now have obvious subsystem homes.
+- Move any remaining file-local or subsystem-local globals out of `variable.c`.
+- Replace ad hoc cross-subsystem includes with narrow public headers and private `*-internal.h` files.
+
+Near-term targets after this phase:
+- `src/externs.h` under 1,100 lines
+- `src/variable.c` under 650 lines
+
+Longer-term targets:
+- keep the original ambition of driving `externs.h` below 600 lines
+- keep driving `variable.c` toward true process-wide state only
+
+### Phase 12: Mobile-Friendly Boundary Follow-Through
+Goal: keep Android and future iOS support as a first-class architectural constraint.
+
+Tasks:
+- Ensure Phases 9-11 do not reintroduce SDL includes into gameplay modules.
+- Push more config/path/input/story-font glue toward platform-facing or UI-facing layers where that improves portability.
+- Revisit `z-term.c` isolation only after the de-inc and monolith-split work is stable.
+- Add an extra Android smoke path whenever `CMakeLists.txt`, `z-term.c`, platform headers, or core/frontend linkage changes.
 
 ## Subagent Work Packages
 
@@ -337,7 +475,7 @@ These should be done by the main integrator or one agent at a time:
 
 Current serial package status:
 - `WP01`: completed in the working tree on 2026-03-24.
-- `WP00`: partially covered operationally by successful builds; the smoke matrix is now recorded in `session_notes.md`, but the manual baseline smoke run is still pending.
+- `WP00`: marked complete in `session_notes.md` on 2026-03-25.
 - `WP99`: completed in the working tree on 2026-03-25; the package localized the planned transient input, UI color, projectile-path, and runtime CLI state out of `variable.c` / `externs.h`, and passed standard + portable incremental builds plus `.\build-cmake.bat`.
 
 ### Parallel Packages
@@ -374,6 +512,45 @@ Current parallel package status:
 - `WP42`: completed in the working tree on 2026-03-25; the full `src/melee/*` split is active in the build, and `melee1.c` plus `melee2.c` are reduced to legacy notes outside the build.
 - `WP50`: completed in the working tree on 2026-03-25; the target split is live in `CMakeLists.txt`, the SDL-facing public surface is now funneled through `platform-ui.h`/`platform-audio.h` plus SDL-free pane/gamepad config headers, `angband.h` no longer imports SDL globally, and both standard plus portable incremental builds pass with the shared `sil-core` archive.
 
+### Next-Wave Parallel Packages
+These are the recommended continuation packages after the unstable-port milestone.
+
+- `WP60`: completed in the working tree on 2026-03-25; `xtra1` no longer depends on a body include, the live code now sits in `src/player/player-calc.c`, `src/player/player-resources.c`, `src/player/player-songs.c`, and `src/ui/ui-status.c`, and standard plus portable incremental builds both pass.
+- `WP61`: completed in the working tree on 2026-03-25; `xtra2` no longer depends on a body include, the live code now sits in `src/game-event.c` plus `src/quest/*`, `src/xtra2.c` is a legacy note outside the build, and standard plus portable incremental builds both pass.
+- `WP62`: completed in the working tree on 2026-03-25; `spells1` no longer depends on a body include, the live code now sits in `src/spell/*` plus `src/player/player-song-*.c`, and `src/spell/spells1-body.inc` has been removed from the tree.
+- `WP63`: completed in the working tree on 2026-03-25; `spells2` no longer depends on a body include, the live code now sits in the owning split spell modules, and `src/spell/spells2-body.inc` has been removed from the tree.
+
+| ID | Scope | Main files | Depends on |
+| --- | --- | --- | --- |
+| WP60 | `xtra1` de-inc | `src/xtra1.c`, `src/xtra1-body.inc`, `src/player/player-calc.*`, `src/player/player-songs.*`, new `src/player/player-resources.*`, new `src/ui/ui-status.*` | WP14, WP41, WP50 |
+| WP61 | `xtra2` de-inc + quest ownership | `src/xtra2.c`, `src/xtra2-body.inc`, `src/game-event.*`, new `src/quest/*` | WP13, WP50 |
+| WP62 | `spells1` de-inc | `src/spell/spells1-body.inc`, `src/spell/*`, `src/player/player-song-*.c` | WP41 |
+| WP63 | `spells2` de-inc | `src/spell/spells2-body.inc`, `src/spell/*` | WP41 |
+| WP70 | `cmd4` split | `src/cmd4.c`, new/existing `src/cmd/ui/*`, any new `src/ui/*` helpers needed by the split | WP30, WP40, WP60-WP63 |
+| WP71 | `files` split | `src/files.c`, `src/fs/*`, `src/ui/*`, any narrow score/runtime modules created by the split | WP12, WP50, WP60-WP63 |
+
+Recommended `WP60` split targets:
+- `src/ui/ui-status.[ch]`: status lines, compact vitals, frame drawing, health formatting/attributes, plus the refresh/window flow that still shares a large private helper surface with status rendering
+- `src/player/player-resources.[ch]`: `calc_torch()`, weapon glow helpers, and related light/resource helpers
+
+Recommended `WP61` split targets:
+- `src/quest/quest-ui.[ch]`: quest status screen, typewriter menu, wrapped quest text helpers
+- `src/quest/quest-rewards.[ch]`: generic reward/follow-up reward plumbing
+- `src/quest/quest-tulkas.c`, `quest-varda.c`, `quest-niena.c`, `quest-orome.c`, `quest-valar.c`: per-quest interaction ownership
+
+Recommended `WP62`/`WP63` rule:
+- Prefer moving each section into the module that already owns its public header.
+- Only introduce a shared private spell helper module when multiple current spell files already depend on the same private behavior.
+
+### Next-Wave Serial Packages
+These are best kept with the main integrator after the next parallel wave lands.
+
+| ID | Scope | Main files | Depends on |
+| --- | --- | --- | --- |
+| WP80 | header/global cleanup round 2 | `src/externs.h`, `src/variable.c`, subsystem headers | WP60-WP71 |
+| WP81 | legacy carryover cleanup | excluded legacy monoliths such as `src/generate.c` and any remaining wrapper notes | WP60-WP71 |
+| WP90 | mobile/platform boundary follow-through | `CMakeLists.txt`, platform headers, `src/z-term.c`, frontend/core boundary files | WP80, WP81 |
+
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
 - The package should preserve behavior first and not perform unrelated gameplay edits.
@@ -407,12 +584,13 @@ Current parallel package status:
 - Do not mix refactor commits with balance changes or new features.
 - Do not revert unrelated user changes in a dirty worktree.
 - Do not push more declarations into `externs.h` just to make a split compile.
+- Do not add new code-bearing `*.inc` files under `src/`.
 - Do not delete `z-term.c` early. Isolate it last.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. `WP50` is now completed in the working tree; keep any further SDL/API tightening under `WP99` unless it clearly belongs to a specific subsystem.
-3. Reserve `WP99` for the main integrator.
+1. Start with `WP70` and `WP71`, using the completed `WP60`-`WP63` body-include cleanup as the pattern for the remaining monolith work.
+2. Once the active `*.inc` debt is gone, tackle `WP70` (`cmd4.c`) and `WP71` (`files.c`).
+3. Reserve `WP80`, `WP81`, and `WP90` for the main integrator.
 
-This order keeps the highest-conflict object/combat/UI work off the table until the repo already has the target directory structure and narrower headers.
+This order removes the transitional macro-body pattern first, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

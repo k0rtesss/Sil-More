@@ -1,10 +1,6 @@
 /* File: xtra2.c */
 
 /*
- * Transitional wrapper for the remaining xtra2 quest/presentation code.
- *
- * Shared narrative/event helpers now live in src/game-event.c.
+ * Legacy note: the remaining xtra2 quest/presentation code has been split into
+ * src/quest/*.c and src/game-event.c as part of WP61.
  */
-
-#define XTRA2_SECTION_LEGACY
-#include "xtra2-body.inc"

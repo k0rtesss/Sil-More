@@ -26,6 +26,7 @@
 #include "player/player-song-duels.h"
 #include "player/player-song-effects.h"
 #include "player/player-songs.h"
+#include "quest/quest.h"
 #include "score/score_io.h"
 #include "score/score_ui.h"
 #include "signals.h"
@@ -1291,55 +1292,9 @@ extern void check_experience(void);
 extern s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill);
 extern void gain_exp(s32b amount);
 extern void lose_exp(s32b amount);
-extern bool random_stair_location(int* sy, int* sx);
-extern void break_truce(bool obvious);
-extern bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 extern void scare_onlooking_friends(const monster_type* m_ptr, int amount);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
-extern void apply_quest_rewards(int quest_idx);
-extern bool check_quest_eligibility(int quest_idx, int depth);
-extern void do_cmd_quest_status(void);
-extern byte quest_get_state(int quest_id);
-extern void quest_set_state(int quest_id, byte state);
-extern int quest_id_for_vala_stage(int vala_id, int stage);
-extern u32b quest_metarun_flag(int quest_id);
-extern cptr quest_display_title(int quest_id);
-extern cptr* extract_quest_init_texts(int quest_idx, int* count);
-extern cptr* extract_quest_completion_texts(int quest_idx, int* count);
-extern void free_quest_texts(cptr* texts, int count);
-extern void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color);
-extern void tulkas_quest_interaction(void);
-extern void check_tulkas_quest_interaction(void);
-extern void check_tulkas_quest_completion(int r_idx);
-extern bool tulkas_orc_is_target(int r_idx);
-extern bool tulkas_orc_targets_alive(bool require_unspawned);
-extern void validate_tulkas_quest_on_load(void);
-extern void remove_quest_giver(int quest_giver_r_idx);
-extern bool is_quest_giver_present(int quest_giver_r_idx);
-extern bool spawn_quest_giver_near_player(int quest_giver_r_idx);
-extern void aule_quest_interaction(void);
-extern void check_aule_quest_interaction(void);
-extern void varda_quest_interaction(void);
-extern void check_varda_quest_interaction(void);
-extern void check_varda_quest_completion(int r_idx);
-extern void mandos_quest_interaction(void);
-extern void check_mandos_quest_interaction(void);
-extern void check_mandos_quest_completion(int r_idx);
-extern int quest_completion_cap(int quest_idx);
-extern void niena_quest_interaction(void);
-extern void check_niena_quest_interaction(void);
-extern void check_niena_quest_completion(void);
-extern void check_niena_morgoth_interaction(void);
-extern void niena_mark_morgoth_attack(void);
-extern void niena_revoke_temp_mercy_gift(bool silent);
-extern void ensure_niena_pacifist_active(void);
-extern void ensure_tulkas_morgoth_active(void);
-extern void ensure_varda_ungoliant_active(void);
-extern void check_orome_quest_completion(int r_idx);
-extern void orome_quest_interaction(void);
-extern void check_orome_quest_interaction(void);
-extern void grant_unique_bane_ability(void);
 extern void anger_morgoth(int level);
 extern void maybe_update_morgoth_state_from_hp(monster_type* m_ptr);
 extern void monster_death(int m_idx);
@@ -1364,16 +1319,6 @@ extern int rough_direction(int y1, int x1, int y2, int x2);
 extern bool get_aim_dir(int* dp, int range);
 extern bool get_rep_dir(int* dp);
 extern bool confuse_dir(int* dp);
-extern const char tutorial_leave_text[][100];
-extern const char tutorial_win_text[][100];
-extern const char tutorial_early_death_text[][100];
-extern const char tutorial_late_death_text[][100];
-extern const char entry_poetry[][100];
-extern const char throne_poetry[][100];
-extern const char ultimate_bug_text[][100];
-void pause_with_text(const char desc[][100], int row, int col,
-                     const char extra[][100], byte extra_attr);
-
 /*
  * Hack -- conditional (or "bizarre") externs
  */

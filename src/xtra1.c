@@ -1,13 +1,11 @@
 /* File: xtra1.c */
 
 /*
- * Transitional wrapper for the remaining xtra1 UI/update code.
+ * Legacy note for the unstable refactor port.
  *
- * Player calculation and song-skill logic now live in
- * src/player/player-calc.c and src/player/player-songs.c.
+ * The former xtra1 monolith now lives in:
+ *   - src/player/player-calc.c
+ *   - src/player/player-resources.c
+ *   - src/player/player-songs.c
+ *   - src/ui/ui-status.c
  */
-
-#define XTRA1_SECTION_LEGACY_TOP
-#define XTRA1_SECTION_LEGACY_LIGHT
-#define XTRA1_SECTION_LEGACY_BOTTOM
-#include "xtra1-body.inc"
