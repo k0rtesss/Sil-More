@@ -220,6 +220,42 @@ size_t strnfmt(char* buf, size_t max, cptr fmt, ...)
     return len;
 }
 
+void comma_number(char* output, int number)
+{
+    if (number >= 1000000)
+    {
+        sprintf(output, "%d,%03d,%03d", number / 1000000,
+            (number % 1000000) / 1000, number % 1000);
+    }
+    else if (number >= 1000)
+    {
+        sprintf(output, "%d,%03d", number / 1000, number % 1000);
+    }
+    else
+    {
+        sprintf(output, "%d", number);
+    }
+}
+
+void atomonth(int number, char* output)
+{
+    switch (number)
+    {
+    case 1: sprintf(output, "Jan"); break;
+    case 2: sprintf(output, "Feb"); break;
+    case 3: sprintf(output, "Mar"); break;
+    case 4: sprintf(output, "Apr"); break;
+    case 5: sprintf(output, "May"); break;
+    case 6: sprintf(output, "Jun"); break;
+    case 7: sprintf(output, "Jul"); break;
+    case 8: sprintf(output, "Aug"); break;
+    case 9: sprintf(output, "Sep"); break;
+    case 10: sprintf(output, "Oct"); break;
+    case 11: sprintf(output, "Nov"); break;
+    case 12: sprintf(output, "Dec"); break;
+    }
+}
+
 /*
  * Format into a static buffer (for compatibility with old code)
  * 

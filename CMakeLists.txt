@@ -252,12 +252,14 @@ set(SIL_MORE_SOURCES_SCORE
 set(SIL_MORE_SOURCES_FS
     src/fs/pref-files.c
     src/fs/pref-time.c
+    src/fs/savefile-name.c
 )
 
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
     src/signals.c
     src/ui/colors.c
+    src/ui/ui-character-name.c
     src/ui/ui-file-viewer.c
     src/ui/ui-help.c
     src/ui/ui-status.c

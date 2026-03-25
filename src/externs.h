@@ -700,8 +700,6 @@ extern void do_cmd_escape(int);
 extern void do_cmd_morgoth_victory(void);
 extern void do_cmd_suicide(void);
 extern void do_cmd_save_game(void);
-extern void comma_number(char* output, int number);
-extern void atomonth(int number, char* output);
 extern int highscore_dead(char* name);
 extern bool highscore_is_empty();
 extern void close_game(void);

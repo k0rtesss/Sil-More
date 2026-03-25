@@ -41,6 +41,9 @@ extern void strnfcat(char* str, size_t max, size_t* end, cptr fmt, ...);
  */
 extern char* format(cptr fmt, ...);
 
+void comma_number(char* output, int number);
+void atomonth(int number, char* output);
+
 /*
  * Format a string into a caller-supplied buffer
  * This is a safer alternative to format() which uses a static buffer

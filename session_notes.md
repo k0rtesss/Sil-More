@@ -1,5 +1,29 @@
 # Session notes
 
+## 2026-03-25: files.c utility extraction follow-on
+- Landed a smaller follow-on `files.c` reduction after `WP71C`:
+  - moved `comma_number()` and `atomonth()` into `src/format.c` / `src/format.h`
+  - moved `silmarils_possessed()` and `has_iron_crown()` into `src/player/player-resources.[ch]`
+- Removed the old broad `externs.h` declarations for the generic formatting helpers now that `format.h` owns them.
+- Current size snapshot after this slice:
+  - `src/cmd4.c`: 16,125 lines
+  - `src/files.c`: 8,041 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: WP71C player-name/savefile split from files
+- Completed the `WP71C` slice by moving the player-name/savefile prompt path out of `src/files.c`:
+  - `src/fs/savefile-name.[ch]` now owns `process_player_name()`
+  - `src/ui/ui-character-name.[ch]` now owns `get_name()`
+- Updated `CMakeLists.txt` so the new `src/fs/` and `src/ui/` modules build as part of `sil-core`.
+- Current size snapshot after this slice:
+  - `src/cmd4.c`: 16,125 lines
+  - `src/files.c`: 8,152 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
 ## 2026-03-25: WP71A pref/time extraction from files
 - Completed the first `WP71A` slice by moving the pref-file and time-restriction logic out of `src/files.c` into:
   - `src/fs/pref-files.[ch]`

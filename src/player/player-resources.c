@@ -413,3 +413,40 @@ void calc_torch(void)
 
     p_ptr->redraw |= (PR_LIGHT);
 }
+
+int silmarils_possessed(void)
+{
+    int i;
+    int silmarils = 0;
+
+    for (i = 0; i < INVEN_TOTAL; i++)
+    {
+        if ((inventory[i].tval == TV_LIGHT)
+            && (inventory[i].sval == SV_LIGHT_SILMARIL))
+        {
+            silmarils += inventory[i].number;
+        }
+        if (inventory[i].name1 == ART_MORGOTH_1)
+            silmarils += 1;
+        if (inventory[i].name1 == ART_MORGOTH_2)
+            silmarils += 2;
+        if (inventory[i].name1 == ART_MORGOTH_3)
+            silmarils += 3;
+    }
+
+    return silmarils;
+}
+
+int has_iron_crown(void)
+{
+    int i;
+
+    for (i = 0; i < INVEN_TOTAL; i++)
+    {
+        int name1 = inventory[i].name1;
+        if ((name1 >= ART_MORGOTH_0) && (name1 <= ART_MORGOTH_3))
+            return name1;
+    }
+
+    return 0;
+}
