@@ -6,6 +6,10 @@
 
 static const int DROP_MIN_DIFFICULTY = -15;
 
+bool drop_allow_noble = false;
+bool drop_allow_evil = false;
+bool drop_allow_noble_from_quality = true;
+
 typedef enum
 {
     DROP_ALIGNMENT_FILTER_ANY = 0,

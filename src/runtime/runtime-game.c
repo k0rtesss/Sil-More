@@ -39,6 +39,7 @@
 #define scores_file_version_patch (score_file_active_ctx()->version_patch)
 #define scores_file_version_extra (score_file_active_ctx()->version_extra)
 
+bool save_game_quietly = false;
 static bool death_processing = false;
 
 bool death_processing_in_progress(void)

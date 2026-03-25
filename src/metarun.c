@@ -56,6 +56,7 @@
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
 
 /* =========================  globals  =========================== */
+metarun         metar;
 static metarun *metaruns    = NULL;
 static s16b     metarun_max = 0;
 static s16b     current_run = 0;

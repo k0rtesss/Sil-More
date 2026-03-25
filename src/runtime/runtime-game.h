@@ -3,6 +3,8 @@
 
 #include "h-basic.h"
 
+extern bool save_game_quietly;
+
 bool death_processing_in_progress(void);
 
 void do_cmd_save_game(void);

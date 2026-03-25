@@ -19,6 +19,16 @@
 #include "melee/melee-attack.h"
 #include "melee/melee-combat-display.h"
 
+combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];
+int combat_number = 0;
+int combat_number_old = 0;
+int turns_since_combat = 0;
+char combat_roll_special_char = 0;
+byte combat_roll_special_attr = 0;
+combat_history_round combat_history[MAX_COMBAT_HISTORY];
+int combat_history_head = 0;
+int combat_history_count = 0;
+
 static int  original_main_combat_rolls = -1;
 static bool main_combat_rolls_deferral_active = false;
 static bool main_combat_rolls_restored = false;

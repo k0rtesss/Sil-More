@@ -24,6 +24,8 @@ static int cached_quest_vault_roll = -1;
 bool cached_gv_level_roll_resolved = false;
 bool cached_gv_level_roll_allowed = false;
 int cached_gv_level_roll_candidates = 0;
+byte num_trap_on_level = 0;
+char g_vault_name[80];
 
 static void reset_generation_retry_locks(void)
 {

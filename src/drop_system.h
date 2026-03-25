@@ -57,6 +57,9 @@ extern void drop_profile_for_partition_kind(
 extern void drop_profile_for_partition_kind_source(
     level_partition_kind kind, partition_drop_source_t source,
     drop_profile* out);
+extern bool drop_allow_noble;
+extern bool drop_allow_evil;
+extern bool drop_allow_noble_from_quality;
 extern drop_quality drop_quality_from_flags(bool good, bool great, bool superb);
 extern void drop_profile_default(drop_profile* profile);
 extern void partition_config_reset(void);

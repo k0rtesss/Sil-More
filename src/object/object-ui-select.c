@@ -19,6 +19,10 @@
 
 #include <ctype.h>
 
+bool item_tester_full = false;
+byte item_tester_tval = 0;
+bool (*item_tester_hook)(const object_type*) = NULL;
+
 /*
  * Flip "inven" and "equip" in any sub-windows
  */
@@ -321,7 +325,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     bool toggle = false;
 
-    char tmp_val[160];
     char out_val[160];
 
     int floor_list[MAX_FLOOR_STACK];

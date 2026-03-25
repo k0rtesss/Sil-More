@@ -20,6 +20,8 @@
 #include "ui/ui-character-screen.h"
 #include "z-term.h"
 
+static bool skill_gain_in_progress = false;
+
 /* Three-column layout constants (same as cmd4.c) */
 #define COL_SKILL 2
 #define COL_ABILITY 15
@@ -547,12 +549,6 @@ void player_wipe(void)
     /* Metarun completion is checked separately via metarun_is_quest_completed() */
     log_trace("Birth: All quest states initialized to NOT_STARTED for new character");
     for (i = 0; i < (int)N_ELEMENTS(p_ptr->quest_reserved); i++) p_ptr->quest_reserved[i] = 0; /* quest_reserved[0] = any quest spawned flag; quest_reserved[1..n] = per-run quest completion markers */
-
-    /*re-set the thefts counter*/
-    recent_failed_thefts = 0;
-
-    /*re-set the altered inventory counter*/
-    allow_altered_inventory = 0;
 
     // reset some unique flags
     p_ptr->unique_forge_made = false;

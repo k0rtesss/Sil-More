@@ -28,13 +28,14 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `WP71D` is now landed in the working tree: `src/ui/ui-story.[ch]` plus `src/ui/ui-death.[ch]` now own the story, tomb, and death/victory presentation helpers extracted from `src/files.c`
   - `WP71E` is now landed in the working tree: `src/score/score-entry.[ch]` now own `create_score()`, `build_live_preview_score()`, `highscore_is_empty()`, and the remaining score-entry helpers such as the kinslayer scorefile path
   - `WP71F` is now landed in the working tree: `src/runtime/runtime-game.[ch]` now own the save/close/panic/autoload/metarun lifecycle flow that used to live in `src/files.c`
-  - `WP71G` is now landed in the working tree: `src/files.c` is reduced to a 586-line facade that only keeps the privilege helpers, escape/suicide commands, and character-dump/mini-screenshot helpers
+  - `WP71G` is now landed in the working tree: `src/files.c` is reduced to a 486-line facade that only keeps the privilege helpers, escape/suicide commands, and character-dump/mini-screenshot helpers
   - a follow-on utility slice is also landed: `comma_number()` / `atomonth()` now live in `src/format.c`, and `silmarils_possessed()` / `has_iron_crown()` now live in `src/player/player-resources.c`
-  - there is no remaining active giant frontend monolith; `src/files.c` is down to 586 lines and `src/cmd4.c` is down to 291 lines
+  - `WP80` is now landed in the working tree: `src/externs.h` now relies on narrow subsystem headers for the `fs/`, `runtime/`, `player/`, `object/`, `score/`, `spell/`, and `ui/` ownership already created by `WP60`-`WP71`, and the obvious combat/item/drop/runtime/level-generation/metarun globals now live in their owning modules instead of `src/variable.c`
+  - there is no remaining active giant frontend monolith; `src/files.c` is down to 486 lines and `src/cmd4.c` is down to 240 lines
   - the current header/global surface is still above the intended end state:
-    - `src/externs.h`: 1,346 lines and 1,103 `extern` declarations
-    - `src/variable.c`: 916 lines
-  - the next real ownership wave is now `WP80+`
+    - `src/externs.h`: 1,074 lines and 882 `extern` declarations
+    - `src/variable.c`: 710 lines
+  - the next real ownership wave is now `WP81` + `WP90`
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -115,6 +116,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing the remaining `WP71E`-`WP71G` score/runtime/files cleanup on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after the follow-on `files.c` utility extraction on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP70` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP80` on 2026-03-25.
 
 ## Completion Assessment
 - The original unstable-port objective is effectively complete as an intermediate architecture:
@@ -124,11 +126,11 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - The broader refactor is not complete:
   - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
   - the `WP71` `files.c` split is now complete and no longer blocks the next cleanup wave
-  - `externs.h` and `variable.c` still need a second cleanup pass after those ownership moves land
+  - the `WP80` second header/global cleanup pass is now complete, but `WP81` legacy carryover cleanup and `WP90` platform-boundary follow-through are still outstanding
 - Priority judgement for the next wave:
-  - extract the non-UI gameplay helpers out of `src/cmd4.c` before splitting the remaining menu/UI command families
-  - split `src/files.c` by real ownership boundaries (`fs`, `ui`, `score`, and only if necessary a new runtime-lifecycle folder), not by arbitrary line ranges
-  - run the next aggressive header/global cleanup pass only after `cmd4.c` and `files.c` are reduced to small facades or notes
+  - use `WP81` to clean up the remaining excluded legacy carryover files and wrapper notes now that the active ownership boundaries are no longer anchored in `externs.h`
+  - keep `WP90` focused on the mobile/platform boundary follow-through instead of reopening broad `externs.h` / `variable.c` churn
+  - treat any further header/global edits as narrow fallout fixes only, not as another large cleanup wave
 - Lower priority:
   - excluded legacy carryover files such as `src/generate.c` should be cleaned up later, after active build code no longer depends on transitional bodies or wrappers
 
@@ -149,13 +151,13 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
     - `src/spells1.c`: 14 lines
     - `src/spells2.c`: 12 lines
   - Largest active built catch-all files:
-    - `src/cmd4.c`: 16,597 lines
-    - `src/files.c`: 8,393 lines
+    - `src/files.c`: 486 lines
+    - `src/cmd4.c`: 240 lines
   - Largest excluded legacy carryover file still present in the tree:
-    - `src/generate.c`: 18,122 lines
+    - `src/generate.c`: 16,132 lines
   - Current global/header surface:
-    - `src/externs.h`: 1,373 lines and 1,128 `extern` declarations
-    - `src/variable.c`: 916 lines
+    - `src/externs.h`: 1,074 lines and 882 `extern` declarations
+    - `src/variable.c`: 710 lines
 - Original baseline hotspot snapshot that motivated the port:
   - `src/cmd4.c`: 20,357 lines
   - `src/generate.c`: 17,554 lines
@@ -627,6 +629,8 @@ These are best kept with the main integrator after the next parallel wave lands.
 | WP81 | legacy carryover cleanup | excluded legacy monoliths such as `src/generate.c` and any remaining wrapper notes | WP60-WP71 |
 | WP90 | mobile/platform boundary follow-through | `CMakeLists.txt`, platform headers, `src/z-term.c`, frontend/core boundary files | WP80, WP81 |
 
+- `WP80`: completed in the working tree on 2026-03-25; the package replaced large duplicate `externs.h` blocks with narrow subsystem headers, moved the obvious combat/item/drop/runtime/level-generation/metarun globals out of `variable.c`, removed dead leftover state, and passed standard + portable incremental builds.
+
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
 - The package should preserve behavior first and not perform unrelated gameplay edits.
@@ -665,7 +669,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. With `WP70` and `WP71` complete, start `WP80` and use the new `score/`, `runtime/`, `fs/`, and `ui/` ownership boundaries to keep shrinking `externs.h` and `variable.c`.
-2. Reserve `WP81` and `WP90` for the main integrator after the `WP80` header/global cleanup settles.
+1. With `WP80` complete, move to `WP81` and clean up the excluded legacy carryover files and wrapper notes without reopening the now-localized active ownership boundaries.
+2. After `WP81`, run `WP90` as the main integrator pass for the remaining mobile/platform boundary work.
 
 This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

@@ -11,7 +11,6 @@
 #include "angband.h"
 #include "externs.h"
 #include "h-basic.h"
-#include "metarun.h" 
 #include "init.h"
 
 /*
@@ -92,9 +91,6 @@ bool msg_flag; /* Player has pending message */
 
 byte object_generation_mode; /* Hack -- use different depth check, prevent
                                 embedded chests */
-bool drop_allow_noble; /* When true, noble-tagged entries are eligible for selection */
-bool drop_allow_evil; /* When true, evil-tagged entries are eligible for selection */
-bool drop_allow_noble_from_quality = true; /* When true, GOOD+ quality may include noble-tagged entries */
 
 bool shimmer_monsters; /* Hack -- optimize multi-hued monsters */
 bool shimmer_objects; /* Hack -- optimize multi-hued objects */
@@ -107,18 +103,8 @@ s16b o_cnt = 0; /* Number of live objects */
 s16b mon_max = 1; /* Number of allocated monsters */
 s16b mon_cnt = 0; /* Number of live monsters */
 
-/*
- *  Most of the extra Sil variables...
- */
-
-bool skill_gain_in_progress
-    = false; // whether we are currently in the skill-gain screen
-
-bool save_game_quietly = false; // whether we are currently trying to save the
-                                // game without displaying a message
-
-bool stop_stealth_mode = false; // whether there has been a signal that we need
-                                // to abort stealth mode
+/* Whether there has been a signal that we need to abort stealth mode. */
+bool stop_stealth_mode = false;
 
 /*
  * true if process_command() is a repeated call.
@@ -670,23 +656,6 @@ char* flavor_name;
 char* flavor_text;
 
 /*
- * The combat roll array for displaying past combat rolls
- */
-combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];
-int combat_number;
-int combat_number_old;
-int turns_since_combat;
-char combat_roll_special_char;
-byte combat_roll_special_attr;
-
-/*
- * Combat history storage for browsing past combat rounds
- */
-combat_history_round combat_history[MAX_COMBAT_HISTORY];
-int combat_history_head = 0;
-int combat_history_count = 0;
-
-/*
  * Hack -- The special Angband "System Suffix"
  * This variable is used to choose an appropriate "pref-xxx" file
  */
@@ -783,24 +752,6 @@ cptr ANGBAND_DIR_XTRA;
 cptr ANGBAND_DIR_SCRIPT;
 
 /*
- * Total Hack -- allow all items to be listed (even empty ones)
- * This is only used by "do_cmd_inven_e()" and is cleared there.
- */
-bool item_tester_full;
-
-/*
- * Here is a "pseudo-hook" used during calls to "get_item()" and
- * "show_inven()" and "show_equip()", and the choice window routines.
- */
-byte item_tester_tval;
-
-/*
- * Here is a "hook" used during calls to "get_item()" and
- * "show_inven()" and "show_equip()", and the choice window routines.
- */
-bool (*item_tester_hook)(const object_type*);
-
-/*
  * Current "comp" function for ang_sort()
  */
 bool (*ang_sort_comp)(const void* u, const void* v, int a, int b);
@@ -855,15 +806,6 @@ bool use_transparency = false;
  */
 char notes_buffer[NOTES_LENGTH];
 
-/* Two variables that limit rogue stealing and creation of traps.
- * Cleared when a level is created. {From Oangband} -JG
- */
-byte recent_failed_thefts;
-byte num_trap_on_level;
-
-/*occasionally allow chance of different inventory in a store*/
-byte allow_altered_inventory;
-
 autoinscription* inscriptions = 0;
 u16b inscriptionsCount = 0;
 
@@ -892,22 +834,9 @@ int ghost_string_type = 0;
 char ghost_string[80];
 
 /*
- * The name of the current greater vault, if any. -DG-
- */
-char g_vault_name[80];
-
-/*
  * While set, the map is drawn with memory hidden (like rage) for labyrinth partitions.
  */
 bool g_labyrinth_view_active = false;
-
-/*
- * The metarun file descriptor, if available.
- */
-int meta_fd = -1;
-
-// Current metarun info
-metarun metar;
 
 runtype_type *runtype_info = NULL;   /* filled by init_rt_info() */
 

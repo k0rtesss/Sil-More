@@ -8,10 +8,20 @@
 #ifndef INCLUDED_MELEE_COMBAT_DISPLAY_H
 #define INCLUDED_MELEE_COMBAT_DISPLAY_H
 
-#include "../h-basic.h"
+#include "../angband.h"
 
 typedef struct monster_type monster_type;
 typedef struct combat_history_round combat_history_round;
+
+extern combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];
+extern int combat_number;
+extern int combat_number_old;
+extern int turns_since_combat;
+extern char combat_roll_special_char;
+extern byte combat_roll_special_attr;
+extern combat_history_round combat_history[MAX_COMBAT_HISTORY];
+extern int combat_history_head;
+extern int combat_history_count;
 
 extern void new_combat_round(void);
 extern void update_combat_rolls1(const monster_type* m_ptr1,

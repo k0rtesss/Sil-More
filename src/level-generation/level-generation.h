@@ -118,6 +118,8 @@ extern void place_monster_by_flag(
 extern void place_random_stairs(int y, int x);
 extern byte get_nest_theme(int nestlevel);
 extern byte get_pit_theme(int pitlevel);
+extern byte num_trap_on_level;
+extern char g_vault_name[80];
 extern void level_layout_info_current(level_layout_info* out);
 extern level_partition_kind level_partition_kind_for_point(int y, int x);
 extern int level_partition_index_for_point(int y, int x);
