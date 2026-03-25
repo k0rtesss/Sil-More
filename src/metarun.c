@@ -907,6 +907,67 @@ static bool build_meta_path(char *buf, size_t len,
     return true;
 }
 
+static bool build_meta_sidecar_path(char* buf, size_t len, const char* live_path,
+    const char* suffix)
+{
+    if (!buf || !len || !live_path || !suffix)
+        return false;
+
+    if (SDL_strlcpy(buf, live_path, len) >= len)
+        return false;
+
+    return SDL_strlcat(buf, suffix, len) < len;
+}
+
+static void recover_staged_metarun_file(const char* live_path)
+{
+    char staged_new[1024];
+    char staged_old[1024];
+    SDL_IOStream* live_fd = NULL;
+    SDL_IOStream* new_fd = NULL;
+    SDL_IOStream* old_fd = NULL;
+
+    if (!build_meta_sidecar_path(staged_new, sizeof(staged_new), live_path, ".new")
+        || !build_meta_sidecar_path(staged_old, sizeof(staged_old), live_path, ".old"))
+        return;
+
+    live_fd = sdl_fopen(live_path, "rb");
+    if (live_fd)
+    {
+        sdl_fclose(live_fd);
+
+        new_fd = sdl_fopen(staged_new, "rb");
+        if (new_fd)
+        {
+            sdl_fclose(new_fd);
+            log_warn("Removing stale staged metarun file '%s'", staged_new);
+            fd_kill(staged_new);
+        }
+        return;
+    }
+
+    new_fd = sdl_fopen(staged_new, "rb");
+    if (new_fd)
+    {
+        sdl_fclose(new_fd);
+        if (fd_move(staged_new, live_path))
+        {
+            log_warn("Recovered staged metarun file '%s' -> '%s'", staged_new,
+                live_path);
+            return;
+        }
+    }
+
+    old_fd = sdl_fopen(staged_old, "rb");
+    if (old_fd)
+    {
+        sdl_fclose(old_fd);
+        if (fd_move(staged_old, live_path))
+            log_warn("Recovered previous metarun file '%s' -> '%s'", staged_old,
+                live_path);
+    }
+}
+
 static void reset_defaults(metarun *m)
 {
     log_info("Initializing new metarun with default values");
@@ -1270,6 +1331,7 @@ errr load_metaruns(bool create_if_missing)
 
     if (!build_meta_path(fn, sizeof fn, NULL, META_RAW))
         return -1;
+    recover_staged_metarun_file(fn);
     fd = sdl_fopen(fn, "rb");
 
     if (!fd && ANGBAND_DIR_METARUN && ANGBAND_DIR_METARUN[0]) {
@@ -1361,56 +1423,79 @@ errr load_metaruns(bool create_if_missing)
 
     if (metarun_max > 0 && entry_size > 0) {
         metaruns = mem_alloc_array(metarun_max, metarun);
+        if (!metaruns) {
+            recovery_reason = "unable to allocate metarun array";
+            sdl_fclose(fd);
+            return -1;
+        }
         sdl_seek(fd, sizeof(meta_file_header));
 
         if (entry_size == sizeof(metarun)) {
-            sdl_read(fd, (char*)metaruns, metarun_max * sizeof(metarun));
-            for (s16b i = 0; i < metarun_max; i++) {
-                if (header.version_major == 0 && header.version_minor < 9) {
-                    metaruns[i].blessing_points_spent = 0;
-                }
-                /* Initialize pending blessing choices for pre-0.9.0.1 saves
-                 * (fields were part of reserved_runtime and may contain garbage) */
-                if (header.version_major == 0 && header.version_minor == 9 &&
-                    header.version_patch == 0 && header.version_extra == 0) {
-                    /* Clear pending choices - will be regenerated on first menu open */
-                    metaruns[i].pending_blessing_count = 0;
-                    for (int j = 0; j < 3; j++) {
-                        metaruns[i].pending_blessing_choices[j] = 255;
+            if (sdl_read(fd, (char*)metaruns, metarun_max * sizeof(metarun)) != 0) {
+                recovery_reason = "versioned meta.raw payload was truncated";
+            } else {
+                for (s16b i = 0; i < metarun_max; i++) {
+                    if (header.version_major == 0 && header.version_minor < 9) {
+                        metaruns[i].blessing_points_spent = 0;
                     }
-                    log_debug("Cleared pending blessing choices for metarun %d (loaded from v0.9.0.0)", i);
+                    /* Initialize pending blessing choices for pre-0.9.0.1 saves
+                     * (fields were part of reserved_runtime and may contain garbage) */
+                    if (header.version_major == 0 && header.version_minor == 9 &&
+                        header.version_patch == 0 && header.version_extra == 0) {
+                        /* Clear pending choices - will be regenerated on first menu open */
+                        metaruns[i].pending_blessing_count = 0;
+                        for (int j = 0; j < 3; j++) {
+                            metaruns[i].pending_blessing_choices[j] = 255;
+                        }
+                        log_debug("Cleared pending blessing choices for metarun %d (loaded from v0.9.0.0)", i);
+                    }
+                    metarun_clamp_and_sync_quests(&metaruns[i]);
+                    metarun_sanitize_blessing_economy(&metaruns[i]);
+                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
                 }
-                metarun_clamp_and_sync_quests(&metaruns[i]);
-                metarun_sanitize_blessing_economy(&metaruns[i]);
-                metarun_sanitize_major_blessing_bits(&metaruns[i]);
             }
         } else if (entry_size == METARUN_V10_SIZE) {
             metarun_v10 *legacy = mem_alloc_array(metarun_max, metarun_v10);
-            sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10));
-            for (s16b i = 0; i < metarun_max; i++) {
-                metarun_from_v10(&metaruns[i], &legacy[i]);
-                metarun_sanitize_major_blessing_bits(&metaruns[i]);
+            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10)) != 0) {
+                recovery_reason = "legacy v10 meta.raw payload was truncated";
+            } else {
+                for (s16b i = 0; i < metarun_max; i++) {
+                    metarun_from_v10(&metaruns[i], &legacy[i]);
+                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
+                }
             }
             legacy = mem_free(legacy);
         } else if (entry_size == METARUN_V9_SIZE) {
             metarun_v9 *legacy = mem_alloc_array(metarun_max, metarun_v9);
-            sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v9));
-            for (s16b i = 0; i < metarun_max; i++) {
-                metarun_from_v9(&metaruns[i], &legacy[i]);
-                metarun_sanitize_major_blessing_bits(&metaruns[i]);
+            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v9)) != 0) {
+                recovery_reason = "legacy v9 meta.raw payload was truncated";
+            } else {
+                for (s16b i = 0; i < metarun_max; i++) {
+                    metarun_from_v9(&metaruns[i], &legacy[i]);
+                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
+                }
             }
             legacy = mem_free(legacy);
         } else if (entry_size == METARUN_V8_SIZE) {
             metarun_v8 *legacy = mem_alloc_array(metarun_max, metarun_v8);
-            sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v8));
-            for (s16b i = 0; i < metarun_max; i++) {
-                metarun_from_v8(&metaruns[i], &legacy[i]);
-                metarun_sanitize_major_blessing_bits(&metaruns[i]);
+            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v8)) != 0) {
+                recovery_reason = "legacy v8 meta.raw payload was truncated";
+            } else {
+                for (s16b i = 0; i < metarun_max; i++) {
+                    metarun_from_v8(&metaruns[i], &legacy[i]);
+                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
+                }
             }
             legacy = mem_free(legacy);
         } else {
             recovery_reason = "versioned meta.raw had unsupported entry size (requires v0.9.0+)";
             log_warn("Unsupported metarun entry size %zu in versioned file; dropping pre-0.9.0 legacy support", entry_size);
+            mem_free_null(metaruns);
+            metaruns = NULL;
+            metarun_max = 0;
+        }
+
+        if (recovery_reason) {
             mem_free_null(metaruns);
             metaruns = NULL;
             metarun_max = 0;
@@ -1664,7 +1749,13 @@ errr save_metaruns(void)
     refresh_current_metar_score();
 
     char fn[1024];
+    char safe[1024];
+    char previous[1024];
+    SDL_IOStream* old_fd = NULL;
     if (!build_meta_path(fn, sizeof fn, NULL, META_RAW))
+        return -1;
+    if (!build_meta_sidecar_path(safe, sizeof(safe), fn, ".new")
+        || !build_meta_sidecar_path(previous, sizeof(previous), fn, ".old"))
         return -1;
 
     /* Create backup before saving */
@@ -1680,12 +1771,10 @@ errr save_metaruns(void)
     log_debug("After updating array: metaruns[%d]: id=%u, deaths=%u, silmarils=%u, score=%u", 
               current_run, metaruns[current_run].id, metaruns[current_run].deaths, metaruns[current_run].silmarils,
               metaruns[current_run].score);
-
-    /* After backup is created in backup_file(), remove the original so sdl_fmake can succeed */
-    fd_kill(fn);
     
     /* Write using the new versioned format */
-    SDL_IOStream* fd = sdl_fmake(fn, 0644);
+    fd_kill(safe);
+    SDL_IOStream* fd = sdl_fmake(safe, 0644);
     if (!fd) {
         log_info("Failed to create metarun file for writing");
         return -1;
@@ -1713,8 +1802,40 @@ errr save_metaruns(void)
     
     if (result != 0) {
         log_info("Failed to write metarun data to file");
+        fd_kill(safe);
         return -1;
     }
+
+    fd_kill(previous);
+    old_fd = sdl_fopen(fn, "rb");
+    if (old_fd)
+    {
+        sdl_fclose(old_fd);
+        if (!fd_move(fn, previous))
+        {
+            log_error("Failed to stage previous metarun file '%s' -> '%s'", fn,
+                previous);
+            fd_kill(safe);
+            return -1;
+        }
+    }
+
+    if (!fd_move(safe, fn))
+    {
+        SDL_IOStream* previous_fd = NULL;
+        log_error("Failed to activate staged metarun file '%s' -> '%s'", safe,
+            fn);
+        previous_fd = sdl_fopen(previous, "rb");
+        if (previous_fd)
+        {
+            sdl_fclose(previous_fd);
+            fd_move(previous, fn);
+        }
+        fd_kill(safe);
+        return -1;
+    }
+
+    fd_kill(previous);
     
     log_info("Metarun data saved successfully (%d bytes, %d entries)", bytes_to_write, metarun_max);
 

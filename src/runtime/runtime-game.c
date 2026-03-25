@@ -79,13 +79,12 @@ void do_cmd_save_game(void)
         if (!save_game_quietly)
             prt("Saving game... done.", 0, 0);
 
-        high_score live_score;
-        if (build_live_preview_score(&live_score)) {
-            time_t now = time(NULL);
-            if (!score_runs_record_current_run(&live_score, now, SCORE_RECORD_ALIVE)) {
-                log_warn("Failed to persist live run snapshot for '%s'",
-                    op_ptr->full_name);
-            }
+        time_t now = time(NULL);
+        if (now == (time_t)-1)
+            now = 0;
+        if (!score_refresh_live_snapshot(now, "save_game")) {
+            log_warn("Failed to persist live run snapshot for '%s'",
+                op_ptr->full_name);
         }
     }
     else
@@ -133,22 +132,31 @@ static void close_game_aux(void)
     log_info("entering score");
     create_score(&the_score);
     score_record_status final_status = p_ptr->escaped ? SCORE_RECORD_ESCAPED : SCORE_RECORD_DEAD;
-    if (!score_runs_record_current_run(&the_score, death_time, final_status)) {
-        log_warn("Failed to persist run statistics for '%s'", op_ptr->full_name);
+
+    bool score_persistence_ready = !score_entry_is_ranked_run();
+    if (!score_persistence_ready) {
+        char score_path[1024];
+        build_current_score_path(score_path, sizeof(score_path));
+        safe_setuid_grab();
+        SDL_IOStream* score_fd = score_file_open(score_path, O_RDWR | O_CREAT);
+        safe_setuid_drop();
+        if (score_fd) {
+            SDL_IOStream* previous_fd = score_file_active_ctx()->fd;
+            score_file_active_ctx()->fd = score_fd;
+            score_persistence_ready = (score_entry_submit(&the_score) == 0);
+            score_file_active_ctx()->fd = previous_fd;
+        } else {
+            log_warn("Unable to open score file for final score submission");
+        }
     }
 
-    char score_path[1024];
-    build_current_score_path(score_path, sizeof(score_path));
-    safe_setuid_grab();
-    SDL_IOStream* score_fd = score_file_open(score_path, O_RDWR | O_CREAT);
-    safe_setuid_drop();
-    if (score_fd) {
-        SDL_IOStream* previous_fd = score_file_active_ctx()->fd;
-        score_file_active_ctx()->fd = score_fd;
-        (void)score_entry_submit(&the_score);
-        score_file_active_ctx()->fd = previous_fd;
+    if (score_persistence_ready) {
+        if (!score_runs_record_current_run(&the_score, death_time, final_status)) {
+            log_warn("Failed to persist run statistics for '%s'", op_ptr->full_name);
+        }
     } else {
-        log_warn("Unable to open score file for final score submission");
+        log_warn("Skipping runs.db update because ranked score submission failed for '%s'",
+            op_ptr->full_name);
     }
 
     p_ptr->rage = 0;
@@ -323,8 +331,6 @@ void close_game(void)
             else
                 show_scores_interactive(true);
         }
-
-        upsert_live_score_on_save();
 
         wipe_o_list();
         wipe_mon_list();

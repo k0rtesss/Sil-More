@@ -901,30 +901,45 @@ static errr init_info_raw(SDL_IOStream* fd, header* head)
 
     /* Allocate the "*_info" array */
     head->info_ptr = mem_alloc_array(head->info_size, char);
+    if (!head->info_ptr)
+        return (-1);
 
     /* Read the "*_info" array */
-    sdl_read(fd, head->info_ptr, head->info_size);
+    if (sdl_read(fd, head->info_ptr, head->info_size))
+        goto fail;
 
     if (head->name_size)
     {
         /* Allocate the "*_name" array */
         head->name_ptr = mem_alloc_array(head->name_size, char);
+        if (!head->name_ptr)
+            goto fail;
 
         /* Read the "*_name" array */
-        sdl_read(fd, head->name_ptr, head->name_size);
+        if (sdl_read(fd, head->name_ptr, head->name_size))
+            goto fail;
     }
 
     if (head->text_size)
     {
         /* Allocate the "*_text" array */
         head->text_ptr = mem_alloc_array(head->text_size, char);
+        if (!head->text_ptr)
+            goto fail;
 
         /* Read the "*_text" array */
-        sdl_read(fd, head->text_ptr, head->text_size);
+        if (sdl_read(fd, head->text_ptr, head->text_size))
+            goto fail;
     }
 
     /* Success */
     return (0);
+
+fail:
+    mem_free_null(head->text_ptr);
+    mem_free_null(head->name_ptr);
+    mem_free_null(head->info_ptr);
+    return (-1);
 }
 
 /* local forward */

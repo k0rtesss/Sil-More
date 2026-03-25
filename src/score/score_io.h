@@ -2,6 +2,7 @@
 #define INCLUDED_SCORE_IO_H
 
 #include "platform-io.h"
+#include <time.h>
 
 typedef struct score_file_ctx {
     ang_file* fd;
@@ -41,7 +42,8 @@ errr backup_scores_file(const char *filepath);
 int score_count_alive_entries(void);
 u32b score_sum_dead_points(void);
 int highscore_add(struct high_score* score);
-void upsert_live_score_on_save(void);
+bool upsert_live_score_on_save(void);
+bool score_refresh_live_snapshot(time_t snapshot_time, const char* reason);
 int highscore_dead(char* name);
 void clear_scorefile(void);
 

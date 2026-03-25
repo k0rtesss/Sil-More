@@ -440,28 +440,6 @@ def calculate_difficulty(art):
     is_normal = (art['type'] == 'normal')
     is_dual_ego = (art['type'] == 'dual_ego')
 
-    # For non-jewelry items (special/dual-ego/artefact), strip base flags and add back specific ones
-    # This mirrors smithing-difficulty.c lines 139-180
-    is_artefact = (art['type'] == 'artefact')
-    if (is_special or is_dual_ego or is_artefact) and tval not in [45, 40]:  # Not ring or amulet
-        # Get base item flags from the OBJECTS_BY_TYPE lookup
-        base_key = (tval, sval)
-        if base_key in OBJECTS_BY_TYPE:
-            base_obj_flags = set(OBJECTS_BY_TYPE[base_key].get('flags', []))
-            # For artefacts, ADD base flags first (special/ego already have them combined at line 1315)
-            # This mirrors how object_flags4() in C code combines base + artefact flags
-            if is_artefact:
-                flags = flags | base_obj_flags
-            # Strip base item flags
-            flags = flags - base_obj_flags
-            # Add back specific flags that should always count
-            add_back_flags = {'TUNNEL', 'STL', 'STEALTH', 'ACCURATE', 'SHARPNESS', 'SHARPNESS2',
-                              'DAMAGE_SIDES', 'REGEN', 'RES_COLD', 'RES_FIRE',
-                              'CHEAT_DEATH', 'STAND_FAST', 'ENCHANTABLE'}
-            for flag in add_back_flags:
-                if flag in base_obj_flags:
-                    flags.add(flag)
-
     # Get base item stats
     if is_special or is_normal or is_dual_ego:
         # For all generated variants, base stats are stored directly

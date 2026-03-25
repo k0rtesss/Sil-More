@@ -9,6 +9,7 @@
 #include "metarun.h"
 #include "score/score_entry.h"
 #include "score/score_logic.h"
+#include "score/score_runs.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -32,6 +33,7 @@ static score_file_ctx* active_score_ctx = &global_score_ctx;
 
 static const char* file_mode_from_flags(int mode);
 static bool score_file_upgrade_to_curses(score_file_ctx* ctx, const char *filepath);
+static bool upsert_live_score_entry(const high_score* live_score);
 
 score_file_ctx* score_file_set_active_ctx(score_file_ctx* ctx)
 {
@@ -887,8 +889,11 @@ int highscore_add(high_score* score)
     return slot;
 }
 
-void upsert_live_score_on_save(void)
+static bool upsert_live_score_entry(const high_score* live_score)
 {
+    if (!live_score)
+        return false;
+
     char score_path[1024];
     build_current_score_path(score_path, sizeof(score_path));
     log_info("upsert_live_score_on_save: Score path: %s", score_path);
@@ -898,7 +903,7 @@ void upsert_live_score_on_save(void)
     safe_setuid_drop();
     if (!live_fd) {
         log_warn("Could not open %s to upsert live save entry", score_path);
-        return;
+        return false;
     }
 
     SDL_IOStream* prev_fd = highscore_fd;
@@ -927,24 +932,20 @@ void upsert_live_score_on_save(void)
         scores_file_entry_count = 0;
     }
 
-    char saved_how[sizeof(p_ptr->died_from)];
-    SDL_strlcpy(saved_how, p_ptr->died_from, sizeof(saved_how));
-    SDL_strlcpy(p_ptr->died_from, "(alive and well)", sizeof(p_ptr->died_from));
-    high_score live_score;
-    create_score(&live_score);
-    SDL_strlcpy(p_ptr->died_from, saved_how, sizeof(p_ptr->died_from));
-
     if (highscore_seek(0) == 0) {
         high_score tmp; bool found=false; int idx;
         for (idx=0; idx < MAX_HISCORES; idx++) {
             if (highscore_read(&tmp)) break;
-            if (streq(tmp.who, live_score.who) && streq(tmp.how, "(alive and well)")) { found=true; break; }
+            if (streq(tmp.who, live_score->who) && streq(tmp.how, "(alive and well)")) { found=true; break; }
         }
         if (found) {
             highscore_seek(idx);
-            highscore_write(&live_score);
+            if (highscore_write(live_score) != 0)
+                log_warn("Failed to update live score entry at slot %d", idx);
         } else {
-            highscore_add(&live_score);
+            if (highscore_add((high_score*)live_score) < 0)
+                log_warn("Failed to append live score entry for '%s'",
+                    live_score->who);
         }
     }
 
@@ -969,6 +970,44 @@ void upsert_live_score_on_save(void)
     scores_file_version_patch = prev_patch;
     scores_file_version_extra = prev_extra;
     scores_file_entry_count = prev_count;
+
+    return true;
+}
+
+bool upsert_live_score_on_save(void)
+{
+    char saved_how[sizeof(p_ptr->died_from)];
+    high_score live_score;
+
+    SDL_strlcpy(saved_how, p_ptr->died_from, sizeof(saved_how));
+    SDL_strlcpy(p_ptr->died_from, "(alive and well)", sizeof(p_ptr->died_from));
+    create_score(&live_score);
+    SDL_strlcpy(p_ptr->died_from, saved_how, sizeof(saved_how));
+
+    return upsert_live_score_entry(&live_score);
+}
+
+bool score_refresh_live_snapshot(time_t snapshot_time, const char* reason)
+{
+    high_score live_score;
+
+    if (!build_live_preview_score(&live_score))
+        return false;
+
+    if (!upsert_live_score_entry(&live_score)) {
+        log_warn("live snapshot skipped because scores.raw update failed (%s)",
+            reason ? reason : "unspecified");
+        return false;
+    }
+
+    if (!score_runs_record_current_run(&live_score, snapshot_time,
+            SCORE_RECORD_ALIVE)) {
+        log_warn("live snapshot runs.db update failed (%s)",
+            reason ? reason : "unspecified");
+        return false;
+    }
+
+    return true;
 }
 
 int highscore_dead(char* name)

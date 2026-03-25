@@ -18,6 +18,7 @@
 #include "platform-ui.h"
 #include "metarun.h"
 #include "player/killer.h"
+#include "reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_logic.h"
 #include "scorefile.h"
@@ -479,7 +480,9 @@ void mini_screenshot(void)
     int x, y, wid, hgt;
     byte a;
     char c;
-    int player_y = 0, player_x = 0;
+    int player_y = -1, player_x = -1;
+    int sample_y, sample_x;
+    int max_hgt, max_wid;
     char screen_char[100][200];
     byte screen_attr[100][200];
 
@@ -494,9 +497,12 @@ void mini_screenshot(void)
         }
     }
 
-    for (y = 0; y < hgt; y++)
+    max_hgt = MIN(hgt, (int)N_ELEMENTS(screen_char));
+    max_wid = MIN(wid, (int)N_ELEMENTS(screen_char[0]));
+
+    for (y = 0; y < max_hgt; y++)
     {
-        for (x = 0; x < wid; x++)
+        for (x = 0; x < max_wid; x++)
         {
             get_tile(y, x, &a, &c);
 
@@ -514,16 +520,23 @@ void mini_screenshot(void)
         }
     }
 
-    if (player_y > 0)
+    if (player_y >= 0 && player_x >= 0)
     {
         for (y = 0; y <= 6; y++)
         {
             for (x = 0; x <= 6; x++)
             {
-                mini_screenshot_char[y][x]
-                    = screen_char[player_y - 3 + y][player_x - 3 + x];
-                mini_screenshot_attr[y][x]
-                    = screen_attr[player_y - 3 + y][player_x - 3 + x];
+                if (reliability_sample_square_point(player_y, player_x, 3, y,
+                        x, max_hgt, max_wid, &sample_y, &sample_x))
+                {
+                    mini_screenshot_char[y][x] = screen_char[sample_y][sample_x];
+                    mini_screenshot_attr[y][x] = screen_attr[sample_y][sample_x];
+                }
+                else
+                {
+                    mini_screenshot_char[y][x] = ' ';
+                    mini_screenshot_attr[y][x] = TERM_DARK;
+                }
             }
         }
     }

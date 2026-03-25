@@ -7,11 +7,15 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include(CTest)
 
 option(LOG_MODE_TIMESTAMP "Create new log with timestamp each time" OFF)
 option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
 option(SIL_USE_LOCAL_DATA "Store generated data inside the game directory (debug builds)" OFF)
 option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from source under external/ (useful for Android)" OFF)
+option(SIL_STRICT_WARNINGS "Enable stricter warning settings for development builds" OFF)
+option(SIL_ENABLE_ASAN "Enable AddressSanitizer on supported compilers" OFF)
+option(SIL_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer on supported compilers" OFF)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "Release")
@@ -301,6 +305,7 @@ set(SIL_MORE_SOURCES_LOG
 )
 
 set(SIL_MORE_SOURCES_SUPPORT
+    src/reliability-checks.c
     src/support/strl.c
 )
 
@@ -331,6 +336,34 @@ target_compile_options(sil-build-config INTERFACE
   $<$<C_COMPILER_ID:MSVC>:/W4>
 )
 target_include_directories(sil-build-config INTERFACE src)
+
+if (SIL_STRICT_WARNINGS)
+  target_compile_options(sil-build-config INTERFACE
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Werror -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes>
+    $<$<C_COMPILER_ID:MSVC>:/WX>
+  )
+endif()
+
+if (SIL_ENABLE_ASAN OR SIL_ENABLE_UBSAN)
+  if (MSVC)
+    message(FATAL_ERROR "SIL_ENABLE_ASAN/SIL_ENABLE_UBSAN are only configured for GNU/Clang-style toolchains.")
+  endif()
+
+  set(SIL_SANITIZER_FLAGS "")
+  if (SIL_ENABLE_ASAN)
+    list(APPEND SIL_SANITIZER_FLAGS -fsanitize=address -fno-omit-frame-pointer)
+  endif()
+  if (SIL_ENABLE_UBSAN)
+    list(APPEND SIL_SANITIZER_FLAGS -fsanitize=undefined -fno-sanitize-recover=undefined)
+  endif()
+
+  target_compile_options(sil-build-config INTERFACE
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
+  )
+  target_link_options(sil-build-config INTERFACE
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
+  )
+endif()
 
 if (LOG_MODE_TIMESTAMP)
   target_compile_definitions(sil-build-config INTERFACE LOG_MODE_TIMESTAMP)
@@ -385,3 +418,12 @@ if(MINGW)
 endif()
 
 target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core)
+
+if(BUILD_TESTING)
+  add_executable(sil-phase0-tests
+    tests/phase0_tests.c
+    src/reliability-checks.c
+  )
+  target_link_libraries(sil-phase0-tests PRIVATE sil-build-config)
+  add_test(NAME sil_phase0_regressions COMMAND sil-phase0-tests)
+endif()

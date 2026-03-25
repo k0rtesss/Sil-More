@@ -19,6 +19,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_entry.h"
+#include "score/score_io.h"
 #include "score/score_runs.h"
 #include "ui/ui-story.h"
 #include "score/score_ui.h"
@@ -61,15 +62,11 @@ static void snapshot_run_history(const char* reason)
     if (!character_generated || !p_ptr || p_ptr->is_dead)
         return;
 
-    high_score preview;
-    if (!build_live_preview_score(&preview))
-        return;
-
     time_t now = time(NULL);
     if (now == (time_t)-1)
         now = 0;
 
-    if (!score_runs_record_current_run(&preview, now, SCORE_RECORD_ALIVE)) {
+    if (!score_refresh_live_snapshot(now, reason)) {
         log_warn("run snapshot failed (%s)", reason ? reason : "unspecified");
     } else if (reason) {
         log_trace("run snapshot recorded (%s)", reason);

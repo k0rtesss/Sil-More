@@ -16,6 +16,7 @@
 #include "platform-ui.h"
 #include "runtime-cli.h"
 #include "player/killer.h"
+#include "reliability-checks.h"
 #include "score/score_guid.h"
 #include <string.h> /* memset, strstr */
 #include <stdio.h>  /* FILE, getc, ftell, fseek, ferror */
@@ -75,10 +76,23 @@ static u32b x_check = 0L;
 
 /* Debug: count bytes consumed from save stream (post-decode) */
 static u32b load_byte_offset = 0;
+static bool load_read_failed = false;
+static void note(cptr msg);
 
 /* Helper macros for concise load logging (use DEBUG level so always visible in user logs) */
 #define LOAD_LOG(fmt, ...) log_trace("[load:%06u] " fmt, (unsigned)load_byte_offset, __VA_ARGS__)
 #define LOAD_LOG0(msg)      log_trace("[load:%06u] %s", (unsigned)load_byte_offset, msg)
+
+static errr load_expect_stream_ok(cptr context)
+{
+    if (!load_read_failed)
+        return 0;
+
+    note(format("Savefile truncated while reading %s.", context));
+    log_error("load: stream failure while reading %s at offset %u", context,
+        (unsigned)load_byte_offset);
+    return (-1);
+}
 
 /* Track feature availability for the currently loaded savefile. */
 static bool savefile_has_runtime_overrides = false;
@@ -244,10 +258,14 @@ static byte sf_get(void)
 {
     byte c, v;
 
+    if (load_read_failed)
+        return 0;
+
     /* Read a byte from the stream */
     if (SDL_ReadIO(fff, &c, 1) != 1)
     {
         log_error("sf_get: Failed to read byte at offset %ld", load_byte_offset);
+        load_read_failed = true;
         return (0);
     }
     
@@ -266,19 +284,30 @@ static byte sf_get(void)
     return (v);
 }
 
-static void rd_byte(byte* ip) { 
-    *ip = sf_get();
+static void rd_byte(byte* ip) {
+    if (ip)
+        *ip = sf_get();
     /* load_byte_offset already incremented by sf_get() */
 }
 
 static void rd_bool(bool* bp) {
-    *bp = sf_get() != 0;  // Any non-zero value becomes true
+    if (bp)
+        *bp = sf_get() != 0;  // Any non-zero value becomes true
     /* load_byte_offset already incremented by sf_get() */
 }
 
 static void rd_u16b(u16b* ip)
 {
+    if (!ip)
+        return;
+
+    *ip = 0;
+    if (load_read_failed)
+        return;
+
     (*ip) = sf_get();
+    if (load_read_failed)
+        return;
     (*ip) |= ((u16b)(sf_get()) << 8);
     /* load_byte_offset already incremented by sf_get() calls */
     log_trace("[load:%06u] rd_u16b: 0x%04X (%u)", (unsigned)(load_byte_offset - 2), (unsigned)*ip, (unsigned)*ip);
@@ -291,9 +320,22 @@ static void rd_s16b(s16b* ip) {
 
 static void rd_u32b(u32b* ip)
 {
+    if (!ip)
+        return;
+
+    *ip = 0;
+    if (load_read_failed)
+        return;
+
     (*ip) = sf_get();
+    if (load_read_failed)
+        return;
     (*ip) |= ((u32b)(sf_get()) << 8);
+    if (load_read_failed)
+        return;
     (*ip) |= ((u32b)(sf_get()) << 16);
+    if (load_read_failed)
+        return;
     (*ip) |= ((u32b)(sf_get()) << 24);
     /* load_byte_offset already incremented by sf_get() calls */
     log_trace("[load:%06u] rd_u32b: 0x%08X (%u)", (unsigned)(load_byte_offset - 4), (unsigned)*ip, (unsigned)*ip);
@@ -307,17 +349,27 @@ static void rd_s32b(s32b* ip) {
 /*
  * Hack -- read a string
  */
-static void rd_string(char* str, int max)
+static bool rd_string(char* str, int max)
 {
     int i;
+
+    if (!str || max <= 0)
+        return false;
+
+    str[0] = '\0';
 
     /* Read the string */
     for (i = 0; true; i++)
     {
         byte tmp8u;
 
+        if (load_read_failed)
+            break;
+
         /* Read a byte */
         rd_byte(&tmp8u);
+        if (load_read_failed)
+            break;
 
         /* Collect string while legal */
         if (i < max)
@@ -330,6 +382,7 @@ static void rd_string(char* str, int max)
 
     /* Terminate */
     str[max - 1] = '\0';
+    return !load_read_failed;
 }
 
 /*
@@ -340,7 +393,7 @@ static void strip_bytes(int n)
     byte tmp8u;
 
     /* Strip the bytes */
-    while (n--)
+    while (n-- && !load_read_failed)
         rd_byte(&tmp8u);
 }
 
@@ -588,6 +641,8 @@ static errr rd_item(object_type* o_ptr)
 
     /* Inscription */
     rd_string(buf, sizeof(buf));
+    if (load_read_failed)
+        return (-1);
 
     /* Save the inscription */
     if (buf[0])
@@ -2215,7 +2270,8 @@ static bool rd_notes(void)
         /* Append the notes in the savefile to the buffer */
         while (true)
         {
-            rd_string(tmpstr, sizeof(tmpstr));
+            if (!rd_string(tmpstr, sizeof(tmpstr)))
+                return (-1);
             /* Found the end? */
             if (strstr(tmpstr, NOTES_MARK))
                 break;
@@ -2228,7 +2284,8 @@ static bool rd_notes(void)
     {
         while (true)
         {
-            rd_string(tmpstr, sizeof(tmpstr));
+            if (!rd_string(tmpstr, sizeof(tmpstr)))
+                return (-1);
 
             /* Found the end? */
             if (strstr(tmpstr, NOTES_MARK))
@@ -2275,6 +2332,11 @@ static errr rd_inventory(void)
 
         /* Get the next item index */
         rd_u16b(&n);
+        if (load_read_failed)
+        {
+            note("Error reading inventory index");
+            return (-1);
+        }
 
         /* Nope, we reached the end */
         if (n == 0xFFFF)
@@ -2363,6 +2425,12 @@ static errr rd_inventory(void)
 
     u16b supply_count = 0;
     rd_u16b(&supply_count);
+    if (load_read_failed)
+    {
+        supplies_set_allow_overflow(false);
+        note("Error reading supply count");
+        return (-1);
+    }
     log_debug("Loading %u supply entries", (unsigned)supply_count);
     supplies_set_allow_overflow(true);
     for (u16b si = 0; si < supply_count; si++)
@@ -2379,6 +2447,12 @@ static errr rd_inventory(void)
 
         s32b stored_units = 0;
         rd_s32b(&stored_units);
+        if (load_read_failed)
+        {
+            supplies_set_allow_overflow(false);
+            note("Error reading supply data");
+            return (-1);
+        }
 
         if (supply.tval == TV_GEM)
         {
@@ -2432,16 +2506,25 @@ static void rd_messages(void)
 
     /* Total */
     rd_s16b(&num);
+    if (load_read_failed)
+        return;
+    if (num < 0)
+        num = 0;
+    if (num > MESSAGE_MAX)
+        num = MESSAGE_MAX;
     log_debug("Loading %d message history entries", num);
 
     /* Read the messages */
     for (i = 0; i < num; i++)
     {
         /* Read the message */
-        rd_string(buf, sizeof(buf));
+        if (!rd_string(buf, sizeof(buf)))
+            return;
 
         /* Read the message type */
         rd_u16b(&tmp16u);
+        if (load_read_failed)
+            return;
 
         /* Save the message */
         message_add(buf, tmp16u);
@@ -2556,11 +2639,26 @@ static errr rd_dungeon(void)
 
     log_trace("[load:%06u] === BEGIN CAVE_INFO RLE ===", (unsigned)load_byte_offset);
     /* Load the dungeon data */
+    int empty_runs = 0;
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
     {
         /* Grab RLE info */
         rd_byte(&count);
         rd_byte(&tmp8u);
+        if (load_read_failed)
+        {
+            note("Invalid cave_info RLE data");
+            return (-1);
+        }
+        if (!reliability_accept_rle_count(count, &empty_runs, 8))
+        {
+            note("Invalid cave_info RLE data");
+            return (-1);
+        }
+        if (count == 0)
+        {
+            continue;
+        }
 
         /* Apply the RLE info */
         for (i = count; i > 0; i--)
@@ -2598,10 +2696,25 @@ static errr rd_dungeon(void)
         }
 
         log_trace("[load:%06u] === BEGIN CAVE_INFO_HI RLE ===", (unsigned)load_byte_offset);
+        empty_runs = 0;
         for (x = y = 0; y < p_ptr->cur_map_hgt;)
         {
             rd_byte(&count);
             rd_byte(&tmp8u);
+            if (load_read_failed)
+            {
+                note("Invalid cave_info_hi RLE data");
+                return (-1);
+            }
+            if (!reliability_accept_rle_count(count, &empty_runs, 8))
+            {
+                note("Invalid cave_info_hi RLE data");
+                return (-1);
+            }
+            if (count == 0)
+            {
+                continue;
+            }
 
             for (i = count; i > 0; i--)
             {
@@ -2642,11 +2755,26 @@ static errr rd_dungeon(void)
 
     log_trace("[load:%06u] === BEGIN CAVE_FEAT RLE ===", (unsigned)load_byte_offset);
     /* Load the dungeon data */
+    empty_runs = 0;
     for (x = y = 0; y < p_ptr->cur_map_hgt;)
     {
         /* Grab RLE info */
         rd_byte(&count);
         rd_byte(&tmp8u);
+        if (load_read_failed)
+        {
+            note("Invalid cave_feat RLE data");
+            return (-1);
+        }
+        if (!reliability_accept_rle_count(count, &empty_runs, 8))
+        {
+            note("Invalid cave_feat RLE data");
+            return (-1);
+        }
+        if (count == 0)
+        {
+            continue;
+        }
 
         /* Apply the RLE info */
         for (i = count; i > 0; i--)
@@ -2696,6 +2824,7 @@ static errr rd_dungeon(void)
 
     /*** Run length decoding of cave_color (style encoding) ***/
     log_trace("[load:%06u] === BEGIN CAVE_COLOR RLE ===", (unsigned)load_byte_offset);
+    empty_runs = 0;
     for (x = y = 0; y < p_ptr->cur_map_hgt;) {
         /* Grab RLE info, using prefetched pair if available first */
         if (color_rle_pair_prefetched) {
@@ -2707,6 +2836,20 @@ static errr rd_dungeon(void)
         } else {
             rd_byte(&count);
             rd_byte(&tmp8u);
+        }
+        if (load_read_failed)
+        {
+            note("Invalid cave_color RLE data");
+            return (-1);
+        }
+        if (!reliability_accept_rle_count(count, &empty_runs, 8))
+        {
+            note("Invalid cave_color RLE data");
+            return (-1);
+        }
+        if (count == 0)
+        {
+            continue;
         }
         /* Apply the RLE info */
         for (i = count; i > 0; i--) {
@@ -2859,6 +3002,8 @@ static errr rd_dungeon(void)
             rearrange_stack(y, x);
         }
     }
+    if (load_expect_stream_ok("dungeon objects"))
+        return (-1);
     log_trace("[load:%06u] === END OBJECTS ===", (unsigned)load_byte_offset);
 
     /*** Monsters ***/
@@ -2906,6 +3051,8 @@ static errr rd_dungeon(void)
             return (-1);
         }
     }
+    if (load_expect_stream_ok("dungeon monsters"))
+        return (-1);
     log_trace("[load:%06u] === END MONSTERS ===", (unsigned)load_byte_offset);
 
     /*** Player (repair path) ***/
@@ -3190,6 +3337,7 @@ static errr rd_savefile_new_aux(void)
     /* Clear the checksums */
     v_check = 0L;
     x_check = 0L;
+    load_read_failed = false;
 
     /* Operating system info */
     rd_u32b(&sf_xtra);
@@ -3208,16 +3356,22 @@ static errr rd_savefile_new_aux(void)
 
     /* Read RNG state */
     rd_randomizer();
+    if (load_expect_stream_ok("randomizer"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Randomizer Info");
 
     /* Then the options */
     rd_options();
+    if (load_expect_stream_ok("options"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Option Flags");
 
     /* Then the "messages" */
     rd_messages();
+    if (load_expect_stream_ok("messages"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Messages");
 
@@ -3238,9 +3392,13 @@ static errr rd_savefile_new_aux(void)
         /* Read the lore */
         rd_lore(i);
     }
+    if (load_expect_stream_ok("monster memory"))
+        return (-1);
     if (savefile_has_runtime_overrides)
     {
         rd_monster_runtime_overrides();
+        if (load_expect_stream_ok("monster runtime overrides"))
+            return (-1);
     }
     else if (r_base)
     {
@@ -3279,6 +3437,8 @@ static errr rd_savefile_new_aux(void)
 
         rd_byte(&k_ptr->squelch);
     }
+    if (load_expect_stream_ok("object memory"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Object Memory");
 
@@ -3311,6 +3471,8 @@ static errr rd_savefile_new_aux(void)
             a_info[i].seen = 0;
         }
     }
+    if (load_expect_stream_ok("artefact memory"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Artefacts");
 
@@ -3318,17 +3480,23 @@ static errr rd_savefile_new_aux(void)
     log_debug("Loading extra player information");
     if (rd_extra())
         return (-1);
+    if (load_expect_stream_ok("extra player information"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded extra information");
 
     log_debug("Loading random artefacts");
     if (rd_randarts())
         return (-1);
+    if (load_expect_stream_ok("random artefacts"))
+        return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Random Artefacts");
 
     log_debug("Loading notes");
     if (rd_notes())
+        return (-1);
+    if (load_expect_stream_ok("notes"))
         return (-1);
     if (runtime_cli_fiddle())
         note("Loaded Notes");

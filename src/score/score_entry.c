@@ -135,30 +135,22 @@ bool build_live_preview_score(high_score* out)
     return (create_score_internal(out, time(NULL), "(alive and well)") == 0);
 }
 
-errr score_entry_submit(high_score* the_score)
+bool score_entry_is_ranked_run(void)
 {
 #ifndef SCORE_CHEATERS
     int j;
 #endif
 
-    if (!highscore_fd)
-    {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score file found)");
-        return 0;
-    }
-
 #ifndef SCORE_WIZARDS
     if (p_ptr->noscore & 0x000F)
     {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score for wizards)");
-        return 0;
+        return false;
     }
 #endif
 
     if (!p_ptr->escaped && streq(p_ptr->died_from, "Interrupting"))
     {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score when interrupted)");
-        return 0;
+        return false;
     }
 
 #ifndef SCORE_CHEATERS
@@ -167,21 +159,33 @@ errr score_entry_submit(high_score* the_score)
         if (!op_ptr->opt[j])
             continue;
 
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score when cheating)");
-        return 0;
+        return false;
     }
 
     if (p_ptr->noscore & 0x0001)
     {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score when cheating)");
-        return 0;
+        return false;
     }
 #endif
+
+    return true;
+}
+
+errr score_entry_submit(high_score* the_score)
+{
+    if (!highscore_fd)
+    {
+        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score file found)");
+        return 1;
+    }
+
+    if (!score_entry_is_ranked_run())
+        return 0;
 
     safe_setuid_grab();
     safe_setuid_drop();
 
-    (void)highscore_add(the_score);
+    int result = highscore_add(the_score);
 
     if (highscore_fd)
     {
@@ -191,7 +195,7 @@ errr score_entry_submit(high_score* the_score)
         safe_setuid_drop();
     }
 
-    return 0;
+    return (result < 0) ? 1 : 0;
 }
 
 static int race_has_character(uint16_t race, uint16_t character)

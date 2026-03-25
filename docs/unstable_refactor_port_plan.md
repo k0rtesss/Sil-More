@@ -3,6 +3,9 @@
 ## Purpose
 Port the structural refactor already proven on `unstable` into `quests-and-refactor` without losing the newer gameplay, Android, quest, UI, and drop-system work on the current branch. After the unstable structure is in place, continue past unstable to finish the job: shrink `externs.h`, localize globals from `variable.c`, and separate core game code from SDL-facing code so the codebase is safer for Android now and iOS later.
 
+Follow-on work after the unstable-port completion point now lives in
+`docs/modernization_mobile_roadmap.md`.
+
 ## Current Status
 - Status date: 2026-03-25.
 - Current-tree verification on 2026-03-25:

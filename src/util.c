@@ -14,13 +14,22 @@
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-ui.h"
+#include "reliability-checks.h"
 #include <SDL3/SDL.h>
 
-/* Fallback no_light() implementation if missing elsewhere */
 bool no_light(void)
 {
-    /* Consider no special light blocking by default */
-    return false;
+    if (!p_ptr)
+        return true;
+
+    if (p_ptr->cur_light > 0)
+        return false;
+
+    if (p_ptr->py < 0 || p_ptr->py >= MAX_DUNGEON_HGT || p_ptr->px < 0
+        || p_ptr->px >= MAX_DUNGEON_WID)
+        return true;
+
+    return (cave_info[p_ptr->py][p_ptr->px] & CAVE_GLOW) == 0;
 }
 
 /*
@@ -4566,15 +4575,26 @@ void editing_buffer_init(
     if (!eb_ptr)
         return;
 
-    if (buf)
-        len = strlen(buf);
+    eb_ptr->pos = 0;
+    eb_ptr->gap_size = 0;
+    eb_ptr->max_size = 0;
+    eb_ptr->buf = NULL;
+
+    if (max_size == 0)
+        return;
+
+    len = reliability_clamp_initial_text_len(buf, max_size);
 
     /* Alloc a clean buffer */
     eb_ptr->buf = mem_alloc_array(max_size, char);
+    if (!eb_ptr->buf)
+        return;
 
     /* Copy the initial string, if any */
     if (len > 0)
-        SDL_strlcpy(eb_ptr->buf, buf, sizeof(eb_ptr->buf));
+        SDL_strlcpy(eb_ptr->buf, buf, max_size);
+    else
+        eb_ptr->buf[0] = '\0';
 
     /* Initialize the remaining fields */
     eb_ptr->pos = len;
