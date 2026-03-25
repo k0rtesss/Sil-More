@@ -3,6 +3,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include <SDL3/SDL.h>
 
 #define TAB_COLUMNS 8
 
@@ -16,13 +17,13 @@ static bool sanitize_path(char* out, size_t out_len, cptr file)
     return true;
 }
 
-SDL_IOStream* sdl_fopen(cptr file, cptr mode)
+ang_file* sdl_fopen(cptr file, cptr mode)
 {
     char buf[1024];
     if (!sanitize_path(buf, sizeof(buf), file))
         return NULL;
 
-    SDL_IOStream* stream = SDL_IOFromFile(buf, mode);
+    ang_file* stream = SDL_IOFromFile(buf, mode);
     if (!stream)
     {
         log_debug("sdl_fopen: failed to open '%s' mode '%s': %s", buf, mode, SDL_GetError());
@@ -31,7 +32,7 @@ SDL_IOStream* sdl_fopen(cptr file, cptr mode)
     return stream;
 }
 
-errr sdl_fclose(SDL_IOStream* stream)
+errr sdl_fclose(ang_file* stream)
 {
     if (!stream)
         return -1;
@@ -45,7 +46,7 @@ errr sdl_fclose(SDL_IOStream* stream)
     return 0;
 }
 
-SDL_IOStream* sdl_fopen_temp(char* buf, size_t max)
+ang_file* sdl_fopen_temp(char* buf, size_t max)
 {
     if (!path_temp(buf, max))
         return NULL;
@@ -53,7 +54,7 @@ SDL_IOStream* sdl_fopen_temp(char* buf, size_t max)
     return sdl_fopen(buf, "w");
 }
 
-SDL_IOStream* sdl_fmake(cptr file, int mode)
+ang_file* sdl_fmake(cptr file, int mode)
 {
     char buf[1024];
     (void)mode;
@@ -61,7 +62,7 @@ SDL_IOStream* sdl_fmake(cptr file, int mode)
     if (!sanitize_path(buf, sizeof(buf), file))
         return NULL;
 
-    SDL_IOStream* test = SDL_IOFromFile(buf, "rb");
+    ang_file* test = SDL_IOFromFile(buf, "rb");
     if (test)
     {
         SDL_CloseIO(test);
@@ -71,7 +72,7 @@ SDL_IOStream* sdl_fmake(cptr file, int mode)
     return SDL_IOFromFile(buf, "wb");
 }
 
-errr sdl_fgets(SDL_IOStream* stream, char* buf, size_t n)
+errr sdl_fgets(ang_file* stream, char* buf, size_t n)
 {
     u16b i = 0;
     int len;
@@ -126,7 +127,7 @@ errr sdl_fgets(SDL_IOStream* stream, char* buf, size_t n)
     return 0;
 }
 
-errr sdl_fputs(SDL_IOStream* stream, cptr buf, size_t n)
+errr sdl_fputs(ang_file* stream, cptr buf, size_t n)
 {
     (void)n;
     size_t result = SDL_IOprintf(stream, "%s\n", buf);
@@ -139,7 +140,7 @@ errr sdl_fputs(SDL_IOStream* stream, cptr buf, size_t n)
     return 0;
 }
 
-errr sdl_read(SDL_IOStream* stream, char* buf, size_t n)
+errr sdl_read(ang_file* stream, char* buf, size_t n)
 {
     size_t bytes_read = SDL_ReadIO(stream, buf, n);
     if (bytes_read != n)
@@ -151,7 +152,7 @@ errr sdl_read(SDL_IOStream* stream, char* buf, size_t n)
     return 0;
 }
 
-errr sdl_write(SDL_IOStream* stream, cptr buf, size_t n)
+errr sdl_write(ang_file* stream, cptr buf, size_t n)
 {
     size_t bytes_written = SDL_WriteIO(stream, buf, n);
     if (bytes_written != n)
@@ -163,7 +164,7 @@ errr sdl_write(SDL_IOStream* stream, cptr buf, size_t n)
     return 0;
 }
 
-errr sdl_seek(SDL_IOStream* stream, Sint64 offset)
+errr sdl_seek(ang_file* stream, ang_file_off_t offset)
 {
     if (!stream)
         return 1;
@@ -184,7 +185,7 @@ errr sdl_seek(SDL_IOStream* stream, Sint64 offset)
     return 0;
 }
 
-Sint64 sdl_tell(SDL_IOStream* stream)
+ang_file_off_t sdl_tell(ang_file* stream)
 {
     Sint64 pos = SDL_TellIO(stream);
     if (pos < 0)
@@ -194,7 +195,7 @@ Sint64 sdl_tell(SDL_IOStream* stream)
     return pos;
 }
 
-Sint64 sdl_size(SDL_IOStream* stream)
+ang_file_off_t sdl_size(ang_file* stream)
 {
     Sint64 size = SDL_GetIOSize(stream);
     if (size < 0)

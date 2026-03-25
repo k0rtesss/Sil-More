@@ -9,7 +9,7 @@
  */
 
 #include "angband.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "externs.h"
 
 #include <ctype.h>

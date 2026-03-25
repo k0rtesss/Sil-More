@@ -13,7 +13,7 @@
 #include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "runtime-cli.h"
 #include "runtime/runtime-game.h"
 #include "player/killer.h"
@@ -22,7 +22,7 @@
 #include "score/score_runs.h"
 #include "ui/ui-story.h"
 #include "score/score_ui.h"
-#include "sdl-sound.h"
+#include "platform-audio.h"
 #include "z-term.h"
 #include <time.h>
 #include <string.h>

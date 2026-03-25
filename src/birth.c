@@ -13,7 +13,7 @@
 #include "blitz.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_entry.h"

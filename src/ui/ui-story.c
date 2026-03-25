@@ -4,7 +4,7 @@
 #include "externs.h"
 
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "metarun.h"
 #include "ui/story_font.h"
 #include "ui/ui-story.h"

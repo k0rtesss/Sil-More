@@ -12,8 +12,8 @@
 #include "externs.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "main-sdl.h"
-#include "sdl-sound.h"
+#include "platform-audio.h"
+#include "platform-ui.h"
 #include <SDL3/SDL.h>
 
 /* Fallback no_light() implementation if missing elsewhere */

@@ -1,5 +1,15 @@
 # Session notes
 
+## 2026-03-25: WP90 platform-boundary follow-through
+- Completed `WP90` by tightening the remaining core/frontend boundary without changing gameplay behavior:
+  - core callers now include `platform-ui.h` / `platform-audio.h` directly instead of the SDL-named wrapper headers
+  - added `src/platform-io.h` so the public/core I/O-facing headers can use the opaque `ang_file` / `ang_file_off_t` surface instead of exposing `SDL_IOStream`
+  - updated `src/fs/io_sdl.h`, `src/init.h`, `src/score/score_io.h`, `src/score/score_runs.h`, `src/externs.h`, and the matching definitions so the narrow platform I/O type is live in the build
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-android-apk.ps1 -Config Debug` succeeded.
+
 ## 2026-03-25: WP71E-WP71G score/runtime/files completion
 - Completed the remaining `WP71` slices and finished the `files.c` breakup:
   - `src/score/score-entry.[ch]` now own score creation, live-preview, score submission, first-time-player detection, and the kinslayer score-entry path

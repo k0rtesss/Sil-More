@@ -13,7 +13,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "runtime-cli.h"
 #include "player/killer.h"
 #include "score/score_guid.h"

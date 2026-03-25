@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
 #include "object/object-slot.h"

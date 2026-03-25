@@ -486,7 +486,7 @@ static bool score_runs_read_detail_header(SDL_IOStream* file,
     return SDL_ReadIO(file, header, sizeof(*header)) == sizeof(*header);
 }
 
-bool score_runs_skip_detail_payload(SDL_IOStream* file,
+bool score_runs_skip_detail_payload(ang_file* file,
                                     const score_run_detail_header_v1* header)
 {
     if (!file || !header)

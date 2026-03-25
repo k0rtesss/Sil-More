@@ -16,7 +16,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {

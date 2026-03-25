@@ -777,7 +777,7 @@ void (*object_info_out_flags)(
 /*
  * Hack - the destination file for text_out_to_file.
  */
-SDL_IOStream* text_out_file = NULL;
+ang_file* text_out_file = NULL;
 
 /*
  * Hack -- function hook to output (colored) text to the

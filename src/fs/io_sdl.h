@@ -1,20 +1,19 @@
 #ifndef INCLUDED_FS_IO_SDL_H
 #define INCLUDED_FS_IO_SDL_H
 
-#include "h-basic.h"
-#include <SDL3/SDL.h>
+#include "platform-io.h"
 
 /* SDL-backed file helpers */
-extern SDL_IOStream* sdl_fopen(cptr file, cptr mode);
-extern SDL_IOStream* sdl_fopen_temp(char* buf, size_t max);
-extern SDL_IOStream* sdl_fmake(cptr file, int mode);
-extern errr sdl_fclose(SDL_IOStream* stream);
-extern errr sdl_fgets(SDL_IOStream* stream, char* buf, size_t n);
-extern errr sdl_fputs(SDL_IOStream* stream, cptr buf, size_t n);
-extern errr sdl_read(SDL_IOStream* stream, char* buf, size_t n);
-extern errr sdl_write(SDL_IOStream* stream, cptr buf, size_t n);
-extern errr sdl_seek(SDL_IOStream* stream, Sint64 offset);
-extern Sint64 sdl_tell(SDL_IOStream* stream);
-extern Sint64 sdl_size(SDL_IOStream* stream);
+extern ang_file* sdl_fopen(cptr file, cptr mode);
+extern ang_file* sdl_fopen_temp(char* buf, size_t max);
+extern ang_file* sdl_fmake(cptr file, int mode);
+extern errr sdl_fclose(ang_file* stream);
+extern errr sdl_fgets(ang_file* stream, char* buf, size_t n);
+extern errr sdl_fputs(ang_file* stream, cptr buf, size_t n);
+extern errr sdl_read(ang_file* stream, char* buf, size_t n);
+extern errr sdl_write(ang_file* stream, cptr buf, size_t n);
+extern errr sdl_seek(ang_file* stream, ang_file_off_t offset);
+extern ang_file_off_t sdl_tell(ang_file* stream);
+extern ang_file_off_t sdl_size(ang_file* stream);
 
 #endif /* INCLUDED_FS_IO_SDL_H */

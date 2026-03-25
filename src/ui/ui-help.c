@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "ui-help.h"
 #include "externs.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>

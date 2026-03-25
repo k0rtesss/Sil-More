@@ -13,7 +13,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
 #include "runtime/runtime-game.h"

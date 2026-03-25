@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"

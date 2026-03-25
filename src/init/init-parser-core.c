@@ -47,7 +47,7 @@ errr parse_tile_line(const char* buf, byte* x_attr, char* x_char)
  * Initialize an "*_info" array by parsing an ascii "template" file.
  */
 errr init_info_txt(
-    SDL_IOStream* fp, char* buf, header* head, parse_info_txt_func parse_info_txt_line)
+    ang_file* fp, char* buf, header* head, parse_info_txt_func parse_info_txt_line)
 {
     errr err;
 

@@ -1,11 +1,10 @@
 #ifndef INCLUDED_SCORE_IO_H
 #define INCLUDED_SCORE_IO_H
 
-#include "h-basic.h"
-#include <SDL3/SDL.h>
+#include "platform-io.h"
 
 typedef struct score_file_ctx {
-    SDL_IOStream* fd;
+    ang_file* fd;
     byte version_major;
     byte version_minor;
     byte version_patch;
@@ -28,7 +27,7 @@ score_file_ctx* score_file_global_ctx(void);
 bool scores_version_has_curses(const score_file_ctx* ctx);
 
 bool score_file_load_header(score_file_ctx* ctx, const char *filepath);
-SDL_IOStream* score_file_open(const char *filepath, int mode);
+ang_file* score_file_open(const char *filepath, int mode);
 bool build_current_score_path(char* buf, size_t len);
 
 /* Convenience helper for zeroing a context before use. */

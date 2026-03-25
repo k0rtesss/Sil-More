@@ -33,11 +33,12 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - a follow-on utility slice is also landed: `comma_number()` / `atomonth()` now live in `src/format.c`, and `silmarils_possessed()` / `has_iron_crown()` now live in `src/player/player-resources.c`
   - `WP80` is now landed in the working tree: `src/externs.h` now relies on narrow subsystem headers for the `fs/`, `runtime/`, `player/`, `object/`, `score/`, `spell/`, and `ui/` ownership already created by `WP60`-`WP71`, and the obvious combat/item/drop/runtime/level-generation/metarun globals now live in their owning modules instead of `src/variable.c`
   - `WP81` is now landed in the working tree: `src/generate.c` is reduced to a legacy note like the other retired monolith entry files, and the remaining live generate-owner comments now point at the split `src/level-generation/` modules instead
+  - `WP90` is now landed in the working tree: core callers now include `src/platform-ui.h` / `src/platform-audio.h` directly instead of the SDL-named wrapper headers, new `src/platform-io.h` hides `SDL_IOStream` behind the narrower `ang_file` ownership used by the public/core I/O-facing headers, and the standard, portable, plus Android debug smoke builds all pass after the boundary cleanup
   - there is no remaining active giant frontend monolith; `src/files.c` is down to 486 lines and `src/cmd4.c` is down to 240 lines
   - the current header/global surface is still above the intended end state:
     - `src/externs.h`: 1,074 lines and 882 `extern` declarations
     - `src/variable.c`: 710 lines
-  - the next real ownership wave is now `WP90`
+  - the planned ownership wave through `WP90` is now landed, and any further work should be narrow fallout or future-platform-driven follow-up
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -120,20 +121,21 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP70` on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP80` on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP81` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP90` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-android-apk.ps1 -Config Debug` succeeded again after completing `WP90` on 2026-03-25.
 
 ## Completion Assessment
 - The original unstable-port objective is effectively complete as an intermediate architecture:
   - the grouped subsystem build graph is live
   - most former monolith entry files are already reduced to legacy notes outside the build
   - standard and portable builds both pass on the new target layout
-- The broader refactor is not complete:
+- The named refactor package roadmap is now complete:
   - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
   - the `WP71` `files.c` split is now complete and no longer blocks the next cleanup wave
-  - the `WP80` second header/global cleanup pass and `WP81` legacy carryover cleanup are now complete, but `WP90` platform-boundary follow-through is still outstanding
-- Priority judgement for the next wave:
-  - move directly to `WP90` now that the excluded legacy carryover cleanup is complete
-  - keep `WP90` focused on the mobile/platform boundary follow-through instead of reopening broad `externs.h` / `variable.c` churn
+  - the `WP80` second header/global cleanup pass, `WP81` legacy carryover cleanup, and `WP90` platform-boundary follow-through are all now complete in the live tree
+- Priority judgement for any further work:
   - treat any further header/global edits as narrow fallout fixes only, not as another large cleanup wave
+  - preserve the current platform boundary unless a later Android/iOS pass finds a concrete gap worth a new focused package
 - Lower priority:
   - keep the remaining legacy note stubs as historical breadcrumbs unless a later cleanup needs to remove them for packaging or tooling reasons
 
@@ -621,7 +623,7 @@ Detailed `WP71` split sequence:
 - `WP71G`: reduce `src/files.c` to a small facade or legacy note and replace its `externs.h` block with narrow subsystem headers.
 
 Recommended execution order for the next wave:
-- With `WP70`, `WP71`, `WP80`, and `WP81` now complete, move directly into `WP90`.
+- With `WP70`, `WP71`, `WP80`, `WP81`, and `WP90` now complete, keep any further platform cleanup as narrow fallout only.
 - Do not reopen `WP60`-`WP63` or `WP71` except for fallout fixes directly caused by later cleanup.
 
 ### Next-Wave Serial Packages
@@ -635,6 +637,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 
 - `WP80`: completed in the working tree on 2026-03-25; the package replaced large duplicate `externs.h` blocks with narrow subsystem headers, moved the obvious combat/item/drop/runtime/level-generation/metarun globals out of `variable.c`, removed dead leftover state, and passed standard + portable incremental builds.
 - `WP81`: completed in the working tree on 2026-03-25; `src/generate.c` is now a legacy note outside the build like the other retired monolith entry files, the last live generate-owner comments now point at the split `src/level-generation/` surface, and standard plus portable incremental builds both pass.
+- `WP90`: completed in the working tree on 2026-03-25; core callers now use `platform-ui.h` / `platform-audio.h` directly instead of the SDL-named wrapper headers, new `src/platform-io.h` hides `SDL_IOStream` from the public/core I/O-facing headers behind `ang_file`, and the standard, portable, plus Android debug smoke builds all pass.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -674,7 +677,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. With `WP80` and `WP81` complete, move to `WP90` as the main integrator pass for the remaining mobile/platform boundary work.
-2. Treat any remaining `WP80`/`WP81`-area edits as narrow fallout fixes only.
+1. Treat `WP90` as the completion point for this roadmap and keep any further changes in this area to narrow fallout fixes.
+2. If a later Android/iOS pass exposes a concrete new boundary problem, open a new focused package instead of reopening the completed `WP90` wave wholesale.
 
 This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

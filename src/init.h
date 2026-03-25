@@ -11,8 +11,7 @@
 #ifndef INCLUDED_INIT_H
 #define INCLUDED_INIT_H
 
-#include "h-basic.h"
-#include <SDL3/SDL.h>
+#include "platform-io.h"
 
 
 /*
@@ -102,7 +101,7 @@ typedef struct effect_glyph
 } effect_glyph;
 
 extern errr init_info_txt(
-    SDL_IOStream* fp, char* buf, header* head, parse_info_txt_func parse_info_txt_line);
+    ang_file* fp, char* buf, header* head, parse_info_txt_func parse_info_txt_line);
 
 #ifdef ALLOW_TEMPLATES
 extern errr parse_z_info(char* buf, header* head);

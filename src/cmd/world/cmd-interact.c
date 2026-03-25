@@ -12,7 +12,7 @@
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "player/killer.h"

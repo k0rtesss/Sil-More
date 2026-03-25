@@ -208,7 +208,7 @@ static bool score_file_upgrade_to_curses(score_file_ctx* ctx, const char *filepa
     return true;
 }
 
-SDL_IOStream* score_file_open(const char *filepath, int mode)
+ang_file* score_file_open(const char *filepath, int mode)
 {
     score_file_ctx* ctx = score_file_active_ctx();
     score_file_reset_ctx(ctx);

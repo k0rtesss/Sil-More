@@ -8,13 +8,13 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"
 #include "player/player-oaths.h"
 #include "sound-config.h"
-#include "sdl-sound.h"
+#include "platform-audio.h"
 #include "ui/ui-character-screen.h"
 
 extern struct sound_config g_sound_config;

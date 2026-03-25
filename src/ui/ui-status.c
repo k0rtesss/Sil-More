@@ -7,7 +7,7 @@
 #include "ui/ui-status.h"
 
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "metarun.h"
 #include "player/player-calc.h"
 #include "player/identification.h"

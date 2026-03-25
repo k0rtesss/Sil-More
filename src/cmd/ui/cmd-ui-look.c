@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include "metarun.h"
 #include "object/object-ui-enhanced.h"
 #include "ui/ui-look-sidebar.h"

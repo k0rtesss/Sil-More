@@ -15,7 +15,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "runtime-cli.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 #include <stdio.h>
 #include "metarun.h"
 #include "score/score_guid.h"

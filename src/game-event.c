@@ -4,7 +4,7 @@
 #include "externs.h"
 #include "game-event.h"
 #include "log/log.h"
-#include "main-sdl.h"
+#include "platform-ui.h"
 
 bool random_stair_location(int* sy, int* sx)
 {
