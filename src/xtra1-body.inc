@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "metarun.h"
 #include "player/encumbrance.h"
 #include "player/identification.h"

@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "externs.h"
+#include "main-sdl.h"
 #include "sdl-config.h"
 #include "log/log.h"
 #include "pane.h"

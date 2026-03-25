@@ -20,6 +20,7 @@
 #include "fs/path.h"
 #include "h-basic.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "metarun.h"
 #include "platform.h"
 #include "sdl-config.h"

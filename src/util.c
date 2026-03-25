@@ -12,6 +12,7 @@
 #include "externs.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "sdl-sound.h"
 #include <SDL3/SDL.h>
 
@@ -2554,7 +2555,6 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent)
 void text_out_to_screen(byte a, cptr str)
 {
     /* If story font is enabled, use pixel-based wrapping */
-    extern bool sdl_is_story_font_enabled(void);
     if (sdl_is_story_font_enabled())
     {
         text_out_to_screen_story(a, str);

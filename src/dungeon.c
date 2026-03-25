@@ -13,6 +13,7 @@
 #include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_runs.h"

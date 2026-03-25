@@ -13,6 +13,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "player/killer.h"
 #include "score/score_guid.h"
 #include <string.h> /* memset, strstr */

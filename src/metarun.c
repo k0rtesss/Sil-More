@@ -13,6 +13,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
 #include "h-define.h"

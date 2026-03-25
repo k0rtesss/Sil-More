@@ -4,6 +4,7 @@
 #include "fs/io_sdl.h"
 #include "log/log.h"
 #include "main.h"
+#include "main-sdl.h"
 #include "z-term.h"
 #include "pane.h"
 #include "sdl-config.h"

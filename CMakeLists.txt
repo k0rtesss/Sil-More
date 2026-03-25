@@ -238,9 +238,6 @@ set(SIL_MORE_SOURCES_SCORE
 
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
-    src/main.c
-    src/main-sdl.c
-    src/pane.c
     src/signals.c
     src/ui/colors.c
     src/ui/ui-file-viewer.c
@@ -249,11 +246,17 @@ set(SIL_MORE_SOURCES_FRONTEND
 )
 
 set(SIL_MORE_SOURCES_PLATFORM
+    src/main-sdl.c
+    src/pane.c
     src/fs/io_sdl.c
     src/fs/path.c
     src/sdl-config.c
     src/sdl-sound.c
     src/sound-config.c
+)
+
+set(SIL_MORE_SOURCES_APP
+    src/main.c
 )
 
 set(SIL_MORE_SOURCES_LOG
@@ -265,7 +268,7 @@ set(SIL_MORE_SOURCES_SUPPORT
     src/support/strl.c
 )
 
-set(SIL_MORE_SOURCES
+set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_CORE}
     ${SIL_MORE_SOURCES_CMD}
     ${SIL_MORE_SOURCES_INIT}
@@ -279,15 +282,50 @@ set(SIL_MORE_SOURCES
     ${SIL_MORE_SOURCES_SAVE_AND_META}
     ${SIL_MORE_SOURCES_SCORE}
     ${SIL_MORE_SOURCES_FRONTEND}
-    ${SIL_MORE_SOURCES_PLATFORM}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}
 )
 
+add_library(sil-build-config INTERFACE)
+target_compile_options(sil-build-config INTERFACE
+  $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra>
+  $<$<C_COMPILER_ID:MSVC>:/W4>
+)
+target_include_directories(sil-build-config INTERFACE src)
+
+if (LOG_MODE_TIMESTAMP)
+  target_compile_definitions(sil-build-config INTERFACE LOG_MODE_TIMESTAMP)
+endif()
+
+if (STEAMDECK_SUPPORT)
+  target_compile_definitions(sil-build-config INTERFACE STEAMDECK_SUPPORT)
+endif()
+
+if (SIL_USE_LOCAL_DATA)
+  target_compile_definitions(sil-build-config INTERFACE SIL_USE_LOCAL_DATA)
+endif()
+
+add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
+set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(sil-core PUBLIC sil-build-config SDL3::SDL3 log)
+
+# WP50: the SDL side still exports services back into gameplay/UI code
+# (config, sound, pane state). Keep it as an object target for now so the
+# target split can land without mixing in that later API-decoupling work.
+add_library(sil-platform-sdl OBJECT ${SIL_MORE_SOURCES_PLATFORM})
+set_target_properties(sil-platform-sdl PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(sil-platform-sdl PUBLIC
+  sil-build-config
+  SDL3::SDL3
+  SDL3_ttf::SDL3_ttf
+  SDL3_image::SDL3_image
+  log
+)
+
 if(ANDROID)
-  add_library(sil-more SHARED ${SIL_MORE_SOURCES})
+  add_library(sil-more SHARED ${SIL_MORE_SOURCES_APP})
 else()
-  add_executable(sil-more ${SIL_MORE_SOURCES})
+  add_executable(sil-more ${SIL_MORE_SOURCES_APP})
 endif()
 
 if(ANDROID)
@@ -304,29 +342,8 @@ endif()
 # add_library(log STATIC src/log/log.c)
 target_include_directories(log PUBLIC src/log)
 
-# add_executable(sil-more ${SIL_MORE_SOURCES})
-
-target_compile_options(sil-more PRIVATE
-  $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra>
-  $<$<C_COMPILER_ID:MSVC>:/W4>
-)
-
-target_include_directories(sil-more PRIVATE src)
 if(MINGW)
   target_link_options(sil-more PRIVATE -mwindows)
 endif()
 
-target_link_libraries(sil-more PRIVATE SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image log)
-
-# Add compile definitions after target is created
-if (LOG_MODE_TIMESTAMP)
-  target_compile_definitions(sil-more PUBLIC LOG_MODE_TIMESTAMP)
-endif()
-
-if (STEAMDECK_SUPPORT)
-    target_compile_definitions(sil-more PUBLIC STEAMDECK_SUPPORT)
-endif()
-
-if (SIL_USE_LOCAL_DATA)
-    target_compile_definitions(sil-more PUBLIC SIL_USE_LOCAL_DATA)
-endif()
+target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core)

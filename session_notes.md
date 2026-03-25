@@ -1,5 +1,14 @@
 # Session notes
 
+## 2026-03-25: WP50 mechanical core/frontend target split
+- Reworked `CMakeLists.txt` so the build now produces `sil-core` as the static gameplay core archive, `sil-platform-sdl` as the SDL-facing object target, and `sil-more` as the thin launcher/app target.
+- Added `src/main-sdl.h` so the exported `main-sdl.c` frontend accessors/story-font/gamepad API now has an owning header; removed that duplicated declaration block from `src/externs.h`.
+- Moved `sdl_init_sounds()` into `src/sdl-sound.h` so sound entry points live with the rest of the SDL sound API instead of `src/main.h`.
+- Kept the SDL side as an object target because core code still calls back into `sdl-config`/`sdl-sound`; this lands the build-graph split without mixing in the later API-boundary cleanup.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
 ## 2026-03-25: WP40 smithing split out of cmd4
 - Moved the smithing subsystem out of `src/cmd4.c` into `src/smithing/` plus `src/ui/smithing/ui-smithing-screen.c`.
 - New active modules:

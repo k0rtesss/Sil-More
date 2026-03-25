@@ -3,6 +3,7 @@
 #include "../angband.h"
 #include "../externs.h"
 #include "../log/log.h"
+#include "../main-sdl.h"
 #include "story_font.h"
 
 /*

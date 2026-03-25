@@ -13,6 +13,7 @@
 #include "blitz.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "main-sdl.h"
 #include "player/killer.h"
 #include "sdl-config.h"
 #include "z-term.h"

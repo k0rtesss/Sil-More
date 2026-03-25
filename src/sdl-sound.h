@@ -5,6 +5,7 @@
 
 /* Initialize the SDL sound subsystem and load the sound registry. */
 bool sdl_sound_initialize(void);
+void sdl_init_sounds(void);
 
 /* Reload sound configuration data (safe to call multiple times). */
 void sdl_sound_reload(void);

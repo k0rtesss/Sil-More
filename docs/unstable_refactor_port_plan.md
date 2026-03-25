@@ -40,13 +40,19 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/cmd4.c` no longer owns smithing and is reduced to the remaining non-smithing menu/UI code.
   - `src/spell/spell-damage.c`, `spell-detection.c`, `spell-monster.c`, `spell-projection.c`, `spell-teleport.c`, `spell-terrain.c`, and `spell-utility.c`, plus `src/player/player-songs.c`, `player-song-disguise.c`, `player-song-duels.c`, `player-song-effects.c`, `player-calc.c`, and `src/game-event.c`, now own the former `spells1.c`/`spells2.c` monoliths plus the extracted player-song/player-calc/game-event helpers; `spells1.c` and `spells2.c` are reduced to legacy notes outside the build.
   - `src/melee/melee-attack.c`, `melee-combat-display.c`, `melee-movement.c`, `melee-process.c`, and `melee-util.c` now own the former `melee1.c`/`melee2.c` monoliths, and `melee1.c` plus `melee2.c` are reduced to legacy notes outside the build.
+- `Phase 6/7` has now started through the first mechanical `WP50` landing in the working tree:
+  - `CMakeLists.txt` now builds `sil-core` as the static gameplay core archive, `sil-platform-sdl` as the SDL-facing object target, and keeps `sil-more` as the thin launcher/app target.
+  - Standard and portable builds now both link the same `sil-core` target instead of compiling the full source set directly into `sil-more`.
+  - `src/main-sdl.h` now owns the exported `main-sdl.c` frontend accessors/story-font/gamepad API instead of duplicating that declaration block in `externs.h`, and `sdl_init_sounds()` now lives with the rest of the SDL sound API in `src/sdl-sound.h`.
+  - Remaining `WP50` follow-up is still architectural rather than mechanical: `angband.h` still pulls in SDL globally, and core modules still call through `sdl-config`/`sdl-sound` APIs that need narrower boundaries later.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the active `WP40` smithing split on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the active `WP41` spell/player-song split and revalidating the `WP42` melee split on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the first mechanical `WP50` core/frontend target split on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
 - Not started yet:
-  - `WP50` and `WP99`.
+  - `WP99`.
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -357,7 +363,7 @@ Current parallel package status:
 - `WP40`: completed in the working tree on 2026-03-25; smithing no longer lives in `cmd4.c`, the split smithing core now builds from `src/smithing/`, and the current branch's create/enchant/artefact/numbers/melt/repair-reforge UI now runs from `src/ui/smithing/ui-smithing-screen.c`.
 - `WP41`: completed in the working tree on 2026-03-25; the split spell/player-song/player-calc/game-event modules are active in the build, and `spells1.c` plus `spells2.c` are reduced to legacy notes outside the build.
 - `WP42`: completed in the working tree on 2026-03-25; the full `src/melee/*` split is active in the build, and `melee1.c` plus `melee2.c` are reduced to legacy notes outside the build.
-- `WP50`: not started.
+- `WP50`: in progress; the first mechanical target split is landed in `CMakeLists.txt` with `sil-core`, `sil-platform-sdl`, and the thin `sil-more` app target now building on both standard and portable trees, but the remaining SDL header/API decoupling work is still outstanding.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -397,7 +403,7 @@ Current parallel package status:
 
 ## Recommended Immediate Start
 1. `WP01` is already landed in the working tree; `WP00` is only partially captured and still needs the explicit smoke matrix bookkeeping.
-2. Move to `WP50`, with `WP30`, `WP40`, `WP41`, `WP42`, `WP20`, `WP21`, `WP22`, `WP10`, and `WP11` now structurally landed in the working tree.
+2. Continue `WP50`, with the mechanical target split now landed and the next work focused on narrowing the remaining SDL-facing APIs out of core modules.
 3. Reserve `WP99` for the main integrator.
 
 This order keeps the highest-conflict object/combat/UI work off the table until the repo already has the target directory structure and narrower headers.
