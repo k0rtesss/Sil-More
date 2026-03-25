@@ -80,14 +80,14 @@
 #define RANDART_VERSION 63
 
 /*
- * Number of grids in each block (vertically)
- * Probably hard-coded to 11, see "generate.c"
+ * Number of grids in each block (vertically).
+ * Level-generation code assumes this remains 11.
  */
 #define BLOCK_HGT 11
 
 /*
- * Number of grids in each block (horizontally)
- * Probably hard-coded to 11, see "generate.c"
+ * Number of grids in each block (horizontally).
+ * Level-generation code assumes this remains 11.
  */
 #define BLOCK_WID 11
 

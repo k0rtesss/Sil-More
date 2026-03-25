@@ -1,11 +1,10 @@
 /* File: level-generation.h */
 
 /*
- * Transitional public API for the level-generation split.
+ * Public API for the active level-generation modules on quests-and-refactor.
  *
- * These declarations currently describe the generate.c surface on the
- * quests-and-refactor branch. Keeping them here lets later file moves land
- * without expanding externs.h again.
+ * Keeping these declarations here avoids growing externs.h as the split
+ * remains localized under src/level-generation/.
  */
 
 #ifndef INCLUDED_LEVEL_GENERATION_H

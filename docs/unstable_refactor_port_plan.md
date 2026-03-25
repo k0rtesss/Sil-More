@@ -17,6 +17,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
     - `src/xtra2.c`: 6 lines
     - `src/spells1.c`: 14 lines
     - `src/spells2.c`: 12 lines
+  - `src/generate.c` is now also reduced to an 18-line legacy note outside the build; no excluded legacy carryover monolith remains in the tree.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeds on the current tree.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` also succeeds on the current tree.
 - The unstable-port milestone is structurally landed, but the overall refactor is not finished completely yet:
@@ -31,11 +32,12 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `WP71G` is now landed in the working tree: `src/files.c` is reduced to a 486-line facade that only keeps the privilege helpers, escape/suicide commands, and character-dump/mini-screenshot helpers
   - a follow-on utility slice is also landed: `comma_number()` / `atomonth()` now live in `src/format.c`, and `silmarils_possessed()` / `has_iron_crown()` now live in `src/player/player-resources.c`
   - `WP80` is now landed in the working tree: `src/externs.h` now relies on narrow subsystem headers for the `fs/`, `runtime/`, `player/`, `object/`, `score/`, `spell/`, and `ui/` ownership already created by `WP60`-`WP71`, and the obvious combat/item/drop/runtime/level-generation/metarun globals now live in their owning modules instead of `src/variable.c`
+  - `WP81` is now landed in the working tree: `src/generate.c` is reduced to a legacy note like the other retired monolith entry files, and the remaining live generate-owner comments now point at the split `src/level-generation/` modules instead
   - there is no remaining active giant frontend monolith; `src/files.c` is down to 486 lines and `src/cmd4.c` is down to 240 lines
   - the current header/global surface is still above the intended end state:
     - `src/externs.h`: 1,074 lines and 882 `extern` declarations
     - `src/variable.c`: 710 lines
-  - the next real ownership wave is now `WP81` + `WP90`
+  - the next real ownership wave is now `WP90`
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -117,6 +119,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after the follow-on `files.c` utility extraction on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP70` on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP80` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after completing `WP81` on 2026-03-25.
 
 ## Completion Assessment
 - The original unstable-port objective is effectively complete as an intermediate architecture:
@@ -126,13 +129,13 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - The broader refactor is not complete:
   - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
   - the `WP71` `files.c` split is now complete and no longer blocks the next cleanup wave
-  - the `WP80` second header/global cleanup pass is now complete, but `WP81` legacy carryover cleanup and `WP90` platform-boundary follow-through are still outstanding
+  - the `WP80` second header/global cleanup pass and `WP81` legacy carryover cleanup are now complete, but `WP90` platform-boundary follow-through is still outstanding
 - Priority judgement for the next wave:
-  - use `WP81` to clean up the remaining excluded legacy carryover files and wrapper notes now that the active ownership boundaries are no longer anchored in `externs.h`
+  - move directly to `WP90` now that the excluded legacy carryover cleanup is complete
   - keep `WP90` focused on the mobile/platform boundary follow-through instead of reopening broad `externs.h` / `variable.c` churn
   - treat any further header/global edits as narrow fallout fixes only, not as another large cleanup wave
 - Lower priority:
-  - excluded legacy carryover files such as `src/generate.c` should be cleaned up later, after active build code no longer depends on transitional bodies or wrappers
+  - keep the remaining legacy note stubs as historical breadcrumbs unless a later cleanup needs to remove them for packaging or tooling reasons
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -146,6 +149,7 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - Active refactor-generated code-body includes:
     - none under `src/`
   - Legacy note wrappers now outside the build:
+    - `src/generate.c`: 18 lines
     - `src/xtra1.c`: 11 lines
     - `src/xtra2.c`: 6 lines
     - `src/spells1.c`: 14 lines
@@ -153,8 +157,8 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - Largest active built catch-all files:
     - `src/files.c`: 486 lines
     - `src/cmd4.c`: 240 lines
-  - Largest excluded legacy carryover file still present in the tree:
-    - `src/generate.c`: 16,132 lines
+  - Excluded legacy carryover monoliths still present in the tree:
+    - none
   - Current global/header surface:
     - `src/externs.h`: 1,074 lines and 882 `extern` declarations
     - `src/variable.c`: 710 lines
@@ -617,7 +621,7 @@ Detailed `WP71` split sequence:
 - `WP71G`: reduce `src/files.c` to a small facade or legacy note and replace its `externs.h` block with narrow subsystem headers.
 
 Recommended execution order for the next wave:
-- With `WP70` and `WP71` now complete, move directly into `WP80`, then `WP81`, then `WP90`.
+- With `WP70`, `WP71`, `WP80`, and `WP81` now complete, move directly into `WP90`.
 - Do not reopen `WP60`-`WP63` or `WP71` except for fallout fixes directly caused by later cleanup.
 
 ### Next-Wave Serial Packages
@@ -630,6 +634,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 | WP90 | mobile/platform boundary follow-through | `CMakeLists.txt`, platform headers, `src/z-term.c`, frontend/core boundary files | WP80, WP81 |
 
 - `WP80`: completed in the working tree on 2026-03-25; the package replaced large duplicate `externs.h` blocks with narrow subsystem headers, moved the obvious combat/item/drop/runtime/level-generation/metarun globals out of `variable.c`, removed dead leftover state, and passed standard + portable incremental builds.
+- `WP81`: completed in the working tree on 2026-03-25; `src/generate.c` is now a legacy note outside the build like the other retired monolith entry files, the last live generate-owner comments now point at the split `src/level-generation/` surface, and standard plus portable incremental builds both pass.
 
 ### Package Rules For Subagents
 - The agent working a package should own only the files listed in that package.
@@ -669,7 +674,7 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. With `WP80` complete, move to `WP81` and clean up the excluded legacy carryover files and wrapper notes without reopening the now-localized active ownership boundaries.
-2. After `WP81`, run `WP90` as the main integrator pass for the remaining mobile/platform boundary work.
+1. With `WP80` and `WP81` complete, move to `WP90` as the main integrator pass for the remaining mobile/platform boundary work.
+2. Treat any remaining `WP80`/`WP81`-area edits as narrow fallout fixes only.
 
 This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.
