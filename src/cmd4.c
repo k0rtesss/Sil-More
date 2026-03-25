@@ -11,6 +11,9 @@
 #include "angband.h"
 #include "main-sdl.h"
 #include "object/object-ui-select.h"
+#include "player/player-abilities.h"
+#include "player/player-bane.h"
+#include "player/player-oaths.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
 
@@ -862,9 +865,6 @@ static int ability_menu_description_wrap(int desc_col)
     return wid - 1;
 }
 
-int abilities_in_skill(int skilltype);
-bool prereqs(int skilltype, int abilitynum);
-
 static int ability_menu_text_width(int desc_col, int indent)
 {
     int wrap = ability_menu_description_wrap(desc_col);
@@ -1010,94 +1010,6 @@ void add_random_curse(object_type *o_ptr)
     }
 }
 
-
-int ability_index(int skilltype, int abilitynum)
-{
-    int i;
-    ability_type* b_ptr;
-
-    for (i = 0; i < z_info->b_max; i++)
-    {
-        b_ptr = &b_info[i];
-
-        /* Skip non-entries */
-        if (!b_ptr->name)
-            continue;
-
-        /* Skip entries for the wrong skill type */
-        if (b_ptr->skilltype != skilltype)
-            continue;
-
-        /* Stop if you get the correct ability number */
-        if (b_ptr->abilitynum == abilitynum)
-            return (i);
-    }
-
-    // Hack: there is no reasonable default value, but this will do
-    return (0);
-}
-
-/*
- *  Counts the number of innate abilities in a skill
- */
-
-int abilities_in_skill(int skilltype)
-{
-    int i;
-    ability_type* b_ptr;
-    int count = 0;
-
-    for (i = 0; i < z_info->b_max; i++)
-    {
-        b_ptr = &b_info[i];
-
-        /* Skip non-entries */
-        if (!b_ptr->name)
-            continue;
-
-        /* Skip entries for the wrong skill type */
-        if (b_ptr->skilltype != skilltype)
-            continue;
-
-        /* Add to the count */
-        if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
-            count++;
-    }
-
-    return (count);
-}
-
-static bool prereq_abilities_met(const ability_type* b_ptr)
-{
-    int i;
-
-    if (b_ptr->prereqs > 0 && !(p_ptr->active_ability[S_PER][PER_QUICK_STUDY]))
-    {
-        for (i = 0; i < b_ptr->prereqs; i++)
-        {
-            if (p_ptr->innate_ability[b_ptr->prereq_skilltype[i]]
-                                     [b_ptr->prereq_abilitynum[i]])
-                return (true);
-        }
-        return (false);
-    }
-
-    return (true);
-}
-
-bool prereqs(int skilltype, int abilitynum)
-{
-    ability_type* b_ptr;
-
-    b_ptr = &b_info[ability_index(skilltype, abilitynum)];
-
-    if (p_ptr->skill_base[skilltype] < b_ptr->level)
-    {
-        return (false);
-    }
-
-    return prereq_abilities_met(b_ptr);
-}
 
 static char song_menu_letter(int song_index)
 {
@@ -1693,294 +1605,6 @@ void wipe_screen_from(int col)
         Term_erase(col, i, wid - col);
 }
 
-int elf_bane_bonus(monster_type* m_ptr)
-{
-    monster_race* r_ptr;
-
-    if (m_ptr == NULL)
-        return (0);
-    else
-        r_ptr = &r_info[m_ptr->r_idx];
-
-    // Sil-x: a bit of a hack. Noldor and Sindar are coded as races 0 and 1 in
-    // the races.txt file
-    if ((r_ptr->flags2 & (RF2_ELFBANE))
-        && ((p_ptr->prace == 0) || (p_ptr->prace == 1)))
-    {
-        // Dagohir must have killed between 32 and 63 elves
-        return (5);
-    }
-
-    return (0);
-}
-
-#define BANE_TYPES 13
-
-static u32b bane_flag[] = { 0L, RF3_ORC, RF3_WOLF, RF3_SPIDER, RF3_TROLL,
-    RF3_UNDEAD, RF3_RAUKO, RF3_SERPENT, RF3_DRAGON, RF3_VAMPIRE,
-    RF3_HORROR, RF3_CAT, RF3_GIANT };
-
-char* bane_name[] = { "Nothing", "Orc", "Wolf", "Spider", "Troll", "Wraith",
-    "Rauko", "Serpent", "Dragon", "Vampire", "Horror", "Cat", "Giant" };
-
-int bane_type_killed(int i)
-{
-    int j;
-    int k = 0;
-
-    /* Scan the monster races */
-    for (j = 1; j < z_info->r_max; j++)
-    {
-        monster_race* r_ptr = &r_info[j];
-        monster_lore* l_ptr = &l_list[j];
-
-        if (r_ptr->flags3 & (bane_flag[i]))
-        {
-            k += l_ptr->pkills;
-        }
-    }
-
-    return (k);
-}
-
-int bane_bonus_aux(void)
-{
-    int i = 2;
-    int bonus = 0;
-    int killed;
-
-    killed = bane_type_killed(p_ptr->bane_type);
-    while (i <= killed)
-    {
-        i *= 2;
-        bonus++;
-    }
-
-    return (bonus);
-}
-
-int bane_bonus(monster_type* m_ptr)
-{
-    int bonus = 0;
-    monster_race* r_ptr;
-
-    // paranoia
-    if (m_ptr == NULL)
-        return (0);
-
-    // entranced players don't get the bonus
-    if (p_ptr->entranced)
-        return (0);
-
-    // knocked out players don't get the bonus
-    if (p_ptr->stun > 100)
-        return (0);
-
-    r_ptr = &r_info[m_ptr->r_idx];
-
-    if (r_ptr->flags3 & (bane_flag[p_ptr->bane_type]))
-    {
-        bonus = bane_bonus_aux();
-    }
-
-    return (bonus);
-}
-
-/*
- * Calculate bane bonus for a specific bane type.
- * This is a helper function that can be used for both player bane and artifact bane.
- */
-int bane_bonus_for_type(int bane_type_idx)
-{
-    int i = 2;
-    int bonus = 0;
-    int killed;
-
-    if (bane_type_idx <= 0 || bane_type_idx >= BANE_TYPES)
-        return 0;
-
-    killed = bane_type_killed(bane_type_idx);
-    while (i <= killed)
-    {
-        i *= 2;
-        bonus++;
-    }
-
-    return bonus;
-}
-
-/*
- * Calculate bane bonus from artifact-granted Bane abilities.
- * These use a pre-selected bane type from the artifact definition.
- */
-int artifact_bane_bonus(monster_type* m_ptr)
-{
-    int bonus = 0;
-    int i, j;
-    monster_race* r_ptr;
-    object_type* o_ptr;
-
-    // paranoia
-    if (m_ptr == NULL)
-        return 0;
-
-    // entranced players don't get the bonus
-    if (p_ptr->entranced)
-        return 0;
-
-    // knocked out players don't get the bonus
-    if (p_ptr->stun > 100)
-        return 0;
-
-    r_ptr = &r_info[m_ptr->r_idx];
-
-    // Check all equipped items
-    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
-    {
-        o_ptr = &inventory[i];
-
-        // Skip empty slots
-        if (!o_ptr->k_idx)
-            continue;
-
-        // Check all abilities on this item
-        for (j = 0; j < o_ptr->abilities; j++)
-        {
-            // Is this a Bane ability with a pre-selected type?
-            if (o_ptr->skilltype[j] == S_PER && o_ptr->abilitynum[j] == PER_BANE
-                && o_ptr->bane_type[j] > 0)
-            {
-                // Skip if this matches the player's innate bane type
-                // (they already get bonus from innate, no stacking)
-                if (o_ptr->bane_type[j] == p_ptr->bane_type)
-                    continue;
-
-                // Does the monster match this bane type?
-                if (r_ptr->flags3 & bane_flag[o_ptr->bane_type[j]])
-                {
-                    int this_bonus = bane_bonus_for_type(o_ptr->bane_type[j]);
-                    if (this_bonus > bonus)
-                        bonus = this_bonus;
-                }
-            }
-        }
-    }
-
-    return bonus;
-}
-
-int spider_bane_bonus(void)
-{
-    if (bane_flag[p_ptr->bane_type] == RF3_SPIDER)
-        return (bane_bonus_aux());
-    else
-        return (0);
-}
-
-/*
- * Calculate spider bane bonus from artifact-granted Bane abilities.
- * Used for web-related difficulty checks.
- */
-int artifact_spider_bane_bonus(void)
-{
-    int bonus = 0;
-    int i, j;
-    object_type* o_ptr;
-
-    // Check all equipped items
-    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
-    {
-        o_ptr = &inventory[i];
-
-        // Skip empty slots
-        if (!o_ptr->k_idx)
-            continue;
-
-        // Check all abilities on this item
-        for (j = 0; j < o_ptr->abilities; j++)
-        {
-            // Is this a Bane ability with Spider type? (Spider = 3)
-            if (o_ptr->skilltype[j] == S_PER && o_ptr->abilitynum[j] == PER_BANE
-                && bane_flag[o_ptr->bane_type[j]] == RF3_SPIDER)
-            {
-                // Skip if this matches the player's innate bane type
-                if (o_ptr->bane_type[j] == p_ptr->bane_type)
-                    continue;
-
-                int this_bonus = bane_bonus_for_type(o_ptr->bane_type[j]);
-                if (this_bonus > bonus)
-                    bonus = this_bonus;
-            }
-        }
-    }
-
-    return bonus;
-}
-
-int unique_bane_bonus(monster_type* m_ptr)
-{
-    int bonus = 0;
-    monster_race* r_ptr;
-
-    // paranoia
-    if (m_ptr == NULL)
-        return (0);
-
-    // entranced players don't get the bonus
-    if (p_ptr->entranced)
-        return (0);
-
-    // knocked out players don't get the bonus
-    if (p_ptr->stun > 100)
-        return (0);
-
-    // Must have the unique bane special ability
-    if (!p_ptr->active_ability[S_SPC][SPC_UNIQUE_BANE])
-        return (0);
-
-    r_ptr = &r_info[m_ptr->r_idx];
-
-    // Check if the monster is unique
-    if (r_ptr->flags1 & RF1_UNIQUE)
-    {
-        // Calculate bonus using the same formula as normal bane
-        int uniques_killed = unique_bane_type_killed();
-        
-        // Use same scaling as bane_bonus_aux: 1, 2, 4, 8, 16, etc.
-        int threshold = 2;
-        bonus = 0;
-        while (threshold <= uniques_killed)
-        {
-            threshold *= 2;
-            bonus++;
-        }
-    }
-
-    return (bonus);
-}
-
-/* Calculate total unique monsters killed for unique bane */
-int unique_bane_type_killed(void)
-{
-    int uniques_killed = 0;
-    int i;
-    
-    // Count all unique monsters that have been killed
-    for (i = 1; i < z_info->r_max; i++) {
-        monster_race* check_r_ptr = &r_info[i];
-        
-        // Skip if not unique
-        if (!(check_r_ptr->flags1 & RF1_UNIQUE)) continue;
-        
-        // Check if this unique has been killed (max_num is set to 0 when killed)
-        if (check_r_ptr->max_num == 0) {
-            uniques_killed++;
-        }
-    }
-    
-    return uniques_killed;
-}
-
 int bane_menu(int* highlight)
 {
     int i, k;
@@ -1999,7 +1623,7 @@ int bane_menu(int* highlight)
     wipe_screen_from(COL_DESCRIPTION);
 
     // list the enemies
-    for (i = 1; i < BANE_TYPES; i++)
+    for (i = 1; i < PLAYER_BANE_TYPES; i++)
     {
         k = bane_type_killed(i);
 
@@ -2026,7 +1650,7 @@ int bane_menu(int* highlight)
             text_out_wrap = 79;
             text_out_indent = COL_DESCRIPTION;
 
-            Term_gotoxy(text_out_indent, BANE_TYPES + 4);
+            Term_gotoxy(text_out_indent, PLAYER_BANE_TYPES + 4);
 
             /* Information */
             if (k >= 4)
@@ -2080,7 +1704,7 @@ int bane_menu(int* highlight)
 
     if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
     {
-        return (BANE_TYPES + 1);
+        return (PLAYER_BANE_TYPES + 1);
     }
 
     /* Choose current  */
@@ -2105,18 +1729,6 @@ int bane_menu(int* highlight)
 }
 
 #define OATH_TYPES 6
-
-static u32b oath_flag[] = { 0L, OATH_MERCY_FLAG, OATH_SILENCE_FLAG, OATH_IRON_FLAG, OATH_SMITH_FLAG, OATH_VALOROUS_FLAG, OATH_LIGHT_FLAG };
-
-char* oath_name[] = {
-    "Nothing",
-    "Mercy",
-    "Silence",
-    "Iron",
-    "Smith",
-    "Valorous Heart",
-    "Light",
-};
 
 char* oath_desc1[] = {
     "Nothing",
@@ -2150,7 +1762,7 @@ char* oath_reward[] = {
 
 static const char* oath_name_short(int oath_id)
 {
-    if (oath_id < 0 || oath_id >= (int)N_ELEMENTS(oath_name)) return "Unknown";
+    if (oath_id < 0 || oath_id > OATH_TYPES) return "Unknown";
     return oath_name[oath_id];
 }
 
@@ -2164,92 +1776,6 @@ static const char* oath_reward_short(int oath_id)
 {
     if (oath_id < 0 || oath_id >= (int)N_ELEMENTS(oath_reward)) return "";
     return oath_reward[oath_id];
-}
-
-bool oath_invalid(int i)
-{
-    if (i < 0 || i >= (int)N_ELEMENTS(oath_flag)) return false;
-    return ((p_ptr->oaths_broken & oath_flag[i]) > 0);
-}
-
-bool chosen_oath(int oath)
-{
-    return p_ptr->oath_type == oath;
-}
-
-/*
- * Helper functions to retrieve oath text from oath_info
- */
-char* oath_confirmation_prompt(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].confirmation_prompt) return "";
-    return oath_name_text + oath_info[oath_id].confirmation_prompt;
-}
-
-char* oath_curse_message(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].curse_message) return "";
-    return oath_name_text + oath_info[oath_id].curse_message;
-}
-
-char* oath_permanent_message(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].permanent_message) return "";
-    return oath_name_text + oath_info[oath_id].permanent_message;
-}
-
-char* oath_death_message(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].death_message) return "";
-    return oath_name_text + oath_info[oath_id].death_message;
-}
-
-char* oath_banned_text(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].banned_text) return "";
-    return oath_desc_text + oath_info[oath_id].banned_text;
-}
-
-char* oath_name_str(int oath_id)
-{
-    if (oath_id == 0) return "No oath";
-    if (!z_info) return "";
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].name) return "";
-    return oath_name_text + oath_info[oath_id].name;
-}
-
-char* oath_description(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].text) return "";
-    return oath_desc_text + oath_info[oath_id].text;
-}
-
-char* oath_pledge(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].pledge_text) return "";
-    return oath_name_text + oath_info[oath_id].pledge_text;
-}
-
-char* oath_forbidden(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].forbidden_text) return "";
-    return oath_name_text + oath_info[oath_id].forbidden_text;
-}
-
-char* oath_reward_text(int oath_id)
-{
-    if (oath_id < 0 || oath_id >= z_info->oath_max) return "";
-    if (!oath_info[oath_id].reward_text) return "";
-    return oath_name_text + oath_info[oath_id].reward_text;
 }
 
 static int oath_menu_put_wrapped(int desc_col, int row, byte attr, cptr text)
@@ -2303,7 +1829,7 @@ int oath_menu(int* highlight)
     Term_putstr(ability_col, 2, -1, TERM_WHITE, "Oaths");
 
     // Build visible oaths list and display them (1..OATH_TYPES)
-    for (i = 1; i <= OATH_TYPES && i < (int)N_ELEMENTS(oath_name); i++)
+    for (i = 1; i <= OATH_TYPES; i++)
     {
         if (visible_count >= (int)N_ELEMENTS(visible_oaths)) break;
 
@@ -2966,7 +2492,7 @@ int abilities_menu2(int skilltype, int* highlight)
                 && (p_ptr->bane_type > 0))
             {
                 int killed = bane_type_killed(p_ptr->bane_type);
-                int current_bonus = bane_bonus_aux();
+                int current_bonus = bane_bonus_for_type(p_ptr->bane_type);
                 int next_threshold = 2;
                 
                 // Calculate next threshold using same formula as bane
@@ -3269,7 +2795,8 @@ void do_cmd_ability_screen(void)
                         }
                         ability_type* b_ptr = &b_info[ability_index(skilltype, abilitynum)];
                         bool has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
-                        bool has_ability_prereq = prereq_abilities_met(b_ptr);
+                        bool has_ability_prereq
+                            = ability_prereqs_met(skilltype, abilitynum);
 
                         if (has_skill_prereq && has_ability_prereq)
                         {
@@ -3310,7 +2837,7 @@ void do_cmd_ability_screen(void)
                                         banechoice = bane_menu(&highlight3);
 
                                         if ((banechoice >= 1)
-                                            && (banechoice <= BANE_TYPES))
+                                            && (banechoice <= PLAYER_BANE_TYPES))
                                         {
                                             if (bane_type_killed(banechoice)
                                                 < 4)
@@ -3325,7 +2852,8 @@ void do_cmd_ability_screen(void)
                                                 return_to_abilities = true;
                                             }
                                         }
-                                        else if (banechoice == BANE_TYPES + 1)
+                                        else if (banechoice
+                                            == PLAYER_BANE_TYPES + 1)
                                         {
                                             return_to_abilities = true;
                                             return_to_skills = true;

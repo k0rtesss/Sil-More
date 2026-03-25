@@ -1,5 +1,57 @@
 # Session notes
 
+## 2026-03-25: WP71A pref/time extraction from files
+- Completed the first `WP71A` slice by moving the pref-file and time-restriction logic out of `src/files.c` into:
+  - `src/fs/pref-files.[ch]`
+  - `src/fs/pref-time.[ch]`
+- Updated `CMakeLists.txt` so the new `src/fs/` modules build as part of `sil-core`.
+- Reduced `src/files.c` by excluding the migrated pref/time block while the rest of the `files.c` breakup remains in progress.
+- Current size snapshot after this slice:
+  - `src/cmd4.c`: 16,125 lines
+  - `src/files.c`: 8,296 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: WP70A gameplay helper eviction from cmd4
+- Completed the first `WP70A` slice by moving the non-UI gameplay helpers out of `src/cmd4.c` into dedicated player modules:
+  - `src/player/player-abilities.[ch]`
+  - `src/player/player-bane.[ch]`
+  - `src/player/player-oaths.[ch]`
+- Updated `CMakeLists.txt` so the new player modules build as part of `sil-core`.
+- Reduced `src/cmd4.c` by removing the extracted helper definitions and keeping only the remaining command/UI consumers, including the bane/oath menus that still belong to later `WP70B+` slices.
+- Current size snapshot after this slice:
+  - `src/cmd4.c`: 16,125 lines
+  - `src/files.c`: 8,393 lines
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
+## 2026-03-25: WP70/WP71 plan revalidation
+- Revalidated the current tree after the `WP60`-`WP63` wave:
+  - `src/xtra1-body.inc`
+  - `src/xtra2-body.inc`
+  - `src/spell/spells1-body.inc`
+  - `src/spell/spells2-body.inc`
+  - all confirmed removed from `src/`
+- Confirmed the legacy wrappers are now tiny notes outside the build:
+  - `src/xtra1.c`: 11 lines
+  - `src/xtra2.c`: 6 lines
+  - `src/spells1.c`: 14 lines
+  - `src/spells2.c`: 12 lines
+- Verified the remaining active monoliths and current global/header surface:
+  - `src/cmd4.c`: 16,597 lines
+  - `src/files.c`: 8,393 lines
+  - `src/externs.h`: 1,373 lines with 1,128 `extern` declarations
+  - `src/variable.c`: 916 lines
+- Updated `docs/unstable_refactor_port_plan.md` to:
+  - mark `WP60`-`WP63` as verified complete in the live tree
+  - replace stale metrics with current-tree measurements
+  - add a detailed `WP70` / `WP71` split sequence, including early extraction of `player-abilities`, `player-oaths`, `player-bane`, `fs` pref/name helpers, UI character/story/death modules, and score/lifecycle ownership
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
 ## 2026-03-25: WP61 xtra2 de-inc completion
 - Completed `WP61` by removing the active `xtra2` body-include pattern and moving the live code into normal translation units:
   - `src/game-event.c`

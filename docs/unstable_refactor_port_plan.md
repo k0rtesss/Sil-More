@@ -5,16 +5,28 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 
 ## Current Status
 - Status date: 2026-03-25.
-- The unstable-port milestone is structurally landed, but the overall refactor is not finished completely yet:
-  - `Phase 8` is still open in practice.
+- Current-tree verification on 2026-03-25:
+  - `WP60`-`WP63` are complete in the live tree, not just in the written plan.
   - Refactor-generated gameplay body includes under `src/` have now been eliminated:
-    - `src/xtra1-body.inc`, `src/xtra2-body.inc`, `src/spell/spells1-body.inc`, and `src/spell/spells2-body.inc` have all been removed from the working tree.
-  - Remaining active large files worth splitting after the unstable port:
-    - `src/cmd4.c`: 14,226 lines
-    - `src/files.c`: 7,118 lines
-  - Current header/global surface is improved from the original baseline, but still above the intended end state:
-    - `src/externs.h`: 1,369 lines and about 1,181 `extern` declarations
-    - `src/variable.c`: 768 lines
+    - `src/xtra1-body.inc`
+    - `src/xtra2-body.inc`
+    - `src/spell/spells1-body.inc`
+    - `src/spell/spells2-body.inc`
+  - The old wrapper entry files are now tiny legacy notes outside the build:
+    - `src/xtra1.c`: 11 lines
+    - `src/xtra2.c`: 6 lines
+    - `src/spells1.c`: 14 lines
+    - `src/spells2.c`: 12 lines
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeds on the current tree.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` also succeeds on the current tree.
+- The unstable-port milestone is structurally landed, but the overall refactor is not finished completely yet:
+  - `WP70A` is now landed in the working tree: `src/player/player-abilities.[ch]`, `player-oaths.[ch]`, and `player-bane.[ch]` now own the first gameplay-helper extraction out of `src/cmd4.c`
+  - `WP71A` is now landed in the working tree: `src/fs/pref-files.[ch]` plus `src/fs/pref-time.[ch]` now own the pref/time logic extracted from `src/files.c`
+  - the remaining active large-file bottlenecks are `src/cmd4.c` at 16,125 lines and `src/files.c` at 8,296 lines
+  - the current header/global surface is still above the intended end state:
+    - `src/externs.h`: 1,373 lines and 1,128 `extern` declarations
+    - `src/variable.c`: 916 lines
+  - the next real ownership wave is the remaining `WP70B`-`WP70H` slices plus `WP71B`-`WP71G`, then `WP80+`
 - `Phase 1` is effectively complete in the working tree:
   - `CMakeLists.txt` is grouped by subsystem instead of one flat source list.
   - Target scaffold directories now exist under `src/` for `cmd/`, `drop/`, `init/`, `level-generation/`, `melee/`, `object/`, `smithing/`, `spell/`, and `ui/smithing/`.
@@ -70,6 +82,12 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/game-event.c` plus `src/quest/quest-rewards.c`, `quest-ui.c`, `quest-tulkas.c`, `quest-varda.c`, `quest-niena.c`, `quest-orome.c`, and `quest-valar.c` now own the former active `xtra2` body sections as normal translation units.
   - `src/xtra2.c` is now reduced to a legacy note outside the build.
   - `src/xtra2-body.inc` has been removed from the tree.
+- `WP62` is now structurally complete in the working tree:
+  - `src/spell/*` plus `src/player/player-song-*.c` now own the former active `spells1` body sections as normal translation units.
+  - `src/spell/spells1-body.inc` has been removed from the tree.
+- `WP63` is now structurally complete in the working tree:
+  - the split `src/spell/*` modules now own the former active `spells2` body sections as normal translation units.
+  - `src/spell/spells2-body.inc` has been removed from the tree.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
@@ -81,6 +99,9 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing the remaining `WP99` projectile-path/runtime-CLI cleanup on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
   - `.\build-cmake.bat` succeeded again after completing `WP99` on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing `WP61` on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again during the 2026-03-25 current-tree revalidation that confirmed `WP60`-`WP63` are still landed and that `cmd4.c` plus `files.c` remain the last big live monoliths.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP70A` on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded again after landing `WP71A` on 2026-03-25.
 
 ## Completion Assessment
 - The original unstable-port objective is effectively complete as an intermediate architecture:
@@ -88,12 +109,13 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - most former monolith entry files are already reduced to legacy notes outside the build
   - standard and portable builds both pass on the new target layout
 - The broader refactor is not complete:
-  - the body-include cleanup wave is complete, but the last large ownership bottlenecks are still `src/cmd4.c` and `src/files.c`
-  - the last big live catch-all files are still `src/cmd4.c` and `src/files.c`
-  - `externs.h` and `variable.c` are smaller, but still too broad for the intended subsystem ownership model
+  - the `WP60`-`WP63` body-include cleanup wave is complete and should not be reopened except for fallout fixes from later moves
+  - the remaining architectural blockers are `WP70` (`src/cmd4.c`) and `WP71` (`src/files.c`)
+  - `externs.h` and `variable.c` still need a second cleanup pass after those ownership moves land
 - Priority judgement for the next wave:
-  - finish splitting the still-live catch-all files first
-  - then run the next aggressive header/global cleanup pass
+  - extract the non-UI gameplay helpers out of `src/cmd4.c` before splitting the remaining menu/UI command families
+  - split `src/files.c` by real ownership boundaries (`fs`, `ui`, `score`, and only if necessary a new runtime-lifecycle folder), not by arbitrary line ranges
+  - run the next aggressive header/global cleanup pass only after `cmd4.c` and `files.c` are reduced to small facades or notes
 - Lower priority:
   - excluded legacy carryover files such as `src/generate.c` should be cleaned up later, after active build code no longer depends on transitional bodies or wrappers
 
@@ -105,20 +127,22 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
 - Consequence: do not blindly cherry-pick unstable refactor commits. Use them as a structural reference and port each subsystem onto the current branch with three-way diffing.
 
 ## Evidence From The Current Tree
-- Remaining active refactor debt as of 2026-03-25:
+- Remaining active refactor debt as of 2026-03-25, revalidated against the live tree:
   - Active refactor-generated code-body includes:
     - none under `src/`
   - Legacy note wrappers now outside the build:
-    - `src/xtra1.c`
-    - `src/xtra2.c`
+    - `src/xtra1.c`: 11 lines
+    - `src/xtra2.c`: 6 lines
+    - `src/spells1.c`: 14 lines
+    - `src/spells2.c`: 12 lines
   - Largest active built catch-all files:
-    - `src/cmd4.c`: 14,226 lines
-    - `src/files.c`: 7,118 lines
+    - `src/cmd4.c`: 16,597 lines
+    - `src/files.c`: 8,393 lines
   - Largest excluded legacy carryover file still present in the tree:
-    - `src/generate.c`: 16,132 lines
-  - Current global/header surface after `WP99`:
-    - `src/externs.h`: 1,369 lines and about 1,181 `extern` declarations
-    - `src/variable.c`: 768 lines
+    - `src/generate.c`: 18,122 lines
+  - Current global/header surface:
+    - `src/externs.h`: 1,373 lines and 1,128 `extern` declarations
+    - `src/variable.c`: 916 lines
 - Original baseline hotspot snapshot that motivated the port:
   - `src/cmd4.c`: 20,357 lines
   - `src/generate.c`: 17,554 lines
@@ -130,9 +154,6 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/object2.c`: 5,751 lines
   - `src/melee2.c`: 5,324 lines
   - `src/xtra1.c`: 5,037 lines
-- Current global/header surface:
-  - `src/externs.h`: 1,752 lines and about 1,414 `extern` declarations
-  - `src/variable.c`: 789 lines and about 217 global definitions
 - `unstable` already created these target directories:
   - `src/cmd/`
   - `src/drop/`
@@ -411,20 +432,27 @@ Done when:
 Goal: remove the last large active files that still own too many unrelated behaviors.
 
 Tasks:
-- Split `src/cmd4.c` into additional `src/cmd/ui/` families, likely:
+- Before moving menus, extract the non-command gameplay helpers that still live in `src/cmd4.c`:
+  - `src/player/player-abilities.[ch]` for `abilities_in_skill()`, `prereqs()`, and related ability-prerequisite bookkeeping
+  - `src/player/player-oaths.[ch]` for `chosen_oath()` / `oath_invalid()`
+  - `src/player/player-bane.[ch]` for bane bonus helpers now used by combat, movement, world, score, and quest code
+- Split the remaining command/UI entry points into additional `src/cmd/ui/` families:
   - `cmd-ui-character.c`
   - `cmd-ui-abilities.c`
   - `cmd-ui-main-menu.c`
-  - `cmd-ui-options.c`
+  - `cmd-ui-settings.c`
   - `cmd-ui-keybinds.c`
-  - `cmd-ui-knowledge.c`
   - `cmd-ui-visuals.c`
+  - `cmd-ui-knowledge.c`
   - `cmd-ui-nearby.c`
-- Move pure rendering helpers out of command files into `src/ui/` when they no longer need command-state ownership.
-- Split `src/files.c` by concern:
-  - `src/fs/` for pref-file parsing and path/file helpers
+- Move pure rendering/browser helpers out of command files into `src/ui/` when they no longer need command-state ownership:
+  - `src/ui/ui-look-sidebar.[ch]`
+  - `src/ui/ui-knowledge-browser.[ch]` if the browser render/state surface proves large enough to justify its own module
+- Split `src/files.c` by concern, preferring existing subsystem directories before inventing new ones:
+  - `src/fs/` for pref-file parsing, time restrictions, and savefile/name helpers
   - `src/ui/` for character/tutorial/story/tomb screens
-  - score/runtime-owned modules for score entry, close-game, and metarun/save cleanup flow
+  - `src/score/` for score entry, live preview, and score-formatting helpers
+  - a new `src/runtime/` directory only if the close-game / death / autoload / metarun lifecycle flow cannot be housed cleanly in existing subsystems
 
 Validation focus:
 - character sheet and compact layouts
@@ -519,6 +547,8 @@ These are the recommended continuation packages after the unstable-port mileston
 - `WP61`: completed in the working tree on 2026-03-25; `xtra2` no longer depends on a body include, the live code now sits in `src/game-event.c` plus `src/quest/*`, `src/xtra2.c` is a legacy note outside the build, and standard plus portable incremental builds both pass.
 - `WP62`: completed in the working tree on 2026-03-25; `spells1` no longer depends on a body include, the live code now sits in `src/spell/*` plus `src/player/player-song-*.c`, and `src/spell/spells1-body.inc` has been removed from the tree.
 - `WP63`: completed in the working tree on 2026-03-25; `spells2` no longer depends on a body include, the live code now sits in the owning split spell modules, and `src/spell/spells2-body.inc` has been removed from the tree.
+- `WP70A`: completed in the working tree on 2026-03-25; the first gameplay-helper eviction out of `src/cmd4.c` is live in `src/player/player-abilities.[ch]`, `src/player/player-oaths.[ch]`, and `src/player/player-bane.[ch]`, while the remaining bane/oath/ability menus stay in `cmd4.c` for the later UI-family splits.
+- `WP71A`: completed in the working tree on 2026-03-25; `src/fs/pref-files.[ch]` plus `src/fs/pref-time.[ch]` now own the extracted pref/time logic, and the old `files.c` block is now excluded while the wider `files.c` breakup continues.
 
 | ID | Scope | Main files | Depends on |
 | --- | --- | --- | --- |
@@ -526,8 +556,8 @@ These are the recommended continuation packages after the unstable-port mileston
 | WP61 | `xtra2` de-inc + quest ownership | `src/xtra2.c`, `src/xtra2-body.inc`, `src/game-event.*`, new `src/quest/*` | WP13, WP50 |
 | WP62 | `spells1` de-inc | `src/spell/spells1-body.inc`, `src/spell/*`, `src/player/player-song-*.c` | WP41 |
 | WP63 | `spells2` de-inc | `src/spell/spells2-body.inc`, `src/spell/*` | WP41 |
-| WP70 | `cmd4` split | `src/cmd4.c`, new/existing `src/cmd/ui/*`, any new `src/ui/*` helpers needed by the split | WP30, WP40, WP60-WP63 |
-| WP71 | `files` split | `src/files.c`, `src/fs/*`, `src/ui/*`, any narrow score/runtime modules created by the split | WP12, WP50, WP60-WP63 |
+| WP70 | `cmd4` split + gameplay helper eviction | `src/cmd4.c`, new/existing `src/cmd/ui/*`, new `src/player/player-abilities.*`, `player-oaths.*`, `player-bane.*`, any new `src/ui/*` helpers needed by the split | WP30, WP40, WP60-WP63 |
+| WP71 | `files` split + score/lifecycle breakup | `src/files.c`, `src/fs/*`, `src/ui/*`, `src/score/*`, and only if justified new `src/runtime/*` lifecycle modules | WP12, WP50, WP60-WP63 |
 
 Recommended `WP60` split targets:
 - `src/ui/ui-status.[ch]`: status lines, compact vitals, frame drawing, health formatting/attributes, plus the refresh/window flow that still shares a large private helper surface with status rendering
@@ -541,6 +571,34 @@ Recommended `WP61` split targets:
 Recommended `WP62`/`WP63` rule:
 - Prefer moving each section into the module that already owns its public header.
 - Only introduce a shared private spell helper module when multiple current spell files already depend on the same private behavior.
+
+Detailed `WP70` split sequence:
+- `WP70A`: extract the non-UI gameplay helpers out of `src/cmd4.c` first:
+  - `src/player/player-abilities.[ch]`
+  - `src/player/player-oaths.[ch]`
+  - `src/player/player-bane.[ch]`
+- `WP70B`: move character-sheet command flow into `src/cmd/ui/cmd-ui-character.c`, keeping pure rendering in `src/ui/` once `WP71B` exposes stable headers.
+- `WP70C`: move songs, ability menus, oath/bane choice menus, and `do_cmd_ability_screen()` / `do_cmd_change_song()` into `src/cmd/ui/cmd-ui-abilities.c`.
+- `WP70D`: move main-menu, hint-message, and message-recall ownership into `src/cmd/ui/cmd-ui-main-menu.c` plus a small dedicated message module if that keeps the write set cleaner.
+- `WP70E`: move options, pane settings, controller settings, keybinds, and macros into `src/cmd/ui/cmd-ui-settings.c` plus `src/cmd/ui/cmd-ui-keybinds.c`.
+- `WP70F`: move visuals/colors ownership into `src/cmd/ui/cmd-ui-visuals.c`, keeping palette-edit helpers together.
+- `WP70G`: move knowledge browser, nearby views, and unified-look sidebar ownership into `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-nearby.c`, and `src/ui/ui-look-sidebar.[ch]`.
+- `WP70H`: reduce `src/cmd4.c` to a thin facade or legacy note, then remove any transitional `externs.h` exports that only existed for the monolith.
+
+Detailed `WP71` split sequence:
+- `WP71A`: extract pref parsing and time restrictions into `src/fs/pref-files.[ch]` and, if it earns its keep, `src/fs/pref-time.[ch]`.
+- `WP71B`: extract the character sheet, compact layout, and tutorial path into `src/ui/ui-character-screen.[ch]`.
+- `WP71C`: extract savefile/name normalization into `src/fs/savefile-name.[ch]`; keep `get_name()` in UI only if it still owns the prompt loop.
+- `WP71D`: extract story, tomb, and death/victory presentation into `src/ui/ui-story.[ch]` and `src/ui/ui-death.[ch]`.
+- `WP71E`: move `create_score()`, `build_live_preview_score()`, score-formatting helpers, and score-table presentation helpers into existing `src/score/*` modules or a narrow new `src/score/score-entry.[ch]`.
+- `WP71F`: move close-game, save, panic-exit, autoload, and metarun score/save cleanup out of `files.c`; prefer existing subsystems first and create `src/runtime/` only if the lifecycle flow still has no coherent home.
+- `WP71G`: reduce `src/files.c` to a small facade or legacy note and replace its `externs.h` block with narrow subsystem headers.
+
+Recommended execution order for the next wave:
+- With `WP70A` and `WP71A` landed, start `WP71B`, then move into `WP70B` / `WP70C` so the character/ability UI split consumes the new subsystem headers instead of broad `files.c` / `cmd4.c` internals.
+- Treat `WP70B` as dependent on `WP71B` if `do_cmd_character_sheet()` switches to a new character-screen UI header.
+- Land `WP71E` before the final `WP71F` lifecycle split so close-game/save code uses the settled score API.
+- Do not reopen `WP60`-`WP63` except for fallout fixes directly caused by `WP70` / `WP71`.
 
 ### Next-Wave Serial Packages
 These are best kept with the main integrator after the next parallel wave lands.
@@ -589,8 +647,8 @@ These are best kept with the main integrator after the next parallel wave lands.
 - Do not attempt a giant all-at-once merge from unstable.
 
 ## Recommended Immediate Start
-1. Start with `WP70` and `WP71`, using the completed `WP60`-`WP63` body-include cleanup as the pattern for the remaining monolith work.
-2. Once the active `*.inc` debt is gone, tackle `WP70` (`cmd4.c`) and `WP71` (`files.c`).
-3. Reserve `WP80`, `WP81`, and `WP90` for the main integrator.
+1. With `WP70A` and `WP71A` landed, start `WP71B`, then move into `WP70B` / `WP70C` so the next wave keeps building on stable subsystem headers.
+2. Continue with the remaining `WP70*` / `WP71*` slices in parallel only when their write sets are disjoint.
+3. Reserve `WP80`, `WP81`, and `WP90` for the main integrator after `cmd4.c` and `files.c` are reduced to small facades or legacy notes.
 
-This order removes the transitional macro-body pattern first, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.
+This order starts with the helper extractions that create clean ownership boundaries, then attacks the last live monoliths, and only then spends the big integrator effort on `externs.h`, `variable.c`, and the next mobile/platform cleanup pass.

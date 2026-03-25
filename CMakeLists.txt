@@ -195,7 +195,10 @@ set(SIL_MORE_SOURCES_SPELL
 
 set(SIL_MORE_SOURCES_PLAYER
     src/player/ability_log.c
+    src/player/player-abilities.c
+    src/player/player-bane.c
     src/player/player-calc.c
+    src/player/player-oaths.c
     src/player/player-resources.c
     src/player/player-song-disguise.c
     src/player/player-song-duels.c
@@ -246,6 +249,11 @@ set(SIL_MORE_SOURCES_SCORE
     src/score/score_ui.c
 )
 
+set(SIL_MORE_SOURCES_FS
+    src/fs/pref-files.c
+    src/fs/pref-time.c
+)
+
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
     src/signals.c
@@ -293,6 +301,7 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_SMITHING}
     ${SIL_MORE_SOURCES_SAVE_AND_META}
     ${SIL_MORE_SOURCES_SCORE}
+    ${SIL_MORE_SOURCES_FS}
     ${SIL_MORE_SOURCES_FRONTEND}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}

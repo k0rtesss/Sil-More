@@ -68,44 +68,6 @@ static bool build_meta_path(char* buf, size_t len, const char* filename)
 static char mini_screenshot_char[7][7];
 static byte mini_screenshot_attr[7][7];
 
-static bool parse_visual_component(const char* token, bool expect_row, byte* value)
-{
-    if (!token || !*token || !value)
-        return false;
-
-    char prefix = token[0];
-    if (expect_row && (prefix == 'R' || prefix == 'r'))
-    {
-        char* end = NULL;
-        long row = strtol(token + 1, &end, 0);
-        if (end && (*end == '\0') && (row >= 0) && (row <= TILE_INDEX_MASK))
-        {
-            *value = TILE_SET_INDEX(TILE_FLAG, (byte)row);
-            return true;
-        }
-    }
-    else if (!expect_row && (prefix == 'C' || prefix == 'c'))
-    {
-        char* end = NULL;
-        long col = strtol(token + 1, &end, 0);
-        if (end && (*end == '\0') && (col >= 0) && (col <= TILE_INDEX_MASK))
-        {
-            *value = TILE_SET_INDEX(TILE_FLAG, (byte)col);
-            return true;
-        }
-    }
-
-    char* end = NULL;
-    long parsed = strtol(token, &end, 0);
-    if (end && (*end == '\0') && (parsed >= 0) && (parsed <= UCHAR_MAX))
-    {
-        *value = (byte)parsed;
-        return true;
-    }
-
-    return false;
-}
-
 /*
  * Hack -- drop permissions
  */
@@ -219,72 +181,6 @@ static const int race_priority[] = {
     0 //Feanor
 };
 
-s16b tokenize(char* buf, s16b num, char** tokens)
-{
-    int i = 0;
-
-    char* s = buf;
-
-    /* Process */
-    while (i < num - 1)
-    {
-        char* t;
-
-        /* Scan the string */
-        for (t = s; *t; t++)
-        {
-            /* Found a delimiter */
-            if ((*t == ':') || (*t == '/'))
-                break;
-
-            /* Handle single quotes */
-            if (*t == '\'')
-            {
-                /* Advance */
-                t++;
-
-                /* Handle backslash */
-                if (*t == '\\')
-                    t++;
-
-                /* Require a character */
-                if (!*t)
-                    break;
-
-                /* Advance */
-                t++;
-
-                /* Hack -- Require a close quote */
-                if (*t != '\'')
-                    *t = '\'';
-            }
-
-            /* Handle back-slash */
-            if (*t == '\\')
-                t++;
-        }
-
-        /* Nothing left */
-        if (!*t)
-            break;
-
-        /* Nuke and advance */
-        *t++ = '\0';
-
-        /* Save the token */
-        tokens[i++] = s;
-
-        /* Advance */
-        s = t;
-    }
-
-    /* Save the token */
-    tokens[i++] = s;
-
-    /* Number found */
-    return (i);
-}
-
 /*
  * Parse a sub-file of the "extra info" (format shown below)
  *
@@ -348,6 +244,12 @@ s16b tokenize(char* buf, s16b num, char** tokens)
  * Specify the attr/char values for "flavors" by flavors index.
  *   L:<num>:<a>/<c>
  */
+/*
+ * Moved to `src/fs/pref-files.c` and `src/fs/pref-time.c` during the
+ * first `WP71A` split. Keep the legacy block excluded for now while the
+ * remaining `files.c` breakup is still in progress.
+ */
+#if 0
 errr process_pref_file_command(char* buf)
 {
     long i, n1, n2, sq;
@@ -1248,6 +1150,7 @@ errr check_time_init(void)
     /* Success */
     return (0);
 }
+#endif
 
 static void display_skill(int skill, int row, int col)
 {
