@@ -194,6 +194,15 @@ set(SIL_MORE_SOURCES_PLAYER
     src/xtra2.c
 )
 
+set(SIL_MORE_SOURCES_SMITHING
+    src/smithing/smithing-cost.c
+    src/smithing/smithing-difficulty.c
+    src/smithing/smithing-item.c
+    src/smithing/smithing-materials.c
+    src/smithing/smithing-state.c
+    src/ui/smithing/ui-smithing-screen.c
+)
+
 set(SIL_MORE_SOURCES_SAVE_AND_META
     src/load.c
     src/metarun.c
@@ -248,6 +257,7 @@ set(SIL_MORE_SOURCES
     ${SIL_MORE_SOURCES_OBJECT}
     ${SIL_MORE_SOURCES_MONSTER_AND_COMBAT}
     ${SIL_MORE_SOURCES_PLAYER}
+    ${SIL_MORE_SOURCES_SMITHING}
     ${SIL_MORE_SOURCES_SAVE_AND_META}
     ${SIL_MORE_SOURCES_SCORE}
     ${SIL_MORE_SOURCES_FRONTEND}

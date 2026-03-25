@@ -1,5 +1,14 @@
 # Session notes
 
+## 2026-03-25: WP40 smithing split out of cmd4
+- Moved the smithing subsystem out of `src/cmd4.c` into `src/smithing/` plus `src/ui/smithing/ui-smithing-screen.c`.
+- New active modules:
+  - `src/smithing/smithing-state.c`, `smithing-materials.c`, `smithing-difficulty.c`, `smithing-cost.c`, `smithing-item.c`
+  - `src/ui/smithing/ui-smithing-screen.c`
+- Updated `src/smithing/smithing-internal.h`, `src/ui/smithing/ui-smithing-internal.h`, and `CMakeLists.txt` so the split modules own the live smithing/internal API and build graph.
+- Preserved the current branch's repair/reforge smithing flow inside the extracted UI module instead of regressing to the older `unstable` menu set.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
 ## 2026-03-24: Unstable refactor port roadmap
 - Added `docs/unstable_refactor_port_plan.md` as the working roadmap for porting the refactor from `unstable` onto `quests-and-refactor`.
 - Plan basis:
