@@ -309,9 +309,8 @@ add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
 set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sil-core PUBLIC sil-build-config SDL3::SDL3 log)
 
-# WP50: the SDL side still exports services back into gameplay/UI code
-# (config, sound, pane state). Keep it as an object target for now so the
-# target split can land without mixing in that later API-decoupling work.
+# WP50: keep the SDL implementation isolated in its own object target while
+# core code talks to it through the narrower platform facade headers.
 add_library(sil-platform-sdl OBJECT ${SIL_MORE_SOURCES_PLATFORM})
 set_target_properties(sil-platform-sdl PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sil-platform-sdl PUBLIC

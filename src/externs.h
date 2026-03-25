@@ -311,6 +311,7 @@ extern bool skill_gain_in_progress;
 extern bool save_game_quietly;
 extern bool stop_stealth_mode;
 extern bool use_background_colors;
+extern bool death_processing_in_progress(void);
 
 extern metarun metar;
 extern int meta_fd;

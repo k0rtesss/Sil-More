@@ -12,7 +12,6 @@
 #include "ui-help.h"
 #include "externs.h"
 #include "main-sdl.h"
-#include "sdl-config.h"
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1365,22 +1364,22 @@ static void show_help_screen_legacy(int i, bool include_header)
         char action_buf[96];
         int binding = 0;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_SOUTH);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "A", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_WEST);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_WEST);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "X", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_NORTH);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "Y", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_EAST);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
@@ -1414,7 +1413,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         const char* input = NULL;
         int text_col = 0;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
@@ -1430,7 +1429,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_PADDLE1);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L4 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1438,7 +1437,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_PADDLE2);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE2);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L5 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1461,7 +1460,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         help_emit_heading("RIGHT SIDE CONTROLS", row, col);
         row = left_start_row;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
@@ -1477,7 +1476,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R4 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1485,7 +1484,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE2);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R5 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1493,7 +1492,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_START);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "Start (Menu)";
         put_role(ROLE_KEY, input, row, col);
@@ -1501,7 +1500,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_BACK);
+        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_BACK);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "Back (View)";
         put_role(ROLE_KEY, input, row, col);

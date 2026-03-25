@@ -15,7 +15,6 @@
 #include "log/log.h"
 #include "main-sdl.h"
 #include "player/killer.h"
-#include "sdl-config.h"
 #include "z-term.h"
 #include "metarun.h"
 
@@ -5088,7 +5087,7 @@ NavResult player_birth()
 
     /* Reapply app-wide settings after character creation so UI preferences are
      * not sourced from the metarun or savefile. */
-    sdl_config_load_app_options(get_sdl_config_path());
+    platform_load_app_options();
 
     log_info("Character creation completed: %s the %s", op_ptr->full_name, p_name + rp_ptr->name);
 

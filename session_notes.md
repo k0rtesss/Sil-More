@@ -1,5 +1,14 @@
 # Session notes
 
+## 2026-03-25: WP50 SDL boundary cleanup completion
+- Finished the second half of `WP50` after the earlier target split by removing the global SDL include from `src/angband.h` and moving the `SDL_strlcpy`/`SDL_strlcat` compatibility declarations into `src/support/strl.h`.
+- Added SDL-free public boundary headers: `src/platform-ui.h`, `src/platform-audio.h`, `src/gamepad-config.h`, and `src/pane-config.h`.
+- Reduced the old SDL-facing public headers to wrappers: `src/main-sdl.h` now forwards to `platform-ui.h`, `src/sdl-sound.h` now forwards to `platform-audio.h`, and `src/pane.h` now keeps only the SDL-rectangle layout surface while pane enums/config moved into `src/pane-config.h`.
+- Updated the SDL config/gamepad path so public button/touch-pane constants no longer require SDL headers, and moved app-option helpers (`platform_load_app_options()`, intro-flame config helpers, app-persistent option checks) onto the platform facade seen by core code.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+
 ## 2026-03-25: WP50 mechanical core/frontend target split
 - Reworked `CMakeLists.txt` so the build now produces `sil-core` as the static gameplay core archive, `sil-platform-sdl` as the SDL-facing object target, and `sil-more` as the thin launcher/app target.
 - Added `src/main-sdl.h` so the exported `main-sdl.c` frontend accessors/story-font/gamepad API now has an owning header; removed that duplicated declaration block from `src/externs.h`.

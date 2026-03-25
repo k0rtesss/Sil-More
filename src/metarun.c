@@ -5201,9 +5201,9 @@ void print_metarun_stats(void)
         int back_key = steamdeck_back_key();
         int alt_key = steamdeck_alt_action_key();
         int secondary_key = steamdeck_secondary_key();
-        int l1_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        int r1_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        int start_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_START);
+        int l1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
+        int r1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        int start_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
 
         metarun_prompt_label(confirm_key, "A", continue_label, sizeof(continue_label));
         metarun_prompt_label(back_key, "B", back_label, sizeof(back_label));
@@ -5662,9 +5662,9 @@ void print_metarun_stats(void)
         int confirm_key = steamdeck_confirm_key();
         int alt_key = steamdeck_alt_action_key();
         int secondary_key = steamdeck_secondary_key();
-        int l1_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        int r1_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        int start_key = get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_START);
+        int l1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
+        int r1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        int start_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
         
         if (key == back_key) {
             /* B button = exit/back */

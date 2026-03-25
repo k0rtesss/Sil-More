@@ -38,6 +38,15 @@ struct sound_config g_sound_config;
 // Configuration file path (needed for saving on exit)
 char config_file_path[1024];
 
+_Static_assert((int)GAMEPAD_BUTTON_COUNT == (int)SDL_GAMEPAD_BUTTON_COUNT,
+    "gamepad button ids must stay aligned with SDL");
+_Static_assert((int)GAMEPAD_BUTTON_SOUTH == (int)SDL_GAMEPAD_BUTTON_SOUTH,
+    "south button id drifted from SDL");
+_Static_assert((int)GAMEPAD_BUTTON_LEFT_PADDLE1 == (int)SDL_GAMEPAD_BUTTON_LEFT_PADDLE1,
+    "left paddle button id drifted from SDL");
+_Static_assert((int)GAMEPAD_BUTTON_TOUCHPAD == (int)SDL_GAMEPAD_BUTTON_TOUCHPAD,
+    "touchpad button id drifted from SDL");
+
 // Default pane configuration
 static const struct pane_config default_pane_config[] = {
     // On the right
@@ -220,7 +229,7 @@ sdl_view g_views[MAX_TERM_DATA];
 static SDL_Rect g_pane_rects[PANE_MAX];
 static gamepad_input_state g_gamepad_state;
 static bool g_gamepad_auto_ui = false;
-static int g_default_gamepad_button_bindings[SDL_GAMEPAD_BUTTON_COUNT];
+static int g_default_gamepad_button_bindings[GAMEPAD_BUTTON_COUNT];
 static int g_default_gamepad_trigger_bindings[GAMEPAD_TRIGGER_COUNT];
 static int g_default_gamepad_left_stick_bindings[GAMEPAD_STICK_DIR_COUNT];
 static int g_default_gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_COUNT];
@@ -2080,7 +2089,7 @@ static bool sdl_gamepad_flush_pending_shoulder(Uint64 now_ns, bool force)
     int button = g_gamepad_state.shoulder_pending_button;
     sdl_gamepad_clear_pending_shoulder();
 
-    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
+    if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return true;
 
     int binding = config.gamepad_button_bindings[button];
@@ -2291,7 +2300,7 @@ static int sdl_gamepad_action_binding_count(int binding, int* out_type, int* out
 {
     int count = 0;
 
-    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
         if (config.gamepad_button_bindings[i] == binding) {
             if (count == 0 && out_type && out_id) {
                 *out_type = GAMEPAD_CAPTURE_BUTTON;
@@ -2540,7 +2549,7 @@ static void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         return;
     }
 
-    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
+    if ((int)button < 0 || (int)button >= GAMEPAD_BUTTON_COUNT)
         return;
 
     int binding = config.gamepad_button_bindings[button];
@@ -4880,6 +4889,11 @@ cptr get_sdl_config_path(void)
     return config_file_path;
 }
 
+void platform_load_app_options(void)
+{
+    sdl_config_load_app_options(get_sdl_config_path());
+}
+
 /*
  * Accessor functions for SDL configuration values
  * These allow the options menu to read and modify settings
@@ -5323,10 +5337,10 @@ void set_sdl_gamepad_use_dpad(bool value)
 {
     config.gamepad_use_dpad = value;
     if (value) {
-        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
-        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
-        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
-        config.gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
+        config.gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
+        config.gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
+        config.gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
+        config.gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
     } else {
         g_gamepad_state.dpad_up = false;
         g_gamepad_state.dpad_down = false;
@@ -5367,14 +5381,14 @@ void set_sdl_gamepad_use_left_stick(bool value)
 
 int get_sdl_gamepad_button_binding(int button)
 {
-    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
+    if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.gamepad_button_bindings[button];
 }
 
 void set_sdl_gamepad_button_binding(int button, int binding)
 {
-    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
+    if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return;
     config.gamepad_button_bindings[button] = binding;
 }
@@ -5433,7 +5447,7 @@ void set_sdl_gamepad_shoulder_combo_binding(int binding)
 
 int get_sdl_gamepad_default_button_binding(int button)
 {
-    if (button < 0 || button >= SDL_GAMEPAD_BUTTON_COUNT)
+    if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return GAMEPAD_BIND_NONE;
     sdl_gamepad_load_default_bindings();
     return g_default_gamepad_button_bindings[button];

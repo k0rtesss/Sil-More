@@ -1059,7 +1059,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "buttonBindings");
         if (cJSON_IsArray(item)) {
             int count = cJSON_GetArraySize(item);
-            for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && i < count; i++) {
+            for (int i = 0; i < GAMEPAD_BUTTON_COUNT && i < count; i++) {
                 cJSON* binding = cJSON_GetArrayItem(item, i);
                 if (cJSON_IsNumber(binding)) {
                     config->gamepad_button_bindings[i] = binding->valueint;
@@ -1111,10 +1111,10 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
         }
 
         if (config->gamepad_use_dpad) {
-            config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
+            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
+            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
+            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
+            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
         }
 
         if (config->gamepad_use_left_stick) {
@@ -1313,7 +1313,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
 
             bindings = cJSON_CreateArray();
             if (bindings) {
-                for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+                for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
                     cJSON_AddItemToArray(bindings, cJSON_CreateNumber(config->gamepad_button_bindings[i]));
                 }
                 cJSON_AddItemToObject(gamepad, "buttonBindings", bindings);
@@ -1451,7 +1451,7 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
     if (!config)
         return;
 
-    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
         config->gamepad_button_bindings[i] = GAMEPAD_BIND_NONE;
     }
     for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
@@ -1462,20 +1462,20 @@ void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
         config->gamepad_right_stick_bindings[i] = GAMEPAD_BIND_NONE;
     }
 
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_SOUTH] = ' ';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_EAST] = 'f';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_WEST] = 'u';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_NORTH] = 's';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_START] = ESCAPE;
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_BACK] = 'h';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_PADDLE1] = 'r';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_PADDLE2] = 'o';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1] = 'q';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2] = '?';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_LEFT_STICK] = 'z';
-    config->gamepad_button_bindings[SDL_GAMEPAD_BUTTON_RIGHT_STICK] = 'j';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_SOUTH] = ' ';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_EAST] = 'f';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_WEST] = 'u';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_NORTH] = 's';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_START] = ESCAPE;
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_BACK] = 'h';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE1] = 'r';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE2] = 'o';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE1] = 'q';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE2] = '?';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_STICK] = 'z';
+    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_STICK] = 'j';
 
     config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_RIGHT] = 'x';
     config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_LEFT] = 'a';

@@ -3701,7 +3701,7 @@ bool load_player(void)
     {
         /* App-wide settings live in the SDL JSON config, so they must win over
          * any copies serialized in the savefile. */
-        sdl_config_load_app_options(get_sdl_config_path());
+        platform_load_app_options();
 
         // if Morgoth has lost his crown...
         if ((&a_info[ART_MORGOTH_3])->cur_num == 1)

@@ -99,8 +99,8 @@ static void handle_signal_simple(int sig)
         /* Mark the savefile */
         SDL_strlcpy(p_ptr->died_from, "Aborting", sizeof(p_ptr->died_from));
 
-        /* HACK - Skip the tombscreen if it is already displayed */
-        if (score_idx == -1)
+        /* Skip duplicate close/death handling if the tomb flow is already active. */
+        if (!death_processing_in_progress())
         {
             /* Close stuff */
             close_game();

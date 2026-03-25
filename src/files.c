@@ -23,7 +23,6 @@
 #include "main-sdl.h"
 #include "metarun.h"
 #include "platform.h"
-#include "sdl-config.h"
 #include "z-term.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6212,6 +6211,12 @@ void print_story(int last_parts, bool fade_in)
  * Hack - save index of player's high score
  */
 static int score_idx = -1;
+static bool death_processing = false;
+
+bool death_processing_in_progress(void)
+{
+    return death_processing;
+}
 
 /*
  * Counts the player's silmarils
@@ -7259,7 +7264,6 @@ static int final_menu(int* highlight)
  */
 static void close_game_aux(void)
 {
-    static bool death_processing = false;
     bool wants_to_quit = false;
     high_score the_score;
     int choice = 0, highlight = 1;

@@ -11,7 +11,6 @@
 #include "angband.h"
 #include "main-sdl.h"
 #include "object/object-ui-select.h"
-#include "sdl-config.h"
 #include "sound-config.h"
 #include "sdl-sound.h"
 
@@ -25,8 +24,6 @@ extern struct sound_config g_sound_config;
 #include "metarun.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
-#include "sdl-config.h"
-#include "pane.h"
 
 /* String used to show a color sample */
 #define COLOR_SAMPLE "###"
@@ -8649,32 +8646,32 @@ typedef struct controller_entry {
 static const char* controller_gamepad_button_label(int button)
 {
     switch (button) {
-    case SDL_GAMEPAD_BUTTON_SOUTH: return "A (South)";
-    case SDL_GAMEPAD_BUTTON_EAST: return "B (East)";
-    case SDL_GAMEPAD_BUTTON_WEST: return "X (West)";
-    case SDL_GAMEPAD_BUTTON_NORTH: return "Y (North)";
-    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1 (Left Shoulder)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1 (Right Shoulder)";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4 (Left Paddle 1)";
-    case SDL_GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5 (Left Paddle 2)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
-    case SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
-    case SDL_GAMEPAD_BUTTON_START: return "Start (Menu)";
-    case SDL_GAMEPAD_BUTTON_BACK: return "Back (View)";
-    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
-    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
-    case SDL_GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
-    case SDL_GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad Click";
-    case SDL_GAMEPAD_BUTTON_DPAD_UP: return "D-pad Up";
-    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return "D-pad Down";
-    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return "D-pad Left";
-    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return "D-pad Right";
-    case SDL_GAMEPAD_BUTTON_MISC1: return "Misc1";
-    case SDL_GAMEPAD_BUTTON_MISC2: return "Misc2";
-    case SDL_GAMEPAD_BUTTON_MISC3: return "Misc3";
-    case SDL_GAMEPAD_BUTTON_MISC4: return "Misc4";
-    case SDL_GAMEPAD_BUTTON_MISC5: return "Misc5";
-    case SDL_GAMEPAD_BUTTON_MISC6: return "Misc6";
+    case GAMEPAD_BUTTON_SOUTH: return "A (South)";
+    case GAMEPAD_BUTTON_EAST: return "B (East)";
+    case GAMEPAD_BUTTON_WEST: return "X (West)";
+    case GAMEPAD_BUTTON_NORTH: return "Y (North)";
+    case GAMEPAD_BUTTON_LEFT_SHOULDER: return "L1 (Left Shoulder)";
+    case GAMEPAD_BUTTON_RIGHT_SHOULDER: return "R1 (Right Shoulder)";
+    case GAMEPAD_BUTTON_LEFT_PADDLE1: return "L4 (Left Paddle 1)";
+    case GAMEPAD_BUTTON_LEFT_PADDLE2: return "L5 (Left Paddle 2)";
+    case GAMEPAD_BUTTON_RIGHT_PADDLE1: return "R4 (Right Paddle 1)";
+    case GAMEPAD_BUTTON_RIGHT_PADDLE2: return "R5 (Right Paddle 2)";
+    case GAMEPAD_BUTTON_START: return "Start (Menu)";
+    case GAMEPAD_BUTTON_BACK: return "Back (View)";
+    case GAMEPAD_BUTTON_LEFT_STICK: return "Left Stick Click";
+    case GAMEPAD_BUTTON_RIGHT_STICK: return "Right Stick Click";
+    case GAMEPAD_BUTTON_GUIDE: return "Guide (Steam)";
+    case GAMEPAD_BUTTON_TOUCHPAD: return "Touchpad Click";
+    case GAMEPAD_BUTTON_DPAD_UP: return "D-pad Up";
+    case GAMEPAD_BUTTON_DPAD_DOWN: return "D-pad Down";
+    case GAMEPAD_BUTTON_DPAD_LEFT: return "D-pad Left";
+    case GAMEPAD_BUTTON_DPAD_RIGHT: return "D-pad Right";
+    case GAMEPAD_BUTTON_MISC1: return "Misc1";
+    case GAMEPAD_BUTTON_MISC2: return "Misc2";
+    case GAMEPAD_BUTTON_MISC3: return "Misc3";
+    case GAMEPAD_BUTTON_MISC4: return "Misc4";
+    case GAMEPAD_BUTTON_MISC5: return "Misc5";
+    case GAMEPAD_BUTTON_MISC6: return "Misc6";
     default: return "Unknown Button";
     }
 }
@@ -8731,7 +8728,7 @@ static int controller_action_binding_count(int binding, int* out_type, int* out_
 {
     int count = 0;
 
-    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
         if (get_sdl_gamepad_button_binding(i) == binding) {
             if (count == 0 && out_type && out_id) {
                 *out_type = GAMEPAD_CAPTURE_BUTTON;
@@ -8890,7 +8887,7 @@ static void controller_clear_action_bindings(int binding, int skip_type, int ski
     if (binding == GAMEPAD_BIND_NONE)
         return;
 
-    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
         if (get_sdl_gamepad_button_binding(i) == binding) {
             if (skip_type == GAMEPAD_CAPTURE_BUTTON && skip_id == i)
                 continue;
@@ -8947,7 +8944,7 @@ static void controller_assign_action_binding(int binding, int type, int id)
 
 static bool controller_action_default_binding(int binding, int* out_type, int* out_id)
 {
-    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++) {
+    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
         if (get_sdl_gamepad_default_button_binding(i) == binding) {
             if (out_type)
                 *out_type = GAMEPAD_CAPTURE_BUTTON;

@@ -1,31 +1,8 @@
 #pragma once
 
 #include <stdbool.h>
-#include <SDL3/SDL_gamepad.h>
-#include "pane.h"
-
-#define GAMEPAD_TRIGGER_COUNT 2
-#define GAMEPAD_STICK_DIR_COUNT 4
-
-#define GAMEPAD_STICK_DIR_UP 0
-#define GAMEPAD_STICK_DIR_DOWN 1
-#define GAMEPAD_STICK_DIR_LEFT 2
-#define GAMEPAD_STICK_DIR_RIGHT 3
-
-#define GAMEPAD_BIND_NONE -1
-#define GAMEPAD_BIND_SHIFT -2
-#define GAMEPAD_BIND_CTRL -3
-#define GAMEPAD_BIND_ALT -4
-#define INPUT_BIND_CONFIRM -5
-#define TOUCH_PANE_BIND_INHERIT -6
-
-#define SDL_TOUCH_PANE_BUTTON_COLS 3
-#define SDL_TOUCH_PANE_BUTTON_ROWS 8
-#define SDL_TOUCH_PANE_BUTTON_COUNT (SDL_TOUCH_PANE_BUTTON_COLS * SDL_TOUCH_PANE_BUTTON_ROWS)
-#define SDL_TOUCH_PANE_LABEL_LEN 24
-#define SDL_TOUCH_PANE_PANEL_COUNT 2
-#define SDL_TOUCH_PANE_PANEL_MAIN 0
-#define SDL_TOUCH_PANE_PANEL_SECOND 1
+#include "gamepad-config.h"
+#include "pane-config.h"
 
 enum sdl_min_terminal_mode {
     SDL_MIN_TERMINAL_NORMAL = 0,
@@ -82,7 +59,7 @@ struct sdl_config {
     bool gamepad_use_left_stick;          // Use left stick for movement
     int gamepad_deadzone;                 // Deadzone for analog sticks
     int gamepad_trigger_threshold;        // Threshold to treat triggers as pressed
-    int gamepad_button_bindings[SDL_GAMEPAD_BUTTON_COUNT];
+    int gamepad_button_bindings[GAMEPAD_BUTTON_COUNT];
     int gamepad_trigger_bindings[GAMEPAD_TRIGGER_COUNT];
     int gamepad_left_stick_bindings[GAMEPAD_STICK_DIR_COUNT];
     int gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_COUNT];

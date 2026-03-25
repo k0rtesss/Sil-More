@@ -1,4 +1,4 @@
-#include <SDL3/SDL_stdinc.h>
+#include "support/strl.h"
 #include <string.h>
 
 size_t SDL_strlcpy(char* buf, const char* src, size_t bufsize)

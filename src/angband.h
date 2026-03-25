@@ -23,6 +23,7 @@
 #include "mem/alloc.h"
 #include "format.h"
 #include "rng.h"
+#include "support/strl.h"
 #include "z-term.h"
 
 /*
@@ -32,8 +33,6 @@
 #include "defines.h"
 #include "types.h"
 #include "supplies.h"
-
-#include <SDL3/SDL.h>
 
 /***** Some older copyright messages follow below *****/
 
@@ -85,6 +84,7 @@
  * Inline string helper functions (replacing z-util.c implementations)
  * These provide simple wrappers for common string operations.
  */
+#include <stdlib.h>
 #include <string.h>
 
 /* String equality check */
@@ -185,20 +185,24 @@ static inline bool suffix(const char* s, const char* t) {
     return (strcmp(s + slen - tlen, t) == 0);
 }
 
-/*
- * String duplication and free helpers (SDL3-based)
- * These replace the legacy string_make/string_free from z-virt.c
- */
-
-/* Duplicate a string using SDL memory allocation */
+/* Duplicate a string using standard allocation. */
 static inline char* str_dup(const char* str) {
-    if (!str) return NULL;
-    return SDL_strdup(str);
+    if (!str)
+        return NULL;
+
+    size_t len = strlen(str) + 1;
+    char* copy = malloc(len);
+    if (!copy)
+        return NULL;
+
+    memcpy(copy, str, len);
+    return copy;
 }
 
 /* Free a string allocated with str_dup and return NULL */
 static inline void* str_free(const char* str) {
-    if (str) SDL_free((void*)str);
+    if (str)
+        free((void*)str);
     return NULL;
 }
 

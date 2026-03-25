@@ -2057,7 +2057,7 @@ extern void re_init_some_things(void)
     op_ptr->window_flag[WINDOW_MONLIST] |= (PW_MONLIST);
 
     /* Reapply app-wide options after resetting runtime defaults. */
-    sdl_config_load_app_options(get_sdl_config_path());
+    platform_load_app_options();
 
     // re-initialize the objects and flavors
     if (init_k_info())
@@ -2179,7 +2179,7 @@ static errr init_other(void)
     op_ptr->window_flag[WINDOW_MONLIST] |= (PW_MONLIST);
 
     /* Reapply app-wide options after initializing runtime defaults. */
-    sdl_config_load_app_options(get_sdl_config_path());
+    platform_load_app_options();
 
     /*** Pre-allocate space for the "format()" buffer ***/
 
@@ -2935,7 +2935,7 @@ void init_angband(void)
 
     /* Load app-wide settings before the first intro render so the welcome
      * screen uses the configured style and first-launch state. */
-    sdl_config_load_app_options(get_sdl_config_path());
+    platform_load_app_options();
     run_mode_reset();
 
     /*** Display the introduction ***/
