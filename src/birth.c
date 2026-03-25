@@ -953,9 +953,9 @@ static bool birth_show_compact_description_after_assignment(bool steamdeck)
 
         c_put_str(TERM_SLATE, buf, prompt_row, 1);
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
@@ -1387,9 +1387,9 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
         /* Move the cursor */
         put_str("", TABLE_ROW + cur - top, col);
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         c = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         /* Exit the game */
         if ((c == 'Q') || (c == 'q'))
@@ -4591,9 +4591,9 @@ static NavResult player_birth_aux_2(void)
         }
 
         /* Get key */
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         /* Quit -> return to main menu before the game starts */
         if ((ch == 'Q') || (ch == 'q')) {
@@ -4837,9 +4837,9 @@ extern NavResult gain_skills(void)
         }
 
         /* Get key */
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         /* Quit -> back to main menu before the game starts */
         if (((ch == 'Q') || (ch == 'q')) && (turn == 0)) {

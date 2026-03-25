@@ -22,6 +22,7 @@
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"
+#include "project-path.h"
 #include "melee/melee-util.h"
 
 static byte side_dirs[20][8] = { { 0, 0, 0, 0, 0, 0, 0, 0 }, /* bias right */
@@ -757,12 +758,8 @@ static bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         if (m_ptr->cdis > 1)
             acceptable = true;
 
-        // Set some hacky global variables so that the project_path()
-        // function doesn't consider the monster's current location to block
-        // line of fire.
-        project_path_ignore = true;
-        project_path_ignore_y = m_ptr->fy;
-        project_path_ignore_x = m_ptr->fx;
+        /* Ignore the monster's current square when checking its own firing lane. */
+        project_path_mask ignore = { m_ptr->fy, m_ptr->fx };
 
         /* Look for adjacent shooting places */
         for (i = start; i < 8 + start; i++)
@@ -797,7 +794,8 @@ static bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
             score += dist;
 
             /* reward having a shot at the player */
-            if (projectable(y, x, p_ptr->py, p_ptr->px, PROJECT_STOP)
+            if (projectable_with_ignore(
+                    y, x, p_ptr->py, p_ptr->px, PROJECT_STOP, &ignore)
                 && (dist > 1))
                 score += 100;
 
@@ -812,13 +810,6 @@ static bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
                 best_x = x;
             }
         }
-
-        // Unset some hacky global variables so that the project_path()
-        // function didn't consider the monster's current location to block line
-        // of fire.
-        project_path_ignore = false;
-        project_path_ignore_y = 0;
-        project_path_ignore_x = 0;
 
         if (acceptable)
         {

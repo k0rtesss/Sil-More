@@ -15,6 +15,7 @@
 #include "metarun.h"
 #include "player/encumbrance.h"
 #include "player/identification.h"
+#include "runtime-cli.h"
 #include "player/weapon_stats.h"
 #include "supplies.h"
 #include "item_set.h"
@@ -4780,7 +4781,7 @@ void redraw_stuff(void)
          * hack:  redraw player, since the player's color
          * now indicates approximate health.
          */
-        if (arg_graphics == GRAPHICS_NONE)
+        if (runtime_cli_graphics_mode() == GRAPHICS_NONE)
         {
             lite_spot(p_ptr->py, p_ptr->px);
         }

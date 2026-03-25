@@ -14,6 +14,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "main-sdl.h"
+#include "runtime-cli.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_runs.h"
@@ -2491,7 +2492,7 @@ static void process_player(void)
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
             /* Do not wait */
-            inkey_scan = true;
+            inkey_set_scan(true);
 
             /* Check for a key */
             if (inkey())
@@ -4360,7 +4361,7 @@ static void print_story_intro(void)
         /* Check if we have enough space for the whole paragraph */
         if (row + lines_needed >= h - 1) {
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key)");
-            hide_cursor = true;
+            inkey_set_cursor_hidden(true);
             {
                 char k = inkey();
                 if (k == 'S') { /* Capital S skips the intro entirely */
@@ -4388,7 +4389,7 @@ static void print_story_intro(void)
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to finish)");
 
     /* Handle input */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     char key = inkey();
     if (key == 'S') {
         Term_clear();
@@ -4745,7 +4746,7 @@ PlayResult play_game(void)
     Term_fresh();
 
     /* Hack -- Enter wizard mode */
-    if (arg_wizard && enter_wizard_mode())
+    if (runtime_cli_wizard() && enter_wizard_mode())
     {
         p_ptr->wizard = true;
         log_debug("Wizard mode activated");
@@ -4773,9 +4774,9 @@ PlayResult play_game(void)
     process_some_user_pref_files();
 
     /* Set or clear "hjkl_movement" if requested */
-    if (arg_force_original)
+    if (runtime_cli_force_original())
         hjkl_movement = false;
-    if (arg_force_roguelike)
+    if (runtime_cli_force_roguelike())
         hjkl_movement = true;
 
     /* React to changes */

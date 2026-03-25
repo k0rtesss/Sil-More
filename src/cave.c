@@ -11,6 +11,8 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "project-path.h"
+#include "ui/colors.h"
 /* Standard headers for utility functions used in this file */
 #include <string.h>
 #include <stdlib.h>
@@ -1150,7 +1152,7 @@ static void special_lighting_wall(byte* a, char* c, int feat, int info, int ligh
         break;
     }
 
-    if (use_background_colors)
+    if (ui_colors_use_backgrounds())
     {
         switch (use_graphics)
         {
@@ -1989,7 +1991,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             }
 
             if (hilite_unwary && (m_ptr->alertness < ALERTNESS_ALERT)
-                && use_background_colors && graphics_are_ascii())
+                && ui_colors_use_backgrounds() && graphics_are_ascii())
             {
                 a += (MAX_COLORS * BG_DARK);
             }
@@ -5304,8 +5306,15 @@ void cave_set_feat(int y, int x, int feat)
  * This function returns the number of grids (if any) in the path.  This
  * may be zero if no grids are legal except for the starting one.
  */
-int project_path(
-    u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg)
+static bool project_path_mask_matches(const project_path_mask* ignore, int y,
+    int x)
+{
+    return ignore && (ignore->y == y) && (ignore->x == x);
+}
+
+static int project_path_internal(
+    u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg,
+    const project_path_mask* ignore)
 {
     int i, j, k;
     int dy, dx;
@@ -5680,8 +5689,7 @@ int project_path(
             {
                 // Hack: ignore monsters on the designated square if these flags
                 // are set
-                if (!(project_path_ignore && (y == project_path_ignore_y)
-                        && (x == project_path_ignore_x)))
+                if (!project_path_mask_matches(ignore, y, x))
                 {
                     if (flg & (PROJECT_STOP))
                         blockage[i] = 2;
@@ -5788,8 +5796,7 @@ int project_path(
                 {
                     // Hack: ignore monsters on the designated square if these
                     // flags are set
-                    if (!(project_path_ignore && (y_c == project_path_ignore_y)
-                            && (x_c == project_path_ignore_x)))
+                    if (!project_path_mask_matches(ignore, y_c, x_c))
                     {
                         if (flg & (PROJECT_STOP))
                             blockage[0] = 2;
@@ -5801,8 +5808,7 @@ int project_path(
                 {
                     // Hack: ignore monsters on the designated square if these
                     // flags are set
-                    if (!(project_path_ignore && (y_c == project_path_ignore_y)
-                            && (x_c == project_path_ignore_x)))
+                    if (!project_path_mask_matches(ignore, y_d, x_d))
                     {
                         if (flg & (PROJECT_STOP))
                             blockage[1] = 2;
@@ -5844,6 +5850,12 @@ int project_path(
         return (step);
 }
 
+int project_path(
+    u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg)
+{
+    return project_path_internal(gp, range, y1, x1, y2, x2, flg, NULL);
+}
+
 /*
  * Determine if a bolt spell cast from (y1,x1) to (y2,x2) will arrive
  * at the final destination, using the "project_path()" function to check
@@ -5857,7 +5869,8 @@ int project_path(
  * exists from monster to player.
  */
 
-byte projectable(int y1, int x1, int y2, int x2, u32b flg)
+byte projectable_with_ignore(int y1, int x1, int y2, int x2, u32b flg,
+    const project_path_mask* ignore)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -5891,7 +5904,8 @@ byte projectable(int y1, int x1, int y2, int x2, u32b flg)
     }
 
     /* Check the projection path */
-    grid_n = project_path(grid_g, MAX_RANGE, y1, x1, &y2, &x2, flg);
+    grid_n = project_path_internal(
+        grid_g, MAX_RANGE, y1, x1, &y2, &x2, flg, ignore);
 
     /* No grid is ever projectable from itself */
     if (!grid_n)
@@ -5919,6 +5933,11 @@ byte projectable(int y1, int x1, int y2, int x2, u32b flg)
 
     /* Assume projectable, but make no promises about clear shots */
     return (PROJECT_NOT_CLEAR);
+}
+
+byte projectable(int y1, int x1, int y2, int x2, u32b flg)
+{
+    return projectable_with_ignore(y1, x1, y2, x2, flg, NULL);
 }
 
 /*

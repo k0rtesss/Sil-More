@@ -933,6 +933,49 @@ errr macro_trigger_free(void)
     return (0);
 }
 
+struct inkey_state {
+    bool base;
+    bool xtra;
+    bool scan;
+    bool flag;
+    bool cursor_hidden;
+};
+
+static struct inkey_state g_inkey_state = { 0 };
+
+static void inkey_clear_transient_flags(void)
+{
+    g_inkey_state.base = false;
+    g_inkey_state.xtra = false;
+    g_inkey_state.scan = false;
+    g_inkey_state.flag = false;
+}
+
+static void inkey_set_flag(bool enabled)
+{
+    g_inkey_state.flag = enabled;
+}
+
+void inkey_set_base(bool enabled)
+{
+    g_inkey_state.base = enabled;
+}
+
+void inkey_set_scan(bool enabled)
+{
+    g_inkey_state.scan = enabled;
+}
+
+bool inkey_cursor_hidden(void)
+{
+    return g_inkey_state.cursor_hidden;
+}
+
+void inkey_set_cursor_hidden(bool hidden)
+{
+    g_inkey_state.cursor_hidden = hidden;
+}
+
 /*
  * Flush all pending input.
  *
@@ -943,7 +986,7 @@ errr macro_trigger_free(void)
 void flush(void)
 {
     /* Do it later */
-    inkey_xtra = true;
+    g_inkey_state.xtra = true;
 }
 
 /*
@@ -1201,13 +1244,13 @@ char inkey(void)
     term* old = Term;
 
     /* Hack -- Use the "inkey_next" pointer */
-    if (inkey_next && *inkey_next && !inkey_xtra)
+    if (inkey_next && *inkey_next && !g_inkey_state.xtra)
     {
         /* Get next character, and advance */
         ch = *inkey_next++;
 
         /* Cancel the various "global parameters" */
-        inkey_base = inkey_xtra = inkey_flag = inkey_scan = false;
+        inkey_clear_transient_flags();
 
         /* Accept result */
         return (ch);
@@ -1217,7 +1260,7 @@ char inkey(void)
     inkey_next = NULL;
 
     /* Hack -- handle delayed "flush()" */
-    if (inkey_xtra)
+    if (g_inkey_state.xtra)
     {
         /* End "macro action" */
         parse_macro = false;
@@ -1233,10 +1276,11 @@ char inkey(void)
     (void)Term_get_cursor(&cursor_state);
 
     /* Show the cursor if waiting, except sometimes in "command" mode */
-    if (!inkey_scan
-        && (!inkey_flag || hilite_player || (hilite_target && target_sighted())
+    if (!g_inkey_state.scan
+        && (!g_inkey_state.flag || hilite_player
+            || (hilite_target && target_sighted())
             || character_icky)
-        && !hide_cursor)
+        && !g_inkey_state.cursor_hidden)
     {
         /* Show the cursor */
         (void)Term_set_cursor(true);
@@ -1251,7 +1295,8 @@ char inkey(void)
     while (!ch)
     {
         /* Hack -- Handle "inkey_scan" */
-        if (!inkey_base && inkey_scan && (0 != Term_inkey(&kk, false, false)))
+        if (!g_inkey_state.base && g_inkey_state.scan
+            && (0 != Term_inkey(&kk, false, false)))
         {
             break;
         }
@@ -1279,12 +1324,12 @@ char inkey(void)
         }
 
         /* Hack -- Handle "inkey_base" */
-        if (inkey_base)
+        if (g_inkey_state.base)
         {
             int w = 0;
 
             /* Wait forever */
-            if (!inkey_scan)
+            if (!g_inkey_state.scan)
             {
                 /* Wait for (and remove) a pending key */
                 if (0 == Term_inkey(&ch, true, true))
@@ -1385,7 +1430,7 @@ char inkey(void)
     Term_set_cursor(cursor_state);
 
     /* Cancel the various "global parameters" */
-    inkey_base = inkey_xtra = inkey_flag = inkey_scan = false;
+    inkey_clear_transient_flags();
 
     /* (no banner countdown updates here; handled per turn) */
 
@@ -3711,7 +3756,7 @@ void request_command(void)
             msg_flag = false;
 
             /* Activate "command mode" */
-            inkey_flag = true;
+            inkey_set_flag(true);
 
             /* Get a command */
             ch = inkey();

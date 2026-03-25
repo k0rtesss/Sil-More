@@ -14,6 +14,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "runtime-cli.h"
 #include "main-sdl.h"
 #include <stdio.h>
 #include "metarun.h"
@@ -2683,8 +2684,8 @@ static void display_introduction_with_layout(
     Term_clear();
 
     /* Hide the cursor for the intro screen while rendering. Do NOT
-        toggle the global hide_cursor here — callers (menus) should set
-        hide_cursor around any following input waits. */
+        toggle the inkey cursor-hidden state here; callers (menus) should
+        set it around any following input waits. */
     bool _saved_cursor_state = false;
     (void)Term_get_cursor(&_saved_cursor_state);
     (void)Term_set_cursor(false);
@@ -3232,7 +3233,7 @@ extern NavResult initial_menu(bool *start_new)
     bool show_sep;
     bool show_blank;
     bool show_prompt;
-    bool show_wizard_line = arg_wizard;
+    bool show_wizard_line = runtime_cli_wizard();
 
     welcome_screen_compute_layout(hgt, show_wizard_line, &intro_layout,
         &show_sep, &show_blank, &show_prompt);
@@ -3284,10 +3285,10 @@ extern NavResult initial_menu(bool *start_new)
     Term_fresh();
 
     /* Prevent inkey() from showing the cursor while waiting on the menu */
-    bool _saved_hide_cursor = hide_cursor;
-    hide_cursor = true;
+    bool _saved_hide_cursor = inkey_cursor_hidden();
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = _saved_hide_cursor;
+    inkey_set_cursor_hidden(_saved_hide_cursor);
 
     /* direct key choices ------------------------------------------------*/
 

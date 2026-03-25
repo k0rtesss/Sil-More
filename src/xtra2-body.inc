@@ -387,9 +387,9 @@ void pause_with_text(const char desc[][100], int row, int col,
     sdl_story_font_disable();
 
     /* 3. wait for key */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     (void)inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* 4. wipe the area used */
     int total = banner_lines + main_rows;

@@ -1,5 +1,34 @@
 # Session notes
 
+## 2026-03-25: Refactor smoke matrix bookkeeping
+- Manual smoke checklist for the refactor branch:
+  - start game
+  - save/load
+  - inventory/equipment overlays
+  - unified look and sidebar
+  - combat roll overlay
+  - one quest accept/complete flow
+  - one metarun open/save flow
+- Status: checklist recorded; manual smoke execution is still pending in this session.
+
+## 2026-03-25: WP99 completion
+- Finished `WP99` by landing the remaining two planned global-localization items after the first input/UI-color slice.
+- Added `src/runtime-cli.[ch]` and moved the old `arg_*` runtime CLI state out of `src/variable.c` / `src/externs.h`; callers now read narrow accessors instead of global launcher flags.
+- Added `src/project-path.h` and replaced the `project_path_ignore*` globals with per-call ignore context passed through `projectable_with_ignore()` for the monster ranged-position scoring path.
+- Current surface after completing `WP99`: `src/externs.h` is 1,369 lines with about 1,181 `extern` declarations, and `src/variable.c` is 768 lines.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded.
+  - `.\build-cmake.bat` succeeded.
+
+## 2026-03-25: WP99 first header/global cleanup slice
+- Started `WP99` by localizing the transient `inkey` state into `src/util.c` and replacing direct cross-file writes to `inkey_base`, `inkey_scan`, and `hide_cursor` with helper calls (`inkey_set_base()`, `inkey_set_scan()`, `inkey_set_cursor_hidden()`, `inkey_cursor_hidden()`).
+- Removed those transient input globals from `src/variable.c` / `src/externs.h`, so the state is now owned privately by the input utility layer instead of the global variable block.
+- Moved background-color ownership out of `src/variable.c` into `src/ui/colors.c` behind `ui_colors_use_backgrounds()`, and updated `src/cave.c` to query the UI color subsystem instead of a direct global.
+- Current surface after this slice: `src/externs.h` is 1,378 lines and `src/variable.c` is 783 lines.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
 ## 2026-03-25: WP50 SDL boundary cleanup completion
 - Finished the second half of `WP50` after the earlier target split by removing the global SDL include from `src/angband.h` and moving the `SDL_strlcpy`/`SDL_strlcat` compatibility declarations into `src/support/strl.h`.
 - Added SDL-free public boundary headers: `src/platform-ui.h`, `src/platform-audio.h`, `src/gamepad-config.h`, and `src/pane-config.h`.

@@ -20,6 +20,7 @@
 
 #include "main.h"
 #include "log/log.h"
+#include "runtime-cli.h"
 #include "sdl-sound.h"
 
 /*
@@ -249,6 +250,7 @@ int main(int argc, char* argv[])
     
     // Initialize dedicated generation log (generation.txt)
     gen_log_init(argv[0]);
+    runtime_cli_reset();
 
     /* Initialize character_icky to ensure it starts at 0 */
     character_icky = 0;
@@ -323,21 +325,21 @@ int main(int argc, char* argv[])
         case 'F':
         case 'f':
         {
-            arg_fiddle = true;
+            runtime_cli_set_fiddle(true);
             break;
         }
 
         case 'W':
         case 'w':
         {
-            arg_wizard = true;
+            runtime_cli_set_wizard(true);
             break;
         }
 
         case 'V':
         case 'v':
         {
-            arg_sound = true;
+            runtime_cli_set_sound(true);
             break;
         }
 
@@ -345,21 +347,21 @@ int main(int argc, char* argv[])
         case 'g':
         {
             /* Default graphics tile */
-            arg_graphics = GRAPHICS_MICROCHASM;
+            runtime_cli_set_graphics_mode(GRAPHICS_MICROCHASM);
             break;
         }
 
         case 'R':
         case 'r':
         {
-            arg_force_roguelike = true;
+            runtime_cli_set_force_roguelike(true);
             break;
         }
 
         case 'O':
         case 'o':
         {
-            arg_force_original = true;
+            runtime_cli_set_force_original(true);
             break;
         }
 

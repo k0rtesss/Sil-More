@@ -69,6 +69,7 @@ set(SIL_MORE_SOURCES_CORE
     src/quest.c
     src/randart.c
     src/rng.c
+    src/runtime-cli.c
     src/squelch.c
     src/supplies.c
     src/tables.c

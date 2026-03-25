@@ -46,6 +46,12 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `src/platform-ui.h`, `src/platform-audio.h`, `src/gamepad-config.h`, and `src/pane-config.h` now form the core-facing platform boundary; `src/main-sdl.h` plus `src/sdl-sound.h` remain as thin compatibility wrappers for the SDL implementation side.
   - `src/pane.h` is now SDL-only layout glue, while generic pane enums/config now live in `src/pane-config.h`, and public gamepad/touch-pane constants no longer depend on SDL headers.
   - `src/angband.h` no longer pulls in SDL globally, `src/support/strl.[ch]` now own the `SDL_strlcpy`/`SDL_strlcat` compatibility layer, and the remaining explicit SDL includes are now localized to the files that actually need SDL types or runtime calls.
+- `WP99` is now structurally complete in the working tree:
+  - `src/util.c` now owns the transient `inkey` base/scan/flush/command/cursor-hidden state behind helper functions, so `variable.c` and `externs.h` no longer expose those globals directly.
+  - Menu/story/smithing/birth callers now use `inkey_set_cursor_hidden()` / `inkey_cursor_hidden()` instead of writing `hide_cursor` directly.
+  - `src/ui/colors.c` now owns the background-color policy behind `ui_colors_use_backgrounds()`, so `cave.c` no longer reads `use_background_colors` directly.
+  - `src/runtime-cli.[ch]` now own the runtime CLI flag state, so the old `arg_*` globals no longer live in `variable.c` / `externs.h`.
+  - `src/project-path.h` plus the new `projectable_with_ignore()` path now replace the old `project_path_ignore*` globals with per-call projectile masking for monster ranged-position scoring.
 - Validation so far:
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the scaffold landing and again after the `init/` extractions.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the first `WP20` object-module extraction, again after the `object-desc` extraction, again after the first `object-ui-display` helper extraction, again after moving the classic list rendering path into `object-ui-display`, again after moving the enhanced/unified object menus into dedicated modules, again after moving the selection flow into `object-ui-select`, again after removing `object1.c` from the build as a completed legacy note, again after landing the `WP11` `level-generation-connectivity.c` and `level-generation-rooms.c` split, again after moving the remaining layout/planning core into `level-generation-layout.c`, again after landing `level-generation-screen.c` plus the final state/helper moves, again after completing the remaining `WP10` parser-module split and removing `init1.c` from the build, again after revalidating the active `WP22` drop split with the thin `drop_system.c` facade on 2026-03-25, again after the first `WP30` command-module extraction on 2026-03-25, and again after completing the full `WP30` command split with the new `src/cmd/*` build on 2026-03-25.
@@ -53,8 +59,9 @@ Port the structural refactor already proven on `unstable` into `quests-and-refac
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the active `WP41` spell/player-song split and revalidating the `WP42` melee split on 2026-03-25.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after landing the first mechanical `WP50` core/frontend target split on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after finishing the `WP50` SDL header/API boundary cleanup on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded again on the portable tree the same day.
-- Not started yet:
-  - `WP99`.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after starting the first `WP99` header/global cleanup slice on 2026-03-25.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after completing the remaining `WP99` projectile-path/runtime-CLI cleanup on 2026-03-25, and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` succeeded on the portable tree the same day.
+  - `.\build-cmake.bat` succeeded again after completing `WP99` on 2026-03-25.
 
 ## Branch Facts
 - Current working branch studied for this plan: `quests-and-refactor` at `750b4e601b1c2afba2ec7f573763e1a2ed22e367`.
@@ -330,8 +337,8 @@ These should be done by the main integrator or one agent at a time:
 
 Current serial package status:
 - `WP01`: completed in the working tree on 2026-03-24.
-- `WP00`: partially covered operationally by successful builds, but the full smoke matrix has not yet been formalized in this plan or `session_notes.md`.
-- `WP99`: not started.
+- `WP00`: partially covered operationally by successful builds; the smoke matrix is now recorded in `session_notes.md`, but the manual baseline smoke run is still pending.
+- `WP99`: completed in the working tree on 2026-03-25; the package localized the planned transient input, UI color, projectile-path, and runtime CLI state out of `variable.c` / `externs.h`, and passed standard + portable incremental builds plus `.\build-cmake.bat`.
 
 ### Parallel Packages
 These can be run in parallel once `WP01` lands, as long as write sets stay disjoint:

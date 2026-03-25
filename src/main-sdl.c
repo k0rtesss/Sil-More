@@ -7,6 +7,7 @@
 #include "main-sdl.h"
 #include "z-term.h"
 #include "pane.h"
+#include "runtime-cli.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
 #include "sound-config.h"
@@ -3489,7 +3490,7 @@ static errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_REACT:
         /* React to global setting changes (graphics mode, colors, etc.) */
         log_debug("TERM_XTRA_REACT received (tiles_mode=%d use_graphics=%d arg_graphics=%d)",
-                  g_state.use_tiles, use_graphics, arg_graphics);
+                  g_state.use_tiles, use_graphics, runtime_cli_graphics_mode());
         /* Reload colors from angband_color_table (may have been changed by .prf files) */
         sdl_sync_palette();
         reset_visuals(true);
@@ -4778,12 +4779,12 @@ errr init_sdl(int argc, char **argv)
     ANGBAND_SYS = "sdl";
     if (config.tiles) {
         ANGBAND_GRAF = "new";
-        arg_graphics = GRAPHICS_MICROCHASM;
+        runtime_cli_set_graphics_mode(GRAPHICS_MICROCHASM);
         use_graphics = GRAPHICS_MICROCHASM;
         use_bigtile = true;
     } else {
         ANGBAND_GRAF = "old";
-        arg_graphics = GRAPHICS_PSEUDO;
+        runtime_cli_set_graphics_mode(GRAPHICS_PSEUDO);
         use_graphics = GRAPHICS_PSEUDO;
     }
 

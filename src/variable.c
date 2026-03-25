@@ -49,16 +49,6 @@ u16b sf_lives; /* Number of past "lives" with this file */
 u16b sf_saves; /* Number of "saves" during this life */
 
 /*
- * Run-time arguments
- */
-bool arg_fiddle; /* Command arg -- Request fiddle mode */
-bool arg_wizard; /* Command arg -- Request wizard mode */
-bool arg_sound; /* Command arg -- Request special sounds */
-bool arg_graphics; /* Command arg -- Request graphics mode */
-bool arg_force_original; /* Command arg -- Request original keyset */
-bool arg_force_roguelike; /* Command arg -- Request roguelike keyset */
-
-/*
  * Various things
  */
 
@@ -100,12 +90,6 @@ s16b signal_count; /* Hack -- Count interrupts */
 
 bool msg_flag; /* Player has pending message */
 
-bool inkey_base; /* See the "inkey()" function */
-bool inkey_xtra; /* See the "inkey()" function */
-bool inkey_scan; /* See the "inkey()" function */
-bool inkey_flag; /* See the "inkey()" function */
-bool hide_cursor; /* See the "inkey()" function */
-
 byte object_generation_mode; /* Hack -- use different depth check, prevent
                                 embedded chests */
 bool drop_allow_noble; /* When true, noble-tagged entries are eligible for selection */
@@ -135,8 +119,6 @@ bool save_game_quietly = false; // whether we are currently trying to save the
 
 bool stop_stealth_mode = false; // whether there has been a signal that we need
                                 // to abort stealth mode
-
-bool use_background_colors = false;
 
 /*
  * true if process_command() is a repeated call.
@@ -703,13 +685,6 @@ byte combat_roll_special_attr;
 combat_history_round combat_history[MAX_COMBAT_HISTORY];
 int combat_history_head = 0;
 int combat_history_count = 0;
-
-/*
- * Hacky variables for ignoring a square during project_path() function
- */
-bool project_path_ignore;
-int project_path_ignore_y;
-int project_path_ignore_x;
 
 /*
  * Hack -- The special Angband "System Suffix"

@@ -1190,9 +1190,9 @@ void level_gen_screen_finish(bool success)
     if (success && level_gen_screen.debug)
     {
         flush();
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         (void)inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
     }
 
     if (level_gen_screen.screen_saved)

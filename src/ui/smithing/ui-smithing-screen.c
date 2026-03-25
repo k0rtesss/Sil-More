@@ -1858,9 +1858,9 @@ int create_sval_menu_aux(int tval, int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch >= 'a') && (ch <= (char)'a' + MAX_SMITHING_TVALS - 1))
     {
@@ -2008,9 +2008,9 @@ int create_tval_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + MAX_SMITHING_TVALS - 1))
@@ -2464,9 +2464,9 @@ int numbers_menu_aux(int* highlight)
     Term_gotoxy(2, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + SMT_NUM_MENU_MAX - 1))
@@ -2782,9 +2782,9 @@ static int smith_bonus_menu_aux(int* highlight)
         Term_putstr(COL_SMT2, 3, -1, TERM_L_DARK,
             "(No editable special bonuses on this item.)");
         Term_fresh();
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         (void)inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
         return -1;
     }
 
@@ -2870,9 +2870,9 @@ static int smith_bonus_menu_aux(int* highlight)
     Term_fresh();
     Term_gotoxy(2, hl_row);
 
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch == '4') || (ch == ESCAPE))
         return -1;
@@ -3178,9 +3178,9 @@ static int reforge_prefix_menu(const object_type* source)
             Term_putstr(COL_SMT2, 3, -1, TERM_L_DARK,
                 "(No legal prefixes available.)");
             Term_fresh();
-            hide_cursor = true;
+            inkey_set_cursor_hidden(true);
             (void)inkey();
-            hide_cursor = false;
+            inkey_set_cursor_hidden(false);
             screen_load();
             return 0;
         }
@@ -3199,9 +3199,9 @@ static int reforge_prefix_menu(const object_type* source)
         Term_fresh();
         Term_gotoxy(14, 1 + highlight);
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         if ((ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
         {
@@ -3401,9 +3401,9 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* Choose by letter */
     if ((ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
@@ -3850,9 +3850,9 @@ int artefact_flag_menu_aux(int category, int* highlight)
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* Abort if there are no choices */
     if (num == 0)
@@ -4279,9 +4279,9 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* Abort if there are no choices */
     if (num == 0)
@@ -4550,9 +4550,9 @@ int artefact_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* Choose by letter */
     if ((ch >= 'a') && (ch <= (char)'a' + num - 1))
@@ -4748,9 +4748,9 @@ int melt_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + num - 1))
@@ -5160,9 +5160,9 @@ int smithing_menu_aux(int* highlight)
     Term_gotoxy(2, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + SMT_MENU_MAX - 1))

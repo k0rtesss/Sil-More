@@ -3,6 +3,8 @@
 #include "../angband.h"
 #include "colors.h"
 
+static bool g_use_background_colors = false;
+
 /* Short color names for base colors */
 static char* short_color_names[MAX_BASE_COLORS] = {
     "Dark", "White", "Slate", "Orange",
@@ -35,4 +37,14 @@ cptr attr_to_text(byte a)
 #endif
 
     return (base);
+}
+
+bool ui_colors_use_backgrounds(void)
+{
+    return g_use_background_colors;
+}
+
+void ui_colors_set_backgrounds(bool enabled)
+{
+    g_use_background_colors = enabled;
 }

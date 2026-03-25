@@ -80,12 +80,6 @@ extern u32b sf_xtra;
 extern u32b sf_when;
 extern u16b sf_lives;
 extern u16b sf_saves;
-extern bool arg_fiddle;
-extern bool arg_wizard;
-extern bool arg_sound;
-extern bool arg_graphics;
-extern bool arg_force_original;
-extern bool arg_force_roguelike;
 extern bool character_generated;
 extern bool character_dungeon;
 extern bool character_loaded;
@@ -108,11 +102,6 @@ extern s16b image_count;
 extern bool use_bigtile;
 extern s16b signal_count;
 extern bool msg_flag;
-extern bool inkey_base;
-extern bool inkey_xtra;
-extern bool inkey_scan;
-extern bool inkey_flag;
-extern bool hide_cursor;
 extern byte object_generation_mode;
 extern bool drop_allow_noble;
 extern bool drop_allow_evil;
@@ -263,10 +252,6 @@ extern combat_history_round combat_history[MAX_COMBAT_HISTORY];
 extern int combat_history_head;   /* Index of the most recent entry */
 extern int combat_history_count;  /* Number of stored rounds */
 
-extern bool project_path_ignore;
-extern int project_path_ignore_y;
-extern int project_path_ignore_x;
-
 extern cptr ANGBAND_SYS;
 extern cptr ANGBAND_GRAF;
 extern cptr ANGBAND_DIR;
@@ -310,7 +295,6 @@ extern bool g_labyrinth_view_active;
 extern bool skill_gain_in_progress;
 extern bool save_game_quietly;
 extern bool stop_stealth_mode;
-extern bool use_background_colors;
 extern bool death_processing_in_progress(void);
 
 extern metarun metar;
@@ -1157,6 +1141,10 @@ extern errr macro_free(void);
 extern errr macro_trigger_free(void);
 extern void flush(void);
 extern void flush_fail(void);
+extern void inkey_set_base(bool enabled);
+extern void inkey_set_scan(bool enabled);
+extern bool inkey_cursor_hidden(void);
+extern void inkey_set_cursor_hidden(bool hidden);
 extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);

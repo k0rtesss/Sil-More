@@ -14,6 +14,7 @@
 #include "fs/io_sdl.h"
 #include "log/log.h"
 #include "main-sdl.h"
+#include "runtime-cli.h"
 #include "player/killer.h"
 #include "score/score_guid.h"
 #include <string.h> /* memset, strstr */
@@ -2026,7 +2027,7 @@ static errr rd_randarts(void)
               z_info->art_max, z_info->art_norm_max, header_valid ? 1 : 0);
 
     /* Alive or cheating death */
-    if (!p_ptr->is_dead || arg_wizard)
+    if (!p_ptr->is_dead || runtime_cli_wizard())
     {
         /* Incompatible save files */
         if ((artefact_count > z_info->art_max) || (art_norm_count > z_info->art_norm_max))
@@ -2199,7 +2200,7 @@ static errr rd_randarts(void)
  */
 static bool rd_notes(void)
 {
-    int alive = (!p_ptr->is_dead || arg_wizard);
+    int alive = (!p_ptr->is_dead || runtime_cli_wizard());
     char tmpstr[100];
     int i;
 
@@ -3207,17 +3208,17 @@ static errr rd_savefile_new_aux(void)
 
     /* Read RNG state */
     rd_randomizer();
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Randomizer Info");
 
     /* Then the options */
     rd_options();
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Option Flags");
 
     /* Then the "messages" */
     rd_messages();
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Messages");
 
     /* Monster Memory */
@@ -3249,7 +3250,7 @@ static errr rd_savefile_new_aux(void)
             r_info[r] = r_base[r];
         }
     }
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Monster Memory");
 
     /* Object Memory */
@@ -3278,7 +3279,7 @@ static errr rd_savefile_new_aux(void)
 
         rd_byte(&k_ptr->squelch);
     }
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Object Memory");
 
     /* Load the Artefacts */
@@ -3310,26 +3311,26 @@ static errr rd_savefile_new_aux(void)
             a_info[i].seen = 0;
         }
     }
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Artefacts");
 
     /* Read the extra stuff */
     log_debug("Loading extra player information");
     if (rd_extra())
         return (-1);
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded extra information");
 
     log_debug("Loading random artefacts");
     if (rd_randarts())
         return (-1);
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Random Artefacts");
 
     log_debug("Loading notes");
     if (rd_notes())
         return (-1);
-    if (arg_fiddle)
+    if (runtime_cli_fiddle())
         note("Loaded Notes");
 
     /* Important -- Initialize the race/character */
@@ -3681,7 +3682,7 @@ bool load_player(void)
 
 #ifdef VERIFY_TIMESTAMP
     /* Verify timestamp */
-    if (!err && !arg_wizard)
+    if (!err && !runtime_cli_wizard())
     {
         /* Hack -- Verify the timestamp */
         if (sf_when > (statbuf.st_ctime + 100)
@@ -3719,7 +3720,7 @@ bool load_player(void)
         {
             log_info("Loading a dead character");
             /* Cheat death (unless the character retired) */
-            if (arg_wizard)
+            if (runtime_cli_wizard())
             {
                 log_info("Wizard mode: resurrecting dead character");
                 /*heal the player*/

@@ -6031,8 +6031,8 @@ void print_story(int last_parts, bool fade_in)
     /* Hide the cursor during story display and restore it at the end */
     (void)Term_get_cursor(&_saved_cursor_state);
     /* Prevent inkey() from showing the cursor while story is active */
-    _saved_hide_cursor = hide_cursor;
-    hide_cursor = true;
+    _saved_hide_cursor = inkey_cursor_hidden();
+    inkey_set_cursor_hidden(true);
     (void)Term_set_cursor(false);
 
     sdl_story_font_enable();  // Enable for entire story display
@@ -6198,9 +6198,9 @@ void print_story(int last_parts, bool fade_in)
     
     sdl_story_font_disable();  // Disable after story display
     screen_load();
-    /* Restore previous cursor visibility and hide_cursor flag */
+    /* Restore previous cursor visibility and input cursor state */
     (void)Term_set_cursor(_saved_cursor_state);
-    hide_cursor = _saved_hide_cursor;
+    inkey_set_cursor_hidden(_saved_hide_cursor);
 
     log_debug("Story display completed");
 
@@ -7186,9 +7186,9 @@ static int final_menu(int* highlight)
     Term_gotoxy(10, separator_row + 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if (ch == 'a')
     {

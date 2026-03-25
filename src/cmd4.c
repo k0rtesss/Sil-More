@@ -2059,9 +2059,9 @@ int bane_menu(int* highlight)
     Term_gotoxy(COL_DESCRIPTION, 3 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch >= 'a') && (ch <= (char)'a' + options - 1))
     {
@@ -2408,9 +2408,9 @@ int oath_menu(int* highlight)
     Term_fresh();
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     /* Handle letter selection (a-z) for immediate highlighting */
     if ((ch >= 'a') && (ch < 'a' + visible_count))
@@ -2508,9 +2508,9 @@ int abilities_menu1(int* highlight)
     Term_gotoxy(COL_SKILL, 3 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch >= 'a') && (ch <= (char)'a' + options - 1))
     {
@@ -3077,9 +3077,9 @@ int abilities_menu2(int skilltype, int* highlight)
     }
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch >= 'a') && (ch <= (char)'a' + visible_count - 1))
     {
@@ -3752,9 +3752,9 @@ int main_menu_aux(int* highlight)
     }
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     // choose an option by letter - alphabetical mapping (updated for new order)
     switch (ch)
@@ -4325,9 +4325,9 @@ static bool hint_message_show_internal(int index, int* look_y, int* look_x,
 
         Term_fresh();
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         if ((ch == 'l' || ch == 'L') && hint_message_has_source(&meta))
         {
@@ -5680,9 +5680,9 @@ extern void do_cmd_options_aux(int page, cptr info)
             MIN(54, Term->wid - 1));
 
         /* Get a key */
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         /*
          * HACK - Try to translate the key into a direction
@@ -6423,9 +6423,9 @@ void do_cmd_pane_settings(void)
                 "(arrows move, 4/6 set, 0 auto, Enter/Esc)"));
 
         /* Get key */
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         char ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
         
         /* Try to translate the key into a direction */
         dir = target_dir(ch);
@@ -6842,9 +6842,9 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
             Term_fresh();
 
-            hide_cursor = true;
+            inkey_set_cursor_hidden(true);
             char ch = inkey();
-            hide_cursor = false;
+            inkey_set_cursor_hidden(false);
 
             dir = target_dir(ch);
             if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
@@ -7171,9 +7171,9 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
         Term_fresh();
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         char ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         dir = target_dir(ch);
         if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
@@ -7481,9 +7481,9 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
         Term_fresh();
 
-        hide_cursor = true;
+        inkey_set_cursor_hidden(true);
         char ch = inkey();
-        hide_cursor = false;
+        inkey_set_cursor_hidden(false);
 
         {
             int dir = target_dir(ch);
@@ -7707,9 +7707,9 @@ int options_menu(int* highlight)
     Term_gotoxy(2, title_row + 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    hide_cursor = true;
+    inkey_set_cursor_hidden(true);
     ch = inkey();
-    hide_cursor = false;
+    inkey_set_cursor_hidden(false);
 
     if ((ch == 'a') || (ch == 'A'))
     {
@@ -9246,7 +9246,7 @@ void do_cmd_controller_settings(void)
                         break;
                     }
 
-                    inkey_scan = true;
+                    inkey_set_scan(true);
                     char choice = inkey();
                     if (choice == ESCAPE) {
                         sdl_gamepad_capture_cancel();
@@ -9365,7 +9365,7 @@ static void do_cmd_macro_aux(char* buf)
     flush();
 
     /* Do not process macros */
-    inkey_base = true;
+    inkey_set_base(true);
 
     /* First key */
     ch = inkey();
@@ -9377,10 +9377,10 @@ static void do_cmd_macro_aux(char* buf)
         buf[n++] = ch;
 
         /* Do not process macros */
-        inkey_base = true;
+        inkey_set_base(true);
 
         /* Do not wait for keys */
-        inkey_scan = true;
+        inkey_set_scan(true);
 
         /* Attempt to read a key */
         ch = inkey();
