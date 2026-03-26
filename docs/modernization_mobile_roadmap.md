@@ -22,6 +22,17 @@ Status date: March 26, 2026.
 - The current desktop audit on March 26, 2026 confirmed:
   - `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` succeeds
   - the tree is structurally past the old unstable-port milestone
+- `Phase 0` is complete in the live tree:
+  - corrupt savefile reads now fail boundedly
+  - `meta.raw` writes use staged replacement and corruption recovery
+  - raw-cache payload reads are validated
+  - the `editing_buffer_init()`, `mini_screenshot()`, and `no_light()` audit bugs are closed
+  - smithing difficulty parity between engine and script is restored on the shared regression corpus
+- `Phase 1` is complete in the live tree:
+  - `CTest` now runs `sil_phase01_regressions` plus `sil_smithing_parity`
+  - `CMakePresets.json` now provides `dev-standard`, `dev-portable`, `dev-strict`, and `dev-sanitize`
+  - the strict preset builds a warning-free gate for the touched `Phase 0` / `Phase 1` files
+  - the sanitizer preset probes ASan/UBSan runtime availability and falls back with a configure warning on hosts where those runtimes are unavailable
 - Android support is real:
   - Gradle project exists under [`android/`](../android)
   - native Android CMake entrypoint exists
@@ -60,6 +71,8 @@ Status date: March 26, 2026.
 ## Phase 0: Reliability And Correctness Hardening
 Goal: eliminate the known live correctness hazards before doing more structural
 cleanup.
+
+Status: complete in the working tree on March 26, 2026.
 
 Tasks:
 - Make corrupt or truncated savefiles fail cleanly instead of hanging the
@@ -100,6 +113,8 @@ Done when:
 
 ## Phase 1: Validation And Tooling Ratchet
 Goal: make future cleanup safer by adding build and test pressure.
+
+Status: complete in the working tree on March 26, 2026.
 
 Tasks:
 - Add one opt-in strict build preset.
@@ -343,19 +358,16 @@ These can run in parallel as long as write sets stay disjoint.
 - story/death screens if touched
 
 ## Recommended Execution Order
-1. Finish the hardening packages first: `WP110`, `WP111`, `WP113`, `WP114`, `WP115`.
-2. Add the validation ratchet early with `WP120` and `WP121`.
-3. Only then start the dependency cleanup wave: `WP130`, `WP131`, `WP140`, `WP141`, `WP142`.
-4. Treat the true platform boundary as the gate before any iOS-facing work: `WP150`, `WP151`.
-5. Do mobile adaptation after the boundary is real: `WP160`, `WP161`.
-6. Close with docs and integration: `WP170`, `WP199`.
+1. Treat `WP110` through `WP121` as complete in the live tree.
+2. Start the dependency cleanup wave: `WP130`, `WP131`, `WP140`, `WP141`, `WP142`.
+3. Treat the true platform boundary as the gate before any iOS-facing work: `WP150`, `WP151`.
+4. Do mobile adaptation after the boundary is real: `WP160`, `WP161`.
+5. Close with docs and integration: `WP170`, `WP199`.
 
 ## Recommended Immediate Start
-1. Open `WP110` to harden corrupt-save handling in [`src/load.c`](../src/load.c).
-2. Open `WP111` to make `meta.raw` writes atomic in [`src/metarun.c`](../src/metarun.c).
-3. Open `WP113` to resync smithing difficulty logic between engine and tool.
-4. Open `WP120` immediately after that so future cleanup runs under a stricter validation loop.
+1. Start `WP130` to keep reducing direct reliance on [`src/externs.h`](../src/externs.h).
+2. Follow with `WP131` to keep localizing obvious ownership out of [`src/variable.c`](../src/variable.c).
+3. Open the next monolith reduction slice only after the header/global surface starts shrinking again.
 
-This order keeps the highest-value correctness fixes ahead of the larger
-cleanup work, and it avoids spending more effort on architecture while known
-persistence hazards are still live.
+The hardening and validation ratchet are in place now; the next highest-value
+work is dependency-surface reduction rather than more Phase 0/1 fallout.

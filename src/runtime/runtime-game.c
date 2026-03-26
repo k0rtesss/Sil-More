@@ -11,6 +11,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"
+#include "reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "score/score_runs.h"
@@ -133,8 +134,9 @@ static void close_game_aux(void)
     create_score(&the_score);
     score_record_status final_status = p_ptr->escaped ? SCORE_RECORD_ESCAPED : SCORE_RECORD_DEAD;
 
-    bool score_persistence_ready = !score_entry_is_ranked_run();
-    if (!score_persistence_ready) {
+    bool ranked_run = score_entry_is_ranked_run();
+    bool legacy_score_written = !ranked_run;
+    if (ranked_run) {
         char score_path[1024];
         build_current_score_path(score_path, sizeof(score_path));
         safe_setuid_grab();
@@ -143,14 +145,14 @@ static void close_game_aux(void)
         if (score_fd) {
             SDL_IOStream* previous_fd = score_file_active_ctx()->fd;
             score_file_active_ctx()->fd = score_fd;
-            score_persistence_ready = (score_entry_submit(&the_score) == 0);
+            legacy_score_written = (score_entry_submit(&the_score) == 0);
             score_file_active_ctx()->fd = previous_fd;
         } else {
             log_warn("Unable to open score file for final score submission");
         }
     }
 
-    if (score_persistence_ready) {
+    if (reliability_should_update_runs_db(ranked_run, legacy_score_written)) {
         if (!score_runs_record_current_run(&the_score, death_time, final_status)) {
             log_warn("Failed to persist run statistics for '%s'", op_ptr->full_name);
         }

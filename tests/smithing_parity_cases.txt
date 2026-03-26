@@ -1,0 +1,6 @@
+name,tval,type,flags,expected
+subtlety_throw,23,normal,SUBTLETY_THROW,15
+oath_boost,40,normal,OATH_BOOST,5
+oath_negate,40,normal,OATH_NEGATE,-5
+traitor,40,normal,TRAITOR,-2
+mixed_flags,23,normal,SUBTLETY_THROW|OATH_BOOST|TRAITOR,18

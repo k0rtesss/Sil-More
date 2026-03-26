@@ -16,6 +16,7 @@
 #include "log/log.h"
 #include "runtime-cli.h"
 #include "platform-ui.h"
+#include "reliability-checks.h"
 #include <stdio.h>
 #include "metarun.h"
 #include "score/score_guid.h"
@@ -197,9 +198,9 @@ static bool has_valid_metarun_data(const char* meta_dir)
         return false;
 
     /* Check if it has valid header */
-    meta_file_header header;
-    bool valid = (SDL_ReadIO(fd, &header, sizeof(header)) == sizeof(header))
-        && header.entry_count > 0;
+    meta_file_header meta_hdr;
+    bool valid = (SDL_ReadIO(fd, &meta_hdr, sizeof(meta_hdr)) == sizeof(meta_hdr))
+        && meta_hdr.entry_count > 0;
 
     sdl_fclose(fd);
     return valid;
@@ -882,6 +883,10 @@ header skeleton_note_head;
 static errr init_info_raw(SDL_IOStream* fd, header* head)
 {
     header test;
+    Sint64 file_size_64;
+    size_t file_size;
+    size_t expected_size = 0;
+    reliability_layout_status layout_status;
 
     /* Read and verify the header */
     if (sdl_read(fd, (char*)(&test), sizeof(header))
@@ -898,6 +903,21 @@ static errr init_info_raw(SDL_IOStream* fd, header* head)
 
     /* Accept the header */
     memcpy(head, &test, sizeof(header));
+
+    file_size_64 = sdl_size(fd);
+    if (file_size_64 < 0)
+        return (-1);
+
+    file_size = (size_t)file_size_64;
+    layout_status = reliability_validate_serialized_layout(file_size,
+        (size_t)test.head_size, (size_t)test.info_size, (size_t)test.name_size,
+        (size_t)test.text_size, &expected_size);
+    if (layout_status != RELIABILITY_LAYOUT_VALID)
+    {
+        log_warn("init_info_raw: rejecting corrupt raw cache (file_size=%zu expected=%zu status=%d)",
+            file_size, expected_size, (int)layout_status);
+        return (-1);
+    }
 
     /* Allocate the "*_info" array */
     head->info_ptr = mem_alloc_array(head->info_size, char);
@@ -3010,16 +3030,16 @@ void init_angband(void)
         else
         {
             /* Write version header to new scores file */
-        score_file_header header;
-        header.version_major = SCORE_FILE_VERSION_MAJOR;
-        header.version_minor = SCORE_FILE_VERSION_MINOR;
-        header.version_patch = SCORE_FILE_VERSION_PATCH;
-        header.version_extra = SCORE_FILE_VERSION_EXTRA;
-            header.entry_count = 0;
-            header.reserved[0] = 0;
-            header.reserved[1] = 0;
+        score_file_header score_hdr;
+        score_hdr.version_major = SCORE_FILE_VERSION_MAJOR;
+        score_hdr.version_minor = SCORE_FILE_VERSION_MINOR;
+        score_hdr.version_patch = SCORE_FILE_VERSION_PATCH;
+        score_hdr.version_extra = SCORE_FILE_VERSION_EXTRA;
+            score_hdr.entry_count = 0;
+            score_hdr.reserved[0] = 0;
+            score_hdr.reserved[1] = 0;
             
-            sdl_write(fd, (cptr)&header, sizeof(header));
+            sdl_write(fd, (cptr)&score_hdr, sizeof(score_hdr));
         }
     }
 

@@ -14,6 +14,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "platform-ui.h"
+#include "reliability-checks.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
 #include "runtime/runtime-game.h"
@@ -1360,14 +1361,14 @@ errr load_metaruns(bool create_if_missing)
         if (!fd) return -1;
 
         /* Write versioned header */
-        meta_file_header header;
-        header.version_major = METARUN_FILE_VERSION_MAJOR;
-        header.version_minor = METARUN_FILE_VERSION_MINOR;
-        header.version_patch = METARUN_FILE_VERSION_PATCH;
-        header.version_extra = METARUN_FILE_VERSION_EXTRA;
-        header.entry_count = 1;
+        meta_file_header meta_hdr;
+        meta_hdr.version_major = METARUN_FILE_VERSION_MAJOR;
+        meta_hdr.version_minor = METARUN_FILE_VERSION_MINOR;
+        meta_hdr.version_patch = METARUN_FILE_VERSION_PATCH;
+        meta_hdr.version_extra = METARUN_FILE_VERSION_EXTRA;
+        meta_hdr.entry_count = 1;
 
-        sdl_write(fd, (cptr)&header, sizeof(header));
+        sdl_write(fd, (cptr)&meta_hdr, sizeof(meta_hdr));
 
         metarun seed;
         reset_defaults(&seed);
@@ -1389,39 +1390,44 @@ errr load_metaruns(bool create_if_missing)
     /* All metarun files are versioned (v0.9.0+) */
     Sint64 file_size_64 = sdl_size(fd);
     int file_size = (file_size_64 > 0) ? (int)file_size_64 : 0;
+    size_t meta_file_size = (file_size > 0) ? (size_t)file_size : 0;
     const char *recovery_reason = NULL;
 
-    meta_file_header header;
+    meta_file_header meta_hdr;
     sdl_seek(fd, 0);
-    if (sdl_read(fd, (char*)&header, sizeof(header)) != 0) {
+    if (sdl_read(fd, (char*)&meta_hdr, sizeof(meta_hdr)) != 0) {
         log_error("Failed to read metarun header");
         sdl_fclose(fd);
         return -1;
     }
 
     log_info("Loading versioned meta file v%d.%d.%d.%d (%u entries)",
-             header.version_major, header.version_minor,
-             header.version_patch, header.version_extra, header.entry_count);
+             meta_hdr.version_major, meta_hdr.version_minor,
+             meta_hdr.version_patch, meta_hdr.version_extra, meta_hdr.entry_count);
 
-    bool header_matches_current = (header.version_major == METARUN_FILE_VERSION_MAJOR &&
-                                   header.version_minor == METARUN_FILE_VERSION_MINOR &&
-                                   header.version_patch == METARUN_FILE_VERSION_PATCH &&
-                                   header.version_extra == METARUN_FILE_VERSION_EXTRA);
+    bool header_matches_current = (meta_hdr.version_major == METARUN_FILE_VERSION_MAJOR &&
+                                   meta_hdr.version_minor == METARUN_FILE_VERSION_MINOR &&
+                                   meta_hdr.version_patch == METARUN_FILE_VERSION_PATCH &&
+                                   meta_hdr.version_extra == METARUN_FILE_VERSION_EXTRA);
     if (!header_matches_current) {
         log_warn("metarun: file version v%d.%d.%d.%d differs from game version v%d.%d.%d.%d",
-                 header.version_major, header.version_minor, header.version_patch, header.version_extra,
+                 meta_hdr.version_major, meta_hdr.version_minor, meta_hdr.version_patch, meta_hdr.version_extra,
                  METARUN_FILE_VERSION_MAJOR, METARUN_FILE_VERSION_MINOR, METARUN_FILE_VERSION_PATCH, METARUN_FILE_VERSION_EXTRA);
     }
 
-    metarun_max = header.entry_count;
-    size_t payload = (file_size >= (int)sizeof(meta_file_header))
-                   ? (size_t)file_size - sizeof(meta_file_header)
-                  : 0;
-    size_t entry_size = (metarun_max > 0)
-                      ? (payload / (size_t)metarun_max)
-                      : 0;
+    metarun_max = meta_hdr.entry_count;
+    size_t payload = 0;
+    size_t entry_size = 0;
+    reliability_metarun_layout layout = RELIABILITY_METARUN_LAYOUT_INVALID;
 
-    if (metarun_max > 0 && entry_size > 0) {
+    if (metarun_max > 0) {
+        layout = reliability_detect_metarun_layout(meta_file_size,
+            sizeof(meta_file_header), meta_hdr.entry_count, sizeof(metarun),
+            METARUN_V10_SIZE, METARUN_V9_SIZE, METARUN_V8_SIZE, &payload,
+            &entry_size);
+    }
+
+    if (metarun_max > 0 && layout != RELIABILITY_METARUN_LAYOUT_INVALID) {
         metaruns = mem_alloc_array(metarun_max, metarun);
         if (!metaruns) {
             recovery_reason = "unable to allocate metarun array";
@@ -1430,18 +1436,18 @@ errr load_metaruns(bool create_if_missing)
         }
         sdl_seek(fd, sizeof(meta_file_header));
 
-        if (entry_size == sizeof(metarun)) {
+        if (layout == RELIABILITY_METARUN_LAYOUT_CURRENT) {
             if (sdl_read(fd, (char*)metaruns, metarun_max * sizeof(metarun)) != 0) {
                 recovery_reason = "versioned meta.raw payload was truncated";
             } else {
                 for (s16b i = 0; i < metarun_max; i++) {
-                    if (header.version_major == 0 && header.version_minor < 9) {
+                    if (meta_hdr.version_major == 0 && meta_hdr.version_minor < 9) {
                         metaruns[i].blessing_points_spent = 0;
                     }
                     /* Initialize pending blessing choices for pre-0.9.0.1 saves
                      * (fields were part of reserved_runtime and may contain garbage) */
-                    if (header.version_major == 0 && header.version_minor == 9 &&
-                        header.version_patch == 0 && header.version_extra == 0) {
+                    if (meta_hdr.version_major == 0 && meta_hdr.version_minor == 9 &&
+                        meta_hdr.version_patch == 0 && meta_hdr.version_extra == 0) {
                         /* Clear pending choices - will be regenerated on first menu open */
                         metaruns[i].pending_blessing_count = 0;
                         for (int j = 0; j < 3; j++) {
@@ -1454,7 +1460,7 @@ errr load_metaruns(bool create_if_missing)
                     metarun_sanitize_major_blessing_bits(&metaruns[i]);
                 }
             }
-        } else if (entry_size == METARUN_V10_SIZE) {
+        } else if (layout == RELIABILITY_METARUN_LAYOUT_V10) {
             metarun_v10 *legacy = mem_alloc_array(metarun_max, metarun_v10);
             if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10)) != 0) {
                 recovery_reason = "legacy v10 meta.raw payload was truncated";
@@ -1465,7 +1471,7 @@ errr load_metaruns(bool create_if_missing)
                 }
             }
             legacy = mem_free(legacy);
-        } else if (entry_size == METARUN_V9_SIZE) {
+        } else if (layout == RELIABILITY_METARUN_LAYOUT_V9) {
             metarun_v9 *legacy = mem_alloc_array(metarun_max, metarun_v9);
             if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v9)) != 0) {
                 recovery_reason = "legacy v9 meta.raw payload was truncated";
@@ -1476,7 +1482,7 @@ errr load_metaruns(bool create_if_missing)
                 }
             }
             legacy = mem_free(legacy);
-        } else if (entry_size == METARUN_V8_SIZE) {
+        } else if (layout == RELIABILITY_METARUN_LAYOUT_V8) {
             metarun_v8 *legacy = mem_alloc_array(metarun_max, metarun_v8);
             if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v8)) != 0) {
                 recovery_reason = "legacy v8 meta.raw payload was truncated";
@@ -1487,12 +1493,6 @@ errr load_metaruns(bool create_if_missing)
                 }
             }
             legacy = mem_free(legacy);
-        } else {
-            recovery_reason = "versioned meta.raw had unsupported entry size (requires v0.9.0+)";
-            log_warn("Unsupported metarun entry size %zu in versioned file; dropping pre-0.9.0 legacy support", entry_size);
-            mem_free_null(metaruns);
-            metaruns = NULL;
-            metarun_max = 0;
         }
 
         if (recovery_reason) {
@@ -1503,6 +1503,10 @@ errr load_metaruns(bool create_if_missing)
     } else if (metarun_max == 0) {
         recovery_reason = "versioned meta.raw reported zero entries";
         log_warn("Versioned meta file contains zero entries");
+    } else if (entry_size > 0) {
+        recovery_reason = "versioned meta.raw had unsupported entry size (requires v0.9.0+)";
+        log_warn("Unsupported metarun entry size %zu in versioned file; dropping pre-0.9.0 legacy support",
+            entry_size);
     } else {
         recovery_reason = "versioned meta.raw had invalid payload size";
         log_warn("Versioned meta file payload %zu does not align with %d entries",
@@ -1781,14 +1785,14 @@ errr save_metaruns(void)
     }
 
     /* Write version header first */
-    meta_file_header header;
-    header.version_major = METARUN_FILE_VERSION_MAJOR;
-    header.version_minor = METARUN_FILE_VERSION_MINOR;
-    header.version_patch = METARUN_FILE_VERSION_PATCH;
-    header.version_extra = METARUN_FILE_VERSION_EXTRA;
-    header.entry_count = metarun_max;
+    meta_file_header meta_hdr;
+    meta_hdr.version_major = METARUN_FILE_VERSION_MAJOR;
+    meta_hdr.version_minor = METARUN_FILE_VERSION_MINOR;
+    meta_hdr.version_patch = METARUN_FILE_VERSION_PATCH;
+    meta_hdr.version_extra = METARUN_FILE_VERSION_EXTRA;
+    meta_hdr.entry_count = metarun_max;
     
-    errr result = sdl_write(fd, (cptr)&header, sizeof(header));
+    errr result = sdl_write(fd, (cptr)&meta_hdr, sizeof(meta_hdr));
     if (result != 0) {
         sdl_fclose(fd);
         log_info("Failed to write metarun header to file");

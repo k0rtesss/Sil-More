@@ -7,6 +7,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_logic.h"
 #include "score/score_runs.h"
@@ -97,16 +98,16 @@ bool score_file_load_header(score_file_ctx* ctx, const char *filepath)
         return false;
     }
 
-    score_file_header header;
-    if (fread(&header, sizeof(header), 1, file) != 1) {
+    score_file_header score_hdr;
+    if (fread(&score_hdr, sizeof(score_hdr), 1, file) != 1) {
         fclose(file);
         log_error("Failed to read score file header");
         return false;
     }
     fclose(file);
 
-    if (header.version_major > 127 || header.version_minor > 127 ||
-        header.version_patch > 127) {
+    if (score_hdr.version_major > 127 || score_hdr.version_minor > 127 ||
+        score_hdr.version_patch > 127) {
         log_error("Invalid version in score file header");
         return false;
     }
@@ -118,20 +119,20 @@ bool score_file_load_header(score_file_ctx* ctx, const char *filepath)
     }
     u32b actual_entries = (u32b)(payload / (long)sizeof(high_score));
 
-    ctx->version_major = header.version_major;
-    ctx->version_minor = header.version_minor;
-    ctx->version_patch = header.version_patch;
-    ctx->version_extra = header.version_extra;
-    ctx->entry_count = header.entry_count;
+    ctx->version_major = score_hdr.version_major;
+    ctx->version_minor = score_hdr.version_minor;
+    ctx->version_patch = score_hdr.version_patch;
+    ctx->version_extra = score_hdr.version_extra;
+    ctx->entry_count = score_hdr.entry_count;
 
     log_trace("score_file_load_header: cached version %d.%d.%d.%d count=%u (physical=%u)",
               ctx->version_major, ctx->version_minor,
               ctx->version_patch, ctx->version_extra,
               ctx->entry_count, actual_entries);
 
-    if (header.entry_count != actual_entries) {
+    if (score_hdr.entry_count != actual_entries) {
         log_debug("score_file_load_header: header entry_count=%u but file has %u entries",
-                  header.entry_count, actual_entries);
+                  score_hdr.entry_count, actual_entries);
     }
 
     return true;
@@ -174,11 +175,11 @@ static bool score_file_upgrade_to_curses(score_file_ctx* ctx, const char *filepa
         return false;
     }
 
-    score_file_header* header = (score_file_header*)buffer;
-    header->version_major = 0;
-    header->version_minor = 9;
-    header->version_patch = 0;
-    header->version_extra = 6;
+    score_file_header* score_hdr = (score_file_header*)buffer;
+    score_hdr->version_major = 0;
+    score_hdr->version_minor = 9;
+    score_hdr->version_patch = 0;
+    score_hdr->version_extra = 6;
 
     long entry_count = (file_size - sizeof(score_file_header)) / sizeof(high_score);
     for (long i = 0; i < entry_count; i++) {
@@ -218,17 +219,17 @@ ang_file* score_file_open(const char *filepath, int mode)
 
     /* If file doesn't exist and caller allows creation, bootstrap header */
     if (!exists && (mode & O_CREAT)) {
-        score_file_header header;
-        header.version_major = SCORE_FILE_VERSION_MAJOR;
-        header.version_minor = SCORE_FILE_VERSION_MINOR;
-        header.version_patch = SCORE_FILE_VERSION_PATCH;
-        header.version_extra = SCORE_FILE_VERSION_EXTRA;
-        header.entry_count  = 0;
+        score_file_header score_hdr;
+        score_hdr.version_major = SCORE_FILE_VERSION_MAJOR;
+        score_hdr.version_minor = SCORE_FILE_VERSION_MINOR;
+        score_hdr.version_patch = SCORE_FILE_VERSION_PATCH;
+        score_hdr.version_extra = SCORE_FILE_VERSION_EXTRA;
+        score_hdr.entry_count  = 0;
 
         log_debug("score_file_open: file doesn't exist, creating with header at '%s'", filepath);
         FILE* new_file = fopen(filepath, "wb");
         if (new_file) {
-            fwrite(&header, sizeof(header), 1, new_file);
+            fwrite(&score_hdr, sizeof(score_hdr), 1, new_file);
             fclose(new_file);
             exists = score_file_load_header(ctx, filepath);
             log_info("score_file_open: initialized new scores file header at %s", filepath);
@@ -260,17 +261,17 @@ ang_file* score_file_open(const char *filepath, int mode)
 
         if (file_size >= (Sint64)sizeof(score_file_header)) {
             SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-            score_file_header header;
-            if (SDL_ReadIO(file, &header, sizeof(header)) == sizeof(header)) {
+            score_file_header score_hdr;
+            if (SDL_ReadIO(file, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr)) {
                 Sint64 payload = file_size - (Sint64)sizeof(score_file_header);
                 if (payload >= 0 && (payload % (Sint64)sizeof(high_score)) == 0) {
                     u32b actual_entries = (u32b)(payload / (Sint64)sizeof(high_score));
-                    if (header.entry_count != actual_entries) {
+                    if (score_hdr.entry_count != actual_entries) {
                         log_info("Reconciling scores header: entry_count %u -> %u",
-                                 header.entry_count, actual_entries);
-                        header.entry_count = actual_entries;
+                                 score_hdr.entry_count, actual_entries);
+                        score_hdr.entry_count = actual_entries;
                         SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-                        SDL_WriteIO(file, &header, sizeof(header));
+                        SDL_WriteIO(file, &score_hdr, sizeof(score_hdr));
                         ctx->entry_count = actual_entries;
                     }
                 }
@@ -469,18 +470,18 @@ static void update_scores_file_header_count(void)
     }
 
     if (scores_file_entry_count != count) {
-        score_file_header header;
+        score_file_header score_hdr;
         if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) < 0)
             return;
-        size_t read_items = SDL_ReadIO(highscore_fd, &header, sizeof(header));
-        if (read_items != sizeof(header))
+        size_t read_items = SDL_ReadIO(highscore_fd, &score_hdr, sizeof(score_hdr));
+        if (read_items != sizeof(score_hdr))
             return;
 
-        header.entry_count = count;
+        score_hdr.entry_count = count;
         if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) < 0)
             return;
-        size_t written_items = SDL_WriteIO(highscore_fd, &header, sizeof(header));
-        if (written_items != sizeof(header))
+        size_t written_items = SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
+        if (written_items != sizeof(score_hdr))
             return;
         scores_file_entry_count = count;
         log_debug("Updated scores file header count to %u", count);
@@ -864,13 +865,13 @@ int highscore_add(high_score* score)
         log_error("Failed to flush high score file: %s", SDL_GetError());
     }
 
-    score_file_header header;
+    score_file_header score_hdr;
     if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) >= 0
-        && SDL_ReadIO(highscore_fd, &header, sizeof(header)) == sizeof(header))
+        && SDL_ReadIO(highscore_fd, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr))
     {
-        header.entry_count = count;
+        score_hdr.entry_count = count;
         SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(highscore_fd, &header, sizeof(header));
+        SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
         SDL_FlushIO(highscore_fd);
         scores_file_entry_count = count;
     }
@@ -915,16 +916,16 @@ static bool upsert_live_score_entry(const high_score* live_score)
     highscore_fd = live_fd;
 
     if (!score_file_load_header(score_file_global_ctx(), score_path)) {
-        score_file_header header;
-        header.version_major = SCORE_FILE_VERSION_MAJOR;
-        header.version_minor = SCORE_FILE_VERSION_MINOR;
-        header.version_patch = SCORE_FILE_VERSION_PATCH;
-        header.version_extra = SCORE_FILE_VERSION_EXTRA;
-        header.entry_count = 0;
-        header.reserved[0] = 0;
-        header.reserved[1] = 0;
+        score_file_header score_hdr;
+        score_hdr.version_major = SCORE_FILE_VERSION_MAJOR;
+        score_hdr.version_minor = SCORE_FILE_VERSION_MINOR;
+        score_hdr.version_patch = SCORE_FILE_VERSION_PATCH;
+        score_hdr.version_extra = SCORE_FILE_VERSION_EXTRA;
+        score_hdr.entry_count = 0;
+        score_hdr.reserved[0] = 0;
+        score_hdr.reserved[1] = 0;
         SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(highscore_fd, &header, sizeof(header));
+        SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
         scores_file_version_major = SCORE_FILE_VERSION_MAJOR;
         scores_file_version_minor = SCORE_FILE_VERSION_MINOR;
         scores_file_version_patch = SCORE_FILE_VERSION_PATCH;
@@ -990,14 +991,23 @@ bool upsert_live_score_on_save(void)
 bool score_refresh_live_snapshot(time_t snapshot_time, const char* reason)
 {
     high_score live_score;
+    bool ranked_run;
+    bool legacy_write_ok;
 
     if (!build_live_preview_score(&live_score))
         return false;
 
-    if (!upsert_live_score_entry(&live_score)) {
-        log_warn("live snapshot skipped because scores.raw update failed (%s)",
+    ranked_run = score_entry_is_ranked_run();
+    legacy_write_ok = upsert_live_score_entry(&live_score);
+    if (!legacy_write_ok) {
+        if (!reliability_should_update_runs_db(ranked_run, legacy_write_ok)) {
+            log_warn("live snapshot skipped because scores.raw update failed (%s)",
+                reason ? reason : "unspecified");
+            return false;
+        }
+
+        log_warn("live snapshot scores.raw update failed, continuing runs.db update for unranked run (%s)",
             reason ? reason : "unspecified");
-        return false;
     }
 
     if (!score_runs_record_current_run(&live_score, snapshot_time,

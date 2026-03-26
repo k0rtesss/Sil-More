@@ -8,6 +8,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CTest)
+include(CheckCSourceCompiles)
+find_package(Python3 QUIET COMPONENTS Interpreter)
 
 option(LOG_MODE_TIMESTAMP "Create new log with timestamp each time" OFF)
 option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
@@ -337,12 +339,11 @@ target_compile_options(sil-build-config INTERFACE
 )
 target_include_directories(sil-build-config INTERFACE src)
 
-if (SIL_STRICT_WARNINGS)
-  target_compile_options(sil-build-config INTERFACE
-    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Werror -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes>
-    $<$<C_COMPILER_ID:MSVC>:/WX>
-  )
-endif()
+add_library(sil-strict-build-config INTERFACE)
+target_compile_options(sil-strict-build-config INTERFACE
+  $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Werror -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes>
+  $<$<C_COMPILER_ID:MSVC>:/WX>
+)
 
 if (SIL_ENABLE_ASAN OR SIL_ENABLE_UBSAN)
   if (MSVC)
@@ -357,12 +358,28 @@ if (SIL_ENABLE_ASAN OR SIL_ENABLE_UBSAN)
     list(APPEND SIL_SANITIZER_FLAGS -fsanitize=undefined -fno-sanitize-recover=undefined)
   endif()
 
-  target_compile_options(sil-build-config INTERFACE
-    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
-  )
-  target_link_options(sil-build-config INTERFACE
-    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
-  )
+  string(JOIN " " SIL_SANITIZER_FLAGS_STRING ${SIL_SANITIZER_FLAGS})
+  set(_sil_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+  set(_sil_saved_required_link_options "${CMAKE_REQUIRED_LINK_OPTIONS}")
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${SIL_SANITIZER_FLAGS_STRING}")
+  set(CMAKE_REQUIRED_LINK_OPTIONS ${SIL_SANITIZER_FLAGS})
+  check_c_source_compiles("int main(void) { return 0; }" SIL_SANITIZER_RUNTIME_AVAILABLE)
+  set(CMAKE_REQUIRED_FLAGS "${_sil_saved_required_flags}")
+  set(CMAKE_REQUIRED_LINK_OPTIONS "${_sil_saved_required_link_options}")
+
+  if (SIL_SANITIZER_RUNTIME_AVAILABLE)
+    target_compile_options(sil-build-config INTERFACE
+      $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
+    )
+    target_link_options(sil-build-config INTERFACE
+      $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:${SIL_SANITIZER_FLAGS}>
+    )
+  else()
+    message(WARNING
+      "Requested sanitizer flags (${SIL_SANITIZER_FLAGS_STRING}) are unavailable on this host; "
+      "the preset will continue without sanitizer instrumentation."
+    )
+  endif()
 endif()
 
 if (LOG_MODE_TIMESTAMP)
@@ -380,6 +397,26 @@ endif()
 add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
 set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sil-core PUBLIC sil-build-config SDL3::SDL3 log)
+
+if (SIL_STRICT_WARNINGS)
+  add_library(sil-phase01-strict-gate OBJECT
+    src/drop/drop-system-difficulty.c
+    src/files.c
+    src/init2.c
+    src/load.c
+    src/metarun.c
+    src/reliability-checks.c
+    src/runtime/runtime-game.c
+    src/score/score_io.c
+    src/util.c
+  )
+  target_link_libraries(sil-phase01-strict-gate PRIVATE
+    sil-build-config
+    sil-strict-build-config
+    SDL3::SDL3
+    log
+  )
+endif()
 
 # WP50: keep the SDL implementation isolated in its own object target while
 # core code talks to it through the narrower platform facade headers.
@@ -420,10 +457,27 @@ endif()
 target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core)
 
 if(BUILD_TESTING)
-  add_executable(sil-phase0-tests
+  add_executable(sil-phase01-tests
     tests/phase0_tests.c
     src/reliability-checks.c
   )
-  target_link_libraries(sil-phase0-tests PRIVATE sil-build-config)
-  add_test(NAME sil_phase0_regressions COMMAND sil-phase0-tests)
+  target_link_libraries(sil-phase01-tests PRIVATE sil-build-config)
+  if(SIL_STRICT_WARNINGS)
+    target_link_libraries(sil-phase01-tests PRIVATE sil-strict-build-config)
+  endif()
+  add_test(
+    NAME sil_phase01_regressions
+    COMMAND sil-phase01-tests
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/smithing_parity_cases.txt
+  )
+
+  if(Python3_Interpreter_FOUND)
+    add_test(
+      NAME sil_smithing_parity
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/smithing_parity_test.py
+    )
+  else()
+    message(WARNING "Python3 interpreter not found; sil_smithing_parity test disabled.")
+  endif()
 endif()

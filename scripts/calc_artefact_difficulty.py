@@ -619,6 +619,8 @@ def calculate_difficulty(art):
         dif_inc += 5  # Situational
     if 'PAIRED' in flags:
         dif_inc += 3  # Paired weapon bonus
+    if 'SUBTLETY_THROW' in flags:
+        dif_inc += 15
 
     # === PVAL-DEPENDENT BONUSES ===
     # For specials: total_pval = base_pval + smithed bonus

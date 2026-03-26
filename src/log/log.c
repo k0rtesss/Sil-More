@@ -167,7 +167,7 @@ void log_log(int level, const char *file, int line, const char *fmt, ...) {
   unlock();
 }
 
-void log_close_files()
+void log_close_files(void)
 {
     for (int i = 0; i < MAX_CALLBACKS && L.callbacks[i].fn; i++) {
         if (L.callbacks[i].fn == file_callback) {

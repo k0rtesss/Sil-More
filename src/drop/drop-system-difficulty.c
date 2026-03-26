@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "drop/drop-system-internal.h"
 #include "externs.h"
+#include "reliability-checks.h"
 
 /* Baseline smithing difficulty (player-neutral). */
 static void drop_dif_mod(int value, int positive_base, int* dif_inc)
@@ -292,8 +293,6 @@ int smithing_difficulty_baseline(const object_type* o_ptr)
         dif_inc += 5;  /* Situational */
     if (f4 & TR4_PAIRED)
         dif_inc += 3;  /* Paired weapon bonus */
-    if (f4 & TR4_SUBTLETY_THROW)
-        dif_inc += 15;
 
     /* pval-based bonuses */
     if (f1 & TR1_TUNNEL)
@@ -461,6 +460,13 @@ int smithing_difficulty_baseline(const object_type* o_ptr)
         dif_inc += 6;
     if (f3 & TR3_MEDIC)
         dif_inc += 4;
+    {
+        int parity_delta = reliability_smithing_phase01_flag_delta(f2, f3, f4);
+        if (parity_delta > 0)
+            dif_inc += parity_delta;
+        else if (parity_delta < 0)
+            dif_dec += -parity_delta;
+    }
 
     if (f2 & TR2_RES_COLD)
         dif_inc += 5;
@@ -499,8 +505,6 @@ int smithing_difficulty_baseline(const object_type* o_ptr)
         dif_dec += 4;
     if (f2 & TR2_VUL_POIS)
         dif_dec += 4;
-    if (f3 & TR2_TRAITOR)
-        dif_dec += 2;
     if (f3 & TR3_CUMBERSOME)
         dif_dec += 3;
     if (f4 & TR4_UNLIGHT)

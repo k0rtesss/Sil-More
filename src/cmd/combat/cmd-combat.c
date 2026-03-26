@@ -132,7 +132,7 @@ static int weapon_animation_delay(u16b weapon_sound_type)
     }
 }
 
-bool graphics_are_ascii()
+bool graphics_are_ascii(void)
 {
     return use_graphics == GRAPHICS_NONE || use_graphics == GRAPHICS_PSEUDO;
 }

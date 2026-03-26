@@ -1,5 +1,30 @@
 # Session notes
 
+## 2026-03-26: Phase 0/1 completion
+- Completed the remaining `docs/modernization_mobile_roadmap.md` `Phase 0` / `Phase 1` work in the live tree:
+  - fixed the last smithing-difficulty drift between [`src/drop/drop-system-difficulty.c`](src/drop/drop-system-difficulty.c) and [`scripts/calc_artefact_difficulty.py`](scripts/calc_artefact_difficulty.py) by restoring the missing `SUBTLETY_THROW`, `OATH_BOOST`, `OATH_NEGATE`, and `TRAITOR` adjustments on the engine/script side
+  - centralized the new Phase 0 validation/policy helpers in `src/reliability-checks.[ch]` and wired them into live code paths for raw-cache validation, metarun payload layout detection, and score dual-write policy
+  - tightened the score persistence policy so `runs.db` now continues after a `scores.raw` live-snapshot failure only for unranked runs; ranked runs still treat the legacy write as authoritative
+  - added executable regression coverage for serialized-layout validation, metarun layout corruption, score dual-write policy, and a shared smithing parity corpus (`tests/phase0_tests.c`, `tests/smithing_parity_cases.csv`, `tests/smithing_parity_test.py`)
+  - added `CMakePresets.json` with repeatable `dev-standard`, `dev-portable`, `dev-strict`, and `dev-sanitize` configure/build/test presets
+  - changed the strict preset from a tree-wide `-Werror` switch to a Phase 0/1 strict gate target so touched files build warning-free under stronger warnings without reopening the whole legacy tree
+  - added a sanitizer capability probe in `CMakeLists.txt`; on hosts with ASan/UBSan runtimes the preset enables instrumentation, and on the current MinGW host it emits a configure warning and falls back cleanly because `libasan` / `libubsan` are not installed
+- Follow-on strict cleanup required by the new gate:
+  - fixed stale non-prototype declarations for `graphics_are_ascii(void)` and `log_close_files(void)`
+  - removed the shadowing locals flagged in the touched Phase 0/1 files (`src/init2.c`, `src/load.c`, `src/metarun.c`, `src/score/score_io.c`, `src/util.c`)
+- Validation:
+  - `cmake --preset dev-standard`
+  - `cmake --build --preset build-standard --parallel`
+  - `ctest --preset test-standard`
+  - `cmake --preset dev-strict`
+  - `cmake --build --preset build-strict --parallel`
+  - `ctest --preset test-strict`
+  - `cmake --preset dev-sanitize`
+  - `cmake --build --preset build-sanitize --parallel`
+  - `ctest --preset test-sanitize`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable`
+
 ## 2026-03-25: WP90 platform-boundary follow-through
 - Completed `WP90` by tightening the remaining core/frontend boundary without changing gameplay behavior:
   - core callers now include `platform-ui.h` / `platform-audio.h` directly instead of the SDL-named wrapper headers

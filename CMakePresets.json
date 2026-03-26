@@ -1,0 +1,104 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 18,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-base",
+      "hidden": true,
+      "generator": "MinGW Makefiles",
+      "environment": {
+        "PATH": "C:/msys64/mingw64/bin;C:/msys64/usr/bin;$penv{PATH}"
+      },
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/msys64/mingw64",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "dev-standard",
+      "inherits": "mingw-base",
+      "binaryDir": "${sourceDir}/build-standard",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SIL_USE_LOCAL_DATA": "OFF"
+      }
+    },
+    {
+      "name": "dev-portable",
+      "inherits": "mingw-base",
+      "binaryDir": "${sourceDir}/build-portable",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SIL_USE_LOCAL_DATA": "ON"
+      }
+    },
+    {
+      "name": "dev-strict",
+      "inherits": "mingw-base",
+      "binaryDir": "${sourceDir}/build-strict",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SIL_USE_LOCAL_DATA": "OFF",
+        "SIL_STRICT_WARNINGS": "ON"
+      }
+    },
+    {
+      "name": "dev-sanitize",
+      "inherits": "mingw-base",
+      "binaryDir": "${sourceDir}/build-sanitize",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SIL_USE_LOCAL_DATA": "OFF",
+        "SIL_STRICT_WARNINGS": "ON",
+        "SIL_ENABLE_ASAN": "ON",
+        "SIL_ENABLE_UBSAN": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-standard",
+      "configurePreset": "dev-standard"
+    },
+    {
+      "name": "build-portable",
+      "configurePreset": "dev-portable"
+    },
+    {
+      "name": "build-strict",
+      "configurePreset": "dev-strict"
+    },
+    {
+      "name": "build-sanitize",
+      "configurePreset": "dev-sanitize"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-standard",
+      "configurePreset": "dev-standard",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-strict",
+      "configurePreset": "dev-strict",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-sanitize",
+      "configurePreset": "dev-sanitize",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

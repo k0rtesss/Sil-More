@@ -1477,19 +1477,19 @@ static errr rd_extra(void)
         {
             byte skill = 0;
             byte abil = 0;
-            u32b turn = 0;
+            u32b ability_turn = 0;
             s16b depth = 0;
 
             rd_byte(&skill);
             rd_byte(&abil);
-            rd_u32b(&turn);
+            rd_u32b(&ability_turn);
             rd_s16b(&depth);
 
             if (idx < ABILITY_TIMELINE_MAX)
             {
                 p_ptr->ability_timeline_skill[idx] = skill;
                 p_ptr->ability_timeline_ability[idx] = abil;
-                p_ptr->ability_timeline_turn[idx] = turn;
+                p_ptr->ability_timeline_turn[idx] = ability_turn;
                 p_ptr->ability_timeline_depth[idx] = depth;
                 p_ptr->ability_timeline_count = idx + 1;
             }
@@ -1739,10 +1739,10 @@ static errr rd_extra(void)
     log_debug("rd_extra: reading quest block (byte_ofs=%u) version=%u.%u.%u", 
              (unsigned)load_byte_offset, (unsigned)sf_major, (unsigned)sf_minor, (unsigned)sf_patch);
     
-    byte marker;
-    rd_byte(&marker);
-    if (marker != 0x51) {
-        note(format("Invalid quest marker 0x%02X (expected 0x51). Savefile too old (< 0.8.9).", marker));
+    byte quest_marker;
+    rd_byte(&quest_marker);
+    if (quest_marker != 0x51) {
+        note(format("Invalid quest marker 0x%02X (expected 0x51). Savefile too old (< 0.8.9).", quest_marker));
         return (-1);
     }
     
@@ -1870,11 +1870,11 @@ static errr rd_extra(void)
     /* Skeleton note state (per-level tutorial-style messages) */
     if (savefile_has_skeleton_notes)
     {
-        byte marker = 0;
-        rd_byte(&marker);
-        if (marker != 0x52)
+        byte skeleton_marker = 0;
+        rd_byte(&skeleton_marker);
+        if (skeleton_marker != 0x52)
         {
-            note(format("Invalid skeleton note marker 0x%02X", marker));
+            note(format("Invalid skeleton note marker 0x%02X", skeleton_marker));
             return (-1);
         }
         skeleton_note_state_save sn_state;
@@ -1898,8 +1898,8 @@ static errr rd_extra(void)
             sn_state.hint_used_mask = 0;
         }
         rd_byte(&sn_state.seen_count);
-        for (int i = 0; i < SKELETON_NOTE_SEEN_MAX; ++i)
-            rd_s16b(&sn_state.seen_ids[i]);
+        for (int seen_idx = 0; seen_idx < SKELETON_NOTE_SEEN_MAX; ++seen_idx)
+            rd_s16b(&sn_state.seen_ids[seen_idx]);
         skeleton_note_set_state(&sn_state);
     }
     else
@@ -1910,11 +1910,11 @@ static errr rd_extra(void)
     /* Partition generation metadata (grid + per-partition modes) */
     if (savefile_has_partition_meta)
     {
-        byte marker = 0;
-        rd_byte(&marker);
-        if (marker != 0x53)
+        byte partition_marker = 0;
+        rd_byte(&partition_marker);
+        if (partition_marker != 0x53)
         {
-            note(format("Invalid partition meta marker 0x%02X", marker));
+            note(format("Invalid partition meta marker 0x%02X", partition_marker));
             return (-1);
         }
 
@@ -1923,12 +1923,12 @@ static errr rd_extra(void)
         rd_s16b(&pm.grid_rows);
         rd_s16b(&pm.grid_cols);
         rd_s16b(&pm.partition_count);
-        for (int i = 0; i < PARTITION_META_MAX; ++i)
-            rd_byte(&pm.modes[i]);
+        for (int part_idx = 0; part_idx < PARTITION_META_MAX; ++part_idx)
+            rd_byte(&pm.modes[part_idx]);
         if (savefile_has_partition_meta_types)
         {
-            for (int i = 0; i < PARTITION_META_MAX; ++i)
-                rd_byte(&pm.big_cave_types[i]);
+            for (int part_idx = 0; part_idx < PARTITION_META_MAX; ++part_idx)
+                rd_byte(&pm.big_cave_types[part_idx]);
         }
 
         level_partition_meta_set(&pm);
@@ -1937,11 +1937,11 @@ static errr rd_extra(void)
     /* Hint message log (per-level skeleton note archive) */
     if (savefile_has_hint_messages)
     {
-        byte marker = 0;
-        rd_byte(&marker);
-        if (marker != 0x54)
+        byte hint_marker = 0;
+        rd_byte(&hint_marker);
+        if (hint_marker != 0x54)
         {
-            note(format("Invalid hint message marker 0x%02X", marker));
+            note(format("Invalid hint message marker 0x%02X", hint_marker));
             return (-1);
         }
 
@@ -2003,16 +2003,16 @@ static errr rd_extra(void)
 
     if (savefile_version_at_least(0, 9, 5, 6))
     {
-        byte marker = 0;
+        byte blitz_marker = 0;
         byte mode = RUN_MODE_STORY;
         int8_t stacks[METAR_CURSE_SLOTS];
         u32b seen_lo = 0;
         u32b seen_hi = 0;
 
-        rd_byte(&marker);
-        if (marker != 0x55)
+        rd_byte(&blitz_marker);
+        if (blitz_marker != 0x55)
         {
-            note(format("Invalid blitz marker 0x%02X", marker));
+            note(format("Invalid blitz marker 0x%02X", blitz_marker));
             return (-1);
         }
 
@@ -2874,9 +2874,14 @@ static errr rd_dungeon(void)
             rd_byte(&n);
             byte buf[64];
             int to_read = (n > 64) ? 64 : n;
-            for (int i = 0; i < to_read; ++i) rd_byte(&buf[i]);
+            for (int door_idx = 0; door_idx < to_read; ++door_idx)
+                rd_byte(&buf[door_idx]);
             /* If payload in file was larger than buffer, skip extras */
-            for (int i = to_read; i < n; ++i) { byte skip; rd_byte(&skip); }
+            for (int door_idx = to_read; door_idx < n; ++door_idx)
+            {
+                byte skip = 0;
+                rd_byte(&skip);
+            }
             log_debug("Read door-choices block after cave_color: magic=0x%04X, len=%d (used=%d)", DOOR_CHOICES_MAGIC, n, to_read);
             styles_load_level_door_choices(buf, to_read);
         } else {
@@ -2987,19 +2992,19 @@ static errr rd_dungeon(void)
         /* Dungeon floor */
         if (!i_ptr->held_m_idx)
         {
-            int x = i_ptr->ix;
-            int y = i_ptr->iy;
+            int obj_x = i_ptr->ix;
+            int obj_y = i_ptr->iy;
 
             /* ToDo: Verify coordinates */
 
             /* Link the object to the pile */
-            o_ptr->next_o_idx = cave_o_idx[y][x];
+            o_ptr->next_o_idx = cave_o_idx[obj_y][obj_x];
 
             /* Link the floor to the object */
-            cave_o_idx[y][x] = o_idx;
+            cave_o_idx[obj_y][obj_x] = o_idx;
 
             /* Rearrange stack if needed */
-            rearrange_stack(y, x);
+            rearrange_stack(obj_y, obj_x);
         }
     }
     if (load_expect_stream_ok("dungeon objects"))
@@ -3425,15 +3430,15 @@ static errr rd_savefile_new_aux(void)
     /* Read the object memory */
     for (i = 0; i < tmp16u; i++)
     {
-        byte tmp8u;
+        byte memory_flags = 0;
 
         object_kind* k_ptr = &k_info[i];
 
-        rd_byte(&tmp8u);
+        rd_byte(&memory_flags);
 
-        k_ptr->aware = (tmp8u & 0x01) ? true : false;
-        k_ptr->tried = (tmp8u & 0x02) ? true : false;
-        k_ptr->everseen = (tmp8u & 0x08) ? true : false;
+        k_ptr->aware = (memory_flags & 0x01) ? true : false;
+        k_ptr->tried = (memory_flags & 0x02) ? true : false;
+        k_ptr->everseen = (memory_flags & 0x08) ? true : false;
 
         rd_byte(&k_ptr->squelch);
     }

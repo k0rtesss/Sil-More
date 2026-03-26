@@ -2815,8 +2815,8 @@ void text_out_to_file(byte a, cptr str)
             ch = (isprint(s[n]) ? s[n] : ' ');
 
             /* Write out the character */
-            unsigned char byte = ch;
-            SDL_WriteIO(text_out_file, &byte, 1);
+            unsigned char out_byte = ch;
+            SDL_WriteIO(text_out_file, &out_byte, 1);
 
             /* Increment */
             pos++;
@@ -3194,9 +3194,9 @@ s16b get_quantity(cptr prompt, int max)
 
         while (!done)
         {
-            char header[120];
-            strnfmt(header, sizeof(header), "%s%d/%d", prompt, current, max);
-            prt(header, 0, 0);
+            char prompt_header[120];
+            strnfmt(prompt_header, sizeof(prompt_header), "%s%d/%d", prompt, current, max);
+            prt(prompt_header, 0, 0);
             prt("Use arrows or +/- to adjust, digits type exact value, Enter=OK, Esc=cancel.",
                 1, 0);
 
