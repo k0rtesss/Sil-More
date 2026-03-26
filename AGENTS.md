@@ -95,6 +95,11 @@ These templates drive gameplay content (monsters, vaults, objects, terrain, ques
 - UI redraw contract: set `p_ptr->redraw`/`p_ptr->window` bits, then let `handle_stuff()` repaint after `screen_load()`.
 - State hygiene: reset `item_tester_*` and similar selection globals immediately after use.
 
+## UI Migration Guardrails
+- UI0 standing rule: new UI-facing work must either land behind `src/app/*` or stay inside modules already tagged in `docs/ui_migration_inventory.md`.
+- Do not add new call sites for `inkey()`, `screen_save()` / `screen_load()`, direct `Term_*` render/control APIs, `#include "platform-ui.h"`, or `get_sdl_*` / `set_sdl_*` outside existing legacy migration surfaces.
+- Run `python tools/ui_debt_audit.py --check` (or `ctest -R sil_ui0_audit --output-on-failure`) after UI architecture changes.
+
 ## UX & Gameplay Guardrails (Do Not Regress)
 - Inventory/equipment overlays: reuse `show_inven()` / `show_equip()` layout math; do not hard-code columns/offsets.
 - Floor items: must keep the `-)` prefix and respond to the `-` shortcut.

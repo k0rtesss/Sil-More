@@ -487,6 +487,13 @@ if(BUILD_TESTING)
 
   if(Python3_Interpreter_FOUND)
     add_test(
+      NAME sil_ui0_audit
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/ui_debt_audit.py
+        --check
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_debt_audit_baseline.json
+    )
+    add_test(
       NAME sil_smithing_parity
       COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/smithing_parity_test.py
