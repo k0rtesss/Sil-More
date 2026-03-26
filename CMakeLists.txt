@@ -79,6 +79,14 @@ set(SIL_MORE_SOURCES_CORE
     src/squelch.c
     src/supplies.c
     src/tables.c
+    src/util-angle.c
+    src/util-convert.c
+    src/util-editing.c
+    src/util-input.c
+    src/util-macro.c
+    src/util-message.c
+    src/util-prompt.c
+    src/util-text.c
     src/util.c
     src/variable.c
     src/wizard1.c
@@ -115,8 +123,10 @@ set(SIL_MORE_SOURCES_CMD
 )
 
 set(SIL_MORE_SOURCES_INIT
+    src/init/init-info.c
     src/init/init-flags.c
     src/init/init-object-bonuses.c
+    src/init/init-paths.c
     src/init/init-parse-limits.c
     src/init/init-parse-partition.c
     src/init/init-parse-runtypes.c

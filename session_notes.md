@@ -1,5 +1,29 @@
 # Session notes
 
+## 2026-03-26: Phase 3 util/init slice
+- Started the `docs/modernization_mobile_roadmap.md` `Phase 3` monolith-reduction wave and completed the non-SDL slices:
+  - split `src/util.c` into ownership modules:
+    - `src/util-convert.c`
+    - `src/util-macro.c`
+    - `src/util-input.c`
+    - `src/util-message.c`
+    - `src/util-text.c`
+    - `src/util-prompt.c`
+    - `src/util-angle.c`
+    - `src/util-editing.c`
+  - reduced `src/util.c` to the small generic remainder (now 490 lines)
+  - split `src/init2.c` path/bootstrap ownership into `src/init/init-paths.c`
+  - split `src/init2.c` raw-cache/template/header ownership into `src/init/init-info.c`
+  - added `src/init/init2-internal.h` for the narrow shared init surface used by the remaining startup/runtime orchestration
+  - reduced `src/init2.c` to the later startup/runtime orchestration layer (now 927 lines)
+- Current Phase 3 metrics after this slice:
+  - `src/util.c`: 490 lines
+  - `src/init2.c`: 927 lines
+  - `src/main-sdl.c`: still pending the SDL-only breakup
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded after the `util.c` split.
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded again after the `init2.c` split.
+
 ## 2026-03-26: Phase 0/1 completion
 - Completed the remaining `docs/modernization_mobile_roadmap.md` `Phase 0` / `Phase 1` work in the live tree:
   - fixed the last smithing-difficulty drift between [`src/drop/drop-system-difficulty.c`](src/drop/drop-system-difficulty.c) and [`scripts/calc_artefact_difficulty.py`](scripts/calc_artefact_difficulty.py) by restoring the missing `SUBTLETY_THROW`, `OATH_BOOST`, `OATH_NEGATE`, and `TRAITOR` adjustments on the engine/script side
