@@ -1,6 +1,7 @@
 /* File: init-parse-partition.c */
 
 #include "angband.h"
+#include "drop_system.h"
 #include "externs.h"
 #include "init.h"
 
@@ -183,6 +184,35 @@ errr parse_partition_info(char* buf, header* head)
         partition_config_set_metal_rule(
             current_kind, divisor, min_count, max_count, min_depth);
         return 0;
+    }
+
+    if (buf[0] == 'T' && buf[1] == ':')
+    {
+        partition_config_set_discovery_text(current_kind, buf + 2);
+        return 0;
+    }
+
+    if (current_kind == LEVEL_PART_BIG_CAVE && buf[0] == 'B'
+        && buf[2] == ':')
+    {
+        if (buf[1] == 'I')
+        {
+            partition_config_set_big_cave_discovery_text(
+                BIG_CAVE_ICE, buf + 3);
+            return 0;
+        }
+        if (buf[1] == 'F')
+        {
+            partition_config_set_big_cave_discovery_text(
+                BIG_CAVE_FIRE, buf + 3);
+            return 0;
+        }
+        if (buf[1] == 'P')
+        {
+            partition_config_set_big_cave_discovery_text(
+                BIG_CAVE_POIS, buf + 3);
+            return 0;
+        }
     }
 
     return PARSE_ERROR_UNDEFINED_DIRECTIVE;

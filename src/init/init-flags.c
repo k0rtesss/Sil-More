@@ -319,6 +319,7 @@ static flag_name info_flags[] = {
     { "ARMOR_SIDE_SHIFT", CUR, CUR_ARMOR_SIDE_SHIFT },
     { "IDENT_DIFF", CUR, CUR_IDENT_DIFF },
     { "CHEST_WOOD", CUR, CUR_CHEST_WOOD },
+    { "ABILITY_COST", CUR, CUR_ABILITY_COST },
 
     /* Unique flags */
     { "EARENDIL", UNQ, UNQ_EARENDIL }, { "SMT_FEANOR", UNQ, UNQ_SMT_FEANOR },

@@ -74,6 +74,7 @@ errr parse_cu_info(char *buf, header *head)
                                                      /* flags included     */
         cu_ptr->weight = 1;      /* sensible defaults           */
         cu_ptr->max_stacks = 0;  /* 0 = unlimited               */
+        cu_ptr->max_blessing_stacks = 0;
 
         if (!(cu_ptr->name = add_name(head, s)))     
             return PARSE_ERROR_OUT_OF_MEMORY;
@@ -201,23 +202,30 @@ errr parse_cu_info(char *buf, header *head)
     }
 
     /* ------------------------------------------------------------ */
-    /* A: weight / max_stacks   (e.g. 3/5 means weight=3, max=5)    */
+    /* A: weight / curse_cap [/ blessing_cap]                       */
     /* ------------------------------------------------------------ */
     else if (buf[0] == 'A')
     {
+        char *u;
+
         if (!cu_ptr) return PARSE_ERROR_MISSING_RECORD_HEADER;
 
-        /* default is "1/0" so zero-initialised files still work    */
+        /* default is "1/0/0" so zero-initialised files still work   */
         cu_ptr->weight     = 1;
         cu_ptr->max_stacks = 0;
+        cu_ptr->max_blessing_stacks = 0;
 
-        char *s = buf + 2;
-        char *t = strchr(s, '/');
+        s = buf + 2;
+        t = strchr(s, '/');
         if (!t) return PARSE_ERROR_GENERIC;
 
         *t++ = '\0';
-        cu_ptr->weight     = (byte)atoi(s);
+        u = strchr(t, '/');
+        if (u) *u++ = '\0';
+
+        cu_ptr->weight = (byte)atoi(s);
         cu_ptr->max_stacks = (byte)atoi(t);
+        cu_ptr->max_blessing_stacks = u ? (byte)atoi(u) : cu_ptr->max_stacks;
     }
 
 

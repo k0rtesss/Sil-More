@@ -1031,6 +1031,7 @@ s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill)
 
     int mkills = l_list[r_ptr - r_info].pkills;
     int msights = l_list[r_ptr - r_info].psights;
+    int repeats = kill ? mkills : msights;
 
     if (kill)
     {
@@ -1040,7 +1041,7 @@ s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill)
         }
         else
         {
-            exp = (mexp) / (mkills + 1);
+            exp = (repeats >= 30) ? 0 : (mexp >> repeats);
         }
 
         if (r_ptr->flags1 & RF1_PEACEFUL)
@@ -1056,7 +1057,7 @@ s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill)
         }
         else
         {
-            exp = (mexp) / (msights + 1);
+            exp = (repeats >= 30) ? 0 : (mexp >> repeats);
         }
     }
 

@@ -41,6 +41,7 @@ errr parse_v_info(char* buf, header* head)
 
         v_ptr = (vault_type*)head->info_ptr + i;
         v_ptr->color = 0;
+        v_ptr->message = 0;
         v_ptr->style_count = 0;
         for (int j = 0; j < 16; ++j)
         {
@@ -164,6 +165,14 @@ errr parse_v_info(char* buf, header* head)
 
             s = t;
         }
+    }
+    else if (buf[0] == 'M')
+    {
+        if (!v_ptr)
+            return PARSE_ERROR_MISSING_RECORD_HEADER;
+
+        if (!add_text(&v_ptr->message, head, buf + 2))
+            return PARSE_ERROR_OUT_OF_MEMORY;
     }
     else if (buf[0] == 'D')
     {
