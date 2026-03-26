@@ -282,6 +282,12 @@ set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/runtime-game.c
 )
 
+set(SIL_MORE_SOURCES_APP_BOUNDARY
+    src/app/app-events.c
+    src/app/app-host.c
+    src/app/app-session.c
+)
+
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
     src/signals.c
@@ -341,6 +347,7 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_SCORE}
     ${SIL_MORE_SOURCES_FS}
     ${SIL_MORE_SOURCES_RUNTIME}
+    ${SIL_MORE_SOURCES_APP_BOUNDARY}
     ${SIL_MORE_SOURCES_FRONTEND}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}
@@ -483,6 +490,19 @@ if(BUILD_TESTING)
     NAME sil_phase01_regressions
     COMMAND sil-phase01-tests
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/smithing_parity_cases.txt
+  )
+
+  add_executable(sil-ui1-tests
+    tests/ui1_tests.c
+    ${SIL_MORE_SOURCES_APP_BOUNDARY}
+  )
+  target_link_libraries(sil-ui1-tests PRIVATE sil-build-config)
+  if(SIL_STRICT_WARNINGS)
+    target_link_libraries(sil-ui1-tests PRIVATE sil-strict-build-config)
+  endif()
+  add_test(
+    NAME sil_ui1_scaffolding
+    COMMAND sil-ui1-tests
   )
 
   if(Python3_Interpreter_FOUND)
