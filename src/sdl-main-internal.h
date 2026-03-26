@@ -2,6 +2,7 @@
 #define INCLUDED_SDL_MAIN_INTERNAL_H
 
 #include "externs.h"
+#include "app/app-session.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
@@ -123,6 +124,9 @@ bool sdl_gamepad_alt_active(void);
 void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
 void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
+void sdl_submit_legacy_input_byte(int key);
+void sdl_drain_legacy_input_queue(void);
+void sdl_clear_legacy_input_queue(void);
 void sdl_gamepad_load_default_bindings(void);
 
 bool sdl_touch_pane_handle_event(const SDL_Event* ev);

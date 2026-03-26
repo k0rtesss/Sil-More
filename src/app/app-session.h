@@ -39,7 +39,9 @@ typedef enum app_wait_reason {
 
 typedef enum app_session_flag {
     APP_SESSION_FLAG_ALLOW_LEGACY_INPUT = 0x00000001u,
-    APP_SESSION_FLAG_ALLOW_INTENT_INPUT = 0x00000002u
+    APP_SESSION_FLAG_ALLOW_INTENT_INPUT = 0x00000002u,
+    APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT = 0x00000004u,
+    APP_SESSION_FLAG_EXTERNAL_DRIVE = 0x00000008u
 } app_session_flag;
 
 typedef struct app_wait_state {
@@ -48,6 +50,12 @@ typedef struct app_wait_state {
     s32b detail0;
     s32b detail1;
 } app_wait_state;
+
+typedef struct app_wait_scope {
+    bool active;
+    u16b state;
+    app_wait_state wait_state;
+} app_wait_scope;
 
 typedef struct app_session_config {
     u32b api_version;
@@ -59,27 +67,50 @@ typedef struct app_session_config {
 typedef struct app_session_counters {
     u64b submitted_inputs;
     u64b submitted_intents;
+    u64b consumed_inputs;
+    u64b consumed_intents;
     u64b emitted_events;
     u64b dropped_events;
 } app_session_counters;
 
 typedef struct app_session app_session;
 
+app_session* app_session_current(void);
+void app_session_make_current(app_session* session);
 app_session* app_session_create(const app_session_config* config);
 void app_session_destroy(app_session* session);
 const app_host* app_session_host(const app_session* session);
+u32b app_session_flags(const app_session* session);
+void app_session_set_flags(app_session* session, u32b flags);
+bool app_session_has_flag(const app_session* session, u32b flag_mask);
 u16b app_session_state_id(const app_session* session);
 void app_session_set_state(app_session* session, u16b state);
 const app_wait_state* app_session_wait_state(const app_session* session);
 void app_session_set_wait_state(app_session* session,
     const app_wait_state* wait_state);
+void app_session_begin_wait(app_session* session, u16b reason, s32b detail0,
+    s32b detail1);
+void app_session_resume_running(app_session* session);
+void app_session_push_wait_scope(app_session* session, app_wait_scope* scope,
+    u16b reason, s32b detail0, s32b detail1);
+void app_session_pop_wait_scope(app_session* session,
+    const app_wait_scope* scope);
 const app_snapshot* app_session_snapshot(const app_session* session);
 void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot);
 const app_session_counters* app_session_get_counters(
     const app_session* session);
 bool app_session_submit_input(app_session* session, const app_input* input);
+size_t app_session_pending_input_count(const app_session* session);
+bool app_session_peek_input(const app_session* session, app_input* out_input);
+bool app_session_pop_input(app_session* session, app_input* out_input);
+void app_session_clear_inputs(app_session* session);
 bool app_session_submit_intent(app_session* session, const app_intent* intent);
+size_t app_session_pending_intent_count(const app_session* session);
+bool app_session_peek_intent(const app_session* session,
+    app_intent* out_intent);
+bool app_session_pop_intent(app_session* session, app_intent* out_intent);
+void app_session_clear_intents(app_session* session);
 bool app_session_emit_event(app_session* session,
     const app_event_record* record);
 app_event_span app_session_view_events(const app_session* session);

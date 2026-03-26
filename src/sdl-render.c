@@ -37,6 +37,19 @@ static void callback_sdl_init(term* t);
 static errr callback_sdl_xtra(int n, int v);
 static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int* actual_font_size);
 
+static bool sdl_legacy_input_pending(void)
+{
+    app_session* session = app_session_current();
+
+    if (!session)
+        return false;
+
+    if (!app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
+        return false;
+
+    return app_session_pending_input_count(session) > 0;
+}
+
 sdl_view* sdl_view_from_term(term* t)
 {
     if (!t)
@@ -189,24 +202,32 @@ static errr callback_sdl_xtra(int n, int v)
     case TERM_XTRA_EVENT: {
         SDL_Event ev;
         if (v) {
+            bool legacy_pending = sdl_legacy_input_pending();
+
             sdl_music_update();
-            Uint64 now_ns = SDL_GetTicksNS();
-            int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
-            int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
-            if (timeout_ms < 0 || (touch_timeout_ms >= 0 && touch_timeout_ms < timeout_ms))
-                timeout_ms = touch_timeout_ms;
-            if (timeout_ms >= 0) {
-                if (SDL_WaitEventTimeout(&ev, timeout_ms))
+            if (legacy_pending) {
+                while (SDL_PollEvent(&ev))
                     sdl_handle_event(&g_state, &ev);
             } else {
-                if (SDL_WaitEvent(&ev))
-                    sdl_handle_event(&g_state, &ev);
+                Uint64 now_ns = SDL_GetTicksNS();
+                int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
+                int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
+                if (timeout_ms < 0 || (touch_timeout_ms >= 0 && touch_timeout_ms < timeout_ms))
+                    timeout_ms = touch_timeout_ms;
+                if (timeout_ms >= 0) {
+                    if (SDL_WaitEventTimeout(&ev, timeout_ms))
+                        sdl_handle_event(&g_state, &ev);
+                } else {
+                    if (SDL_WaitEvent(&ev))
+                        sdl_handle_event(&g_state, &ev);
+                }
             }
             Uint64 flush_ns = SDL_GetTicksNS();
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
             sdl_gamepad_flush_pending_left_stick(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_touch_pane_flush_pending_press(flush_ns);
+            sdl_drain_legacy_input_queue();
             sdl_music_update();
         } else {
             bool handled = false;
@@ -220,8 +241,9 @@ static errr callback_sdl_xtra(int n, int v)
             sdl_gamepad_flush_pending_left_stick(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_touch_pane_flush_pending_press(flush_ns);
+            sdl_drain_legacy_input_queue();
 
-            if (!handled)
+            if (!handled && !sdl_legacy_input_pending())
                 SDL_Delay(1);
         }
         sdl_present_if_needed(d);
@@ -233,6 +255,7 @@ static errr callback_sdl_xtra(int n, int v)
         while (SDL_PollEvent(&ev))
             sdl_handle_event(&g_state, &ev);
         sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
+        sdl_clear_legacy_input_queue();
         sdl_present_if_needed(d);
         return 0;
     }
@@ -265,6 +288,7 @@ static errr callback_sdl_xtra(int n, int v)
             while (SDL_PollEvent(&ev))
                 sdl_handle_event(&g_state, &ev);
             sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
+            sdl_drain_legacy_input_queue();
         }
         return 0;
     }

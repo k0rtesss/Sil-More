@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 
 int macro_find_check(cptr pat);
@@ -230,6 +231,18 @@ static char inkey_aux(void)
  * trigger any macros.  It is used in Angband to handle "keymaps".
  */
 static cptr inkey_next = NULL;
+
+static char inkey_with_wait_reason(u16b reason)
+{
+    app_wait_scope scope;
+    app_session* session = app_session_current();
+    char ch;
+
+    app_session_push_wait_scope(session, &scope, reason, 0, 0);
+    ch = inkey();
+    app_session_pop_wait_scope(session, &scope);
+    return ch;
+}
 
 /*
  * Get a keypress from the user.
@@ -503,7 +516,7 @@ void request_command(void)
             inkey_set_flag(true);
 
             /* Get a command */
-            ch = inkey();
+            ch = inkey_with_wait_reason(APP_WAIT_REASON_COMMAND_INPUT);
         }
 
         /* Clear top line */
@@ -524,7 +537,7 @@ void request_command(void)
             while (1)
             {
                 /* Get a new keypress */
-                ch = inkey();
+                ch = inkey_with_wait_reason(APP_WAIT_REASON_COMMAND_INPUT);
 
                 /* Simple editing (delete or backspace) */
                 if ((ch == 0x7F) || (ch == KTRL('H')))

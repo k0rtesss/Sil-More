@@ -332,18 +332,25 @@ static void test_session_scaffolding(void)
     app_session_config config;
     app_session* session;
     app_wait_state wait_state;
+    app_wait_scope wait_scope;
     app_input input;
+    app_input popped_input;
     app_intent intent;
+    app_intent popped_intent;
     app_event_record event;
     app_snapshot snapshot;
     app_snapshot_blob blob;
     app_event_span drained;
     const app_session_counters* counters;
+    u64b emitted_baseline;
     static const byte snapshot_bytes[] = { 1, 2, 3, 4 };
 
     memset(&config, 0, sizeof(config));
     config.api_version = APP_SESSION_API_VERSION;
     config.initial_event_capacity = 1;
+    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+        | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
     session = app_session_create(NULL);
     CHECK(session == NULL);
@@ -356,10 +363,21 @@ static void test_session_scaffolding(void)
     if (!session)
         return;
 
+    CHECK(app_session_current() == NULL);
+    app_session_make_current(session);
+    CHECK(app_session_current() == session);
+
     CHECK(app_session_host(session) == NULL);
+    CHECK(app_session_flags(session) == config.flags);
+    CHECK(app_session_has_flag(session, APP_SESSION_FLAG_ALLOW_LEGACY_INPUT));
+    CHECK(app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT));
     CHECK(app_session_state_id(session) == APP_SESSION_STATE_IDLE);
     CHECK(app_session_wait_state(session)->reason == APP_WAIT_REASON_NONE);
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_NONE);
+    CHECK(app_session_pending_input_count(session) == 0);
+    CHECK(app_session_pending_intent_count(session) == 0);
+
+    emitted_baseline = app_session_get_counters(session)->emitted_events;
 
     memset(&wait_state, 0, sizeof(wait_state));
     wait_state.reason = APP_WAIT_REASON_COMMAND_INPUT;
@@ -368,6 +386,22 @@ static void test_session_scaffolding(void)
     CHECK(app_session_wait_state(session)->reason
         == APP_WAIT_REASON_COMMAND_INPUT);
     CHECK(app_session_wait_state(session)->detail0 == 17);
+    CHECK(app_session_view_events(session).count == 2);
+
+    app_session_push_wait_scope(session, &wait_scope, APP_WAIT_REASON_TARGETING,
+        3, 4);
+    CHECK(app_session_state_id(session) == APP_SESSION_STATE_WAITING);
+    CHECK(app_session_wait_state(session)->reason == APP_WAIT_REASON_TARGETING);
+    CHECK(app_session_wait_state(session)->detail0 == 3);
+    CHECK(app_session_wait_state(session)->detail1 == 4);
+    app_session_pop_wait_scope(session, &wait_scope);
+    CHECK(app_session_wait_state(session)->reason
+        == APP_WAIT_REASON_COMMAND_INPUT);
+    CHECK(app_session_wait_state(session)->detail0 == 17);
+
+    app_session_resume_running(session);
+    CHECK(app_session_state_id(session) == APP_SESSION_STATE_RUNNING);
+    CHECK(app_session_wait_state(session)->reason == APP_WAIT_REASON_NONE);
 
     memset(&blob, 0, sizeof(blob));
     blob.kind = APP_SNAPSHOT_BLOB_HEADER;
@@ -385,32 +419,50 @@ static void test_session_scaffolding(void)
     CHECK(app_session_snapshot(session)->blob_count == 1);
 
     memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
     input.type = APP_INPUT_TYPE_KEY;
+    input.payload.key.logical_key = 'x';
     CHECK(app_session_submit_input(session, &input));
     CHECK(!app_session_submit_input(session, NULL));
+    CHECK(app_session_pending_input_count(session) == 1);
+    CHECK(app_session_peek_input(session, &popped_input));
+    CHECK(popped_input.payload.key.logical_key == 'x');
+    CHECK(app_session_pop_input(session, &popped_input));
+    CHECK(popped_input.payload.key.logical_key == 'x');
+    CHECK(app_session_pending_input_count(session) == 0);
+    CHECK(!app_session_pop_input(session, NULL));
 
     memset(&intent, 0, sizeof(intent));
     intent.kind = APP_INTENT_KIND_CONFIRM;
     CHECK(app_session_submit_intent(session, &intent));
     CHECK(!app_session_submit_intent(session, NULL));
+    CHECK(app_session_pending_intent_count(session) == 1);
+    CHECK(app_session_peek_intent(session, &popped_intent));
+    CHECK(popped_intent.kind == APP_INTENT_KIND_CONFIRM);
+    CHECK(app_session_pop_intent(session, &popped_intent));
+    CHECK(popped_intent.kind == APP_INTENT_KIND_CONFIRM);
+    CHECK(app_session_pending_intent_count(session) == 0);
 
     event = make_event(APP_EVENT_KIND_WAIT_STATE, APP_EVENT_SCOPE_SESSION, 0,
         7, 8, 9, 10);
     CHECK(app_session_emit_event(session, &event));
-    CHECK(app_session_view_events(session).count == 1);
+    CHECK(app_session_view_events(session).count >= 1);
 
     drained = app_session_drain_events(session);
-    CHECK(drained.count == 1);
+    CHECK(drained.count >= 1);
     CHECK(app_session_view_events(session).count == 0);
 
     counters = app_session_get_counters(session);
     CHECK(counters != NULL);
     CHECK(counters->submitted_inputs == 1);
     CHECK(counters->submitted_intents == 1);
-    CHECK(counters->emitted_events == 1);
+    CHECK(counters->consumed_inputs == 1);
+    CHECK(counters->consumed_intents == 1);
+    CHECK(counters->emitted_events >= emitted_baseline + 1);
     CHECK(counters->dropped_events == 0);
 
     app_session_destroy(session);
+    CHECK(app_session_current() == NULL);
 }
 
 int main(void)

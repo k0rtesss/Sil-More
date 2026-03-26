@@ -691,11 +691,11 @@ static void sdl_touch_pane_display_label_for_slot(int panel, int index, char* bu
 static void sdl_touch_pane_send_confirm_action(void)
 {
     if (character_dungeon) {
-        Term_keypress(' ');
+        sdl_submit_legacy_input_byte(' ');
         return;
     }
 
-    Term_keypress('\r');
+    sdl_submit_legacy_input_byte('\r');
 }
 
 static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool long_press)
@@ -735,7 +735,7 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     }
 
     if (binding == 'z' && long_press) {
-        Term_keypress('Z');
+        sdl_submit_legacy_input_byte('Z');
         return;
     }
 

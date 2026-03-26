@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/bootstrap.h"
 #include "gen-log.h"
@@ -233,6 +234,7 @@ static void change_path(cptr info)
 int main(int argc, char* argv[])
 {
     int i;
+    app_session* session = NULL;
 
     bool done = false;
 
@@ -487,6 +489,29 @@ int main(int argc, char* argv[])
     /* Initialize */
     init_angband();
 
+    {
+        app_session_config session_config;
+        app_snapshot snapshot;
+
+        memset(&session_config, 0, sizeof(session_config));
+        session_config.api_version = APP_SESSION_API_VERSION;
+        session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+            | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+            | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
+
+        session = app_session_create(&session_config);
+        if (!session)
+            quit("Unable to create UI session.");
+
+        app_session_make_current(session);
+
+        memset(&snapshot, 0, sizeof(snapshot));
+        snapshot.scene = APP_SCENE_KIND_BOOTSTRAP;
+        snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
+        app_session_set_snapshot(session, &snapshot);
+        app_session_set_state(session, APP_SESSION_STATE_IDLE);
+    }
+
     /* Initialize sound system (requires ANGBAND_DIR_XTRA to be set) */
     sdl_init_sounds();
     sdl_music_play_main();
@@ -508,6 +533,12 @@ int main(int argc, char* argv[])
         if (!game_in_progress) {
             bool      start_new = false;
             NavResult mn;
+            app_snapshot snapshot;
+
+            memset(&snapshot, 0, sizeof(snapshot));
+            snapshot.scene = APP_SCENE_KIND_MENU;
+            snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
+            app_session_set_snapshot(session, &snapshot);
 
             /* loop until the player chooses a valid action */
             while (!game_in_progress) {
@@ -538,6 +569,7 @@ int main(int argc, char* argv[])
     }
 
     /* Free resources */
+    app_session_destroy(session);
     cleanup_angband();
 
     /* Quit */

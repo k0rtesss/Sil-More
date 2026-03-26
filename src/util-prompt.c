@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "platform-ui.h"
 
@@ -17,6 +18,18 @@ static int active_term_width(void)
         wid = 80;
 
     return wid;
+}
+
+static char prompt_inkey_with_wait_reason(u16b reason)
+{
+    app_wait_scope scope;
+    app_session* session = app_session_current();
+    char ch;
+
+    app_session_push_wait_scope(session, &scope, reason, 0, 0);
+    ch = inkey();
+    app_session_pop_wait_scope(session, &scope);
+    return ch;
 }
 
 bool askfor_aux(char* buf, size_t len)
@@ -57,7 +70,7 @@ bool askfor_aux(char* buf, size_t len)
         Term_gotoxy(x + k, y);
 
         /* Get a key */
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
 
         /* Analyze the key */
         switch (ch)
@@ -155,7 +168,7 @@ bool askfor_name(char* buf, size_t len)
         Term_gotoxy(x + k, y);
 
         /* Get a key */
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
 
         /* Analyze the key */
         switch (ch)
@@ -310,7 +323,7 @@ s16b get_quantity(cptr prompt, int max)
             prt("Use arrows or +/- to adjust, digits type exact value, Enter=OK, Esc=cancel.",
                 1, 0);
 
-            ch = inkey();
+            ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
             switch (ch)
             {
             case ESCAPE:
@@ -496,7 +509,7 @@ int get_check_other(cptr prompt, char other)
     /* Get an acceptable answer */
     while (true)
     {
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
         if (quick_messages)
             break;
         if (ch == ESCAPE)
@@ -553,7 +566,7 @@ bool get_check(cptr prompt)
     /* Get an acceptable answer */
     while (true)
     {
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
         if (quick_messages)
             break;
         if (ch == ESCAPE)
@@ -676,7 +689,7 @@ bool get_check_oath_multiline(cptr prompt)
     /* Get an acceptable answer */
     while (true)
     {
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
         if (quick_messages)
             break;
         if (ch == ESCAPE)
@@ -712,7 +725,7 @@ int get_menu_choice(s16b max, char* prompt)
 
     while (!done)
     {
-        ch = inkey();
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         /* Letters are used for selection */
         if (isalpha((unsigned char)ch))
@@ -777,7 +790,7 @@ bool get_com(cptr prompt, char* command)
     prt(prompt, 0, 0);
 
     /* Get a key */
-    ch = inkey();
+    ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
 
     /* Clear the prompt */
     prt("", 0, 0);
@@ -798,6 +811,6 @@ void pause_line(int row)
 {
     prt("", row, 0);
     put_str("(press any key)", row, 23);
-    (void)inkey();
+    (void)prompt_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
     prt("", row, 0);
 }

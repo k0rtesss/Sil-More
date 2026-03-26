@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "platform-ui.h"
@@ -1638,6 +1639,7 @@ static void load_path(int max, u16b* path, char* c, byte* a)
  */
 bool target_set_interactive(int mode, int range)
 {
+    app_wait_scope wait_scope;
     int py = p_ptr->py;
     int px = p_ptr->px;
 
@@ -1672,6 +1674,9 @@ bool target_set_interactive(int mode, int range)
     int max;
 
     bool wiz = mode & (TARGET_WIZ);
+
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_TARGETING, mode, range);
 
     // turn off auto if doing wizard mode dungeon modification
     if (wiz)
@@ -2426,10 +2431,12 @@ bool target_set_interactive(int mode, int range)
             target_set_monster(0);
             health_track(0);
         }
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
     }
 
     /* Success */
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }
 
@@ -2493,11 +2500,15 @@ int rough_direction(int y1, int x1, int y2, int x2)
  */
 bool get_aim_dir(int* dp, int range)
 {
+    app_wait_scope wait_scope;
     int dir;
 
     char ch;
 
     cptr p;
+
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_TARGETING, 0, range);
 
 #ifdef ALLOW_REPEAT
 
@@ -2506,6 +2517,7 @@ bool get_aim_dir(int* dp, int range)
         /* Verify */
         if (!(*dp == 5 && !target_okay(range)))
         {
+            app_session_pop_wait_scope(app_session_current(), &wait_scope);
             return (true);
         }
         else
@@ -2616,6 +2628,7 @@ bool get_aim_dir(int* dp, int range)
     /* No direction */
     if (!dir)
     {
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
     }
 
@@ -2648,6 +2661,7 @@ bool get_aim_dir(int* dp, int range)
 #endif /* ALLOW_REPEAT */
 
     /* A "valid" direction was entered */
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }
 
@@ -2663,16 +2677,21 @@ bool get_aim_dir(int* dp, int range)
  */
 bool get_rep_dir(int* dp)
 {
+    app_wait_scope wait_scope;
     int dir;
 
     char ch;
 
     cptr p;
 
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_TARGETING, 0, 0);
+
 #ifdef ALLOW_REPEAT
 
     if (repeat_pull(dp))
     {
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (true);
     }
 
@@ -2704,7 +2723,10 @@ bool get_rep_dir(int* dp)
 
     /* Aborted */
     if (!dir)
+    {
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
+    }
 
     /* Save desired direction */
     p_ptr->command_dir = dir;
@@ -2719,6 +2741,7 @@ bool get_rep_dir(int* dp)
 #endif /* ALLOW_REPEAT */
 
     /* Success */
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }
 

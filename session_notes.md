@@ -1,5 +1,21 @@
 # Session notes
 
+## 2026-03-27: UI2 session driver / wait-state landing
+- Activated the `src/app/*` boundary for UI2 instead of leaving it as scaffolding-only:
+  - `src/app/app-session.[ch]` now own live session flags, current-session access, queued legacy inputs/intents, wait-scope helpers, and session/wait lifecycle event emission.
+  - `src/main.c` now creates the default app session at startup and marks bootstrap/menu scenes; `src/dungeon.c` switches the snapshot scene to dungeon when gameplay begins.
+- Bridged the legacy SDL frontend through the session queue first:
+  - `src/main-sdl.c` now routes translated legacy byte emissions through `sdl_submit_legacy_input_byte()` rather than writing directly to the `Term` queue.
+  - `src/sdl-touch.c` uses the same bridge for confirm and long-press actions.
+  - `src/sdl-render.c` drains queued legacy bytes into `term_screen` during `TERM_XTRA_EVENT` / `TERM_XTRA_DELAY` and clears the session queue during `TERM_XTRA_FLUSH`.
+- Added explicit wait-reason ownership to the central legacy interaction helpers:
+  - `src/util-input.c` marks command-input waits.
+  - `src/util-prompt.c` marks confirm, list-selection, and informational-pause waits.
+  - `src/targeting.c` marks targeting waits across target selection / aim / repeat-direction flows.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `ctest --output-on-failure` from `build-standard/`
+
 ## 2026-03-26: Phase 3 util/init slice
 - Started the `docs/modernization_mobile_roadmap.md` `Phase 3` monolith-reduction wave and completed the non-SDL slices:
   - split `src/util.c` into ownership modules:

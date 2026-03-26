@@ -71,6 +71,7 @@ static bool g_gamepad_capture_active = false;
 static bool g_gamepad_capture_ready = false;
 static int g_gamepad_capture_type = GAMEPAD_CAPTURE_BUTTON;
 static int g_gamepad_capture_id = 0;
+static u64b g_legacy_input_sequence = 0;
 
 void sdl_handle_event(sdl_state* st, const SDL_Event* ev);
 static void sdl_quit_hook(cptr str);
@@ -114,6 +115,103 @@ void sdl_gamepad_load_default_bindings(void);
 
 bool steamdeck_controls_active(void);
 
+static bool sdl_legacy_input_bridge_active(void)
+{
+    app_session* session = app_session_current();
+
+    if (!session)
+        return false;
+
+    return app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
+}
+
+static errr sdl_term_queue_keypress(term* target, int key)
+{
+    if (!target || !key || !target->key_queue || !target->key_size)
+        return -1;
+
+    target->key_queue[target->key_head++] = (char)key;
+    if (target->key_head == target->key_size)
+        target->key_head = 0;
+
+    if (target->key_head != target->key_tail)
+        return 0;
+
+    return 1;
+}
+
+static void sdl_enqueue_legacy_key_to_term_screen(int key)
+{
+    if (!key)
+        return;
+
+    if (term_screen && sdl_term_queue_keypress(term_screen, key) >= 0)
+        return;
+
+    Term_keypress(key);
+}
+
+static bool sdl_queue_legacy_input_byte(int key)
+{
+    app_session* session;
+    app_input input;
+
+    if (!key)
+        return true;
+
+    session = app_session_current();
+    if (!session || !app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
+        return false;
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS | APP_INPUT_FLAG_SYNTHETIC;
+    input.sequence = ++g_legacy_input_sequence;
+    input.timestamp_usec = SDL_GetTicksNS() / 1000ULL;
+    input.payload.key.logical_key = (u32b)(byte)key;
+    input.payload.key.physical_key = (u32b)(byte)key;
+
+    return app_session_submit_input(session, &input);
+}
+
+void sdl_submit_legacy_input_byte(int key)
+{
+    if (sdl_queue_legacy_input_byte(key))
+        return;
+
+    sdl_enqueue_legacy_key_to_term_screen(key);
+}
+
+void sdl_drain_legacy_input_queue(void)
+{
+    app_session* session;
+    app_input input;
+
+    if (!sdl_legacy_input_bridge_active())
+        return;
+
+    session = app_session_current();
+    if (!session)
+        return;
+
+    while (app_session_pop_input(session, &input)) {
+        if (input.layer != APP_INPUT_LAYER_LEGACY || input.type != APP_INPUT_TYPE_KEY)
+            continue;
+
+        sdl_enqueue_legacy_key_to_term_screen((int)(input.payload.key.logical_key & 0xFFu));
+    }
+}
+
+void sdl_clear_legacy_input_queue(void)
+{
+    app_session* session = app_session_current();
+
+    if (session)
+        app_session_clear_inputs(session);
+}
+
 bool sdl_gamepad_shift_active(void)
 {
     return g_gamepad_state.shift_held > 0;
@@ -156,17 +254,17 @@ void sdl_gamepad_apply_modifier(int binding, bool down)
 
 void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt)
 {
-    Term_keypress(31);
+    sdl_submit_legacy_input_byte(31);
     if (ctrl)
-        Term_keypress('C');
+        sdl_submit_legacy_input_byte('C');
     if (shift)
-        Term_keypress('S');
+        sdl_submit_legacy_input_byte('S');
     if (alt)
-        Term_keypress('A');
-    Term_keypress('x');
-    Term_keypress(hexsym[(key / 16) & 0x0F]);
-    Term_keypress(hexsym[key % 16]);
-    Term_keypress(13);
+        sdl_submit_legacy_input_byte('A');
+    sdl_submit_legacy_input_byte('x');
+    sdl_submit_legacy_input_byte(hexsym[(key / 16) & 0x0F]);
+    sdl_submit_legacy_input_byte(hexsym[key % 16]);
+    sdl_submit_legacy_input_byte(13);
     log_debug("send macro key=%d ^_%s%s%sx%x%x\r",
         key, ctrl ? "C" : "", shift ? "S" : "", alt ? "A" : "", key / 16, key % 16);
 }
@@ -268,9 +366,9 @@ static bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift,
         follow_key = (char)('0' + dir);
 
     /* Bypass keymaps for the action key itself, but keep the bound direction key. */
-    Term_keypress('\\');
-    Term_keypress(action_key);
-    Term_keypress(follow_key);
+    sdl_submit_legacy_input_byte('\\');
+    sdl_submit_legacy_input_byte(action_key);
+    sdl_submit_legacy_input_byte(follow_key);
     return true;
 }
 
@@ -334,7 +432,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
             set_sdl_main_view_scale(current_scale + 1);
             sdl_apply_config();
             if (character_dungeon)
-                Term_keypress(KTRL('R'));
+                sdl_submit_legacy_input_byte(KTRL('R'));
         }
         return true;
     }
@@ -346,7 +444,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
             set_sdl_main_view_scale(current_scale - 1);
             sdl_apply_config();
             if (character_dungeon)
-                Term_keypress(KTRL('R'));
+                sdl_submit_legacy_input_byte(KTRL('R'));
         }
         return true;
     }
@@ -357,7 +455,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
         set_sdl_enable_right_panes(!enabled);
         sdl_apply_config();
         if (character_dungeon)
-            Term_keypress(KTRL('R'));
+            sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
     }
 
@@ -367,7 +465,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
         set_sdl_enable_bottom_panes(!enabled);
         sdl_apply_config();
         if (character_dungeon)
-            Term_keypress(KTRL('R'));
+            sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
     }
 
@@ -377,7 +475,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
         set_sdl_hide_left_panel(!hidden);
         sdl_apply_config();
         if (character_dungeon)
-            Term_keypress(KTRL('R'));
+            sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
     }
 
@@ -397,7 +495,7 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
 
     if (SDL_isprint(key)) {
         if (ctrl && !alt && SDL_isalpha(key)) {
-            Term_keypress(KTRL(key));
+            sdl_submit_legacy_input_byte(KTRL(key));
             return;
         }
 
@@ -419,14 +517,14 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
             }
         }
 
-        Term_keypress(key);
+        sdl_submit_legacy_input_byte(key);
         return;
     }
 
     if (shift || ctrl || alt) {
         sdl_send_macro_key(key, shift, ctrl, alt);
     } else {
-        Term_keypress(key);
+        sdl_submit_legacy_input_byte(key);
     }
 }
 
@@ -456,7 +554,7 @@ void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
     if (shift || ctrl || alt) {
         sdl_send_macro_key('0' + dir, shift, ctrl, alt);
     } else {
-        Term_keypress('0' + dir);
+        sdl_submit_legacy_input_byte('0' + dir);
     }
 }
 
@@ -1394,7 +1492,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
         return;
 
     if (ev->type == SDL_EVENT_QUIT) {
-        Term_keypress(27);
+        sdl_submit_legacy_input_byte(27);
         return;
     }
 
@@ -1426,7 +1524,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
             bool ctrl = ev->key.mod & SDL_KMOD_CTRL;
             bool gui = ev->key.mod & SDL_KMOD_GUI;
             if (ctrl && !alt && !gui && SDL_isalpha(key)) {
-                Term_keypress(KTRL(key));
+                sdl_submit_legacy_input_byte(KTRL(key));
             } else if (ctrl || alt || gui) {
                 sdl_send_macro_key(key, shift, ctrl || gui, alt);
             } else {
@@ -1447,7 +1545,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
                             key = shifted[key];
                     }
                 }
-                Term_keypress(key);
+                sdl_submit_legacy_input_byte(key);
             }
         } else {
             bool shift = ev->key.mod & SDL_KMOD_SHIFT;
@@ -1494,7 +1592,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
             if (mod) {
                 sdl_send_macro_key(key, shift, ctrl || gui, alt);
             } else {
-                Term_keypress(key);
+                sdl_submit_legacy_input_byte(key);
             }
         }
         return;

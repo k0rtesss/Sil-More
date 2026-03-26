@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "object/object-ui-select.h"
 #include "blitz.h"
 #include "externs.h"
@@ -4960,6 +4961,16 @@ PlayResult play_game(void)
     /* Start playing */
     p_ptr->playing = true;
     metarun_created = false;
+
+    {
+        app_session* session = app_session_current();
+        app_snapshot snapshot;
+
+        memset(&snapshot, 0, sizeof(snapshot));
+        snapshot.scene = APP_SCENE_KIND_DUNGEON;
+        app_session_set_snapshot(session, &snapshot);
+        app_session_resume_running(session);
+    }
 
     log_info("Game session started - entering play mode");
     
