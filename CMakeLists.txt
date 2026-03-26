@@ -299,6 +299,10 @@ set(SIL_MORE_SOURCES_FRONTEND
 
 set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
+    src/sdl-layout.c
+    src/sdl-render.c
+    src/sdl-story-font.c
+    src/sdl-touch.c
     src/pane.c
     src/fs/io_sdl.c
     src/fs/path.c

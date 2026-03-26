@@ -8782,3 +8782,14 @@ The script now fully matches the game's drop generation logic for all item types
 - `src/cmd4.c` now keeps only the redraw/note/version/feeling/ghost remainder; the former character, song/ability, menu/message, settings, knowledge, nearby, and unified-look-sidebar ownership is no longer in the monolith.
 - `CMakeLists.txt` now builds the new `cmd/ui` modules plus `src/ui/ui-look-sidebar.c`, and `src/cmd/ui/cmd-ui.h` plus `src/ui/ui-look-sidebar.h` provide the narrow shared surfaces needed by the split.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded.
+
+## 2026-03-26: Phase 3 SDL monolith split completion
+- `src/main-sdl.c` is reduced to 1,908 lines and now keeps only SDL input/gamepad plus init/orchestration.
+- Added `src/sdl-main-internal.h` so the SDL frontend can share state without re-expanding `externs.h`.
+- Moved SDL-only ownership out of `src/main-sdl.c` into:
+  - `src/sdl-layout.c` for pane layout, resize, and platform-ui config accessors.
+  - `src/sdl-render.c` for SDL view lifecycle, renderer reset, presentation, and term callbacks.
+  - `src/sdl-story-font.c` for story-font cache/state and proportional-text rendering.
+  - `src/sdl-touch.c` for touch-pane state, rendering, pointer handling, and touch-pane config APIs.
+- `CMakeLists.txt` now builds the new SDL platform modules in `sil-platform-sdl`.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.

@@ -33,6 +33,15 @@ Status date: March 26, 2026.
   - `CMakePresets.json` now provides `dev-standard`, `dev-portable`, `dev-strict`, and `dev-sanitize`
   - the strict preset builds a warning-free gate for the touched `Phase 0` / `Phase 1` files
   - the sanitizer preset probes ASan/UBSan runtime availability and falls back with a configure warning on hosts where those runtimes are unavailable
+- `Phase 3` is complete in the live tree:
+  - [`src/util.c`](../src/util.c) is down to 490 lines
+  - [`src/init2.c`](../src/init2.c) is down to 927 lines
+  - [`src/main-sdl.c`](../src/main-sdl.c) is down to 1,908 lines
+  - SDL-only ownership now lives in:
+    - [`src/sdl-layout.c`](../src/sdl-layout.c)
+    - [`src/sdl-render.c`](../src/sdl-render.c)
+    - [`src/sdl-story-font.c`](../src/sdl-story-font.c)
+    - [`src/sdl-touch.c`](../src/sdl-touch.c)
 - Android support is real:
   - Gradle project exists under [`android/`](../android)
   - native Android CMake entrypoint exists
@@ -41,10 +50,7 @@ Status date: March 26, 2026.
   - touch pane and gamepad plumbing exist
 - The remaining bottlenecks are now concentrated in a smaller set of files and
   surfaces:
-  - [`src/main-sdl.c`](../src/main-sdl.c): 5,377 lines
-  - [`src/init2.c`](../src/init2.c): 2,724 lines
   - [`src/z-term.c`](../src/z-term.c): 2,150 lines
-  - [`src/util.c`](../src/util.c): 4,099 lines
   - [`src/externs.h`](../src/externs.h): 1,074 lines / 883 `extern`s
   - [`src/variable.c`](../src/variable.c): 710 lines
 - The biggest newly-audited risk areas are:
@@ -174,6 +180,8 @@ Done when:
 
 ## Phase 3: Monolith Reduction Round 3
 Goal: split the remaining ownership hubs that still mix unrelated concerns.
+
+Status: complete in the working tree on March 26, 2026.
 
 Tasks:
 - Split [`src/util.c`](../src/util.c) by ownership.
