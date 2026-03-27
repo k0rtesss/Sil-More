@@ -8809,3 +8809,7 @@ The script now fully matches the game's drop generation logic for all item types
   - `src/sdl-touch.c` for touch-pane state, rendering, pointer handling, and touch-pane config APIs.
 - `CMakeLists.txt` now builds the new SDL platform modules in `sil-platform-sdl`.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+- UI3 landed a session-owned dungeon snapshot path under `src/app/app-scene-dungeon.[ch]`.
+- `app_session` now owns stable dungeon blob storage plus dirty/invalidation tracking, and `src/ui/ui-status.c:handle_stuff()` is the main rebuild funnel after `p_ptr->update` / `redraw` / `window` masks are consumed.
+- Added first-pass UI3 event hooks for message-log updates, cursor/target changes, actor movement, damage, projectile launches, and object transfers in the existing early-snapshot modules.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `ctest --output-on-failure` in `build-standard` both succeeded.

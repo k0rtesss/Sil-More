@@ -23,6 +23,12 @@
 static bool story_inventory_list_active = false;
 static bool story_equipment_list_active = false;
 
+enum
+{
+    MENU_LABEL_FIELD_WIDTH = 4,
+    MENU_WEIGHT_FIELD_WIDTH = 8
+};
+
 bool get_story_inventory_list_active(void)
 {
     return story_inventory_list_active;
@@ -188,6 +194,17 @@ int draw_item_tile(int x, int y, object_type* o_ptr)
     return x;
 }
 
+static int menu_item_tile_width(const object_type* o_ptr)
+{
+    if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO
+        && o_ptr && o_ptr->k_idx)
+    {
+        return use_bigtile ? 2 : 1;
+    }
+
+    return 0;
+}
+
 int menu_term_width(void)
 {
     if (Term && Term->wid > 0)
@@ -198,7 +215,7 @@ int menu_term_width(void)
 
 int menu_weight_col_for_width(int term_wid)
 {
-    int col = term_wid - 10;
+    int col = term_wid - (MENU_LABEL_FIELD_WIDTH + MENU_WEIGHT_FIELD_WIDTH);
 
     if (col < 0)
         col = 0;
@@ -208,7 +225,9 @@ int menu_weight_col_for_width(int term_wid)
 
 int menu_label_col_for_width(int term_wid, bool display_weights)
 {
-    int col = display_weights ? (term_wid - 2) : (term_wid - 9);
+    (void)display_weights;
+
+    int col = term_wid - MENU_LABEL_FIELD_WIDTH;
 
     if (col < 0)
         col = 0;
@@ -236,6 +255,27 @@ int menu_desc_limit(int text_col, int label_col, int weight_col,
     return limit;
 }
 
+int menu_inventory_row_width(cptr desc, const object_type* o_ptr,
+    bool display_weights)
+{
+    int desc_len = desc ? (int)strlen(desc) : 0;
+    int suffix_width = MENU_LABEL_FIELD_WIDTH;
+
+    if (display_weights)
+        suffix_width += MENU_WEIGHT_FIELD_WIDTH;
+
+    return menu_item_tile_width(o_ptr) + desc_len + suffix_width;
+}
+
+int menu_equipment_row_width(cptr desc, const object_type* o_ptr,
+    bool display_weights)
+{
+    const int prefix_width = 12 + 2;
+
+    return prefix_width + menu_inventory_row_width(desc, o_ptr,
+        display_weights);
+}
+
 void story_render_inventory_entry(int row, int base_col, int label_col,
     cptr desc, byte desc_attr, bool display_weights, cptr weight_text,
     byte weight_attr, cptr label_text, byte label_attr, const object_type* o_ptr,
@@ -244,7 +284,7 @@ void story_render_inventory_entry(int row, int base_col, int label_col,
     int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
     int highlight_cols = term_wid;
     int weight_col = display_weights ? MAX(0, label_col - 8) : label_col;
-    const int label_width = 6;
+    const int label_width = MENU_LABEL_FIELD_WIDTH;
 
     Term_erase(base_col, row, 255);
     if (highlight)
@@ -280,7 +320,7 @@ void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
     int highlight_cols = term_wid;
     int label_col = menu_label_col_for_width(term_wid, display_weights);
     int weight_col = menu_weight_col_for_width(term_wid);
-    const int label_width = 6;
+    const int label_width = MENU_LABEL_FIELD_WIDTH;
     bool has_object = (o_ptr && o_ptr->k_idx);
 
     Term_erase(col, row, 255);
@@ -322,7 +362,7 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
     int label_col_base = menu_label_col_for_width(term_wid, display_weights);
     int weight_col = menu_weight_col_for_width(term_wid);
     int highlight_cols = term_wid;
-    const int label_width = 6;
+    const int label_width = MENU_LABEL_FIELD_WIDTH;
 
     log_trace("draw_equipment_story_rows: entry_count=%d, highlight_active=%d, highlight_index=%d",
         entry_count, highlight_active, highlight_index);
@@ -769,9 +809,7 @@ void show_inven(void)
         out_color[k] = TERM_L_WHITE;
         SDL_strlcpy(out_desc[k], supply_desc, sizeof(out_desc[0]));
 
-        l = (int)strlen(out_desc[k]) + 5;
-        if (show_weights)
-            l += 9;
+        l = menu_inventory_row_width(out_desc[k], NULL, show_weights);
         if (l > len)
             len = l;
 
@@ -797,10 +835,7 @@ void show_inven(void)
 
         SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
 
-        l = strlen(out_desc[k]) + 5;
-
-        if (show_weights)
-            l += 9;
+        l = menu_inventory_row_width(out_desc[k], o_ptr, show_weights);
 
         if (l > len)
             len = l;
@@ -974,11 +1009,8 @@ void show_equip(void)
         out_index[k] = i;
         SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
 
-        l = strlen(out_desc[k]) + (2 + 3);
-        l += (12 + 2);
-
-        if (show_weights)
-            l += 9;
+        l = menu_equipment_row_width(out_desc[k], o_ptr->k_idx ? o_ptr : NULL,
+            show_weights);
 
         if (l > len)
             len = l;
@@ -1146,10 +1178,7 @@ void show_floor(const int* floor_list, int floor_num)
         out_color[k] = object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
         SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
 
-        l = strlen(out_desc[k]) + 5;
-
-        if (show_weights)
-            l += 9;
+        l = menu_inventory_row_width(out_desc[k], o_ptr, show_weights);
 
         if (l > len)
             len = l;

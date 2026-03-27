@@ -1,6 +1,7 @@
 /* File: ui/ui-status.c */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 
 #include "ui/ui-character-screen.h"
@@ -2991,6 +2992,10 @@ void window_stuff(void)
  */
 void handle_stuff(void)
 {
+    u32b update_mask = p_ptr->update;
+    u32b redraw_mask = p_ptr->redraw;
+    u32b window_mask = p_ptr->window;
+
     log_trace("handle_stuff: starting (update=0x%08X, redraw=0x%08X, window=0x%08X)", 
               p_ptr->update, p_ptr->redraw, p_ptr->window);
 
@@ -3005,6 +3010,18 @@ void handle_stuff(void)
     /* Window stuff */
     if (p_ptr->window)
         window_stuff();
+
+    if (character_generated && p_ptr->playing)
+    {
+        app_session* session = app_session_current();
+
+        if (session && (app_session_snapshot(session)->scene
+                == APP_SCENE_KIND_DUNGEON))
+        {
+            (void)app_session_build_dungeon_snapshot(session, update_mask,
+                redraw_mask, window_mask);
+        }
+    }
 
     log_trace("handle_stuff: completed");
 }

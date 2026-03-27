@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -575,6 +576,16 @@ void do_cmd_fire(int quiver)
     /* Calculate the path */
     path_n = project_path(
         path_g, tdis, p_ptr->py, p_ptr->px, &ty2, &tx2, PROJECT_THRU);
+
+    if (path_n > 0)
+    {
+        app_session_note_animation(app_session_current(),
+            APP_ANIMATION_HINT_PROJECTILE, i_ptr->k_idx,
+            APP_PACK_COORD(p_ptr->py, p_ptr->px),
+            APP_PACK_COORD(GRID_Y(path_g[path_n - 1]),
+                GRID_X(path_g[path_n - 1])),
+            shots, APP_SNAPSHOT_INVALIDATE_MAP);
+    }
 
     /* Hack -- Handle stuff */
     handle_stuff();
@@ -1747,6 +1758,16 @@ void do_cmd_throw(bool automatic)
     path_n = project_path(
         path_g, tdis, p_ptr->py, p_ptr->px, &ty2, &tx2, path_flg);
     path_n = ABS(path_n);
+
+    if (path_n > 0)
+    {
+        app_session_note_animation(app_session_current(),
+            APP_ANIMATION_HINT_PROJECTILE, o_ptr->k_idx,
+            APP_PACK_COORD(p_ptr->py, p_ptr->px),
+            APP_PACK_COORD(GRID_Y(path_g[path_n - 1]),
+                GRID_X(path_g[path_n - 1])),
+            1, APP_SNAPSHOT_INVALIDATE_MAP);
+    }
 
     /* DEBUG: Log path result */
     log_debug("do_cmd_throw: path_n=%d after project_path", path_n);

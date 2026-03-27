@@ -285,6 +285,7 @@ set(SIL_MORE_SOURCES_RUNTIME
 set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-events.c
     src/app/app-host.c
+    src/app/app-scene-dungeon.c
     src/app/app-session.c
 )
 
@@ -494,9 +495,12 @@ if(BUILD_TESTING)
 
   add_executable(sil-ui1-tests
     tests/ui1_tests.c
-    ${SIL_MORE_SOURCES_APP_BOUNDARY}
   )
-  target_link_libraries(sil-ui1-tests PRIVATE sil-build-config)
+  target_link_libraries(sil-ui1-tests PRIVATE
+    sil-build-config
+    sil-core
+    sil-platform-sdl
+  )
   if(SIL_STRICT_WARNINGS)
     target_link_libraries(sil-ui1-tests PRIVATE sil-strict-build-config)
   endif()
@@ -504,6 +508,11 @@ if(BUILD_TESTING)
     NAME sil_ui1_scaffolding
     COMMAND sil-ui1-tests
   )
+  if(WIN32)
+    set_tests_properties(sil_ui1_scaffolding PROPERTIES
+      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+    )
+  endif()
 
   if(Python3_Interpreter_FOUND)
     add_test(

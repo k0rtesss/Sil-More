@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -102,6 +103,11 @@ bool hp_player(int x, bool percent, bool message)
 
         /* Window stuff */
         p_ptr->window |= (PW_PLAYER_0);
+
+        app_session_note_animation(app_session_current(),
+            APP_ANIMATION_HINT_DAMAGE, APP_DUNGEON_PLAYER_SUBJECT, -points,
+            p_ptr->chp, 0,
+            APP_SNAPSHOT_INVALIDATE_STATUS | APP_SNAPSHOT_INVALIDATE_MAP);
 
         if (message)
         {

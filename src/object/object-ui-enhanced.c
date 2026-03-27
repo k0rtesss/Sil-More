@@ -240,7 +240,7 @@ void show_inven_enhanced(void)
                     tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
             SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
 
-            l = (int)strlen(out_desc[k]) + 5 + (show_weights ? 9 : 0);
+            l = menu_inventory_row_width(out_desc[k], o_ptr, show_weights);
             if (l > len)
                 len = l;
 
@@ -258,7 +258,7 @@ void show_inven_enhanced(void)
         out_color[k] = TERM_L_WHITE;
         SDL_strlcpy(out_desc[k], supply_desc, sizeof(out_desc[0]));
 
-        l = (int)strlen(out_desc[k]) + 5 + (show_weights ? 9 : 0);
+        l = menu_inventory_row_width(out_desc[k], NULL, show_weights);
         if (l > len)
             len = l;
 
@@ -283,7 +283,7 @@ void show_inven_enhanced(void)
                 tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
         SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
 
-        l = (int)strlen(out_desc[k]) + 5 + (show_weights ? 9 : 0);
+        l = menu_inventory_row_width(out_desc[k], o_ptr, show_weights);
         if (l > len)
             len = l;
 
@@ -1038,7 +1038,8 @@ void show_equip_enhanced(void)
         if (show_weights && o_ptr->weight && i >= INVEN_BODY && i <= INVEN_FEET)
             armour_weight += o_ptr->weight * o_ptr->number;
 
-        l = (int)strlen(out_desc[k]) + 17 + (show_weights ? 9 : 0);
+        l = menu_equipment_row_width(out_desc[k], o_ptr->k_idx ? o_ptr : NULL,
+            show_weights);
         if (l > len)
             len = l;
 

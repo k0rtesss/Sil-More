@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "project-path.h"
@@ -2413,6 +2414,7 @@ void move_cursor_relative(int y, int x)
 
     /* Go there */
     (void)Term_gotoxy(vx, vy);
+    app_session_note_cursor_relative(app_session_current(), y, x);
 }
 
 /*

@@ -1,6 +1,7 @@
 /* File: object-inventory.c */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "supplies.h"
@@ -1573,6 +1574,10 @@ void inven_drop(int item, int amt)
 
     /* Message */
     msg_format("You drop %s (%c).", o_name, index_to_label(item));
+    app_session_note_animation(app_session_current(),
+        APP_ANIMATION_HINT_OBJECT_TRANSFER, i_ptr->k_idx, item,
+        APP_PACK_COORD(py, px), amt,
+        APP_SNAPSHOT_INVALIDATE_MAP | APP_SNAPSHOT_INVALIDATE_STATUS);
 
     /* Drop it near the player */
     drop_near(i_ptr, 0, py, px);

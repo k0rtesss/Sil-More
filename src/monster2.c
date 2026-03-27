@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -2352,6 +2353,39 @@ void monster_swap(int y1, int x1, int y2, int x2)
     /* Redraw */
     lite_spot(y1, x1);
     lite_spot(y2, x2);
+
+    {
+        app_session* session = app_session_current();
+        u32b invalidation_mask = APP_SNAPSHOT_INVALIDATE_MAP;
+
+        if ((m1 < 0) || (m2 < 0))
+        {
+            invalidation_mask |= APP_SNAPSHOT_INVALIDATE_CURSOR
+                | APP_SNAPSHOT_INVALIDATE_TARGET
+                | APP_SNAPSHOT_INVALIDATE_STATUS;
+        }
+
+        if (session)
+        {
+            if (m1 != 0)
+            {
+                app_session_note_animation(session,
+                    APP_ANIMATION_HINT_ACTOR_MOVED,
+                    (m1 < 0) ? APP_DUNGEON_PLAYER_SUBJECT : m1,
+                    APP_PACK_COORD(y1, x1), APP_PACK_COORD(y2, x2), m2,
+                    invalidation_mask);
+            }
+
+            if (m2 != 0)
+            {
+                app_session_note_animation(session,
+                    APP_ANIMATION_HINT_ACTOR_MOVED,
+                    (m2 < 0) ? APP_DUNGEON_PLAYER_SUBJECT : m2,
+                    APP_PACK_COORD(y2, x2), APP_PACK_COORD(y1, x1), m1,
+                    invalidation_mask);
+            }
+        }
+    }
 
     // deal with set polearm attacks
     if (p_ptr->active_ability[S_MEL][MEL_POLEARMS] && monster1 && m_ptr->ml)

@@ -930,6 +930,8 @@ extern u16b message_type(s16b age);
 extern byte message_color(s16b age);
 extern errr message_color_define(u16b type, byte color);
 extern void message_add(cptr str, u16b type);
+extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
+    byte* out_color, u16b* out_type, bool* out_more_pending);
 extern errr messages_init(void);
 extern void messages_free(void);
 extern void move_cursor(int row, int col);

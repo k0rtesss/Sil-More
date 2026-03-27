@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -2414,6 +2415,13 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
 
         /* Calculate the projection path */
         path_n = project_path(path_g, dist, y0, x0, &y1, &x1, flg);
+        if (path_n > 0)
+        {
+            app_session_note_animation(app_session_current(),
+                APP_ANIMATION_HINT_PROJECTILE, typ,
+                APP_PACK_COORD(y0, x0), APP_PACK_COORD(y1, x1), flg,
+                APP_SNAPSHOT_INVALIDATE_MAP);
+        }
 
         /* Project along the path */
         for (i = 0; i < path_n; ++i)

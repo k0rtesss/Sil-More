@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
@@ -331,6 +332,7 @@ void message_add(cptr str, u16b type)
     {
         /* Increase the message count */
         message__count[x]++;
+        app_session_note_message(app_session_current(), type);
 
         /* Success */
         return;
@@ -403,6 +405,7 @@ void message_add(cptr str, u16b type)
 
         /* Store the message count */
         message__count[x] = 1;
+        app_session_note_message(app_session_current(), type);
 
         /* Success */
         return;
@@ -510,6 +513,7 @@ void message_add(cptr str, u16b type)
 
     /* Store the message count */
     message__count[x] = 1;
+    app_session_note_message(app_session_current(), type);
 }
 
 /*
@@ -548,7 +552,15 @@ void messages_free(void)
 /*
  * Move the cursor
  */
-void move_cursor(int row, int col) { Term_gotoxy(col, row); }
+static void message_topline_reset(void);
+static void message_topline_append(cptr text, u16b type, byte color);
+
+void move_cursor(int row, int col)
+{
+    Term_gotoxy(col, row);
+    app_session_note_cursor_absolute(app_session_current(), row, col,
+        !inkey_cursor_hidden());
+}
 
 /*
  * Hack -- flush
@@ -585,9 +597,57 @@ static void msg_flush(int x)
 
     /* Clear the line */
     Term_erase(0, 0, 255);
+    message_topline_reset();
 }
 
 static int message_column = 0;
+static char message_topline[1024];
+static u16b message_topline_type = MSG_GENERIC;
+static byte message_topline_color = TERM_WHITE;
+static bool message_topline_active = false;
+
+static void message_topline_reset(void)
+{
+    message_topline[0] = '\0';
+    message_topline_type = MSG_GENERIC;
+    message_topline_color = TERM_WHITE;
+    message_topline_active = false;
+}
+
+static void message_topline_append(cptr text, u16b type, byte color)
+{
+    if (!text || !text[0])
+        return;
+
+    if (!message_topline_active)
+        message_topline[0] = '\0';
+
+    if (message_topline_active && message_topline[0])
+        SDL_strlcat(message_topline, " ", sizeof(message_topline));
+
+    SDL_strlcat(message_topline, text, sizeof(message_topline));
+    message_topline_type = type;
+    message_topline_color = color;
+    message_topline_active = true;
+}
+
+bool message_topline_snapshot(char* out_text, size_t out_text_size,
+    byte* out_color, u16b* out_type, bool* out_more_pending)
+{
+    if (!message_topline_active || !message_topline[0])
+        return false;
+
+    if (out_text && out_text_size)
+        SDL_strlcpy(out_text, message_topline, out_text_size);
+    if (out_color)
+        *out_color = message_topline_color;
+    if (out_type)
+        *out_type = message_topline_type;
+    if (out_more_pending)
+        *out_more_pending = false;
+
+    return true;
+}
 
 /*
  * Output a message to the top line of the screen.
@@ -605,7 +665,10 @@ static void msg_print_aux(u16b type, cptr msg)
 
     /* Hack -- Reset */
     if (!msg_flag)
+    {
         message_column = 0;
+        message_topline_reset();
+    }
 
     /* Message Length */
     n = (msg ? strlen(msg) : 0);
@@ -690,6 +753,7 @@ static void msg_print_aux(u16b type, cptr msg)
 
     /* Display the tail of the message */
     Term_putstr(message_column, 0, n, color, t);
+    message_topline_append(t, type, color);
 
     /* Remember the message */
     msg_flag = true;
@@ -700,6 +764,9 @@ static void msg_print_aux(u16b type, cptr msg)
     /* Optional refresh */
     if (fresh_after)
         Term_fresh();
+
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_MESSAGES);
 }
 
 /*

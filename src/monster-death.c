@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -1090,6 +1091,9 @@ bool mon_take_hit(int m_idx, int dam, cptr note, int who)
 
     /* Hurt it */
     m_ptr->hp -= dam;
+    app_session_note_animation(app_session_current(),
+        APP_ANIMATION_HINT_DAMAGE, m_idx, who, dam, m_ptr->r_idx,
+        APP_SNAPSHOT_INVALIDATE_MAP | APP_SNAPSHOT_INVALIDATE_STATUS);
 
     if (dam > 0)
         maybe_update_morgoth_state_from_hp(m_ptr);

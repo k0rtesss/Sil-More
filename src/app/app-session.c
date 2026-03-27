@@ -1,6 +1,7 @@
 #include "angband.h"
 
 #include "app-session.h"
+#include "externs.h"
 
 typedef struct app_input_queue {
     app_input* items;
@@ -22,6 +23,9 @@ struct app_session {
     u16b state;
     app_wait_state wait_state;
     app_snapshot snapshot;
+    app_dungeon_snapshot dungeon_snapshot;
+    u32b snapshot_dirty_mask;
+    u64b next_snapshot_revision;
     app_session_counters counters;
     app_event_buffer* events;
     app_input_queue inputs;
@@ -84,6 +88,17 @@ static void app_session_emit_internal_event(app_session* session, u16b kind,
     record.arg2 = arg2;
 
     (void)app_session_emit_event(session, &record);
+}
+
+static void app_session_emit_snapshot_invalidation(app_session* session,
+    u32b invalidation_mask)
+{
+    if (!session || !invalidation_mask)
+        return;
+
+    app_session_emit_internal_event(session, APP_EVENT_KIND_SNAPSHOT_INVALIDATED,
+        APP_EVENT_SCOPE_SCENE, APP_SCENE_KIND_DUNGEON,
+        (s32b)invalidation_mask, session->state, session->wait_state.reason);
 }
 
 static bool app_input_queue_init(app_input_queue* queue, size_t capacity)
@@ -316,6 +331,8 @@ app_session* app_session_create(const app_session_config* config)
     session->state = APP_SESSION_STATE_IDLE;
     session->wait_state.reason = APP_WAIT_REASON_NONE;
     session->snapshot.scene = APP_SCENE_KIND_NONE;
+    app_dungeon_snapshot_init(&session->dungeon_snapshot);
+    session->next_snapshot_revision = 1u;
     session->events = app_event_buffer_create(initial_event_capacity);
 
     if (!session->events
@@ -342,6 +359,7 @@ void app_session_destroy(app_session* session)
     if (g_current_session == session)
         g_current_session = NULL;
 
+    app_dungeon_snapshot_destroy(&session->dungeon_snapshot);
     app_input_queue_destroy(&session->inputs);
     app_intent_queue_destroy(&session->intents);
     app_event_buffer_destroy(session->events);
@@ -421,6 +439,14 @@ void app_session_set_wait_state(app_session* session,
         APP_EVENT_SCOPE_SESSION, session->wait_state.reason,
         session->wait_state.detail0, session->wait_state.detail1,
         session->state);
+
+    if (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
+    {
+        app_session_mark_snapshot_dirty(session,
+            APP_SNAPSHOT_INVALIDATE_CURSOR | APP_SNAPSHOT_INVALIDATE_TARGET
+            | APP_SNAPSHOT_INVALIDATE_PANES);
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+    }
 }
 
 void app_session_begin_wait(app_session* session, u16b reason, s32b detail0,
@@ -496,6 +522,132 @@ void app_session_set_snapshot(app_session* session,
         session->snapshot.scene = APP_SCENE_KIND_NONE;
         session->snapshot.flags = 0;
     }
+
+    if (session->snapshot.scene != APP_SCENE_KIND_DUNGEON)
+        session->snapshot_dirty_mask = 0;
+}
+
+const app_dungeon_snapshot* app_session_dungeon_snapshot(
+    const app_session* session)
+{
+    return session ? &session->dungeon_snapshot : NULL;
+}
+
+void app_session_mark_snapshot_dirty(app_session* session,
+    u32b invalidation_mask)
+{
+    u32b new_bits;
+
+    if (!session || !invalidation_mask)
+        return;
+
+    new_bits = invalidation_mask & ~session->snapshot_dirty_mask;
+    session->snapshot_dirty_mask |= invalidation_mask;
+
+    if (new_bits && (session->snapshot.scene == APP_SCENE_KIND_DUNGEON))
+        app_session_emit_snapshot_invalidation(session, new_bits);
+}
+
+bool app_session_build_dungeon_snapshot(app_session* session,
+    u32b update_mask, u32b redraw_mask, u32b window_mask)
+{
+    u32b mask;
+
+    if (!session)
+        return false;
+
+    if (session->snapshot.scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+
+    mask = app_snapshot_invalidation_from_masks(update_mask, redraw_mask,
+        window_mask);
+    if (mask)
+        app_session_mark_snapshot_dirty(session, mask);
+
+    if (!session->snapshot_dirty_mask
+        && (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
+        && session->dungeon_snapshot.snapshot.revision)
+    {
+        return true;
+    }
+
+    if (!app_build_dungeon_snapshot(&session->dungeon_snapshot,
+            session->next_snapshot_revision, &session->wait_state, update_mask,
+            redraw_mask, window_mask))
+    {
+        return false;
+    }
+
+    session->next_snapshot_revision++;
+    session->snapshot = session->dungeon_snapshot.snapshot;
+    session->snapshot_dirty_mask = 0;
+    return true;
+}
+
+void app_session_note_message(app_session* session, u16b message_type)
+{
+    if (!session)
+        return;
+
+    app_session_emit_internal_event(session, APP_EVENT_KIND_MESSAGE,
+        APP_EVENT_SCOPE_SESSION, message_type, 0, message_num(), 0);
+    app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_MESSAGES);
+}
+
+void app_session_note_animation(app_session* session, u16b animation_kind,
+    s32b subject, s32b arg0, s32b arg1, s32b arg2,
+    u32b invalidation_mask)
+{
+    u16b event_kind = APP_EVENT_KIND_ANIMATION_HINT;
+
+    if (!session)
+        return;
+
+    if (animation_kind == APP_ANIMATION_HINT_ACTOR_MOVED)
+        event_kind = APP_EVENT_KIND_ACTOR_MOVED;
+    else if (animation_kind == APP_ANIMATION_HINT_DAMAGE)
+        event_kind = APP_EVENT_KIND_DAMAGE;
+    else if (animation_kind == APP_ANIMATION_HINT_PROJECTILE)
+        event_kind = APP_EVENT_KIND_PROJECTILE;
+    else if (animation_kind == APP_ANIMATION_HINT_OBJECT_TRANSFER)
+        event_kind = APP_EVENT_KIND_OBJECT_TRANSFER;
+
+    app_session_emit_internal_event(session, event_kind, APP_EVENT_SCOPE_SCENE,
+        subject, arg0, arg1, arg2);
+    if (invalidation_mask)
+        app_session_mark_snapshot_dirty(session, invalidation_mask);
+}
+
+void app_session_note_cursor_relative(app_session* session, s16b map_y,
+    s16b map_x)
+{
+    if (!session)
+        return;
+
+    session->dungeon_snapshot.cursor_state.visible = inkey_cursor_hidden()
+        ? 0 : 1;
+    session->dungeon_snapshot.cursor_state.relative = 1;
+    session->dungeon_snapshot.cursor_state.row = 0;
+    session->dungeon_snapshot.cursor_state.col = 0;
+    session->dungeon_snapshot.cursor_state.map_y = map_y;
+    session->dungeon_snapshot.cursor_state.map_x = map_x;
+    app_session_mark_snapshot_dirty(session,
+        APP_SNAPSHOT_INVALIDATE_CURSOR | APP_SNAPSHOT_INVALIDATE_MAP);
+}
+
+void app_session_note_cursor_absolute(app_session* session, s16b row,
+    s16b col, bool visible)
+{
+    if (!session)
+        return;
+
+    session->dungeon_snapshot.cursor_state.visible = visible ? 1 : 0;
+    session->dungeon_snapshot.cursor_state.relative = 0;
+    session->dungeon_snapshot.cursor_state.row = row;
+    session->dungeon_snapshot.cursor_state.col = col;
+    session->dungeon_snapshot.cursor_state.map_y = -1;
+    session->dungeon_snapshot.cursor_state.map_x = -1;
+    app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_CURSOR);
 }
 
 const app_session_counters* app_session_get_counters(

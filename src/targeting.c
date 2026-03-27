@@ -623,6 +623,10 @@ void target_set_monster(int m_idx)
         p_ptr->target_row = 0;
         p_ptr->target_col = 0;
     }
+
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_TARGET | APP_SNAPSHOT_INVALIDATE_CURSOR
+            | APP_SNAPSHOT_INVALIDATE_MAP);
 }
 
 /*
@@ -649,6 +653,10 @@ void target_set_location(int y, int x)
         p_ptr->target_row = 0;
         p_ptr->target_col = 0;
     }
+
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_TARGET | APP_SNAPSHOT_INVALIDATE_CURSOR
+            | APP_SNAPSHOT_INVALIDATE_MAP);
 }
 
 /*

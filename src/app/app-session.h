@@ -4,6 +4,7 @@
 #include "app-events.h"
 #include "app-host.h"
 #include "app-input.h"
+#include "app-scene-dungeon.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
 
@@ -98,6 +99,20 @@ void app_session_pop_wait_scope(app_session* session,
 const app_snapshot* app_session_snapshot(const app_session* session);
 void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot);
+const app_dungeon_snapshot* app_session_dungeon_snapshot(
+    const app_session* session);
+void app_session_mark_snapshot_dirty(app_session* session,
+    u32b invalidation_mask);
+bool app_session_build_dungeon_snapshot(app_session* session,
+    u32b update_mask, u32b redraw_mask, u32b window_mask);
+void app_session_note_message(app_session* session, u16b message_type);
+void app_session_note_animation(app_session* session, u16b animation_kind,
+    s32b subject, s32b arg0, s32b arg1, s32b arg2,
+    u32b invalidation_mask);
+void app_session_note_cursor_relative(app_session* session, s16b map_y,
+    s16b map_x);
+void app_session_note_cursor_absolute(app_session* session, s16b row,
+    s16b col, bool visible);
 const app_session_counters* app_session_get_counters(
     const app_session* session);
 bool app_session_submit_input(app_session* session, const app_input* input);

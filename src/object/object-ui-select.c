@@ -606,7 +606,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     object_desc(tmp, sizeof(tmp), o_ptr, true, 3);                  \
                 }                                                                   \
                 tmp[lim]='\0';                                                      \
-                int ltmp=strlen(tmp)+5 + (show_weights?9:0);                        \
+                int ltmp = (entry == SUPPLIES_INDEX)                                \
+                    ? menu_inventory_row_width(tmp, NULL, show_weights)             \
+                    : menu_inventory_row_width(tmp, &inventory[entry], show_weights); \
                 if (ltmp>len) len=ltmp;                                             \
             }                                                                       \
         } else if (p_ptr->command_wrk == (USE_EQUIP)) {                             \
@@ -614,7 +616,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 object_type* o_ptr=&inventory[vis_equip[r]];                        \
                 object_desc(tmp, sizeof(tmp), o_ptr, true, 3);                      \
                 tmp[lim]='\0';                                                      \
-                int ltmp=strlen(tmp)+(2+3)+(12+2)+(show_weights?9:0);               \
+                int ltmp = menu_equipment_row_width(tmp,                            \
+                    o_ptr->k_idx ? o_ptr : NULL, show_weights);                     \
                 if (ltmp>len) len=ltmp;                                             \
             }                                                                       \
         } else if (p_ptr->command_wrk == (USE_FLOOR)) {                             \
@@ -622,7 +625,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 object_type* o_ptr=&o_list[floor_list[vis_floor[r]]];               \
                 object_desc_floor(tmp, sizeof(tmp), o_ptr, true, 3);                \
                 tmp[lim]='\0';                                                      \
-                int ltmp=strlen(tmp)+5 + (show_weights?9:0);                        \
+                int ltmp = menu_inventory_row_width(tmp, o_ptr, show_weights);      \
                 if (ltmp>len) len=ltmp;                                             \
             }                                                                       \
         }                                                                           \

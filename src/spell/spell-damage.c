@@ -1,6 +1,7 @@
 /* File: spell-damage.c */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -187,6 +188,11 @@ void take_hit(int dam, cptr kb_str)
 
     /* Window stuff */
     p_ptr->window |= (PW_PLAYER_0);
+
+    app_session_note_animation(app_session_current(),
+        APP_ANIMATION_HINT_DAMAGE, APP_DUNGEON_PLAYER_SUBJECT, dam,
+        p_ptr->chp, 0,
+        APP_SNAPSHOT_INVALIDATE_STATUS | APP_SNAPSHOT_INVALIDATE_MAP);
 
     if (p_ptr->chp <= 0)
     {

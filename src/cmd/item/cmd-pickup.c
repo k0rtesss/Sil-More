@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "platform-ui.h"
 #include "object/object-ui-select.h"
@@ -21,6 +22,8 @@ void give_player_item(object_type * o_ptr)
 {
     char o_name[80];
     object_type copy = *o_ptr;
+    int source_y = o_ptr ? o_ptr->iy : -1;
+    int source_x = o_ptr ? o_ptr->ix : -1;
 
     int slot = inven_carry(o_ptr, true);
 
@@ -48,6 +51,10 @@ void give_player_item(object_type * o_ptr)
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
     msg_format("You have %s (%c).", o_name, index_to_label(slot));
+    app_session_note_animation(app_session_current(),
+        APP_ANIMATION_HINT_OBJECT_TRANSFER, copy.k_idx,
+        APP_PACK_COORD(source_y, source_x), slot, copy.number,
+        APP_SNAPSHOT_INVALIDATE_MAP | APP_SNAPSHOT_INVALIDATE_STATUS);
 
     /* Update quiver display if this was a throwing weapon or arrow */
     if ((slot == INVEN_QUIVER1 || slot == INVEN_QUIVER2) ||

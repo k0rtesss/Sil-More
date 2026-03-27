@@ -4988,6 +4988,17 @@ PlayResult play_game(void)
     // Sil-y: added to get 'shades' right in extra inventory terms
     do_cmd_redraw();
 
+    {
+        app_session* session = app_session_current();
+
+        if (session)
+        {
+            app_session_mark_snapshot_dirty(session,
+                APP_SNAPSHOT_INVALIDATE_ALL);
+            (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+        }
+    }
+
     // update player noise
     update_flow(p_ptr->py, p_ptr->px, FLOW_PLAYER_NOISE);
 

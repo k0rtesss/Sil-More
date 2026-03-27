@@ -1,6 +1,7 @@
 /* File: object-place.c */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 
 /*
@@ -363,6 +364,11 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
         /* Failure */
         return;
     }
+
+    app_session_note_animation(app_session_current(),
+        APP_ANIMATION_HINT_OBJECT_TRANSFER, j_ptr->k_idx,
+        APP_PACK_COORD(y, x), APP_PACK_COORD(by, bx), chance,
+        APP_SNAPSHOT_INVALIDATE_MAP);
 
     update_stuff();
 

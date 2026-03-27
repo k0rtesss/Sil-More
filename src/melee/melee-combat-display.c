@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "melee/melee-attack.h"
@@ -431,15 +432,17 @@ void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
     log_trace("[ROLL2] enter: combat_number=%d old=%d last_index=%d", combat_number, combat_number_old, combat_number - 1);
     if (combat_number - 1 < MAX_COMBAT_ROLLS)
     {
-        combat_rolls[0][combat_number - 1].dam_type = dam_type;
-        combat_rolls[0][combat_number - 1].dd = dd;
-        combat_rolls[0][combat_number - 1].ds = ds;
-        combat_rolls[0][combat_number - 1].dam = dam;
-        combat_rolls[0][combat_number - 1].pd = pd;
-        combat_rolls[0][combat_number - 1].ps = ps;
-        combat_rolls[0][combat_number - 1].prot = prot;
-        combat_rolls[0][combat_number - 1].prt_percent = prt_percent;
-        combat_rolls[0][combat_number - 1].melee = melee;
+        combat_roll* roll = &combat_rolls[0][combat_number - 1];
+
+        roll->dam_type = dam_type;
+        roll->dd = dd;
+        roll->ds = ds;
+        roll->dam = dam;
+        roll->pd = pd;
+        roll->ps = ps;
+        roll->prot = prot;
+        roll->prt_percent = prt_percent;
+        roll->melee = melee;
         log_trace("[ROLL2] filled index=%d dd=%d ds=%d dam=%d pd=%d ps=%d prot=%d prt%%=%d melee=%d", 
                   combat_number - 1, dd, ds, dam, pd, ps, prot, prt_percent, melee);
 
@@ -450,19 +453,27 @@ void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
         {
             // use the protection values for pure elemental types if there was
             // no attack roll
-            if (combat_rolls[0][combat_number - 1].att_type == COMBAT_ROLL_AUTO)
+            if (roll->att_type == COMBAT_ROLL_AUTO)
             {
-                combat_rolls[0][combat_number - 1].pd = p_min(dam_type, melee);
-                combat_rolls[0][combat_number - 1].ps = p_max(dam_type, melee);
+                roll->pd = p_min(dam_type, melee);
+                roll->ps = p_max(dam_type, melee);
             }
             // otherwise use the normal protection values
             else
             {
-                combat_rolls[0][combat_number - 1].pd = p_min(GF_HURT, melee);
-                combat_rolls[0][combat_number - 1].ps = p_max(GF_HURT, melee);
+                roll->pd = p_min(GF_HURT, melee);
+                roll->ps = p_max(GF_HURT, melee);
             }
     }
     log_trace("[ROLL2] exit: index=%d done", combat_number - 1);
+
+        app_session_note_animation(app_session_current(),
+            APP_ANIMATION_HINT_DAMAGE,
+            roll->is_defender_player ? APP_DUNGEON_PLAYER_SUBJECT : 0,
+            roll->is_attacker_player ? APP_DUNGEON_PLAYER_SUBJECT : 0,
+            dam, dam_type,
+            APP_SNAPSHOT_INVALIDATE_STATUS | APP_SNAPSHOT_INVALIDATE_PANES
+                | APP_SNAPSHOT_INVALIDATE_MAP);
     }
     
     /* Window stuff - DO NOT set flag here; defer to main loop to avoid mid-combat updates */
