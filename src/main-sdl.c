@@ -1661,6 +1661,7 @@ static void sdl_quit_hook(cptr str)
     
     // Clean up story fonts
     sdl_story_font_cache_clear();
+    sdl_scene_stack_shutdown();
     
     // Only save if we have a valid window and config file path
     if (g_state.window && config_file_path[0] != '\0') {
@@ -1966,6 +1967,7 @@ errr init_sdl(int argc, char **argv)
     SDL_GetWindowSizeInPixels(g_state.window, &window.w, &window.h);
     log_debug("window pixel size %dx%d", window.w, window.h);
     resize(&window);
+    sdl_scene_stack_init();
 
     log_debug("init_sdl: SDL term opened (tiles_mode=%d higher_pict=%d always_pict=%d)",
             config.tiles, Term->higher_pict, Term->always_pict);

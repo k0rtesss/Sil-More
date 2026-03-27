@@ -308,6 +308,8 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
     src/sdl-layout.c
     src/sdl-render.c
+    src/sdl-scene-dungeon.c
+    src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c
     src/pane.c

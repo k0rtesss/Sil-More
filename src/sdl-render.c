@@ -89,24 +89,40 @@ void sdl_view_destroy(sdl_view* d)
 void sdl_present_if_needed(sdl_view* d)
 {
     int active_views = 0;
+    Uint64 now_ns = SDL_GetTicksNS();
+    bool scene_frame_due = (sdl_scene_stack_pending_timeout_ms(now_ns) == 0);
+    bool handled_main = false;
 
-    if (!g_state.need_present)
+    if (!g_state.need_present && !scene_frame_due)
         return;
+
+    (void)sdl_scene_stack_prepare_frame(now_ns);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderClear(g_state.renderer);
 
+    handled_main = sdl_scene_stack_handles_main_view();
+    if (handled_main)
+        active_views++;
+
     for (int i = 0; i < MAX_TERM_DATA; i++) {
+        if (handled_main && i == 0)
+            continue;
         if (g_views[i].canvas)
             active_views++;
     }
+
+    if (handled_main)
+        handled_main = sdl_scene_stack_render_main_layer();
 
     for (int i = 0; i < MAX_TERM_DATA; i++) {
         sdl_view* view = &g_views[i];
         float dst_w;
         float dst_h;
 
+        if (handled_main && i == 0)
+            continue;
         if (!view->canvas)
             continue;
         if (view->cols <= 0 || view->rows <= 0 || view->cell_w <= 0 || view->cell_h <= 0)
@@ -135,6 +151,8 @@ void sdl_present_if_needed(sdl_view* d)
             SDL_RenderRect(g_state.renderer, &frame);
         }
     }
+
+    sdl_scene_stack_render_overlay_layer();
 
     if (g_pane_rects[PANE_TOUCH].w > 0 && sdl_touch_pane_is_config_enabled())
         sdl_touch_pane_render();
@@ -190,6 +208,7 @@ void sdl_handle_renderer_reset(void)
         }
     }
 
+    sdl_scene_stack_on_renderer_reset();
     g_state.need_present = true;
     Term_redraw();
 }
@@ -212,8 +231,11 @@ static errr callback_sdl_xtra(int n, int v)
                 Uint64 now_ns = SDL_GetTicksNS();
                 int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
                 int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
+                int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(now_ns);
                 if (timeout_ms < 0 || (touch_timeout_ms >= 0 && touch_timeout_ms < timeout_ms))
                     timeout_ms = touch_timeout_ms;
+                if (timeout_ms < 0 || (scene_timeout_ms >= 0 && scene_timeout_ms < timeout_ms))
+                    timeout_ms = scene_timeout_ms;
                 if (timeout_ms >= 0) {
                     if (SDL_WaitEventTimeout(&ev, timeout_ms))
                         sdl_handle_event(&g_state, &ev);
@@ -223,12 +245,16 @@ static errr callback_sdl_xtra(int n, int v)
                 }
             }
             Uint64 flush_ns = SDL_GetTicksNS();
+            int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(flush_ns);
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
             sdl_gamepad_flush_pending_left_stick(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_touch_pane_flush_pending_press(flush_ns);
             sdl_drain_legacy_input_queue();
             sdl_music_update();
+
+            if (scene_timeout_ms == 0)
+                g_state.need_present = true;
         } else {
             bool handled = false;
             sdl_music_update();
@@ -237,14 +263,18 @@ static errr callback_sdl_xtra(int n, int v)
                 sdl_handle_event(&g_state, &ev);
             }
             Uint64 flush_ns = SDL_GetTicksNS();
+            int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(flush_ns);
             sdl_gamepad_flush_pending_dpad(flush_ns, false);
             sdl_gamepad_flush_pending_left_stick(flush_ns, false);
             sdl_gamepad_flush_pending_shoulder(flush_ns, false);
             sdl_touch_pane_flush_pending_press(flush_ns);
             sdl_drain_legacy_input_queue();
 
-            if (!handled && !sdl_legacy_input_pending())
+            if (!handled && !sdl_legacy_input_pending() && scene_timeout_ms != 0)
                 SDL_Delay(1);
+
+            if (scene_timeout_ms == 0)
+                g_state.need_present = true;
         }
         sdl_present_if_needed(d);
         return 0;
@@ -289,6 +319,7 @@ static errr callback_sdl_xtra(int n, int v)
                 sdl_handle_event(&g_state, &ev);
             sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
             sdl_drain_legacy_input_queue();
+            sdl_present_if_needed(d);
         }
         return 0;
     }

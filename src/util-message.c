@@ -568,6 +568,8 @@ void move_cursor(int row, int col)
 static void msg_flush(int x)
 {
     byte a = TERM_L_BLUE;
+    app_wait_scope scope;
+    app_session* session = app_session_current();
 
     /* Pause for response */
     Term_putstr(x, 0, -1, a, "-more-");
@@ -580,6 +582,9 @@ static void msg_flush(int x)
 
     if (!auto_more)
     {
+        app_session_push_wait_scope(session, &scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+
         /* Get an acceptable keypress */
         while (1)
         {
@@ -593,6 +598,8 @@ static void msg_flush(int x)
                 break;
             bell("Illegal response to a 'more' prompt!");
         }
+
+        app_session_pop_wait_scope(session, &scope);
     }
 
     /* Clear the line */

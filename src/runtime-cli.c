@@ -7,13 +7,14 @@ struct runtime_cli_state {
     bool fiddle;
     bool wizard;
     bool sound;
+    bool snapshot_renderer;
     int graphics_mode;
     bool force_original;
     bool force_roguelike;
 };
 
 static struct runtime_cli_state g_runtime_cli = {
-    false, false, false, GRAPHICS_NONE, false, false
+    false, false, false, true, GRAPHICS_NONE, false, false
 };
 
 void runtime_cli_reset(void)
@@ -21,6 +22,7 @@ void runtime_cli_reset(void)
     g_runtime_cli.fiddle = false;
     g_runtime_cli.wizard = false;
     g_runtime_cli.sound = false;
+    g_runtime_cli.snapshot_renderer = true;
     g_runtime_cli.graphics_mode = GRAPHICS_NONE;
     g_runtime_cli.force_original = false;
     g_runtime_cli.force_roguelike = false;
@@ -54,6 +56,16 @@ bool runtime_cli_sound(void)
 void runtime_cli_set_sound(bool enabled)
 {
     g_runtime_cli.sound = enabled;
+}
+
+bool runtime_cli_snapshot_renderer(void)
+{
+    return g_runtime_cli.snapshot_renderer;
+}
+
+void runtime_cli_set_snapshot_renderer(bool enabled)
+{
+    g_runtime_cli.snapshot_renderer = enabled;
 }
 
 int runtime_cli_graphics_mode(void)

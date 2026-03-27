@@ -8813,3 +8813,16 @@ The script now fully matches the game's drop generation logic for all item types
 - `app_session` now owns stable dungeon blob storage plus dirty/invalidation tracking, and `src/ui/ui-status.c:handle_stuff()` is the main rebuild funnel after `p_ptr->update` / `redraw` / `window` masks are consumed.
 - Added first-pass UI3 event hooks for message-log updates, cursor/target changes, actor movement, damage, projectile launches, and object transfers in the existing early-snapshot modules.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `ctest --output-on-failure` in `build-standard` both succeeded.
+
+## 2026-03-27: UI4 snapshot-driven SDL scene stack landing
+- Added snapshot-driven SDL scene ownership in `src/sdl-scene.c` and `src/sdl-scene-dungeon.c`.
+- The main SDL pane now renders dungeon snapshots plus lightweight event-driven animations during normal dungeon play.
+- Legacy main-term rendering remains available as the overlay/modal fallback for non-dungeon scenes, `screen_save()` flows, and non-command dungeon wait states that UI5 has not extracted yet.
+- Follow-up: disabled snapshot-scene tweening for player `APP_EVENT_KIND_ACTOR_MOVED` events so the authoritative cursor/player position no longer fights a transient move animation during normal movement.
+- Follow-up: wrapped `msg_flush()` in an `APP_WAIT_REASON_INFORMATIONAL_PAUSE` wait scope so `-more-` prompts drop back to the legacy main view instead of staying in the snapshot-driven dungeon scene.
+- Layout and renderer-reset paths now invalidate the snapshot scene canvas from `src/sdl-layout.c` and `src/sdl-render.c`.
+- Validation:
+  - `./build-incremental.ps1`
+  - `./build-incremental.ps1 -Target portable`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R "sil_ui0_audit|sil_ui1_scaffolding" --output-on-failure` from `build-standard/`

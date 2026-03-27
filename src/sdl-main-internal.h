@@ -66,6 +66,29 @@ typedef struct sdl_view {
     bool term_ready;
 } sdl_view;
 
+typedef enum sdl_scene_animation_kind {
+    SDL_SCENE_ANIMATION_NONE = 0,
+    SDL_SCENE_ANIMATION_ACTOR_MOVED = 1,
+    SDL_SCENE_ANIMATION_DAMAGE = 2,
+    SDL_SCENE_ANIMATION_PROJECTILE = 3,
+    SDL_SCENE_ANIMATION_OBJECT_TRANSFER = 4
+} sdl_scene_animation_kind;
+
+typedef struct sdl_scene_animation {
+    bool active;
+    u16b kind;
+    Uint64 started_ns;
+    Uint64 duration_ns;
+    s32b subject;
+    s16b from_y;
+    s16b from_x;
+    s16b to_y;
+    s16b to_x;
+    s32b arg0;
+    s32b arg1;
+    s32b arg2;
+} sdl_scene_animation;
+
 extern struct sdl_config config;
 extern bool g_hide_left_panel;
 extern struct sound_config g_sound_config;
@@ -156,5 +179,22 @@ int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y
     SDL_Color col, float max_w_px);
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row,
     const char* row_chars, const byte* row_attr);
+
+void sdl_scene_stack_init(void);
+void sdl_scene_stack_shutdown(void);
+void sdl_scene_stack_set_enabled(bool enabled);
+bool sdl_scene_stack_is_enabled(void);
+void sdl_scene_stack_on_layout_changed(void);
+void sdl_scene_stack_on_renderer_reset(void);
+void sdl_scene_stack_prepare_frame(Uint64 now_ns);
+int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns);
+bool sdl_scene_stack_handles_main_view(void);
+bool sdl_scene_stack_render_main_layer(void);
+void sdl_scene_stack_render_overlay_layer(void);
+void sdl_scene_stack_clear(void);
+bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot,
+    const sdl_scene_animation* animations, size_t animation_count,
+    Uint64 now_ns);
 
 #endif /* INCLUDED_SDL_MAIN_INTERNAL_H */

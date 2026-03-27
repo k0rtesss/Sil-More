@@ -500,6 +500,7 @@ void resize(const SDL_Rect* screen)
     sdl_view_link_term(&g_views[0], 0);
 
     Term_activate(&g_views[0].t);
+    sdl_scene_stack_on_layout_changed();
 
     if (character_dungeon && p_ptr) {
         p_ptr->update |= PU_PANEL;
