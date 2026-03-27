@@ -7,26 +7,26 @@
   "platform_sdl_exclusions": [
     "src/main-sdl.c",
     "src/main-sdl.h",
-    "src/platform-ui.h",
+    "src/platform-*.h",
     "src/sdl-*.c",
     "src/sdl-*.h"
   ],
   "metrics": {
     "inkey_calls": {
       "files": 41,
-      "matches": 159
+      "matches": 149
     },
     "screen_overlay_calls": {
       "files": 35,
-      "matches": 253
+      "matches": 251
     },
     "term_render_control_calls": {
-      "files": 66,
+      "files": 65,
       "matches": 1795
     },
     "platform_ui_includes": {
-      "files": 28,
-      "matches": 28
+      "files": 0,
+      "matches": 0
     },
     "sdl_named_ui_calls_outside_platform": {
       "files": 6,

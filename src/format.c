@@ -1,8 +1,8 @@
 /* File: format.c */
 
 #include "format.h"
+#include "support/strl.h"
 
-#include <SDL3/SDL.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>

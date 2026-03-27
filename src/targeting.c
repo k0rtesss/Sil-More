@@ -17,7 +17,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-story-font.h"
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {

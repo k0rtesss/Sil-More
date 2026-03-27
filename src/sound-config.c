@@ -1,3 +1,4 @@
+#define ANGBAND_NO_IO_COMPAT
 #include "sound-config.h"
 
 #include "angband.h"
@@ -50,7 +51,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
     }
     
     // Read file
-    SDL_IOStream* f = sdl_fopen(filename, "rb");
+    ang_file* f = sdl_fopen(filename, "rb");
     if (!f) {
         log_info("Sound config file not found: %s (creating with defaults)", filename);
         // Auto-create sound.json with defaults
@@ -58,7 +59,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
         return;
     }
 
-    Sint64 file_size = SDL_GetIOSize(f);
+    ang_file_off_t file_size = ang_file_size_compat(f);
     if (file_size < 0) {
         log_error("Failed to get sound config size: %s", filename);
         sdl_fclose(f);
@@ -79,7 +80,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
         return;
     }
 
-    size_t read = SDL_ReadIO(f, buffer, length);
+    size_t read = ang_file_read_compat(f, buffer, length);
     if (read != length) {
         log_warn("Sound config read truncated: %s (expected %zu, got %zu)", filename, length, read);
     }
@@ -297,7 +298,7 @@ void sound_config_save(const char* filename, const struct sound_config* config)
         return;
     }
     
-    SDL_IOStream* f = sdl_fopen(filename, "wb");
+    ang_file* f = sdl_fopen(filename, "wb");
     if (!f) {
         log_error("Could not write sound config JSON file: %s", filename);
         cJSON_free(json_string);
@@ -306,7 +307,7 @@ void sound_config_save(const char* filename, const struct sound_config* config)
     }
 
     size_t json_len = strlen(json_string);
-    size_t written = SDL_WriteIO(f, json_string, json_len);
+    size_t written = ang_file_write_compat(f, json_string, json_len);
     if (written != json_len) {
         log_error("Failed writing sound config JSON file: %s", filename);
         sdl_fclose(f);

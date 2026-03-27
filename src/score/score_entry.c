@@ -5,6 +5,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
+#include "fs/io_sdl.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"

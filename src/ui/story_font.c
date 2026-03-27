@@ -3,7 +3,7 @@
 #include "../angband.h"
 #include "../externs.h"
 #include "../log/log.h"
-#include "../platform-ui.h"
+#include "../platform-story-font.h"
 #include "story_font.h"
 
 /*

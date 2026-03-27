@@ -13,7 +13,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-config.h"
 #include "runtime-cli.h"
 #include "player/killer.h"
 #include "reliability-checks.h"

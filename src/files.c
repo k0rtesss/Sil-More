@@ -15,7 +15,6 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "platform-ui.h"
 #include "metarun.h"
 #include "player/killer.h"
 #include "reliability-checks.h"
@@ -213,7 +212,6 @@ errr file_character(cptr name, bool full)
 {
     int i, x, y;
     byte a;
-#define SDL_IOprintf SDL_IOprintf
     char c;
     SDL_IOStream* fd;
     SDL_IOStream* fff = NULL;
@@ -457,8 +455,6 @@ errr file_character(cptr name, bool full)
     SDL_IOprintf(fff, "  ['Score' %.9d]\n\n", score_points(&the_score));
 
     sdl_fclose(fff);
-
-#undef SDL_IOprintf
 
     return 0;
 }

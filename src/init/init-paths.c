@@ -1,10 +1,11 @@
+#define ANGBAND_NO_IO_COMPAT
 #include "angband.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
-#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL.h>
 
 #define SIL_USER_ROOT "sil-more"
 #define SIL_USER_DATA_DIR "data"
@@ -176,13 +177,14 @@ static bool has_valid_metarun_data(const char* meta_dir)
         return false;
 
     /* File exists and is readable */
-    SDL_IOStream* fd = sdl_fopen(meta_path, "rb");
+    ang_file* fd = sdl_fopen(meta_path, "rb");
     if (!fd)
         return false;
 
     /* Check if it has valid header */
     meta_file_header meta_hdr;
-    bool valid = (SDL_ReadIO(fd, &meta_hdr, sizeof(meta_hdr)) == sizeof(meta_hdr))
+    bool valid = (ang_file_read_compat(fd, &meta_hdr, sizeof(meta_hdr))
+        == sizeof(meta_hdr))
         && meta_hdr.entry_count > 0;
 
     sdl_fclose(fd);
@@ -386,17 +388,17 @@ static void seed_user_saves_from_install(const char* user_save_dir)
 }
 #endif
 
-/* Copy a file using SDL IO streams (works with Android assets via SDL_IOFromFile). */
+/* Copy a file using the platform IO facade (works with Android assets). */
 static bool copy_file_io(const char* src, const char* dst)
 {
     if (!src || !*src || !dst || !*dst)
         return false;
 
-    SDL_IOStream* in = sdl_fopen(src, "rb");
+    ang_file* in = sdl_fopen(src, "rb");
     if (!in)
         return false;
 
-    SDL_IOStream* out = sdl_fopen(dst, "wb");
+    ang_file* out = sdl_fopen(dst, "wb");
     if (!out)
     {
         sdl_fclose(in);
@@ -407,11 +409,11 @@ static bool copy_file_io(const char* src, const char* dst)
     char buf[8192];
     for (;;)
     {
-        size_t r = SDL_ReadIO(in, buf, sizeof(buf));
+        size_t r = ang_file_read_compat(in, buf, sizeof(buf));
         if (r == 0)
             break;
 
-        size_t w = SDL_WriteIO(out, buf, r);
+        size_t w = ang_file_write_compat(out, buf, r);
         if (w != r)
         {
             ok = false;

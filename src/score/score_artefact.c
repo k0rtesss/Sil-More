@@ -2,6 +2,7 @@
 
 #include "angband.h"
 #include "externs.h"
+#include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "score/score_format.h"
@@ -47,7 +48,7 @@ static void artefact_db_build_path(char* path, size_t len)
 
 static void artefact_db_init_header(artefact_db_header* header)
 {
-    SDL_memset(header, 0, sizeof(*header));
+    memset(header, 0, sizeof(*header));
     memcpy(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic));
     header->version = SCORE_ARTEFACT_DB_VERSION;
 }
@@ -116,7 +117,7 @@ static bool artefact_db_find(SDL_IOStream* file, const score_guid64* guid,
 static void artefact_db_snapshot(const artefact_type* art,
                                  artefact_db_record_v1* rec)
 {
-    SDL_memset(rec, 0, sizeof(*rec));
+    memset(rec, 0, sizeof(*rec));
     rec->guid = art->guid;
     SDL_strlcpy(rec->name, art->name, sizeof(rec->name));
     rec->tval = art->tval;

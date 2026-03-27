@@ -1,17 +1,17 @@
 /* File: rng.c */
 
 #include "rng.h"
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_stdinc.h>
+#include "platform-time.h"
 #include <time.h>
 
-static Uint64 rng_state = 0;
+static u64b rng_state = 0;
 
-static Uint64 sanitize_seed(Uint64 seed)
+static u64b sanitize_seed(u64b seed)
 {
     if (seed == 0)
     {
-        seed = ((Uint64)time(NULL) << 32) ^ SDL_GetPerformanceCounter() ^ 0x9E3779B97F4A7C15ULL;
+        seed = ((u64b)time(NULL) << 32) ^ platform_perf_counter()
+            ^ 0x9E3779B97F4A7C15ULL;
     }
     return seed;
 }
@@ -34,15 +34,15 @@ void Rand_state_pop(u64b saved_state)
     rng_state = saved_state;
 }
 
-static Uint32 rng_random_bits(void) { return SDL_rand_bits_r(&rng_state); }
+static u32b rng_random_bits(void) { return platform_rand_bits(&rng_state); }
 
 u32b Rand_div(u32b m)
 {
     if (m <= 1)
         return 0;
 
-    Uint32 threshold = UINT32_MAX - (UINT32_MAX % m);
-    Uint32 value;
+    u32b threshold = UINT32_MAX - (UINT32_MAX % m);
+    u32b value;
 
     do
     {

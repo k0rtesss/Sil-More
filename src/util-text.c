@@ -1,7 +1,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
-#include "platform-ui.h"
+#include "platform-story-font.h"
 #include "ui/story_font.h"
 #include "log/log.h"
 

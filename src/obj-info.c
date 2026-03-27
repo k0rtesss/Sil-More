@@ -12,9 +12,20 @@
 #include "externs.h"
 #include "log/log.h"
 
+#include <stdint.h>
+#include <stdlib.h>
+
 /* true if a paragraph break should be output before next p_text_out() */
 static bool new_paragraph = false;
-static SDL_IOStream* object_info_capture_stream = NULL;
+typedef struct object_info_text_buffer
+{
+    char* data;
+    size_t len;
+    size_t cap;
+} object_info_text_buffer;
+
+static object_info_text_buffer* object_info_capture_buffer = NULL;
+static bool object_info_capture_failed = false;
 static int object_info_capture_pos = 0;
 
 typedef struct object_info_screen_capture
@@ -28,6 +39,62 @@ typedef struct object_info_screen_capture
 
 static void object_info_screen_multi_body(const object_type** objects,
     const char** headings, int count, bool clear_current_line);
+static bool object_info_buffer_append(const void* data, size_t len);
+static bool object_info_buffer_append_byte(unsigned char value);
+
+static bool object_info_buffer_reserve(size_t needed)
+{
+    char* grown;
+    size_t new_cap;
+
+    if (!object_info_capture_buffer)
+        return false;
+
+    if (needed <= object_info_capture_buffer->cap)
+        return true;
+
+    new_cap = object_info_capture_buffer->cap ? object_info_capture_buffer->cap : 256;
+    while (new_cap < needed)
+    {
+        if (new_cap > (SIZE_MAX / 2))
+            return false;
+        new_cap *= 2;
+    }
+
+    grown = realloc(object_info_capture_buffer->data, new_cap);
+    if (!grown)
+        return false;
+
+    object_info_capture_buffer->data = grown;
+    object_info_capture_buffer->cap = new_cap;
+    return true;
+}
+
+static bool object_info_buffer_append(const void* data, size_t len)
+{
+    size_t needed;
+
+    if (!object_info_capture_buffer || !data)
+        return false;
+    if (len == 0)
+        return true;
+
+    needed = object_info_capture_buffer->len + len + 1;
+    if (needed < object_info_capture_buffer->len)
+        return false;
+    if (!object_info_buffer_reserve(needed))
+        return false;
+
+    memcpy(object_info_capture_buffer->data + object_info_capture_buffer->len,
+        data, len);
+    object_info_capture_buffer->len += len;
+    return true;
+}
+
+static bool object_info_buffer_append_byte(unsigned char value)
+{
+    return object_info_buffer_append(&value, 1);
+}
 
 static void p_text_out(cptr str)
 {
@@ -59,7 +126,7 @@ static void text_out_to_object_info_buffer(byte attr, cptr str)
 
     (void)attr;
 
-    if (!object_info_capture_stream || !str)
+    if (!object_info_capture_buffer || object_info_capture_failed || !str)
         return;
 
     while (*s)
@@ -73,8 +140,11 @@ static void text_out_to_object_info_buffer(byte attr, cptr str)
         {
             for (int i = 0; i < text_out_indent; i++)
             {
-                unsigned char space = ' ';
-                SDL_WriteIO(object_info_capture_stream, &space, 1);
+                if (!object_info_buffer_append_byte(' '))
+                {
+                    object_info_capture_failed = true;
+                    return;
+                }
                 object_info_capture_pos++;
             }
         }
@@ -98,8 +168,11 @@ static void text_out_to_object_info_buffer(byte attr, cptr str)
             }
             else
             {
-                unsigned char newline = '\n';
-                SDL_WriteIO(object_info_capture_stream, &newline, 1);
+                if (!object_info_buffer_append_byte('\n'))
+                {
+                    object_info_capture_failed = true;
+                    return;
+                }
                 object_info_capture_pos = 0;
                 continue;
             }
@@ -118,7 +191,11 @@ static void text_out_to_object_info_buffer(byte attr, cptr str)
 
             ch = (isprint((unsigned char)s[n]) ? s[n] : ' ');
             byte = (unsigned char)ch;
-            SDL_WriteIO(object_info_capture_stream, &byte, 1);
+            if (!object_info_buffer_append_byte(byte))
+            {
+                object_info_capture_failed = true;
+                return;
+            }
             object_info_capture_pos++;
         }
 
@@ -130,9 +207,10 @@ static void text_out_to_object_info_buffer(byte attr, cptr str)
         if (*s == '\n')
             s++;
 
+        if (!object_info_buffer_append_byte('\n'))
         {
-            unsigned char newline = '\n';
-            SDL_WriteIO(object_info_capture_stream, &newline, 1);
+            object_info_capture_failed = true;
+            return;
         }
         object_info_capture_pos = 0;
 
@@ -1802,23 +1880,14 @@ void object_info_screen(const object_type* o_ptr)
 static char* capture_object_info_screen_multi_text(const object_type** objects,
     const char** headings, int count)
 {
-    SDL_IOStream* stream;
+    object_info_text_buffer buffer = {0};
     void (*old_hook)(byte, cptr) = text_out_hook;
     int old_wrap = text_out_wrap;
     int old_indent = text_out_indent;
     int term_wid = 80;
     int term_hgt = 24;
-    Sint64 stream_size;
-    SDL_PropertiesID props;
-    char* dynamic_mem;
-    char* copy;
-    size_t copy_size;
 
     if (!objects || count <= 0)
-        return NULL;
-
-    stream = SDL_IOFromDynamicMem();
-    if (!stream)
         return NULL;
 
     Term_get_size(&term_wid, &term_hgt);
@@ -1826,39 +1895,29 @@ static char* capture_object_info_screen_multi_text(const object_type** objects,
         term_wid = 20;
     (void)term_hgt;
 
-    object_info_capture_stream = stream;
+    object_info_capture_buffer = &buffer;
+    object_info_capture_failed = false;
     object_info_capture_pos = 0;
     text_out_hook = text_out_to_object_info_buffer;
     text_out_wrap = term_wid - 1;
     text_out_indent = 0;
     object_info_screen_multi_body(objects, headings, count, false);
 
-    {
-        unsigned char zero = '\0';
-        SDL_WriteIO(stream, &zero, 1);
-    }
-
-    stream_size = SDL_GetIOSize(stream);
-    props = SDL_GetIOProperties(stream);
-    dynamic_mem = SDL_GetPointerProperty(props,
-        SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, NULL);
-
-    copy_size = (stream_size > 0) ? (size_t)stream_size : 1;
-    copy = mem_alloc_array(copy_size, char);
-    SDL_memset(copy, 0, copy_size);
-    if (dynamic_mem && stream_size > 0)
-        memcpy(copy, dynamic_mem, copy_size);
-    copy[copy_size - 1] = '\0';
-
     text_out_hook = old_hook;
     text_out_wrap = old_wrap;
     text_out_indent = old_indent;
     new_paragraph = false;
-    object_info_capture_stream = NULL;
+    if (object_info_capture_failed || !object_info_buffer_append_byte('\0'))
+    {
+        object_info_capture_buffer = NULL;
+        object_info_capture_pos = 0;
+        free(buffer.data);
+        return NULL;
+    }
+    object_info_capture_buffer = NULL;
     object_info_capture_pos = 0;
-    SDL_CloseIO(stream);
 
-    return copy;
+    return buffer.data;
 }
 
 static int object_info_buffer_line_count(cptr text)
@@ -1980,8 +2039,8 @@ static bool object_info_screen_capture_build(
     if (!capture || !objects || count <= 0 || !saved_term)
         return false;
 
-    SDL_memset(capture, 0, sizeof(*capture));
-    SDL_memset(&scratch, 0, sizeof(scratch));
+    memset(capture, 0, sizeof(*capture));
+    memset(&scratch, 0, sizeof(scratch));
 
     Term_get_size(&term_wid, &term_hgt);
     if (term_wid < 20)

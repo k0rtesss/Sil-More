@@ -14,7 +14,7 @@
 #include "log/log.h"
 #include "gen-log.h"
 #include "metarun.h"
-#include <SDL3/SDL.h>
+#include "platform-time.h"
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +38,7 @@ typedef struct level_gen_screen_state {
     int total_failures;
     int stage;
     int spinner;
-    Uint64 last_draw_ticks;
+    u64b last_draw_ticks;
     char depth_label[64];
     char status_text[160];
     char detail_text[160];
@@ -1039,13 +1039,13 @@ static void level_gen_screen_draw_now(void)
 
 static void level_gen_screen_maybe_draw(bool force)
 {
-    Uint64 now;
-    Uint64 min_interval;
+    u64b now;
+    u64b min_interval;
 
     if (!level_gen_screen.active || !Term)
         return;
 
-    now = SDL_GetTicks();
+    now = platform_monotonic_ms();
     min_interval = level_gen_screen.debug ? 75 : 125;
 
     if (!force && (now - level_gen_screen.last_draw_ticks < min_interval))

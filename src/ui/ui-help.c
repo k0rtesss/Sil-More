@@ -12,7 +12,7 @@
 #include "ui-help.h"
 #include "ui-information-scene.h"
 #include "externs.h"
-#include "platform-ui.h"
+#include "platform-input.h"
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>

@@ -8,7 +8,8 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
-#include "platform-ui.h"
+#include "platform-input.h"
+#include "platform-story-font.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"

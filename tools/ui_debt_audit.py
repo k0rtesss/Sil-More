@@ -20,7 +20,7 @@ COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
 PLATFORM_SDL_GLOBS = (
     "src/main-sdl.c",
     "src/main-sdl.h",
-    "src/platform-ui.h",
+    "src/platform-*.h",
     "src/sdl-*.c",
     "src/sdl-*.h",
 )
@@ -69,7 +69,7 @@ METRICS = (
         label="get_sdl_*/set_sdl_* usage outside platform code",
         pattern=re.compile(r"\b(?:get|set)_sdl_[A-Za-z0-9_]+\s*\("),
         exclude_globs=PLATFORM_SDL_GLOBS,
-        notes="Excludes SDL platform implementation files and the platform-ui.h declaration surface.",
+        notes="Excludes SDL platform implementation files and platform-facing declaration headers.",
     ),
 )
 

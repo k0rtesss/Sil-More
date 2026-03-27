@@ -15,11 +15,12 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "runtime-cli.h"
-#include "platform-ui.h"
+#include "platform-config.h"
+#include "platform-time.h"
+#include "platform-story-font.h"
 #include "metarun.h"
 #include "item_set.h"
 #include "init/init2-internal.h"
-#include <SDL3/SDL.h>
 
 void autoinscribe_clean(void)
 {
@@ -592,7 +593,7 @@ static void display_introduction_with_layout(
     if (sdl_config_should_force_intro_flame())
         intro_style = INTRO_STYLE_FLAME;
     else if (op_ptr->intro_style == INTRO_STYLE_RANDOM)
-        intro_style = (int)(SDL_GetTicks() % 5u);
+        intro_style = (int)(platform_monotonic_ms() % 5u);
     else
         intro_style = (int)op_ptr->intro_style;
 

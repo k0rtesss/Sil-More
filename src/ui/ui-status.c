@@ -8,7 +8,8 @@
 #include "ui/ui-status.h"
 
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-config.h"
+#include "platform-story-font.h"
 #include "metarun.h"
 #include "player/player-calc.h"
 #include "player/identification.h"

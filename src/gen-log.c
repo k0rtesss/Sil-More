@@ -83,13 +83,8 @@ void gen_log_init(const char *exe_path)
     char parsed_path[1024];
     char summary_path[1024];
     char parsed_summary_path[1024];
-    char base_log_path[1024];
-    char base_summary_path[1024];
     time_t now;
     struct tm *timeinfo;
-    const char *sdl_base = NULL;
-    bool use_sdl_base = false;
-    
     if (gen_log_initialized) return;
     
     /* Store exe_path for reference */
@@ -99,23 +94,9 @@ void gen_log_init(const char *exe_path)
         stored_exe_path[sizeof(stored_exe_path) - 1] = '\0';
     }
     
-    /* Build log file paths in the executable directory (prefer SDL base path). */
-    sdl_base = SDL_GetBasePath();
-    if (sdl_base && sdl_base[0])
-    {
-        use_sdl_base = path_build(base_log_path, sizeof(base_log_path), sdl_base, "generation.txt")
-            && path_build(base_summary_path, sizeof(base_summary_path), sdl_base, "generation-summary.txt");
-        if (use_sdl_base)
-        {
-            (void)strnfmt(log_path, sizeof(log_path), "%s", base_log_path);
-            (void)strnfmt(summary_path, sizeof(summary_path), "%s", base_summary_path);
-        }
-    }
-    if (!use_sdl_base)
-    {
-        (void)gen_log_build_path(log_path, sizeof(log_path), exe_path, "generation.txt");
-        (void)gen_log_build_path(summary_path, sizeof(summary_path), exe_path, "generation-summary.txt");
-    }
+    /* Build log file paths in the executable directory. */
+    (void)gen_log_build_path(log_path, sizeof(log_path), exe_path, "generation.txt");
+    (void)gen_log_build_path(summary_path, sizeof(summary_path), exe_path, "generation-summary.txt");
     
     /* Parse path and open file */
     if (!path_parse(parsed_path, sizeof(parsed_path), log_path))

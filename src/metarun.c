@@ -13,7 +13,9 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-config.h"
+#include "platform-input.h"
+#include "platform-story-font.h"
 #include "reliability-checks.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
@@ -25,7 +27,6 @@
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */
 #include "supplies.h"
-#include <SDL3/SDL.h>
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>

@@ -3,7 +3,9 @@
 
 #include "externs.h"
 #include "app/app-session.h"
+#define ANGBAND_NO_IO_COMPAT
 #include "fs/io_sdl.h"
+#undef ANGBAND_NO_IO_COMPAT
 #include "fs/path.h"
 #include "log/log.h"
 #include "main.h"

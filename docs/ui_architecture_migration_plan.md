@@ -424,6 +424,13 @@ Validation:
 Exit when:
 - the current target split is real in semantics, not only in source layout
 
+Status:
+- complete in the working tree on 2026-03-28
+- `sil-core` now builds without SDL headers or SDL link requirements
+- legacy frontend ownership is isolated behind `sil-legacy-compat` and
+  `sil-platform-sdl`, and `platform-ui.h` has been replaced by the narrower
+  neutral boundary headers
+
 ## Stage UI8: WASM And Web Bridge
 Goal:
 - make the new boundary usable from a browser-hosted frontend

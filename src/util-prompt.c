@@ -1,7 +1,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
-#include "platform-ui.h"
+#include "platform-input.h"
 
 static cptr g_prompt_interaction_label = NULL;
 

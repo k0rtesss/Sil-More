@@ -14,7 +14,6 @@
 #include "log/log.h"
 #include "gen-log.h"
 #include "metarun.h"
-#include <SDL3/SDL.h>
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>
 #include <string.h>

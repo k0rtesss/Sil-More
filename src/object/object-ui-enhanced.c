@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "platform-ui.h"
+#include "platform-input.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
 #include "object/object-slot.h"

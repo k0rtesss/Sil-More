@@ -2,9 +2,10 @@
 
 #include "angband.h"
 #include "externs.h"
+#include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-input.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "score/score_logic.h"
@@ -12,7 +13,6 @@
 #include "ui/ui-information-scene.h"
 #include "metarun.h"
 
-#include <SDL3/SDL.h>
 #include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>

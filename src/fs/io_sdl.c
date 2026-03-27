@@ -1,9 +1,11 @@
+#define ANGBAND_NO_IO_COMPAT
 #include "angband.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include <SDL3/SDL.h>
+#include <stdarg.h>
 
 #define TAB_COLUMNS 8
 
@@ -203,5 +205,106 @@ ang_file_off_t sdl_size(ang_file* stream)
         log_debug("sdl_size: Failed: %s", SDL_GetError());
     }
     return size;
+}
+
+ang_file* ang_file_open_compat(cptr file, cptr mode)
+{
+    return sdl_fopen(file, mode);
+}
+
+bool ang_file_close_compat(ang_file* stream)
+{
+    return sdl_fclose(stream) == 0;
+}
+
+size_t ang_file_read_compat(ang_file* stream, void* buf, size_t n)
+{
+    return SDL_ReadIO(stream, buf, n);
+}
+
+size_t ang_file_write_compat(ang_file* stream, const void* buf, size_t n)
+{
+    return SDL_WriteIO(stream, buf, n);
+}
+
+ang_file_off_t ang_file_seek_compat(ang_file* stream, ang_file_off_t offset,
+    int whence)
+{
+    int actual_whence = SDL_IO_SEEK_SET;
+
+    switch (whence)
+    {
+    case ANG_FILE_SEEK_CUR: actual_whence = SDL_IO_SEEK_CUR; break;
+    case ANG_FILE_SEEK_END: actual_whence = SDL_IO_SEEK_END; break;
+    case ANG_FILE_SEEK_SET:
+    default: actual_whence = SDL_IO_SEEK_SET; break;
+    }
+
+    return SDL_SeekIO(stream, offset, actual_whence);
+}
+
+ang_file_off_t ang_file_tell_compat(ang_file* stream)
+{
+    return SDL_TellIO(stream);
+}
+
+ang_file_off_t ang_file_size_compat(ang_file* stream)
+{
+    return SDL_GetIOSize(stream);
+}
+
+int ang_file_flush_compat(ang_file* stream)
+{
+    return SDL_FlushIO(stream);
+}
+
+size_t ang_file_printf_compat(ang_file* stream, const char* fmt, ...)
+{
+    va_list ap;
+    va_list copy;
+    int needed;
+    size_t written = 0;
+    char stack_buf[1024];
+    char* heap_buf = NULL;
+    char* out = stack_buf;
+
+    va_start(ap, fmt);
+    va_copy(copy, ap);
+    needed = vsnprintf(NULL, 0, fmt, copy);
+    va_end(copy);
+
+    if (needed < 0)
+    {
+        va_end(ap);
+        return 0;
+    }
+
+    if ((size_t)needed + 1 > sizeof(stack_buf))
+    {
+        heap_buf = malloc((size_t)needed + 1);
+        if (!heap_buf)
+        {
+            va_end(ap);
+            return 0;
+        }
+        out = heap_buf;
+    }
+
+    if (vsnprintf(out, (size_t)needed + 1, fmt, ap) == needed)
+        written = SDL_WriteIO(stream, out, (size_t)needed);
+
+    va_end(ap);
+    free(heap_buf);
+    return written;
+}
+
+bool ang_file_write_u8_compat(ang_file* stream, byte value)
+{
+    return SDL_WriteIO(stream, &value, 1) == 1;
+}
+
+const char* ang_file_get_error_compat(void)
+{
+    return SDL_GetError();
 }
 

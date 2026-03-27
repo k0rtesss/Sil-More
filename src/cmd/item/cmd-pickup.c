@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
-#include "platform-ui.h"
+#include "platform-story-font.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"

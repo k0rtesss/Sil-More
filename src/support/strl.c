@@ -1,4 +1,5 @@
 #include "support/strl.h"
+#include <ctype.h>
 #include <string.h>
 
 size_t SDL_strlcpy(char* buf, const char* src, size_t bufsize)
@@ -28,4 +29,53 @@ size_t SDL_strlcat(char* buf, const char* src, size_t bufsize)
     }
 
     return dlen + strlen(src);
+}
+
+int SDL_strcasecmp(const char* left, const char* right)
+{
+    unsigned char a;
+    unsigned char b;
+
+    if (left == right)
+        return 0;
+    if (!left)
+        return -1;
+    if (!right)
+        return 1;
+
+    while (*left && *right)
+    {
+        a = (unsigned char)tolower((unsigned char)*left++);
+        b = (unsigned char)tolower((unsigned char)*right++);
+        if (a != b)
+            return (int)a - (int)b;
+    }
+
+    return (int)(unsigned char)tolower((unsigned char)*left)
+        - (int)(unsigned char)tolower((unsigned char)*right);
+}
+
+int SDL_strncasecmp(const char* left, const char* right, size_t len)
+{
+    unsigned char a;
+    unsigned char b;
+
+    if (left == right || len == 0)
+        return 0;
+    if (!left)
+        return -1;
+    if (!right)
+        return 1;
+
+    while (len-- > 0)
+    {
+        a = (unsigned char)tolower((unsigned char)*left++);
+        b = (unsigned char)tolower((unsigned char)*right++);
+        if (a != b)
+            return (int)a - (int)b;
+        if (a == '\0')
+            return 0;
+    }
+
+    return 0;
 }

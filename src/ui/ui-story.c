@@ -4,7 +4,8 @@
 #include "externs.h"
 
 #include "log/log.h"
-#include "platform-ui.h"
+#include "platform-input.h"
+#include "platform-story-font.h"
 #include "metarun.h"
 #include "ui/story_font.h"
 #include "ui/ui-information-scene.h"

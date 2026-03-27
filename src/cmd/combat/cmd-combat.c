@@ -14,6 +14,7 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "platform-time.h"
 
 static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr);
 
@@ -1723,7 +1724,7 @@ void py_attack_aux(int y, int x, int attack_type)
             sound(weapon_swing_type);
 
             // Delay before result sound (varies by weapon type)
-            SDL_Delay(weapon_animation_delay(weapon_swing_type));
+            platform_delay_ms((u32b)weapon_animation_delay(weapon_swing_type));
 
             // Determine result sound: armor blocked, hit, or nothing
             u16b result_sound = MSG_ARMOR; // default to armor
@@ -1949,7 +1950,7 @@ void py_attack_aux(int y, int x, int attack_type)
             sound(weapon_swing_type);
 
             // Delay before message (shorter for misses, still weapon-aware)
-            SDL_Delay(weapon_animation_delay(weapon_swing_type) - 200);
+            platform_delay_ms((u32b)MAX(0, weapon_animation_delay(weapon_swing_type) - 200));
 
             /* Message - no additional sound for miss */
             msg_format("You miss %s.", m_name);

@@ -839,7 +839,7 @@ static drop_entry* choose_supply_entry(drop_entry* entries, size_t count,
             if (new_cap < b->count + 1)
                 new_cap = b->count + 1;
             drop_entry** new_items
-                = (drop_entry**)SDL_realloc(b->items, new_cap * sizeof(*new_items));
+                = (drop_entry**)realloc(b->items, new_cap * sizeof(*new_items));
             if (!new_items)
             {
                 for (int j = 0; j < DROP_SUPPLY_GROUP_MAX; j++)

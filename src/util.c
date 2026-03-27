@@ -13,7 +13,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "reliability-checks.h"
-#include <SDL3/SDL.h>
+#include <sys/stat.h>
 
 bool no_light(void)
 {
@@ -155,10 +155,11 @@ void user_name(char* buf, size_t len, int id)
 /* SDL3-compatible modification time check */
 errr check_modification_date_sdl(cptr raw_path, cptr txt_path)
 {
-    SDL_PathInfo txt_info, raw_info;
+    struct stat txt_info;
+    struct stat raw_info;
 
     /* Get info for text file */
-    if (!SDL_GetPathInfo(txt_path, &txt_info))
+    if (stat(txt_path, &txt_info) != 0)
     {
         /* No text file or error - continue with raw */
         log_debug("check_modification_date: Cannot get info for txt file '%s'",
@@ -167,7 +168,7 @@ errr check_modification_date_sdl(cptr raw_path, cptr txt_path)
     }
 
     /* Get info for raw file */
-    if (!SDL_GetPathInfo(raw_path, &raw_info))
+    if (stat(raw_path, &raw_info) != 0)
     {
         /* No raw file - need to regenerate */
         log_info("check_modification_date: No raw file '%s' - regenerating",
@@ -176,17 +177,17 @@ errr check_modification_date_sdl(cptr raw_path, cptr txt_path)
     }
 
     /* Ensure text file is not newer than raw file */
-    if (txt_info.modify_time > raw_info.modify_time)
+    if (txt_info.st_mtime > raw_info.st_mtime)
     {
         /* Text file is newer - reprocess */
         log_info("check_modification_date: txt file newer (txt=%lld, raw=%lld) - regenerating '%s'",
-            (long long)txt_info.modify_time, (long long)raw_info.modify_time,
+            (long long)txt_info.st_mtime, (long long)raw_info.st_mtime,
             txt_path);
         return (-1);
     }
 
     log_info("check_modification_date: raw file is up to date (txt=%lld, raw=%lld) for '%s'",
-        (long long)txt_info.modify_time, (long long)raw_info.modify_time,
+        (long long)txt_info.st_mtime, (long long)raw_info.st_mtime,
         txt_path);
     return (0);
 }

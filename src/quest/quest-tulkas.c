@@ -430,7 +430,7 @@ void tulkas_quest_interaction(void)
                 SDL_strlcpy(temp_text, init_texts[i], sizeof(temp_text));
                 
                 /* Replace [monster name] with actual monster name */
-                char* monster_pos = SDL_strstr(temp_text, "[monster name]");
+                char* monster_pos = strstr(temp_text, "[monster name]");
                 if (monster_pos) {
                     char before[512], after[512];
                     int before_len = monster_pos - temp_text;
@@ -441,7 +441,7 @@ void tulkas_quest_interaction(void)
                 }
                 
                 /* Replace [artifact name] with actual artifact name */
-                char* artifact_pos = SDL_strstr(temp_text, "[artifact name]");
+                char* artifact_pos = strstr(temp_text, "[artifact name]");
                 if (artifact_pos) {
                     char before[512], after[512];
                     int before_len = artifact_pos - temp_text;

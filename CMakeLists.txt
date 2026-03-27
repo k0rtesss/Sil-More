@@ -91,7 +91,6 @@ set(SIL_MORE_SOURCES_CORE
     src/variable.c
     src/wizard1.c
     src/wizard2.c
-    src/z-term.c
 )
 
 set(SIL_MORE_SOURCES_CMD
@@ -126,7 +125,6 @@ set(SIL_MORE_SOURCES_INIT
     src/init/init-info.c
     src/init/init-flags.c
     src/init/init-object-bonuses.c
-    src/init/init-paths.c
     src/init/init-parse-limits.c
     src/init/init-parse-partition.c
     src/init/init-parse-runtypes.c
@@ -307,6 +305,11 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/story_font.c
 )
 
+set(SIL_MORE_SOURCES_LEGACY_COMPAT
+    src/z-term.c
+    ${SIL_MORE_SOURCES_FRONTEND}
+)
+
 set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
     src/sdl-layout.c
@@ -319,6 +322,9 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/pane.c
     src/fs/io_sdl.c
     src/fs/path.c
+    src/init/init-paths.c
+    src/platform-time.c
+    src/log/bootstrap.c
     src/sdl-config.c
     src/sdl-sound.c
     src/sound-config.c
@@ -329,7 +335,6 @@ set(SIL_MORE_SOURCES_APP
 )
 
 set(SIL_MORE_SOURCES_LOG
-    src/log/bootstrap.c
     src/log/fatal.c
 )
 
@@ -355,7 +360,6 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_FS}
     ${SIL_MORE_SOURCES_RUNTIME}
     ${SIL_MORE_SOURCES_APP_BOUNDARY}
-    ${SIL_MORE_SOURCES_FRONTEND}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}
 )
@@ -365,7 +369,9 @@ target_compile_options(sil-build-config INTERFACE
   $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra>
   $<$<C_COMPILER_ID:MSVC>:/W4>
 )
-target_include_directories(sil-build-config INTERFACE src)
+target_include_directories(sil-build-config INTERFACE
+  src
+)
 
 add_library(sil-strict-build-config INTERFACE)
 target_compile_options(sil-strict-build-config INTERFACE
@@ -424,7 +430,11 @@ endif()
 
 add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
 set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(sil-core PUBLIC sil-build-config SDL3::SDL3 log)
+target_link_libraries(sil-core PUBLIC sil-build-config log)
+
+add_library(sil-legacy-compat OBJECT ${SIL_MORE_SOURCES_LEGACY_COMPAT})
+set_target_properties(sil-legacy-compat PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(sil-legacy-compat PUBLIC sil-build-config log)
 
 if (SIL_STRICT_WARNINGS)
   add_library(sil-phase01-strict-gate OBJECT
@@ -441,7 +451,6 @@ if (SIL_STRICT_WARNINGS)
   target_link_libraries(sil-phase01-strict-gate PRIVATE
     sil-build-config
     sil-strict-build-config
-    SDL3::SDL3
     log
   )
 endif()
@@ -482,7 +491,7 @@ if(MINGW)
   target_link_options(sil-more PRIVATE -mwindows)
 endif()
 
-target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core)
+target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core sil-legacy-compat)
 
 if(BUILD_TESTING)
   add_executable(sil-phase01-tests
@@ -505,6 +514,7 @@ if(BUILD_TESTING)
   target_link_libraries(sil-ui1-tests PRIVATE
     sil-build-config
     sil-core
+    sil-legacy-compat
     sil-platform-sdl
   )
   if(SIL_STRICT_WARNINGS)

@@ -58,10 +58,10 @@ static void trim_inplace(char* s)
     while (*p && isspace((unsigned char)*p))
         p++;
     if (p != s)
-        memmove(s, p, SDL_strlen(p) + 1);
+        memmove(s, p, strlen(p) + 1);
 
     /* right trim */
-    size_t len = SDL_strlen(s);
+    size_t len = strlen(s);
     while (len > 0 && isspace((unsigned char)s[len - 1]))
         s[--len] = '\0';
 }
@@ -71,7 +71,7 @@ static void strip_single_quotes_inplace(char* s)
     if (!s)
         return;
 
-    size_t len = SDL_strlen(s);
+    size_t len = strlen(s);
     if (len >= 2 && s[0] == '\'' && s[len - 1] == '\'')
     {
         memmove(s, s + 1, len - 2);
@@ -274,7 +274,7 @@ static int item_set_parse_member_token(const char* token)
 
     /* Heuristic: treat as GUID if it contains hex letters/separators/prefix, or is 16+ chars */
     bool looks_like_guid = false;
-    size_t len = SDL_strlen(tmp);
+    size_t len = strlen(tmp);
     if (len >= 16)
         looks_like_guid = true;
     for (size_t i = 0; i < len && !looks_like_guid; i++)
@@ -364,7 +364,7 @@ static bool item_sets_ensure_capacity(int needed)
     while (new_cap < needed)
         new_cap *= 2;
 
-    item_set_type* resized = SDL_realloc(set_info, (size_t)new_cap * sizeof(*set_info));
+    item_set_type* resized = realloc(set_info, (size_t)new_cap * sizeof(*set_info));
     if (!resized)
         return false;
 

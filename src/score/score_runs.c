@@ -3,6 +3,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
+#include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -12,7 +13,6 @@
 #include "score/score_runs.h"
 #include "score/score_logic.h"
 
-#include <SDL3/SDL.h>
 #include <ctype.h>
 #include <limits.h>
 #include <string.h>

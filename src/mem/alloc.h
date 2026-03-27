@@ -4,7 +4,7 @@
 #define INCLUDED_MEM_ALLOC_H
 
 #include "../h-basic.h"
-#include <SDL3/SDL.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -12,7 +12,7 @@
  * These replace the legacy z-virt.h macro-based system with:
  * - Better type safety (compiler checks types)
  * - Clearer semantics (explicit return values)
- * - Standard behavior (uses SDL_calloc/SDL_free)
+ * - Standard behavior (uses calloc/free)
  * - Better debugging (inline functions appear in stack traces)
  */
 
@@ -28,7 +28,7 @@
  *   if (!array) { handle_error(); }
  */
 #define mem_alloc_array(count, type) \
-    ((type*)SDL_calloc((count), sizeof(type)))
+    ((type*)calloc((count), sizeof(type)))
 
 /**
  * Allocate and zero-initialize a single object.
@@ -41,7 +41,7 @@
  *   if (!mon) { handle_error(); }
  */
 #define mem_alloc(type) \
-    ((type*)SDL_calloc(1, sizeof(type)))
+    ((type*)calloc(1, sizeof(type)))
 
 /**
  * Free memory and return NULL.
@@ -55,7 +55,7 @@
  */
 static inline void* mem_free(void* ptr)
 {
-    if (ptr) SDL_free(ptr);
+    if (ptr) free(ptr);
     return NULL;
 }
 

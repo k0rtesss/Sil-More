@@ -2,6 +2,10 @@
 #include "externs.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "support/strl.h"
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_filesystem.h>
 
 #define FS_PREF_ORG "Sil-QH"
 
