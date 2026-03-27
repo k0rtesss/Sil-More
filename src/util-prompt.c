@@ -3,6 +3,8 @@
 #include "externs.h"
 #include "platform-ui.h"
 
+static cptr g_prompt_interaction_label = NULL;
+
 /*
  * Get some input at the cursor location.
  */
@@ -32,10 +34,55 @@ static char prompt_inkey_with_wait_reason(u16b reason)
     return ch;
 }
 
+static bool prompt_snapshot_interaction_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void prompt_snapshot_begin(u16b kind, u16b reason, u16b flags,
+    byte prompt_attr, cptr prompt, byte detail_attr, cptr detail)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_begin_interaction(session, kind, reason, flags);
+    app_session_set_interaction_prompt(session, prompt_attr, prompt);
+    if (detail && detail[0])
+        app_session_set_interaction_detail(session, detail_attr, detail);
+}
+
+static void prompt_snapshot_set_value(byte value_attr, cptr value,
+    s16b cursor_index)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_set_interaction_value(session, value_attr, value,
+        cursor_index);
+}
+
+static void prompt_snapshot_clear(void)
+{
+    app_session_clear_interaction(app_session_current());
+}
+
+static void prompt_snapshot_present(void)
+{
+    if (!prompt_snapshot_interaction_active())
+        return;
+
+    Term_fresh();
+}
+
 bool askfor_aux(char* buf, size_t len)
 {
     int y, x;
     int term_wid = active_term_width();
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     size_t k = 0;
 
@@ -60,14 +107,35 @@ bool askfor_aux(char* buf, size_t len)
     buf[len - 1] = '\0';
 
     /* Display the default answer */
-    Term_erase(x, y, (int)len);
-    Term_putstr(x, y, -1, TERM_YELLOW, buf);
+    if (!snapshot_interaction)
+    {
+        Term_erase(x, y, (int)len);
+        Term_putstr(x, y, -1, TERM_YELLOW, buf);
+    }
 
     /* Process input */
     while (!done)
     {
-        /* Place cursor */
-        Term_gotoxy(x + k, y);
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
+                APP_WAIT_REASON_CONFIRM,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL
+                    | APP_INTERACTION_FLAG_SHOW_VALUE
+                    | APP_INTERACTION_FLAG_SHOW_CURSOR,
+                TERM_WHITE,
+                g_prompt_interaction_label ? g_prompt_interaction_label
+                    : "Input:",
+                TERM_SLATE, "Enter accepts, Esc cancels.");
+            prompt_snapshot_set_value(TERM_YELLOW, buf, (s16b)k);
+            prompt_snapshot_present();
+        }
+        else
+        {
+            /* Place cursor */
+            Term_gotoxy(x + k, y);
+        }
 
         /* Get a key */
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
@@ -116,8 +184,17 @@ bool askfor_aux(char* buf, size_t len)
         buf[k] = '\0';
 
         /* Update the entry */
-        Term_erase(x, y, (int)len);
-        Term_putstr(x, y, -1, TERM_WHITE, buf);
+        if (!snapshot_interaction)
+        {
+            Term_erase(x, y, (int)len);
+            Term_putstr(x, y, -1, TERM_WHITE, buf);
+        }
+    }
+
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
     }
 
     /* Done */
@@ -133,6 +210,7 @@ bool askfor_name(char* buf, size_t len)
 {
     int y, x;
     int term_wid = active_term_width();
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     size_t k = 0;
 
@@ -158,14 +236,36 @@ bool askfor_name(char* buf, size_t len)
     buf[len - 1] = '\0';
 
     /* Display the default answer */
-    Term_erase(x, y, (int)len);
-    Term_putstr(x, y, -1, TERM_YELLOW, buf);
+    if (!snapshot_interaction)
+    {
+        Term_erase(x, y, (int)len);
+        Term_putstr(x, y, -1, TERM_YELLOW, buf);
+    }
 
     /* Process input */
     while (!done)
     {
-        /* Place cursor */
-        Term_gotoxy(x + k, y);
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
+                APP_WAIT_REASON_CONFIRM,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL
+                    | APP_INTERACTION_FLAG_SHOW_VALUE
+                    | APP_INTERACTION_FLAG_SHOW_CURSOR,
+                TERM_WHITE,
+                g_prompt_interaction_label ? g_prompt_interaction_label
+                    : "Name:",
+                TERM_SLATE,
+                "Enter accepts, Esc cancels, Tab randomizes.");
+            prompt_snapshot_set_value(TERM_YELLOW, buf, (s16b)k);
+            prompt_snapshot_present();
+        }
+        else
+        {
+            /* Place cursor */
+            Term_gotoxy(x + k, y);
+        }
 
         /* Get a key */
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
@@ -223,8 +323,11 @@ bool askfor_name(char* buf, size_t len)
         if (new_default_name)
         {
             /* Display the random name */
-            Term_erase(x, y, (int)len);
-            Term_putstr(x, y, -1, TERM_YELLOW, buf);
+            if (!snapshot_interaction)
+            {
+                Term_erase(x, y, (int)len);
+                Term_putstr(x, y, -1, TERM_YELLOW, buf);
+            }
 
             new_default_name = false;
         }
@@ -234,9 +337,18 @@ bool askfor_name(char* buf, size_t len)
             buf[k] = '\0';
 
             /* Update the entry */
-            Term_erase(x, y, (int)len);
-            Term_putstr(x, y, -1, TERM_WHITE, buf);
+            if (!snapshot_interaction)
+            {
+                Term_erase(x, y, (int)len);
+                Term_putstr(x, y, -1, TERM_WHITE, buf);
+            }
         }
+    }
+
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
     }
 
     /* Done */
@@ -251,18 +363,23 @@ bool askfor_name(char* buf, size_t len)
 bool term_get_string(cptr prompt, char* buf, size_t len)
 {
     bool res;
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
     /* Display prompt */
-    prt(prompt, 0, 0);
+    if (!snapshot_interaction)
+        prt(prompt, 0, 0);
 
     /* Ask the user for a string */
+    g_prompt_interaction_label = prompt;
     res = askfor_aux(buf, len);
+    g_prompt_interaction_label = NULL;
 
     /* Clear prompt */
-    prt("", 0, 0);
+    if (!snapshot_interaction)
+        prt("", 0, 0);
 
     /* Result */
     return (res);
@@ -302,6 +419,7 @@ s16b get_quantity(cptr prompt, int max)
         bool done = false;
         bool canceled = false;
         int ch;
+        bool snapshot_interaction = prompt_snapshot_interaction_active();
 
         if (!prompt)
         {
@@ -319,9 +437,29 @@ s16b get_quantity(cptr prompt, int max)
             char prompt_header[120];
             strnfmt(prompt_header, sizeof(prompt_header), "%s%d/%d", prompt,
                 current, max);
-            prt(prompt_header, 0, 0);
-            prt("Use arrows or +/- to adjust, digits type exact value, Enter=OK, Esc=cancel.",
-                1, 0);
+            if (snapshot_interaction)
+            {
+                char value_buf[16];
+
+                prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
+                    APP_WAIT_REASON_LIST_SELECTION,
+                    APP_INTERACTION_FLAG_CAN_CONFIRM
+                        | APP_INTERACTION_FLAG_CAN_CANCEL
+                        | APP_INTERACTION_FLAG_SHOW_VALUE
+                        | APP_INTERACTION_FLAG_SHOW_CURSOR,
+                    TERM_WHITE, prompt_header, TERM_SLATE,
+                    "8/+ increase, 2/- decrease, digits type, Enter accepts.");
+                strnfmt(value_buf, sizeof(value_buf), "%d", current);
+                prompt_snapshot_set_value(TERM_YELLOW, value_buf,
+                    (s16b)strlen(value_buf));
+                prompt_snapshot_present();
+            }
+            else
+            {
+                prt(prompt_header, 0, 0);
+                prt("Use arrows or +/- to adjust, digits type exact value, Enter=OK, Esc=cancel.",
+                    1, 0);
+            }
 
             ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
             switch (ch)
@@ -455,8 +593,16 @@ s16b get_quantity(cptr prompt, int max)
             }
         }
 
-        prt("", 0, 0);
-        prt("", 1, 0);
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_clear();
+            prompt_snapshot_present();
+        }
+        else
+        {
+            prt("", 0, 0);
+            prt("", 1, 0);
+        }
 
         if (canceled)
             return (0);
@@ -491,6 +637,7 @@ int get_check_other(cptr prompt, char other)
     int term_wid = active_term_width();
     int suffix_wid = 9;
     int prompt_wid = term_wid - suffix_wid;
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     /*default set to no*/
     int result = 0;
@@ -504,11 +651,22 @@ int get_check_other(cptr prompt, char other)
     strnfmt(buf, sizeof(buf), "%.*s[y/n/%c] ", prompt_wid, prompt, other);
 
     /* Prompt for it */
-    prt(buf, 0, 0);
+    if (!snapshot_interaction)
+        prt(buf, 0, 0);
 
     /* Get an acceptable answer */
     while (true)
     {
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
+                APP_WAIT_REASON_CONFIRM,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL,
+                TERM_WHITE, buf, TERM_SLATE,
+                "Y confirms, N declines.");
+            prompt_snapshot_present();
+        }
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
         if (quick_messages)
             break;
@@ -524,7 +682,13 @@ int get_check_other(cptr prompt, char other)
     }
 
     /* Erase the prompt */
-    prt("", 0, 0);
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
+    }
+    else
+        prt("", 0, 0);
 
     /* Normal negation */
     if ((ch == 'Y') || (ch == 'y'))
@@ -550,6 +714,7 @@ bool get_check(cptr prompt)
     int term_wid = active_term_width();
     int suffix_wid = steamdeck ? 13 : 7;
     int prompt_wid = term_wid - suffix_wid;
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
@@ -561,11 +726,23 @@ bool get_check(cptr prompt)
         steamdeck ? "/space" : "");
 
     /* Prompt for it */
-    prt(buf, 0, 0);
+    if (!snapshot_interaction)
+        prt(buf, 0, 0);
 
     /* Get an acceptable answer */
     while (true)
     {
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
+                APP_WAIT_REASON_CONFIRM,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL,
+                TERM_WHITE, buf, TERM_SLATE,
+                steamdeck ? "Y or Space confirms, N declines."
+                    : "Y confirms, N declines.");
+            prompt_snapshot_present();
+        }
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
         if (quick_messages)
             break;
@@ -577,7 +754,13 @@ bool get_check(cptr prompt)
     }
 
     /* Erase the prompt */
-    prt("", 0, 0);
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
+    }
+    else
+        prt("", 0, 0);
 
     /* Normal negation */
     if ((ch != 'Y') && (ch != 'y') && !(steamdeck && ch == ' '))
@@ -720,11 +903,23 @@ int get_menu_choice(s16b max, char* prompt)
     char ch;
 
     bool done = false;
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
-    prt(prompt, 0, 0);
+    if (!snapshot_interaction)
+        prt(prompt, 0, 0);
 
     while (!done)
     {
+        if (snapshot_interaction)
+        {
+            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
+                APP_WAIT_REASON_LIST_SELECTION,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL,
+                TERM_WHITE, prompt, TERM_SLATE,
+                "Press a menu letter or Esc to cancel.");
+            prompt_snapshot_present();
+        }
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         /* Letters are used for selection */
@@ -766,7 +961,13 @@ int get_menu_choice(s16b max, char* prompt)
     }
 
     /* Clear the prompt */
-    prt("", 0, 0);
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
+    }
+    else
+        prt("", 0, 0);
 
     /* Return */
     return (choice);
@@ -782,18 +983,37 @@ int get_menu_choice(s16b max, char* prompt)
 bool get_com(cptr prompt, char* command)
 {
     char ch;
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
     /* Display a prompt */
-    prt(prompt, 0, 0);
+    if (!snapshot_interaction)
+        prt(prompt, 0, 0);
+
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
+            APP_WAIT_REASON_CONFIRM,
+            APP_INTERACTION_FLAG_CAN_CONFIRM
+                | APP_INTERACTION_FLAG_CAN_CANCEL,
+            TERM_WHITE, prompt, TERM_SLATE,
+            "Press a key or Esc to cancel.");
+        prompt_snapshot_present();
+    }
 
     /* Get a key */
     ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
 
     /* Clear the prompt */
-    prt("", 0, 0);
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
+    }
+    else
+        prt("", 0, 0);
 
     /* Save the command */
     *command = ch;
@@ -809,8 +1029,28 @@ bool get_com(cptr prompt, char* command)
  */
 void pause_line(int row)
 {
-    prt("", row, 0);
-    put_str("(press any key)", row, 23);
+    bool snapshot_interaction = prompt_snapshot_interaction_active();
+
+    if (!snapshot_interaction)
+    {
+        prt("", row, 0);
+        put_str("(press any key)", row, 23);
+    }
+    else
+    {
+        prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE,
+            APP_INTERACTION_FLAG_CAN_CONFIRM,
+            TERM_WHITE, "(press any key)", TERM_SLATE, "");
+        prompt_snapshot_present();
+    }
+
     (void)prompt_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
-    prt("", row, 0);
+    if (snapshot_interaction)
+    {
+        prompt_snapshot_clear();
+        prompt_snapshot_present();
+    }
+    else
+        prt("", row, 0);
 }

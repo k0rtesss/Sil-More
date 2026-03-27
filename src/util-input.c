@@ -46,7 +46,11 @@ bool inkey_cursor_hidden(void)
 
 void inkey_set_cursor_hidden(bool hidden)
 {
+    if (g_inkey_state.cursor_hidden == hidden)
+        return;
+
     g_inkey_state.cursor_hidden = hidden;
+    app_session_set_cursor_visible(app_session_current(), !hidden);
 }
 
 /*

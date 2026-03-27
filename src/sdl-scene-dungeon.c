@@ -109,40 +109,30 @@ static bool sdl_scene_layout_cell_rect(const sdl_view* view, int col, int row,
     return true;
 }
 
-static void sdl_scene_copy_legacy_left_panel(SDL_Texture* canvas,
-    const sdl_view* view, const sdl_scene_layout* layout)
+static bool sdl_scene_layout_block_rect(const sdl_view* view, int col, int row,
+    int width_cells, int height_cells, SDL_FRect* out_rect)
 {
-    SDL_FRect dst;
-    SDL_FRect src;
-    float width_px;
-    float height_px;
+    if (!view || !out_rect || col < 0 || row < 0
+        || width_cells <= 0 || height_cells <= 0)
+    {
+        return false;
+    }
+    if (col >= view->cols || row >= view->rows)
+        return false;
+    if (col + width_cells > view->cols)
+        width_cells = view->cols - col;
+    if (row + height_cells > view->rows)
+        height_cells = view->rows - row;
+    if (width_cells <= 0 || height_cells <= 0)
+        return false;
 
-    if (!canvas || !view || !layout || layout->hide_left_panel)
-        return;
-    if (!view->canvas || view->canvas == canvas)
-        return;
-    if (layout->col_map <= 0 || view->cell_w <= 0 || view->cell_h <= 0)
-        return;
-
-    width_px = (float)(layout->col_map * view->cell_w);
-    height_px = (float)(view->rows * view->cell_h);
-    if (width_px <= 0.0f || height_px <= 0.0f)
-        return;
-
-    src = (SDL_FRect){
-        .x = 0.0f,
-        .y = 0.0f,
-        .w = width_px,
-        .h = height_px
+    *out_rect = (SDL_FRect){
+        .x = (float)(col * view->cell_w),
+        .y = (float)(row * view->cell_h),
+        .w = (float)(width_cells * view->cell_w),
+        .h = (float)(height_cells * view->cell_h)
     };
-    dst = src;
-
-    /*
-     * The snapshot renderer currently synthesizes a simplified left status area.
-     * Reuse the legacy main-term strip instead so the visible panel matches the
-     * classic develop output while the scene renderer continues to own the map.
-     */
-    SDL_RenderTexture(g_state.renderer, view->canvas, &src, &dst);
+    return true;
 }
 
 static void sdl_scene_draw_text(const sdl_view* view, int col, int row,
@@ -176,6 +166,244 @@ static void sdl_scene_draw_text_snapshot(const sdl_view* view, int col, int row,
         return;
 
     sdl_scene_draw_text(view, col, row, text->attr, text->text);
+}
+
+static bool sdl_scene_story_cell_is_text(byte attr, char ch)
+{
+    unsigned char uch = (unsigned char)ch;
+
+    if ((attr & 0x80) && (uch & 0x80))
+        return false;
+    if (attr == 255 && uch == 0xFF)
+        return false;
+
+    return true;
+}
+
+static void sdl_scene_render_packed_story_row(const sdl_view* view,
+    TTF_Font* font, int col_offset, int row, int width,
+    const app_panel_cell_snapshot* cells)
+{
+    const float cell_h_f = (float)view->cell_h;
+    int x = 0;
+
+    if (!view || !cells || width <= 0 || row < 0 || row >= view->rows)
+        return;
+
+    while (x < width)
+    {
+        byte flags;
+        bool use_story;
+        bool grid_align;
+        byte attr;
+        int run_start;
+
+        if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+        {
+            SDL_FRect dst;
+            byte ch = (byte)cells[x].ch;
+
+            if (sdl_scene_layout_cell_rect(view, col_offset + x, row, 1, &dst))
+            {
+                sdl_scene_fill_rect(&dst, (SDL_Color){ 0, 0, 0, 255 });
+
+                if (g_state.use_tiles && g_state.tileset
+                    && (cells[x].attr & TILE_FLAG) && (ch & TILE_FLAG))
+                {
+                    SDL_FRect src = {
+                        .x = (float)(TILE_GET_INDEX(ch) * TILE_SIZE),
+                        .y = (float)(TILE_GET_INDEX(cells[x].attr) * TILE_SIZE),
+                        .w = (float)TILE_SIZE,
+                        .h = (float)TILE_SIZE
+                    };
+
+                    SDL_RenderTexture(g_state.renderer, g_state.tileset, &src,
+                        &dst);
+                }
+                else if (cells[x].ch)
+                {
+                    char glyph[2] = { cells[x].ch, '\0' };
+
+                    sdl_render_mono_text((sdl_view*)view, col_offset + x, row,
+                        1, glyph, sdl_scene_color(cells[x].attr));
+                }
+            }
+
+            x++;
+            continue;
+        }
+
+        flags = cells[x].story;
+        use_story = (flags & STORY_FLAG_USE) != 0;
+        grid_align = (flags & STORY_FLAG_CELL_ALIGN) != 0;
+        attr = cells[x].attr;
+        run_start = x;
+
+        if (!use_story || !font)
+        {
+            char text[APP_DUNGEON_LEFT_PANEL_COLS + 1];
+            int run_len = 0;
+            SDL_Color color = sdl_scene_color(attr);
+
+            while (x < width)
+            {
+                if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                    break;
+                if (((cells[x].story & STORY_FLAG_USE) != 0 && font)
+                    || cells[x].attr != attr)
+                {
+                    break;
+                }
+
+                if (run_len >= (int)APP_DUNGEON_LEFT_PANEL_COLS)
+                    break;
+                text[run_len++] = cells[x].ch ? cells[x].ch : ' ';
+                x++;
+            }
+            text[run_len] = '\0';
+
+            sdl_scene_fill_rect(&(SDL_FRect){
+                .x = (float)((col_offset + run_start) * view->cell_w),
+                .y = (float)(row * view->cell_h),
+                .w = (float)(run_len * view->cell_w),
+                .h = cell_h_f
+            }, (SDL_Color){ 0, 0, 0, 255 });
+
+            sdl_render_mono_text((sdl_view*)view, col_offset + run_start, row,
+                run_len, text, color);
+            continue;
+        }
+
+        if (grid_align)
+        {
+            char text[APP_DUNGEON_LEFT_PANEL_COLS + 1];
+            int run_len = 0;
+            SDL_Color color = sdl_scene_color(attr);
+
+            while (x < width)
+            {
+                if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                    break;
+                if ((cells[x].story & STORY_FLAG_USE) == 0
+                    || (cells[x].story & STORY_FLAG_CELL_ALIGN) == 0
+                    || cells[x].attr != attr)
+                {
+                    break;
+                }
+
+                if (run_len >= (int)APP_DUNGEON_LEFT_PANEL_COLS)
+                    break;
+                text[run_len++] = cells[x].ch ? cells[x].ch : ' ';
+                x++;
+            }
+            text[run_len] = '\0';
+
+            sdl_scene_fill_rect(&(SDL_FRect){
+                .x = (float)((col_offset + run_start) * view->cell_w),
+                .y = (float)(row * view->cell_h),
+                .w = (float)(run_len * view->cell_w),
+                .h = cell_h_f
+            }, (SDL_Color){ 0, 0, 0, 255 });
+
+            sdl_render_story_text_grid((sdl_view*)view, font,
+                col_offset + run_start, row, run_len, text, color);
+            continue;
+        }
+
+        while (x < width)
+        {
+            if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                break;
+            if ((cells[x].story & STORY_FLAG_USE) == 0
+                || (cells[x].story & STORY_FLAG_CELL_ALIGN) != 0)
+            {
+                break;
+            }
+            x++;
+        }
+
+        {
+            int region_start = run_start;
+            int region_end = x;
+            float px_cursor = (float)((col_offset + region_start) * view->cell_w);
+            float px_end = (float)((col_offset + region_end) * view->cell_w);
+            int seg = region_start;
+
+            sdl_scene_fill_rect(&(SDL_FRect){
+                .x = (float)((col_offset + region_start) * view->cell_w),
+                .y = (float)(row * view->cell_h),
+                .w = (float)((region_end - region_start) * view->cell_w),
+                .h = cell_h_f
+            }, (SDL_Color){ 0, 0, 0, 255 });
+
+            while (seg < region_end)
+            {
+                char text[APP_DUNGEON_LEFT_PANEL_COLS + 1];
+                byte seg_attr;
+                SDL_Color seg_color;
+                int seg_end = seg + 1;
+                int seg_len;
+
+                if (!sdl_scene_story_cell_is_text(cells[seg].attr, cells[seg].ch))
+                {
+                    seg++;
+                    continue;
+                }
+
+                seg_attr = cells[seg].attr;
+                while (seg_end < region_end
+                    && sdl_scene_story_cell_is_text(cells[seg_end].attr,
+                        cells[seg_end].ch)
+                    && cells[seg_end].attr == seg_attr)
+                {
+                    seg_end++;
+                }
+
+                seg_len = seg_end - seg;
+                if (seg_len > (int)APP_DUNGEON_LEFT_PANEL_COLS)
+                    seg_len = (int)APP_DUNGEON_LEFT_PANEL_COLS;
+                for (int i = 0; i < seg_len; i++)
+                    text[i] = cells[seg + i].ch ? cells[seg + i].ch : ' ';
+                text[seg_len] = '\0';
+
+                seg_color = sdl_scene_color(seg_attr);
+                if (px_end - px_cursor <= 0.0f)
+                    break;
+
+                px_cursor += (float)sdl_render_story_text_free_px(
+                    (sdl_view*)view, font, px_cursor, row, text, seg_len,
+                    seg_color, px_end - px_cursor);
+                seg = seg_end;
+            }
+        }
+    }
+}
+
+static void sdl_scene_render_left_panel(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_panes_snapshot* panes)
+{
+    TTF_Font* font;
+    int rows;
+    int cols;
+
+    if (!view || !layout || !panes || layout->hide_left_panel)
+        return;
+    if (panes->left_panel_rows == 0 || panes->left_panel_cols == 0)
+        return;
+
+    rows = panes->left_panel_rows;
+    cols = panes->left_panel_cols;
+    if (rows > view->rows)
+        rows = view->rows;
+    if (cols > layout->col_map)
+        cols = layout->col_map;
+    if (cols <= 0)
+        return;
+
+    font = sdl_story_font_for_view(view);
+    for (int row = 0; row < rows; row++)
+        sdl_scene_render_packed_story_row(view, font, 0, row, cols,
+            panes->left_panel[row]);
 }
 
 static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
@@ -276,6 +504,212 @@ static const app_panes_snapshot* sdl_scene_panes_snapshot(
     if (!blob || blob->size < sizeof(app_panes_snapshot))
         return NULL;
     return (const app_panes_snapshot*)blob->data;
+}
+
+static const app_interaction_state* sdl_scene_interaction_snapshot(
+    const app_dungeon_snapshot* snapshot)
+{
+    const app_snapshot_blob* blob = sdl_scene_find_blob(snapshot,
+        APP_SNAPSHOT_BLOB_OVERLAY);
+
+    if (!blob || blob->size < sizeof(app_interaction_state))
+        return NULL;
+    return (const app_interaction_state*)blob->data;
+}
+
+static int sdl_scene_interaction_width(const app_interaction_state* interaction)
+{
+    int width = 28;
+    u16b i;
+
+    if (!interaction)
+        return width;
+
+    width = MAX(width, (int)strlen(interaction->prompt) + 4);
+    width = MAX(width, (int)strlen(interaction->detail) + 4);
+    width = MAX(width, (int)strlen(interaction->value) + 4);
+
+    for (i = 0; i < interaction->option_count; i++)
+    {
+        const app_interaction_option* option = &interaction->options[i];
+        int option_width = (int)strlen(option->label)
+            + (option->meta[0] ? (int)strlen(option->meta) + 4 : 0) + 6;
+
+        width = MAX(width, option_width);
+    }
+
+    return width;
+}
+
+static void sdl_scene_render_interaction_overlay(const sdl_view* view,
+    const app_interaction_state* interaction)
+{
+    SDL_FRect box;
+    SDL_Color background = { 10, 18, 26, 216 };
+    SDL_Color border = { 122, 146, 170, 255 };
+    SDL_Color selected = { 36, 74, 112, 208 };
+    int width_cells;
+    int start_col;
+    int start_row;
+    int height_cells;
+    int row;
+    int header_lines = 0;
+    int option_rows = 0;
+    int option_start = 0;
+    int selected_index;
+    char line[APP_INTERACTION_TEXT_MAX + APP_INTERACTION_META_MAX + 16];
+
+    if (!view || !interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
+        return;
+
+    width_cells = sdl_scene_interaction_width(interaction);
+    if (width_cells > view->cols - 4)
+        width_cells = view->cols - 4;
+    if (width_cells < 20)
+        width_cells = MIN(20, view->cols);
+    if (width_cells <= 0)
+        return;
+
+    if (interaction->prompt[0])
+        header_lines++;
+    if (interaction->detail[0])
+        header_lines++;
+    if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_VALUE)
+        && interaction->value[0])
+        header_lines++;
+
+    option_rows = interaction->option_count;
+    if (interaction->kind == APP_INTERACTION_KIND_LIST)
+    {
+        int max_option_rows = view->rows - header_lines - 6;
+
+        if (max_option_rows < 4)
+            max_option_rows = 4;
+        if (option_rows > max_option_rows)
+            option_rows = max_option_rows;
+    }
+    else
+    {
+        option_rows = 0;
+    }
+
+    height_cells = header_lines + option_rows + 2;
+    if (height_cells < 4)
+        height_cells = 4;
+    if (height_cells > view->rows - 2)
+        height_cells = view->rows - 2;
+    if (height_cells <= 0)
+        return;
+
+    start_col = (view->cols - width_cells) / 2;
+    if (start_col < 1)
+        start_col = 1;
+
+    if (interaction->kind == APP_INTERACTION_KIND_TARGETING)
+        start_row = 1;
+    else
+        start_row = (view->rows - height_cells) / 2;
+    if (start_row < 1)
+        start_row = 1;
+    if ((start_row + height_cells) >= view->rows)
+        start_row = MAX(1, view->rows - height_cells - 1);
+
+    if (!sdl_scene_layout_block_rect(view, start_col, start_row, width_cells,
+            height_cells, &box))
+    {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    sdl_scene_fill_rect(&box, background);
+    sdl_scene_draw_rect(&box, border);
+
+    row = start_row + 1;
+    if (interaction->prompt[0])
+        sdl_scene_draw_text(view, start_col + 1, row++, interaction->prompt_attr,
+            interaction->prompt);
+    if (interaction->detail[0])
+        sdl_scene_draw_text(view, start_col + 1, row++, interaction->detail_attr,
+            interaction->detail);
+    if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_VALUE)
+        && interaction->value[0])
+    {
+        char value_buf[APP_INTERACTION_VALUE_MAX + 2];
+        size_t len = strlen(interaction->value);
+
+        SDL_strlcpy(value_buf, interaction->value, sizeof(value_buf));
+        if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_CURSOR)
+            && interaction->cursor_index >= 0
+            && interaction->cursor_index <= (s16b)len
+            && len + 1 < sizeof(value_buf))
+        {
+            size_t cursor = (size_t)interaction->cursor_index;
+
+            memmove(value_buf + cursor + 1, value_buf + cursor, len - cursor + 1);
+            value_buf[cursor] = '_';
+        }
+        sdl_scene_draw_text(view, start_col + 1, row++, interaction->value_attr,
+            value_buf);
+    }
+
+    if (interaction->kind != APP_INTERACTION_KIND_LIST || option_rows <= 0)
+        return;
+
+    selected_index = interaction->selected_index;
+    if (selected_index < 0)
+        selected_index = 0;
+    if ((u16b)selected_index >= interaction->option_count
+        && interaction->option_count > 0)
+    {
+        selected_index = interaction->option_count - 1;
+    }
+
+    if ((int)interaction->option_count > option_rows)
+    {
+        option_start = selected_index - option_rows / 2;
+        if (option_start < 0)
+            option_start = 0;
+        if (option_start + option_rows > (int)interaction->option_count)
+            option_start = interaction->option_count - option_rows;
+    }
+
+    for (int i = 0; i < option_rows; i++)
+    {
+        const app_interaction_option* option;
+        int index = option_start + i;
+        int draw_row = row + i;
+        byte attr;
+
+        if ((u16b)index >= interaction->option_count)
+            break;
+
+        option = &interaction->options[index];
+        attr = option->enabled ? option->attr : TERM_L_DARK;
+
+        if (option->selected)
+        {
+            SDL_FRect selected_rect;
+
+            if (sdl_scene_layout_block_rect(view, start_col + 1, draw_row,
+                    width_cells - 2, 1, &selected_rect))
+            {
+                sdl_scene_fill_rect(&selected_rect, selected);
+            }
+        }
+
+        if (option->meta[0])
+        {
+            strnfmt(line, sizeof(line), "%c %s  %s",
+                option->tag ? option->tag : ' ', option->label, option->meta);
+        }
+        else
+        {
+            strnfmt(line, sizeof(line), "%c %s",
+                option->tag ? option->tag : ' ', option->label);
+        }
+
+        sdl_scene_draw_text(view, start_col + 1, draw_row, attr, line);
+    }
 }
 
 static bool sdl_scene_map_to_screen(const sdl_scene_layout* layout,
@@ -805,6 +1239,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_status_snapshot* status;
     const app_messages_snapshot* messages;
     const app_panes_snapshot* panes;
+    const app_interaction_state* interaction;
     sdl_scene_layout layout;
     size_t i;
 
@@ -815,6 +1250,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     status = sdl_scene_status_snapshot(snapshot);
     messages = sdl_scene_messages_snapshot(snapshot);
     panes = sdl_scene_panes_snapshot(snapshot);
+    interaction = sdl_scene_interaction_snapshot(snapshot);
     if (!map || !status || !messages || !panes)
         return false;
 
@@ -824,8 +1260,15 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderClear(g_state.renderer);
 
-    sdl_scene_render_messages(main_view, messages);
-    sdl_scene_render_status_panel(main_view, &layout, status);
+    if (layout.hide_left_panel || panes->left_panel_cols == 0
+        || panes->left_panel_rows == 0)
+    {
+        sdl_scene_render_status_panel(main_view, &layout, status);
+    }
+    else
+    {
+        sdl_scene_render_left_panel(main_view, &layout, panes);
+    }
 
     for (i = 0; i < map->cell_count; i++)
         sdl_scene_draw_map_cell(main_view, &layout, map, &map->cells[i]);
@@ -836,7 +1279,8 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     sdl_scene_render_animations(main_view, &layout, map, animations,
         animation_count, now_ns);
     sdl_scene_draw_absolute_cursor(main_view, &map->cursor);
-    sdl_scene_copy_legacy_left_panel(canvas, main_view, &layout);
+    sdl_scene_render_messages(main_view, messages);
+    sdl_scene_render_interaction_overlay(main_view, interaction);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;

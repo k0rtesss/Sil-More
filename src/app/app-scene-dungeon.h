@@ -1,6 +1,7 @@
 #ifndef INCLUDED_APP_SCENE_DUNGEON_H
 #define INCLUDED_APP_SCENE_DUNGEON_H
 
+#include "app-interaction.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
 
@@ -14,7 +15,7 @@ struct app_wait_state;
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
 #define APP_DUNGEON_STATUS_FORMAT_VERSION 1u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
-#define APP_DUNGEON_PANES_FORMAT_VERSION 1u
+#define APP_DUNGEON_PANES_FORMAT_VERSION 2u
 
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
 
@@ -25,6 +26,8 @@ struct app_wait_state;
 #define APP_DUNGEON_HIDDEN_OVERLAY_MAX 16u
 #define APP_DUNGEON_COMBAT_ENTRY_MAX 100u
 #define APP_DUNGEON_MESSAGE_LIMIT 256u
+#define APP_DUNGEON_LEFT_PANEL_COLS 13u
+#define APP_DUNGEON_LEFT_PANEL_ROWS_MAX 64u
 
 #define APP_PACK_COORD(y, x) \
     ((((u32b)((u16b)(y))) << 16) | ((u32b)((u16b)(x))))
@@ -39,7 +42,8 @@ typedef enum app_snapshot_invalidation_mask {
     APP_SNAPSHOT_INVALIDATE_PANES = 0x00000008u,
     APP_SNAPSHOT_INVALIDATE_CURSOR = 0x00000010u,
     APP_SNAPSHOT_INVALIDATE_TARGET = 0x00000020u,
-    APP_SNAPSHOT_INVALIDATE_ALL = 0x0000003Fu
+    APP_SNAPSHOT_INVALIDATE_OVERLAY = 0x00000040u,
+    APP_SNAPSHOT_INVALIDATE_ALL = 0x0000007Fu
 } app_snapshot_invalidation_mask;
 
 typedef enum app_animation_hint_kind {
@@ -196,6 +200,13 @@ typedef struct app_hidden_overlay_line_snapshot {
     char text[APP_DUNGEON_PANE_TEXT_MAX];
 } app_hidden_overlay_line_snapshot;
 
+typedef struct app_panel_cell_snapshot {
+    byte attr;
+    byte story;
+    char ch;
+    char reserved;
+} app_panel_cell_snapshot;
+
 typedef struct app_combat_roll_snapshot {
     s16b round;
     s16b index;
@@ -229,14 +240,18 @@ typedef struct app_panes_snapshot {
     u16b combat_entry_count;
     u16b hidden_overlay_rows;
     u16b main_combat_roll_lines;
+    u16b left_panel_rows;
+    u16b left_panel_cols;
     byte hidden_overlay_widths[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
     app_hidden_overlay_line_snapshot hidden_overlay[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
+    app_panel_cell_snapshot left_panel[APP_DUNGEON_LEFT_PANEL_ROWS_MAX]
+                                      [APP_DUNGEON_LEFT_PANEL_COLS];
     app_combat_roll_snapshot combat_entries[APP_DUNGEON_COMBAT_ENTRY_MAX];
 } app_panes_snapshot;
 
 typedef struct app_dungeon_snapshot {
     app_snapshot snapshot;
-    app_snapshot_blob blobs[4];
+    app_snapshot_blob blobs[5];
     byte* map_data;
     size_t map_size;
     size_t map_capacity;
@@ -249,13 +264,17 @@ typedef struct app_dungeon_snapshot {
     byte* panes_data;
     size_t panes_size;
     size_t panes_capacity;
+    byte* overlay_data;
+    size_t overlay_size;
+    size_t overlay_capacity;
     app_cursor_snapshot cursor_state;
 } app_dungeon_snapshot;
 
 void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
-    u64b revision, const struct app_wait_state* wait_state, u32b update_mask,
+    u64b revision, const struct app_wait_state* wait_state,
+    const app_interaction_state* interaction, u32b update_mask,
     u32b redraw_mask, u32b window_mask);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const struct app_session* session);

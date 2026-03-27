@@ -2575,6 +2575,7 @@ static void process_player(void)
     // update the player's torch radius
     calc_torch();
 
+    listen_hint_new_player_turn();
     song_disguise_new_player_turn();
     song_duels_new_player_turn();
 

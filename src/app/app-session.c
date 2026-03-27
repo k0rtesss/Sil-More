@@ -2,6 +2,7 @@
 
 #include "app-session.h"
 #include "externs.h"
+#include "runtime-cli.h"
 
 typedef struct app_input_queue {
     app_input* items;
@@ -22,6 +23,7 @@ struct app_session {
     u32b flags;
     u16b state;
     app_wait_state wait_state;
+    app_interaction_state interaction;
     app_snapshot snapshot;
     app_dungeon_snapshot dungeon_snapshot;
     u32b snapshot_dirty_mask;
@@ -99,6 +101,26 @@ static void app_session_emit_snapshot_invalidation(app_session* session,
     app_session_emit_internal_event(session, APP_EVENT_KIND_SNAPSHOT_INVALIDATED,
         APP_EVENT_SCOPE_SCENE, APP_SCENE_KIND_DUNGEON,
         (s32b)invalidation_mask, session->state, session->wait_state.reason);
+}
+
+static void app_interaction_state_init(app_interaction_state* interaction)
+{
+    if (!interaction)
+        return;
+
+    memset(interaction, 0, sizeof(*interaction));
+    interaction->format_version = APP_INTERACTION_FORMAT_VERSION;
+    interaction->selected_index = -1;
+}
+
+static void app_session_touch_interaction(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_OVERLAY);
+    if (app_session_interactions_enabled(session))
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
 }
 
 static bool app_input_queue_init(app_input_queue* queue, size_t capacity)
@@ -330,6 +352,7 @@ app_session* app_session_create(const app_session_config* config)
     session->flags = config->flags;
     session->state = APP_SESSION_STATE_IDLE;
     session->wait_state.reason = APP_WAIT_REASON_NONE;
+    app_interaction_state_init(&session->interaction);
     session->snapshot.scene = APP_SCENE_KIND_NONE;
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
     session->next_snapshot_revision = 1u;
@@ -444,7 +467,8 @@ void app_session_set_wait_state(app_session* session,
     {
         app_session_mark_snapshot_dirty(session,
             APP_SNAPSHOT_INVALIDATE_CURSOR | APP_SNAPSHOT_INVALIDATE_TARGET
-            | APP_SNAPSHOT_INVALIDATE_PANES);
+            | APP_SNAPSHOT_INVALIDATE_PANES
+            | APP_SNAPSHOT_INVALIDATE_OVERLAY);
         (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
     }
 }
@@ -572,8 +596,8 @@ bool app_session_build_dungeon_snapshot(app_session* session,
     }
 
     if (!app_build_dungeon_snapshot(&session->dungeon_snapshot,
-            session->next_snapshot_revision, &session->wait_state, update_mask,
-            redraw_mask, window_mask))
+            session->next_snapshot_revision, &session->wait_state,
+            &session->interaction, update_mask, redraw_mask, window_mask))
     {
         return false;
     }
@@ -648,6 +672,178 @@ void app_session_note_cursor_absolute(app_session* session, s16b row,
     session->dungeon_snapshot.cursor_state.map_y = -1;
     session->dungeon_snapshot.cursor_state.map_x = -1;
     app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_CURSOR);
+}
+
+void app_session_set_cursor_visible(app_session* session, bool visible)
+{
+    u32b invalidation_mask = APP_SNAPSHOT_INVALIDATE_CURSOR;
+
+    if (!session)
+        return;
+    if (session->dungeon_snapshot.cursor_state.visible == (visible ? 1 : 0))
+        return;
+
+    session->dungeon_snapshot.cursor_state.visible = visible ? 1 : 0;
+    if (session->dungeon_snapshot.cursor_state.relative)
+        invalidation_mask |= APP_SNAPSHOT_INVALIDATE_MAP;
+
+    app_session_mark_snapshot_dirty(session, invalidation_mask);
+    if (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+}
+
+bool app_session_interactions_enabled(const app_session* session)
+{
+    return session && runtime_cli_snapshot_renderer()
+        && (session->snapshot.scene == APP_SCENE_KIND_DUNGEON);
+}
+
+const app_interaction_state* app_session_interaction(
+    const app_session* session)
+{
+    return session ? &session->interaction : NULL;
+}
+
+void app_session_clear_interaction(app_session* session)
+{
+    app_interaction_state cleared;
+
+    if (!session)
+        return;
+
+    app_interaction_state_init(&cleared);
+    if (memcmp(&session->interaction, &cleared, sizeof(cleared)) == 0)
+        return;
+
+    session->interaction = cleared;
+    app_session_touch_interaction(session);
+}
+
+void app_session_begin_interaction(app_session* session, u16b kind,
+    u16b reason, u16b flags)
+{
+    if (!session)
+        return;
+
+    app_interaction_state_init(&session->interaction);
+    session->interaction.kind = kind;
+    session->interaction.reason = reason;
+    session->interaction.flags = flags;
+    app_session_touch_interaction(session);
+}
+
+void app_session_set_interaction_prompt(app_session* session, byte attr,
+    cptr prompt)
+{
+    if (!session)
+        return;
+
+    session->interaction.prompt_attr = attr;
+    SDL_strlcpy(session->interaction.prompt, prompt ? prompt : "",
+        sizeof(session->interaction.prompt));
+    app_session_touch_interaction(session);
+}
+
+void app_session_set_interaction_detail(app_session* session, byte attr,
+    cptr detail)
+{
+    if (!session)
+        return;
+
+    session->interaction.detail_attr = attr;
+    SDL_strlcpy(session->interaction.detail, detail ? detail : "",
+        sizeof(session->interaction.detail));
+    app_session_touch_interaction(session);
+}
+
+void app_session_set_interaction_value(app_session* session, byte attr,
+    cptr value, s16b cursor_index)
+{
+    if (!session)
+        return;
+
+    session->interaction.value_attr = attr;
+    session->interaction.cursor_index = cursor_index;
+    SDL_strlcpy(session->interaction.value, value ? value : "",
+        sizeof(session->interaction.value));
+    app_session_touch_interaction(session);
+}
+
+void app_session_clear_interaction_options(app_session* session)
+{
+    if (!session)
+        return;
+
+    memset(session->interaction.options, 0, sizeof(session->interaction.options));
+    session->interaction.option_count = 0;
+    session->interaction.selected_index = -1;
+    app_session_touch_interaction(session);
+}
+
+void app_session_set_interaction_selected(app_session* session,
+    s16b selected_index)
+{
+    size_t i;
+
+    if (!session)
+        return;
+
+    session->interaction.selected_index = selected_index;
+    for (i = 0; i < session->interaction.option_count; i++)
+    {
+        session->interaction.options[i].selected
+            = (selected_index >= 0 && (size_t)selected_index == i) ? 1 : 0;
+        if (session->interaction.options[i].selected)
+            session->interaction.options[i].flags
+                |= APP_INTERACTION_ENTRY_FLAG_SELECTED;
+        else
+            session->interaction.options[i].flags
+                &= (byte)~APP_INTERACTION_ENTRY_FLAG_SELECTED;
+    }
+    app_session_touch_interaction(session);
+}
+
+bool app_session_add_interaction_option(app_session* session, byte attr,
+    char tag, bool enabled, bool selected, cptr label, cptr meta)
+{
+    app_interaction_option* option;
+    size_t index;
+
+    if (!session
+        || session->interaction.option_count >= APP_INTERACTION_OPTION_MAX)
+    {
+        return false;
+    }
+
+    index = session->interaction.option_count;
+    option = app_interaction_append_entry(&session->interaction);
+    if (!option)
+        return false;
+
+    option->attr = attr;
+    option->tag = tag ? (byte)tag : 0;
+    option->enabled = enabled ? 1 : 0;
+    option->selected = selected ? 1 : 0;
+    option->flags = APP_INTERACTION_ENTRY_FLAG_NONE;
+    if (!enabled)
+        option->flags |= APP_INTERACTION_ENTRY_FLAG_DISABLED;
+    if (selected)
+        option->flags |= APP_INTERACTION_ENTRY_FLAG_SELECTED;
+    if (tag)
+        strnfmt(option->key, sizeof(option->key), "%c", tag);
+    SDL_strlcpy(option->label, label ? label : "", sizeof(option->label));
+    SDL_strlcpy(option->meta, meta ? meta : "", sizeof(option->meta));
+
+    if (selected)
+        session->interaction.selected_index = (s16b)index;
+    else if (session->interaction.selected_index == (s16b)index)
+    {
+        option->selected = 1;
+        option->flags |= APP_INTERACTION_ENTRY_FLAG_SELECTED;
+    }
+
+    app_session_touch_interaction(session);
+    return true;
 }
 
 const app_session_counters* app_session_get_counters(

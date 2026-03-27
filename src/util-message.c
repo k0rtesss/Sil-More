@@ -582,6 +582,17 @@ static void msg_flush(int x)
 
     if (!auto_more)
     {
+        if (app_session_interactions_enabled(session))
+        {
+            app_session_begin_interaction(session, APP_INTERACTION_KIND_PROMPT,
+                APP_WAIT_REASON_INFORMATIONAL_PAUSE,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL);
+            app_session_set_interaction_prompt(session, a, "-more-");
+            app_session_set_interaction_detail(session, TERM_SLATE,
+                "Press Space, Enter, or Esc to continue.");
+        }
+
         app_session_push_wait_scope(session, &scope,
             APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
 
@@ -600,6 +611,8 @@ static void msg_flush(int x)
         }
 
         app_session_pop_wait_scope(session, &scope);
+        if (app_session_interactions_enabled(session))
+            app_session_clear_interaction(session);
     }
 
     /* Clear the line */

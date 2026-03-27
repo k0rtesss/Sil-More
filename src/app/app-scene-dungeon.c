@@ -31,6 +31,16 @@ static bool app_dungeon_buffer_reserve(byte** data, size_t* capacity,
     return true;
 }
 
+static void app_interaction_snapshot_clear(app_interaction_state* interaction)
+{
+    if (!interaction)
+        return;
+
+    memset(interaction, 0, sizeof(*interaction));
+    interaction->format_version = APP_INTERACTION_FORMAT_VERSION;
+    interaction->selected_index = -1;
+}
+
 static void app_text_snapshot_clear(app_text_snapshot* text)
 {
     if (!text)
@@ -401,12 +411,44 @@ static int app_collect_combat_entries(app_combat_roll_snapshot* out_entries,
     return count;
 }
 
+static void app_build_left_panel_cells(app_panes_snapshot* panes)
+{
+    int rows;
+    int cols;
+    int y;
+    int x;
+
+    if (!panes || g_hide_left_panel || !Term || !Term->scr)
+        return;
+
+    rows = MIN((int)Term->hgt, (int)APP_DUNGEON_LEFT_PANEL_ROWS_MAX);
+    cols = MIN((int)Term->wid, (int)APP_DUNGEON_LEFT_PANEL_COLS);
+    if (rows <= 0 || cols <= 0)
+        return;
+
+    panes->left_panel_rows = (u16b)rows;
+    panes->left_panel_cols = (u16b)cols;
+
+    for (y = 0; y < rows; y++)
+    {
+        for (x = 0; x < cols; x++)
+        {
+            app_panel_cell_snapshot* cell = &panes->left_panel[y][x];
+
+            cell->attr = Term->scr->a[y][x];
+            cell->story = Term->scr->story[y][x];
+            cell->ch = Term->scr->c[y][x];
+        }
+    }
+}
+
 static bool app_build_map_blob(app_dungeon_snapshot* snapshot,
     const app_wait_state* wait_state)
 {
     size_t cell_count;
     size_t required;
     app_map_snapshot* map;
+    bool suppress_saved_target;
     int y;
     int x;
     size_t cell_index = 0;
@@ -434,7 +476,11 @@ static bool app_build_map_blob(app_dungeon_snapshot* snapshot,
     map->player_y = p_ptr->py;
     map->player_x = p_ptr->px;
     map->cursor = snapshot->cursor_state;
-    map->target.active = p_ptr->target_set ? 1 : 0;
+    suppress_saved_target = (wait_state
+        && wait_state->reason == APP_WAIT_REASON_TARGETING
+        && snapshot->cursor_state.visible
+        && snapshot->cursor_state.relative);
+    map->target.active = (!suppress_saved_target && p_ptr->target_set) ? 1 : 0;
     map->target.who = p_ptr->target_who;
     map->target.map_y = p_ptr->target_row;
     map->target.map_x = p_ptr->target_col;
@@ -480,7 +526,8 @@ static bool app_build_map_blob(app_dungeon_snapshot* snapshot,
                 flags |= APP_MAP_CELL_FLAG_MONSTER;
             if (cell->o_idx > 0)
                 flags |= APP_MAP_CELL_FLAG_OBJECT;
-            if (p_ptr->target_set && (p_ptr->target_row == y)
+            if (!suppress_saved_target && p_ptr->target_set
+                && (p_ptr->target_row == y)
                 && (p_ptr->target_col == x))
             {
                 flags |= APP_MAP_CELL_FLAG_TARGET;
@@ -989,8 +1036,32 @@ static bool app_build_panes_blob(app_dungeon_snapshot* snapshot)
     combat_count = app_collect_combat_entries(panes->combat_entries,
         APP_DUNGEON_COMBAT_ENTRY_MAX);
     panes->combat_entry_count = (u16b)combat_count;
+    app_build_left_panel_cells(panes);
 
     snapshot->panes_size = sizeof(*panes);
+    return true;
+}
+
+static bool app_build_interaction_blob(app_dungeon_snapshot* snapshot,
+    const app_interaction_state* interaction)
+{
+    app_interaction_state empty_interaction;
+
+    if (!snapshot)
+        return false;
+
+    app_interaction_snapshot_clear(&empty_interaction);
+    if (!interaction)
+        interaction = &empty_interaction;
+
+    if (!app_dungeon_buffer_reserve(&snapshot->overlay_data,
+            &snapshot->overlay_capacity, sizeof(*interaction)))
+    {
+        return false;
+    }
+
+    memcpy(snapshot->overlay_data, interaction, sizeof(*interaction));
+    snapshot->overlay_size = sizeof(*interaction);
     return true;
 }
 
@@ -1009,6 +1080,8 @@ void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot)
     snapshot->blobs[2].format_version = APP_DUNGEON_MESSAGES_FORMAT_VERSION;
     snapshot->blobs[3].kind = APP_SNAPSHOT_BLOB_PANES;
     snapshot->blobs[3].format_version = APP_DUNGEON_PANES_FORMAT_VERSION;
+    snapshot->blobs[4].kind = APP_SNAPSHOT_BLOB_OVERLAY;
+    snapshot->blobs[4].format_version = APP_INTERACTION_FORMAT_VERSION;
     snapshot->snapshot.blobs = snapshot->blobs;
     snapshot->snapshot.blob_count = N_ELEMENTS(snapshot->blobs);
 }
@@ -1022,11 +1095,13 @@ void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot)
     mem_free_null(snapshot->status_data);
     mem_free_null(snapshot->messages_data);
     mem_free_null(snapshot->panes_data);
+    mem_free_null(snapshot->overlay_data);
     memset(snapshot, 0, sizeof(*snapshot));
 }
 
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
-    u64b revision, const app_wait_state* wait_state, u32b update_mask,
+    u64b revision, const app_wait_state* wait_state,
+    const app_interaction_state* interaction, u32b update_mask,
     u32b redraw_mask, u32b window_mask)
 {
     u16b snapshot_flags = 0;
@@ -1037,7 +1112,8 @@ bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     if (!app_build_map_blob(snapshot, wait_state)
         || !app_build_status_blob(snapshot, wait_state)
         || !app_build_messages_blob(snapshot)
-        || !app_build_panes_blob(snapshot))
+        || !app_build_panes_blob(snapshot)
+        || !app_build_interaction_blob(snapshot, interaction))
     {
         return false;
     }
@@ -1061,6 +1137,8 @@ bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     snapshot->blobs[2].size = snapshot->messages_size;
     snapshot->blobs[3].data = snapshot->panes_data;
     snapshot->blobs[3].size = snapshot->panes_size;
+    snapshot->blobs[4].data = snapshot->overlay_data;
+    snapshot->blobs[4].size = snapshot->overlay_size;
 
     return true;
 }

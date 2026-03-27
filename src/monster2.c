@@ -14,6 +14,10 @@
 #include "log/log.h"
 #include "metarun.h"
 
+static void listen_hint_handle_monster_removed(int m_idx);
+static void listen_hint_set(int m_idx);
+static void listen_hint_clear_monster(int m_idx);
+
 /*
  * Return another race for a monster to polymorph into.  -LM-
  *
@@ -158,6 +162,8 @@ void delete_monster_idx(int i)
     cave_m_idx[y][x] = 0;
     song_disguise_handle_monster_removed(i);
     song_duels_handle_monster_removed(i);
+    if (i > 0 && i < MAX_MONSTERS)
+        listen_hint_handle_monster_removed(i);
 
     /* Delete objects */
     for (this_o_idx = m_ptr->hold_o_idx; this_o_idx; this_o_idx = next_o_idx)
@@ -185,6 +191,94 @@ void delete_monster_idx(int i)
 
     /* Visual update */
     lite_spot(y, x);
+}
+
+static byte listen_hint[MAX_MONSTERS];
+static bool listen_hint_has_data = false;
+
+static void listen_hint_refresh_presence(void)
+{
+    int i;
+
+    listen_hint_has_data = false;
+    for (i = 1; i < MAX_MONSTERS; i++)
+    {
+        if (listen_hint[i])
+        {
+            listen_hint_has_data = true;
+            return;
+        }
+    }
+}
+
+static void listen_hint_handle_monster_removed(int m_idx)
+{
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS || !listen_hint[m_idx])
+        return;
+
+    listen_hint[m_idx] = 0;
+    listen_hint_refresh_presence();
+}
+
+static void listen_hint_set(int m_idx)
+{
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS)
+        return;
+
+    listen_hint[m_idx] = 1;
+    listen_hint_has_data = true;
+}
+
+static void listen_hint_clear_monster(int m_idx)
+{
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS || !listen_hint[m_idx])
+        return;
+
+    listen_hint[m_idx] = 0;
+    listen_hint_refresh_presence();
+}
+
+void listen_hint_new_player_turn(void)
+{
+    if (!listen_hint_has_data)
+        return;
+
+    memset(listen_hint, 0, sizeof(listen_hint));
+    listen_hint_has_data = false;
+    p_ptr->redraw |= (PR_MAP);
+}
+
+bool listen_hint_overlay(int m_idx, byte* a, char* c)
+{
+    int base;
+    byte k;
+    monster_type* m_ptr;
+
+    if (!listen_hint_has_data)
+        return false;
+    if (m_idx <= 0 || m_idx >= MAX_MONSTERS || !listen_hint[m_idx])
+        return false;
+    if (!a || !c)
+        return false;
+
+    m_ptr = &mon_list[m_idx];
+    if (!m_ptr->r_idx || m_ptr->ml)
+        return false;
+
+    if (graphics_are_ascii())
+    {
+        base = 0x30;
+        k = TERM_SLATE;
+        *a = misc_to_attr[base + k];
+        *c = misc_to_char[base + k];
+    }
+    else
+    {
+        *a = misc_to_attr[ICON_UNKNOWN_ENEMY];
+        *c = misc_to_char[ICON_UNKNOWN_ENEMY];
+    }
+
+    return true;
 }
 
 /*
@@ -1395,13 +1489,8 @@ int monster_stat(monster_type* m_ptr, int stat_type)
  */
 bool detect_monster_noise(monster_type* m_ptr, int skill)
 {
-    byte a;
-    char c;
-    byte k;
-    int base;
-
     int result;
-
+    int m_idx;
     int y = m_ptr->fy;
     int x = m_ptr->fx;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -1441,37 +1530,19 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
         return false;
     }
 
+    m_idx = cave_m_idx[y][x];
+
     // make the monster completely visible if a dramatic success
     if (result > 10)
     {
+        listen_hint_clear_monster(m_idx);
         m_ptr->ml = true;
         lite_spot(y, x);
         return true;
     }
 
-    if (graphics_are_ascii())
-    {
-        /* Base graphic '*' */
-        base = 0x30;
-
-        /* Basic listen color */
-        k = TERM_SLATE;
-
-        /* Obtain attr/char */
-        a = misc_to_attr[base + k];
-        c = misc_to_char[base + k];
-    }
-    else
-    {
-        a = misc_to_attr[ICON_UNKNOWN_ENEMY];
-        c = misc_to_char[ICON_UNKNOWN_ENEMY];
-    }
-
-    /* Display the visual effects */
-    print_rel(c, a, y, x);
-    move_cursor_relative(y, x);
-    Term_fresh();
-
+    listen_hint_set(m_idx);
+    lite_spot(y, x);
     return true;
 }
 

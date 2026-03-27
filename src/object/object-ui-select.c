@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "object/object-desc.h"
 #include "object/object-slot.h"
@@ -22,6 +23,131 @@
 bool item_tester_full = false;
 byte item_tester_tval = 0;
 bool (*item_tester_hook)(const object_type*) = NULL;
+
+static bool item_selector_snapshot_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void item_selector_format_weight(char* buf, size_t buf_size,
+    const object_type* o_ptr)
+{
+    int weight = 0;
+
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (!show_weights || !o_ptr || !o_ptr->k_idx)
+        return;
+
+    weight = o_ptr->weight * o_ptr->number;
+    strnfmt(buf, buf_size, "%2d.%1d lb", weight / 10, weight % 10);
+}
+
+static void item_selector_sync_snapshot(cptr prompt, int current_mode,
+    const int* floor_list, int vis_inven_cnt, const int* vis_inven,
+    int vis_equip_cnt, const int* vis_equip, int vis_floor_cnt,
+    const int* vis_floor, int highlight_row)
+{
+    app_session* session = app_session_current();
+    char detail[APP_INTERACTION_TEXT_MAX];
+    int i;
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
+        APP_WAIT_REASON_LIST_SELECTION,
+        APP_INTERACTION_FLAG_CAN_CONFIRM
+            | APP_INTERACTION_FLAG_CAN_CANCEL
+            | APP_INTERACTION_FLAG_SHOW_OPTIONS);
+    app_session_set_interaction_prompt(session, TERM_WHITE, prompt);
+    SDL_strlcpy(detail,
+        "Enter/Space selects, x examines, / switches panes, - selects floor, Esc cancels.",
+        sizeof(detail));
+    app_session_set_interaction_detail(session, TERM_SLATE, detail);
+
+    if (current_mode == (USE_INVEN))
+    {
+        for (i = 0; i < vis_inven_cnt; i++)
+        {
+            char label[APP_INTERACTION_LABEL_MAX];
+            char meta[APP_INTERACTION_META_MAX];
+            char tag = 'a';
+            int item_index = vis_inven[i];
+
+            label[0] = '\0';
+            meta[0] = '\0';
+            if (item_index == SUPPLIES_INDEX)
+            {
+                int virtual_slot = supplies_virtual_slot();
+
+                format_supply_summary(label, sizeof(label));
+                tag = supplies_label_char();
+                if (!tag && virtual_slot >= 0)
+                    tag = index_to_label(virtual_slot);
+                if (!tag)
+                    tag = 'a';
+            }
+            else
+            {
+                object_type* o_ptr = &inventory[item_index];
+
+                object_desc(label, sizeof(label), o_ptr, true, 3);
+                tag = index_to_label(item_index);
+                item_selector_format_weight(meta, sizeof(meta), o_ptr);
+            }
+
+            (void)app_session_add_interaction_option(session, TERM_WHITE, tag,
+                true, highlight_row == i, label, meta);
+        }
+    }
+    else if (current_mode == (USE_EQUIP))
+    {
+        for (i = 0; i < vis_equip_cnt; i++)
+        {
+            char label[APP_INTERACTION_LABEL_MAX];
+            char meta[APP_INTERACTION_META_MAX];
+            char desc[80];
+            int item_index = vis_equip[i];
+            object_type* o_ptr = &inventory[item_index];
+
+            if (o_ptr->k_idx)
+                object_desc(desc, sizeof(desc), o_ptr, true, 3);
+            else
+                SDL_strlcpy(desc, "(empty slot)", sizeof(desc));
+            strnfmt(label, sizeof(label), "%s: %s", mention_use(item_index),
+                desc);
+            item_selector_format_weight(meta, sizeof(meta), o_ptr);
+
+            (void)app_session_add_interaction_option(session, TERM_WHITE,
+                index_to_label(item_index), true, highlight_row == i, label,
+                meta);
+        }
+    }
+    else if (current_mode == (USE_FLOOR))
+    {
+        for (i = 0; i < vis_floor_cnt; i++)
+        {
+            char label[APP_INTERACTION_LABEL_MAX];
+            char meta[APP_INTERACTION_META_MAX];
+            int floor_slot = vis_floor[i];
+            int object_index = floor_list[floor_slot];
+            object_type* o_ptr = &o_list[object_index];
+
+            object_desc_floor(label, sizeof(label), o_ptr, true, 3);
+            item_selector_format_weight(meta, sizeof(meta), o_ptr);
+
+            (void)app_session_add_interaction_option(session, TERM_WHITE,
+                index_to_label(floor_slot), true, highlight_row == i, label,
+                meta);
+        }
+    }
+
+    app_session_set_interaction_selected(session,
+        (highlight_row >= 0) ? (s16b)highlight_row : -1);
+}
 
 /*
  * Flip "inven" and "equip" in any sub-windows
@@ -300,6 +426,7 @@ static int get_tag(int* cp, char tag)
  */
 bool get_item(int* cp, cptr pmt, cptr str, int mode)
 {
+    app_wait_scope wait_scope;
     int py = p_ptr->py;
     int px = p_ptr->px;
 
@@ -329,6 +456,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     int floor_list[MAX_FLOOR_STACK];
     int floor_num;
+    bool snapshot_interaction = item_selector_snapshot_active();
 
 #ifdef ALLOW_REPEAT
 
@@ -358,6 +486,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     /* save the mode in a global variable version */
     p_ptr->get_item_mode = mode;
+
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_LIST_SELECTION, mode, 0);
 
     /* Paranoia XXX XXX XXX */
     message_flush();
@@ -479,8 +610,11 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         p_ptr->command_see = true;
     }
 
+    if (snapshot_interaction)
+        p_ptr->command_see = true;
+
     /* Start out in "display" mode */
-    if (p_ptr->command_see)
+    if (p_ptr->command_see && !snapshot_interaction)
     {
         /* Save screen */
         screen_save();
@@ -765,7 +899,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         BUILD_VISIBLE_LIST();
 
         /* Viewing inventory */
-        if (p_ptr->command_see)
+        if (p_ptr->command_see && !snapshot_interaction)
         {
             /* Inventory screen */
             if (p_ptr->command_wrk == (USE_INVEN))
@@ -789,7 +923,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
         }
 
-        if (p_ptr->command_see)
+        if (p_ptr->command_see && !snapshot_interaction)
         {
             DRAW_HIGHLIGHT();
         }
@@ -833,8 +967,12 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             strnfmt(out_val, sizeof(out_val), "(Items, ESC) %s", pmt);
         }
 
-        /* Hack -- start on the prompt */
-        put_str(out_val, 0, 0);
+        if (snapshot_interaction)
+            item_selector_sync_snapshot(out_val, p_ptr->command_wrk,
+                floor_list, vis_inven_cnt, vis_inven, vis_equip_cnt, vis_equip,
+                vis_floor_cnt, vis_floor, highlight_active ? highlight_row : -1);
+        else
+            put_str(out_val, 0, 0);
 
         /* Get a key */
         which = inkey();
@@ -900,6 +1038,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             if (handled_space)
                 break;
 
+            if (snapshot_interaction)
+                break;
+
             /* Hide the list */
             if (p_ptr->command_see)
             {
@@ -945,7 +1086,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Hack -- Fix screen */
-            if (p_ptr->command_see)
+            if (p_ptr->command_see && !snapshot_interaction)
             {
                 /* Load screen */
                 screen_load();
@@ -1021,6 +1162,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (have_selection)
                 {
+                    if (snapshot_interaction)
+                        app_session_clear_interaction(app_session_current());
                     describe_item_with_comparisons(examine_index, true);
                 }
                 else
@@ -1382,11 +1525,16 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     if (p_ptr->command_see)
     {
         /* Load screen */
-        screen_load();
+        if (!snapshot_interaction)
+            screen_load();
 
         /* Hack -- Cancel "display" */
         p_ptr->command_see = false;
     }
+
+    if (snapshot_interaction)
+        app_session_clear_interaction(app_session_current());
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
 
     set_story_inventory_list_active(false);
     set_story_equipment_list_active(false);

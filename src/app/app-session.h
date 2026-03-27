@@ -3,6 +3,7 @@
 
 #include "app-events.h"
 #include "app-host.h"
+#include "app-interaction.h"
 #include "app-input.h"
 #include "app-scene-dungeon.h"
 #include "app-snapshot.h"
@@ -113,6 +114,24 @@ void app_session_note_cursor_relative(app_session* session, s16b map_y,
     s16b map_x);
 void app_session_note_cursor_absolute(app_session* session, s16b row,
     s16b col, bool visible);
+void app_session_set_cursor_visible(app_session* session, bool visible);
+bool app_session_interactions_enabled(const app_session* session);
+const app_interaction_state* app_session_interaction(
+    const app_session* session);
+void app_session_clear_interaction(app_session* session);
+void app_session_begin_interaction(app_session* session, u16b kind,
+    u16b reason, u16b flags);
+void app_session_set_interaction_prompt(app_session* session, byte attr,
+    cptr prompt);
+void app_session_set_interaction_detail(app_session* session, byte attr,
+    cptr detail);
+void app_session_set_interaction_value(app_session* session, byte attr,
+    cptr value, s16b cursor_index);
+void app_session_clear_interaction_options(app_session* session);
+void app_session_set_interaction_selected(app_session* session,
+    s16b selected_index);
+bool app_session_add_interaction_option(app_session* session, byte attr,
+    char tag, bool enabled, bool selected, cptr label, cptr meta);
 const app_session_counters* app_session_get_counters(
     const app_session* session);
 bool app_session_submit_input(app_session* session, const app_input* input);

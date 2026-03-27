@@ -340,6 +340,7 @@ static void test_session_scaffolding(void)
     app_event_record event;
     app_snapshot snapshot;
     app_snapshot_blob blob;
+    const app_interaction_state* interaction;
     app_event_span drained;
     const app_session_counters* counters;
     u64b emitted_baseline;
@@ -376,6 +377,7 @@ static void test_session_scaffolding(void)
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_NONE);
     CHECK(app_session_pending_input_count(session) == 0);
     CHECK(app_session_pending_intent_count(session) == 0);
+    CHECK(!app_session_interactions_enabled(session));
 
     emitted_baseline = app_session_get_counters(session)->emitted_events;
 
@@ -417,6 +419,50 @@ static void test_session_scaffolding(void)
     app_session_set_snapshot(session, &snapshot);
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_DUNGEON);
     CHECK(app_session_snapshot(session)->blob_count == 1);
+    CHECK(app_session_interactions_enabled(session));
+
+    app_session_note_cursor_relative(session, 7, 9);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.visible == 1);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.relative == 1);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.map_y == 7);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.map_x == 9);
+    app_session_set_cursor_visible(session, false);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.visible == 0);
+    app_session_set_cursor_visible(session, true);
+    CHECK(app_session_dungeon_snapshot(session)->cursor_state.visible == 1);
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
+        APP_WAIT_REASON_LIST_SELECTION,
+        APP_INTERACTION_FLAG_CAN_CONFIRM | APP_INTERACTION_FLAG_CAN_CANCEL
+            | APP_INTERACTION_FLAG_SHOW_OPTIONS);
+    app_session_set_interaction_prompt(session, TERM_WHITE, "Choose an item");
+    app_session_set_interaction_detail(session, TERM_SLATE,
+        "Press Enter to confirm.");
+    app_session_set_interaction_value(session, TERM_YELLOW, "12", 2);
+    CHECK(app_session_add_interaction_option(session, TERM_WHITE, 'a', true,
+        true, "Arrow", "1.0 lb"));
+    CHECK(app_session_add_interaction_option(session, TERM_WHITE, 'b', false,
+        false, "Bow", ""));
+    app_session_set_interaction_selected(session, 0);
+
+    interaction = app_session_interaction(session);
+    CHECK(interaction != NULL);
+    CHECK(interaction->kind == APP_INTERACTION_KIND_LIST);
+    CHECK(interaction->reason == APP_WAIT_REASON_LIST_SELECTION);
+    CHECK(interaction->option_count == 2);
+    CHECK(interaction->selected_index == 0);
+    CHECK(interaction->cursor_index == 2);
+    CHECK(streq(interaction->prompt, "Choose an item"));
+    CHECK(streq(interaction->detail, "Press Enter to confirm."));
+    CHECK(streq(interaction->value, "12"));
+    CHECK(interaction->options[0].selected == 1);
+    CHECK(interaction->options[1].enabled == 0);
+
+    app_session_clear_interaction(session);
+    interaction = app_session_interaction(session);
+    CHECK(interaction->kind == APP_INTERACTION_KIND_NONE);
+    CHECK(interaction->option_count == 0);
+    CHECK(interaction->selected_index == -1);
 
     memset(&input, 0, sizeof(input));
     input.layer = APP_INPUT_LAYER_LEGACY;

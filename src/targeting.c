@@ -31,6 +31,27 @@ static void look_prt(bool use_story_font, cptr text, int row, int col)
     }
 }
 
+static bool targeting_snapshot_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void targeting_snapshot_prompt(cptr text)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_TARGETING,
+        APP_WAIT_REASON_TARGETING,
+        APP_INTERACTION_FLAG_CAN_CONFIRM
+            | APP_INTERACTION_FLAG_CAN_CANCEL);
+    app_session_set_interaction_prompt(session, TERM_WHITE, text ? text : "");
+    app_session_set_interaction_detail(session, TERM_SLATE,
+        "Use direction keys to move, Enter targets, Esc cancels.");
+}
+
 /*
  * Modify the current panel to the given coordinates, adjusting only to
  * ensure the coordinates are legal, and return true if anything done.
@@ -1089,7 +1110,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             strnfmt(out_val, sizeof(out_val),
                 "What you see is not to be believed.  [%s]", info);
 
-            look_prt(use_story_font, out_val, 0, 0);
+            if (targeting_snapshot_active())
+                targeting_snapshot_prompt(out_val);
+            else
+                look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
             query = inkey();
 
@@ -1144,6 +1168,9 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     /* Recall, but not when raging */
                     if ((recall) && !p_ptr->rage)
                     {
+                        if (targeting_snapshot_active())
+                            app_session_clear_interaction(app_session_current());
+
                         /* Save screen */
                         screen_save();
 
@@ -1216,7 +1243,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                                 m_name, buf, more, info);
                         }
 
-                        look_prt(use_story_font, out_val, 0, 0);
+                        if (targeting_snapshot_active())
+                            targeting_snapshot_prompt(out_val);
+                        else
+                            look_prt(use_story_font, out_val, 0, 0);
 
                         /* Place cursor */
                         move_cursor_relative(y, x);
@@ -1293,7 +1323,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             s1, s2, s3, o_name, more, info);
                     }
 
-                    look_prt(use_story_font, out_val, 0, 0);
+                    if (targeting_snapshot_active())
+                        targeting_snapshot_prompt(out_val);
+                    else
+                        look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
                     query = inkey();
 
@@ -1372,7 +1405,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             s1, s2, s3, o_name, more, info);
                     }
 
-                    look_prt(use_story_font, out_val, 0, 0);
+                    if (targeting_snapshot_active())
+                        targeting_snapshot_prompt(out_val);
+                    else
+                        look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
                     query = inkey();
 
@@ -1453,7 +1489,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     s3, name, more, info);
             }
 
-            look_prt(use_story_font, out_val, 0, 0);
+            if (targeting_snapshot_active())
+                targeting_snapshot_prompt(out_val);
+            else
+                look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
             query = inkey();
 
@@ -2439,11 +2478,13 @@ bool target_set_interactive(int mode, int range)
             target_set_monster(0);
             health_track(0);
         }
+        app_session_clear_interaction(app_session_current());
         app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
     }
 
     /* Success */
+    app_session_clear_interaction(app_session_current());
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }

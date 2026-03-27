@@ -175,6 +175,10 @@ static bool sdl_scene_stack_wait_reason_allows_snapshot(
     {
     case APP_WAIT_REASON_NONE:
     case APP_WAIT_REASON_COMMAND_INPUT:
+    case APP_WAIT_REASON_CONFIRM:
+    case APP_WAIT_REASON_LIST_SELECTION:
+    case APP_WAIT_REASON_TARGETING:
+    case APP_WAIT_REASON_INFORMATIONAL_PAUSE:
         return true;
 
     default:
@@ -184,6 +188,7 @@ static bool sdl_scene_stack_wait_reason_allows_snapshot(
 
 static void sdl_scene_stack_expire_animations(Uint64 now_ns)
 {
+    size_t previous_count = g_scene_stack.animation_count;
     size_t i;
     size_t write_index = 0;
 
@@ -205,6 +210,11 @@ static void sdl_scene_stack_expire_animations(Uint64 now_ns)
         memset(&g_scene_stack.animations[i], 0, sizeof(g_scene_stack.animations[i]));
 
     g_scene_stack.animation_count = write_index;
+    if (write_index != previous_count)
+    {
+        g_scene_stack.frame_dirty = true;
+        g_state.need_present = true;
+    }
 }
 
 static bool sdl_scene_stack_dungeon_snapshot_active(const app_session* session)
@@ -231,9 +241,13 @@ static void sdl_scene_stack_update_layers(app_session* session)
 {
     const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
     const app_wait_state* wait_state = session ? app_session_wait_state(session) : NULL;
+    const app_interaction_state* interaction = session
+        ? app_session_interaction(session) : NULL;
     bool next_dungeon_active = sdl_scene_stack_dungeon_snapshot_active(session);
+    bool interaction_owns_overlay = interaction
+        && interaction->kind != APP_INTERACTION_KIND_NONE;
     bool next_overlay_active = next_dungeon_active && character_icky > 0
-        && g_views[0].canvas;
+        && g_views[0].canvas && !interaction_owns_overlay;
     bool next_modal_active = g_scene_stack.enabled && g_views[0].term_ready
         && g_views[0].canvas && session && snapshot
         && ((snapshot->scene != APP_SCENE_KIND_DUNGEON)

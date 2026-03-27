@@ -1907,7 +1907,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             byte ha;
             char hc;
 
-            if (song_revealing_overlay(m_idx, &ha, &hc))
+            if (song_revealing_overlay(m_idx, &ha, &hc)
+                || listen_hint_overlay(m_idx, &ha, &hc))
             {
                 a = ha;
                 c = hc;
