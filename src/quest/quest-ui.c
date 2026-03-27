@@ -4,6 +4,7 @@
 #include "externs.h"
 #include "metarun.h"
 #include "quest/quest.h"
+#include "ui/ui-information-scene.h"
 #include "log/log.h"
 
 static cptr get_quest_title(int quest_idx)
@@ -84,6 +85,557 @@ static cptr get_oath_name_from_id(byte oath_id)
         case 4: return "Smith oath";
         default: return "Unknown oath";
     }
+}
+
+static cptr process_quest_placeholders(cptr text, int quest_idx);
+static cptr get_quest_reward_text(int quest_idx);
+
+static void quest_scene_add_line(app_information_scene* scene, int col,
+    int* row, cptr text, byte color)
+{
+    if (!scene || !row || !text || !text[0])
+        return;
+
+    (void)app_information_scene_add_text(scene, (s16b)(*row), (s16b)col,
+        color, text);
+    (*row)++;
+}
+
+static void quest_scene_display_wrapped_text(app_information_scene* scene,
+    int col, int* row, cptr text, byte color, int max_width)
+{
+    char line_buf[256];
+    int line_pos = 0;
+    int effective_width = max_width - col - 4;
+    int text_len;
+    int word_start = 0;
+    int i = 0;
+    int loop_count = 0;
+
+    if (!scene || !row || !text)
+        return;
+
+    text_len = strlen(text);
+    if (effective_width < 20)
+        effective_width = 20;
+
+    line_buf[0] = '\0';
+
+    while (i <= text_len)
+    {
+        loop_count++;
+        if (loop_count > 1000)
+        {
+            log_warn("quest_scene_display_wrapped_text: safety break");
+            break;
+        }
+
+        if (i == text_len || text[i] == ' ')
+        {
+            int word_len = i - word_start;
+            char word[128];
+
+            if (word_len > 0 && word_len < (int)sizeof(word))
+            {
+                int copy_len = word_len;
+
+                if (copy_len >= (int)sizeof(word))
+                    copy_len = (int)sizeof(word) - 1;
+                for (int j = 0; j < copy_len; j++)
+                    word[j] = text[word_start + j];
+                word[copy_len] = '\0';
+
+                if (line_pos + (line_pos > 0 ? 1 : 0) + copy_len
+                    > effective_width && line_pos > 0)
+                {
+                    (void)app_information_scene_add_text(scene, (s16b)(*row),
+                        (s16b)(col + 2), color, line_buf);
+                    (*row)++;
+
+                    if (copy_len > effective_width)
+                    {
+                        int word_pos = 0;
+
+                        while (word_pos < copy_len)
+                        {
+                            int chunk_len = effective_width;
+                            char chunk[256];
+                            int k;
+
+                            if (word_pos + chunk_len > copy_len)
+                                chunk_len = copy_len - word_pos;
+
+                            for (k = 0; k < chunk_len
+                                && word_pos + k < copy_len; k++)
+                            {
+                                chunk[k] = word[word_pos + k];
+                            }
+                            chunk[k] = '\0';
+
+                            (void)app_information_scene_add_text(scene,
+                                (s16b)(*row), (s16b)(col + 2), color, chunk);
+                            (*row)++;
+                            word_pos += chunk_len;
+                        }
+
+                        line_buf[0] = '\0';
+                        line_pos = 0;
+                    }
+                    else
+                    {
+                        SDL_strlcpy(line_buf, word, sizeof(line_buf));
+                        line_pos = copy_len;
+                    }
+                }
+                else
+                {
+                    if (line_pos > 0)
+                    {
+                        SDL_strlcat(line_buf, " ", sizeof(line_buf));
+                        line_pos++;
+                    }
+                    SDL_strlcat(line_buf, word, sizeof(line_buf));
+                    line_pos += copy_len;
+                }
+            }
+
+            while (i < text_len && text[i] == ' ')
+                i++;
+            word_start = i;
+        }
+        else
+        {
+            i++;
+        }
+    }
+
+    if (line_pos > 0)
+    {
+        (void)app_information_scene_add_text(scene, (s16b)(*row),
+            (s16b)(col + 2), color, line_buf);
+        (*row)++;
+    }
+}
+
+static void quest_scene_add_previous_completion(app_information_scene* scene,
+    int col, int* row, int quest_id, int metarun_quest_id, int current_state,
+    int rewarded_state, int quest_info_index, int wid,
+    bool* has_previous_completions)
+{
+    int completed = metarun_quest_completion_count(metarun_quest_id);
+
+    if (completed <= 0 || current_state == rewarded_state)
+        return;
+
+    if (!*has_previous_completions)
+    {
+        quest_scene_add_line(scene, col, row,
+            "Previously Completed in Metarun:", TERM_L_DARK);
+        *has_previous_completions = true;
+    }
+
+    {
+        cptr quest_title = get_quest_title(quest_id);
+        cptr oath_name = get_oath_name_from_id(quest_info[quest_info_index].oath_id);
+        char status_text[150];
+
+        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)",
+            quest_title, oath_name, completed);
+        quest_scene_display_wrapped_text(scene, col, row, status_text,
+            TERM_SLATE, wid);
+    }
+}
+
+static bool do_cmd_quest_status_information_scene(void)
+{
+    ui_information_scene_scope scope;
+    app_information_scene scene;
+    char buf[128];
+    int row = 1;
+    int col = 2;
+    bool any_quests = false;
+    bool has_previous_completions = false;
+    int wid;
+    int hgt;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    Term_get_size(&wid, &hgt);
+    app_information_scene_init(&scene);
+
+    quest_scene_add_line(&scene, col, &row, "=== Quest Status ===", TERM_YELLOW);
+    row++;
+
+    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_TULKAS),
+            TERM_YELLOW);
+
+        switch (p_ptr->tulkas_quest)
+        {
+        case TULKAS_QUEST_GIVER_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Tulkas awaits", TERM_L_BLUE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                process_quest_placeholders(get_quest_challenge(QUEST_ID_TULKAS),
+                    QUEST_ID_TULKAS), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_TULKAS));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case TULKAS_QUEST_ACTIVE:
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                process_quest_placeholders(get_quest_challenge(QUEST_ID_TULKAS),
+                    QUEST_ID_TULKAS), TERM_WHITE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_TULKAS));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case TULKAS_QUEST_COMPLETE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Return for reward", TERM_L_GREEN);
+            break;
+
+        case TULKAS_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_TULKAS));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+        }
+        row++;
+    }
+
+    if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_AULE),
+            TERM_YELLOW);
+
+        switch (p_ptr->aule_quest)
+        {
+        case AULE_QUEST_FORGE_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Aule awaits", TERM_L_BLUE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_AULE), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_AULE));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case AULE_QUEST_ACTIVE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Active - Seek the forge-halls", TERM_WHITE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_AULE), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_AULE));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case AULE_QUEST_SUCCESS:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Return for reward", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_AULE));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case AULE_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_AULE));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+        }
+        row++;
+    }
+
+    if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_MANDOS),
+            TERM_YELLOW);
+
+        switch (p_ptr->mandos_quest)
+        {
+        case MANDOS_QUEST_GIVER_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Mandos waits beyond death", TERM_L_BLUE);
+            quest_scene_add_line(&scene, col + 2, &row,
+                get_quest_challenge(QUEST_ID_MANDOS), TERM_SLATE);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_MANDOS));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+
+        case MANDOS_QUEST_ACTIVE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Active - Escape the houses of waiting", TERM_WHITE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_MANDOS), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_MANDOS));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case MANDOS_QUEST_SUCCESS:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Claim Mandos's favour", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_MANDOS));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+
+        case MANDOS_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_MANDOS));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+        }
+        row++;
+    }
+
+    if (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_NIENA),
+            TERM_YELLOW);
+
+        switch (p_ptr->niena_quest)
+        {
+        case NIENA_QUEST_GIVER_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Niena offers mercy", TERM_L_BLUE);
+            quest_scene_add_line(&scene, col + 2, &row,
+                get_quest_challenge(QUEST_ID_NIENA), TERM_SLATE);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_NIENA));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+
+        case NIENA_QUEST_ACTIVE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Active - Walk the path of mercy", TERM_WHITE);
+            strnfmt(buf, sizeof(buf), "Monsters seen: %d  killed: %d",
+                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
+            quest_scene_add_line(&scene, col + 4, &row, buf, TERM_SLATE);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_NIENA));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case NIENA_QUEST_SUCCESS:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Claim Niena's grace", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_NIENA));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+
+        case NIENA_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_NIENA));
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_SLATE);
+            break;
+
+        case NIENA_QUEST_FAILED:
+            strnfmt(buf, sizeof(buf), "Failed: %d seen, %d killed",
+                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
+            quest_scene_add_line(&scene, col + 2, &row, buf, TERM_RED);
+            quest_scene_add_line(&scene, col + 2, &row,
+                "You took a life and lost Niena's mercy.", TERM_SLATE);
+            break;
+        }
+        row++;
+    }
+
+    if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_OROME),
+            TERM_YELLOW);
+
+        switch (p_ptr->orome_quest)
+        {
+        case OROME_QUEST_GIVER_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Orome awaits", TERM_L_BLUE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_OROME), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_OROME));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case OROME_QUEST_ACTIVE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Active: Hunt the fell kindreds", TERM_WHITE);
+            strnfmt(buf, sizeof(buf), "Wolves killed: %d/100",
+                p_ptr->orome_wolves_killed);
+            quest_scene_display_wrapped_text(&scene, col + 2, &row, buf,
+                p_ptr->orome_wolves_killed >= 100 ? TERM_L_GREEN : TERM_SLATE,
+                wid);
+            strnfmt(buf, sizeof(buf), "Spiders killed: %d/80",
+                p_ptr->orome_spiders_killed);
+            quest_scene_display_wrapped_text(&scene, col + 2, &row, buf,
+                p_ptr->orome_spiders_killed >= 80 ? TERM_L_GREEN : TERM_SLATE,
+                wid);
+            strnfmt(buf, sizeof(buf), "Serpents killed: %d/60",
+                p_ptr->orome_serpents_killed);
+            quest_scene_display_wrapped_text(&scene, col + 2, &row, buf,
+                p_ptr->orome_serpents_killed >= 60 ? TERM_L_GREEN : TERM_SLATE,
+                wid);
+            strnfmt(buf, sizeof(buf), "Vampires killed: %d/30",
+                p_ptr->orome_vampires_killed);
+            quest_scene_display_wrapped_text(&scene, col + 2, &row, buf,
+                p_ptr->orome_vampires_killed >= 30 ? TERM_L_GREEN : TERM_SLATE,
+                wid);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_OROME), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_OROME));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case OROME_QUEST_SUCCESS:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Return for reward", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_OROME));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case OROME_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_OROME));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+        }
+        row++;
+    }
+
+    if (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED)
+    {
+        any_quests = true;
+        quest_scene_add_line(&scene, col, &row, get_quest_title(QUEST_ID_VARDA),
+            TERM_YELLOW);
+
+        switch (p_ptr->varda_quest)
+        {
+        case VARDA_QUEST_GIVER_PRESENT:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Available - Varda waits in sunlight", TERM_L_BLUE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_VARDA), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_VARDA));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case VARDA_QUEST_ACTIVE:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Active - Seek Duruin's bastion", TERM_WHITE);
+            quest_scene_display_wrapped_text(&scene, col, &row,
+                get_quest_challenge(QUEST_ID_VARDA), TERM_SLATE, wid);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_VARDA));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case VARDA_QUEST_SUCCESS:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Complete - Claim Varda's blessing", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s",
+                get_quest_reward_text(QUEST_ID_VARDA));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+
+        case VARDA_QUEST_REWARDED:
+            quest_scene_add_line(&scene, col + 2, &row,
+                "Completed by this character", TERM_L_GREEN);
+            strnfmt(buf, sizeof(buf), "Reward: %s received",
+                get_quest_reward_text(QUEST_ID_VARDA));
+            quest_scene_display_wrapped_text(&scene, col, &row, buf, TERM_SLATE,
+                wid);
+            break;
+        }
+        row++;
+    }
+
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_TULKAS,
+        METARUN_QUEST_TULKAS, p_ptr->tulkas_quest, TULKAS_QUEST_REWARDED, 1,
+        wid, &has_previous_completions);
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_AULE,
+        METARUN_QUEST_AULE, p_ptr->aule_quest, AULE_QUEST_REWARDED, 2, wid,
+        &has_previous_completions);
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_MANDOS,
+        METARUN_QUEST_MANDOS, p_ptr->mandos_quest, MANDOS_QUEST_REWARDED, 3,
+        wid, &has_previous_completions);
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_NIENA,
+        METARUN_QUEST_NIENA, p_ptr->niena_quest, NIENA_QUEST_REWARDED, 4, wid,
+        &has_previous_completions);
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_OROME,
+        METARUN_QUEST_OROME, p_ptr->orome_quest, OROME_QUEST_REWARDED, 5, wid,
+        &has_previous_completions);
+    quest_scene_add_previous_completion(&scene, col, &row, QUEST_ID_VARDA,
+        METARUN_QUEST_VARDA, p_ptr->varda_quest, VARDA_QUEST_REWARDED, 6, wid,
+        &has_previous_completions);
+
+    if (has_previous_completions)
+        row++;
+
+    if (!any_quests)
+    {
+        quest_scene_add_line(&scene, col, &row,
+            "No active or completed quests this run.", TERM_SLATE);
+        row++;
+        quest_scene_add_line(&scene, col, &row,
+            "Quest vaults may appear as you delve deeper...", TERM_L_DARK);
+    }
+
+    row++;
+    quest_scene_add_line(&scene, col, &row, "Press any key to return.",
+        TERM_L_WHITE);
+
+    if (!ui_information_scene_present(&scene))
+    {
+        ui_information_scene_leave(&scope);
+        return false;
+    }
+
+    (void)ui_information_scene_wait_key();
+    ui_information_scene_leave(&scope);
+    return true;
 }
 
 /*
@@ -430,6 +982,9 @@ void do_cmd_quest_status(void)
 
     log_trace("QUEST STATUS: Player exists, quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
+
+    if (do_cmd_quest_status_information_scene())
+        return;
 
     /* Get terminal size for wrapping */
     Term_get_size(&wid, &hgt);

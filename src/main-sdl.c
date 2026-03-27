@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl-main-internal.h"
+#include "ui/ui-information-scene.h"
 
 const char help_sdl[] = "SDL3";
 
@@ -125,6 +126,11 @@ static bool sdl_legacy_input_bridge_active(void)
     return app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
 }
 
+static bool sdl_information_scene_owns_input(void)
+{
+    return ui_information_scene_owns_input();
+}
+
 static errr sdl_term_queue_keypress(term* target, int key)
 {
     if (!target || !key || !target->key_queue || !target->key_size)
@@ -190,6 +196,8 @@ void sdl_drain_legacy_input_queue(void)
     app_input input;
 
     if (!sdl_legacy_input_bridge_active())
+        return;
+    if (sdl_information_scene_owns_input())
         return;
 
     session = app_session_current();

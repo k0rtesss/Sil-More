@@ -26,6 +26,7 @@ extern struct sound_config g_sound_config;
 #include "metarun.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
+#include "ui/ui-information-scene.h"
 #include "cmd-ui.h"
 
 typedef struct knowledge_browser_layout knowledge_browser_layout;
@@ -98,6 +99,25 @@ struct knowledge_browser_state
 };
 
 static int g_knowledge_last_page = KNOWLEDGE_PAGE_ARTEFACTS;
+
+static bool knowledge_pause_information_scene(
+    ui_information_scene_scope* scope)
+{
+    if (!scope || !scope->active)
+        return false;
+
+    ui_information_scene_leave(scope);
+    return true;
+}
+
+static bool knowledge_resume_information_scene(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter(scope);
+}
 
 static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
     "Herbs",
@@ -2639,6 +2659,8 @@ static bool knowledge_is_recall_input(int ch)
 
 void do_cmd_knowledge_browser_page(int page)
 {
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
     int i;
     int artefact_grp_idx[100];
     int object_grp_idx[100];
@@ -2704,7 +2726,8 @@ void do_cmd_knowledge_browser_page(int page)
 
     curse_cnt = knowledge_collect_curses(curse_idx);
 
-    screen_save();
+    if (!use_information_scene)
+        screen_save();
 
     while (!done)
     {
@@ -2772,7 +2795,23 @@ void do_cmd_knowledge_browser_page(int page)
                         + (state.entry_cur[page] - state.entry_top[page]));
             }
 
-            ch = inkey();
+            if (use_information_scene)
+            {
+                if (!ui_information_scene_present_term())
+                {
+                    ui_information_scene_leave(&info_scope);
+                    use_information_scene = false;
+                    screen_save();
+                    Term_fresh();
+                }
+            }
+            else
+            {
+                Term_fresh();
+            }
+
+            ch = use_information_scene ? ui_information_scene_wait_key()
+                                       : inkey();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -2791,7 +2830,15 @@ void do_cmd_knowledge_browser_page(int page)
             if (knowledge_is_recall_input(ch))
             {
                 if (artefact_cnt > 0)
+                {
+                    if (use_information_scene
+                        && !knowledge_pause_information_scene(&info_scope))
+                        break;
                     desc_art_fake(artefact_idx[state.entry_cur[page]]);
+                    if (use_information_scene
+                        && !knowledge_resume_information_scene(&info_scope))
+                        return;
+                }
                 else
                     bell("Nothing to recall.");
                 break;
@@ -2888,7 +2935,23 @@ void do_cmd_knowledge_browser_page(int page)
                         + (state.entry_cur[page] - state.entry_top[page]));
             }
 
-            ch = inkey();
+            if (use_information_scene)
+            {
+                if (!ui_information_scene_present_term())
+                {
+                    ui_information_scene_leave(&info_scope);
+                    use_information_scene = false;
+                    screen_save();
+                    Term_fresh();
+                }
+            }
+            else
+            {
+                Term_fresh();
+            }
+
+            ch = use_information_scene ? ui_information_scene_wait_key()
+                                       : inkey();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -2910,7 +2973,13 @@ void do_cmd_knowledge_browser_page(int page)
                     && (object_idx[state.entry_cur[page]].type == OBJ_NORMAL)
                     && k_info[object_idx[state.entry_cur[page]].idx].aware)
                 {
+                    if (use_information_scene
+                        && !knowledge_pause_information_scene(&info_scope))
+                        break;
                     desc_obj_fake(object_idx[state.entry_cur[page]].idx);
+                    if (use_information_scene
+                        && !knowledge_resume_information_scene(&info_scope))
+                        return;
                 }
                 else
                 {
@@ -2994,7 +3063,23 @@ void do_cmd_knowledge_browser_page(int page)
                         + (state.entry_cur[page] - state.entry_top[page]));
             }
 
-            ch = inkey();
+            if (use_information_scene)
+            {
+                if (!ui_information_scene_present_term())
+                {
+                    ui_information_scene_leave(&info_scope);
+                    use_information_scene = false;
+                    screen_save();
+                    Term_fresh();
+                }
+            }
+            else
+            {
+                Term_fresh();
+            }
+
+            ch = use_information_scene ? ui_information_scene_wait_key()
+                                       : inkey();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -3014,8 +3099,14 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 if (monster_cnt > 0)
                 {
+                    if (use_information_scene
+                        && !knowledge_pause_information_scene(&info_scope))
+                        break;
                     screen_roff(mon_idx[state.entry_cur[page]].r_idx, NULL);
                     (void)inkey();
+                    if (use_information_scene
+                        && !knowledge_resume_information_scene(&info_scope))
+                        return;
                 }
                 else
                 {
@@ -3077,7 +3168,23 @@ void do_cmd_knowledge_browser_page(int page)
                     + (state.entry_cur[page] - state.entry_top[page]));
             }
 
-            ch = inkey();
+            if (use_information_scene)
+            {
+                if (!ui_information_scene_present_term())
+                {
+                    ui_information_scene_leave(&info_scope);
+                    use_information_scene = false;
+                    screen_save();
+                    Term_fresh();
+                }
+            }
+            else
+            {
+                Term_fresh();
+            }
+
+            ch = use_information_scene ? ui_information_scene_wait_key()
+                                       : inkey();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -3093,7 +3200,15 @@ void do_cmd_knowledge_browser_page(int page)
             if (knowledge_is_recall_input(ch))
             {
                 if (curse_cnt > 0)
+                {
+                    if (use_information_scene
+                        && !knowledge_pause_information_scene(&info_scope))
+                        break;
                     knowledge_show_curse_detail(curse_idx[state.entry_cur[page]]);
+                    if (use_information_scene
+                        && !knowledge_resume_information_scene(&info_scope))
+                        return;
+                }
                 else
                     bell("Nothing to recall.");
                 break;
@@ -3141,7 +3256,10 @@ void do_cmd_knowledge_browser_page(int page)
     mem_free_null(object_idx);
     mem_free_null(artefact_idx);
 
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else
+        screen_load();
 }
 
 /*
@@ -3149,6 +3267,8 @@ void do_cmd_knowledge_browser_page(int page)
  */
 bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 {
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
     int i;
     int max = 0;
     int grp_cnt = SUPPLY_GROUP_MAX;
@@ -3189,7 +3309,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     entries = mem_alloc_array(z_info->k_max, supply_list_entry);
 
-    screen_save();
+    if (!use_information_scene)
+        screen_save();
 
     while (!flag)
     {
@@ -3317,7 +3438,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         else
             Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
 
-        char ch = inkey();
+        if (use_information_scene)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+                screen_save();
+                Term_fresh();
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+
+        char ch = use_information_scene ? (char)ui_information_scene_wait_key()
+                                        : inkey();
         if (steamdeck_controls_active() && ch == steamdeck_back_key())
             ch = ESCAPE;
 
@@ -3348,7 +3485,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 supply_list_entry* entry = &entries[entry_cur];
                 if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
                 {
+                    if (use_information_scene
+                        && !knowledge_pause_information_scene(&info_scope))
+                        break;
                     object_info_screen(&inventory[entry->item_idx]);
+                    if (use_information_scene
+                        && !knowledge_resume_information_scene(&info_scope))
+                        return acted;
                     redraw = true;
                 }
                 else if (entry->k_idx >= 0)
@@ -3356,7 +3499,13 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     object_kind* k_ptr = &k_info[entry->k_idx];
                     if (k_ptr->aware)
                     {
+                        if (use_information_scene
+                            && !knowledge_pause_information_scene(&info_scope))
+                            break;
                         desc_obj_fake(entry->k_idx);
+                        if (use_information_scene
+                            && !knowledge_resume_information_scene(&info_scope))
+                            return acted;
                         redraw = true;
                     }
                     else
@@ -3489,7 +3638,10 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     }
 
     mem_free_null(entries);
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else
+        screen_load();
 
     if (refresh_after_close)
     {
@@ -3589,6 +3741,8 @@ void do_cmd_knowledge_kills(void)
  */
 void do_cmd_knowledge(void)
 {
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
     char ch;
 
     /* File type is "TEXT" */
@@ -3602,7 +3756,8 @@ void do_cmd_knowledge(void)
     }
 
     /* Save screen */
-    screen_save();
+    if (!use_information_scene)
+        screen_save();
 
     /* Interact until done */
     while (1)
@@ -3627,7 +3782,23 @@ void do_cmd_knowledge(void)
         prt("Command: ", 11, 0);
 
         /* Prompt */
-        ch = inkey();
+        if (use_information_scene)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+                screen_save();
+                Term_fresh();
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+
+        ch = use_information_scene ? (char)ui_information_scene_wait_key()
+                                   : inkey();
 
         /* Done */
         if (ch == ESCAPE)
@@ -3636,38 +3807,74 @@ void do_cmd_knowledge(void)
         /* Known lore browser */
         if (ch == '1')
         {
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_browser_page(g_knowledge_last_page);
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Scores */
         else if (ch == '2')
         {
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_supplies(NULL);
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Scores */
         else if (ch == '3')
         {
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             show_scores_interactive(true);
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Kill counts */
         else if (ch == '4')
         {
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_kills();
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Notes file, if one exists */
         else if (ch == '5')
         {
             /* Spawn */
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_notes();
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Oath status */
         else if (ch == '6')
         {
+            if (use_information_scene
+                && !knowledge_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_oaths();
+            if (use_information_scene
+                && !knowledge_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Unknown option */
@@ -3681,6 +3888,9 @@ void do_cmd_knowledge(void)
     }
 
     /* Load screen */
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else
+        screen_load();
 }
 

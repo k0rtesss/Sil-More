@@ -16,6 +16,7 @@
 #include "sound-config.h"
 #include "platform-audio.h"
 #include "ui/ui-character-screen.h"
+#include "ui/ui-information-scene.h"
 
 extern struct sound_config g_sound_config;
 #include "externs.h"
@@ -174,10 +175,31 @@ static void character_sheet_draw_page_indicator(int sheet_page, int compact_page
         sdl_story_font_disable();
 }
 
+static bool character_sheet_pause_information_scene(
+    ui_information_scene_scope* scope)
+{
+    if (!scope || !scope->active)
+        return false;
+
+    ui_information_scene_leave(scope);
+    return true;
+}
+
+static bool character_sheet_resume_information_scene(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter(scope);
+}
+
 void do_cmd_character_sheet(void)
 {
     char ch;
-
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    bool saved_screen = !use_information_scene;
     int mode = 0;
     int sheet_page = 1;
     int body_scroll = 0;
@@ -191,7 +213,8 @@ void do_cmd_character_sheet(void)
     }
 
     /* Save screen */
-    screen_save();
+    if (saved_screen)
+        screen_save();
 
     /* Forever */
     while (1)
@@ -287,14 +310,27 @@ void do_cmd_character_sheet(void)
                 sdl_story_font_disable();
         }
 
-        Term_fresh();  /* Render commands */
+        if (use_information_scene)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+                Term_fresh();
+            }
+        }
+        else
+        {
+            Term_fresh();  /* Render commands */
+        }
 
         if (story_character_enabled()) {
             sdl_story_font_disable();
         }
 
         /* Query */
-        ch = inkey();
+        ch = use_information_scene ? (char)ui_information_scene_wait_key()
+                                   : inkey();
 
         /* Exit - B button (back) or ESC */
         if (ch == ESCAPE || (steamdeck && ch == steamdeck_back_key()))
@@ -336,7 +372,13 @@ void do_cmd_character_sheet(void)
         if (ch == 'i' || ch == ' ' || ch == INPUT_BIND_CONFIRM
             || (steamdeck && ch == steamdeck_confirm_key()))
         {
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             gain_skills();
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
             /* Force redraw after skill changes */
             p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_EXP);
             handle_stuff();
@@ -345,13 +387,25 @@ void do_cmd_character_sheet(void)
         /* Show notes - 'n' */
         else if (ch == 'n')
         {
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             do_cmd_knowledge_notes();
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Story stats - 's' or Y button */
         else if (ch == 's' || (steamdeck && ch == steamdeck_secondary_key()))
         {
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             print_metarun_stats();
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
         }
 
 #ifdef DEBUG_CURSES
@@ -365,7 +419,13 @@ void do_cmd_character_sheet(void)
         /* Abilities - 'a', Tab, or X button */
         else if ((ch == 'a') || (ch == '\t') || (steamdeck && ch == steamdeck_alt_action_key()))
         {
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             (void)do_cmd_ability_screen();
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
             /* Force redraw after ability changes */
             p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_EXP);
             handle_stuff();
@@ -376,6 +436,9 @@ void do_cmd_character_sheet(void)
         {
             char ftmp[80];
 
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             strnfmt(ftmp, sizeof(ftmp), "%s.txt", op_ptr->base_name);
 
             if (term_get_string("File name: ", ftmp, sizeof(ftmp)))
@@ -392,12 +455,21 @@ void do_cmd_character_sheet(void)
                     }
                 }
             }
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Tutorial / Help - '?' or RS Right */
         else if (ch == '?' || (steamdeck && ch == steamdeck_info_key()))
         {
+            if (use_information_scene
+                && !character_sheet_pause_information_scene(&info_scope))
+                break;
             display_character_tutorial();
+            if (use_information_scene
+                && !character_sheet_resume_information_scene(&info_scope))
+                return;
         }
 
         /* Oops */
@@ -411,7 +483,10 @@ void do_cmd_character_sheet(void)
     }
 
     /* Load screen */
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else if (saved_screen)
+        screen_load();
 
     /* Force redraw after screen restore if skills/abilities were changed */
     p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_EXP);

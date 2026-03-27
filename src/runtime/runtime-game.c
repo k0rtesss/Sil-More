@@ -225,21 +225,15 @@ static void close_game_aux(void)
             break;
 
         case 2:
-            screen_save();
             death_spectator_view();
-            screen_load();
             break;
 
         case 3:
-            screen_save();
             do_cmd_messages();
-            screen_load();
             break;
 
         case 4:
-            screen_save();
             ui_death_show_character_info();
-            screen_load();
             break;
 
         case 5:
@@ -257,9 +251,7 @@ static void close_game_aux(void)
                 if (ftmp[0] && (ftmp[0] != ' '))
                 {
                     errr dump_err;
-                    screen_save();
                     dump_err = file_character(ftmp, false);
-                    screen_load();
 
                     if (dump_err)
                         msg_print("Character dump failed!");
@@ -275,6 +267,14 @@ static void close_game_aux(void)
         case 7:
             wants_to_quit = true;
             break;
+        }
+
+        if (!wants_to_quit && choice >= 1 && choice <= 6)
+        {
+            Term_clear();
+            ui_death_print_tomb(&the_score);
+            flush();
+            message_flush();
         }
     }
 

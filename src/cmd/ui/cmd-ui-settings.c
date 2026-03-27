@@ -27,11 +27,22 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-information-scene.h"
 #include "ui/ui-look-sidebar.h"
+#include "ui/ui-information-scene.h"
 
 #define COLOR_SAMPLE "###"
 
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
+
+static bool settings_information_scene_active(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
+
+    return ui_information_scene_supported() && snapshot
+        && (snapshot->scene == APP_SCENE_KIND_INFORMATION);
+}
 
 
 static void dump_visual_pair(
@@ -3184,14 +3195,25 @@ int options_menu(int* highlight)
     }
 
     /* Flush the prompt */
-    Term_fresh();
+    if (settings_information_scene_active())
+    {
+        if (!ui_information_scene_present_term())
+            Term_fresh();
+    }
+    else
+    {
+        Term_fresh();
+    }
 
     /* Place cursor at current choice */
     Term_gotoxy(2, title_row + 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    if (settings_information_scene_active())
+        ch = ui_information_scene_wait_key();
+    else
+        ch = inkey();
     inkey_set_cursor_hidden(false);
 
     if ((ch == 'a') || (ch == 'A'))
@@ -3331,6 +3353,9 @@ void do_cmd_options(void)
     char ftmp[80];
 
     bool return_to_game = false;
+    ui_information_scene_scope scene_scope;
+    bool scene_active = ui_information_scene_enter(&scene_scope);
+    bool saved_screen = !scene_active;
 
     /* Clear any active banner before opening options */
     extern int g_banner_force_redraw_remaining;
@@ -3340,7 +3365,8 @@ void do_cmd_options(void)
     }
 
     /* Save screen */
-    screen_save();
+    if (saved_screen)
+        screen_save();
 
     /* Clear screen */
     Term_clear();
@@ -3349,6 +3375,9 @@ void do_cmd_options(void)
     while (!return_to_game)
     {
         choice = options_menu(&highlight);
+
+        if (scene_active && choice != 16)
+            ui_information_scene_leave(&scene_scope);
 
         switch (choice)
         {
@@ -3485,13 +3514,22 @@ void do_cmd_options(void)
             break;
         }
         }
+
+        if (scene_active && !return_to_game
+            && !ui_information_scene_enter(&scene_scope))
+        {
+            scene_active = false;
+        }
     }
 
     /* Flush messages */
     message_flush();
 
     /* Load screen */
-    screen_load();
+    if (scene_active)
+        ui_information_scene_leave(&scene_scope);
+    else if (saved_screen)
+        screen_load();
 }
 
 #ifdef ALLOW_MACROS
@@ -3802,7 +3840,6 @@ void do_cmd_keybinds(void)
     else
         mode = KEYMAP_MODE_ANGBAND_HJKL;
     
-    /* Save screen */
     screen_save();
     
     while (!done)
@@ -5396,7 +5433,6 @@ void do_cmd_macros(void)
         message_flush();
     }
 
-    /* Load screen */
     screen_load();
 }
 

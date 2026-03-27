@@ -26,6 +26,7 @@ struct app_session {
     app_interaction_state interaction;
     app_snapshot snapshot;
     app_dungeon_snapshot dungeon_snapshot;
+    app_information_snapshot information_snapshot;
     u32b snapshot_dirty_mask;
     u64b next_snapshot_revision;
     app_session_counters counters;
@@ -121,6 +122,20 @@ static void app_session_touch_interaction(app_session* session)
     app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_OVERLAY);
     if (app_session_interactions_enabled(session))
         (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+}
+
+static void app_session_sync_information_blob(app_session* session)
+{
+    if (!session)
+        return;
+
+    session->information_snapshot.snapshot.scene = APP_SCENE_KIND_INFORMATION;
+    session->information_snapshot.snapshot.blobs = session->information_snapshot.blobs;
+    session->information_snapshot.snapshot.blob_count = N_ELEMENTS(session->information_snapshot.blobs);
+    session->information_snapshot.blobs[0].kind = APP_SNAPSHOT_BLOB_INFORMATION;
+    session->information_snapshot.blobs[0].format_version = APP_INFORMATION_FORMAT_VERSION;
+    session->information_snapshot.blobs[0].data = (const byte*)&session->information_snapshot.scene;
+    session->information_snapshot.blobs[0].size = sizeof(session->information_snapshot.scene);
 }
 
 static bool app_input_queue_init(app_input_queue* queue, size_t capacity)
@@ -355,6 +370,7 @@ app_session* app_session_create(const app_session_config* config)
     app_interaction_state_init(&session->interaction);
     session->snapshot.scene = APP_SCENE_KIND_NONE;
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
+    app_information_snapshot_init(&session->information_snapshot);
     session->next_snapshot_revision = 1u;
     session->events = app_event_buffer_create(initial_event_capacity);
 
@@ -555,6 +571,45 @@ const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const app_session* session)
 {
     return session ? &session->dungeon_snapshot : NULL;
+}
+
+const app_information_snapshot* app_session_information_snapshot(
+    const app_session* session)
+{
+    return session ? &session->information_snapshot : NULL;
+}
+
+void app_session_clear_information_snapshot(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_information_scene_init(&session->information_snapshot.scene);
+    app_session_sync_information_blob(session);
+}
+
+bool app_session_add_information_op(app_session* session, s16b row,
+    s16b col, byte attr, cptr text)
+{
+    if (!session)
+        return false;
+
+    return app_information_scene_add_text(&session->information_snapshot.scene,
+        row, col, attr, text);
+}
+
+bool app_session_publish_information_snapshot(app_session* session)
+{
+    if (!session)
+        return false;
+
+    app_session_sync_information_blob(session);
+    session->information_snapshot.snapshot.flags
+        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
+    session->information_snapshot.snapshot.revision = session->next_snapshot_revision++;
+    session->snapshot = session->information_snapshot.snapshot;
+    session->snapshot_dirty_mask = 0;
+    return true;
 }
 
 void app_session_mark_snapshot_dirty(app_session* session,

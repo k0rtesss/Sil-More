@@ -5,6 +5,7 @@
 #include "angband.h"
 #include "app/app-events.h"
 #include "app/app-host.h"
+#include "app/app-scene-information.h"
 #include "app/app-session.h"
 
 static int g_failures = 0;
@@ -340,6 +341,8 @@ static void test_session_scaffolding(void)
     app_event_record event;
     app_snapshot snapshot;
     app_snapshot_blob blob;
+    app_information_scene info_scene;
+    const app_information_snapshot* info_snapshot;
     const app_interaction_state* interaction;
     app_event_span drained;
     const app_session_counters* counters;
@@ -419,6 +422,30 @@ static void test_session_scaffolding(void)
     app_session_set_snapshot(session, &snapshot);
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_DUNGEON);
     CHECK(app_session_snapshot(session)->blob_count == 1);
+    CHECK(app_session_interactions_enabled(session));
+
+    app_information_scene_init(&info_scene);
+    CHECK(app_information_scene_add_text(&info_scene, 0, 1, TERM_WHITE,
+        "Info Header"));
+    CHECK(app_information_scene_add_text(&info_scene, 2, 0, TERM_SLATE,
+        "Some informational text."));
+    app_session_clear_information_snapshot(session);
+    CHECK(app_session_add_information_op(session, 0, 1, TERM_WHITE,
+        "Info Header"));
+    CHECK(app_session_add_information_op(session, 2, 0, TERM_SLATE,
+        "Some informational text."));
+    CHECK(app_session_publish_information_snapshot(session));
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_INFORMATION);
+    info_snapshot = app_session_information_snapshot(session);
+    CHECK(info_snapshot != NULL);
+    CHECK(info_snapshot->scene.op_count == 2);
+    CHECK(streq(info_snapshot->scene.ops[0].text, "Info Header"));
+    CHECK(streq(info_snapshot->scene.ops[1].text,
+        "Some informational text."));
+    CHECK(!app_session_interactions_enabled(session));
+
+    app_session_set_snapshot(session, &snapshot);
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_DUNGEON);
     CHECK(app_session_interactions_enabled(session));
 
     app_session_note_cursor_relative(session, 7, 9);

@@ -7,6 +7,7 @@
 #include "platform-ui.h"
 #include "ui/story_font.h"
 #include "ui/ui-character-screen.h"
+#include "ui/ui-information-scene.h"
 
 #include <ctype.h>
 
@@ -1267,6 +1268,8 @@ void display_character_tutorial(void)
 {
     int page = 0;
     char ch;
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter_mirror(&info_scope);
 
     while (1)
     {
@@ -2027,7 +2030,21 @@ void display_character_tutorial(void)
             }
         }
 
-        ch = inkey();
+        if (use_information_scene)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+
+        ch = use_information_scene ? (char)ui_information_scene_wait_key()
+                                   : inkey();
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
 
@@ -2056,6 +2073,8 @@ void display_character_tutorial(void)
     }
 
     Term_clear();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
 }
 
 /*

@@ -20,6 +20,7 @@
 #include "runtime/runtime-game.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
+#include "ui/ui-information-scene.h"
 #include "ui/ui-story.h"
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */
@@ -5258,11 +5259,14 @@ void print_metarun_stats(void)
     int col = 2;
     char buf[160];
     int term_height, term_width;
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter_mirror(&info_scope);
 
     refresh_current_metar_score();
 
     if (current_run < 0 || current_run >= metarun_max) {
-        screen_save();
+        if (!use_information_scene)
+            screen_save();
         Term_clear();
         Term_putstr(2, 5, -1, TERM_RED, "Error: No metarun data available.");
         Term_putstr(2, 6, -1, TERM_L_WHITE, "Please start a new game first.");
@@ -5274,8 +5278,26 @@ void print_metarun_stats(void)
         } else {
             Term_putstr(2, 8, -1, TERM_L_DARK, "Press any key to return.");
         }
-        inkey();
-        screen_load();
+        if (use_information_scene)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+        if (use_information_scene)
+            (void)ui_information_scene_wait_key();
+        else
+            (void)inkey();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         return;
     }
 
@@ -5317,7 +5339,8 @@ void print_metarun_stats(void)
     int spent_points = metar.blessing_points_spent;
     int available_points = earned_points - spent_points;
 
-    screen_save();
+    if (!use_information_scene)
+        screen_save();
     Term_clear();
     Term_get_size(&term_width, &term_height);
     bool steamdeck = get_sdl_steamdeck_mode();
@@ -5790,7 +5813,21 @@ void print_metarun_stats(void)
         metarun_put_prompt_line(term_width, term_height, TERM_L_DARK, prompt_buf);
     }
 
-    char key = inkey();
+    if (use_information_scene)
+    {
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&info_scope);
+            use_information_scene = false;
+        }
+    }
+    else
+    {
+        Term_fresh();
+    }
+
+    char key = use_information_scene ? (char)ui_information_scene_wait_key()
+                                     : inkey();
     if (steamdeck) {
         int back_key = steamdeck_back_key();
         int confirm_key = steamdeck_confirm_key();
@@ -5802,11 +5839,17 @@ void print_metarun_stats(void)
         
         if (key == back_key) {
             /* B button = exit/back */
-            screen_load();
+            if (use_information_scene)
+                ui_information_scene_leave(&info_scope);
+            else
+                screen_load();
             return;
         } else if (key == confirm_key || key == '\r' || key == '\n') {
             /* A button = continue (exit) */
-            screen_load();
+            if (use_information_scene)
+                ui_information_scene_leave(&info_scope);
+            else
+                screen_load();
             return;
         } else if (key == alt_key) {
             /* X button = spend blessings */
@@ -5826,44 +5869,68 @@ void print_metarun_stats(void)
         }
     }
     if (key == 'b' || key == 'B') {
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         open_blessing_exchange();
         print_metarun_stats();
         return;
     } else if (key == 'c' || key == 'C') {
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         choose_difficulty_menu();
         return;
     } else if (key == 'f' || key == 'F') {
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         adjust_blessing_threshold_menu();
         print_metarun_stats();
         return;
     } else if (key == 'u' || key == 'U') {
         /* Show the full list of active curses/blessings separately */
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         show_all_active_curses();
         print_metarun_stats();
         return;
     } else if (key == 's' || key == 'S') {
         /* Show history only */
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         list_metaruns();
         print_metarun_stats();
         return;
     } else if (key == 't' || key == 'T') {
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         show_completed_quests_summary();
         print_metarun_stats();
         return;
     } else if ((key == 'x' || key == 'X') && blitz_enabled) {
-        screen_load();
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
+        else
+            screen_load();
         run_mode_set_pending(RUN_MODE_BLITZ);
         run_mode_set_current(RUN_MODE_BLITZ);
         return;
     }
 
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else
+        screen_load();
 }
 
 

@@ -7,7 +7,97 @@
 #include "platform-ui.h"
 #include "metarun.h"
 #include "ui/story_font.h"
+#include "ui/ui-information-scene.h"
 #include "ui/ui-story.h"
+
+static bool story_information_scene_active(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
+
+    return ui_information_scene_supported() && snapshot
+        && (snapshot->scene == APP_SCENE_KIND_INFORMATION);
+}
+
+static errr story_term_inkey(char* out_key, bool wait, bool take)
+{
+    return Term_inkey(out_key, wait, take);
+}
+
+static void story_present(void)
+{
+    if (story_information_scene_active())
+    {
+        if (!ui_information_scene_present_term())
+            Term_fresh();
+    }
+    else
+    {
+        Term_fresh();
+    }
+}
+
+static bool story_peek_key(char* out_key)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    if (!out_key)
+        return false;
+
+    if (!story_information_scene_active() || !session)
+        return (story_term_inkey(out_key, false, false) == 0);
+
+    while (app_session_peek_input(session, &input))
+    {
+        if (input.layer == APP_INPUT_LAYER_LEGACY
+            && input.type == APP_INPUT_TYPE_KEY)
+        {
+            *out_key = (char)(input.payload.key.logical_key & 0xFFu);
+            return true;
+        }
+
+        (void)app_session_pop_input(session, NULL);
+    }
+
+    return false;
+}
+
+static void story_consume_peeked_key(char* out_key)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    if (!out_key)
+        return;
+
+    if (!story_information_scene_active() || !session)
+    {
+        (void)story_term_inkey(out_key, false, true);
+        return;
+    }
+
+    while (app_session_pop_input(session, &input))
+    {
+        if (input.layer == APP_INPUT_LAYER_LEGACY
+            && input.type == APP_INPUT_TYPE_KEY)
+        {
+            *out_key = (char)(input.payload.key.logical_key & 0xFFu);
+            return;
+        }
+    }
+}
+
+static char story_wait_key(void)
+{
+    if (story_information_scene_active())
+    {
+        (void)ui_information_scene_present_term();
+        return (char)ui_information_scene_wait_key();
+    }
+
+    return inkey();
+}
 
 /*
  * Helper: colour fade-in paragraph printer
@@ -23,16 +113,16 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
     {
         char ch;
 
-        if (Term_inkey(&ch, false, false) == 0)
+        if (story_peek_key(&ch))
         {
-            Term_inkey(&ch, false, true);
+            story_consume_peeked_key(&ch);
             text_out_indent = indent;
             text_out_wrap = wrap_width;
             Term_gotoxy(indent, row);
             text_out_to_screen(TERM_WHITE, text);
             text_out_wrap = 0;
             text_out_indent = 0;
-            Term_fresh();
+            story_present();
             return (ch == ESCAPE) ? 2 : 1;
         }
 
@@ -42,16 +132,16 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
         text_out_to_screen(fade_cols[s], text);
         text_out_wrap = 0;
         text_out_indent = 0;
-        Term_fresh();
+        story_present();
         Term_xtra(TERM_XTRA_DELAY, 125);
     }
 
     {
         char ch;
 
-        if (Term_inkey(&ch, false, false) == 0)
+        if (story_peek_key(&ch))
         {
-            Term_inkey(&ch, false, true);
+            story_consume_peeked_key(&ch);
             return (ch == ESCAPE) ? 2 : 1;
         }
     }
@@ -333,7 +423,7 @@ void print_fade_centered_at_row(cptr text, int row_start, bool fade_in,
         else
         {
             c_put_str(TERM_ORANGE, buf, row_start + printed_lines, indent);
-            Term_fresh();
+            story_present();
         }
 
         printed_lines++;
@@ -350,6 +440,9 @@ void print_story(int last_parts, bool fade_in)
 {
     int wid, h;
     const int indent = 2;
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    bool saved_screen = !use_information_scene;
     bool fast_forward = false;
     bool show_page_instantly = false;
     bool saved_cursor_state = false;
@@ -365,6 +458,9 @@ void print_story(int last_parts, bool fade_in)
         last_parts, fade_in ? "true" : "false");
     log_debug("last_parts=%d, fade_in=%s", last_parts,
         fade_in ? "true" : "false");
+
+    if (use_information_scene)
+        fade_in = false;
 
 #define REDRAW_HINT() story_print_hint(indent, h)
 
@@ -417,7 +513,8 @@ void print_story(int last_parts, bool fade_in)
     log_debug("Story range: start=%d, total=%d", start, total);
 
     Term_get_size(&wid, &h);
-    screen_save();
+    if (saved_screen)
+        screen_save();
     Term_clear();
     (void)Term_get_cursor(&saved_cursor_state);
     saved_hide_cursor = inkey_cursor_hidden();
@@ -458,7 +555,13 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    ch = inkey();
+                    if (use_information_scene
+                        && !ui_information_scene_present_term())
+                    {
+                        ui_information_scene_leave(&info_scope);
+                        use_information_scene = false;
+                    }
+                    ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
                         fast_forward = true;
@@ -532,7 +635,13 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    ch = inkey();
+                    if (use_information_scene
+                        && !ui_information_scene_present_term())
+                    {
+                        ui_information_scene_leave(&info_scope);
+                        use_information_scene = false;
+                    }
+                    ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
                         fast_forward = true;
@@ -582,12 +691,20 @@ void print_story(int last_parts, bool fade_in)
         Term_putstr(indent, h - 1, -1, TERM_L_WHITE,
             "[Press any key to continue]");
     }
-    (void)inkey();
+    if (use_information_scene && !ui_information_scene_present_term())
+    {
+        ui_information_scene_leave(&info_scope);
+        use_information_scene = false;
+    }
+    (void)story_wait_key();
 
     Term_flush();
 
     sdl_story_font_disable();
-    screen_load();
+    if (use_information_scene)
+        ui_information_scene_leave(&info_scope);
+    else if (saved_screen)
+        screen_load();
     (void)Term_set_cursor(saved_cursor_state);
     inkey_set_cursor_hidden(saved_hide_cursor);
 

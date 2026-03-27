@@ -10,6 +10,7 @@
 #include "score/score_ui.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-death.h"
+#include "ui/ui-information-scene.h"
 
 void do_cmd_morgoth_victory(void)
 {
@@ -76,6 +77,8 @@ void ui_death_show_character_info(void)
 {
     int term_wid = 80;
     int term_hgt = 24;
+    ui_information_scene_scope scope;
+    bool scene_active = ui_information_scene_enter(&scope);
 
     Term_get_size(&term_wid, &term_hgt);
     display_player(0);
@@ -83,8 +86,25 @@ void ui_death_show_character_info(void)
     Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
         "(press any key)");
 
-    if (inkey() == ESCAPE)
+    if (scene_active)
+    {
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&scope);
+            scene_active = false;
+        }
+    }
+    else
+    {
+        Term_fresh();
+    }
+
+    if ((scene_active ? ui_information_scene_wait_key() : inkey()) == ESCAPE)
+    {
+        if (scene_active)
+            ui_information_scene_leave(&scope);
         return;
+    }
 
     if (p_ptr->equip_cnt)
     {
@@ -94,8 +114,25 @@ void ui_death_show_character_info(void)
         prt("You are using:", 0, 0);
         Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
             "(press any key)");
-        if (inkey() == ESCAPE)
+        if (scene_active)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&scope);
+                scene_active = false;
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+        if ((scene_active ? ui_information_scene_wait_key() : inkey())
+            == ESCAPE)
+        {
+            if (scene_active)
+                ui_information_scene_leave(&scope);
             return;
+        }
         item_tester_full = false;
     }
 
@@ -108,11 +145,30 @@ void ui_death_show_character_info(void)
         Term_putstr(MAX(0, term_wid - 18),
             MIN(p_ptr->inven_cnt + 2, term_hgt - 2), -1, TERM_L_WHITE,
             "(press any key)");
-        if (inkey() == ESCAPE)
+        if (scene_active)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&scope);
+                scene_active = false;
+            }
+        }
+        else
+        {
+            Term_fresh();
+        }
+        if ((scene_active ? ui_information_scene_wait_key() : inkey())
+            == ESCAPE)
+        {
+            if (scene_active)
+                ui_information_scene_leave(&scope);
             return;
+        }
         item_tester_full = false;
     }
 
+    if (scene_active)
+        ui_information_scene_leave(&scope);
     do_cmd_knowledge_notes();
 }
 
@@ -125,6 +181,8 @@ int ui_death_final_menu(int* highlight)
     int separator_row;
     int option_row;
     char separator[96];
+    ui_information_scene_scope scope;
+    bool scene_active = ui_information_scene_enter(&scope);
     const char* option_a = morgoth_victory ? "a) Review the Valar's record"
                                            : "a) View scores";
     const char* option_b = morgoth_victory ? "b) Survey Angband one last time"
@@ -161,12 +219,30 @@ int ui_death_final_menu(int* highlight)
     Term_putstr(15, option_row, term_wid - 15,
         (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE, option_exit);
 
-    Term_fresh();
+    if (scene_active)
+    {
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&scope);
+            scene_active = false;
+            Term_fresh();
+        }
+    }
+    else
+    {
+        Term_fresh();
+    }
     Term_gotoxy(10, separator_row + 1 + *highlight);
 
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    if (scene_active)
+        ch = (char)ui_information_scene_wait_key();
+    else
+        ch = inkey();
     inkey_set_cursor_hidden(false);
+
+    if (scene_active)
+        ui_information_scene_leave(&scope);
 
     if (ch == 'a')
     {

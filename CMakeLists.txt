@@ -287,6 +287,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-events.c
     src/app/app-host.c
     src/app/app-scene-dungeon.c
+    src/app/app-scene-information.c
     src/app/app-session.c
 )
 
@@ -299,6 +300,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/ui-death.c
     src/ui/ui-file-viewer.c
     src/ui/ui-help.c
+    src/ui/ui-information-scene.c
     src/ui/ui-look-sidebar.c
     src/ui/ui-story.c
     src/ui/ui-status.c
@@ -310,6 +312,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-layout.c
     src/sdl-render.c
     src/sdl-scene-dungeon.c
+    src/sdl-scene-information.c
     src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c

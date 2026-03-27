@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "sdl-main-internal.h"
+#include "ui/ui-information-scene.h"
 
 sdl_state g_state;
 sdl_view g_views[MAX_TERM_DATA];
@@ -90,13 +91,14 @@ void sdl_present_if_needed(sdl_view* d)
 {
     int active_views = 0;
     Uint64 now_ns = SDL_GetTicksNS();
-    bool scene_frame_due = (sdl_scene_stack_pending_timeout_ms(now_ns) == 0);
+    bool scene_frame_due;
     bool handled_main = false;
+
+    (void)sdl_scene_stack_prepare_frame(now_ns);
+    scene_frame_due = (sdl_scene_stack_pending_timeout_ms(now_ns) == 0);
 
     if (!g_state.need_present && !scene_frame_due)
         return;
-
-    (void)sdl_scene_stack_prepare_frame(now_ns);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
@@ -300,6 +302,8 @@ static errr callback_sdl_xtra(int n, int v)
         return 0;
 
     case TERM_XTRA_FRESH:
+        if (ui_information_scene_is_active())
+            (void)ui_information_scene_present_term();
         sdl_present_if_needed(d);
         return 0;
 
@@ -319,6 +323,8 @@ static errr callback_sdl_xtra(int n, int v)
                 sdl_handle_event(&g_state, &ev);
             sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
             sdl_drain_legacy_input_queue();
+            if (ui_information_scene_is_active())
+                (void)ui_information_scene_present_term();
             sdl_present_if_needed(d);
         }
         return 0;

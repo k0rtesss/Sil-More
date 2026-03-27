@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "ui-help.h"
+#include "ui-information-scene.h"
 #include "externs.h"
 #include "platform-ui.h"
 #include <limits.h>
@@ -73,6 +74,14 @@ static int HELP_THEME[ROLE__COUNT] = {
 
 static inline void put_role(color_role_t role, const char *s, int row, int col) {
     c_put_str(HELP_THEME[role], s, row, col);
+}
+
+static byte help_role_attr(color_role_t role)
+{
+    if ((int)role < 0 || role >= ROLE__COUNT)
+        return TERM_WHITE;
+
+    return (byte)HELP_THEME[role];
 }
 
 
@@ -795,6 +804,68 @@ static void show_help_screen_dynamic_document(
         else
             c_put_str(g_help_doc_ops[op].attr, g_help_doc_ops[op].text, screen_y, x);
     }
+}
+
+static void help_build_information_scene(app_information_scene* scene, int page,
+    int total_pages, int term_hgt, int doc_start_y, int doc_end_y)
+{
+    char header[96];
+    char nav[160];
+    const int col = 1;
+    const int top = 2;
+
+    if (!scene)
+        return;
+
+    app_information_scene_init(scene);
+
+    strnfmt(header, sizeof(header),
+        "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
+        page, total_pages);
+    (void)app_information_scene_add_text(scene, 0, col,
+        help_role_attr(ROLE_HEADER), header);
+
+    for (int op = 0; op < g_help_doc_ops_n; op++)
+    {
+        byte attr;
+        int y = g_help_doc_ops[op].y;
+        int x = g_help_doc_ops[op].x;
+        int screen_y;
+
+        if (y < doc_start_y || y > doc_end_y)
+            continue;
+
+        screen_y = top + (y - doc_start_y);
+        if (screen_y < top || screen_y >= term_hgt - 1)
+            continue;
+
+        attr = g_help_doc_ops[op].use_role
+            ? help_role_attr(g_help_doc_ops[op].role)
+            : g_help_doc_ops[op].attr;
+        (void)app_information_scene_add_text(scene, (s16b)screen_y, (s16b)x,
+            attr, g_help_doc_ops[op].text);
+    }
+
+    if (steamdeck_controls_active())
+    {
+        char next_label[16];
+        char back_label[16];
+
+        help_prompt_label(' ', "A", next_label, sizeof(next_label));
+        help_prompt_label('b', "b", back_label, sizeof(back_label));
+        strnfmt(nav, sizeof(nav),
+            "Navigation: D-pad left/right Prev/Next  [%s] Next  [%s] Back",
+            next_label, back_label);
+    }
+    else
+    {
+        SDL_strlcpy(nav,
+            "Navigation: [<-/4] Prev  [->/6/Space] Next  [1-9] Page  [Q/Esc] Quit",
+            sizeof(nav));
+    }
+
+    (void)app_information_scene_add_text(scene, (s16b)(term_hgt - 1), 1,
+        TERM_WHITE, nav);
 }
 
 /* -------- Help pages ----------------------------------------------------- */
@@ -1539,10 +1610,93 @@ static void show_help_screen_legacy(int i, bool include_header)
 
 
 
+static bool do_cmd_help_information_scene(void)
+{
+    ui_information_scene_scope scope;
+    bool row_has_content[HELP_DOC_MAX_ROWS];
+    bool row_has_heading[HELP_DOC_MAX_ROWS];
+    int page_starts[HELP_DOC_MAX_PAGES];
+    int page_ends[HELP_DOC_MAX_PAGES];
+    int doc_hgt = 0;
+    int page = 1;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    while (true)
+    {
+        app_information_scene scene;
+        int wid;
+        int hgt;
+        int total_pages;
+        int ch;
+
+        Term_get_size(&wid, &hgt);
+        (void)wid;
+        help_build_document_ops(&doc_hgt, row_has_content, row_has_heading);
+        total_pages = help_dynamic_build_document_pages(hgt, doc_hgt,
+            row_has_content, row_has_heading, page_starts, page_ends);
+        if (total_pages < 1)
+            total_pages = 1;
+        if (total_pages > 9)
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        if (page < 1)
+            page = 1;
+        if (page > total_pages)
+            page = total_pages;
+
+        help_build_information_scene(&scene, page, total_pages, hgt,
+            page_starts[page - 1], page_ends[page - 1]);
+        if (!ui_information_scene_present(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        ch = ui_information_scene_wait_key();
+        if (steamdeck_controls_active() && ch == 'b')
+            ch = ESCAPE;
+
+        if (ch == 'q' || ch == 'Q' || ch == ESCAPE)
+            break;
+        if (ch == '8' || ch == '-' || ch == '4')
+        {
+            page--;
+        }
+        else if (ch == '2' || ch == '6' || ch == ' '
+            || ch == '\r' || ch == '\n')
+        {
+            page++;
+        }
+        else if (ch >= '1' && ch <= '9')
+        {
+            int target = ch - '0';
+
+            if (target >= 1 && target <= total_pages)
+                page = target;
+        }
+        else
+        {
+            page++;
+        }
+
+        if (page > total_pages)
+            break;
+    }
+
+    ui_information_scene_leave(&scope);
+    message_flush();
+    return true;
+}
+
 /*
  * Peruse the On-Line-Help
  */
-void do_cmd_help(void)
+static void do_cmd_help_legacy(void)
 {
     int i = 1;
     char ch;
@@ -1686,6 +1840,21 @@ void do_cmd_help(void)
 
     /* Load screen */
     screen_load();
+}
+
+void do_cmd_help(void)
+{
+    extern int g_banner_force_redraw_remaining;
+
+    if (g_banner_force_redraw_remaining > 0) {
+        g_banner_force_redraw_remaining = 0;
+        do_cmd_redraw();
+    }
+
+    if (do_cmd_help_information_scene())
+        return;
+
+    do_cmd_help_legacy();
 }
 
 /*

@@ -6,6 +6,7 @@
 #include "app-interaction.h"
 #include "app-input.h"
 #include "app-scene-dungeon.h"
+#include "app-scene-information.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
 
@@ -102,6 +103,12 @@ void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const app_session* session);
+const app_information_snapshot* app_session_information_snapshot(
+    const app_session* session);
+void app_session_clear_information_snapshot(app_session* session);
+bool app_session_add_information_op(app_session* session, s16b row,
+    s16b col, byte attr, cptr text);
+bool app_session_publish_information_snapshot(app_session* session);
 void app_session_mark_snapshot_dirty(app_session* session,
     u32b invalidation_mask);
 bool app_session_build_dungeon_snapshot(app_session* session,

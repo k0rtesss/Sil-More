@@ -196,5 +196,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_dungeon_snapshot* snapshot,
     const sdl_scene_animation* animations, size_t animation_count,
     Uint64 now_ns);
+bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view,
+    const app_information_snapshot* snapshot);
 
 #endif /* INCLUDED_SDL_MAIN_INTERNAL_H */
