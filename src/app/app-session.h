@@ -129,6 +129,8 @@ const app_information_snapshot* app_session_information_snapshot(
 void app_session_clear_information_snapshot(app_session* session);
 bool app_session_add_information_op(app_session* session, s16b row,
     s16b col, byte attr, cptr text);
+bool app_session_add_information_op_ex(app_session* session, s16b row,
+    s16b col, byte attr, byte story, cptr text);
 bool app_session_publish_information_snapshot(app_session* session);
 void app_session_mark_snapshot_dirty(app_session* session,
     u32b invalidation_mask);

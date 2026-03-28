@@ -11,11 +11,13 @@ extern "C" {
 typedef struct ui_information_scene_scope {
     bool active;
     app_snapshot previous_snapshot;
+    app_information_snapshot* previous_information_snapshot;
     app_wait_scope wait_scope;
     u16b previous_mode;
 } ui_information_scene_scope;
 
 bool ui_information_scene_supported(void);
+bool ui_information_scene_set_refresh_enabled(bool enabled);
 bool ui_information_scene_enter(ui_information_scene_scope* scope);
 bool ui_information_scene_enter_mirror(ui_information_scene_scope* scope);
 bool ui_information_scene_capture_term(app_information_scene* scene);

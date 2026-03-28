@@ -8,13 +8,13 @@
 extern "C" {
 #endif
 
-#define APP_INFORMATION_FORMAT_VERSION 1u
+#define APP_INFORMATION_FORMAT_VERSION 2u
 #define APP_INFORMATION_OP_MAX 512u
 #define APP_INFORMATION_TEXT_MAX 160u
 
 typedef struct app_information_op {
     byte attr;
-    byte reserved;
+    byte story;
     s16b row;
     s16b col;
     char text[APP_INFORMATION_TEXT_MAX];
@@ -35,6 +35,8 @@ typedef struct app_information_snapshot {
 } app_information_snapshot;
 
 void app_information_scene_init(app_information_scene* scene);
+bool app_information_scene_add_text_ex(app_information_scene* scene, s16b row,
+    s16b col, byte attr, byte story, cptr text);
 bool app_information_scene_add_text(app_information_scene* scene, s16b row,
     s16b col, byte attr, cptr text);
 void app_information_snapshot_init(app_information_snapshot* snapshot);

@@ -918,6 +918,7 @@ extern void inkey_set_base(bool enabled);
 extern void inkey_set_scan(bool enabled);
 extern bool inkey_cursor_hidden(void);
 extern void inkey_set_cursor_hidden(bool hidden);
+extern bool inkey_can_consume_immediately(void);
 extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);

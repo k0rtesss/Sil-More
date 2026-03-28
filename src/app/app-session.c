@@ -599,11 +599,17 @@ void app_session_clear_information_snapshot(app_session* session)
 bool app_session_add_information_op(app_session* session, s16b row,
     s16b col, byte attr, cptr text)
 {
+    return app_session_add_information_op_ex(session, row, col, attr, 0, text);
+}
+
+bool app_session_add_information_op_ex(app_session* session, s16b row,
+    s16b col, byte attr, byte story, cptr text)
+{
     if (!session)
         return false;
 
-    return app_information_scene_add_text(&session->information_snapshot.scene,
-        row, col, attr, text);
+    return app_information_scene_add_text_ex(
+        &session->information_snapshot.scene, row, col, attr, story, text);
 }
 
 bool app_session_publish_information_snapshot(app_session* session)

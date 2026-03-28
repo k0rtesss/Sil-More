@@ -353,30 +353,22 @@ static bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift,
 {
     bool control = ctrl || gui;
     int mod_count = (shift ? 1 : 0) + (control ? 1 : 0) + (alt ? 1 : 0);
-    char action_key;
-    char follow_key;
+    char macro_key;
 
     if (dir < 1 || dir > 9 || mod_count != 1)
         return false;
 
-    if (alt) {
-        action_key = 'f';
-        follow_key = (dir == 5) ? 'f' : dir_ch;
-    } else if (control) {
-        action_key = '/';
-        follow_key = (dir == 5) ? '5' : dir_ch;
-    } else {
-        action_key = '.';
-        follow_key = (dir == 5) ? '5' : dir_ch;
-    }
+    /*
+     * Use the existing macro-trigger path for directional modifier combos.
+     * That keeps the legacy prompt machinery from briefly rendering the
+     * intermediate command/direction pair before the queued input resolves.
+     */
+    macro_key = (char)('0' + dir);
+    if (!macro_key)
+        return false;
 
-    if (!follow_key)
-        follow_key = (char)('0' + dir);
-
-    /* Bypass keymaps for the action key itself, but keep the bound direction key. */
-    sdl_submit_legacy_input_byte('\\');
-    sdl_submit_legacy_input_byte(action_key);
-    sdl_submit_legacy_input_byte(follow_key);
+    (void)dir_ch;
+    sdl_send_macro_key(macro_key, shift, control, alt);
     return true;
 }
 

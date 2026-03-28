@@ -15,8 +15,11 @@ static SDL_Color sdl_information_color(byte attr)
 }
 
 static void sdl_information_draw_text(const sdl_view* view, int col, int row,
-    byte attr, cptr text)
+    byte attr, byte story, cptr text)
 {
+    TTF_Font* story_font = NULL;
+    bool use_story;
+    bool grid_align;
     size_t len;
 
     if (!view || !text || !text[0])
@@ -33,6 +36,21 @@ static void sdl_information_draw_text(const sdl_view* view, int col, int row,
         len = (size_t)(view->cols - col);
     if (len == 0)
         return;
+
+    use_story = (story & STORY_FLAG_USE) != 0;
+    grid_align = (story & STORY_FLAG_CELL_ALIGN) != 0;
+    if (use_story)
+        story_font = sdl_story_font_for_view((sdl_view*)view);
+    if (use_story && story_font)
+    {
+        if (grid_align)
+            sdl_render_story_text_grid((sdl_view*)view, story_font, col, row,
+                (int)len, text, sdl_information_color(attr));
+        else
+            sdl_render_story_text_free((sdl_view*)view, story_font, col, row,
+                (int)len, text, sdl_information_color(attr));
+        return;
+    }
 
     sdl_render_mono_text((sdl_view*)view, col, row, (int)len, text,
         sdl_information_color(attr));
@@ -69,7 +87,7 @@ bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view
                 continue;
 
             sdl_information_draw_text(main_view, op->col, op->row, op->attr,
-                op->text);
+                op->story, op->text);
         }
     }
 

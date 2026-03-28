@@ -236,6 +236,18 @@ static char inkey_aux(void)
  */
 static cptr inkey_next = NULL;
 
+bool inkey_can_consume_immediately(void)
+{
+    char ch;
+
+    if (inkey_next && *inkey_next && !g_inkey_state.xtra)
+        return true;
+    if (!Term)
+        return false;
+
+    return (Term_inkey(&ch, false, false) == 0);
+}
+
 static char inkey_with_wait_reason(u16b reason)
 {
     app_wait_scope scope;

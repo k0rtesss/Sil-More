@@ -11,8 +11,8 @@ void app_information_scene_init(app_information_scene* scene)
     scene->format_version = APP_INFORMATION_FORMAT_VERSION;
 }
 
-bool app_information_scene_add_text(app_information_scene* scene, s16b row,
-    s16b col, byte attr, cptr text)
+bool app_information_scene_add_text_ex(app_information_scene* scene, s16b row,
+    s16b col, byte attr, byte story, cptr text)
 {
     app_information_op* op;
 
@@ -25,10 +25,17 @@ bool app_information_scene_add_text(app_information_scene* scene, s16b row,
     op = &scene->ops[scene->op_count++];
     memset(op, 0, sizeof(*op));
     op->attr = attr;
+    op->story = story;
     op->row = row;
     op->col = col;
     SDL_strlcpy(op->text, text, sizeof(op->text));
     return true;
+}
+
+bool app_information_scene_add_text(app_information_scene* scene, s16b row,
+    s16b col, byte attr, cptr text)
+{
+    return app_information_scene_add_text_ex(scene, row, col, attr, 0, text);
 }
 
 void app_information_snapshot_init(app_information_snapshot* snapshot)

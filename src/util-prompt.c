@@ -78,6 +78,14 @@ static void prompt_snapshot_present(void)
     Term_fresh();
 }
 
+static bool prompt_snapshot_should_present(void)
+{
+    if (!prompt_snapshot_interaction_active())
+        return false;
+
+    return !inkey_can_consume_immediately();
+}
+
 bool askfor_aux(char* buf, size_t len)
 {
     int y, x;
@@ -657,7 +665,7 @@ int get_check_other(cptr prompt, char other)
     /* Get an acceptable answer */
     while (true)
     {
-        if (snapshot_interaction)
+        if (snapshot_interaction && prompt_snapshot_should_present())
         {
             prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
                 APP_WAIT_REASON_CONFIRM,
@@ -732,7 +740,7 @@ bool get_check(cptr prompt)
     /* Get an acceptable answer */
     while (true)
     {
-        if (snapshot_interaction)
+        if (snapshot_interaction && prompt_snapshot_should_present())
         {
             prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
                 APP_WAIT_REASON_CONFIRM,
@@ -910,7 +918,7 @@ int get_menu_choice(s16b max, char* prompt)
 
     while (!done)
     {
-        if (snapshot_interaction)
+        if (snapshot_interaction && prompt_snapshot_should_present())
         {
             prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
                 APP_WAIT_REASON_LIST_SELECTION,
@@ -992,7 +1000,7 @@ bool get_com(cptr prompt, char* command)
     if (!snapshot_interaction)
         prt(prompt, 0, 0);
 
-    if (snapshot_interaction)
+    if (snapshot_interaction && prompt_snapshot_should_present())
     {
         prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
             APP_WAIT_REASON_CONFIRM,

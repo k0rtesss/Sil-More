@@ -28,6 +28,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-information-scene.h"
 
 #define MAIN_MENU_RETURN 1
 #define MAIN_MENU_CHARACTER 2
@@ -85,7 +86,8 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
 /*
  * Performs the interface and selection work for the main menu.
  */
-int main_menu_aux(int* highlight)
+static int main_menu_aux(int* highlight, bool scene_active,
+    bool clear_fullscreen)
 {
     char ch;
     int i;
@@ -107,11 +109,14 @@ int main_menu_aux(int* highlight)
         /* Keep the menu fixed vertically.
          * At height 20, start at row 0 so all menu rows fit.
          * Otherwise keep row 0 for message bar and start menu at row 1. */
-        if (Term->hgt <= 18)
+        if (clear_fullscreen || Term->hgt <= 18)
             row_top = 0;
         else
             row_top = (Term->hgt > 1) ? 1 : 0;
     }
+
+    if (clear_fullscreen && Term)
+        menu_h = Term->hgt;
 
     if (death_view && (*highlight >= 13) && (*highlight <= 15))
         *highlight = 16;
@@ -122,10 +127,11 @@ int main_menu_aux(int* highlight)
         if (!Term || y < 0 || y >= Term->hgt)
             continue;
 
-        int clear_x = col_main - 2;
+        int clear_x = clear_fullscreen ? 0 : col_main - 2;
+        int clear_w = clear_fullscreen ? Term->wid : menu_w + 4;
+
         if (clear_x < 0)
             clear_x = 0;
-        int clear_w = menu_w + 4;
         if (clear_x + clear_w > Term->wid)
             clear_w = Term->wid - clear_x;
         if (clear_w > 0)
@@ -185,7 +191,8 @@ int main_menu_aux(int* highlight)
         "Return to game       (r)");
 
     /* Flush the prompt */
-    Term_fresh();
+    if (!scene_active || !ui_information_scene_present_term())
+        Term_fresh();
 
     /* Place cursor at current choice */
     {
@@ -202,7 +209,10 @@ int main_menu_aux(int* highlight)
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    if (scene_active)
+        ch = (char)ui_information_scene_wait_key();
+    else
+        ch = inkey();
     inkey_set_cursor_hidden(false);
 
     // choose an option by letter - alphabetical mapping (updated for new order)
@@ -322,12 +332,21 @@ int main_menu_aux(int* highlight)
  */
 void do_cmd_main_menu(void)
 {
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;
     bool pending_hint_look = false;
     int pending_hint_look_y = -1;
     int pending_hint_look_x = -1;
+    ui_information_scene_scope scene_scope;
+    bool allow_information_scene = snapshot
+        && snapshot->scene == APP_SCENE_KIND_INFORMATION;
+    bool scene_active = allow_information_scene
+        && ui_information_scene_enter(&scene_scope);
+    bool clear_fullscreen = scene_active;
+    bool saved_screen = !scene_active;
 
     /* Clear any active banner before opening main menu */
     extern int g_banner_force_redraw_remaining;
@@ -337,17 +356,24 @@ void do_cmd_main_menu(void)
     }
 
     /* Save screen */
-    screen_save();
-
+    if (saved_screen)
+        screen_save();
     /* Process Events until "Return to Game" is selected */
     while (!leave_menu)
     {
-        actiontype = main_menu_aux(&highlight);
+        actiontype = main_menu_aux(&highlight, scene_active,
+            clear_fullscreen);
 
         if (death_spectator_active() && (actiontype >= 13) && (actiontype <= 15))
         {
             msg_print("You can no longer take that action.");
             continue;
+        }
+
+        if (scene_active && actiontype > 0 && actiontype != MAIN_MENU_RETURN)
+        {
+            ui_information_scene_leave(&scene_scope);
+            scene_active = false;
         }
 
         // if an action has been selected...
@@ -477,7 +503,10 @@ void do_cmd_main_menu(void)
     }
 
     /* Load screen */
-    screen_load();
+    if (scene_active)
+        ui_information_scene_leave(&scene_scope);
+    else if (saved_screen)
+        screen_load();
 
     if (pending_hint_look)
     {
