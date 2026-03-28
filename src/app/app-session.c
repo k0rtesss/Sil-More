@@ -726,6 +726,8 @@ void app_session_note_cursor_relative(app_session* session, s16b map_y,
     session->dungeon_snapshot.cursor_state.map_x = map_x;
     app_session_mark_snapshot_dirty(session,
         APP_SNAPSHOT_INVALIDATE_CURSOR | APP_SNAPSHOT_INVALIDATE_MAP);
+    if (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
 }
 
 void app_session_note_cursor_absolute(app_session* session, s16b row,
@@ -741,6 +743,8 @@ void app_session_note_cursor_absolute(app_session* session, s16b row,
     session->dungeon_snapshot.cursor_state.map_y = -1;
     session->dungeon_snapshot.cursor_state.map_x = -1;
     app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_CURSOR);
+    if (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
 }
 
 void app_session_set_cursor_visible(app_session* session, bool visible)

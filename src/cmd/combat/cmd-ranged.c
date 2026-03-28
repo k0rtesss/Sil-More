@@ -749,6 +749,7 @@ void do_cmd_fire(int quiver)
 
                 if (abort_for_mercy(m_ptr))
                 {
+                    restore_game_cursor();
                     return;
                 }
 
@@ -1276,6 +1277,8 @@ void do_cmd_fire(int quiver)
         attacks_of_opportunity(first_y, first_x);
     else
         attacks_of_opportunity(0, 0);
+
+    restore_game_cursor();
 }
 
 /*handle special effects of throwing certain potions*/
@@ -2253,6 +2256,7 @@ void do_cmd_throw(bool automatic)
 
     // Break the truce if creatures see
     break_truce(false);
+    restore_game_cursor();
 }
 
 /*

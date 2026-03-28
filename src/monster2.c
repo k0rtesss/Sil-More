@@ -2428,16 +2428,39 @@ void monster_swap(int y1, int x1, int y2, int x2)
     {
         app_session* session = app_session_current();
         u32b invalidation_mask = APP_SNAPSHOT_INVALIDATE_MAP;
+        bool moved_target = false;
 
-        if ((m1 < 0) || (m2 < 0))
+        if ((m1 > 0) && (p_ptr->target_who == m1))
+        {
+            p_ptr->target_row = y2;
+            p_ptr->target_col = x2;
+            moved_target = true;
+        }
+        if ((m2 > 0) && (p_ptr->target_who == m2))
+        {
+            p_ptr->target_row = y1;
+            p_ptr->target_col = x1;
+            moved_target = true;
+        }
+
+        if ((m1 < 0) || (m2 < 0) || moved_target)
         {
             invalidation_mask |= APP_SNAPSHOT_INVALIDATE_CURSOR
-                | APP_SNAPSHOT_INVALIDATE_TARGET
-                | APP_SNAPSHOT_INVALIDATE_STATUS;
+                | APP_SNAPSHOT_INVALIDATE_TARGET;
+        }
+        if ((m1 < 0) || (m2 < 0))
+        {
+            invalidation_mask |= APP_SNAPSHOT_INVALIDATE_STATUS;
         }
 
         if (session)
         {
+            if (moved_target && hilite_target && target_sighted())
+            {
+                app_session_note_cursor_relative(session, p_ptr->target_row,
+                    p_ptr->target_col);
+            }
+
             if (m1 != 0)
             {
                 app_session_note_animation(session,

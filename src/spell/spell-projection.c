@@ -3002,6 +3002,8 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
     if (p_ptr->update)
         update_stuff();
 
+    restore_game_cursor();
+
     /* Return "something was noticed" */
     return (notice);
 }

@@ -2419,6 +2419,30 @@ void move_cursor_relative(int y, int x)
 }
 
 /*
+ * Restore the steady-state gameplay cursor after a transient animation has
+ * moved it elsewhere.
+ */
+void restore_game_cursor(void)
+{
+    app_session* session = app_session_current();
+
+    if (hilite_target && target_sighted())
+    {
+        move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+        return;
+    }
+
+    if (hilite_player)
+    {
+        move_cursor_relative(p_ptr->py, p_ptr->px);
+        return;
+    }
+
+    if (session)
+        app_session_set_cursor_visible(session, false);
+}
+
+/*
  * Display an attr/char pair at the given map location
  *
  * Note the inline use of "panel_contains()" for efficiency.

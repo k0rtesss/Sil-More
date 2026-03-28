@@ -337,6 +337,7 @@ extern void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
 extern void map_info_default(int y, int x, byte* ap, char* cp);
 extern int player_tile_offset(void);
 extern void move_cursor_relative(int y, int x);
+extern void restore_game_cursor(void);
 extern void print_rel(char c, byte a, int y, int x);
 extern void note_spot(int y, int x);
 extern void lite_spot(int y, int x);

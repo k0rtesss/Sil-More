@@ -777,6 +777,7 @@ void display_hit(int y, int x, int net_dam, int dam_type, bool fatal_blow)
     lite_spot(y, x);
     lite_spot(y, x - 1);
     Term_fresh();
+    restore_game_cursor();
 }
 
 /*

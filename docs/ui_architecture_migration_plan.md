@@ -477,6 +477,202 @@ Status:
   plus the packet-driven browser demo described in
   [`ui8_web_demo.md`](./ui8_web_demo.md)
 
+## Menu Modernization Follow-On: Fixed-Size Pixel Menus
+Goal:
+- keep the dungeon view on integer-scaled tiles
+- move menus and modal browsers onto a dedicated pixel UI layer whose visual
+  size does not change with `main_view_scale`
+- stop expressing menu layout in terminal columns and rows except inside the
+  temporary legacy bridge
+
+Current blocker summary:
+- `src/sdl-scene-dungeon.c` still renders interaction overlays in main-view
+  cell units, so list/prompt overlays scale with the tile view
+- `src/sdl-scene-information.c` still renders information scenes from
+  row/column text ops against `view->cols` and `view->rows`
+- `src/ui/ui-information-scene.c` still mirrors captured `Term` contents, so
+  information scenes inherit legacy terminal layout even when shown through the
+  new SDL scene stack
+- `APP_SCENE_KIND_MENU` exists in `src/app/app-snapshot.h` and is already set
+  by bootstrap in `src/main.c`, but the SDL scene stack still has no dedicated
+  menu payload or renderer for it
+- `app_interaction_state` is the only real semantic menu primitive today
+  - it is good enough for prompt, text-entry, list, and targeting overlays
+  - it is not rich enough yet for tabbed browsers, multi-column list/detail
+    layouts, compare panes, or nested footer action bars
+- most menu modules still branch on `Term->wid` / `Term->hgt` to choose
+  "compact" layouts, wrapping, and prompt rows
+
+Standing rule for this track:
+- do not port menus one by one straight from terminal coordinates into SDL
+  pixel code
+- first land a shared menu scene and widget model
+- treat `APP_SCENE_KIND_INFORMATION` plus `ui_information_scene_present_term()`
+  as a bridge for legacy flows, not as the final menu API
+
+### Detailed Menu Audit For Parallel Execution
+| Family | Representative files | Current render and input model | Needed shared widgets | Recommended subagent |
+| --- | --- | --- | --- | --- |
+| Bootstrap and hub menus | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c` | centered `Term_putstr()` menus, `screen_save()`, `screen_load()`, and direct `inkey()` loops | modal menu scene, action list, footer hints | Hub lane |
+| Message, hint, map, nearby, and combat-history views | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | pager and list screens with term-size-derived rows and horizontal scroll | pager, fixed-width document view, simple list browser | Browser lane |
+| Settings and config editors | `src/cmd/ui/cmd-ui-settings.c` | mixed menus, text entry, key capture, pane editors, and controller or touch setup in one large terminal-owned file | forms, text entry, key-capture dialog, action list, settings rows | Settings lane |
+| Character and knowledge browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | split-pane browsers with tabs, grouped lists, detail panes, and recall actions; many compact-layout branches | tab strip, split-pane list-detail widget, compare pane, footer action bar | Character/knowledge lane |
+| Gameplay selector overlays | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | some semantic interaction state already exists, but SDL still renders in cell units and several loops still block on legacy input | fixed-pixel prompt modal, list modal, text entry, targeting overlay | Interaction lane |
+| Ability, song, oath, bane, supplies, and query action menus | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | list-plus-detail action menus with confirm branches and recursive term redraw | action list, detail side panel, confirm dialog, stepper or selector rows | Action-menu lane |
+| Inventory, equipment, identify, compare, and item-action browsers | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | custom row layouts and popups, still partially coupled to term width and classic list rendering | reusable item list rows, compare panel, recall modal, action popup | Inventory lane |
+| Help, file viewer, score, run history, quest, story, and death scenes | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | information scenes often mirror row and column text through `ui_information_scene` | document scene, history table, detail browser, narrative panel | Document lane |
+| Metarun presentation and blessing exchange | `src/metarun.c` | bespoke action menus, threshold pickers, active-effects browsers, and story-stat screens; some paths already mirror through information scene | action list, document view, meters, detail browser, confirm dialog | Metarun lane |
+| Birth, blitz, and smithing workflows | `src/birth.c`, `src/blitz.c`, `src/ui/smithing/ui-smithing-screen.c` | dense bespoke workflows with compact-layout math, inline prompts, previews, and multi-step state loops | proven list-detail widgets, forms, steppers, compare panels, workflow adapters | Late bespoke lane |
+
+### Recommended Subagent Execution Map
+| Package | Write set | Start after | Notes |
+| --- | --- | --- | --- |
+| `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | define semantic menu payloads, focus ids, tabs, action bars, and scroll state |
+| `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | render menus in logical pixels and decouple menu fonts from tile scale |
+| `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | keep legacy information scenes working as a bridge while family lanes migrate |
+| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | lands the canonical fixed-pixel prompt, list, and targeting flow |
+| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | finishes the `get_item()` path on top of the shared list modal |
+| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | intro, pause, message, hint, map, nearby, and combat-history entry flows |
+| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | lowest-risk browser and document lane after the foundation |
+| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | keep single-owner because this is the largest single menu file |
+| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | split-pane browser lane with tabs, groups, and recall hooks |
+| `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | action-list and detail-side-panel lane |
+| `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | inventory, equipment, identify, compare, and item-action browsers |
+| `MENU9` | `src/metarun.c` | `MENU4` and `MENU7` | blessing exchange, thresholds, active-effects browser, and story stats |
+| `MENU10` | `src/ui/smithing/ui-smithing-screen.c` | `MENU2`, `MENU7`, and the shared split-pane widgets from `MENU6` | isolate completely; highest-risk live gameplay editor after birth |
+| `MENU11` | `src/birth.c`, `src/blitz.c`, shared bootstrap helpers in `src/init2.c` if still needed | `MENU3`, `MENU5`, `MENU6`, `MENU7` | deliberately last because it combines list selection, text entry, detail panes, and gameplay mutation in one loop |
+
+### Menu Inventory And Target Shapes
+| Family | Primary files | Current shape | Target shape |
+| --- | --- | --- | --- |
+| Shared prompt and selector primitives | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/sdl-scene-dungeon.c` | prompts and selectors already publish `app_interaction_state`, but SDL still renders them as cell-sized overlays inside the dungeon view | fixed-pixel modal dialog / list widgets fed by semantic interaction snapshots |
+| Pause menu and lightweight overlay menus | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cmd/ui/cmd-ui-query.c`, `src/cmd/ui/cmd-ui-look.c` | centered or edge-anchored text blocks rendered with `Term_putstr()` and `inkey()` | frontend-owned modal menu scene and side panels with fixed pixel metrics |
+| Character, knowledge, abilities, and object browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/cmd-item-core.c`, `src/cmd/item/cmd-item-activate.c` | mixed list/detail screens with lots of `Term->wid` / `Term->hgt` layout branching | reusable list-detail, tab strip, footer action, compare-panel widgets, and action popups |
+| Informational documents and settings | `src/cmd/ui/cmd-ui-settings.c`, `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c` | large term documents, file viewers, and settings trees with row-based paging | scrollable document scene plus frontend-owned settings forms and pickers |
+| Score, quest, story, death, and metarun presentation | `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c`, `src/metarun.c` | information scenes and bespoke terminal pages, often with tabs, detail panes, or typewriter effects | fixed-size history/detail browsers and narrative scenes using menu document and animation widgets |
+| Birth, blitz, and smithing workflows | `src/birth.c`, `src/ui/smithing/ui-smithing-screen.c`, `src/blitz.c` | dense bespoke workflows with heavy terminal math, inline prompts, and multi-step state loops | last-wave migration onto proven menu widgets plus workflow-specific state adapters |
+
+### Required Shared Infrastructure Before Menu Ports
+Workstream M0:
+- add a frontend-owned menu layer separate from the tile-scaled dungeon canvas
+- give that layer its own font metrics, padding, and width caps so modal menus
+  stay visually stable across SDL scale values
+- introduce a semantic menu scene/model in `src/app/*`
+  - recommended scope: document blocks, titled panels, list rows, footer
+    actions, tabs, scroll state, and optional detail panes
+- keep the existing interaction snapshot for prompt/text-entry/targeting, but
+  extend it or wrap it so renderers no longer infer layout from terminal cells
+- keep `ui_information_scene` available as a compatibility adapter while new
+  menu scenes are landing
+
+Exit when:
+- changing `main_view_scale` changes dungeon tile size but not modal menu pixel
+  size
+- a menu can be centered, width-limited, and scrolled without consulting
+  `Term->wid` / `Term->hgt`
+- no new menu code depends on `ui_information_scene_capture_term()`
+
+### Migration Order
+Workstream M1: generic interaction consumers.
+- move prompt, confirm, quantity, text-entry, item selection, and targeting to
+  the fixed-pixel menu layer
+- primary write set:
+  - `src/util-prompt.c`
+  - `src/util-message.c`
+  - `src/object/object-ui-select.c`
+  - `src/targeting.c`
+- this is the dependency for later bespoke workflows
+
+Workstream M2: simple document and pause scenes.
+- port the main menu, message recall, hint-message browser, help viewer, file
+  viewer, and nearby/object summary screens
+- primary write set:
+  - `src/cmd/ui/cmd-ui-main-menu.c`
+  - `src/ui/ui-help.c`
+  - `src/ui/ui-file-viewer.c`
+  - `src/cmd/ui/cmd-ui-nearby.c`
+
+Workstream M3: data-heavy browsers.
+- port score screens, run history, quest status, character sheet, knowledge
+  browsers, abilities/song menus, and enhanced inventory/equipment browsers
+- primary write set:
+  - `src/score/score_ui.c`
+  - `src/quest/quest-ui.c`
+  - `src/cmd/ui/cmd-ui-character.c`
+  - `src/ui/ui-character-screen.c`
+  - `src/cmd/ui/cmd-ui-knowledge.c`
+  - `src/cmd/ui/cmd-ui-abilities.c`
+  - `src/object/object-ui-display.c`
+  - `src/object/object-ui-enhanced.c`
+  - `src/object/object-ui-identify.c`
+  - `src/cmd/item/cmd-item-core.c`
+  - `src/cmd/item/cmd-item-activate.c`
+
+Workstream M4: presentation-heavy narrative scenes.
+- port story playback, death/review flows, and metarun presentation screens
+- primary write set:
+  - `src/ui/ui-story.c`
+  - `src/ui/ui-death.c`
+  - `src/metarun.c`
+- depends on M0 and the scroll/document widgets from M2-M3
+
+Workstream M5: bespoke workflow migrations.
+- port birth, blitz setup, oath selection, and smithing after M1-M3 prove the
+  widget set
+- primary write set:
+  - `src/birth.c`
+  - `src/ui/smithing/ui-smithing-screen.c`
+  - `src/blitz.c`
+- this is deliberately last because these flows combine list selection,
+  text-entry, scrolling details, compare panes, and gameplay mutations in a
+  single loop
+
+### Parallel Subagent Plan
+Only one subagent should own M0 at a time.
+
+After M0 merges, the following lanes can run in parallel:
+| Lane | Write set | Depends on | Notes |
+| --- | --- | --- | --- |
+| Lane A: prompt/selectors | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c` | M0 | establishes the canonical fixed-pixel prompt/list flow |
+| Lane B: pause and document screens | `src/cmd/ui/cmd-ui-main-menu.c`, `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/cmd/ui/cmd-ui-nearby.c` | M0 | lowest-risk consumer lane; good first UI payoff |
+| Lane C: settings | `src/cmd/ui/cmd-ui-settings.c` | M0 | keep isolated because the file is large and touches SDL config/forms |
+| Lane D: score and quest browsers | `src/score/score_ui.c`, `src/quest/quest-ui.c` | M0 | shared need: tabs, list-detail panes, scrollable detail views |
+| Lane E: character, knowledge, abilities, and object browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/cmd-item-core.c`, `src/cmd/item/cmd-item-activate.c` | M0 | shared need: list-detail widgets, compare panes, footer action bars, and action popups |
+| Lane F: story, death, and metarun presentation | `src/ui/ui-story.c`, `src/ui/ui-death.c`, `src/metarun.c` | M0 plus M2 document widgets | keep separate from score/quest because metarun already owns a large bespoke surface |
+| Lane G: birth and blitz | `src/birth.c`, `src/blitz.c` | M0 plus M1/M3 | should start only after text-entry, list, and detail widgets are stable |
+| Lane H: smithing | `src/ui/smithing/ui-smithing-screen.c` | M0 plus M1/M3 | isolate completely; this is the highest-risk workflow after birth |
+
+Parallelization rules:
+- do not split ownership of `src/app/*` menu model files or `src/sdl-scene*.c`
+  across multiple agents
+- keep `src/cmd/ui/cmd-ui-settings.c`, `src/birth.c`, `src/ui/smithing/ui-smithing-screen.c`,
+  and `src/metarun.c` single-owner because each is a large bespoke surface
+- prefer merging Lane A before G/H so bespoke flows reuse the generic prompt
+  and selector path instead of re-implementing it
+
+### Validation Gates For This Track
+Gate M0:
+- switching SDL scale changes dungeon tile size only
+- modal menu width, font size, and padding remain visually stable
+
+Gate M1:
+- prompt/text-entry/item-selection/targeting no longer rely on term-space
+  layout for their normal SDL path
+
+Gate M2-M3:
+- help, file viewer, main menu, score history, quest status, character sheet,
+  and knowledge screens no longer query `Term->wid` / `Term->hgt` for layout in
+  their SDL path
+
+Gate M4-M5:
+- story, death, metarun, birth, and smithing use the shared menu widgets
+  instead of bespoke cell-positioned redraw loops
+
+Note:
+- for menu execution planning, prefer the `MENU0A`-`MENU11` packages above
+- the broader grouping below is retained as architectural background, not as
+  the primary menu split
+
 ## Suggested Subagent Grouping For Implementation
 - Group A: input and prompt boundary.
   - `src/util-input.c`
