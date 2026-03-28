@@ -543,7 +543,7 @@ int main(int argc, char* argv[])
             app_snapshot snapshot;
 
             memset(&snapshot, 0, sizeof(snapshot));
-            snapshot.scene = APP_SCENE_KIND_MENU;
+            snapshot.scene = APP_SCENE_KIND_BOOTSTRAP;
             snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
             app_session_set_snapshot(session, &snapshot);
 

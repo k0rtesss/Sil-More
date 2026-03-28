@@ -10,6 +10,7 @@ enum {
 typedef struct sdl_scene_stack_state {
     bool enabled;
     bool dungeon_active;
+    bool bootstrap_active;
     bool information_active;
     bool menu_active;
     bool overlay_active;
@@ -236,7 +237,27 @@ static bool sdl_scene_stack_dungeon_snapshot_active(const app_session* session)
         return false;
 
     dungeon_snapshot = app_session_dungeon_snapshot(session);
-    return dungeon_snapshot && dungeon_snapshot->snapshot.revision > 0;
+    return dungeon_snapshot
+        && dungeon_snapshot->snapshot.revision > 0
+        && dungeon_snapshot->snapshot.revision == snapshot->revision;
+}
+
+static bool sdl_scene_stack_bootstrap_snapshot_active(const app_session* session)
+{
+    const app_snapshot* snapshot;
+    const app_bootstrap_snapshot* bootstrap_snapshot;
+
+    if (!g_scene_stack.enabled || !session || !g_views[0].term_ready)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_BOOTSTRAP)
+        return false;
+
+    bootstrap_snapshot = app_session_bootstrap_snapshot(session);
+    return bootstrap_snapshot
+        && bootstrap_snapshot->snapshot.revision > 0
+        && bootstrap_snapshot->snapshot.revision == snapshot->revision;
 }
 
 static bool sdl_scene_stack_information_snapshot_active(
@@ -254,7 +275,8 @@ static bool sdl_scene_stack_information_snapshot_active(
 
     information_snapshot = app_session_information_snapshot(session);
     return information_snapshot
-        && information_snapshot->snapshot.revision > 0;
+        && information_snapshot->snapshot.revision > 0
+        && information_snapshot->snapshot.revision == snapshot->revision;
 }
 
 static bool sdl_scene_stack_menu_snapshot_active(const app_session* session)
@@ -270,7 +292,9 @@ static bool sdl_scene_stack_menu_snapshot_active(const app_session* session)
         return false;
 
     menu_snapshot = app_session_menu_snapshot(session);
-    return menu_snapshot && menu_snapshot->snapshot.revision > 0;
+    return menu_snapshot
+        && menu_snapshot->snapshot.revision > 0
+        && menu_snapshot->snapshot.revision == snapshot->revision;
 }
 
 static void sdl_scene_stack_update_layers(app_session* session)
@@ -280,6 +304,8 @@ static void sdl_scene_stack_update_layers(app_session* session)
     const app_interaction_state* interaction = session
         ? app_session_interaction(session) : NULL;
     bool next_dungeon_active = sdl_scene_stack_dungeon_snapshot_active(session);
+    bool next_bootstrap_active
+        = sdl_scene_stack_bootstrap_snapshot_active(session);
     bool next_information_active
         = sdl_scene_stack_information_snapshot_active(session);
     bool next_menu_active = sdl_scene_stack_menu_snapshot_active(session);
@@ -288,11 +314,14 @@ static void sdl_scene_stack_update_layers(app_session* session)
     bool next_overlay_active = next_dungeon_active && character_icky > 0
         && g_views[0].canvas && !interaction_owns_overlay;
     bool next_modal_active = g_scene_stack.enabled && g_views[0].term_ready
-        && g_views[0].canvas && session && snapshot && !next_information_active
-        && !next_menu_active && ((snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        && g_views[0].canvas && session && snapshot && !next_bootstrap_active
+        && !next_information_active && !next_menu_active
+        && (snapshot->scene != APP_SCENE_KIND_BOOTSTRAP)
+        && ((snapshot->scene != APP_SCENE_KIND_DUNGEON)
             || !sdl_scene_stack_wait_reason_allows_snapshot(wait_state));
 
     if (next_dungeon_active != g_scene_stack.dungeon_active
+        || next_bootstrap_active != g_scene_stack.bootstrap_active
         || next_information_active != g_scene_stack.information_active
         || next_menu_active != g_scene_stack.menu_active
         || next_overlay_active != g_scene_stack.overlay_active
@@ -303,6 +332,7 @@ static void sdl_scene_stack_update_layers(app_session* session)
     }
 
     g_scene_stack.dungeon_active = next_dungeon_active;
+    g_scene_stack.bootstrap_active = next_bootstrap_active;
     g_scene_stack.information_active = next_information_active;
     g_scene_stack.menu_active = next_menu_active;
     g_scene_stack.overlay_active = next_overlay_active;
@@ -418,6 +448,7 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
 {
     app_session* session = app_session_current();
     const app_dungeon_snapshot* snapshot;
+    const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_information_snapshot* information_snapshot;
     const app_menu_snapshot* menu_snapshot;
 
@@ -426,8 +457,8 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
 
     sdl_scene_stack_update_layers(session);
 
-    if (!g_scene_stack.dungeon_active && !g_scene_stack.information_active
-        && !g_scene_stack.menu_active)
+    if (!g_scene_stack.dungeon_active && !g_scene_stack.bootstrap_active
+        && !g_scene_stack.information_active && !g_scene_stack.menu_active)
     {
         if (session)
             app_session_clear_events(session);
@@ -437,10 +468,14 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
     }
 
     snapshot = app_session_dungeon_snapshot(session);
+    bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     information_snapshot = app_session_information_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
     if ((g_scene_stack.dungeon_active && snapshot
             && snapshot->snapshot.revision != g_scene_stack.rendered_revision)
+        || (g_scene_stack.bootstrap_active && bootstrap_snapshot
+            && (bootstrap_snapshot->snapshot.revision
+                != g_scene_stack.rendered_revision))
         || (g_scene_stack.information_active && information_snapshot
             && (information_snapshot->snapshot.revision
                 != g_scene_stack.rendered_revision)))
@@ -484,6 +519,7 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
     const app_session* session;
     const app_snapshot* snapshot;
     const app_dungeon_snapshot* dungeon_snapshot;
+    const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_information_snapshot* information_snapshot;
     const app_menu_snapshot* menu_snapshot;
     Uint64 delta_ns;
@@ -497,7 +533,19 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
     {
         dungeon_snapshot = app_session_dungeon_snapshot(session);
         if (dungeon_snapshot
+            && dungeon_snapshot->snapshot.revision == snapshot->revision
             && dungeon_snapshot->snapshot.revision != g_scene_stack.rendered_revision)
+        {
+            return 0;
+        }
+    }
+    else if (snapshot && snapshot->scene == APP_SCENE_KIND_BOOTSTRAP)
+    {
+        bootstrap_snapshot = app_session_bootstrap_snapshot(session);
+        if (bootstrap_snapshot
+            && bootstrap_snapshot->snapshot.revision == snapshot->revision
+            && bootstrap_snapshot->snapshot.revision
+                != g_scene_stack.rendered_revision)
         {
             return 0;
         }
@@ -506,6 +554,7 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
     {
         information_snapshot = app_session_information_snapshot(session);
         if (information_snapshot
+            && information_snapshot->snapshot.revision == snapshot->revision
             && information_snapshot->snapshot.revision != g_scene_stack.rendered_revision)
         {
             return 0;
@@ -515,6 +564,7 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
     {
         menu_snapshot = app_session_menu_snapshot(session);
         if (menu_snapshot
+            && menu_snapshot->snapshot.revision == snapshot->revision
             && menu_snapshot->snapshot.revision != g_scene_stack.rendered_revision)
         {
             return 0;
@@ -534,13 +584,15 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
 bool sdl_scene_stack_handles_main_view(void)
 {
     return g_scene_stack.modal_active || g_scene_stack.dungeon_active
-        || g_scene_stack.information_active || g_scene_stack.menu_active;
+        || g_scene_stack.bootstrap_active || g_scene_stack.information_active
+        || g_scene_stack.menu_active;
 }
 
 bool sdl_scene_stack_render_main_layer(void)
 {
     app_session* session = app_session_current();
     const app_dungeon_snapshot* snapshot;
+    const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_information_snapshot* information_snapshot;
     const app_menu_snapshot* menu_snapshot;
     Uint64 now_ns = SDL_GetTicksNS();
@@ -554,16 +606,19 @@ bool sdl_scene_stack_render_main_layer(void)
         return true;
     }
 
-    if (!g_scene_stack.dungeon_active && !g_scene_stack.information_active
-        && !g_scene_stack.menu_active)
+    if (!g_scene_stack.dungeon_active && !g_scene_stack.bootstrap_active
+        && !g_scene_stack.information_active && !g_scene_stack.menu_active)
         return false;
     if (!sdl_scene_stack_ensure_canvas())
         return false;
 
     snapshot = app_session_dungeon_snapshot(session);
+    bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     information_snapshot = app_session_information_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
     if (g_scene_stack.dungeon_active && !snapshot)
+        return false;
+    if (g_scene_stack.bootstrap_active && !bootstrap_snapshot)
         return false;
     if (g_scene_stack.information_active && !information_snapshot)
         return false;
@@ -573,6 +628,9 @@ bool sdl_scene_stack_render_main_layer(void)
     if (g_scene_stack.frame_dirty || g_scene_stack.animation_count > 0
         || (g_scene_stack.dungeon_active && snapshot
             && (g_scene_stack.rendered_revision != snapshot->snapshot.revision))
+        || (g_scene_stack.bootstrap_active && bootstrap_snapshot
+            && (g_scene_stack.rendered_revision
+                != bootstrap_snapshot->snapshot.revision))
         || (g_scene_stack.information_active && information_snapshot
             && (g_scene_stack.rendered_revision
                 != information_snapshot->snapshot.revision))
@@ -587,6 +645,11 @@ bool sdl_scene_stack_render_main_layer(void)
             rendered = sdl_scene_dungeon_render(g_scene_stack.dungeon_canvas,
                 &g_views[0], snapshot, g_scene_stack.animations,
                 g_scene_stack.animation_count, now_ns);
+        }
+        else if (g_scene_stack.bootstrap_active)
+        {
+            rendered = sdl_scene_bootstrap_render(g_scene_stack.dungeon_canvas,
+                &g_views[0], bootstrap_snapshot);
         }
         else if (g_scene_stack.information_active)
         {
@@ -607,6 +670,9 @@ bool sdl_scene_stack_render_main_layer(void)
         g_scene_stack.frame_dirty = false;
         if (g_scene_stack.dungeon_active)
             g_scene_stack.rendered_revision = snapshot->snapshot.revision;
+        else if (g_scene_stack.bootstrap_active)
+            g_scene_stack.rendered_revision
+                = bootstrap_snapshot->snapshot.revision;
         else if (g_scene_stack.information_active)
             g_scene_stack.rendered_revision = information_snapshot->snapshot.revision;
         else

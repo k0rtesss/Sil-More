@@ -480,10 +480,37 @@ Status:
 ## Menu Modernization Follow-On: Fixed-Size Pixel Menus
 Goal:
 - keep the dungeon view on integer-scaled tiles
-- move menus and modal browsers onto a dedicated pixel UI layer whose visual
-  size does not change with `main_view_scale`
+- move menus and modal browsers onto a dedicated logical-pixel UI layer whose
+  visual size does not change with `main_view_scale`, terminal dimensions, or
+  tile metrics
+- make menus behave like fixed-size overlays in a modern PC game: stable
+  on-screen footprint, stable typography, and stable padding while the world
+  view scales independently
 - stop expressing menu layout in terminal columns and rows except inside the
   temporary legacy bridge
+- keep the current Sil menu appearance intact; this track modernizes scaling
+  and rendering ownership, not the game's visual style
+
+Menu-specific non-goals:
+- do not redesign menu fonts, colors, borders, copy, highlight treatment, or
+  screen composition for style reasons
+- do not replace the current menu look with a new "modern UI" skin
+- do not let SDL menu layout fall back to `Term->wid` / `Term->hgt` math once
+  a menu family has moved onto the fixed-pixel layer
+
+Visual preservation contract:
+- a migrated menu should read as the same Sil screen the player already knows,
+  with the same hierarchy, wording, framing, and relative spacing
+- dungeon and tile rendering may change size only through integer scaling
+- menu rendering may change size only through explicit logical-pixel metrics
+  and, if needed later, explicit DPI-aware menu scale buckets
+- menu size must never be derived from dungeon tile scale, terminal cell size,
+  `Term->wid`, or `Term->hgt` on the SDL path
+- when a menu family first migrates, the acceptable visual delta is limited to
+  pixel anchoring and stability; stylistic changes need separate approval and
+  should not ride along with architecture work
+- shared menu widgets should treat the current terminal-era presentation as the
+  visual reference, not as disposable placeholder styling
 
 Current blocker summary:
 - `src/sdl-scene-dungeon.c` still renders interaction overlays in main-view
@@ -511,13 +538,19 @@ Standing rule for this track:
   as a bridge for legacy flows, not as the final menu API
 - current constraint: keep the shared `APP_SCENE_KIND_MENU` renderer limited to
   prompt-style modals for now; do not roll full menus, selectors, or document
-  browsers onto it until the visual direction is revisited
+  browsers onto it until the shared widgets can reproduce the current look
+  without visual regressions
+- do not treat this track as permission to revisit the game's menu art
+  direction; first priority is fixed-pixel behavior with preserved visuals
 
 Status on 2026-03-28:
 - M0 foundation is now complete in the working tree
 - `src/sdl-scene-dungeon.c` keeps the pre-existing fixed-pixel interaction
   overlay, so prompt/list/targeting overlays remain decoupled from terminal
   size without changing their established visual style
+- `src/cmd/ui/cmd-ui-main-menu.c` now uses the shared plain menu scene on the
+  snapshot-rendered dungeon path, so the pause menu keeps its legacy text-only
+  look while moving onto the fixed-pixel menu layer
 - `src/app/app-scene-menu.[ch]` now define the shared semantic menu payload for
   titled panels, list rows, detail panes, footer actions, tabs, focus ids, and
   row scroll state
@@ -588,6 +621,8 @@ Workstream M0:
 - add a frontend-owned menu layer separate from the tile-scaled dungeon canvas
 - give that layer its own font metrics, padding, and width caps so modal menus
   stay visually stable across SDL scale values
+- keep those font, padding, border, and color decisions aligned with the
+  current in-game menu presentation rather than introducing new chrome
 - introduce a semantic menu scene/model in `src/app/*`
   - recommended scope: document blocks, titled panels, list rows, footer
     actions, tabs, scroll state, and optional detail panes
@@ -602,6 +637,8 @@ Exit when:
 - a menu can be centered, width-limited, and scrolled without consulting
   `Term->wid` / `Term->hgt`
 - no new menu code depends on `ui_information_scene_capture_term()`
+- the migrated menu still matches the current visual style closely enough that
+  the change reads as scaling modernization, not as a redesign
 
 ### Migration Order
 Workstream M1: generic interaction consumers.
@@ -685,19 +722,27 @@ Parallelization rules:
 Gate M0:
 - switching SDL scale changes dungeon tile size only
 - modal menu width, font size, and padding remain visually stable
+- modal menus preserve the existing Sil look instead of introducing a new
+  visual treatment
 
 Gate M1:
 - prompt/text-entry/item-selection/targeting no longer rely on term-space
   layout for their normal SDL path
+- those flows still present with the current visual language and interaction
+  hierarchy
 
 Gate M2-M3:
 - help, file viewer, main menu, score history, quest status, character sheet,
   and knowledge screens no longer query `Term->wid` / `Term->hgt` for layout in
   their SDL path
+- migrated browsers preserve existing framing, typography, and information
+  density unless a separate design change is approved
 
 Gate M4-M5:
 - story, death, metarun, birth, and smithing use the shared menu widgets
   instead of bespoke cell-positioned redraw loops
+- workflow migrations still look like the current game UI, only decoupled from
+  terminal sizing
 
 Note:
 - for menu execution planning, prefer the `MENU0A`-`MENU11` packages above

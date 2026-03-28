@@ -25,6 +25,7 @@ struct app_session {
     app_wait_state wait_state;
     app_interaction_state interaction;
     app_snapshot snapshot;
+    app_bootstrap_snapshot bootstrap_snapshot;
     app_dungeon_snapshot dungeon_snapshot;
     app_information_snapshot information_snapshot;
     app_menu_snapshot menu_snapshot;
@@ -145,6 +146,24 @@ static void app_session_sync_information_blob(app_session* session)
     session->information_snapshot.blobs[0].format_version = APP_INFORMATION_FORMAT_VERSION;
     session->information_snapshot.blobs[0].data = (const byte*)&session->information_snapshot.scene;
     session->information_snapshot.blobs[0].size = sizeof(session->information_snapshot.scene);
+}
+
+static void app_session_sync_bootstrap_blob(app_session* session)
+{
+    if (!session)
+        return;
+
+    session->bootstrap_snapshot.snapshot.scene = APP_SCENE_KIND_BOOTSTRAP;
+    session->bootstrap_snapshot.snapshot.blobs = session->bootstrap_snapshot.blobs;
+    session->bootstrap_snapshot.snapshot.blob_count
+        = N_ELEMENTS(session->bootstrap_snapshot.blobs);
+    session->bootstrap_snapshot.blobs[0].kind = APP_SNAPSHOT_BLOB_BOOTSTRAP;
+    session->bootstrap_snapshot.blobs[0].format_version
+        = APP_BOOTSTRAP_FORMAT_VERSION;
+    session->bootstrap_snapshot.blobs[0].data
+        = (const byte*)&session->bootstrap_snapshot.scene;
+    session->bootstrap_snapshot.blobs[0].size
+        = sizeof(session->bootstrap_snapshot.scene);
 }
 
 static void app_session_sync_menu_blob(app_session* session)
@@ -394,6 +413,7 @@ app_session* app_session_create(const app_session_config* config)
     session->wait_state.reason = APP_WAIT_REASON_NONE;
     app_interaction_state_init(&session->interaction);
     session->snapshot.scene = APP_SCENE_KIND_NONE;
+    app_bootstrap_snapshot_init(&session->bootstrap_snapshot);
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
     app_information_snapshot_init(&session->information_snapshot);
     app_menu_snapshot_init(&session->menu_snapshot);
@@ -593,6 +613,12 @@ void app_session_set_snapshot(app_session* session,
         session->snapshot_dirty_mask = 0;
 }
 
+const app_bootstrap_snapshot* app_session_bootstrap_snapshot(
+    const app_session* session)
+{
+    return session ? &session->bootstrap_snapshot : NULL;
+}
+
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const app_session* session)
 {
@@ -608,6 +634,15 @@ const app_information_snapshot* app_session_information_snapshot(
 const app_menu_snapshot* app_session_menu_snapshot(const app_session* session)
 {
     return session ? &session->menu_snapshot : NULL;
+}
+
+void app_session_clear_bootstrap_snapshot(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_bootstrap_scene_init(&session->bootstrap_snapshot.scene);
+    app_session_sync_bootstrap_blob(session);
 }
 
 void app_session_clear_information_snapshot(app_session* session)
@@ -654,6 +689,23 @@ bool app_session_publish_information_snapshot(app_session* session)
         = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
     session->information_snapshot.snapshot.revision = session->next_snapshot_revision++;
     session->snapshot = session->information_snapshot.snapshot;
+    session->snapshot_dirty_mask = 0;
+    return true;
+}
+
+bool app_session_publish_bootstrap_scene(app_session* session,
+    const app_bootstrap_scene* scene)
+{
+    if (!session || !scene)
+        return false;
+
+    session->bootstrap_snapshot.scene = *scene;
+    app_session_sync_bootstrap_blob(session);
+    session->bootstrap_snapshot.snapshot.flags
+        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
+    session->bootstrap_snapshot.snapshot.revision
+        = session->next_snapshot_revision++;
+    session->snapshot = session->bootstrap_snapshot.snapshot;
     session->snapshot_dirty_mask = 0;
     return true;
 }

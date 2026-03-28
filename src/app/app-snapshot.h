@@ -26,7 +26,8 @@ typedef enum app_snapshot_blob_kind {
     APP_SNAPSHOT_BLOB_OVERLAY = 6,
     APP_SNAPSHOT_BLOB_INFORMATION = 7,
     APP_SNAPSHOT_BLOB_CUSTOM = 8,
-    APP_SNAPSHOT_BLOB_MENU = 9
+    APP_SNAPSHOT_BLOB_MENU = 9,
+    APP_SNAPSHOT_BLOB_BOOTSTRAP = 10
 } app_snapshot_blob_kind;
 
 typedef enum app_snapshot_flag {

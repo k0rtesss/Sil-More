@@ -5,6 +5,7 @@
 #include "app-host.h"
 #include "app-interaction.h"
 #include "app-input.h"
+#include "app-scene-bootstrap.h"
 #include "app-scene-dungeon.h"
 #include "app-scene-information.h"
 #include "app-scene-menu.h"
@@ -123,12 +124,17 @@ void app_session_pop_wait_scope(app_session* session,
 const app_snapshot* app_session_snapshot(const app_session* session);
 void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot);
+const app_bootstrap_snapshot* app_session_bootstrap_snapshot(
+    const app_session* session);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const app_session* session);
 const app_information_snapshot* app_session_information_snapshot(
     const app_session* session);
 const app_menu_snapshot* app_session_menu_snapshot(
     const app_session* session);
+void app_session_clear_bootstrap_snapshot(app_session* session);
+bool app_session_publish_bootstrap_scene(app_session* session,
+    const app_bootstrap_scene* scene);
 void app_session_clear_information_snapshot(app_session* session);
 bool app_session_add_information_op(app_session* session, s16b row,
     s16b col, byte attr, cptr text);

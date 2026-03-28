@@ -8,6 +8,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "app/app-session.h"
 #include "platform-story-font.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
@@ -22,6 +23,7 @@ extern struct sound_config g_sound_config;
 #include "fs/path.h"
 #include "log/log.h"
 #include "runtime/runtime-game.h"
+#include "runtime-cli.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"
@@ -47,6 +49,11 @@ extern struct sound_config g_sound_config;
 #define MAIN_MENU_RETURN 16
 
 #define MAIN_MENU_MAX 16
+
+typedef struct main_menu_scene_scope {
+    bool active;
+    app_snapshot previous_snapshot;
+} main_menu_scene_scope;
 
 static int main_menu_calc_width(void)
 {
@@ -82,6 +89,127 @@ static int main_menu_calc_width(void)
 
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     int* out_look_x);
+
+static bool main_menu_scene_enter(main_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    if (!runtime_cli_snapshot_renderer() || !session)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+
+    scope->previous_snapshot = *snapshot;
+    scope->active = true;
+    return true;
+}
+
+static bool main_menu_scene_add_row(app_menu_scene* scene, int id,
+    int highlight, bool death_view, cptr label)
+{
+    byte attr = TERM_WHITE;
+    bool enabled = true;
+
+    if (!scene || !label)
+        return false;
+
+    if (death_view && id >= MAIN_MENU_ABORT && id <= MAIN_MENU_SAVE_QUIT)
+    {
+        attr = TERM_L_DARK;
+        enabled = false;
+    }
+    else if (highlight == id)
+    {
+        attr = TERM_L_BLUE;
+    }
+
+    return app_menu_scene_add_row(scene, (s16b)id, attr, enabled,
+        highlight == id, "", label, "");
+}
+
+static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
+    bool death_view)
+{
+    app_session* session = app_session_current();
+    app_menu_scene scene;
+
+    if (!scope || !scope->active || !session)
+        return false;
+
+    if (highlight < 1 || highlight > MAIN_MENU_MAX)
+        highlight = MAIN_MENU_CHARACTER;
+    if (death_view && highlight >= MAIN_MENU_ABORT
+        && highlight <= MAIN_MENU_SAVE_QUIT)
+    {
+        highlight = MAIN_MENU_RETURN;
+    }
+
+    app_menu_scene_init(&scene);
+    scene.flags = APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
+        | APP_MENU_SCENE_FLAG_PLAIN;
+    app_menu_scene_set_widths(&scene, 320, 520);
+
+    if (!main_menu_scene_add_row(&scene, MAIN_MENU_CHARACTER, highlight,
+            death_view, "Character sheet      (c)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_KNOWLEDGE, highlight,
+            death_view, "Known lore           (a)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_QUEST_STATUS, highlight,
+            death_view, "Quest status         (t)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_SCORES, highlight,
+            death_view, "Halls of Mandos      (d)")
+        || !main_menu_scene_add_row(&scene, 5, highlight, death_view,
+            "Run history          (v)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_MAP, highlight,
+            death_view, "Map                  (m)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_MESSAGES, highlight,
+            death_view, "Log                  (l)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_SCREENSHOT, highlight,
+            death_view, "Combat history       (x)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_NOTE, highlight,
+            death_view, "Hint messages        (i)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_STORY, highlight,
+            death_view, "The story so far     (y)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_OPTIONS, highlight,
+            death_view, "Options and misc     (o)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_HELP, highlight,
+            death_view, "Help                 (h)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_ABORT, highlight,
+            death_view, "Suicide              (k)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_SAVE, highlight,
+            death_view, "Save                 (s)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_SAVE_QUIT, highlight,
+            death_view, "Quit with save       (q)")
+        || !main_menu_scene_add_row(&scene, MAIN_MENU_RETURN, highlight,
+            death_view, "Return to game       (r)"))
+    {
+        return false;
+    }
+
+    if (!app_session_publish_menu_scene(session, &scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
+static void main_menu_scene_leave(main_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    app_session_set_snapshot(session, &scope->previous_snapshot);
+    scope->active = false;
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+}
 
 static void main_menu_publish_interaction(int highlight, bool death_view)
 {
@@ -179,11 +307,13 @@ static void main_menu_publish_interaction(int highlight, bool death_view)
  * Performs the interface and selection work for the main menu.
  */
 static int main_menu_aux(int* highlight, bool scene_active,
-    bool clear_fullscreen)
+    bool clear_fullscreen, main_menu_scene_scope* menu_scene_scope)
 {
     char ch;
     int i;
     bool death_view = death_spectator_active();
+    bool use_menu_scene = menu_scene_scope && menu_scene_scope->active
+        && main_menu_scene_present(menu_scene_scope, *highlight, death_view);
 
     int menu_w = main_menu_calc_width();
     const int top_pad = 1;
@@ -213,92 +343,95 @@ static int main_menu_aux(int* highlight, bool scene_active,
     if (death_view && (*highlight >= 13) && (*highlight <= 15))
         *highlight = 16;
 
-    for (i = 0; i < menu_h; i++)
+    if (!use_menu_scene)
     {
-        int y = row_top + i;
-        if (!Term || y < 0 || y >= Term->hgt)
-            continue;
-
-        int clear_x = clear_fullscreen ? 0 : col_main - 2;
-        int clear_w = clear_fullscreen ? Term->wid : menu_w + 4;
-
-        if (clear_x < 0)
-            clear_x = 0;
-        if (clear_x + clear_w > Term->wid)
-            clear_w = Term->wid - clear_x;
-        if (clear_w > 0)
-            Term_erase(clear_x, y, clear_w);
-    }
-
-    Term_putstr(col_main, row_top + row_first + 0, -1,
-        (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE,
-        "Character sheet      (c)");
-    Term_putstr(col_main, row_top + row_first + 1, -1,
-        (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE,
-        "Known lore           (a)");
-    Term_putstr(col_main, row_top + row_first + 2, -1,
-        (*highlight == 3) ? TERM_L_BLUE : TERM_WHITE,
-        "Quest status         (t)");
-    Term_putstr(col_main, row_top + row_first + 3, -1,
-        (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
-        "Halls of Mandos      (d)");
-    Term_putstr(col_main, row_top + row_first + 4, -1,
-        (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
-        "Run history          (v)");
-    Term_putstr(col_main, row_top + row_first + 5, -1,
-        (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE,
-        "Map                  (m)");
-    Term_putstr(col_main, row_top + row_first + 6, -1,
-        (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE,
-        "Log                  (l)");
-    Term_putstr(col_main, row_top + row_first + 7, -1,
-        (*highlight == 8) ? TERM_L_BLUE : TERM_WHITE,
-        "Combat history       (x)");
-    Term_putstr(col_main, row_top + row_first + 8, -1,
-        (*highlight == 9) ? TERM_L_BLUE : TERM_WHITE,
-        "Hint messages        (i)");
-    Term_putstr(col_main, row_top + row_first + 9, -1,
-        (*highlight == 10) ? TERM_L_BLUE : TERM_WHITE,
-        "The story so far     (y)");
-    Term_putstr(col_main, row_top + row_first + 10, -1,
-        (*highlight == 11) ? TERM_L_BLUE : TERM_WHITE,
-        "Options and misc     (o)");
-    Term_putstr(col_main, row_top + row_first + 11, -1,
-        (*highlight == 12) ? TERM_L_BLUE : TERM_WHITE,
-        "Help                 (h)");
-    byte suicide_color = death_view ? TERM_L_DARK
-        : ((*highlight == 13) ? TERM_L_BLUE : TERM_WHITE);
-    Term_putstr(col_main, row_top + row_first + 12, -1, suicide_color,
-        "Suicide              (k)");
-    byte save_color = death_view ? TERM_L_DARK
-        : ((*highlight == 14) ? TERM_L_BLUE : TERM_WHITE);
-    Term_putstr(col_main, row_top + row_first + 13, -1, save_color,
-        "Save                 (s)");
-    byte quit_color = death_view ? TERM_L_DARK
-        : ((*highlight == 15) ? TERM_L_BLUE : TERM_WHITE);
-    Term_putstr(col_main, row_top + row_first + 14, -1, quit_color,
-        "Quit with save       (q)");
-    Term_putstr(col_main, row_top + row_first + 15, -1,
-        (*highlight == 16) ? TERM_L_BLUE : TERM_WHITE,
-        "Return to game       (r)");
-
-    main_menu_publish_interaction(*highlight, death_view);
-
-    /* Flush the prompt */
-    if (!scene_active || !ui_information_scene_present_term())
-        Term_fresh();
-
-    /* Place cursor at current choice */
-    {
-        int cursor_y = row_top + row_first + (*highlight - 1);
-        if (Term)
+        for (i = 0; i < menu_h; i++)
         {
-            if (cursor_y < 0)
-                cursor_y = 0;
-            if (cursor_y >= Term->hgt)
-                cursor_y = Term->hgt - 1;
+            int y = row_top + i;
+            if (!Term || y < 0 || y >= Term->hgt)
+                continue;
+
+            int clear_x = clear_fullscreen ? 0 : col_main - 2;
+            int clear_w = clear_fullscreen ? Term->wid : menu_w + 4;
+
+            if (clear_x < 0)
+                clear_x = 0;
+            if (clear_x + clear_w > Term->wid)
+                clear_w = Term->wid - clear_x;
+            if (clear_w > 0)
+                Term_erase(clear_x, y, clear_w);
         }
-        Term_gotoxy(col_main, cursor_y);
+
+        Term_putstr(col_main, row_top + row_first + 0, -1,
+            (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE,
+            "Character sheet      (c)");
+        Term_putstr(col_main, row_top + row_first + 1, -1,
+            (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE,
+            "Known lore           (a)");
+        Term_putstr(col_main, row_top + row_first + 2, -1,
+            (*highlight == 3) ? TERM_L_BLUE : TERM_WHITE,
+            "Quest status         (t)");
+        Term_putstr(col_main, row_top + row_first + 3, -1,
+            (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
+            "Halls of Mandos      (d)");
+        Term_putstr(col_main, row_top + row_first + 4, -1,
+            (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
+            "Run history          (v)");
+        Term_putstr(col_main, row_top + row_first + 5, -1,
+            (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE,
+            "Map                  (m)");
+        Term_putstr(col_main, row_top + row_first + 6, -1,
+            (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE,
+            "Log                  (l)");
+        Term_putstr(col_main, row_top + row_first + 7, -1,
+            (*highlight == 8) ? TERM_L_BLUE : TERM_WHITE,
+            "Combat history       (x)");
+        Term_putstr(col_main, row_top + row_first + 8, -1,
+            (*highlight == 9) ? TERM_L_BLUE : TERM_WHITE,
+            "Hint messages        (i)");
+        Term_putstr(col_main, row_top + row_first + 9, -1,
+            (*highlight == 10) ? TERM_L_BLUE : TERM_WHITE,
+            "The story so far     (y)");
+        Term_putstr(col_main, row_top + row_first + 10, -1,
+            (*highlight == 11) ? TERM_L_BLUE : TERM_WHITE,
+            "Options and misc     (o)");
+        Term_putstr(col_main, row_top + row_first + 11, -1,
+            (*highlight == 12) ? TERM_L_BLUE : TERM_WHITE,
+            "Help                 (h)");
+        byte suicide_color = death_view ? TERM_L_DARK
+            : ((*highlight == 13) ? TERM_L_BLUE : TERM_WHITE);
+        Term_putstr(col_main, row_top + row_first + 12, -1, suicide_color,
+            "Suicide              (k)");
+        byte save_color = death_view ? TERM_L_DARK
+            : ((*highlight == 14) ? TERM_L_BLUE : TERM_WHITE);
+        Term_putstr(col_main, row_top + row_first + 13, -1, save_color,
+            "Save                 (s)");
+        byte quit_color = death_view ? TERM_L_DARK
+            : ((*highlight == 15) ? TERM_L_BLUE : TERM_WHITE);
+        Term_putstr(col_main, row_top + row_first + 14, -1, quit_color,
+            "Quit with save       (q)");
+        Term_putstr(col_main, row_top + row_first + 15, -1,
+            (*highlight == 16) ? TERM_L_BLUE : TERM_WHITE,
+            "Return to game       (r)");
+
+        main_menu_publish_interaction(*highlight, death_view);
+
+        /* Flush the prompt */
+        if (!scene_active || !ui_information_scene_present_term())
+            Term_fresh();
+
+        /* Place cursor at current choice */
+        {
+            int cursor_y = row_top + row_first + (*highlight - 1);
+            if (Term)
+            {
+                if (cursor_y < 0)
+                    cursor_y = 0;
+                if (cursor_y >= Term->hgt)
+                    cursor_y = Term->hgt - 1;
+            }
+            Term_gotoxy(col_main, cursor_y);
+        }
     }
 
     /* Get key (while allowing menu commands) */
@@ -435,12 +568,15 @@ void do_cmd_main_menu(void)
     int pending_hint_look_y = -1;
     int pending_hint_look_x = -1;
     ui_information_scene_scope scene_scope;
+    main_menu_scene_scope menu_scene_scope;
+    bool menu_scene_active = main_menu_scene_enter(&menu_scene_scope);
     bool allow_information_scene = snapshot
-        && snapshot->scene == APP_SCENE_KIND_INFORMATION;
+        && snapshot->scene == APP_SCENE_KIND_INFORMATION
+        && !menu_scene_active;
     bool scene_active = allow_information_scene
         && ui_information_scene_enter(&scene_scope);
     bool clear_fullscreen = scene_active;
-    bool restore_saved_screen = !scene_active;
+    bool restore_saved_screen = !scene_active && !menu_scene_active;
 
     /* Clear any active banner before opening main menu */
     extern int g_banner_force_redraw_remaining;
@@ -456,7 +592,7 @@ void do_cmd_main_menu(void)
     while (!leave_menu)
     {
         actiontype = main_menu_aux(&highlight, scene_active,
-            clear_fullscreen);
+            clear_fullscreen, &menu_scene_scope);
 
         if (death_spectator_active() && (actiontype >= 13) && (actiontype <= 15))
         {
@@ -498,6 +634,8 @@ void do_cmd_main_menu(void)
     /* Load screen */
     if (scene_active)
         ui_information_scene_leave(&scene_scope);
+    else if (menu_scene_active)
+        main_menu_scene_leave(&menu_scene_scope);
     else if (restore_saved_screen)
         screen_load();
 

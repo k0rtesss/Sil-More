@@ -285,6 +285,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-events.c
     src/app/app-host.c
     src/app/app-host-bridge.c
+    src/app/app-scene-bootstrap.c
     src/app/app-scene-dungeon.c
     src/app/app-scene-information.c
     src/app/app-scene-menu.c
@@ -317,6 +318,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
     src/sdl-layout.c
     src/sdl-render.c
+    src/sdl-scene-bootstrap.c
     src/sdl-scene-dungeon.c
     src/sdl-scene-information.c
     src/sdl-scene-menu.c

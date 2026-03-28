@@ -297,7 +297,8 @@ static void sdl_menu_render_row(TTF_Font* font, const app_menu_scene* scene,
     selected_fill = sdl_menu_color(accent_attr);
     selected_fill.a = (scene->flags & APP_MENU_SCENE_FLAG_PLAIN) ? 72 : 104;
 
-    if (row->flags & APP_MENU_ITEM_FLAG_SELECTED)
+    if ((row->flags & APP_MENU_ITEM_FLAG_SELECTED)
+        && !(scene->flags & APP_MENU_SCENE_FLAG_PLAIN))
     {
         SDL_FRect selected_rect = {
             (float)(clip_rect->x - item_gap),
