@@ -510,6 +510,25 @@ Standing rule for this track:
 - treat `APP_SCENE_KIND_INFORMATION` plus `ui_information_scene_present_term()`
   as a bridge for legacy flows, not as the final menu API
 
+Status on 2026-03-28:
+- partial progress is now live in the working tree
+- `src/sdl-scene-dungeon.c` renders `app_interaction_state` overlays in fixed
+  logical pixels, so prompt/list/targeting overlays no longer scale with the
+  dungeon tile view
+- `src/cmd/ui/cmd-ui-main-menu.c` mirrors the existing pause menu entries into
+  that interaction layer as a plain list, preserving the same strings,
+  ordering, and selection behavior
+- menu teardown now restores the underlying scene before clearing the overlay,
+  eliminating the one-frame flash of the old terminal-sized pause menu
+- `src/runtime/runtime-game.c` now uses the same overlay layer for save status
+  and the quit-path high-score prompt, so those transitional messages no longer
+  depend on the legacy message row
+- `Quit with save` now relies on the single shutdown save path in
+  `close_game()`, avoiding the earlier duplicate save from the main menu action
+- the actual destination screens behind most menu entries are still legacy
+  term- or information-scene-driven flows; the project is only through the
+  first slice of M1/M2, not the full menu migration
+
 ### Detailed Menu Audit For Parallel Execution
 | Family | Representative files | Current render and input model | Needed shared widgets | Recommended subagent |
 | --- | --- | --- | --- | --- |

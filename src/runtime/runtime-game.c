@@ -3,6 +3,7 @@
 #include "runtime/runtime-game.h"
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -43,6 +44,68 @@
 bool save_game_quietly = false;
 static bool death_processing = false;
 
+static bool runtime_snapshot_prompt_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void runtime_snapshot_prompt_begin(u16b reason, u16b flags,
+    byte prompt_attr, cptr prompt, byte detail_attr, cptr detail)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_PROMPT,
+        reason, flags);
+    app_session_set_interaction_prompt(session, prompt_attr,
+        prompt ? prompt : "");
+    if (detail && detail[0])
+        app_session_set_interaction_detail(session, detail_attr, detail);
+}
+
+static void runtime_snapshot_prompt_clear(void)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_clear_interaction(session);
+}
+
+static char runtime_close_game_prompt_key(void)
+{
+    app_session* session = app_session_current();
+    app_wait_scope scope;
+    bool snapshot_prompt = app_session_interactions_enabled(session);
+    char prompt_key;
+
+    if (snapshot_prompt)
+    {
+        runtime_snapshot_prompt_begin(APP_WAIT_REASON_CONFIRM,
+            APP_INTERACTION_FLAG_CAN_CONFIRM | APP_INTERACTION_FLAG_CAN_CANCEL,
+            TERM_L_BLUE, "View high scores? (ESC to skip)", TERM_WHITE, NULL);
+        app_session_push_wait_scope(session, &scope, APP_WAIT_REASON_CONFIRM,
+            0, 0);
+    }
+    else
+        Term_putstr(6, 0, -1, TERM_L_BLUE, "View high scores? (ESC to skip)");
+
+    prompt_key = inkey();
+
+    if (snapshot_prompt)
+    {
+        app_session_pop_wait_scope(session, &scope);
+        runtime_snapshot_prompt_clear();
+    }
+    else
+        Term_erase(0, 0, 255);
+
+    return prompt_key;
+}
+
 bool death_processing_in_progress(void)
 {
     return death_processing;
@@ -50,6 +113,8 @@ bool death_processing_in_progress(void)
 
 void do_cmd_save_game(void)
 {
+    bool snapshot_prompt = false;
+
     disturb(1, 0);
 
     if (DEPLOYMENT && p_ptr->game_type != 0)
@@ -62,7 +127,11 @@ void do_cmd_save_game(void)
     message_flush();
     handle_stuff();
 
-    if (!save_game_quietly)
+    snapshot_prompt = !save_game_quietly && runtime_snapshot_prompt_active();
+    if (snapshot_prompt)
+        runtime_snapshot_prompt_begin(APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0,
+            TERM_WHITE, "Saving game...", TERM_WHITE, NULL);
+    else if (!save_game_quietly)
         prt("Saving game...", 0, 0);
 
     Term_fresh();
@@ -77,7 +146,7 @@ void do_cmd_save_game(void)
     if (save_player())
     {
         log_debug("Game saved successfully");
-        if (!save_game_quietly)
+        if (!save_game_quietly && !snapshot_prompt)
             prt("Saving game... done.", 0, 0);
 
         time_t now = time(NULL);
@@ -91,10 +160,16 @@ void do_cmd_save_game(void)
     else
     {
         log_error("Game save failed");
-        prt("Saving game... failed!", 0, 0);
+        if (snapshot_prompt)
+            runtime_snapshot_prompt_begin(APP_WAIT_REASON_INFORMATIONAL_PAUSE,
+                0, TERM_WHITE, "Saving game... failed!", TERM_WHITE, NULL);
+        else
+            prt("Saving game... failed!", 0, 0);
     }
 
     signals_handle_tstp();
+    if (snapshot_prompt)
+        runtime_snapshot_prompt_clear();
     Term_fresh();
 
     SDL_strlcpy(p_ptr->died_from, "(alive and well)", sizeof(p_ptr->died_from));
@@ -320,11 +395,11 @@ void close_game(void)
     }
     else
     {
+        char prompt_key;
+
         do_cmd_save_game();
 
-        Term_putstr(6, 0, -1, TERM_L_BLUE, "View high scores? (ESC to skip)");
-        char prompt_key = inkey();
-        Term_erase(0, 0, 255);
+        prompt_key = runtime_close_game_prompt_key();
         if (prompt_key != ESCAPE)
         {
             high_score preview;

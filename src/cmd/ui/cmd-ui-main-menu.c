@@ -30,21 +30,21 @@ extern struct sound_config g_sound_config;
 #include "cmd-ui.h"
 #include "ui/ui-information-scene.h"
 
-#define MAIN_MENU_RETURN 1
-#define MAIN_MENU_CHARACTER 2
-#define MAIN_MENU_KNOWLEDGE 3
-#define MAIN_MENU_QUEST_STATUS 4
-#define MAIN_MENU_SCORES 5
-#define MAIN_MENU_NOTE 6
-#define MAIN_MENU_MAP 7
-#define MAIN_MENU_MESSAGES 8
-#define MAIN_MENU_SCREENSHOT 9
+#define MAIN_MENU_CHARACTER 1
+#define MAIN_MENU_KNOWLEDGE 2
+#define MAIN_MENU_QUEST_STATUS 3
+#define MAIN_MENU_SCORES 4
+#define MAIN_MENU_NOTE 9
+#define MAIN_MENU_MAP 6
+#define MAIN_MENU_MESSAGES 7
+#define MAIN_MENU_SCREENSHOT 8
 #define MAIN_MENU_STORY 10
 #define MAIN_MENU_OPTIONS 11
 #define MAIN_MENU_HELP 12
 #define MAIN_MENU_ABORT 13
 #define MAIN_MENU_SAVE 14
 #define MAIN_MENU_SAVE_QUIT 15
+#define MAIN_MENU_RETURN 16
 
 #define MAIN_MENU_MAX 16
 
@@ -82,6 +82,98 @@ static int main_menu_calc_width(void)
 
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     int* out_look_x);
+
+static void main_menu_publish_interaction(int highlight, bool death_view)
+{
+    app_session* session;
+
+    session = app_session_current();
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    if (highlight < 1 || highlight > MAIN_MENU_MAX)
+        highlight = 1;
+    if (death_view && highlight >= 13 && highlight <= 15)
+        highlight = MAIN_MENU_RETURN;
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
+        APP_WAIT_REASON_COMMAND_INPUT,
+        APP_INTERACTION_FLAG_CAN_CONFIRM
+            | APP_INTERACTION_FLAG_CAN_CANCEL
+            | APP_INTERACTION_FLAG_SHOW_OPTIONS
+            | APP_INTERACTION_FLAG_PLAIN_LIST);
+
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_CHARACTER) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_CHARACTER,
+        "Character sheet      (c)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_KNOWLEDGE) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_KNOWLEDGE,
+        "Known lore           (a)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_QUEST_STATUS) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_QUEST_STATUS,
+        "Quest status         (t)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == 4,
+        "Halls of Mandos      (d)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == 5,
+        "Run history          (v)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_MAP) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_MAP,
+        "Map                  (m)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_MESSAGES) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_MESSAGES,
+        "Log                  (l)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_SCREENSHOT) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_SCREENSHOT,
+        "Combat history       (x)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_NOTE) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_NOTE,
+        "Hint messages        (i)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_STORY) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_STORY,
+        "The story so far     (y)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_OPTIONS) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_OPTIONS,
+        "Options and misc     (o)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_HELP) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_HELP,
+        "Help                 (h)", "");
+    (void)app_session_add_interaction_option(session,
+        death_view ? TERM_L_DARK
+                   : ((highlight == MAIN_MENU_ABORT) ? TERM_L_BLUE : TERM_WHITE),
+        0, !death_view, highlight == MAIN_MENU_ABORT,
+        "Suicide              (k)", "");
+    (void)app_session_add_interaction_option(session,
+        death_view ? TERM_L_DARK
+                   : ((highlight == MAIN_MENU_SAVE) ? TERM_L_BLUE : TERM_WHITE),
+        0, !death_view, highlight == MAIN_MENU_SAVE,
+        "Save                 (s)", "");
+    (void)app_session_add_interaction_option(session,
+        death_view ? TERM_L_DARK
+                   : ((highlight == MAIN_MENU_SAVE_QUIT) ? TERM_L_BLUE : TERM_WHITE),
+        0, !death_view, highlight == MAIN_MENU_SAVE_QUIT,
+        "Quit with save       (q)", "");
+    (void)app_session_add_interaction_option(session,
+        (highlight == MAIN_MENU_RETURN) ? TERM_L_BLUE : TERM_WHITE,
+        0, true, highlight == MAIN_MENU_RETURN,
+        "Return to game       (r)", "");
+
+    app_session_set_interaction_selected(session,
+        (s16b)(highlight - 1));
+}
 
 /*
  * Performs the interface and selection work for the main menu.
@@ -189,6 +281,8 @@ static int main_menu_aux(int* highlight, bool scene_active,
     Term_putstr(col_main, row_top + row_first + 15, -1,
         (*highlight == 16) ? TERM_L_BLUE : TERM_WHITE,
         "Return to game       (r)");
+
+    main_menu_publish_interaction(*highlight, death_view);
 
     /* Flush the prompt */
     if (!scene_active || !ui_information_scene_present_term())
@@ -346,7 +440,7 @@ void do_cmd_main_menu(void)
     bool scene_active = allow_information_scene
         && ui_information_scene_enter(&scene_scope);
     bool clear_fullscreen = scene_active;
-    bool saved_screen = !scene_active;
+    bool restore_saved_screen = !scene_active;
 
     /* Clear any active banner before opening main menu */
     extern int g_banner_force_redraw_remaining;
@@ -356,7 +450,7 @@ void do_cmd_main_menu(void)
     }
 
     /* Save screen */
-    if (saved_screen)
+    if (restore_saved_screen)
         screen_save();
     /* Process Events until "Return to Game" is selected */
     while (!leave_menu)
@@ -370,125 +464,24 @@ void do_cmd_main_menu(void)
             continue;
         }
 
-        if (scene_active && actiontype > 0 && actiontype != MAIN_MENU_RETURN)
-        {
-            ui_information_scene_leave(&scene_scope);
-            scene_active = false;
-        }
-
-        // if an action has been selected...
         switch (actiontype)
         {
         case 1: // Character sheet (c)
-        {
-            do_cmd_character_sheet();
-            leave_menu = true;
-            break;
-        }
         case 2: // Known lore (a)
-        {
-            do_cmd_knowledge_browser_page(cmd_ui_knowledge_last_page());
-            leave_menu = true;
-            break;
-        }
         case 3: // Quest status (t)
-        {
-            do_cmd_quest_status();
-            leave_menu = true;
-            break;
-        }
         case 4: // Halls of Mandos (d)
-        {
-            log_info("main menu: opening Halls of Mandos view");
-            show_scores_interactive(true);
-            leave_menu = true;
-            break;
-        }
         case 5: // Run history (v)
-        {
-            do_cmd_run_history();
-            leave_menu = true;
-            break;
-        }
         case 6: // Map (m)
-        {
-            do_cmd_view_map();
-            leave_menu = true;
-            break;
-        }
         case 7: // Log (l)
-        {
-            do_cmd_messages();
-            leave_menu = true;
-            break;
-        }
         case 8: // Combat history (x)
-        {
-            do_cmd_combat_history();
-            leave_menu = true;
-            break;
-        }
         case 9: // Hint messages (i)
-        {
-            do_cmd_hint_messages(&pending_hint_look, &pending_hint_look_y,
-                &pending_hint_look_x);
-            leave_menu = true;
-            break;
-        }
         case 10: // The story so far (y)
-        {
-            /* Save screen before showing story */
-            screen_save();
-            print_story(15, 1);
-            /* Load screen after story */
-            screen_load();
-            leave_menu = true;
-            break;
-        }
         case 11: // Options and misc (o)
-        {
-            do_cmd_options();
-            leave_menu = true;
-            break;
-        }
         case 12: // Help (h)
-        {
-            do_cmd_help();
-            leave_menu = true;
-            break;
-        }
         case 13: // Suicide (k)
-        {
-            do_cmd_suicide();
-            leave_menu = true;
-            break;
-        }
         case 14: // Save (s)
-        {
-            do_cmd_save_game();
-            leave_menu = true;
-            break;
-        }
         case 15: // Quit with save (q)
-        {
-            do_cmd_save_game();
-
-            /* Stop playing */
-            p_ptr->playing = false;
-
-            /* Mark that we want to quit to menu, not exit application */
-            p_ptr->quit_to_menu = true;
-
-            /* Leaving */
-            p_ptr->leaving = true;
-            leave_menu = true;
-            break;
-        }
         case 16: // Return to game (r)
-        {
-            leave_menu = true;
-            break;
-        }
         case -1:
         {
             leave_menu = true;
@@ -505,8 +498,112 @@ void do_cmd_main_menu(void)
     /* Load screen */
     if (scene_active)
         ui_information_scene_leave(&scene_scope);
-    else if (saved_screen)
+    else if (restore_saved_screen)
         screen_load();
+
+    if (app_session_interactions_enabled(session))
+        app_session_clear_interaction(session);
+
+    switch (actiontype)
+    {
+    case 1: // Character sheet (c)
+    {
+        do_cmd_character_sheet();
+        break;
+    }
+    case 2: // Known lore (a)
+    {
+        do_cmd_knowledge_browser_page(cmd_ui_knowledge_last_page());
+        break;
+    }
+    case 3: // Quest status (t)
+    {
+        do_cmd_quest_status();
+        break;
+    }
+    case 4: // Halls of Mandos (d)
+    {
+        log_info("main menu: opening Halls of Mandos view");
+        show_scores_interactive(true);
+        break;
+    }
+    case 5: // Run history (v)
+    {
+        do_cmd_run_history();
+        break;
+    }
+    case 6: // Map (m)
+    {
+        do_cmd_view_map();
+        break;
+    }
+    case 7: // Log (l)
+    {
+        do_cmd_messages();
+        break;
+    }
+    case 8: // Combat history (x)
+    {
+        do_cmd_combat_history();
+        break;
+    }
+    case 9: // Hint messages (i)
+    {
+        do_cmd_hint_messages(&pending_hint_look, &pending_hint_look_y,
+            &pending_hint_look_x);
+        break;
+    }
+    case 10: // The story so far (y)
+    {
+        /* Save screen before showing story */
+        screen_save();
+        print_story(15, 1);
+        /* Load screen after story */
+        screen_load();
+        break;
+    }
+    case 11: // Options and misc (o)
+    {
+        do_cmd_options();
+        break;
+    }
+    case 12: // Help (h)
+    {
+        do_cmd_help();
+        break;
+    }
+    case 13: // Suicide (k)
+    {
+        do_cmd_suicide();
+        break;
+    }
+    case 14: // Save (s)
+    {
+        do_cmd_save_game();
+        break;
+    }
+    case 15: // Quit with save (q)
+    {
+        /* Stop playing */
+        p_ptr->playing = false;
+
+        /* Mark that we want to quit to menu, not exit application */
+        p_ptr->quit_to_menu = true;
+
+        /* Leaving */
+        p_ptr->leaving = true;
+        break;
+    }
+    case 16: // Return to game (r)
+    case -1:
+    {
+        break;
+    }
+    default:
+    {
+        break;
+    }
+    }
 
     if (pending_hint_look)
     {

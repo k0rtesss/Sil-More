@@ -32,6 +32,15 @@ typedef struct sdl_scene_layout {
     int col_depth;
 } sdl_scene_layout;
 
+typedef struct sdl_scene_ui_font_cache {
+    TTF_Font* font;
+    int pixel_height;
+    int style_signature;
+    char path[1024];
+} sdl_scene_ui_font_cache;
+
+static sdl_scene_ui_font_cache g_sdl_scene_ui_font_cache;
+
 static SDL_Color sdl_scene_color(byte attr)
 {
     byte color = attr & 0x0Fu;
@@ -88,6 +97,213 @@ static void sdl_scene_draw_rect(const SDL_FRect* rect, SDL_Color color)
     SDL_RenderRect(g_state.renderer, rect);
 }
 
+static int sdl_scene_ui_scale_px(float logical_value)
+{
+    float scale = (g_state.system_scale > 0.0f) ? g_state.system_scale : 1.0f;
+
+    return (int)(logical_value * scale + 0.5f);
+}
+
+static const char* sdl_scene_ui_font_path(void)
+{
+    return config.monospace_font[0] != '\0'
+        ? config.monospace_font
+        : "lib/xtra/font/InputMono-Bold.ttf";
+}
+
+static int sdl_scene_ui_font_signature(void)
+{
+    int signature = 0;
+
+    signature |= config.mono_bold ? 0x0001 : 0;
+    signature |= config.mono_italic ? 0x0002 : 0;
+    signature |= config.mono_underline ? 0x0004 : 0;
+    signature |= config.mono_strikethrough ? 0x0008 : 0;
+    signature |= (config.mono_hinting & 0xFF) << 8;
+    signature |= config.mono_kerning ? 0x10000 : 0;
+    signature |= (config.mono_outline & 0xFF) << 17;
+
+    return signature;
+}
+
+static void sdl_scene_ui_apply_font_settings(TTF_Font* font)
+{
+    int style = TTF_STYLE_NORMAL;
+
+    if (!font)
+        return;
+
+    if (config.mono_bold)
+        style |= TTF_STYLE_BOLD;
+    if (config.mono_italic)
+        style |= TTF_STYLE_ITALIC;
+    if (config.mono_underline)
+        style |= TTF_STYLE_UNDERLINE;
+    if (config.mono_strikethrough)
+        style |= TTF_STYLE_STRIKETHROUGH;
+    if (style != TTF_STYLE_NORMAL)
+        TTF_SetFontStyle(font, style);
+
+    TTF_SetFontHinting(font, config.mono_hinting);
+    TTF_SetFontKerning(font, config.mono_kerning);
+    if (config.mono_outline > 0)
+        TTF_SetFontOutline(font, config.mono_outline);
+}
+
+static void sdl_scene_ui_font_clear(void)
+{
+    if (g_sdl_scene_ui_font_cache.font)
+    {
+        TTF_CloseFont(g_sdl_scene_ui_font_cache.font);
+        g_sdl_scene_ui_font_cache.font = NULL;
+    }
+
+    g_sdl_scene_ui_font_cache.pixel_height = 0;
+    g_sdl_scene_ui_font_cache.style_signature = 0;
+    g_sdl_scene_ui_font_cache.path[0] = '\0';
+}
+
+static TTF_Font* sdl_scene_ui_font_for_height(int pixel_height)
+{
+    const char* font_path = sdl_scene_ui_font_path();
+    int style_signature = sdl_scene_ui_font_signature();
+
+    if (pixel_height <= 0)
+        return NULL;
+
+    if (g_sdl_scene_ui_font_cache.font
+        && g_sdl_scene_ui_font_cache.pixel_height == pixel_height
+        && g_sdl_scene_ui_font_cache.style_signature == style_signature
+        && streq(g_sdl_scene_ui_font_cache.path, font_path))
+    {
+        return g_sdl_scene_ui_font_cache.font;
+    }
+
+    sdl_scene_ui_font_clear();
+
+    g_sdl_scene_ui_font_cache.font = TTF_OpenFont(font_path, pixel_height);
+    if (!g_sdl_scene_ui_font_cache.font)
+    {
+        log_warn("sdl scene UI font load failed for '%s': %s", font_path,
+            SDL_GetError());
+        return NULL;
+    }
+
+    sdl_scene_ui_apply_font_settings(g_sdl_scene_ui_font_cache.font);
+    g_sdl_scene_ui_font_cache.pixel_height = pixel_height;
+    g_sdl_scene_ui_font_cache.style_signature = style_signature;
+    SDL_strlcpy(g_sdl_scene_ui_font_cache.path, font_path,
+        sizeof(g_sdl_scene_ui_font_cache.path));
+    return g_sdl_scene_ui_font_cache.font;
+}
+
+static int sdl_scene_interaction_font_size_logical(const sdl_view* view)
+{
+    int logical_size;
+    int canvas_h = 0;
+
+    if (config.aux_view_font_size > 0)
+        return config.aux_view_font_size;
+
+    if (view)
+        canvas_h = view->rows * view->cell_h;
+
+    logical_size = 24;
+    if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(420.0f))
+        logical_size = 16;
+    else if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(540.0f))
+        logical_size = 18;
+    else if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(700.0f))
+        logical_size = 20;
+
+    return logical_size;
+}
+
+static int sdl_scene_measure_ui_text(TTF_Font* font, cptr text)
+{
+    int measured_w = 0;
+
+    if (!font || !text || !text[0])
+        return 0;
+
+    if (!TTF_MeasureString(font, text, 0, 0, &measured_w, NULL))
+        return 0;
+
+    return measured_w;
+}
+
+static void sdl_scene_render_ui_text(TTF_Font* font, float x_px, float y_px,
+    SDL_Color color, cptr text)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+
+    if (!font || !text || !text[0])
+        return;
+
+    surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface)
+        return;
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (!texture)
+    {
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    dst.x = x_px;
+    dst.y = y_px;
+    dst.w = (float)surface->w;
+    dst.h = (float)surface->h;
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+    SDL_DestroySurface(surface);
+}
+
+static void sdl_scene_interaction_format_line(char* line, size_t line_size,
+    const app_interaction_state* interaction,
+    const app_interaction_option* option)
+{
+    bool plain_list;
+
+    if (!line || !line_size)
+        return;
+
+    line[0] = '\0';
+    if (!interaction || !option)
+        return;
+
+    plain_list = (interaction->flags & APP_INTERACTION_FLAG_PLAIN_LIST) != 0;
+    if (plain_list)
+    {
+        if (option->meta[0])
+            strnfmt(line, line_size, "%s %s", option->label, option->meta);
+        else
+            SDL_strlcpy(line, option->label, line_size);
+        return;
+    }
+
+    if (option->meta[0])
+    {
+        if (option->tag)
+            strnfmt(line, line_size, "%c %s  %s", option->tag, option->label,
+                option->meta);
+        else
+            strnfmt(line, line_size, "%s  %s", option->label, option->meta);
+    }
+    else
+    {
+        if (option->tag)
+            strnfmt(line, line_size, "%c %s", option->tag, option->label);
+        else
+            SDL_strlcpy(line, option->label, line_size);
+    }
+}
+
 static bool sdl_scene_layout_cell_rect(const sdl_view* view, int col, int row,
     int width_cells, SDL_FRect* out_rect)
 {
@@ -105,32 +321,6 @@ static bool sdl_scene_layout_cell_rect(const sdl_view* view, int col, int row,
         .y = (float)(row * view->cell_h),
         .w = (float)(width_cells * view->cell_w),
         .h = (float)view->cell_h
-    };
-    return true;
-}
-
-static bool sdl_scene_layout_block_rect(const sdl_view* view, int col, int row,
-    int width_cells, int height_cells, SDL_FRect* out_rect)
-{
-    if (!view || !out_rect || col < 0 || row < 0
-        || width_cells <= 0 || height_cells <= 0)
-    {
-        return false;
-    }
-    if (col >= view->cols || row >= view->rows)
-        return false;
-    if (col + width_cells > view->cols)
-        width_cells = view->cols - col;
-    if (row + height_cells > view->rows)
-        height_cells = view->rows - row;
-    if (width_cells <= 0 || height_cells <= 0)
-        return false;
-
-    *out_rect = (SDL_FRect){
-        .x = (float)(col * view->cell_w),
-        .y = (float)(row * view->cell_h),
-        .w = (float)(width_cells * view->cell_w),
-        .h = (float)(height_cells * view->cell_h)
     };
     return true;
 }
@@ -517,58 +707,56 @@ static const app_interaction_state* sdl_scene_interaction_snapshot(
     return (const app_interaction_state*)blob->data;
 }
 
-static int sdl_scene_interaction_width(const app_interaction_state* interaction)
-{
-    int width = 28;
-    u16b i;
-
-    if (!interaction)
-        return width;
-
-    width = MAX(width, (int)strlen(interaction->prompt) + 4);
-    width = MAX(width, (int)strlen(interaction->detail) + 4);
-    width = MAX(width, (int)strlen(interaction->value) + 4);
-
-    for (i = 0; i < interaction->option_count; i++)
-    {
-        const app_interaction_option* option = &interaction->options[i];
-        int option_width = (int)strlen(option->label)
-            + (option->meta[0] ? (int)strlen(option->meta) + 4 : 0) + 6;
-
-        width = MAX(width, option_width);
-    }
-
-    return width;
-}
-
 static void sdl_scene_render_interaction_overlay(const sdl_view* view,
     const app_interaction_state* interaction)
 {
-    SDL_FRect box;
-    SDL_Color background = { 10, 18, 26, 216 };
-    SDL_Color border = { 122, 146, 170, 255 };
+    SDL_Color background;
+    SDL_Color border;
     SDL_Color selected = { 36, 74, 112, 208 };
-    int width_cells;
-    int start_col;
-    int start_row;
-    int height_cells;
-    int row;
+    SDL_Rect clip_rect;
+    SDL_FRect box;
+    TTF_Font* font;
+    int canvas_w;
+    int canvas_h;
+    int pixel_height;
+    int line_h;
+    int line_gap;
+    int pad_x;
+    int pad_y;
+    int outer_margin;
     int header_lines = 0;
     int option_rows = 0;
     int option_start = 0;
     int selected_index;
+    int width_px = 0;
+    int height_px;
+    int line_step;
+    int current_y;
+    bool plain_list;
     char line[APP_INTERACTION_TEXT_MAX + APP_INTERACTION_META_MAX + 16];
 
     if (!view || !interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
         return;
 
-    width_cells = sdl_scene_interaction_width(interaction);
-    if (width_cells > view->cols - 4)
-        width_cells = view->cols - 4;
-    if (width_cells < 20)
-        width_cells = MIN(20, view->cols);
-    if (width_cells <= 0)
+    canvas_w = view->cols * view->cell_w;
+    canvas_h = view->rows * view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
         return;
+
+    pixel_height = sdl_scene_ui_scale_px((float)sdl_scene_interaction_font_size_logical(view));
+    font = sdl_scene_ui_font_for_height(pixel_height);
+    if (!font)
+        return;
+
+    plain_list = (interaction->flags & APP_INTERACTION_FLAG_PLAIN_LIST) != 0;
+    line_h = TTF_GetFontHeight(font);
+    if (line_h <= 0)
+        line_h = pixel_height;
+    line_gap = sdl_scene_ui_scale_px(2.0f);
+    pad_x = sdl_scene_ui_scale_px(plain_list ? 16.0f : 14.0f);
+    pad_y = sdl_scene_ui_scale_px(plain_list ? 10.0f : 12.0f);
+    outer_margin = sdl_scene_ui_scale_px(24.0f);
+    line_step = line_h + line_gap;
 
     if (interaction->prompt[0])
         header_lines++;
@@ -576,61 +764,16 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
         header_lines++;
     if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_VALUE)
         && interaction->value[0])
+    {
         header_lines++;
-
-    option_rows = interaction->option_count;
-    if (interaction->kind == APP_INTERACTION_KIND_LIST)
-    {
-        int max_option_rows = view->rows - header_lines - 6;
-
-        if (max_option_rows < 4)
-            max_option_rows = 4;
-        if (option_rows > max_option_rows)
-            option_rows = max_option_rows;
-    }
-    else
-    {
-        option_rows = 0;
     }
 
-    height_cells = header_lines + option_rows + 2;
-    if (height_cells < 4)
-        height_cells = 4;
-    if (height_cells > view->rows - 2)
-        height_cells = view->rows - 2;
-    if (height_cells <= 0)
-        return;
-
-    start_col = (view->cols - width_cells) / 2;
-    if (start_col < 1)
-        start_col = 1;
-
-    if (interaction->kind == APP_INTERACTION_KIND_TARGETING)
-        start_row = 1;
-    else
-        start_row = (view->rows - height_cells) / 2;
-    if (start_row < 1)
-        start_row = 1;
-    if ((start_row + height_cells) >= view->rows)
-        start_row = MAX(1, view->rows - height_cells - 1);
-
-    if (!sdl_scene_layout_block_rect(view, start_col, start_row, width_cells,
-            height_cells, &box))
-    {
-        return;
-    }
-
-    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
-    sdl_scene_fill_rect(&box, background);
-    sdl_scene_draw_rect(&box, border);
-
-    row = start_row + 1;
     if (interaction->prompt[0])
-        sdl_scene_draw_text(view, start_col + 1, row++, interaction->prompt_attr,
-            interaction->prompt);
+        width_px = MAX(width_px, sdl_scene_measure_ui_text(font,
+            interaction->prompt));
     if (interaction->detail[0])
-        sdl_scene_draw_text(view, start_col + 1, row++, interaction->detail_attr,
-            interaction->detail);
+        width_px = MAX(width_px, sdl_scene_measure_ui_text(font,
+            interaction->detail));
     if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_VALUE)
         && interaction->value[0])
     {
@@ -645,16 +788,16 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
         {
             size_t cursor = (size_t)interaction->cursor_index;
 
-            memmove(value_buf + cursor + 1, value_buf + cursor, len - cursor + 1);
+            memmove(value_buf + cursor + 1, value_buf + cursor,
+                len - cursor + 1);
             value_buf[cursor] = '_';
         }
-        sdl_scene_draw_text(view, start_col + 1, row++, interaction->value_attr,
-            value_buf);
+        width_px = MAX(width_px, sdl_scene_measure_ui_text(font, value_buf));
     }
 
-    if (interaction->kind != APP_INTERACTION_KIND_LIST || option_rows <= 0)
-        return;
-
+    option_rows = (interaction->kind == APP_INTERACTION_KIND_LIST)
+        ? (int)interaction->option_count
+        : 0;
     selected_index = interaction->selected_index;
     if (selected_index < 0)
         selected_index = 0;
@@ -664,20 +807,140 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
         selected_index = interaction->option_count - 1;
     }
 
-    if ((int)interaction->option_count > option_rows)
+    for (int i = 0; i < option_rows; i++)
     {
-        option_start = selected_index - option_rows / 2;
-        if (option_start < 0)
-            option_start = 0;
-        if (option_start + option_rows > (int)interaction->option_count)
-            option_start = interaction->option_count - option_rows;
+        const app_interaction_option* option = &interaction->options[i];
+
+        sdl_scene_interaction_format_line(line, sizeof(line), interaction,
+            option);
+        width_px = MAX(width_px, sdl_scene_measure_ui_text(font, line));
     }
+
+    width_px += pad_x * 2;
+    if (width_px < sdl_scene_ui_scale_px(220.0f))
+        width_px = sdl_scene_ui_scale_px(220.0f);
+    if (width_px > canvas_w - outer_margin * 2)
+        width_px = canvas_w - outer_margin * 2;
+    if (width_px <= 0)
+        return;
+
+    if (option_rows > 0)
+    {
+        int header_height = 0;
+        int available_h;
+        int max_option_rows;
+
+        if (header_lines > 0)
+            header_height = header_lines * line_h + (header_lines - 1) * line_gap;
+
+        available_h = canvas_h - outer_margin * 2 - pad_y * 2 - header_height;
+        max_option_rows = (available_h + line_gap) / line_step;
+        if (max_option_rows < 1)
+            max_option_rows = 1;
+        if (option_rows > max_option_rows)
+            option_rows = max_option_rows;
+
+        if ((int)interaction->option_count > option_rows)
+        {
+            option_start = selected_index - option_rows / 2;
+            if (option_start < 0)
+                option_start = 0;
+            if (option_start + option_rows > (int)interaction->option_count)
+                option_start = interaction->option_count - option_rows;
+        }
+    }
+
+    height_px = pad_y * 2;
+    if (header_lines > 0)
+        height_px += header_lines * line_h + (header_lines - 1) * line_gap;
+    if (option_rows > 0)
+    {
+        if (header_lines > 0)
+            height_px += line_gap;
+        height_px += option_rows * line_h + (option_rows - 1) * line_gap;
+    }
+    if (height_px < sdl_scene_ui_scale_px(72.0f))
+        height_px = sdl_scene_ui_scale_px(72.0f);
+    if (height_px > canvas_h - outer_margin * 2)
+        height_px = canvas_h - outer_margin * 2;
+    if (height_px <= 0)
+        return;
+
+    box.w = (float)width_px;
+    box.h = (float)height_px;
+    box.x = (float)((canvas_w - width_px) / 2);
+    if (interaction->kind == APP_INTERACTION_KIND_TARGETING)
+        box.y = (float)outer_margin;
+    else
+        box.y = (float)((canvas_h - height_px) / 2);
+
+    if (box.x < (float)outer_margin)
+        box.x = (float)outer_margin;
+    if (box.y < (float)outer_margin)
+        box.y = (float)outer_margin;
+
+    background = plain_list ? (SDL_Color){ 0, 0, 0, 232 }
+                            : (SDL_Color){ 10, 18, 26, 216 };
+    border = plain_list ? (SDL_Color){ 0, 0, 0, 0 }
+                        : (SDL_Color){ 122, 146, 170, 255 };
+
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    sdl_scene_fill_rect(&box, background);
+    if (!plain_list)
+        sdl_scene_draw_rect(&box, border);
+
+    clip_rect.x = (int)box.x + pad_x;
+    clip_rect.y = (int)box.y + pad_y;
+    clip_rect.w = width_px - pad_x * 2;
+    clip_rect.h = height_px - pad_y * 2;
+    if (clip_rect.w <= 0 || clip_rect.h <= 0)
+        return;
+
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    current_y = clip_rect.y;
+    if (interaction->prompt[0])
+    {
+        sdl_scene_render_ui_text(font, (float)clip_rect.x, (float)current_y,
+            sdl_scene_color(interaction->prompt_attr), interaction->prompt);
+        current_y += line_step;
+    }
+    if (interaction->detail[0])
+    {
+        sdl_scene_render_ui_text(font, (float)clip_rect.x, (float)current_y,
+            sdl_scene_color(interaction->detail_attr), interaction->detail);
+        current_y += line_step;
+    }
+    if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_VALUE)
+        && interaction->value[0])
+    {
+        char value_buf[APP_INTERACTION_VALUE_MAX + 2];
+        size_t len = strlen(interaction->value);
+
+        SDL_strlcpy(value_buf, interaction->value, sizeof(value_buf));
+        if ((interaction->flags & APP_INTERACTION_FLAG_SHOW_CURSOR)
+            && interaction->cursor_index >= 0
+            && interaction->cursor_index <= (s16b)len
+            && len + 1 < sizeof(value_buf))
+        {
+            size_t cursor = (size_t)interaction->cursor_index;
+
+            memmove(value_buf + cursor + 1, value_buf + cursor,
+                len - cursor + 1);
+            value_buf[cursor] = '_';
+        }
+        sdl_scene_render_ui_text(font, (float)clip_rect.x, (float)current_y,
+            sdl_scene_color(interaction->value_attr), value_buf);
+        current_y += line_step;
+    }
+
+    if (header_lines > 0 && option_rows > 0)
+        current_y += line_gap;
 
     for (int i = 0; i < option_rows; i++)
     {
         const app_interaction_option* option;
         int index = option_start + i;
-        int draw_row = row + i;
         byte attr;
 
         if ((u16b)index >= interaction->option_count)
@@ -685,31 +948,27 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
 
         option = &interaction->options[index];
         attr = option->enabled ? option->attr : TERM_L_DARK;
+        sdl_scene_interaction_format_line(line, sizeof(line), interaction,
+            option);
 
-        if (option->selected)
+        if (!plain_list && option->selected)
         {
-            SDL_FRect selected_rect;
+            SDL_FRect selected_rect = {
+                (float)clip_rect.x - sdl_scene_ui_scale_px(4.0f),
+                (float)current_y - sdl_scene_ui_scale_px(2.0f),
+                (float)clip_rect.w + sdl_scene_ui_scale_px(8.0f),
+                (float)line_h + sdl_scene_ui_scale_px(4.0f)
+            };
 
-            if (sdl_scene_layout_block_rect(view, start_col + 1, draw_row,
-                    width_cells - 2, 1, &selected_rect))
-            {
-                sdl_scene_fill_rect(&selected_rect, selected);
-            }
+            sdl_scene_fill_rect(&selected_rect, selected);
         }
 
-        if (option->meta[0])
-        {
-            strnfmt(line, sizeof(line), "%c %s  %s",
-                option->tag ? option->tag : ' ', option->label, option->meta);
-        }
-        else
-        {
-            strnfmt(line, sizeof(line), "%c %s",
-                option->tag ? option->tag : ' ', option->label);
-        }
-
-        sdl_scene_draw_text(view, start_col + 1, draw_row, attr, line);
+        sdl_scene_render_ui_text(font, (float)clip_rect.x, (float)current_y,
+            sdl_scene_color(attr), line);
+        current_y += line_step;
     }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
 
 static bool sdl_scene_map_to_screen(const sdl_scene_layout* layout,

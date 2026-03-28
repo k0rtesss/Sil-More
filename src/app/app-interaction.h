@@ -29,7 +29,8 @@ typedef enum app_interaction_flag {
     APP_INTERACTION_FLAG_CAN_CANCEL = 0x0002u,
     APP_INTERACTION_FLAG_SHOW_OPTIONS = 0x0004u,
     APP_INTERACTION_FLAG_SHOW_VALUE = 0x0008u,
-    APP_INTERACTION_FLAG_SHOW_CURSOR = 0x0010u
+    APP_INTERACTION_FLAG_SHOW_CURSOR = 0x0010u,
+    APP_INTERACTION_FLAG_PLAIN_LIST = 0x0020u
 } app_interaction_flag;
 
 typedef enum app_interaction_entry_flag {
