@@ -8826,3 +8826,515 @@ The script now fully matches the game's drop generation logic for all item types
   - `./build-incremental.ps1 -Target portable`
   - `py -3 tools/ui_debt_audit.py --check`
   - `ctest -R "sil_ui0_audit|sil_ui1_scaffolding" --output-on-failure` from `build-standard/`
+for 'Direct access' (opening menu via 'i' or 'e' instead of 'u'/'x' command cycling).
+- This logic was:
+  \\\c
+  } else {
+      /* Direct access (i/e pressed): Letters disabled */
+      allow_letters = false;
+  }
+  \\\
+- This unconditionally disabled letters for direct access, regardless of \STEAMDECK_SUPPORT\.
+
+## Fix
+- Modified \src/object1.c\ in both \show_inven_enhanced\ and \show_equip_enhanced\.
+- Changed the logic to respect \STEAMDECK_SUPPORT\ for direct access as well.
+- New logic:
+  \\\c
+  #ifdef STEAMDECK_SUPPORT
+      /* STEAMDECK: Letters disabled */
+      allow_letters = false;
+  #else
+      /* Non-STEAMDECK: Letters enabled */
+      allow_letters = true;
+  #endif
+  \\\
+- This ensures that letter selection is enabled for standard builds, restoring expected behavior.
+
+## Verification
+- Built the project successfully with \cmake --build build --parallel\.
+
+
+# Session Notes - Inventory Letter Selection Fix Part 2 (2025-11-20)
+
+## Issue
+User reported that while letters were enabled, the 'i' and 'e' keys were still switching menus in non-SteamDeck builds, which conflicted with selecting items labeled 'i' or 'e'.
+
+## Fix
+- Modified \src/object1.c\ in \show_inven_enhanced\ and \show_equip_enhanced\.
+- Updated the \case 'e'\ (in inventory) and \case 'i'\ (in equipment) blocks.
+- Wrapped the menu switching logic in \#ifdef STEAMDECK_SUPPORT\ for the 'Direct access' path as well.
+- If \STEAMDECK_SUPPORT\ is NOT defined, these cases now fall through to \default_case\ (inventory) or \equip_default_case\ (equipment), allowing 'i' and 'e' to be treated as standard item selection letters.
+
+## Verification
+- Built the project successfully with \cmake --build build --parallel\.
+
+# Session Notes - Metarun Quest Split (2025-11-22)
+
+## Issue
+- Quest completion tracking lived in \src/metarun.c\, making the TU hard to navigate and reuse.
+
+## Fix
+- Added \src/quest.c\ containing quest flag/slot mapping, clamping, completion/restore logic, and mask seeding helpers (reuses exported metarun state).
+- Exposed metarun state and quest helper prototypes in \src/metarun.h\ and made \refresh_current_metar_score\ public for quest updates.
+- Updated \src/metarun.c\ to call the new helpers, dropped the inlined quest code, and registered \src/quest.c\ in \CMakeLists.txt\.
+
+## Verification
+- Not run (logic-only refactor). 
+
+# Session Notes - Metarun Accessors & Legacy Trim (2025-11-22)
+
+## Issue
+- metarun globals were exposed for quest tracking, and legacy loaders still supported pre-0.9.0 records cluttering \src/metarun.c\.
+
+## Fix
+- Added accessor helpers in \src/metarun.h\ (\metarun_current/_mutable, entry getters, counts) and hid raw globals inside \src/metarun.c\; updated \src/quest.c\ to rely on accessors instead of globals.
+- Moved legacy format structs/converters into \src/metarun_legacy.h\ / \src/metarun_legacy.c\ and dropped v7/v6/v5 (pre-0.9.0) support; version check now only accepts current, v10, v9, v8.
+- Promoted blessing runtime sanitizers/clearers to shared helpers for reuse by legacy conversion and main logic.
+- Wired new source into CMake and reran \build-cmake.bat\ successfully (standard + portable).
+
+## Verification
+- \build-cmake.bat\ (passes with existing warnings). 
+
+- Added the Varda roulette quest (depth 1-3) with data-driven probability (35%->15%), quest text, and quest giver mapping. Forced Duruin Bastion quest vault after 500ft when active; new vault template (B/q/j/k/n tokens) and monster flag updates for Varda ensure peaceful, static generation.
+- Introduced Oath of Light content: oath.txt entry (unlocked by Varda quest), ability.txt entry for SPC_OATH_LIGHT, UI description updates, and oath activation wiring in the oath selection flow. Wearing DARKNESS gear now immediately breaks the oath during bonus calculation; wielding shadow gear prompts a break confirmation.
+- Implemented Varda quest flow: sunlight spawn on early levels, adjacency interaction to accept quest, success trigger on Duruin death (auto-spawns Varda nearby), reward menu offering one radiant artefact, metarun completion tracking/unlock, quest status UI block, and quest reset handling when leaving levels.
+- Improved generic quest probability roll to use a 0-9999 float threshold (better fidelity for fractional chances).
+- Locked Duruin Bastion to quest-only placement (no roulette placement), flagged Duruin as SPECIAL_GEN, aligned bastion depth to the first level past 500ft, and ensured Oath of Light breaks on light-cursing gear while marking the vow as broken before applying penalties.
+- Fixed quest reservation to persist when Varda is active and to block other quest vaults (including Aule) while the quest is in progress; reserved flag no longer clears on level changes while Varda awaits.
+- Prevented blank/garbled live-score names from breaking autoload and bootstrapped scores.raw creation: score context resets before open, writes a header when missing, trims trailing spaces on alive entries, and falls back to base_name when creating scores if full_name is empty.
+- **Music & Typewriter fixes (Nov 23)**: Fixed ambient music not restarting when creating new character after death (now stops main theme and starts ambient if p_ptr->depth > 0). Typewriter effect now only responds to ESC/Enter keys for skipping - all other keys are consumed but ignored (no queueing).
+- **Typewriter skip fix (Nov 23 #2)**: Fixed typewriter skip to display ALL remaining text instantly when ESC/Enter pressed, instead of just stopping. Added skipped flag that disables all delays and continues printing all paragraphs without animation.
+- **Raw file regeneration diagnostics (Nov 23)**: Added comprehensive logging to modification time checks and init_info flow. System should auto-regenerate .raw files when .txt files are newer. If issues persist, users can delete the .raw file from lib/data/ to force regeneration. Logs will show: txt/raw timestamps, whether regeneration was triggered, and any file access issues.
+
+# Session Notes - Vault Docking & Variety Prep (2025-11-23)
+
+## Issue
+- Vault entrances always flowed into corridors; vaults could not adjoin directly, making layouts predictable when opening exterior doors.
+
+## Fix
+- Added dungeon-piece metadata for room kind and quest status (`dun->kind`, `dun->is_quest`) to gate special handling.
+- Introduced a docked-vault placer that snaps non-quest vaults to an existing vault edge, verifies adjacent granite, links them with a single door + open entry (no corridor), and pre-marks the connection graph.
+- Hooked type6/7/8 builders to try docking (skipping forced forge/quest vaults) before normal placement; greater-vault bookkeeping now uses the docked centre for marking.
+- Docked vaults now pick a primary style different from the contacted vault (via style decoding + avoid list); docking chance for type6/7 reduced to 1-in-4, and we’ve started varying corridor widths (occasional 2-wide tunnels carving only into granite).
+
+## Verification
+- Not run (logic-only change).
+
+# Session Notes - Multi-pass Layout Scaffolding (2025-11-23)
+
+## Observations on current generator
+- `cave_gen()` seeds map size from depth (l * PANEL sizes), resets styles, fills with granite, zeroes the connection matrix, and builds rooms via `room_build()` (types 1/2/6/7/8) after quest/forced vault steps.
+- Corridors run through `connect_two_rooms()` / `connect_room_to_corridor()` and mark `dun->connection` plus `cave_corridor1/2`; connectivity check follows `connect_rooms_stairs()` (stairs + streamers).
+- Room metadata already captured in `dun` (kind/is_quest/corners/centers); docked vaults reuse it to snap vaults together before corridors.
+- Post-room steps: `set_perm_boundry()`, door randomization, rubble/player placement, monster/object allocation, quest spawn checks.
+
+## Plan for multi-pass generation
+- Anchor layer: represent placed spaces (prefabs/blobs/slices/setpieces) with bounds, centers, style hints, adjacency flags; keep count separate from `dun` while mirroring `dun->kind/is_quest`.
+- Prefab seeding pass: choose a small set of anchor prefabs (weighted by depth/style), allow docked/forced placements, and mark reserved anchors requiring neighbors for combo setpieces.
+- Gap filling: carve remaining space into CA blobs or BSP rectangles, registering each carve as an anchor and tagging traversal masks for corridor linking.
+- Corridor stitching: adapt corridor planner to treat anchors as nodes (including irregular blobs), biasing connectors toward anchors marked as unlinked; keep stair/streamer placement contract.
+- Adjacency setpieces: when reserved anchors touch/overlap neighborhoods, place small bridge setpieces between/inside them and record neighbor links to avoid repeats.
+- Balancing/diagnostics: depth-based weights, quest/forge exclusions, toggle to fall back to classic generator, logging to trace anchor selection and carving.
+
+## Progress this session
+- Added layout anchor scaffolding (`LAYOUT_ANCHOR_*` types + capture helpers) to `generate.c`; anchors mirror existing room bounds/centers, kind, quest flag, and style hint via `style_at_color`.
+- `cave_gen()` now resets anchors before placement and snapshots rooms after `set_perm_boundry()`; no functional change yet - foundation for upcoming multi-pass passes.
+
+## Progress (Nov 23 - prefab seeding)
+- Introduced prefab anchor seeding: `seed_prefab_anchors()` runs before the main room loop, tries a small depth-scaled count of vault-prefabs (types 6/7/8), and tags them as `LAYOUT_ANCHOR_PREFAB`, optionally marked `requires_neighbor` for future adjacency setpieces.
+- Anchor metadata now mirrors room slots: per-room anchor kind + neighbor requirement recorded in `room_anchor_kind/room_anchor_requires_neighbor`, captured into `layout_anchors` alongside bounds/centers/styles.
+- Added helper `place_prefab_anchor_of_type()` to reuse existing type6/7/8 builders and mark anchor metadata on success; no corridor changes yet.
+
+## Progress (Nov 23 - gap fill anchors)
+- Added cellular-automata blob carving (`seed_ca_blob_anchors()` + `carve_ca_blob_anchor()`), digging organic pockets into untouched granite after room placement and tagging them as `LAYOUT_ANCHOR_CA_BLOB` with optional neighbor requirement. Increased targets/attempts and relaxed placement to raise blob frequency.
+- Added BSP slice carving (`seed_bsp_slice_anchors()` + `carve_bsp_slice_anchor()`), splitting a granite patch into a handful of offset rectangles and marking them as `LAYOUT_ANCHOR_BSP_SLICE`.
+- Anchor capture now records these fillers so corridor logic can treat them like rooms; corridor pre-pass now connects neighbor-required anchors to their nearest mate, ahead of the standard corridor phases. Setpiece adjacency hooks still pending.
+
+## Progress (Nov 24 - large map stability)
+- Raised `DUN_ROOMS` to 150 so the connection table can safely track all `CENT_MAX` rooms on the new 6-15 block square maps.
+- Scaled corridor reach in `connect_two_rooms()` off the current map size (base 15/10, but up to ~33/20 on 165x165 levels) so distant partitions still connect before we declare failure.
+- Added `ensure_minimum_rooms()` fallback: after anchor seeding, we force a few simple rooms if `cent_n` < `ROOM_MIN`, cutting off regen loops that were exiting with 0–1 rooms.
+
+## Progress (Nov 24 - capacity guards)
+- Made room storage arrays track the connection matrix by tying `CENT_MAX` to `DUN_ROOMS`.
+- Added a shared `room_capacity_limit()` helper and applied it to all room/anchor builders (including bounded CA/BSP anchors and prefab docking) to prevent overruns on large 15-block layouts.
+- Quadrant generation now stops when capacity is reached, avoiding buffer corruption that previously zeroed out `cent_n` and led to connectivity failures and regen loops.
+
+## Progress (Nov 24 - connectivity spans)
+- Increased corridor distance limits in `connect_two_rooms()` to scale with the new 15x15 block maps (now ~110-grid span on 165x165 levels, with extra headroom when desperate) so far-apart partitions can be linked.
+- Added debug logging in `check_connectivity()` that reports unreachable passable tiles to pinpoint stranded regions during generation failures.
+
+## Progress (Dec 1 - partition/anchor backbone)
+- Rebuilt the partition hub pass: map every room to its partition, pick a hub biased toward anchors/large rooms, connect H/V/diag neighbors, and top up partitions to a minimum external degree where space allows.
+- Added anchor backbone linking: anchors (prefabs, chasms, CA blobs, BSP slices) now demand multiple exits based on size/flags and link to other components/partitions before the rescue pass; connections are logged to `generation.txt`.
+- New helpers for partition indexing, connection degree, and adjacency seeding to support the backbone and log corridor additions without relying on late rescue tunnels.
+- Rescue tunneling now clamps endpoints a couple tiles inside the map boundary to avoid edge-hugging L-corridors that create dead ends on the outer rim.
+- Chasm generation no longer paints a continuous floor ring at the cave edge; replaced with sparse edge nubs tied to nearby platforms to remove the perimeter “shortcut” walkway.
+
+## Progress (Dec 2 - greater vault partition)
+- Removed the type6/7 -> type8 promotion path in `place_room_with_budget()` and silenced the now-unused depth parameter.
+- Added helpers to gate greater vault attempts off the minimum non-quest type8 depth and to detect interior partitions (non-border only).
+- Quadrant generation now rolls once per level for a dedicated interior partition (chance 1/eligible_count when depth is sufficient), reserves one slot for it, and attempts a bounded type8 placement there; if it fails or the area is reserved, the partition falls back to normal processing and the GV budget is zeroed.
+- Added logging for GV partition rolls and outcomes; build-cmake.bat completes (warnings unchanged in generate.c from preexisting unused helpers/params).
+
+## Progress (Dec 3 - GV logging and regen)
+- Generation log header now reports attempt numbers per depth (regen-friendly) and uses block counts on both axes; level counters no longer balloon on regen attempts.
+- Added partition-level genlog entries for greater-vault selection, reservation, success/failure, and stored map grid coordinates.
+- GV partitions are processed in pass 1 alongside other special modes; reserved partition attempts are retried on regeneration because budgets/selection reset each attempt.
+
+## Progress (Dec 3 - GV rarity gating)
+- GV reservation now depends on per-level rarity rolls across all eligible, unused type8 vaults (non-quest, depth-qualified); if none pass, no type8 budget is issued that level.
+- Partition reservation roll happens only after the rarity gate passes; genlog now reports depth, candidate count, pass/fail, and interior-partition selection details.
+
+
+
+
+
+
+
+## Morgoth level integration (current session)
+- Level 20 now uses the regular generator with a reserved central partition; type-9 throne room is forced there with no docked vault attachments and dedicated 3-wide north tunnels carved from the '$' markers.
+- Final levels scrub any down stairs after generation and skip the stair request so only the vault's built-in up stair remains; partition reserve prevents other content in the throne-room quadrant.
+- Entry prompt/truce moved to vault entry: descending no longer asks; entering the throne room shows the poetry+prompt, starts the truce, and leaving the vault breaks it with the usual reminder.
+
+- 2025-12-04: Began planning drop system rewrite. Reviewed current generation in `src/object2.c` (`make_object`, `apply_magic`, `object_into_special`) and smithing difficulty in `src/cmd4.c::object_difficulty`. Flavor assignment happens in `dungeon.c` via `flavor_init()`, so ring/amulet entries need to align with runtime flavors. Supply buckets identified: potions (`TV_POTION`), herbs (`TV_FOOD` herb svals), gems (`TV_GEM`), staves (`TV_STAFF`/`TV_GEM` charges), normal arrows (`TV_ARROW`), torches/oil (`TV_LIGHT` torch/mallorn, `TV_FLASK`). Plan is to introduce a drop catalog (cached to a raw file keyed off edit txt mtimes) with neutral smithing difficulty per variant (base, ego, artefact, craftable lights), then swap `make_object`/`drop_loot` to new category/difficulty/rarity pipeline and update chest placement rules.
+- 2025-12-04: Implemented the new drop catalog/generator (`src/drop_system.c`, cached to `lib/data/drops.raw` after `flavor_init`). Catalog builds base/boosted variants, ego variants across their max bonus ranges, and artefacts with player-neutral smithing difficulty. `make_object` now delegates to the new generator; chest opening uses it with depth+4 plus wooden/steel/jewelled bonuses and the legacy theme droptypes. Chest placement per partition spec still pending.
+- 2025-12-07: Drop system fixes: allow NO_SMITHING bases to enter catalog (skip variants only), treat horns as supply, and remove unintended max-depth cap so low-level consumables remain eligible at deeper levels. Observed generation.txt showing empty supply pools at dlvl 19; changes target that.
+- 2025-12-07: Corrected drop max_depth handling: locale[] used as allocation weights, not hard caps; now max depth defaults to MORGOTH_DEPTH. Added catalog diagnostics logging counts per category/kind.
+- 2025-12-07: Increased drop difficulty scale (doubled final smithing difficulty) to align with depth*1.8 bands; updated Python sims (simulate_drops.py, calc_difficulty_distribution.py, calc_artefact_difficulty.py) accordingly.
+- 2025-12-07: Rebuilt drop catalog variant generation to use smithing caps (att/ds/evn/ps/pval) per cmd4.c; normal items enumerate full ranges, egos respect min/ max from special.txt and smithing bounds; removed temporary difficulty scaling so it matches object_difficulty.
+- 2025-12-07: Fixed drop selection buffer issues: enlarged per-group entry capacity (4096) with bounds checks; choose_group now allocates weights dynamically to avoid overflow when many groups are present.
+- 2025-12-07: Hardened grouping: build_groups now respects provided capacity; drop_group array allocated per cand_count to avoid overflow; reduces risk of crash when variant/group counts are large.
+
+## Skeleton note drops (current session)
+- Added `level_layout_info` exposure with partition counts and dominant kind via `level_layout_info_current` in `src/generate.c`, plus a per-level reset hook for skeleton notes.
+- Skeleton searches now roll for note events with per-skeleton chances/weights; notes use `pause_with_text` and surface vault/partition/size intel with a map-area-based cap (`src/cmd2.c`).
+- Level generation calls `skeleton_note_level_reset` so caps refresh per floor; `build-cmake.bat` standard+portable build succeeds.
+
+## Smithing alloy + star iron (current session)
+- Added star iron metal (`SV_METAL_STAR_IRON`, `TR3_STAR_IRON`) with a new piece item; Star-Iron Greatsword now tagged STAR_IRON. Chasm partitions scatter star iron pieces on platforms and mark quartz with `CAVE_CHASM_AREA` for star-iron mining; cave quartz logic now checks chasm vs cave to keep mithril separate.
+- Introduced Alloy mastery (`SMT_ALLOY_MASTERY`, ability id 128) gating mithril/star-iron crafting and alloy use. Smithing costs track star iron; both metals now show in smithing cost display and affordability.
+- Smithing Numbers menu gains alloy toggles (cycle mithril/star iron/none, clear). Applying an alloy adds a free stat (+1 att / +1 evn for mithril; +1 ds / +1 ps for star iron) without raising smithing difficulty but consumes 25% item weight in the chosen metal; alloy state is backed up/restored with smithing objects.
+- `build-cmake.bat` run completed (standard build) with existing warnings only.
+## 2025-12-10: Star-iron/mithril drops and alloy UX
+- Increased cave mithril/gem scatter (higher base/caps; big caves can drop two mithril) and made star-iron scatter depth/size weighted with up to four pieces; chasm fallbacks now tag quartz for CAVE_CHASM_AREA and still scatter star iron, and big-cave fallbacks run cave gem/mithril scatter.
+- Tunneling drops now count quartz adjacent to cave floors, use a higher per-vein roll, and try metals 45% of the time at depth 12+ (star iron only on chasm-tagged quartz).
+- Smithing alloy menu shows required metal weight (with your mithril/star-iron amounts), calls out missing Alloy mastery, and dims the cycle option when you lack both metals.
+- Build: build-cmake.bat (standard/portable) succeeds; only longstanding warnings remain.
+
+## 2025-12-10: Drop quality tiers and chest updates
+- Drop generation now uses a drop_quality enum (normal/good/great/superb with bonuses 0/5/10/15); updated drop_generate_object*, make_object, place_object, and acquirement signatures plus a drop_quality_from_flags helper for legacy bool inputs.
+- Chests map to the new tiers: wooden=good, steel=great, jewelled=superb; chest contents use quality instead of hardcoded bonuses, and chest generation logs quality using chest sval macros.
+- Big caves now guarantee a chest with a 75% wooden / 25% steel mix instead of forcing wooden-only spawns.
+- Data: refreshed chest note in lib/edit/object.txt; build-cmake.bat (standard) completes with existing warnings only.
+
+## 2025-12-13: Drop system tweaks (artefacts, max depth, vault great, digging gems)
+- Artefacts now require `DROP_QUALITY_GREAT` or `DROP_QUALITY_SUPERB` (and `allow_artefacts=true`) to be eligible, preventing artefacts from normal/good floor/vault spawns while still allowing them from great/superb sources.
+- Interpreted trailing `A:.../0` allocation entries as an inclusive max-depth marker for the drop system; fixes low-depth damaged items (e.g. Broken Shield) appearing deep.
+- Vaults support a new `!` token for “great treasure +1 to +4 levels” (code support + legend entry).
+- ROOMY-partition floor/corridor object scatter is reduced by ~50% via an extra reroll gate.
+- Quartz-vein digging gem drops now force `number=1` for `TV_GEM` results.
+- Build: `build-cmake.bat` succeeds (standard + portable).
+
+## 2025-12-13: Chest depth fix + log clarity
+- Fixed chest contents depth being `+8` instead of `+4`: chest `pval` is now the generation depth, and opening still applies the existing `+4` content boost (`src/cmd2.c:816`).
+- Drop gen-log now prints `target=` (not `roll=`) for the computed difficulty target (the `min(d30,d30)` is already logged separately as `min=` in `DROP_TARGET`).
+- Fixed artefact catalog entries missing their `B:` abilities (and underestimating their difficulty bands as a result); drop catalog version bumped to force rebuild.
+- Load-time safety: artefacts missing `B:` abilities in saved items get them re-attached from `a_info[]`.
+- Fixed max-depth caps (`A:.../0`) getting lost when combining base+ego allocation schedules (e.g. “Broken Shield of Deflection” spawning deep); drop catalog version bumped to force rebuild.
+
+
+## 2025-12-14: Updated calc_artefact_difficulty.py to match game logic
+
+Updated scripts/calc_artefact_difficulty.py to generate **all possible special item variants** matching the exact game logic from src/drop_system.c.
+
+### Key Improvements
+
+1. **Added object.txt parsing** - Now reads base item stats from lib/edit/object.txt
+2. **Added special variant generation** - Implements generate_special_variants() to mirror build_ego_variants() from drop_system.c (lines 1149-1410)
+3. **Generates all stat combinations** - Creates every possible variant within smithing caps for each special+base combination
+4. **Jewelry handling** - Properly handles rings and amulets with pval ranges 1-4
+5. **Accurate difficulty calculation** - Uses actual variant stats instead of just the max bonuses
+
+### Results
+- **1,297** special item variants generated (up from 73 template specials)
+- **105** artefacts (unchanged)
+- **1,402** total items in difficulty database
+
+The script now exactly mirrors the game's drop generation logic for all artefacts, special items (ego), and jewelry.
+
+
+## 2025-12-14: Fixed calc_artefact_difficulty.py - Removed INSTA_ART items
+
+**Issue 1 (Launch error):** Script was working fine, no error found.
+
+**Issue 2 (70 Ring of Protection variants):** Fixed. The issue was INSTA_ART items being included as base items. Rings and amulets in object.txt are all INSTA_ART templates (artefact-only). Real rings/amulets use flavor.txt for appearance only - they have no base items or special (ego) variants in the game.
+
+### Changes
+- Updated parse_object_file() to skip INSTA_ART items when building base item list
+- This removed 15 bogus ring/amulet base items (svals 30-32 for rings, 10-16 for amulets)
+
+### Final Results
+- **105** artefacts
+- **1,249** special variants (down from 1,297)
+- **1,354** total items
+
+Note: 'of Protection' has 70 variants correctly - it applies to shields (tval 34), boots (tval 30), soft armor (tval 36), and mail (tval 37) with different protection dice combinations.
+
+
+## 2025-12-14: Added normal item variants (rings & amulets)
+
+Updated calc_artefact_difficulty.py to generate all possible stat variants for normal items, including rings and amulets.
+
+### Changes
+- Added generate_normal_variants() function mirroring build_normal_variants() from drop_system.c
+- Rings generate variants with different pval/att/evn/protection combinations:
+  - Ring of Accuracy: att 1-4, pval 0-4
+  - Ring of Evasion: evn 1-4, pval 0-4
+  - Ring of Protection: pd=1, ps 1-3, pval 0-4
+  - Other rings: pval 0-4 if they have pval flags
+- Amulets generate variants with pval 0-4 if they have pval flags
+- Weapons and armor also generate all smithing cap variants
+
+### Final Results
+- **105** artefacts
+- **326** normal variants (including 37 rings + 20 amulets)
+- **1,249** special (ego) variants
+- **1,680** total items
+
+The script now fully matches the game's drop generation logic for all item types.
+
+## 2025-12-14: Drop band fallback + chest/ vault depth tweaks
+- `src/drop_system.c`: replaced band-widening retry loop with: skip if `upper<0`, then (partition-driven only) add W/A/J categories by partition weight (skipping zero-weight cats), then relax by decrementing `lower` until candidates exist.
+- `src/drop_system.c`: added `min_depth_penalty_depth` (separate from difficulty target depth) and new APIs `drop_generate_object_*_depths()` so depth boosts only reduce the min-depth penalty, not the `1.70*depth` target formula.
+- `src/cmd2.c`: chest opening now uses `+5` (was `+4`) as min-depth-penalty-only depth boost for contents.
+- `src/generate.c`: vault object tokens now use `1d5` (was `1d4`) depth boost as min-depth-penalty-only; vault chest token uses `+5` (was `+4`).
+- `src/drop_system.c`, `src/cmd2.c`: chests no longer store a theme; chest contents are generated as `DROP_TYPE_UNTHEMED` with the spawning partition’s profile weights.
+- `src/generate.c`, `src/xtra2.c`: chest `xtra1` now stores `0x80|level_partition_kind` where the chest was spawned (to avoid colliding with legacy chest themes), used at open time to pick the correct partition drop profile.
+
+## 2025-12-17: Chasm partition light penalty fix
+- `src/save.c`, `src/load.c`: cave_info save format extended with optional `CAVE_INFO_HI_MAGIC` block to persist high-bit "important" flags (including `CAVE_CHASM_AREA`) while remaining backward-compatible with older saves.
+- `src/generate.c`, `src/load.c`: chasm partitions now tag `CAVE_CHASM_AREA` across the full partition bounds (so later digging/tunneling keeps the tag).
+- `src/cave.c`, `src/cmd2.c`: chasm behavior (light penalty, quartz drops) keys off `CAVE_CHASM_AREA` again as intended.
+
+## 2025-12-17: Save format gating for cave_info_hi
+- `src/defines.h`: bumped `VERSION_EXTRA` to `8` so older builds reject saves that include the new dungeon encoding.
+- `src/load.c`: `cave_info_hi` is mandatory for `sf_extra>=8`; for older save versions the loader assumes no hi-plane block (no probe/guess path).
+
+## 2025-12-17: Labyrinth/CA_BLOB no-perma-light
+- `src/generate.c`: clears `CAVE_GLOW` across all `QUAD_MODE_LABYRINTH` partition bounds and within all `LAYOUT_ANCHOR_CA_BLOB` room bounds so those areas always start unlit.
+
+## 2025-12-17: Persistent generation summary log
+- `src/gen-log.c`: added `generation-summary.txt` (append-only across launches) and write one tab-separated summary line per level-generation attempt with success/failure and failure reason.
+- `src/generate.c`: ensured forced-regeneration returns (quest vault placement, Varda/Niena/Oromë spawn fallbacks) log a failure reason and call `gen_log_level_end(false, ...)` before returning.
+
+## 2025-12-18: Generation log naming + connectivity fix
+- `src/gen-log.c`: log files now use `SDL_GetBasePath()` so names are consistently `generation.txt` and `generation-summary.txt` (fixes accidental `sil-more.exegeneration*.txt` filenames).
+- `src/generate.c`: fixed connectivity floodfill stability by making `player_passable()` reject out-of-bounds and replacing recursive `flood_access()` with an iterative queue-based floodfill; `check_connectivity()` no longer calls `player_passable()` on outer-wall coordinates.
+- `src/generate.c`: improved rescue-tunnel connectivity by sampling unreachable room centers, increasing the rescue cap for large levels, and logging a specific failure reason from inside `check_connectivity()` (so summary log shows something actionable).
+
+## 2025-12-18: Morgoth health-based anger state selection
+- `src/melee2.c`: fixed Morgoth state updates to select the strongest applicable anger level from current HP (prevents big hits from leaving him temporarily in a weaker state until later turns).
+- `src/xtra2.c`: recalculates/apply Morgoth anger state inside `mon_take_hit()` so multi-hit attacks immediately use the updated stats.
+- `src/xtra2.c`, `src/spells1.c`: centralized HP% thresholds (80/60/40/20) in `maybe_update_morgoth_state_from_hp()` and call it on maxHP changes (Song duel) and monster-vs-monster damage paths that bypass `mon_take_hit()`.
+
+## 2025-12-18: Halls of Mandos short score Morgoth victory text + scoring
+- `src/score/score_ui.c`: short layout now special-cases `morgoth_slain` entries to display "Victorious over Morgoth's illusion ..." instead of "Slain by ...".
+- `src/score/score_logic.c`: Morgoth victory now receives the escape bonus in scoring, in addition to the existing forced `3` Silmarils + full ascent (`depth_up = MORGOTH_DEPTH`).
+- `src/score/score_io.c`: blessing pool no longer counts `morgoth_slain` entries (Morgoth victory is not treated as a death for blessing economy).
+
+## 2025-12-18: Depth 20 normal + Morgoth hall (vault) restrictions
+- `src/types.h`, `src/save.c`, `src/load.c`: added `p_ptr->morgoth_hall_entered` persisted via the first of the existing 15 spare bytes in the savefile (backward-compatible default 0).
+- `src/cmd2.c`: `min_depth()` only clamps to `MORGOTH_DEPTH` after entering Morgoth's hall; `do_cmd_go_up()` no longer forces endgame behavior on depth 20 unless `min_depth()==MORGOTH_DEPTH`, and only sets `on_the_run` when leaving 1000ft with a Silmaril.
+- `src/dungeon.c`: added a full-screen Tolkien-style confirmation before entering Morgoth's hall; freezes monsters inside the hall until entry; blocks leaving the hall without a Silmaril.
+- `src/generate.c`, `src/defines.h`: entry tunnels are preserved with `CAVE_MORGOTH_TUNNEL` and the forced doors now sit in the vault wall (end of each of the two corridors), so the confirmation triggers exactly when stepping through those doors.
+- `src/generate.c`: fixed a build-breaking `auto ... -> bool` local helper by moving it to a proper `static` C helper (`connectivity_rescue_traversable()`), and reduced the Morgoth “no-go” region from the entire reserved partition to a small permanent-wall buffer around the vault to avoid repeated connectivity failures/regeneration loops on depth 20.
+- `src/generate.c`: fixed depth-20 regen loops caused by BFS rescue starting from a clamped coordinate (so it never actually connected the unreachable edge rooms) and by over-restricting vault walls; BFS rescue now starts from the actual unreachable tile, can dig through normal vault walls as needed, but still refuses to dig through Morgoth's vault walls (so entry stays via the forced doors).
+
+## 2025-12-19: Steam Deck native controller input
+- `src/main-sdl.c`, `src/sdl-config.{h,c}`: added SDL3 gamepad init + input handling (d-pad diagonals, left stick movement, trigger modifiers), persisted new `gamepad` settings + bindings in `sil_sdl.json`.
+- `src/cmd4.c`: added Controller Settings menu (toggles + button/trigger bindings, reset-to-defaults) and updated options menu ordering.
+- `src/util.c`, `src/dungeon.c`, `src/object1.c`, `src/cmd3.c`, `src/files.c`: replaced compile-time Steam Deck guards with runtime `steamdeck_controls_active()` and updated help text to point to in-game bindings.
+- Build: `build-cmake.bat` completed successfully (standard + portable SDL3 outputs).
+
+## 2025-12-20: D-pad diagonal merge
+- `src/main-sdl.c`: delay single-cardinal D-pad sends to merge quick diagonal presses into one input, with a short timeout and pending flush in the SDL event loop; clears pending state when D-pad/gamepad input is disabled.
+## 2025-12-20: D-pad diagonal release suppression
+- `src/main-sdl.c`: only schedule D-pad moves on button-down transitions (not release) and avoid flushing pending before queued events are processed, preventing diagonal+cardinal double-moves.
+## 2025-12-20: Left stick diagonal merge + single-pane frame
+- `src/main-sdl.c`: added left-stick pending state to merge diagonal moves like the D-pad and gated view frame rendering when only one pane is active.
+## 2025-12-20: Left stick diagonal release suppression
+- `src/main-sdl.c`: suppresses immediate cardinal moves when the stick transitions from a diagonal back to a straight direction, preventing diagonal+cardinal double steps on release.
+## 2025-12-20: Controller action-first rebinding
+- `src/main-sdl.c`, `src/externs.h`: added capture mode to read the next gamepad button/trigger for binding.
+- `src/cmd4.c`: rebuilt Controller Settings to list actions and bind them by pressing a gamepad button; includes action-to-button lookup, default reset per action, and modifier entries.
+
+- SDL: cache story fonts per cell height (main/aux) and reload on config/scale changes to avoid blurry upscaling at low resolutions.
+## 2025-12-20: Steam Deck metarun + scores prompts
+- `src/metarun.c`: story info (metarun stats) and blessing submenus now show Steam Deck button labels, map A/L1/B/X/Y/Back to actions, and add Back-cancel handling in submenus plus controller-friendly prompts in history/active effects (gated to Steam Deck UI only).
+- `src/score/score_ui.c`: Halls of Mandos scores footer/prompt now uses Steam Deck labels, maps X to layout toggle, and Back to exit (gated to Steam Deck UI only).
+
+## 2025-12-22: Steam Deck music path fix
+- lib/pref/sound.json: corrected default music paths to music/*.wav under lib/xtra/.
+
+## 2025-12-22: Varda quest sunlight spawn fix
+- src/generate.c: replaced random Varda spawn attempts with a scan of valid sunlight tiles and a forced sunlit fallback near the player; ensure_sunlight_for_varda now guarantees an empty sunlight tile (patch + forced tile) to avoid regen loops.
+
+## 2025-12-22: Gems as normal items
+- src/cmd6.c, src/cmd3.c, src/cmd4.c, src/externs.h: added do_cmd_use_gem and routed gem use through it; staff activation is staff-only now.
+- src/use-obj.c, src/object2.c: gems stack like other consumables; gem usage split from staff logic and charges messaging is staff-only.
+- src/supplies.c, src/load.c: supplies treat gems like normal items (count/weight/consumption), with load handling legacy gem supply counts.
+- src/load.c: fix gem supply load loop to decrement count before absorb so object_wipe doesn't zero the remaining counter.
+- src/cmd4.c: refresh after supply use to avoid stale screen line when closing menu.
+- src/cmd1.c: prevent ident_on_wield from auto-identifying staves just because they're aware, keeping charges hidden unless identified.
+
+## 2025-09-05
+- Sync use_sound with sound.json on sdl_sound_reload() so a fresh install honors enabled sounds without needing a toggle (fixes silent SFX on first run).
+
+## 2025-12-24: Dailir arrow behavior
+- `src/drop_system.c`: keep artifact arrows single by skipping stack quantity rolls.
+- `src/cmd2.c`: Dailir no longer uses return-to-hand logic; it drops like other artifacts (unbreakable).
+- `lib/edit/artefact.txt`: removed the returning line from Dailir's description.
+
+
+## 2025-12-24: Chasm fall rules at depth 19/20
+- `src/cmd1.c`: chasm falls now cap at `MORGOTH_DEPTH`, depth 20 chasms are fatal, and chasm prompts warn about certain death on the final level.
+- `src/xtra2.c`, `src/monster2.c`: chasm fall damage uses one-floor dice at depth >= `MORGOTH_DEPTH - 1`.
+
+## 2025-12-25: Aim dir target fallback
+- src/xtra2.c: ignore stored command_dir=5 when no valid target so get_aim_dir prompts instead of throwing at the player's square.
+
+## 2025-12-25: Auto-identify awareness fix
+- src/xtra1.c: auto-identify now calls ident when an item lacks awareness even if it is already marked known, so Jeweller reveals starting jewellery like Last Chances.
+
+## 2025-12-25: Morgoth second wind
+- src/xtra2.c: first Morgoth death now restores him to 20% HP, shows full-screen Melkor proclamation, and applies anger state 6 (will/per 100).
+- src/types.h: add morgoth_second_wind flag for the first-death revival.
+- src/birth.c, src/save.c, src/load.c: init/persist morgoth_second_wind using a spare save byte for compatibility.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-26: Star iron pictogram
+- lib/pref/graf-new.prf: set `K:491` (Piece of Star Iron) to `0x93/0x85` (tileset row 19, col 5).
+
+## 2025-12-26: Crash fix when escaping to the Gates (depth 0)
+- `src/generate.c`: make dungeon-generation state `dun` use file-scope storage (avoid dangling stack pointer) and reset generation metadata in `gates_gen()`; add a safe fallback if the Gates vault/stair placement fails instead of placing the player at (0,0).
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-27: Savefile load crash fix (player at 0,0 on depth 0)
+- `src/load.c`: treat out-of-bounds or boundary player coords in the dungeon header as repairable corruption; defer `player_place()` until after monsters load, enforce perma-wall boundary, and relocate player to a safe staircase/floor tile to prevent `update_view()` OOB crashes.
+- Verified by loading corrupted `Glorfindel` save (header `py=0,px=0` on `33x66` Gates); loader repairs to a valid interior grid and the game no longer crashes on load.
+
+## 2025-12-27: Song of the Trees dice display fix
+- `src/spells1.c`: Song of Trees now uses effective Song skill (`song_effective_skill()`) for its projection parameters (radius/dice/skill), instead of the light-radius bonus value.
+- `src/spells1.c`: combat roll dice for `GF_LIGHT` now record `ds = cave_light[y][x]` (the actual light-level sides used) so the shown dice match damage dealt.
+- `src/xtra1.c`, `src/externs.h`: added `song_effective_skill()` helper (minor theme penalty + silence dampening + woven synergy) and refactored `ability_bonus()` to use it.
+- `src/xtra1.c`: reduced woven synergy bonus from ~20% to ~10% of base Song skill.
+- `src/spells1.c`: `GF_LIGHT` resistance checks now use `dif >= 0` to identify Song of Trees (so low song scores still use song skill, not Will).
+- `src/spells1.c`: trolls killed by Song of Trees radiant damage now turn into `FEAT_RUBBLE` (Kemenrauko-style), unless on stairs.
+
+## 2025-12-27: Oath of Light post-death crash fix
+- `src/dungeon.c`: if `load_player()` loads a dead character, immediately `player_wipe()` before `player_birth()` (prevents using dead-save state during oath selection).
+- `src/cmd4.c`: fix `oath_menu()`/ability display to only enumerate `OATH_TYPES`, add bounds-checked oath text helpers, and replace unsafe `strcpy()` in oath wrapping with `SDL_strlcpy()` (prevents OOB/overflow crashes).
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-27: Artefact base flags shown on examine
+- `src/object1.c`: fix `object_flags_known()` to include base `k_info` flags for artefacts (avoid overwriting base flags like `SHARPNESS` on star-iron/mithril bases).
+- build-cmake.bat: success (standard build).
+
+## 2025-12-27: Varda spawn reachability + adjacency fixes
+- `src/generate.c`: Varda now spawns only on `FEAT_SUNLIGHT` tiles that are reachable from the player without digging rubble/crossing chasms (`flood_access(..., false)`) and not adjacent to the player; forced sunlight fallback now picks a random rubble-free reachable floor tile and creates a small sunlight pool.
+- `src/xtra2.c`: scripted quest-giver spawns avoid adjacent placement (Varda/Niena); Varda scripted spawns now create a 3x3 sunlight pool around her.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-28: Option to disable skeleton-note tutorial messages
+- `src/defines.h`, `src/tables.c`: add `disable_skeleton_note_tutorial` option (default off) and expose it on Interface options page.
+- `src/cmd2.c`: gate `SKEL_HINT_TIP` skeleton-note templates behind the new option.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-28: Small caves theming + stuffy light penalty
+- `src/dungeon.c`: entering `LEVEL_PART_CAVEY` prints a stuffy-atmosphere message; torches/lanterns burn 2 fuel/turn while in small caves.
+- `src/generate.c`, `src/object2.c`: small caves bias extra monsters toward spiders/wolves/bats/trolls; web traps are more common in cavey partitions (and small extra trap chance on cave floors at depth 8+).
+- `src/defines.h`, `lib/edit/object.txt`, `src/object2.c`, `src/drop_system.c`: keep wooden-torch max fuel at 3,000 but reduce spawned torch fuel to ~1,000.
+- build-cmake.bat: success (standard + portable builds; standard deployment copy may fail if `sil-more.exe` is running).
+
+## 2025-12-29: Smithing-difficulty identification overhaul
+- `src/defines.h`: add `IDENT_EXPERIENCED` flag (+5 identify bonus after experiencing effects).
+- `src/drop_system.c`, `src/externs.h`: expose `object_uses_smithing_difficulty()` + `object_smithing_difficulty()` for weapons/armour/jewellery (incl horns + some lights) using the drop baseline.
+- `src/xtra1.c`: new Per+Smt identification helpers (bonuses from abilities/context/known ego/experienced effects); auto-ID on sight uses `skill >= difficulty + 10` with distance penalty `min(10, dist/2)`.
+- `src/object1.c`, `src/cmd3.c`: opening item description attempts identification; floor item names hide combat stats until identified via `object_desc_floor()`.
+- `src/cmd4.c`, `src/xtra1.c`: unified-look sidebar uses `object_desc_floor()`; smithing-ID checks now emit `log_debug` traces and show an in-game message on successful identification.
+- `src/spells2.c`, `src/spells1.c`, `src/xtra1.c`: treasure detection + Song of Revealing auto-identify qualifying smithing items with no distance penalty and no +10 auto-ID margin.
+- `src/cmd1.c`, `src/cmd2.c`, `src/spells2.c`, `src/cmd6.c`, `src/use-obj.c`: replace “identify by use/wield” with `IDENT_EXPERIENCED` for smithing-difficulty items; gem of understanding still fully identifies; self knowledge gives +5 and tries equipped items.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2025-12-30: Win7 minimize/restore can corrupt tile visuals (SDL3)
+- `src/main-sdl.c`: handle `SDL_EVENT_RENDER_*_RESET`/`SDL_EVENT_RENDER_DEVICE_LOST` + `SDL_EVENT_WINDOW_RESTORED` by reloading the tileset (device reset) and recreating render-target textures via `resize()` to force a full redraw.
+- `src/main-sdl.c`: fix tileset surface use-after-free and stop reading `SDL_Texture` internal `->w/->h` fields.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2026-01-01: Fix crash on repeat Varda quest accept/complete (invalid free)
+- `src/xtra2.c`: `free_quest_texts()` now takes a `count` and frees only those entries; fixes OOB reads/invalid frees when `prepend_repeat_context()` returns a smaller array on repeat attempts.
+- `src/externs.h`: update `free_quest_texts` declaration; update all call sites to pass `text_count`/`completion_count`.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2026-01-01: Oath of Light post-death crash (between-games hygiene)
+- `src/init2.c`: reload `oath_info` in `re_init_some_things()` so post-run state cannot retain corrupted oath tables (targets crash when selecting Oath of Light after a previous Oath-of-Light death without restarting).
+- `src/birth.c`: add bounds checks when granting the oath reward ability (A: field) to avoid OOB writes if oath data is ever corrupted.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2026-01-03: Logging volume reduction + safety cap
+- `src/log/bootstrap.c`: default `SIL_LOG_LEVEL` is now `INFO` (was effectively `TRACE`); adds `SIL_LOG_MAX_MB` (default `64`, `0` = unlimited).
+- `src/log/log.c`, `src/log/log.h`: add `log_add_fp_capped()` and close/free capped file sinks on exit.
+- `src/xtra2.c`: remove ultra-spammy per-character WRAP/PLACEHOLDER trace logging (keeps a single WARN on safety break).
+- `src/main-sdl.c`, `src/xtra1.c`, `src/cmd2.c`, `src/cmd4.c`, `src/cave.c`: move high-frequency `log_debug`/`log_info` lines down to `TRACE`/`DEBUG`; fix missing format argument in `do_cmd_throw` wall-collision log.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2026-01-04: Thrall quest repair + more damaged item kinds
+- `lib/edit/object.txt`: add 7 new `DAMAGED` item kinds (weapons/armor) to expand repair targets and skeleton loot variety.
+- `src/defines.h`: add new `SV_*` constants for the new damaged item svals.
+- `src/thrall_quest.c`: extend damaged→normal upgrade mapping; fix repair to apply base deltas to `att`/`evn`/`pval` (not just dice).
+- `src/drop_system.c`: implement `DROP_TYPE_DAMAGED` / `DROP_TYPE_NOT_DAMAGED` filtering so damaged items generate only when requested.
+- `lib/edit/artefact.txt`: move `'Thorn'` from depth 0 to 7 to prevent ultra-early vampiric/poison artefact spikes.
+- `lib/pref/graf-new.prf`: map new damaged kinds (`K:423..430`) to the same tiles as their repaired counterparts.
+- build-cmake.bat: success (standard + portable builds).
+
+## 2026-01-05 Loot tweaks (DROP_SUPERB + dragon hoards)
+- Added monster flag `DROP_SUPERB` (reuses former `RF2XXX6` bit) and parser support; monster drops can now use `DROP_QUALITY_SUPERB` (+15 difficulty).
+- Monster drop logic/recall updated: superb > great > good; recall text shows "superb".
+- Vault `!` now spawns great items (+10) with artefacts allowed and strongly biased (10x artefact group weight) via `drop_generate_object_profiled_depths_biased()`.
+- Data tweaks:
+  - `lib/edit/monster.txt`: Morgoth -> `DROP_SUPERB`; Shelob -> `DROP_2D2 | DROP_GOOD`; Ungoliant -> `DROP_2D2 | DROP_GREAT`; Draugluin -> `DROP_GOOD`; Thuringwethil -> `DROP_GREAT`; Gothmog -> `DROP_CHOSEN` (enables Calris auto-drop).
+  - `lib/edit/vault.txt`: added `!` placements in dragon vaults (Dragon Lairs, Dragon Island, Draconic Caves, Dragons' Run, Glaurung hoard).
+- Build: `build-cmake.bat` OK (one pre-existing unused-parameter warning in `generate.c`).
+
+## 2026-01-29: Light corridor alcoves like torches
+- `src/generate.c`: when carving tunnel side niches (alcoves), mark `CAVE_GLOW` on the niche + its two flanking walls + the 3 corridor floor tiles in front (torch-sized) to mimic wall torches.
+- Build: `cmake --build build-standard --parallel` and `cmake --build build-portable --parallel` OK.
+
+## 2026-03-18: Negative smithing difficulty support
+- `src/drop_system.c`: removed the zero clamp from smithing difficulty, bumped `DROP_RAW_VERSION` to `22`, and added negative-target handling that keeps the strict band but skips category/band relaxation when the target itself is below zero.
+- `src/drop_system.c`: added a hard floor at `-15`; if the target band cannot find a candidate by that point, the drop now fails cleanly instead of widening further.
+- `scripts/calc_artefact_difficulty.py`: added C-style truncating division for negative results so the analysis script matches the engine once difficulty can go below zero.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-03-19: TR4_SUBTLETY_THROW active-skill gate
+- `src/cmd1.c`: keep the thrown Subtlety crit bonus gated on active `MEL_CONTROL` only, so item-granted Subtlety still works while the weapon flag itself does not grant the ability.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-03-25: WP70 cmd4 split completion
+- Completed the remaining `WP70` command/UI breakup by moving the live `cmd4.c` families into `src/cmd/ui/cmd-ui-character.c`, `cmd-ui-abilities.c`, `cmd-ui-main-menu.c`, `cmd-ui-settings.c`, `cmd-ui-knowledge.c`, `cmd-ui-nearby.c`, and `src/ui/ui-look-sidebar.[ch]`.
+- `src/cmd4.c` now keeps only the redraw/note/version/feeling/ghost remainder; the former character, song/ability, menu/message, settings, knowledge, nearby, and unified-look-sidebar ownership is no longer in the monolith.
+- `CMakeLists.txt` now builds the new `cmd/ui` modules plus `src/ui/ui-look-sidebar.c`, and `src/cmd/ui/cmd-ui.h` plus `src/ui/ui-look-sidebar.h` provide the narrow shared surfaces needed by the split.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` and `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1 -Target portable` both succeeded.
+
+## 2026-03-26: Phase 3 SDL monolith split completion
+- `src/main-sdl.c` is reduced to 1,908 lines and now keeps only SDL input/gamepad plus init/orchestration.
+- Added `src/sdl-main-internal.h` so the SDL frontend can share state without re-expanding `externs.h`.
+- Moved SDL-only ownership out of `src/main-sdl.c` into:
+  - `src/sdl-layout.c` for pane layout, resize, and platform-ui config accessors.
+  - `src/sdl-render.c` for SDL view lifecycle, renderer reset, presentation, and term callbacks.
+  - `src/sdl-story-font.c` for story-font cache/state and proportional-text rendering.
+  - `src/sdl-touch.c` for touch-pane state, rendering, pointer handling, and touch-pane config APIs.
+- `CMakeLists.txt` now builds the new SDL platform modules in `sil-platform-sdl`.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.

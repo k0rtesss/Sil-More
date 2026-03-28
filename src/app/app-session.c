@@ -37,6 +37,14 @@ struct app_session {
 
 static app_session* g_current_session;
 
+static u32b app_session_u32_from_size(size_t value)
+{
+    if (value > 0xFFFFFFFFu)
+        return 0xFFFFFFFFu;
+
+    return (u32b)value;
+}
+
 static size_t app_session_initial_event_capacity(size_t requested)
 {
     if (requested == 0)
@@ -905,6 +913,43 @@ const app_session_counters* app_session_get_counters(
     const app_session* session)
 {
     return session ? &session->counters : NULL;
+}
+
+void app_session_export_state(const app_session* session,
+    app_session_export* out_state)
+{
+    app_event_span span;
+
+    if (!out_state)
+        return;
+
+    memset(out_state, 0, sizeof(*out_state));
+    out_state->api_version = APP_SESSION_API_VERSION;
+    out_state->state = APP_SESSION_STATE_UNINITIALIZED;
+
+    if (!session)
+        return;
+
+    span = app_event_buffer_view(session->events);
+
+    out_state->flags = session->flags;
+    out_state->state = session->state;
+    out_state->wait_reason = session->wait_state.reason;
+    out_state->wait_flags = session->wait_state.flags;
+    out_state->wait_detail0 = session->wait_state.detail0;
+    out_state->wait_detail1 = session->wait_state.detail1;
+    out_state->snapshot_revision = session->snapshot.revision;
+    out_state->snapshot_scene = session->snapshot.scene;
+    out_state->snapshot_flags = session->snapshot.flags;
+    out_state->snapshot_blob_count
+        = app_session_u32_from_size(session->snapshot.blob_count);
+    out_state->pending_input_count
+        = app_session_u32_from_size(session->inputs.count);
+    out_state->pending_intent_count
+        = app_session_u32_from_size(session->intents.count);
+    out_state->pending_event_count = app_session_u32_from_size(span.count);
+    out_state->pending_event_dropped_count = span.dropped_count;
+    out_state->counters = session->counters;
 }
 
 bool app_session_submit_input(app_session* session, const app_input* input)

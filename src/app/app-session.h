@@ -76,6 +76,27 @@ typedef struct app_session_counters {
     u64b dropped_events;
 } app_session_counters;
 
+typedef struct app_session_export {
+    u32b api_version;
+    u32b flags;
+    u16b state;
+    u16b wait_reason;
+    u16b wait_flags;
+    u16b snapshot_scene;
+    s32b wait_detail0;
+    s32b wait_detail1;
+    u16b snapshot_flags;
+    u16b reserved0;
+    u32b snapshot_blob_count;
+    u32b pending_input_count;
+    u32b pending_intent_count;
+    u32b pending_event_count;
+    u32b pending_event_dropped_count;
+    u32b reserved1;
+    u64b snapshot_revision;
+    app_session_counters counters;
+} app_session_export;
+
 typedef struct app_session app_session;
 
 app_session* app_session_current(void);
@@ -141,6 +162,8 @@ bool app_session_add_interaction_option(app_session* session, byte attr,
     char tag, bool enabled, bool selected, cptr label, cptr meta);
 const app_session_counters* app_session_get_counters(
     const app_session* session);
+void app_session_export_state(const app_session* session,
+    app_session_export* out_state);
 bool app_session_submit_input(app_session* session, const app_input* input);
 size_t app_session_pending_input_count(const app_session* session);
 bool app_session_peek_input(const app_session* session, app_input* out_input);

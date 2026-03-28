@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sil UI8 Web Demo</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <div class="backdrop"></div>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">UI8 Web Demo</p>
+        <h1>Snapshot + Event + Input Boundary</h1>
+        <p class="lede">
+          Static browser proof-of-concept driven by real <code>app-wire</code>
+          packets emitted from the C boundary.
+        </p>
+      </div>
+      <section class="status-strip" id="session-summary"></section>
+    </header>
+
+    <section class="board">
+      <article class="panel dungeon-panel">
+        <div class="panel-head">
+          <h2>Dungeon Scene</h2>
+          <button id="reset-demo" class="ghost-button" type="button">Reset State</button>
+        </div>
+        <div id="dungeon-grid" class="dungeon-grid" aria-live="polite"></div>
+      </article>
+
+      <article class="panel stack-panel">
+        <section class="subpanel">
+          <h2>Messages</h2>
+          <div id="messages" class="messages"></div>
+        </section>
+        <section class="subpanel">
+          <h2>Interaction</h2>
+          <div id="overlay" class="overlay"></div>
+        </section>
+      </article>
+    </section>
+
+    <section class="board secondary-board">
+      <article class="panel">
+        <h2>Recent Events</h2>
+        <div id="events" class="events"></div>
+      </article>
+      <article class="panel">
+        <h2>Host Bridge</h2>
+        <div id="host-log" class="host-log"></div>
+      </article>
+      <article class="panel">
+        <h2>Encoded Inputs</h2>
+        <div id="input-log" class="input-log"></div>
+      </article>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

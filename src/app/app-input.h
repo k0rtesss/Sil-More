@@ -7,6 +7,9 @@
 extern "C" {
 #endif
 
+#define APP_INPUT_FORMAT_VERSION 1u
+#define APP_INTENT_FORMAT_VERSION 1u
+
 typedef enum app_input_layer {
     APP_INPUT_LAYER_LEGACY = 0,
     APP_INPUT_LAYER_INTENT = 1

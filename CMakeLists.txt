@@ -284,9 +284,11 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-interaction.c
     src/app/app-events.c
     src/app/app-host.c
+    src/app/app-host-bridge.c
     src/app/app-scene-dungeon.c
     src/app/app-scene-information.c
     src/app/app-session.c
+    src/app/app-wire.c
 )
 
 set(SIL_MORE_SOURCES_FRONTEND
@@ -524,8 +526,47 @@ if(BUILD_TESTING)
     NAME sil_ui1_scaffolding
     COMMAND sil-ui1-tests
   )
+  add_executable(sil-ui8-tests
+    tests/ui8_tests.c
+  )
+  target_link_libraries(sil-ui8-tests PRIVATE
+    sil-build-config
+    sil-core
+    sil-legacy-compat
+    sil-platform-sdl
+  )
+  if(SIL_STRICT_WARNINGS)
+    target_link_libraries(sil-ui8-tests PRIVATE sil-strict-build-config)
+  endif()
+  add_test(
+    NAME sil_ui8_wire
+    COMMAND sil-ui8-tests
+  )
+  add_executable(sil-ui8-demo-packets
+    tools/ui8_emit_demo_packets.c
+  )
+  target_link_libraries(sil-ui8-demo-packets PRIVATE
+    sil-build-config
+    sil-core
+    sil-legacy-compat
+    sil-platform-sdl
+  )
+  if(SIL_STRICT_WARNINGS)
+    target_link_libraries(sil-ui8-demo-packets PRIVATE sil-strict-build-config)
+  endif()
+  add_test(
+    NAME sil_ui8_demo_packets
+    COMMAND sil-ui8-demo-packets
+      ${CMAKE_CURRENT_BINARY_DIR}/ui8-demo-samples
+  )
   if(WIN32)
     set_tests_properties(sil_ui1_scaffolding PROPERTIES
+      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+    )
+    set_tests_properties(sil_ui8_wire PROPERTIES
+      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+    )
+    set_tests_properties(sil_ui8_demo_packets PROPERTIES
       ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
     )
   endif()

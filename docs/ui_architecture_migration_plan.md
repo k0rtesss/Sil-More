@@ -10,7 +10,7 @@ Recommended direction:
 - keep frame cadence in the frontend
 - treat the existing `Term` path as a legacy frontend, not as the future UI API
 
-Status date: March 27, 2026.
+Status date: March 28, 2026.
 
 ## Current Tree Baseline
 - The SDL frontend is no longer one monolithic file.
@@ -463,6 +463,19 @@ Validation:
 Exit when:
 - the web frontend is a consumer of the same boundary as SDL, not a special
   fork
+
+Status:
+- complete in the working tree on 2026-03-28
+- `src/app/app-wire.*` now formalizes the versioned packet ABI for snapshots,
+  event spans, session state, legacy input, and intents
+- `src/app/app-host-bridge.*` now provides a neutral host bridge for timing,
+  persistence, resource lookup, and logging
+- `web/ui8-demo/` now renders packetized dungeon, message, and interaction
+  data and encodes browser key input back into the UI8 legacy-input packet
+  format
+- validation is currently through the host-neutral `sil-core` static library
+  plus the packet-driven browser demo described in
+  [`ui8_web_demo.md`](./ui8_web_demo.md)
 
 ## Suggested Subagent Grouping For Implementation
 - Group A: input and prompt boundary.
