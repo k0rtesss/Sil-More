@@ -287,6 +287,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-host-bridge.c
     src/app/app-scene-dungeon.c
     src/app/app-scene-information.c
+    src/app/app-scene-menu.c
     src/app/app-session.c
     src/app/app-wire.c
 )
@@ -318,6 +319,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-render.c
     src/sdl-scene-dungeon.c
     src/sdl-scene-information.c
+    src/sdl-scene-menu.c
     src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c

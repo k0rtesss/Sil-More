@@ -743,7 +743,8 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return;
 
-    pixel_height = sdl_scene_ui_scale_px((float)sdl_scene_interaction_font_size_logical(view));
+    pixel_height = sdl_scene_ui_scale_px(
+        (float)sdl_scene_interaction_font_size_logical(view));
     font = sdl_scene_ui_font_for_height(pixel_height);
     if (!font)
         return;
@@ -831,7 +832,8 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
         int max_option_rows;
 
         if (header_lines > 0)
-            header_height = header_lines * line_h + (header_lines - 1) * line_gap;
+            header_height = header_lines * line_h
+                + (header_lines - 1) * line_gap;
 
         available_h = canvas_h - outer_margin * 2 - pad_y * 2 - header_height;
         max_option_rows = (available_h + line_gap) / line_step;

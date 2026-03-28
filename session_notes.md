@@ -16,6 +16,28 @@
   - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
   - `ctest --output-on-failure` from `build-standard/`
 
+## 2026-03-28: Menu modernization M0 foundation
+- Completed the menu-foundation slice described in `docs/ui_architecture_migration_plan.md`:
+  - added `src/app/app-scene-menu.[ch]` with the shared semantic menu payload for body blocks, list rows, detail panes, footer actions, tabs, focus ids, and row scroll state
+  - extended `src/app/app-session.[ch]` to own/publish `APP_SCENE_KIND_MENU` snapshots
+  - added `src/sdl-scene-menu.c` and routed `src/sdl-scene.c` through a dedicated menu render path instead of treating `APP_SCENE_KIND_MENU` as a generic legacy modal fallback
+  - kept the existing SDL dungeon interaction overlay style in place; it already renders in fixed pixels and remains the path for legacy prompt/list/targeting presentation
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `ctest --output-on-failure` from `build-standard/`
+
+## 2026-03-28: Menu modernization scope correction
+- Narrowed the shared menu rollout after visual review:
+  - restored `src/sdl-scene-dungeon.c` to the prior fixed-pixel interaction overlay so prompts/lists/targeting keep their existing look while staying decoupled from terminal size
+  - reverted `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, and `src/object/object-ui-select.c` away from shared menu snapshots, so bootstrap, pause-menu, and `get_item()` keep their earlier presentation
+  - kept `src/util-prompt.c:get_check_oath_multiline()` as the only current shared-menu consumer, with the legacy term prompt retained as fallback
+  - kept the `src/targeting.c` monster-recall mirror on `ui_information_scene`, since that change is independent of the shared menu styling
+- Kept the UI0 debt gate intact without raising the baseline.
+- Validation:
+  - `py -3 tools/ui_debt_audit.py --check tests/ui_debt_audit_baseline.json`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `ctest --output-on-failure` from `build-standard/`
+
 ## 2026-03-26: Phase 3 util/init slice
 - Started the `docs/modernization_mobile_roadmap.md` `Phase 3` monolith-reduction wave and completed the non-SDL slices:
   - split `src/util.c` into ownership modules:

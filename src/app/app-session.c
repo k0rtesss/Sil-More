@@ -27,6 +27,7 @@ struct app_session {
     app_snapshot snapshot;
     app_dungeon_snapshot dungeon_snapshot;
     app_information_snapshot information_snapshot;
+    app_menu_snapshot menu_snapshot;
     u32b snapshot_dirty_mask;
     u64b next_snapshot_revision;
     app_session_counters counters;
@@ -144,6 +145,22 @@ static void app_session_sync_information_blob(app_session* session)
     session->information_snapshot.blobs[0].format_version = APP_INFORMATION_FORMAT_VERSION;
     session->information_snapshot.blobs[0].data = (const byte*)&session->information_snapshot.scene;
     session->information_snapshot.blobs[0].size = sizeof(session->information_snapshot.scene);
+}
+
+static void app_session_sync_menu_blob(app_session* session)
+{
+    if (!session)
+        return;
+
+    session->menu_snapshot.snapshot.scene = APP_SCENE_KIND_MENU;
+    session->menu_snapshot.snapshot.blobs = session->menu_snapshot.blobs;
+    session->menu_snapshot.snapshot.blob_count
+        = N_ELEMENTS(session->menu_snapshot.blobs);
+    session->menu_snapshot.blobs[0].kind = APP_SNAPSHOT_BLOB_MENU;
+    session->menu_snapshot.blobs[0].format_version = APP_MENU_FORMAT_VERSION;
+    session->menu_snapshot.blobs[0].data
+        = (const byte*)&session->menu_snapshot.scene;
+    session->menu_snapshot.blobs[0].size = sizeof(session->menu_snapshot.scene);
 }
 
 static bool app_input_queue_init(app_input_queue* queue, size_t capacity)
@@ -379,6 +396,7 @@ app_session* app_session_create(const app_session_config* config)
     session->snapshot.scene = APP_SCENE_KIND_NONE;
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
     app_information_snapshot_init(&session->information_snapshot);
+    app_menu_snapshot_init(&session->menu_snapshot);
     session->next_snapshot_revision = 1u;
     session->events = app_event_buffer_create(initial_event_capacity);
 
@@ -587,6 +605,11 @@ const app_information_snapshot* app_session_information_snapshot(
     return session ? &session->information_snapshot : NULL;
 }
 
+const app_menu_snapshot* app_session_menu_snapshot(const app_session* session)
+{
+    return session ? &session->menu_snapshot : NULL;
+}
+
 void app_session_clear_information_snapshot(app_session* session)
 {
     if (!session)
@@ -594,6 +617,15 @@ void app_session_clear_information_snapshot(app_session* session)
 
     app_information_scene_init(&session->information_snapshot.scene);
     app_session_sync_information_blob(session);
+}
+
+void app_session_clear_menu_snapshot(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_menu_scene_init(&session->menu_snapshot.scene);
+    app_session_sync_menu_blob(session);
 }
 
 bool app_session_add_information_op(app_session* session, s16b row,
@@ -622,6 +654,22 @@ bool app_session_publish_information_snapshot(app_session* session)
         = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
     session->information_snapshot.snapshot.revision = session->next_snapshot_revision++;
     session->snapshot = session->information_snapshot.snapshot;
+    session->snapshot_dirty_mask = 0;
+    return true;
+}
+
+bool app_session_publish_menu_scene(app_session* session,
+    const app_menu_scene* scene)
+{
+    if (!session || !scene)
+        return false;
+
+    session->menu_snapshot.scene = *scene;
+    app_session_sync_menu_blob(session);
+    session->menu_snapshot.snapshot.flags
+        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
+    session->menu_snapshot.snapshot.revision = session->next_snapshot_revision++;
+    session->snapshot = session->menu_snapshot.snapshot;
     session->snapshot_dirty_mask = 0;
     return true;
 }

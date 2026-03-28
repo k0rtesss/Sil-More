@@ -509,25 +509,37 @@ Standing rule for this track:
 - first land a shared menu scene and widget model
 - treat `APP_SCENE_KIND_INFORMATION` plus `ui_information_scene_present_term()`
   as a bridge for legacy flows, not as the final menu API
+- current constraint: keep the shared `APP_SCENE_KIND_MENU` renderer limited to
+  prompt-style modals for now; do not roll full menus, selectors, or document
+  browsers onto it until the visual direction is revisited
 
 Status on 2026-03-28:
-- partial progress is now live in the working tree
-- `src/sdl-scene-dungeon.c` renders `app_interaction_state` overlays in fixed
-  logical pixels, so prompt/list/targeting overlays no longer scale with the
-  dungeon tile view
-- `src/cmd/ui/cmd-ui-main-menu.c` mirrors the existing pause menu entries into
-  that interaction layer as a plain list, preserving the same strings,
-  ordering, and selection behavior
-- menu teardown now restores the underlying scene before clearing the overlay,
-  eliminating the one-frame flash of the old terminal-sized pause menu
+- M0 foundation is now complete in the working tree
+- `src/sdl-scene-dungeon.c` keeps the pre-existing fixed-pixel interaction
+  overlay, so prompt/list/targeting overlays remain decoupled from terminal
+  size without changing their established visual style
+- `src/app/app-scene-menu.[ch]` now define the shared semantic menu payload for
+  titled panels, list rows, detail panes, footer actions, tabs, focus ids, and
+  row scroll state
+- `src/sdl-scene-menu.c` now renders that payload in logical pixels for
+  top-level `APP_SCENE_KIND_MENU` snapshots
+- `src/util-prompt.c:get_check_oath_multiline()` now uses the shared fixed-pixel
+  menu modal on the SDL snapshot path; this is the current prompt-only
+  consumer of the shared menu renderer, with the old term overlay retained as a
+  fallback
+- `src/targeting.c` now mirrors the monster-recall overlay through
+  `ui_information_scene` on the snapshot renderer path instead of relying only
+  on `screen_save()` / `screen_load()` there
+- bootstrap, pause-menu, and `get_item()` presentation stay on their previous
+  visual paths rather than adopting the shared menu styling
 - `src/runtime/runtime-game.c` now uses the same overlay layer for save status
   and the quit-path high-score prompt, so those transitional messages no longer
   depend on the legacy message row
 - `Quit with save` now relies on the single shutdown save path in
   `close_game()`, avoiding the earlier duplicate save from the main menu action
 - the actual destination screens behind most menu entries are still legacy
-  term- or information-scene-driven flows; the project is only through the
-  first slice of M1/M2, not the full menu migration
+  term- or information-scene-driven flows; M0 is done, but the shared menu
+  renderer is intentionally scoped to prompt-style usage only for now
 
 ### Detailed Menu Audit For Parallel Execution
 | Family | Representative files | Current render and input model | Needed shared widgets | Recommended subagent |

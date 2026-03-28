@@ -2,8 +2,14 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "platform-input.h"
+#include "runtime-cli.h"
 
 static cptr g_prompt_interaction_label = NULL;
+
+typedef struct prompt_menu_scene_scope {
+    bool active;
+    app_snapshot previous_snapshot;
+} prompt_menu_scene_scope;
 
 /*
  * Get some input at the cursor location.
@@ -84,6 +90,118 @@ static bool prompt_snapshot_should_present(void)
         return false;
 
     return !inkey_can_consume_immediately();
+}
+
+static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    if (!runtime_cli_snapshot_renderer() || !session)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+
+    scope->previous_snapshot = *snapshot;
+    scope->active = true;
+    return true;
+}
+
+static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
+    const app_menu_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !scene || !session)
+        return false;
+    if (!app_session_publish_menu_scene(session, scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
+static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    app_session_set_snapshot(session, &scope->previous_snapshot);
+    scope->active = false;
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+}
+
+static void prompt_menu_scene_add_wrapped_text(app_menu_scene* scene,
+    byte attr, cptr text, size_t wrap_chars)
+{
+    const char* cursor = text;
+
+    if (!scene || !text || !text[0])
+        return;
+    if (wrap_chars < 8)
+        wrap_chars = 8;
+
+    while (*cursor && scene->body_line_count < APP_MENU_BODY_LINE_MAX)
+    {
+        const char* line_start;
+        const char* line_end;
+        const char* last_space = NULL;
+        char line[APP_MENU_TEXT_MAX];
+        size_t line_len;
+
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n')
+            cursor++;
+        if (!*cursor)
+            break;
+
+        line_start = cursor;
+        while (*cursor && *cursor != '\n'
+            && (size_t)(cursor - line_start) < wrap_chars)
+        {
+            if (*cursor == ' ' || *cursor == '\t')
+                last_space = cursor;
+            cursor++;
+        }
+
+        if (*cursor == '\n')
+        {
+            line_end = cursor;
+            cursor++;
+        }
+        else if (*cursor && last_space && last_space > line_start)
+        {
+            line_end = last_space;
+            cursor = last_space + 1;
+        }
+        else
+        {
+            line_end = cursor;
+        }
+
+        while (line_end > line_start
+            && (line_end[-1] == ' ' || line_end[-1] == '\t'))
+        {
+            line_end--;
+        }
+
+        line_len = (size_t)(line_end - line_start);
+        if (line_len == 0)
+            continue;
+        if (line_len >= sizeof(line))
+            line_len = sizeof(line) - 1;
+
+        memcpy(line, line_start, line_len);
+        line[line_len] = '\0';
+        (void)app_menu_scene_add_body_line(scene, attr, line);
+    }
 }
 
 bool askfor_aux(char* buf, size_t len)
@@ -786,9 +904,50 @@ bool get_check_oath_multiline(cptr prompt)
 {
     char ch;
     int wid, h;
+    prompt_menu_scene_scope menu_scope;
+    bool snapshot_menu = false;
 
     /* Paranoia */
     message_flush();
+
+    snapshot_menu = prompt_menu_scene_enter(&menu_scope);
+    if (snapshot_menu)
+    {
+        app_menu_scene scene;
+
+        app_menu_scene_init(&scene);
+        scene.flags = APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
+            | APP_MENU_SCENE_FLAG_DIM_BACKDROP;
+        app_menu_scene_set_widths(&scene, 420, 760);
+        app_menu_scene_set_title(&scene, TERM_L_RED, "Breaking a Sacred Oath");
+        prompt_menu_scene_add_wrapped_text(&scene, TERM_WHITE, prompt, 62);
+        (void)app_menu_scene_add_footer_action(&scene, 1, TERM_L_GREEN, true,
+            "Y", "Accept");
+        (void)app_menu_scene_add_footer_action(&scene, 2, TERM_WHITE, true,
+            "N/Esc", "Cancel");
+
+        snapshot_menu = prompt_menu_scene_present(&menu_scope, &scene);
+    }
+
+    if (snapshot_menu)
+    {
+        while (true)
+        {
+            ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+            if (quick_messages)
+                break;
+            if (ch == ESCAPE)
+                break;
+            if (strchr("YyNn", ch))
+                break;
+            bell("Illegal response to a 'yes/no' question!");
+        }
+
+        prompt_menu_scene_leave(&menu_scope);
+        if ((ch != 'Y') && (ch != 'y'))
+            return false;
+        return true;
+    }
 
     /* Get terminal size */
     Term_get_size(&wid, &h);

@@ -18,6 +18,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "platform-story-font.h"
+#include "ui/ui-information-scene.h"
 
 static void look_prt(bool use_story_font, cptr text, int row, int col)
 {
@@ -1168,24 +1169,58 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     /* Recall, but not when raging */
                     if ((recall) && !p_ptr->rage)
                     {
+                        ui_information_scene_scope info_scope;
+                        bool info_scene_active;
+
                         if (targeting_snapshot_active())
                             app_session_clear_interaction(app_session_current());
 
-                        /* Save screen */
-                        screen_save();
+                        info_scene_active
+                            = ui_information_scene_enter_mirror(&info_scope);
+                        if (info_scene_active)
+                        {
+                            app_information_scene info_scene;
+                            char recall_prompt[APP_INFORMATION_TEXT_MAX];
 
-                        /* Recall on screen */
-                        screen_roff(m_ptr->r_idx, m_ptr);
+                            screen_roff(m_ptr->r_idx, m_ptr);
+                            strnfmt(recall_prompt, sizeof(recall_prompt),
+                                "  [(r)ecall, %s]", info);
 
-                        /* Hack -- Complete the prompt (again) */
-                        Term_addstr(
-                            -1, TERM_WHITE, format("  [(r)ecall, %s]", info));
+                            if (ui_information_scene_capture_term(&info_scene)
+                                && app_information_scene_add_text(&info_scene,
+                                    (s16b)Term->scr->cy,
+                                    (s16b)Term->scr->cx, TERM_WHITE,
+                                    recall_prompt)
+                                && ui_information_scene_present(&info_scene))
+                            {
+                                query = (char)ui_information_scene_wait_key();
+                                ui_information_scene_leave(&info_scope);
+                            }
+                            else
+                            {
+                                ui_information_scene_leave(&info_scope);
+                                info_scene_active = false;
+                            }
+                        }
 
-                        /* Command */
-                        query = inkey();
+                        if (!info_scene_active)
+                        {
+                            /* Save screen */
+                            screen_save();
 
-                        /* Load screen */
-                        screen_load();
+                            /* Recall on screen */
+                            screen_roff(m_ptr->r_idx, m_ptr);
+
+                            /* Hack -- Complete the prompt (again) */
+                            Term_addstr(-1, TERM_WHITE,
+                                format("  [(r)ecall, %s]", info));
+
+                            /* Command */
+                            query = inkey();
+
+                            /* Load screen */
+                            screen_load();
+                        }
                     }
 
                     /* Normal */
