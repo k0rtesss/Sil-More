@@ -53,6 +53,19 @@ static void targeting_snapshot_prompt(cptr text)
         "Use direction keys to move, Enter targets, Esc cancels.");
 }
 
+static char targeting_inkey_with_wait_reason(void)
+{
+    app_wait_scope scope;
+    app_session* session = app_session_current();
+    char ch;
+
+    app_session_push_wait_scope(session, &scope,
+        APP_WAIT_REASON_TARGETING, 0, 0);
+    ch = inkey();
+    app_session_pop_wait_scope(session, &scope);
+    return ch;
+}
+
 /*
  * Modify the current panel to the given coordinates, adjusting only to
  * ensure the coordinates are legal, and return true if anything done.
@@ -1116,7 +1129,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             else
                 look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
-            query = inkey();
+            query = targeting_inkey_with_wait_reason();
 
             /* Stop on everything but "return" */
             if ((query != '\n') && (query != '\r'))
@@ -1216,7 +1229,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                                 format("  [(r)ecall, %s]", info));
 
                             /* Command */
-                            query = inkey();
+                            query = targeting_inkey_with_wait_reason();
 
                             /* Load screen */
                             screen_load();
@@ -1287,7 +1300,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         move_cursor_relative(y, x);
 
                         /* Command */
-                        query = inkey();
+                        query = targeting_inkey_with_wait_reason();
                     }
 
                     /* Normal commands */
@@ -1363,7 +1376,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     else
                         look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
-                    query = inkey();
+                    query = targeting_inkey_with_wait_reason();
 
                     /* Stop on everything but "return"/"space" */
                     if ((query != '\n') && (query != '\r') && (query != ' '))
@@ -1445,7 +1458,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     else
                         look_prt(use_story_font, out_val, 0, 0);
                     move_cursor_relative(y, x);
-                    query = inkey();
+                    query = targeting_inkey_with_wait_reason();
 
                     /* Stop on everything but "return"/"space" */
                     if ((query != '\n') && (query != '\r') && (query != ' '))
@@ -1529,7 +1542,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             else
                 look_prt(use_story_font, out_val, 0, 0);
             move_cursor_relative(y, x);
-            query = inkey();
+            query = targeting_inkey_with_wait_reason();
 
             /* Stop on everything but "return"/"space" */
             if ((query != '\n') && (query != '\r') && (query != ' '))

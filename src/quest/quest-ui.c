@@ -1455,13 +1455,20 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     int wid, h;
     const int indent = 2;
     bool skipped = false;
+    ui_information_scene_scope info_scope;
+    bool scene_active = ui_information_scene_enter(&info_scope);
+
+    /* Disable fade/typewriter in information scene mode */
+    if (scene_active)
+        skipped = true;
     
     /* Get terminal size */
     Term_get_size(&wid, &h);
     int wrap_width = wid - indent * 2;
     
     /* Save screen and start fresh */
-    screen_save();
+    if (!scene_active)
+        screen_save();
     Term_clear();
     
     /* Display title */
@@ -1500,10 +1507,22 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
         if (row + lines_needed >= h - 2) {
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
             {
-                char k = inkey();
+                char k;
+                if (scene_active)
+                {
+                    (void)ui_information_scene_present_term();
+                    k = (char)ui_information_scene_wait_key();
+                }
+                else
+                {
+                    k = inkey();
+                }
                 if (k == 'Q' || k == 'q') { /* Q/q skips remaining dialog */
                     Term_clear();
-                    screen_load();
+                    if (scene_active)
+                        ui_information_scene_leave(&info_scope);
+                    else
+                        screen_load();
                     return;
                 }
             }
@@ -1632,11 +1651,22 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     
     /* Final prompt */
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
-    inkey();
+    if (scene_active)
+    {
+        (void)ui_information_scene_present_term();
+        (void)ui_information_scene_wait_key();
+    }
+    else
+    {
+        inkey();
+    }
     
     /* Flush any queued keypresses that accumulated during the typewriter effect */
     Term_flush();
     
     Term_clear();
-    screen_load();
+    if (scene_active)
+        ui_information_scene_leave(&info_scope);
+    else
+        screen_load();
 }

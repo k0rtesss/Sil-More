@@ -2424,7 +2424,11 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             }
             run_history_show_detail(&entries[highlight]);
             if (!score_information_scene_resume(&scope))
-                return false;
+            {
+                /* Detail view ran fine, but we can no longer resume the
+                 * information scene; treat as completed successfully. */
+                return true;
+            }
             break;
 
         case ' ':
@@ -3252,10 +3256,23 @@ static void run_history_examine_monster(const score_run_detail_block* details,
     mem_free(order);
 
     if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max) {
+        ui_information_scene_scope monster_scope;
+        bool monster_scene = ui_information_scene_enter(&monster_scope);
+
         screen_save();
         screen_roff(entry->r_idx, NULL);
-        (void)inkey();
+        if (monster_scene)
+        {
+            (void)ui_information_scene_present_term();
+            (void)ui_information_scene_wait_key();
+        }
+        else
+        {
+            (void)inkey();
+        }
         screen_load();
+        if (monster_scene)
+            ui_information_scene_leave(&monster_scope);
     } else {
         bell("Monster information not available.");
     }
@@ -3453,11 +3470,14 @@ static void run_history_show_detail(const run_history_entry* entry)
     bool done = false;
     int term_hgt = 24;
     int term_wid = 80;
+    ui_information_scene_scope detail_scope;
+    bool scene_active = ui_information_scene_enter(&detail_scope);
 
     while (!done) {
         bool compact;
 
-        screen_save();
+        if (!scene_active)
+            screen_save();
         Term_clear();
 
         score_ui_get_term_size(&term_wid, &term_hgt);
@@ -3513,10 +3533,21 @@ static void run_history_show_detail(const run_history_entry* entry)
         }
 
         score_ui_put_fit(TERM_L_DARK, footer, term_hgt - 2, 0, term_wid);
-        Term_fresh();
 
-        int ch = inkey();
-        screen_load();
+        if (scene_active)
+        {
+            if (!ui_information_scene_present_term())
+            {
+                ui_information_scene_leave(&detail_scope);
+                scene_active = false;
+            }
+        }
+        if (!scene_active)
+            Term_fresh();
+
+        int ch = scene_active ? ui_information_scene_wait_key() : inkey();
+        if (!scene_active)
+            screen_load();
 
         switch (ch) {
         case ESCAPE:
@@ -3588,6 +3619,9 @@ static void run_history_show_detail(const run_history_entry* entry)
         }
         }
     }
+
+    if (scene_active)
+        ui_information_scene_leave(&detail_scope);
 
     if (have_details)
         score_runs_free_details(&details);

@@ -35,6 +35,21 @@ extern struct sound_config g_sound_config;
 
 #define COLOR_SAMPLE "###"
 
+/*
+ * Settings scene bridge: when an information scene scope is active, mirror
+ * the current Term contents into the scene and wait for input through the
+ * information scene channel.  Falls back to inkey() in legacy mode.
+ */
+static int settings_wait_key(void)
+{
+    if (ui_information_scene_is_active())
+    {
+        (void)ui_information_scene_present_term();
+        return ui_information_scene_wait_key();
+    }
+    return inkey();
+}
+
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
 
 static void dump_visual_pair(
@@ -1167,7 +1182,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 
         /* Get a key */
         inkey_set_cursor_hidden(true);
-        ch = inkey();
+        ch = settings_wait_key();
         inkey_set_cursor_hidden(false);
 
         /*
@@ -1924,7 +1939,7 @@ void do_cmd_pane_settings(void)
 
         /* Get key */
         inkey_set_cursor_hidden(true);
-        char ch = inkey();
+        char ch = settings_wait_key();
         inkey_set_cursor_hidden(false);
         
         /* Try to translate the key into a direction */
@@ -2314,7 +2329,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
         Term_putstr(2, 3, -1, TERM_WHITE, "No supporting panes are configured.");
         Term_putstr(2, Term->hgt - 1, -1, TERM_L_BLUE, "Press any key to return...");
         Term_fresh();
-        (void)inkey();
+        (void)settings_wait_key();
         screen_load();
         return;
     }
@@ -2386,7 +2401,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             Term_fresh();
 
             inkey_set_cursor_hidden(true);
-            char ch = inkey();
+            char ch = settings_wait_key();
             inkey_set_cursor_hidden(false);
 
             dir = target_dir(ch);
@@ -2604,7 +2619,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         Term_putstr(2, 3, -1, TERM_WHITE, "No supporting panes are configured.");
         Term_putstr(2, Term->hgt - 1, -1, TERM_L_BLUE, "Press any key to return...");
         Term_fresh();
-        (void)inkey();
+        (void)settings_wait_key();
         screen_load();
         return;
     }
@@ -2715,7 +2730,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         Term_fresh();
 
         inkey_set_cursor_hidden(true);
-        char ch = inkey();
+        char ch = settings_wait_key();
         inkey_set_cursor_hidden(false);
 
         dir = target_dir(ch);
@@ -3025,7 +3040,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
         Term_fresh();
 
         inkey_set_cursor_hidden(true);
-        char ch = inkey();
+        char ch = settings_wait_key();
         inkey_set_cursor_hidden(false);
 
         {
@@ -3251,7 +3266,7 @@ int options_menu(int* highlight)
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    ch = settings_wait_key();
     inkey_set_cursor_hidden(false);
 
     if ((ch == 'a') || (ch == 'A'))
@@ -3391,6 +3406,8 @@ void do_cmd_options(void)
     char ftmp[80];
 
     bool return_to_game = false;
+    ui_information_scene_scope settings_scope;
+    bool settings_scene = ui_information_scene_enter(&settings_scope);
 
     /* Clear any active banner before opening options */
     extern int g_banner_force_redraw_remaining;
@@ -3400,7 +3417,8 @@ void do_cmd_options(void)
     }
 
     /* Save screen */
-    screen_save();
+    if (!settings_scene)
+        screen_save();
 
     /* Clear screen */
     Term_clear();
@@ -3551,8 +3569,11 @@ void do_cmd_options(void)
     /* Flush messages */
     message_flush();
 
-    /* Load screen */
-    screen_load();
+    /* Clean up */
+    if (settings_scene)
+        ui_information_scene_leave(&settings_scope);
+    else
+        screen_load();
 }
 
 #ifdef ALLOW_MACROS
@@ -4002,7 +4023,7 @@ void do_cmd_keybinds(void)
                 term_w > 2 ? term_w - 2 : 0);
         
         /* Get input */
-        ch = inkey();
+        ch = settings_wait_key();
         
         /* Handle input */
         if (ch == ESCAPE || ch == 'q' || ch == 'Q')
@@ -4702,7 +4723,7 @@ void do_cmd_controller_settings(void)
         settings_ui_put_fitted(list_start_row + visible_rows + 2, 2, TERM_WHITE,
             compact_width ? "Saves on exit." : "Changes are saved on exit.");
 
-        char ch = inkey();
+        char ch = settings_wait_key();
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q' || (steamdeck && ch == steamdeck_back_key())) {
             done = true;
@@ -5162,7 +5183,7 @@ void do_cmd_macros(void)
         prt("Command: ", command_row, 0);
 
         /* Get a command */
-        ch = inkey();
+        ch = settings_wait_key();
 
         /* Leave */
         if (ch == ESCAPE)
@@ -5650,7 +5671,7 @@ void do_cmd_visuals(void)
         prt("Command: ", 15, 0);
 
         /* Prompt */
-        ch = inkey();
+        ch = settings_wait_key();
 
         /* Done */
         if (ch == ESCAPE)
@@ -6030,7 +6051,7 @@ void do_cmd_visuals(void)
                     0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
 
                 /* Get a command */
-                cx = inkey();
+                cx = settings_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6112,7 +6133,7 @@ void do_cmd_visuals(void)
                     0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
 
                 /* Get a command */
-                cx = inkey();
+                cx = settings_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6194,7 +6215,7 @@ void do_cmd_visuals(void)
                     0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
 
                 /* Get a command */
-                cx = inkey();
+                cx = settings_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6277,7 +6298,7 @@ void do_cmd_visuals(void)
                     0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
 
                 /* Get a command */
-                cx = inkey();
+                cx = settings_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6855,7 +6876,7 @@ void do_cmd_colors(void)
         prt("Command: ", 8, 0);
 
         /* Prompt */
-        ch = inkey();
+        ch = settings_wait_key();
 
         /* Done */
         if (ch == ESCAPE)

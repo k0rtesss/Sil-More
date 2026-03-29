@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -993,7 +994,13 @@ static void do_qual_squelch(void)
         move_cursor(2 + (index % rows_per_col), 1 + ((index / rows_per_col) * col_step));
 
         /* Get a key */
-        ch = inkey();
+        {
+            app_wait_scope squelch_scope;
+            app_session_push_wait_scope(app_session_current(), &squelch_scope,
+                APP_WAIT_REASON_LIST_SELECTION, 0, 0);
+            ch = inkey();
+            app_session_pop_wait_scope(app_session_current(), &squelch_scope);
+        }
 
         /* Analyze */
         switch (ch)

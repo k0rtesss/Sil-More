@@ -2988,7 +2988,13 @@ void do_cmd_view_map(void)
     Term_gotoxy(cx, cy);
 
     /* Get any key */
-    (void)inkey();
+    {
+        app_wait_scope scope;
+        app_session_push_wait_scope(app_session_current(), &scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        (void)inkey();
+        app_session_pop_wait_scope(app_session_current(), &scope);
+    }
 
     /* Load screen */
     screen_load();

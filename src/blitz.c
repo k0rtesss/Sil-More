@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-session.h"
 
 #include "blitz.h"
 #include "externs.h"
@@ -197,6 +198,12 @@ void blitz_show_end_summary(byte sil_count)
     c_put_str(TERM_L_WHITE, result_line, row, MAX((wid - (int)strlen(result_line)) / 2, 0));
     c_put_str(TERM_L_BLUE, "Press any key to continue.", MIN(row + 3, hgt - 1), 2);
     Term_fresh();
-    (void)inkey();
+    {
+        app_wait_scope scope;
+        app_session_push_wait_scope(app_session_current(), &scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        (void)inkey();
+        app_session_pop_wait_scope(app_session_current(), &scope);
+    }
     screen_load();
 }

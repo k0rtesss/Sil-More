@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
@@ -1016,7 +1017,13 @@ void do_cmd_spoilers(void)
         prt("Command: ", 13, 0);
 
         /* Get a choice */
-        ch = inkey();
+        {
+            app_wait_scope wiz_scope;
+            app_session_push_wait_scope(app_session_current(), &wiz_scope,
+                APP_WAIT_REASON_LIST_SELECTION, 0, 0);
+            ch = inkey();
+            app_session_pop_wait_scope(app_session_current(), &wiz_scope);
+        }
 
         /* Escape */
         if (ch == ESCAPE)

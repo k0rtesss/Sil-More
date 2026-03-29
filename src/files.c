@@ -10,6 +10,7 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -194,7 +195,13 @@ void do_cmd_suicide(void)
 
     prt("Please verify ABORTING by typing the '@' sign: ", 0, 0);
     flush();
-    ch = inkey();
+    {
+        app_wait_scope scope;
+        app_session_push_wait_scope(app_session_current(), &scope,
+            APP_WAIT_REASON_CONFIRM, 0, 0);
+        ch = inkey();
+        app_session_pop_wait_scope(app_session_current(), &scope);
+    }
     prt("", 0, 0);
     if (ch != '@')
         return;

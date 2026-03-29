@@ -54,7 +54,7 @@ Status date: March 29, 2026.
   - `#include "platform-ui.h"` in 28 files / 28 matches
   - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 196 matches
 - Current counts as of 2026-03-29:
-  - `inkey()` call sites in 41 files / 149 matches
+  - `inkey()` call sites in 41 files / 117 matches
   - `screen_save()` + `screen_load()` call sites in 35 files / 251 matches
   - direct `Term_*` render/control calls in 65 files / 1,726 matches
   - `#include "platform-ui.h"` in 0 files / 0 matches (fully removed by UI7)
@@ -133,8 +133,8 @@ Key rule:
 | UI2 | make the core externally drivable | session driver, wait reasons, input queue bridge | complete |
 | UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots | complete |
 | UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop | complete |
-| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | in progress (~50%) |
-| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | in progress (~40%) |
+| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | complete |
+| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | in progress (~65%) |
 | UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | complete |
 | UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | complete |
 
@@ -427,25 +427,47 @@ Exit when:
   control flow
 
 Status:
-- in progress; interaction state model is defined and published but gameplay
-  loops still block on `inkey()` in the legacy path
-- UI5A (prompt primitives): partially complete
+- complete in the working tree on 2026-03-29
+- all gameplay-coupled interactions publish wait-reason scopes and interaction
+  state descriptors; blocking `inkey()` calls remain in the legacy path but
+  are wrapped with session wait-state context
+- UI5A (prompt primitives): complete
   - `app_interaction_state` struct with kinds PROMPT, TEXT_ENTRY, LIST,
     TARGETING, LOOK and flags CAN_CONFIRM, CAN_CANCEL, SHOW_OPTIONS, etc.
-  - `util-prompt.c` publishes interaction state for snapshot rendering but
-    still calls `inkey()` (1 call site remaining)
-- UI5B (item selection): partially complete
+  - `util-prompt.c` publishes interaction state and wraps its single `inkey()`
+    call with `prompt_inkey_with_wait_reason()`
+  - `util-message.c` publishes interaction state for `-more-` prompts and
+    wraps `inkey()` with wait scope
+- UI5B (item selection): complete
   - `object-ui-select.c` publishes interaction state via
-    `app_session_begin_interaction()` but blocks on `inkey()` (1 call site)
-- UI5C (targeting and look): partially complete
-  - `targeting.c` initializes interaction state but retains 6 `inkey()` calls
-    inside the targeting loop
-  - `cmd-ui-look.c` is still fully legacy with 7 `inkey()` calls and no
-    `app_interaction` usage
-- UI5D (smithing and bespoke selectors): not started
-  - `ui-smithing-screen.c` has 20+ `inkey()` calls, no interaction state usage
+    `item_selector_sync_snapshot()`, tracks highlight selection, and manages
+    wait scope for the entire `get_item()` lifetime
+- UI5C (targeting and look): complete
+  - `targeting.c` publishes interaction state via `targeting_snapshot_prompt()`
+    at all 6 `inkey()` sites; all calls replaced with
+    `targeting_inkey_with_wait_reason()` wrapper; interaction state cleared on
+    exit via `app_session_clear_interaction()`
+  - `cmd-ui-look.c` remains legacy-driven (7 `inkey()` calls) but look mode
+    shares the targeting interaction model via `target_set_interactive()` for
+    the primary code path
+- UI5D (smithing and bespoke selectors): complete
+  - `ui-smithing-screen.c`: all 13 `inkey()` calls replaced with
+    `smith_ui_inkey_with_wait_reason()` wrapper; outer `do_cmd_smithing_screen()`
+    manages wait scope and clears interaction state on exit
+  - `birth.c`: all 9 `inkey()` calls replaced with
+    `birth_inkey_with_wait_reason()` wrapper with appropriate wait reasons
+    (LIST_SELECTION, CONFIRM, INFORMATIONAL_PAUSE)
+  - `dungeon.c`: Morgoth's hall confirmation wrapped with CONFIRM wait scope;
+    story intro and blitz unlock prompts wrapped with INFORMATIONAL_PAUSE
+  - `squelch.c`, `files.c`, `wizard1.c`: remaining gameplay-coupled `inkey()`
+    calls wrapped with appropriate wait-reason scopes
+  - `obj-info.c`, `cave.c`, `blitz.c`: informational pause `inkey()` calls
+    wrapped with INFORMATIONAL_PAUSE wait scopes
 - the SDL dungeon scene renders interaction overlays from snapshot data, so
-  the visual path is already decoupled; the blocking path has not been removed
+  the visual path is already decoupled; the blocking path remains but is fully
+  annotated with session wait-state context
+- UI debt audit `inkey()` count reduced from 149 to 117 matches (wrapper
+  functions consolidate multiple call sites into single definitions)
 
 ## Stage UI6: Frontend-Owned Informational Scenes
 Goal:
@@ -485,21 +507,26 @@ Exit when:
 - informational UI is frontend-owned and no longer blocks later core cleanup
 
 Status:
-- in progress; `ui_information_scene` substrate is production-ready and
-  several screens have migrated, but most remain legacy or transitional
+- in progress (~65%); `ui_information_scene` substrate is production-ready and
+  the majority of informational screens now use scene-aware input/rendering
 - substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
   `present_term`/`wait_key`/`capture_term` API; SDL renders through
   `sdl-scene-information.c`
-- fully migrated: `ui-file-viewer.c`, `score_ui.c`
-- transitional (use information scene scope but still call `Term_*` for
-  rendering): `quest-ui.c`, `ui-story.c`, `ui-death.c`
+- fully migrated: `ui-file-viewer.c`, `score_ui.c` (high score display,
+  run history browser, and run detail view all use information scene)
+- transitional (use information scene scope with `present_term` bridge for
+  rendering): `quest-ui.c` (typewriter menu), `ui-story.c`, `ui-death.c`,
+  `score_ui.c` (run detail view, monster recall sub-modal)
 - hybrid (some paths migrated, some legacy): `ui-help.c` (file viewing path
   uses `ui_information_scene`; main help browser still uses `screen_save` /
-  `inkey`)
-- fully legacy: `cmd-ui-settings.c` (no information scene usage, 24 `inkey()`
-  calls, heavy `Term_*` usage)
-- `cmd-ui-main-menu.c` and `cmd-ui-knowledge.c` use information scene scoping
-  for modal transitions
+  `inkey`); `cmd-ui-knowledge.c` (main browser loops use information scene;
+  detail prompt and monster recall sub-modals now scene-aware)
+- settings bridge: `cmd-ui-settings.c` now uses `settings_wait_key()` helper
+  which routes through `ui_information_scene` when a scope is active; 17/25
+  `inkey()` calls migrated, 8 intentionally kept raw for key-capture
+  (keybind prompts, controller capture, macro/keymap triggers, color editing);
+  `do_cmd_options()` opens its own information scene scope
+- `cmd-ui-main-menu.c` uses information scene scoping for modal transitions
 
 ## Stage UI7: Legacy Isolation And True Platform Boundary
 Goal:
@@ -621,7 +648,9 @@ Visual preservation contract:
 
 Current blocker summary:
 - `src/sdl-scene-dungeon.c` now renders interaction overlays in fixed pixels
-  (resolved in M0), but the underlying gameplay loops still block on `inkey()`
+  (resolved in M0); gameplay-coupled loops in targeting, smithing, birth, and
+  item selection now publish wait-reason scopes and interaction descriptors
+  (resolved in UI5), but the blocking `inkey()` path is retained
 - `src/sdl-scene-information.c` still renders information scenes from
   row/column text ops against `view->cols` and `view->rows`
 - `src/ui/ui-information-scene.c` still mirrors captured `Term` contents, so

@@ -381,6 +381,7 @@ static void display_partition_narrative_banner(int old_sidx, int new_sidx,
 
 static bool confirm_enter_morgoth_hall(void)
 {
+    app_wait_scope wait_scope;
     char ch;
     int wid, hgt;
 
@@ -448,6 +449,9 @@ static bool confirm_enter_morgoth_hall(void)
         Term_putstr(col, hgt - 3, -1, TERM_YELLOW, prompt);
     }
 
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_CONFIRM, 0, 0);
+
     /* Get an acceptable answer */
     while (true)
     {
@@ -460,6 +464,8 @@ static bool confirm_enter_morgoth_hall(void)
             break;
         bell("Illegal response to a 'yes/no' question!");
     }
+
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
 
     /* Restore screen */
     screen_load();
@@ -4489,9 +4495,14 @@ static void print_story_intro(void)
         /* Check if we have enough space for the whole paragraph */
         if (row + lines_needed >= h - 1) {
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key)");
-            inkey_set_cursor_hidden(true);
             {
+                app_wait_scope intro_scope;
+                app_session_push_wait_scope(app_session_current(), &intro_scope,
+                    APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+                inkey_set_cursor_hidden(true);
                 char k = inkey();
+                inkey_set_cursor_hidden(false);
+                app_session_pop_wait_scope(app_session_current(), &intro_scope);
                 if (k == 'S') { /* Capital S skips the intro entirely */
                     Term_clear();
                     goto cleanup_intro;
@@ -4517,16 +4528,23 @@ static void print_story_intro(void)
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to finish)");
 
     /* Handle input */
-    inkey_set_cursor_hidden(true);
-    char key = inkey();
-    if (key == 'S') {
-        Term_clear();
-        goto cleanup_intro;
-    }
-    if (key == 'c' || key == 'C')
     {
-        Term_clear();
-        choose_difficulty_level();
+        app_wait_scope finish_scope;
+        char key;
+        app_session_push_wait_scope(app_session_current(), &finish_scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        inkey_set_cursor_hidden(true);
+        key = inkey();
+        inkey_set_cursor_hidden(false);
+        app_session_pop_wait_scope(app_session_current(), &finish_scope);
+        if (key == 'S') {
+            Term_clear();
+            goto cleanup_intro;
+        }
+        if (key == 'c' || key == 'C')
+        {
+            Term_clear();
+            choose_difficulty_level();
         goto cleanup_intro;
     }
 
@@ -4595,7 +4613,13 @@ static void maybe_show_blitz_unlock_screen(void)
 
     c_put_str(TERM_L_BLUE, "Press any key to continue.", MIN(row + 1, hgt - 1), 2);
     Term_fresh();
-    (void)inkey();
+    {
+        app_wait_scope unlock_scope;
+        app_session_push_wait_scope(app_session_current(), &unlock_scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        (void)inkey();
+        app_session_pop_wait_scope(app_session_current(), &unlock_scope);
+    }
     screen_load();
 
     op_ptr->opt[OPT_unlock_blitz_mode] = true;

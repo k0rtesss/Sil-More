@@ -9,12 +9,28 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "object/object-ui-select.h"
 #include "ui/smithing/ui-smithing-internal.h"
 #include "externs.h"
 #include "log/log.h"
 
 static int smith_ui_last_desc_row = -1;
+
+static char smith_ui_inkey_with_wait_reason(void)
+{
+    app_wait_scope scope;
+    app_session* session = app_session_current();
+    char ch;
+
+    app_session_push_wait_scope(session, &scope,
+        APP_WAIT_REASON_LIST_SELECTION, 0, 0);
+    inkey_set_cursor_hidden(true);
+    ch = inkey();
+    inkey_set_cursor_hidden(false);
+    app_session_pop_wait_scope(session, &scope);
+    return ch;
+}
 
 static int smith_ui_term_wid(void)
 {
@@ -1858,9 +1874,7 @@ int create_sval_menu_aux(int tval, int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     if ((ch >= 'a') && (ch <= (char)'a' + MAX_SMITHING_TVALS - 1))
     {
@@ -2008,9 +2022,7 @@ int create_tval_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + MAX_SMITHING_TVALS - 1))
@@ -2464,9 +2476,7 @@ int numbers_menu_aux(int* highlight)
     Term_gotoxy(2, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + SMT_NUM_MENU_MAX - 1))
@@ -2782,9 +2792,7 @@ static int smith_bonus_menu_aux(int* highlight)
         Term_putstr(COL_SMT2, 3, -1, TERM_L_DARK,
             "(No editable special bonuses on this item.)");
         Term_fresh();
-        inkey_set_cursor_hidden(true);
-        (void)inkey();
-        inkey_set_cursor_hidden(false);
+        (void)smith_ui_inkey_with_wait_reason();
         return -1;
     }
 
@@ -2870,9 +2878,7 @@ static int smith_bonus_menu_aux(int* highlight)
     Term_fresh();
     Term_gotoxy(2, hl_row);
 
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     if ((ch == '4') || (ch == ESCAPE))
         return -1;
@@ -3178,9 +3184,7 @@ static int reforge_prefix_menu(const object_type* source)
             Term_putstr(COL_SMT2, 3, -1, TERM_L_DARK,
                 "(No legal prefixes available.)");
             Term_fresh();
-            inkey_set_cursor_hidden(true);
-            (void)inkey();
-            inkey_set_cursor_hidden(false);
+            (void)smith_ui_inkey_with_wait_reason();
             screen_load();
             return 0;
         }
@@ -3199,9 +3203,7 @@ static int reforge_prefix_menu(const object_type* source)
         Term_fresh();
         Term_gotoxy(14, 1 + highlight);
 
-        inkey_set_cursor_hidden(true);
-        ch = inkey();
-        inkey_set_cursor_hidden(false);
+        ch = smith_ui_inkey_with_wait_reason();
 
         if ((ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
         {
@@ -3401,9 +3403,7 @@ static int enchant_menu_aux(int* highlight, int fixed_prefix, int fixed_suffix,
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     /* Choose by letter */
     if ((ch >= 'a') && (ch <= (char)'a' + entry_count - 1))
@@ -3850,9 +3850,7 @@ int artefact_flag_menu_aux(int category, int* highlight)
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     /* Abort if there are no choices */
     if (num == 0)
@@ -4279,9 +4277,7 @@ int artefact_ability_menu_aux(int skill, int* highlight)
     Term_gotoxy(14, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     /* Abort if there are no choices */
     if (num == 0)
@@ -4550,9 +4546,7 @@ int artefact_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     /* Choose by letter */
     if ((ch >= 'a') && (ch <= (char)'a' + num - 1))
@@ -4748,9 +4742,7 @@ int melt_menu_aux(int* highlight)
     Term_gotoxy(14, smith_ui_dense_highlight_row(*highlight));
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + num - 1))
@@ -5160,9 +5152,7 @@ int smithing_menu_aux(int* highlight)
     Term_gotoxy(2, 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    ch = smith_ui_inkey_with_wait_reason();
 
     // choose an option by letter
     if ((ch >= 'a') && (ch <= (char)'a' + SMT_MENU_MAX - 1))
@@ -5224,10 +5214,14 @@ int smithing_menu_aux(int* highlight)
  */
 void do_cmd_smithing_screen(void)
 {
+    app_wait_scope wait_scope;
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;
     bool create = false;
+
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_LIST_SELECTION, 0, 0);
 
     // if (!cave_forge_bold(p_ptr->py, p_ptr->px))
     //{
@@ -5460,6 +5454,8 @@ void do_cmd_smithing_screen(void)
     /* Load screen */
     smith_ui_reset_description_state();
     screen_load();
+    app_session_clear_interaction(app_session_current());
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 
 /*
