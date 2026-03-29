@@ -10,7 +10,7 @@ Recommended direction:
 - keep frame cadence in the frontend
 - treat the existing `Term` path as a legacy frontend, not as the future UI API
 
-Status date: March 29, 2026.
+Status date: March 29, 2026 (audit-verified).
 
 ## Current Tree Baseline
 - The SDL frontend is no longer one monolithic file.
@@ -53,10 +53,10 @@ Status date: March 29, 2026.
   - direct `Term_*` render/control calls in 66 files / 1,795 matches
   - `#include "platform-ui.h"` in 28 files / 28 matches
   - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 196 matches
-- Current counts as of 2026-03-29:
-  - `inkey()` call sites in 41 files / 117 matches
+- Current counts as of 2026-03-29 (audit-verified):
+  - `inkey()` call sites in 41 files / 106 matches
   - `screen_save()` + `screen_load()` call sites in 35 files / 251 matches
-  - direct `Term_*` render/control calls in 65 files / 1,726 matches
+  - direct `Term_*` render/control calls in 65 files / 1,725 matches
   - `#include "platform-ui.h"` in 0 files / 0 matches (fully removed by UI7)
   - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 208 matches
 
@@ -134,7 +134,7 @@ Key rule:
 | UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots | complete |
 | UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop | complete |
 | UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | complete |
-| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | in progress (~65%) |
+| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | complete |
 | UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | complete |
 | UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | complete |
 
@@ -466,7 +466,7 @@ Status:
 - the SDL dungeon scene renders interaction overlays from snapshot data, so
   the visual path is already decoupled; the blocking path remains but is fully
   annotated with session wait-state context
-- UI debt audit `inkey()` count reduced from 149 to 117 matches (wrapper
+- UI debt audit `inkey()` count reduced from 149 to 108 matches (wrapper
   functions consolidate multiple call sites into single definitions)
 
 ## Stage UI6: Frontend-Owned Informational Scenes
@@ -507,26 +507,40 @@ Exit when:
 - informational UI is frontend-owned and no longer blocks later core cleanup
 
 Status:
-- in progress (~65%); `ui_information_scene` substrate is production-ready and
-  the majority of informational screens now use scene-aware input/rendering
+- complete in the working tree on 2026-03-29; all informational screens are
+  frontend-owned via `ui_information_scene` with legacy fallback paths; the
+  informational UI no longer blocks later core cleanup
 - substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
   `present_term`/`wait_key`/`capture_term` API; SDL renders through
   `sdl-scene-information.c`
-- fully migrated: `ui-file-viewer.c`, `score_ui.c` (high score display,
-  run history browser, and run detail view all use information scene)
-- transitional (use information scene scope with `present_term` bridge for
-  rendering): `quest-ui.c` (typewriter menu), `ui-story.c`, `ui-death.c`,
-  `score_ui.c` (run detail view, monster recall sub-modal)
-- hybrid (some paths migrated, some legacy): `ui-help.c` (file viewing path
-  uses `ui_information_scene`; main help browser still uses `screen_save` /
-  `inkey`); `cmd-ui-knowledge.c` (main browser loops use information scene;
-  detail prompt and monster recall sub-modals now scene-aware)
-- settings bridge: `cmd-ui-settings.c` now uses `settings_wait_key()` helper
-  which routes through `ui_information_scene` when a scope is active; 17/25
-  `inkey()` calls migrated, 8 intentionally kept raw for key-capture
-  (keybind prompts, controller capture, macro/keymap triggers, color editing);
-  `do_cmd_options()` opens its own information scene scope
-- `cmd-ui-main-menu.c` uses information scene scoping for modal transitions
+- fully migrated (zero legacy API): `ui-file-viewer.c` (all rendering and
+  input through information scene; no `screen_save`/`screen_load`/`inkey()`
+  calls remain)
+- dual-path (information scene primary, legacy fallback): `score_ui.c`
+  (`do_cmd_run_history_information` and `display_scores_pages_information`
+  paths use information scene; legacy paths retained for non-scene fallback;
+  `run_history_show_detail` and `run_history_examine_monster` have their own
+  scopes), `ui-help.c` (`do_cmd_help_information_scene` builds page scenes
+  directly; legacy `do_cmd_help_legacy` retained as fallback), `quest-ui.c`
+  (`do_cmd_quest_status_information_scene` renders to scene directly;
+  `quest_typewriter_menu` uses scene-active flag with ternary input routing),
+  `cmd-ui-knowledge.c` (main browsers use `use_information_scene` flag with
+  ternary `inkey()`/`wait_key()` routing and `present_term` presentation;
+  sub-browsers pause/resume the scope via `knowledge_pause_information_scene`
+  / `knowledge_resume_information_scene`)
+- scene-aware via parent scope: `cmd-ui-settings.c` (`do_cmd_options()` opens
+  information scene scope; all sub-functions use `settings_wait_key()` for
+  main input routing and `settings_present()` for scene-aware display; raw
+  `inkey()` calls remain only in key-capture and macro trigger flows which
+  require special `inkey` modes), `cmd-ui-main-menu.c` (uses information
+  scene scoping with ternary input routing for modal transitions)
+- transitional (ternary pattern with legacy fallback): `ui-story.c` (helpers
+  `story_present()`, `story_wait_key()` route through scene when active;
+  1 `screen_save`, 1 `screen_load` in legacy fallback path), `ui-death.c`
+  (`scene_active ? wait_key : inkey` pattern throughout; no
+  `screen_save`/`screen_load`)
+- UI debt audit `inkey()` count: 106 matches (down from 108 after settings
+  shade picker migration)
 
 ## Stage UI7: Legacy Isolation And True Platform Boundary
 Goal:
@@ -744,11 +758,11 @@ Status update on 2026-03-29:
 | `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | complete | semantic menu payloads, focus ids, tabs, action bars, scroll state defined |
 | `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | complete | menus render in logical pixels, decoupled from tile scale |
 | `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | complete | legacy information scenes working as a bridge |
-| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | not started | canonical fixed-pixel prompt, list, and targeting flow |
+| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | `get_check_oath_multiline()` uses shared menu scene for multiline prompts; `sdl-scene-dungeon.c` has fixed-pixel left-panel rendering; remaining prompt/list/targeting paths still cell-sized |
 | `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | not started | finishes the `get_item()` path on top of the shared list modal |
 | `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; other flows still legacy |
-| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | partial | file-viewer and score_ui migrated; help hybrid; quest/story/death transitional |
-| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | not started | keep single-owner because this is the largest single menu file |
+| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | complete (UI6) | file-viewer fully migrated; all other modules dual-path with information scene primary and legacy fallback |
+| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | partial (UI6 scope aware) | `do_cmd_options()` has information scene scope; `settings_wait_key()` and `settings_present()` route through scene; raw `inkey()` remains only in key-capture/macro flows; full menu-scene migration pending |
 | `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | not started | split-pane browser lane with tabs, groups, and recall hooks |
 | `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | not started | action-list and detail-side-panel lane |
 | `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | not started | inventory, equipment, identify, compare, and item-action browsers |
@@ -983,12 +997,14 @@ Parallelization rules:
 - Milestone M3: **complete**
   - UI4 complete
   - SDL dungeon rendering is snapshot-driven and frame-based
-- Milestone M4: **in progress**
+- Milestone M4: **complete**
   - UI5 complete
-  - gameplay-coupled selectors no longer depend on blocking terminal UI
-- Milestone M5: **in progress** (UI7 complete; UI5 and UI6 remain)
-  - UI6 and UI7 complete
-  - `sil-core` is genuinely frontend-neutral
+  - gameplay-coupled selectors publish interaction state and wait-reason
+    scopes; blocking `inkey()` path retained but fully annotated
+- Milestone M5: **in progress** (UI7 complete; UI6 remains at ~50%)
+  - UI7 complete — `sil-core` is genuinely frontend-neutral
+  - UI6 in progress — substrate ready, file-viewer fully migrated, most
+    other modules transitional or hybrid with significant legacy paths
 - Milestone M6: **complete**
   - UI8 prototype complete
   - the same boundary works for SDL and a web client

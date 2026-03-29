@@ -50,6 +50,19 @@ static int settings_wait_key(void)
     return inkey();
 }
 
+/*
+ * Scene-aware Term_fresh: present through the information scene when a
+ * scope is active so prompts are visible on the SDL scene renderer path.
+ * Falls back to Term_fresh() in legacy mode.
+ */
+static void settings_present(void)
+{
+    if (ui_information_scene_is_active())
+        (void)ui_information_scene_present_term();
+    else
+        Term_fresh();
+}
+
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
 
 static void dump_visual_pair(
@@ -4086,7 +4099,7 @@ void do_cmd_keybinds(void)
                 settings_ui_pick_label(row_width, prompt_long, prompt_short,
                     prompt_short));
             settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-            Term_fresh();
+            settings_present();
             
             /* Get the key to bind */
             flush();
@@ -4788,7 +4801,7 @@ void do_cmd_controller_settings(void)
                     settings_ui_pick_label(row_width, prompt_long, prompt_medium,
                         prompt_short));
                 settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-                Term_fresh();
+                settings_present();
 
                 flush();
                 if (!sdl_gamepad_capture_begin()) {
@@ -5521,7 +5534,7 @@ static void askfor_shade(byte* attr, int y)
         Term_gotoxy(strlen(msg), y);
 
         /* Get a command */
-        ch = inkey();
+        ch = settings_wait_key();
 
         /* Cancel */
         if (ch == ESCAPE)
@@ -5588,7 +5601,7 @@ static void askfor_shade(byte* attr, int y)
         Term_gotoxy(strlen(msg), y);
 
         /* Get a command */
-        ch = inkey();
+        ch = settings_wait_key();
 
         /* Cancel */
         if (ch == ESCAPE)

@@ -4545,7 +4545,8 @@ static void print_story_intro(void)
         {
             Term_clear();
             choose_difficulty_level();
-        goto cleanup_intro;
+            goto cleanup_intro;
+        }
     }
 
     Term_clear();
