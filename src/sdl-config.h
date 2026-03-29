@@ -15,6 +15,8 @@ struct sdl_config {
     // Default supporting-pane font size. Zero means auto from the main pane's
     // visible font/cell height.
     int aux_view_font_size;
+    // Fixed-pixel menu and classic left-panel font size. Zero means auto.
+    int menu_panel_font_size;
     int margin;
     bool fullscreen;
     bool tiles;

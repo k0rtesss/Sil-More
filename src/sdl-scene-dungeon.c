@@ -39,7 +39,20 @@ typedef struct sdl_scene_ui_font_cache {
     char path[1024];
 } sdl_scene_ui_font_cache;
 
+typedef struct sdl_scene_panel_metrics {
+    int pixel_height;
+    int cell_w;
+    int cell_h;
+    int panel_w;
+    int panel_h;
+} sdl_scene_panel_metrics;
+
 static sdl_scene_ui_font_cache g_sdl_scene_ui_font_cache;
+
+static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
+    const SDL_FRect* dst);
+static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
+    float y_px, int cell_w, int cell_h, SDL_Color color, char ch);
 
 static SDL_Color sdl_scene_color(byte attr)
 {
@@ -199,24 +212,8 @@ static TTF_Font* sdl_scene_ui_font_for_height(int pixel_height)
 
 static int sdl_scene_interaction_font_size_logical(const sdl_view* view)
 {
-    int logical_size;
-    int canvas_h = 0;
-
-    if (config.aux_view_font_size > 0)
-        return config.aux_view_font_size;
-
-    if (view)
-        canvas_h = view->rows * view->cell_h;
-
-    logical_size = 24;
-    if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(420.0f))
-        logical_size = 16;
-    else if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(540.0f))
-        logical_size = 18;
-    else if (canvas_h > 0 && canvas_h < sdl_scene_ui_scale_px(700.0f))
-        logical_size = 20;
-
-    return logical_size;
+    (void)view;
+    return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
 }
 
 static int sdl_scene_measure_ui_text(TTF_Font* font, cptr text)
@@ -227,6 +224,19 @@ static int sdl_scene_measure_ui_text(TTF_Font* font, cptr text)
         return 0;
 
     if (!TTF_MeasureString(font, text, 0, 0, &measured_w, NULL))
+        return 0;
+
+    return measured_w;
+}
+
+static int sdl_scene_measure_font_text_n(TTF_Font* font, cptr text, size_t len)
+{
+    int measured_w = 0;
+
+    if (!font || !text || len == 0)
+        return 0;
+
+    if (!TTF_MeasureString(font, text, len, 0, &measured_w, NULL))
         return 0;
 
     return measured_w;
@@ -262,6 +272,273 @@ static void sdl_scene_render_ui_text(TTF_Font* font, float x_px, float y_px,
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
     SDL_DestroyTexture(texture);
     SDL_DestroySurface(surface);
+}
+
+static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
+    SDL_Color color, cptr text, size_t len, int target_h, float max_w_px)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    char buf[APP_DUNGEON_PANE_TEXT_MAX + 1];
+    int advance_w;
+    float scale = 1.0f;
+    size_t copy_len = len;
+
+    if (!font || !text || len == 0)
+        return 0;
+
+    if (copy_len >= sizeof(buf))
+        copy_len = sizeof(buf) - 1;
+    memcpy(buf, text, copy_len);
+    buf[copy_len] = '\0';
+
+    surface = TTF_RenderText_Blended(font, buf, 0, color);
+    if (!surface)
+        return 0;
+
+    advance_w = sdl_scene_measure_font_text_n(font, buf, copy_len);
+    dst.x = x_px;
+    dst.y = y_px;
+    dst.w = (float)surface->w;
+    dst.h = (float)surface->h;
+
+    if (target_h > 0 && surface->h > 0)
+    {
+        scale = (float)target_h / (float)surface->h;
+        dst.w *= scale;
+        dst.h = (float)target_h;
+        advance_w = (int)((float)advance_w * scale + 0.5f);
+    }
+
+    if (max_w_px > 0.0f)
+    {
+        if (dst.w > max_w_px)
+            dst.w = max_w_px;
+        if ((float)advance_w > max_w_px)
+            advance_w = (int)max_w_px;
+    }
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (texture)
+    {
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        SDL_DestroyTexture(texture);
+    }
+
+    SDL_DestroySurface(surface);
+    return advance_w;
+}
+
+static void sdl_scene_render_fixed_panel_text_cells(float x_px, float y_px,
+    int cell_w, int cell_h, TTF_Font* font, SDL_Color color, cptr text,
+    size_t len)
+{
+    size_t i;
+
+    if (!font || !text || len == 0 || cell_w <= 0 || cell_h <= 0)
+        return;
+
+    for (i = 0; i < len; i++)
+    {
+        sdl_scene_render_fixed_panel_glyph(font, x_px + (float)(i * cell_w),
+            y_px, cell_w, cell_h, color, text[i]);
+    }
+}
+
+static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
+    float y_px, int cell_w, int cell_h, SDL_Color color, char ch)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    char glyph[2] = { ch ? ch : ' ', '\0' };
+    float dst_w;
+    float dst_h;
+
+    if (!font || !glyph[0] || glyph[0] == ' ' || cell_w <= 0 || cell_h <= 0)
+        return;
+
+    surface = TTF_RenderText_Blended(font, glyph, 0, color);
+    if (!surface)
+        return;
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (!texture)
+    {
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    dst_w = (float)surface->w;
+    dst_h = (float)surface->h;
+    if (dst_h > (float)cell_h && dst_h > 0.0f)
+    {
+        float scale = (float)cell_h / dst_h;
+
+        dst_w *= scale;
+        dst_h = (float)cell_h;
+    }
+    if (dst_w > (float)cell_w)
+        dst_w = (float)cell_w;
+
+    dst.x = x_px + ((float)cell_w - dst_w) * 0.5f;
+    dst.y = y_px;
+    dst.w = dst_w;
+    dst.h = dst_h;
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+    SDL_DestroySurface(surface);
+}
+
+static bool sdl_scene_left_panel_metrics_for_height(const sdl_view* view,
+    const sdl_scene_layout* layout, int cols, int rows, int pixel_height,
+    sdl_scene_panel_metrics* metrics, TTF_Font** out_story_font,
+    TTF_Font** out_mono_font)
+{
+    TTF_Font* story_font;
+    TTF_Font* mono_font;
+    int available_w;
+    int available_h;
+    int cell_w;
+    int cell_h;
+
+    if (!view || !layout || !metrics || !out_story_font || !out_mono_font)
+        return false;
+    if (cols <= 0 || rows <= 0 || pixel_height <= 0)
+        return false;
+
+    available_w = layout->col_map * view->cell_w;
+    available_h = view->rows * view->cell_h;
+    if (available_w <= 0 || available_h <= 0)
+        return false;
+
+    story_font = sdl_story_font_for_height(pixel_height);
+    mono_font = sdl_scene_ui_font_for_height(pixel_height);
+    if (!story_font || !mono_font)
+        return false;
+
+    cell_h = pixel_height;
+    cell_w = MAX(1, pixel_height / 2);
+
+    if ((cols * cell_w) > available_w || (rows * cell_h) > available_h)
+        return false;
+
+    metrics->pixel_height = pixel_height;
+    metrics->cell_w = cell_w;
+    metrics->cell_h = cell_h;
+    metrics->panel_w = cols * cell_w;
+    metrics->panel_h = rows * cell_h;
+    *out_story_font = story_font;
+    *out_mono_font = mono_font;
+    return true;
+}
+
+static bool sdl_scene_resolve_left_panel_metrics(const sdl_view* view,
+    const sdl_scene_layout* layout, int cols, int rows,
+    sdl_scene_panel_metrics* metrics, TTF_Font** out_story_font,
+    TTF_Font** out_mono_font)
+{
+    int desired_px;
+    int min_px;
+    int pixel_height;
+
+    if (!view || !layout || !metrics || !out_story_font || !out_mono_font)
+        return false;
+    if (cols <= 0 || rows <= 0)
+        return false;
+
+    desired_px = sdl_scene_ui_scale_px(
+        (float)sdl_scene_interaction_font_size_logical(view));
+    min_px = sdl_scene_ui_scale_px(10.0f);
+    if (min_px < 10)
+        min_px = 10;
+    if (desired_px < min_px)
+        desired_px = min_px;
+
+    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
+    {
+        if (sdl_scene_left_panel_metrics_for_height(view, layout, cols, rows,
+                pixel_height, metrics, out_story_font, out_mono_font))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static int sdl_scene_left_panel_max_reserved_cols(const sdl_view* view,
+    const sdl_scene_layout* layout)
+{
+    int min_map_cols;
+    int max_reserved_cols;
+
+    if (!view || !layout || view->cols <= 1)
+        return layout ? layout->col_map : 0;
+
+    min_map_cols = (view->cols < 60) ? 20 : 30;
+    if (view->cols <= min_map_cols)
+        min_map_cols = MAX(1, view->cols / 2);
+
+    max_reserved_cols = view->cols - min_map_cols;
+    if (max_reserved_cols < layout->col_map)
+        max_reserved_cols = layout->col_map;
+    if (max_reserved_cols > view->cols - 1)
+        max_reserved_cols = view->cols - 1;
+    if (max_reserved_cols < 1)
+        max_reserved_cols = 1;
+
+    return max_reserved_cols;
+}
+
+static int sdl_scene_left_panel_reserved_cols(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_panes_snapshot* panes)
+{
+    TTF_Font* story_font = NULL;
+    TTF_Font* mono_font = NULL;
+    sdl_scene_layout probe_layout;
+    sdl_scene_panel_metrics metrics;
+    int max_reserved_cols;
+    int rows;
+    int cols;
+    int reserved_cols;
+
+    if (!view || !layout || !panes || view->cell_w <= 0)
+        return layout ? layout->col_map : 0;
+    if (layout->hide_left_panel || panes->left_panel_rows == 0
+        || panes->left_panel_cols == 0)
+    {
+        return layout->col_map;
+    }
+
+    rows = panes->left_panel_rows;
+    cols = panes->left_panel_cols;
+    if (rows > view->rows)
+        rows = view->rows;
+    if (rows <= 0 || cols <= 0)
+        return layout->col_map;
+
+    max_reserved_cols = sdl_scene_left_panel_max_reserved_cols(view, layout);
+    probe_layout = *layout;
+    probe_layout.col_map = max_reserved_cols;
+
+    if (!sdl_scene_resolve_left_panel_metrics(view, &probe_layout, cols, rows,
+            &metrics, &story_font, &mono_font))
+    {
+        return layout->col_map;
+    }
+
+    reserved_cols = (metrics.panel_w + view->cell_w - 1) / view->cell_w;
+    if (reserved_cols < 1)
+        reserved_cols = 1;
+    if (reserved_cols > max_reserved_cols)
+        reserved_cols = max_reserved_cols;
+
+    return reserved_cols;
 }
 
 static void sdl_scene_interaction_format_line(char* line, size_t line_size,
@@ -569,10 +846,180 @@ static void sdl_scene_render_packed_story_row(const sdl_view* view,
     }
 }
 
+static void sdl_scene_render_fixed_left_panel_row(float x_px, float y_px,
+    int cols, int cell_w, int cell_h, TTF_Font* story_font,
+    TTF_Font* mono_font, const app_panel_cell_snapshot* cells)
+{
+    int x = 0;
+
+    if (!cells || cols <= 0 || cell_w <= 0 || cell_h <= 0)
+        return;
+
+    sdl_scene_fill_rect(&(SDL_FRect){
+        .x = x_px,
+        .y = y_px,
+        .w = (float)(cols * cell_w),
+        .h = (float)cell_h
+    }, (SDL_Color){ 0, 0, 0, 255 });
+
+    while (x < cols)
+    {
+        if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+        {
+            SDL_FRect dst = {
+                .x = x_px + (float)(x * cell_w),
+                .y = y_px,
+                .w = (float)cell_w,
+                .h = (float)cell_h
+            };
+            byte ch = (byte)cells[x].ch;
+
+            if (g_state.use_tiles && g_state.tileset
+                && (cells[x].attr & TILE_FLAG) && (ch & TILE_FLAG))
+            {
+                sdl_scene_draw_tile(g_state.tileset, cells[x].attr, ch, &dst);
+            }
+            else if (cells[x].ch && cells[x].ch != ' ')
+            {
+                sdl_scene_render_fixed_panel_glyph(mono_font, dst.x, dst.y,
+                    cell_w, cell_h, sdl_scene_color(cells[x].attr), cells[x].ch);
+            }
+            x++;
+            continue;
+        }
+
+        {
+            byte flags = cells[x].story;
+            bool use_story = (flags & STORY_FLAG_USE) != 0;
+            bool grid_align = (flags & STORY_FLAG_CELL_ALIGN) != 0;
+            byte attr = cells[x].attr;
+            int run_start = x;
+
+            if (!use_story)
+            {
+                char text[APP_DUNGEON_PANE_TEXT_MAX + 1];
+                int run_len;
+
+                while (x < cols)
+                {
+                    if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                        break;
+                    if ((cells[x].story & STORY_FLAG_USE) != 0
+                        || cells[x].attr != attr)
+                    {
+                        break;
+                    }
+                    x++;
+                }
+
+                run_len = x - run_start;
+                if (run_len >= (int)sizeof(text))
+                    run_len = (int)sizeof(text) - 1;
+                for (int i = 0; i < run_len; i++)
+                    text[i] = cells[run_start + i].ch ? cells[run_start + i].ch : ' ';
+                text[run_len] = '\0';
+
+                sdl_scene_render_fixed_panel_text_cells(
+                    x_px + (float)(run_start * cell_w), y_px, cell_w, cell_h,
+                    mono_font, sdl_scene_color(attr), text, (size_t)run_len);
+                continue;
+            }
+
+            if (grid_align)
+            {
+                while (x < cols)
+                {
+                    if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                        break;
+                    if ((cells[x].story & STORY_FLAG_USE) == 0
+                        || (cells[x].story & STORY_FLAG_CELL_ALIGN) == 0
+                        || cells[x].attr != attr)
+                    {
+                        break;
+                    }
+                    x++;
+                }
+
+                for (int i = run_start; i < x; i++)
+                {
+                    if (!cells[i].ch || cells[i].ch == ' ')
+                        continue;
+                    sdl_scene_render_fixed_panel_glyph(story_font,
+                        x_px + (float)(i * cell_w), y_px, cell_w, cell_h,
+                        sdl_scene_color(cells[i].attr), cells[i].ch);
+                }
+                continue;
+            }
+
+            while (x < cols)
+            {
+                if (!sdl_scene_story_cell_is_text(cells[x].attr, cells[x].ch))
+                    break;
+                if ((cells[x].story & STORY_FLAG_USE) == 0
+                    || (cells[x].story & STORY_FLAG_CELL_ALIGN) != 0)
+                {
+                    break;
+                }
+                x++;
+            }
+
+            {
+                float px_cursor = x_px + (float)(run_start * cell_w);
+                float px_end = x_px + (float)(x * cell_w);
+                int seg = run_start;
+
+                while (seg < x)
+                {
+                    byte seg_attr;
+                    int seg_end;
+                    char text[APP_DUNGEON_PANE_TEXT_MAX + 1];
+                    int seg_len;
+
+                    if (!sdl_scene_story_cell_is_text(cells[seg].attr,
+                            cells[seg].ch))
+                    {
+                        seg++;
+                        continue;
+                    }
+
+                    seg_attr = cells[seg].attr;
+                    seg_end = seg + 1;
+                    while (seg_end < x
+                        && sdl_scene_story_cell_is_text(cells[seg_end].attr,
+                            cells[seg_end].ch)
+                        && cells[seg_end].attr == seg_attr)
+                    {
+                        seg_end++;
+                    }
+
+                    seg_len = seg_end - seg;
+                    if (seg_len >= (int)sizeof(text))
+                        seg_len = (int)sizeof(text) - 1;
+                    for (int i = 0; i < seg_len; i++)
+                        text[i] = cells[seg + i].ch ? cells[seg + i].ch : ' ';
+                    text[seg_len] = '\0';
+
+                    if (px_end - px_cursor <= 0.0f)
+                        break;
+
+                    px_cursor += (float)sdl_scene_render_text_run_px(story_font,
+                        px_cursor, y_px, sdl_scene_color(seg_attr), text,
+                        (size_t)seg_len, cell_h, px_end - px_cursor);
+                    seg = seg_end;
+                }
+            }
+        }
+    }
+}
+
 static void sdl_scene_render_left_panel(const sdl_view* view,
     const sdl_scene_layout* layout, const app_panes_snapshot* panes)
 {
     TTF_Font* font;
+    TTF_Font* story_font;
+    TTF_Font* mono_font;
+    sdl_scene_panel_metrics metrics;
+    SDL_Rect clip_rect;
     int rows;
     int cols;
 
@@ -585,10 +1032,32 @@ static void sdl_scene_render_left_panel(const sdl_view* view,
     cols = panes->left_panel_cols;
     if (rows > view->rows)
         rows = view->rows;
-    if (cols > layout->col_map)
-        cols = layout->col_map;
     if (cols <= 0)
         return;
+
+    if (sdl_scene_resolve_left_panel_metrics(view, layout, cols, rows, &metrics,
+            &story_font, &mono_font))
+    {
+        clip_rect.x = 0;
+        clip_rect.y = 0;
+        clip_rect.w = metrics.panel_w;
+        clip_rect.h = metrics.panel_h;
+
+        sdl_scene_fill_rect(&(SDL_FRect){
+            .x = 0.0f,
+            .y = 0.0f,
+            .w = (float)metrics.panel_w,
+            .h = (float)metrics.panel_h
+        }, (SDL_Color){ 0, 0, 0, 255 });
+
+        SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+        for (int row = 0; row < rows; row++)
+            sdl_scene_render_fixed_left_panel_row(0.0f,
+                (float)(row * metrics.cell_h), cols, metrics.cell_w,
+                metrics.cell_h, story_font, mono_font, panes->left_panel[row]);
+        SDL_SetRenderClipRect(g_state.renderer, NULL);
+        return;
+    }
 
     font = sdl_story_font_for_view(view);
     for (int row = 0; row < rows; row++)
@@ -1516,6 +1985,11 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         return false;
 
     layout = sdl_scene_make_layout(main_view, status->flags);
+    if (!layout.hide_left_panel)
+    {
+        layout.col_map = sdl_scene_left_panel_reserved_cols(main_view, &layout,
+            panes);
+    }
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);

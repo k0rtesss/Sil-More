@@ -1,5 +1,12 @@
 # Session notes
 
+## 2026-03-29: Partition monster spawn ownership fix
+- Investigated monster clumping in big cave and other large partition types during level generation.
+- Root cause: `choose_partition_monster_location()` in `src/level-generation/level-generation-connectivity.c` sampled any valid naked tile inside the partition bounding box but did not verify `level_partition_index_for_point(y, x) == plan->pi`.
+- On large/open partitions, that allowed multiple partition population passes to converge on the same overlapping open pocket near partition boundaries, producing the visible monster pileup/clump.
+- Fix: require the sampled tile to belong to the current partition before attempting themed or generic monster placement.
+- Validation pending: rebuild with `build-cmake.bat` and smoke-test big cave / cavey generation.
+
 ## 2026-03-27: UI2 session driver / wait-state landing
 - Activated the `src/app/*` boundary for UI2 instead of leaving it as scaffolding-only:
   - `src/app/app-session.[ch]` now own live session flags, current-session access, queued legacy inputs/intents, wait-scope helpers, and session/wait lifecycle event emission.

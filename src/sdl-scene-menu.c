@@ -143,50 +143,42 @@ static TTF_Font* sdl_menu_font_for_height(int pixel_height)
 
 static int sdl_menu_font_size_logical(const sdl_view* view)
 {
-    int logical_size;
-    int canvas_h = 0;
-
-    if (config.aux_view_font_size > 0)
-        return config.aux_view_font_size;
-
-    if (view)
-        canvas_h = view->rows * view->cell_h;
-
-    logical_size = 24;
-    if (canvas_h > 0 && canvas_h < sdl_menu_scale_px(420.0f))
-        logical_size = 16;
-    else if (canvas_h > 0 && canvas_h < sdl_menu_scale_px(540.0f))
-        logical_size = 18;
-    else if (canvas_h > 0 && canvas_h < sdl_menu_scale_px(700.0f))
-        logical_size = 20;
-
-    return logical_size;
+    (void)view;
+    return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
 }
 
-static int sdl_menu_measure_text(TTF_Font* font, cptr text)
+static int sdl_menu_cell_width(int line_h)
 {
-    int measured_w = 0;
+    int cell_w = line_h / 2;
 
-    if (!font || !text || !text[0])
-        return 0;
+    if (cell_w < 1)
+        cell_w = 1;
 
-    if (!TTF_MeasureString(font, text, 0, 0, &measured_w, NULL))
-        return 0;
-
-    return measured_w;
+    return cell_w;
 }
 
-static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
-    SDL_Color color, cptr text)
+static int sdl_menu_measure_text(int cell_w, cptr text)
+{
+    if (!text || !text[0] || cell_w <= 0)
+        return 0;
+
+    return (int)strlen(text) * cell_w;
+}
+
+static void sdl_menu_render_glyph(TTF_Font* font, float x_px, float y_px,
+    int cell_w, int line_h, SDL_Color color, char ch)
 {
     SDL_Surface* surface;
     SDL_Texture* texture;
     SDL_FRect dst;
+    char glyph[2] = { ch ? ch : ' ', '\0' };
+    float dst_w;
+    float dst_h;
 
-    if (!font || !text || !text[0])
+    if (!font || !glyph[0] || glyph[0] == ' ' || cell_w <= 0 || line_h <= 0)
         return;
 
-    surface = TTF_RenderText_Blended(font, text, 0, color);
+    surface = TTF_RenderText_Blended(font, glyph, 0, color);
     if (!surface)
         return;
 
@@ -197,10 +189,24 @@ static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
         return;
     }
 
+    dst_w = (float)surface->w;
+    dst_h = (float)surface->h;
+    if (dst_h > (float)line_h && dst_h > 0.0f)
+    {
+        float scale = (float)line_h / dst_h;
+
+        dst_w *= scale;
+        dst_h = (float)line_h;
+    }
+    if (dst_w > (float)cell_w)
+        dst_w = (float)cell_w;
+
     dst.x = x_px;
     dst.y = y_px;
-    dst.w = (float)surface->w;
-    dst.h = (float)surface->h;
+    dst.w = dst_w;
+    dst.h = dst_h;
+
+    dst.x += ((float)cell_w - dst_w) * 0.5f;
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
@@ -208,31 +214,46 @@ static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_DestroySurface(surface);
 }
 
-static int sdl_menu_measure_row(TTF_Font* font, const app_menu_scene* scene,
+static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
+    int cell_w, int line_h, SDL_Color color, cptr text)
+{
+    size_t i;
+
+    if (!font || !text || !text[0] || cell_w <= 0 || line_h <= 0)
+        return;
+
+    for (i = 0; text[i] != '\0'; i++)
+    {
+        sdl_menu_render_glyph(font, x_px + (float)(i * cell_w), y_px, cell_w,
+            line_h, color, text[i]);
+    }
+}
+
+static int sdl_menu_measure_row(int cell_w, const app_menu_scene* scene,
     const app_menu_row* row, int item_gap)
 {
     int width = 0;
 
-    if (!font || !scene || !row)
+    if (!scene || !row || cell_w <= 0)
         return 0;
 
     if (!(scene->flags & APP_MENU_SCENE_FLAG_PLAIN) && row->key[0])
-        width += sdl_menu_measure_text(font, row->key) + item_gap;
+        width += sdl_menu_measure_text(cell_w, row->key) + item_gap;
     if (row->label[0])
-        width += sdl_menu_measure_text(font, row->label);
+        width += sdl_menu_measure_text(cell_w, row->label);
     if (row->meta[0])
-        width += item_gap + sdl_menu_measure_text(font, row->meta);
+        width += item_gap + sdl_menu_measure_text(cell_w, row->meta);
 
     return width;
 }
 
-static int sdl_menu_measure_footer(TTF_Font* font,
+static int sdl_menu_measure_footer(int cell_w,
     const app_menu_scene* scene, int pill_gap, int pill_pad_x)
 {
     int width = 0;
     u16b i;
 
-    if (!font || !scene || scene->footer_action_count == 0)
+    if (!scene || scene->footer_action_count == 0 || cell_w <= 0)
         return 0;
 
     for (i = 0; i < scene->footer_action_count; i++)
@@ -246,7 +267,7 @@ static int sdl_menu_measure_footer(TTF_Font* font,
         else
             SDL_strlcpy(text, action->label, sizeof(text));
 
-        action_w = sdl_menu_measure_text(font, text) + pill_pad_x * 2;
+        action_w = sdl_menu_measure_text(cell_w, text) + pill_pad_x * 2;
         if (width > 0)
             width += pill_gap;
         width += action_w;
@@ -255,19 +276,19 @@ static int sdl_menu_measure_footer(TTF_Font* font,
     return width;
 }
 
-static int sdl_menu_measure_tabs(TTF_Font* font, const app_menu_scene* scene,
+static int sdl_menu_measure_tabs(int cell_w, const app_menu_scene* scene,
     int pill_gap, int pill_pad_x)
 {
     int width = 0;
     u16b i;
 
-    if (!font || !scene || scene->tab_count == 0)
+    if (!scene || scene->tab_count == 0 || cell_w <= 0)
         return 0;
 
     for (i = 0; i < scene->tab_count; i++)
     {
         const app_menu_tab* tab = &scene->tabs[i];
-        int tab_w = sdl_menu_measure_text(font, tab->label) + pill_pad_x * 2;
+        int tab_w = sdl_menu_measure_text(cell_w, tab->label) + pill_pad_x * 2;
 
         if (width > 0)
             width += pill_gap;
@@ -278,7 +299,7 @@ static int sdl_menu_measure_tabs(TTF_Font* font, const app_menu_scene* scene,
 }
 
 static void sdl_menu_render_row(TTF_Font* font, const app_menu_scene* scene,
-    const app_menu_row* row, const SDL_Rect* clip_rect, int line_h,
+    const app_menu_row* row, const SDL_Rect* clip_rect, int cell_w, int line_h,
     int item_gap, int current_y, byte accent_attr)
 {
     SDL_Color color;
@@ -312,31 +333,31 @@ static void sdl_menu_render_row(TTF_Font* font, const app_menu_scene* scene,
 
     if (!(scene->flags & APP_MENU_SCENE_FLAG_PLAIN) && row->key[0])
     {
-        key_w = sdl_menu_measure_text(font, row->key);
+        key_w = sdl_menu_measure_text(cell_w, row->key);
         sdl_menu_render_text(font, (float)clip_rect->x, (float)current_y,
-            sdl_menu_color(scene->accent_attr), row->key);
+            cell_w, line_h, sdl_menu_color(scene->accent_attr), row->key);
         label_x += key_w + item_gap;
     }
 
     if (row->meta[0])
     {
-        meta_w = sdl_menu_measure_text(font, row->meta);
+        meta_w = sdl_menu_measure_text(cell_w, row->meta);
         meta_x = clip_rect->x + clip_rect->w - meta_w;
         if (meta_x < label_x + item_gap)
             meta_x = label_x + item_gap;
     }
 
     if (row->label[0])
-        sdl_menu_render_text(font, (float)label_x, (float)current_y, color,
-            row->label);
+        sdl_menu_render_text(font, (float)label_x, (float)current_y, cell_w,
+            line_h, color, row->label);
     if (row->meta[0])
-        sdl_menu_render_text(font, (float)meta_x, (float)current_y, color,
-            row->meta);
+        sdl_menu_render_text(font, (float)meta_x, (float)current_y, cell_w,
+            line_h, color, row->meta);
 }
 
 static void sdl_menu_render_footer(TTF_Font* font,
     const app_menu_scene* scene, const SDL_Rect* clip_rect, int line_h,
-    int pill_gap, int pill_pad_x, int pill_pad_y)
+    int cell_w, int pill_gap, int pill_pad_x, int pill_pad_y)
 {
     int cursor_x;
     u16b i;
@@ -360,7 +381,7 @@ static void sdl_menu_render_footer(TTF_Font* font,
         else
             SDL_strlcpy(text, action->label, sizeof(text));
 
-        text_w = sdl_menu_measure_text(font, text);
+        text_w = sdl_menu_measure_text(cell_w, text);
         pill.x = (float)cursor_x;
         pill.y = (float)clip_rect->y;
         pill.w = (float)(text_w + pill_pad_x * 2);
@@ -387,15 +408,15 @@ static void sdl_menu_render_footer(TTF_Font* font,
         sdl_menu_fill_rect(&pill, fill);
         sdl_menu_draw_rect(&pill, border);
         sdl_menu_render_text(font, pill.x + pill_pad_x, pill.y + pill_pad_y,
-            text_color, text);
+            cell_w, line_h, text_color, text);
 
         cursor_x += (int)pill.w + pill_gap;
     }
 }
 
 static void sdl_menu_render_tabs(TTF_Font* font, const app_menu_scene* scene,
-    const SDL_Rect* clip_rect, int line_h, int pill_gap, int pill_pad_x,
-    int pill_pad_y)
+    const SDL_Rect* clip_rect, int cell_w, int line_h, int pill_gap,
+    int pill_pad_x, int pill_pad_y)
 {
     int cursor_x;
     u16b i;
@@ -412,7 +433,7 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_menu_scene* scene,
             : TERM_SLATE);
         SDL_Color border = sdl_menu_color(scene->accent_attr);
         SDL_Color text_color = sdl_menu_color(tab->attr ? tab->attr : TERM_WHITE);
-        int text_w = sdl_menu_measure_text(font, tab->label);
+        int text_w = sdl_menu_measure_text(cell_w, tab->label);
         SDL_FRect pill = {
             (float)cursor_x,
             (float)clip_rect->y,
@@ -428,7 +449,7 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_menu_scene* scene,
         sdl_menu_fill_rect(&pill, fill);
         sdl_menu_draw_rect(&pill, border);
         sdl_menu_render_text(font, pill.x + pill_pad_x, pill.y + pill_pad_y,
-            text_color, tab->label);
+            cell_w, line_h, text_color, tab->label);
 
         cursor_x += (int)pill.w + pill_gap;
     }
@@ -448,6 +469,7 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     int canvas_w;
     int canvas_h;
     int pixel_height;
+    int cell_w;
     int line_h;
     int line_gap;
     int section_gap;
@@ -504,9 +526,10 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     if (!font)
         return false;
 
-    line_h = TTF_GetFontHeight(font);
+    line_h = pixel_height;
     if (line_h <= 0)
-        line_h = pixel_height;
+        line_h = TTF_GetFontHeight(font);
+    cell_w = sdl_menu_cell_width(line_h);
     line_gap = sdl_menu_scale_px(2.0f);
     section_gap = sdl_menu_scale_px(12.0f);
     item_gap = sdl_menu_scale_px(10.0f);
@@ -521,22 +544,22 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     pill_pad_y = sdl_menu_scale_px(4.0f);
 
     if (scene->title[0])
-        title_w = sdl_menu_measure_text(font, scene->title);
+        title_w = sdl_menu_measure_text(cell_w, scene->title);
     if (scene->subtitle[0])
-        subtitle_w = sdl_menu_measure_text(font, scene->subtitle);
+        subtitle_w = sdl_menu_measure_text(cell_w, scene->subtitle);
     for (i = 0; i < scene->body_line_count; i++)
-        body_w = MAX(body_w, sdl_menu_measure_text(font,
+        body_w = MAX(body_w, sdl_menu_measure_text(cell_w,
             scene->body_lines[i].text));
     for (i = 0; i < scene->row_count; i++)
-        rows_w = MAX(rows_w, sdl_menu_measure_row(font, scene, &scene->rows[i],
+        rows_w = MAX(rows_w, sdl_menu_measure_row(cell_w, scene, &scene->rows[i],
             item_gap));
     if (scene->detail_title[0])
-        detail_w = sdl_menu_measure_text(font, scene->detail_title);
+        detail_w = sdl_menu_measure_text(cell_w, scene->detail_title);
     for (i = 0; i < scene->detail_line_count; i++)
-        detail_w = MAX(detail_w, sdl_menu_measure_text(font,
+        detail_w = MAX(detail_w, sdl_menu_measure_text(cell_w,
             scene->detail_lines[i].text));
-    footer_w = sdl_menu_measure_footer(font, scene, pill_gap, pill_pad_x);
-    tabs_w = sdl_menu_measure_tabs(font, scene, pill_gap, pill_pad_x);
+    footer_w = sdl_menu_measure_footer(cell_w, scene, pill_gap, pill_pad_x);
+    tabs_w = sdl_menu_measure_tabs(cell_w, scene, pill_gap, pill_pad_x);
 
     left_w = MAX(MAX(title_w, subtitle_w), MAX(body_w, rows_w));
     left_w = MAX(left_w, footer_w);
@@ -716,8 +739,8 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
             tabs_h
         };
 
-        sdl_menu_render_tabs(font, scene, &tabs_clip, line_h, pill_gap,
-            pill_pad_x, pill_pad_y);
+        sdl_menu_render_tabs(font, scene, &tabs_clip, cell_w, line_h,
+            pill_gap, pill_pad_x, pill_pad_y);
         current_y += tabs_h;
         if (header_h > 0)
             current_y += section_gap;
@@ -726,13 +749,14 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     if (scene->title[0])
     {
         sdl_menu_render_text(font, (float)left_clip.x, (float)current_y,
-            sdl_menu_color(scene->title_attr), scene->title);
+            cell_w, line_h, sdl_menu_color(scene->title_attr), scene->title);
         current_y += line_h + line_gap;
     }
     if (scene->subtitle[0])
     {
         sdl_menu_render_text(font, (float)left_clip.x, (float)current_y,
-            sdl_menu_color(scene->subtitle_attr), scene->subtitle);
+            cell_w, line_h, sdl_menu_color(scene->subtitle_attr),
+            scene->subtitle);
         current_y += line_h + line_gap;
     }
     if (has_columns)
@@ -758,7 +782,7 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
         for (i = 0; i < scene->body_line_count; i++)
         {
             sdl_menu_render_text(font, (float)left_clip.x, (float)current_y,
-                sdl_menu_color(scene->body_lines[i].attr),
+                cell_w, line_h, sdl_menu_color(scene->body_lines[i].attr),
                 scene->body_lines[i].text);
             current_y += line_h + line_gap;
         }
@@ -770,15 +794,16 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
         {
             sdl_menu_render_text(font,
                 (float)(left_clip.x + left_clip.w - sdl_menu_scale_px(10.0f)),
-                (float)current_y, sdl_menu_color(scene->accent_attr), "^");
+                (float)current_y, cell_w, line_h,
+                sdl_menu_color(scene->accent_attr), "^");
         }
 
         for (i = 0; i < (u16b)row_visible; i++)
         {
             const app_menu_row* row = &scene->rows[row_start + i];
 
-            sdl_menu_render_row(font, scene, row, &column_clip, line_h, item_gap,
-                current_y, scene->accent_attr);
+            sdl_menu_render_row(font, scene, row, &column_clip, cell_w,
+                line_h, item_gap, current_y, scene->accent_attr);
             current_y += line_h + line_gap;
         }
 
@@ -786,7 +811,7 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
         {
             sdl_menu_render_text(font,
                 (float)(left_clip.x + left_clip.w - sdl_menu_scale_px(10.0f)),
-                (float)(current_y - line_gap),
+                (float)(current_y - line_gap), cell_w, line_h,
                 sdl_menu_color(scene->accent_attr), "v");
         }
 
@@ -809,13 +834,14 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
         if (scene->detail_title[0])
         {
             sdl_menu_render_text(font, (float)right_clip.x, (float)detail_y,
-                sdl_menu_color(scene->detail_title_attr), scene->detail_title);
+                cell_w, line_h, sdl_menu_color(scene->detail_title_attr),
+                scene->detail_title);
             detail_y += line_h + line_gap;
         }
         for (i = 0; i < scene->detail_line_count; i++)
         {
             sdl_menu_render_text(font, (float)right_clip.x, (float)detail_y,
-                sdl_menu_color(scene->detail_lines[i].attr),
+                cell_w, line_h, sdl_menu_color(scene->detail_lines[i].attr),
                 scene->detail_lines[i].text);
             detail_y += line_h + line_gap;
         }
@@ -824,8 +850,8 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
 
     if (has_footer)
     {
-        sdl_menu_render_footer(font, scene, &footer_clip, line_h, pill_gap,
-            pill_pad_x, pill_pad_y);
+        sdl_menu_render_footer(font, scene, &footer_clip, line_h, cell_w,
+            pill_gap, pill_pad_x, pill_pad_y);
     }
 
     return true;
@@ -854,20 +880,7 @@ bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
     }
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
-    if ((snapshot->scene.flags & APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP)
-        && main_view->canvas)
-    {
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-        SDL_RenderClear(g_state.renderer);
-        SDL_RenderTexture(g_state.renderer, main_view->canvas, NULL,
-            &(SDL_FRect){
-                .x = 0.0f,
-                .y = 0.0f,
-                .w = (float)(main_view->cols * main_view->cell_w),
-                .h = (float)(main_view->rows * main_view->cell_h)
-            });
-    }
-    else
+    if (!(snapshot->scene.flags & APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP))
     {
         SDL_SetRenderDrawColor(g_state.renderer, 6, 10, 14, 255);
         SDL_RenderClear(g_state.renderer);

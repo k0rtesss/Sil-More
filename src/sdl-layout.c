@@ -331,6 +331,46 @@ int sdl_resolve_aux_view_font_size(int requested_size)
     return size;
 }
 
+int sdl_auto_menu_panel_font_size(void)
+{
+    float system_scale = (g_state.system_scale > 0.0f) ? g_state.system_scale : 1.0f;
+    int canvas_h = 0;
+    int size = 34;
+
+    if (g_views[0].term_ready && g_views[0].rows > 0 && g_views[0].cell_h > 0)
+        canvas_h = g_views[0].rows * g_views[0].cell_h;
+
+    if (canvas_h > 0 && canvas_h < (int)(420.0f * system_scale + 0.5f))
+        size = 24;
+    else if (canvas_h > 0 && canvas_h < (int)(540.0f * system_scale + 0.5f))
+        size = 26;
+    else if (canvas_h > 0 && canvas_h < (int)(700.0f * system_scale + 0.5f))
+        size = 30;
+
+    if (size < 8)
+        size = 8;
+    if (size > 64)
+        size = 64;
+
+    return size;
+}
+
+int sdl_resolve_menu_panel_font_size(int requested_size)
+{
+    int size = requested_size;
+
+    if (size <= 0 && config.aux_view_font_size > 0)
+        size = config.aux_view_font_size;
+    if (size <= 0)
+        size = sdl_auto_menu_panel_font_size();
+    if (size < 8)
+        size = 8;
+    if (size > 64)
+        size = 64;
+
+    return size;
+}
+
 int sdl_effective_pane_font_size_for_config(const struct pane_config* pc)
 {
     if (pc && pc->font_size > 0)
@@ -528,6 +568,14 @@ void get_sdl_config_info(char* buf, size_t size)
         offset += (size_t)strnfmt(buf + offset, size - offset,
             "Default Aux View Font Size: auto (%d)\n", sdl_auto_aux_view_font_size());
     }
+    if (config.menu_panel_font_size > 0) {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Menu + Left Panel Font Size: %d\n", config.menu_panel_font_size);
+    } else {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Menu + Left Panel Font Size: auto (%d)\n",
+            sdl_resolve_menu_panel_font_size(config.menu_panel_font_size));
+    }
     offset += (size_t)strnfmt(buf + offset, size - offset, "Margin: %d\n", config.margin);
     offset += (size_t)strnfmt(buf + offset, size - offset, "Fullscreen: %s\n", config.fullscreen ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Tiles: %s\n", config.tiles ? "Yes" : "No");
@@ -643,6 +691,22 @@ void set_sdl_aux_view_font_size(int value)
 {
     if (value == 0 || (value >= 8 && value <= 48))
         config.aux_view_font_size = value;
+}
+
+int get_sdl_menu_panel_font_size(void)
+{
+    return config.menu_panel_font_size;
+}
+
+int get_sdl_effective_menu_panel_font_size(void)
+{
+    return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
+}
+
+void set_sdl_menu_panel_font_size(int value)
+{
+    if (value == 0 || (value >= 8 && value <= 64))
+        config.menu_panel_font_size = value;
 }
 
 int get_sdl_margin(void)

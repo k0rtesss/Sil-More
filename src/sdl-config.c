@@ -738,6 +738,13 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
         } else {
             log_warn("auxViewFontSize not found or not a number");
         }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "menuPanelFontSize");
+        if (cJSON_IsNumber(item)) {
+            config->menu_panel_font_size = item->valueint;
+            log_debug("Loaded menuPanelFontSize: %d",
+                config->menu_panel_font_size);
+        }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "margin");
         if (cJSON_IsNumber(item)) {
@@ -1217,6 +1224,8 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     
     cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", config->aux_view_font_size);
+    cJSON_AddNumberToObject(sdl, "menuPanelFontSize",
+        config->menu_panel_font_size);
     cJSON_AddNumberToObject(sdl, "margin", config->margin);
     cJSON_AddBoolToObject(sdl, "fullscreen", config->fullscreen);
     cJSON_AddBoolToObject(sdl, "tiles", config->tiles);
@@ -1537,6 +1546,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
 {
     config->main_view_scale = 1;
     config->aux_view_font_size = 0;
+    config->menu_panel_font_size = 0;
     config->margin = 4;
     config->fullscreen = true;
     config->tiles = true;
@@ -1619,6 +1629,7 @@ void sdl_config_set_defaults_for_resolution(struct sdl_config* config,
         
         config->main_view_scale = profile->main_view_scale;
         config->aux_view_font_size = 0;
+        config->menu_panel_font_size = 0;
         // Note: margin, fullscreen, tiles, and window position/size use base defaults
         
         // Apply pane configuration

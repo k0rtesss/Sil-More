@@ -1777,8 +1777,9 @@ errr init_sdl(int argc, char **argv)
         // Apply sound setting to global variable
         use_sound = g_sound_config.enabled;
         
-        log_debug("After loading JSON: scale=%d, default_aux_font=%d, margin=%d, fullscreen=%d, tiles=%d, sound=%d",
-                  config.main_view_scale, config.aux_view_font_size, config.margin,
+        log_debug("After loading JSON: scale=%d, default_aux_font=%d, menu_panel_font=%d, margin=%d, fullscreen=%d, tiles=%d, sound=%d",
+                  config.main_view_scale, config.aux_view_font_size,
+                  config.menu_panel_font_size, config.margin,
                   config.fullscreen, config.tiles, g_sound_config.enabled);
     } else {
         // Config file doesn't exist - use resolution-based defaults
@@ -1790,8 +1791,9 @@ errr init_sdl(int argc, char **argv)
         if (pane_config_count == 0)
             sdl_copy_default_pane_config();
         
-        log_debug("After resolution defaults: scale=%d, default_aux_font=%d, margin=%d, fullscreen=%d, tiles=%d",
-                  config.main_view_scale, config.aux_view_font_size, config.margin,
+        log_debug("After resolution defaults: scale=%d, default_aux_font=%d, menu_panel_font=%d, margin=%d, fullscreen=%d, tiles=%d",
+                  config.main_view_scale, config.aux_view_font_size,
+                  config.menu_panel_font_size, config.margin,
                   config.fullscreen, config.tiles);
     }
 
@@ -1821,8 +1823,9 @@ errr init_sdl(int argc, char **argv)
     
     // Apply command-line overrides
     sdl_config_apply_cmdline(&config, argc, argv);
-    log_debug("After command-line: scale=%d, default_aux_font=%d, margin=%d, fullscreen=%d, tiles=%d",
-              config.main_view_scale, config.aux_view_font_size, config.margin,
+    log_debug("After command-line: scale=%d, default_aux_font=%d, menu_panel_font=%d, margin=%d, fullscreen=%d, tiles=%d",
+              config.main_view_scale, config.aux_view_font_size,
+              config.menu_panel_font_size, config.margin,
               config.fullscreen, config.tiles);
 
 #ifdef __ANDROID__
@@ -1869,6 +1872,15 @@ errr init_sdl(int argc, char **argv)
         log_warn("Invalid aux_view_font_size %d, clamping to 48", config.aux_view_font_size);
         config.aux_view_font_size = 48;
     }
+    if (config.menu_panel_font_size < 0) {
+        log_warn("Invalid menu_panel_font_size %d, using auto",
+            config.menu_panel_font_size);
+        config.menu_panel_font_size = 0;
+    } else if (config.menu_panel_font_size > 64) {
+        log_warn("Invalid menu_panel_font_size %d, clamping to 64",
+            config.menu_panel_font_size);
+        config.menu_panel_font_size = 64;
+    }
     if (config.margin < 0) {
         log_warn("Invalid margin %d, using 0", config.margin);
         config.margin = 0;
@@ -1906,6 +1918,12 @@ errr init_sdl(int argc, char **argv)
         log_info("  Default aux view font size: %d", config.aux_view_font_size);
     else
         log_info("  Default aux view font size: auto (%d)", sdl_auto_aux_view_font_size());
+    if (config.menu_panel_font_size > 0)
+        log_info("  Menu + left panel font size: %d",
+            config.menu_panel_font_size);
+    else
+        log_info("  Menu + left panel font size: auto (%d)",
+            sdl_resolve_menu_panel_font_size(config.menu_panel_font_size));
     log_info("  Margin: %d", config.margin);
     log_info("  Fullscreen: %s", config.fullscreen ? "true" : "false");
     log_info("  Tiles: %s", config.tiles ? "true" : "false");

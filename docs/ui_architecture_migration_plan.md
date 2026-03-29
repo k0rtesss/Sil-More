@@ -10,12 +10,12 @@ Recommended direction:
 - keep frame cadence in the frontend
 - treat the existing `Term` path as a legacy frontend, not as the future UI API
 
-Status date: March 28, 2026.
+Status date: March 29, 2026.
 
 ## Current Tree Baseline
 - The SDL frontend is no longer one monolithic file.
   - `src/main-sdl.c`: bootstrap, config load/apply, keyboard/gamepad
-    translation, top-level event routing, and most `platform-ui.h` shims
+    translation, top-level event routing, and platform shims
   - `src/sdl-layout.c`: pane config state, terminal sizing, pane placement,
     `resize()`, and view creation
   - `src/sdl-render.c`: `z-term` hook backend, canvas presentation, renderer
@@ -28,24 +28,37 @@ Status date: March 28, 2026.
     related prompt helpers
   - `src/util-message.c`: message history, `screen_save()`, `screen_load()`
   - `src/util-text.c`: `put_str()` / `prt()` / text wrapping
-- The build graph is still only partially semantic.
-  - `sil-core` still links SDL directly
-  - `sil-core` still includes `SIL_MORE_SOURCES_FRONTEND`
-  - `platform-ui.h` is still SDL-shaped and widely imported
-- The active render/input boundary is still terminal-first.
+- The build graph is no longer only partially semantic.
+  - `sil-core` now builds without SDL headers or SDL link requirements
+  - `sil-legacy-compat` isolates `z-term.c` and legacy frontend rendering
+  - `sil-platform-sdl` owns all SDL-specific infrastructure
+  - `platform-ui.h` has been removed and replaced by neutral boundary headers
+- The active render/input boundary is now dual-path.
   - `src/sdl-render.c` still services `TERM_XTRA_EVENT`, `TERM_XTRA_FRESH`,
-    `TERM_XTRA_CLEAR`, and `TERM_XTRA_DELAY`
+    `TERM_XTRA_CLEAR`, and `TERM_XTRA_DELAY` for legacy modules
+  - `src/sdl-scene-dungeon.c` renders the main dungeon from snapshot data
+  - `src/sdl-scene-menu.c` renders menus from semantic payloads in logical
+    pixels
+  - `src/sdl-scene-information.c` bridges legacy `Term` content for
+    informational screens
   - `src/ui/ui-status.c` still owns `update_stuff()`, `redraw_stuff()`,
     `window_stuff()`, and `handle_stuff()`
-  - `src/cave.c` still renders map cells with `Term_queue_char()`
+  - `src/cave.c` still renders map cells with `Term_queue_char()` for the
+    legacy path
   - `src/object/object-ui-select.c` still fuses gameplay item selection and
-    terminal UI in `get_item()`
+    terminal UI in `get_item()` via `inkey()`
 - Current hotspot counts from the UI0 audit baseline:
   - `inkey()` call sites in 41 files / 159 matches
   - `screen_save()` + `screen_load()` call sites in 35 files / 253 matches
   - direct `Term_*` render/control calls in 66 files / 1,795 matches
   - `#include "platform-ui.h"` in 28 files / 28 matches
   - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 196 matches
+- Current counts as of 2026-03-29:
+  - `inkey()` call sites in 41 files / 149 matches
+  - `screen_save()` + `screen_load()` call sites in 35 files / 251 matches
+  - direct `Term_*` render/control calls in 65 files / 1,726 matches
+  - `#include "platform-ui.h"` in 0 files / 0 matches (fully removed by UI7)
+  - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 208 matches
 
 ## Non-Goals
 - Do not migrate to a game engine.
@@ -113,17 +126,17 @@ Key rule:
   place.
 
 ## Stage Overview
-| Stage | Goal | Main outputs |
-| --- | --- | --- |
-| UI0 | freeze debt growth and establish metrics | rules, audit script, migration inventory |
-| UI1 | add neutral boundary scaffolding | `app-*` headers, event buffer, host interface draft |
-| UI2 | make the core externally drivable | session driver, wait reasons, input queue bridge |
-| UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots |
-| UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop |
-| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look |
-| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes |
-| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend |
-| UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge |
+| Stage | Goal | Main outputs | Status |
+| --- | --- | --- | --- |
+| UI0 | freeze debt growth and establish metrics | rules, audit script, migration inventory | complete |
+| UI1 | add neutral boundary scaffolding | `app-*` headers, event buffer, host interface draft | complete |
+| UI2 | make the core externally drivable | session driver, wait reasons, input queue bridge | complete |
+| UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots | complete |
+| UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop | complete |
+| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | in progress (~50%) |
+| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | in progress (~40%) |
+| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | complete |
+| UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | complete |
 
 ## Stage UI0: Guardrails And Baseline
 Goal:
@@ -169,6 +182,14 @@ Exit when:
 - the target boundary is documented
 - legacy debt growth is measurable
 
+Status:
+- complete in the working tree on 2026-03-28
+- ADR note (`docs/ui_architecture_target_adr.md`), migration inventory
+  (`docs/ui_migration_inventory.md`), audit tool (`tools/ui_debt_audit.py`),
+  and baseline (`tests/ui_debt_audit_baseline.json`) are all in place
+- `ctest -R sil_ui0_audit --output-on-failure` is registered in CMakeLists.txt
+- standing rules are documented in the migration plan and AGENTS.md
+
 ## Stage UI1: Neutral Boundary Scaffolding
 Goal:
 - add the new API surface without changing active gameplay behavior
@@ -201,6 +222,17 @@ Validation:
 
 Exit when:
 - the new boundary exists and is stable enough for later stages to target
+
+Status:
+- complete in the working tree on 2026-03-28
+- `src/app/` contains 12 header/source pairs: `app-session`, `app-input`,
+  `app-snapshot`, `app-events`, `app-host`, `app-host-bridge`, `app-wire`,
+  `app-interaction`, `app-scene-bootstrap`, `app-scene-dungeon`,
+  `app-scene-information`, `app-scene-menu`
+- event buffer (`app-events.c`) is core-owned with explicit capacity and drain
+- host surface (`app-host.h`, `app-host.c`) covers timing, persistence, and
+  resource hooks without SDL types
+- no SDL includes in any `src/app/` header
 
 ## Stage UI2: Session Driver And Wait Reasons
 Goal:
@@ -240,6 +272,16 @@ Validation:
 Exit when:
 - the core can be advanced by an external caller until a well-defined wait
   state
+
+Status:
+- complete in the working tree on 2026-03-28
+- `app_session` manages state transitions (UNINITIALIZED → IDLE → RUNNING →
+  WAITING → STOPPING → STOPPED), wait reasons, and session flags
+- `app_wait_reason` enum covers BOOTSTRAP, COMMAND_INPUT, CONFIRM,
+  LIST_SELECTION, TARGETING, TEXT_ENTRY, INFORMATION, and SHUTDOWN
+- session-owned input queue and intent queue are embedded in `app-session.c`
+- legacy SDL path bridges through `APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT`
+- `src/runtime/runtime-game.c` hosts the game control loop
 
 ## Stage UI3: Dungeon Snapshot And Event Model
 Goal:
@@ -281,6 +323,21 @@ Validation:
 Exit when:
 - the core can describe the live dungeon state without requiring a terminal
 
+Status:
+- complete in the working tree on 2026-03-28
+- `app-scene-dungeon.c` implements `app_build_dungeon_snapshot()` which
+  atomically builds map, status, messages, panes, and interaction blobs
+- snapshot structs cover `app_map_cell_snapshot` (with visibility/entity flags),
+  `app_status_snapshot` (18 text panes), `app_messages_snapshot` (256-line
+  history), `app_combat_roll_snapshot`, and `app_panes_snapshot` (left panel
+  cells and combat entries)
+- event emission is active: `APP_EVENT_KIND_MESSAGE`,
+  `APP_EVENT_KIND_ACTOR_MOVED`, `APP_EVENT_KIND_DAMAGE`,
+  `APP_EVENT_KIND_PROJECTILE`, `APP_EVENT_KIND_OBJECT_TRANSFER`,
+  `APP_EVENT_KIND_ANIMATION_HINT`, plus session/snapshot lifecycle events
+- `sdl-scene.c` consumes drained events to drive SDL-side animations
+  (actor move, damage, projectile, object transfer)
+
 ## Stage UI4: Snapshot-Driven SDL Scene Stack
 Goal:
 - let SDL render the dungeon every frame from snapshots instead of `Term`
@@ -316,6 +373,18 @@ Validation:
 
 Exit when:
 - the SDL dungeon scene no longer depends on `Term` for normal frame rendering
+
+Status:
+- complete in the working tree on 2026-03-28
+- five SDL scene files: `sdl-scene.c` (coordinator), `sdl-scene-dungeon.c`,
+  `sdl-scene-information.c`, `sdl-scene-menu.c`, `sdl-scene-bootstrap.c`
+- `sdl-scene-dungeon.c` renders entirely from `app_dungeon_snapshot` blobs;
+  no `Term_queue_char` or `Term_putstr` calls in the dungeon scene renderer
+- scene kinds: BOOTSTRAP, DUNGEON, OVERLAY, MENU, INFORMATION
+- the legacy `Term` path remains available as a parallel rendering backend
+  via `sdl-render.c` for modules not yet migrated
+- animations (actor move, damage, projectile, object transfer) are driven
+  from `app_event_span` records, not gameplay delays
 
 ## Stage UI5: Gameplay-Coupled Interaction Extraction
 Goal:
@@ -357,6 +426,27 @@ Exit when:
 - gameplay-coupled interactions are represented as session state, not terminal
   control flow
 
+Status:
+- in progress; interaction state model is defined and published but gameplay
+  loops still block on `inkey()` in the legacy path
+- UI5A (prompt primitives): partially complete
+  - `app_interaction_state` struct with kinds PROMPT, TEXT_ENTRY, LIST,
+    TARGETING, LOOK and flags CAN_CONFIRM, CAN_CANCEL, SHOW_OPTIONS, etc.
+  - `util-prompt.c` publishes interaction state for snapshot rendering but
+    still calls `inkey()` (1 call site remaining)
+- UI5B (item selection): partially complete
+  - `object-ui-select.c` publishes interaction state via
+    `app_session_begin_interaction()` but blocks on `inkey()` (1 call site)
+- UI5C (targeting and look): partially complete
+  - `targeting.c` initializes interaction state but retains 6 `inkey()` calls
+    inside the targeting loop
+  - `cmd-ui-look.c` is still fully legacy with 7 `inkey()` calls and no
+    `app_interaction` usage
+- UI5D (smithing and bespoke selectors): not started
+  - `ui-smithing-screen.c` has 20+ `inkey()` calls, no interaction state usage
+- the SDL dungeon scene renders interaction overlays from snapshot data, so
+  the visual path is already decoupled; the blocking path has not been removed
+
 ## Stage UI6: Frontend-Owned Informational Scenes
 Goal:
 - move non-authoritative browsers and presentation screens out of core rendering
@@ -393,6 +483,23 @@ Validation:
 
 Exit when:
 - informational UI is frontend-owned and no longer blocks later core cleanup
+
+Status:
+- in progress; `ui_information_scene` substrate is production-ready and
+  several screens have migrated, but most remain legacy or transitional
+- substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
+  `present_term`/`wait_key`/`capture_term` API; SDL renders through
+  `sdl-scene-information.c`
+- fully migrated: `ui-file-viewer.c`, `score_ui.c`
+- transitional (use information scene scope but still call `Term_*` for
+  rendering): `quest-ui.c`, `ui-story.c`, `ui-death.c`
+- hybrid (some paths migrated, some legacy): `ui-help.c` (file viewing path
+  uses `ui_information_scene`; main help browser still uses `screen_save` /
+  `inkey`)
+- fully legacy: `cmd-ui-settings.c` (no information scene usage, 24 `inkey()`
+  calls, heavy `Term_*` usage)
+- `cmd-ui-main-menu.c` and `cmd-ui-knowledge.c` use information scene scoping
+  for modal transitions
 
 ## Stage UI7: Legacy Isolation And True Platform Boundary
 Goal:
@@ -513,8 +620,8 @@ Visual preservation contract:
   visual reference, not as disposable placeholder styling
 
 Current blocker summary:
-- `src/sdl-scene-dungeon.c` still renders interaction overlays in main-view
-  cell units, so list/prompt overlays scale with the tile view
+- `src/sdl-scene-dungeon.c` now renders interaction overlays in fixed pixels
+  (resolved in M0), but the underlying gameplay loops still block on `inkey()`
 - `src/sdl-scene-information.c` still renders information scenes from
   row/column text ops against `view->cols` and `view->rows`
 - `src/ui/ui-information-scene.c` still mirrors captured `Term` contents, so
@@ -574,6 +681,20 @@ Status on 2026-03-28:
   term- or information-scene-driven flows; M0 is done, but the shared menu
   renderer is intentionally scoped to prompt-style usage only for now
 
+Status update on 2026-03-29:
+- `src/sdl-scene-dungeon.c` now renders the visible main-game left panel on a
+  fixed-pixel path with its own cell metrics instead of inheriting dungeon tile
+  scale
+- the dungeon renderer now reserves map offset from the left panel's rendered
+  width rather than from the old 13 tile-scaled columns, so raising
+  `main_view_scale` no longer leaves an oversized gap
+- `src/sdl-scene-menu.c` and the fixed-pixel left-panel path now preserve
+  terminal-style horizontal mono-cell spacing for text, which is required for
+  the classic menu and status-panel presentation to read correctly
+- remaining work in this track is still the family-by-family migration listed
+  below in `MENU1` through `MENU11`, plus live SDL smoke testing across ASCII,
+  tiles, and the supported scale buckets
+
 ### Detailed Menu Audit For Parallel Execution
 | Family | Representative files | Current render and input model | Needed shared widgets | Recommended subagent |
 | --- | --- | --- | --- | --- |
@@ -589,22 +710,22 @@ Status on 2026-03-28:
 | Birth, blitz, and smithing workflows | `src/birth.c`, `src/blitz.c`, `src/ui/smithing/ui-smithing-screen.c` | dense bespoke workflows with compact-layout math, inline prompts, previews, and multi-step state loops | proven list-detail widgets, forms, steppers, compare panels, workflow adapters | Late bespoke lane |
 
 ### Recommended Subagent Execution Map
-| Package | Write set | Start after | Notes |
-| --- | --- | --- | --- |
-| `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | define semantic menu payloads, focus ids, tabs, action bars, and scroll state |
-| `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | render menus in logical pixels and decouple menu fonts from tile scale |
-| `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | keep legacy information scenes working as a bridge while family lanes migrate |
-| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | lands the canonical fixed-pixel prompt, list, and targeting flow |
-| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | finishes the `get_item()` path on top of the shared list modal |
-| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | intro, pause, message, hint, map, nearby, and combat-history entry flows |
-| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | lowest-risk browser and document lane after the foundation |
-| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | keep single-owner because this is the largest single menu file |
-| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | split-pane browser lane with tabs, groups, and recall hooks |
-| `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | action-list and detail-side-panel lane |
-| `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | inventory, equipment, identify, compare, and item-action browsers |
-| `MENU9` | `src/metarun.c` | `MENU4` and `MENU7` | blessing exchange, thresholds, active-effects browser, and story stats |
-| `MENU10` | `src/ui/smithing/ui-smithing-screen.c` | `MENU2`, `MENU7`, and the shared split-pane widgets from `MENU6` | isolate completely; highest-risk live gameplay editor after birth |
-| `MENU11` | `src/birth.c`, `src/blitz.c`, shared bootstrap helpers in `src/init2.c` if still needed | `MENU3`, `MENU5`, `MENU6`, `MENU7` | deliberately last because it combines list selection, text entry, detail panes, and gameplay mutation in one loop |
+| Package | Write set | Start after | Status | Notes |
+| --- | --- | --- | --- | --- |
+| `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | complete | semantic menu payloads, focus ids, tabs, action bars, scroll state defined |
+| `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | complete | menus render in logical pixels, decoupled from tile scale |
+| `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | complete | legacy information scenes working as a bridge |
+| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | not started | canonical fixed-pixel prompt, list, and targeting flow |
+| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | not started | finishes the `get_item()` path on top of the shared list modal |
+| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; other flows still legacy |
+| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | partial | file-viewer and score_ui migrated; help hybrid; quest/story/death transitional |
+| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | not started | keep single-owner because this is the largest single menu file |
+| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | not started | split-pane browser lane with tabs, groups, and recall hooks |
+| `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | not started | action-list and detail-side-panel lane |
+| `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | not started | inventory, equipment, identify, compare, and item-action browsers |
+| `MENU9` | `src/metarun.c` | `MENU4` and `MENU7` | not started | blessing exchange, thresholds, active-effects browser, and story stats |
+| `MENU10` | `src/ui/smithing/ui-smithing-screen.c` | `MENU2`, `MENU7`, and the shared split-pane widgets from `MENU6` | not started | isolate completely; highest-risk live gameplay editor after birth |
+| `MENU11` | `src/birth.c`, `src/blitz.c`, shared bootstrap helpers in `src/init2.c` if still needed | `MENU3`, `MENU5`, `MENU6`, `MENU7` | not started | deliberately last because it combines list selection, text entry, detail panes, and gameplay mutation in one loop |
 
 ### Menu Inventory And Target Shapes
 | Family | Primary files | Current shape | Target shape |
@@ -824,21 +945,21 @@ Parallelization rules:
   - death and metarun flows
 
 ## Recommended Near-Term Milestones
-- Milestone M1:
+- Milestone M1: **complete**
   - UI0 through UI2 complete
   - core is externally drivable and wait-state aware
-- Milestone M2:
+- Milestone M2: **complete**
   - UI3 complete
   - snapshots and events can describe the live dungeon scene
-- Milestone M3:
+- Milestone M3: **complete**
   - UI4 complete
   - SDL dungeon rendering is snapshot-driven and frame-based
-- Milestone M4:
+- Milestone M4: **in progress**
   - UI5 complete
   - gameplay-coupled selectors no longer depend on blocking terminal UI
-- Milestone M5:
+- Milestone M5: **in progress** (UI7 complete; UI5 and UI6 remain)
   - UI6 and UI7 complete
   - `sil-core` is genuinely frontend-neutral
-- Milestone M6:
+- Milestone M6: **complete**
   - UI8 prototype complete
   - the same boundary works for SDL and a web client

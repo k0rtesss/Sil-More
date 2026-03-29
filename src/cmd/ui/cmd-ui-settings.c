@@ -37,16 +37,6 @@ extern struct sound_config g_sound_config;
 
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
 
-static bool settings_information_scene_active(void)
-{
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
-
-    return ui_information_scene_supported() && snapshot
-        && (snapshot->scene == APP_SCENE_KIND_INFORMATION);
-}
-
-
 static void dump_visual_pair(
     SDL_IOStream* fff, const char* tag, int index, byte attr, byte chr)
 {
@@ -1754,7 +1744,7 @@ static const char* sdl_min_terminal_mode_label(int mode)
 void do_cmd_pane_settings(void)
 {
     int k = 0;
-    int n = 11; /* Total number of options */
+    int n = 12; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
     int dir;
@@ -1819,8 +1809,22 @@ void do_cmd_pane_settings(void)
             font_value, row_width, 6);
         c_prt(a, buf, y0 + 2, 2);
 
-        /* Option 3: Margin */
+        /* Option 3: Menu + Left Panel Font Size */
         a = (k == 3) ? TERM_L_BLUE : TERM_WHITE;
+        format_font_size_value(font_value, sizeof(font_value),
+            get_sdl_menu_panel_font_size(),
+            get_sdl_effective_menu_panel_font_size(),
+            MAX(6, MIN(14, row_width / 2)));
+        settings_ui_format_pair_line(buf, sizeof(buf),
+            settings_ui_pick_label(label_hint,
+                "Menu + Left Panel Font (0=auto, 8-64)",
+                "Menu + Left Panel Font",
+                "Menu Font"),
+            font_value, row_width, 6);
+        c_prt(a, buf, y0 + 3, 2);
+
+        /* Option 4: Margin */
+        a = (k == 4) ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_margin());
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
@@ -1828,22 +1832,22 @@ void do_cmd_pane_settings(void)
                 "Margin",
                 "Margin"),
             value_buf, row_width, 3);
-        c_prt(a, buf, y0 + 3, 2);
-
-        /* Option 4: Fullscreen */
-        a = (k == 4) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
-            get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
         c_prt(a, buf, y0 + 4, 2);
 
-        /* Option 5: Tiles */
+        /* Option 5: Fullscreen */
         a = (k == 5) ? TERM_L_BLUE : TERM_WHITE;
-        settings_ui_format_pair_line(buf, sizeof(buf), "Tiles",
-            get_sdl_tiles() ? "yes" : "no", row_width, 3);
+        settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
+            get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
         c_prt(a, buf, y0 + 5, 2);
 
-        /* Option 6: Enable Side Panes */
+        /* Option 6: Tiles */
         a = (k == 6) ? TERM_L_BLUE : TERM_WHITE;
+        settings_ui_format_pair_line(buf, sizeof(buf), "Tiles",
+            get_sdl_tiles() ? "yes" : "no", row_width, 3);
+        c_prt(a, buf, y0 + 6, 2);
+
+        /* Option 7: Enable Side Panes */
+        a = (k == 7) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
                 "Enable Side Panes [Alt+I]",
@@ -1851,10 +1855,10 @@ void do_cmd_pane_settings(void)
                 "Side Panes"),
             get_sdl_enable_right_panes() ? "yes" : "no",
             row_width, 3);
-        c_prt(a, buf, y0 + 6, 2);
+        c_prt(a, buf, y0 + 7, 2);
 
-        /* Option 7: Enable Bottom Panes */
-        a = (k == 7) ? TERM_L_BLUE : TERM_WHITE;
+        /* Option 8: Enable Bottom Panes */
+        a = (k == 8) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_format_pair_line(buf, sizeof(buf),
             settings_ui_pick_label(label_hint,
                 "Enable Bottom Panes [Alt+L]",
@@ -1862,10 +1866,10 @@ void do_cmd_pane_settings(void)
                 "Bottom Panes"),
             get_sdl_enable_bottom_panes() ? "yes" : "no",
             row_width, 3);
-        c_prt(a, buf, y0 + 7, 2);
+        c_prt(a, buf, y0 + 8, 2);
 
-        /* Option 8: View Pane Configuration (supporting panes only) */
-        a = (k == 8) ? TERM_L_BLUE : TERM_WHITE;
+        /* Option 9: View Pane Configuration (supporting panes only) */
+        a = (k == 9) ? TERM_L_BLUE : TERM_WHITE;
         strnfmt(buf, sizeof(buf), "%s (%d)",
             settings_ui_pick_label(row_width,
                 "View Pane Configuration",
@@ -1877,25 +1881,25 @@ void do_cmd_pane_settings(void)
             settings_ui_fit_text(fitted_buf, sizeof(fitted_buf), buf, row_width);
             SDL_strlcpy(buf, fitted_buf, sizeof(buf));
         }
-        c_prt(a, buf, y0 + 8, 2);
+        c_prt(a, buf, y0 + 9, 2);
 
-        /* Option 9: Pane Font Sizes */
-        a = (k == 9) ? TERM_L_BLUE : TERM_WHITE;
+        /* Option 10: Pane Font Sizes */
+        a = (k == 10) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
             settings_ui_pick_label(row_width,
                 "Pane Font Sizes",
                 "Pane Fonts",
                 "Pane Fonts"),
             row_width);
-        c_prt(a, buf, y0 + 9, 2);
+        c_prt(a, buf, y0 + 10, 2);
 
-        /* Option 10: Save/Return */
-        a = (k == 10) ? TERM_L_BLUE : TERM_WHITE;
+        /* Option 11: Save/Return */
+        a = (k == 11) ? TERM_L_BLUE : TERM_WHITE;
         settings_ui_fit_text(buf, sizeof(buf),
             settings_changed ? "Save Changes and Return"
                              : "Return to Options Menu",
             row_width);
-        c_prt(a, buf, y0 + 10, 2);
+        c_prt(a, buf, y0 + 11, 2);
 
         /* Display help */
         int y = Term->hgt - 3;
@@ -1949,12 +1953,12 @@ void do_cmd_pane_settings(void)
         case '\r':
         {
             /* Enter activates the current option for actions; otherwise accept/exit. */
-            if (k == 8) /* Supporting Pane Layout */
+            if (k == 9) /* Supporting Pane Layout */
             {
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
                 break;
             }
-            if (k == 9) /* Pane Font Sizes */
+            if (k == 10) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
                 break;
@@ -1998,9 +2002,18 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
+            else if (k == 3)
+            {
+                if (get_sdl_menu_panel_font_size() != 0)
+                {
+                    set_sdl_menu_panel_font_size(0);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
             else
             {
-                bell("0 sets the default aux font to auto");
+                bell("0 sets the selected font to auto");
             }
             break;
         }
@@ -2016,37 +2029,37 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 sdl_apply_config();
             }
-            else if (k == 4) /* Fullscreen */
+            else if (k == 5) /* Fullscreen */
             {
                 set_sdl_fullscreen(!get_sdl_fullscreen());
                 settings_changed = true;
             }
-            else if (k == 5) /* Tiles */
+            else if (k == 6) /* Tiles */
             {
                 set_sdl_tiles(!get_sdl_tiles());
                 settings_changed = true;
             }
-            else if (k == 6) /* Enable Side Panes */
+            else if (k == 7) /* Enable Side Panes */
             {
                 set_sdl_enable_right_panes(!get_sdl_enable_right_panes());
                 settings_changed = true;
                 sdl_apply_config();
             }
-            else if (k == 7) /* Enable Bottom Panes */
+            else if (k == 8) /* Enable Bottom Panes */
             {
                 set_sdl_enable_bottom_panes(!get_sdl_enable_bottom_panes());
                 settings_changed = true;
                 sdl_apply_config();
             }
-            else if (k == 8) /* Supporting Pane Layout */
+            else if (k == 9) /* Supporting Pane Layout */
             {
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
             }
-            else if (k == 9) /* Pane Font Sizes */
+            else if (k == 10) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
             }
-            else if (k == 10) /* Save/Return */
+            else if (k == 11) /* Save/Return */
             {
                 if (settings_changed)
                 {
@@ -2102,7 +2115,24 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
-            else if (k == 3) /* Margin */
+            else if (k == 3) /* Menu + Left Panel Font Size */
+            {
+                val = get_sdl_menu_panel_font_size();
+                if (val == 0)
+                {
+                    set_sdl_menu_panel_font_size(
+                        get_sdl_effective_menu_panel_font_size());
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+                else if (val < 64)
+                {
+                    set_sdl_menu_panel_font_size(val + 1);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == 4) /* Margin */
             {
                 val = get_sdl_margin();
                 if (val < 20)
@@ -2112,23 +2142,23 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
-            else if (k == 4) /* Fullscreen */
+            else if (k == 5) /* Fullscreen */
             {
                 set_sdl_fullscreen(true);
                 settings_changed = true;
             }
-            else if (k == 5) /* Tiles */
+            else if (k == 6) /* Tiles */
             {
                 set_sdl_tiles(true);
                 settings_changed = true;
             }
-            else if (k == 6) /* Enable Side Panes */
+            else if (k == 7) /* Enable Side Panes */
             {
                 set_sdl_enable_right_panes(true);
                 settings_changed = true;
                 sdl_apply_config();
             }
-            else if (k == 7) /* Enable Bottom Panes */
+            else if (k == 8) /* Enable Bottom Panes */
             {
                 set_sdl_enable_bottom_panes(true);
                 settings_changed = true;
@@ -2178,7 +2208,24 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
-            else if (k == 3) /* Margin */
+            else if (k == 3) /* Menu + Left Panel Font Size */
+            {
+                val = get_sdl_menu_panel_font_size();
+                if (val == 0)
+                {
+                    set_sdl_menu_panel_font_size(
+                        get_sdl_effective_menu_panel_font_size());
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+                else if (val > 8)
+                {
+                    set_sdl_menu_panel_font_size(val - 1);
+                    settings_changed = true;
+                    sdl_apply_config();
+                }
+            }
+            else if (k == 4) /* Margin */
             {
                 val = get_sdl_margin();
                 if (val > 0)
@@ -2188,23 +2235,23 @@ void do_cmd_pane_settings(void)
                     sdl_apply_config();
                 }
             }
-            else if (k == 4) /* Fullscreen */
+            else if (k == 5) /* Fullscreen */
             {
                 set_sdl_fullscreen(false);
                 settings_changed = true;
             }
-            else if (k == 5) /* Tiles */
+            else if (k == 6) /* Tiles */
             {
                 set_sdl_tiles(false);
                 settings_changed = true;
             }
-            else if (k == 6) /* Enable Side Panes */
+            else if (k == 7) /* Enable Side Panes */
             {
                 set_sdl_enable_right_panes(false);
                 settings_changed = true;
                 sdl_apply_config();
             }
-            else if (k == 7) /* Enable Bottom Panes */
+            else if (k == 8) /* Enable Bottom Panes */
             {
                 set_sdl_enable_bottom_panes(false);
                 settings_changed = true;
@@ -3197,25 +3244,14 @@ int options_menu(int* highlight)
     }
 
     /* Flush the prompt */
-    if (settings_information_scene_active())
-    {
-        if (!ui_information_scene_present_term())
-            Term_fresh();
-    }
-    else
-    {
-        Term_fresh();
-    }
+    Term_fresh();
 
     /* Place cursor at current choice */
     Term_gotoxy(2, title_row + 1 + *highlight);
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
-    if (settings_information_scene_active())
-        ch = ui_information_scene_wait_key();
-    else
-        ch = inkey();
+    ch = inkey();
     inkey_set_cursor_hidden(false);
 
     if ((ch == 'a') || (ch == 'A'))
@@ -3355,9 +3391,6 @@ void do_cmd_options(void)
     char ftmp[80];
 
     bool return_to_game = false;
-    ui_information_scene_scope scene_scope;
-    bool scene_active = ui_information_scene_enter(&scene_scope);
-    bool saved_screen = !scene_active;
 
     /* Clear any active banner before opening options */
     extern int g_banner_force_redraw_remaining;
@@ -3367,8 +3400,7 @@ void do_cmd_options(void)
     }
 
     /* Save screen */
-    if (saved_screen)
-        screen_save();
+    screen_save();
 
     /* Clear screen */
     Term_clear();
@@ -3377,9 +3409,6 @@ void do_cmd_options(void)
     while (!return_to_game)
     {
         choice = options_menu(&highlight);
-
-        if (scene_active && choice != 16)
-            ui_information_scene_leave(&scene_scope);
 
         switch (choice)
         {
@@ -3517,21 +3546,13 @@ void do_cmd_options(void)
         }
         }
 
-        if (scene_active && !return_to_game
-            && !ui_information_scene_enter(&scene_scope))
-        {
-            scene_active = false;
-        }
     }
 
     /* Flush messages */
     message_flush();
 
     /* Load screen */
-    if (scene_active)
-        ui_information_scene_leave(&scene_scope);
-    else if (saved_screen)
-        screen_load();
+    screen_load();
 }
 
 #ifdef ALLOW_MACROS
