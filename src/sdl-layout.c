@@ -947,7 +947,7 @@ void set_sdl_intro_style(int style)
         return;
     op_ptr->intro_style = (style == -1)
         ? INTRO_STYLE_RANDOM
-        : (byte)(style < 0 ? 0 : style > 4 ? 4 : style);
+        : (byte)(style < 0 ? 0 : style > (INTRO_STYLE_RANDOM - 1) ? (INTRO_STYLE_RANDOM - 1) : style);
 }
 
 int get_sdl_max_scale(void)

@@ -3,6 +3,12 @@
 #include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
+#include "sdl-main-internal.h"
+
+static bool message_use_legacy_topline_rendering(void)
+{
+    return !sdl_scene_stack_handles_main_view();
+}
 
 /*
  * Flush the screen, make a noise
@@ -570,9 +576,11 @@ static void msg_flush(int x)
     byte a = TERM_L_BLUE;
     app_wait_scope scope;
     app_session* session = app_session_current();
+    bool render_legacy_topline = message_use_legacy_topline_rendering();
 
     /* Pause for response */
-    Term_putstr(x, 0, -1, a, "-more-");
+    if (render_legacy_topline)
+        Term_putstr(x, 0, -1, a, "-more-");
 
     /* Place the cursor on the player or target */
     if (hilite_player)
@@ -616,7 +624,8 @@ static void msg_flush(int x)
     }
 
     /* Clear the line */
-    Term_erase(0, 0, 255);
+    if (render_legacy_topline)
+        Term_erase(0, 0, 255);
     message_topline_reset();
 }
 
@@ -678,6 +687,7 @@ static void msg_print_aux(u16b type, cptr msg)
     char* t;
     char buf[1024];
     byte color;
+    bool render_legacy_topline = message_use_legacy_topline_rendering();
     int w, h;
 
     /* Obtain the size */
@@ -755,7 +765,8 @@ static void msg_print_aux(u16b type, cptr msg)
         t[split] = '\0';
 
         /* Display part of the message */
-        Term_putstr(0, 0, split, color, t);
+        if (render_legacy_topline)
+            Term_putstr(0, 0, split, color, t);
 
         /* Flush it */
         msg_flush(split + 1);
@@ -772,7 +783,8 @@ static void msg_print_aux(u16b type, cptr msg)
     }
 
     /* Display the tail of the message */
-    Term_putstr(message_column, 0, n, color, t);
+    if (render_legacy_topline)
+        Term_putstr(message_column, 0, n, color, t);
     message_topline_append(t, type, color);
 
     /* Remember the message */
@@ -782,7 +794,7 @@ static void msg_print_aux(u16b type, cptr msg)
     message_column += n + 1;
 
     /* Optional refresh */
-    if (fresh_after)
+    if (render_legacy_topline && fresh_after)
         Term_fresh();
 
     app_session_mark_snapshot_dirty(app_session_current(),

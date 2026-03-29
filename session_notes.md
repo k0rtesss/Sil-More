@@ -1,5 +1,19 @@
 # Session notes
 
+## 2026-03-29: Message line duplicate legacy/new render fix
+- Investigated doubled top-line messages in the SDL frontend.
+- Root cause: `src/util-message.c:msg_print_aux()` always wrote to the legacy `Term` top row while also updating the snapshot-backed message topline consumed by `src/sdl-scene-dungeon.c`.
+- Fix: gate legacy topline `Term_putstr()` / `Term_erase()` / immediate `Term_fresh()` calls behind `sdl_scene_stack_handles_main_view()` so the SDL scene-owned main view renders the message line only once from the snapshot path.
+- Validation: `build-cmake.bat` completed successfully and deployed updated standard/portable builds.
+
+## 2026-03-29: SDL menu and left-panel font width parity fix
+- Investigated SDL menu/main-menu and left-panel text rendering appearing narrower than the legacy path.
+- Root cause: `src/sdl-scene-menu.c` measured text as `strlen * (line_h / 2)` and rendered one glyph per synthetic cell, which compressed glyph advance and narrowed the layout relative to legacy SDL_ttf rendering.
+- Fix: switched the menu scene renderer to use `TTF_MeasureString()` for layout width and `TTF_RenderText_Blended()` for whole-string rendering across titles, rows, tabs, detail text, and footer pills.
+- Follow-up: the dungeon left-panel path in `src/sdl-scene-dungeon.c` was still reserving width with `pixel_height / 2`; switched that to scale from the legacy terminal cell aspect ratio so proportional story text gets the same width budget as the old renderer.
+- Follow-up: the shared SDL main menu now uses the exact legacy padded row strings so plain-row width matches the old menu line-for-line instead of re-spacing label/meta columns.
+- Validation: `build-cmake.bat` completed successfully and deployed updated standard/portable builds.
+
 ## 2026-03-29: Partition monster spawn ownership fix
 - Investigated monster clumping in big cave and other large partition types during level generation.
 - Root cause: `choose_partition_monster_location()` in `src/level-generation/level-generation-connectivity.c` sampled any valid naked tile inside the partition bounding box but did not verify `level_partition_index_for_point(y, x) == plan->pi`.

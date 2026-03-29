@@ -282,7 +282,6 @@ static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
     SDL_FRect dst;
     char buf[APP_DUNGEON_PANE_TEXT_MAX + 1];
     int advance_w;
-    float scale = 1.0f;
     size_t copy_len = len;
 
     if (!font || !text || len == 0)
@@ -303,12 +302,9 @@ static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
     dst.w = (float)surface->w;
     dst.h = (float)surface->h;
 
-    if (target_h > 0 && surface->h > 0)
+    if (target_h > 0 && surface->h > 0 && surface->h != target_h)
     {
-        scale = (float)target_h / (float)surface->h;
-        dst.w *= scale;
         dst.h = (float)target_h;
-        advance_w = (int)((float)advance_w * scale + 0.5f);
     }
 
     if (max_w_px > 0.0f)
@@ -355,7 +351,6 @@ static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
     SDL_FRect dst;
     char glyph[2] = { ch ? ch : ' ', '\0' };
     float dst_w;
-    float dst_h;
 
     if (!font || !glyph[0] || glyph[0] == ' ' || cell_w <= 0 || cell_h <= 0)
         return;
@@ -372,21 +367,13 @@ static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
     }
 
     dst_w = (float)surface->w;
-    dst_h = (float)surface->h;
-    if (dst_h > (float)cell_h && dst_h > 0.0f)
-    {
-        float scale = (float)cell_h / dst_h;
-
-        dst_w *= scale;
-        dst_h = (float)cell_h;
-    }
     if (dst_w > (float)cell_w)
         dst_w = (float)cell_w;
 
     dst.x = x_px + ((float)cell_w - dst_w) * 0.5f;
     dst.y = y_px;
     dst.w = dst_w;
-    dst.h = dst_h;
+    dst.h = (float)cell_h;
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
@@ -422,7 +409,9 @@ static bool sdl_scene_left_panel_metrics_for_height(const sdl_view* view,
         return false;
 
     cell_h = pixel_height;
-    cell_w = MAX(1, pixel_height / 2);
+    cell_w = MAX(1,
+        (view->cell_w * pixel_height + MAX(1, view->cell_h) - 1)
+            / MAX(1, view->cell_h));
 
     if ((cols * cell_w) > available_w || (rows * cell_h) > available_h)
         return false;

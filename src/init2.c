@@ -439,7 +439,7 @@ static int welcome_screen_current_intro_style(void)
     if (sdl_config_should_force_intro_flame())
         return INTRO_STYLE_FLAME;
     if (op_ptr->intro_style == INTRO_STYLE_RANDOM)
-        return (int)(platform_monotonic_ms() % 5u);
+        return (int)(platform_monotonic_ms() % 7u);
     return (int)op_ptr->intro_style;
 }
 
@@ -612,6 +612,62 @@ static bool welcome_screen_visit_intro_lines(const welcome_intro_layout* layout,
             "await in the First Age reborn.");
         EMIT_LINE(intro_col, INTRO_ROW(16), TERM_L_BLUE,
             "\"Aure entuluva!\"");
+        break;
+
+    case 5:
+        EMIT_LINE(title_col, INTRO_ROW(1), TERM_WHITE, "S I L - M O R E");
+        EMIT_LINE(subtitle_col, INTRO_ROW(2), TERM_L_BLUE,
+            "~ Shining  Darkness ~");
+        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_WHITE,
+            "By silver waters Elves first woke");
+        EMIT_LINE(intro_col, INTRO_ROW(5), TERM_WHITE,
+            "beneath the stars ere morning broke.");
+        EMIT_LINE(intro_col, INTRO_ROW(6), TERM_WHITE,
+            "No sun had risen, no moon shone --");
+        EMIT_LINE(intro_col, INTRO_ROW(7), TERM_WHITE,
+            "just heaven's light on lake and stone.");
+        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
+            "Then Morgoth's shadow veiled the land");
+        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
+            "and stole the Light with iron hand.");
+        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
+            "Yet still a whisper stirs the deep:");
+        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
+            "what darkness took, the bold may reap.");
+        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_L_BLUE,
+            "\"...the starlight glittered");
+        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_L_BLUE,
+            "  on the waters of Cuivienen.\"");
+        EMIT_LINE(quote_attr_col, INTRO_ROW(16), TERM_SLATE,
+            "-- Of the Coming of the Elves");
+        break;
+
+    case 6:
+        EMIT_LINE(title_col, INTRO_ROW(1), TERM_WHITE, "S I L - M O R E");
+        EMIT_LINE(subtitle_col, INTRO_ROW(2), TERM_L_BLUE,
+            "~ Shining  Darkness ~");
+        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_WHITE,
+            "In Valinor the Two Trees shone");
+        EMIT_LINE(intro_col, INTRO_ROW(5), TERM_WHITE,
+            "with gold and silver, leaf and bough.");
+        EMIT_LINE(intro_col, INTRO_ROW(6), TERM_WHITE,
+            "Their mingled light is dead and gone --");
+        EMIT_LINE(intro_col, INTRO_ROW(7), TERM_WHITE,
+            "the world lies under shadow now.");
+        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
+            "Across the ice the exiles came,");
+        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
+            "the Noldor burning with their oath.");
+        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
+            "They traded bliss for grief and flame");
+        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
+            "and lost the blessing of them both.");
+        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_L_BLUE,
+            "\"...and the Noldor wept");
+        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_L_BLUE,
+            "  for the beauty of Telperion and Laurelin.\"");
+        EMIT_LINE(quote_attr_col, INTRO_ROW(16), TERM_SLATE,
+            "-- Of the Darkening of Valinor");
         break;
     }
 
