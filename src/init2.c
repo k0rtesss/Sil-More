@@ -1080,11 +1080,6 @@ void init_angband(void)
     if (init_r_info())
         quit("Cannot initialize monsters");
 
-    if (!r_base)
-        r_base = mem_alloc_array(z_info->r_max, monster_race);
-    for (i = 0; i < z_info->r_max; i++)
-        r_base[i] = r_info[i];
-
     note("[Initializing arrays... (vaults)]");
     if (init_v_info())
         quit("Cannot initialize vaults");
@@ -1159,6 +1154,19 @@ void init_angband(void)
 
     build_randart_tables();
 
+    /* Snapshot the fully initialized monster templates. This baseline must be
+     * taken after prefs and mon_power setup so load can restore clean runtime
+     * race data without replaying stale pre-init values. */
+    if (!r_base)
+    {
+        r_base = mem_alloc_array(z_info->r_max, monster_race);
+    }
+    for (i = 0; i < z_info->r_max; i++)
+    {
+        r_base[i] = r_info[i];
+    }
+
+    /* Clean up old files if this is a fresh start (no existing metarun) */
     if (metarun_created)
         cleanup_old_game_files();
 

@@ -151,6 +151,10 @@ typedef struct partition_chest_recipe
 } partition_chest_recipe;
 
 #define PARTITION_CHEST_RECIPE_MAX 3
+#define PARTITION_THEME_MONSTER_PERCENT 80
+#define PARTITION_THEME_LEVEL_DELTA 2
+#define CHASM_WHISPERING_SHADOW_TARGET 8
+#define CHASM_AMBUSH_UNIQUE_SUB_PERCENT 10
 
 typedef struct partition_population_meta
 {
@@ -348,6 +352,8 @@ extern int run_partition_monster_pass(
     const partition_population_plan* plans, int plan_count);
 extern int run_partition_special_scatter_pass(
     const partition_population_plan* plans, int plan_count);
+extern void partition_theme_depth_band(
+    int depth, int* min_depth, int* max_depth);
 extern int qv_stored_y1;
 extern int qv_stored_x1;
 extern int qv_stored_y2;
@@ -371,6 +377,8 @@ extern bool place_monster_by_flag_try(int y, int x, int flagset, u32b flag,
     bool allow_unique, int max_depth);
 extern bool place_monster_by_letter_try(int y, int x, char letter,
     bool allow_unique, int max_depth);
+extern bool place_vault_monster_token(char symbol, int y, int x);
+extern bool place_chasm_theme_monster_at(int y, int x, int r_idx);
 extern bool place_big_cave_elemental_monster(int y, int x,
     big_cave_type_t cave_type, int max_depth);
 extern bool place_big_cave_troll_or_giant(int y, int x, int max_depth);

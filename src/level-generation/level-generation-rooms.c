@@ -154,7 +154,7 @@ void monster_special_vault_debug_context(
         *exact_token = current_build_vault_exact_token;
 }
 
-static bool place_vault_monster_token(char symbol, int y, int x)
+bool place_vault_monster_token(char symbol, int y, int x)
 {
     for (size_t i = 0; i < N_ELEMENTS(vault_monster_table); i++)
     {
@@ -3503,6 +3503,156 @@ bool place_monster_by_letter_try(int y, int x, char letter, bool allow_unique, i
     return false;
 }
 
+static const int chasm_sanctum_ambush_offsets[8][2] = {
+    {-1, -1}, {-1, 0}, {-1, 1},
+    {0, -1},           {0, 1},
+    {1, -1},  {1, 0},  {1, 1},
+};
+
+static bool chasm_theme_monster_ok(
+    int r_idx, int min_depth, int max_depth, bool allow_unique, bool unique_only)
+{
+    monster_race* r_ptr = &r_info[r_idx];
+
+    if (!r_ptr->name || !r_ptr->rarity)
+        return false;
+    if (!allow_unique && (r_ptr->flags1 & RF1_UNIQUE))
+        return false;
+    if (unique_only && !(r_ptr->flags1 & RF1_UNIQUE))
+        return false;
+    if (r_ptr->flags3 & RF3_SPECIAL_VAULT_ONLY)
+        return false;
+    if (r_ptr->flags1 & RF1_SPECIAL_GEN)
+        return false;
+    if (r_ptr->light >= 0)
+        return false;
+    if (r_ptr->level < min_depth || r_ptr->level > max_depth)
+        return false;
+    if ((r_ptr->flags1 & RF1_FORCE_DEPTH) && (r_ptr->level > p_ptr->depth))
+        return false;
+    if (r_ptr->cur_num >= r_ptr->max_num)
+        return false;
+
+    return true;
+}
+
+static s16b choose_chasm_theme_monster(
+    int min_depth, int max_depth, bool allow_unique, bool unique_only)
+{
+    alloc_entry* table = alloc_race_table;
+    long total = 0L;
+
+    if (min_depth < 1)
+        min_depth = 1;
+    if (max_depth > MORGOTH_DEPTH + 3)
+        max_depth = MORGOTH_DEPTH + 3;
+    if (min_depth > max_depth)
+        return 0;
+
+    for (int i = 0; i < alloc_race_size; ++i)
+    {
+        int r_idx = table[i].index;
+
+        if (!chasm_theme_monster_ok(
+                r_idx, min_depth, max_depth, allow_unique, unique_only))
+        {
+            continue;
+        }
+
+        total += table[i].prob1;
+    }
+
+    if (total <= 0)
+        return 0;
+
+    {
+        long value = rand_int(total);
+
+        for (int i = 0; i < alloc_race_size; ++i)
+        {
+            int r_idx = table[i].index;
+
+            if (!chasm_theme_monster_ok(
+                    r_idx, min_depth, max_depth, allow_unique, unique_only))
+            {
+                continue;
+            }
+
+            if (value < table[i].prob1)
+                return r_idx;
+
+            value -= table[i].prob1;
+        }
+    }
+
+    return 0;
+}
+
+bool place_chasm_theme_monster_at(int y, int x, int r_idx)
+{
+    bool had_glyph = false;
+
+    if (!in_bounds_fully(y, x))
+        return false;
+
+    if (cave_feat[y][x] == FEAT_GLYPH)
+    {
+        cave_set_feat(y, x, FEAT_FLOOR);
+        had_glyph = true;
+    }
+
+    if (!cave_empty_bold(y, x))
+    {
+        if (had_glyph)
+            cave_set_feat(y, x, FEAT_GLYPH);
+        return false;
+    }
+
+    if (!place_monster_one(y, x, r_idx, true, false, NULL))
+    {
+        if (had_glyph)
+            cave_set_feat(y, x, FEAT_GLYPH);
+        return false;
+    }
+
+    {
+        int m_idx = cave_m_idx[y][x];
+
+        if (m_idx > 0)
+        {
+            monster_type* m_ptr = &mon_list[m_idx];
+
+            m_ptr->alertness = MAX(m_ptr->alertness, ALERTNESS_ALERT);
+            m_ptr->skip_next_turn = false;
+            m_ptr->mflag |= MFLAG_ACTV;
+            m_ptr->min_range = 0;
+        }
+    }
+
+    if (had_glyph)
+        cave_set_feat(y, x, FEAT_GLYPH);
+
+    return true;
+}
+
+static bool chasm_sanctum_drop_present(int y, int x);
+
+static bool chasm_sanctum_ambush_tile(int y, int x)
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        int cy = y - chasm_sanctum_ambush_offsets[i][0];
+        int cx = x - chasm_sanctum_ambush_offsets[i][1];
+
+        if (!in_bounds_fully(cy, cx))
+            continue;
+        if (chasm_sanctum_drop_present(cy, cx))
+            return true;
+    }
+
+    return false;
+}
+
 static bool chasm_sanctum_drop_present(int y, int x)
 {
     for (object_type* o_ptr = get_first_object(y, x); o_ptr;
@@ -3524,46 +3674,46 @@ static void clear_chasm_sanctum_drop_marker(int y, int x)
     }
 }
 
-static void awaken_chasm_sanctum_monster(int y, int x)
+static bool relocate_chasm_sanctum_blocker(int y, int x)
 {
     int m_idx = cave_m_idx[y][x];
 
     if (m_idx <= 0)
-        return;
+        return true;
 
-    monster_type* m_ptr = &mon_list[m_idx];
-    m_ptr->alertness = MAX(m_ptr->alertness, ALERTNESS_ALERT);
-    m_ptr->skip_next_turn = false;
-    m_ptr->mflag |= MFLAG_ACTV;
-    m_ptr->min_range = 0;
-}
-
-static bool place_chasm_sanctum_ambusher(int y, int x, int max_depth)
-{
-    if (!in_bounds_fully(y, x))
-        return false;
-
-    if (cave_feat[y][x] == FEAT_GLYPH)
-        cave_set_feat(y, x, FEAT_FLOOR);
-
-    if (!cave_naked_bold(y, x))
-        return false;
-
-    if (place_monster_by_flag_try(y, x, 4, RF4_DARKNESS, false, max_depth)
-        || place_monster_by_flag_try(y, x, 4, RF4_BRTH_DARK, false, max_depth)
-        || place_monster_by_flag_try(y, x, 3, RF3_UNDEAD, false, max_depth)
-        || place_monster_by_flag_try(y, x, 3, RF3_HORROR, false, max_depth)
-        || place_vault_monster_token('q', y, x))
+    for (int tries = 0; tries < 200; ++tries)
     {
-        awaken_chasm_sanctum_monster(y, x);
+        int ny = rand_spread(y, 6);
+        int nx = rand_spread(x, 6);
+        monster_type* m_ptr = &mon_list[m_idx];
+        monster_race* r_ptr = &r_info[m_ptr->r_idx];
+
+        if (!in_bounds_fully(ny, nx))
+            continue;
+        if (!cave_empty_bold(ny, nx))
+            continue;
+        if (cave_glyph(ny, nx))
+            continue;
+        if (chasm_sanctum_ambush_tile(ny, nx))
+            continue;
+        if (!cave_exist_mon(r_ptr, ny, nx, false, false))
+            continue;
+
+        monster_swap(y, x, ny, nx);
         return true;
     }
 
-    return false;
+    teleport_away(m_idx, 10);
+    return (cave_m_idx[y][x] == 0);
 }
 
 void trigger_chasm_sanctum_ambush_if_needed(int y, int x)
 {
+    int min_depth = 0;
+    int max_depth = 0;
+    s16b base_r_idx = 0;
+    s16b unique_r_idx = 0;
+    int unique_slot = -1;
     int placed = 0;
 
     if (!in_bounds_fully(y, x))
@@ -3576,24 +3726,45 @@ void trigger_chasm_sanctum_ambush_if_needed(int y, int x)
     msg_print("The evil artefact calls to its own.");
     msg_print("A cry goes up from the deeps, and black shadows gather.");
 
-    for (int dy = -1; dy <= 1; ++dy)
+    partition_theme_depth_band(p_ptr->depth, &min_depth, &max_depth);
+    base_r_idx = choose_chasm_theme_monster(min_depth, max_depth, false, false);
+    if (!base_r_idx)
     {
-        for (int dx = -1; dx <= 1; ++dx)
+        log_warn("Chasm sanctum ambush: no themed monster available at depth=%d band=[%d,%d]",
+            p_ptr->depth, min_depth, max_depth);
+        return;
+    }
+
+    if (base_r_idx && one_in_(CHASM_AMBUSH_UNIQUE_SUB_PERCENT))
+    {
+        unique_r_idx = choose_chasm_theme_monster(min_depth, max_depth, true, true);
+        if (unique_r_idx)
+            unique_slot = rand_int(8);
+    }
+
+    for (int i = 0; i < 8; ++i)
+    {
+        int ny = y + chasm_sanctum_ambush_offsets[i][0];
+        int nx = x + chasm_sanctum_ambush_offsets[i][1];
+        bool slot_placed = false;
+
+        if (!in_bounds_fully(ny, nx))
+            continue;
+        if (!relocate_chasm_sanctum_blocker(ny, nx))
+            continue;
+
+        if (base_r_idx)
         {
-            int ny = y + dy;
-            int nx = x + dx;
+            s16b r_idx = (unique_r_idx && (i == unique_slot))
+                ? unique_r_idx
+                : base_r_idx;
 
-            if (dy == 0 && dx == 0)
-                continue;
-            if (!in_bounds_fully(ny, nx))
-                continue;
-
-            if (cave_feat[ny][nx] == FEAT_GLYPH)
-                cave_set_feat(ny, nx, FEAT_FLOOR);
-
-            if (place_chasm_sanctum_ambusher(ny, nx, p_ptr->depth))
-                placed++;
+            slot_placed = place_chasm_theme_monster_at(ny, nx, r_idx);
+            if (!slot_placed && unique_r_idx && (i == unique_slot))
+                slot_placed = place_chasm_theme_monster_at(ny, nx, base_r_idx);
         }
+        if (slot_placed)
+            placed++;
     }
 
     (void)explosion(-1, 1, y, x, 0, 0, 0, GF_DARK_WEAK);
