@@ -44,6 +44,8 @@ static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
     const SDL_FRect* dst);
 static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
     float y_px, int cell_w, int cell_h, SDL_Color color, char ch);
+static void sdl_scene_render_look_prompt(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_interaction_state* interaction);
 static SDL_Color sdl_scene_color(byte attr)
 {
     byte color = attr & 0x0Fu;
@@ -474,6 +476,20 @@ static void sdl_scene_draw_text(const sdl_view* view, int col, int row,
 
     sdl_render_mono_text((sdl_view*)view, col, row, (int)len, text,
         sdl_scene_color(attr));
+}
+
+static void sdl_scene_clear_text_row(const sdl_view* view, int row)
+{
+    SDL_FRect rect;
+
+    if (!view || row < 0 || row >= view->rows)
+        return;
+
+    rect.x = 0.0f;
+    rect.y = (float)(row * view->cell_h);
+    rect.w = (float)(view->cols * view->cell_w);
+    rect.h = (float)view->cell_h;
+    sdl_scene_fill_rect(&rect, (SDL_Color){ 0, 0, 0, 255 });
 }
 
 static void sdl_scene_draw_text_snapshot(const sdl_view* view, int col, int row,
@@ -1027,7 +1043,7 @@ static const app_interaction_state* sdl_scene_interaction_snapshot(
 }
 
 static void sdl_scene_render_interaction_overlay(const sdl_view* view,
-    const app_interaction_state* interaction)
+    const sdl_scene_layout* layout, const app_interaction_state* interaction)
 {
     SDL_Color background;
     SDL_Color border;
@@ -1056,6 +1072,12 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
 
     if (!view || !interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
         return;
+
+    if (interaction->kind == APP_INTERACTION_KIND_LOOK)
+    {
+        sdl_scene_render_look_prompt(view, layout, interaction);
+        return;
+    }
 
     canvas_w = view->cols * view->cell_w;
     canvas_h = view->rows * view->cell_h;
@@ -1456,6 +1478,25 @@ static void sdl_scene_render_messages(const sdl_view* view,
     else if (messages->line_count > 0 && messages->lines[0].text[0])
         sdl_scene_draw_text(view, 0, 0, messages->lines[0].color,
             messages->lines[0].text);
+}
+
+static void sdl_scene_render_look_prompt(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_interaction_state* interaction)
+{
+    const char* text;
+
+    if (!view || !layout || !interaction)
+        return;
+    (void)layout;
+
+    text = interaction->prompt[0] ? interaction->prompt : interaction->detail;
+    if (!text || !text[0])
+        return;
+
+    sdl_scene_clear_text_row(view, 0);
+    sdl_scene_draw_text(view, 0, 0,
+        interaction->prompt_attr ? interaction->prompt_attr : TERM_WHITE,
+        text);
 }
 
 static void sdl_scene_render_status_panel(const sdl_view* view,
@@ -1865,7 +1906,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         animation_count, now_ns);
     sdl_scene_draw_absolute_cursor(main_view, &map->cursor);
     sdl_scene_render_messages(main_view, messages);
-    sdl_scene_render_interaction_overlay(main_view, interaction);
+    sdl_scene_render_interaction_overlay(main_view, &layout, interaction);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;

@@ -9,12 +9,14 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "metarun.h"
 #include "object/object-ui-enhanced.h"
+#include "ui/ui-information-scene.h"
 #include "ui/ui-look-sidebar.h"
 
 void do_cmd_target(void)
@@ -125,6 +127,98 @@ static bool get_explored_bounds(int* min_y, int* max_y, int* min_x, int* max_x)
 static bool g_unified_look_has_start = false;
 static int g_unified_look_start_y = 0;
 static int g_unified_look_start_x = 0;
+
+static bool unified_look_snapshot_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void unified_look_snapshot_clear(void)
+{
+    if (!unified_look_snapshot_active())
+        return;
+
+    app_session_clear_interaction(app_session_current());
+}
+
+static char unified_look_inkey_with_wait_reason(void)
+{
+    app_wait_scope scope;
+    app_session* session = app_session_current();
+    char ch;
+
+    app_session_push_wait_scope(session, &scope,
+        APP_WAIT_REASON_TARGETING, 0, 0);
+    ch = inkey();
+    app_session_pop_wait_scope(session, &scope);
+    return ch;
+}
+
+static void unified_look_wait_for_information(void)
+{
+    ui_information_scene_scope info_scope;
+
+    if (ui_information_scene_enter_mirror(&info_scope))
+    {
+        if (ui_information_scene_present_term())
+        {
+            (void)ui_information_scene_wait_key();
+            ui_information_scene_leave(&info_scope);
+            return;
+        }
+
+        ui_information_scene_leave(&info_scope);
+    }
+
+    {
+        app_wait_scope wait_scope;
+
+        app_session_push_wait_scope(app_session_current(), &wait_scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        (void)inkey();
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
+    }
+}
+
+static void unified_look_show_monster_recall(const monster_type* m_ptr)
+{
+    if (!m_ptr)
+        return;
+
+    screen_save();
+    screen_roff(m_ptr->r_idx, m_ptr);
+    unified_look_wait_for_information();
+    screen_load();
+}
+
+static void unified_look_show_object_info(const object_type* o_ptr)
+{
+    if (!o_ptr)
+        return;
+
+    if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
+    {
+        int slot = wield_slot(o_ptr);
+        const object_type* compare_objects[2];
+        const char* compare_headings[2];
+        char selected_heading[32];
+        char equipped_heading[32];
+
+        strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
+        strnfmt(equipped_heading, sizeof(equipped_heading), "%s",
+            mention_use(slot));
+
+        compare_objects[0] = o_ptr;
+        compare_headings[0] = selected_heading;
+        compare_headings[1] = equipped_heading;
+        compare_objects[1] = inventory[slot].k_idx ? &inventory[slot] : NULL;
+
+        object_info_screen_multi(compare_objects, compare_headings, 2);
+        return;
+    }
+
+    object_info_screen(o_ptr);
+}
 
 void do_cmd_look_at(int y, int x)
 {
@@ -386,6 +480,16 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
         SDL_strlcat(buf, "...", sizeof(buf));
     }
 
+    if (unified_look_snapshot_active())
+    {
+        app_session* session = app_session_current();
+
+        app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
+            APP_WAIT_REASON_TARGETING, 0);
+        app_session_set_interaction_prompt(session, TERM_WHITE, buf);
+        return;
+    }
+
     prt(buf, 0, 0);
 }
 
@@ -589,7 +693,7 @@ void do_cmd_unified_look(void)
                     
                     /* Display "You see <monster name>" in left sidebar */
                     strnfmt(out_val, sizeof(out_val), "You see %s.", m_name);
-                    prt(out_val, 0, 0);
+                    unified_look_print_prompt(out_val, NULL);
                 }
                 else if (has_marked_object)
                 {
@@ -612,14 +716,16 @@ void do_cmd_unified_look(void)
                     }
                     
                     /* Display "You see <object name>" in left sidebar */
-                    strnfmt(out_val, sizeof(out_val), "You see %s%s.", o_name, smith_buf);
-                    prt(out_val, 0, 0);
+                    strnfmt(out_val, sizeof(out_val), "You see %s%s.", o_name,
+                        smith_buf);
+                    unified_look_print_prompt(out_val, NULL);
                 }
                 else if (has_known_feature)
                 {
                     /* Display "You see <feature name>" in left sidebar */
-                    strnfmt(out_val, sizeof(out_val), "You see %s.", feature_name);
-                    prt(out_val, 0, 0);
+                    strnfmt(out_val, sizeof(out_val), "You see %s.",
+                        feature_name);
+                    unified_look_print_prompt(out_val, NULL);
                 }
                 else
                 {
@@ -696,7 +802,7 @@ void do_cmd_unified_look(void)
         }
         
         /* Get input */
-        query = inkey();
+        query = unified_look_inkey_with_wait_reason();
         log_trace("Unified look key input: '%c' (%d) [char: %c, isupper: %d]", 
                  query, (int)query, (query >= 32 && query <= 126) ? query : '?', 
                  (query >= 'A' && query <= 'Z') ? 1 : 0);
@@ -777,6 +883,8 @@ void do_cmd_unified_look(void)
                 /* Disable story font for info screens */
                 if (use_story_font)
                     sdl_story_font_disable();
+
+                unified_look_snapshot_clear();
                 
                 /* Same logic as Space/Enter for examination */
                 log_trace("EXAMINATION: state.in_sidebar_mode=%d, state.selected_entity=%d", 
@@ -807,17 +915,7 @@ void do_cmd_unified_look(void)
                                 state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
-                            /* Save screen */
-                            screen_save();
-                            
-                            /* Show monster recall */
-                            screen_roff(m_ptr->r_idx, m_ptr);
-                            
-                            /* Wait for input */
-                            inkey();
-                            
-                            /* Restore screen */
-                            screen_load();
+                            unified_look_show_monster_recall(m_ptr);
                             log_trace("EXAMINATION: Monster recall completed");
                         }
                         else
@@ -834,43 +932,7 @@ void do_cmd_unified_look(void)
                         /* Object examination */
                         object_type* o_ptr = &o_list[cursor_o_idx];
                         log_trace("EXAMINATION: Showing object info screen");
-                        /* Save screen */
-                        screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
-
-                        /* Restore screen */
-                        screen_load();
+                        unified_look_show_object_info(o_ptr);
                         log_trace("EXAMINATION: Object examination completed");
                     }
                     else if (cursor_m_idx > 0)
@@ -883,17 +945,7 @@ void do_cmd_unified_look(void)
                                 state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
-                            /* Save screen */
-                            screen_save();
-                            
-                            /* Show monster recall */
-                            screen_roff(m_ptr->r_idx, m_ptr);
-                            
-                            /* Wait for input */
-                            inkey();
-                            
-                            /* Restore screen */
-                            screen_load();
+                            unified_look_show_monster_recall(m_ptr);
                             log_trace("EXAMINATION: Monster recall completed");
                         }
                         else
@@ -926,50 +978,13 @@ void do_cmd_unified_look(void)
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
                         object_type* o_ptr = &o_list[cursor_o_idx];
-                        screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
-
-                        screen_load();
+                        unified_look_show_object_info(o_ptr);
                     }
                     else if (has_visible_monster)
                     {
                         log_trace("EXAMINATION: Examining visible monster at cursor position");
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
-                        screen_save();
-                        screen_roff(m_ptr->r_idx, m_ptr);
-                        inkey();
-                        screen_load();
+                        unified_look_show_monster_recall(m_ptr);
                     }
                     else
                     {
@@ -1317,6 +1332,8 @@ command_key:
                 /* Disable story font for info screens */
                 if (use_story_font)
                     sdl_story_font_disable();
+
+                unified_look_snapshot_clear();
                 
                 /* Examine current target */
                 log_trace("EXAMINATION: state.in_sidebar_mode=%d, state.selected_entity=%d", 
@@ -1347,17 +1364,7 @@ command_key:
                                 state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
-                            /* Save screen */
-                            screen_save();
-                            
-                            /* Show monster recall */
-                            screen_roff(m_ptr->r_idx, m_ptr);
-                            
-                            /* Wait for input */
-                            inkey();
-                            
-                            /* Restore screen */
-                            screen_load();
+                            unified_look_show_monster_recall(m_ptr);
                             log_trace("EXAMINATION: Monster recall completed");
                         }
                         else
@@ -1374,43 +1381,7 @@ command_key:
                         /* Object examination */
                         object_type* o_ptr = &o_list[cursor_o_idx];
                         log_trace("EXAMINATION: Showing object info screen");
-                        /* Save screen */
-                        screen_save();
-                        /* Show object info, with comparison if applicable */
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
-
-                        /* Restore screen */
-                        screen_load();
+                        unified_look_show_object_info(o_ptr);
                         log_trace("EXAMINATION: Object examination completed");
                     }
                     else if (cursor_m_idx > 0)
@@ -1423,17 +1394,7 @@ command_key:
                                 state.highlighted_x))
                         {
                             log_trace("EXAMINATION: Showing monster recall");
-                            /* Save screen */
-                            screen_save();
-                            
-                            /* Show monster recall */
-                            screen_roff(m_ptr->r_idx, m_ptr);
-                            
-                            /* Wait for input */
-                            inkey();
-                            
-                            /* Restore screen */
-                            screen_load();
+                            unified_look_show_monster_recall(m_ptr);
                             log_trace("EXAMINATION: Monster recall completed");
                         }
                         else
@@ -1466,50 +1427,13 @@ command_key:
                     {
                         log_trace("EXAMINATION: Examining object at cursor position");
                         object_type* o_ptr = &o_list[cursor_o_idx];
-                        screen_save();
-
-                        if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
-                        {
-                            int slot = wield_slot(o_ptr);
-                            const object_type* compare_objects[2];
-                            const char* compare_headings[2];
-                            char selected_heading[32];
-                            char equipped_heading[32];
-
-                            strnfmt(selected_heading, sizeof(selected_heading), "Selected item");
-                            strnfmt(equipped_heading, sizeof(equipped_heading), "%s", mention_use(slot));
-
-                            compare_objects[0] = o_ptr;
-                            compare_headings[0] = selected_heading;
-
-                            if (inventory[slot].k_idx)
-                            {
-                                compare_objects[1] = &inventory[slot];
-                            }
-                            else
-                            {
-                                compare_objects[1] = NULL;
-                            }
-
-                            compare_headings[1] = equipped_heading;
-
-                            object_info_screen_multi(compare_objects, compare_headings, 2);
-                        }
-                        else
-                        {
-                            object_info_screen(o_ptr);
-                        }
-
-                        screen_load();
+                        unified_look_show_object_info(o_ptr);
                     }
                     else if (has_visible_monster)
                     {
                         log_trace("EXAMINATION: Examining visible monster at cursor position");
                         monster_type* m_ptr = &mon_list[cursor_m_idx];
-                        screen_save();
-                        screen_roff(m_ptr->r_idx, m_ptr);
-                        inkey();
-                        screen_load();
+                        unified_look_show_monster_recall(m_ptr);
                     }
                     else
                     {
@@ -1786,6 +1710,8 @@ command_key:
     }
     
     log_trace("=== UNIFIED LOOK ENDED ===");
+
+    unified_look_snapshot_clear();
     
     /* Clear health tracking before exiting look command */
     health_track(0);

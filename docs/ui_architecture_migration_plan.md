@@ -147,7 +147,7 @@ Key rule:
 | UI2 | partial | wait reasons, input queues, the SDL legacy-input bridge, and an `app_advance_until_waiting()`-style stepper API are landed, but the runtime is not yet driven through that callback-based driver and many core flows still block inside `inkey()`-owned loops. |
 | UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
 | UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
-| UI5 | partial | prompt, list, and targeting interaction state exists, but `get_item()`, look-mode detail flows, and smithing-class selectors still rely on blocking term control flow. |
+| UI5 | partial | prompt, list, and targeting interaction state exists, and look/object detail pauses now mirror through `ui_information_scene`, but `get_item()` selector ownership, the outer look/targeting loops, and smithing-class selectors still rely on blocking term control flow. |
 | UI6 | partial | help, file viewer, message recall, story, death, the small-scale map viewer, nearby or object summaries, and combat-history now have information-scene bridges, but settings, score, quest, character, and knowledge flows still depend heavily on legacy term layout and input. |
 | UI7 | partial | the `sil-core` / `sil-platform-sdl` / `sil-legacy-compat` split is live in `CMakeLists.txt`, but legacy UI-heavy modules still live inside `sil-core`, so semantic isolation is not finished. |
 | UI8 | partial as a prototype | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI, but the stage still depends on the unfinished semantic cleanup tracked in UI7. |
@@ -466,14 +466,18 @@ Status:
   - `object-ui-select.c` publishes interaction state via
     `item_selector_sync_snapshot()`, tracks highlight selection, and manages
     wait scope for the entire `get_item()` lifetime
-- UI5C (targeting and look): complete
+- UI5C (targeting and look): partial
   - `targeting.c` publishes interaction state via `targeting_snapshot_prompt()`
     at all 6 `inkey()` sites; all calls replaced with
     `targeting_inkey_with_wait_reason()` wrapper; interaction state cleared on
     exit via `app_session_clear_interaction()`
-  - `cmd-ui-look.c` remains legacy-driven (7 `inkey()` calls) but look mode
-    shares the targeting interaction model via `target_set_interactive()` for
-    the primary code path
+  - `cmd-ui-look.c` now publishes `APP_INTERACTION_KIND_LOOK` prompt state on
+    the snapshot path, wraps its main wait with a targeting-scoped helper, and
+    clears interaction state before nested examine flows
+  - `cmd-ui-look.c` object and monster examination now mirror through
+    `ui_information_scene`, and `obj-info.c` uses the same bridge for
+    item-information pauses, but the outer look and targeting loops still own
+    redraw/path state through legacy term control flow
 - UI5D (smithing and bespoke selectors): complete
   - `ui-smithing-screen.c`: all 13 `inkey()` calls replaced with
     `smith_ui_inkey_with_wait_reason()` wrapper; outer `do_cmd_smithing_screen()`
@@ -750,8 +754,8 @@ Status on 2026-04-01:
 - `src/targeting.c` now mirrors the monster-recall overlay through
   `ui_information_scene` on the snapshot renderer path instead of relying only
   on `screen_save()` / `screen_load()` there
-- bootstrap, pause-menu, and `get_item()` presentation stay on their previous
-  visual paths rather than adopting the shared menu styling
+- bootstrap and pause-menu presentation stay on their previous visual paths
+  rather than adopting the shared menu styling
 - `src/runtime/runtime-game.c` now uses the same overlay layer for save status
   and the quit-path high-score prompt, so those transitional messages no longer
   depend on the legacy message row
@@ -768,9 +772,13 @@ Status on 2026-04-01:
   - `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, and
     `src/object/object-ui-select.c` all publish semantic interaction state for
     the snapshot renderer path
-  - `src/object/object-ui-select.c` and `src/cmd/ui/cmd-ui-look.c` still rely
-    on blocking term redraw loops for important normal-path behavior, so
-    generic interaction consumers are not finished yet
+  - `src/object/object-ui-select.c` now publishes its snapshot renderer path
+    through the shared menu scene while retaining the legacy blocking selector
+    loop and fallback redraw path
+  - `src/cmd/ui/cmd-ui-look.c` now publishes look interaction state and uses
+    the information-scene bridge for nested detail views, but its outer redraw
+    loop still relies on blocking term ownership for important normal-path
+    behavior, so generic interaction consumers are not finished yet
 - M2 is now complete for the current bridge-based path
   - `MENU3A` is complete: `do_cmd_messages()` in
     `src/cmd/ui/cmd-ui-main-menu.c` prefers `ui_information_scene` on the
@@ -831,8 +839,8 @@ Status update on 2026-03-29:
 | `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | complete | legacy information scenes working as a bridge |
 | `MENU0D` | new `src/sdl-ui-style.c`, `src/sdl-main-internal.h`, touch `src/sdl-scene-dungeon.c`, `src/sdl-scene-menu.c`, `src/sdl-scene.c` | `MENU0B` | complete | centralizes fixed-pixel menu typography, logical-pixel scaling, and cache ownership so overlay modals and shared menu scenes stay aligned |
 | `MENU0E` | `src/app/app-scene-information.*`, `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c`, and only the consumers that need glyph parity | `MENU0C` | complete | the information-scene bridge now preserves raw tile/cursor cells so nearby/object summaries, combat-history, and the map viewer keep legacy visuals on the snapshot path |
-| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | `get_check_oath_multiline()` uses shared menu scene for multiline prompts; `sdl-scene-dungeon.c` has fixed-pixel left-panel rendering; remaining prompt/list/targeting paths still cell-sized |
-| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | not started | finishes the `get_item()` path on top of the shared list modal |
+| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | multiline oath prompts use the shared menu scene; snapshot prompt/message paths no longer size against the live terminal width; look-mode prompts publish `APP_INTERACTION_KIND_LOOK` and nested look/object detail screens mirror through `ui_information_scene`; the outer look/targeting loops and some prompt/list flows still remain legacy-owned |
+| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | partial | snapshot-renderer path now uses the shared list modal via `app_menu_scene`; blocking selector ownership and legacy fallback remain |
 | `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; message, hint, nearby, combat-history, and map-view bridge work are now on the snapshot path, but several entry flows stay legacy |
 | `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | complete (UI6) | file-viewer fully migrated; all other modules dual-path with information scene primary and legacy fallback |
 | `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | partial (UI6 scope aware) | `do_cmd_options()` has information scene scope; `settings_wait_key()` and `settings_present()` route through scene; raw `inkey()` remains only in key-capture/macro flows; full menu-scene migration pending |

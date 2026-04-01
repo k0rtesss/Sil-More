@@ -10,6 +10,20 @@ static bool message_use_legacy_topline_rendering(void)
     return !sdl_scene_stack_handles_main_view();
 }
 
+static int message_topline_wrap_width(bool render_legacy_topline)
+{
+    int w = 80;
+    int h = 24;
+
+    if (!render_legacy_topline)
+        return (int)APP_DUNGEON_MESSAGE_TEXT_MAX - 8;
+
+    (void)Term_get_size(&w, &h);
+    if (w < 20)
+        w = 20;
+    return w;
+}
+
 /*
  * Flush the screen, make a noise
  */
@@ -688,10 +702,10 @@ static void msg_print_aux(u16b type, cptr msg)
     char buf[1024];
     byte color;
     bool render_legacy_topline = message_use_legacy_topline_rendering();
-    int w, h;
+    int w;
 
-    /* Obtain the size */
-    (void)Term_get_size(&w, &h);
+    /* Obtain the active wrap width */
+    w = message_topline_wrap_width(render_legacy_topline);
 
     /* Hack -- Reset */
     if (!msg_flag)

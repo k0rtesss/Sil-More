@@ -11,6 +11,8 @@ typedef struct prompt_menu_scene_scope {
     app_snapshot previous_snapshot;
 } prompt_menu_scene_scope;
 
+static bool prompt_snapshot_interaction_active(void);
+
 /*
  * Get some input at the cursor location.
  */
@@ -18,6 +20,9 @@ static int active_term_width(void)
 {
     int wid = 80;
     int hgt = 24;
+
+    if (prompt_snapshot_interaction_active())
+        return (int)APP_INTERACTION_TEXT_MAX - 1;
 
     if (Term)
         Term_get_size(&wid, &hgt);
@@ -217,14 +222,22 @@ bool askfor_aux(char* buf, size_t len)
     bool done = false;
 
     /* Locate the cursor */
-    Term_locate(&x, &y);
+    if (snapshot_interaction)
+    {
+        x = 0;
+        y = 0;
+    }
+    else
+    {
+        Term_locate(&x, &y);
+    }
 
     /* Paranoia */
     if ((x < 0) || (x >= term_wid))
         x = 0;
 
     /* Restrict the length */
-    if ((size_t)x + len > (size_t)term_wid)
+    if (!snapshot_interaction && (size_t)x + len > (size_t)term_wid)
         len = (size_t)(term_wid - x);
     if (len < 1)
         len = 1;
@@ -346,14 +359,22 @@ bool askfor_name(char* buf, size_t len)
     bool new_default_name = false;
 
     /* Locate the cursor */
-    Term_locate(&x, &y);
+    if (snapshot_interaction)
+    {
+        x = 0;
+        y = 0;
+    }
+    else
+    {
+        Term_locate(&x, &y);
+    }
 
     /* Paranoia */
     if ((x < 0) || (x >= term_wid))
         x = 0;
 
     /* Restrict the length */
-    if ((size_t)x + len > (size_t)term_wid)
+    if (!snapshot_interaction && (size_t)x + len > (size_t)term_wid)
         len = (size_t)(term_wid - x);
     if (len < 1)
         len = 1;
@@ -772,9 +793,17 @@ int get_check_other(cptr prompt, char other)
     message_flush();
 
     /* Hack -- Build a "useful" prompt */
-    if (prompt_wid < 8)
-        prompt_wid = 8;
-    strnfmt(buf, sizeof(buf), "%.*s[y/n/%c] ", prompt_wid, prompt, other);
+    if (snapshot_interaction)
+    {
+        strnfmt(buf, sizeof(buf), "%s[y/n/%c] ", prompt, other);
+    }
+    else
+    {
+        if (prompt_wid < 8)
+            prompt_wid = 8;
+        strnfmt(buf, sizeof(buf), "%.*s[y/n/%c] ", prompt_wid, prompt,
+            other);
+    }
 
     /* Prompt for it */
     if (!snapshot_interaction)
@@ -846,10 +875,18 @@ bool get_check(cptr prompt)
     message_flush();
 
     /* Hack -- Build a "useful" prompt */
-    if (prompt_wid < 8)
-        prompt_wid = 8;
-    strnfmt(buf, sizeof(buf), "%.*s[y/n%s] ", prompt_wid, prompt,
-        steamdeck ? "/space" : "");
+    if (snapshot_interaction)
+    {
+        strnfmt(buf, sizeof(buf), "%s[y/n%s] ", prompt,
+            steamdeck ? "/space" : "");
+    }
+    else
+    {
+        if (prompt_wid < 8)
+            prompt_wid = 8;
+        strnfmt(buf, sizeof(buf), "%.*s[y/n%s] ", prompt_wid, prompt,
+            steamdeck ? "/space" : "");
+    }
 
     /* Prompt for it */
     if (!snapshot_interaction)

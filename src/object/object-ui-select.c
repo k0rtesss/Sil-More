@@ -24,9 +24,99 @@ bool item_tester_full = false;
 byte item_tester_tval = 0;
 bool (*item_tester_hook)(const object_type*) = NULL;
 
+typedef struct item_selector_menu_scene_scope {
+    bool active;
+    app_snapshot previous_snapshot;
+} item_selector_menu_scene_scope;
+
 static bool item_selector_snapshot_active(void)
 {
     return app_session_interactions_enabled(app_session_current());
+}
+
+static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!scope || !session)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+
+    scope->previous_snapshot = *snapshot;
+    scope->active = true;
+    return true;
+}
+
+static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_interaction_state* interaction;
+    app_menu_scene scene;
+
+    if (!scope || !scope->active || !session)
+        return false;
+
+    interaction = app_session_interaction(session);
+    if (!interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
+        return false;
+
+    if (!app_menu_scene_from_interaction(&scene, interaction))
+        return false;
+
+    scene.flags |= APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
+        | APP_MENU_SCENE_FLAG_DIM_BACKDROP;
+    scene.min_width_px = MAX(scene.min_width_px, 340);
+
+    if (!app_session_publish_menu_scene(session, &scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
+static void item_selector_menu_scene_restore(
+    item_selector_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    app_session_set_snapshot(session, &scope->previous_snapshot);
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+}
+
+static void item_selector_suspend_snapshot_ui(
+    item_selector_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    item_selector_menu_scene_restore(scope);
+    if (session)
+    {
+        app_session_clear_interaction(session);
+        snapshot = app_session_snapshot(session);
+        if (scope && scope->active && snapshot
+            && snapshot->scene == APP_SCENE_KIND_DUNGEON)
+        {
+            scope->previous_snapshot = *snapshot;
+        }
+    }
+}
+
+static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope)
+{
+    if (!scope)
+        return;
+
+    item_selector_suspend_snapshot_ui(scope);
+    scope->active = false;
 }
 
 static void item_selector_format_weight(char* buf, size_t buf_size,
@@ -54,7 +144,7 @@ static void item_selector_sync_snapshot(cptr prompt, int current_mode,
     char detail[APP_INTERACTION_TEXT_MAX];
     int i;
 
-    if (!app_session_interactions_enabled(session))
+    if (!session)
         return;
 
     app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
@@ -457,6 +547,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     int floor_list[MAX_FLOOR_STACK];
     int floor_num;
     bool snapshot_interaction = item_selector_snapshot_active();
+    item_selector_menu_scene_scope menu_scene_scope;
+
+    memset(&menu_scene_scope, 0, sizeof(menu_scene_scope));
 
 #ifdef ALLOW_REPEAT
 
@@ -612,6 +705,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     if (snapshot_interaction)
         p_ptr->command_see = true;
+
+    if (snapshot_interaction)
+        (void)item_selector_menu_scene_enter(&menu_scene_scope);
 
     /* Start out in "display" mode */
     if (p_ptr->command_see && !snapshot_interaction)
@@ -968,9 +1064,12 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         }
 
         if (snapshot_interaction)
+        {
             item_selector_sync_snapshot(out_val, p_ptr->command_wrk,
                 floor_list, vis_inven_cnt, vis_inven, vis_equip_cnt, vis_equip,
                 vis_floor_cnt, vis_floor, highlight_active ? highlight_row : -1);
+            (void)item_selector_menu_scene_present(&menu_scene_scope);
+        }
         else
             put_str(out_val, 0, 0);
 
@@ -1016,6 +1115,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (have_selection)
                 {
+                    if (snapshot_interaction)
+                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
                     if ((k >= 0 && k < INVEN_WIELD && !allow_inven) ||
                         (k >= INVEN_WIELD && k < INVEN_TOTAL && !allow_equip) ||
                         (k < 0 && !allow_floor) ||
@@ -1119,6 +1221,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     continue;
 
                 /* Allow player to "refuse" certain actions */
+                if (snapshot_interaction)
+                    item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
                 if (!get_item_allow(k))
                     continue;
 
@@ -1163,7 +1268,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 if (have_selection)
                 {
                     if (snapshot_interaction)
-                        app_session_clear_interaction(app_session_current());
+                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
                     describe_item_with_comparisons(examine_index, true);
                 }
                 else
@@ -1248,6 +1353,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Allow player to "refuse" certain actions */
+            if (snapshot_interaction)
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
             if (!get_item_allow(k))
             {
                 done = true;
@@ -1307,6 +1415,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Allow player to "refuse" certain actions */
+            if (snapshot_interaction)
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
             if (!get_item_allow(k))
             {
                 done = true;
@@ -1344,6 +1455,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     break;
                 }
                 if (!get_item_okay(k)) { bell("Illegal object choice (highlight)!"); break; }
+                if (snapshot_interaction) {
+                    item_selector_suspend_snapshot_ui(&menu_scene_scope);
+                }
                 if (!get_item_allow(k)) { done = true; break; }
                 (*cp)=k; item=true; done=true; break;
             }
@@ -1392,6 +1506,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Allow player to "refuse" certain actions */
+            if (snapshot_interaction)
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
             if (!get_item_allow(k))
             {
                 done = true;
@@ -1427,6 +1544,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     if (!get_item_okay(k)) {
                         bell("Illegal object choice (highlight)!");
                         break;
+                    }
+                    if (snapshot_interaction) {
+                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
                     }
                     if (!get_item_allow(k)) {
                         done=true;
@@ -1492,6 +1612,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Verify the item */
+            if (snapshot_interaction)
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
             if (verify && !verify_item("Try", k))
             {
                 done = true;
@@ -1499,6 +1622,9 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Allow player to "refuse" certain actions */
+            if (snapshot_interaction)
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+
             if (!get_item_allow(k))
             {
                 done = true;
@@ -1533,7 +1659,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     }
 
     if (snapshot_interaction)
-        app_session_clear_interaction(app_session_current());
+        item_selector_menu_scene_close(&menu_scene_scope);
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 
     set_story_inventory_list_active(false);

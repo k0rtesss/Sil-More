@@ -12,6 +12,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "ui/ui-information-scene.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -42,6 +43,35 @@ static void object_info_screen_multi_body(const object_type** objects,
     const char** headings, int count, bool clear_current_line);
 static bool object_info_buffer_append(const void* data, size_t len);
 static bool object_info_buffer_append_byte(unsigned char value);
+
+static char object_info_wait_key(void)
+{
+    ui_information_scene_scope info_scope;
+
+    if (ui_information_scene_enter_mirror(&info_scope))
+    {
+        if (ui_information_scene_present_term())
+        {
+            char ch = (char)ui_information_scene_wait_key();
+
+            ui_information_scene_leave(&info_scope);
+            return ch;
+        }
+
+        ui_information_scene_leave(&info_scope);
+    }
+
+    {
+        app_wait_scope scope;
+        char ch;
+
+        app_session_push_wait_scope(app_session_current(), &scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        ch = inkey();
+        app_session_pop_wait_scope(app_session_current(), &scope);
+        return ch;
+    }
+}
 
 static bool object_info_buffer_reserve(size_t needed)
 {
@@ -1803,13 +1833,7 @@ void note_info_screen(const object_type* o_ptr)
     text_out_indent = 0;
 
     /* Wait for input */
-    {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
-    }
+    (void)object_info_wait_key();
 
     /* Load the screen */
     screen_load();
@@ -1868,13 +1892,7 @@ void object_info_screen(const object_type* o_ptr)
     log_trace("object_info_screen: About to wait for input");
 
     /* Wait for input */
-    {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
-    }
+    (void)object_info_wait_key();
 
     log_trace("object_info_screen: Input received, about to load screen");
 
@@ -2230,13 +2248,7 @@ static void object_info_screen_capture_view(
 
         object_info_screen_capture_draw(capture, scroll);
 
-        {
-            app_wait_scope scope;
-            app_session_push_wait_scope(app_session_current(), &scope,
-                APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-            ch = inkey();
-            app_session_pop_wait_scope(app_session_current(), &scope);
-        }
+        ch = object_info_wait_key();
         dir = target_dir(ch);
         if ((dir == 8) || (dir == 2))
             ch = I2D(dir);
@@ -2316,13 +2328,7 @@ void object_info_screen_multi(const object_type** objects, const char** headings
     object_info_screen_multi_body(objects, headings, count, true);
 
     text_out_c(TERM_L_BLUE, "\n\n(press any key)\n");
-    {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
-    }
+    (void)object_info_wait_key();
 
     screen_load();
 

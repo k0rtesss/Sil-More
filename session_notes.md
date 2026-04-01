@@ -1,5 +1,16 @@
 # Session notes
 
+## 2026-04-01: MENU2 get_item shared menu-scene migration
+- Advanced the UI migration plan on the `MENU2` slice in `src/object/object-ui-select.c`.
+- `get_item()` now publishes its snapshot-renderer path through the shared `app_menu_scene` renderer instead of the dungeon interaction overlay:
+  - added a small local menu-scene scope that snapshots the current dungeon scene, publishes the selector as `APP_SCENE_KIND_MENU` with `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP | APP_MENU_SCENE_FLAG_DIM_BACKDROP`, and restores the dungeon snapshot on exit
+  - kept the legacy terminal list path unchanged for non-snapshot renderers
+  - suspended the shared menu scene before nested examination / confirmation flows (`describe_item_with_comparisons()`, `verify_item()`, inscription-driven `get_item_allow()` prompts) so those legacy subflows still render correctly and the selector can resume cleanly afterward
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `py -3 tools/ui_debt_audit.py`
+  - `py -3 tools/ui_debt_audit.py --check tests/ui_debt_audit_baseline.json` still fails because the checked-in baseline is already stale on `direct Term_* render/control calls` (`1729` current vs `1725` baseline); this slice did not change the live audit counts from the pre-edit state
+
 ## 2026-03-29: Message line duplicate legacy/new render fix
 - Investigated doubled top-line messages in the SDL frontend.
 - Root cause: `src/util-message.c:msg_print_aux()` always wrote to the legacy `Term` top row while also updating the snapshot-backed message topline consumed by `src/sdl-scene-dungeon.c`.
@@ -8852,6 +8863,33 @@ The script now fully matches the game's drop generation logic for all item types
   - `src/sdl-touch.c` for touch-pane state, rendering, pointer handling, and touch-pane config APIs.
 - `CMakeLists.txt` now builds the new SDL platform modules in `sil-platform-sdl`.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-04-01: MENU1 partial follow-up (look + prompt/message bridge)
+- `src/cmd/ui/cmd-ui-look.c`: snapshot renderer path now publishes `APP_INTERACTION_KIND_LOOK`, wraps the main wait in a targeting-scoped wait helper, clears interaction state before nested examine flows, and routes monster recall through a shared information-scene wait helper instead of raw `inkey()`.
+- `src/obj-info.c`: note, object-info, and scrolling multi-object detail pauses now prefer `ui_information_scene_enter_mirror()` / `ui_information_scene_present_term()` and keep the legacy wait fallback.
+- `src/util-prompt.c`: snapshot prompt/text-entry paths no longer size prompt text or input length against the live terminal cursor/width; legacy terminal behavior is unchanged.
+- `src/util-message.c`: snapshot top-line message wrapping now uses the fixed snapshot message width instead of `Term_get_size()`.
+- `src/sdl-scene-dungeon.c`: `APP_INTERACTION_KIND_LOOK` overlays now top-anchor like targeting on the SDL dungeon scene.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+- Validation: `py -3 tools/ui_debt_audit.py --check tests/ui_debt_audit_baseline.json` still fails because the checked-in `Term_*` baseline is stale (`1729` current vs `1725` baseline); this predates the MENU1 follow-up.
+- Status: `MENU1` remains partial because the outer `cmd-ui-look.c` and `targeting.c` redraw/path loops still own important normal-path behavior through legacy term control flow.
+
+## 2026-04-02: LOOK prompt renderer correction
+- `src/sdl-scene-dungeon.c`: `APP_INTERACTION_KIND_LOOK` no longer renders through the boxed generic interaction overlay. The snapshot renderer now draws it as a single top-line prompt using the same fixed left-panel font metrics, so look-mode prompts keep the legacy placement and scaling instead of appearing as a modal menu.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+- Validation: `py -3 tools/ui_debt_audit.py --check tests/ui_debt_audit_baseline.json` still fails only because the checked-in `Term_*` baseline is stale (`1729` current vs `1725` baseline).
+
+## 2026-04-02: LOOK prompt top-line path correction
+- `src/sdl-scene-dungeon.c`: simplified `APP_INTERACTION_KIND_LOOK` rendering again so it now uses the same row-0 `sdl_scene_draw_text()` path as ordinary dungeon top-line text, not the fixed left-panel glyph renderer. This keeps look-mode prompts on the legacy top line instead of making them behave like side-panel text.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-04-02: LOOK prompt row-clear fix
+- `src/sdl-scene-dungeon.c`: fixed the row-0 overlap bug for `APP_INTERACTION_KIND_LOOK`. The cause was that the prompt was rendered after the message line using `sdl_scene_draw_text()` without clearing row 0 first, unlike legacy `prt()` semantics. The renderer now clears the whole top text row before drawing the look prompt.
+- Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
+
+## 2026-04-02: LOOK prompt snapshot top-line fix reverted
+- Reverted the attempted `APP_INTERACTION_KIND_LOOK` move into the dungeon snapshot top-line path after it introduced new SDL layout regressions: the left panel clipped on the left edge, the message row reappeared mid-screen, and the boxed interaction prompt still rendered separately.
+- Restored the previous SDL-side `LOOK` special-case path in `src/sdl-scene-dungeon.c` and returned `src/app/app-scene-dungeon.c` to the normal message snapshot builder.
 - UI3 landed a session-owned dungeon snapshot path under `src/app/app-scene-dungeon.[ch]`.
 - `app_session` now owns stable dungeon blob storage plus dirty/invalidation tracking, and `src/ui/ui-status.c:handle_stuff()` is the main rebuild funnel after `p_ptr->update` / `redraw` / `window` masks are consumed.
 - Added first-pass UI3 event hooks for message-log updates, cursor/target changes, actor movement, damage, projectile launches, and object transfers in the existing early-snapshot modules.
