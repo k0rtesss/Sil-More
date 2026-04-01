@@ -1408,8 +1408,9 @@ static drop_profile drop_profile_for_mode(quadrant_mode_t mode)
     return prof.profile;
 }
 
-static bool place_partition_chest_at(
-    int y, int x, const partition_chest_recipe* recipe, quadrant_mode_t mode)
+static bool place_partition_chest_at(int pi, int y, int x,
+    const partition_chest_recipe* recipe, quadrant_mode_t mode,
+    bool require_room_tile)
 {
     object_type object_type_body;
     object_type* i_ptr = &object_type_body;
@@ -1418,6 +1419,8 @@ static bool place_partition_chest_at(
     int chest_mode = 0;
 
     if (!in_bounds_fully(y, x))
+        return false;
+    if (pi >= 0 && level_partition_index_for_point(y, x) != pi)
         return false;
 
     if (mode == QUAD_MODE_CHASM && !chasm_native_walkable_bold(y, x))
@@ -1431,6 +1434,8 @@ static bool place_partition_chest_at(
     {
         return false;
     }
+    if (require_room_tile && !(cave_info[y][x] & CAVE_ROOM))
+        return false;
 
     if (recipe)
         chest_mode = recipe->chest_mode;
@@ -1483,8 +1488,9 @@ void reset_partition_population_metadata(void)
 }
 
 static bool place_chest_in_bounds(
-    int y1, int y2, int x1, int x2, const partition_chest_recipe* recipe,
-    quadrant_mode_t mode)
+    int pi, int y1, int y2, int x1, int x2,
+    const partition_chest_recipe* recipe, quadrant_mode_t mode,
+    bool require_room_tile)
 {
     int attempts = 0;
     int max_attempts = 100;
@@ -1497,7 +1503,8 @@ static bool place_chest_in_bounds(
         int cy = rand_range(y1 + 1, y2 - 1);
         int cx = rand_range(x1 + 1, x2 - 1);
 
-        if (place_partition_chest_at(cy, cx, recipe, mode))
+        if (place_partition_chest_at(pi, cy, cx, recipe, mode,
+                require_room_tile))
         {
             genlog_anchor("Placed chest in partition at (%d,%d)", cy, cx);
             return true;
@@ -1510,7 +1517,8 @@ static bool place_chest_in_bounds(
     {
         for (int cx = x1 + 1; cx < x2; ++cx)
         {
-            if (!place_partition_chest_at(cy, cx, recipe, mode))
+            if (!place_partition_chest_at(pi, cy, cx, recipe, mode,
+                    require_room_tile))
                 continue;
 
             genlog_anchor(
@@ -1529,9 +1537,11 @@ static bool place_chest_in_bounds(
 }
 
 static bool place_chest_in_partition(
-    int y1, int y2, int x1, int x2, const partition_chest_recipe* recipe,
-    quadrant_mode_t mode)
+    int pi, int y1, int y2, int x1, int x2,
+    const partition_chest_recipe* recipe, quadrant_mode_t mode)
 {
+    bool require_room_tile = (mode == QUAD_MODE_BIG_CAVE);
+
     if (recipe && recipe->anchor_pref == PARTITION_CHEST_ANCHOR_BSP_SLICE)
     {
         int room_count = dun->cent_n;
@@ -1549,15 +1559,30 @@ static bool place_chest_in_partition(
             if (bounds.y1 < y1 || bounds.y2 > y2 || bounds.x1 < x1 || bounds.x2 > x2)
                 continue;
 
-            if (place_chest_in_bounds(bounds.y1, bounds.y2, bounds.x1, bounds.x2,
-                    recipe, mode))
+            if (place_chest_in_bounds(pi, bounds.y1, bounds.y2, bounds.x1,
+                    bounds.x2, recipe, mode, require_room_tile))
             {
                 return true;
             }
         }
     }
 
-    return place_chest_in_bounds(y1, y2, x1, x2, recipe, mode);
+    if (place_chest_in_bounds(pi, y1, y2, x1, x2, recipe, mode,
+            require_room_tile))
+    {
+        return true;
+    }
+
+    if (require_room_tile)
+    {
+        genlog_anchor(
+            "Big cave chest fallback: retrying without room-tile restriction in partition %d",
+            pi);
+        return place_chest_in_bounds(
+            pi, y1, y2, x1, x2, recipe, mode, false);
+    }
+
+    return false;
 }
 
 void drop_profile_for_partition_kind(level_partition_kind kind, drop_profile* out)
@@ -2881,7 +2906,7 @@ int run_partition_special_scatter_pass(
         for (int chest = 0; chest < plan->meta.chest_count; ++chest)
         {
             place_chest_in_partition(
-                plan->y1, plan->y2, plan->x1, plan->x2,
+                plan->pi, plan->y1, plan->y2, plan->x1, plan->x2,
                 &plan->meta.chest_recipes[chest], plan->mode);
         }
 
