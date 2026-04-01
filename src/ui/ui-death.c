@@ -99,7 +99,7 @@ void ui_death_show_character_info(void)
         Term_fresh();
     }
 
-    if ((scene_active ? ui_information_scene_wait_key() : inkey()) == ESCAPE)
+    if ((scene_active ? ui_information_scene_wait_key_nonrepeat() : inkey()) == ESCAPE)
     {
         if (scene_active)
             ui_information_scene_leave(&scope);
@@ -126,7 +126,7 @@ void ui_death_show_character_info(void)
         {
             Term_fresh();
         }
-        if ((scene_active ? ui_information_scene_wait_key() : inkey())
+        if ((scene_active ? ui_information_scene_wait_key_nonrepeat() : inkey())
             == ESCAPE)
         {
             if (scene_active)
@@ -157,7 +157,7 @@ void ui_death_show_character_info(void)
         {
             Term_fresh();
         }
-        if ((scene_active ? ui_information_scene_wait_key() : inkey())
+        if ((scene_active ? ui_information_scene_wait_key_nonrepeat() : inkey())
             == ESCAPE)
         {
             if (scene_active)

@@ -35,6 +35,8 @@ struct app_session {
     app_event_buffer* events;
     app_input_queue inputs;
     app_intent_queue intents;
+    app_session_advance_callback advance_callback;
+    void* advance_user_data;
 };
 
 static app_session* g_current_session;
@@ -63,6 +65,13 @@ static size_t app_session_initial_input_capacity(void)
 static size_t app_session_initial_intent_capacity(void)
 {
     return 16u;
+}
+
+static bool app_session_state_is_terminal(u16b state)
+{
+    return state == APP_SESSION_STATE_STOPPING
+        || state == APP_SESSION_STATE_STOPPED
+        || state == APP_SESSION_STATE_FAULTED;
 }
 
 static u64b app_session_event_timestamp(const app_session* session)
@@ -392,6 +401,21 @@ void app_session_make_current(app_session* session)
     g_current_session = session;
 }
 
+void app_session_set_advance_callback(app_session* session,
+    app_session_advance_callback callback, void* user_data)
+{
+    if (!session)
+        return;
+
+    session->advance_callback = callback;
+    session->advance_user_data = user_data;
+}
+
+bool app_session_can_advance(const app_session* session)
+{
+    return session && session->advance_callback != NULL;
+}
+
 app_session* app_session_create(const app_session_config* config)
 {
     app_session* session;
@@ -587,6 +611,65 @@ void app_session_pop_wait_scope(app_session* session,
     app_session_set_state(session, scope->state);
 }
 
+u16b app_session_advance_until_waiting(app_session* session)
+{
+    u32b steps = 0;
+    const u32b step_limit = 100000u;
+
+    if (!session)
+        return APP_WAIT_REASON_FAULT;
+
+    if (session->wait_state.reason != APP_WAIT_REASON_NONE)
+    {
+        if (!app_session_state_is_terminal(session->state))
+            app_session_set_state(session, APP_SESSION_STATE_WAITING);
+        return session->wait_state.reason;
+    }
+
+    if (app_session_state_is_terminal(session->state))
+        return session->wait_state.reason;
+
+    if (!session->advance_callback)
+        return APP_WAIT_REASON_NONE;
+
+    app_session_set_state(session, APP_SESSION_STATE_RUNNING);
+
+    while (session->wait_state.reason == APP_WAIT_REASON_NONE
+        && !app_session_state_is_terminal(session->state))
+    {
+        bool advanced = session->advance_callback(session,
+            session->advance_user_data);
+
+        steps++;
+
+        if (session->wait_state.reason != APP_WAIT_REASON_NONE)
+            break;
+        if (app_session_state_is_terminal(session->state))
+            return session->wait_state.reason;
+        if (!advanced)
+        {
+            app_session_set_state(session, APP_SESSION_STATE_IDLE);
+            return APP_WAIT_REASON_NONE;
+        }
+        if (session->state == APP_SESSION_STATE_IDLE)
+            return APP_WAIT_REASON_NONE;
+        if (steps >= step_limit)
+        {
+            app_session_begin_wait(session, APP_WAIT_REASON_FAULT, 0, 0);
+            app_session_set_state(session, APP_SESSION_STATE_FAULTED);
+            return APP_WAIT_REASON_FAULT;
+        }
+    }
+
+    if (session->wait_state.reason != APP_WAIT_REASON_NONE
+        && !app_session_state_is_terminal(session->state))
+    {
+        app_session_set_state(session, APP_SESSION_STATE_WAITING);
+    }
+
+    return session->wait_state.reason;
+}
+
 const app_snapshot* app_session_snapshot(const app_session* session)
 {
     return session ? &session->snapshot : NULL;
@@ -654,6 +737,23 @@ void app_session_clear_information_snapshot(app_session* session)
     app_session_sync_information_blob(session);
 }
 
+bool app_session_publish_information_scene(app_session* session,
+    const app_information_scene* scene)
+{
+    if (!session || !scene)
+        return false;
+
+    session->information_snapshot.scene = *scene;
+    app_session_sync_information_blob(session);
+    session->information_snapshot.snapshot.flags
+        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
+    session->information_snapshot.snapshot.revision
+        = session->next_snapshot_revision++;
+    session->snapshot = session->information_snapshot.snapshot;
+    session->snapshot_dirty_mask = 0;
+    return true;
+}
+
 void app_session_clear_menu_snapshot(app_session* session)
 {
     if (!session)
@@ -679,18 +779,34 @@ bool app_session_add_information_op_ex(app_session* session, s16b row,
         &session->information_snapshot.scene, row, col, attr, story, text);
 }
 
+bool app_session_add_information_cell_ex(app_session* session, s16b row,
+    s16b col, byte attr, char ch, byte terrain_attr, char terrain_char,
+    byte story, byte width)
+{
+    if (!session)
+        return false;
+
+    return app_information_scene_add_cell_ex(&session->information_snapshot.scene,
+        row, col, attr, ch, terrain_attr, terrain_char, story, width);
+}
+
+bool app_session_add_information_cursor(app_session* session, s16b row,
+    s16b col, byte attr, byte width)
+{
+    if (!session)
+        return false;
+
+    return app_information_scene_add_cursor(&session->information_snapshot.scene,
+        row, col, attr, width);
+}
+
 bool app_session_publish_information_snapshot(app_session* session)
 {
     if (!session)
         return false;
 
-    app_session_sync_information_blob(session);
-    session->information_snapshot.snapshot.flags
-        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
-    session->information_snapshot.snapshot.revision = session->next_snapshot_revision++;
-    session->snapshot = session->information_snapshot.snapshot;
-    session->snapshot_dirty_mask = 0;
-    return true;
+    return app_session_publish_information_scene(session,
+        &session->information_snapshot.scene);
 }
 
 bool app_session_publish_bootstrap_scene(app_session* session,
@@ -1186,4 +1302,34 @@ void app_session_clear_events(app_session* session)
         return;
 
     app_event_buffer_clear(session->events);
+}
+
+bool app_submit_input(app_session* session, const app_input* input)
+{
+    return app_session_submit_input(session, input);
+}
+
+bool app_submit_intent(app_session* session, const app_intent* intent)
+{
+    return app_session_submit_intent(session, intent);
+}
+
+u16b app_advance_until_waiting(app_session* session)
+{
+    return app_session_advance_until_waiting(session);
+}
+
+const app_snapshot* app_get_snapshot(const app_session* session)
+{
+    return app_session_snapshot(session);
+}
+
+app_event_span app_view_events(const app_session* session)
+{
+    return app_session_view_events(session);
+}
+
+app_event_span app_drain_events(app_session* session)
+{
+    return app_session_drain_events(session);
 }

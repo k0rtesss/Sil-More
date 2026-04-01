@@ -100,9 +100,15 @@ typedef struct app_session_export {
 } app_session_export;
 
 typedef struct app_session app_session;
+typedef bool (*app_session_advance_callback)(app_session* session,
+    void* user_data);
 
 app_session* app_session_current(void);
 void app_session_make_current(app_session* session);
+void app_session_set_advance_callback(app_session* session,
+    app_session_advance_callback callback, void* user_data);
+bool app_session_can_advance(const app_session* session);
+u16b app_session_advance_until_waiting(app_session* session);
 app_session* app_session_create(const app_session_config* config);
 void app_session_destroy(app_session* session);
 const app_host* app_session_host(const app_session* session);
@@ -136,10 +142,17 @@ void app_session_clear_bootstrap_snapshot(app_session* session);
 bool app_session_publish_bootstrap_scene(app_session* session,
     const app_bootstrap_scene* scene);
 void app_session_clear_information_snapshot(app_session* session);
+bool app_session_publish_information_scene(app_session* session,
+    const app_information_scene* scene);
 bool app_session_add_information_op(app_session* session, s16b row,
     s16b col, byte attr, cptr text);
 bool app_session_add_information_op_ex(app_session* session, s16b row,
     s16b col, byte attr, byte story, cptr text);
+bool app_session_add_information_cell_ex(app_session* session, s16b row,
+    s16b col, byte attr, char ch, byte terrain_attr, char terrain_char,
+    byte story, byte width);
+bool app_session_add_information_cursor(app_session* session, s16b row,
+    s16b col, byte attr, byte width);
 bool app_session_publish_information_snapshot(app_session* session);
 void app_session_clear_menu_snapshot(app_session* session);
 bool app_session_publish_menu_scene(app_session* session,
@@ -194,6 +207,18 @@ bool app_session_emit_event(app_session* session,
 app_event_span app_session_view_events(const app_session* session);
 app_event_span app_session_drain_events(app_session* session);
 void app_session_clear_events(app_session* session);
+
+/*
+ * Canonical boundary entry points promised by the UI architecture ADR.
+ * These wrap the session-scoped helpers above so later drivers and hosts can
+ * target one stable surface while the runtime extraction continues.
+ */
+bool app_submit_input(app_session* session, const app_input* input);
+bool app_submit_intent(app_session* session, const app_intent* intent);
+u16b app_advance_until_waiting(app_session* session);
+const app_snapshot* app_get_snapshot(const app_session* session);
+app_event_span app_view_events(const app_session* session);
+app_event_span app_drain_events(app_session* session);
 
 #ifdef __cplusplus
 }

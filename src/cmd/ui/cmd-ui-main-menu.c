@@ -894,6 +894,91 @@ static void hint_message_draw_colored_line(int row, int col, byte base_attr,
     }
 }
 
+static bool hint_message_add_information_segment(app_information_scene* scene,
+    s16b row, s16b col, byte attr, byte story, const char* text)
+{
+    if (!scene || !text || !text[0])
+        return true;
+
+    return app_information_scene_add_text_ex(scene, row, col, attr, story,
+        text);
+}
+
+static bool hint_message_build_information_colored_line(
+    app_information_scene* scene, int row, int col, byte base_attr,
+    byte story, const char* line, const hint_message_meta* meta)
+{
+    int start = 0;
+    int cursor = col;
+    int len;
+
+    if (!scene)
+        return false;
+    if (!line)
+        line = "";
+
+    len = (int)strlen(line);
+    for (int i = 0; i < len; )
+    {
+        byte match_attr = base_attr;
+        int match_len = hint_message_match_length(line, i, meta, &match_attr);
+
+        if (match_len > 0)
+        {
+            if (i > start)
+            {
+                char plain[100];
+                int plain_len = i - start;
+
+                memcpy(plain, line + start, plain_len);
+                plain[plain_len] = '\0';
+                if (!hint_message_add_information_segment(scene, (s16b)row,
+                        (s16b)cursor, base_attr, story, plain))
+                {
+                    return false;
+                }
+                cursor += plain_len;
+            }
+
+            {
+                char special[HINT_MESSAGE_CUE_TEXT_MAX + 1];
+
+                memcpy(special, line + i, match_len);
+                special[match_len] = '\0';
+                if (!hint_message_add_information_segment(scene, (s16b)row,
+                        (s16b)cursor, match_attr, story, special))
+                {
+                    return false;
+                }
+            }
+
+            cursor += match_len;
+            i += match_len;
+            start = i;
+        }
+        else
+        {
+            ++i;
+        }
+    }
+
+    if (start < len)
+    {
+        char tail[100];
+        int tail_len = len - start;
+
+        memcpy(tail, line + start, tail_len);
+        tail[tail_len] = '\0';
+        if (!hint_message_add_information_segment(scene, (s16b)row,
+                (s16b)cursor, base_attr, story, tail))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static const char* hint_message_title(int index)
 {
     byte line_count = hint_messages_message_line_count(index);
@@ -989,6 +1074,217 @@ static void hint_message_draw_list_row(int row, int idx, bool selected, int wid)
         Term_putstr(col, row, -1, chrome_attr, "]");
 }
 
+static bool hint_message_build_information_list_row(app_information_scene* scene,
+    int row, int idx, bool selected, int wid)
+{
+    hint_message_meta meta;
+    char prefix[8];
+    char title_buf[96];
+    const char* title = hint_message_title(idx);
+    byte prefix_attr = selected ? TERM_L_BLUE : TERM_WHITE;
+    byte title_attr = selected ? TERM_L_WHITE : TERM_WHITE;
+    byte chrome_attr = TERM_SLATE;
+    int col = 0;
+    int title_room;
+
+    if (!scene)
+        return false;
+
+    hint_messages_message_meta(idx, &meta);
+
+    strnfmt(prefix, sizeof(prefix), "%2d) ", idx + 1);
+    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+            prefix_attr, prefix))
+    {
+        return false;
+    }
+    col += (int)strlen(prefix);
+
+    title_room = MAX(8, wid - col - 1);
+    if (meta.cue_count > 0)
+        title_room = MIN(title_room, MAX(wid / 2, 24));
+    hint_message_build_title(title_buf, sizeof(title_buf), title, title_room);
+    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+            title_attr, title_buf))
+    {
+        return false;
+    }
+    col += (int)strlen(title_buf);
+
+    if (meta.cue_count <= 0 || col >= wid - 4)
+        return true;
+
+    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+            chrome_attr, " ["))
+    {
+        return false;
+    }
+    col += 2;
+
+    for (int cue = 0; cue < meta.cue_count && col < wid - 1; ++cue)
+    {
+        if (cue > 0)
+        {
+            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+                    chrome_attr, "; "))
+            {
+                return false;
+            }
+            col += 2;
+        }
+
+        if (meta.cue_dists[cue][0])
+        {
+            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+                    TERM_YELLOW, meta.cue_dists[cue]))
+            {
+                return false;
+            }
+            col += (int)strlen(meta.cue_dists[cue]);
+        }
+
+        if (meta.cue_dists[cue][0] && meta.cue_dirs[cue][0] && col < wid - 1)
+        {
+            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+                    chrome_attr, " "))
+            {
+                return false;
+            }
+            col += 1;
+        }
+
+        if (meta.cue_dirs[cue][0] && col < wid - 1)
+        {
+            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+                    TERM_L_BLUE, meta.cue_dirs[cue]))
+            {
+                return false;
+            }
+            col += (int)strlen(meta.cue_dirs[cue]);
+        }
+    }
+
+    if (col < wid - 1)
+    {
+        if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
+                chrome_attr, "]"))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool hint_message_build_information_detail_scene(
+    app_information_scene* scene, int index, int hgt)
+{
+    hint_message_meta meta;
+    byte line_count;
+    byte story = STORY_FLAG_USE;
+    int row = 4;
+    int col = 8;
+
+    if (!scene)
+        return false;
+
+    hint_messages_ensure_level_state();
+    line_count = hint_messages_message_line_count(index);
+    if (!line_count)
+        return false;
+
+    hint_messages_message_meta(index, &meta);
+    app_information_scene_init(scene);
+
+    for (int li = 0; li < line_count && row + li < hgt - 1; ++li)
+    {
+        const char* line = hint_messages_message_line(index, li);
+        byte base_attr = (li == 0) ? TERM_L_WHITE : TERM_WHITE;
+        const hint_message_meta* line_meta = (li == 0) ? NULL : &meta;
+
+        if (!hint_message_build_information_colored_line(scene, row + li, col,
+                base_attr, story, line, line_meta))
+        {
+            return false;
+        }
+    }
+
+    if (hint_message_has_source(&meta))
+    {
+        if (!app_information_scene_add_text(scene, (s16b)(hgt - 1), 0,
+                TERM_WHITE,
+                "[Press any key to continue, or 'l' to look at the skeleton]"))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!app_information_scene_add_text(scene, (s16b)(hgt - 1), 0,
+                TERM_WHITE, "[Press any key to continue]"))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool hint_message_show_information_scene(int index, int* look_y,
+    int* look_x)
+{
+    ui_information_scene_scope scope;
+    app_information_scene scene;
+    hint_message_meta meta;
+    byte line_count;
+
+    hint_messages_ensure_level_state();
+    line_count = hint_messages_message_line_count(index);
+    if (!line_count)
+        return false;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    hint_messages_message_meta(index, &meta);
+
+    while (1)
+    {
+        int wid;
+        int hgt;
+        char ch;
+
+        Term_get_size(&wid, &hgt);
+        if (!hint_message_build_information_detail_scene(&scene, index, hgt))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        if (!ui_information_scene_present(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        ch = (char)ui_information_scene_wait_key_nonrepeat();
+        if ((ch == 'l' || ch == 'L') && hint_message_has_source(&meta))
+        {
+            if (look_y)
+                *look_y = meta.source_y;
+            if (look_x)
+                *look_x = meta.source_x;
+            ui_information_scene_leave(&scope);
+            return true;
+        }
+
+        break;
+    }
+
+    ui_information_scene_leave(&scope);
+    return false;
+}
+
 static bool hint_message_show_internal(int index, int* look_y, int* look_x,
     bool manage_screen)
 {
@@ -1067,11 +1363,159 @@ void show_hint_message_screen(int index)
     int look_y = -1;
     int look_x = -1;
 
-    if (hint_message_show_internal(index, &look_y, &look_x, true))
+    if (hint_message_show_information_scene(index, &look_y, &look_x)
+        || hint_message_show_internal(index, &look_y, &look_x, true))
     {
         do_cmd_redraw();
         do_cmd_look_at(look_y, look_x);
     }
+}
+
+static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
+    int* out_look_y, int* out_look_x)
+{
+    ui_information_scene_scope scope;
+    bool pending_look = false;
+    int look_y = -1;
+    int look_x = -1;
+    int n;
+    int sel = 0;
+    int top = 0;
+
+    hint_messages_ensure_level_state();
+    n = (int)hint_messages_count_for_save();
+    if (n <= 0)
+        return false;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    while (1)
+    {
+        app_information_scene scene;
+        int wid;
+        int hgt;
+        int rows;
+        char ch;
+
+        app_information_scene_init(&scene);
+        Term_get_size(&wid, &hgt);
+
+        rows = hgt - 4;
+        if (rows < 1)
+            rows = 1;
+
+        if (sel < 0)
+            sel = 0;
+        if (sel >= n)
+            sel = n - 1;
+
+        if (sel < top)
+            top = sel;
+        if (sel >= top + rows)
+            top = sel - rows + 1;
+        if (top < 0)
+            top = 0;
+        if (top > n - rows)
+            top = n - rows;
+        if (top < 0)
+            top = 0;
+
+        {
+            char title[64];
+
+            strnfmt(title, sizeof(title), "Hint Messages (%d)", n);
+            if (!app_information_scene_add_text(&scene, 0, 0, TERM_WHITE, title)
+                || !app_information_scene_add_text(&scene, (s16b)(hgt - 1), 0,
+                    TERM_WHITE,
+                    "[Press '8'/'2' to move, Enter to read, 'l' to look, or ESCAPE]"))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
+        }
+
+        for (int row = 0; row < rows && top + row < n; ++row)
+        {
+            int idx = top + row;
+
+            if (!hint_message_build_information_list_row(&scene, 2 + row, idx,
+                    idx == sel, wid))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
+        }
+
+        if (!ui_information_scene_present(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        ch = (char)ui_information_scene_wait_key();
+
+        if (ch == ESCAPE)
+            break;
+
+        if (ch == '8')
+        {
+            sel = (sel > 0) ? (sel - 1) : (n - 1);
+            continue;
+        }
+
+        if (ch == '2')
+        {
+            sel = (sel + 1 < n) ? (sel + 1) : 0;
+            continue;
+        }
+
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+        {
+            int selected_look_y = -1;
+            int selected_look_x = -1;
+
+            if (hint_message_show_information_scene(sel, &selected_look_y,
+                    &selected_look_x))
+            {
+                pending_look = true;
+                look_y = selected_look_y;
+                look_x = selected_look_x;
+                break;
+            }
+            continue;
+        }
+
+        if (ch == 'l' || ch == 'L')
+        {
+            hint_message_meta meta;
+
+            hint_messages_message_meta(sel, &meta);
+            if (hint_message_has_source(&meta))
+            {
+                pending_look = true;
+                look_y = meta.source_y;
+                look_x = meta.source_x;
+                break;
+            }
+
+            bell(NULL);
+            continue;
+        }
+
+        bell(NULL);
+    }
+
+    ui_information_scene_leave(&scope);
+
+    if (out_pending_look)
+        *out_pending_look = pending_look;
+    if (out_look_y)
+        *out_look_y = look_y;
+    if (out_look_x)
+        *out_look_x = look_x;
+
+    return true;
 }
 
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
@@ -1097,6 +1541,12 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     if (n <= 0)
     {
         msg_print("You recall no hint messages on this level.");
+        return;
+    }
+
+    if (do_cmd_hint_messages_information_scene(out_pending_look, out_look_y,
+            out_look_x))
+    {
         return;
     }
 
@@ -1220,6 +1670,215 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
  *
  * Attempt to only hilite the matching portions of the string.
  */
+static bool message_recall_information_scene_pause(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    ui_information_scene_leave(scope);
+    return true;
+}
+
+static bool message_recall_information_scene_resume(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter(scope);
+}
+
+static bool do_cmd_messages_information_scene(void)
+{
+    ui_information_scene_scope scope;
+    char shower[80];
+    char finder[80];
+    int i = 0;
+    int q = 0;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    SDL_strlcpy(finder, "", sizeof(finder));
+    SDL_strlcpy(shower, "", sizeof(shower));
+
+    while (true)
+    {
+        app_information_scene scene;
+        int n = message_num();
+        int wid;
+        int hgt;
+        int shown;
+        int old_i;
+        char ch;
+
+        app_information_scene_init(&scene);
+        Term_get_size(&wid, &hgt);
+
+        for (shown = 0; (shown < hgt - 4) && (i + shown < n); shown++)
+        {
+            cptr msg = message_str((s16b)(i + shown));
+            byte attr = message_color((s16b)(i + shown));
+            char visible[APP_INFORMATION_TEXT_MAX];
+
+            if ((int)strlen(msg) >= q)
+                SDL_strlcpy(visible, msg + q, sizeof(visible));
+            else
+                visible[0] = '\0';
+
+            (void)app_information_scene_add_text(&scene,
+                (s16b)(hgt - 3 - shown), 0, attr, visible);
+
+            if (shower[0])
+            {
+                cptr str = visible;
+
+                while ((str = strstr(str, shower)) != NULL)
+                {
+                    size_t len = strlen(shower);
+                    char highlight[APP_INFORMATION_TEXT_MAX];
+
+                    if (len >= sizeof(highlight))
+                        len = sizeof(highlight) - 1;
+                    memcpy(highlight, str, len);
+                    highlight[len] = '\0';
+
+                    (void)app_information_scene_add_text(&scene,
+                        (s16b)(hgt - 3 - shown), (s16b)(str - visible),
+                        TERM_YELLOW, highlight);
+
+                    if (len == 0)
+                        break;
+                    str += len;
+                }
+            }
+        }
+
+        {
+            char header[APP_INFORMATION_TEXT_MAX];
+            char prompt[APP_INFORMATION_TEXT_MAX];
+            int last_shown = (shown > 0) ? (i + shown - 1) : i;
+
+            strnfmt(header, sizeof(header),
+                "Message Recall (%d-%d of %d), Offset %d", i, last_shown, n, q);
+            (void)app_information_scene_add_text(&scene, 0, 0, TERM_WHITE,
+                header);
+
+            SDL_strlcpy(prompt,
+                "[Press 'p' for older, 'n' for newer, ..., or ESCAPE]",
+                sizeof(prompt));
+            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 1), 0,
+                TERM_WHITE, prompt);
+        }
+
+        if (!ui_information_scene_present(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        ch = (char)ui_information_scene_wait_key();
+
+        if (ch == ESCAPE)
+            break;
+
+        old_i = i;
+
+        if (ch == '4')
+        {
+            q = (q >= wid / 2) ? (q - wid / 2) : 0;
+            continue;
+        }
+
+        if (ch == '6')
+        {
+            q += wid / 2;
+            continue;
+        }
+
+        if (ch == '=')
+        {
+            if (!message_recall_information_scene_pause(&scope))
+                break;
+
+            if (!term_get_string("Show: ", shower, sizeof(shower)))
+            {
+                if (!message_recall_information_scene_resume(&scope))
+                    return false;
+                continue;
+            }
+
+            if (!message_recall_information_scene_resume(&scope))
+                return false;
+
+            continue;
+        }
+
+        if (ch == '/')
+        {
+            s16b z;
+
+            if (!message_recall_information_scene_pause(&scope))
+                break;
+
+            if (term_get_string("Find: ", finder, sizeof(finder)))
+            {
+                SDL_strlcpy(shower, finder, sizeof(shower));
+
+                for (z = i + 1; z < n; z++)
+                {
+                    cptr msg = message_str(z);
+
+                    if (strstr(msg, finder))
+                    {
+                        i = z;
+                        break;
+                    }
+                }
+            }
+
+            if (!message_recall_information_scene_resume(&scope))
+                return false;
+
+            continue;
+        }
+
+        if ((ch == 'p') || (ch == KTRL('P')) || (ch == ' '))
+        {
+            if (i + 20 < n)
+                i += 20;
+        }
+
+        if (ch == '+')
+        {
+            if (i + 10 < n)
+                i += 10;
+        }
+
+        if ((ch == '8') || (ch == '\n') || (ch == '\r'))
+        {
+            if (i + 1 < n)
+                i += 1;
+        }
+
+        if ((ch == 'n') || (ch == KTRL('N')))
+            i = (i >= 20) ? (i - 20) : 0;
+
+        if (ch == '-')
+            i = (i >= 10) ? (i - 10) : 0;
+
+        if (ch == '2')
+            i = (i >= 1) ? (i - 1) : 0;
+
+        if (i == old_i)
+            bell(NULL);
+    }
+
+    ui_information_scene_leave(&scope);
+    return true;
+}
+
 void do_cmd_messages(void)
 {
     char ch;
@@ -1236,6 +1895,9 @@ void do_cmd_messages(void)
         g_banner_force_redraw_remaining = 0;
         do_cmd_redraw();
     }
+
+    if (do_cmd_messages_information_scene())
+        return;
 
     /* Wipe finder */
     SDL_strlcpy(finder, "", sizeof(finder));

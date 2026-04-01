@@ -24,6 +24,7 @@ bool ui_information_scene_capture_term(app_information_scene* scene);
 bool ui_information_scene_present(const app_information_scene* scene);
 bool ui_information_scene_present_term(void);
 int ui_information_scene_wait_key(void);
+int ui_information_scene_wait_key_nonrepeat(void);
 bool ui_information_scene_is_active(void);
 bool ui_information_scene_owns_input(void);
 void ui_information_scene_leave(ui_information_scene_scope* scope);

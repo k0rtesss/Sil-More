@@ -27,6 +27,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-information-scene.h"
 /*
  * Determines the direction from the player and writes it as text into a buffer
  * of at least size 10.
@@ -337,6 +338,44 @@ void show_nearby_objects(bool line_of_sight_only)
     }
 }
 
+typedef void (*nearby_scene_draw_fn)(bool line_of_sight_only);
+
+static bool nearby_information_scene(nearby_scene_draw_fn draw_fn,
+    cptr los_prompt, cptr screen_prompt, char toggle_key)
+{
+    ui_information_scene_scope scope;
+    char ch = toggle_key;
+    bool show_los = true;
+
+    if (!draw_fn || !los_prompt || !screen_prompt)
+        return false;
+    if (!ui_information_scene_enter_mirror(&scope))
+        return false;
+
+    while (ch == toggle_key)
+    {
+        do_cmd_redraw();
+        draw_fn(show_los);
+        prt(show_los ? los_prompt : screen_prompt, 0, 0);
+
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        inkey_set_cursor_hidden(true);
+        ch = (char)ui_information_scene_wait_key();
+        inkey_set_cursor_hidden(false);
+
+        if (ch == toggle_key)
+            show_los = !show_los;
+    }
+
+    ui_information_scene_leave(&scope);
+    return true;
+}
+
 void do_cmd_view_monsters()
 {
     char get_char = '[';
@@ -347,6 +386,13 @@ void do_cmd_view_monsters()
     {
         g_banner_force_redraw_remaining = 0;
         do_cmd_redraw();
+    }
+
+    if (nearby_information_scene(show_nearby_monsters,
+            "Monsters you can see (press [ to toggle):",
+            "Monsters on screen (press [ to toggle):", '['))
+    {
+        return;
     }
 
     while (get_char == '[')
@@ -374,6 +420,13 @@ void do_cmd_view_objects()
     {
         g_banner_force_redraw_remaining = 0;
         do_cmd_redraw();
+    }
+
+    if (nearby_information_scene(show_nearby_objects,
+            "Objects you can see (press ] to toggle):",
+            "Objects on screen (press ] to toggle):", ']'))
+    {
+        return;
     }
 
     while (get_char == ']')

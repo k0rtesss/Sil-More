@@ -157,7 +157,7 @@ static void sdl_enqueue_legacy_key_to_term_screen(int key)
     Term_keypress(key);
 }
 
-static bool sdl_queue_legacy_input_byte(int key)
+static bool sdl_queue_legacy_input_byte_ex(int key, bool repeat)
 {
     app_session* session;
     app_input input;
@@ -174,12 +174,20 @@ static bool sdl_queue_legacy_input_byte(int key)
     input.type = APP_INPUT_TYPE_KEY;
     input.device = APP_INPUT_DEVICE_KEYBOARD;
     input.flags = APP_INPUT_FLAG_PRESS | APP_INPUT_FLAG_SYNTHETIC;
+    if (repeat)
+        input.flags |= APP_INPUT_FLAG_REPEAT;
     input.sequence = ++g_legacy_input_sequence;
     input.timestamp_usec = SDL_GetTicksNS() / 1000ULL;
     input.payload.key.logical_key = (u32b)(byte)key;
     input.payload.key.physical_key = (u32b)(byte)key;
+    input.payload.key.repeat_count = repeat ? 1 : 0;
 
     return app_session_submit_input(session, &input);
+}
+
+static bool sdl_queue_legacy_input_byte(int key)
+{
+    return sdl_queue_legacy_input_byte_ex(key, false);
 }
 
 void sdl_submit_legacy_input_byte(int key)
@@ -1545,7 +1553,9 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
                             key = shifted[key];
                     }
                 }
-                sdl_submit_legacy_input_byte(key);
+                if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
+                    return;
+                sdl_enqueue_legacy_key_to_term_screen(key);
             }
         } else {
             bool shift = ev->key.mod & SDL_KMOD_SHIFT;
@@ -1592,7 +1602,9 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
             if (mod) {
                 sdl_send_macro_key(key, shift, ctrl || gui, alt);
             } else {
-                sdl_submit_legacy_input_byte(key);
+                if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
+                    return;
+                sdl_enqueue_legacy_key_to_term_screen(key);
             }
         }
         return;

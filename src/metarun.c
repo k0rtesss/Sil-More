@@ -5292,7 +5292,7 @@ void print_metarun_stats(void)
             Term_fresh();
         }
         if (use_information_scene)
-            (void)ui_information_scene_wait_key();
+            (void)ui_information_scene_wait_key_nonrepeat();
         else
             (void)inkey();
         if (use_information_scene)

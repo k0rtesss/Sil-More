@@ -8,15 +8,27 @@
 extern "C" {
 #endif
 
-#define APP_INFORMATION_FORMAT_VERSION 2u
-#define APP_INFORMATION_OP_MAX 512u
+#define APP_INFORMATION_FORMAT_VERSION 3u
+#define APP_INFORMATION_OP_MAX 4096u
 #define APP_INFORMATION_TEXT_MAX 160u
 
+typedef enum app_information_op_kind {
+    APP_INFORMATION_OP_KIND_TEXT = 0,
+    APP_INFORMATION_OP_KIND_CELL = 1,
+    APP_INFORMATION_OP_KIND_CURSOR = 2
+} app_information_op_kind;
+
 typedef struct app_information_op {
+    byte kind;
     byte attr;
     byte story;
+    byte width;
     s16b row;
     s16b col;
+    byte terrain_attr;
+    char ch;
+    char terrain_char;
+    byte reserved;
     char text[APP_INFORMATION_TEXT_MAX];
 } app_information_op;
 
@@ -39,6 +51,11 @@ bool app_information_scene_add_text_ex(app_information_scene* scene, s16b row,
     s16b col, byte attr, byte story, cptr text);
 bool app_information_scene_add_text(app_information_scene* scene, s16b row,
     s16b col, byte attr, cptr text);
+bool app_information_scene_add_cell_ex(app_information_scene* scene, s16b row,
+    s16b col, byte attr, char ch, byte terrain_attr, char terrain_char,
+    byte story, byte width);
+bool app_information_scene_add_cursor(app_information_scene* scene, s16b row,
+    s16b col, byte attr, byte width);
 void app_information_snapshot_init(app_information_snapshot* snapshot);
 
 #ifdef __cplusplus

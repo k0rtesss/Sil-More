@@ -43,26 +43,10 @@ static app_event_record make_event(u16b kind, u16b scope, u32b sequence,
 static bool publish_information_scene_to_session(app_session* session,
     const app_information_scene* scene)
 {
-    u16b i;
-
     if (!session || !scene)
         return false;
 
-    app_session_clear_information_snapshot(session);
-    for (i = 0; i < scene->op_count && i < APP_INFORMATION_OP_MAX; i++)
-    {
-        const app_information_op* op = &scene->ops[i];
-
-        if (!op->text[0])
-            continue;
-        if (!app_session_add_information_op_ex(session, op->row, op->col,
-                op->attr, op->story, op->text))
-        {
-            return false;
-        }
-    }
-
-    return app_session_publish_information_snapshot(session);
+    return app_session_publish_information_scene(session, scene);
 }
 
 static void test_record_round_trip(void)
@@ -355,6 +339,35 @@ static void test_host_wrappers(void)
     CHECK(state.log_calls == 1);
 }
 
+typedef struct test_advance_state {
+    int calls;
+    int wait_after;
+    bool idle_without_wait;
+} test_advance_state;
+
+static bool test_session_advance_callback(app_session* session,
+    void* user_data)
+{
+    test_advance_state* state = user_data;
+
+    CHECK(session != NULL);
+    CHECK(state != NULL);
+    if (!session || !state)
+        return false;
+
+    if (state->idle_without_wait)
+        return false;
+
+    state->calls++;
+    if (state->wait_after > 0 && state->calls >= state->wait_after)
+    {
+        app_session_begin_wait(session, APP_WAIT_REASON_COMMAND_INPUT,
+            state->calls, 0);
+    }
+
+    return true;
+}
+
 static void test_session_scaffolding(void)
 {
     app_session_config config;
@@ -454,20 +467,40 @@ static void test_session_scaffolding(void)
     app_information_scene_init(&info_scene);
     CHECK(app_information_scene_add_text(&info_scene, 0, 1, TERM_WHITE,
         "Info Header"));
+    CHECK(app_information_scene_add_cell_ex(&info_scene, 1, 4,
+        (byte)(TILE_FLAG | 3), (char)(TILE_FLAG | 5),
+        (byte)(TILE_FLAG | 1), (char)(TILE_FLAG | 2), 0, 2));
+    CHECK(app_information_scene_add_cursor(&info_scene, 1, 4, TERM_L_BLUE, 2));
     CHECK(app_information_scene_add_text(&info_scene, 2, 0, TERM_SLATE,
         "Some informational text."));
     app_session_clear_information_snapshot(session);
     CHECK(app_session_add_information_op(session, 0, 1, TERM_WHITE,
         "Info Header"));
+    CHECK(app_session_add_information_cell_ex(session, 1, 4,
+        (byte)(TILE_FLAG | 3), (char)(TILE_FLAG | 5),
+        (byte)(TILE_FLAG | 1), (char)(TILE_FLAG | 2), 0, 2));
+    CHECK(app_session_add_information_cursor(session, 1, 4, TERM_L_BLUE, 2));
     CHECK(app_session_add_information_op(session, 2, 0, TERM_SLATE,
         "Some informational text."));
     CHECK(app_session_publish_information_snapshot(session));
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_INFORMATION);
     info_snapshot = app_session_information_snapshot(session);
     CHECK(info_snapshot != NULL);
-    CHECK(info_snapshot->scene.op_count == 2);
+    CHECK(info_snapshot->scene.op_count == 4);
+    CHECK(info_snapshot->scene.ops[0].kind == APP_INFORMATION_OP_KIND_TEXT);
     CHECK(streq(info_snapshot->scene.ops[0].text, "Info Header"));
-    CHECK(streq(info_snapshot->scene.ops[1].text,
+    CHECK(info_snapshot->scene.ops[1].kind == APP_INFORMATION_OP_KIND_CELL);
+    CHECK(info_snapshot->scene.ops[1].attr == (byte)(TILE_FLAG | 3));
+    CHECK((byte)info_snapshot->scene.ops[1].ch == (byte)(TILE_FLAG | 5));
+    CHECK(info_snapshot->scene.ops[1].terrain_attr == (byte)(TILE_FLAG | 1));
+    CHECK((byte)info_snapshot->scene.ops[1].terrain_char
+        == (byte)(TILE_FLAG | 2));
+    CHECK(info_snapshot->scene.ops[1].width == 2);
+    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CURSOR);
+    CHECK(info_snapshot->scene.ops[2].attr == TERM_L_BLUE);
+    CHECK(info_snapshot->scene.ops[2].width == 2);
+    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_TEXT);
+    CHECK(streq(info_snapshot->scene.ops[3].text,
         "Some informational text."));
     CHECK(!app_session_interactions_enabled(session));
 
@@ -565,6 +598,102 @@ static void test_session_scaffolding(void)
     CHECK(app_session_current() == NULL);
 }
 
+static void test_public_boundary_wrappers(void)
+{
+    static const byte snapshot_bytes[] = { 7, 6, 5, 4 };
+    app_session_config config;
+    app_session* session;
+    app_input input;
+    app_intent intent;
+    app_input popped_input;
+    app_intent popped_intent;
+    app_snapshot_blob blob;
+    app_snapshot snapshot;
+    app_event_record event;
+    app_event_span span;
+    test_advance_state advance_state;
+
+    memset(&config, 0, sizeof(config));
+    config.api_version = APP_SESSION_API_VERSION;
+    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT;
+
+    session = app_session_create(&config);
+    CHECK(session != NULL);
+    if (!session)
+        return;
+
+    CHECK(!app_session_can_advance(NULL));
+    CHECK(!app_session_can_advance(session));
+    CHECK(app_get_snapshot(session)->scene == APP_SCENE_KIND_NONE);
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 'p';
+    CHECK(app_submit_input(session, &input));
+    CHECK(app_session_pop_input(session, &popped_input));
+    CHECK(popped_input.payload.key.logical_key == 'p');
+
+    memset(&intent, 0, sizeof(intent));
+    intent.kind = APP_INTENT_KIND_CONFIRM;
+    CHECK(app_submit_intent(session, &intent));
+    CHECK(app_session_pop_intent(session, &popped_intent));
+    CHECK(popped_intent.kind == APP_INTENT_KIND_CONFIRM);
+
+    memset(&blob, 0, sizeof(blob));
+    blob.kind = APP_SNAPSHOT_BLOB_HEADER;
+    blob.format_version = 1;
+    blob.data = snapshot_bytes;
+    blob.size = sizeof(snapshot_bytes);
+
+    memset(&snapshot, 0, sizeof(snapshot));
+    snapshot.revision = 33;
+    snapshot.scene = APP_SCENE_KIND_DUNGEON;
+    snapshot.blobs = &blob;
+    snapshot.blob_count = 1;
+    app_session_set_snapshot(session, &snapshot);
+    CHECK(app_get_snapshot(session)->scene == APP_SCENE_KIND_DUNGEON);
+    CHECK(app_get_snapshot(session)->revision == 33);
+
+    app_session_clear_events(session);
+    event = make_event(APP_EVENT_KIND_DAMAGE, APP_EVENT_SCOPE_SCENE, 0,
+        1, 2, 3, 4);
+    CHECK(app_session_emit_event(session, &event));
+    span = app_view_events(session);
+    CHECK(span.count == 1);
+    CHECK(span.records[0].kind == APP_EVENT_KIND_DAMAGE);
+    span = app_drain_events(session);
+    CHECK(span.count == 1);
+    CHECK(app_view_events(session).count == 0);
+
+    memset(&advance_state, 0, sizeof(advance_state));
+    advance_state.wait_after = 3;
+    app_session_set_advance_callback(session, test_session_advance_callback,
+        &advance_state);
+    CHECK(app_session_can_advance(session));
+    CHECK(app_advance_until_waiting(session) == APP_WAIT_REASON_COMMAND_INPUT);
+    CHECK(advance_state.calls == 3);
+    CHECK(app_session_state_id(session) == APP_SESSION_STATE_WAITING);
+    CHECK(app_session_wait_state(session)->detail0 == 3);
+
+    app_session_resume_running(session);
+    memset(&advance_state, 0, sizeof(advance_state));
+    advance_state.idle_without_wait = true;
+    app_session_set_advance_callback(session, test_session_advance_callback,
+        &advance_state);
+    CHECK(app_advance_until_waiting(session) == APP_WAIT_REASON_NONE);
+    CHECK(app_session_state_id(session) == APP_SESSION_STATE_IDLE);
+
+    app_session_set_advance_callback(session, NULL, NULL);
+    CHECK(!app_session_can_advance(session));
+    CHECK(app_advance_until_waiting(session) == APP_WAIT_REASON_NONE);
+
+    app_session_destroy(session);
+}
+
 static void test_information_scene_nested_restore(void)
 {
     app_session_config config;
@@ -622,12 +751,20 @@ static void test_information_scene_nested_restore(void)
         STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN, "Outer title"));
     CHECK(app_information_scene_add_text(&outer_scene, 2, 3, TERM_SLATE,
         "Outer body"));
+    CHECK(app_information_scene_add_cell_ex(&outer_scene, 4, 5,
+        (byte)(TILE_FLAG | 6), (char)(TILE_FLAG | 7),
+        (byte)(TILE_FLAG | 8), (char)(TILE_FLAG | 9), 0, 2));
+    CHECK(app_information_scene_add_cursor(&outer_scene, 4, 5, TERM_L_BLUE, 2));
 
     app_information_scene_init(&inner_scene);
     CHECK(app_information_scene_add_text_ex(&inner_scene, 1, 1, TERM_L_RED,
         STORY_FLAG_USE, "Inner title"));
     CHECK(app_information_scene_add_text(&inner_scene, 3, 2, TERM_WHITE,
         "Inner body"));
+    CHECK(app_information_scene_add_cell_ex(&inner_scene, 5, 6,
+        (byte)(TILE_FLAG | 10), (char)(TILE_FLAG | 11),
+        (byte)(TILE_FLAG | 12), (char)(TILE_FLAG | 13), 0, 2));
+    CHECK(app_information_scene_add_cursor(&inner_scene, 5, 6, TERM_L_BLUE, 2));
 
     outer_entered = ui_information_scene_enter(&outer_scope);
     CHECK(outer_entered);
@@ -636,12 +773,17 @@ static void test_information_scene_nested_restore(void)
 
     CHECK(publish_information_scene_to_session(session, &outer_scene));
     info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 2);
+    CHECK(info_snapshot->scene.op_count == 4);
     CHECK(streq(info_snapshot->scene.ops[0].text, "Outer title"));
     CHECK(info_snapshot->scene.ops[0].story
         == (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN));
     CHECK(streq(info_snapshot->scene.ops[1].text, "Outer body"));
     CHECK(info_snapshot->scene.ops[1].story == 0);
+    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
+    CHECK(info_snapshot->scene.ops[2].width == 2);
+    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 7));
+    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
+    CHECK(info_snapshot->scene.ops[3].width == 2);
 
     inner_entered = ui_information_scene_enter(&inner_scope);
     CHECK(inner_entered);
@@ -650,22 +792,32 @@ static void test_information_scene_nested_restore(void)
 
     CHECK(publish_information_scene_to_session(session, &inner_scene));
     info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 2);
+    CHECK(info_snapshot->scene.op_count == 4);
     CHECK(streq(info_snapshot->scene.ops[0].text, "Inner title"));
     CHECK(info_snapshot->scene.ops[0].story == STORY_FLAG_USE);
     CHECK(streq(info_snapshot->scene.ops[1].text, "Inner body"));
     CHECK(info_snapshot->scene.ops[1].story == 0);
+    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
+    CHECK(info_snapshot->scene.ops[2].width == 2);
+    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 11));
+    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
+    CHECK(info_snapshot->scene.ops[3].width == 2);
 
     ui_information_scene_leave(&inner_scope);
     inner_entered = false;
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_INFORMATION);
     info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 2);
+    CHECK(info_snapshot->scene.op_count == 4);
     CHECK(streq(info_snapshot->scene.ops[0].text, "Outer title"));
     CHECK(info_snapshot->scene.ops[0].story
         == (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN));
     CHECK(streq(info_snapshot->scene.ops[1].text, "Outer body"));
     CHECK(info_snapshot->scene.ops[1].story == 0);
+    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
+    CHECK(info_snapshot->scene.ops[2].width == 2);
+    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 7));
+    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
+    CHECK(info_snapshot->scene.ops[3].width == 2);
 
     ui_information_scene_leave(&outer_scope);
     outer_entered = false;
@@ -682,6 +834,65 @@ cleanup:
     runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
 }
 
+static void test_information_scene_wait_key_nonrepeat(void)
+{
+    app_session_config config;
+    app_session* session;
+    ui_information_scene_scope scope;
+    app_input input;
+    bool entered = false;
+    bool snapshot_renderer_enabled;
+    bool refresh_enabled;
+
+    snapshot_renderer_enabled = runtime_cli_snapshot_renderer();
+    runtime_cli_set_snapshot_renderer(true);
+    refresh_enabled = ui_information_scene_set_refresh_enabled(false);
+
+    memset(&config, 0, sizeof(config));
+    config.api_version = APP_SESSION_API_VERSION;
+    config.initial_event_capacity = 1;
+    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+        | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
+
+    session = app_session_create(&config);
+    CHECK(session != NULL);
+    if (!session)
+    {
+        ui_information_scene_set_refresh_enabled(refresh_enabled);
+        runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
+        return;
+    }
+
+    app_session_make_current(session);
+    entered = ui_information_scene_enter(&scope);
+    CHECK(entered);
+    if (!entered)
+        goto cleanup;
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS | APP_INPUT_FLAG_REPEAT;
+    input.payload.key.logical_key = 'm';
+    CHECK(app_session_submit_input(session, &input));
+
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 'x';
+    CHECK(app_session_submit_input(session, &input));
+
+    CHECK(ui_information_scene_wait_key_nonrepeat() == 'x');
+
+cleanup:
+    if (entered)
+        ui_information_scene_leave(&scope);
+    app_session_destroy(session);
+    CHECK(app_session_current() == NULL);
+    ui_information_scene_set_refresh_enabled(refresh_enabled);
+    runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
+}
+
 int main(void)
 {
     test_record_round_trip();
@@ -690,7 +901,9 @@ int main(void)
     test_drain_semantics();
     test_host_wrappers();
     test_session_scaffolding();
+    test_public_boundary_wrappers();
     test_information_scene_nested_restore();
+    test_information_scene_wait_key_nonrepeat();
 
     if (g_failures != 0)
     {

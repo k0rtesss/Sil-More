@@ -10,16 +10,17 @@ Recommended direction:
 - keep frame cadence in the frontend
 - treat the existing `Term` path as a legacy frontend, not as the future UI API
 
-Status date: March 29, 2026 (audit-verified).
+Status date: April 1, 2026.
 
 ## Current Tree Baseline
 - The SDL frontend is no longer one monolithic file.
   - `src/main-sdl.c`: bootstrap, config load/apply, keyboard/gamepad
-    translation, top-level event routing, and platform shims
+    translation, top-level event routing, legacy input bridging, and the
+    remaining SDL platform shims
   - `src/sdl-layout.c`: pane config state, terminal sizing, pane placement,
     `resize()`, and view creation
   - `src/sdl-render.c`: `z-term` hook backend, canvas presentation, renderer
-    reset, and `TERM_XTRA_*` handling
+    reset, and the remaining `TERM_XTRA_*` bridge
   - `src/sdl-story-font.c`: story font cache/load/state/measurement
   - `src/sdl-touch.c`: touch pane state, rendering, bindings, and reset flow
 - The old `util.c` split is also already real.
@@ -28,37 +29,37 @@ Status date: March 29, 2026 (audit-verified).
     related prompt helpers
   - `src/util-message.c`: message history, `screen_save()`, `screen_load()`
   - `src/util-text.c`: `put_str()` / `prt()` / text wrapping
-- The build graph is no longer only partially semantic.
-  - `sil-core` now builds without SDL headers or SDL link requirements
-  - `sil-legacy-compat` isolates `z-term.c` and legacy frontend rendering
-  - `sil-platform-sdl` owns all SDL-specific infrastructure
-  - `platform-ui.h` has been removed and replaced by neutral boundary headers
-- The active render/input boundary is now dual-path.
+- The build graph split is now real.
+  - `CMakeLists.txt` now builds `sil-core` as an SDL-free static library
+  - `sil-legacy-compat` isolates `z-term.c` and the remaining legacy frontend
+    bridge modules
+  - `sil-platform-sdl` owns SDL-facing infrastructure
+  - `platform-ui.h` has been retired in favor of narrower boundary headers, so
+    the include-count audit for it is now zero
+- The active render/input boundary is now dual-path: snapshot-capable, but not
+  yet fully externally driven.
   - `src/sdl-render.c` still services `TERM_XTRA_EVENT`, `TERM_XTRA_FRESH`,
     `TERM_XTRA_CLEAR`, and `TERM_XTRA_DELAY` for legacy modules
-  - `src/sdl-scene-dungeon.c` renders the main dungeon from snapshot data
+  - `src/sdl-scene.c` and `src/sdl-scene-dungeon.c` render the main scene from
+    `app_session` snapshots and drained event spans
   - `src/sdl-scene-menu.c` renders menus from semantic payloads in logical
     pixels
   - `src/sdl-scene-information.c` bridges legacy `Term` content for
     informational screens
   - `src/ui/ui-status.c` still owns `update_stuff()`, `redraw_stuff()`,
-    `window_stuff()`, and `handle_stuff()`
+    `window_stuff()`, and `handle_stuff()`, and now rebuilds the dungeon
+    snapshot after `handle_stuff()`
   - `src/cave.c` still renders map cells with `Term_queue_char()` for the
     legacy path
-  - `src/object/object-ui-select.c` still fuses gameplay item selection and
-    terminal UI in `get_item()` via `inkey()`
-- Current hotspot counts from the UI0 audit baseline:
-  - `inkey()` call sites in 41 files / 159 matches
-  - `screen_save()` + `screen_load()` call sites in 35 files / 253 matches
-  - direct `Term_*` render/control calls in 66 files / 1,795 matches
-  - `#include "platform-ui.h"` in 28 files / 28 matches
+  - `src/object/object-ui-select.c`, `src/cmd/ui/cmd-ui-look.c`, and several
+    other gameplay selectors still fuse blocking terminal flow with snapshot
+    state
+- Current hotspot counts from `py -3 tools/ui_debt_audit.py` on 2026-04-01:
+  - `inkey()` call sites in 41 files / 149 matches
+  - `screen_save()` + `screen_load()` call sites in 34 files / 247 matches
+  - direct `Term_*` render/control calls in 65 files / 1,731 matches
+  - `#include "platform-ui.h"` in 0 files / 0 matches
   - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 196 matches
-- Current counts as of 2026-03-29 (audit-verified):
-  - `inkey()` call sites in 41 files / 106 matches
-  - `screen_save()` + `screen_load()` call sites in 35 files / 251 matches
-  - direct `Term_*` render/control calls in 65 files / 1,725 matches
-  - `#include "platform-ui.h"` in 0 files / 0 matches (fully removed by UI7)
-  - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 208 matches
 
 ## Non-Goals
 - Do not migrate to a game engine.
@@ -137,6 +138,19 @@ Key rule:
 | UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | complete |
 | UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | complete |
 | UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | complete |
+
+## Status Audit On 2026-04-01
+| Stage | Status | Notes |
+| --- | --- | --- |
+| UI0 | complete | ADR, audit tool, audit baseline, and migration inventory are all landed; the current audit still passes against the checked-in baseline. |
+| UI1 | complete | `src/app/app-*.h`, the event buffer, host surface, and `tests/ui1_tests.c` cover the neutral boundary scaffolding. |
+| UI2 | partial | wait reasons, input queues, the SDL legacy-input bridge, and an `app_advance_until_waiting()`-style stepper API are landed, but the runtime is not yet driven through that callback-based driver and many core flows still block inside `inkey()`-owned loops. |
+| UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
+| UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
+| UI5 | partial | prompt, list, and targeting interaction state exists, but `get_item()`, look-mode detail flows, and smithing-class selectors still rely on blocking term control flow. |
+| UI6 | partial | help, file viewer, message recall, story, death, the small-scale map viewer, nearby or object summaries, and combat-history now have information-scene bridges, but settings, score, quest, character, and knowledge flows still depend heavily on legacy term layout and input. |
+| UI7 | partial | the `sil-core` / `sil-platform-sdl` / `sil-legacy-compat` split is live in `CMakeLists.txt`, but legacy UI-heavy modules still live inside `sil-core`, so semantic isolation is not finished. |
+| UI8 | partial as a prototype | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI, but the stage still depends on the unfinished semantic cleanup tracked in UI7. |
 
 ## Stage UI0: Guardrails And Baseline
 Goal:
@@ -243,6 +257,16 @@ Work packages:
   - input required
   - scene transition required
   - shutdown requested
+- Stabilize the public driver-facing surface with canonical wrapper entry
+  points:
+  - `app_submit_input()`
+  - `app_submit_intent()`
+  - `app_advance_until_waiting()`
+  - `app_get_snapshot()`
+  - `app_drain_events()`
+- Add an explicit advance callback seam on `app_session` so later runtime
+  extraction can plug in a real core stepper without exposing SDL or `main.c`
+  details through the public boundary.
 - Add explicit wait reasons for:
   - command input
   - confirm/cancel prompt
@@ -573,11 +597,13 @@ Exit when:
 - the current target split is real in semantics, not only in source layout
 
 Status:
-- complete in the working tree on 2026-03-28
+- build split landed in the working tree on 2026-03-28
 - `sil-core` now builds without SDL headers or SDL link requirements
 - legacy frontend ownership is isolated behind `sil-legacy-compat` and
   `sil-platform-sdl`, and `platform-ui.h` has been replaced by the narrower
   neutral boundary headers
+- stage remains partial on 2026-04-01 because several legacy UI-heavy modules
+  still live in `sil-core`, so the split is not yet semantically complete
 
 ## Stage UI8: WASM And Web Bridge
 Goal:
@@ -613,7 +639,7 @@ Exit when:
   fork
 
 Status:
-- complete in the working tree on 2026-03-28
+- packet ABI and browser prototype landed in the working tree on 2026-03-28
 - `src/app/app-wire.*` now formalizes the versioned packet ABI for snapshots,
   event spans, session state, legacy input, and intents
 - `src/app/app-host-bridge.*` now provides a neutral host bridge for timing,
@@ -624,6 +650,8 @@ Status:
 - validation is currently through the host-neutral `sil-core` static library
   plus the packet-driven browser demo described in
   [`ui8_web_demo.md`](./ui8_web_demo.md)
+- stage remains partial on 2026-04-01 because the web bridge is ahead of the
+  still-incomplete semantic cleanup tracked in UI7
 
 ## Menu Modernization Follow-On: Fixed-Size Pixel Menus
 Goal:
@@ -670,13 +698,22 @@ Current blocker summary:
 - `src/ui/ui-information-scene.c` still mirrors captured `Term` contents, so
   information scenes inherit legacy terminal layout even when shown through the
   new SDL scene stack
-- `APP_SCENE_KIND_MENU` exists in `src/app/app-snapshot.h` and is already set
-  by bootstrap in `src/main.c`, but the SDL scene stack still has no dedicated
-  menu payload or renderer for it
+- `src/sdl-scene-menu.c` and the dungeon interaction overlay now share the same
+  fixed-pixel typography/cache helper, but only prompt-style consumers are on
+  that shared visual path
+- `ui_information_scene` now preserves raw term cells, bigtile width, terrain
+  pict data, and cursor overlays for bridge consumers, so glyph-bearing legacy
+  list screens can move onto the snapshot path without changing their visual
+  layout
+  - it is still a compatibility bridge driven by mirrored terminal output, not
+    the final semantic menu API
 - `app_interaction_state` is the only real semantic menu primitive today
   - it is good enough for prompt, text-entry, list, and targeting overlays
   - it is not rich enough yet for tabbed browsers, multi-column list/detail
     layouts, compare panes, or nested footer action bars
+- `src/object/object-ui-select.c` and `src/cmd/ui/cmd-ui-look.c` still keep
+  their normal-path blocking redraw loops, so the shared overlay is not yet the
+  canonical selector path
 - most menu modules still branch on `Term->wid` / `Term->hgt` to choose
   "compact" layouts, wrapping, and prompt rows
 
@@ -693,7 +730,7 @@ Standing rule for this track:
 - do not treat this track as permission to revisit the game's menu art
   direction; first priority is fixed-pixel behavior with preserved visuals
 
-Status on 2026-03-28:
+Status on 2026-04-01:
 - M0 foundation is now complete in the working tree
 - `src/sdl-scene-dungeon.c` keeps the pre-existing fixed-pixel interaction
   overlay, so prompt/list/targeting overlays remain decoupled from terminal
@@ -723,6 +760,40 @@ Status on 2026-03-28:
 - the actual destination screens behind most menu entries are still legacy
   term- or information-scene-driven flows; M0 is done, but the shared menu
   renderer is intentionally scoped to prompt-style usage only for now
+- `src/sdl-ui-style.c` now centralizes the fixed-pixel menu font cache,
+  text measurement, and logical-pixel scaling shared by
+  `src/sdl-scene-dungeon.c` overlays and `src/sdl-scene-menu.c`, so future menu
+  ports do not drift on typography and scaling
+- M1 is only partially complete
+  - `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, and
+    `src/object/object-ui-select.c` all publish semantic interaction state for
+    the snapshot renderer path
+  - `src/object/object-ui-select.c` and `src/cmd/ui/cmd-ui-look.c` still rely
+    on blocking term redraw loops for important normal-path behavior, so
+    generic interaction consumers are not finished yet
+- M2 is now complete for the current bridge-based path
+  - `MENU3A` is complete: `do_cmd_messages()` in
+    `src/cmd/ui/cmd-ui-main-menu.c` prefers `ui_information_scene` on the
+    snapshot renderer path and keeps the legacy screen-stack fallback
+  - `MENU3B` is complete: the hint-message browser and detail view in
+    `src/cmd/ui/cmd-ui-main-menu.c` now prefer `ui_information_scene` on the
+    snapshot renderer path while keeping the legacy layout, prompts, colors,
+    and fallback behavior
+  - `MENU0E` is complete: the information-scene bridge now preserves glyph and
+    tile cells instead of collapsing them to spaces
+  - `MENU3C` is complete: nearby/object summary screens in
+    `src/cmd/ui/cmd-ui-nearby.c` now keep legacy glyph and tile visuals on the
+    snapshot renderer path
+  - `MENU3D` is complete: the combat-history browser in
+    `src/melee/melee-combat-display.c` now keeps its legacy glyph and tile
+    layout on the snapshot renderer path
+  - `MENU3E` is complete: the small-scale map viewer in `src/cave.c` now uses
+    the same bridge instead of remaining SDL-term-only
+- M3 through M5 are still open
+  - most document, browser, settings, character, knowledge, metarun, birth,
+    blitz, and smithing flows still derive layout from `Term->wid` /
+    `Term->hgt` or depend on `screen_save()` / `screen_load()` in their normal
+    path
 
 Status update on 2026-03-29:
 - `src/sdl-scene-dungeon.c` now renders the visible main-game left panel on a
@@ -745,7 +816,7 @@ Status update on 2026-03-29:
 | Message, hint, map, nearby, and combat-history views | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | pager and list screens with term-size-derived rows and horizontal scroll | pager, fixed-width document view, simple list browser | Browser lane |
 | Settings and config editors | `src/cmd/ui/cmd-ui-settings.c` | mixed menus, text entry, key capture, pane editors, and controller or touch setup in one large terminal-owned file | forms, text entry, key-capture dialog, action list, settings rows | Settings lane |
 | Character and knowledge browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | split-pane browsers with tabs, grouped lists, detail panes, and recall actions; many compact-layout branches | tab strip, split-pane list-detail widget, compare pane, footer action bar | Character/knowledge lane |
-| Gameplay selector overlays | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | some semantic interaction state already exists, but SDL still renders in cell units and several loops still block on legacy input | fixed-pixel prompt modal, list modal, text entry, targeting overlay | Interaction lane |
+| Gameplay selector overlays | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | semantic interaction state exists and SDL renders it in fixed pixels, but several loops still block on legacy input | fixed-pixel prompt modal, list modal, text entry, targeting overlay | Interaction lane |
 | Ability, song, oath, bane, supplies, and query action menus | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | list-plus-detail action menus with confirm branches and recursive term redraw | action list, detail side panel, confirm dialog, stepper or selector rows | Action-menu lane |
 | Inventory, equipment, identify, compare, and item-action browsers | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | custom row layouts and popups, still partially coupled to term width and classic list rendering | reusable item list rows, compare panel, recall modal, action popup | Inventory lane |
 | Help, file viewer, score, run history, quest, story, and death scenes | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | information scenes often mirror row and column text through `ui_information_scene` | document scene, history table, detail browser, narrative panel | Document lane |
@@ -758,9 +829,11 @@ Status update on 2026-03-29:
 | `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | complete | semantic menu payloads, focus ids, tabs, action bars, scroll state defined |
 | `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | complete | menus render in logical pixels, decoupled from tile scale |
 | `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | complete | legacy information scenes working as a bridge |
+| `MENU0D` | new `src/sdl-ui-style.c`, `src/sdl-main-internal.h`, touch `src/sdl-scene-dungeon.c`, `src/sdl-scene-menu.c`, `src/sdl-scene.c` | `MENU0B` | complete | centralizes fixed-pixel menu typography, logical-pixel scaling, and cache ownership so overlay modals and shared menu scenes stay aligned |
+| `MENU0E` | `src/app/app-scene-information.*`, `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c`, and only the consumers that need glyph parity | `MENU0C` | complete | the information-scene bridge now preserves raw tile/cursor cells so nearby/object summaries, combat-history, and the map viewer keep legacy visuals on the snapshot path |
 | `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | `get_check_oath_multiline()` uses shared menu scene for multiline prompts; `sdl-scene-dungeon.c` has fixed-pixel left-panel rendering; remaining prompt/list/targeting paths still cell-sized |
 | `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | not started | finishes the `get_item()` path on top of the shared list modal |
-| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; other flows still legacy |
+| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; message, hint, nearby, combat-history, and map-view bridge work are now on the snapshot path, but several entry flows stay legacy |
 | `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | complete (UI6) | file-viewer fully migrated; all other modules dual-path with information scene primary and legacy fallback |
 | `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | partial (UI6 scope aware) | `do_cmd_options()` has information scene scope; `settings_wait_key()` and `settings_present()` route through scene; raw `inkey()` remains only in key-capture/macro flows; full menu-scene migration pending |
 | `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | not started | split-pane browser lane with tabs, groups, and recall hooks |
@@ -773,7 +846,7 @@ Status update on 2026-03-29:
 ### Menu Inventory And Target Shapes
 | Family | Primary files | Current shape | Target shape |
 | --- | --- | --- | --- |
-| Shared prompt and selector primitives | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/sdl-scene-dungeon.c` | prompts and selectors already publish `app_interaction_state`, but SDL still renders them as cell-sized overlays inside the dungeon view | fixed-pixel modal dialog / list widgets fed by semantic interaction snapshots |
+| Shared prompt and selector primitives | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/sdl-scene-dungeon.c` | prompts and selectors already publish `app_interaction_state`, and SDL renders them as fixed-pixel overlays above the dungeon snapshot, but the producers still run through legacy blocking loops | fixed-pixel modal dialog / list widgets fed by semantic interaction snapshots |
 | Pause menu and lightweight overlay menus | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cmd/ui/cmd-ui-query.c`, `src/cmd/ui/cmd-ui-look.c` | centered or edge-anchored text blocks rendered with `Term_putstr()` and `inkey()` | frontend-owned modal menu scene and side panels with fixed pixel metrics |
 | Character, knowledge, abilities, and object browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/cmd-item-core.c`, `src/cmd/item/cmd-item-activate.c` | mixed list/detail screens with lots of `Term->wid` / `Term->hgt` layout branching | reusable list-detail, tab strip, footer action, compare-panel widgets, and action popups |
 | Informational documents and settings | `src/cmd/ui/cmd-ui-settings.c`, `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c` | large term documents, file viewers, and settings trees with row-based paging | scrollable document scene plus frontend-owned settings forms and pickers |
@@ -785,6 +858,9 @@ Workstream M0:
 - add a frontend-owned menu layer separate from the tile-scaled dungeon canvas
 - give that layer its own font metrics, padding, and width caps so modal menus
   stay visually stable across SDL scale values
+- centralize the SDL-side menu typography helpers so `APP_SCENE_KIND_MENU` and
+  dungeon interaction overlays use the same logical-pixel scaling, font size
+  buckets, text measurement, and cache ownership
 - keep those font, padding, border, and color decisions aligned with the
   current in-game menu presentation rather than introducing new chrome
 - introduce a semantic menu scene/model in `src/app/*`
@@ -817,7 +893,28 @@ Workstream M1: generic interaction consumers.
 
 Workstream M2: simple document and pause scenes.
 - port the main menu, message recall, hint-message browser, help viewer, file
-  viewer, and nearby/object summary screens
+  viewer, nearby/object summary screens, the small-scale map viewer, and the
+  combat-history browser
+- status on 2026-04-01:
+  - pause menu, help viewer, file viewer, and message recall have snapshot-scene
+    paths
+  - hint-message browser now has a snapshot-scene path with legacy visual
+    parity preserved
+  - nearby/object summary now uses the tile-capable information-scene bridge
+    and keeps the legacy glyph/tile layout
+  - the small-scale map viewer and combat-history browser now use the same
+    bridge while keeping their legacy term-derived visuals
+- execution split:
+  - `MENU3A`: message recall browser in `src/cmd/ui/cmd-ui-main-menu.c`
+    complete
+  - `MENU3B`: hint-message browser in `src/cmd/ui/cmd-ui-main-menu.c`
+    complete
+  - `MENU3C`: nearby/object summary screens
+    complete
+  - `MENU3D`: combat-history browser in `src/melee/melee-combat-display.c`
+    complete
+  - `MENU3E`: small-scale map viewer in `src/cave.c`
+    complete
 - primary write set:
   - `src/cmd/ui/cmd-ui-main-menu.c`
   - `src/ui/ui-help.c`

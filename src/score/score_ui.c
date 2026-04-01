@@ -1576,7 +1576,7 @@ static char display_scores_pages_information(const high_score* entries,
                 footer_row, 2, term_wid);
         }
         (void)ui_information_scene_present(&scene);
-        (void)ui_information_scene_wait_key();
+        (void)ui_information_scene_wait_key_nonrepeat();
         ui_information_scene_leave(&scope);
         return 0;
     }

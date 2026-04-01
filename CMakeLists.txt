@@ -325,6 +325,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c
+    src/sdl-ui-style.c
     src/pane.c
     src/fs/io_sdl.c
     src/fs/path.c

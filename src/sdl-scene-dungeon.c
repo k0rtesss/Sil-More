@@ -32,13 +32,6 @@ typedef struct sdl_scene_layout {
     int col_depth;
 } sdl_scene_layout;
 
-typedef struct sdl_scene_ui_font_cache {
-    TTF_Font* font;
-    int pixel_height;
-    int style_signature;
-    char path[1024];
-} sdl_scene_ui_font_cache;
-
 typedef struct sdl_scene_panel_metrics {
     int pixel_height;
     int cell_w;
@@ -47,13 +40,10 @@ typedef struct sdl_scene_panel_metrics {
     int panel_h;
 } sdl_scene_panel_metrics;
 
-static sdl_scene_ui_font_cache g_sdl_scene_ui_font_cache;
-
 static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
     const SDL_FRect* dst);
 static void sdl_scene_render_fixed_panel_glyph(TTF_Font* font, float x_px,
     float y_px, int cell_w, int cell_h, SDL_Color color, char ch);
-
 static SDL_Color sdl_scene_color(byte attr)
 {
     byte color = attr & 0x0Fu;
@@ -112,102 +102,7 @@ static void sdl_scene_draw_rect(const SDL_FRect* rect, SDL_Color color)
 
 static int sdl_scene_ui_scale_px(float logical_value)
 {
-    float scale = (g_state.system_scale > 0.0f) ? g_state.system_scale : 1.0f;
-
-    return (int)(logical_value * scale + 0.5f);
-}
-
-static const char* sdl_scene_ui_font_path(void)
-{
-    return config.monospace_font[0] != '\0'
-        ? config.monospace_font
-        : "lib/xtra/font/InputMono-Bold.ttf";
-}
-
-static int sdl_scene_ui_font_signature(void)
-{
-    int signature = 0;
-
-    signature |= config.mono_bold ? 0x0001 : 0;
-    signature |= config.mono_italic ? 0x0002 : 0;
-    signature |= config.mono_underline ? 0x0004 : 0;
-    signature |= config.mono_strikethrough ? 0x0008 : 0;
-    signature |= (config.mono_hinting & 0xFF) << 8;
-    signature |= config.mono_kerning ? 0x10000 : 0;
-    signature |= (config.mono_outline & 0xFF) << 17;
-
-    return signature;
-}
-
-static void sdl_scene_ui_apply_font_settings(TTF_Font* font)
-{
-    int style = TTF_STYLE_NORMAL;
-
-    if (!font)
-        return;
-
-    if (config.mono_bold)
-        style |= TTF_STYLE_BOLD;
-    if (config.mono_italic)
-        style |= TTF_STYLE_ITALIC;
-    if (config.mono_underline)
-        style |= TTF_STYLE_UNDERLINE;
-    if (config.mono_strikethrough)
-        style |= TTF_STYLE_STRIKETHROUGH;
-    if (style != TTF_STYLE_NORMAL)
-        TTF_SetFontStyle(font, style);
-
-    TTF_SetFontHinting(font, config.mono_hinting);
-    TTF_SetFontKerning(font, config.mono_kerning);
-    if (config.mono_outline > 0)
-        TTF_SetFontOutline(font, config.mono_outline);
-}
-
-static void sdl_scene_ui_font_clear(void)
-{
-    if (g_sdl_scene_ui_font_cache.font)
-    {
-        TTF_CloseFont(g_sdl_scene_ui_font_cache.font);
-        g_sdl_scene_ui_font_cache.font = NULL;
-    }
-
-    g_sdl_scene_ui_font_cache.pixel_height = 0;
-    g_sdl_scene_ui_font_cache.style_signature = 0;
-    g_sdl_scene_ui_font_cache.path[0] = '\0';
-}
-
-static TTF_Font* sdl_scene_ui_font_for_height(int pixel_height)
-{
-    const char* font_path = sdl_scene_ui_font_path();
-    int style_signature = sdl_scene_ui_font_signature();
-
-    if (pixel_height <= 0)
-        return NULL;
-
-    if (g_sdl_scene_ui_font_cache.font
-        && g_sdl_scene_ui_font_cache.pixel_height == pixel_height
-        && g_sdl_scene_ui_font_cache.style_signature == style_signature
-        && streq(g_sdl_scene_ui_font_cache.path, font_path))
-    {
-        return g_sdl_scene_ui_font_cache.font;
-    }
-
-    sdl_scene_ui_font_clear();
-
-    g_sdl_scene_ui_font_cache.font = TTF_OpenFont(font_path, pixel_height);
-    if (!g_sdl_scene_ui_font_cache.font)
-    {
-        log_warn("sdl scene UI font load failed for '%s': %s", font_path,
-            SDL_GetError());
-        return NULL;
-    }
-
-    sdl_scene_ui_apply_font_settings(g_sdl_scene_ui_font_cache.font);
-    g_sdl_scene_ui_font_cache.pixel_height = pixel_height;
-    g_sdl_scene_ui_font_cache.style_signature = style_signature;
-    SDL_strlcpy(g_sdl_scene_ui_font_cache.path, font_path,
-        sizeof(g_sdl_scene_ui_font_cache.path));
-    return g_sdl_scene_ui_font_cache.font;
+    return sdl_ui_scale_px(logical_value);
 }
 
 static int sdl_scene_interaction_font_size_logical(const sdl_view* view)
@@ -218,15 +113,7 @@ static int sdl_scene_interaction_font_size_logical(const sdl_view* view)
 
 static int sdl_scene_measure_ui_text(TTF_Font* font, cptr text)
 {
-    int measured_w = 0;
-
-    if (!font || !text || !text[0])
-        return 0;
-
-    if (!TTF_MeasureString(font, text, 0, 0, &measured_w, NULL))
-        return 0;
-
-    return measured_w;
+    return sdl_ui_measure_text(font, text);
 }
 
 static int sdl_scene_measure_font_text_n(TTF_Font* font, cptr text, size_t len)
@@ -245,33 +132,7 @@ static int sdl_scene_measure_font_text_n(TTF_Font* font, cptr text, size_t len)
 static void sdl_scene_render_ui_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text)
 {
-    SDL_Surface* surface;
-    SDL_Texture* texture;
-    SDL_FRect dst;
-
-    if (!font || !text || !text[0])
-        return;
-
-    surface = TTF_RenderText_Blended(font, text, 0, color);
-    if (!surface)
-        return;
-
-    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
-    if (!texture)
-    {
-        SDL_DestroySurface(surface);
-        return;
-    }
-
-    dst.x = x_px;
-    dst.y = y_px;
-    dst.w = (float)surface->w;
-    dst.h = (float)surface->h;
-
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
-    SDL_DestroyTexture(texture);
-    SDL_DestroySurface(surface);
+    sdl_ui_render_text(font, x_px, y_px, color, text);
 }
 
 static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
@@ -404,7 +265,7 @@ static bool sdl_scene_left_panel_metrics_for_height(const sdl_view* view,
         return false;
 
     story_font = sdl_story_font_for_height(pixel_height);
-    mono_font = sdl_scene_ui_font_for_height(pixel_height);
+    mono_font = sdl_ui_font_for_height(pixel_height);
     if (!story_font || !mono_font)
         return false;
 
@@ -1203,7 +1064,7 @@ static void sdl_scene_render_interaction_overlay(const sdl_view* view,
 
     pixel_height = sdl_scene_ui_scale_px(
         (float)sdl_scene_interaction_font_size_logical(view));
-    font = sdl_scene_ui_font_for_height(pixel_height);
+    font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return;
 

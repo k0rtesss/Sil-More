@@ -410,6 +410,7 @@ void sdl_scene_stack_init(void)
 
 void sdl_scene_stack_shutdown(void)
 {
+    sdl_ui_font_cache_clear();
     sdl_scene_stack_destroy_canvas();
     memset(&g_scene_stack, 0, sizeof(g_scene_stack));
 }

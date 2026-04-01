@@ -3577,7 +3577,6 @@ void do_cmd_options(void)
             break;
         }
         }
-
     }
 
     /* Flush messages */

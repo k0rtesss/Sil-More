@@ -19,6 +19,7 @@
 #include "log/log.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-combat-display.h"
+#include "ui/ui-information-scene.h"
 
 combat_roll combat_rolls[2][MAX_COMBAT_ROLLS];
 int combat_number = 0;
@@ -952,6 +953,497 @@ void add_combat_round_to_history(void)
     }
 }
 
+static int combat_history_total_rolls(void)
+{
+    int total = 0;
+
+    for (int i = 0; i < combat_history_count; i++)
+        total += combat_history[i].num_rolls;
+
+    return total;
+}
+
+static bool combat_history_locate_roll(int absolute_index, int* history_idx,
+    int* roll_idx)
+{
+    int total_rolls = 0;
+
+    if (absolute_index < 0)
+        return false;
+
+    for (int h = 0; h < combat_history_count; h++)
+    {
+        int hist_idx = (combat_history_head - h + MAX_COMBAT_HISTORY)
+            % MAX_COMBAT_HISTORY;
+
+        if (total_rolls + combat_history[hist_idx].num_rolls > absolute_index)
+        {
+            if (history_idx)
+                *history_idx = hist_idx;
+            if (roll_idx)
+                *roll_idx = absolute_index - total_rolls;
+            return true;
+        }
+
+        total_rolls += combat_history[hist_idx].num_rolls;
+    }
+
+    return false;
+}
+
+static void combat_history_draw_screen(int start_index, int offset, int hgt,
+    int total_rolls, int* out_shown)
+{
+    int j;
+    char buf[120];
+
+    Term_clear();
+
+    for (j = 0; (j < hgt - 4) && (start_index + j < total_rolls); j++)
+    {
+        int history_idx = -1;
+        int roll_idx = -1;
+        combat_history_round* round;
+        combat_roll* roll;
+        int a_att;
+        int a_evn;
+        int a_hit;
+        int a_dam_roll;
+        int a_prot_roll;
+        int a_net_dam;
+        bool is_player_attack;
+        int line_y = hgt - 3 - j;
+        int col = -offset;
+
+        if (!combat_history_locate_roll(start_index + j, &history_idx,
+                &roll_idx))
+        {
+            continue;
+        }
+
+        round = &combat_history[history_idx];
+        roll = &round->rolls[roll_idx];
+        if (roll->att_type == COMBAT_ROLL_NONE)
+            continue;
+
+        is_player_attack = (roll->attacker_char == r_info[0].d_char)
+            && (roll->attacker_attr == r_info[0].d_attr);
+
+        if (is_player_attack)
+        {
+            a_att = TERM_L_BLUE;
+            a_evn = TERM_WHITE;
+            a_hit = TERM_L_RED;
+            a_dam_roll = TERM_L_BLUE;
+            a_net_dam = TERM_L_RED;
+            if (roll->prt_percent >= 100)
+                a_prot_roll = TERM_WHITE;
+            else if (roll->prt_percent >= 1)
+                a_prot_roll = TERM_SLATE;
+            else
+                a_prot_roll = TERM_DARK;
+        }
+        else
+        {
+            a_att = TERM_WHITE;
+            a_evn = TERM_L_BLUE;
+            a_hit = TERM_L_RED;
+            a_dam_roll = TERM_WHITE;
+            a_net_dam = TERM_L_RED;
+            if (roll->prt_percent >= 100)
+                a_prot_roll = TERM_L_BLUE;
+            else if (roll->prt_percent >= 1)
+                a_prot_roll = TERM_BLUE;
+            else
+                a_prot_roll = TERM_DARK;
+        }
+
+        if (roll_idx == 0)
+        {
+            strnfmt(buf, sizeof(buf), "Turn %d:", round->turn_count);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, TERM_L_DARK, buf);
+            col += 9;
+        }
+        else
+        {
+            col += 9;
+        }
+
+        if (col >= 0)
+            Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+        col += 1;
+        if (col >= 0)
+        {
+            Term_queue_char(col, line_y, roll->attacker_attr,
+                roll->attacker_char, 0, 0);
+            if (use_bigtile && !graphics_are_ascii())
+            {
+                if ((roll->attacker_attr & 0x80)
+                    && ((byte)roll->attacker_char & 0x80))
+                {
+                    Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                }
+                else
+                {
+                    Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
+                }
+            }
+        }
+        col += 1;
+        if (use_bigtile && !graphics_are_ascii())
+            col += 1;
+
+        if (roll->att_type == COMBAT_ROLL_ROLL)
+        {
+            int net_att;
+
+            if (roll->att < 10)
+                strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
+            else
+                strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_att, buf);
+            col += strlen(buf);
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_att, buf);
+            col += 4;
+
+            net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
+            if (net_att > 0)
+            {
+                strnfmt(buf, sizeof(buf), "%4d", net_att);
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, a_hit, buf);
+            }
+            else if (col >= 0)
+            {
+                Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+            }
+            col += 4;
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_evn, buf);
+            col += 4;
+
+            if (roll->evn < 10)
+                strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
+            else
+                strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_evn, buf);
+            col += strlen(buf);
+
+            if (col >= 0)
+                Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+            col += 1;
+            if (col >= 0)
+            {
+                Term_queue_char(col, line_y, roll->defender_attr,
+                    roll->defender_char, 0, 0);
+                if (use_bigtile && !graphics_are_ascii())
+                {
+                    if ((roll->defender_attr & 0x80)
+                        && ((byte)roll->defender_char & 0x80))
+                    {
+                        Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                    }
+                    else
+                    {
+                        Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0,
+                            0);
+                    }
+                }
+            }
+            col += 1;
+            if (use_bigtile && !graphics_are_ascii())
+                col += 1;
+
+            if (net_att > 0)
+            {
+                int net_dam;
+
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
+                col += 4;
+
+                if (roll->ds < 10)
+                    strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd,
+                        roll->ds);
+                else
+                    strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd,
+                        roll->ds);
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                col += strlen(buf);
+
+                strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, a_dam_roll, buf);
+                col += 4;
+
+                net_dam = roll->dam - roll->prot;
+                if (net_dam < 0)
+                    net_dam = 0;
+
+                if (net_dam > 0)
+                {
+                    strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                    if (col >= 0)
+                        Term_putstr(col, line_y, -1, a_net_dam, buf);
+                }
+                else if (col >= 0)
+                {
+                    Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+                }
+                col += 4;
+
+                strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, a_prot_roll, buf);
+                col += 4;
+            }
+        }
+        else if (roll->att_type == COMBAT_ROLL_AUTO)
+        {
+            int net_dam;
+
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, TERM_L_DARK,
+                    "                         ");
+            col += 25;
+
+            if (col >= 0)
+                Term_putstr(col, line_y, 1, TERM_WHITE, " ");
+            col += 1;
+            if (col >= 0)
+            {
+                Term_queue_char(col, line_y, roll->defender_attr,
+                    roll->defender_char, 0, 0);
+                if (use_bigtile && !graphics_are_ascii())
+                {
+                    if ((roll->defender_attr & 0x80)
+                        && ((byte)roll->defender_char & 0x80))
+                    {
+                        Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
+                    }
+                    else
+                    {
+                        Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0,
+                            0);
+                    }
+                }
+            }
+            col += 1;
+            if (use_bigtile && !graphics_are_ascii())
+                col += 1;
+
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
+            col += 4;
+
+            if (roll->ds < 10)
+                strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
+            else
+                strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_dam_roll, buf);
+            col += strlen(buf);
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_dam_roll, buf);
+            col += 4;
+
+            net_dam = roll->dam - roll->prot;
+            if (net_dam < 0)
+                net_dam = 0;
+
+            if (net_dam > 0)
+            {
+                strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                if (col >= 0)
+                    Term_putstr(col, line_y, -1, a_net_dam, buf);
+            }
+            else if (col >= 0)
+            {
+                Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
+            }
+            col += 4;
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+            if (col >= 0)
+                Term_putstr(col, line_y, -1, a_prot_roll, buf);
+            col += 4;
+        }
+    }
+
+    if (out_shown)
+        *out_shown = j;
+
+    prt(format("Combat History (%d-%d of %d rolls), Offset %d", start_index,
+            start_index + j - 1, total_rolls, offset), 0, 0);
+    prt("[Press 'p' for older, 'n' for newer, '=' to highlight, '/' to search, or ESCAPE]",
+        hgt - 1, 0);
+}
+
+static bool combat_history_information_scene_pause(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    ui_information_scene_leave(scope);
+    return true;
+}
+
+static bool combat_history_information_scene_resume(
+    ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter_mirror(scope);
+}
+
+static bool do_cmd_combat_history_information_scene(void)
+{
+    ui_information_scene_scope scope;
+    char shower[80];
+    char finder[80];
+    int i = 0;
+    int q = 0;
+    int n;
+
+    if (!ui_information_scene_enter_mirror(&scope))
+        return false;
+
+    SDL_strlcpy(finder, "", sizeof(finder));
+    SDL_strlcpy(shower, "", sizeof(shower));
+    n = combat_history_total_rolls();
+
+    while (true)
+    {
+        int wid;
+        int hgt;
+        int old_i;
+        char ch;
+
+        Term_get_size(&wid, &hgt);
+        combat_history_draw_screen(i, q, hgt, n, NULL);
+
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        ch = (char)ui_information_scene_wait_key();
+        if (ch == ESCAPE)
+            break;
+
+        old_i = i;
+
+        if (ch == '4')
+        {
+            q = (q >= wid / 2) ? (q - wid / 2) : 0;
+            continue;
+        }
+        if (ch == '6')
+        {
+            q += wid / 2;
+            continue;
+        }
+        if (ch == '=')
+        {
+            if (!combat_history_information_scene_pause(&scope))
+                break;
+
+            if (!term_get_string("Show: ", shower, sizeof(shower)))
+            {
+                if (!combat_history_information_scene_resume(&scope))
+                    return false;
+                continue;
+            }
+
+            if (!combat_history_information_scene_resume(&scope))
+                return false;
+            continue;
+        }
+        if (ch == '/')
+        {
+            s16b z;
+
+            if (!combat_history_information_scene_pause(&scope))
+                break;
+
+            if (term_get_string("Find: ", finder, sizeof(finder)))
+            {
+                SDL_strlcpy(shower, finder, sizeof(shower));
+
+                for (z = i + 1; z < n; z++)
+                {
+                    int history_idx = -1;
+                    int roll_idx = -1;
+                    combat_roll* search_roll;
+                    char search_buf[120];
+
+                    if (!combat_history_locate_roll(z, &history_idx, &roll_idx))
+                        continue;
+
+                    search_roll = &combat_history[history_idx].rolls[roll_idx];
+                    strnfmt(search_buf, sizeof(search_buf),
+                        "Turn %d %c (%+d) (%dd%d)",
+                        combat_history[history_idx].turn_count,
+                        search_roll->attacker_char, search_roll->att,
+                        search_roll->dd, search_roll->ds);
+
+                    if (strstr(search_buf, finder))
+                    {
+                        i = z;
+                        break;
+                    }
+                }
+            }
+
+            if (!combat_history_information_scene_resume(&scope))
+                return false;
+            continue;
+        }
+
+        if ((ch == 'p') || (ch == KTRL('P')) || (ch == ' '))
+        {
+            if (i + 20 < n)
+                i += 20;
+        }
+        if (ch == '+')
+        {
+            if (i + 10 < n)
+                i += 10;
+        }
+        if ((ch == '8') || (ch == '\n') || (ch == '\r'))
+        {
+            if (i + 1 < n)
+                i += 1;
+        }
+        if ((ch == 'n') || (ch == KTRL('N')))
+            i = (i >= 20) ? (i - 20) : 0;
+        if (ch == '-')
+            i = (i >= 10) ? (i - 10) : 0;
+        if (ch == '2')
+            i = (i >= 1) ? (i - 1) : 0;
+
+        if (i == old_i)
+            bell(NULL);
+    }
+
+    ui_information_scene_leave(&scope);
+    return true;
+}
+
 /*
  * Display combat history menu similar to message log
  */
@@ -962,7 +1454,9 @@ void do_cmd_combat_history(void)
     int wid, hgt;
     char shower[80];
     char finder[80];
-    char buf[120];
+
+    if (do_cmd_combat_history_information_scene())
+        return;
     
     /* Wipe finder */
     SDL_strlcpy(finder, "", sizeof(finder));
@@ -971,10 +1465,7 @@ void do_cmd_combat_history(void)
     SDL_strlcpy(shower, "", sizeof(shower));
     
     /* Count total combat rolls across all history */
-    n = 0;
-    for (i = 0; i < combat_history_count; i++) {
-        n += combat_history[i].num_rolls;
-    }
+    n = combat_history_total_rolls();
     
     /* Start on first roll */
     i = 0;
@@ -990,263 +1481,7 @@ void do_cmd_combat_history(void)
     
     /* Process requests until done */
     while (1) {
-        /* Clear screen */
-        Term_clear();
-        
-        /* Calculate rolls to display */
-        int rolls_to_show = hgt - 4;
-        
-        /* Display combat rolls */
-        for (j = 0; (j < rolls_to_show) && (i + j < n); j++) {
-            /* Find which history entry and which roll within that entry */
-            int total_rolls = 0;
-            int history_idx = -1;
-            int roll_idx = -1;
-            
-            /* Walk through history from newest to oldest to find the roll at index (i + j) */
-            for (int h = 0; h < combat_history_count; h++) {
-                int hist_idx = (combat_history_head - h + MAX_COMBAT_HISTORY) % MAX_COMBAT_HISTORY;
-                
-                if (total_rolls + combat_history[hist_idx].num_rolls > i + j) {
-                    history_idx = hist_idx;
-                    roll_idx = (i + j) - total_rolls;
-                    break;
-                }
-                total_rolls += combat_history[hist_idx].num_rolls;
-            }
-            
-            if (history_idx == -1 || roll_idx == -1) continue;
-            
-            combat_history_round* round = &combat_history[history_idx];
-            combat_roll* roll = &round->rolls[roll_idx];
-            
-            /* Skip empty rolls */
-            if (roll->att_type == COMBAT_ROLL_NONE) continue;
-            
-            /* Format the combat roll with proper colors and alignment */
-            
-            /* Set up color scheme like display_combat_rolls */
-            int a_att, a_evn, a_hit, a_dam_roll, a_prot_roll, a_net_dam;
-            
-            /* Determine if player attack or monster attack */
-            bool is_player_attack = (roll->attacker_char == r_info[0].d_char) &&
-                                   (roll->attacker_attr == r_info[0].d_attr);
-            
-            if (is_player_attack) {
-                a_att = TERM_L_BLUE;
-                a_evn = TERM_WHITE;
-                a_hit = TERM_L_RED;
-                a_dam_roll = TERM_L_BLUE;
-                a_net_dam = TERM_L_RED;
-                if (roll->prt_percent >= 100)
-                    a_prot_roll = TERM_WHITE;
-                else if (roll->prt_percent >= 1)
-                    a_prot_roll = TERM_SLATE;
-                else
-                    a_prot_roll = TERM_DARK;
-            } else {
-                a_att = TERM_WHITE;
-                a_evn = TERM_L_BLUE;
-                a_hit = TERM_L_RED;
-                a_dam_roll = TERM_WHITE;
-                a_net_dam = TERM_L_RED;
-                if (roll->prt_percent >= 100)
-                    a_prot_roll = TERM_L_BLUE;
-                else if (roll->prt_percent >= 1)
-                    a_prot_roll = TERM_BLUE;
-                else
-                    a_prot_roll = TERM_DARK;
-            }
-            
-            /* Start building the line with proper formatting */
-            int line_y = hgt - 3 - j;
-            int col = 0;
-            
-            /* Apply horizontal scroll to starting column */
-            col = -q;
-            
-            /* Add turn indicator for first roll of each turn */
-            if (roll_idx == 0) {
-                strnfmt(buf, sizeof(buf), "Turn %d:", round->turn_count);
-                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, buf);
-                col += 9; /* "Turn XXXXX:" is about 9-10 chars */
-            } else {
-                col += 9; /* Same spacing for continuation rolls */
-            }
-            
-            /* Display like combat rolls window - attacker symbol */
-            if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
-            col += 1;
-            if (col >= 0) {
-                Term_queue_char(col, line_y, roll->attacker_attr, roll->attacker_char, 0, 0);
-                if (use_bigtile && !graphics_are_ascii())
-                {
-                    if ((roll->attacker_attr & 0x80) && ((byte)roll->attacker_char & 0x80))
-                        Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
-                    else
-                        Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
-                }
-            }
-            col += 1;
-            if (use_bigtile && !graphics_are_ascii()) col += 1;
-            
-            /* Attack roll section */
-            if (roll->att_type == COMBAT_ROLL_ROLL) {
-                /* Attack bonus */
-                if (roll->att < 10) {
-                    strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
-                } else {
-                    strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
-                }
-                if (col >= 0) Term_putstr(col, line_y, -1, a_att, buf);
-                col += strlen(buf);
-                
-                /* Attack total */
-                strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
-                if (col >= 0) Term_putstr(col, line_y, -1, a_att, buf);
-                col += 4;
-                
-                /* Net attack (hit calculation) */
-                int net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
-                if (net_att > 0) {
-                    strnfmt(buf, sizeof(buf), "%4d", net_att);
-                    if (col >= 0) Term_putstr(col, line_y, -1, a_hit, buf);
-                } else {
-                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
-                }
-                col += 4;
-                
-                /* Evasion total */
-                strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
-                if (col >= 0) Term_putstr(col, line_y, -1, a_evn, buf);
-                col += 4;
-                
-                /* Evasion bonus */
-                if (roll->evn < 10) {
-                    strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
-                } else {
-                    strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
-                }
-                if (col >= 0) Term_putstr(col, line_y, -1, a_evn, buf);
-                col += strlen(buf);
-                
-                /* Defender symbol */
-                if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
-                col += 1;
-                if (col >= 0) {
-                    Term_queue_char(col, line_y, roll->defender_attr, roll->defender_char, 0, 0);
-                    if (use_bigtile && !graphics_are_ascii())
-                    {
-                        if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
-                            Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
-                        else
-                            Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
-                    }
-                }
-                col += 1;
-                if (use_bigtile && !graphics_are_ascii()) col += 1;
-                
-                /* Damage section (only if hit) */
-                if (net_att > 0) {
-                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
-                    col += 4;
-                    
-                    /* Damage dice */
-                    if (roll->ds < 10) {
-                        strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
-                    } else {
-                        strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
-                    }
-                    if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
-                    col += strlen(buf);
-                    
-                    /* Damage total */
-                    strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-                    if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
-                    col += 4;
-                    
-                    /* Net damage */
-                    int net_dam = roll->dam - roll->prot;
-                    if (net_dam < 0) net_dam = 0;
-                    
-                    if (net_dam > 0) {
-                        strnfmt(buf, sizeof(buf), "%4d", net_dam);
-                        if (col >= 0) Term_putstr(col, line_y, -1, a_net_dam, buf);
-                    } else {
-                        if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
-                    }
-                    col += 4;
-                    
-                    /* Protection */
-                    strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-                    if (col >= 0) Term_putstr(col, line_y, -1, a_prot_roll, buf);
-                    col += 4;
-                }
-                
-            } else if (roll->att_type == COMBAT_ROLL_AUTO) {
-                /* Auto-hit attacks */
-                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "                         ");
-                col += 25;
-                
-                /* Defender symbol */
-                if (col >= 0) Term_putstr(col, line_y, 1, TERM_WHITE, " ");
-                col += 1;
-                if (col >= 0) {
-                    Term_queue_char(col, line_y, roll->defender_attr, roll->defender_char, 0, 0);
-                    if (use_bigtile && !graphics_are_ascii())
-                    {
-                        if ((roll->defender_attr & 0x80) && ((byte)roll->defender_char & 0x80))
-                            Term_queue_char(col + 1, line_y, 255, -1, 0, 0);
-                        else
-                            Term_queue_char(col + 1, line_y, TERM_WHITE, ' ', 0, 0);
-                    }
-                }
-                col += 1;
-                if (use_bigtile && !graphics_are_ascii()) col += 1;
-                
-                /* Damage section */
-                if (col >= 0) Term_putstr(col, line_y, -1, TERM_L_DARK, "  ->");
-                col += 4;
-                
-                /* Damage dice */
-                if (roll->ds < 10) {
-                    strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
-                } else {
-                    strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
-                }
-                if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
-                col += strlen(buf);
-                
-                /* Damage total */
-                strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-                if (col >= 0) Term_putstr(col, line_y, -1, a_dam_roll, buf);
-                col += 4;
-                
-                /* Net damage */
-                int net_dam = roll->dam - roll->prot;
-                if (net_dam < 0) net_dam = 0;
-                
-                if (net_dam > 0) {
-                    strnfmt(buf, sizeof(buf), "%4d", net_dam);
-                    if (col >= 0) Term_putstr(col, line_y, -1, a_net_dam, buf);
-                } else {
-                    if (col >= 0) Term_putstr(col, line_y, -1, TERM_SLATE, "   -");
-                }
-                col += 4;
-                
-                /* Protection */
-                strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-                if (col >= 0) Term_putstr(col, line_y, -1, a_prot_roll, buf);
-                col += 4;
-            }
-        }
-        
-        /* Display header */
-        prt(format("Combat History (%d-%d of %d rolls), Offset %d", 
-                   i, i + j - 1, n, q), 0, 0);
-        
-        /* Display prompt */
-        prt("[Press 'p' for older, 'n' for newer, '=' to highlight, '/' to search, or ESCAPE]", hgt - 1, 0);
+        combat_history_draw_screen(i, q, hgt, n, &j);
         
         /* Get a command */
         ch = inkey();
@@ -1281,36 +1516,25 @@ void do_cmd_combat_history(void)
             
             /* Search through combat rolls */
             for (z = i + 1; z < n; z++) {
-                /* Find the roll at index z and check if it matches */
-                int total_rolls = 0;
-                bool found = false;
-                
-                for (int h = 0; h < combat_history_count; h++) {
-                    int hist_idx = (combat_history_head - h + MAX_COMBAT_HISTORY) % MAX_COMBAT_HISTORY;
-                    
-                    if (total_rolls + combat_history[hist_idx].num_rolls > z) {
-                        int r_idx = z - total_rolls;
-                        combat_roll* search_roll = &combat_history[hist_idx].rolls[r_idx];
-                        
-                        /* Create search string for this roll */
-                        char search_buf[120];
-                        strnfmt(search_buf, sizeof(search_buf), "Turn %d %c (%+d) (%dd%d)",
-                                combat_history[hist_idx].turn_count,
-                                search_roll->attacker_char,
-                                search_roll->att,
-                                search_roll->dd, search_roll->ds);
-                        
-                        if (strstr(search_buf, finder)) {
-                            i = z;
-                            found = true;
-                            break;
-                        }
-                        break;
-                    }
-                    total_rolls += combat_history[hist_idx].num_rolls;
+                int history_idx = -1;
+                int roll_idx = -1;
+                combat_roll* search_roll;
+                char search_buf[120];
+
+                if (!combat_history_locate_roll(z, &history_idx, &roll_idx))
+                    continue;
+
+                search_roll = &combat_history[history_idx].rolls[roll_idx];
+                strnfmt(search_buf, sizeof(search_buf), "Turn %d %c (%+d) (%dd%d)",
+                        combat_history[history_idx].turn_count,
+                        search_roll->attacker_char,
+                        search_roll->att,
+                        search_roll->dd, search_roll->ds);
+
+                if (strstr(search_buf, finder)) {
+                    i = z;
+                    break;
                 }
-                
-                if (found) break;
             }
         }
         
@@ -1349,10 +1573,7 @@ void display_combat_round_details(combat_history_round* round)
 {
     int i;
     char buf[120];
-    
-    /* Save screen */
-    screen_save();
-    
+
     /* Clear screen */
     Term_clear();
     
@@ -1441,9 +1662,8 @@ void display_combat_round_details(combat_history_round* round)
     
     /* Wait for input */
     inkey();
-    
-    /* Restore screen */
-    screen_load();
+
+    do_cmd_redraw();
 }
 
 /*

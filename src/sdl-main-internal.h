@@ -174,6 +174,13 @@ void sdl_apply_story_grid_state(bool grid);
 void sdl_story_font_reset_state(void);
 TTF_Font* sdl_story_font_for_height(int pixel_height);
 TTF_Font* sdl_story_font_for_view(const sdl_view* d);
+int sdl_ui_scale_px(float logical_value);
+int sdl_ui_font_size_logical(const sdl_view* view);
+TTF_Font* sdl_ui_font_for_height(int pixel_height);
+void sdl_ui_font_cache_clear(void);
+int sdl_ui_measure_text(TTF_Font* font, cptr text);
+void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
+    SDL_Color color, cptr text);
 void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col);
 void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
     SDL_Color col);

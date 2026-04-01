@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "ui/ui-information-scene.h"
 
 int macro_find_check(cptr pat);
 int macro_find_maybe(cptr pat);
@@ -85,6 +86,64 @@ static bool parse_macro = false;
  */
 static bool parse_under = false;
 
+static bool inkey_information_scene_candidate(const app_input* input)
+{
+    return input && input->layer == APP_INPUT_LAYER_LEGACY
+        && input->type == APP_INPUT_TYPE_KEY;
+}
+
+static errr inkey_information_scene(char* ch, bool wait, bool take)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    if (!ch || !ui_information_scene_owns_input() || !session)
+        return -1;
+
+    while (true)
+    {
+        while (app_session_peek_input(session, &input))
+        {
+            if (!inkey_information_scene_candidate(&input))
+            {
+                app_input discarded;
+
+                (void)app_session_pop_input(session, &discarded);
+                continue;
+            }
+
+            *ch = (char)(input.payload.key.logical_key & 0xFFu);
+            if (take)
+            {
+                app_input consumed;
+
+                (void)app_session_pop_input(session, &consumed);
+            }
+            return 0;
+        }
+
+        if (!wait)
+            return 1;
+
+        Term_xtra(TERM_XTRA_EVENT, true);
+    }
+}
+
+static errr inkey_read(char* ch, bool wait, bool take)
+{
+    errr err;
+
+    err = Term_inkey(ch, false, take);
+    if (err == 0)
+        return 0;
+
+    err = inkey_information_scene(ch, wait, take);
+    if (err >= 0)
+        return err;
+
+    return Term_inkey(ch, wait, take);
+}
+
 /*
  * Helper function called only from "inkey()"
  *
@@ -102,7 +161,7 @@ static char inkey_aux(void)
     char buf[1024];
 
     /* Wait for a keypress */
-    (void)(Term_inkey(&ch, true, true));
+    (void)(inkey_read(&ch, true, true));
 
     /* End "macro action" */
     if (ch == 30)
@@ -142,7 +201,7 @@ static char inkey_aux(void)
             break;
 
         /* Check for (and remove) a pending key */
-        if (0 == Term_inkey(&ch, false, true))
+        if (0 == inkey_read(&ch, false, true))
         {
             /* Append the key */
             buf[p++] = ch;
@@ -182,7 +241,7 @@ static char inkey_aux(void)
         }
 
         /* Wait for (and remove) a pending key */
-        (void)Term_inkey(&ch, true, true);
+        (void)inkey_read(&ch, true, true);
 
         /* Return the key */
         return (ch);
@@ -245,7 +304,7 @@ bool inkey_can_consume_immediately(void)
     if (!Term)
         return false;
 
-    return (Term_inkey(&ch, false, false) == 0);
+    return (inkey_read(&ch, false, false) == 0);
 }
 
 static char inkey_with_wait_reason(u16b reason)
@@ -326,13 +385,13 @@ char inkey(void)
     {
         /* Hack -- Handle "inkey_scan" */
         if (!g_inkey_state.base && g_inkey_state.scan
-            && (0 != Term_inkey(&kk, false, false)))
+            && (0 != inkey_read(&kk, false, false)))
         {
             break;
         }
 
         /* Hack -- Flush output once when no key ready */
-        if (!done && (0 != Term_inkey(&kk, false, false)))
+        if (!done && (0 != inkey_read(&kk, false, false)))
         {
             /* Hack -- activate proper term */
             Term_activate(old);
@@ -362,7 +421,7 @@ char inkey(void)
             if (!g_inkey_state.scan)
             {
                 /* Wait for (and remove) a pending key */
-                if (0 == Term_inkey(&ch, true, true))
+                if (0 == inkey_read(&ch, true, true))
                 {
                     /* Done */
                     break;
@@ -376,7 +435,7 @@ char inkey(void)
             while (true)
             {
                 /* Check for (and remove) a pending key */
-                if (0 == Term_inkey(&ch, false, true))
+                if (0 == inkey_read(&ch, false, true))
                 {
                     /* Done */
                     break;

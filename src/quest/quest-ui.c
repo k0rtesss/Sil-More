@@ -633,7 +633,7 @@ static bool do_cmd_quest_status_information_scene(void)
         return false;
     }
 
-    (void)ui_information_scene_wait_key();
+    (void)ui_information_scene_wait_key_nonrepeat();
     ui_information_scene_leave(&scope);
     return true;
 }

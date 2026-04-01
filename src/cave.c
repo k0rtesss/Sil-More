@@ -14,6 +14,7 @@
 #include "log/log.h"
 #include "project-path.h"
 #include "ui/colors.h"
+#include "ui/ui-information-scene.h"
 /* Standard headers for utility functions used in this file */
 #include <string.h>
 #include <stdlib.h>
@@ -2963,17 +2964,19 @@ void display_map(int* cy, int* cx)
  */
 void do_cmd_view_map(void)
 {
+    ui_information_scene_scope scope;
     int cy, cx;
     cptr prompt = "Hit any key to continue";
+    bool scene_active = ui_information_scene_enter_mirror(&scope);
 
-    /* Save screen */
-    screen_save();
+    if (!scene_active)
+    {
+        /* Note */
+        prt("Please wait...", 0, 0);
 
-    /* Note */
-    prt("Please wait...", 0, 0);
-
-    /* Flush */
-    Term_fresh();
+        /* Flush */
+        Term_fresh();
+    }
 
     /* Clear the screen */
     Term_clear();
@@ -2988,16 +2991,31 @@ void do_cmd_view_map(void)
     Term_gotoxy(cx, cy);
 
     /* Get any key */
+    if (scene_active)
     {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&scope);
+            scene_active = false;
+        }
     }
 
-    /* Load screen */
-    screen_load();
+    if (scene_active)
+    {
+        (void)ui_information_scene_wait_key_nonrepeat();
+    }
+    else
+    {
+        app_wait_scope wait_scope;
+        app_session_push_wait_scope(app_session_current(), &wait_scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        (void)inkey();
+        app_session_pop_wait_scope(app_session_current(), &wait_scope);
+    }
+
+    if (scene_active)
+        ui_information_scene_leave(&scope);
+    do_cmd_redraw();
 }
 
 /*

@@ -49,54 +49,22 @@ static app_information_snapshot* ui_information_scene_clone_snapshot(
 static bool ui_information_scene_restore_snapshot(app_session* session,
     const ui_information_scene_scope* scope)
 {
-    const app_information_snapshot* saved;
-    u16b i;
-
     if (!session || !scope || !scope->previous_information_snapshot)
         return false;
 
-    saved = scope->previous_information_snapshot;
-    app_session_clear_information_snapshot(session);
-    for (i = 0; i < saved->scene.op_count && i < APP_INFORMATION_OP_MAX; i++)
-    {
-        const app_information_op* op = &saved->scene.ops[i];
-
-        if (!op->text[0])
-            continue;
-        if (!app_session_add_information_op_ex(session, op->row, op->col,
-                op->attr, op->story, op->text))
-        {
-            return false;
-        }
-    }
-
-    return app_session_publish_information_snapshot(session);
+    return app_session_publish_information_scene(session,
+        &scope->previous_information_snapshot->scene);
 }
 
 static bool ui_information_scene_publish(const app_information_scene* scene,
     bool refresh)
 {
     app_session* session = app_session_current();
-    u16b i;
 
     if (!session || !scene)
         return false;
 
-    app_session_clear_information_snapshot(session);
-    for (i = 0; i < scene->op_count && i < APP_INFORMATION_OP_MAX; i++)
-    {
-        const app_information_op* op = &scene->ops[i];
-
-        if (!op->text[0])
-            continue;
-        if (!app_session_add_information_op_ex(session, op->row, op->col,
-                op->attr, op->story, op->text))
-        {
-            return false;
-        }
-    }
-
-    if (!app_session_publish_information_snapshot(session))
+    if (!app_session_publish_information_scene(session, scene))
         return false;
 
     if (refresh)
@@ -177,6 +145,37 @@ bool ui_information_scene_enter_mirror(ui_information_scene_scope* scope)
         UI_INFORMATION_SCENE_MODE_MIRROR);
 }
 
+static bool ui_information_scene_cell_is_raw(byte attr, char ch,
+    byte terrain_attr, char terrain_char)
+{
+    unsigned char raw = (unsigned char)ch;
+    unsigned char terrain_raw = (unsigned char)terrain_char;
+
+    if (((attr & 0x80) && (raw & 0x80)) || (attr == 255 && raw == 0xFF))
+        return true;
+    if (terrain_attr || terrain_raw)
+        return true;
+
+    return false;
+}
+
+static byte ui_information_scene_cell_width(int y, int x, int term_wid)
+{
+    if (!Term || !Term->scr || y < 0 || y >= Term->hgt || x < 0 || x >= term_wid)
+        return 1;
+
+    if ((x + 1) < term_wid
+        && (Term->scr->a[y][x] & 0x80)
+        && (((unsigned char)Term->scr->c[y][x]) & 0x80)
+        && Term->scr->a[y][x + 1] == 255
+        && (unsigned char)Term->scr->c[y][x + 1] == 0xFF)
+    {
+        return 2;
+    }
+
+    return 1;
+}
+
 bool ui_information_scene_capture_term(app_information_scene* scene)
 {
     int term_wid = 0;
@@ -200,8 +199,11 @@ bool ui_information_scene_capture_term(app_information_scene* scene)
         {
             unsigned char ch = (unsigned char)Term->scr->c[y][x];
             byte attr = Term->scr->a[y][x];
+            byte terrain_attr = Term->scr->ta[y][x];
+            char terrain_char = Term->scr->tc[y][x];
 
-            if ((attr & TILE_FLAG) || ch == 0xFF)
+            if (ui_information_scene_cell_is_raw(attr, Term->scr->c[y][x],
+                    terrain_attr, terrain_char))
             {
                 last_nonblank = x;
                 continue;
@@ -218,37 +220,48 @@ bool ui_information_scene_capture_term(app_information_scene* scene)
         {
             byte attr = Term->scr->a[y][x];
             byte story = Term->scr->story[y][x];
-            int start = x;
+            byte terrain_attr = Term->scr->ta[y][x];
+            char terrain_char = Term->scr->tc[y][x];
+            unsigned char raw = (unsigned char)Term->scr->c[y][x];
 
-            while (x <= last_nonblank)
+            if (ui_information_scene_cell_is_raw(attr, Term->scr->c[y][x],
+                    terrain_attr, terrain_char))
+            {
+                byte width = ui_information_scene_cell_width(y, x, term_wid);
+
+                if (!app_information_scene_add_cell_ex(scene, (s16b)y,
+                        (s16b)x, attr, (char)raw, terrain_attr, terrain_char,
+                        story, width))
+                {
+                    return false;
+                }
+                x += width;
+                continue;
+            }
+
             {
                 char buf[APP_INFORMATION_TEXT_MAX];
                 int len = 0;
+                int start = x;
 
                 while (x <= last_nonblank && Term->scr->a[y][x] == attr
                     && Term->scr->story[y][x] == story
+                    && !ui_information_scene_cell_is_raw(Term->scr->a[y][x],
+                        Term->scr->c[y][x], Term->scr->ta[y][x],
+                        Term->scr->tc[y][x])
                     && len < (int)sizeof(buf) - 1)
                 {
-                    unsigned char raw = (unsigned char)Term->scr->c[y][x];
-
-                    if ((attr & TILE_FLAG) || raw == 0xFF)
-                        buf[len++] = ' ';
-                    else
-                        buf[len++] = raw ? (char)raw : ' ';
+                    raw = (unsigned char)Term->scr->c[y][x];
+                    buf[len++] = raw ? (char)raw : ' ';
                     x++;
                 }
 
                 buf[len] = '\0';
-                if (!app_information_scene_add_text_ex(scene, (s16b)y,
-                        (s16b)start, attr, story, buf))
+                if (len > 0 && !app_information_scene_add_text_ex(scene,
+                        (s16b)y, (s16b)start, attr, story, buf))
                 {
                     return false;
                 }
-
-                start = x;
-                if (x > last_nonblank || Term->scr->a[y][x] != attr
-                    || Term->scr->story[y][x] != story)
-                    break;
             }
         }
     }
@@ -261,18 +274,10 @@ bool ui_information_scene_capture_term(app_information_scene* scene)
         if (cursor_x >= 0 && cursor_x < term_wid
             && cursor_y >= 0 && cursor_y < term_hgt)
         {
-            unsigned char raw = (unsigned char)Term->scr->c[cursor_y][cursor_x];
-            char cursor_buf[2];
-
-            if ((Term->scr->a[cursor_y][cursor_x] & TILE_FLAG) || raw == 0xFF)
-                cursor_buf[0] = ' ';
-            else
-                cursor_buf[0] = raw ? (char)raw : ' ';
-            cursor_buf[1] = '\0';
-
-            if (!app_information_scene_add_text_ex(scene, (s16b)cursor_y,
+            if (!app_information_scene_add_cursor(scene, (s16b)cursor_y,
                     (s16b)cursor_x, TERM_L_BLUE,
-                    Term->scr->story[cursor_y][cursor_x], cursor_buf))
+                    ui_information_scene_cell_width(cursor_y, cursor_x,
+                        term_wid)))
             {
                 return false;
             }
@@ -289,15 +294,25 @@ bool ui_information_scene_present(const app_information_scene* scene)
 
 bool ui_information_scene_present_term(void)
 {
-    app_information_scene scene;
+    app_information_scene* scene;
+    bool published = false;
 
-    if (!ui_information_scene_capture_term(&scene))
+    scene = mem_alloc(app_information_scene);
+    if (!scene)
         return false;
 
-    return ui_information_scene_publish(&scene, false);
+    if (!ui_information_scene_capture_term(scene))
+    {
+        mem_free(scene);
+        return false;
+    }
+
+    published = ui_information_scene_publish(scene, false);
+    mem_free(scene);
+    return published;
 }
 
-int ui_information_scene_wait_key(void)
+static int ui_information_scene_wait_key_internal(u16b ignored_flags)
 {
     app_session* session = app_session_current();
     app_input input;
@@ -314,6 +329,8 @@ int ui_information_scene_wait_key(void)
             {
                 continue;
             }
+            if (input.flags & ignored_flags)
+                continue;
 
             return (int)(input.payload.key.logical_key & 0xFFu);
         }
@@ -321,6 +338,16 @@ int ui_information_scene_wait_key(void)
         ui_information_scene_term_xtra(TERM_XTRA_EVENT, 1);
         ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
     }
+}
+
+int ui_information_scene_wait_key(void)
+{
+    return ui_information_scene_wait_key_internal(0);
+}
+
+int ui_information_scene_wait_key_nonrepeat(void)
+{
+    return ui_information_scene_wait_key_internal(APP_INPUT_FLAG_REPEAT);
 }
 
 void ui_information_scene_leave(ui_information_scene_scope* scope)
