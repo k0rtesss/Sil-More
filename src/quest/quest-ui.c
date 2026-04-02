@@ -972,6 +972,13 @@ void do_cmd_quest_status(void)
     int wid, hgt;
 
     log_trace("QUEST STATUS: do_cmd_quest_status() called");
+    /* The legacy quest-status renderer is no longer a live runtime path. */
+    (void)buf;
+    (void)row;
+    (void)col;
+    (void)any_quests;
+    (void)wid;
+    (void)hgt;
 
     /* Safety check: ensure we have a valid player and metarun */
     if (!p_ptr) {
@@ -983,19 +990,19 @@ void do_cmd_quest_status(void)
     log_trace("QUEST STATUS: Player exists, quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
 
-    if (do_cmd_quest_status_information_scene())
+    if (!ui_information_scene_supported())
+    {
+        log_warn("quest status: snapshot renderer required; legacy quest-status renderer removed");
+        msg_print("Quest status viewer requires the snapshot UI renderer.");
         return;
+    }
 
-    /* Get terminal size for wrapping */
-    Term_get_size(&wid, &hgt);
-
-    /* Save screen */
-    screen_save();
-    Term_clear();
-
-    /* Title */
-    Term_putstr(col, row++, -1, TERM_YELLOW, "=== Quest Status ===");
-    row++;
+    if (!do_cmd_quest_status_information_scene())
+    {
+        log_warn("quest status: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Quest status viewer unavailable.");
+    }
+    return;
 
     /* Check Tulkas quest */
     if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED) {

@@ -10,7 +10,7 @@ Recommended direction:
 - keep frame cadence in the frontend
 - treat the existing `Term` path as a legacy frontend, not as the future UI API
 
-Status date: April 1, 2026.
+Status date: April 2, 2026.
 
 ## Current Tree Baseline
 - The SDL frontend is no longer one monolithic file.
@@ -54,12 +54,30 @@ Status date: April 1, 2026.
   - `src/object/object-ui-select.c`, `src/cmd/ui/cmd-ui-look.c`, and several
     other gameplay selectors still fuse blocking terminal flow with snapshot
     state
-- Current hotspot counts from `py -3 tools/ui_debt_audit.py` on 2026-04-01:
-  - `inkey()` call sites in 41 files / 149 matches
-  - `screen_save()` + `screen_load()` call sites in 34 files / 247 matches
-  - direct `Term_*` render/control calls in 65 files / 1,731 matches
+- Current hotspot counts from `py -3 tools/ui_debt_audit.py` on 2026-04-02:
+  - `inkey()` call sites in 39 files / 89 matches
+  - `screen_save()` + `screen_load()` call sites in 33 files / 215 matches
+  - direct `Term_*` render/control calls in 65 files / 1,697 matches
   - `#include "platform-ui.h"` in 0 files / 0 matches
-  - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 196 matches
+  - `get_sdl_*` / `set_sdl_*` usage outside platform code in 6 files / 208 matches
+
+## April 2 Direction Reset
+- Treat UI0 through UI8 as the landed architecture substrate, not as the
+  pacing item for the remaining UI work.
+- The active goal is now menu/browser migration plus runtime legacy-render
+  removal.
+- Recreate existing menus visually through the new multilayer renderers.
+  Preserve the current Sil look, wording, spacing, and hierarchy, but do not
+  preserve the old runtime renderers as permanent fallbacks.
+- On the snapshot renderer path, a scene-backed screen must not silently drop
+  back to legacy term rendering as an emergency fallback. If that path fails,
+  treat it as a bug and report it explicitly.
+- `ui_information_scene` and mirrored `Term` capture remain temporary bridge
+  tools only. They are allowed while a family is being ported, but they are
+  not the final menu/document API.
+- Keeping legacy draw code around as a visual reference or content-capture
+  helper is acceptable during migration; keeping it as a second runtime render
+  backend is not the target state.
 
 ## Non-Goals
 - Do not migrate to a game engine.
@@ -134,23 +152,46 @@ Key rule:
 | UI2 | make the core externally drivable | session driver, wait reasons, input queue bridge | complete |
 | UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots | complete |
 | UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop | complete |
-| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | complete |
-| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | complete |
-| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | complete |
-| UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | complete |
+| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | closed; carry-over in M1/M5 |
+| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | closed; carry-over in M2-M5 |
+| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | closed; carry-over in M* |
+| UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | prototype complete |
 
-## Status Audit On 2026-04-01
+## Status Audit On 2026-04-02
 | Stage | Status | Notes |
 | --- | --- | --- |
-| UI0 | complete | ADR, audit tool, audit baseline, and migration inventory are all landed; the current audit still passes against the checked-in baseline. |
+| UI0 | complete | ADR, audit tool, migration inventory, and a refreshed 2026-04-02 baseline are landed; the audit is again measuring regressions against the current tree. |
 | UI1 | complete | `src/app/app-*.h`, the event buffer, host surface, and `tests/ui1_tests.c` cover the neutral boundary scaffolding. |
-| UI2 | partial | wait reasons, input queues, the SDL legacy-input bridge, and an `app_advance_until_waiting()`-style stepper API are landed, but the runtime is not yet driven through that callback-based driver and many core flows still block inside `inkey()`-owned loops. |
+| UI2 | complete for the active runtime | wait reasons, input queues, the SDL legacy-input bridge, and the stepper surface are landed; the remaining blocking loops are consumer-migration work now tracked under M1/M5 rather than missing driver scaffolding. |
 | UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
 | UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
-| UI5 | partial | prompt, list, and targeting interaction state exists, and look/object detail pauses now mirror through `ui_information_scene`, but `get_item()` selector ownership, the outer look/targeting loops, and smithing-class selectors still rely on blocking term control flow. |
-| UI6 | partial | help, file viewer, message recall, story, death, the small-scale map viewer, nearby or object summaries, and combat-history now have information-scene bridges, but settings, score, quest, character, and knowledge flows still depend heavily on legacy term layout and input. |
-| UI7 | partial | the `sil-core` / `sil-platform-sdl` / `sil-legacy-compat` split is live in `CMakeLists.txt`, but legacy UI-heavy modules still live inside `sil-core`, so semantic isolation is not finished. |
-| UI8 | partial as a prototype | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI, but the stage still depends on the unfinished semantic cleanup tracked in UI7. |
+| UI5 | closed as a boundary stage | interaction kinds, wait scopes, and snapshot overlays are in place; the remaining look/target/item cleanup is renderer migration work in MENU1/M1/M5, not missing session primitives. |
+| UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the snapshot path; remaining hybrids are tracked in MENU2-MENU5. |
+| UI7 | closed for planning purposes | the build split is live; the remaining semantic cleanup is now best understood as legacy-render removal inside migrated consumers, so it is carried by the M-track rather than by another UI-stage. |
+| UI8 | prototype complete | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI; further web hardening should wait on M-track reduction of runtime legacy-render debt. |
+
+## Quality Assessment On 2026-04-02
+- Strong:
+  - the session/snapshot/event substrate is real, test-backed, and already
+    good enough to carry SDL plus the UI8 web prototype
+  - the fixed-pixel menu stack (`app_menu_scene`, `sdl-scene-menu`,
+    `sdl-ui-style`) is a credible long-term renderer for visual parity work
+- Medium:
+  - `ui_information_scene` is doing useful bridge work, but it has also
+    blurred the definition of "done" because mirrored term output can look
+    shipped while ownership is still legacy
+  - several documents and browsers now have scene-backed entry flows, but
+    their inner panels still depend on `present_term()`, `screen_save()`, or
+    term-layout code
+- Weak:
+  - earlier plan revisions overstated UI5-UI7 as "complete" without clearly
+    separating architecture substrate from runtime renderer removal
+  - package status had drifted; `MENU4` and `MENU6` in particular were lagging
+    behind what the code actually does
+- Immediate quality bar:
+  - once a scene-backed SDL path exists, keep the old visuals only as a
+    reference or migration helper; do not keep a second runtime renderer as an
+    emergency escape hatch
 
 ## Stage UI0: Guardrails And Baseline
 Goal:
@@ -299,8 +340,8 @@ Exit when:
 
 Status:
 - complete in the working tree on 2026-03-28
-- `app_session` manages state transitions (UNINITIALIZED → IDLE → RUNNING →
-  WAITING → STOPPING → STOPPED), wait reasons, and session flags
+- `app_session` manages state transitions (UNINITIALIZED -> IDLE -> RUNNING ->
+  WAITING -> STOPPING -> STOPPED), wait reasons, and session flags
 - `app_wait_reason` enum covers BOOTSTRAP, COMMAND_INPUT, CONFIRM,
   LIST_SELECTION, TARGETING, TEXT_ENTRY, INFORMATION, and SHUTDOWN
 - session-owned input queue and intent queue are embedded in `app-session.c`
@@ -451,7 +492,8 @@ Exit when:
   control flow
 
 Status:
-- complete in the working tree on 2026-03-29
+- closed as an architecture stage on 2026-04-02; the boundary work is landed
+  and the remaining user-visible cleanup is tracked under MENU1/M1/M5
 - all gameplay-coupled interactions publish wait-reason scopes and interaction
   state descriptors; blocking `inkey()` calls remain in the legacy path but
   are wrapped with session wait-state context
@@ -494,8 +536,7 @@ Status:
 - the SDL dungeon scene renders interaction overlays from snapshot data, so
   the visual path is already decoupled; the blocking path remains but is fully
   annotated with session wait-state context
-- UI debt audit `inkey()` count reduced from 149 to 108 matches (wrapper
-  functions consolidate multiple call sites into single definitions)
+- UI debt audit `inkey()` count now stands at 89 matches on 2026-04-02
 
 ## Stage UI6: Frontend-Owned Informational Scenes
 Goal:
@@ -535,40 +576,31 @@ Exit when:
 - informational UI is frontend-owned and no longer blocks later core cleanup
 
 Status:
-- complete in the working tree on 2026-03-29; all informational screens are
-  frontend-owned via `ui_information_scene` with legacy fallback paths; the
-  informational UI no longer blocks later core cleanup
+- closed as a scene-substrate stage on 2026-04-02; the remaining work is
+  renderer replacement and bridge removal in MENU2-MENU5 rather than missing
+  scene plumbing
 - substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
   `present_term`/`wait_key`/`capture_term` API; SDL renders through
   `sdl-scene-information.c`
-- fully migrated (zero legacy API): `ui-file-viewer.c` (all rendering and
-  input through information scene; no `screen_save`/`screen_load`/`inkey()`
-  calls remain)
-- dual-path (information scene primary, legacy fallback): `score_ui.c`
-  (`do_cmd_run_history_information` and `display_scores_pages_information`
-  paths use information scene; legacy paths retained for non-scene fallback;
-  `run_history_show_detail` and `run_history_examine_monster` have their own
-  scopes), `ui-help.c` (`do_cmd_help_information_scene` builds page scenes
-  directly; legacy `do_cmd_help_legacy` retained as fallback), `quest-ui.c`
-  (`do_cmd_quest_status_information_scene` renders to scene directly;
-  `quest_typewriter_menu` uses scene-active flag with ternary input routing),
-  `cmd-ui-knowledge.c` (main browsers use `use_information_scene` flag with
-  ternary `inkey()`/`wait_key()` routing and `present_term` presentation;
-  sub-browsers pause/resume the scope via `knowledge_pause_information_scene`
-  / `knowledge_resume_information_scene`)
+- fully migrated: `ui-file-viewer.c` (all rendering and input through
+  information scene; no `screen_save`/`screen_load()`/`inkey()` calls remain)
+- scene-backed and authoritative on the snapshot path: `ui-help.c`,
+  `quest-ui.c:do_cmd_quest_status()`, `score_ui.c:show_scores()`,
+  `score_ui.c:do_cmd_run_history()`, `cmd-ui-main-menu.c:do_cmd_messages()`,
+  and the hint-message browser now report failure instead of silently
+  dropping to legacy rendering when the scene path is active
+- hybrid or bridge-backed: `score_ui.c` detail viewers,
+  `quest_typewriter_menu()`, `ui-story.c`, `ui-death.c`,
+  `cmd-ui-knowledge.c`, and `cmd-ui-settings.c` still depend on mirrored
+  `Term` content, ternary input routing, or other legacy layout/input control
 - scene-aware via parent scope: `cmd-ui-settings.c` (`do_cmd_options()` opens
   information scene scope; all sub-functions use `settings_wait_key()` for
   main input routing and `settings_present()` for scene-aware display; raw
   `inkey()` calls remain only in key-capture and macro trigger flows which
   require special `inkey` modes), `cmd-ui-main-menu.c` (uses information
   scene scoping with ternary input routing for modal transitions)
-- transitional (ternary pattern with legacy fallback): `ui-story.c` (helpers
-  `story_present()`, `story_wait_key()` route through scene when active;
-  1 `screen_save`, 1 `screen_load` in legacy fallback path), `ui-death.c`
-  (`scene_active ? wait_key : inkey` pattern throughout; no
-  `screen_save`/`screen_load`)
-- UI debt audit `inkey()` count: 106 matches (down from 108 after settings
-  shade picker migration)
+- UI debt audit now reports 89 `inkey()` matches and 215
+  `screen_save()`/`screen_load()` matches on 2026-04-02
 
 ## Stage UI7: Legacy Isolation And True Platform Boundary
 Goal:
@@ -606,8 +638,9 @@ Status:
 - legacy frontend ownership is isolated behind `sil-legacy-compat` and
   `sil-platform-sdl`, and `platform-ui.h` has been replaced by the narrower
   neutral boundary headers
-- stage remains partial on 2026-04-01 because several legacy UI-heavy modules
-  still live in `sil-core`, so the split is not yet semantically complete
+- planning for this stage is closed on 2026-04-02; the remaining semantic gap
+  is no longer missing build-boundary work, it is runtime legacy-render
+  removal inside migrated consumers and menu families
 
 ## Stage UI8: WASM And Web Bridge
 Goal:
@@ -654,8 +687,9 @@ Status:
 - validation is currently through the host-neutral `sil-core` static library
   plus the packet-driven browser demo described in
   [`ui8_web_demo.md`](./ui8_web_demo.md)
-- stage remains partial on 2026-04-01 because the web bridge is ahead of the
-  still-incomplete semantic cleanup tracked in UI7
+- treat the stage as prototype-complete on 2026-04-02; further web-facing
+  follow-through should wait on the M-track's runtime legacy-render removal so
+  the browser path does not inherit transitional UI debt
 
 ## Menu Modernization Follow-On: Fixed-Size Pixel Menus
 Goal:
@@ -691,6 +725,8 @@ Visual preservation contract:
   should not ride along with architecture work
 - shared menu widgets should treat the current terminal-era presentation as the
   visual reference, not as disposable placeholder styling
+- the target end state is runtime legacy-render-free: preserve the current
+  visuals, not the old renderer implementation
 
 Current blocker summary:
 - `src/sdl-scene-dungeon.c` now renders interaction overlays in fixed pixels
@@ -727,6 +763,8 @@ Standing rule for this track:
 - first land a shared menu scene and widget model
 - treat `APP_SCENE_KIND_INFORMATION` plus `ui_information_scene_present_term()`
   as a bridge for legacy flows, not as the final menu API
+- once a screen has a scene-backed SDL path, do not keep an emergency runtime
+  fallback to direct legacy rendering on that same snapshot path
 - current constraint: keep the shared `APP_SCENE_KIND_MENU` renderer limited to
   prompt-style modals for now; do not roll full menus, selectors, or document
   browsers onto it until the shared widgets can reproduce the current look
@@ -734,7 +772,7 @@ Standing rule for this track:
 - do not treat this track as permission to revisit the game's menu art
   direction; first priority is fixed-pixel behavior with preserved visuals
 
-Status on 2026-04-01:
+Status on 2026-04-02:
 - M0 foundation is now complete in the working tree
 - `src/sdl-scene-dungeon.c` keeps the pre-existing fixed-pixel interaction
   overlay, so prompt/list/targeting overlays remain decoupled from terminal
@@ -749,8 +787,7 @@ Status on 2026-04-01:
   top-level `APP_SCENE_KIND_MENU` snapshots
 - `src/util-prompt.c:get_check_oath_multiline()` now uses the shared fixed-pixel
   menu modal on the SDL snapshot path; this is the current prompt-only
-  consumer of the shared menu renderer, with the old term overlay retained as a
-  fallback
+  consumer of the shared menu renderer
 - `src/targeting.c` now mirrors the monster-recall overlay through
   `ui_information_scene` on the snapshot renderer path instead of relying only
   on `screen_save()` / `screen_load()` there
@@ -761,14 +798,18 @@ Status on 2026-04-01:
   depend on the legacy message row
 - `Quit with save` now relies on the single shutdown save path in
   `close_game()`, avoiding the earlier duplicate save from the main menu action
-- the actual destination screens behind most menu entries are still legacy
-  term- or information-scene-driven flows; M0 is done, but the shared menu
-  renderer is intentionally scoped to prompt-style usage only for now
+- scene-backed help, quest status, run history, message recall, and
+  hint-message entry flows no longer emergency-fallback to direct legacy render
+  on the snapshot path; failure there is now treated as a bug, not as an
+  alternate renderer choice
+- the actual destination screens behind most menu entries are still bridge- or
+  legacy-flow-driven; M0 is done, but the shared menu renderer is intentionally
+  scoped to prompt-style usage only for now
 - `src/sdl-ui-style.c` now centralizes the fixed-pixel menu font cache,
   text measurement, and logical-pixel scaling shared by
   `src/sdl-scene-dungeon.c` overlays and `src/sdl-scene-menu.c`, so future menu
   ports do not drift on typography and scaling
-- M1 is only partially complete
+- M1 remains the next active blocker
   - `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, and
     `src/object/object-ui-select.c` all publish semantic interaction state for
     the snapshot renderer path
@@ -779,14 +820,14 @@ Status on 2026-04-01:
     the information-scene bridge for nested detail views, but its outer redraw
     loop still relies on blocking term ownership for important normal-path
     behavior, so generic interaction consumers are not finished yet
-- M2 is now complete for the current bridge-based path
+- M2 is only partially complete under the stricter no-legacy-render goal
   - `MENU3A` is complete: `do_cmd_messages()` in
-    `src/cmd/ui/cmd-ui-main-menu.c` prefers `ui_information_scene` on the
-    snapshot renderer path and keeps the legacy screen-stack fallback
+    `src/cmd/ui/cmd-ui-main-menu.c` now treats the information-scene path as
+    authoritative on the snapshot renderer path
   - `MENU3B` is complete: the hint-message browser and detail view in
-    `src/cmd/ui/cmd-ui-main-menu.c` now prefer `ui_information_scene` on the
-    snapshot renderer path while keeping the legacy layout, prompts, colors,
-    and fallback behavior
+    `src/cmd/ui/cmd-ui-main-menu.c` now treat `ui_information_scene` as the
+    authoritative snapshot-path renderer while keeping the legacy layout and
+    prompts visually intact
   - `MENU0E` is complete: the information-scene bridge now preserves glyph and
     tile cells instead of collapsing them to spaces
   - `MENU3C` is complete: nearby/object summary screens in
@@ -797,11 +838,24 @@ Status on 2026-04-01:
     layout on the snapshot renderer path
   - `MENU3E` is complete: the small-scale map viewer in `src/cave.c` now uses
     the same bridge instead of remaining SDL-term-only
-- M3 through M5 are still open
-  - most document, browser, settings, character, knowledge, metarun, birth,
-    blitz, and smithing flows still derive layout from `Term->wid` /
-    `Term->hgt` or depend on `screen_save()` / `screen_load()` in their normal
-    path
+- M3 has started at the entry-flow level, but the family is still mostly open
+  - `score_ui.c:show_scores()`, `score_ui.c:do_cmd_run_history()`, and
+    `quest-ui.c:do_cmd_quest_status()` now treat the scene path as
+    authoritative on the snapshot renderer path
+  - score detail panels, character/knowledge browsers, abilities, and the
+    enhanced inventory family still depend heavily on legacy layout/input flow
+- M4 and M5 are still open
+  - most narrative, metarun, settings, birth, blitz, and smithing flows still
+    derive layout from `Term->wid` / `Term->hgt` or depend on
+    `screen_save()` / `screen_load()` in their normal path
+
+Active execution order on 2026-04-02:
+- finish `MENU1` so prompt, targeting, and look/item-selector flows stop being
+  legacy-owned in their normal path
+- finish `MENU2`, then take `MENU5` through `MENU8` so the common browsers and
+  settings/config surfaces stop depending on mirrored term layouts
+- leave `MENU9` through `MENU11` for after the shared document/list-detail
+  widgets are stable
 
 Status update on 2026-03-29:
 - `src/sdl-scene-dungeon.c` now renders the visible main-game left panel on a
@@ -841,10 +895,10 @@ Status update on 2026-03-29:
 | `MENU0E` | `src/app/app-scene-information.*`, `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c`, and only the consumers that need glyph parity | `MENU0C` | complete | the information-scene bridge now preserves raw tile/cursor cells so nearby/object summaries, combat-history, and the map viewer keep legacy visuals on the snapshot path |
 | `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | multiline oath prompts use the shared menu scene; snapshot prompt/message paths no longer size against the live terminal width; look-mode prompts publish `APP_INTERACTION_KIND_LOOK` and nested look/object detail screens mirror through `ui_information_scene`; the outer look/targeting loops and some prompt/list flows still remain legacy-owned |
 | `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | partial | snapshot-renderer path now uses the shared list modal via `app_menu_scene`; blocking selector ownership and legacy fallback remain |
-| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; message, hint, nearby, combat-history, and map-view bridge work are now on the snapshot path, but several entry flows stay legacy |
-| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | complete (UI6) | file-viewer fully migrated; all other modules dual-path with information scene primary and legacy fallback |
+| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; message and hint-message entry flows no longer emergency-fallback on the snapshot path, but nearby/combat-history/map work still rely on the bridge and several entry flows stay legacy |
+| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | partial | file-viewer is fully migrated; help, Halls of Mandos, quest status, and run-history entry flows are scene-authoritative on the snapshot path; story, death, and score detail flows are still hybrid or bridge-backed |
 | `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | partial (UI6 scope aware) | `do_cmd_options()` has information scene scope; `settings_wait_key()` and `settings_present()` route through scene; raw `inkey()` remains only in key-capture/macro flows; full menu-scene migration pending |
-| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | not started | split-pane browser lane with tabs, groups, and recall hooks |
+| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | partial | character and knowledge entry flows already use information-scene scopes and scene-aware input routing, but the family is still a term-layout browser set with no shared split-pane widget migration yet |
 | `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | not started | action-list and detail-side-panel lane |
 | `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | not started | inventory, equipment, identify, compare, and item-action browsers |
 | `MENU9` | `src/metarun.c` | `MENU4` and `MENU7` | not started | blessing exchange, thresholds, active-effects browser, and story stats |
@@ -1004,6 +1058,8 @@ Gate M2-M3:
 - help, file viewer, main menu, score history, quest status, character sheet,
   and knowledge screens no longer query `Term->wid` / `Term->hgt` for layout in
   their SDL path
+- migrated SDL paths no longer keep a direct legacy-render fallback as a
+  second runtime backend
 - migrated browsers preserve existing framing, typography, and information
   density unless a separate design change is approved
 
@@ -1103,13 +1159,13 @@ Parallelization rules:
   - UI4 complete
   - SDL dungeon rendering is snapshot-driven and frame-based
 - Milestone M4: **complete**
-  - UI5 complete
+  - UI5 boundary work is complete
   - gameplay-coupled selectors publish interaction state and wait-reason
-    scopes; blocking `inkey()` path retained but fully annotated
-- Milestone M5: **in progress** (UI7 complete; UI6 remains at ~50%)
-  - UI7 complete — `sil-core` is genuinely frontend-neutral
-  - UI6 in progress — substrate ready, file-viewer fully migrated, most
-    other modules transitional or hybrid with significant legacy paths
+    scopes; remaining cleanup is now tracked in MENU1/M5
+- Milestone M5: **closed; remaining work moved to MENU1-MENU11**
+  - UI6/UI7 are no longer the pacing items
+  - the active program is now scene/widget migration plus runtime
+    legacy-render removal across the menu families
 - Milestone M6: **complete**
   - UI8 prototype complete
   - the same boundary works for SDL and a web client

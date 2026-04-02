@@ -12,6 +12,7 @@
 #include "ui-help.h"
 #include "ui-information-scene.h"
 #include "externs.h"
+#include "log/log.h"
 #include "platform-input.h"
 #include <limits.h>
 #include <stdlib.h>
@@ -634,11 +635,6 @@ static void help_emit_attr(byte attr, const char* s, int row, int col)
         c_put_str(attr, s, row, col);
 }
 
-static bool help_use_legacy_layout(int wid, int hgt)
-{
-    return (wid == 80) && (hgt == 24);
-}
-
 static int help_build_document_ops(int* out_doc_hgt, bool row_has_content[HELP_DOC_MAX_ROWS], bool row_has_heading[HELP_DOC_MAX_ROWS])
 {
     int page;
@@ -770,42 +766,6 @@ static int help_dynamic_build_document_pages(
     return page_count;
 }
 
-static void show_help_screen_dynamic_document(
-    int page,
-    int total_pages,
-    int term_hgt,
-    int doc_start_y,
-    int doc_end_y)
-{
-    char header[96];
-    const int col = 1;
-    const int top = 2;
-
-    strnfmt(header, sizeof(header),
-        "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
-        page, total_pages);
-    put_role(ROLE_HEADER, header, 0, col);
-
-    for (int op = 0; op < g_help_doc_ops_n; op++)
-    {
-        int y = g_help_doc_ops[op].y;
-        int x = g_help_doc_ops[op].x;
-        int screen_y;
-
-        if (y < doc_start_y || y > doc_end_y)
-            continue;
-
-        screen_y = top + (y - doc_start_y);
-        if (screen_y < top || screen_y >= term_hgt - 1)
-            continue;
-
-        if (g_help_doc_ops[op].use_role)
-            put_role(g_help_doc_ops[op].role, g_help_doc_ops[op].text, screen_y, x);
-        else
-            c_put_str(g_help_doc_ops[op].attr, g_help_doc_ops[op].text, screen_y, x);
-    }
-}
-
 static void help_build_information_scene(app_information_scene* scene, int page,
     int total_pages, int term_hgt, int doc_start_y, int doc_end_y)
 {
@@ -859,8 +819,9 @@ static void help_build_information_scene(app_information_scene* scene, int page,
     }
     else
     {
-        SDL_strlcpy(nav,
-            "Navigation: [<-/4] Prev  [->/6/Space] Next  [1-9] Page  [Q/Esc] Quit",
+        SDL_strlcpy(nav, (total_pages <= 9)
+                ? "Navigation: [<-/4] Prev  [->/6/Space] Next  [1-9] Page  [Q/Esc] Quit"
+                : "Navigation: [<-/4] Prev  [->/6/Space] Next  [Q/Esc] Quit",
             sizeof(nav));
     }
 
@@ -1638,12 +1599,6 @@ static bool do_cmd_help_information_scene(void)
             row_has_content, row_has_heading, page_starts, page_ends);
         if (total_pages < 1)
             total_pages = 1;
-        if (total_pages > 9)
-        {
-            ui_information_scene_leave(&scope);
-            return false;
-        }
-
         if (page < 1)
             page = 1;
         if (page > total_pages)
@@ -1693,155 +1648,6 @@ static bool do_cmd_help_information_scene(void)
     return true;
 }
 
-/*
- * Peruse the On-Line-Help
- */
-static void do_cmd_help_legacy(void)
-{
-    int i = 1;
-    char ch;
-    bool row_has_content[HELP_DOC_MAX_ROWS];
-    bool row_has_heading[HELP_DOC_MAX_ROWS];
-    int page_starts[HELP_DOC_MAX_PAGES];
-    int page_ends[HELP_DOC_MAX_PAGES];
-    int doc_hgt = 0;
-
-    /* Clear any active banner before opening help */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
-    /* Save screen */
-    screen_save();
-
-    /* Interact until done */
-    while (1)
-    {
-        int wid, hgt;
-        int total_pages;
-        bool legacy;
-
-        /* Get current terminal size before deciding layout */
-        Term_get_size(&wid, &hgt);
-        legacy = help_use_legacy_layout(wid, hgt);
-
-        if (legacy)
-        {
-            total_pages = HELP_TOTAL_PAGES;
-        }
-        else
-        {
-            /* Rebuild each time so controller bindings / options are current */
-            help_build_document_ops(&doc_hgt, row_has_content, row_has_heading);
-            total_pages = help_dynamic_build_document_pages(
-                hgt,
-                doc_hgt,
-                row_has_content,
-                row_has_heading,
-                page_starts,
-                page_ends);
-        }
-
-        if (total_pages < 1)
-            total_pages = 1;
-
-        if (i < 1)
-            i = 1;
-        if (i > total_pages)
-            i = total_pages;
-
-        /* Clear screen */
-        Term_clear();
-
-        if (legacy)
-        {
-            show_help_screen_legacy(i, true);
-        }
-        else
-        {
-            int start_y = page_starts[i - 1];
-            int end_y = page_ends[i - 1];
-            show_help_screen_dynamic_document(i, total_pages, hgt, start_y, end_y);
-        }
-
-        /* Better navigation prompt */
-        {
-            char nav[128];
-            if (steamdeck_controls_active()) {
-                char next_label[16];
-                char back_label[16];
-                help_prompt_label(' ', "A", next_label, sizeof(next_label));
-                help_prompt_label('b', "b", back_label, sizeof(back_label));
-                strnfmt(nav, sizeof(nav),
-                    "Navigation: D-pad left/right Prev/Next  [%s] Next  [%s] Back",
-                    next_label, back_label);
-            } else {
-                strnfmt(nav, sizeof(nav),
-                    "Navigation: [<-/4] Prev  [->/6/Space] Next  [X+1-%d] Page  [Q/Esc] Quit",
-                    total_pages);
-            }
-            c_put_str(TERM_WHITE, nav, hgt - 1, 1);
-        }
-        ch = inkey();
-        if (steamdeck_controls_active() && ch == 'b')
-            ch = ESCAPE;
-
-        /* Enhanced navigation */
-        if (ch != EOF)
-        {
-            /* Quit commands */
-            if ((ch == 'q') || (ch == 'Q') || (ch == ESCAPE))
-            {
-                break;
-            }
-            /* Previous page */
-            else if ((ch == '8') || (ch == '-') || (ch == '4'))
-            {
-                i--;
-                if (i < 1)
-                    i = 1;
-            }
-            /* Next page */
-            else if ((ch == '2') || (ch == '6') || (ch == ' ') || (ch == '\r') || (ch == '\n'))
-            {
-                i++;
-            }
-            /* Direct page navigation with 'x' prefix */
-            else if (ch == 'x' || ch == 'X')
-            {
-                char prompt[32];
-                char tmp[8];
-                strnfmt(prompt, sizeof(prompt), "Page (1-%d): ", total_pages);
-                prt(prompt, hgt - 1, 0);
-                SDL_strlcpy(tmp, "1", sizeof(tmp));
-                if (askfor_aux(tmp, sizeof(tmp)))
-                {
-                    int target = atoi(tmp);
-                    if ((target >= 1) && (target <= total_pages))
-                        i = target;
-                }
-            }
-            /* Default: next page */
-            else
-            {
-                i++;
-            }
-        }
-
-        /* Done */
-        if (i > total_pages)
-            break;
-
-        /* Flush messages */
-        message_flush();
-    }
-
-    /* Load screen */
-    screen_load();
-}
-
 void do_cmd_help(void)
 {
     extern int g_banner_force_redraw_remaining;
@@ -1851,10 +1657,18 @@ void do_cmd_help(void)
         do_cmd_redraw();
     }
 
-    if (do_cmd_help_information_scene())
+    if (!ui_information_scene_supported())
+    {
+        log_warn("help: snapshot renderer required; legacy help renderer removed");
+        msg_print("Help viewer requires the snapshot UI renderer.");
         return;
+    }
 
-    do_cmd_help_legacy();
+    if (!do_cmd_help_information_scene())
+    {
+        log_warn("help: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Help viewer unavailable.");
+    }
 }
 
 /*

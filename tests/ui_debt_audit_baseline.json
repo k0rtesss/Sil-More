@@ -13,16 +13,16 @@
   ],
   "metrics": {
     "inkey_calls": {
-      "files": 41,
-      "matches": 106
+      "files": 39,
+      "matches": 89
     },
     "screen_overlay_calls": {
-      "files": 35,
-      "matches": 251
+      "files": 33,
+      "matches": 215
     },
     "term_render_control_calls": {
       "files": 65,
-      "matches": 1725
+      "matches": 1697
     },
     "platform_ui_includes": {
       "files": 0,

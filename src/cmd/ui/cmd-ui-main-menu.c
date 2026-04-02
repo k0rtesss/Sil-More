@@ -829,71 +829,6 @@ static int hint_message_match_length(const char* line, int offset,
     return best_len;
 }
 
-static void hint_message_put_segment(int row, int col, byte attr, const char* text)
-{
-    if (!text || !text[0])
-        return;
-
-    if (sdl_is_story_font_enabled())
-        story_print_text(row, col, 0, attr, text);
-    else
-        Term_putstr(col, row, -1, attr, text);
-}
-
-static void hint_message_draw_colored_line(int row, int col, byte base_attr,
-    const char* line, const hint_message_meta* meta)
-{
-    int start = 0;
-    int cursor = col;
-    int len;
-
-    if (!line)
-        line = "";
-
-    len = (int)strlen(line);
-    for (int i = 0; i < len; )
-    {
-        byte match_attr = base_attr;
-        int match_len = hint_message_match_length(line, i, meta, &match_attr);
-        if (match_len > 0)
-        {
-            if (i > start)
-            {
-                char plain[100];
-                int plain_len = i - start;
-                memcpy(plain, line + start, plain_len);
-                plain[plain_len] = '\0';
-                hint_message_put_segment(row, cursor, base_attr, plain);
-                cursor += plain_len;
-            }
-
-            {
-                char special[HINT_MESSAGE_CUE_TEXT_MAX + 1];
-                memcpy(special, line + i, match_len);
-                special[match_len] = '\0';
-                hint_message_put_segment(row, cursor, match_attr, special);
-            }
-
-            cursor += match_len;
-            i += match_len;
-            start = i;
-        }
-        else
-        {
-            ++i;
-        }
-    }
-
-    if (start < len)
-    {
-        char tail[100];
-        int tail_len = len - start;
-        memcpy(tail, line + start, tail_len);
-        tail[tail_len] = '\0';
-        hint_message_put_segment(row, cursor, base_attr, tail);
-    }
-}
-
 static bool hint_message_add_information_segment(app_information_scene* scene,
     s16b row, s16b col, byte attr, byte story, const char* text)
 {
@@ -1008,70 +943,6 @@ static void hint_message_build_title(char* buf, size_t buf_sz, const char* title
     }
 
     strnfmt(buf, buf_sz, "%.*s...", max_len - 3, title);
-}
-
-static void hint_message_draw_list_row(int row, int idx, bool selected, int wid)
-{
-    hint_message_meta meta;
-    char prefix[8];
-    char title_buf[96];
-    const char* title = hint_message_title(idx);
-    byte prefix_attr = selected ? TERM_L_BLUE : TERM_WHITE;
-    byte title_attr = selected ? TERM_L_WHITE : TERM_WHITE;
-    byte chrome_attr = TERM_SLATE;
-    int col = 0;
-    int title_room;
-
-    hint_messages_message_meta(idx, &meta);
-
-    Term_erase(0, row, 255);
-
-    strnfmt(prefix, sizeof(prefix), "%2d) ", idx + 1);
-    Term_putstr(col, row, -1, prefix_attr, prefix);
-    col += (int)strlen(prefix);
-
-    title_room = MAX(8, wid - col - 1);
-    if (meta.cue_count > 0)
-        title_room = MIN(title_room, MAX(wid / 2, 24));
-    hint_message_build_title(title_buf, sizeof(title_buf), title, title_room);
-    Term_putstr(col, row, -1, title_attr, title_buf);
-    col += (int)strlen(title_buf);
-
-    if (meta.cue_count <= 0 || col >= wid - 4)
-        return;
-
-    Term_putstr(col, row, -1, chrome_attr, " [");
-    col += 2;
-
-    for (int cue = 0; cue < meta.cue_count && col < wid - 1; ++cue)
-    {
-        if (cue > 0)
-        {
-            Term_putstr(col, row, -1, chrome_attr, "; ");
-            col += 2;
-        }
-
-        if (meta.cue_dists[cue][0])
-        {
-            Term_putstr(col, row, -1, TERM_YELLOW, meta.cue_dists[cue]);
-            col += (int)strlen(meta.cue_dists[cue]);
-        }
-
-        if (meta.cue_dists[cue][0] && meta.cue_dirs[cue][0] && col < wid - 1)
-        {
-            Term_putstr(col, row, -1, chrome_attr, " ");
-            col += 1;
-        }
-
-        if (meta.cue_dirs[cue][0] && col < wid - 1)
-        {
-            Term_putstr(col, row, -1, TERM_L_BLUE, meta.cue_dirs[cue]);
-            col += (int)strlen(meta.cue_dirs[cue]);
-        }
-    }
-
-    if (col < wid - 1)
-        Term_putstr(col, row, -1, chrome_attr, "]");
 }
 
 static bool hint_message_build_information_list_row(app_information_scene* scene,
@@ -1231,12 +1102,15 @@ static bool hint_message_build_information_detail_scene(
 }
 
 static bool hint_message_show_information_scene(int index, int* look_y,
-    int* look_x)
+    int* look_x, bool* out_request_look)
 {
     ui_information_scene_scope scope;
     app_information_scene scene;
     hint_message_meta meta;
     byte line_count;
+
+    if (out_request_look)
+        *out_request_look = false;
 
     hint_messages_ensure_level_state();
     line_count = hint_messages_message_line_count(index);
@@ -1274,6 +1148,8 @@ static bool hint_message_show_information_scene(int index, int* look_y,
                 *look_y = meta.source_y;
             if (look_x)
                 *look_x = meta.source_x;
+            if (out_request_look)
+                *out_request_look = true;
             ui_information_scene_leave(&scope);
             return true;
         }
@@ -1282,89 +1158,31 @@ static bool hint_message_show_information_scene(int index, int* look_y,
     }
 
     ui_information_scene_leave(&scope);
-    return false;
-}
-
-static bool hint_message_show_internal(int index, int* look_y, int* look_x,
-    bool manage_screen)
-{
-    int wid = 80;
-    int hgt = 24;
-    int row = 4;
-    int col = 8;
-    char ch;
-    hint_message_meta meta;
-    byte line_count;
-    bool request_look = false;
-
-    hint_messages_ensure_level_state();
-    line_count = hint_messages_message_line_count(index);
-    if (!line_count)
-        return false;
-
-    hint_messages_message_meta(index, &meta);
-
-    if (manage_screen)
-        screen_save();
-
-    sdl_story_font_enable();
-
-    while (1)
-    {
-        Term_clear();
-        Term_get_size(&wid, &hgt);
-
-        for (int li = 0; li < line_count && row + li < hgt - 1; ++li)
-        {
-            const char* line = hint_messages_message_line(index, li);
-            byte base_attr = (li == 0) ? TERM_L_WHITE : TERM_WHITE;
-            hint_message_draw_colored_line(row + li, col, base_attr, line,
-                (li == 0) ? NULL : &meta);
-        }
-
-        if (hint_message_has_source(&meta))
-        {
-            prt("[Press any key to continue, or 'l' to look at the skeleton]",
-                hgt - 1, 0);
-        }
-        else
-        {
-            prt("[Press any key to continue]", hgt - 1, 0);
-        }
-
-        Term_fresh();
-
-        inkey_set_cursor_hidden(true);
-        ch = inkey();
-        inkey_set_cursor_hidden(false);
-
-        if ((ch == 'l' || ch == 'L') && hint_message_has_source(&meta))
-        {
-            if (look_y)
-                *look_y = meta.source_y;
-            if (look_x)
-                *look_x = meta.source_x;
-            request_look = true;
-            break;
-        }
-
-        break;
-    }
-
-    sdl_story_font_disable();
-    if (manage_screen)
-        screen_load();
-
-    return request_look;
+    return true;
 }
 
 void show_hint_message_screen(int index)
 {
     int look_y = -1;
     int look_x = -1;
+    bool request_look = false;
 
-    if (hint_message_show_information_scene(index, &look_y, &look_x)
-        || hint_message_show_internal(index, &look_y, &look_x, true))
+    if (!ui_information_scene_supported())
+    {
+        log_warn("hint message detail: snapshot renderer required; legacy detail renderer removed");
+        msg_print("Hint message viewer requires the snapshot UI renderer.");
+        return;
+    }
+
+    if (!hint_message_show_information_scene(index, &look_y, &look_x,
+            &request_look))
+    {
+        log_warn("hint message detail: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Hint message viewer unavailable.");
+        return;
+    }
+
+    if (request_look)
     {
         do_cmd_redraw();
         do_cmd_look_at(look_y, look_x);
@@ -1475,8 +1293,16 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
             int selected_look_y = -1;
             int selected_look_x = -1;
 
-            if (hint_message_show_information_scene(sel, &selected_look_y,
-                    &selected_look_x))
+            bool request_look = false;
+
+            if (!hint_message_show_information_scene(sel, &selected_look_y,
+                    &selected_look_x, &request_look))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
+
+            if (request_look)
             {
                 pending_look = true;
                 look_y = selected_look_y;
@@ -1521,13 +1347,6 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     int* out_look_x)
 {
-    char ch;
-
-    int wid, hgt;
-    bool pending_look = false;
-    int look_y = -1;
-    int look_x = -1;
-
     /* Clear any active banner before opening hint messages */
     extern int g_banner_force_redraw_remaining;
     if (g_banner_force_redraw_remaining > 0) {
@@ -1544,115 +1363,19 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
         return;
     }
 
-    if (do_cmd_hint_messages_information_scene(out_pending_look, out_look_y,
-            out_look_x))
+    if (!ui_information_scene_supported())
     {
+        log_warn("hint messages: snapshot renderer required; legacy hint-message renderer removed");
+        msg_print("Hint message browser requires the snapshot UI renderer.");
         return;
     }
 
-    int sel = 0;
-    int top = 0;
-
-    Term_get_size(&wid, &hgt);
-
-    /* Save screen */
-    screen_save();
-
-    while (1)
+    if (!do_cmd_hint_messages_information_scene(out_pending_look,
+            out_look_y, out_look_x))
     {
-        Term_clear();
-
-        int rows = hgt - 4;
-        if (rows < 1)
-            rows = 1;
-
-        if (sel < 0)
-            sel = 0;
-        if (sel >= n)
-            sel = n - 1;
-
-        if (sel < top)
-            top = sel;
-        if (sel >= top + rows)
-            top = sel - rows + 1;
-        if (top < 0)
-            top = 0;
-        if (top > n - rows)
-            top = n - rows;
-        if (top < 0)
-            top = 0;
-
-        prt(format("Hint Messages (%d)", n), 0, 0);
-        prt("[Press '8'/'2' to move, Enter to read, 'l' to look, or ESCAPE]",
-            hgt - 1, 0);
-
-        for (int row = 0; row < rows && top + row < n; ++row)
-        {
-            int idx = top + row;
-            hint_message_draw_list_row(2 + row, idx, idx == sel, wid);
-        }
-
-        Term_fresh();
-        ch = inkey();
-
-        if (ch == ESCAPE)
-            break;
-
-        if (ch == '8')
-        {
-            sel = (sel > 0) ? (sel - 1) : (n - 1);
-            continue;
-        }
-
-        if (ch == '2')
-        {
-            sel = (sel + 1 < n) ? (sel + 1) : 0;
-            continue;
-        }
-
-        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-        {
-            int selected_look_y = -1;
-            int selected_look_x = -1;
-
-            if (hint_message_show_internal(sel, &selected_look_y, &selected_look_x, false))
-            {
-                pending_look = true;
-                look_y = selected_look_y;
-                look_x = selected_look_x;
-                break;
-            }
-            continue;
-        }
-
-        if (ch == 'l' || ch == 'L')
-        {
-            hint_message_meta meta;
-            hint_messages_message_meta(sel, &meta);
-            if (hint_message_has_source(&meta))
-            {
-                pending_look = true;
-                look_y = meta.source_y;
-                look_x = meta.source_x;
-                break;
-            }
-
-            bell(NULL);
-            continue;
-        }
-
-        bell(NULL);
+        log_warn("hint messages: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Hint message browser unavailable.");
     }
-
-    /* Load screen */
-    screen_load();
-
-    if (out_pending_look)
-        *out_pending_look = pending_look;
-    if (out_look_y)
-        *out_look_y = look_y;
-    if (out_look_x)
-        *out_look_x = look_x;
 }
 
 /*
@@ -1881,14 +1604,6 @@ static bool do_cmd_messages_information_scene(void)
 
 void do_cmd_messages(void)
 {
-    char ch;
-
-    int i, j, n, q;
-    int wid, hgt;
-
-    char shower[80];
-    char finder[80];
-
     /* Clear any active banner before opening message history */
     extern int g_banner_force_redraw_remaining;
     if (g_banner_force_redraw_remaining > 0) {
@@ -1896,203 +1611,18 @@ void do_cmd_messages(void)
         do_cmd_redraw();
     }
 
-    if (do_cmd_messages_information_scene())
-        return;
-
-    /* Wipe finder */
-    SDL_strlcpy(finder, "", sizeof(finder));
-
-    /* Wipe shower */
-    SDL_strlcpy(shower, "", sizeof(shower));
-
-    /* Total messages */
-    n = message_num();
-
-    /* Start on first message */
-    i = 0;
-
-    /* Start at leftmost edge */
-    q = 0;
-
-    /* Get size */
-    Term_get_size(&wid, &hgt);
-
-    /* Save screen */
-    screen_save();
-
-    /* Process requests until done */
-    while (1)
+    if (!ui_information_scene_supported())
     {
-        /* Clear screen */
-        Term_clear();
-
-        /* Dump messages */
-        for (j = 0; (j < hgt - 4) && (i + j < n); j++)
-        {
-            cptr msg = message_str((s16b)(i + j));
-            byte attr = message_color((s16b)(i + j));
-
-            /* Apply horizontal scroll */
-            msg = ((int)strlen(msg) >= q) ? (msg + q) : "";
-
-            /* Dump the messages, bottom to top */
-            Term_putstr(0, hgt - 3 - j, -1, attr, msg);
-
-            /* Hilite "shower" */
-            if (shower[0])
-            {
-                cptr str = msg;
-
-                /* Display matches */
-                while ((str = strstr(str, shower)) != NULL)
-                {
-                    int len = strlen(shower);
-
-                    /* Display the match */
-                    Term_putstr(
-                        str - msg, hgt - 3 - j, len, TERM_YELLOW, shower);
-
-                    /* Advance */
-                    str += len;
-                }
-            }
-        }
-
-        /* Display header XXX XXX XXX */
-        prt(format(
-                "Message Recall (%d-%d of %d), Offset %d", i, i + j - 1, n, q),
-            0, 0);
-
-        /* Display prompt (not very informative) */
-        prt("[Press 'p' for older, 'n' for newer, ..., or ESCAPE]", hgt - 1, 0);
-
-        /* Get a command */
-        ch = inkey();
-
-        /* Exit on Escape */
-        if (ch == ESCAPE)
-            break;
-
-        /* Hack -- Save the old index */
-        j = i;
-
-        /* Horizontal scroll */
-        if (ch == '4')
-        {
-            /* Scroll left */
-            q = (q >= wid / 2) ? (q - wid / 2) : 0;
-
-            /* Success */
-            continue;
-        }
-
-        /* Horizontal scroll */
-        if (ch == '6')
-        {
-            /* Scroll right */
-            q = q + wid / 2;
-
-            /* Success */
-            continue;
-        }
-
-        /* Hack -- handle show */
-        if (ch == '=')
-        {
-            /* Prompt */
-            prt("Show: ", hgt - 1, 0);
-
-            /* Get a "shower" string, or continue */
-            if (!askfor_aux(shower, sizeof(shower)))
-                continue;
-
-            /* Okay */
-            continue;
-        }
-
-        /* Hack -- handle find */
-        if (ch == '/')
-        {
-            s16b z;
-
-            /* Prompt */
-            prt("Find: ", hgt - 1, 0);
-
-            /* Get a "finder" string, or continue */
-            if (!askfor_aux(finder, sizeof(finder)))
-                continue;
-
-            /* Show it */
-            SDL_strlcpy(shower, finder, sizeof(shower));
-
-            /* Scan messages */
-            for (z = i + 1; z < n; z++)
-            {
-                cptr msg = message_str(z);
-
-                /* Search for it */
-                if (strstr(msg, finder))
-                {
-                    /* New location */
-                    i = z;
-
-                    /* Done */
-                    break;
-                }
-            }
-        }
-
-        /* Recall 20 older messages */
-        if ((ch == 'p') || (ch == KTRL('P')) || (ch == ' '))
-        {
-            /* Go older if legal */
-            if (i + 20 < n)
-                i += 20;
-        }
-
-        /* Recall 10 older messages */
-        if (ch == '+')
-        {
-            /* Go older if legal */
-            if (i + 10 < n)
-                i += 10;
-        }
-
-        /* Recall 1 older message */
-        if ((ch == '8') || (ch == '\n') || (ch == '\r'))
-        {
-            /* Go newer if legal */
-            if (i + 1 < n)
-                i += 1;
-        }
-
-        /* Recall 20 newer messages */
-        if ((ch == 'n') || (ch == KTRL('N')))
-        {
-            /* Go newer (if able) */
-            i = (i >= 20) ? (i - 20) : 0;
-        }
-
-        /* Recall 10 newer messages */
-        if (ch == '-')
-        {
-            /* Go newer (if able) */
-            i = (i >= 10) ? (i - 10) : 0;
-        }
-
-        /* Recall 1 newer messages */
-        if (ch == '2')
-        {
-            /* Go newer (if able) */
-            i = (i >= 1) ? (i - 1) : 0;
-        }
-
-        /* Hack -- Error of some kind */
-        if (i == j)
-            bell(NULL);
+        log_warn("message recall: snapshot renderer required; legacy message-recall renderer removed");
+        msg_print("Message recall requires the snapshot UI renderer.");
+        return;
     }
 
-    /* Load screen */
-    screen_load();
+    if (!do_cmd_messages_information_scene())
+    {
+        log_warn("message recall: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Message recall unavailable.");
+    }
+    return;
 }
 

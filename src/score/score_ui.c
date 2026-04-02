@@ -571,159 +571,6 @@ static void truncate_preserving_tail(const char* src, char* dst, size_t dst_size
     pos += tail_copy;
     dst[pos] = '\0';
 }
-static void display_single_score_short(byte attr, int place, int row, const high_score* entry)
-{
-    char depth_commas[16];
-    char verdict_buf[96];
-    const char* verdict;
-    int wid, hgt;
-
-    /* Get actual terminal width */
-    score_ui_get_term_size(&wid, &hgt);
-    const int line_width = wid;
-
-    int depth_ft = atoi(entry->cur_dun) * 50;
-    comma_number(depth_commas, depth_ft);
-
-    int pts = score_points(entry);
-    int silmarils = parse_score_int(entry->silmarils, sizeof(entry->silmarils), 0);
-    bool morgoth = (entry->morgoth_slain[0] == 't');
-
-    /* Build indicators string */
-    char indicators[8] = "";
-    int ind_pos = 0;
-    
-    /* Add Silmaril indicators */
-    for (int i = 0; i < silmarils && i < 3; i++) {
-        indicators[ind_pos++] = '*';
-    }
-    
-    /* Add Morgoth indicator */
-    if (morgoth) {
-        indicators[ind_pos++] = 'V';
-    }
-    indicators[ind_pos] = '\0';
-
-    /* Build verdict with appropriate formatting */
-    if (entry->escaped[0] == 't') {
-        if (indicators[0]) {
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Escaped with %s", indicators);
-        } else {
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Escaped Angband");
-        }
-        verdict = verdict_buf;
-    } else if (streq(entry->how, "(alive and well)")) {
-        verdict = "Alive";
-    } else if (morgoth) {
-        /* Morgoth victory is a special end state; avoid "Slain by ..." wording. */
-        if (indicators[0]) {
-            strnfmt(verdict_buf, sizeof(verdict_buf),
-                    "Victorious over Morgoth's illusion (%s) at %sft %s",
-                    entry->how, depth_commas, indicators);
-        } else {
-            strnfmt(verdict_buf, sizeof(verdict_buf),
-                    "Victorious over Morgoth's illusion (%s) at %sft",
-                    entry->how, depth_commas);
-        }
-        verdict = verdict_buf;
-    } else {
-        /* For deaths, include depth and indicators - keep ft visible */
-        if (indicators[0]) {
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Slain by %s at %sft %s", 
-                    entry->how, depth_commas, indicators);
-        } else {
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Slain by %s at %sft", 
-                    entry->how, depth_commas);
-        }
-        verdict = verdict_buf;
-    }
-
-    const char* name_src = entry->who[0] ? entry->who : "(unknown)";
-
-    /* Column layout with maximum verdict display:
-     * "1. Maedhros   777  Slain by a Young fire-drake at 800ft with indicators"
-     *  ^^^ ^^^^^^^^ ^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-     *  Pl  Name(12) Scr  Verdict (uses all remaining terminal width)
-     */
-    const int place_width = 4;      /* "1. " */
-    const int name_width = 15;      /* Fixed minimum name column */
-    const int score_width = 5;      /* Right-aligned score */
-    const int gap = 2;              /* Spaces between score and verdict */
-    
-    /* Verdict gets all remaining space on the line, minus 1 for cleaner right margin */
-    int verdict_start = place_width + name_width + score_width + gap;
-    int verdict_width = line_width - verdict_start - 1;  /* -1 for right margin */
-    if (verdict_width < 1) verdict_width = 1;
-
-    /* Build the line */
-    char line[256];
-    for (size_t i = 0; i < sizeof(line); i++) line[i] = ' ';
-    
-    int pos = 0;
-    
-    /* Place number: "1. " */
-    char place_buf[8];
-    strnfmt(place_buf, sizeof(place_buf), "%2d. ", place);
-    memcpy(line + pos, place_buf, strlen(place_buf));
-    pos = place_width;  /* Jump to fixed position */
-    
-    /* Name field: left-aligned in 20-char column */
-    char name_field[64];
-    truncate_preserving_words(name_src, name_field, sizeof(name_field), name_width);
-    int name_len = (int)strlen(name_field);
-    if (name_len > name_width) name_len = name_width;
-    memcpy(line + pos, name_field, name_len);
-    pos = place_width + name_width;  /* Jump to fixed position */
-    
-    /* Score field: right-aligned in 5-char column */
-    char score_buf[16];
-    strnfmt(score_buf, sizeof(score_buf), "%d", pts);
-    int score_len = (int)strlen(score_buf);
-    if (score_len > score_width) {
-        /* Truncate from left if too long */
-        memcpy(line + pos + score_width - score_len, score_buf + (score_len - score_width), score_width);
-    } else {
-        memcpy(line + pos + score_width - score_len, score_buf, score_len);
-    }
-    pos = place_width + name_width + score_width + gap;  /* Jump past score + gap */
-    
-    /* Verdict field: keep "at XXft" visible at end if truncating needed */
-    const char* verdict_str = verdict;
-    int verdict_len = (int)strlen(verdict_str);
-    
-    if (verdict_len > verdict_width) {
-        /* Find the " at " part which contains the depth info - keep it visible */
-        const char* at_pos = strstr(verdict_str, " at ");
-        if (at_pos) {
-            int at_offset = (int)(at_pos - verdict_str);
-            int tail_len = verdict_len - at_offset;  /* Length from " at " onward */
-            
-            if (tail_len < verdict_width) {
-                /* We can fit the tail, so truncate the beginning */
-                int prefix_len = verdict_width - tail_len;
-                memcpy(line + pos, verdict_str, prefix_len);
-                memcpy(line + pos + prefix_len, at_pos, tail_len);
-                pos += verdict_width;
-            } else {
-                /* Even the tail is too long, just show what fits starting from beginning */
-                memcpy(line + pos, verdict_str, verdict_width);
-                pos += verdict_width;
-            }
-        } else {
-            /* No " at " found, just show beginning of verdict */
-            memcpy(line + pos, verdict_str, verdict_width);
-            pos += verdict_width;
-        }
-    } else {
-        /* Verdict fits completely */
-        memcpy(line + pos, verdict_str, verdict_len);
-        pos += verdict_len;
-    }
-    
-    line[pos] = '\0';
-
-    c_put_str(attr, line, 3 + row, 0);
-}
 extern void display_single_score(
     byte attr, int row, int col, int place, int fake, high_score* the_score)
 {
@@ -1346,176 +1193,6 @@ static void score_scene_display_single_score(app_information_scene* scene,
             TERM_L_DARK, "         V");
     }
 }
-static char display_scores_pages(const high_score* entries, int count, int highlight_index,
-                                 score_view_order order, bool detailed, int page_size)
-{
-    bool steamdeck = score_ui_steamdeck_mode();
-    char order_label[16] = "";
-    char layout_label[16] = "";
-    char exit_label[16] = "";
-    char next_label[16] = "";
-    int term_wid = 80;
-    int term_hgt = 24;
-    int footer_row;
-    bool compact;
-
-    if (steamdeck) {
-        /* Steam Deck UI: Y=order, X=layout, B=exit, A=next */
-        score_prompt_label(steamdeck_secondary_key(), "Y", order_label, sizeof(order_label));
-        score_prompt_label(steamdeck_alt_action_key(), "X", layout_label, sizeof(layout_label));
-        score_prompt_label(steamdeck_back_key(), "B", exit_label, sizeof(exit_label));
-        score_prompt_label(steamdeck_confirm_key(), "A", next_label, sizeof(next_label));
-    }
-
-    score_ui_get_term_size(&term_wid, &term_hgt);
-    footer_row = term_hgt - 1;
-    if (footer_row < 4)
-        footer_row = 4;
-    compact = score_ui_compact_width(term_wid);
-
-    Term_clear();
-
-    if (!entries || count <= 0)
-    {
-        c_put_str(TERM_L_BLUE, "               Halls of Mandos", 1, 0);
-        c_put_str(TERM_SLATE, "No recorded heroes yet.", 3, 0);
-        if (steamdeck) {
-            char hint_buf[48];
-            strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", next_label);
-            score_ui_put_fit(TERM_L_WHITE, hint_buf, footer_row, 2, term_wid);
-        } else {
-            score_ui_put_fit(TERM_L_WHITE, "(press any key)", footer_row, 2,
-                term_wid);
-        }
-        (void)inkey();
-        return 0;
-    }
-
-    int start_index = 0;
-    bool highlight_pending = true;
-
-    while (start_index < count)
-    {
-        int body_rows;
-        int entries_per_page;
-        int layout_col;
-
-        score_ui_get_term_size(&term_wid, &term_hgt);
-        footer_row = term_hgt - 1;
-        if (footer_row < 4)
-            footer_row = 4;
-        compact = score_ui_compact_width(term_wid);
-
-        body_rows = footer_row - 3;
-        if (body_rows < 1)
-            body_rows = 1;
-
-        entries_per_page = detailed ? (body_rows / 4) : body_rows;
-        if (detailed && entries_per_page > page_size)
-            entries_per_page = page_size;
-        if (entries_per_page < 1) entries_per_page = 1;
-
-        if (highlight_pending && highlight_index >= 0)
-        {
-            int max_start = (count - entries_per_page);
-            if (max_start < 0) max_start = 0;
-            start_index = (highlight_index / entries_per_page) * entries_per_page;
-            if (start_index > max_start) start_index = max_start;
-            highlight_pending = false;
-        }
-
-        Term_clear();
-        c_put_str(TERM_L_BLUE, "               Halls of Mandos", 1, 0);
-
-        char order_buf[64];
-        strnfmt(order_buf, sizeof(order_buf), "%s", score_view_order_label(order));
-        c_put_str(TERM_L_WHITE, order_buf, 2, 0);
-
-        char layout_buf[32];
-        strnfmt(layout_buf, sizeof(layout_buf), "Layout: %s", detailed ? "Full" : "Short");
-        layout_col = term_wid - (int)strlen(layout_buf) - 1;
-        if (!compact && layout_col > (int)strlen(order_buf) + 2)
-            c_put_str(TERM_SLATE, layout_buf, 2, layout_col);
-
-        for (int row = 0; row < entries_per_page && (start_index + row) < count; row++)
-        {
-            int idx = start_index + row;
-            bool is_highlight = (idx == highlight_index);
-            byte attr = score_entry_color(&entries[idx], is_highlight);
-
-            if (detailed)
-            {
-                display_single_score(attr, row * 4, 0, start_index + row + 1, false, (high_score*)&entries[idx]);
-            }
-            else
-            {
-                display_single_score_short(attr, start_index + row + 1, row, &entries[idx]);
-            }
-        }
-
-        bool has_more = (start_index + entries_per_page < count);
-
-        char footer[80];
-        if (steamdeck) {
-            const char* action = has_more ? "Next" : "Close";
-            if (compact) {
-                strnfmt(footer, sizeof(footer),
-                    "[%s]Ord [%s]Lay [%s]Exit [%s]%s", order_label,
-                    layout_label, exit_label, next_label, action);
-            } else {
-                strnfmt(footer, sizeof(footer),
-                    "[%s] Order  [%s] Layout  [%s] Exit  [%s] %s",
-                    order_label, layout_label, exit_label, next_label, action);
-            }
-        } else {
-            if (compact) {
-                strnfmt(footer, sizeof(footer),
-                    "[S] order [L] layout [Esc] exit [any] %s",
-                    has_more ? "next" : "close");
-            } else {
-                strnfmt(footer, sizeof(footer),
-                    "[S] Toggle order   [L] Layout   [ESC] Exit   (press any other key to %s)",
-                    has_more ? "continue" : "close");
-            }
-        }
-        score_ui_put_fit(TERM_L_WHITE, footer, footer_row, 1, term_wid);
-
-        char ch = inkey();
-        prt("", footer_row, 0);
-
-        if (steamdeck) {
-            int back_key = steamdeck_back_key();
-            int confirm_key = steamdeck_confirm_key();
-            int alt_key = steamdeck_alt_action_key();
-            int secondary_key = steamdeck_secondary_key();
-            
-            if (ch == back_key)
-                return ESCAPE;  /* B = back */
-            if (ch == confirm_key || ch == '\r' || ch == '\n') {
-                if (!has_more) return 0;  /* A = continue/close */
-            }
-            if (ch == alt_key)
-                ch = 'l';  /* X = layout toggle */
-            if (ch == secondary_key)
-                ch = 's';  /* Y = order toggle */
-        }
-
-        if (ch == ESCAPE)
-            return ESCAPE;
-        if (ch == 's' || ch == 'S' || ch == 'o' || ch == 'O')
-            return ch;
-        if (ch == 'l' || ch == 'L')
-            return ch;
-
-        if (!has_more)
-            break;
-
-        start_index += entries_per_page;
-    }
-
-    return 0;
-}
-
 static char display_scores_pages_information(const high_score* entries,
     int count, int highlight_index, score_view_order order, bool detailed,
     int page_size)
@@ -1532,8 +1209,10 @@ static char display_scores_pages_information(const high_score* entries,
     bool compact;
 
     if (!ui_information_scene_enter(&scope))
-        return display_scores_pages(entries, count, highlight_index, order,
-            detailed, page_size);
+    {
+        log_warn("scores: unable to enter information-scene scope");
+        return 0;
+    }
 
     if (steamdeck)
     {
@@ -1706,6 +1385,7 @@ static char display_scores_pages_information(const high_score* entries,
 
             if (!ui_information_scene_present(&scene))
             {
+                log_warn("scores: failed to present information-scene page");
                 ui_information_scene_leave(&scope);
                 return 0;
             }
@@ -1937,33 +1617,8 @@ void show_scores(bool longscore)
     }
     else
     {
-        screen_save();
-        while (true)
-        {
-            const high_score* list = (order == SCORE_VIEW_ORDER_SCORE) ? ordered_by_score : ordered_by_time;
-            int count = (order == SCORE_VIEW_ORDER_SCORE) ? count_score : count_time;
-            int highlight = (order == SCORE_VIEW_ORDER_SCORE) ? highlight_score : highlight_time;
-
-            log_debug("show_scores: rendering page (order=%s count=%d highlight=%d)",
-                      (order == SCORE_VIEW_ORDER_SCORE) ? "score" : "time",
-                      count, highlight);
-
-            char response = display_scores_pages(list, count, highlight, order, detailed, page_size);
-            if (response == 's' || response == 'S' || response == 'o' || response == 'O')
-            {
-                order = (order == SCORE_VIEW_ORDER_SCORE) ? SCORE_VIEW_ORDER_CHRONOLOGY : SCORE_VIEW_ORDER_SCORE;
-                continue;
-            }
-            if (response == 'l' || response == 'L')
-            {
-                detailed = !detailed;
-                score_last_layout_short = !detailed;
-                continue;
-            }
-            break;
-        }
-        screen_load();
-        Term_fresh();
+        log_warn("show_scores: snapshot renderer required; legacy score renderer removed");
+        msg_print("Halls of Mandos requires the snapshot UI renderer.");
     }
 
     forced_highlight_active = false;
@@ -2506,233 +2161,6 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
     }
 }
 
-static void do_cmd_run_history_legacy(void)
-{
-    run_history_refresh_active_run();
-
-    run_history_entry entries[RUN_HISTORY_MAX];
-    int count = collect_run_history(entries, RUN_HISTORY_MAX);
-    if (count <= 0) {
-        msg_print("No run history is available.");
-        return;
-    }
-    run_history_sort_order sort_order = RUN_HISTORY_SORT_DATE;
-    run_history_sort_entries(entries, count, sort_order);
-
-    int page_offset = 0;
-    int highlight = 0;
-    bool done = false;
-
-    while (!done) {
-        int term_wid = 80;
-        int term_hgt = 24;
-        int footer_row;
-        int rows;
-        int total_pages;
-        int last_page_offset;
-        bool compact;
-
-        screen_save();
-        Term_clear();
-
-        score_ui_get_term_size(&term_wid, &term_hgt);
-        footer_row = term_hgt - 1;
-        if (footer_row < 5)
-            footer_row = 5;
-        rows = footer_row - 3;
-        if (rows < 4)
-            rows = 4;
-        total_pages = (count + rows - 1) / rows;
-        last_page_offset = ((count - 1) / rows) * rows;
-        if (last_page_offset < 0)
-            last_page_offset = 0;
-        compact = score_ui_compact_width(term_wid);
-
-        if (page_offset < 0)
-            page_offset = 0;
-        if (page_offset > last_page_offset)
-            page_offset = last_page_offset;
-
-        int page = (rows > 0) ? (page_offset / rows) : 0;
-
-        if (compact) {
-            score_ui_put_fit(TERM_L_BLUE,
-                format("Run History %d/%d", page + 1, total_pages), 0, 0,
-                term_wid);
-            score_ui_put_fit(TERM_SLATE,
-                format("Sort: %s [R]", run_history_sort_label(sort_order)),
-                1, 2, term_wid);
-            c_prt(TERM_L_UMBER, "Date", 2, 2);
-            c_prt(TERM_L_UMBER, "S", 2, 13);
-            c_prt(TERM_L_UMBER, "Depth", 2, 15);
-            c_prt(TERM_L_UMBER, "Score", 2, 22);
-            c_prt(TERM_L_UMBER, "Player", 2, 30);
-        } else {
-            c_prt(TERM_L_BLUE,
-                  format("=== Run History (%d entries) === Page %d of %d ===",
-                      count, page + 1, total_pages),
-                  0, 0);
-            c_prt(TERM_L_UMBER, "Date", 2, 2);
-            c_prt(TERM_L_UMBER, "Status", 2, 15);
-            c_prt(TERM_L_UMBER, "Depth", 2, 26);
-            c_prt(TERM_L_UMBER, "Score", 2, 35);
-            c_prt(TERM_L_UMBER, "Sils", 2, 46);
-            c_prt(TERM_L_UMBER, "Player", 2, 52);
-            c_prt(TERM_L_UMBER, "Fate", 2, 68);
-            c_prt(TERM_SLATE,
-                  format("Sort: %s (press [R] to toggle)",
-                      run_history_sort_label(sort_order)),
-                  1, 2);
-        }
-
-        for (int i = 0; i < rows; i++) {
-            int idx = page_offset + i;
-            if (idx >= count)
-                break;
-
-            const score_record_v1* rec = &entries[idx].record;
-            int row_y = 3 + i;
-
-            char date[16];
-            run_history_format_timestamp(rec->completed_utc, false, date, sizeof(date));
-
-            char player[21];
-            if (rec->player_name[0]) {
-                SDL_strlcpy(player, rec->player_name, sizeof(player));
-            } else if (rec->savefile_hint[0]) {
-                SDL_strlcpy(player, rec->savefile_hint, sizeof(player));
-            } else {
-                SDL_strlcpy(player, "<unknown>", sizeof(player));
-            }
-
-            /* Convert depth to feet */
-            int depth_ft = rec->exit_depth * 50;
-
-            bool selected = (idx == highlight);
-            byte row_color = selected ? TERM_YELLOW : 
-                           (rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN :
-                           (rec->silmarils > 0) ? TERM_VIOLET : TERM_WHITE;
-            
-            c_prt(row_color, selected ? ">" : " ", row_y, 0);
-            c_prt(row_color, date, row_y, 2);
-            if (compact) {
-                char status_buf[2] = { run_history_status_short(rec->status), '\0' };
-                c_prt(row_color, status_buf, row_y, 13);
-                c_prt(row_color, format("%4d'", depth_ft), row_y, 15);
-                c_prt(row_color, format("%6d", entries[idx].rating), row_y,
-                    22);
-                Term_putstr(30, row_y, term_wid - 30, row_color, player);
-            } else {
-                char cause[32];
-                truncate_preserving_tail(rec->cause_of_death, cause,
-                    sizeof(cause), 12);
-                c_prt(row_color, score_run_status_label(rec->status), row_y,
-                    15);
-                c_prt(row_color, format("%6d'", depth_ft), row_y, 26);
-                c_prt(row_color, format("%7d", entries[idx].rating), row_y,
-                    35);
-                c_prt(row_color, format("%3u", (unsigned)rec->silmarils),
-                    row_y, 46);
-                c_prt(row_color, format("%-15.15s", player), row_y, 52);
-                c_prt(row_color, cause, row_y, 68);
-            }
-        }
-
-        score_ui_put_fit(TERM_L_DARK,
-            compact
-                ? "[8/2] move [4/6] page [Y] detail [R] sort [Esc]"
-                : "[Esc] exit  [Up/Down] move  [Space/Right] next  [Left/-] prev  [Y/Enter] details  [R] sort",
-            footer_row, 0, term_wid);
-
-        Term_fresh();
-        int ch = inkey();
-        screen_load();
-
-        switch (ch) {
-        case ESCAPE:
-        case 'q':
-            done = true;
-            break;
-
-        case 'r':
-        case 'R':
-            sort_order = (sort_order == RUN_HISTORY_SORT_DATE)
-                ? RUN_HISTORY_SORT_RATING : RUN_HISTORY_SORT_DATE;
-            run_history_sort_entries(entries, count, sort_order);
-            page_offset = 0;
-            highlight = 0;
-            break;
-
-        case 'y':
-        case 'Y':
-        case '\r':
-        case '\n':
-            run_history_show_detail(&entries[highlight]);
-            break;
-
-        case ' ':
-        case '6':
-        case '3':
-        case 'n':
-        case 'N':
-            if (page_offset + rows < count) {
-                page_offset += rows;
-                if (page_offset > last_page_offset)
-                    page_offset = last_page_offset;
-                highlight += rows;
-                if (highlight >= count)
-                    highlight = count - 1;
-            } else {
-                bell("Already at last page.");
-            }
-            break;
-
-        case '4':
-        case '7':
-        case '-':
-        case 'p':
-        case 'P':
-            if (page_offset > 0) {
-                page_offset -= rows;
-                if (page_offset < 0)
-                    page_offset = 0;
-                if (highlight < page_offset)
-                    highlight = page_offset;
-            } else {
-                bell("Already at first page.");
-            }
-            break;
-
-        case '8':
-        case 'k':
-        case 'K':
-            if (highlight > 0) {
-                highlight--;
-                if (highlight < page_offset)
-                    page_offset = (highlight / rows) * rows;
-            } else {
-                bell("Already at top entry.");
-            }
-            break;
-
-        case '2':
-        case 'j':
-        case 'J':
-            if (highlight + 1 < count) {
-                highlight++;
-                if (highlight >= page_offset + rows)
-                    page_offset = (highlight / rows) * rows;
-            } else {
-                bell("Already at last entry.");
-            }
-            break;
-
-        default:
-            break;
-        }
-    }
-}
-
 void do_cmd_run_history(void)
 {
     run_history_refresh_active_run();
@@ -2747,14 +2175,20 @@ void do_cmd_run_history(void)
             return;
         }
 
-        if (ui_information_scene_supported()
-            && do_cmd_run_history_information(entries, count))
+        if (!ui_information_scene_supported())
         {
+            log_warn("run history: snapshot renderer required; legacy run-history renderer removed");
+            msg_print("Run history viewer requires the snapshot UI renderer.");
             return;
         }
-    }
 
-    do_cmd_run_history_legacy();
+        if (!do_cmd_run_history_information(entries, count))
+        {
+            log_warn("run history: information-scene presentation failed on the snapshot renderer path");
+            msg_print("Run history viewer unavailable.");
+        }
+        return;
+    }
 }
 static bool run_history_prepare_artefact_object(
     const score_run_artefact_v1* entry, object_type* out)
@@ -3257,22 +2691,26 @@ static void run_history_examine_monster(const score_run_detail_block* details,
 
     if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max) {
         ui_information_scene_scope monster_scope;
-        bool monster_scene = ui_information_scene_enter(&monster_scope);
+        if (!ui_information_scene_enter(&monster_scope))
+        {
+            log_warn("run history: monster recall requires information-scene scope");
+            bell("Monster information not available.");
+            return;
+        }
 
         screen_save();
         screen_roff(entry->r_idx, NULL);
-        if (monster_scene)
+        if (!ui_information_scene_present_term())
         {
-            (void)ui_information_scene_present_term();
-            (void)ui_information_scene_wait_key();
-        }
-        else
-        {
-            (void)inkey();
-        }
-        screen_load();
-        if (monster_scene)
+            screen_load();
             ui_information_scene_leave(&monster_scope);
+            log_warn("run history: failed to present monster recall scene");
+            bell("Monster information not available.");
+            return;
+        }
+        (void)ui_information_scene_wait_key();
+        screen_load();
+        ui_information_scene_leave(&monster_scope);
     } else {
         bell("Monster information not available.");
     }
@@ -3471,13 +2909,18 @@ static void run_history_show_detail(const run_history_entry* entry)
     int term_hgt = 24;
     int term_wid = 80;
     ui_information_scene_scope detail_scope;
-    bool scene_active = ui_information_scene_enter(&detail_scope);
+    if (!ui_information_scene_enter(&detail_scope))
+    {
+        log_warn("run history detail: information-scene scope unavailable");
+        msg_print("Run history detail viewer unavailable.");
+        if (have_details)
+            score_runs_free_details(&details);
+        return;
+    }
 
     while (!done) {
         bool compact;
 
-        if (!scene_active)
-            screen_save();
         Term_clear();
 
         score_ui_get_term_size(&term_wid, &term_hgt);
@@ -3534,20 +2977,14 @@ static void run_history_show_detail(const run_history_entry* entry)
 
         score_ui_put_fit(TERM_L_DARK, footer, term_hgt - 2, 0, term_wid);
 
-        if (scene_active)
+        if (!ui_information_scene_present_term())
         {
-            if (!ui_information_scene_present_term())
-            {
-                ui_information_scene_leave(&detail_scope);
-                scene_active = false;
-            }
+            log_warn("run history detail: failed to present information-scene frame");
+            msg_print("Run history detail viewer unavailable.");
+            break;
         }
-        if (!scene_active)
-            Term_fresh();
 
-        int ch = scene_active ? ui_information_scene_wait_key() : inkey();
-        if (!scene_active)
-            screen_load();
+        int ch = ui_information_scene_wait_key();
 
         switch (ch) {
         case ESCAPE:
@@ -3620,8 +3057,7 @@ static void run_history_show_detail(const run_history_entry* entry)
         }
     }
 
-    if (scene_active)
-        ui_information_scene_leave(&detail_scope);
+    ui_information_scene_leave(&detail_scope);
 
     if (have_details)
         score_runs_free_details(&details);
