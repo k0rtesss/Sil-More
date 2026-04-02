@@ -282,6 +282,7 @@ set(SIL_MORE_SOURCES_RUNTIME
 
 set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-interaction.c
+    src/app/app-ui.c
     src/app/app-events.c
     src/app/app-host.c
     src/app/app-host-bridge.c

@@ -6,7 +6,9 @@
 #include "app/app-events.h"
 #include "app/app-host.h"
 #include "app/app-scene-information.h"
+#include "app/app-scene-menu.h"
 #include "app/app-session.h"
+#include "app/app-ui.h"
 #include "runtime-cli.h"
 #include "ui/ui-information-scene.h"
 
@@ -893,6 +895,81 @@ cleanup:
     runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
 }
 
+static void test_ui_scene_from_menu_scene(void)
+{
+    app_menu_scene menu_scene;
+    app_ui_scene ui_scene;
+    const app_ui_panel* panel;
+
+    app_menu_scene_init(&menu_scene);
+    menu_scene.flags = APP_MENU_SCENE_FLAG_TOP_ANCHORED
+        | APP_MENU_SCENE_FLAG_DIM_BACKDROP
+        | APP_MENU_SCENE_FLAG_SCROLL_ROWS
+        | APP_MENU_SCENE_FLAG_SHOW_DETAIL;
+    app_menu_scene_set_title(&menu_scene, TERM_L_BLUE, "Inventory");
+    app_menu_scene_set_subtitle(&menu_scene, TERM_WHITE, "Choose one item");
+    app_menu_scene_set_detail_title(&menu_scene, TERM_L_BLUE, "Details");
+    app_menu_scene_set_widths(&menu_scene, 320, 760);
+    app_menu_scene_set_row_offset(&menu_scene, 2);
+    CHECK(app_menu_scene_add_body_line_ex(&menu_scene, TERM_WHITE,
+        STORY_FLAG_USE, "Body line"));
+    CHECK(app_menu_scene_add_row_ex(&menu_scene, 7, TERM_WHITE, TERM_SLATE,
+        TERM_L_RED, '!', true, true, "a", "Potion", "x2"));
+    CHECK(app_menu_scene_add_detail_line(&menu_scene, TERM_L_WHITE,
+        "Detail line"));
+    CHECK(app_menu_scene_add_footer_action(&menu_scene, 11, TERM_L_BLUE,
+        true, "Enter", "Choose"));
+    CHECK(app_menu_scene_add_tab(&menu_scene, 3, TERM_WHITE, true,
+        "Equipment"));
+
+    CHECK(app_ui_scene_from_menu_scene(&ui_scene, &menu_scene));
+    CHECK(ui_scene.format_version == APP_UI_FORMAT_VERSION);
+    CHECK(ui_scene.flags == APP_UI_SCENE_FLAG_DIM_BACKDROP);
+    CHECK(ui_scene.panel_count == 1);
+
+    panel = &ui_scene.panels[0];
+    CHECK(panel->layer == APP_UI_LAYER_MODAL);
+    CHECK((panel->flags & APP_UI_PANEL_FLAG_ACTIVE) != 0);
+    CHECK((panel->flags & APP_UI_PANEL_FLAG_TOP_ANCHORED) != 0);
+    CHECK((panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS) != 0);
+    CHECK((panel->flags & APP_UI_PANEL_FLAG_SHOW_DETAIL) != 0);
+    CHECK(panel->style == APP_UI_PANEL_STYLE_DEFAULT);
+    CHECK(panel->focus_area == APP_UI_FOCUS_TABS);
+    CHECK(panel->focus_id == 3);
+    CHECK(panel->selected_row == 0);
+    CHECK(panel->row_offset == 2);
+    CHECK(panel->min_width_px == 320);
+    CHECK(panel->width_cap_px == 760);
+    CHECK(panel->title_attr == TERM_L_BLUE);
+    CHECK(panel->subtitle_attr == TERM_WHITE);
+    CHECK(panel->detail_title_attr == TERM_L_BLUE);
+    CHECK(streq(panel->title, "Inventory"));
+    CHECK(streq(panel->subtitle, "Choose one item"));
+    CHECK(streq(panel->detail_title, "Details"));
+    CHECK(panel->body_line_count == 1);
+    CHECK(panel->body_lines[0].attr == TERM_WHITE);
+    CHECK(panel->body_lines[0].story == STORY_FLAG_USE);
+    CHECK(streq(panel->body_lines[0].text, "Body line"));
+    CHECK(panel->row_count == 1);
+    CHECK(panel->rows[0].id == 7);
+    CHECK(panel->rows[0].attr == TERM_WHITE);
+    CHECK(panel->rows[0].meta_attr == TERM_SLATE);
+    CHECK(panel->rows[0].icon_attr == TERM_L_RED);
+    CHECK(panel->rows[0].icon_char == '!');
+    CHECK((panel->rows[0].flags & APP_UI_ITEM_FLAG_SELECTED) != 0);
+    CHECK(streq(panel->rows[0].key, "a"));
+    CHECK(streq(panel->rows[0].label, "Potion"));
+    CHECK(streq(panel->rows[0].meta, "x2"));
+    CHECK(panel->detail_line_count == 1);
+    CHECK(streq(panel->detail_lines[0].text, "Detail line"));
+    CHECK(panel->footer_action_count == 1);
+    CHECK(streq(panel->footer_actions[0].key, "Enter"));
+    CHECK(streq(panel->footer_actions[0].label, "Choose"));
+    CHECK(panel->tab_count == 1);
+    CHECK(streq(panel->tabs[0].label, "Equipment"));
+    CHECK((panel->tabs[0].flags & APP_UI_ITEM_FLAG_ACTIVE) != 0);
+}
+
 int main(void)
 {
     test_record_round_trip();
@@ -904,6 +981,7 @@ int main(void)
     test_public_boundary_wrappers();
     test_information_scene_nested_restore();
     test_information_scene_wait_key_nonrepeat();
+    test_ui_scene_from_menu_scene();
 
     if (g_failures != 0)
     {
