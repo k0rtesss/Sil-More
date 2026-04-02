@@ -1129,5 +1129,3 @@ extern int  any_curse_flag_active(u32b flag); /* CUR-only */
 extern void dbg_show_active_flags(void);
 
 extern bool g_hide_left_panel;
-extern byte g_hidden_left_panel_overlay_rows;
-extern byte g_hidden_left_panel_overlay_widths[16];

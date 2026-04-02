@@ -7,9 +7,6 @@
 
 typedef struct monster_type monster_type;
 
-extern byte g_hidden_left_panel_overlay_rows;
-extern byte g_hidden_left_panel_overlay_widths[16];
-
 void cnv_stat(int val, char* out_val);
 int health_level(int current, int max);
 bool get_alertness_text(monster_type* m_ptr, int text_size, char* text, int* color);

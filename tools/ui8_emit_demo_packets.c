@@ -507,8 +507,7 @@ static bool emit_layout_json(const char* path)
         "      \"monster\": %u,\n"
         "      \"object\": %u,\n"
         "      \"target\": %u,\n"
-        "      \"cursor\": %u,\n"
-        "      \"masked\": %u\n"
+        "      \"cursor\": %u\n"
         "    }\n"
         "  }\n"
         "}\n",
@@ -573,8 +572,7 @@ static bool emit_layout_json(const char* path)
         (unsigned)APP_MAP_CELL_FLAG_MONSTER,
         (unsigned)APP_MAP_CELL_FLAG_OBJECT,
         (unsigned)APP_MAP_CELL_FLAG_TARGET,
-        (unsigned)APP_MAP_CELL_FLAG_CURSOR,
-        (unsigned)APP_MAP_CELL_FLAG_MASKED);
+        (unsigned)APP_MAP_CELL_FLAG_CURSOR);
 
     fclose(file);
     return true;

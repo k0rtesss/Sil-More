@@ -45,9 +45,6 @@ typedef struct hidden_overlay_line {
     byte attr;
 } hidden_overlay_line;
 
-byte g_hidden_left_panel_overlay_rows = 0;
-byte g_hidden_left_panel_overlay_widths[16] = { 0 };
-
 static void prt_status_line_compact(void);
 static void prt_cut_poisoned_compact(void);
 static void prt_hidden_top_vitals(void);
@@ -57,7 +54,6 @@ static bool status_state_text(char* out_long, size_t out_long_sz,
 static void hidden_left_panel_add_line(hidden_overlay_line* lines, int* count,
                                        int max_lines, byte attr, cptr text);
 static int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines);
-static bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_count);
 
 /*
  * Converts stat num into a two-char (right justified) string
@@ -727,44 +723,6 @@ static int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lin
     }
 
     return count;
-}
-
-static bool hidden_left_panel_sync_mask(const hidden_overlay_line* lines, int line_count)
-{
-    bool changed = false;
-    int old_rows = g_hidden_left_panel_overlay_rows;
-    int max_rows = old_rows;
-
-    if (line_count > max_rows)
-        max_rows = line_count;
-
-    for (int i = 0; i < max_rows && i < 16; i++)
-    {
-        byte new_width = 0;
-
-        if (i < line_count && lines[i].text[0])
-        {
-            int width = (int)strlen(lines[i].text);
-            if (Term && width > Term->wid)
-                width = Term->wid;
-            new_width = (byte)width;
-        }
-
-        if (g_hidden_left_panel_overlay_widths[i] != new_width)
-            changed = true;
-
-        g_hidden_left_panel_overlay_widths[i] = new_width;
-    }
-
-    for (int i = max_rows; i < 16; i++)
-        g_hidden_left_panel_overlay_widths[i] = 0;
-
-    if (g_hidden_left_panel_overlay_rows != line_count)
-        changed = true;
-
-    g_hidden_left_panel_overlay_rows = (byte)MIN(line_count, 16);
-
-    return changed;
 }
 
 static void prt_hidden_top_vitals(void)
@@ -2647,18 +2605,6 @@ void redraw_stuff(void)
     if (character_icky && !p_ptr->is_dead) {
         // log_trace("redraw_stuff: character in icky mode (value=%d), skipping screen updates", character_icky);
         return;
-    }
-
-    if (ui_hide_left_panel())
-    {
-        hidden_overlay_line hidden_lines[16];
-        int hidden_line_count = hidden_left_panel_build_lines(hidden_lines, 16);
-
-        if (hidden_left_panel_sync_mask(hidden_lines, hidden_line_count))
-        {
-            p_ptr->redraw |= PR_MAP;
-            hidden_overlay_needs_refresh = true;
-        }
     }
 
     if (p_ptr->redraw & (PR_MAP))

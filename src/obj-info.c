@@ -48,7 +48,7 @@ static char object_info_wait_key(void)
 {
     ui_information_scene_scope info_scope;
 
-    if (ui_information_scene_enter_mirror(&info_scope))
+    if (ui_information_scene_enter(&info_scope))
     {
         if (ui_information_scene_present_term())
         {

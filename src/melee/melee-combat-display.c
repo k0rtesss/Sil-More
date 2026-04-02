@@ -1306,7 +1306,7 @@ static bool combat_history_information_scene_resume(
     if (!scope)
         return false;
 
-    return ui_information_scene_enter_mirror(scope);
+    return ui_information_scene_enter(scope);
 }
 
 static bool do_cmd_combat_history_information_scene(void)
@@ -1318,7 +1318,7 @@ static bool do_cmd_combat_history_information_scene(void)
     int q = 0;
     int n;
 
-    if (!ui_information_scene_enter_mirror(&scope))
+    if (!ui_information_scene_enter(&scope))
         return false;
 
     SDL_strlcpy(finder, "", sizeof(finder));

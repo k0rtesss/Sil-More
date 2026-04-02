@@ -1188,8 +1188,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
                             app_session_clear_interaction(
                                 app_session_current());
-                            if (!ui_information_scene_enter_mirror(
-                                &info_scope))
+                            if (!ui_information_scene_enter(&info_scope))
                             {
                                 log_error("targeting: snapshot recall scene "
                                     "could not enter mirror scope");

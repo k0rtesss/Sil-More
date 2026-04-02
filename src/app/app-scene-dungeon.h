@@ -17,8 +17,8 @@ struct app_wait_state;
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
 #define APP_DUNGEON_STATUS_FORMAT_VERSION 1u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
-#define APP_DUNGEON_PANES_FORMAT_VERSION 3u
-#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 4u
+#define APP_DUNGEON_PANES_FORMAT_VERSION 4u
+#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 5u
 
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
 
@@ -29,11 +29,7 @@ struct app_wait_state;
 #define APP_DUNGEON_HIDDEN_OVERLAY_MAX 16u
 #define APP_DUNGEON_COMBAT_ENTRY_MAX 100u
 #define APP_DUNGEON_MESSAGE_LIMIT 256u
-#define APP_DUNGEON_LEFT_PANEL_COLS 13u
 #define APP_DUNGEON_LEFT_PANEL_ROWS_MAX 64u
-#define APP_DUNGEON_OVERLAY_TEXT_MAX 96u
-#define APP_DUNGEON_OVERLAY_ROW_MAX 24u
-#define APP_DUNGEON_OVERLAY_SEGMENT_MAX 12u
 
 #define APP_PACK_COORD(y, x) \
     ((((u32b)((u16b)(y))) << 16) | ((u32b)((u16b)(x))))
@@ -69,8 +65,7 @@ typedef enum app_map_cell_flag {
     APP_MAP_CELL_FLAG_MONSTER = 0x0020u,
     APP_MAP_CELL_FLAG_OBJECT = 0x0040u,
     APP_MAP_CELL_FLAG_TARGET = 0x0080u,
-    APP_MAP_CELL_FLAG_CURSOR = 0x0100u,
-    APP_MAP_CELL_FLAG_MASKED = 0x0200u
+    APP_MAP_CELL_FLAG_CURSOR = 0x0100u
 } app_map_cell_flag;
 
 typedef enum app_dungeon_snapshot_flag {
@@ -79,16 +74,6 @@ typedef enum app_dungeon_snapshot_flag {
     APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL = 0x0004u,
     APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0008u
 } app_dungeon_snapshot_flag;
-
-typedef enum app_dungeon_overlay_panel_flag {
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_NONE = 0x0000u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_ACTIVE = 0x0001u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_TOP = 0x0002u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_BOTTOM = 0x0004u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_LEFT = 0x0008u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE = 0x0010u,
-    APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID = 0x0020u
-} app_dungeon_overlay_panel_flag;
 
 typedef enum app_dungeon_overlay_snapshot_flag {
     APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_NONE = 0x0000u,
@@ -215,12 +200,6 @@ typedef struct app_messages_snapshot {
     app_message_line_snapshot lines[];
 } app_messages_snapshot;
 
-typedef struct app_hidden_overlay_line_snapshot {
-    byte attr;
-    byte width;
-    char text[APP_DUNGEON_PANE_TEXT_MAX];
-} app_hidden_overlay_line_snapshot;
-
 typedef app_raw_cell_snapshot app_panel_cell_snapshot;
 
 typedef struct app_combat_roll_snapshot {
@@ -252,49 +231,14 @@ typedef struct app_combat_roll_snapshot {
 typedef struct app_panes_snapshot {
     u16b format_version;
     u16b flags;
-    u16b hidden_overlay_count;
     u16b combat_entry_count;
-    u16b hidden_overlay_rows;
     u16b main_combat_roll_lines;
-    byte hidden_overlay_widths[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
-    app_hidden_overlay_line_snapshot hidden_overlay[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
     app_combat_roll_snapshot combat_entries[APP_DUNGEON_COMBAT_ENTRY_MAX];
 } app_panes_snapshot;
-
-typedef struct app_dungeon_overlay_segment_snapshot {
-    u16b cell_offset;
-    byte attr;
-    byte reserved;
-    char text[APP_DUNGEON_OVERLAY_TEXT_MAX];
-} app_dungeon_overlay_segment_snapshot;
-
-typedef struct app_dungeon_overlay_row_snapshot {
-    u16b segment_count;
-    u16b reserved;
-    app_dungeon_overlay_segment_snapshot
-        segments[APP_DUNGEON_OVERLAY_SEGMENT_MAX];
-} app_dungeon_overlay_row_snapshot;
-
-typedef struct app_dungeon_overlay_panel_snapshot {
-    u16b flags;
-    u16b row_count;
-    u16b grid_cols;
-    u16b reserve_cells;
-    u16b cell_rows;
-    u16b cell_cols;
-    u16b cell_reserved0;
-    u16b cell_reserved1;
-    app_dungeon_overlay_row_snapshot rows[APP_DUNGEON_OVERLAY_ROW_MAX];
-    app_panel_cell_snapshot cells[APP_DUNGEON_LEFT_PANEL_ROWS_MAX]
-                                 [APP_DUNGEON_LEFT_PANEL_COLS];
-} app_dungeon_overlay_panel_snapshot;
 
 typedef struct app_dungeon_overlay_snapshot {
     u16b format_version;
     u16b flags;
-    app_dungeon_overlay_panel_snapshot top_strip;
-    app_dungeon_overlay_panel_snapshot left_rail;
-    app_dungeon_overlay_panel_snapshot bottom_strip;
     app_interaction_state interaction;
     app_menu_scene transient_menu;
     app_ui_scene chrome_scene;

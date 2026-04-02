@@ -5261,7 +5261,7 @@ void print_metarun_stats(void)
     char buf[160];
     int term_height, term_width;
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter_mirror(&info_scope);
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
 
     refresh_current_metar_score();
 

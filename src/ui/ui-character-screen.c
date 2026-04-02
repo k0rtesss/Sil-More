@@ -1270,7 +1270,7 @@ void display_character_tutorial(void)
     int page = 0;
     char ch;
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter_mirror(&info_scope);
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
 
     while (1)
     {

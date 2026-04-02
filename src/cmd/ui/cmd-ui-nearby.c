@@ -382,7 +382,7 @@ static bool nearby_information_scene(nearby_scene_draw_fn draw_fn,
 
     if (!draw_fn || !los_prompt || !screen_prompt)
         return false;
-    if (!ui_information_scene_enter_mirror(&scope))
+    if (!ui_information_scene_enter(&scope))
         return false;
 
     while (ch == toggle_key)

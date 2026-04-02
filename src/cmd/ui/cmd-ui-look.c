@@ -209,7 +209,7 @@ static void unified_look_show_monster_recall(const monster_type* m_ptr)
         ui_information_scene_scope info_scope;
 
         unified_look_snapshot_clear();
-        if (!ui_information_scene_enter_mirror(&info_scope))
+        if (!ui_information_scene_enter(&info_scope))
         {
             log_error("unified-look: snapshot recall scene could not enter "
                 "mirror scope");

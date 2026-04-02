@@ -92,15 +92,6 @@ static void app_dungeon_overlay_layout_init(
     layout->col_depth = 72;
 }
 
-static void app_dungeon_overlay_panel_clear(
-    app_dungeon_overlay_panel_snapshot* panel)
-{
-    if (!panel)
-        return;
-
-    memset(panel, 0, sizeof(*panel));
-}
-
 static void app_dungeon_overlay_snapshot_clear(
     app_dungeon_overlay_snapshot* overlay)
 {
@@ -112,52 +103,6 @@ static void app_dungeon_overlay_snapshot_clear(
     app_interaction_clear(&overlay->interaction);
     app_menu_scene_init(&overlay->transient_menu);
     app_ui_scene_init(&overlay->chrome_scene);
-}
-
-static app_dungeon_overlay_row_snapshot* app_dungeon_overlay_get_row(
-    app_dungeon_overlay_panel_snapshot* panel, int row_index)
-{
-    if (!panel || row_index < 0
-        || row_index >= (int)APP_DUNGEON_OVERLAY_ROW_MAX)
-        return NULL;
-
-    if (panel->row_count <= (u16b)row_index)
-        panel->row_count = (u16b)(row_index + 1);
-
-    return &panel->rows[row_index];
-}
-
-static bool app_dungeon_overlay_add_segment(
-    app_dungeon_overlay_panel_snapshot* panel, int row_index, u16b cell_offset,
-    byte attr, cptr text)
-{
-    app_dungeon_overlay_row_snapshot* row;
-    app_dungeon_overlay_segment_snapshot* segment;
-
-    if (!panel || !text || !text[0])
-        return false;
-
-    row = app_dungeon_overlay_get_row(panel, row_index);
-    if (!row || row->segment_count >= APP_DUNGEON_OVERLAY_SEGMENT_MAX)
-        return false;
-
-    segment = &row->segments[row->segment_count++];
-    memset(segment, 0, sizeof(*segment));
-    segment->cell_offset = cell_offset;
-    segment->attr = attr;
-    SDL_strlcpy(segment->text, text, sizeof(segment->text));
-    return true;
-}
-
-static bool app_dungeon_overlay_add_text_snapshot(
-    app_dungeon_overlay_panel_snapshot* panel, int row_index, u16b cell_offset,
-    const app_text_snapshot* text)
-{
-    if (!text || !text->active || !text->text[0])
-        return false;
-
-    return app_dungeon_overlay_add_segment(panel, row_index, cell_offset,
-        text->attr, text->text);
 }
 
 static void app_dungeon_ui_line_set(char* out_line, size_t out_line_size,
@@ -621,40 +566,6 @@ static int app_collect_combat_entries(app_combat_roll_snapshot* out_entries,
     return count;
 }
 
-static void app_dungeon_overlay_copy_left_panel_cells(
-    app_dungeon_overlay_panel_snapshot* panel)
-{
-    int rows;
-    int cols;
-    int y;
-    int x;
-
-    if (!panel || g_hide_left_panel || !Term || !Term->scr)
-        return;
-
-    rows = MIN((int)Term->hgt, (int)APP_DUNGEON_LEFT_PANEL_ROWS_MAX);
-    cols = MIN((int)Term->wid, (int)APP_DUNGEON_LEFT_PANEL_COLS);
-    if (rows <= 0 || cols <= 0)
-        return;
-
-    panel->cell_rows = (u16b)rows;
-    panel->cell_cols = (u16b)cols;
-    panel->row_count = (u16b)rows;
-    panel->grid_cols = (u16b)cols;
-
-    for (y = 0; y < rows; y++)
-    {
-        for (x = 0; x < cols; x++)
-        {
-            app_panel_cell_snapshot* cell = &panel->cells[y][x];
-
-            cell->attr = Term->scr->a[y][x];
-            cell->story = Term->scr->story[y][x];
-            cell->ch = Term->scr->c[y][x];
-        }
-    }
-}
-
 static bool app_build_map_blob(app_dungeon_snapshot* snapshot,
     const app_wait_state* wait_state)
 {
@@ -750,20 +661,6 @@ static bool app_build_map_blob(app_dungeon_snapshot* snapshot,
                 && (snapshot->cursor_state.map_x == x))
             {
                 flags |= APP_MAP_CELL_FLAG_CURSOR;
-            }
-            if (g_hide_left_panel)
-            {
-                int vy = y - p_ptr->wy + ROW_MAP;
-                int vx = x - p_ptr->wx + COL_MAP;
-                int row_index = vy - ROW_NAME;
-
-                if (row_index >= 0
-                    && row_index < g_hidden_left_panel_overlay_rows
-                    && vx >= 0
-                    && vx < g_hidden_left_panel_overlay_widths[row_index])
-                {
-                    flags |= APP_MAP_CELL_FLAG_MASKED;
-                }
             }
 
             cell->flags = flags;
@@ -1210,8 +1107,6 @@ static bool app_build_messages_blob(app_dungeon_snapshot* snapshot)
 static bool app_build_panes_blob(app_dungeon_snapshot* snapshot)
 {
     app_panes_snapshot* panes;
-    app_hidden_overlay_line_local hidden_lines[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
-    int hidden_count;
     int combat_count;
 
     if (!app_dungeon_buffer_reserve(&snapshot->panes_data,
@@ -1224,249 +1119,16 @@ static bool app_build_panes_blob(app_dungeon_snapshot* snapshot)
     memset(panes, 0, sizeof(*panes));
 
     panes->format_version = APP_DUNGEON_PANES_FORMAT_VERSION;
-    panes->hidden_overlay_rows = g_hidden_left_panel_overlay_rows;
     panes->main_combat_roll_lines = op_ptr->main_combat_rolls;
 
     if (g_hide_left_panel)
         panes->flags |= APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL;
-
-    memcpy(panes->hidden_overlay_widths, g_hidden_left_panel_overlay_widths,
-        sizeof(panes->hidden_overlay_widths));
-
-    hidden_count = app_hidden_overlay_build_lines(hidden_lines,
-        APP_DUNGEON_HIDDEN_OVERLAY_MAX);
-    panes->hidden_overlay_count = (u16b)hidden_count;
-
-    for (int i = 0; i < hidden_count; i++)
-    {
-        panes->hidden_overlay[i].attr = hidden_lines[i].attr;
-        panes->hidden_overlay[i].width
-            = (byte)strlen(hidden_lines[i].text);
-        SDL_strlcpy(panes->hidden_overlay[i].text, hidden_lines[i].text,
-            sizeof(panes->hidden_overlay[i].text));
-    }
 
     combat_count = app_collect_combat_entries(panes->combat_entries,
         APP_DUNGEON_COMBAT_ENTRY_MAX);
     panes->combat_entry_count = (u16b)combat_count;
     snapshot->panes_size = sizeof(*panes);
     return true;
-}
-
-static void app_build_top_strip_overlay(app_dungeon_overlay_snapshot* overlay,
-    const app_messages_snapshot* messages)
-{
-    app_dungeon_overlay_panel_snapshot* panel;
-    byte attr = TERM_WHITE;
-    cptr text = NULL;
-
-    if (!overlay)
-        return;
-
-    panel = &overlay->top_strip;
-    app_dungeon_overlay_panel_clear(panel);
-    panel->flags = APP_DUNGEON_OVERLAY_PANEL_FLAG_ACTIVE
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_TOP
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID;
-    panel->reserve_cells = 1;
-    panel->row_count = 1;
-
-    if (!messages)
-        return;
-
-    if (messages->top_line_active && messages->top_line[0])
-    {
-        attr = messages->top_line_color;
-        text = messages->top_line;
-    }
-    else if (messages->line_count > 0 && messages->lines[0].text[0])
-    {
-        attr = messages->lines[0].color;
-        text = messages->lines[0].text;
-    }
-
-    if (text && text[0])
-        (void)app_dungeon_overlay_add_segment(panel, 0, 0, attr, text);
-}
-
-static void app_build_left_rail_semantic_overlay(
-    app_dungeon_overlay_panel_snapshot* panel, const app_status_snapshot* status)
-{
-    app_dungeon_overlay_layout_local layout;
-    bool compact_height;
-    char buf[APP_DUNGEON_OVERLAY_TEXT_MAX];
-
-    if (!panel || !status)
-        return;
-
-    compact_height = (status->flags & APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT)
-        ? true : false;
-    app_dungeon_overlay_layout_init(&layout, compact_height);
-
-    panel->flags |= APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE;
-    panel->reserve_cells = APP_DUNGEON_LEFT_PANEL_COLS;
-    panel->row_count = (u16b)(layout.row_song + 1);
-    panel->grid_cols = APP_DUNGEON_LEFT_PANEL_COLS;
-
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_name, 0,
-        TERM_WHITE, status->player_name);
-
-    strnfmt(buf, sizeof(buf), "Str %2d", status->str_use);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_stat + 0, 0,
-        TERM_L_GREEN, buf);
-    strnfmt(buf, sizeof(buf), "Dex %2d", status->dex_use);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_stat + 1, 0,
-        TERM_L_GREEN, buf);
-    strnfmt(buf, sizeof(buf), "Con %2d", status->con_use);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_stat + 2, 0,
-        TERM_L_GREEN, buf);
-    strnfmt(buf, sizeof(buf), "Gra %2d", status->gra_use);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_stat + 3, 0,
-        TERM_L_GREEN, buf);
-
-    strnfmt(buf, sizeof(buf), "EXP %ld", (long)status->exp);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_exp, 0, TERM_WHITE,
-        buf);
-
-    strnfmt(buf, sizeof(buf), "HP %d/%d", status->hp_cur, status->hp_max);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_hp, 0,
-        status->hp_attr, buf);
-
-    strnfmt(buf, sizeof(buf), "Voice %d/%d", status->voice_cur,
-        status->voice_max);
-    (void)app_dungeon_overlay_add_segment(panel, layout.row_sp, 0,
-        status->voice_attr, buf);
-
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_mel, 0,
-        &status->melee_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_arc, 0,
-        &status->archery_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_quiver, 0,
-        &status->quiver_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_evn, 0,
-        &status->evasion_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_light, 0,
-        &status->light_text);
-
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_info, 0,
-        &status->tracked_name_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_info + 1, 0,
-        &status->tracked_health_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_info + 2, 0,
-        &status->tracked_alertness_text);
-
-    if (status->cut_text.active && status->poisoned_text.active)
-    {
-        (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_cut - 1,
-            0, &status->cut_text);
-        (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_cut, 0,
-            &status->poisoned_text);
-    }
-    else if (status->cut_text.active)
-    {
-        (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_cut, 0,
-            &status->cut_text);
-    }
-    else if (status->poisoned_text.active)
-    {
-        (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_cut, 0,
-            &status->poisoned_text);
-    }
-
-    (void)app_dungeon_overlay_add_text_snapshot(panel, layout.row_song, 0,
-        &status->song_text);
-}
-
-static bool app_dungeon_overlay_interaction_owns_left_rail(
-    const app_interaction_state* interaction)
-{
-    return interaction && interaction->kind != APP_INTERACTION_KIND_NONE;
-}
-
-static void app_build_left_rail_overlay(app_dungeon_overlay_snapshot* overlay,
-    const app_status_snapshot* status,
-    const app_interaction_state* interaction)
-{
-    app_dungeon_overlay_panel_snapshot* panel;
-
-    if (!overlay || !status)
-        return;
-
-    panel = &overlay->left_rail;
-    app_dungeon_overlay_panel_clear(panel);
-    panel->flags = APP_DUNGEON_OVERLAY_PANEL_FLAG_ACTIVE
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_TOP
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_LEFT
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID;
-    panel->grid_cols = APP_DUNGEON_LEFT_PANEL_COLS;
-
-    if (status->flags & APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL)
-    {
-        app_hidden_overlay_line_local hidden_lines[APP_DUNGEON_HIDDEN_OVERLAY_MAX];
-        int hidden_count = app_hidden_overlay_build_lines(hidden_lines,
-            APP_DUNGEON_HIDDEN_OVERLAY_MAX);
-        int i;
-
-        for (i = 0; i < hidden_count
-            && i < (int)APP_DUNGEON_OVERLAY_ROW_MAX; i++)
-        {
-            (void)app_dungeon_overlay_add_segment(panel, i, 0,
-                hidden_lines[i].attr, hidden_lines[i].text);
-        }
-        panel->row_count = (u16b)hidden_count;
-        return;
-    }
-
-    panel->flags |= APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE;
-    panel->reserve_cells = APP_DUNGEON_LEFT_PANEL_COLS;
-    if (!app_dungeon_overlay_interaction_owns_left_rail(interaction))
-        app_dungeon_overlay_copy_left_panel_cells(panel);
-    if (panel->cell_rows == 0 || panel->cell_cols == 0)
-        app_build_left_rail_semantic_overlay(panel, status);
-}
-
-static void app_build_bottom_strip_overlay(app_dungeon_overlay_snapshot* overlay,
-    const app_status_snapshot* status)
-{
-    app_dungeon_overlay_panel_snapshot* panel;
-    app_dungeon_overlay_layout_local layout;
-    bool compact_height;
-
-    if (!overlay || !status)
-        return;
-
-    compact_height = (status->flags & APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT)
-        ? true : false;
-    app_dungeon_overlay_layout_init(&layout, compact_height);
-
-    panel = &overlay->bottom_strip;
-    app_dungeon_overlay_panel_clear(panel);
-    panel->flags = APP_DUNGEON_OVERLAY_PANEL_FLAG_ACTIVE
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_BOTTOM
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE
-        | APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID;
-    panel->reserve_cells = 1;
-    panel->row_count = 1;
-
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_hungry,
-        &status->hunger_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_blind,
-        &status->blind_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_confused,
-        &status->confused_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_stun,
-        &status->stun_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_afraid,
-        &status->afraid_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_state,
-        &status->state_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_speed,
-        &status->speed_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_terrain,
-        &status->terrain_text);
-    (void)app_dungeon_overlay_add_text_snapshot(panel, 0, layout.col_depth,
-        &status->depth_text);
 }
 
 static void app_build_top_strip_ui_panel(app_ui_scene* scene,
@@ -1723,8 +1385,7 @@ static void app_build_chrome_ui_scene(app_dungeon_overlay_snapshot* overlay,
 
     app_ui_scene_init(&overlay->chrome_scene);
     app_build_top_strip_ui_panel(&overlay->chrome_scene, messages);
-    if (overlay->left_rail.cell_rows == 0 || overlay->left_rail.cell_cols == 0)
-        app_build_left_rail_ui_panel(&overlay->chrome_scene, status);
+    app_build_left_rail_ui_panel(&overlay->chrome_scene, status);
     app_build_bottom_strip_ui_panel(&overlay->chrome_scene, status);
 }
 
@@ -1746,9 +1407,6 @@ static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
 
     overlay = (app_dungeon_overlay_snapshot*)snapshot->overlay_data;
     app_dungeon_overlay_snapshot_clear(overlay);
-    app_build_top_strip_overlay(overlay, messages);
-    app_build_left_rail_overlay(overlay, status, interaction);
-    app_build_bottom_strip_overlay(overlay, status);
     app_build_chrome_ui_scene(overlay, status, messages);
 
     if (interaction)

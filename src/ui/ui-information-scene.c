@@ -4,13 +4,7 @@
 #include "externs.h"
 #include "runtime-cli.h"
 
-typedef enum ui_information_scene_mode {
-    UI_INFORMATION_SCENE_MODE_NONE = 0,
-    UI_INFORMATION_SCENE_MODE_EXPLICIT = 1,
-    UI_INFORMATION_SCENE_MODE_MIRROR = 2
-} ui_information_scene_mode;
-
-static u16b g_ui_information_scene_mode = UI_INFORMATION_SCENE_MODE_NONE;
+static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
 
 static void ui_information_scene_term_xtra(int action, int value)
@@ -91,16 +85,15 @@ bool ui_information_scene_set_refresh_enabled(bool enabled)
 
 bool ui_information_scene_is_active(void)
 {
-    return g_ui_information_scene_mode != UI_INFORMATION_SCENE_MODE_NONE;
+    return g_ui_information_scene_active;
 }
 
 bool ui_information_scene_owns_input(void)
 {
-    return g_ui_information_scene_mode != UI_INFORMATION_SCENE_MODE_NONE;
+    return g_ui_information_scene_active;
 }
 
-static bool ui_information_scene_enter_with_mode(
-    ui_information_scene_scope* scope, u16b mode)
+bool ui_information_scene_enter(ui_information_scene_scope* scope)
 {
     app_session* session;
     const app_snapshot* snapshot;
@@ -124,25 +117,13 @@ static bool ui_information_scene_enter_with_mode(
             return false;
     }
 
-    scope->previous_mode = g_ui_information_scene_mode;
+    scope->previous_active = g_ui_information_scene_active;
     app_session_push_wait_scope(session, &scope->wait_scope,
         APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
     app_session_clear_inputs(session);
-    g_ui_information_scene_mode = mode;
+    g_ui_information_scene_active = true;
     scope->active = true;
     return true;
-}
-
-bool ui_information_scene_enter(ui_information_scene_scope* scope)
-{
-    return ui_information_scene_enter_with_mode(scope,
-        UI_INFORMATION_SCENE_MODE_EXPLICIT);
-}
-
-bool ui_information_scene_enter_mirror(ui_information_scene_scope* scope)
-{
-    return ui_information_scene_enter_with_mode(scope,
-        UI_INFORMATION_SCENE_MODE_MIRROR);
 }
 
 static bool ui_information_scene_cell_is_raw(byte attr, char ch,
@@ -188,8 +169,6 @@ bool ui_information_scene_capture_term(app_information_scene* scene)
         return false;
 
     app_information_scene_init(scene);
-    if (g_ui_information_scene_mode == UI_INFORMATION_SCENE_MODE_MIRROR)
-        scene->flags |= APP_INFORMATION_SCENE_FLAG_TERM_MIRROR;
     term_wid = Term->wid;
     term_hgt = Term->hgt;
 
@@ -370,14 +349,14 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
         app_session_pop_wait_scope(session, &scope->wait_scope);
     }
 
-    g_ui_information_scene_mode = scope->previous_mode;
+    g_ui_information_scene_active = scope->previous_active;
     scope->previous_information_snapshot
         = mem_free(scope->previous_information_snapshot);
     scope->active = false;
     if (!restored_information
         && scope->previous_snapshot.scene == APP_SCENE_KIND_DUNGEON
         && Term
-        && scope->previous_mode == UI_INFORMATION_SCENE_MODE_NONE)
+        && !scope->previous_active)
     {
         do_cmd_redraw();
     }

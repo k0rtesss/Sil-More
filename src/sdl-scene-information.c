@@ -13,6 +13,10 @@ typedef struct sdl_information_fixed_metrics {
     TTF_Font* story_font;
 } sdl_information_fixed_metrics;
 
+enum {
+    SDL_INFORMATION_OVERLAY_RAIL_COLS = 13
+};
+
 static SDL_Color sdl_information_color(byte attr)
 {
     byte color = attr & 0x0Fu;
@@ -74,8 +78,11 @@ static bool sdl_information_scene_row_has_overlay_text(
             continue;
         if (!op->text[0])
             continue;
-        if (op->col >= 0 && (int)op->col < (int)APP_DUNGEON_LEFT_PANEL_COLS)
+        if (op->col >= 0
+            && (int)op->col < SDL_INFORMATION_OVERLAY_RAIL_COLS)
+        {
             return true;
+        }
     }
 
     return false;
@@ -523,48 +530,6 @@ static void sdl_information_render_fixed_text_cells(float x_px, float y_px,
     }
 }
 
-static void sdl_information_draw_text(const sdl_view* view, int col, int row,
-    byte attr, byte story, cptr text)
-{
-    TTF_Font* story_font = NULL;
-    bool use_story;
-    bool grid_align;
-    size_t len;
-
-    if (!view || !text || !text[0])
-        return;
-    if (row < 0 || row >= view->rows || col >= view->cols)
-        return;
-    if (col < 0)
-        col = 0;
-
-    len = strlen(text);
-    if (len == 0)
-        return;
-    if ((size_t)col + len > (size_t)view->cols)
-        len = (size_t)(view->cols - col);
-    if (len == 0)
-        return;
-
-    use_story = (story & STORY_FLAG_USE) != 0;
-    grid_align = (story & STORY_FLAG_CELL_ALIGN) != 0;
-    if (use_story)
-        story_font = sdl_story_font_for_view((sdl_view*)view);
-    if (use_story && story_font)
-    {
-        if (grid_align)
-            sdl_render_story_text_grid((sdl_view*)view, story_font, col, row,
-                (int)len, text, sdl_information_color(attr));
-        else
-            sdl_render_story_text_free((sdl_view*)view, story_font, col, row,
-                (int)len, text, sdl_information_color(attr));
-        return;
-    }
-
-    sdl_render_mono_text((sdl_view*)view, col, row, (int)len, text,
-        sdl_information_color(attr));
-}
-
 static void sdl_information_draw_text_fixed(
     const sdl_information_fixed_metrics* metrics, int col, int row, byte attr,
     byte story, cptr text)
@@ -639,55 +604,6 @@ static void sdl_information_draw_text_fixed(
 
     (void)sdl_information_render_text_run_px(metrics->mono_font, x_px, y_px,
         color, text, len, metrics->cell_h, max_run_w);
-}
-
-static void sdl_information_draw_cell(const sdl_view* view,
-    const app_information_op* op)
-{
-    SDL_FRect dst;
-    byte width;
-
-    if (!view || !op)
-        return;
-
-    width = op->width ? op->width : 1;
-    if (!sdl_information_layout_cell_rect(view, op->col, op->row, width, &dst))
-        return;
-
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-    SDL_RenderFillRect(g_state.renderer, &dst);
-
-    if (sdl_information_cell_is_raw(op->attr, op->ch, op->terrain_attr,
-            op->terrain_char))
-    {
-        if (g_state.use_tiles && g_state.tileset)
-        {
-            if ((op->terrain_attr & TILE_FLAG)
-                && (((byte)op->terrain_char) & TILE_FLAG))
-            {
-                sdl_information_draw_tile(&dst, op->terrain_attr,
-                    (byte)op->terrain_char);
-            }
-            if (op->attr & GRAPHICS_GLOW_MASK)
-                sdl_information_draw_misc_icon(&dst, ICON_GLOW);
-            sdl_information_draw_tile(&dst, op->attr, (byte)op->ch);
-            if (op->terrain_attr & GRAPHICS_SLEEP_MASK)
-                sdl_information_draw_misc_icon(&dst, ICON_SLEEPING);
-            if (((byte)op->terrain_char) & GRAPHICS_SEEN_MASK)
-                sdl_information_draw_misc_icon(&dst,
-                    ICON_MONSTER_SEES_PLAYER);
-            if (((byte)op->ch) & GRAPHICS_ALERT_MASK)
-                sdl_information_draw_misc_icon(&dst, ICON_ALERT);
-        }
-        return;
-    }
-
-    if (op->ch)
-    {
-        char glyph[2] = { op->ch, '\0' };
-        sdl_information_draw_text(view, op->col, op->row, op->attr, op->story,
-            glyph);
-    }
 }
 
 static void sdl_information_draw_cell_fixed(
@@ -863,8 +779,6 @@ bool sdl_scene_information_render_overlay(SDL_Texture* canvas,
 bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_information_snapshot* snapshot)
 {
-    u16b i;
-
     if (!canvas || !main_view || !snapshot)
         return false;
     if (snapshot->snapshot.scene != APP_SCENE_KIND_INFORMATION)
@@ -877,45 +791,6 @@ bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view
         return false;
     }
 
-    if ((snapshot->scene.flags & APP_INFORMATION_SCENE_FLAG_TERM_MIRROR)
-        && sdl_information_render_fixed_scene(canvas, main_view, snapshot,
-            true, false))
-    {
-        return true;
-    }
-
-    SDL_SetRenderTarget(g_state.renderer, canvas);
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(g_state.renderer);
-
-    if (snapshot->scene.format_version == APP_INFORMATION_FORMAT_VERSION)
-    {
-        for (i = 0; i < snapshot->scene.op_count && i < APP_INFORMATION_OP_MAX; i++)
-        {
-            const app_information_op* op = &snapshot->scene.ops[i];
-
-            if (op->kind == APP_INFORMATION_OP_KIND_TEXT)
-            {
-                if (!op->text[0])
-                    continue;
-                sdl_information_draw_text(main_view, op->col, op->row,
-                    op->attr, op->story, op->text);
-            }
-            else if (op->kind == APP_INFORMATION_OP_KIND_CELL)
-            {
-                sdl_information_draw_cell(main_view, op);
-            }
-        }
-
-        for (i = 0; i < snapshot->scene.op_count && i < APP_INFORMATION_OP_MAX; i++)
-        {
-            const app_information_op* op = &snapshot->scene.ops[i];
-
-            if (op->kind == APP_INFORMATION_OP_KIND_CURSOR)
-                sdl_information_draw_cursor(main_view, op);
-        }
-    }
-
-    SDL_SetRenderTarget(g_state.renderer, NULL);
-    return true;
+    return sdl_information_render_fixed_scene(canvas, main_view, snapshot,
+        true, false);
 }
