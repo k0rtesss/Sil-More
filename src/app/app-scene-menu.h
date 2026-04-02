@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define APP_MENU_FORMAT_VERSION 1u
+#define APP_MENU_FORMAT_VERSION 2u
 #define APP_MENU_TITLE_MAX 80u
 #define APP_MENU_TEXT_MAX 160u
 #define APP_MENU_LABEL_MAX 96u
@@ -29,7 +29,9 @@ typedef enum app_menu_scene_flag {
     APP_MENU_SCENE_FLAG_SHOW_DETAIL = 0x0008u,
     APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP = 0x0010u,
     APP_MENU_SCENE_FLAG_DIM_BACKDROP = 0x0020u,
-    APP_MENU_SCENE_FLAG_SCROLL_ROWS = 0x0040u
+    APP_MENU_SCENE_FLAG_SCROLL_ROWS = 0x0040u,
+    APP_MENU_SCENE_FLAG_LEFT_ANCHORED = 0x0080u,
+    APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR = 0x0100u
 } app_menu_scene_flag;
 
 typedef enum app_menu_focus_area {
@@ -44,7 +46,8 @@ typedef enum app_menu_item_flag {
     APP_MENU_ITEM_FLAG_NONE = 0x00u,
     APP_MENU_ITEM_FLAG_DISABLED = 0x01u,
     APP_MENU_ITEM_FLAG_SELECTED = 0x02u,
-    APP_MENU_ITEM_FLAG_ACTIVE = 0x04u
+    APP_MENU_ITEM_FLAG_ACTIVE = 0x04u,
+    APP_MENU_ITEM_FLAG_SECTION = 0x08u
 } app_menu_item_flag;
 
 typedef struct app_menu_text_line {
@@ -57,7 +60,11 @@ typedef struct app_menu_text_line {
 typedef struct app_menu_row {
     s16b id;
     byte attr;
+    byte meta_attr;
     byte flags;
+    byte icon_attr;
+    byte reserved0;
+    char icon_char;
     char key[APP_MENU_KEY_MAX];
     char label[APP_MENU_LABEL_MAX];
     char meta[APP_MENU_META_MAX];
@@ -124,6 +131,9 @@ void app_menu_scene_set_row_offset(app_menu_scene* scene, s16b row_offset);
 bool app_menu_scene_add_body_line_ex(app_menu_scene* scene, byte attr,
     byte story, cptr text);
 bool app_menu_scene_add_body_line(app_menu_scene* scene, byte attr, cptr text);
+bool app_menu_scene_add_row_ex(app_menu_scene* scene, s16b id, byte attr,
+    byte meta_attr, byte icon_attr, char icon_char, bool enabled,
+    bool selected, cptr key, cptr label, cptr meta);
 bool app_menu_scene_add_row(app_menu_scene* scene, s16b id, byte attr,
     bool enabled, bool selected, cptr key, cptr label, cptr meta);
 bool app_menu_scene_add_detail_line_ex(app_menu_scene* scene, byte attr,

@@ -2,6 +2,7 @@
 #define INCLUDED_APP_SCENE_DUNGEON_H
 
 #include "app-interaction.h"
+#include "app-scene-menu.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
 
@@ -16,7 +17,7 @@ struct app_wait_state;
 #define APP_DUNGEON_STATUS_FORMAT_VERSION 1u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 3u
-#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 2u
+#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 4u
 
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
 
@@ -87,6 +88,11 @@ typedef enum app_dungeon_overlay_panel_flag {
     APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE = 0x0010u,
     APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID = 0x0020u
 } app_dungeon_overlay_panel_flag;
+
+typedef enum app_dungeon_overlay_snapshot_flag {
+    APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_NONE = 0x0000u,
+    APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU = 0x0001u
+} app_dungeon_overlay_snapshot_flag;
 
 typedef struct app_text_snapshot {
     byte attr;
@@ -284,11 +290,12 @@ typedef struct app_dungeon_overlay_panel_snapshot {
 
 typedef struct app_dungeon_overlay_snapshot {
     u16b format_version;
-    u16b reserved;
+    u16b flags;
     app_dungeon_overlay_panel_snapshot top_strip;
     app_dungeon_overlay_panel_snapshot left_rail;
     app_dungeon_overlay_panel_snapshot bottom_strip;
     app_interaction_state interaction;
+    app_menu_scene transient_menu;
 } app_dungeon_overlay_snapshot;
 
 typedef struct app_dungeon_snapshot {
@@ -316,8 +323,9 @@ void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     u64b revision, const struct app_wait_state* wait_state,
-    const app_interaction_state* interaction, u32b update_mask,
-    u32b redraw_mask, u32b window_mask);
+    const app_interaction_state* interaction,
+    const app_menu_scene* transient_menu, u32b update_mask, u32b redraw_mask,
+    u32b window_mask);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const struct app_session* session);
 bool app_dump_dungeon_snapshot_text(const app_dungeon_snapshot* snapshot,

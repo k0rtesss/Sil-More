@@ -137,61 +137,43 @@ static bool unified_look_snapshot_active(void)
 
 static void unified_look_snapshot_clear(void)
 {
+    app_session* session = app_session_current();
+
     g_unified_look_snapshot_prompt[0] = '\0';
     g_unified_look_snapshot_prompt_cols = 0;
 
-    if (!unified_look_snapshot_active())
+    if (!unified_look_snapshot_active() || !session)
         return;
 
-    app_session_clear_interaction(app_session_current());
+    app_session_clear_interaction(session);
+    app_session_clear_dungeon_overlay_menu(session);
 }
 
-static bool unified_look_snapshot_publish_overlay(int overlay_rows,
-    int overlay_cols)
+static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
 {
     app_session* session = app_session_current();
-    app_raw_cell_snapshot captured[APP_INTERACTION_PANEL_ROW_MAX]
-                                  [APP_INTERACTION_PANEL_COL_MAX];
-    int rows;
-    int cols;
-    int y;
-    int x;
+    app_menu_scene scene;
 
-    if (!unified_look_snapshot_active() || !session || !Term || !Term->scr)
+    if (!unified_look_snapshot_active() || !session)
         return false;
+
+    if (!unified_look_build_menu_scene(state, g_unified_look_snapshot_prompt,
+            &scene))
+    {
+        app_session_clear_interaction(session);
+        app_session_clear_dungeon_overlay_menu(session);
+        return true;
+    }
 
     app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
         APP_WAIT_REASON_TARGETING, APP_INTERACTION_FLAG_CAN_CANCEL);
-    if (g_unified_look_snapshot_prompt_cols > 0
-        && g_unified_look_snapshot_prompt[0])
-    {
-        app_session_set_interaction_prompt(session, TERM_WHITE,
-            g_unified_look_snapshot_prompt);
-    }
+    app_session_set_interaction_prompt(session, TERM_WHITE,
+        g_unified_look_snapshot_prompt);
+    if (!app_session_publish_dungeon_overlay_menu(session, &scene))
+        return false;
 
-    rows = MIN(overlay_rows, (int)APP_INTERACTION_PANEL_ROW_MAX);
-    cols = MIN(overlay_cols, (int)APP_INTERACTION_PANEL_COL_MAX);
-    if (rows <= 0 || cols <= 0)
-        return true;
-
-    memset(captured, 0, sizeof(captured));
-    for (y = 0; y < rows; y++)
-    {
-        int term_row = y + 1;
-
-        if (term_row < 0 || term_row >= Term->hgt)
-            break;
-
-        for (x = 0; x < cols; x++)
-        {
-            captured[y][x].attr = Term->scr->a[term_row][x];
-            captured[y][x].story = Term->scr->story[term_row][x];
-            captured[y][x].ch = Term->scr->c[term_row][x];
-        }
-    }
-
-    return app_session_set_interaction_panel(session, 1, 0, (u16b)rows,
-        (u16b)cols, &captured[0][0], APP_INTERACTION_PANEL_COL_MAX);
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
 }
 
 static char unified_look_inkey_with_wait_reason(void)
@@ -548,7 +530,8 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
     SDL_strlcpy(g_unified_look_snapshot_prompt, buf,
         sizeof(g_unified_look_snapshot_prompt));
     g_unified_look_snapshot_prompt_cols = (int)strlen(buf);
-    prt(buf, 0, 0);
+    if (!unified_look_snapshot_active())
+        prt(buf, 0, 0);
 }
 
 void do_cmd_unified_look(void)
@@ -645,8 +628,6 @@ void do_cmd_unified_look(void)
     while (!done)
     {
         bool screen_saved = false;
-        int overlay_rows = 0;
-        int overlay_cols = 0;
         
         if (need_redraw)
         {
@@ -654,12 +635,15 @@ void do_cmd_unified_look(void)
             g_unified_look_snapshot_prompt[0] = '\0';
             g_unified_look_snapshot_prompt_cols = 0;
 
-            /* Save screen to preserve underlying display */
-            screen_save();
-            screen_saved = true;
-            
-            /* Show unified sidebar */
-            overlay_rows = show_unified_sidebar(&state, &overlay_cols);
+            if (!unified_look_snapshot_active())
+            {
+                /* Save screen to preserve underlying display. */
+                screen_save();
+                screen_saved = true;
+
+                /* Show unified sidebar. */
+                (void)show_unified_sidebar(&state, NULL);
+            }
             
             /* Track monster health at current cursor position for left sidebar display */
             /* This handles Tab cycling and any other cursor position updates */
@@ -864,8 +848,7 @@ void do_cmd_unified_look(void)
             move_cursor_relative(state.cursor_y, state.cursor_x);
 
             if (unified_look_snapshot_active())
-                (void)unified_look_snapshot_publish_overlay(overlay_rows,
-                    overlay_cols);
+                (void)unified_look_snapshot_publish_menu_scene(&state);
             
             need_redraw = false;
         }

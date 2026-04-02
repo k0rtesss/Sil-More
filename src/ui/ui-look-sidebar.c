@@ -547,6 +547,296 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
     log_trace("sidebar_compact_name: combined result='%s'", dest);
 }
 
+static cptr unified_look_object_filter_tag(const unified_look_state* state)
+{
+    int filter = state ? state->object_group_filter : -1;
+
+    switch (filter)
+    {
+    case LOOK_GROUP_ARTIFACT:
+        return "ART";
+    case LOOK_GROUP_WEAPON:
+        return "WEAP";
+    case LOOK_GROUP_ARMOUR:
+        return "ARM";
+    case LOOK_GROUP_JEWELRY:
+        return "JEWL";
+    case LOOK_GROUP_HERBS:
+        return "HERB";
+    case LOOK_GROUP_POTIONS:
+        return "POT";
+    case LOOK_GROUP_GEMS:
+        return "GEM";
+    case LOOK_GROUP_CONSUMABLE:
+        return "CONS";
+    case LOOK_GROUP_OTHER:
+        return "OTHER";
+    default:
+        return "ALL";
+    }
+}
+
+static bool unified_look_menu_add_section(app_menu_scene* scene, byte attr,
+    cptr label)
+{
+    u16b row_index;
+
+    if (!scene || !label || !label[0] || scene->row_count >= APP_MENU_ROW_MAX)
+        return false;
+
+    row_index = scene->row_count;
+    if (!app_menu_scene_add_row(scene, -1, attr, true, false, "", label, ""))
+        return false;
+
+    scene->rows[row_index].flags |= APP_MENU_ITEM_FLAG_SECTION;
+    return true;
+}
+
+static void unified_look_clear_highlight_state(unified_look_state* state)
+{
+    if (!state)
+        return;
+
+    if (state->highlighted_y >= 0 && state->highlighted_x >= 0)
+        highlight_entity_on_map(state->highlighted_y, state->highlighted_x,
+            false);
+
+    state->highlighted_y = -1;
+    state->highlighted_x = -1;
+    state->highlighted_entity_type = 0;
+}
+
+static void unified_look_select_highlight(unified_look_state* state, int y,
+    int x, int entity_type)
+{
+    if (!state)
+        return;
+
+    state->highlighted_y = y;
+    state->highlighted_x = x;
+    state->highlighted_entity_type = entity_type;
+    state->cursor_y = y;
+    state->cursor_x = x;
+    highlight_entity_on_map_type(y, x, true, entity_type);
+}
+
+bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
+    app_menu_scene* scene)
+{
+    bool has_sidebar_selection;
+    bool selected_row_found = false;
+    int monster_count = 0;
+    int object_count = 0;
+    int object_start = 0;
+
+    if (!state || !scene)
+        return false;
+
+    app_menu_scene_init(scene);
+    scene->flags = APP_MENU_SCENE_FLAG_TOP_ANCHORED
+        | APP_MENU_SCENE_FLAG_LEFT_ANCHORED
+        | APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR;
+    scene->accent_attr = TERM_L_BLUE;
+    app_menu_scene_set_widths(scene, 420, 760);
+    (void)title;
+
+    has_sidebar_selection = (state->selected_entity >= 0)
+        && (state->in_sidebar_mode || (state->look_mode == 0));
+    unified_look_clear_highlight_state(state);
+
+    if (state->show_monsters && scene->row_count < APP_MENU_ROW_MAX)
+    {
+        int i;
+
+        (void)unified_look_menu_add_section(scene, TERM_WHITE, "MONSTERS:");
+        get_sorted_target_list(TARGET_LIST_MONSTER, 0);
+
+        for (i = 0; i < temp_n && scene->row_count < APP_MENU_ROW_MAX; i++)
+        {
+            int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
+            monster_type* m_ptr;
+            monster_race* r_ptr;
+            char label[APP_MENU_LABEL_MAX];
+            char meta[APP_MENU_META_MAX];
+            char hp_bar[10];
+            char hp_display[12];
+            char monster_name[80];
+            int hp_len = 0;
+            int morale_num = 0;
+            byte label_attr;
+            byte meta_attr;
+            bool selected;
+
+            if (!m_idx)
+                continue;
+            if (!grid_info_is_available(temp_y[i], temp_x[i]))
+                continue;
+
+            m_ptr = &mon_list[m_idx];
+            r_ptr = &r_info[m_ptr->r_idx];
+            if (!m_ptr->ml)
+                continue;
+
+            monster_desc_race(monster_name, sizeof(monster_name), m_ptr->r_idx);
+            if (m_ptr->maxhp > 0)
+                hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
+
+            if (m_ptr->confused && m_ptr->stunned)
+                strncpy(hp_bar, "cscscscs", hp_len);
+            else if (m_ptr->confused)
+                strncpy(hp_bar, "cccccccc", hp_len);
+            else if (m_ptr->stunned)
+                strncpy(hp_bar, "ssssssss", hp_len);
+            else
+                strncpy(hp_bar, "********", hp_len);
+            hp_bar[hp_len] = '\0';
+
+            meta_attr = TERM_WHITE;
+            if (m_ptr->alertness < ALERTNESS_UNWARY)
+            {
+                meta_attr = TERM_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else if (m_ptr->alertness < ALERTNESS_ALERT)
+            {
+                meta_attr = TERM_L_BLUE;
+                morale_num = m_ptr->alertness;
+            }
+            else if (m_ptr->morale >= 0)
+            {
+                morale_num = (m_ptr->morale + 9) / 10;
+            }
+            else
+            {
+                morale_num = m_ptr->morale / 10;
+            }
+
+            hp_display[0] = '\0';
+            if (hp_bar[0])
+                strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
+            strnfmt(label, sizeof(label), "%s%s", monster_name, hp_display);
+            if (hp_bar[0])
+                strnfmt(meta, sizeof(meta), " %d", morale_num);
+            else
+                strnfmt(meta, sizeof(meta), " %d", morale_num);
+
+            selected = has_sidebar_selection
+                && (state->selected_entity == monster_count);
+            label_attr = selected ? TERM_L_BLUE : TERM_WHITE;
+            if (!app_menu_scene_add_row_ex(scene, monster_count, label_attr,
+                    selected ? TERM_L_BLUE : meta_attr, monster_attr(r_ptr),
+                    monster_char(r_ptr), true, selected, "", label, meta))
+            {
+                break;
+            }
+
+            if (selected)
+            {
+                selected_row_found = true;
+                unified_look_select_highlight(state, temp_y[i], temp_x[i], 1);
+            }
+
+            monster_count++;
+        }
+    }
+
+    object_start = monster_count;
+    if (state->show_objects && scene->row_count < APP_MENU_ROW_MAX)
+    {
+        int i;
+        int group_display_counts[LOOK_GROUP_COUNT] = { 0 };
+        int object_capacity = (temp_n > 0) ? temp_n : 1;
+        unified_sidebar_sorted_object objects[object_capacity];
+        int valid_objects;
+        char header_buf[32];
+
+        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s",
+            unified_look_object_filter_tag(state));
+        (void)unified_look_menu_add_section(scene, TERM_WHITE, header_buf);
+
+        get_sorted_target_list(TARGET_LIST_OBJECT, 0);
+        valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
+            object_capacity);
+
+        for (i = 0; i < valid_objects && scene->row_count < APP_MENU_ROW_MAX;
+             i++)
+        {
+            unified_sidebar_sorted_object* entry = &objects[i];
+            object_type* o_ptr = entry->o_ptr;
+            char object_name[80];
+            char label[APP_MENU_LABEL_MAX];
+            char meta[APP_MENU_META_MAX];
+            char weight_buf[16];
+            char smith_buf[16];
+            int weight_total;
+            byte row_attr;
+            byte label_attr;
+            bool selected;
+
+            if (state->limit_objects_top_five
+                && group_display_counts[entry->group] >= 5)
+            {
+                continue;
+            }
+
+            group_display_counts[entry->group]++;
+
+            object_desc_floor(object_name, sizeof(object_name), o_ptr, false, 4);
+            sidebar_compact_name(object_name, 40, label, sizeof(label));
+
+            weight_total = o_ptr->weight * o_ptr->number;
+            strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d", weight_total / 10,
+                weight_total % 10);
+            smith_buf[0] = '\0';
+            if (op_ptr->opt[OPT_show_smithing_difficulty_look]
+                && object_known_p(o_ptr)
+                && object_uses_smithing_difficulty(o_ptr))
+            {
+                int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
+                int sd = object_smithing_difficulty(o_ptr);
+                int wr = object_weight_rarity(o_ptr, depth);
+
+                strnfmt(smith_buf, sizeof(smith_buf), "{%d,%d}", sd, wr);
+            }
+
+            if (smith_buf[0])
+                strnfmt(meta, sizeof(meta), "%s %s", weight_buf, smith_buf);
+            else
+                SDL_strlcpy(meta, weight_buf, sizeof(meta));
+
+            row_attr = weapon_glows(o_ptr)
+                ? object_display_color(o_ptr, TERM_L_BLUE)
+                : object_display_color(o_ptr,
+                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            selected = has_sidebar_selection
+                && (state->selected_entity == (object_start + object_count));
+            label_attr = selected ? TERM_L_BLUE : row_attr;
+
+            if (!app_menu_scene_add_row_ex(scene, object_start + object_count,
+                    label_attr, label_attr, object_attr(o_ptr),
+                    object_char(o_ptr), true, selected, "", label, meta))
+            {
+                break;
+            }
+
+            if (selected)
+            {
+                selected_row_found = true;
+                unified_look_select_highlight(state, entry->y, entry->x, 2);
+            }
+
+            object_count++;
+        }
+    }
+
+    if (scene->row_count > 0)
+        scene->flags |= APP_MENU_SCENE_FLAG_SCROLL_ROWS;
+    if (has_sidebar_selection && !selected_row_found)
+        unified_look_clear_highlight_state(state);
+
+    return scene->title[0] || scene->row_count > 0;
+}
+
 /*
  * Show unified sidebar with monsters and objects
  */

@@ -161,8 +161,9 @@ bool app_menu_scene_add_body_line(app_menu_scene* scene, byte attr, cptr text)
     return app_menu_scene_add_body_line_ex(scene, attr, 0, text);
 }
 
-bool app_menu_scene_add_row(app_menu_scene* scene, s16b id, byte attr,
-    bool enabled, bool selected, cptr key, cptr label, cptr meta)
+bool app_menu_scene_add_row_ex(app_menu_scene* scene, s16b id, byte attr,
+    byte meta_attr, byte icon_attr, char icon_char, bool enabled,
+    bool selected, cptr key, cptr label, cptr meta)
 {
     app_menu_row* row;
 
@@ -173,7 +174,10 @@ bool app_menu_scene_add_row(app_menu_scene* scene, s16b id, byte attr,
     memset(row, 0, sizeof(*row));
     row->id = id;
     row->attr = attr;
+    row->meta_attr = meta_attr;
     row->flags = APP_MENU_ITEM_FLAG_NONE;
+    row->icon_attr = icon_attr;
+    row->icon_char = icon_char;
     if (!enabled)
         row->flags |= APP_MENU_ITEM_FLAG_DISABLED;
     if (selected)
@@ -191,6 +195,13 @@ bool app_menu_scene_add_row(app_menu_scene* scene, s16b id, byte attr,
 
     scene->row_count++;
     return true;
+}
+
+bool app_menu_scene_add_row(app_menu_scene* scene, s16b id, byte attr,
+    bool enabled, bool selected, cptr key, cptr label, cptr meta)
+{
+    return app_menu_scene_add_row_ex(scene, id, attr, attr, 0, '\0', enabled,
+        selected, key, label, meta);
 }
 
 bool app_menu_scene_add_detail_line_ex(app_menu_scene* scene, byte attr,

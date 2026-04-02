@@ -110,6 +110,7 @@ static void app_dungeon_overlay_snapshot_clear(
     memset(overlay, 0, sizeof(*overlay));
     overlay->format_version = APP_DUNGEON_OVERLAY_FORMAT_VERSION;
     app_interaction_clear(&overlay->interaction);
+    app_menu_scene_init(&overlay->transient_menu);
 }
 
 static app_dungeon_overlay_row_snapshot* app_dungeon_overlay_get_row(
@@ -1285,8 +1286,15 @@ static void app_build_left_rail_semantic_overlay(
         &status->song_text);
 }
 
+static bool app_dungeon_overlay_interaction_owns_left_rail(
+    const app_interaction_state* interaction)
+{
+    return interaction && interaction->kind != APP_INTERACTION_KIND_NONE;
+}
+
 static void app_build_left_rail_overlay(app_dungeon_overlay_snapshot* overlay,
-    const app_status_snapshot* status)
+    const app_status_snapshot* status,
+    const app_interaction_state* interaction)
 {
     app_dungeon_overlay_panel_snapshot* panel;
 
@@ -1320,7 +1328,8 @@ static void app_build_left_rail_overlay(app_dungeon_overlay_snapshot* overlay,
 
     panel->flags |= APP_DUNGEON_OVERLAY_PANEL_FLAG_RESERVE_SPACE;
     panel->reserve_cells = APP_DUNGEON_LEFT_PANEL_COLS;
-    app_dungeon_overlay_copy_left_panel_cells(panel);
+    if (!app_dungeon_overlay_interaction_owns_left_rail(interaction))
+        app_dungeon_overlay_copy_left_panel_cells(panel);
     if (panel->cell_rows == 0 || panel->cell_cols == 0)
         app_build_left_rail_semantic_overlay(panel, status);
 }
@@ -1370,7 +1379,8 @@ static void app_build_bottom_strip_overlay(app_dungeon_overlay_snapshot* overlay
 
 static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
     const app_status_snapshot* status, const app_messages_snapshot* messages,
-    const app_interaction_state* interaction)
+    const app_interaction_state* interaction,
+    const app_menu_scene* transient_menu)
 {
     app_dungeon_overlay_snapshot* overlay;
 
@@ -1386,13 +1396,19 @@ static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
     overlay = (app_dungeon_overlay_snapshot*)snapshot->overlay_data;
     app_dungeon_overlay_snapshot_clear(overlay);
     app_build_top_strip_overlay(overlay, messages);
-    app_build_left_rail_overlay(overlay, status);
+    app_build_left_rail_overlay(overlay, status, interaction);
     app_build_bottom_strip_overlay(overlay, status);
 
     if (interaction)
         memcpy(&overlay->interaction, interaction, sizeof(overlay->interaction));
     else
         app_interaction_snapshot_clear(&overlay->interaction);
+
+    if (transient_menu)
+    {
+        overlay->flags |= APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU;
+        overlay->transient_menu = *transient_menu;
+    }
 
     snapshot->overlay_size = sizeof(*overlay);
     return true;
@@ -1434,8 +1450,9 @@ void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot)
 
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     u64b revision, const app_wait_state* wait_state,
-    const app_interaction_state* interaction, u32b update_mask,
-    u32b redraw_mask, u32b window_mask)
+    const app_interaction_state* interaction,
+    const app_menu_scene* transient_menu, u32b update_mask, u32b redraw_mask,
+    u32b window_mask)
 {
     u16b snapshot_flags = 0;
     const app_status_snapshot* status;
@@ -1454,7 +1471,8 @@ bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
 
     status = (const app_status_snapshot*)snapshot->status_data;
     messages = (const app_messages_snapshot*)snapshot->messages_data;
-    if (!app_build_overlay_blob(snapshot, status, messages, interaction))
+    if (!app_build_overlay_blob(snapshot, status, messages, interaction,
+            transient_menu))
     {
         return false;
     }
