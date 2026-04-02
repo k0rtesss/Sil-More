@@ -1161,35 +1161,273 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     return true;
 }
 
-bool sdl_scene_menu_render_overlay(const sdl_view* main_view,
-    const app_menu_scene* scene)
+static bool sdl_menu_scene_from_ui_panel(app_menu_scene* scene,
+    const app_ui_scene* ui_scene, const app_ui_panel* panel)
 {
+    u16b i;
+
+    if (!scene || !ui_scene || !panel)
+        return false;
+
+    app_menu_scene_init(scene);
+    if (ui_scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)
+        scene->flags |= APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP;
+    if (ui_scene->flags & APP_UI_SCENE_FLAG_DIM_BACKDROP)
+        scene->flags |= APP_MENU_SCENE_FLAG_DIM_BACKDROP;
+    if (panel->flags & APP_UI_PANEL_FLAG_TOP_ANCHORED)
+        scene->flags |= APP_MENU_SCENE_FLAG_TOP_ANCHORED;
+    if (panel->flags & APP_UI_PANEL_FLAG_BOTTOM_ANCHORED)
+        scene->flags |= APP_MENU_SCENE_FLAG_BOTTOM_ANCHORED;
+    if (panel->flags & APP_UI_PANEL_FLAG_LEFT_ANCHORED)
+        scene->flags |= APP_MENU_SCENE_FLAG_LEFT_ANCHORED;
+    if (panel->flags & APP_UI_PANEL_FLAG_SHOW_DETAIL)
+        scene->flags |= APP_MENU_SCENE_FLAG_SHOW_DETAIL;
+    if (panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS)
+        scene->flags |= APP_MENU_SCENE_FLAG_SCROLL_ROWS;
+    if (panel->style == APP_UI_PANEL_STYLE_PLAIN)
+        scene->flags |= APP_MENU_SCENE_FLAG_PLAIN;
+    if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
+        scene->flags |= APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR;
+
+    scene->focus_area = panel->focus_area;
+    scene->focus_id = panel->focus_id;
+    scene->selected_row = panel->selected_row;
+    scene->row_offset = panel->row_offset;
+    scene->min_width_px = panel->min_width_px;
+    scene->width_cap_px = panel->width_cap_px;
+    scene->title_attr = panel->title_attr;
+    scene->subtitle_attr = panel->subtitle_attr;
+    scene->detail_title_attr = panel->detail_title_attr;
+    scene->accent_attr = panel->accent_attr;
+    SDL_strlcpy(scene->title, panel->title, sizeof(scene->title));
+    SDL_strlcpy(scene->subtitle, panel->subtitle, sizeof(scene->subtitle));
+    SDL_strlcpy(scene->detail_title, panel->detail_title,
+        sizeof(scene->detail_title));
+
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+
+        if (!app_menu_scene_add_body_line_ex(scene, line->attr, line->story,
+                line->text))
+        {
+            return false;
+        }
+    }
+
+    for (i = 0; i < panel->row_count; i++)
+    {
+        const app_ui_row* row = &panel->rows[i];
+        bool enabled = (row->flags & APP_UI_ITEM_FLAG_DISABLED) == 0;
+        bool selected = (row->flags & APP_UI_ITEM_FLAG_SELECTED) != 0;
+
+        if (!app_menu_scene_add_row_ex(scene, row->id, row->attr,
+                row->meta_attr, row->icon_attr, row->icon_char, enabled,
+                selected, row->key, row->label, row->meta))
+        {
+            return false;
+        }
+        if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+            scene->rows[i].flags |= APP_MENU_ITEM_FLAG_SECTION;
+        if (row->flags & APP_UI_ITEM_FLAG_ACTIVE)
+            scene->rows[i].flags |= APP_MENU_ITEM_FLAG_ACTIVE;
+    }
+
+    for (i = 0; i < panel->detail_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->detail_lines[i];
+
+        if (!app_menu_scene_add_detail_line_ex(scene, line->attr,
+                line->story, line->text))
+        {
+            return false;
+        }
+    }
+
+    for (i = 0; i < panel->footer_action_count; i++)
+    {
+        const app_ui_footer_action* action = &panel->footer_actions[i];
+        bool enabled = (action->flags & APP_UI_ITEM_FLAG_DISABLED) == 0;
+
+        if (!app_menu_scene_add_footer_action(scene, action->id,
+                action->attr, enabled, action->key, action->label))
+        {
+            return false;
+        }
+    }
+
+    for (i = 0; i < panel->tab_count; i++)
+    {
+        const app_ui_tab* tab = &panel->tabs[i];
+        bool active = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) != 0;
+
+        if (!app_menu_scene_add_tab(scene, tab->id, tab->attr, active,
+                tab->label))
+        {
+            return false;
+        }
+    }
+
+    scene->focus_area = panel->focus_area;
+    scene->focus_id = panel->focus_id;
+    scene->selected_row = panel->selected_row;
+    return true;
+}
+
+static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
+{
+    u16b i;
+
+    if (!scene)
+        return NULL;
+
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        const app_ui_panel* panel = &scene->panels[i];
+
+        if (panel->flags & APP_UI_PANEL_FLAG_ACTIVE)
+            return panel;
+    }
+
+    return NULL;
+}
+
+static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
+    const app_ui_panel* panel)
+{
+    TTF_Font* font;
+    SDL_Rect clip_rect;
+    int canvas_w;
+    int canvas_h;
+    int pixel_height;
+    int line_h;
+    int rows;
+    int strip_h;
+    int current_y;
+    u16b i;
+    float y_px;
+
+    if (!main_view || !panel)
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    pixel_height = sdl_menu_scale_px(
+        (float)sdl_menu_font_size_logical(main_view));
+    font = sdl_ui_font_for_height(pixel_height);
+    if (!font)
+        return false;
+
+    line_h = MAX(pixel_height, TTF_GetFontHeight(font));
+    rows = panel->body_line_count ? (int)panel->body_line_count : 1;
+    strip_h = rows * line_h;
+    if (strip_h < main_view->cell_h)
+        strip_h = main_view->cell_h;
+    if (strip_h > canvas_h)
+        strip_h = canvas_h;
+
+    y_px = (panel->flags & APP_UI_PANEL_FLAG_BOTTOM_ANCHORED)
+        ? (float)(canvas_h - strip_h)
+        : 0.0f;
+
+    sdl_menu_fill_rect(&(SDL_FRect){
+        .x = 0.0f,
+        .y = y_px,
+        .w = (float)canvas_w,
+        .h = (float)strip_h
+    }, (SDL_Color){ 0, 0, 0, 255 });
+
+    clip_rect.x = 0;
+    clip_rect.y = (int)y_px;
+    clip_rect.w = canvas_w;
+    clip_rect.h = strip_h;
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    current_y = (int)y_px + ((strip_h - rows * line_h) / 2);
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+
+        if (line->text[0] && line->text[0] != ' ')
+        {
+            sdl_menu_render_text(font, 0.0f, (float)current_y, line_h,
+                sdl_menu_color(line->attr), line->text);
+        }
+        current_y += line_h;
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    return true;
+}
+
+bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
+    const app_ui_scene* scene)
+{
+    app_menu_scene menu_scene;
+    const app_ui_panel* panel;
+    app_ui_scene panel_scene;
+    SDL_Color scrim_color = { 0, 0, 0, 112 };
+    int canvas_w;
+    int canvas_h;
+    u16b i;
+
     if (!main_view || !scene)
         return false;
 
-    return sdl_menu_render_scene_internal(main_view, scene);
+    panel = sdl_menu_pick_ui_panel(scene);
+    if (!panel)
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if ((scene->flags & APP_UI_SCENE_FLAG_DIM_BACKDROP)
+        && canvas_w > 0 && canvas_h > 0)
+    {
+        sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)canvas_w,
+            (float)canvas_h }, scrim_color);
+    }
+
+    panel_scene = *scene;
+    panel_scene.flags &= (u16b)~APP_UI_SCENE_FLAG_DIM_BACKDROP;
+
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        panel = &scene->panels[i];
+        if (!(panel->flags & APP_UI_PANEL_FLAG_ACTIVE))
+            continue;
+
+        if (panel->style == APP_UI_PANEL_STYLE_STRIP)
+        {
+            if (!sdl_menu_render_strip_panel(main_view, panel))
+                return false;
+            continue;
+        }
+
+        if (!sdl_menu_scene_from_ui_panel(&menu_scene, &panel_scene, panel))
+            return false;
+        if (!sdl_menu_render_scene_internal(main_view, &menu_scene))
+            return false;
+    }
+
+    return true;
 }
 
-bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_menu_snapshot* snapshot)
+bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
+    const app_ui_scene* scene)
 {
     int canvas_w;
     int canvas_h;
 
-    if (!canvas || !main_view || !snapshot)
+    if (!canvas || !main_view || !scene)
         return false;
-    if (snapshot->snapshot.scene != APP_SCENE_KIND_MENU)
-        return false;
-    if (snapshot->blobs[0].kind != APP_SNAPSHOT_BLOB_MENU
-        || snapshot->blobs[0].size < sizeof(app_menu_scene))
-    {
-        return false;
-    }
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     canvas_w = main_view->cols * main_view->cell_w;
     canvas_h = main_view->rows * main_view->cell_h;
-    if ((snapshot->scene.flags & APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP)
+    if ((scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)
         && main_view->canvas && canvas_w > 0 && canvas_h > 0)
     {
         SDL_RenderTexture(g_state.renderer, main_view->canvas, NULL,
@@ -1206,7 +1444,7 @@ bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
         SDL_RenderClear(g_state.renderer);
     }
 
-    if (!sdl_menu_render_scene_internal(main_view, &snapshot->scene))
+    if (!sdl_scene_ui_render_overlay(main_view, scene))
     {
         SDL_SetRenderTarget(g_state.renderer, NULL);
         return false;
@@ -1214,4 +1452,38 @@ bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;
+}
+
+bool sdl_scene_menu_render_overlay(const sdl_view* main_view,
+    const app_menu_scene* scene)
+{
+    app_ui_scene ui_scene;
+
+    if (!main_view || !scene)
+        return false;
+    if (!app_ui_scene_from_menu_scene(&ui_scene, scene))
+        return false;
+
+    return sdl_scene_ui_render_overlay(main_view, &ui_scene);
+}
+
+bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
+    const app_menu_snapshot* snapshot)
+{
+    app_ui_scene ui_scene;
+
+    if (!canvas || !main_view || !snapshot)
+        return false;
+    if (snapshot->snapshot.scene != APP_SCENE_KIND_MENU)
+        return false;
+    if (snapshot->blobs[0].kind != APP_SNAPSHOT_BLOB_MENU
+        || snapshot->blobs[0].size < sizeof(app_menu_scene))
+    {
+        return false;
+    }
+
+    if (!app_ui_scene_from_menu_scene(&ui_scene, &snapshot->scene))
+        return false;
+
+    return sdl_scene_ui_render(canvas, main_view, &ui_scene);
 }

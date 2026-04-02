@@ -396,6 +396,29 @@ static bool sdl_scene_overlay_panel_has_raw_cells(
     return panel && panel->cell_rows > 0 && panel->cell_cols > 0;
 }
 
+static const app_ui_panel* sdl_scene_find_status_rail_panel(
+    const app_ui_scene* scene)
+{
+    u16b i;
+
+    if (!scene)
+        return NULL;
+
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        const app_ui_panel* panel = &scene->panels[i];
+
+        if ((panel->flags & APP_UI_PANEL_FLAG_ACTIVE)
+            && (panel->flags & APP_UI_PANEL_FLAG_LEFT_ANCHORED)
+            && panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
+        {
+            return panel;
+        }
+    }
+
+    return NULL;
+}
+
 static bool sdl_scene_raw_cell_is_blank(const app_panel_cell_snapshot* cell)
 {
     if (!cell)
@@ -618,6 +641,82 @@ static int sdl_scene_overlay_left_reserved_cols(const sdl_view* view,
     reserved_cols = (metrics.panel_w + view->cell_w - 1) / view->cell_w;
     if (reserved_cols < panel->reserve_cells)
         reserved_cols = panel->reserve_cells;
+    if (reserved_cols < 1)
+        reserved_cols = 1;
+    if (reserved_cols > max_reserved_cols)
+        reserved_cols = max_reserved_cols;
+
+    return reserved_cols;
+}
+
+static int sdl_scene_ui_status_row_width_px(TTF_Font* font,
+    const app_ui_row* row)
+{
+    int cell_w;
+    int width = 0;
+
+    if (!font || !row)
+        return 0;
+
+    cell_w = sdl_scene_measure_ui_text(font, "M");
+    if (cell_w < 1)
+        cell_w = 1;
+
+    if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+        return (int)strlen(row->label) * cell_w;
+
+    if (row->icon_char && row->icon_char != ' ')
+        width += cell_w * 2;
+    if (row->key[0])
+        width += (int)strlen(row->key) * cell_w;
+    if (row->label[0])
+    {
+        if (width > 0)
+            width += cell_w;
+        width += (int)strlen(row->label) * cell_w;
+    }
+    if (row->meta[0])
+    {
+        width += cell_w;
+        width += (int)strlen(row->meta) * cell_w;
+    }
+
+    return width;
+}
+
+static int sdl_scene_ui_left_reserved_cols(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_ui_scene* scene)
+{
+    const app_ui_panel* panel;
+    TTF_Font* font;
+    int max_reserved_cols;
+    int max_w_px = 0;
+    int reserved_cols;
+    int pixel_height;
+    u16b i;
+
+    if (!view || !layout || !scene || view->cell_w <= 0)
+        return layout ? layout->col_map : 0;
+
+    panel = sdl_scene_find_status_rail_panel(scene);
+    if (!panel)
+        return layout->col_map;
+
+    max_reserved_cols = sdl_scene_left_panel_max_reserved_cols(view, layout);
+    pixel_height = sdl_scene_ui_scale_px(
+        (float)sdl_scene_interaction_font_size_logical(view));
+    font = sdl_ui_font_for_height(pixel_height);
+    if (!font)
+        return layout->col_map;
+
+    for (i = 0; i < panel->row_count; i++)
+        max_w_px = MAX(max_w_px,
+            sdl_scene_ui_status_row_width_px(font, &panel->rows[i]));
+
+    if (max_w_px <= 0)
+        return layout->hide_left_panel ? 0 : layout->col_map;
+
+    reserved_cols = (max_w_px + view->cell_w - 1) / view->cell_w;
     if (reserved_cols < 1)
         reserved_cols = 1;
     if (reserved_cols > max_reserved_cols)
@@ -1380,61 +1479,6 @@ static void sdl_scene_render_left_panel(const sdl_view* view,
     SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
 
-static void sdl_scene_render_strip_panel(const sdl_view* view,
-    const app_dungeon_overlay_panel_snapshot* panel, bool bottom_anchored)
-{
-    TTF_Font* font = NULL;
-    sdl_scene_panel_metrics metrics;
-    SDL_Rect clip_rect;
-    int rows = 1;
-    int cols;
-    float y_px;
-    float text_y_px;
-    int strip_h;
-    int canvas_w;
-
-    if (!view || !panel)
-        return;
-    if (!(panel->flags & APP_DUNGEON_OVERLAY_PANEL_FLAG_ACTIVE))
-        return;
-    if (panel->row_count == 0)
-        rows = 1;
-    else
-        rows = panel->row_count;
-
-    cols = sdl_scene_overlay_panel_max_cols(panel);
-    if (cols <= 0)
-        cols = view->cols;
-    if (!sdl_scene_resolve_overlay_metrics(view, cols, rows,
-            view->cols * view->cell_w, view->cell_h, &metrics, &font))
-    {
-        return;
-    }
-
-    canvas_w = view->cols * view->cell_w;
-    strip_h = view->cell_h;
-    if (strip_h < metrics.cell_h)
-        strip_h = metrics.cell_h;
-    y_px = bottom_anchored ? (float)(view->rows * view->cell_h - strip_h) : 0.0f;
-    text_y_px = y_px + (float)((strip_h - metrics.cell_h) / 2);
-
-    sdl_scene_fill_rect(&(SDL_FRect){
-        .x = 0.0f,
-        .y = y_px,
-        .w = (float)canvas_w,
-        .h = (float)strip_h
-    }, (SDL_Color){ 0, 0, 0, 255 });
-
-    clip_rect.x = 0;
-    clip_rect.y = (int)y_px;
-    clip_rect.w = canvas_w;
-    clip_rect.h = strip_h;
-    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
-    sdl_scene_render_overlay_panel_rows(panel, font, &metrics, 0.0f, text_y_px,
-        canvas_w);
-    SDL_SetRenderClipRect(g_state.renderer, NULL);
-}
-
 static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
     u16b status_flags)
 {
@@ -1553,6 +1597,15 @@ static const app_menu_scene* sdl_scene_overlay_transient_menu(
         return NULL;
 
     return &overlay->transient_menu;
+}
+
+static const app_ui_scene* sdl_scene_overlay_chrome_scene(
+    const app_dungeon_overlay_snapshot* overlay)
+{
+    if (!overlay || overlay->chrome_scene.panel_count == 0)
+        return NULL;
+
+    return &overlay->chrome_scene;
 }
 
 static void sdl_scene_render_interaction_overlay(const sdl_view* view,
@@ -2271,6 +2324,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_dungeon_overlay_snapshot* overlay;
     const app_interaction_state* interaction;
     const app_menu_scene* transient_menu;
+    const app_ui_scene* chrome_scene;
     sdl_scene_layout layout;
     size_t i;
 
@@ -2283,28 +2337,38 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     overlay = sdl_scene_overlay_snapshot(snapshot);
     interaction = sdl_scene_overlay_interaction(overlay);
     transient_menu = sdl_scene_overlay_transient_menu(overlay);
+    chrome_scene = sdl_scene_overlay_chrome_scene(overlay);
     if (!map || !status || !panes || !overlay)
         return false;
 
     layout = sdl_scene_make_layout(main_view, status->flags);
     if (!layout.hide_left_panel)
     {
-        layout.col_map = sdl_scene_overlay_left_reserved_cols(main_view, &layout,
-            &overlay->left_rail);
+        if (sdl_scene_overlay_panel_has_raw_cells(&overlay->left_rail))
+        {
+            layout.col_map = sdl_scene_overlay_left_reserved_cols(main_view,
+                &layout, &overlay->left_rail);
+        }
+        else if (chrome_scene)
+        {
+            layout.col_map = sdl_scene_ui_left_reserved_cols(main_view,
+                &layout, chrome_scene);
+        }
     }
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderClear(g_state.renderer);
 
-    sdl_scene_render_left_panel(main_view, &layout, &overlay->left_rail);
-    sdl_scene_render_strip_panel(main_view, &overlay->top_strip, false);
+    if (sdl_scene_overlay_panel_has_raw_cells(&overlay->left_rail))
+        sdl_scene_render_left_panel(main_view, &layout, &overlay->left_rail);
 
     for (i = 0; i < map->cell_count; i++)
         sdl_scene_draw_map_cell(main_view, &layout, map, &map->cells[i]);
 
     sdl_scene_render_combat_overlay(main_view, &layout, map, panes);
-    sdl_scene_render_strip_panel(main_view, &overlay->bottom_strip, true);
+    if (chrome_scene)
+        (void)sdl_scene_ui_render_overlay(main_view, chrome_scene);
     sdl_scene_render_animations(main_view, &layout, map, animations,
         animation_count, now_ns);
     sdl_scene_draw_absolute_cursor(main_view, &map->cursor);

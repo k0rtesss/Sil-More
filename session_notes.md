@@ -1,5 +1,17 @@
 # Session notes
 
+## 2026-04-03: UI render replacement Slice A chrome/menu cut
+- Added the first shared semantic UI payload under `src/app/app-ui.[ch]` and kept the existing menu payload as an adapter source.
+- Routed SDL menu rendering through `app_ui_scene` entrypoints in `src/sdl-scene-menu.c`, with the old menu compositor temporarily used as a panel adapter so current visuals stay intact.
+- Added `chrome_scene` to dungeon overlay snapshots and now build top strip, semantic left rail, and bottom strip panels in `src/app/app-scene-dungeon.c`.
+- `src/sdl-scene-dungeon.c` now computes left-rail map reservation from the semantic status-rail panel when the legacy raw-cell rail is absent, and renders top/bottom chrome through the shared `app_ui_scene` overlay path.
+- Kept the raw-cell left-rail fallback for now when `left_rail.cell_rows/cell_cols` exists; that isolates the remaining `Term->scr` bridge until hidden-panel masking and old rail mirroring are removed.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `$env:Path='C:\\msys64\\mingw64\\bin;C:\\msys64\\usr\\bin;' + $env:Path; & .\\build-standard\\sil-ui1-tests.exe`
+  - `C:\\msys64\\mingw64\\bin\\ctest.exe --test-dir build-standard -R sil_ui0_audit --output-on-failure`
+  - `& .\\src\\.venv\\Scripts\\python.exe tools\\ui_debt_audit.py --check`
+
 ## 2026-04-01: MENU2 get_item shared menu-scene migration
 - Advanced the UI migration plan on the `MENU2` slice in `src/object/object-ui-select.c`.
 - `get_item()` now publishes its snapshot-renderer path through the shared `app_menu_scene` renderer instead of the dungeon interaction overlay:

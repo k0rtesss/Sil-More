@@ -39,7 +39,8 @@ typedef enum app_ui_layer_kind {
 typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_DEFAULT = 0,
     APP_UI_PANEL_STYLE_PLAIN = 1,
-    APP_UI_PANEL_STYLE_STATUS_RAIL = 2
+    APP_UI_PANEL_STYLE_STATUS_RAIL = 2,
+    APP_UI_PANEL_STYLE_STRIP = 3
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {

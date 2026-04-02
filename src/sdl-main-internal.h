@@ -3,6 +3,7 @@
 
 #include "externs.h"
 #include "app/app-session.h"
+#include "app/app-ui.h"
 #define ANGBAND_NO_IO_COMPAT
 #include "fs/io_sdl.h"
 #undef ANGBAND_NO_IO_COMPAT
@@ -213,6 +214,10 @@ bool sdl_scene_information_render_overlay(SDL_Texture* canvas,
     const sdl_view* main_view, const app_information_snapshot* snapshot);
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
+bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
+    const app_ui_scene* scene);
+bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
+    const app_ui_scene* scene);
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_menu_snapshot* snapshot);
 bool sdl_scene_menu_render_overlay(const sdl_view* main_view,

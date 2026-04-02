@@ -4,6 +4,7 @@
 #include "app-interaction.h"
 #include "app-scene-menu.h"
 #include "app-snapshot.h"
+#include "app-ui.h"
 #include "h-basic.h"
 
 #ifdef __cplusplus
@@ -296,6 +297,7 @@ typedef struct app_dungeon_overlay_snapshot {
     app_dungeon_overlay_panel_snapshot bottom_strip;
     app_interaction_state interaction;
     app_menu_scene transient_menu;
+    app_ui_scene chrome_scene;
 } app_dungeon_overlay_snapshot;
 
 typedef struct app_dungeon_snapshot {
