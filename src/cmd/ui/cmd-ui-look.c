@@ -127,6 +127,8 @@ static bool get_explored_bounds(int* min_y, int* max_y, int* min_x, int* max_x)
 static bool g_unified_look_has_start = false;
 static int g_unified_look_start_y = 0;
 static int g_unified_look_start_x = 0;
+static char g_unified_look_snapshot_prompt[APP_INTERACTION_TEXT_MAX];
+static int g_unified_look_snapshot_prompt_cols = 0;
 
 static bool unified_look_snapshot_active(void)
 {
@@ -135,13 +137,17 @@ static bool unified_look_snapshot_active(void)
 
 static void unified_look_snapshot_clear(void)
 {
+    g_unified_look_snapshot_prompt[0] = '\0';
+    g_unified_look_snapshot_prompt_cols = 0;
+
     if (!unified_look_snapshot_active())
         return;
 
     app_session_clear_interaction(app_session_current());
 }
 
-static bool unified_look_snapshot_capture_panel(int overlay_rows)
+static bool unified_look_snapshot_publish_overlay(int overlay_rows,
+    int overlay_cols)
 {
     app_session* session = app_session_current();
     app_raw_cell_snapshot captured[APP_INTERACTION_PANEL_ROW_MAX]
@@ -154,25 +160,37 @@ static bool unified_look_snapshot_capture_panel(int overlay_rows)
     if (!unified_look_snapshot_active() || !session || !Term || !Term->scr)
         return false;
 
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
+        APP_WAIT_REASON_TARGETING, APP_INTERACTION_FLAG_CAN_CANCEL);
+    if (g_unified_look_snapshot_prompt_cols > 0
+        && g_unified_look_snapshot_prompt[0])
+    {
+        app_session_set_interaction_prompt(session, TERM_WHITE,
+            g_unified_look_snapshot_prompt);
+    }
+
     rows = MIN(overlay_rows, (int)APP_INTERACTION_PANEL_ROW_MAX);
-    cols = MIN((int)Term->wid, (int)APP_INTERACTION_PANEL_COL_MAX);
+    cols = MIN(overlay_cols, (int)APP_INTERACTION_PANEL_COL_MAX);
     if (rows <= 0 || cols <= 0)
-        return false;
+        return true;
 
     memset(captured, 0, sizeof(captured));
     for (y = 0; y < rows; y++)
     {
+        int term_row = y + 1;
+
+        if (term_row < 0 || term_row >= Term->hgt)
+            break;
+
         for (x = 0; x < cols; x++)
         {
-            captured[y][x].attr = Term->scr->a[y][x];
-            captured[y][x].story = Term->scr->story[y][x];
-            captured[y][x].ch = Term->scr->c[y][x];
+            captured[y][x].attr = Term->scr->a[term_row][x];
+            captured[y][x].story = Term->scr->story[term_row][x];
+            captured[y][x].ch = Term->scr->c[term_row][x];
         }
     }
 
-    app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
-        APP_WAIT_REASON_TARGETING, APP_INTERACTION_FLAG_CAN_CANCEL);
-    return app_session_set_interaction_panel(session, 0, 0, (u16b)rows,
+    return app_session_set_interaction_panel(session, 1, 0, (u16b)rows,
         (u16b)cols, &captured[0][0], APP_INTERACTION_PANEL_COL_MAX);
 }
 
@@ -527,6 +545,9 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
         SDL_strlcat(buf, "...", sizeof(buf));
     }
 
+    SDL_strlcpy(g_unified_look_snapshot_prompt, buf,
+        sizeof(g_unified_look_snapshot_prompt));
+    g_unified_look_snapshot_prompt_cols = (int)strlen(buf);
     prt(buf, 0, 0);
 }
 
@@ -625,17 +646,20 @@ void do_cmd_unified_look(void)
     {
         bool screen_saved = false;
         int overlay_rows = 0;
+        int overlay_cols = 0;
         
         if (need_redraw)
         {
             unified_look_sync_cursor_selection(&state);
+            g_unified_look_snapshot_prompt[0] = '\0';
+            g_unified_look_snapshot_prompt_cols = 0;
 
             /* Save screen to preserve underlying display */
             screen_save();
             screen_saved = true;
             
             /* Show unified sidebar */
-            overlay_rows = show_unified_sidebar(&state);
+            overlay_rows = show_unified_sidebar(&state, &overlay_cols);
             
             /* Track monster health at current cursor position for left sidebar display */
             /* This handles Tab cycling and any other cursor position updates */
@@ -840,7 +864,8 @@ void do_cmd_unified_look(void)
             move_cursor_relative(state.cursor_y, state.cursor_x);
 
             if (unified_look_snapshot_active())
-                (void)unified_look_snapshot_capture_panel(MAX(1, overlay_rows + 1));
+                (void)unified_look_snapshot_publish_overlay(overlay_rows,
+                    overlay_cols);
             
             need_redraw = false;
         }

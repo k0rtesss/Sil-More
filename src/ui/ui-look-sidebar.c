@@ -550,7 +550,7 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 /*
  * Show unified sidebar with monsters and objects
  */
-int show_unified_sidebar(unified_look_state* state)
+int show_unified_sidebar(unified_look_state* state, int* out_cols)
 {
     int sidebar_col = 0; /* Left side of screen - column 0 */
     int line = 1;
@@ -565,6 +565,7 @@ int show_unified_sidebar(unified_look_state* state)
     static int prev_name_len[256];
     const int prev_array_capacity = (int)(sizeof(prev_name_len) / sizeof(prev_name_len[0]));
     bool has_sidebar_selection;
+    int max_rendered_col = 0;
 
     
     /* Get terminal height and calculate available space */
@@ -614,6 +615,8 @@ int show_unified_sidebar(unified_look_state* state)
         state->highlighted_entity_type = 0;
         previous_line_count = 0;
         memset(prev_name_len, 0, sizeof(prev_name_len));
+        if (out_cols)
+            *out_cols = 0;
         return 0;
     }
 
@@ -626,8 +629,12 @@ int show_unified_sidebar(unified_look_state* state)
     /* Show monsters section */
     if (state->show_monsters)
     {
+        int header_len = (int)strlen("MONSTERS:    ");
+
         log_trace("show_unified_sidebar: displaying MONSTERS header at line %d", line);
         c_put_str(TERM_WHITE, "MONSTERS:    ", line++, sidebar_col);
+        if (sidebar_col + header_len > max_rendered_col)
+            max_rendered_col = sidebar_col + header_len;
         
         /* Get monster list */
         get_sorted_target_list(TARGET_LIST_MONSTER, 0);
@@ -790,6 +797,9 @@ int show_unified_sidebar(unified_look_state* state)
             
             /* Calculate column for morale display */
             int morale_col = name_col + name_hp_len;
+            int row_end = MAX(pictogram_col + 2, morale_col + morale_display_len);
+            if (row_end > max_rendered_col)
+                max_rendered_col = row_end;
             
             /* Highlight if selected with cursor-style highlighting only */
             bool highlight_this_monster = (has_sidebar_selection
@@ -868,6 +878,8 @@ int show_unified_sidebar(unified_look_state* state)
         char header_buf[32];
         strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s", filter_tag);
         c_put_str(TERM_WHITE, header_buf, line++, sidebar_col);
+        if (sidebar_col + (int)strlen(header_buf) > max_rendered_col)
+            max_rendered_col = sidebar_col + (int)strlen(header_buf);
         
         get_sorted_target_list(TARGET_LIST_OBJECT, 0);
         int object_capacity = (temp_n > 0) ? temp_n : 1;
@@ -983,6 +995,10 @@ int show_unified_sidebar(unified_look_state* state)
             if (row_index >= prev_array_capacity) row_index = prev_array_capacity - 1;
 
             int old_name_len = prev_name_len[row_index];
+            int row_end = MAX(pictogram_col + 2,
+                name_col + MAX(final_name_len, old_name_len));
+            if (row_end > max_rendered_col)
+                max_rendered_col = row_end;
             if (old_name_len > final_name_len)
             {
                 int diff = old_name_len - final_name_len;
@@ -1061,6 +1077,8 @@ int show_unified_sidebar(unified_look_state* state)
     }
     
     previous_line_count = current_line_count;
+    if (out_cols)
+        *out_cols = max_rendered_col;
     log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
     return current_line_count;
 }
