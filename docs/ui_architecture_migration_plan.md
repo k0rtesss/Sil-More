@@ -1,4 +1,21 @@
-# UI Architecture Migration Plan
+# Deprecated: UI Architecture Migration Plan
+
+Deprecated on April 3, 2026.
+
+This document is kept only as the historical record of the UI0-UI8 substrate
+work and the first overlay-track plan. The active execution document is
+[`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md).
+
+Why it was deprecated:
+- UI0-UI4, the `src/app/*` boundary, the build split, and the first SDL scene
+  stack are already landed substrate
+- the remaining work is no longer a stage ladder; it is runtime replacement of
+  legacy `Term` rendering and the terminal layout model
+- several older "closed" or "complete" labels became misleading because major
+  overlay families still depend on term mirroring, cell-grid overlays,
+  `screen_save()` / `screen_load()`, `inkey()`, and direct `Term_*` rendering
+
+Historical contents of the superseded plan follow below.
 
 ## Purpose
 This plan turns the recommended UI direction into an execution plan for the
