@@ -188,6 +188,8 @@ bool ui_information_scene_capture_term(app_information_scene* scene)
         return false;
 
     app_information_scene_init(scene);
+    if (g_ui_information_scene_mode == UI_INFORMATION_SCENE_MODE_MIRROR)
+        scene->flags |= APP_INFORMATION_SCENE_FLAG_TERM_MIRROR;
     term_wid = Term->wid;
     term_hgt = Term->hgt;
 

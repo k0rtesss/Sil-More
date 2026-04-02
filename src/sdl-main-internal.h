@@ -209,6 +209,8 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     Uint64 now_ns);
 bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_information_snapshot* snapshot);
+bool sdl_scene_information_render_overlay(SDL_Texture* canvas,
+    const sdl_view* main_view, const app_information_snapshot* snapshot);
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,

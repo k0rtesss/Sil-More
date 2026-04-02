@@ -20,6 +20,7 @@ typedef struct sdl_scene_stack_state {
     int dungeon_canvas_w;
     int dungeon_canvas_h;
     u64b rendered_revision;
+    u64b rendered_backdrop_revision;
     sdl_scene_animation animations[SDL_SCENE_ANIMATION_MAX];
     size_t animation_count;
     Uint64 next_frame_ns;
@@ -50,6 +51,7 @@ void sdl_scene_stack_clear(void)
 {
     g_scene_stack.frame_dirty = true;
     g_scene_stack.rendered_revision = 0;
+    g_scene_stack.rendered_backdrop_revision = 0;
     sdl_scene_stack_reset_animations();
 }
 
@@ -297,6 +299,13 @@ static bool sdl_scene_stack_menu_snapshot_active(const app_session* session)
         && menu_snapshot->snapshot.revision == snapshot->revision;
 }
 
+static bool sdl_scene_stack_information_uses_dungeon_backdrop(
+    const app_information_snapshot* snapshot)
+{
+    return snapshot
+        && (snapshot->scene.flags & APP_INFORMATION_SCENE_FLAG_OVERLAY_DUNGEON);
+}
+
 static void sdl_scene_stack_update_layers(app_session* session)
 {
     const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
@@ -452,6 +461,7 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
     const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_information_snapshot* information_snapshot;
     const app_menu_snapshot* menu_snapshot;
+    bool information_uses_backdrop;
 
     if (!g_scene_stack.enabled)
         return;
@@ -465,6 +475,7 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
             app_session_clear_events(session);
         sdl_scene_stack_reset_animations();
         g_scene_stack.rendered_revision = 0;
+        g_scene_stack.rendered_backdrop_revision = 0;
         return;
     }
 
@@ -472,14 +483,19 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
     bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     information_snapshot = app_session_information_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
+    information_uses_backdrop
+        = sdl_scene_stack_information_uses_dungeon_backdrop(information_snapshot);
     if ((g_scene_stack.dungeon_active && snapshot
             && snapshot->snapshot.revision != g_scene_stack.rendered_revision)
         || (g_scene_stack.bootstrap_active && bootstrap_snapshot
             && (bootstrap_snapshot->snapshot.revision
                 != g_scene_stack.rendered_revision))
         || (g_scene_stack.information_active && information_snapshot
-            && (information_snapshot->snapshot.revision
-                != g_scene_stack.rendered_revision)))
+            && ((information_snapshot->snapshot.revision
+                    != g_scene_stack.rendered_revision)
+                || (information_uses_backdrop && snapshot
+                    && (snapshot->snapshot.revision
+                        != g_scene_stack.rendered_backdrop_revision)))))
     {
         g_scene_stack.frame_dirty = true;
     }
@@ -556,7 +572,14 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
         information_snapshot = app_session_information_snapshot(session);
         if (information_snapshot
             && information_snapshot->snapshot.revision == snapshot->revision
-            && information_snapshot->snapshot.revision != g_scene_stack.rendered_revision)
+            && (information_snapshot->snapshot.revision
+                    != g_scene_stack.rendered_revision
+                || (sdl_scene_stack_information_uses_dungeon_backdrop(
+                        information_snapshot)
+                    && (dungeon_snapshot
+                            = app_session_dungeon_snapshot(session)) != NULL
+                    && dungeon_snapshot->snapshot.revision
+                        != g_scene_stack.rendered_backdrop_revision)))
         {
             return 0;
         }
@@ -596,6 +619,7 @@ bool sdl_scene_stack_render_main_layer(void)
     const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_information_snapshot* information_snapshot;
     const app_menu_snapshot* menu_snapshot;
+    bool information_uses_backdrop;
     Uint64 now_ns = SDL_GetTicksNS();
 
     if (!g_scene_stack.enabled)
@@ -617,6 +641,8 @@ bool sdl_scene_stack_render_main_layer(void)
     bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     information_snapshot = app_session_information_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
+    information_uses_backdrop
+        = sdl_scene_stack_information_uses_dungeon_backdrop(information_snapshot);
     if (g_scene_stack.dungeon_active && !snapshot)
         return false;
     if (g_scene_stack.bootstrap_active && !bootstrap_snapshot)
@@ -633,8 +659,11 @@ bool sdl_scene_stack_render_main_layer(void)
             && (g_scene_stack.rendered_revision
                 != bootstrap_snapshot->snapshot.revision))
         || (g_scene_stack.information_active && information_snapshot
-            && (g_scene_stack.rendered_revision
-                != information_snapshot->snapshot.revision))
+            && ((g_scene_stack.rendered_revision
+                    != information_snapshot->snapshot.revision)
+                || (information_uses_backdrop && snapshot
+                    && (g_scene_stack.rendered_backdrop_revision
+                        != snapshot->snapshot.revision))))
         || (g_scene_stack.menu_active && menu_snapshot
             && (g_scene_stack.rendered_revision
                 != menu_snapshot->snapshot.revision)))
@@ -654,8 +683,24 @@ bool sdl_scene_stack_render_main_layer(void)
         }
         else if (g_scene_stack.information_active)
         {
-            rendered = sdl_scene_information_render(
-                g_scene_stack.dungeon_canvas, &g_views[0], information_snapshot);
+            if (information_uses_backdrop && snapshot)
+            {
+                rendered = sdl_scene_dungeon_render(g_scene_stack.dungeon_canvas,
+                    &g_views[0], snapshot, g_scene_stack.animations,
+                    g_scene_stack.animation_count, now_ns);
+                if (rendered)
+                {
+                    rendered = sdl_scene_information_render_overlay(
+                        g_scene_stack.dungeon_canvas, &g_views[0],
+                        information_snapshot);
+                }
+            }
+            else
+            {
+                rendered = sdl_scene_information_render(
+                    g_scene_stack.dungeon_canvas, &g_views[0],
+                    information_snapshot);
+            }
         }
         else if (g_scene_stack.menu_active)
         {
@@ -670,14 +715,29 @@ bool sdl_scene_stack_render_main_layer(void)
 
         g_scene_stack.frame_dirty = false;
         if (g_scene_stack.dungeon_active)
+        {
             g_scene_stack.rendered_revision = snapshot->snapshot.revision;
+            g_scene_stack.rendered_backdrop_revision = 0;
+        }
         else if (g_scene_stack.bootstrap_active)
+        {
             g_scene_stack.rendered_revision
                 = bootstrap_snapshot->snapshot.revision;
+            g_scene_stack.rendered_backdrop_revision = 0;
+        }
         else if (g_scene_stack.information_active)
+        {
             g_scene_stack.rendered_revision = information_snapshot->snapshot.revision;
+            g_scene_stack.rendered_backdrop_revision
+                = (information_uses_backdrop && snapshot)
+                ? snapshot->snapshot.revision
+                : 0;
+        }
         else
+        {
             g_scene_stack.rendered_revision = menu_snapshot->snapshot.revision;
+            g_scene_stack.rendered_backdrop_revision = 0;
+        }
     }
 
     sdl_scene_stack_render_texture(g_scene_stack.dungeon_canvas, &g_views[0]);

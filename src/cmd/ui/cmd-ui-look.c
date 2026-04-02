@@ -141,6 +141,17 @@ static void unified_look_snapshot_clear(void)
     app_session_clear_interaction(app_session_current());
 }
 
+static bool unified_look_present_overlay_snapshot(void)
+{
+    app_information_scene scene;
+
+    if (!ui_information_scene_capture_term(&scene))
+        return false;
+
+    scene.flags |= APP_INFORMATION_SCENE_FLAG_OVERLAY_DUNGEON;
+    return ui_information_scene_present(&scene);
+}
+
 static char unified_look_inkey_with_wait_reason(void)
 {
     app_wait_scope scope;
@@ -480,6 +491,12 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
         SDL_strlcat(buf, "...", sizeof(buf));
     }
 
+    if (ui_information_scene_is_active())
+    {
+        prt(buf, 0, 0);
+        return;
+    }
+
     if (unified_look_snapshot_active())
     {
         app_session* session = app_session_current();
@@ -496,10 +513,12 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
 void do_cmd_unified_look(void)
 {
     unified_look_state state;
+    ui_information_scene_scope snapshot_scene_scope;
     int y, x;
     char query;
     bool done = false;
     bool need_redraw = true;
+    bool use_snapshot_scene = false;
     int original_wy, original_wx; /* Store original viewport */
     
     /* Clear entry level banner when using look command */
@@ -515,6 +534,14 @@ void do_cmd_unified_look(void)
     {
         log_debug("do_cmd_unified_look: Enabling story font");
         sdl_story_font_enable();
+    }
+
+    if (unified_look_snapshot_active())
+    {
+        use_snapshot_scene = ui_information_scene_enter_mirror(
+            &snapshot_scene_scope);
+        if (use_snapshot_scene)
+            unified_look_snapshot_clear();
     }
     
     log_trace("=== UNIFIED LOOK STARTED ===");
@@ -613,7 +640,7 @@ void do_cmd_unified_look(void)
             
             /* Process redraw flags to update health bar immediately */
             handle_stuff();
-            
+
             /* Show cursor position info */
             y = state.cursor_y;
             x = state.cursor_x;
@@ -797,6 +824,9 @@ void do_cmd_unified_look(void)
             
             /* Move cursor to position */
             move_cursor_relative(state.cursor_y, state.cursor_x);
+
+            if (use_snapshot_scene)
+                (void)unified_look_present_overlay_snapshot();
             
             need_redraw = false;
         }
@@ -1732,6 +1762,9 @@ command_key:
         p_ptr->window |= (PW_OVERHEAD);
         handle_stuff();
     }
+
+    if (use_snapshot_scene)
+        ui_information_scene_leave(&snapshot_scene_scope);
 }
 
 /*

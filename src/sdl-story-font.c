@@ -212,7 +212,7 @@ int sdl_story_font_text_width(cptr text, int len)
     TTF_MeasureString(font, text, len, 0, &w, NULL);
 
     int font_h = TTF_GetFontHeight(font);
-    if (font_h > 0) {
+    if (font_h > d->cell_h) {
         float cell_h_f = (float)d->cell_h;
         float surf_h_f = (float)font_h;
         float scale = cell_h_f / surf_h_f;
@@ -248,19 +248,34 @@ void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n
     if (text_texture) {
         float cell_h_f = (float)d->cell_h;
         float surf_h_f = (float)text_surface->h;
-        float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;
+        float scale = (surf_h_f > cell_h_f && surf_h_f > 0.0f)
+            ? (cell_h_f / surf_h_f) : 1.0f;
         SDL_FRect dst = {
             (float)(x * d->cell_w),
             (float)(y * d->cell_h),
             (float)(text_surface->w) * scale,
-            cell_h_f
+            (float)(text_surface->h) * scale
         };
         float max_w = (float)(n * d->cell_w);
-        if (dst.w > max_w)
-            dst.w = max_w;
+        SDL_Rect previous_clip;
+        SDL_Rect clip = {
+            x * d->cell_w,
+            y * d->cell_h,
+            (int)(max_w + 0.999f),
+            (int)(dst.h + 0.999f)
+        };
+        bool had_clip = false;
 
+        if (clip.w > 0 && clip.h > 0)
+        {
+            had_clip = SDL_GetRenderClipRect(g_state.renderer, &previous_clip);
+            SDL_SetRenderClipRect(g_state.renderer, &clip);
+        }
         SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
         SDL_RenderTexture(g_state.renderer, text_texture, NULL, &dst);
+        if (clip.w > 0 && clip.h > 0)
+            SDL_SetRenderClipRect(g_state.renderer,
+                had_clip ? &previous_clip : NULL);
         SDL_DestroyTexture(text_texture);
     }
 
@@ -290,25 +305,42 @@ int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y
 
     float cell_h_f = (float)d->cell_h;
     float surf_h_f = (float)text_surface->h;
-    float scale = (surf_h_f > 0.0f) ? (cell_h_f / surf_h_f) : 1.0f;
+    float scale = (surf_h_f > cell_h_f && surf_h_f > 0.0f)
+        ? (cell_h_f / surf_h_f) : 1.0f;
     float advance_w = (float)adv_w_unscaled * scale;
     float render_w = (float)text_surface->w * scale;
+    float render_h = (float)text_surface->h * scale;
+    SDL_Rect clip = { 0, 0, 0, 0 };
+    SDL_Rect previous_clip;
 
-    if (max_w_px > 0.0f && render_w > max_w_px)
-        render_w = max_w_px;
     if (max_w_px > 0.0f && advance_w > max_w_px)
         advance_w = max_w_px;
+    if (max_w_px > 0.0f && render_w > max_w_px) {
+        clip.x = (int)x_px;
+        clip.y = y * d->cell_h;
+        clip.w = (int)(max_w_px + 0.999f);
+        clip.h = (int)(render_h + 0.999f);
+    }
 
     SDL_Texture* text_texture = SDL_CreateTextureFromSurface(g_state.renderer, text_surface);
     if (text_texture) {
+        bool had_clip = false;
         SDL_FRect dst = {
             x_px,
             (float)(y * d->cell_h),
             render_w,
-            cell_h_f
+            render_h
         };
+        if (clip.w > 0 && clip.h > 0)
+        {
+            had_clip = SDL_GetRenderClipRect(g_state.renderer, &previous_clip);
+            SDL_SetRenderClipRect(g_state.renderer, &clip);
+        }
         SDL_SetTextureBlendMode(text_texture, SDL_BLENDMODE_BLEND);
         SDL_RenderTexture(g_state.renderer, text_texture, NULL, &dst);
+        if (clip.w > 0 && clip.h > 0)
+            SDL_SetRenderClipRect(g_state.renderer,
+                had_clip ? &previous_clip : NULL);
         SDL_DestroyTexture(text_texture);
     }
 
