@@ -1058,6 +1058,37 @@ void app_session_set_interaction_value(app_session* session, byte attr,
     app_session_touch_interaction(session);
 }
 
+bool app_session_set_interaction_panel(app_session* session, s16b row, s16b col,
+    u16b rows, u16b cols, const app_raw_cell_snapshot* cells, size_t stride)
+{
+    size_t y;
+
+    if (!session || !cells || rows == 0 || cols == 0)
+        return false;
+
+    if (rows > APP_INTERACTION_PANEL_ROW_MAX)
+        rows = APP_INTERACTION_PANEL_ROW_MAX;
+    if (cols > APP_INTERACTION_PANEL_COL_MAX)
+        cols = APP_INTERACTION_PANEL_COL_MAX;
+    if (stride < cols)
+        return false;
+
+    memset(&session->interaction.panel, 0, sizeof(session->interaction.panel));
+    session->interaction.panel.row = row;
+    session->interaction.panel.col = col;
+    session->interaction.panel.rows = rows;
+    session->interaction.panel.cols = cols;
+
+    for (y = 0; y < rows; y++)
+    {
+        memcpy(session->interaction.panel.cells[y], cells + (y * stride),
+            (size_t)cols * sizeof(session->interaction.panel.cells[0][0]));
+    }
+
+    app_session_touch_interaction(session);
+    return true;
+}
+
 void app_session_clear_interaction_options(app_session* session)
 {
     if (!session)

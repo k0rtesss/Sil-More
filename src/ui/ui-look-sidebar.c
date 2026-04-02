@@ -550,7 +550,7 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 /*
  * Show unified sidebar with monsters and objects
  */
-void show_unified_sidebar(unified_look_state* state)
+int show_unified_sidebar(unified_look_state* state)
 {
     int sidebar_col = 0; /* Left side of screen - column 0 */
     int line = 1;
@@ -614,7 +614,7 @@ void show_unified_sidebar(unified_look_state* state)
         state->highlighted_entity_type = 0;
         previous_line_count = 0;
         memset(prev_name_len, 0, sizeof(prev_name_len));
-        return;
+        return 0;
     }
 
     has_sidebar_selection = (state->selected_entity >= 0)
@@ -1062,4 +1062,5 @@ void show_unified_sidebar(unified_look_state* state)
     
     previous_line_count = current_line_count;
     log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
+    return current_line_count;
 }

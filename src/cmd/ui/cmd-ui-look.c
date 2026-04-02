@@ -141,15 +141,39 @@ static void unified_look_snapshot_clear(void)
     app_session_clear_interaction(app_session_current());
 }
 
-static bool unified_look_present_overlay_snapshot(void)
+static bool unified_look_snapshot_capture_panel(int overlay_rows)
 {
-    app_information_scene scene;
+    app_session* session = app_session_current();
+    app_raw_cell_snapshot captured[APP_INTERACTION_PANEL_ROW_MAX]
+                                  [APP_INTERACTION_PANEL_COL_MAX];
+    int rows;
+    int cols;
+    int y;
+    int x;
 
-    if (!ui_information_scene_capture_term(&scene))
+    if (!unified_look_snapshot_active() || !session || !Term || !Term->scr)
         return false;
 
-    scene.flags |= APP_INFORMATION_SCENE_FLAG_OVERLAY_DUNGEON;
-    return ui_information_scene_present(&scene);
+    rows = MIN(overlay_rows, (int)APP_INTERACTION_PANEL_ROW_MAX);
+    cols = MIN((int)Term->wid, (int)APP_INTERACTION_PANEL_COL_MAX);
+    if (rows <= 0 || cols <= 0)
+        return false;
+
+    memset(captured, 0, sizeof(captured));
+    for (y = 0; y < rows; y++)
+    {
+        for (x = 0; x < cols; x++)
+        {
+            captured[y][x].attr = Term->scr->a[y][x];
+            captured[y][x].story = Term->scr->story[y][x];
+            captured[y][x].ch = Term->scr->c[y][x];
+        }
+    }
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
+        APP_WAIT_REASON_TARGETING, APP_INTERACTION_FLAG_CAN_CANCEL);
+    return app_session_set_interaction_panel(session, 0, 0, (u16b)rows,
+        (u16b)cols, &captured[0][0], APP_INTERACTION_PANEL_COL_MAX);
 }
 
 static char unified_look_inkey_with_wait_reason(void)
@@ -167,34 +191,46 @@ static char unified_look_inkey_with_wait_reason(void)
 
 static void unified_look_wait_for_information(void)
 {
-    ui_information_scene_scope info_scope;
+    app_wait_scope wait_scope;
 
-    if (ui_information_scene_enter_mirror(&info_scope))
-    {
-        if (ui_information_scene_present_term())
-        {
-            (void)ui_information_scene_wait_key();
-            ui_information_scene_leave(&info_scope);
-            return;
-        }
-
-        ui_information_scene_leave(&info_scope);
-    }
-
-    {
-        app_wait_scope wait_scope;
-
-        app_session_push_wait_scope(app_session_current(), &wait_scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &wait_scope);
-    }
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+    (void)inkey();
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 
 static void unified_look_show_monster_recall(const monster_type* m_ptr)
 {
     if (!m_ptr)
         return;
+
+    if (unified_look_snapshot_active())
+    {
+        ui_information_scene_scope info_scope;
+
+        unified_look_snapshot_clear();
+        if (!ui_information_scene_enter_mirror(&info_scope))
+        {
+            log_error("unified-look: snapshot recall scene could not enter "
+                "mirror scope");
+            bell("Monster recall screen unavailable.");
+            return;
+        }
+
+        screen_roff(m_ptr->r_idx, m_ptr);
+        if (!ui_information_scene_present_term())
+        {
+            ui_information_scene_leave(&info_scope);
+            log_error("unified-look: snapshot recall scene could not "
+                "capture/present");
+            bell("Monster recall screen unavailable.");
+            return;
+        }
+
+        (void)ui_information_scene_wait_key();
+        ui_information_scene_leave(&info_scope);
+        return;
+    }
 
     screen_save();
     screen_roff(m_ptr->r_idx, m_ptr);
@@ -491,34 +527,16 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
         SDL_strlcat(buf, "...", sizeof(buf));
     }
 
-    if (ui_information_scene_is_active())
-    {
-        prt(buf, 0, 0);
-        return;
-    }
-
-    if (unified_look_snapshot_active())
-    {
-        app_session* session = app_session_current();
-
-        app_session_begin_interaction(session, APP_INTERACTION_KIND_LOOK,
-            APP_WAIT_REASON_TARGETING, 0);
-        app_session_set_interaction_prompt(session, TERM_WHITE, buf);
-        return;
-    }
-
     prt(buf, 0, 0);
 }
 
 void do_cmd_unified_look(void)
 {
     unified_look_state state;
-    ui_information_scene_scope snapshot_scene_scope;
     int y, x;
     char query;
     bool done = false;
     bool need_redraw = true;
-    bool use_snapshot_scene = false;
     int original_wy, original_wx; /* Store original viewport */
     
     /* Clear entry level banner when using look command */
@@ -537,12 +555,7 @@ void do_cmd_unified_look(void)
     }
 
     if (unified_look_snapshot_active())
-    {
-        use_snapshot_scene = ui_information_scene_enter_mirror(
-            &snapshot_scene_scope);
-        if (use_snapshot_scene)
-            unified_look_snapshot_clear();
-    }
+        unified_look_snapshot_clear();
     
     log_trace("=== UNIFIED LOOK STARTED ===");
     
@@ -611,6 +624,7 @@ void do_cmd_unified_look(void)
     while (!done)
     {
         bool screen_saved = false;
+        int overlay_rows = 0;
         
         if (need_redraw)
         {
@@ -621,7 +635,7 @@ void do_cmd_unified_look(void)
             screen_saved = true;
             
             /* Show unified sidebar */
-            show_unified_sidebar(&state);
+            overlay_rows = show_unified_sidebar(&state);
             
             /* Track monster health at current cursor position for left sidebar display */
             /* This handles Tab cycling and any other cursor position updates */
@@ -825,8 +839,8 @@ void do_cmd_unified_look(void)
             /* Move cursor to position */
             move_cursor_relative(state.cursor_y, state.cursor_x);
 
-            if (use_snapshot_scene)
-                (void)unified_look_present_overlay_snapshot();
+            if (unified_look_snapshot_active())
+                (void)unified_look_snapshot_capture_panel(MAX(1, overlay_rows + 1));
             
             need_redraw = false;
         }
@@ -1763,8 +1777,6 @@ command_key:
         handle_stuff();
     }
 
-    if (use_snapshot_scene)
-        ui_information_scene_leave(&snapshot_scene_scope);
 }
 
 /*

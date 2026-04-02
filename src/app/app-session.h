@@ -182,6 +182,8 @@ void app_session_set_interaction_detail(app_session* session, byte attr,
     cptr detail);
 void app_session_set_interaction_value(app_session* session, byte attr,
     cptr value, s16b cursor_index);
+bool app_session_set_interaction_panel(app_session* session, s16b row, s16b col,
+    u16b rows, u16b cols, const app_raw_cell_snapshot* cells, size_t stride);
 void app_session_clear_interaction_options(app_session* session);
 void app_session_set_interaction_selected(app_session* session,
     s16b selected_index);

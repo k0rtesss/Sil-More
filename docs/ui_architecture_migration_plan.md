@@ -152,9 +152,9 @@ Key rule:
 | UI2 | make the core externally drivable | session driver, wait reasons, input queue bridge | complete |
 | UI3 | build first-class dungeon snapshots/events | map/status/message/pane snapshots | complete |
 | UI4 | build new SDL scene stack | snapshot-driven dungeon renderer and frame loop | complete |
-| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | closed; carry-over in M1/M5 |
-| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | closed; carry-over in M2-M5 |
-| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | closed; carry-over in M* |
+| UI5 | extract gameplay-coupled interaction state | prompts, item selection, targeting, look | closed; carry-over in `OVER2`-`OVER5` |
+| UI6 | move informational screens to frontend scenes | help/settings/score/story/etc. scenes | closed; carry-over in `OVER3`-`OVER5` |
+| UI7 | make the split semantically true | SDL-free `sil-core`, isolated legacy frontend | closed; carry-over in the overlay track |
 | UI8 | formalize WASM/web delivery | serializable ABI/protocol and host bridge | prototype complete |
 
 ## Status Audit On 2026-04-02
@@ -162,13 +162,13 @@ Key rule:
 | --- | --- | --- |
 | UI0 | complete | ADR, audit tool, migration inventory, and a refreshed 2026-04-02 baseline are landed; the audit is again measuring regressions against the current tree. |
 | UI1 | complete | `src/app/app-*.h`, the event buffer, host surface, and `tests/ui1_tests.c` cover the neutral boundary scaffolding. |
-| UI2 | complete for the active runtime | wait reasons, input queues, the SDL legacy-input bridge, and the stepper surface are landed; the remaining blocking loops are consumer-migration work now tracked under M1/M5 rather than missing driver scaffolding. |
+| UI2 | complete for the active runtime | wait reasons, input queues, the SDL legacy-input bridge, and the stepper surface are landed; the remaining blocking loops are consumer-migration work now tracked under `OVER2`-`OVER5` rather than missing driver scaffolding. |
 | UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
 | UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
-| UI5 | closed as a boundary stage | interaction kinds, wait scopes, and snapshot overlays are in place; the remaining look/target/item cleanup is renderer migration work in MENU1/M1/M5, not missing session primitives. |
-| UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the snapshot path; remaining hybrids are tracked in MENU2-MENU5. |
-| UI7 | closed for planning purposes | the build split is live; the remaining semantic cleanup is now best understood as legacy-render removal inside migrated consumers, so it is carried by the M-track rather than by another UI-stage. |
-| UI8 | prototype complete | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI; further web hardening should wait on M-track reduction of runtime legacy-render debt. |
+| UI5 | closed as a boundary stage | interaction kinds, wait scopes, and snapshot overlays are in place; the remaining look/target/item cleanup is renderer migration work in `OVER2`-`OVER5`, not missing session primitives. |
+| UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the snapshot path; remaining hybrids are tracked in `OVER3`-`OVER5`. |
+| UI7 | closed for planning purposes | the build split is live; the remaining semantic cleanup is now best understood as legacy-render removal inside migrated consumers, so it is carried by the overlay track rather than by another UI-stage. |
+| UI8 | prototype complete | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI; further web hardening should wait on overlay-track reduction of runtime legacy-render debt. |
 
 ## Quality Assessment On 2026-04-02
 - Strong:
@@ -493,7 +493,7 @@ Exit when:
 
 Status:
 - closed as an architecture stage on 2026-04-02; the boundary work is landed
-  and the remaining user-visible cleanup is tracked under MENU1/M1/M5
+  and the remaining user-visible cleanup is tracked under `OVER2`-`OVER5`
 - all gameplay-coupled interactions publish wait-reason scopes and interaction
   state descriptors; blocking `inkey()` calls remain in the legacy path but
   are wrapped with session wait-state context
@@ -577,8 +577,8 @@ Exit when:
 
 Status:
 - closed as a scene-substrate stage on 2026-04-02; the remaining work is
-  renderer replacement and bridge removal in MENU2-MENU5 rather than missing
-  scene plumbing
+  renderer replacement and bridge removal in `OVER3`-`OVER5` rather than
+  missing scene plumbing
 - substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
   `present_term`/`wait_key`/`capture_term` API; SDL renders through
   `sdl-scene-information.c`
@@ -688,174 +688,171 @@ Status:
   plus the packet-driven browser demo described in
   [`ui8_web_demo.md`](./ui8_web_demo.md)
 - treat the stage as prototype-complete on 2026-04-02; further web-facing
-  follow-through should wait on the M-track's runtime legacy-render removal so
+  follow-through should wait on overlay-track runtime legacy-render removal so
   the browser path does not inherit transitional UI debt
 
-## Menu Modernization Follow-On: Fixed-Size Pixel Menus
+## Overlay UI Modernization Follow-On: Semantic Overlay System
 Goal:
-- keep the dungeon view on integer-scaled tiles
-- move menus and modal browsers onto a dedicated logical-pixel UI layer whose
-  visual size does not change with `main_view_scale`, terminal dimensions, or
-  tile metrics
-- make menus behave like fixed-size overlays in a modern PC game: stable
-  on-screen footprint, stable typography, and stable padding while the world
-  view scales independently
-- stop expressing menu layout in terminal columns and rows except inside the
-  temporary legacy bridge
-- keep the current Sil menu appearance intact; this track modernizes scaling
-  and rendering ownership, not the game's visual style
+- keep the dungeon scene on an integer-scaled world canvas
+- move inventory, equipment, look menus, the left bar, the message bar, the
+  bottom bar, and the remaining browsers onto one semantic overlay system
+- let overlay scale be independent from dungeon tile scale; overlay surfaces
+  may use fractional scaling, and minimap-style panels do not need integer
+  scale
+- keep the current Sil visual language intact while deleting the normal-path
+  legacy terminal renderer
+- stop carrying terminal rows and columns as a hidden second layout system
 
-Menu-specific non-goals:
-- do not redesign menu fonts, colors, borders, copy, highlight treatment, or
-  screen composition for style reasons
-- do not replace the current menu look with a new "modern UI" skin
-- do not let SDL menu layout fall back to `Term->wid` / `Term->hgt` math once
-  a menu family has moved onto the fixed-pixel layer
+Overlay-specific non-goals:
+- do not redesign fonts, colors, borders, copy, highlight treatment, or screen
+  composition for style reasons
+- do not replace the current UI look with a new "modern UI" skin
+- do not add more term-mirror or `ui_information_scene` dependencies for
+  persistent overlays
+- do not let overlay sizing depend on `main_view_scale`, `Term->wid`,
+  `Term->hgt`, or tile metrics once a family is migrated
+
+Direction reset on 2026-04-02:
+- treat the overlay problem as one architecture problem, not as a pile of
+  unrelated SDL pixel ports
+- inventory, equipment, look, the left rail, the message bar, and the bottom
+  bar are all overlay surfaces and should share the same widget and composition
+  model
+- the SDL path must be semantic end-to-end: the core publishes content, state,
+  focus, selection, scroll, and layout hints; the frontend owns pixel layout,
+  anchoring, scaling, and rendering
+- preserving the current visuals means reproducing them with semantic widgets,
+  not keeping a hidden terminal renderer alive
+- `ui_information_scene` and mirrored `Term` capture remain temporary bridge
+  tools only for raw-cell parity views; they are not the target architecture
+  for chrome, menus, selectors, or sidebars
 
 Visual preservation contract:
-- a migrated menu should read as the same Sil screen the player already knows,
+- a migrated overlay should read as the same Sil UI the player already knows,
   with the same hierarchy, wording, framing, and relative spacing
-- dungeon and tile rendering may change size only through integer scaling
-- menu rendering may change size only through explicit logical-pixel metrics
-  and, if needed later, explicit DPI-aware menu scale buckets
-- menu size must never be derived from dungeon tile scale, terminal cell size,
-  `Term->wid`, or `Term->hgt` on the SDL path
-- when a menu family first migrates, the acceptable visual delta is limited to
-  pixel anchoring and stability; stylistic changes need separate approval and
-  should not ride along with architecture work
-- shared menu widgets should treat the current terminal-era presentation as the
-  visual reference, not as disposable placeholder styling
-- the target end state is runtime legacy-render-free: preserve the current
-  visuals, not the old renderer implementation
+- dungeon and world-space rendering change size only through integer scaling
+- overlay rendering changes size only through explicit logical-pixel metrics,
+  explicit overlay scale, and approved font buckets
+- overlay layout must never be inferred from dungeon tile size, terminal cell
+  size, or `Term->wid` / `Term->hgt` on the SDL path
+- persistent overlay chrome may reserve safe area from the world viewport, but
+  that reservation must be expressed in logical pixels owned by overlay layout,
+  not in terminal columns or map cells
+- text widgets should keep stable snapped metrics; non-text surfaces such as
+  minimaps may scale fractionally when that improves fit and readability
+- the acceptable visual delta for migration work is stability, anchoring, and
+  scaling correctness; stylistic changes require separate approval
+- the target end state is runtime legacy-render-free: preserve the visuals, not
+  the old renderer implementation
+
+Target overlay architecture:
+- `world canvas`
+  - dungeon map, actors, cursor, and world-space effects
+  - integer-scaled only
+- `overlay compositor`
+  - SDL-owned, logical-pixel layout above the world canvas
+  - three z-ordered families: persistent chrome, transient overlays, and modal
+    overlays
+  - responsible for anchoring left/top/bottom strips, centered modals, side
+    panes, floating recall panels, and minimap surfaces
+- `semantic widget model`
+  - lives in `src/app/*`
+  - shared by dungeon overlays and full menu scenes instead of each path
+    inventing its own struct
+  - stable widget ids, focus ids, selection, scroll state, visibility, actions,
+    and layout hints
+  - minimum common primitives: panel, strip, text block, stat row, message row,
+    list, list row, detail pane, tab strip, footer action bar, prompt, text
+    entry, compare pane, and minimap
+- `SDL overlay renderer`
+  - one measurement and styling source centered on `src/sdl-ui-style.c`
+  - one renderer/compositor for chrome, selectors, list/detail browsers, and
+    modal scenes
+- `legacy bridge island`
+  - temporary raw-cell compatibility only
+  - bug-fix-only
+  - no new persistent overlay family should enter this path
+
+Recommended ownership split:
+- core owns semantic state and content
+  - widget trees or overlay snapshots
+  - focus, selection, tabs, scroll position, actions, prompt mode, and list
+    identity
+  - stable identifiers so frontends can animate and restore focus cleanly
+- frontend owns rendering policy
+  - overlay scale, font bucket choice, padding, border drawing, anchoring,
+    transitions, hit-testing, and safe-area behavior
+  - viewport reservation for visible chrome
+
+Overlay family inventory:
+| Family | Representative files now | Current issue | Target semantic surface |
+| --- | --- | --- | --- |
+| Left rail | `src/ui/ui-status.c`, `src/app/app-scene-dungeon.*`, `src/sdl-scene-dungeon.c` | visually fixed-pixel now, but still partly driven by legacy row/cell assumptions and hidden-overlay globals | anchored status-rail widget with stat rows, icon-value rows, optional collapsed sections, and explicit logical-pixel width |
+| Message bar and history | `src/util-message.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/runtime/runtime-game.c` | top-line and recall flows still straddle message-row assumptions, bridge scenes, and prompt plumbing | top strip message widget plus expandable history/document widget using the same overlay compositor |
+| Bottom bar and prompts | `src/util-prompt.c`, `src/runtime/runtime-game.c`, `src/sdl-scene-dungeon.c` | prompt/footer behavior exists, but is still too tied to interaction blobs and legacy flow ownership | footer action bar and prompt widget family with confirm, quantity, and text-entry variants |
+| Inventory and equipment | `src/object/object-ui-select.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/cmd/item/*` | list rendering and ownership loops still rely on term layout, blocking redraw, and menu-state globals | modal list/detail browser with compare panel, action popup, footer actions, and shared item-row widgets |
+| Look, targeting, sidebar, minimap | `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`, `src/ui/ui-look-sidebar.c`, `src/cave.c` | look and targeting publish some semantic state, but outer loops and nested detail/minimap paths remain bridge-heavy | split-pane overlay with cursor/minimap pane, recall/detail pane, footer actions, and target-state widgets |
+| Documents and browsers | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/cmd/ui/cmd-ui-character.c`, `src/cmd/ui/cmd-ui-knowledge.c` | many screens now have scene-backed entry paths, but their bodies still lean on bridge or term-derived layout | document widget, list-detail widget, tabs, tables, and scroll containers rendered on the common overlay layer |
 
 Current blocker summary:
-- `src/sdl-scene-dungeon.c` now renders interaction overlays in fixed pixels
-  (resolved in M0); gameplay-coupled loops in targeting, smithing, birth, and
-  item selection now publish wait-reason scopes and interaction descriptors
-  (resolved in UI5), but the blocking `inkey()` path is retained
-- `src/sdl-scene-information.c` still renders information scenes from
-  row/column text ops against `view->cols` and `view->rows`
-- `src/ui/ui-information-scene.c` still mirrors captured `Term` contents, so
-  information scenes inherit legacy terminal layout even when shown through the
-  new SDL scene stack
-- `src/sdl-scene-menu.c` and the dungeon interaction overlay now share the same
-  fixed-pixel typography/cache helper, but only prompt-style consumers are on
-  that shared visual path
-- `ui_information_scene` now preserves raw term cells, bigtile width, terrain
-  pict data, and cursor overlays for bridge consumers, so glyph-bearing legacy
-  list screens can move onto the snapshot path without changing their visual
-  layout
-  - it is still a compatibility bridge driven by mirrored terminal output, not
-    the final semantic menu API
-- `app_interaction_state` is the only real semantic menu primitive today
-  - it is good enough for prompt, text-entry, list, and targeting overlays
-  - it is not rich enough yet for tabbed browsers, multi-column list/detail
-    layouts, compare panes, or nested footer action bars
-- `src/object/object-ui-select.c` and `src/cmd/ui/cmd-ui-look.c` still keep
-  their normal-path blocking redraw loops, so the shared overlay is not yet the
-  canonical selector path
-- most menu modules still branch on `Term->wid` / `Term->hgt` to choose
-  "compact" layouts, wrapping, and prompt rows
+- `src/sdl-scene-dungeon.c` already renders fixed-pixel overlays, but the left
+  rail is still not a first-class semantic chrome surface end-to-end
+- `src/util-message.c` and `src/util-prompt.c` still represent important UI
+  through legacy row semantics or narrow interaction blobs rather than through
+  a shared widget model
+- `app_interaction_state` is useful for prompts and selectors, but it is too
+  small to carry left-rail chrome, bottom-bar actions, split-pane browsers,
+  compare panels, or minimap widgets
+- `src/object/object-ui-select.c`, `src/cmd/ui/cmd-ui-look.c`, and much of the
+  inventory/equipment family still keep normal-path blocking redraw and input
+  ownership
+- `src/sdl-scene-information.c` and `src/ui/ui-information-scene.c` still form
+  a useful bridge for raw-cell parity, but keeping that bridge alive for more
+  overlay families would continue the current ad hoc architecture
+- many modules still branch on `Term->wid` / `Term->hgt` for compact layouts,
+  wrapping, prompt rows, and side-panel width
 
-Standing rule for this track:
-- do not port menus one by one straight from terminal coordinates into SDL
-  pixel code
-- first land a shared menu scene and widget model
-- treat `APP_SCENE_KIND_INFORMATION` plus `ui_information_scene_present_term()`
-  as a bridge for legacy flows, not as the final menu API
-- once a screen has a scene-backed SDL path, do not keep an emergency runtime
-  fallback to direct legacy rendering on that same snapshot path
-- current constraint: keep the shared `APP_SCENE_KIND_MENU` renderer limited to
-  prompt-style modals for now; do not roll full menus, selectors, or document
-  browsers onto it until the shared widgets can reproduce the current look
-  without visual regressions
-- do not treat this track as permission to revisit the game's menu art
-  direction; first priority is fixed-pixel behavior with preserved visuals
+Standing rules for this track:
+- do not port overlays one by one from terminal coordinates into SDL pixel code
+- first land or extend one shared semantic widget model for chrome and modal UI
+- do not keep the dungeon overlay path and the menu-scene path as separate UI
+  systems that merely happen to share fonts
+- treat `APP_SCENE_KIND_INFORMATION` plus
+  `ui_information_scene_present_term()` as a temporary bridge for raw-cell
+  viewers, not as the final API
+- once a family has a semantic SDL path, remove its normal-path legacy render
+  fallback instead of keeping two runtime renderers
+- do not add new SDL-side sizing or reinterpretation heuristics to term-mirror
+  paths; that route is compatibility-only now
 
 Status on 2026-04-02:
-- M0 foundation is now complete in the working tree
-- `src/sdl-scene-dungeon.c` keeps the pre-existing fixed-pixel interaction
-  overlay, so prompt/list/targeting overlays remain decoupled from terminal
-  size without changing their established visual style
-- `src/cmd/ui/cmd-ui-main-menu.c` now uses the shared plain menu scene on the
-  snapshot-rendered dungeon path, so the pause menu keeps its legacy text-only
-  look while moving onto the fixed-pixel menu layer
-- `src/app/app-scene-menu.[ch]` now define the shared semantic menu payload for
-  titled panels, list rows, detail panes, footer actions, tabs, focus ids, and
-  row scroll state
-- `src/sdl-scene-menu.c` now renders that payload in logical pixels for
-  top-level `APP_SCENE_KIND_MENU` snapshots
-- `src/util-prompt.c:get_check_oath_multiline()` now uses the shared fixed-pixel
-  menu modal on the SDL snapshot path; this is the current prompt-only
-  consumer of the shared menu renderer
-- `src/targeting.c` now mirrors the monster-recall overlay through
-  `ui_information_scene` on the snapshot renderer path instead of relying only
-  on `screen_save()` / `screen_load()` there
-- bootstrap and pause-menu presentation stay on their previous visual paths
-  rather than adopting the shared menu styling
-- `src/runtime/runtime-game.c` now uses the same overlay layer for save status
-  and the quit-path high-score prompt, so those transitional messages no longer
-  depend on the legacy message row
-- `Quit with save` now relies on the single shutdown save path in
-  `close_game()`, avoiding the earlier duplicate save from the main menu action
-- scene-backed help, quest status, run history, message recall, and
-  hint-message entry flows no longer emergency-fallback to direct legacy render
-  on the snapshot path; failure there is now treated as a bug, not as an
-  alternate renderer choice
-- the actual destination screens behind most menu entries are still bridge- or
-  legacy-flow-driven; M0 is done, but the shared menu renderer is intentionally
-  scoped to prompt-style usage only for now
-- `src/sdl-ui-style.c` now centralizes the fixed-pixel menu font cache,
-  text measurement, and logical-pixel scaling shared by
-  `src/sdl-scene-dungeon.c` overlays and `src/sdl-scene-menu.c`, so future menu
-  ports do not drift on typography and scaling
-- M1 remains the next active blocker
-  - `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, and
-    `src/object/object-ui-select.c` all publish semantic interaction state for
-    the snapshot renderer path
-  - `src/object/object-ui-select.c` now publishes its snapshot renderer path
-    through the shared menu scene while retaining the legacy blocking selector
-    loop and fallback redraw path
-  - `src/cmd/ui/cmd-ui-look.c` now publishes look interaction state and uses
-    the information-scene bridge for nested detail views, but its outer redraw
-    loop still relies on blocking term ownership for important normal-path
-    behavior, so generic interaction consumers are not finished yet
-- M2 is only partially complete under the stricter no-legacy-render goal
-  - `MENU3A` is complete: `do_cmd_messages()` in
-    `src/cmd/ui/cmd-ui-main-menu.c` now treats the information-scene path as
-    authoritative on the snapshot renderer path
-  - `MENU3B` is complete: the hint-message browser and detail view in
-    `src/cmd/ui/cmd-ui-main-menu.c` now treat `ui_information_scene` as the
-    authoritative snapshot-path renderer while keeping the legacy layout and
-    prompts visually intact
-  - `MENU0E` is complete: the information-scene bridge now preserves glyph and
-    tile cells instead of collapsing them to spaces
-  - `MENU3C` is complete: nearby/object summary screens in
-    `src/cmd/ui/cmd-ui-nearby.c` now keep legacy glyph and tile visuals on the
-    snapshot renderer path
-  - `MENU3D` is complete: the combat-history browser in
-    `src/melee/melee-combat-display.c` now keeps its legacy glyph and tile
-    layout on the snapshot renderer path
-  - `MENU3E` is complete: the small-scale map viewer in `src/cave.c` now uses
-    the same bridge instead of remaining SDL-term-only
-- M3 has started at the entry-flow level, but the family is still mostly open
-  - `score_ui.c:show_scores()`, `score_ui.c:do_cmd_run_history()`, and
-    `quest-ui.c:do_cmd_quest_status()` now treat the scene path as
-    authoritative on the snapshot renderer path
-  - score detail panels, character/knowledge browsers, abilities, and the
-    enhanced inventory family still depend heavily on legacy layout/input flow
-- M4 and M5 are still open
-  - most narrative, metarun, settings, birth, blitz, and smithing flows still
-    derive layout from `Term->wid` / `Term->hgt` or depend on
-    `screen_save()` / `screen_load()` in their normal path
+- the foundation for overlay rendering is real
+  - `src/app/app-scene-menu.[ch]` define semantic menu payloads
+  - `src/sdl-scene-menu.c` renders them in logical pixels
+  - `src/sdl-ui-style.c` centralizes menu typography, measurement, and scaling
+  - `src/sdl-scene-dungeon.c` already renders prompt-style overlays and the
+    visible left panel on a fixed-pixel path
+- that foundation is not yet the finished overlay architecture
+  - prompt and selector flows publish some semantic state, but the left rail,
+    message bar, and bottom bar are not yet first-class widgets
+  - inventory, equipment, and look still retain important normal-path legacy
+    ownership
+  - several browsers and viewers still route through the raw-cell bridge
+- the plan correction is: stop expanding bridge-first menu ports and instead
+  finish the overlay model so persistent chrome and modal browsers use the same
+  semantic system
 
 Active execution order on 2026-04-02:
-- finish `MENU1` so prompt, targeting, and look/item-selector flows stop being
-  legacy-owned in their normal path
-- finish `MENU2`, then take `MENU5` through `MENU8` so the common browsers and
-  settings/config surfaces stop depending on mirrored term layouts
-- leave `MENU9` through `MENU11` for after the shared document/list-detail
-  widgets are stable
+- finish the shared overlay schema only far enough to support all overlay
+  families, not just prompt modals
+- migrate the left rail, message bar, and bottom bar next; they are foundation,
+  not polish
+- move inventory, equipment, look, and targeting onto the same widget set after
+  the chrome primitives land
+- keep bridge-backed screens alive only as temporary compatibility surfaces
+  while the shared document and list-detail widgets are filled out
+- leave story, death, metarun, birth, blitz, and smithing for after the common
+  widget set is proven
 
 Status update on 2026-03-29:
 - `src/sdl-scene-dungeon.c` now renders the visible main-game left panel on a
@@ -867,212 +864,205 @@ Status update on 2026-03-29:
 - `src/sdl-scene-menu.c` and the fixed-pixel left-panel path now preserve
   terminal-style horizontal mono-cell spacing for text, which is required for
   the classic menu and status-panel presentation to read correctly
-- remaining work in this track is still the family-by-family migration listed
-  below in `MENU1` through `MENU11`, plus live SDL smoke testing across ASCII,
-  tiles, and the supported scale buckets
+- that work remains valid, but it is now understood as early evidence for the
+  overlay-first plan above rather than as permission to keep left/top/bottom
+  chrome and modal menus on separate long-term architectures
 
-### Detailed Menu Audit For Parallel Execution
-| Family | Representative files | Current render and input model | Needed shared widgets | Recommended subagent |
-| --- | --- | --- | --- | --- |
-| Bootstrap and hub menus | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c` | centered `Term_putstr()` menus, `screen_save()`, `screen_load()`, and direct `inkey()` loops | modal menu scene, action list, footer hints | Hub lane |
-| Message, hint, map, nearby, and combat-history views | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | pager and list screens with term-size-derived rows and horizontal scroll | pager, fixed-width document view, simple list browser | Browser lane |
-| Settings and config editors | `src/cmd/ui/cmd-ui-settings.c` | mixed menus, text entry, key capture, pane editors, and controller or touch setup in one large terminal-owned file | forms, text entry, key-capture dialog, action list, settings rows | Settings lane |
-| Character and knowledge browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | split-pane browsers with tabs, grouped lists, detail panes, and recall actions; many compact-layout branches | tab strip, split-pane list-detail widget, compare pane, footer action bar | Character/knowledge lane |
-| Gameplay selector overlays | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | semantic interaction state exists and SDL renders it in fixed pixels, but several loops still block on legacy input | fixed-pixel prompt modal, list modal, text entry, targeting overlay | Interaction lane |
-| Ability, song, oath, bane, supplies, and query action menus | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | list-plus-detail action menus with confirm branches and recursive term redraw | action list, detail side panel, confirm dialog, stepper or selector rows | Action-menu lane |
-| Inventory, equipment, identify, compare, and item-action browsers | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | custom row layouts and popups, still partially coupled to term width and classic list rendering | reusable item list rows, compare panel, recall modal, action popup | Inventory lane |
-| Help, file viewer, score, run history, quest, story, and death scenes | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | information scenes often mirror row and column text through `ui_information_scene` | document scene, history table, detail browser, narrative panel | Document lane |
-| Metarun presentation and blessing exchange | `src/metarun.c` | bespoke action menus, threshold pickers, active-effects browsers, and story-stat screens; some paths already mirror through information scene | action list, document view, meters, detail browser, confirm dialog | Metarun lane |
-| Birth, blitz, and smithing workflows | `src/birth.c`, `src/blitz.c`, `src/ui/smithing/ui-smithing-screen.c` | dense bespoke workflows with compact-layout math, inline prompts, previews, and multi-step state loops | proven list-detail widgets, forms, steppers, compare panels, workflow adapters | Late bespoke lane |
+### Overlay Workstreams
+The previous M0-M5 menu wording is superseded by the overlay-first execution
+order below. The existing `MENU0A`-`MENU11` package names remain useful as
+implementation shards, but they should now be scheduled under these overlay
+workstreams.
 
-### Recommended Subagent Execution Map
-| Package | Write set | Start after | Status | Notes |
-| --- | --- | --- | --- | --- |
-| `MENU0A` | new `src/app/app-scene-menu.[ch]`, `src/app/app-snapshot.h`, `src/app/app-session.*`, narrow query headers | start now | complete | semantic menu payloads, focus ids, tabs, action bars, scroll state defined |
-| `MENU0B` | new `src/sdl-scene-menu.*`, `src/sdl-scene.c`, `src/sdl-render.c`, `src/main-sdl.c`, `src/sdl-story-font.c` if needed | `MENU0A` | complete | menus render in logical pixels, decoupled from tile scale |
-| `MENU0C` | `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c` | `MENU0A` | complete | legacy information scenes working as a bridge |
-| `MENU0D` | new `src/sdl-ui-style.c`, `src/sdl-main-internal.h`, touch `src/sdl-scene-dungeon.c`, `src/sdl-scene-menu.c`, `src/sdl-scene.c` | `MENU0B` | complete | centralizes fixed-pixel menu typography, logical-pixel scaling, and cache ownership so overlay modals and shared menu scenes stay aligned |
-| `MENU0E` | `src/app/app-scene-information.*`, `src/ui/ui-information-scene.*`, `src/sdl-scene-information.c`, and only the consumers that need glyph parity | `MENU0C` | complete | the information-scene bridge now preserves raw tile/cursor cells so nearby/object summaries, combat-history, and the map viewer keep legacy visuals on the snapshot path |
-| `MENU1` | `src/sdl-scene-dungeon.c`, `src/util-prompt.c`, `src/util-message.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c` | `MENU0B` | partial | multiline oath prompts use the shared menu scene; snapshot prompt/message paths no longer size against the live terminal width; look-mode prompts publish `APP_INTERACTION_KIND_LOOK` and nested look/object detail screens mirror through `ui_information_scene`; the outer look/targeting loops and some prompt/list flows still remain legacy-owned |
-| `MENU2` | `src/object/object-ui-select.c`, narrow fallout in `src/cmd/item/*` | `MENU0B`, preferably after `MENU1` | partial | snapshot-renderer path now uses the shared list modal via `app_menu_scene`; blocking selector ownership and legacy fallback remain |
-| `MENU3` | `src/init2.c`, `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cave.c`, `src/melee/melee-combat-display.c` | `MENU0B`, bridge support from `MENU0C` if needed | partial | main menu uses `app_menu_scene`; message and hint-message entry flows no longer emergency-fallback on the snapshot path, but nearby/combat-history/map work still rely on the bridge and several entry flows stay legacy |
-| `MENU4` | `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c` | `MENU0B`, with `MENU0C` during transition | partial | file-viewer is fully migrated; help, Halls of Mandos, quest status, and run-history entry flows are scene-authoritative on the snapshot path; story, death, and score detail flows are still hybrid or bridge-backed |
-| `MENU5` | `src/cmd/ui/cmd-ui-settings.c` plus any new settings-only helpers | `MENU0B` and text-entry support from `MENU0A` | partial (UI6 scope aware) | `do_cmd_options()` has information scene scope; `settings_wait_key()` and `settings_present()` route through scene; raw `inkey()` remains only in key-capture/macro flows; full menu-scene migration pending |
-| `MENU6` | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/ui/ui-look-sidebar.c` | `MENU0B` | partial | character and knowledge entry flows already use information-scene scopes and scene-aware input routing, but the family is still a term-layout browser set with no shared split-pane widget migration yet |
-| `MENU7` | `src/cmd/ui/cmd-ui-abilities.c`, supplies path in `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-query.c` | `MENU0B`, ideally after `MENU1` | not started | action-list and detail-side-panel lane |
-| `MENU8` | `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `MENU2` | not started | inventory, equipment, identify, compare, and item-action browsers |
-| `MENU9` | `src/metarun.c` | `MENU4` and `MENU7` | not started | blessing exchange, thresholds, active-effects browser, and story stats |
-| `MENU10` | `src/ui/smithing/ui-smithing-screen.c` | `MENU2`, `MENU7`, and the shared split-pane widgets from `MENU6` | not started | isolate completely; highest-risk live gameplay editor after birth |
-| `MENU11` | `src/birth.c`, `src/blitz.c`, shared bootstrap helpers in `src/init2.c` if still needed | `MENU3`, `MENU5`, `MENU6`, `MENU7` | not started | deliberately last because it combines list selection, text entry, detail panes, and gameplay mutation in one loop |
-
-### Menu Inventory And Target Shapes
-| Family | Primary files | Current shape | Target shape |
-| --- | --- | --- | --- |
-| Shared prompt and selector primitives | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c`, `src/sdl-scene-dungeon.c` | prompts and selectors already publish `app_interaction_state`, and SDL renders them as fixed-pixel overlays above the dungeon snapshot, but the producers still run through legacy blocking loops | fixed-pixel modal dialog / list widgets fed by semantic interaction snapshots |
-| Pause menu and lightweight overlay menus | `src/cmd/ui/cmd-ui-main-menu.c`, `src/cmd/ui/cmd-ui-nearby.c`, `src/cmd/ui/cmd-ui-query.c`, `src/cmd/ui/cmd-ui-look.c` | centered or edge-anchored text blocks rendered with `Term_putstr()` and `inkey()` | frontend-owned modal menu scene and side panels with fixed pixel metrics |
-| Character, knowledge, abilities, and object browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/cmd-item-core.c`, `src/cmd/item/cmd-item-activate.c` | mixed list/detail screens with lots of `Term->wid` / `Term->hgt` layout branching | reusable list-detail, tab strip, footer action, compare-panel widgets, and action popups |
-| Informational documents and settings | `src/cmd/ui/cmd-ui-settings.c`, `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c` | large term documents, file viewers, and settings trees with row-based paging | scrollable document scene plus frontend-owned settings forms and pickers |
-| Score, quest, story, death, and metarun presentation | `src/score/score_ui.c`, `src/quest/quest-ui.c`, `src/ui/ui-story.c`, `src/ui/ui-death.c`, `src/metarun.c` | information scenes and bespoke terminal pages, often with tabs, detail panes, or typewriter effects | fixed-size history/detail browsers and narrative scenes using menu document and animation widgets |
-| Birth, blitz, and smithing workflows | `src/birth.c`, `src/ui/smithing/ui-smithing-screen.c`, `src/blitz.c` | dense bespoke workflows with heavy terminal math, inline prompts, and multi-step state loops | last-wave migration onto proven menu widgets plus workflow-specific state adapters |
-
-### Required Shared Infrastructure Before Menu Ports
-Workstream M0:
-- add a frontend-owned menu layer separate from the tile-scaled dungeon canvas
-- give that layer its own font metrics, padding, and width caps so modal menus
-  stay visually stable across SDL scale values
-- centralize the SDL-side menu typography helpers so `APP_SCENE_KIND_MENU` and
-  dungeon interaction overlays use the same logical-pixel scaling, font size
-  buckets, text measurement, and cache ownership
-- keep those font, padding, border, and color decisions aligned with the
-  current in-game menu presentation rather than introducing new chrome
-- introduce a semantic menu scene/model in `src/app/*`
-  - recommended scope: document blocks, titled panels, list rows, footer
-    actions, tabs, scroll state, and optional detail panes
-- keep the existing interaction snapshot for prompt/text-entry/targeting, but
-  extend it or wrap it so renderers no longer infer layout from terminal cells
-- keep `ui_information_scene` available as a compatibility adapter while new
-  menu scenes are landing
-
-Exit when:
-- changing `main_view_scale` changes dungeon tile size but not modal menu pixel
-  size
-- a menu can be centered, width-limited, and scrolled without consulting
-  `Term->wid` / `Term->hgt`
-- no new menu code depends on `ui_information_scene_capture_term()`
-- the migrated menu still matches the current visual style closely enough that
-  the change reads as scaling modernization, not as a redesign
-
-### Migration Order
-Workstream M1: generic interaction consumers.
-- move prompt, confirm, quantity, text-entry, item selection, and targeting to
-  the fixed-pixel menu layer
+Workstream `OVER0`: overlay schema and compositor convergence.
+- extend the existing semantic scene work into one shared widget schema for
+  chrome and modal UI
+- either evolve `app-scene-menu.*` into the shared widget carrier or add a new
+  adjacent `app-ui-widget.*` / `app-scene-overlay.*` layer; the key rule is one
+  schema, not more one-off blobs
+- give the overlay compositor explicit layer ownership: chrome, transient, and
+  modal
+- make viewport reservation and overlay anchoring logical-pixel
+  responsibilities of the frontend, not of term-space layout math
+- status on 2026-04-02:
+  - equivalent of old `MENU0A` through `MENU0D` is largely landed
+  - the missing piece is not fonts or basic menu rendering; it is convergence
+    of left/top/bottom chrome and richer browser widgets onto the same semantic
+    model
 - primary write set:
+  - `src/app/*`
+  - `src/sdl-scene.c`
+  - `src/sdl-scene-dungeon.c`
+  - `src/sdl-scene-menu.c`
+  - `src/sdl-render.c`
+  - `src/sdl-ui-style.c`
+- exit when:
+  - the left rail, top message strip, bottom bar, and a centered modal can all
+    be described without terminal coordinates
+  - changing `main_view_scale` affects only dungeon/world rendering
+  - changing overlay scale affects only overlay surfaces
+
+Workstream `OVER1`: persistent chrome migration.
+- migrate the left bar, message bar, and bottom bar first
+- remove the current split where bars are half overlay and half terminal-era
+  state carriers
+- convert hidden left-panel overlays, top-line messaging, and footer prompt or
+  action hints into explicit widgets owned by the common overlay model
+- primary write set:
+  - `src/ui/ui-status.c`
+  - `src/util-message.c`
+  - `src/util-prompt.c`
+  - `src/app/app-scene-dungeon.*`
+  - `src/runtime/runtime-game.c`
+  - `src/sdl-scene-dungeon.c`
+- exit when:
+  - no normal SDL path for left rail, message strip, or bottom bar depends on
+    `Term_putstr()`, `Term_erase()`, `Term_get_size()`, `screen_save()`, or
+    `screen_load()`
+  - left-rail width and viewport reservation are driven by logical-pixel widget
+    metrics, not term columns
+  - save-status and quit-path prompts use the same bottom-bar or modal widgets
+    as the rest of the UI
+
+Workstream `OVER2`: generic interaction and item browsers.
+- finish prompt, confirm, quantity, text-entry, item selection, inventory,
+  equipment, identify, compare, and item-action flows on semantic widgets
+- replace blocking redraw ownership with session-driven selection and action
+  state
+- primary write set:
+  - `src/object/object-ui-select.c`
+  - `src/object/object-ui-display.c`
+  - `src/object/object-ui-enhanced.c`
+  - `src/object/object-ui-identify.c`
+  - `src/cmd/item/*`
   - `src/util-prompt.c`
   - `src/util-message.c`
-  - `src/object/object-ui-select.c`
-  - `src/targeting.c`
-- this is the dependency for later bespoke workflows
+- exit when:
+  - inventory and equipment behave as semantic list/detail overlays with footer
+    actions and compare panels
+  - no normal SDL path for these flows depends on term-width branching or a
+    second legacy renderer
 
-Workstream M2: simple document and pause scenes.
-- port the main menu, message recall, hint-message browser, help viewer, file
-  viewer, nearby/object summary screens, the small-scale map viewer, and the
-  combat-history browser
-- status on 2026-04-01:
-  - pause menu, help viewer, file viewer, and message recall have snapshot-scene
-    paths
-  - hint-message browser now has a snapshot-scene path with legacy visual
-    parity preserved
-  - nearby/object summary now uses the tile-capable information-scene bridge
-    and keeps the legacy glyph/tile layout
-  - the small-scale map viewer and combat-history browser now use the same
-    bridge while keeping their legacy term-derived visuals
-- execution split:
-  - `MENU3A`: message recall browser in `src/cmd/ui/cmd-ui-main-menu.c`
-    complete
-  - `MENU3B`: hint-message browser in `src/cmd/ui/cmd-ui-main-menu.c`
-    complete
-  - `MENU3C`: nearby/object summary screens
-    complete
-  - `MENU3D`: combat-history browser in `src/melee/melee-combat-display.c`
-    complete
-  - `MENU3E`: small-scale map viewer in `src/cave.c`
-    complete
+Workstream `OVER3`: look, targeting, sidebar, and minimap.
+- migrate look and targeting as a semantic split-pane overlay family rather
+  than as more bridge logic
+- treat the minimap as an overlay widget, not as a special terminal clone
+- allow minimap and similar non-text surfaces to scale fractionally while text
+  widgets keep stable snapped metrics
+- primary write set:
+  - `src/targeting.c`
+  - `src/cmd/ui/cmd-ui-look.c`
+  - `src/ui/ui-look-sidebar.c`
+  - `src/cave.c`
+  - `src/sdl-scene-dungeon.c`
+- exit when:
+  - look and targeting no longer rely on legacy outer redraw loops on the SDL
+    path
+  - nearby/minimap-style panels stop requiring new term-mirror behavior
+  - the minimap can size independently from dungeon tile scale without
+    distorting surrounding text UI
+
+Workstream `OVER4`: document and data-heavy browsers.
+- migrate help, file viewer, score, quest, character, knowledge, abilities,
+  settings, and similar browsers onto the shared overlay widgets
+- keep bridge consumers alive only where semantic widgets still do not exist
 - primary write set:
   - `src/cmd/ui/cmd-ui-main-menu.c`
   - `src/ui/ui-help.c`
   - `src/ui/ui-file-viewer.c`
-  - `src/cmd/ui/cmd-ui-nearby.c`
-
-Workstream M3: data-heavy browsers.
-- port score screens, run history, quest status, character sheet, knowledge
-  browsers, abilities/song menus, and enhanced inventory/equipment browsers
-- primary write set:
   - `src/score/score_ui.c`
   - `src/quest/quest-ui.c`
+  - `src/cmd/ui/cmd-ui-settings.c`
   - `src/cmd/ui/cmd-ui-character.c`
   - `src/ui/ui-character-screen.c`
   - `src/cmd/ui/cmd-ui-knowledge.c`
   - `src/cmd/ui/cmd-ui-abilities.c`
-  - `src/object/object-ui-display.c`
-  - `src/object/object-ui-enhanced.c`
-  - `src/object/object-ui-identify.c`
-  - `src/cmd/item/cmd-item-core.c`
-  - `src/cmd/item/cmd-item-activate.c`
+  - `src/cmd/ui/cmd-ui-query.c`
+- exit when:
+  - these screens no longer derive SDL layout from `Term->wid` / `Term->hgt`
+  - migrated browsers no longer use the raw-cell bridge as their normal runtime
+    renderer
 
-Workstream M4: presentation-heavy narrative scenes.
-- port story playback, death/review flows, and metarun presentation screens
+Workstream `OVER5`: narrative and bespoke workflows.
+- migrate story, death, metarun, birth, blitz, and smithing after the shared
+  widget set is proven on chrome, list/detail, and document flows
 - primary write set:
   - `src/ui/ui-story.c`
   - `src/ui/ui-death.c`
   - `src/metarun.c`
-- depends on M0 and the scroll/document widgets from M2-M3
-
-Workstream M5: bespoke workflow migrations.
-- port birth, blitz setup, oath selection, and smithing after M1-M3 prove the
-  widget set
-- primary write set:
   - `src/birth.c`
-  - `src/ui/smithing/ui-smithing-screen.c`
   - `src/blitz.c`
-- this is deliberately last because these flows combine list selection,
-  text-entry, scrolling details, compare panes, and gameplay mutations in a
-  single loop
+  - `src/ui/smithing/ui-smithing-screen.c`
+- exit when:
+  - these flows use shared semantic widgets instead of bespoke cell-positioned
+    redraw loops
+  - workflow-specific logic remains in the core, but layout and rendering are
+    fully owned by the overlay compositor
+
+Execution mapping to existing package names:
+| Overlay workstream | Existing package mapping |
+| --- | --- |
+| `OVER0` | old `MENU0A`-`MENU0E` plus the missing chrome-schema work |
+| `OVER1` | persistent-chrome slice that was previously spread across `MENU1`, dungeon overlay code, and status/message helpers |
+| `OVER2` | remaining generic interaction work plus old `MENU2` and `MENU8` |
+| `OVER3` | the remaining look/target/minimap/sidebar parts of old `MENU1`, `MENU3`, `MENU6`, and `MENU7` |
+| `OVER4` | old `MENU3A`-`MENU3B`, `MENU4`, `MENU5`, and the browser-heavy parts of `MENU6`-`MENU7` |
+| `OVER5` | old `MENU9`-`MENU11` |
 
 ### Parallel Subagent Plan
-Only one subagent should own M0 at a time.
+Only one subagent should own `OVER0` at a time.
 
-After M0 merges, the following lanes can run in parallel:
+After `OVER0` is stable, the following lanes can run in parallel:
 | Lane | Write set | Depends on | Notes |
 | --- | --- | --- | --- |
-| Lane A: prompt/selectors | `src/util-prompt.c`, `src/util-message.c`, `src/object/object-ui-select.c`, `src/targeting.c` | M0 | establishes the canonical fixed-pixel prompt/list flow |
-| Lane B: pause and document screens | `src/cmd/ui/cmd-ui-main-menu.c`, `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/cmd/ui/cmd-ui-nearby.c` | M0 | lowest-risk consumer lane; good first UI payoff |
-| Lane C: settings | `src/cmd/ui/cmd-ui-settings.c` | M0 | keep isolated because the file is large and touches SDL config/forms |
-| Lane D: score and quest browsers | `src/score/score_ui.c`, `src/quest/quest-ui.c` | M0 | shared need: tabs, list-detail panes, scrollable detail views |
-| Lane E: character, knowledge, abilities, and object browsers | `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/cmd-item-core.c`, `src/cmd/item/cmd-item-activate.c` | M0 | shared need: list-detail widgets, compare panes, footer action bars, and action popups |
-| Lane F: story, death, and metarun presentation | `src/ui/ui-story.c`, `src/ui/ui-death.c`, `src/metarun.c` | M0 plus M2 document widgets | keep separate from score/quest because metarun already owns a large bespoke surface |
-| Lane G: birth and blitz | `src/birth.c`, `src/blitz.c` | M0 plus M1/M3 | should start only after text-entry, list, and detail widgets are stable |
-| Lane H: smithing | `src/ui/smithing/ui-smithing-screen.c` | M0 plus M1/M3 | isolate completely; this is the highest-risk workflow after birth |
+| Lane A: persistent chrome | `src/ui/ui-status.c`, `src/util-message.c`, `src/util-prompt.c`, `src/app/app-scene-dungeon.*`, `src/sdl-scene-dungeon.c` | `OVER0` | establishes the canonical left/top/bottom overlay model |
+| Lane B: interaction and items | `src/object/object-ui-select.c`, `src/object/object-ui-display.c`, `src/object/object-ui-enhanced.c`, `src/object/object-ui-identify.c`, `src/cmd/item/*` | `OVER0`, preferably after Lane A starts landing | reuses the same footer, list, and compare widgets |
+| Lane C: look and minimap | `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`, `src/ui/ui-look-sidebar.c`, `src/cave.c` | `OVER0`, preferably after Lane A | should consume chrome/footer primitives instead of extending the bridge |
+| Lane D: documents and browsers | `src/cmd/ui/cmd-ui-main-menu.c`, `src/ui/ui-help.c`, `src/ui/ui-file-viewer.c`, `src/score/score_ui.c`, `src/quest/quest-ui.c` | `OVER0` | good first payoff after the shared document widgets exist |
+| Lane E: settings and character family | `src/cmd/ui/cmd-ui-settings.c`, `src/cmd/ui/cmd-ui-character.c`, `src/ui/ui-character-screen.c`, `src/cmd/ui/cmd-ui-knowledge.c`, `src/cmd/ui/cmd-ui-abilities.c`, `src/cmd/ui/cmd-ui-query.c` | `OVER0`, plus early Lane D widgets | shared need: tabs, list-detail panes, footer actions |
+| Lane F: narrative and bespoke | `src/ui/ui-story.c`, `src/ui/ui-death.c`, `src/metarun.c`, `src/birth.c`, `src/blitz.c`, `src/ui/smithing/ui-smithing-screen.c` | `OVER1`-`OVER4` foundations | deliberately last because these are the most stateful workflows |
 
 Parallelization rules:
-- do not split ownership of `src/app/*` menu model files or `src/sdl-scene*.c`
-  across multiple agents
-- keep `src/cmd/ui/cmd-ui-settings.c`, `src/birth.c`, `src/ui/smithing/ui-smithing-screen.c`,
-  and `src/metarun.c` single-owner because each is a large bespoke surface
-- prefer merging Lane A before G/H so bespoke flows reuse the generic prompt
-  and selector path instead of re-implementing it
+- do not split ownership of the shared overlay model in `src/app/*` or the SDL
+  overlay compositor across multiple agents
+- keep `src/cmd/ui/cmd-ui-settings.c`, `src/metarun.c`, `src/birth.c`, and
+  `src/ui/smithing/ui-smithing-screen.c` single-owner
+- prefer merging Lane A before B/C so selectors and look flows reuse the same
+  chrome and footer primitives instead of re-implementing them
 
 ### Validation Gates For This Track
-Gate M0:
-- switching SDL scale changes dungeon tile size only
-- modal menu width, font size, and padding remain visually stable
-- modal menus preserve the existing Sil look instead of introducing a new
-  visual treatment
+Gate `OVER0`:
+- changing `main_view_scale` changes dungeon/world rendering only
+- changing overlay scale changes overlay surfaces only
+- a centered modal, the left rail, the message strip, and the bottom bar can be
+  laid out without consulting `Term->wid` / `Term->hgt`
+- overlay typography remains visually consistent with current Sil presentation
 
-Gate M1:
-- prompt/text-entry/item-selection/targeting no longer rely on term-space
-  layout for their normal SDL path
-- those flows still present with the current visual language and interaction
-  hierarchy
+Gate `OVER1`:
+- left rail, message bar, and bottom bar are semantic widgets on the SDL path
+- those surfaces no longer depend on direct `Term_*` rendering or on
+  `screen_save()` / `screen_load()` in normal play
+- viewport reservation for visible chrome is driven by overlay layout metrics
 
-Gate M2-M3:
+Gate `OVER2`-`OVER3`:
+- prompt, text-entry, item-selection, inventory, equipment, look, and targeting
+  no longer rely on term-space layout in their normal SDL path
+- migrated flows no longer keep a second direct legacy renderer alive
+- minimap and similar non-text panels can scale independently without forcing
+  text widgets into blurry arbitrary scaling
+
+Gate `OVER4`:
 - help, file viewer, main menu, score history, quest status, character sheet,
-  and knowledge screens no longer query `Term->wid` / `Term->hgt` for layout in
-  their SDL path
-- migrated SDL paths no longer keep a direct legacy-render fallback as a
-  second runtime backend
-- migrated browsers preserve existing framing, typography, and information
-  density unless a separate design change is approved
+  knowledge, and settings screens no longer query `Term->wid` / `Term->hgt`
+  for SDL layout
+- bridge-backed information scenes are reduced to temporary compatibility-only
+  surfaces, not the normal architecture for migrated browsers
 
-Gate M4-M5:
-- story, death, metarun, birth, and smithing use the shared menu widgets
+Gate `OVER5`:
+- story, death, metarun, birth, blitz, and smithing use shared semantic widgets
   instead of bespoke cell-positioned redraw loops
-- workflow migrations still look like the current game UI, only decoupled from
-  terminal sizing
-
-Note:
-- for menu execution planning, prefer the `MENU0A`-`MENU11` packages above
-- the broader grouping below is retained as architectural background, not as
-  the primary menu split
+- the workflows still look like the current game UI, only decoupled from
+  terminal sizing and term ownership
 
 ## Suggested Subagent Grouping For Implementation
 - Group A: input and prompt boundary.
@@ -1161,11 +1151,11 @@ Parallelization rules:
 - Milestone M4: **complete**
   - UI5 boundary work is complete
   - gameplay-coupled selectors publish interaction state and wait-reason
-    scopes; remaining cleanup is now tracked in MENU1/M5
-- Milestone M5: **closed; remaining work moved to MENU1-MENU11**
+    scopes; remaining cleanup is now tracked in `OVER2`-`OVER5`
+- Milestone M5: **closed; remaining work moved to the overlay track**
   - UI6/UI7 are no longer the pacing items
-  - the active program is now scene/widget migration plus runtime
-    legacy-render removal across the menu families
+  - the active program is now semantic overlay migration plus runtime
+    legacy-render removal across chrome, menus, and browsers
 - Milestone M6: **complete**
   - UI8 prototype complete
   - the same boundary works for SDL and a web client

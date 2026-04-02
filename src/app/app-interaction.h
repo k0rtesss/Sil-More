@@ -7,13 +7,15 @@
 extern "C" {
 #endif
 
-#define APP_INTERACTION_FORMAT_VERSION 1u
+#define APP_INTERACTION_FORMAT_VERSION 2u
 #define APP_INTERACTION_TEXT_MAX 192u
 #define APP_INTERACTION_VALUE_MAX 96u
 #define APP_INTERACTION_META_MAX 40u
 #define APP_INTERACTION_OPTION_MAX 64u
 #define APP_INTERACTION_LABEL_MAX 96u
 #define APP_INTERACTION_KEY_MAX 4u
+#define APP_INTERACTION_PANEL_ROW_MAX 64u
+#define APP_INTERACTION_PANEL_COL_MAX 160u
 
 typedef enum app_interaction_kind {
     APP_INTERACTION_KIND_NONE = 0,
@@ -50,6 +52,22 @@ typedef struct app_interaction_option {
     char meta[APP_INTERACTION_META_MAX];
 } app_interaction_option;
 
+typedef struct app_raw_cell_snapshot {
+    byte attr;
+    byte story;
+    char ch;
+    char reserved;
+} app_raw_cell_snapshot;
+
+typedef struct app_interaction_panel_snapshot {
+    s16b row;
+    s16b col;
+    u16b rows;
+    u16b cols;
+    app_raw_cell_snapshot cells[APP_INTERACTION_PANEL_ROW_MAX]
+                               [APP_INTERACTION_PANEL_COL_MAX];
+} app_interaction_panel_snapshot;
+
 typedef struct app_interaction_state {
     u16b format_version;
     u16b kind;
@@ -67,6 +85,7 @@ typedef struct app_interaction_state {
     char detail[APP_INTERACTION_TEXT_MAX];
     char value[APP_INTERACTION_VALUE_MAX];
     app_interaction_option options[APP_INTERACTION_OPTION_MAX];
+    app_interaction_panel_snapshot panel;
 } app_interaction_state;
 
 void app_interaction_clear(app_interaction_state* interaction);

@@ -1182,41 +1182,52 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     /* Recall, but not when raging */
                     if ((recall) && !p_ptr->rage)
                     {
-                        ui_information_scene_scope info_scope;
-                        bool info_scene_active;
-
                         if (targeting_snapshot_active())
-                            app_session_clear_interaction(app_session_current());
-
-                        info_scene_active
-                            = ui_information_scene_enter_mirror(&info_scope);
-                        if (info_scene_active)
                         {
-                            app_information_scene info_scene;
-                            char recall_prompt[APP_INFORMATION_TEXT_MAX];
+                            ui_information_scene_scope info_scope;
 
-                            screen_roff(m_ptr->r_idx, m_ptr);
-                            strnfmt(recall_prompt, sizeof(recall_prompt),
-                                "  [(r)ecall, %s]", info);
-
-                            if (ui_information_scene_capture_term(&info_scene)
-                                && app_information_scene_add_text(&info_scene,
-                                    (s16b)Term->scr->cy,
-                                    (s16b)Term->scr->cx, TERM_WHITE,
-                                    recall_prompt)
-                                && ui_information_scene_present(&info_scene))
+                            app_session_clear_interaction(
+                                app_session_current());
+                            if (!ui_information_scene_enter_mirror(
+                                &info_scope))
                             {
-                                query = (char)ui_information_scene_wait_key();
-                                ui_information_scene_leave(&info_scope);
+                                log_error("targeting: snapshot recall scene "
+                                    "could not enter mirror scope");
+                                bell("Monster recall screen unavailable.");
+                                query = '\r';
                             }
                             else
                             {
+                                app_information_scene info_scene;
+                                char recall_prompt[APP_INFORMATION_TEXT_MAX];
+
+                                screen_roff(m_ptr->r_idx, m_ptr);
+                                strnfmt(recall_prompt, sizeof(recall_prompt),
+                                    "  [(r)ecall, %s]", info);
+
+                                if (ui_information_scene_capture_term(
+                                    &info_scene)
+                                    && app_information_scene_add_text(
+                                        &info_scene, (s16b)Term->scr->cy,
+                                        (s16b)Term->scr->cx, TERM_WHITE,
+                                        recall_prompt)
+                                    && ui_information_scene_present(
+                                        &info_scene))
+                                {
+                                    query = (char)ui_information_scene_wait_key();
+                                }
+                                else
+                                {
+                                    log_error("targeting: snapshot recall "
+                                        "scene could not capture/present");
+                                    bell("Monster recall screen unavailable.");
+                                    query = '\r';
+                                }
+
                                 ui_information_scene_leave(&info_scope);
-                                info_scene_active = false;
                             }
                         }
-
-                        if (!info_scene_active)
+                        else
                         {
                             /* Save screen */
                             screen_save();
