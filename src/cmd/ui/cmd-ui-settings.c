@@ -719,6 +719,9 @@ static cptr option_menu_label(int opt)
     case OPT_look_objects_sort_by_difficulty:
         return compact ? (narrow ? "Look diff sort" : "Look sort by diff")
                        : "Sort look (L) objects by difficulty only";
+    case OPT_look_nearby_filter_default:
+        return compact ? (narrow ? "Look near def" : "Look nearby default")
+                       : "Default look (l) nearby filter";
     case OPT_intro_style:
         return compact ? (narrow ? "Welcome art" : "Welcome screen")
                        : "Welcome screen style";
@@ -774,6 +777,7 @@ static cptr option_menu_label(int opt)
         case OPT_sleep_icon: return narrow ? "Sleep icon" : "Sleep icon";
         case OPT_show_smithing_difficulty: return narrow ? "Smith dbg items" : "Debug smithing in items";
         case OPT_show_smithing_difficulty_look: return narrow ? "Smith dbg look" : "Debug smithing in look";
+        case OPT_look_nearby_filter_default: return narrow ? "Look near def" : "Look nearby default";
         case OPT_show_level_generation_debug: return narrow ? "Dbg lvl screen" : "Debug level screen";
         case OPT_birth_discon_stair: return narrow ? "Disc. stairs" : "Disconnected stairs";
         case OPT_birth_ironman: return narrow ? "Straight down" : "Straight down";
@@ -3431,6 +3435,8 @@ void do_cmd_options(void)
     }
 
     /* Save screen */
+    if (p_ptr && p_ptr->playing)
+        sdl_music_play_menu_theme();
     if (!settings_scene)
         screen_save();
 
@@ -3587,6 +3593,8 @@ void do_cmd_options(void)
         ui_information_scene_leave(&settings_scope);
     else
         screen_load();
+    if (p_ptr && p_ptr->playing)
+        sdl_music_stop_main();
 }
 
 #ifdef ALLOW_MACROS

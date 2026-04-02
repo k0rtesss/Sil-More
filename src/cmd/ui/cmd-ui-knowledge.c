@@ -2734,6 +2734,9 @@ void do_cmd_knowledge_browser_page(int page)
 
     curse_cnt = knowledge_collect_curses(curse_idx);
 
+    if (p_ptr && p_ptr->playing)
+        sdl_music_play_menu_theme();
+
     if (!use_information_scene)
         screen_save();
 
@@ -3276,6 +3279,8 @@ void do_cmd_knowledge_browser_page(int page)
         ui_information_scene_leave(&info_scope);
     else
         screen_load();
+    if (p_ptr && p_ptr->playing)
+        sdl_music_stop_main();
 }
 
 /*

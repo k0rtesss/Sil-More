@@ -15,6 +15,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "platform-audio.h"
 #include "runtime-cli.h"
 #include "platform-config.h"
 #include "platform-time.h"
@@ -1176,6 +1177,11 @@ void init_angband(void)
 NavResult initial_menu(bool* start_new)
 {
     log_info("initial_menu: ENTERED - showing main menu");
+    if (score_count_alive_entries() > 0)
+        sdl_music_play_main();
+    else
+        sdl_music_play_main_full();
+
     int ch;
     NavResult result = NAV_BACK;
     bool intro_story_font = false;

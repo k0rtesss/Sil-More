@@ -13,6 +13,7 @@
 #include "ui-information-scene.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-audio.h"
 #include "platform-input.h"
 #include <limits.h>
 #include <stdlib.h>
@@ -1664,11 +1665,17 @@ void do_cmd_help(void)
         return;
     }
 
+    if (p_ptr && p_ptr->playing)
+        sdl_music_play_menu_theme();
+
     if (!do_cmd_help_information_scene())
     {
         log_warn("help: information-scene presentation failed on the snapshot renderer path");
         msg_print("Help viewer unavailable.");
     }
+
+    if (p_ptr && p_ptr->playing)
+        sdl_music_stop_main();
 }
 
 /*

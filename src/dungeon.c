@@ -3693,10 +3693,10 @@ static void dungeon(void)
         sdl_music_stop_main();
         sdl_music_play_ambient();
     } else if (!now_in_dungeon && was_in_dungeon) {
-        /* Returning to surface from dungeon - switch to main */
-        log_debug("Switching to main music (returning to surface)");
-        sdl_music_stop_ambient();
-        sdl_music_play_main();
+        /* Leaving dungeon gameplay - keep ambient running, clear any overlay. */
+        log_debug("Leaving dungeon gameplay - preserving ambient music");
+        sdl_music_stop_main();
+        sdl_music_play_ambient();
     }
     
     last_music_depth = p_ptr->depth;
@@ -4428,6 +4428,7 @@ static void print_story_intro(void)
 {
     bool story_intro_story_font = true;
     sdl_story_font_enable();
+    sdl_music_play_main_full();
     int wid, h;
     const int indent = 2;
 
@@ -4754,6 +4755,8 @@ PlayResult play_game(void)
                                            : character_creation();
         if (cr == NAV_TO_MAIN) {
             log_info("Returning to main menu from character creation");
+            sdl_music_stop_main();
+            sdl_music_stop_ambient();
             return PLAY_DONE;
         }
         if (cr == NAV_QUIT) {
@@ -4832,6 +4835,8 @@ PlayResult play_game(void)
         }
         if (br == NAV_TO_MAIN) {
             log_info("Returning to main menu from character birth");
+            sdl_music_stop_main();
+            sdl_music_stop_ambient();
             return PLAY_DONE;
         }
         if (br == NAV_QUIT) {
@@ -4878,6 +4883,7 @@ PlayResult play_game(void)
     /* Only show story when no alive character exists (fresh start or all characters dead) */
     if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
     {
+        sdl_music_play_main_full();
         print_story(15,1);
     }
 
@@ -5079,9 +5085,9 @@ PlayResult play_game(void)
         {
             log_info("Player quit and saved - exiting game loop");
             
-            /* Return to main menu music when quitting */
+            /* Stop gameplay audio; the title screen chooses its own track. */
+            sdl_music_stop_main();
             sdl_music_stop_ambient();
-            sdl_music_play_main();
             
             break;
         }
@@ -5157,9 +5163,9 @@ PlayResult play_game(void)
         {
             log_debug("Character dead - taking screenshot and revealing map");
             
-            /* Stop ambient music and restart main menu music */
+            /* Stop gameplay audio; the title screen chooses its own track. */
+            sdl_music_stop_main();
             sdl_music_stop_ambient();
-            sdl_music_play_main();
             
             death_knowledge();
 

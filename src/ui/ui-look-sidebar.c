@@ -112,6 +112,15 @@ static bool unified_sidebar_object_should_swap(
     return false;
 }
 
+static bool unified_look_sidebar_in_radius(const unified_look_state* state, int y,
+    int x)
+{
+    if (!state || !state->nearby_filter)
+        return true;
+
+    return distance(p_ptr->py, p_ptr->px, y, x) <= UNIFIED_LOOK_NEAR_RADIUS;
+}
+
 static int unified_sidebar_collect_sorted_objects(const unified_look_state* state,
     unified_sidebar_sorted_object objects[], int max_objects)
 {
@@ -133,6 +142,8 @@ static int unified_sidebar_collect_sorted_objects(const unified_look_state* stat
             continue;
 
         if (!grid_info_is_available(temp_y[i], temp_x[i]))
+            continue;
+        if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
             continue;
 
         o_ptr = &o_list[o_idx];
@@ -198,6 +209,8 @@ int unified_look_find_cursor_selection(const unified_look_state* state, int curs
             if (!grid_info_is_available(temp_y[i], temp_x[i]))
                 continue;
             if (!mon_list[m_idx].ml)
+                continue;
+            if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i]))
                 continue;
 
             if ((temp_y[i] == cursor_y) && (temp_x[i] == cursor_x))
@@ -945,6 +958,7 @@ int show_unified_sidebar(unified_look_state* state, int* out_cols)
 
             /* Skip monsters that are not visible to the player */
             if (!m_ptr->ml) continue;
+            if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i])) continue;
             
             /* Generate monster name without articles using race name function */
             monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
