@@ -1,7 +1,6 @@
 #include "angband.h"
 
 #include "app-ui.h"
-#include "app-scene-menu.h"
 
 static void app_ui_copy_text(char* dst, size_t dst_size, cptr text)
 {
@@ -290,140 +289,6 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     return true;
 }
 
-static bool app_ui_panel_copy_menu_rows(app_ui_panel* panel,
-    const struct app_menu_scene* menu_scene)
-{
-    u16b i;
-
-    if (!panel || !menu_scene)
-        return false;
-
-    for (i = 0; i < menu_scene->body_line_count; i++)
-    {
-        const app_menu_text_line* line = &menu_scene->body_lines[i];
-
-        if (!app_ui_panel_add_body_line_ex(panel, line->attr, line->story,
-                line->text))
-        {
-            return false;
-        }
-    }
-
-    for (i = 0; i < menu_scene->row_count; i++)
-    {
-        const app_menu_row* row = &menu_scene->rows[i];
-        bool enabled = (row->flags & APP_MENU_ITEM_FLAG_DISABLED) == 0;
-        bool selected = (row->flags & APP_MENU_ITEM_FLAG_SELECTED) != 0;
-
-        if (!app_ui_panel_add_row_ex(panel, row->id, row->attr,
-                row->meta_attr, row->icon_attr, row->icon_char, enabled,
-                selected, row->key, row->label, row->meta))
-        {
-            return false;
-        }
-        if (row->flags & APP_MENU_ITEM_FLAG_SECTION)
-            panel->rows[i].flags |= APP_UI_ITEM_FLAG_SECTION;
-        if (row->flags & APP_MENU_ITEM_FLAG_ACTIVE)
-            panel->rows[i].flags |= APP_UI_ITEM_FLAG_ACTIVE;
-    }
-
-    for (i = 0; i < menu_scene->detail_line_count; i++)
-    {
-        const app_menu_text_line* line = &menu_scene->detail_lines[i];
-
-        if (!app_ui_panel_add_detail_line_ex(panel, line->attr, line->story,
-                line->text))
-        {
-            return false;
-        }
-    }
-
-    for (i = 0; i < menu_scene->footer_action_count; i++)
-    {
-        const app_menu_footer_action* action
-            = &menu_scene->footer_actions[i];
-        bool enabled = (action->flags & APP_MENU_ITEM_FLAG_DISABLED) == 0;
-
-        if (!app_ui_panel_add_footer_action(panel, action->id,
-                action->attr, enabled, action->key, action->label))
-        {
-            return false;
-        }
-    }
-
-    for (i = 0; i < menu_scene->tab_count; i++)
-    {
-        const app_menu_tab* tab = &menu_scene->tabs[i];
-        bool active = (tab->flags & APP_MENU_ITEM_FLAG_ACTIVE) != 0;
-
-        if (!app_ui_panel_add_tab(panel, tab->id, tab->attr, active,
-                tab->label))
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool app_ui_scene_from_menu_scene(app_ui_scene* scene,
-    const struct app_menu_scene* menu_scene)
-{
-    app_ui_panel* panel;
-
-    if (!scene || !menu_scene)
-        return false;
-
-    app_ui_scene_init(scene);
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP)
-        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_DIM_BACKDROP)
-        scene->flags |= APP_UI_SCENE_FLAG_DIM_BACKDROP;
-
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
-    if (!panel)
-        return false;
-
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_TOP_ANCHORED)
-        panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_BOTTOM_ANCHORED)
-        panel->flags |= APP_UI_PANEL_FLAG_BOTTOM_ANCHORED;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_LEFT_ANCHORED)
-        panel->flags |= APP_UI_PANEL_FLAG_LEFT_ANCHORED;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_SHOW_DETAIL)
-        panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_SCROLL_ROWS)
-        panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_PLAIN)
-        panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    if (menu_scene->flags & APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR)
-        panel->style = APP_UI_PANEL_STYLE_STATUS_RAIL;
-
-    panel->focus_area = menu_scene->focus_area;
-    panel->focus_id = menu_scene->focus_id;
-    panel->selected_row = menu_scene->selected_row;
-    panel->row_offset = menu_scene->row_offset;
-    panel->min_width_px = menu_scene->min_width_px;
-    panel->width_cap_px = menu_scene->width_cap_px;
-    panel->title_attr = menu_scene->title_attr;
-    panel->subtitle_attr = menu_scene->subtitle_attr;
-    panel->detail_title_attr = menu_scene->detail_title_attr;
-    panel->accent_attr = menu_scene->accent_attr;
-    app_ui_copy_text(panel->title, sizeof(panel->title), menu_scene->title);
-    app_ui_copy_text(panel->subtitle, sizeof(panel->subtitle),
-        menu_scene->subtitle);
-    app_ui_copy_text(panel->detail_title, sizeof(panel->detail_title),
-        menu_scene->detail_title);
-
-    if (!app_ui_panel_copy_menu_rows(panel, menu_scene))
-        return false;
-
-    panel->selected_row = menu_scene->selected_row;
-    panel->focus_area = menu_scene->focus_area;
-    panel->focus_id = menu_scene->focus_id;
-    return true;
-}
-
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction)
 {
@@ -476,9 +341,16 @@ bool app_ui_scene_from_interaction(app_ui_scene* scene,
         bool selected = option->selected
             || ((s16b)i == interaction->selected_index);
         byte attr = option->enabled ? option->attr : TERM_L_DARK;
+        char key_buf[APP_UI_KEY_MAX];
+
+        key_buf[0] = '\0';
+        if (option->key[0])
+            app_ui_copy_text(key_buf, sizeof(key_buf), option->key);
+        else if (option->tag)
+            strnfmt(key_buf, sizeof(key_buf), "%c", option->tag);
 
         if (!app_ui_panel_add_row(panel, (s16b)i, attr,
-                option->enabled != 0, selected, option->key, option->label,
+                option->enabled != 0, selected, key_buf, option->label,
                 option->meta))
         {
             return false;

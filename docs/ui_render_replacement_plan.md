@@ -22,27 +22,29 @@ all forward UI work.
 ### Landed
 - `src/app/*` already carries session, input, snapshot, event, and host
   surfaces.
-- `src/app/app-ui.[ch]` now provide the first shared semantic UI payload, and
-  the existing menu payload can be adapted into that model.
+- `src/app/app-ui.[ch]` now provide the first shared semantic UI payload.
 - `CMakeLists.txt` already splits `sil-core`, `sil-legacy-compat`, and
   `sil-platform-sdl`.
 - `src/sdl-scene-dungeon.c` already renders the main dungeon from snapshots.
 - `src/app/app-scene-menu.*` plus `src/sdl-scene-menu.c` already prove a
   semantic SDL renderer path for menus, and `sdl-scene-menu.c` now also has
   direct `app_ui_scene` entrypoints for overlay rendering.
-- `src/sdl-scene-menu.c` now renders regular `app_ui_panel` modal/browser
-  panels directly, so only the one-way `app_menu_scene` to `app_ui_scene`
-  adapter remains for older menu producers.
+- `src/sdl-scene-menu.c` now renders `app_ui_panel` modal/browser panels
+  directly, and the old `app_menu_scene` compatibility adapter was deleted.
 - `src/app/app-scene-dungeon.*` now publish persistent chrome through
   `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
   the top strip, left status rail, and bottom strip.
 - Dungeon transient overlays are now stored as `app_ui_scene` in
   `app_dungeon_overlay_snapshot`, and the main-menu, unified-look, standalone
-  item selector, and oath prompt producers publish `app_ui_scene` directly.
+  item selector, oath prompt, and nearby monster/object list producers publish
+  `app_ui_scene` directly.
 - The semantic left rail now uses a direct status-rail compositor with
   proportional text measurement, tile/icon slots, and pixel-based map
   reservation, so the old raw `Term->scr` mirror is no longer the shipped SDL
   path for that panel.
+- Shared modal/list rows now render glyph/tile icons and distinct meta colors,
+  so in-play nearby monster/object lists no longer need the information-scene
+  term-capture bridge.
 - The hidden left-panel map-mask globals and the cave draw-time masking checks
   used only by the old sidebar mirror were removed.
 - The information-scene mirror mode was collapsed to one fixed renderer path:
@@ -62,18 +64,13 @@ all forward UI work.
 - The new shared `app_ui_scene` model is only partially adopted:
   - persistent chrome, dungeon transient overlays, standalone item-selector and
     oath modals, and the look sidebar use it directly
-  - some older menu producers still build `app_menu_scene`, then convert
-    one-way into `app_ui_scene`
   - shared document, list-detail, tab, table, and minimap widgets are still
     missing
 - Overlay and interaction payloads are still partly term-grid contracts:
   - `app_interaction_panel_snapshot` is still a raw cell-grid payload
-- The menu path still contains compatibility modes instead of one final model:
-  - `APP_MENU_SCENE_FLAG_PLAIN`
-  - `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
-  - `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
-  - these flags are now producer-side legacy fields, not the direct SDL render
-    contract
+- The old menu-scene compatibility payload is gone, but shared document,
+  list-detail, tab, and table widgets still need first-class `app_ui_scene`
+  primitives.
 - The information-scene bridge is still a real runtime dependency for many
   browser and document screens:
   - `ui_information_scene_capture_term()`
@@ -101,9 +98,8 @@ all forward UI work.
 - All non-map UI must converge on one shared semantic UI model.
 - Do not keep dungeon overlays, menu scenes, document browsers, and bespoke
   workflows on separate long-term payload formats.
-- Future work should add a new shared `app-ui-*` layer under `src/app/` rather
-  than stretching `app_menu_scene` and `app_interaction_state` with more
-  special flags.
+- Future work should extend the shared `app-ui-*` layer under `src/app/`
+  rather than stretching `app_interaction_state` with more special flags.
 
 ### 3. Preserve The Look, Not The Terminal Contract
 - Keep the classic Sil visual language:
@@ -170,7 +166,6 @@ all forward UI work.
 ### New Shared UI Layer
 - Add a new shared UI layer under `src/app/`, named `app-ui-*`.
 - Freeze the older bridge-shaped payloads:
-  - `app_menu_scene`
   - `app_interaction_state.panel`
   - `app_dungeon_overlay_panel_snapshot` cell-grid fields
   - `app_information_scene`
@@ -203,15 +198,16 @@ Deleted in Slice A. Do not reintroduce:
 - `APP_DUNGEON_LEFT_PANEL_COLS`
 - `APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID`
 - `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
+- `APP_MENU_SCENE_FLAG_PLAIN`
+- `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
+- `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
+- `app_menu_scene`
 - `ui_information_scene_enter_mirror()`
 
 Still present as migration debt. Do not add new SDL-path dependencies on:
 - `ui_information_scene_capture_term()`
 - `ui_information_scene_present_term()`
 - `app_interaction_panel_snapshot`
-- `APP_MENU_SCENE_FLAG_PLAIN`
-- `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
-- `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
 - SDL layout derived from `Term->wid` or `Term->hgt`
 
 ## Execution Program
@@ -234,13 +230,16 @@ Status on 2026-04-03:
     `app_ui_scene` end-to-end
   - converted the main-menu and unified-look sidebar overlay producers to
     build `app_ui_scene` directly
+  - converted standalone item-selector and oath modal producers to
+    `app_ui_scene` directly
+  - converted nearby monster/object overlays to `app_ui_scene` dungeon
+    overlays and taught shared rows to render icons plus per-meta colors
+  - deleted the legacy `app_menu_scene` payload, helper APIs, and adapter
   - deleted the old raw left-rail mirror and hidden-panel globals
   - deleted the information-scene term-mirror flag and mirror-enter helper
   - fixed the semantic status rail to measure and draw proportional text runs
     instead of synthetic fixed-grid glyph spacing
 - Still to do before Slice A can exit:
-  - migrate the remaining old menu producers off `app_menu_scene` and delete
-    the remaining `APP_MENU_SCENE_FLAG_*` compatibility fields
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`
@@ -374,15 +373,16 @@ Already removed:
 - `APP_DUNGEON_LEFT_PANEL_COLS`
 - `APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID`
 - `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
+- `APP_MENU_SCENE_FLAG_PLAIN`
+- `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
+- `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
+- `app_menu_scene`
 - `ui_information_scene_enter_mirror()`
 - hidden left-panel overlay globals in `src/ui/ui-status.c`
 
 Still pending:
 - overlay panel `cell_rows`, `cell_cols`, and embedded raw cell arrays
 - `app_interaction_panel_snapshot`
-- `APP_MENU_SCENE_FLAG_PLAIN`
-- `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
-- `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
 - `ui_information_scene_capture_term()`
 - `ui_information_scene_present_term()`
 

@@ -895,39 +895,40 @@ cleanup:
     runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
 }
 
-static void test_ui_scene_from_menu_scene(void)
+static void test_ui_scene_direct_panel_payload(void)
 {
-    app_menu_scene menu_scene;
     app_ui_scene ui_scene;
-    const app_ui_panel* panel;
+    app_ui_panel* panel;
 
-    app_menu_scene_init(&menu_scene);
-    menu_scene.flags = APP_MENU_SCENE_FLAG_TOP_ANCHORED
-        | APP_MENU_SCENE_FLAG_DIM_BACKDROP
-        | APP_MENU_SCENE_FLAG_SCROLL_ROWS
-        | APP_MENU_SCENE_FLAG_SHOW_DETAIL;
-    app_menu_scene_set_title(&menu_scene, TERM_L_BLUE, "Inventory");
-    app_menu_scene_set_subtitle(&menu_scene, TERM_WHITE, "Choose one item");
-    app_menu_scene_set_detail_title(&menu_scene, TERM_L_BLUE, "Details");
-    app_menu_scene_set_widths(&menu_scene, 320, 760);
-    app_menu_scene_set_row_offset(&menu_scene, 2);
-    CHECK(app_menu_scene_add_body_line_ex(&menu_scene, TERM_WHITE,
+    app_ui_scene_init(&ui_scene);
+    ui_scene.flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+
+    panel = app_ui_scene_append_panel(&ui_scene, APP_UI_LAYER_MODAL);
+    CHECK(panel != NULL);
+    if (!panel)
+        return;
+
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS
+        | APP_UI_PANEL_FLAG_SHOW_DETAIL;
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Inventory");
+    app_ui_panel_set_subtitle(panel, TERM_WHITE, "Choose one item");
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Details");
+    app_ui_panel_set_widths(panel, 320, 760);
+    app_ui_panel_set_row_offset(panel, 2);
+    CHECK(app_ui_panel_add_body_line_ex(panel, TERM_WHITE,
         STORY_FLAG_USE, "Body line"));
-    CHECK(app_menu_scene_add_row_ex(&menu_scene, 7, TERM_WHITE, TERM_SLATE,
+    CHECK(app_ui_panel_add_row_ex(panel, 7, TERM_WHITE, TERM_SLATE,
         TERM_L_RED, '!', true, true, "a", "Potion", "x2"));
-    CHECK(app_menu_scene_add_detail_line(&menu_scene, TERM_L_WHITE,
-        "Detail line"));
-    CHECK(app_menu_scene_add_footer_action(&menu_scene, 11, TERM_L_BLUE,
-        true, "Enter", "Choose"));
-    CHECK(app_menu_scene_add_tab(&menu_scene, 3, TERM_WHITE, true,
-        "Equipment"));
+    CHECK(app_ui_panel_add_detail_line(panel, TERM_L_WHITE, "Detail line"));
+    CHECK(app_ui_panel_add_footer_action(panel, 11, TERM_L_BLUE, true,
+        "Enter", "Choose"));
+    CHECK(app_ui_panel_add_tab(panel, 3, TERM_WHITE, true, "Equipment"));
 
-    CHECK(app_ui_scene_from_menu_scene(&ui_scene, &menu_scene));
     CHECK(ui_scene.format_version == APP_UI_FORMAT_VERSION);
     CHECK(ui_scene.flags == APP_UI_SCENE_FLAG_DIM_BACKDROP);
     CHECK(ui_scene.panel_count == 1);
 
-    panel = &ui_scene.panels[0];
     CHECK(panel->layer == APP_UI_LAYER_MODAL);
     CHECK((panel->flags & APP_UI_PANEL_FLAG_ACTIVE) != 0);
     CHECK((panel->flags & APP_UI_PANEL_FLAG_TOP_ANCHORED) != 0);
@@ -981,7 +982,7 @@ int main(void)
     test_public_boundary_wrappers();
     test_information_scene_nested_restore();
     test_information_scene_wait_key_nonrepeat();
-    test_ui_scene_from_menu_scene();
+    test_ui_scene_direct_panel_payload();
 
     if (g_failures != 0)
     {

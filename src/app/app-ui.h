@@ -8,8 +8,6 @@
 extern "C" {
 #endif
 
-struct app_menu_scene;
-
 #define APP_UI_FORMAT_VERSION 1u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
@@ -168,8 +166,6 @@ bool app_ui_panel_add_footer_action(app_ui_panel* panel, s16b id, byte attr,
     bool enabled, cptr key, cptr label);
 bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
-bool app_ui_scene_from_menu_scene(app_ui_scene* scene,
-    const struct app_menu_scene* menu_scene);
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction);
 

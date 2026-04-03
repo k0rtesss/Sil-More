@@ -220,7 +220,5 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
     const app_ui_scene* scene);
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_menu_snapshot* snapshot);
-bool sdl_scene_menu_render_overlay(const sdl_view* main_view,
-    const app_menu_scene* scene);
 
 #endif /* INCLUDED_SDL_MAIN_INTERNAL_H */

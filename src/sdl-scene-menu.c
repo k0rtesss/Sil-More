@@ -64,6 +64,21 @@ static int sdl_menu_measure_text(TTF_Font* font, cptr text)
     return sdl_ui_measure_text(font, text);
 }
 
+static void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
+    int icon_slot_w, int line_h, byte icon_attr, char icon_char);
+
+static int sdl_menu_icon_slot_px(TTF_Font* font, int line_h)
+{
+    int icon_slot_w = sdl_menu_measure_text(font, "MM");
+
+    if (icon_slot_w < line_h)
+        icon_slot_w = line_h;
+    if (icon_slot_w < 1)
+        icon_slot_w = 1;
+
+    return icon_slot_w;
+}
+
 static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
     int line_h, SDL_Color color, cptr text)
 {
@@ -214,6 +229,7 @@ static int sdl_menu_measure_row(TTF_Font* font, const app_ui_panel* panel,
     const app_ui_row* row, int item_gap)
 {
     int width = 0;
+    int line_h;
 
     if (!font || !panel || !row)
         return 0;
@@ -221,6 +237,13 @@ static int sdl_menu_measure_row(TTF_Font* font, const app_ui_panel* panel,
     if (row->flags & APP_UI_ITEM_FLAG_SECTION)
         return row->label[0] ? sdl_menu_measure_text(font, row->label) : 0;
 
+    line_h = TTF_GetFontHeight(font);
+    if (row->icon_char)
+    {
+        width += sdl_menu_icon_slot_px(font, line_h);
+        if (row->key[0] || row->label[0] || row->meta[0])
+            width += item_gap;
+    }
     if (panel->style != APP_UI_PANEL_STYLE_PLAIN && row->key[0])
         width += sdl_menu_measure_text(font, row->key) + item_gap;
     if (row->label[0])
@@ -288,7 +311,9 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
     int item_gap, int current_y, byte accent_attr)
 {
     SDL_Color color;
+    SDL_Color meta_color;
     SDL_Color selected_fill;
+    int icon_slot_w = 0;
     int key_w = 0;
     int label_x = clip_rect->x;
     int meta_w = 0;
@@ -311,6 +336,9 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
     color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : row->attr);
+    meta_color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
+        ? TERM_L_DARK
+        : (row->meta_attr ? row->meta_attr : row->attr));
     selected_fill = sdl_menu_color(accent_attr);
     selected_fill.a = (panel->style == APP_UI_PANEL_STYLE_PLAIN) ? 72 : 104;
 
@@ -327,10 +355,23 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
         sdl_menu_fill_rect(&selected_rect, selected_fill);
     }
 
+    if (row->icon_char)
+    {
+        icon_slot_w = sdl_menu_icon_slot_px(font, line_h);
+        sdl_menu_render_icon(font, (float)label_x, (float)current_y,
+            icon_slot_w, line_h, row->icon_attr, row->icon_char);
+        label_x += icon_slot_w;
+        if ((panel->style != APP_UI_PANEL_STYLE_PLAIN && row->key[0])
+            || row->label[0] || row->meta[0])
+        {
+            label_x += item_gap;
+        }
+    }
+
     if (panel->style != APP_UI_PANEL_STYLE_PLAIN && row->key[0])
     {
         key_w = sdl_menu_measure_text(font, row->key);
-        sdl_menu_render_text(font, (float)clip_rect->x, (float)current_y,
+        sdl_menu_render_text(font, (float)label_x, (float)current_y,
             line_h, sdl_menu_color(panel->accent_attr), row->key);
         label_x += key_w + item_gap;
     }
@@ -348,7 +389,7 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
             line_h, color, row->label);
     if (row->meta[0])
         sdl_menu_render_text(font, (float)meta_x, (float)current_y,
-            line_h, color, row->meta);
+            line_h, meta_color, row->meta);
 }
 
 static void sdl_menu_render_footer(TTF_Font* font,
@@ -1007,14 +1048,7 @@ static int sdl_menu_status_rail_gap_px(TTF_Font* mono_font)
 
 static int sdl_menu_status_rail_icon_slot_px(TTF_Font* mono_font, int line_h)
 {
-    int icon_slot_w = sdl_menu_measure_text(mono_font, "MM");
-
-    if (icon_slot_w < line_h)
-        icon_slot_w = line_h;
-    if (icon_slot_w < 1)
-        icon_slot_w = 1;
-
-    return icon_slot_w;
+    return sdl_menu_icon_slot_px(mono_font, line_h);
 }
 
 static int sdl_menu_status_rail_label_width_px(TTF_Font* mono_font,
@@ -1080,6 +1114,13 @@ static int sdl_menu_status_rail_row_width_px(TTF_Font* mono_font,
 static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
     float y_px, int icon_slot_w, int line_h, byte icon_attr, char icon_char)
 {
+    sdl_menu_render_icon(mono_font, x_px, y_px, icon_slot_w, line_h,
+        icon_attr, icon_char);
+}
+
+static void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
+    int icon_slot_w, int line_h, byte icon_attr, char icon_char)
+{
     SDL_FRect tile_dst;
     byte ch = (byte)icon_char;
 
@@ -1101,12 +1142,12 @@ static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
 
     {
         char glyph[2] = { icon_char, '\0' };
-        int glyph_w = sdl_menu_measure_text(mono_font, glyph);
+        int glyph_w = sdl_menu_measure_text(font, glyph);
         float text_x = x_px;
 
         if (glyph_w < icon_slot_w)
             text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
-        sdl_menu_render_text(mono_font, text_x, y_px, line_h,
+        sdl_menu_render_text(font, text_x, y_px, line_h,
             sdl_menu_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
     }
 }
@@ -1544,19 +1585,6 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;
-}
-
-bool sdl_scene_menu_render_overlay(const sdl_view* main_view,
-    const app_menu_scene* scene)
-{
-    app_ui_scene ui_scene;
-
-    if (!main_view || !scene)
-        return false;
-    if (!app_ui_scene_from_menu_scene(&ui_scene, scene))
-        return false;
-
-    return sdl_scene_ui_render_overlay(main_view, &ui_scene);
 }
 
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
