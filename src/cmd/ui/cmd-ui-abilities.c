@@ -2301,4 +2301,6 @@ void do_cmd_ability_screen(void)
 
     /* Load screen */
     screen_load();
+    handle_stuff();
+    inven_enforce_current_pack_limits();
 }

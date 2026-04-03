@@ -489,6 +489,8 @@ void do_betrayal_ring_amulet()
         int near_x = p_ptr->px;
 
         item = inven_takeoff(item, 1);
+        if (item == -1)
+            return;
         if (item >= 0)
             o_ptr = &inventory[item];
         else
@@ -559,6 +561,9 @@ void do_betrayal_ring_amulet()
             floor_item_increase(0 - item, -1);
             floor_item_optimize(0 - item);
         }
+
+        handle_stuff();
+        inven_enforce_current_pack_limits();
     }
 }
 
@@ -1719,6 +1724,8 @@ bool make_attack_normal(monster_type* m_ptr)
                     {
                         /* Take off first */
                         item = inven_takeoff(item, 1);
+                        if (item == -1)
+                            break;
 
                         /* Get the original object */
                         if (item >= 0)
@@ -1759,6 +1766,9 @@ bool make_attack_normal(monster_type* m_ptr)
                         floor_item_increase(0 - item, -1);
                         floor_item_optimize(0 - item);
                     }
+
+                    handle_stuff();
+                    inven_enforce_current_pack_limits();
                 }
 
                 break;

@@ -1818,6 +1818,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
     /* Force immediate sidebar update */
     handle_stuff();
+    inven_enforce_current_pack_limits();
 
     /*
      * Smithing identification checks depend on the player's current effective
@@ -1957,6 +1958,7 @@ void do_cmd_takeoff(object_type* default_o_ptr, int default_item)
 
     /* Force immediate sidebar update */
     handle_stuff();
+    inven_enforce_current_pack_limits();
 }
 
 /*

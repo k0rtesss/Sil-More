@@ -306,6 +306,8 @@ void compact_objects(int size)
     /* Compact at least 'size' objects */
     for (num = 0, cnt = 1; num < size; cnt++)
     {
+        bool saw_non_artefact = false;
+
         /* Get more vicious each iteration */
         cur_lev = 5 * cnt;
 
@@ -322,6 +324,12 @@ void compact_objects(int size)
             /* Skip dead objects */
             if (!o_ptr->k_idx)
                 continue;
+
+            /* Never compact artefacts; dropped artefacts must not disappear. */
+            if (artefact_p(o_ptr))
+                continue;
+
+            saw_non_artefact = true;
 
             /* Hack -- High level objects start out "immune" */
             if ((k_ptr->level > cur_lev) && (k_ptr->squelch != SQUELCH_ALWAYS))
@@ -364,10 +372,6 @@ void compact_objects(int size)
             if ((k_ptr->aware) && (k_ptr->squelch == SQUELCH_ALWAYS))
                 chance = 0;
 
-            /* Hack -- only compact artefacts in emergencies */
-            if (artefact_p(o_ptr) && (cnt < 1000))
-                chance = 100;
-
             /* Apply the saving throw */
             if (percent_chance(chance))
                 continue;
@@ -378,6 +382,10 @@ void compact_objects(int size)
             /* Count it */
             num++;
         }
+
+        /* Avoid looping forever when only artefacts remain. */
+        if (!saw_non_artefact)
+            break;
     }
 
     /* Excise dead objects (backwards!) */
@@ -479,41 +487,49 @@ void wipe_o_list(void)
  */
 s16b o_pop(void)
 {
+    int attempt;
     int i;
 
-    /* Initial allocation */
-    if (o_max < z_info->o_max)
+    for (attempt = 0; attempt < 2; attempt++)
     {
-        /* Get next space */
-        i = o_max;
+        /* Initial allocation */
+        if (o_max < z_info->o_max)
+        {
+            /* Get next space */
+            i = o_max;
 
-        /* Expand object array */
-        o_max++;
+            /* Expand object array */
+            o_max++;
 
-        /* Count objects */
-        o_cnt++;
+            /* Count objects */
+            o_cnt++;
 
-        /* Use this object */
-        return (i);
-    }
+            /* Use this object */
+            return (i);
+        }
 
-    /* Recycle dead objects */
-    for (i = 1; i < o_max; i++)
-    {
-        object_type* o_ptr;
+        /* Recycle dead objects */
+        for (i = 1; i < o_max; i++)
+        {
+            object_type* o_ptr;
 
-        /* Get the object */
-        o_ptr = &o_list[i];
+            /* Get the object */
+            o_ptr = &o_list[i];
 
-        /* Skip live objects */
-        if (o_ptr->k_idx)
-            continue;
+            /* Skip live objects */
+            if (o_ptr->k_idx)
+                continue;
 
-        /* Count objects */
-        o_cnt++;
+            /* Count objects */
+            o_cnt++;
 
-        /* Use this object */
-        return (i);
+            /* Use this object */
+            return (i);
+        }
+
+        /* Make space by compacting ordinary objects, then retry once. */
+        if (attempt == 0)
+            compact_objects(1);
     }
 
     /* Warn the player (except during dungeon creation) */

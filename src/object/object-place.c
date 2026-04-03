@@ -105,10 +105,11 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
  * some form of "description" of the drop event (under the player).
  *
  * We check several locations to see if we can find a location at which
- * the object can combine, stack, or be placed.  Artefacts will try very
- * hard to be placed, including "teleporting" to a useful grid if needed.
+ * the object can combine, stack, or be placed. Artefacts and thrown/fired
+ * auto-recovery objects will try very hard to be placed, including
+ * "teleporting" to a useful grid if needed.
  */
-void drop_near(object_type* j_ptr, int chance, int y, int x)
+s16b drop_near(object_type* j_ptr, int chance, int y, int x)
 {
     int i, k, d, s;
 
@@ -127,9 +128,9 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
     const bool is_silmaril = (j_ptr->tval == TV_LIGHT) && (j_ptr->sval == SV_LIGHT_SILMARIL);
     const bool impact_is_floor =
         (cave_feat[y][x] == FEAT_FLOOR) || (cave_feat[y][x] == FEAT_SUNLIGHT);
-    const bool force_place = artefact_p(j_ptr) || is_silmaril;
+    const bool force_place = artefact_p(j_ptr) || is_silmaril || j_ptr->pickup;
     const bool try_hard_place = force_place || impact_is_floor;
-    const bool can_clobber = (j_ptr->name1 == ART_MORGOTH_3) || is_silmaril;
+    const bool can_clobber = force_place;
     const int scan_radius = try_hard_place ? 10 : 4;
     const int scan_dist2_max = (scan_radius * scan_radius) + 1;
 
@@ -154,7 +155,7 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
         // if (p_ptr->wizard) msg_print("Breakage (breakage).");
 
         /* Failure */
-        return;
+        return (0);
     }
 
     /* Score */
@@ -280,7 +281,7 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
             msg_print("Breakage (no floor space).");
 
         /* Failure */
-        return;
+        return (0);
     }
 
     /* Don't silently lose items just because there is no nearby empty floor. */
@@ -323,7 +324,7 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
         by = ty;
         bx = tx;
 
-        // Clear it if needed (crown/silmarils only)
+        // Clear ordinary junk if this object must be force-placed.
         if (can_clobber && cave_o_idx[ty][tx] != 0)
         {
             object_type* o_ptr = &o_list[cave_o_idx[ty][tx]];
@@ -349,7 +350,8 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
     }
 
     /* Give it to the floor */
-    if (!floor_carry(by, bx, j_ptr))
+    s16b o_idx = floor_carry(by, bx, j_ptr);
+    if (!o_idx)
     {
         /* Message */
         if (player_has_los_bold(y, x))
@@ -362,7 +364,7 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
             msg_print("Breakage (too many objects).");
 
         /* Failure */
-        return;
+        return (0);
     }
 
     app_session_note_animation(app_session_current(),
@@ -432,6 +434,8 @@ void drop_near(object_type* j_ptr, int chance, int y, int x)
     {
         msg_print("You feel something roll beneath your feet.");
     }
+
+    return (o_idx);
 }
 
 /*
