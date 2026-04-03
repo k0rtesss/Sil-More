@@ -589,19 +589,19 @@ static cptr unified_look_object_filter_tag(const unified_look_state* state)
     }
 }
 
-static bool unified_look_menu_add_section(app_menu_scene* scene, byte attr,
+static bool unified_look_menu_add_section(app_ui_panel* panel, byte attr,
     cptr label)
 {
     u16b row_index;
 
-    if (!scene || !label || !label[0] || scene->row_count >= APP_MENU_ROW_MAX)
+    if (!panel || !label || !label[0] || panel->row_count >= APP_UI_ROW_MAX)
         return false;
 
-    row_index = scene->row_count;
-    if (!app_menu_scene_add_row(scene, -1, attr, true, false, "", label, ""))
+    row_index = panel->row_count;
+    if (!app_ui_panel_add_row(panel, -1, attr, true, false, "", label, ""))
         return false;
 
-    scene->rows[row_index].flags |= APP_MENU_ITEM_FLAG_SECTION;
+    panel->rows[row_index].flags |= APP_UI_ITEM_FLAG_SECTION;
     return true;
 }
 
@@ -634,8 +634,9 @@ static void unified_look_select_highlight(unified_look_state* state, int y,
 }
 
 bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
-    app_menu_scene* scene)
+    app_ui_scene* scene)
 {
+    app_ui_panel* panel;
     bool has_sidebar_selection;
     bool selected_row_found = false;
     int monster_count = 0;
@@ -645,32 +646,37 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     if (!state || !scene)
         return false;
 
-    app_menu_scene_init(scene);
-    scene->flags = APP_MENU_SCENE_FLAG_TOP_ANCHORED
-        | APP_MENU_SCENE_FLAG_LEFT_ANCHORED
-        | APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR;
-    scene->accent_attr = TERM_L_BLUE;
-    app_menu_scene_set_widths(scene, 420, 760);
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_TRANSIENT);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_STATUS_RAIL;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 420, 760);
     (void)title;
 
     has_sidebar_selection = (state->selected_entity >= 0)
         && (state->in_sidebar_mode || (state->look_mode == 0));
     unified_look_clear_highlight_state(state);
 
-    if (state->show_monsters && scene->row_count < APP_MENU_ROW_MAX)
+    if (state->show_monsters && panel->row_count < APP_UI_ROW_MAX)
     {
         int i;
 
-        (void)unified_look_menu_add_section(scene, TERM_WHITE, "MONSTERS:");
+        (void)unified_look_menu_add_section(panel, TERM_WHITE, "MONSTERS:");
         get_sorted_target_list(TARGET_LIST_MONSTER, 0);
 
-        for (i = 0; i < temp_n && scene->row_count < APP_MENU_ROW_MAX; i++)
+        for (i = 0; i < temp_n && panel->row_count < APP_UI_ROW_MAX; i++)
         {
             int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
             monster_type* m_ptr;
             monster_race* r_ptr;
-            char label[APP_MENU_LABEL_MAX];
-            char meta[APP_MENU_META_MAX];
+            char label[APP_UI_LABEL_MAX];
+            char meta[APP_UI_META_MAX];
             char hp_bar[10];
             char hp_display[12];
             char monster_name[80];
@@ -736,7 +742,7 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
             selected = has_sidebar_selection
                 && (state->selected_entity == monster_count);
             label_attr = selected ? TERM_L_BLUE : TERM_WHITE;
-            if (!app_menu_scene_add_row_ex(scene, monster_count, label_attr,
+            if (!app_ui_panel_add_row_ex(panel, monster_count, label_attr,
                     selected ? TERM_L_BLUE : meta_attr, monster_attr(r_ptr),
                     monster_char(r_ptr), true, selected, "", label, meta))
             {
@@ -754,7 +760,7 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     }
 
     object_start = monster_count;
-    if (state->show_objects && scene->row_count < APP_MENU_ROW_MAX)
+    if (state->show_objects && panel->row_count < APP_UI_ROW_MAX)
     {
         int i;
         int group_display_counts[LOOK_GROUP_COUNT] = { 0 };
@@ -765,20 +771,20 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
 
         strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s",
             unified_look_object_filter_tag(state));
-        (void)unified_look_menu_add_section(scene, TERM_WHITE, header_buf);
+        (void)unified_look_menu_add_section(panel, TERM_WHITE, header_buf);
 
         get_sorted_target_list(TARGET_LIST_OBJECT, 0);
         valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
             object_capacity);
 
-        for (i = 0; i < valid_objects && scene->row_count < APP_MENU_ROW_MAX;
+        for (i = 0; i < valid_objects && panel->row_count < APP_UI_ROW_MAX;
              i++)
         {
             unified_sidebar_sorted_object* entry = &objects[i];
             object_type* o_ptr = entry->o_ptr;
             char object_name[80];
-            char label[APP_MENU_LABEL_MAX];
-            char meta[APP_MENU_META_MAX];
+            char label[APP_UI_LABEL_MAX];
+            char meta[APP_UI_META_MAX];
             char weight_buf[16];
             char smith_buf[16];
             int weight_total;
@@ -825,7 +831,8 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
                 && (state->selected_entity == (object_start + object_count));
             label_attr = selected ? TERM_L_BLUE : row_attr;
 
-            if (!app_menu_scene_add_row_ex(scene, object_start + object_count,
+            if (!app_ui_panel_add_row_ex(panel,
+                    object_start + object_count,
                     label_attr, label_attr, object_attr(o_ptr),
                     object_char(o_ptr), true, selected, "", label, meta))
             {
@@ -842,12 +849,10 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
         }
     }
 
-    if (scene->row_count > 0)
-        scene->flags |= APP_MENU_SCENE_FLAG_SCROLL_ROWS;
     if (has_sidebar_selection && !selected_row_found)
         unified_look_clear_highlight_state(state);
 
-    return scene->title[0] || scene->row_count > 0;
+    return panel->row_count > 0;
 }
 
 /*

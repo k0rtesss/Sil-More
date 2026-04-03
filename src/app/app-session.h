@@ -157,9 +157,9 @@ bool app_session_publish_information_snapshot(app_session* session);
 void app_session_clear_menu_snapshot(app_session* session);
 bool app_session_publish_menu_scene(app_session* session,
     const app_menu_scene* scene);
-void app_session_clear_dungeon_overlay_menu(app_session* session);
-bool app_session_publish_dungeon_overlay_menu(app_session* session,
-    const app_menu_scene* scene);
+void app_session_clear_dungeon_overlay_scene(app_session* session);
+bool app_session_publish_dungeon_overlay_scene(app_session* session,
+    const app_ui_scene* scene);
 void app_session_mark_snapshot_dirty(app_session* session,
     u32b invalidation_mask);
 bool app_session_build_dungeon_snapshot(app_session* session,

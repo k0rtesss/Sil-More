@@ -1317,15 +1317,17 @@ static const app_interaction_state* sdl_scene_overlay_interaction(
     return &overlay->interaction;
 }
 
-static const app_menu_scene* sdl_scene_overlay_transient_menu(
+static const app_ui_scene* sdl_scene_overlay_transient_scene(
     const app_dungeon_overlay_snapshot* overlay)
 {
     if (!overlay)
         return NULL;
     if (!(overlay->flags & APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU))
         return NULL;
+    if (overlay->transient_scene.panel_count == 0)
+        return NULL;
 
-    return &overlay->transient_menu;
+    return &overlay->transient_scene;
 }
 
 static const app_ui_scene* sdl_scene_overlay_chrome_scene(
@@ -2087,7 +2089,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_panes_snapshot* panes;
     const app_dungeon_overlay_snapshot* overlay;
     const app_interaction_state* interaction;
-    const app_menu_scene* transient_menu;
+    const app_ui_scene* transient_scene;
     const app_ui_scene* chrome_scene;
     sdl_scene_layout layout;
     size_t i;
@@ -2100,7 +2102,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     panes = sdl_scene_panes_snapshot(snapshot);
     overlay = sdl_scene_overlay_snapshot(snapshot);
     interaction = sdl_scene_overlay_interaction(overlay);
-    transient_menu = sdl_scene_overlay_transient_menu(overlay);
+    transient_scene = sdl_scene_overlay_transient_scene(overlay);
     chrome_scene = sdl_scene_overlay_chrome_scene(overlay);
     if (!map || !status || !panes || !overlay)
         return false;
@@ -2128,8 +2130,8 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     sdl_scene_render_animations(main_view, &layout, map, animations,
         animation_count, now_ns);
     sdl_scene_draw_absolute_cursor(main_view, &map->cursor);
-    if (transient_menu)
-        (void)sdl_scene_menu_render_overlay(main_view, transient_menu);
+    if (transient_scene)
+        (void)sdl_scene_ui_render_overlay(main_view, transient_scene);
     sdl_scene_render_interaction_overlay(main_view, &layout, interaction);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);

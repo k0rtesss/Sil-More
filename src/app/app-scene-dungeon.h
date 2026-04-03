@@ -2,7 +2,6 @@
 #define INCLUDED_APP_SCENE_DUNGEON_H
 
 #include "app-interaction.h"
-#include "app-scene-menu.h"
 #include "app-snapshot.h"
 #include "app-ui.h"
 #include "h-basic.h"
@@ -18,7 +17,7 @@ struct app_wait_state;
 #define APP_DUNGEON_STATUS_FORMAT_VERSION 1u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 4u
-#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 5u
+#define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
 
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
 
@@ -240,7 +239,7 @@ typedef struct app_dungeon_overlay_snapshot {
     u16b format_version;
     u16b flags;
     app_interaction_state interaction;
-    app_menu_scene transient_menu;
+    app_ui_scene transient_scene;
     app_ui_scene chrome_scene;
 } app_dungeon_overlay_snapshot;
 
@@ -270,7 +269,7 @@ void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     u64b revision, const struct app_wait_state* wait_state,
     const app_interaction_state* interaction,
-    const app_menu_scene* transient_menu, u32b update_mask, u32b redraw_mask,
+    const app_ui_scene* transient_scene, u32b update_mask, u32b redraw_mask,
     u32b window_mask);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const struct app_session* session);

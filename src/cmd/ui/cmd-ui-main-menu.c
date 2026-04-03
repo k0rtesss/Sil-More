@@ -111,13 +111,13 @@ static bool main_menu_scene_enter(main_menu_scene_scope* scope)
     return true;
 }
 
-static bool main_menu_scene_add_row(app_menu_scene* scene, int id,
+static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
     int highlight, bool death_view, cptr label, cptr meta)
 {
     byte attr = TERM_WHITE;
     bool enabled = true;
 
-    if (!scene || !label)
+    if (!panel || !label)
         return false;
 
     if (death_view && id >= MAIN_MENU_ABORT && id <= MAIN_MENU_SAVE_QUIT)
@@ -130,7 +130,7 @@ static bool main_menu_scene_add_row(app_menu_scene* scene, int id,
         attr = TERM_L_BLUE;
     }
 
-    return app_menu_scene_add_row(scene, (s16b)id, attr, enabled,
+    return app_ui_panel_add_row(panel, (s16b)id, attr, enabled,
         highlight == id, "", label, meta ? meta : "");
 }
 
@@ -138,7 +138,8 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
     bool death_view)
 {
     app_session* session = app_session_current();
-    app_menu_scene scene;
+    app_ui_scene scene;
+    app_ui_panel* panel;
 
     if (!scope || !scope->active || !session)
         return false;
@@ -151,49 +152,53 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
         highlight = MAIN_MENU_RETURN;
     }
 
-    app_menu_scene_init(&scene);
-    scene.flags = APP_MENU_SCENE_FLAG_DIM_BACKDROP
-        | APP_MENU_SCENE_FLAG_PLAIN;
-    app_menu_scene_set_widths(&scene, 300, 460);
+    app_ui_scene_init(&scene);
+    scene.flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
 
-    if (!main_menu_scene_add_row(&scene, MAIN_MENU_CHARACTER, highlight,
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 300, 460);
+
+    if (!main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
             death_view, "Character sheet      (c)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_KNOWLEDGE, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_KNOWLEDGE, highlight,
             death_view, "Known lore           (a)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_QUEST_STATUS, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_QUEST_STATUS, highlight,
             death_view, "Quest status         (t)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_SCORES, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_SCORES, highlight,
             death_view, "Halls of Mandos      (d)", "")
-        || !main_menu_scene_add_row(&scene, 5, highlight, death_view,
+        || !main_menu_scene_add_row(panel, 5, highlight, death_view,
             "Run history          (v)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_MAP, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight,
             death_view, "Map                  (m)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_MESSAGES, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_MESSAGES, highlight,
             death_view, "Log                  (l)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_SCREENSHOT, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_SCREENSHOT, highlight,
             death_view, "Combat history       (x)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_NOTE, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_NOTE, highlight,
             death_view, "Hint messages        (i)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_STORY, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_STORY, highlight,
             death_view, "The story so far     (y)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_OPTIONS, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_OPTIONS, highlight,
             death_view, "Options and misc     (o)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_HELP, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight,
             death_view, "Help                 (h)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_ABORT, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_ABORT, highlight,
             death_view, "Suicide              (k)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_SAVE, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight,
             death_view, "Save                 (s)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_SAVE_QUIT, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_SAVE_QUIT, highlight,
             death_view, "Quit with save       (q)", "")
-        || !main_menu_scene_add_row(&scene, MAIN_MENU_RETURN, highlight,
+        || !main_menu_scene_add_row(panel, MAIN_MENU_RETURN, highlight,
             death_view, "Return to game       (r)", ""))
     {
         return false;
     }
 
     app_session_clear_interaction(session);
-    if (!app_session_publish_dungeon_overlay_menu(session, &scene))
+    if (!app_session_publish_dungeon_overlay_scene(session, &scene))
         return false;
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
@@ -207,7 +212,7 @@ static void main_menu_scene_leave(main_menu_scene_scope* scope)
     if (!scope || !scope->active || !session)
         return;
 
-    app_session_clear_dungeon_overlay_menu(session);
+    app_session_clear_dungeon_overlay_scene(session);
     app_session_set_snapshot(session, &scope->previous_snapshot);
     scope->active = false;
     (void)Term_xtra(TERM_XTRA_FRESH, 0);

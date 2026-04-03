@@ -29,9 +29,9 @@ struct app_session {
     app_dungeon_snapshot dungeon_snapshot;
     app_information_snapshot information_snapshot;
     app_menu_snapshot menu_snapshot;
-    byte dungeon_overlay_menu_active;
-    byte dungeon_overlay_menu_reserved[3];
-    app_menu_scene dungeon_overlay_menu_scene;
+    byte dungeon_overlay_scene_active;
+    byte dungeon_overlay_scene_reserved[3];
+    app_ui_scene dungeon_overlay_scene;
     u32b snapshot_dirty_mask;
     u64b next_snapshot_revision;
     app_session_counters counters;
@@ -454,7 +454,7 @@ app_session* app_session_create(const app_session_config* config)
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
     app_information_snapshot_init(&session->information_snapshot);
     app_menu_snapshot_init(&session->menu_snapshot);
-    app_menu_scene_init(&session->dungeon_overlay_menu_scene);
+    app_ui_scene_init(&session->dungeon_overlay_scene);
     session->next_snapshot_revision = 1u;
     session->events = app_event_buffer_create(initial_event_capacity);
 
@@ -777,16 +777,16 @@ void app_session_clear_menu_snapshot(app_session* session)
     app_session_sync_menu_blob(session);
 }
 
-void app_session_clear_dungeon_overlay_menu(app_session* session)
+void app_session_clear_dungeon_overlay_scene(app_session* session)
 {
     if (!session)
         return;
 
-    if (!session->dungeon_overlay_menu_active)
+    if (!session->dungeon_overlay_scene_active)
         return;
 
-    session->dungeon_overlay_menu_active = 0;
-    app_menu_scene_init(&session->dungeon_overlay_menu_scene);
+    session->dungeon_overlay_scene_active = 0;
+    app_ui_scene_init(&session->dungeon_overlay_scene);
     app_session_touch_overlay_menu(session);
 }
 
@@ -869,14 +869,14 @@ bool app_session_publish_menu_scene(app_session* session,
     return true;
 }
 
-bool app_session_publish_dungeon_overlay_menu(app_session* session,
-    const app_menu_scene* scene)
+bool app_session_publish_dungeon_overlay_scene(app_session* session,
+    const app_ui_scene* scene)
 {
     if (!session || !scene)
         return false;
 
-    session->dungeon_overlay_menu_scene = *scene;
-    session->dungeon_overlay_menu_active = 1;
+    session->dungeon_overlay_scene = *scene;
+    session->dungeon_overlay_scene_active = 1;
     app_session_touch_overlay_menu(session);
     return true;
 }
@@ -922,8 +922,8 @@ bool app_session_build_dungeon_snapshot(app_session* session,
     if (!app_build_dungeon_snapshot(&session->dungeon_snapshot,
             session->next_snapshot_revision, &session->wait_state,
             &session->interaction,
-            session->dungeon_overlay_menu_active
-                ? &session->dungeon_overlay_menu_scene
+            session->dungeon_overlay_scene_active
+                ? &session->dungeon_overlay_scene
                 : NULL,
             update_mask, redraw_mask, window_mask))
     {

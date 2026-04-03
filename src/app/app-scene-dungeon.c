@@ -114,7 +114,7 @@ static void app_dungeon_overlay_snapshot_clear(
     memset(overlay, 0, sizeof(*overlay));
     overlay->format_version = APP_DUNGEON_OVERLAY_FORMAT_VERSION;
     app_interaction_clear(&overlay->interaction);
-    app_menu_scene_init(&overlay->transient_menu);
+    app_ui_scene_init(&overlay->transient_scene);
     app_ui_scene_init(&overlay->chrome_scene);
 }
 
@@ -1537,7 +1537,7 @@ static void app_build_chrome_ui_scene(app_dungeon_overlay_snapshot* overlay,
 static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
     const app_status_snapshot* status, const app_messages_snapshot* messages,
     const app_interaction_state* interaction,
-    const app_menu_scene* transient_menu)
+    const app_ui_scene* transient_scene)
 {
     app_dungeon_overlay_snapshot* overlay;
 
@@ -1559,10 +1559,10 @@ static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
     else
         app_interaction_snapshot_clear(&overlay->interaction);
 
-    if (transient_menu)
+    if (transient_scene)
     {
         overlay->flags |= APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU;
-        overlay->transient_menu = *transient_menu;
+        overlay->transient_scene = *transient_scene;
     }
 
     snapshot->overlay_size = sizeof(*overlay);
@@ -1606,7 +1606,7 @@ void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot)
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     u64b revision, const app_wait_state* wait_state,
     const app_interaction_state* interaction,
-    const app_menu_scene* transient_menu, u32b update_mask, u32b redraw_mask,
+    const app_ui_scene* transient_scene, u32b update_mask, u32b redraw_mask,
     u32b window_mask)
 {
     u16b snapshot_flags = 0;
@@ -1627,7 +1627,7 @@ bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     status = (const app_status_snapshot*)snapshot->status_data;
     messages = (const app_messages_snapshot*)snapshot->messages_data;
     if (!app_build_overlay_blob(snapshot, status, messages, interaction,
-            transient_menu))
+            transient_scene))
     {
         return false;
     }

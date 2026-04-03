@@ -146,13 +146,13 @@ static void unified_look_snapshot_clear(void)
         return;
 
     app_session_clear_interaction(session);
-    app_session_clear_dungeon_overlay_menu(session);
+    app_session_clear_dungeon_overlay_scene(session);
 }
 
 static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
 {
     app_session* session = app_session_current();
-    app_menu_scene scene;
+    app_ui_scene scene;
 
     if (!unified_look_snapshot_active() || !session)
         return false;
@@ -161,7 +161,7 @@ static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
             &scene))
     {
         app_session_clear_interaction(session);
-        app_session_clear_dungeon_overlay_menu(session);
+        app_session_clear_dungeon_overlay_scene(session);
         return true;
     }
 
@@ -169,7 +169,7 @@ static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
         APP_WAIT_REASON_TARGETING, APP_INTERACTION_FLAG_CAN_CANCEL);
     app_session_set_interaction_prompt(session, TERM_WHITE,
         g_unified_look_snapshot_prompt);
-    if (!app_session_publish_dungeon_overlay_menu(session, &scene))
+    if (!app_session_publish_dungeon_overlay_scene(session, &scene))
         return false;
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);

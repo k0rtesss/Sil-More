@@ -30,9 +30,15 @@ all forward UI work.
 - `src/app/app-scene-menu.*` plus `src/sdl-scene-menu.c` already prove a
   semantic SDL renderer path for menus, and `sdl-scene-menu.c` now also has
   direct `app_ui_scene` entrypoints for overlay rendering.
+- `src/sdl-scene-menu.c` now renders regular `app_ui_panel` modal/browser
+  panels directly, so only the one-way `app_menu_scene` to `app_ui_scene`
+  adapter remains for older menu producers.
 - `src/app/app-scene-dungeon.*` now publish persistent chrome through
   `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
   the top strip, left status rail, and bottom strip.
+- Dungeon transient overlays are now stored as `app_ui_scene` in
+  `app_dungeon_overlay_snapshot`, and the main-menu and unified-look overlay
+  producers publish `app_ui_scene` directly.
 - The semantic left rail now uses a direct status-rail compositor with
   proportional text measurement, tile/icon slots, and pixel-based map
   reservation, so the old raw `Term->scr` mirror is no longer the shipped SDL
@@ -54,9 +60,10 @@ all forward UI work.
 
 ### Not Landed
 - The new shared `app_ui_scene` model is only partially adopted:
-  - persistent chrome and the status rail use it directly
-  - menu panels other than `STRIP` and `STATUS_RAIL` still round-trip through
-    `app_menu_scene` as a compatibility adapter
+  - persistent chrome, dungeon transient overlays, and the look sidebar use it
+    directly
+  - standalone legacy menu producers still publish `app_menu_scene`, then
+    convert one-way into `app_ui_scene`
   - shared document, list-detail, tab, table, and minimap widgets are still
     missing
 - Overlay and interaction payloads are still partly term-grid contracts:
@@ -65,6 +72,8 @@ all forward UI work.
   - `APP_MENU_SCENE_FLAG_PLAIN`
   - `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
   - `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
+  - these flags are now producer-side legacy fields, not the direct SDL render
+    contract
 - The information-scene bridge is still a real runtime dependency for many
   browser and document screens:
   - `ui_information_scene_capture_term()`
@@ -218,15 +227,20 @@ Status on 2026-04-03:
   - added dungeon `chrome_scene`
   - routed top strip, left rail, bottom strip, and main-menu overlay through
     shared `app_ui_scene` entrypoints
+  - switched the regular SDL modal/browser panel renderer to consume
+    `app_ui_panel` directly and deleted the reverse conversion back into
+    `app_menu_scene`
+  - changed dungeon transient overlays from `app_menu_scene` to
+    `app_ui_scene` end-to-end
+  - converted the main-menu and unified-look sidebar overlay producers to
+    build `app_ui_scene` directly
   - deleted the old raw left-rail mirror and hidden-panel globals
   - deleted the information-scene term-mirror flag and mirror-enter helper
   - fixed the semantic status rail to measure and draw proportional text runs
     instead of synthetic fixed-grid glyph spacing
 - Still to do before Slice A can exit:
-  - remove the non-strip/non-status-rail menu adapter back into
-    `app_menu_scene`
-  - replace menu `PLAIN` / `LEGACY_SIDEBAR` compatibility modes with direct
-    `app_ui_scene` rendering
+  - migrate standalone old menu producers off `app_menu_scene` and delete the
+    remaining `APP_MENU_SCENE_FLAG_*` compatibility fields
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`
