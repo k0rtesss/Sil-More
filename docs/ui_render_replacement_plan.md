@@ -37,8 +37,8 @@ all forward UI work.
   `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
   the top strip, left status rail, and bottom strip.
 - Dungeon transient overlays are now stored as `app_ui_scene` in
-  `app_dungeon_overlay_snapshot`, and the main-menu and unified-look overlay
-  producers publish `app_ui_scene` directly.
+  `app_dungeon_overlay_snapshot`, and the main-menu, unified-look, standalone
+  item selector, and oath prompt producers publish `app_ui_scene` directly.
 - The semantic left rail now uses a direct status-rail compositor with
   proportional text measurement, tile/icon slots, and pixel-based map
   reservation, so the old raw `Term->scr` mirror is no longer the shipped SDL
@@ -60,10 +60,10 @@ all forward UI work.
 
 ### Not Landed
 - The new shared `app_ui_scene` model is only partially adopted:
-  - persistent chrome, dungeon transient overlays, and the look sidebar use it
-    directly
-  - standalone legacy menu producers still publish `app_menu_scene`, then
-    convert one-way into `app_ui_scene`
+  - persistent chrome, dungeon transient overlays, standalone item-selector and
+    oath modals, and the look sidebar use it directly
+  - some older menu producers still build `app_menu_scene`, then convert
+    one-way into `app_ui_scene`
   - shared document, list-detail, tab, table, and minimap widgets are still
     missing
 - Overlay and interaction payloads are still partly term-grid contracts:
@@ -239,8 +239,8 @@ Status on 2026-04-03:
   - fixed the semantic status rail to measure and draw proportional text runs
     instead of synthetic fixed-grid glyph spacing
 - Still to do before Slice A can exit:
-  - migrate standalone old menu producers off `app_menu_scene` and delete the
-    remaining `APP_MENU_SCENE_FLAG_*` compatibility fields
+  - migrate the remaining old menu producers off `app_menu_scene` and delete
+    the remaining `APP_MENU_SCENE_FLAG_*` compatibility fields
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`

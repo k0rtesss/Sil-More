@@ -119,7 +119,7 @@ static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
 }
 
 static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
-    const app_menu_scene* scene)
+    const app_ui_scene* scene)
 {
     app_session* session = app_session_current();
 
@@ -144,22 +144,22 @@ static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
-static void prompt_menu_scene_add_wrapped_text(app_menu_scene* scene,
+static void prompt_menu_scene_add_wrapped_text(app_ui_panel* panel,
     byte attr, cptr text, size_t wrap_chars)
 {
     const char* cursor = text;
 
-    if (!scene || !text || !text[0])
+    if (!panel || !text || !text[0])
         return;
     if (wrap_chars < 8)
         wrap_chars = 8;
 
-    while (*cursor && scene->body_line_count < APP_MENU_BODY_LINE_MAX)
+    while (*cursor && panel->body_line_count < APP_UI_BODY_LINE_MAX)
     {
         const char* line_start;
         const char* line_end;
         const char* last_space = NULL;
-        char line[APP_MENU_TEXT_MAX];
+        char line[APP_UI_TEXT_MAX];
         size_t line_len;
 
         while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n')
@@ -205,7 +205,7 @@ static void prompt_menu_scene_add_wrapped_text(app_menu_scene* scene,
 
         memcpy(line, line_start, line_len);
         line[line_len] = '\0';
-        (void)app_menu_scene_add_body_line(scene, attr, line);
+        (void)app_ui_panel_add_body_line(panel, attr, line);
     }
 }
 
@@ -950,17 +950,22 @@ bool get_check_oath_multiline(cptr prompt)
     snapshot_menu = prompt_menu_scene_enter(&menu_scope);
     if (snapshot_menu)
     {
-        app_menu_scene scene;
+        app_ui_scene scene;
+        app_ui_panel* panel;
 
-        app_menu_scene_init(&scene);
-        scene.flags = APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
-            | APP_MENU_SCENE_FLAG_DIM_BACKDROP;
-        app_menu_scene_set_widths(&scene, 420, 760);
-        app_menu_scene_set_title(&scene, TERM_L_RED, "Breaking a Sacred Oath");
-        prompt_menu_scene_add_wrapped_text(&scene, TERM_WHITE, prompt, 62);
-        (void)app_menu_scene_add_footer_action(&scene, 1, TERM_L_GREEN, true,
+        app_ui_scene_init(&scene);
+        scene.flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+            | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
+        if (!panel)
+            return false;
+
+        app_ui_panel_set_widths(panel, 420, 760);
+        app_ui_panel_set_title(panel, TERM_L_RED, "Breaking a Sacred Oath");
+        prompt_menu_scene_add_wrapped_text(panel, TERM_WHITE, prompt, 62);
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
             "Y", "Accept");
-        (void)app_menu_scene_add_footer_action(&scene, 2, TERM_WHITE, true,
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
             "N/Esc", "Cancel");
 
         snapshot_menu = prompt_menu_scene_present(&menu_scope, &scene);

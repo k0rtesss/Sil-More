@@ -1562,20 +1562,15 @@ bool sdl_scene_menu_render_overlay(const sdl_view* main_view,
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_menu_snapshot* snapshot)
 {
-    app_ui_scene ui_scene;
-
     if (!canvas || !main_view || !snapshot)
         return false;
     if (snapshot->snapshot.scene != APP_SCENE_KIND_MENU)
         return false;
     if (snapshot->blobs[0].kind != APP_SNAPSHOT_BLOB_MENU
-        || snapshot->blobs[0].size < sizeof(app_menu_scene))
+        || snapshot->blobs[0].size < sizeof(app_ui_scene))
     {
         return false;
     }
 
-    if (!app_ui_scene_from_menu_scene(&ui_scene, &snapshot->scene))
-        return false;
-
-    return sdl_scene_ui_render(canvas, main_view, &ui_scene);
+    return sdl_scene_ui_render(canvas, main_view, &snapshot->scene);
 }

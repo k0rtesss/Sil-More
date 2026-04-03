@@ -198,7 +198,7 @@ static void app_session_sync_menu_blob(app_session* session)
     session->menu_snapshot.snapshot.blob_count
         = N_ELEMENTS(session->menu_snapshot.blobs);
     session->menu_snapshot.blobs[0].kind = APP_SNAPSHOT_BLOB_MENU;
-    session->menu_snapshot.blobs[0].format_version = APP_MENU_FORMAT_VERSION;
+    session->menu_snapshot.blobs[0].format_version = APP_UI_FORMAT_VERSION;
     session->menu_snapshot.blobs[0].data
         = (const byte*)&session->menu_snapshot.scene;
     session->menu_snapshot.blobs[0].size = sizeof(session->menu_snapshot.scene);
@@ -773,7 +773,7 @@ void app_session_clear_menu_snapshot(app_session* session)
     if (!session)
         return;
 
-    app_menu_scene_init(&session->menu_snapshot.scene);
+    app_ui_scene_init(&session->menu_snapshot.scene);
     app_session_sync_menu_blob(session);
 }
 
@@ -854,7 +854,7 @@ bool app_session_publish_bootstrap_scene(app_session* session,
 }
 
 bool app_session_publish_menu_scene(app_session* session,
-    const app_menu_scene* scene)
+    const app_ui_scene* scene)
 {
     if (!session || !scene)
         return false;

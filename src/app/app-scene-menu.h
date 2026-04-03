@@ -2,6 +2,7 @@
 #define INCLUDED_APP_SCENE_MENU_H
 
 #include "app-interaction.h"
+#include "app-ui.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
 
@@ -116,7 +117,7 @@ typedef struct app_menu_scene {
 typedef struct app_menu_snapshot {
     app_snapshot snapshot;
     app_snapshot_blob blobs[1];
-    app_menu_scene scene;
+    app_ui_scene scene;
 } app_menu_snapshot;
 
 void app_menu_scene_init(app_menu_scene* scene);

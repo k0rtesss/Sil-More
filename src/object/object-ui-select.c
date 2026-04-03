@@ -56,7 +56,8 @@ static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* sco
 {
     app_session* session = app_session_current();
     const app_interaction_state* interaction;
-    app_menu_scene scene;
+    app_ui_scene scene;
+    app_ui_panel* panel;
 
     if (!scope || !scope->active || !session)
         return false;
@@ -65,12 +66,15 @@ static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* sco
     if (!interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
         return false;
 
-    if (!app_menu_scene_from_interaction(&scene, interaction))
+    if (!app_ui_scene_from_interaction(&scene, interaction))
         return false;
 
-    scene.flags |= APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
-        | APP_MENU_SCENE_FLAG_DIM_BACKDROP;
-    scene.min_width_px = MAX(scene.min_width_px, 340);
+    scene.flags |= APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = (scene.panel_count > 0) ? &scene.panels[0] : NULL;
+    if (!panel)
+        return false;
+    panel->min_width_px = MAX(panel->min_width_px, 340);
 
     if (!app_session_publish_menu_scene(session, &scene))
         return false;

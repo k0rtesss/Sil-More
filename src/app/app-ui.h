@@ -1,6 +1,7 @@
 #ifndef INCLUDED_APP_UI_H
 #define INCLUDED_APP_UI_H
 
+#include "app-interaction.h"
 #include "h-basic.h"
 
 #ifdef __cplusplus
@@ -169,6 +170,8 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
 bool app_ui_scene_from_menu_scene(app_ui_scene* scene,
     const struct app_menu_scene* menu_scene);
+bool app_ui_scene_from_interaction(app_ui_scene* scene,
+    const app_interaction_state* interaction);
 
 #ifdef __cplusplus
 }
