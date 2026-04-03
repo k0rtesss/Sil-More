@@ -66,7 +66,8 @@ typedef enum app_ui_item_flag {
     APP_UI_ITEM_FLAG_DISABLED = 0x01u,
     APP_UI_ITEM_FLAG_SELECTED = 0x02u,
     APP_UI_ITEM_FLAG_ACTIVE = 0x04u,
-    APP_UI_ITEM_FLAG_SECTION = 0x08u
+    APP_UI_ITEM_FLAG_SECTION = 0x08u,
+    APP_UI_ITEM_FLAG_STORY_LABEL = 0x10u
 } app_ui_item_flag;
 
 typedef struct app_ui_text_line {
@@ -82,8 +83,9 @@ typedef struct app_ui_row {
     byte meta_attr;
     byte flags;
     byte icon_attr;
-    byte reserved0;
+    byte extra_icon_attr;
     char icon_char;
+    char extra_icon_char;
     char key[APP_UI_KEY_MAX];
     char label[APP_UI_LABEL_MAX];
     char meta[APP_UI_META_MAX];

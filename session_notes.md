@@ -5,6 +5,7 @@
 - Routed SDL menu rendering through `app_ui_scene` entrypoints in `src/sdl-scene-menu.c`, with the old menu compositor temporarily used as a panel adapter so current visuals stay intact.
 - Added `chrome_scene` to dungeon overlay snapshots and now build top strip, semantic left rail, and bottom strip panels in `src/app/app-scene-dungeon.c`.
 - `src/sdl-scene-dungeon.c` now computes left-rail map reservation from the semantic status-rail panel and renders all persistent chrome through the shared `app_ui_scene` overlay path.
+- Reworked the semantic status-rail renderer to measure and draw proportional text runs instead of synthetic fixed-cell glyph placement, reserve map space from actual pixel width instead of the legacy 13-column minimum, and publish the main-menu overlay once before the first wait cycle to avoid a stale-frame flash.
 - Removed the old raw-cell left-rail overlay payload, the hidden-panel map-mask globals, and the cave draw-time masking checks that existed only to support the term-grid rail mirror.
 - Collapsed information scenes to one fixed renderer path in `src/sdl-scene-information.c`, deleted `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR` plus `ui_information_scene_enter_mirror()`, and switched the mirror callers to `ui_information_scene_enter()`.
 - Subagent use: `Darwin` ran `gpt-5.4-mini` with medium reasoning to map the information-scene mirror bridge because that was a bounded read-only exploration task with low coupling to the local chrome edits.

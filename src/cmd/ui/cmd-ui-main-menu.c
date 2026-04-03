@@ -152,7 +152,7 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
     }
 
     app_menu_scene_init(&scene);
-    scene.flags = APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP
+    scene.flags = APP_MENU_SCENE_FLAG_DIM_BACKDROP
         | APP_MENU_SCENE_FLAG_PLAIN;
     app_menu_scene_set_widths(&scene, 300, 460);
 
@@ -192,7 +192,8 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
         return false;
     }
 
-    if (!app_session_publish_menu_scene(session, &scene))
+    app_session_clear_interaction(session);
+    if (!app_session_publish_dungeon_overlay_menu(session, &scene))
         return false;
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
@@ -206,6 +207,7 @@ static void main_menu_scene_leave(main_menu_scene_scope* scope)
     if (!scope || !scope->active || !session)
         return;
 
+    app_session_clear_dungeon_overlay_menu(session);
     app_session_set_snapshot(session, &scope->previous_snapshot);
     scope->active = false;
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
@@ -560,7 +562,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
 void do_cmd_main_menu(void)
 {
     app_session* session = app_session_current();
-    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
+    const app_snapshot* snapshot;
     int actiontype = -1;
     int highlight = 1;
     bool leave_menu = false;
@@ -569,14 +571,11 @@ void do_cmd_main_menu(void)
     int pending_hint_look_x = -1;
     ui_information_scene_scope scene_scope;
     main_menu_scene_scope menu_scene_scope;
-    bool menu_scene_active = main_menu_scene_enter(&menu_scene_scope);
-    bool allow_information_scene = snapshot
-        && snapshot->scene == APP_SCENE_KIND_INFORMATION
-        && !menu_scene_active;
-    bool scene_active = allow_information_scene
-        && ui_information_scene_enter(&scene_scope);
-    bool clear_fullscreen = scene_active;
-    bool restore_saved_screen = !scene_active && !menu_scene_active;
+    bool menu_scene_active;
+    bool allow_information_scene;
+    bool scene_active;
+    bool clear_fullscreen;
+    bool restore_saved_screen;
 
     /* Clear any active banner before opening main menu */
     extern int g_banner_force_redraw_remaining;
@@ -584,6 +583,24 @@ void do_cmd_main_menu(void)
         g_banner_force_redraw_remaining = 0;
         do_cmd_redraw();
     }
+
+    snapshot = session ? app_session_snapshot(session) : NULL;
+    menu_scene_active = main_menu_scene_enter(&menu_scene_scope);
+    if (menu_scene_active
+        && !main_menu_scene_present(&menu_scene_scope, highlight,
+            death_spectator_active()))
+    {
+        main_menu_scene_leave(&menu_scene_scope);
+        menu_scene_active = false;
+    }
+
+    allow_information_scene = snapshot
+        && snapshot->scene == APP_SCENE_KIND_INFORMATION
+        && !menu_scene_active;
+    scene_active = allow_information_scene
+        && ui_information_scene_enter(&scene_scope);
+    clear_fullscreen = scene_active;
+    restore_saved_screen = !scene_active && !menu_scene_active;
 
     /* Save screen */
     if (restore_saved_screen)

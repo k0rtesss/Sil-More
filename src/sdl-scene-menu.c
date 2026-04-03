@@ -323,6 +323,7 @@ static bool sdl_menu_render_legacy_sidebar_scene(const sdl_view* main_view,
     for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
     {
         int font_h;
+        int min_clear_w_cells = 0;
 
         font = sdl_ui_font_for_height(pixel_height);
         if (!font)
@@ -333,6 +334,14 @@ static bool sdl_menu_render_legacy_sidebar_scene(const sdl_view* main_view,
         cell_w = sdl_menu_measure_text(font, "M");
         if (cell_w < 1)
             cell_w = 1;
+        if (scene->min_width_px > 0)
+        {
+            int min_w_px = sdl_menu_scale_px((float)scene->min_width_px);
+
+            min_clear_w_cells = (min_w_px + cell_w - 1) / cell_w;
+            if (min_clear_w_cells > clear_w_cells)
+                clear_w_cells = min_clear_w_cells;
+        }
 
         screen_cols = canvas_w / cell_w;
         screen_rows = canvas_h / cell_h;
@@ -1161,6 +1170,388 @@ static bool sdl_menu_render_scene_internal(const sdl_view* main_view,
     return true;
 }
 
+static const char* sdl_menu_status_rail_label_text(const app_ui_row* row)
+{
+    if (!row)
+        return "";
+
+    if (row->key[0])
+        return row->key;
+
+    return row->label;
+}
+
+static int sdl_menu_status_rail_gap_px(TTF_Font* mono_font)
+{
+    int gap_px = sdl_menu_measure_text(mono_font, " ");
+
+    if (gap_px < 4)
+        gap_px = 4;
+
+    return gap_px;
+}
+
+static int sdl_menu_status_rail_icon_slot_px(TTF_Font* mono_font, int line_h)
+{
+    int icon_slot_w = sdl_menu_measure_text(mono_font, "MM");
+
+    if (icon_slot_w < line_h)
+        icon_slot_w = line_h;
+    if (icon_slot_w < 1)
+        icon_slot_w = 1;
+
+    return icon_slot_w;
+}
+
+static int sdl_menu_status_rail_label_width_px(TTF_Font* mono_font,
+    TTF_Font* story_font, const app_ui_row* row, cptr text)
+{
+    if (!text || !text[0])
+        return 0;
+    if ((row->flags & APP_UI_ITEM_FLAG_STORY_LABEL) && story_font)
+        return sdl_menu_measure_text(story_font, text);
+
+    return sdl_menu_measure_text(mono_font, text);
+}
+
+static int sdl_menu_status_rail_row_width_px(TTF_Font* mono_font,
+    TTF_Font* story_font, int line_h, const app_ui_row* row)
+{
+    const char* label_text = sdl_menu_status_rail_label_text(row);
+    int icon_slot_w;
+    int gap_px;
+    int label_w;
+    int meta_w;
+    int width;
+
+    if (!mono_font || !row)
+        return 0;
+
+    icon_slot_w = sdl_menu_status_rail_icon_slot_px(mono_font, line_h);
+    gap_px = sdl_menu_status_rail_gap_px(mono_font);
+    label_w = sdl_menu_status_rail_label_width_px(mono_font, story_font, row,
+        label_text);
+    meta_w = sdl_menu_measure_text(mono_font, row->meta);
+
+    if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+        return label_w;
+
+    if (row->extra_icon_char)
+    {
+        width = label_w + icon_slot_w + meta_w;
+        if (row->icon_char)
+            width += icon_slot_w;
+        if (label_w > 0 && meta_w > 0)
+            width += gap_px;
+        return width;
+    }
+
+    width = label_w;
+    if (row->icon_char)
+    {
+        width += icon_slot_w;
+        if (label_w > 0)
+            width += gap_px;
+    }
+    if (row->meta[0])
+    {
+        if (width > 0)
+            width += gap_px;
+        width += meta_w;
+    }
+
+    return width;
+}
+
+static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
+    float y_px, int icon_slot_w, int line_h, byte icon_attr, char icon_char)
+{
+    SDL_FRect tile_dst;
+    byte ch = (byte)icon_char;
+
+    if (!icon_char || icon_char == ' ')
+        return;
+
+    if (g_state.use_tiles && g_state.tileset
+        && (icon_attr & TILE_FLAG) && (ch & TILE_FLAG))
+    {
+        float tile_size = (float)MIN(line_h, icon_slot_w);
+
+        tile_dst.x = x_px + ((float)icon_slot_w - tile_size) * 0.5f;
+        tile_dst.y = y_px + ((float)line_h - tile_size) * 0.5f;
+        tile_dst.w = tile_size;
+        tile_dst.h = tile_size;
+        sdl_menu_draw_tile(icon_attr, ch, &tile_dst);
+        return;
+    }
+
+    {
+        char glyph[2] = { icon_char, '\0' };
+        int glyph_w = sdl_menu_measure_text(mono_font, glyph);
+        float text_x = x_px;
+
+        if (glyph_w < icon_slot_w)
+            text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
+        sdl_menu_render_text(mono_font, text_x, y_px, line_h,
+            sdl_menu_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
+    }
+}
+
+static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
+    TTF_Font* story_font, float x_px, float y_px, int line_h,
+    byte attr, byte flags, cptr text)
+{
+    if (!text || !text[0])
+        return;
+
+    if ((flags & APP_UI_ITEM_FLAG_STORY_LABEL) && story_font)
+    {
+        sdl_menu_render_text(story_font, x_px, y_px, line_h,
+            sdl_menu_color(attr), text);
+        return;
+    }
+
+    sdl_menu_render_text(mono_font, x_px, y_px, line_h,
+        sdl_menu_color(attr), text);
+}
+
+static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
+    const app_ui_panel* panel)
+{
+    TTF_Font* mono_font = NULL;
+    TTF_Font* story_font = NULL;
+    SDL_FRect clear_rect;
+    SDL_Rect clip_rect;
+    int canvas_w;
+    int canvas_h;
+    int desired_px;
+    int min_px;
+    int pixel_height;
+    int line_h = 0;
+    int icon_slot_w = 0;
+    int gap_px = 0;
+    int row_top = 1;
+    int panel_w_px = 0;
+    int row_visible;
+    int screen_rows = 0;
+    u16b i;
+
+    if (!main_view || !panel || panel->row_count == 0)
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    desired_px = sdl_menu_scale_px(
+        (float)sdl_menu_font_size_logical(main_view));
+    min_px = sdl_menu_scale_px(10.0f);
+    if (min_px < 10)
+        min_px = 10;
+    if (desired_px < min_px)
+        desired_px = min_px;
+
+    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
+    {
+        int mono_h;
+        int story_h = 0;
+        int candidate_w_px = 0;
+        int max_w_px;
+        u16b row_index;
+
+        mono_font = sdl_ui_font_for_height(pixel_height);
+        story_font = sdl_story_font_for_height(pixel_height);
+        if (!mono_font)
+            continue;
+
+        mono_h = TTF_GetFontHeight(mono_font);
+        if (story_font)
+            story_h = TTF_GetFontHeight(story_font);
+        line_h = MAX(pixel_height, MAX(mono_h, story_h));
+        if (line_h < 1)
+            line_h = 1;
+        icon_slot_w = sdl_menu_status_rail_icon_slot_px(mono_font, line_h);
+        gap_px = sdl_menu_status_rail_gap_px(mono_font);
+
+        for (row_index = 0; row_index < panel->row_count; row_index++)
+        {
+            candidate_w_px = MAX(candidate_w_px,
+                sdl_menu_status_rail_row_width_px(mono_font, story_font,
+                    line_h, &panel->rows[row_index]));
+        }
+        if (panel->min_width_px > 0)
+        {
+            int min_w_px = sdl_menu_scale_px((float)panel->min_width_px);
+
+            candidate_w_px = MAX(candidate_w_px, min_w_px);
+        }
+        max_w_px = panel->width_cap_px > 0
+            ? sdl_menu_scale_px((float)panel->width_cap_px)
+            : 0;
+        if (max_w_px > 0 && candidate_w_px > max_w_px)
+            candidate_w_px = max_w_px;
+
+        screen_rows = canvas_h / line_h;
+        if (candidate_w_px <= 0 || candidate_w_px > canvas_w
+            || screen_rows <= row_top)
+        {
+            continue;
+        }
+
+        panel_w_px = candidate_w_px;
+        break;
+    }
+
+    if (!mono_font || line_h <= 0 || panel_w_px <= 0 || screen_rows <= row_top)
+    {
+        return false;
+    }
+
+    row_visible = MIN((int)panel->row_count, screen_rows - row_top);
+    if (row_visible <= 0)
+        return false;
+
+    clear_rect.x = 0.0f;
+    clear_rect.y = (float)(row_top * line_h);
+    clear_rect.w = (float)panel_w_px;
+    clear_rect.h = (float)(row_visible * line_h);
+    sdl_menu_fill_rect(&clear_rect, (SDL_Color){ 0, 0, 0, 255 });
+
+    clip_rect.x = (int)clear_rect.x;
+    clip_rect.y = (int)clear_rect.y;
+    clip_rect.w = (int)clear_rect.w;
+    clip_rect.h = (int)clear_rect.h;
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    for (i = 0; i < (u16b)row_visible; i++)
+    {
+        const app_ui_row* row = &panel->rows[i];
+        float y_px = (float)((row_top + (int)i) * line_h);
+        const char* label_text = sdl_menu_status_rail_label_text(row);
+        byte label_attr = row->attr ? row->attr : TERM_WHITE;
+        byte meta_attr = row->meta_attr ? row->meta_attr : label_attr;
+        int label_w = sdl_menu_status_rail_label_width_px(mono_font,
+            story_font, row, label_text);
+        int meta_w = sdl_menu_measure_text(mono_font, row->meta);
+
+        if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+        {
+            sdl_menu_render_status_rail_label(mono_font, story_font, 0.0f,
+                y_px, line_h, label_attr, row->flags,
+                row->label[0] ? row->label : row->key);
+            continue;
+        }
+
+        if (row->extra_icon_char)
+        {
+            int group_w = label_w + icon_slot_w + meta_w;
+            float x_px;
+
+            if (row->icon_char)
+            {
+                group_w += icon_slot_w;
+                if (label_w > 0 && meta_w > 0)
+                    group_w += gap_px;
+                x_px = (float)panel_w_px - (float)group_w;
+                if (x_px < 0.0f)
+                    x_px = 0.0f;
+                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                    icon_slot_w, line_h, row->icon_attr, row->icon_char);
+                x_px += (float)icon_slot_w;
+                if (row->label[0])
+                {
+                    sdl_menu_render_text(mono_font, x_px, y_px, line_h,
+                        sdl_menu_color(label_attr), row->label);
+                }
+                x_px += (float)label_w;
+                if (label_w > 0 && meta_w > 0)
+                    x_px += (float)gap_px;
+                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                    icon_slot_w, line_h, row->extra_icon_attr,
+                    row->extra_icon_char);
+                if (row->meta[0])
+                {
+                    sdl_menu_render_text(mono_font,
+                        x_px + (float)icon_slot_w, y_px, line_h,
+                        sdl_menu_color(meta_attr), row->meta);
+                }
+            }
+            else
+            {
+                if (label_w > 0 && meta_w > 0)
+                    group_w += gap_px;
+                x_px = (float)panel_w_px - (float)group_w;
+                if (x_px < 0.0f)
+                    x_px = 0.0f;
+                if (row->label[0])
+                {
+                    sdl_menu_render_text(mono_font, x_px, y_px, line_h,
+                        sdl_menu_color(label_attr), row->label);
+                }
+                x_px += (float)label_w;
+                if (label_w > 0 && meta_w > 0)
+                    x_px += (float)gap_px;
+                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                    icon_slot_w, line_h, row->extra_icon_attr,
+                    row->extra_icon_char);
+                if (row->meta[0])
+                {
+                    sdl_menu_render_text(mono_font,
+                        x_px + (float)icon_slot_w, y_px, line_h,
+                        sdl_menu_color(meta_attr), row->meta);
+                }
+            }
+            continue;
+        }
+
+        if (row->icon_char)
+        {
+            sdl_menu_render_status_rail_icon(mono_font, 0.0f, y_px,
+                icon_slot_w, line_h, row->icon_attr, row->icon_char);
+            if (row->label[0])
+            {
+                sdl_menu_render_status_rail_label(mono_font, story_font,
+                    (float)(icon_slot_w + gap_px), y_px, line_h, label_attr,
+                    row->flags, row->label);
+            }
+            if (row->meta[0])
+            {
+                float meta_x = (float)panel_w_px - (float)meta_w;
+                float min_meta_x = (row->label[0]
+                    ? (float)(icon_slot_w + gap_px + label_w + gap_px)
+                    : (float)icon_slot_w);
+
+                if (meta_x < min_meta_x)
+                    meta_x = min_meta_x;
+                sdl_menu_render_text(mono_font, meta_x, y_px, line_h,
+                    sdl_menu_color(meta_attr), row->meta);
+            }
+            continue;
+        }
+
+        if (label_text[0])
+        {
+            sdl_menu_render_status_rail_label(mono_font, story_font, 0.0f,
+                y_px, line_h, label_attr, row->flags, label_text);
+        }
+        if (row->meta[0])
+        {
+            float meta_x = (float)panel_w_px - (float)meta_w;
+
+            if (label_text[0] && meta_x < (float)(label_w + gap_px))
+                meta_x = (float)(label_w + gap_px);
+            if (meta_x < 0.0f)
+                meta_x = 0.0f;
+            sdl_menu_render_text(mono_font, meta_x, y_px, line_h,
+                sdl_menu_color(meta_attr), row->meta);
+        }
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    return true;
+}
+
 static bool sdl_menu_scene_from_ui_panel(app_menu_scene* scene,
     const app_ui_scene* ui_scene, const app_ui_panel* panel)
 {
@@ -1402,6 +1793,13 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
         if (panel->style == APP_UI_PANEL_STYLE_STRIP)
         {
             if (!sdl_menu_render_strip_panel(main_view, panel))
+                return false;
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
+        {
+            if (!sdl_menu_render_status_rail_panel(main_view, panel))
                 return false;
             continue;
         }

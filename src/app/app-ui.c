@@ -128,8 +128,13 @@ bool app_ui_panel_add_row_ex(app_ui_panel* panel, s16b id, byte attr,
 {
     app_ui_row* row;
 
-    if (!panel || !label || !label[0] || panel->row_count >= APP_UI_ROW_MAX)
+    if (!panel || panel->row_count >= APP_UI_ROW_MAX)
         return false;
+    if ((!key || !key[0]) && (!label || !label[0]) && (!meta || !meta[0])
+        && (!icon_char || icon_char == ' '))
+    {
+        return false;
+    }
 
     row = &panel->rows[panel->row_count];
     memset(row, 0, sizeof(*row));

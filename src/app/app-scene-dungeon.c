@@ -36,6 +36,19 @@ typedef struct app_dungeon_overlay_layout_local {
     int col_depth;
 } app_dungeon_overlay_layout_local;
 
+typedef struct app_dungeon_status_row_local {
+    byte attr;
+    byte meta_attr;
+    byte icon_attr;
+    byte extra_icon_attr;
+    byte flags;
+    char icon_char;
+    char extra_icon_char;
+    char key[APP_UI_KEY_MAX];
+    char label[APP_UI_LABEL_MAX];
+    char meta[APP_UI_META_MAX];
+} app_dungeon_status_row_local;
+
 static bool app_dungeon_buffer_reserve(byte** data, size_t* capacity,
     size_t required)
 {
@@ -105,15 +118,6 @@ static void app_dungeon_overlay_snapshot_clear(
     app_ui_scene_init(&overlay->chrome_scene);
 }
 
-static void app_dungeon_ui_line_set(char* out_line, size_t out_line_size,
-    cptr text)
-{
-    if (!out_line || out_line_size == 0)
-        return;
-
-    SDL_strlcpy(out_line, text ? text : "", out_line_size);
-}
-
 static void app_dungeon_ui_line_write_at(char* out_line, size_t out_line_size,
     size_t col, const app_text_snapshot* text)
 {
@@ -163,22 +167,119 @@ static bool app_dungeon_ui_append_body_or_blank(app_ui_panel* panel,
 }
 
 static bool app_dungeon_ui_append_status_row_or_blank(app_ui_panel* panel,
-    byte attr, cptr text)
+    const app_dungeon_status_row_local* source)
 {
+    const char* key = "";
+    const char* label = " ";
+    const char* meta = "";
     s16b row_id;
 
     if (!panel)
         return false;
 
     row_id = (s16b)panel->row_count;
-    if (!app_ui_panel_add_row(panel, row_id, attr, true, false, NULL,
-            (text && text[0]) ? text : " ", NULL))
+    if (source)
+    {
+        key = source->key;
+        label = source->label[0] ? source->label : "";
+        meta = source->meta;
+        if (!source->key[0] && !source->label[0] && !source->meta[0]
+            && !source->icon_char && !source->extra_icon_char)
+        {
+            label = " ";
+        }
+    }
+
+    if (!app_ui_panel_add_row_ex(panel, row_id,
+            source ? source->attr : TERM_WHITE,
+            source ? source->meta_attr : TERM_WHITE,
+            source ? source->icon_attr : 0,
+            source ? source->icon_char : '\0',
+            true, false, key, label, meta))
     {
         return false;
     }
 
-    panel->rows[panel->row_count - 1].flags |= APP_UI_ITEM_FLAG_SECTION;
+    if (source)
+    {
+        app_ui_row* row = &panel->rows[panel->row_count - 1];
+
+        row->flags |= source->flags;
+        row->extra_icon_attr = source->extra_icon_attr;
+        row->extra_icon_char = source->extra_icon_char;
+    }
     return true;
+}
+
+static void app_dungeon_status_rows_clear(
+    app_dungeon_status_row_local* rows, int count)
+{
+    int i;
+
+    if (!rows || count <= 0)
+        return;
+
+    for (i = 0; i < count; i++)
+    {
+        memset(&rows[i], 0, sizeof(rows[i]));
+        rows[i].attr = TERM_WHITE;
+        rows[i].meta_attr = TERM_WHITE;
+    }
+}
+
+static void app_dungeon_status_row_set_section(
+    app_dungeon_status_row_local* row, byte attr, cptr label, bool story_label)
+{
+    if (!row)
+        return;
+
+    memset(row, 0, sizeof(*row));
+    row->attr = attr;
+    row->meta_attr = attr;
+    row->flags = APP_UI_ITEM_FLAG_SECTION;
+    if (story_label)
+        row->flags |= APP_UI_ITEM_FLAG_STORY_LABEL;
+    SDL_strlcpy(row->label, label ? label : "", sizeof(row->label));
+}
+
+static void app_dungeon_status_row_set_key_meta(
+    app_dungeon_status_row_local* row, byte key_attr, cptr key,
+    byte meta_attr, cptr meta, bool story_label)
+{
+    if (!row)
+        return;
+
+    memset(row, 0, sizeof(*row));
+    row->attr = key_attr;
+    row->meta_attr = meta_attr;
+    if (story_label)
+        row->flags |= APP_UI_ITEM_FLAG_STORY_LABEL;
+    SDL_strlcpy(row->key, key ? key : "", sizeof(row->key));
+    SDL_strlcpy(row->meta, meta ? meta : "", sizeof(row->meta));
+}
+
+static void app_dungeon_status_row_set_value(
+    app_dungeon_status_row_local* row, byte attr, cptr value)
+{
+    if (!row)
+        return;
+
+    memset(row, 0, sizeof(*row));
+    row->attr = attr;
+    row->meta_attr = attr;
+    SDL_strlcpy(row->meta, value ? value : "", sizeof(row->meta));
+}
+
+static void app_dungeon_status_row_set_bar(
+    app_dungeon_status_row_local* row, byte attr, cptr bar)
+{
+    if (!row)
+        return;
+
+    memset(row, 0, sizeof(*row));
+    row->attr = attr;
+    row->meta_attr = attr;
+    SDL_strlcpy(row->label, bar ? bar : "", sizeof(row->label));
 }
 
 static app_ui_panel* app_dungeon_ui_append_chrome_panel(app_ui_scene* scene,
@@ -860,7 +961,7 @@ static void app_build_light_text(app_text_snapshot* out_text)
 
     if (infinite)
     {
-        SDL_strlcpy(buf, "Light inf", sizeof(buf));
+        SDL_strlcpy(buf, "inf", sizeof(buf));
         attr = TERM_L_GREEN;
     }
     else
@@ -873,7 +974,7 @@ static void app_build_light_text(app_text_snapshot* out_text)
         else if (fuel <= 100)
             attr = TERM_ORANGE;
 
-        strnfmt(buf, sizeof(buf), "Light %ld", fuel);
+        strnfmt(buf, sizeof(buf), "%ld", fuel);
     }
 
     app_text_snapshot_set(out_text, attr, buf);
@@ -1171,8 +1272,15 @@ static void app_build_left_rail_ui_panel(app_ui_scene* scene,
     bool compact_height;
     int max_row;
     int row;
-    char lines[APP_DUNGEON_LEFT_PANEL_ROWS_MAX][APP_UI_TEXT_MAX];
-    byte attrs[APP_DUNGEON_LEFT_PANEL_ROWS_MAX];
+    app_dungeon_status_row_local
+        rows[APP_DUNGEON_LEFT_PANEL_ROWS_MAX];
+    object_type* light_ptr = &inventory[INVEN_LITE];
+    object_type* q1_ptr = &inventory[INVEN_QUIVER1];
+    object_type* q2_ptr = &inventory[INVEN_QUIVER2];
+    char value_buf[APP_UI_META_MAX];
+    char bar[13];
+    int filled;
+    int i;
 
     if (!scene || !status)
         return;
@@ -1196,12 +1304,15 @@ static void app_build_left_rail_ui_panel(app_ui_scene* scene,
 
         for (i = 0; i < hidden_count; i++)
         {
-            (void)app_dungeon_ui_append_status_row_or_blank(panel,
+            app_dungeon_status_row_local hidden_row;
+
+            app_dungeon_status_row_set_bar(&hidden_row,
                 hidden_lines[i].attr, hidden_lines[i].text);
+            (void)app_dungeon_ui_append_status_row_or_blank(panel,
+                &hidden_row);
         }
         if (panel->row_count == 0)
-            (void)app_dungeon_ui_append_status_row_or_blank(panel,
-                TERM_WHITE, " ");
+            (void)app_dungeon_ui_append_status_row_or_blank(panel, NULL);
         return;
     }
 
@@ -1212,126 +1323,160 @@ static void app_build_left_rail_ui_panel(app_ui_scene* scene,
     if (max_row >= (int)APP_DUNGEON_LEFT_PANEL_ROWS_MAX)
         max_row = (int)APP_DUNGEON_LEFT_PANEL_ROWS_MAX - 1;
 
-    for (row = 0; row <= max_row; row++)
+    app_dungeon_status_rows_clear(rows, max_row + 1);
+
+    app_dungeon_status_row_set_section(&rows[layout.row_name], TERM_L_BLUE,
+        status->player_name, true);
+
+    filled = 0;
+    if (status->hp_max > 0)
     {
-        lines[row][0] = '\0';
-        attrs[row] = TERM_WHITE;
+        filled = (12 * status->hp_cur + status->hp_max - 1)
+            / status->hp_max;
     }
+    if (filled < 0)
+        filled = 0;
+    if (filled > 12)
+        filled = 12;
+    for (i = 0; i < filled; i++)
+        bar[i] = 'x';
+    for (i = filled; i < 12; i++)
+        bar[i] = ' ';
+    bar[12] = '\0';
+    app_dungeon_status_row_set_bar(&rows[layout.row_name + 1],
+        status->hp_attr, bar);
 
-    app_dungeon_ui_line_set(lines[layout.row_name],
-        sizeof(lines[layout.row_name]), status->player_name);
-    attrs[layout.row_name] = TERM_WHITE;
+    cnv_stat(status->str_use, value_buf);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_stat + 0],
+        TERM_WHITE, "Str",
+        (p_ptr->stat_drain[A_STR] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+        value_buf, true);
+    cnv_stat(status->dex_use, value_buf);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_stat + 1],
+        TERM_WHITE, "Dex",
+        (p_ptr->stat_drain[A_DEX] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+        value_buf, true);
+    cnv_stat(status->con_use, value_buf);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_stat + 2],
+        TERM_WHITE, "Con",
+        (p_ptr->stat_drain[A_CON] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+        value_buf, true);
+    cnv_stat(status->gra_use, value_buf);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_stat + 3],
+        TERM_WHITE, "Gra",
+        (p_ptr->stat_drain[A_GRA] < 0) ? TERM_YELLOW : TERM_L_GREEN,
+        value_buf, true);
 
-    strnfmt(lines[layout.row_stat + 0], sizeof(lines[layout.row_stat + 0]),
-        "Str %2d", status->str_use);
-    attrs[layout.row_stat + 0] = TERM_L_GREEN;
-    strnfmt(lines[layout.row_stat + 1], sizeof(lines[layout.row_stat + 1]),
-        "Dex %2d", status->dex_use);
-    attrs[layout.row_stat + 1] = TERM_L_GREEN;
-    strnfmt(lines[layout.row_stat + 2], sizeof(lines[layout.row_stat + 2]),
-        "Con %2d", status->con_use);
-    attrs[layout.row_stat + 2] = TERM_L_GREEN;
-    strnfmt(lines[layout.row_stat + 3], sizeof(lines[layout.row_stat + 3]),
-        "Gra %2d", status->gra_use);
-    attrs[layout.row_stat + 3] = TERM_L_GREEN;
+    comma_number(value_buf, status->exp);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_exp], TERM_WHITE,
+        "Exp", TERM_L_GREEN, value_buf, true);
 
-    strnfmt(lines[layout.row_exp], sizeof(lines[layout.row_exp]), "EXP %ld",
-        (long)status->exp);
-    attrs[layout.row_exp] = TERM_WHITE;
+    strnfmt(value_buf, sizeof(value_buf), "%d/%d", status->hp_cur,
+        status->hp_max);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_hp], TERM_WHITE,
+        (status->hp_max >= 100) ? "Hth" : "Health", status->hp_attr,
+        value_buf, true);
 
-    strnfmt(lines[layout.row_hp], sizeof(lines[layout.row_hp]), "HP %d/%d",
-        status->hp_cur, status->hp_max);
-    attrs[layout.row_hp] = status->hp_attr;
-
-    strnfmt(lines[layout.row_sp], sizeof(lines[layout.row_sp]),
-        "Voice %d/%d", status->voice_cur, status->voice_max);
-    attrs[layout.row_sp] = status->voice_attr;
+    strnfmt(value_buf, sizeof(value_buf), "%d:%d", status->voice_cur,
+        status->voice_max);
+    app_dungeon_status_row_set_key_meta(&rows[layout.row_sp], TERM_WHITE,
+        (status->voice_max >= 100) ? "Vce" : "Voice", status->voice_attr,
+        value_buf, true);
 
     if (status->light_text.active)
     {
-        app_dungeon_ui_line_set(lines[layout.row_light],
-            sizeof(lines[layout.row_light]), status->light_text.text);
-        attrs[layout.row_light] = status->light_text.attr;
+        app_dungeon_status_row_set_key_meta(&rows[layout.row_light],
+            TERM_WHITE, "", status->light_text.attr,
+            status->light_text.text, false);
+        if (light_ptr->k_idx)
+        {
+            rows[layout.row_light].icon_attr = object_attr(light_ptr);
+            rows[layout.row_light].icon_char = object_char(light_ptr);
+        }
     }
+
     if (status->melee_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_mel],
-            sizeof(lines[layout.row_mel]), status->melee_text.text);
-        attrs[layout.row_mel] = status->melee_text.attr;
-    }
+        app_dungeon_status_row_set_value(&rows[layout.row_mel],
+            status->melee_text.attr, status->melee_text.text);
     if (status->archery_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_arc],
-            sizeof(lines[layout.row_arc]), status->archery_text.text);
-        attrs[layout.row_arc] = status->archery_text.attr;
-    }
+        app_dungeon_status_row_set_value(&rows[layout.row_arc],
+            status->archery_text.attr, status->archery_text.text);
     if (status->quiver_text.active)
     {
-        app_dungeon_ui_line_set(lines[layout.row_quiver],
-            sizeof(lines[layout.row_quiver]), status->quiver_text.text);
-        attrs[layout.row_quiver] = status->quiver_text.attr;
+        bool same_type = q1_ptr->k_idx && q2_ptr->k_idx
+            && q1_ptr->tval == q2_ptr->tval
+            && q1_ptr->sval == q2_ptr->sval;
+
+        rows[layout.row_quiver].attr = status->quiver_text.attr;
+        rows[layout.row_quiver].meta_attr = status->quiver_text.attr;
+
+        if (same_type)
+        {
+            strnfmt(rows[layout.row_quiver].label,
+                sizeof(rows[layout.row_quiver].label), "%d/%d",
+                q1_ptr->number, object_stack_limit(q1_ptr));
+            strnfmt(rows[layout.row_quiver].meta,
+                sizeof(rows[layout.row_quiver].meta), "%d/%d",
+                q2_ptr->number, object_stack_limit(q2_ptr));
+            rows[layout.row_quiver].extra_icon_attr = object_attr(q1_ptr);
+            rows[layout.row_quiver].extra_icon_char = object_char(q1_ptr);
+        }
+        else
+        {
+            if (q1_ptr->k_idx)
+            {
+                rows[layout.row_quiver].icon_attr = object_attr(q1_ptr);
+                rows[layout.row_quiver].icon_char = object_char(q1_ptr);
+                strnfmt(rows[layout.row_quiver].label,
+                    sizeof(rows[layout.row_quiver].label), "%d/%d",
+                    q1_ptr->number, object_stack_limit(q1_ptr));
+            }
+            if (q2_ptr->k_idx)
+            {
+                rows[layout.row_quiver].extra_icon_attr = object_attr(q2_ptr);
+                rows[layout.row_quiver].extra_icon_char = object_char(q2_ptr);
+                strnfmt(rows[layout.row_quiver].meta,
+                    sizeof(rows[layout.row_quiver].meta), "%d/%d",
+                    q2_ptr->number, object_stack_limit(q2_ptr));
+            }
+        }
     }
     if (status->evasion_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_evn],
-            sizeof(lines[layout.row_evn]), status->evasion_text.text);
-        attrs[layout.row_evn] = status->evasion_text.attr;
-    }
+        app_dungeon_status_row_set_value(&rows[layout.row_evn],
+            status->evasion_text.attr, status->evasion_text.text);
     if (status->tracked_name_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_info],
-            sizeof(lines[layout.row_info]), status->tracked_name_text.text);
-        attrs[layout.row_info] = status->tracked_name_text.attr;
-    }
+        app_dungeon_status_row_set_section(&rows[layout.row_info],
+            status->tracked_name_text.attr,
+            status->tracked_name_text.text, true);
     if (status->tracked_health_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_info + 1],
-            sizeof(lines[layout.row_info + 1]),
+        app_dungeon_status_row_set_value(&rows[layout.row_info + 1],
+            status->tracked_health_text.attr,
             status->tracked_health_text.text);
-        attrs[layout.row_info + 1] = status->tracked_health_text.attr;
-    }
     if (status->tracked_alertness_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_info + 2],
-            sizeof(lines[layout.row_info + 2]),
+        app_dungeon_status_row_set_value(&rows[layout.row_info + 2],
+            status->tracked_alertness_text.attr,
             status->tracked_alertness_text.text);
-        attrs[layout.row_info + 2] = status->tracked_alertness_text.attr;
-    }
 
     if (status->cut_text.active && status->poisoned_text.active)
     {
-        app_dungeon_ui_line_set(lines[layout.row_cut - 1],
-            sizeof(lines[layout.row_cut - 1]), status->cut_text.text);
-        attrs[layout.row_cut - 1] = status->cut_text.attr;
-        app_dungeon_ui_line_set(lines[layout.row_cut],
-            sizeof(lines[layout.row_cut]), status->poisoned_text.text);
-        attrs[layout.row_cut] = status->poisoned_text.attr;
+        app_dungeon_status_row_set_value(&rows[layout.row_cut - 1],
+            status->cut_text.attr, status->cut_text.text);
+        app_dungeon_status_row_set_value(&rows[layout.row_cut],
+            status->poisoned_text.attr, status->poisoned_text.text);
     }
     else if (status->cut_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_cut],
-            sizeof(lines[layout.row_cut]), status->cut_text.text);
-        attrs[layout.row_cut] = status->cut_text.attr;
-    }
+        app_dungeon_status_row_set_value(&rows[layout.row_cut],
+            status->cut_text.attr, status->cut_text.text);
     else if (status->poisoned_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_cut],
-            sizeof(lines[layout.row_cut]), status->poisoned_text.text);
-        attrs[layout.row_cut] = status->poisoned_text.attr;
-    }
+        app_dungeon_status_row_set_value(&rows[layout.row_cut],
+            status->poisoned_text.attr, status->poisoned_text.text);
 
     if (status->song_text.active)
-    {
-        app_dungeon_ui_line_set(lines[layout.row_song],
-            sizeof(lines[layout.row_song]), status->song_text.text);
-        attrs[layout.row_song] = status->song_text.attr;
-    }
+        app_dungeon_status_row_set_section(&rows[layout.row_song],
+            status->song_text.attr, status->song_text.text, true);
 
     for (row = 0; row <= max_row; row++)
-    {
-        (void)app_dungeon_ui_append_status_row_or_blank(panel, attrs[row],
-            lines[row]);
-    }
+        (void)app_dungeon_ui_append_status_row_or_blank(panel, &rows[row]);
 }
 
 static void app_build_bottom_strip_ui_panel(app_ui_scene* scene,

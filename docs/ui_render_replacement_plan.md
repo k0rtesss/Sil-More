@@ -22,11 +22,30 @@ all forward UI work.
 ### Landed
 - `src/app/*` already carries session, input, snapshot, event, and host
   surfaces.
+- `src/app/app-ui.[ch]` now provide the first shared semantic UI payload, and
+  the existing menu payload can be adapted into that model.
 - `CMakeLists.txt` already splits `sil-core`, `sil-legacy-compat`, and
   `sil-platform-sdl`.
 - `src/sdl-scene-dungeon.c` already renders the main dungeon from snapshots.
 - `src/app/app-scene-menu.*` plus `src/sdl-scene-menu.c` already prove a
-  semantic SDL renderer path for menus.
+  semantic SDL renderer path for menus, and `sdl-scene-menu.c` now also has
+  direct `app_ui_scene` entrypoints for overlay rendering.
+- `src/app/app-scene-dungeon.*` now publish persistent chrome through
+  `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
+  the top strip, left status rail, and bottom strip.
+- The semantic left rail now uses a direct status-rail compositor with
+  proportional text measurement, tile/icon slots, and pixel-based map
+  reservation, so the old raw `Term->scr` mirror is no longer the shipped SDL
+  path for that panel.
+- The hidden left-panel map-mask globals and the cave draw-time masking checks
+  used only by the old sidebar mirror were removed.
+- The information-scene mirror mode was collapsed to one fixed renderer path:
+  `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR` and
+  `ui_information_scene_enter_mirror()` were deleted, and mirror callers were
+  moved to `ui_information_scene_enter()`.
+- The main menu now opens as a dungeon overlay menu, and the overlay is
+  published before the first wait cycle to avoid a stale-frame flash from the
+  old background.
 - `tools/ui_debt_audit.py` and `tests/ui_debt_audit_baseline.json` already give
   a measurable debt baseline.
 - Independent scaling already exists in seed form:
@@ -34,19 +53,23 @@ all forward UI work.
   - `menu_panel_font_size` for menus and left-panel text
 
 ### Not Landed
-- Overlay payloads are still partly term-grid contracts:
-  - `src/app/app-scene-dungeon.h` still bakes in
-    `APP_DUNGEON_LEFT_PANEL_COLS`
-  - overlay panels still expose `CELL_GRID`, `grid_cols`, `reserve_cells`,
-    `cell_rows`, and `cell_cols`
+- The new shared `app_ui_scene` model is only partially adopted:
+  - persistent chrome and the status rail use it directly
+  - menu panels other than `STRIP` and `STATUS_RAIL` still round-trip through
+    `app_menu_scene` as a compatibility adapter
+  - shared document, list-detail, tab, table, and minimap widgets are still
+    missing
+- Overlay and interaction payloads are still partly term-grid contracts:
+  - `app_interaction_panel_snapshot` is still a raw cell-grid payload
 - The menu path still contains compatibility modes instead of one final model:
   - `APP_MENU_SCENE_FLAG_PLAIN`
   - `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
   - `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
-- The information-scene bridge is still a real runtime dependency:
+- The information-scene bridge is still a real runtime dependency for many
+  browser and document screens:
   - `ui_information_scene_capture_term()`
   - `ui_information_scene_present_term()`
-  - `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
+  - `app_information_scene`
 - Large UI families still own layout through `Term->wid`, `Term->hgt`,
   `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
@@ -167,13 +190,15 @@ not as mirrored terminal regions.
 These are semantic widgets, not raw glyph dumps.
 
 ## Freeze List
-Do not add new SDL-path dependencies on:
+Deleted in Slice A. Do not reintroduce:
+- `APP_DUNGEON_LEFT_PANEL_COLS`
+- `APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID`
+- `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
+- `ui_information_scene_enter_mirror()`
+
+Still present as migration debt. Do not add new SDL-path dependencies on:
 - `ui_information_scene_capture_term()`
 - `ui_information_scene_present_term()`
-- `ui_information_scene_enter_mirror()`
-- `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
-- `APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID`
-- `APP_DUNGEON_LEFT_PANEL_COLS`
 - `app_interaction_panel_snapshot`
 - `APP_MENU_SCENE_FLAG_PLAIN`
 - `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
@@ -185,6 +210,26 @@ Do not add new SDL-path dependencies on:
 Goal:
 - replace the current split between dungeon overlay payloads, menu payloads,
   and information-scene bridges with one shared semantic UI system
+
+Status on 2026-04-03:
+- In progress, with the first big chrome/menu slice landed.
+- Done:
+  - added `src/app/app-ui.[ch]`
+  - added dungeon `chrome_scene`
+  - routed top strip, left rail, bottom strip, and main-menu overlay through
+    shared `app_ui_scene` entrypoints
+  - deleted the old raw left-rail mirror and hidden-panel globals
+  - deleted the information-scene term-mirror flag and mirror-enter helper
+  - fixed the semantic status rail to measure and draw proportional text runs
+    instead of synthetic fixed-grid glyph spacing
+- Still to do before Slice A can exit:
+  - remove the non-strip/non-status-rail menu adapter back into
+    `app_menu_scene`
+  - replace menu `PLAIN` / `LEGACY_SIDEBAR` compatibility modes with direct
+    `app_ui_scene` rendering
+  - add the shared list-detail, document, table, tab, and minimap widgets
+  - migrate normal browser/document paths off
+    `ui_information_scene_present_term()` / `capture_term()`
 
 Primary write set:
 - `src/app/*`
@@ -236,7 +281,8 @@ Deliverables:
   path
 
 Delete during this slice:
-- hidden left-panel overlay globals
+- hidden left-panel overlay globals (already removed in the Slice A chrome
+  cut)
 - term-grid overlay panel contracts
 - raw interaction panel grids
 - transient menu overlay behavior used only to paper over legacy ownership
@@ -310,17 +356,21 @@ Exit when:
 These are not permanent compatibility shims. They should be removed as their
 replacements land.
 
+Already removed:
 - `APP_DUNGEON_LEFT_PANEL_COLS`
 - `APP_DUNGEON_OVERLAY_PANEL_FLAG_CELL_GRID`
+- `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
+- `ui_information_scene_enter_mirror()`
+- hidden left-panel overlay globals in `src/ui/ui-status.c`
+
+Still pending:
 - overlay panel `cell_rows`, `cell_cols`, and embedded raw cell arrays
 - `app_interaction_panel_snapshot`
 - `APP_MENU_SCENE_FLAG_PLAIN`
 - `APP_MENU_SCENE_FLAG_LEGACY_SIDEBAR`
 - `APP_MENU_SCENE_FLAG_USE_LEGACY_BACKDROP`
-- `APP_INFORMATION_SCENE_FLAG_TERM_MIRROR`
 - `ui_information_scene_capture_term()`
 - `ui_information_scene_present_term()`
-- hidden left-panel overlay globals in `src/ui/ui-status.c`
 
 ## Validation Gates
 - `main_view_scale` changes dungeon rendering only.
