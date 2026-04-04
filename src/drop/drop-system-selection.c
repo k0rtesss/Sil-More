@@ -1098,23 +1098,23 @@ static bool generate_chest(int depth, const drop_profile* profile, object_type* 
 
         if (g_chest_vault_type == 6)
         {
-            wooden_pct = 100;
-            steel_pct = 0;
-        }
-        else if (g_chest_vault_type == 7)
-        {
             wooden_pct = 65;
             steel_pct = 35;
         }
-        else if (g_chest_vault_type == 8)
+        else if (g_chest_vault_type == 7)
         {
             wooden_pct = 35;
-            steel_pct = 40;
+            steel_pct = 65;
+        }
+        else if (g_chest_vault_type == 8)
+        {
+            wooden_pct = 0;
+            steel_pct = 0;
         }
         else if (g_chest_vault_type == 9)
         {
-            wooden_pct = 20;
-            steel_pct = 35;
+            wooden_pct = 0;
+            steel_pct = 0;
         }
         else
         {
