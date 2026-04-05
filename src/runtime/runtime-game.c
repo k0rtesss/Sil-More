@@ -188,6 +188,7 @@ static void close_game_aux(void)
         return;
     }
     death_processing = true;
+    score_clear_postmortem_scores_path();
 
     log_debug("Processing character death for '%s' (wizard=%d, noscore=0x%04X, savefile='%s')",
              op_ptr->full_name, p_ptr->wizard ? 1 : 0, (unsigned)p_ptr->noscore, savefile);
@@ -257,7 +258,15 @@ static void close_game_aux(void)
     int final_score = score_points(&the_score);
     if (!run_mode_is_blitz())
     {
-        if (p_ptr->morgoth_slain && !p_ptr->escaped)
+        if (p_ptr->escaped)
+        {
+            int escaped_silmarils = parse_score_int(the_score.silmarils,
+                sizeof(the_score.silmarils), 0);
+            log_info("Player escaped - updating metarun data after score entry");
+            metarun_update_on_exit(false, true, (byte)MAX(escaped_silmarils, 0),
+                final_score);
+        }
+        else if (p_ptr->morgoth_slain && !p_ptr->escaped)
         {
             log_info("Player achieved Morgoth victory - updating metarun data");
             metarun_update_on_exit(false, false, 3, final_score);
@@ -296,8 +305,15 @@ static void close_game_aux(void)
         switch (choice)
         {
         case 1:
-            show_scores_interactive_highlight(true, &the_score);
+        {
+            const char* archived_score_path = score_postmortem_scores_path();
+            if (archived_score_path && archived_score_path[0])
+                show_scores_interactive_highlight_from_file(true,
+                    archived_score_path, &the_score);
+            else
+                show_scores_interactive_highlight(true, &the_score);
             break;
+        }
 
         case 2:
             death_spectator_view();
@@ -353,6 +369,7 @@ static void close_game_aux(void)
         }
     }
 
+    score_clear_postmortem_scores_path();
     death_processing = false;
 }
 

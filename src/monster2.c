@@ -715,8 +715,11 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
     bool allow24 = false;
     int build_vault_type = 0;
     bool exact_token = false;
+    int current_generation_depth = player_generation_depth();
 
     // determine the effective level:
+
+    level = generation_depth_for_level(level);
 
     // default
     generation_level = level;
@@ -747,20 +750,13 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
                 generation_level = rand_range(17, 23);
             }
 
-            // the surface generates monsters as levels 17--23
-            if (level == 0)
-            {
-                pursuing_monster = true;
-                generation_level = rand_range(17, 23);
-            }
-
             if (pursuing_monster)
             {
                 // leave as is
             }
 
             // most of the time use a small distribution
-            else if (level == p_ptr->depth)
+            else if (level == current_generation_depth)
             {
                 // modify the effective level by a small random amount: [1, 4,
                 // 6, 4, 1]
@@ -2129,6 +2125,7 @@ void describe_floor_object(void)
     // arms and armour show weight
     else if (((wield_slot(o_ptr) >= INVEN_WIELD)
                  && (wield_slot(o_ptr) <= INVEN_STAFF))
+        || (wield_slot(o_ptr) == INVEN_HORN)
         || ((wield_slot(o_ptr) >= INVEN_BODY)
             && (wield_slot(o_ptr) <= INVEN_FEET)))
     {
@@ -3713,7 +3710,7 @@ bool alloc_monster(bool on_stairs, bool force_undead)
             while (!placed && (tries < 50))
             {
                 // modify the monster generation level based on the stair type
-                monster_level = p_ptr->depth;
+                monster_level = player_generation_depth();
                 switch (cave_feat[sy][sx])
                 {
                 case FEAT_LESS_SHAFT:

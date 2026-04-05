@@ -446,11 +446,12 @@ static bool droptype_matches(const drop_request* req, const drop_entry* e)
         return (e->obj.tval == TV_HELM || e->obj.tval == TV_CROWN);
     case DROP_TYPE_JEWELRY:
         return (e->obj.tval == TV_RING || e->obj.tval == TV_AMULET
-            || e->obj.tval == TV_LIGHT || e->obj.tval == TV_HORN);
+            || e->obj.tval == TV_LIGHT);
     case DROP_TYPE_POTION:
         return e->obj.tval == TV_POTION;
     case DROP_TYPE_STAFF:
-        return (e->obj.tval == TV_STAFF || e->obj.tval == TV_GEM);
+        return (e->obj.tval == TV_STAFF || e->obj.tval == TV_HORN
+            || e->obj.tval == TV_GEM);
     case DROP_TYPE_SIMPLE_LIGHTS:
         return e->group_kind == DROP_GROUP_NORMAL
             && e->obj.tval == TV_LIGHT
@@ -1069,8 +1070,14 @@ static bool generate_chest(int depth, const drop_profile* profile, object_type* 
     int material_roll = rand_int(100);
     int material_index;
     drop_quality material_quality;
+    bool force_steel = p_ptr && (p_ptr->depth == 0);
 
-    if (chest_has_custom_material_weights())
+    if (force_steel)
+    {
+        material_index = 1;
+        material_quality = DROP_QUALITY_GREAT;
+    }
+    else if (chest_has_custom_material_weights())
     {
         int wooden_pct = g_chest_material_wood_pct;
         int steel_pct = g_chest_material_steel_pct;
@@ -1364,7 +1371,7 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
     int legal_depth = gen_depth;
     if (p_ptr)
     {
-        int current_depth = (p_ptr->depth > 0) ? p_ptr->depth : 1;
+        int current_depth = player_generation_depth();
         if (legal_depth > current_depth)
             legal_depth = current_depth;
     }
@@ -1702,7 +1709,7 @@ bool drop_generate_chasm_sanctum_object(int depth, object_type* out)
 
     if (p_ptr)
     {
-        int current_depth = (p_ptr->depth > 0) ? p_ptr->depth : 1;
+        int current_depth = player_generation_depth();
         if (legal_depth > current_depth)
             legal_depth = current_depth;
     }

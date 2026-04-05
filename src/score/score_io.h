@@ -46,5 +46,7 @@ bool upsert_live_score_on_save(void);
 bool score_refresh_live_snapshot(time_t snapshot_time, const char* reason);
 int highscore_dead(char* name);
 void clear_scorefile(void);
+const char* score_postmortem_scores_path(void);
+void score_clear_postmortem_scores_path(void);
 
 #endif /* INCLUDED_SCORE_IO_H */

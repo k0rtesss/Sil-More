@@ -1177,7 +1177,8 @@ void init_angband(void)
 NavResult initial_menu(bool* start_new)
 {
     log_info("initial_menu: ENTERED - showing main menu");
-    if (score_count_alive_entries() > 0)
+    if (sdl_music_consume_welcome_main_once()
+        || score_count_alive_entries() > 0)
         sdl_music_play_main();
     else
         sdl_music_play_main_full();

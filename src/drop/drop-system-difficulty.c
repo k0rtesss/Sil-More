@@ -37,6 +37,8 @@ static s16b neutral_wield_slot(const object_type* o_ptr)
         return INVEN_BOW;
     case TV_STAFF:
         return INVEN_STAFF;
+    case TV_HORN:
+        return INVEN_HORN;
     case TV_RING:
         return INVEN_LEFT;
     case TV_AMULET:
@@ -95,7 +97,6 @@ bool object_uses_smithing_difficulty(const object_type* o_ptr)
 
     case TV_RING:
     case TV_AMULET:
-    case TV_HORN:
         return true;
 
     case TV_LIGHT:
@@ -547,6 +548,7 @@ int smithing_difficulty_baseline(const object_type* o_ptr)
         case INVEN_FEET:
         case INVEN_QUIVER1:
         case INVEN_QUIVER2:
+        case INVEN_HORN:
             dif_mult += 20;
             break;
         default:

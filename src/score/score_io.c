@@ -31,10 +31,30 @@ bool build_current_score_path(char* buf, size_t len)
 
 static score_file_ctx global_score_ctx;
 static score_file_ctx* active_score_ctx = &global_score_ctx;
+static char g_postmortem_scores_path[1024];
 
 static const char* file_mode_from_flags(int mode);
 static bool score_file_upgrade_to_curses(score_file_ctx* ctx, const char *filepath);
 static bool upsert_live_score_entry(const high_score* live_score);
+
+const char* score_postmortem_scores_path(void)
+{
+    return g_postmortem_scores_path;
+}
+
+void score_clear_postmortem_scores_path(void)
+{
+    g_postmortem_scores_path[0] = '\0';
+}
+
+static void score_set_postmortem_scores_path(const char* path)
+{
+    if (path && path[0])
+        SDL_strlcpy(g_postmortem_scores_path, path,
+            sizeof(g_postmortem_scores_path));
+    else
+        score_clear_postmortem_scores_path();
+}
 
 score_file_ctx* score_file_set_active_ctx(score_file_ctx* ctx)
 {
@@ -1064,6 +1084,7 @@ void clear_scorefile(void)
     char cur_path[1024];
     bool was_open = (highscore_fd != NULL);
 
+    score_clear_postmortem_scores_path();
     build_current_score_path(cur_path, sizeof(cur_path));
 
     if (was_open) {
@@ -1100,10 +1121,16 @@ void clear_scorefile(void)
             safe_setuid_grab();
             int rn = rename(cur_path, arch_path);
             safe_setuid_drop();
-            if (rn != 0)
+            if (rn == 0)
+                score_set_postmortem_scores_path(arch_path);
+            else
+            {
+                score_clear_postmortem_scores_path();
                 (void)fd_kill(cur_path);
+            }
         }
         else {
+            score_clear_postmortem_scores_path();
             (void)fd_kill(cur_path);
         }
     }

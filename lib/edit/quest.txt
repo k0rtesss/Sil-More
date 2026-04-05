@@ -114,7 +114,7 @@ I:"Grant the tormented spirit its final release, that it may at last face my jud
 W:As the false body falls, a long, sorrowful sigh echoes, and the spirit is gone. A profound stillness settles upon the place.
 W:
 W:"The mockery is unmade. The spirit of Brodda is unbound and set upon the path to its final judgment."
-W:"You have not wrought vengeance, but restored a thread of the natural order, long tangled by the Enemy’s malice."
+W:"You have not wrought vengeance, but restored a thread of the natural order, long tangled by the Enemy's malice."
 W:"Accept now this gift: a spirit shielded from the great fears that unman the hearts of mortals. Go forth, and walk unafraid."
 
 # Quest of Nienna, Lady of Pity

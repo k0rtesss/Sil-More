@@ -192,11 +192,11 @@ void do_cmd_escape(int silmarils)
     SDL_strlcat(notes_buffer, "\n", sizeof(notes_buffer));
     SDL_strlcpy(p_ptr->died_from, "ripe old age", sizeof(p_ptr->died_from));
 
-    log_info("Player escaped with %d Silmarils", silmarils);
-    if (run_mode_is_blitz())
-        blitz_show_end_summary((byte)MAX(silmarils, 0));
-    else
-        metarun_update_on_exit(false, true, silmarils, 0);
+    /* Defer metarun exit processing until close_game_aux() has recorded the
+     * final score. Otherwise the rollover can start a fresh metarun before
+     * this escape is written, and the winning character lands in the new run.
+     */
+    log_info("Player escaped with %d Silmarils (metarun processing deferred until close_game_aux)", silmarils);
 }
 
 void do_cmd_suicide(void)

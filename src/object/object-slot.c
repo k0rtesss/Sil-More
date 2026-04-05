@@ -82,6 +82,9 @@ s16b wield_slot(const object_type* o_ptr)
     case TV_STAFF:
         return (INVEN_STAFF);
 
+    case TV_HORN:
+        return (INVEN_HORN);
+
     case TV_RING:
         if (!inventory[INVEN_RIGHT].k_idx)
             return (INVEN_RIGHT);
@@ -147,6 +150,7 @@ cptr describe_empty_slot(int i)
     case INVEN_FEET: p = "(no boots)"; break;
     case INVEN_QUIVER1: p = "(empty 1st quiver)"; break;
     case INVEN_QUIVER2: p = "(empty 2nd quiver)"; break;
+    case INVEN_HORN: p = "(no horn)"; break;
     default: p = "(empty slot)"; break;
     }
 
@@ -174,6 +178,7 @@ cptr mention_use(int i)
     case INVEN_FEET: p = "On feet"; break;
     case INVEN_QUIVER1: p = "1st quiver"; break;
     case INVEN_QUIVER2: p = "2nd quiver"; break;
+    case INVEN_HORN: p = "Horn"; break;
     default: p = "In pack"; break;
     }
 
@@ -201,6 +206,7 @@ cptr describe_use(int i)
     case INVEN_FEET: p = "wearing on your feet"; break;
     case INVEN_QUIVER1: p = "carrying in your quiver"; break;
     case INVEN_QUIVER2: p = "carrying in your quiver"; break;
+    case INVEN_HORN: p = "carrying at your side"; break;
     default: p = "carrying in your pack"; break;
     }
 

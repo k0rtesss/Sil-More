@@ -104,10 +104,9 @@ static drop_category drop_category_for_kind(const object_kind* k_ptr)
         if (k_ptr->sval == SV_SHOVEL || k_ptr->sval == SV_MATTOCK)
             return DROP_CAT_SUPPLY;
         return DROP_CAT_WEAPON;
-    case TV_HORN:
-        return DROP_CAT_JEWELRY;
     case TV_POTION:
     case TV_STAFF:
+    case TV_HORN:
     case TV_GEM:
     case TV_FOOD: /* Herbs */
     case TV_FLASK:
