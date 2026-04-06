@@ -760,21 +760,29 @@ static bool welcome_screen_publish_bootstrap(bool show_wizard_line)
 {
     app_session* session = app_session_current();
     app_bootstrap_scene scene;
-    welcome_intro_layout layout = { 1, false, false, false };
+    welcome_intro_layout layout;
+    int term_hgt = Term ? Term->hgt : 24;
+    bool show_sep = true;
+    bool show_blank = true;
+    bool show_prompt = true;
+    int intro_col = welcome_screen_base_col();
 
     if (!runtime_cli_snapshot_renderer() || !session)
         return false;
 
+    welcome_screen_compute_layout(term_hgt, show_wizard_line, &layout,
+        &show_sep, &show_blank, &show_prompt);
+
     app_bootstrap_scene_init(&scene);
-    if (!welcome_screen_visit_intro_lines(&layout, WELCOME_SCREEN_LEGACY_BASE_COL,
+    if (!welcome_screen_visit_intro_lines(&layout, intro_col,
             welcome_screen_current_intro_style(),
             welcome_screen_bootstrap_emit, &scene))
     {
         return false;
     }
 
-    if (!welcome_screen_visit_footer_lines(WELCOME_SCREEN_LEGACY_BASE_COL,
-            show_wizard_line, true, true, true,
+    if (!welcome_screen_visit_footer_lines(intro_col, show_wizard_line,
+            show_sep, show_blank, show_prompt,
             welcome_screen_bootstrap_emit, &scene))
     {
         return false;
@@ -789,7 +797,14 @@ static bool welcome_screen_publish_bootstrap(bool show_wizard_line)
 
 void display_introduction(void)
 {
-    welcome_intro_layout layout = { 1, false, false, false };
+    int term_wid = 80;
+    int term_hgt = 24;
+    welcome_intro_layout layout;
+
+    Term_get_size(&term_wid, &term_hgt);
+    (void)term_wid;
+    welcome_screen_compute_layout(term_hgt, runtime_cli_wizard(), &layout,
+        NULL, NULL, NULL);
     display_introduction_with_layout(&layout);
 }
 

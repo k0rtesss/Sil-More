@@ -97,7 +97,8 @@ void describe_item_with_comparisons(int item_index, bool include_comparisons)
     if (object_uses_smithing_difficulty(base_obj) && !object_known_p(base_obj))
     {
         bool is_equipped = (!is_floor && item_index >= INVEN_WIELD);
-        (void)player_try_identify_smithing_object(base_obj, is_equipped, 0);
+        (void)player_try_identify_smithing_object_on_examine(base_obj,
+            is_equipped);
     }
 
     strnfmt(heading_texts[count], sizeof(heading_texts[count]), "%s:",

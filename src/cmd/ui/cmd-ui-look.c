@@ -238,10 +238,12 @@ static void unified_look_show_monster_recall(const monster_type* m_ptr)
     screen_load();
 }
 
-static void unified_look_show_object_info(const object_type* o_ptr)
+static void unified_look_show_object_info(object_type* o_ptr)
 {
     if (!o_ptr)
         return;
+
+    (void)player_try_identify_smithing_object_on_examine(o_ptr, false);
 
     if (wield_slot(o_ptr) >= INVEN_WIELD && wield_slot(o_ptr) < INVEN_TOTAL)
     {

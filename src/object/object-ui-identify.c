@@ -331,6 +331,9 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         case '4':
         case 'h':
         case 'H':
+            (void)player_try_identify_smithing_object_on_examine(
+                entries[highlight].o_ptr,
+                (entries[highlight].type == IDENT_ENTRY_EQUIP));
             object_info_screen(entries[highlight].o_ptr);
             break;
 

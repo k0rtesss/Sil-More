@@ -856,7 +856,8 @@ void do_cmd_equip(void)
         log_trace("do_cmd_equip: Examining item %d", selected_index);
         if (selected_index >= INVEN_WIELD && selected_index < INVEN_TOTAL)
         {
-            (void)player_try_identify_smithing_object(&inventory[selected_index], true, 0);
+            (void)player_try_identify_smithing_object_on_examine(
+                &inventory[selected_index], true);
             object_info_screen(&inventory[selected_index]);
         }
         break;

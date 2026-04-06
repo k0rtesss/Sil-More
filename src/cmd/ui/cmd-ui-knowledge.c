@@ -3509,6 +3509,8 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                     if (use_information_scene
                         && !knowledge_pause_information_scene(&info_scope))
                         break;
+                    (void)player_try_identify_smithing_object_on_examine(
+                        &inventory[entry->item_idx], false);
                     object_info_screen(&inventory[entry->item_idx]);
                     if (use_information_scene
                         && !knowledge_resume_information_scene(&info_scope))

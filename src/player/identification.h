@@ -9,6 +9,8 @@ bool player_auto_identifies_object(const object_type* o_ptr);
 void player_mark_object_experienced(object_type* o_ptr);
 bool player_try_identify_smithing_object(
     object_type* o_ptr, bool is_equipped, int bonus);
+bool player_try_identify_smithing_object_on_examine(
+    object_type* o_ptr, bool is_equipped);
 bool player_auto_identify_smithing_object(
     object_type* o_ptr, bool ignore_distance_penalty);
 void player_update_lore(void);
