@@ -395,6 +395,19 @@ static int less_special_rarity_penalty(int rarity_percent)
     return rarity_percent;
 }
 
+static byte scale_arrow_supply_rarity(byte rarity, int att_bonus)
+{
+    int scaled = rarity;
+
+    while (att_bonus > 0 && scaled > 0)
+    {
+        scaled /= 2;
+        att_bonus--;
+    }
+
+    return (byte)scaled;
+}
+
 typedef enum
 {
     DROP_ALIGNMENT_STANDARD = 0,
@@ -754,11 +767,37 @@ static void build_normal_variants(int k_idx)
 
     drop_group_kind group_kind = (cat == DROP_CAT_JEWELRY) ? DROP_GROUP_EGO : DROP_GROUP_NORMAL;
 
-    /* Supply items: no smithing variants, use new allocation semantics */
+    /* Supply items: no smithing variants, use new allocation semantics. */
     if (cat == DROP_CAT_SUPPLY)
     {
-        add_drop_entry(&base, cat, DROP_GROUP_NORMAL, k_idx, min_depth, max_depth,
-            alloc_depths, alloc_rarities, num_allocations);
+        if (k_ptr->tval == TV_ARROW)
+        {
+            int att_min = k_ptr->att;
+            int att_max = MAX(k_ptr->att, k_ptr->max_att);
+
+            for (int att = att_min; att <= att_max; att++)
+            {
+                object_type v = base;
+                byte arrow_alloc_rarities[DROP_ALLOC_MAX];
+                int att_bonus = MAX(0, att - k_ptr->att);
+
+                memcpy(arrow_alloc_rarities, alloc_rarities,
+                    sizeof(arrow_alloc_rarities));
+                for (int i = 0; i < num_allocations; i++)
+                    arrow_alloc_rarities[i] = scale_arrow_supply_rarity(
+                        alloc_rarities[i], att_bonus);
+
+                v.att = att;
+                add_drop_entry(&v, cat, DROP_GROUP_NORMAL, k_idx, min_depth,
+                    max_depth, alloc_depths, arrow_alloc_rarities,
+                    num_allocations);
+            }
+        }
+        else
+        {
+            add_drop_entry(&base, cat, DROP_GROUP_NORMAL, k_idx, min_depth,
+                max_depth, alloc_depths, alloc_rarities, num_allocations);
+        }
         return;
     }
 

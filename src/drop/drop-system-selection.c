@@ -173,9 +173,10 @@ typedef enum
     DROP_SUPPLY_HERB = 1,
     DROP_SUPPLY_GEM = 2,
     DROP_SUPPLY_STAFF = 3,
-    DROP_SUPPLY_MISC = 4,
-    DROP_SUPPLY_TUNNELING = 5,
-    DROP_SUPPLY_GROUP_MAX = 6
+    DROP_SUPPLY_LIGHT = 4,
+    DROP_SUPPLY_ARROWS = 5,
+    DROP_SUPPLY_TUNNELING = 6,
+    DROP_SUPPLY_GROUP_MAX = 7
 } drop_supply_group_id;
 
 typedef struct
@@ -221,8 +222,13 @@ static void drop_request_set_default_weights(drop_request* req)
     req->allow_damaged = false;
     for (int i = 0; i < DROP_CAT_MAX; ++i)
         req->cat_weights[i] = DROP_DEFAULT_CAT_WEIGHT;
-    for (int i = 0; i < DROP_SUPPLY_GROUP_MAX; ++i)
-        req->supply_weights[i] = DROP_DEFAULT_SUPPLY_WEIGHT;
+    req->supply_weights[DROP_SUPPLY_POTION] = DROP_DEFAULT_SUPPLY_WEIGHT * 2;
+    req->supply_weights[DROP_SUPPLY_HERB] = DROP_DEFAULT_SUPPLY_WEIGHT * 2;
+    req->supply_weights[DROP_SUPPLY_GEM] = DROP_DEFAULT_SUPPLY_WEIGHT * 2;
+    req->supply_weights[DROP_SUPPLY_STAFF] = DROP_DEFAULT_SUPPLY_WEIGHT * 2;
+    req->supply_weights[DROP_SUPPLY_LIGHT] = DROP_DEFAULT_SUPPLY_WEIGHT;
+    req->supply_weights[DROP_SUPPLY_ARROWS] = DROP_DEFAULT_SUPPLY_WEIGHT;
+    req->supply_weights[DROP_SUPPLY_TUNNELING] = DROP_DEFAULT_SUPPLY_WEIGHT * 2;
 }
 
 static void drop_request_apply_profile(
@@ -241,7 +247,8 @@ static void drop_request_apply_profile(
     req->supply_weights[DROP_SUPPLY_HERB] = MAX(0, profile->supply_herb);
     req->supply_weights[DROP_SUPPLY_GEM] = MAX(0, profile->supply_gem);
     req->supply_weights[DROP_SUPPLY_STAFF] = MAX(0, profile->supply_staff);
-    req->supply_weights[DROP_SUPPLY_MISC] = MAX(0, profile->supply_misc);
+    req->supply_weights[DROP_SUPPLY_LIGHT] = MAX(0, profile->supply_light);
+    req->supply_weights[DROP_SUPPLY_ARROWS] = MAX(0, profile->supply_arrows);
     req->supply_weights[DROP_SUPPLY_TUNNELING] = MAX(0, profile->supply_tunneling);
     req->allow_damaged = profile->allow_damaged;
 }
@@ -258,14 +265,15 @@ static drop_supply_group_id supply_group_for_entry(const drop_entry* e)
         return DROP_SUPPLY_GEM;
     case TV_STAFF:
         return DROP_SUPPLY_STAFF;
+    case TV_LIGHT:
+    case TV_FLASK:
+        return DROP_SUPPLY_LIGHT;
     case TV_DIGGING:
         return DROP_SUPPLY_TUNNELING;
     case TV_ARROW:
-    case TV_LIGHT:
-    case TV_FLASK:
-        return DROP_SUPPLY_MISC;
+        return DROP_SUPPLY_ARROWS;
     default:
-        return DROP_SUPPLY_MISC;
+        return DROP_SUPPLY_ARROWS;
     }
 }
 
@@ -1412,7 +1420,8 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         req.supply_weights[DROP_SUPPLY_HERB] = 0;
         req.supply_weights[DROP_SUPPLY_GEM] = 0;
         req.supply_weights[DROP_SUPPLY_STAFF] = 0;
-        req.supply_weights[DROP_SUPPLY_MISC] = 0;
+        req.supply_weights[DROP_SUPPLY_LIGHT] = 0;
+        req.supply_weights[DROP_SUPPLY_ARROWS] = 0;
         req.supply_weights[DROP_SUPPLY_TUNNELING] = 0;
 
         if (req.cat_weights[DROP_CAT_WEAPON] <= 0
@@ -1503,7 +1512,8 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         req.supply_weights[DROP_SUPPLY_HERB] = 0;
         req.supply_weights[DROP_SUPPLY_GEM] = 0;
         req.supply_weights[DROP_SUPPLY_STAFF] = 0;
-        req.supply_weights[DROP_SUPPLY_MISC] = 100;
+        req.supply_weights[DROP_SUPPLY_LIGHT] = 100;
+        req.supply_weights[DROP_SUPPLY_ARROWS] = 0;
         req.supply_weights[DROP_SUPPLY_TUNNELING] = 0;
     }
 
@@ -1513,7 +1523,8 @@ static bool drop_generate_object_internal(int depth, drop_quality quality,
         req.supply_weights[DROP_SUPPLY_HERB] = 0;
         req.supply_weights[DROP_SUPPLY_GEM] = 0;
         req.supply_weights[DROP_SUPPLY_STAFF] = 0;
-        req.supply_weights[DROP_SUPPLY_MISC] = 0;
+        req.supply_weights[DROP_SUPPLY_LIGHT] = 0;
+        req.supply_weights[DROP_SUPPLY_ARROWS] = 0;
         req.supply_weights[DROP_SUPPLY_TUNNELING] = 100;
     }
 
