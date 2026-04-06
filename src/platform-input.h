@@ -5,6 +5,7 @@
 #include "gamepad-config.h"
 
 bool steamdeck_controls_active(void);
+bool portable_controls_active(void);
 int steamdeck_back_key(void);
 int steamdeck_confirm_key(void);
 int steamdeck_info_key(void);

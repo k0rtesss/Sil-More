@@ -653,6 +653,7 @@ void do_cmd_unified_look(void)
     state.look_mode = 0; /* 0 = normal unified look, 1 = L-style scrolling */
     state.current_square_entity = 0; /* 0 = monster, 1 = object */
     state.square_cycling_mode = false; /* Start in normal sidebar cycling mode */
+    const bool portable_controls = portable_controls_active();
 
     if (!g_unified_look_has_start
         || ((state.cursor_y == p_ptr->py) && (state.cursor_x == p_ptr->px)))
@@ -834,7 +835,7 @@ void do_cmd_unified_look(void)
                     /* Display help text based on current mode */
                     if (state.look_mode == 0)
                     {
-                        if (steamdeck_controls_active()) {
+                        if (portable_controls) {
                             char prev_label[16];
                             char next_label[16];
                             char exam_label[16];
@@ -873,7 +874,7 @@ void do_cmd_unified_look(void)
                     }
                     else
                     {
-                        if (steamdeck_controls_active()) {
+                        if (portable_controls) {
                             char prev_label[16];
                             char next_label[16];
                             char exam_label[16];
@@ -1363,9 +1364,9 @@ command_key:
             }
             
             case '\t': /* Tab key */
-            case 'i':  /* I key = nearby filter on keyboard, forward cycling on Steam Deck */
+            case 'i':  /* I key = nearby filter on keyboard, forward cycling in portable UI */
             {
-                if (query == 'i' && !steamdeck_controls_active())
+                if (query == 'i' && !portable_controls)
                 {
                     state.nearby_filter = !state.nearby_filter;
                     state.selected_entity = -1;
@@ -1417,9 +1418,9 @@ command_key:
             
             case '`': /* Backtick key - reverse Tab cycling */
             case 'q': /* Q key - reverse Tab cycling */
-            case 'e': /* E key - reverse Tab cycling (Steam Deck) */
+            case 'e': /* E key - reverse Tab cycling in portable UI */
             {
-                if (query == 'e' && !steamdeck_controls_active())
+                if (query == 'e' && !portable_controls)
                     goto command_key;
                 log_trace("REVERSE CYCLING: Key handler reached - cycling entities backward");
                 
@@ -1614,7 +1615,7 @@ command_key:
             }
             
             case 'u':
-                if (!steamdeck_controls_active())
+                if (!portable_controls)
                     goto command_key;
                 /* fallthrough */
             case 'o':

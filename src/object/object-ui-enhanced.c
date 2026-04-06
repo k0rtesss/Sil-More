@@ -300,7 +300,7 @@ void show_inven_enhanced(void)
 
     while (!done)
     {
-        bool steamdeck = steamdeck_controls_active();
+        const bool portable_controls = portable_controls_active();
         bool allow_compare = (current_menu_command == 'u'
             || current_menu_command == 'x');
         int compare_count = 0;
@@ -314,7 +314,7 @@ void show_inven_enhanced(void)
         int redraw_y1 = -1;
         int redraw_y2 = -1;
 
-        if (steamdeck)
+        if (portable_controls)
         {
             char confirm_label[16];
             char desc_label[16];
@@ -764,7 +764,7 @@ void show_inven_enhanced(void)
         case 'e':
             if (current_menu_command != 0)
             {
-                if (steamdeck_controls_active())
+                if (portable_controls)
                 {
                     enhanced_menu_action = ENHANCED_ACTION_SWITCH;
                     done = true;
@@ -772,7 +772,7 @@ void show_inven_enhanced(void)
                 else
                     goto default_case;
             }
-            else if (steamdeck_controls_active())
+            else if (portable_controls)
             {
                 enhanced_menu_action = ENHANCED_ACTION_SWITCH;
                 done = true;
@@ -795,7 +795,7 @@ void show_inven_enhanced(void)
                 enhanced_menu_action = ENHANCED_ACTION_SWITCH;
                 done = true;
             }
-            else if (steamdeck_controls_active() && highlight_active
+            else if (portable_controls && highlight_active
                 && highlight_row >= 0 && highlight_row < k)
             {
                 enhanced_menu_action = ENHANCED_ACTION_EXAMINE;
@@ -866,7 +866,7 @@ void show_inven_enhanced(void)
                 || (which >= 'A' && which <= 'Z') || which == '-')
             {
                 bool item_found = false;
-                if (steamdeck_controls_active())
+                if (portable_controls)
                 {
                     bell("Use arrow keys and Space to select items in this mode");
                     break;
@@ -1056,7 +1056,7 @@ void show_equip_enhanced(void)
 
     while (!done)
     {
-        bool steamdeck = steamdeck_controls_active();
+        const bool portable_controls = portable_controls_active();
 
         if (use_story_font)
         {
@@ -1084,7 +1084,7 @@ void show_equip_enhanced(void)
             show_equip();
         }
 
-        if (steamdeck)
+        if (portable_controls)
         {
             char confirm_label[16];
             char desc_label[16];
@@ -1195,7 +1195,7 @@ void show_equip_enhanced(void)
         case 'i':
             if (current_menu_command != 0)
             {
-                if (steamdeck_controls_active())
+                if (portable_controls)
                 {
                     enhanced_equip_action = ENHANCED_ACTION_SWITCH;
                     done = true;
@@ -1203,7 +1203,7 @@ void show_equip_enhanced(void)
                 else
                     goto equip_default_case;
             }
-            else if (steamdeck_controls_active())
+            else if (portable_controls)
             {
                 enhanced_equip_action = ENHANCED_ACTION_SWITCH;
                 done = true;
@@ -1226,7 +1226,7 @@ void show_equip_enhanced(void)
                 enhanced_equip_action = ENHANCED_ACTION_SWITCH;
                 done = true;
             }
-            else if (steamdeck_controls_active() && highlight_active
+            else if (portable_controls && highlight_active
                 && highlight_index >= 0 && highlight_index < k)
             {
                 enhanced_equip_action = ENHANCED_ACTION_EXAMINE;
@@ -1292,7 +1292,7 @@ void show_equip_enhanced(void)
                 || (which >= 'A' && which <= 'Z'))
             {
                 int item;
-                if (steamdeck_controls_active())
+                if (portable_controls)
                 {
                     bell("Use arrow keys and Space to select items in this mode");
                     break;

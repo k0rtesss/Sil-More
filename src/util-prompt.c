@@ -865,9 +865,9 @@ bool get_check(cptr prompt)
     char ch;
 
     char buf[160];
-    bool steamdeck = steamdeck_controls_active();
+    bool portable = portable_controls_active();
     int term_wid = active_term_width();
-    int suffix_wid = steamdeck ? 13 : 7;
+    int suffix_wid = portable ? 13 : 7;
     int prompt_wid = term_wid - suffix_wid;
     bool snapshot_interaction = prompt_snapshot_interaction_active();
 
@@ -878,14 +878,14 @@ bool get_check(cptr prompt)
     if (snapshot_interaction)
     {
         strnfmt(buf, sizeof(buf), "%s[y/n%s] ", prompt,
-            steamdeck ? "/space" : "");
+            portable ? "/space" : "");
     }
     else
     {
         if (prompt_wid < 8)
             prompt_wid = 8;
         strnfmt(buf, sizeof(buf), "%.*s[y/n%s] ", prompt_wid, prompt,
-            steamdeck ? "/space" : "");
+            portable ? "/space" : "");
     }
 
     /* Prompt for it */
@@ -902,7 +902,7 @@ bool get_check(cptr prompt)
                 APP_INTERACTION_FLAG_CAN_CONFIRM
                     | APP_INTERACTION_FLAG_CAN_CANCEL,
                 TERM_WHITE, buf, TERM_SLATE,
-                steamdeck ? "Y or Space confirms, N declines."
+                portable ? "Y, Enter, or Space confirms, N declines."
                     : "Y confirms, N declines.");
             prompt_snapshot_present();
         }
@@ -911,7 +911,8 @@ bool get_check(cptr prompt)
             break;
         if (ch == ESCAPE)
             break;
-        if (strchr("YyNn", ch) || (steamdeck && ch == ' '))
+        if (strchr("YyNn", ch)
+            || (portable && (ch == ' ' || ch == '\r' || ch == '\n')))
             break;
         bell("Illegal response to a 'yes/no' question!");
     }
@@ -926,7 +927,8 @@ bool get_check(cptr prompt)
         prt("", 0, 0);
 
     /* Normal negation */
-    if ((ch != 'Y') && (ch != 'y') && !(steamdeck && ch == ' '))
+    if ((ch != 'Y') && (ch != 'y')
+        && !(portable && (ch == ' ' || ch == '\r' || ch == '\n')))
         return (false);
 
     /* Success */
