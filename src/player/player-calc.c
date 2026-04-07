@@ -66,6 +66,14 @@ static int oath_special_ability_from_oath_num(int oath_num)
         return -1;
     }
 }
+
+static bool heavy_armour_evasion_bonus_applies(const object_type* o_ptr)
+{
+    return (o_ptr->tval == TV_MAIL)
+        && ((o_ptr->sval == SV_MAIL_CORSLET)
+            || (o_ptr->sval == SV_LONG_CORSLET));
+}
+
 void calc_voice(void)
 {
     int msp;
@@ -571,6 +579,12 @@ void calc_bonuses(void)
         
         /* Apply the evasion bonus */
         p_ptr->skill_equip_mod[S_EVN] += o_ptr->evn;
+
+        if (p_ptr->active_ability[S_EVN][EVN_HEAVY_ARMOUR]
+            && heavy_armour_evasion_bonus_applies(o_ptr))
+        {
+            p_ptr->skill_equip_mod[S_EVN] += 1;
+        }
     }
 
     /* Clear the old item granted abilities */
