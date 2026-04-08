@@ -78,6 +78,7 @@ static bool sdl_music_play_with_fallback(const char* primary_path, const char* f
     Uint32* length_ptr, SDL_AudioSpec* spec_ptr, const char* label,
     char* resolved_path, size_t resolved_len);
 static bool sdl_music_track_exists(const char* path);
+extern ang_file* sdl_fopen(cptr file, cptr mode);
 
 typedef struct {
     char (*files)[SDL_SOUND_NAME_LEN];

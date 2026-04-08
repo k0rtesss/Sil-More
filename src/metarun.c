@@ -19,6 +19,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "platform-audio.h"
 #include "platform-config.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
