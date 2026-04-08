@@ -96,6 +96,8 @@ static int sdl_touch_pane_effective_binding_for_panel(int panel, int index)
     return binding;
 }
 
+static bool sdl_touch_pane_confirm_binding(int binding);
+
 static bool sdl_touch_pane_binding_is_direction(int binding)
 {
     switch (binding) {
@@ -115,7 +117,10 @@ static bool sdl_touch_pane_binding_is_direction(int binding)
 
 static bool sdl_touch_pane_slot_uses_long_press(int slot, int binding)
 {
-    return (slot == 0) || sdl_touch_pane_binding_is_direction(binding) || (binding == 'z');
+    return (slot == 0)
+        || sdl_touch_pane_binding_is_direction(binding)
+        || (binding == 'z')
+        || sdl_touch_pane_confirm_binding(binding);
 }
 
 static bool sdl_touch_pane_confirm_binding(int binding)
@@ -703,11 +708,6 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     if (binding == GAMEPAD_BIND_NONE)
         return;
 
-    if (binding == INPUT_BIND_CONFIRM) {
-        sdl_touch_pane_send_confirm_action();
-        return;
-    }
-
     if (binding == GAMEPAD_BIND_SHIFT) {
         g_touch_pane_second_panel = !g_touch_pane_second_panel;
         g_state.need_present = true;
@@ -723,6 +723,15 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     if (binding == GAMEPAD_BIND_ALT) {
         sdl_gamepad_apply_modifier(binding, true);
         sdl_gamepad_apply_modifier(binding, false);
+        return;
+    }
+
+    if (sdl_touch_pane_confirm_binding(binding)) {
+        if (long_press && character_dungeon) {
+            Term_keypress('z');
+        } else {
+            sdl_touch_pane_send_confirm_action();
+        }
         return;
     }
 
