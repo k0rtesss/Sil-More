@@ -208,7 +208,8 @@ void do_cmd_suicide(void)
     if (!get_check("This will destroy the current character: are you sure? "))
         return;
 
-    prt("Please verify ABORTING by typing the '@' sign: ", 0, 0);
+    /* Special Verification for suicide */
+    prt("Please verify ABORTING by typing the '~' sign: ", 0, 0);
     flush();
     {
         app_wait_scope scope;
@@ -218,7 +219,7 @@ void do_cmd_suicide(void)
         app_session_pop_wait_scope(app_session_current(), &scope);
     }
     prt("", 0, 0);
-    if (ch != '@')
+    if (ch != '~')
         return;
 
     p_ptr->is_dead = true;

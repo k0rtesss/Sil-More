@@ -688,7 +688,7 @@ int object_difficulty(object_type* o_ptr)
         {
             dif_dec += 4;
         }
-        if (f3 & TR2_TRAITOR)
+        if (f2 & TR2_TRAITOR)
         {
             dif_dec += 2;
         }
