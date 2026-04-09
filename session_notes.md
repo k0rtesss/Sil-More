@@ -8879,6 +8879,18 @@ The script now fully matches the game's drop generation logic for all item types
 - `CMakeLists.txt` now builds the new SDL platform modules in `sil-platform-sdl`.
 - Validation: `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` succeeded.
 
+## 2026-04-10: Knowledge browser semantic SDL slice
+- Added `ui_information_scene_present_ui()` so browser/menu controllers can publish `app_ui_scene` directly while still using the information-scene wait/input scope.
+- Bumped `APP_UI_FORMAT_VERSION` to `6`, raised `APP_UI_ROW_MAX` to `192`, and added `APP_UI_PANEL_STYLE_BROWSER` plus `APP_UI_PANEL_FLAG_DETAIL_LEADING` so larger browser lists and lore-style split columns fit the semantic scene payload without falling back to term capture.
+- `src/cmd/ui/cmd-ui-knowledge.c` now builds semantic `app_ui_scene` browsers for artefacts, objects, monsters, curses, and the root knowledge menu on the SDL snapshot path; the old `Term` drawing remains only as the non-snapshot fallback.
+- The semantic knowledge browser keeps page tabs, row selection, row icons/meta, group visibility, and browser footer actions without deriving SDL layout from `Term->wid` / `Term->hgt` or calling `ui_information_scene_present_term()` in the migrated loops.
+- `src/sdl-scene-menu.c` now routes browser-style panels through a dedicated lore/browser compositor instead of the generic boxed panel skin, preserving the flatter classic Sil browser look (plain tabs/footer text, split columns, text-color selection) while staying semantic/pixel-based.
+- Remaining knowledge-family debt after this slice: `knowledge_show_curse_detail()` and `do_cmd_knowledge_supplies()` still use the information-scene term bridge / saved-screen flow.
+- Validation:
+  - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R sil_ui0_audit --output-on-failure`
+
 ## 2026-04-01: MENU1 partial follow-up (look + prompt/message bridge)
 - `src/cmd/ui/cmd-ui-look.c`: snapshot renderer path now publishes `APP_INTERACTION_KIND_LOOK`, wraps the main wait in a targeting-scoped wait helper, clears interaction state before nested examine flows, and routes monster recall through a shared information-scene wait helper instead of raw `inkey()`.
 - `src/obj-info.c`: note, object-info, and scrolling multi-object detail pauses now prefer `ui_information_scene_enter_mirror()` / `ui_information_scene_present_term()` and keep the legacy wait fallback.

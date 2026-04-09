@@ -324,6 +324,19 @@ bool ui_information_scene_present_document(const app_information_scene* scene)
     return true;
 }
 
+bool ui_information_scene_present_ui(const app_ui_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scene || !session)
+        return false;
+    if (!app_session_publish_menu_scene(session, scene))
+        return false;
+
+    ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
 bool ui_information_scene_supported(void)
 {
     app_session* session = app_session_current();

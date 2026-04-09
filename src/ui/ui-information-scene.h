@@ -25,6 +25,7 @@ bool ui_information_scene_capture_term(app_information_scene* scene);
 bool ui_information_scene_present(const app_information_scene* scene);
 bool ui_information_scene_present_document(
     const app_information_scene* scene);
+bool ui_information_scene_present_ui(const app_ui_scene* scene);
 bool ui_information_scene_show_monster_recall(int r_idx,
     const monster_type* m_ptr, cptr prompt, bool overlay_dungeon,
     int* out_key);

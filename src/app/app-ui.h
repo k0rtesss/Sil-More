@@ -9,14 +9,14 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 3u
+#define APP_UI_FORMAT_VERSION 6u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
 #define APP_UI_META_MAX 64u
 #define APP_UI_KEY_MAX 12u
 #define APP_UI_BODY_LINE_MAX 24u
-#define APP_UI_ROW_MAX 64u
+#define APP_UI_ROW_MAX 192u
 #define APP_UI_DETAIL_LINE_MAX 24u
 #define APP_UI_FOOTER_ACTION_MAX 8u
 #define APP_UI_TAB_MAX 8u
@@ -44,7 +44,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_PLAIN = 1,
     APP_UI_PANEL_STYLE_STATUS_RAIL = 2,
     APP_UI_PANEL_STYLE_STRIP = 3,
-    APP_UI_PANEL_STYLE_DOCUMENT = 4
+    APP_UI_PANEL_STYLE_DOCUMENT = 4,
+    APP_UI_PANEL_STYLE_BROWSER = 5
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {
@@ -54,7 +55,8 @@ typedef enum app_ui_panel_flag {
     APP_UI_PANEL_FLAG_BOTTOM_ANCHORED = 0x0004u,
     APP_UI_PANEL_FLAG_LEFT_ANCHORED = 0x0008u,
     APP_UI_PANEL_FLAG_SHOW_DETAIL = 0x0010u,
-    APP_UI_PANEL_FLAG_SCROLL_ROWS = 0x0020u
+    APP_UI_PANEL_FLAG_SCROLL_ROWS = 0x0020u,
+    APP_UI_PANEL_FLAG_DETAIL_LEADING = 0x0040u
 } app_ui_panel_flag;
 
 typedef enum app_ui_focus_area {

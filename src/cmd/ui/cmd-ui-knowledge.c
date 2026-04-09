@@ -26,6 +26,7 @@ extern struct sound_config g_sound_config;
 #include "metarun.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
+#include "app/app-ui.h"
 #include "ui/ui-information-scene.h"
 #include "cmd-ui.h"
 
@@ -2665,6 +2666,545 @@ static bool knowledge_is_recall_input(int ch)
     return false;
 }
 
+static void knowledge_scene_add_tabs(app_ui_panel* panel, int page,
+    bool tabs_focus)
+{
+    int i;
+
+    if (!panel)
+        return;
+
+    for (i = KNOWLEDGE_PAGE_ARTEFACTS; i <= KNOWLEDGE_PAGE_CURSES; i++)
+    {
+        byte attr = TERM_SLATE;
+
+        if (i == page)
+            attr = tabs_focus ? TERM_YELLOW : TERM_L_BLUE;
+        (void)app_ui_panel_add_tab(panel, (s16b)i, attr, i == page,
+            knowledge_tab_label(i));
+    }
+}
+
+static void knowledge_scene_add_footer_actions(app_ui_panel* panel,
+    bool has_groups, bool can_recall)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "e", "Prev page");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+        "i", "Next page");
+    if (has_groups)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "4/6", "Group");
+    }
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, can_recall,
+        "r", "Recall");
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+        "Esc", "Back");
+}
+
+static app_ui_panel* knowledge_scene_begin(app_ui_scene* scene, int page,
+    bool tabs_focus, cptr status)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "");
+    knowledge_scene_add_tabs(panel, page, tabs_focus);
+    if (status && status[0])
+        (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, status);
+
+    return panel;
+}
+
+static void knowledge_scene_add_group_detail_lines(app_ui_panel* panel,
+    int grp_idx[], cptr group_text[], int grp_cnt, int grp_cur, int grp_top)
+{
+    int start;
+    int i;
+
+    if (!panel || !grp_idx || !group_text || grp_cnt <= 0)
+        return;
+
+    panel->flags |= APP_UI_PANEL_FLAG_DETAIL_LEADING;
+    app_ui_panel_set_detail_title(panel, TERM_SLATE, "Groups");
+    start = grp_top;
+    if (start < 0)
+        start = 0;
+    if (start >= grp_cnt)
+        start = grp_cnt - 1;
+    if (start < 0)
+        start = 0;
+    if ((start + (int)APP_UI_DETAIL_LINE_MAX) > grp_cnt)
+        start = MAX(0, grp_cnt - (int)APP_UI_DETAIL_LINE_MAX);
+
+    for (i = start; i < grp_cnt && panel->detail_line_count < APP_UI_DETAIL_LINE_MAX;
+        i++)
+    {
+        char buf[APP_UI_TEXT_MAX];
+        bool selected = (i == grp_cur);
+        byte attr = selected ? TERM_L_BLUE : TERM_WHITE;
+
+        strnfmt(buf, sizeof(buf), "%c %s", selected ? '>' : ' ',
+            group_text[grp_idx[i]]);
+        (void)app_ui_panel_add_detail_line(panel, attr, buf);
+    }
+}
+
+static void knowledge_scene_set_focus(app_ui_panel* panel, bool tabs_focus)
+{
+    if (!panel)
+        return;
+
+    if (tabs_focus && panel->tab_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_TABS;
+        return;
+    }
+    if (panel->row_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->focus_id = (panel->selected_row >= 0)
+            ? panel->rows[panel->selected_row].id
+            : panel->rows[0].id;
+    }
+}
+
+static void knowledge_scene_append_artefact_rows(app_ui_panel* panel,
+    int artefact_idx[], int artefact_cnt, int artefact_cur)
+{
+    int i;
+
+    if (!panel || !artefact_idx || artefact_cnt <= 0)
+        return;
+
+    for (i = 0; i < artefact_cnt; i++)
+    {
+        object_type object_type_body;
+        object_type* o_ptr = &object_type_body;
+        artefact_type* a_ptr;
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+
+        object_wipe(o_ptr);
+        if (!prepare_fake_artefact(o_ptr, (byte)artefact_idx[i]))
+            continue;
+
+        a_ptr = &a_info[artefact_idx[i]];
+        object_desc(label, sizeof(label), o_ptr, true, 0);
+        meta[0] = '\0';
+        if (cheat_know)
+        {
+            strnfmt(meta, sizeof(meta), "#%d L%d R%d", artefact_idx[i],
+                a_ptr->level, a_ptr->rarity);
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, TERM_WHITE, TERM_SLATE,
+                object_attr(o_ptr), object_char(o_ptr), true,
+                i == artefact_cur, "", label, meta))
+        {
+            break;
+        }
+    }
+}
+
+static void knowledge_scene_append_object_rows(app_ui_panel* panel,
+    object_list_entry object_idx[], int object_cnt, int object_cur)
+{
+    int i;
+
+    if (!panel || !object_idx || object_cnt <= 0)
+        return;
+
+    for (i = 0; i < object_cnt; i++)
+    {
+        object_list_entry* obj = &object_idx[i];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte attr = TERM_WHITE;
+        byte icon_attr = 0;
+        char icon_char = '\0';
+
+        label[0] = '\0';
+        meta[0] = '\0';
+
+        switch (obj->type)
+        {
+        case OBJ_NORMAL:
+        {
+            object_kind* k_ptr = &k_info[obj->idx];
+
+            attr = k_ptr->aware ? TERM_WHITE : TERM_SLATE;
+            strip_name(label, obj->idx);
+            if (k_ptr->aware)
+            {
+                object_type object_type_body;
+                object_type* o_ptr = &object_type_body;
+
+                object_wipe(o_ptr);
+                object_prep(o_ptr, obj->idx);
+                o_ptr->ident |= IDENT_KNOWN;
+                icon_attr = object_attr(o_ptr);
+                icon_char = object_char(o_ptr);
+            }
+            if (cheat_know)
+                strnfmt(meta, sizeof(meta), "#%d", obj->idx);
+            break;
+        }
+
+        case OBJ_SPECIAL:
+        {
+            ego_item_type* e_ptr = &e_info[obj->e_idx];
+
+            attr = e_ptr->aware ? TERM_WHITE : TERM_SLATE;
+            if (obj->sval == -1)
+            {
+                strnfmt(label, sizeof(label), "%s", &e_name[e_ptr->name]);
+            }
+            else
+            {
+                int j;
+                char base_name[80];
+
+                base_name[0] = '\0';
+                for (j = 0; j < z_info->k_max; ++j)
+                {
+                    if ((k_info[j].tval == obj->tval)
+                        && (k_info[j].sval == obj->sval))
+                    {
+                        strip_name(base_name, j);
+                        break;
+                    }
+                }
+
+                strnfmt(label, sizeof(label), "%s %s", base_name,
+                    &e_name[e_ptr->name]);
+            }
+            if (cheat_know)
+                SDL_strlcpy(meta, "ego", sizeof(meta));
+            break;
+        }
+
+        case OBJ_NONE:
+        default:
+            continue;
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, attr, TERM_SLATE,
+                icon_attr, icon_char, true, i == object_cur, "", label, meta))
+        {
+            break;
+        }
+    }
+}
+
+static void knowledge_scene_append_monster_rows(app_ui_panel* panel,
+    monster_list_entry mon_idx[], int mon_cnt, int mon_cur)
+{
+    int i;
+
+    if (!panel || !mon_idx || mon_cnt <= 0)
+        return;
+
+    for (i = 0; i < mon_cnt; i++)
+    {
+        int r_idx = mon_idx[i].r_idx;
+        monster_race* r_ptr = &r_info[r_idx];
+        monster_lore* l_ptr = &l_list[r_idx];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte meta_attr = TERM_SLATE;
+
+        monster_desc_race(label, sizeof(label), r_idx);
+        if (r_ptr->flags1 & RF1_UNIQUE)
+        {
+            SDL_strlcpy(meta, (r_ptr->max_num == 0) ? "dead" : "alive",
+                sizeof(meta));
+            meta_attr = (r_ptr->max_num == 0) ? TERM_L_RED : TERM_L_GREEN;
+        }
+        else
+        {
+            strnfmt(meta, sizeof(meta), "%d", l_ptr->pkills);
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, TERM_WHITE, meta_attr,
+                r_ptr->x_attr, r_ptr->x_char, true, i == mon_cur, "",
+                label, meta))
+        {
+            break;
+        }
+    }
+}
+
+static void knowledge_scene_append_curse_rows(app_ui_panel* panel,
+    int curse_idx[], int curse_cnt, int curse_cur)
+{
+    int i;
+
+    if (!panel || !curse_idx || curse_cnt <= 0)
+        return;
+
+    for (i = 0; i < curse_cnt; i++)
+    {
+        char meta[APP_UI_META_MAX];
+        cptr blessing = knowledge_blessing_display_name(curse_idx[i]);
+
+        meta[0] = '\0';
+        if (blessing && blessing[0]
+            && strcmp(blessing, knowledge_curse_display_name(curse_idx[i])) != 0)
+        {
+            SDL_strlcpy(meta, blessing, sizeof(meta));
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, TERM_L_RED,
+                meta[0] ? TERM_L_GREEN : TERM_SLATE, 0, '\0', true,
+                i == curse_cur, "", knowledge_curse_display_name(curse_idx[i]),
+                meta))
+        {
+            break;
+        }
+    }
+}
+
+static void knowledge_scene_add_curse_detail(app_ui_panel* panel, int curse_id)
+{
+    curse_type* curse;
+    cptr blessing;
+    cptr power;
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || curse_id < 0)
+        return;
+
+    curse = &cu_info[curse_id];
+    blessing = knowledge_blessing_display_name(curse_id);
+    power = cu_text + curse->power;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_RED,
+        knowledge_curse_display_name(curse_id));
+    if (blessing && blessing[0]
+        && strcmp(blessing, knowledge_curse_display_name(curse_id)) != 0)
+    {
+        strnfmt(buf, sizeof(buf), "Blessing: %s", blessing);
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN, buf);
+    }
+
+    strnfmt(buf, sizeof(buf), "Effect: %s",
+        (power && power[0]) ? power : "[no additional effect listed]");
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+}
+
+static bool knowledge_build_artefact_browser_scene(app_ui_scene* scene, int page,
+    bool tabs_focus, int grp_idx[], int grp_cnt, int grp_cur, int grp_top,
+    int artefact_idx[], int artefact_cnt, int artefact_top, int artefact_cur)
+{
+    app_ui_panel* panel;
+    char status[APP_UI_TEXT_MAX];
+
+    if (artefact_cnt > 0)
+    {
+        strnfmt(status, sizeof(status), "%d artefact%s in %s.",
+            artefact_cnt, (artefact_cnt == 1) ? "" : "s",
+            object_group_text[grp_idx[grp_cur]]);
+    }
+    else
+    {
+        SDL_strlcpy(status, "No known artefacts yet.", sizeof(status));
+    }
+
+    panel = knowledge_scene_begin(scene, page, tabs_focus, status);
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore - Artefacts");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Artefact");
+    knowledge_scene_add_group_detail_lines(panel, grp_idx, object_group_text,
+        grp_cnt, grp_cur, grp_top);
+    knowledge_scene_append_artefact_rows(panel, artefact_idx, artefact_cnt,
+        artefact_cur);
+    app_ui_panel_set_row_offset(panel, (s16b)artefact_top);
+    knowledge_scene_add_footer_actions(panel, true, artefact_cnt > 0);
+    knowledge_scene_set_focus(panel, tabs_focus);
+    return true;
+}
+
+static bool knowledge_build_object_browser_scene(app_ui_scene* scene, int page,
+    bool tabs_focus, int grp_idx[], int grp_cnt, int grp_cur, int grp_top,
+    object_list_entry object_idx[], int object_cnt, int object_top,
+    int object_cur)
+{
+    app_ui_panel* panel;
+    char status[APP_UI_TEXT_MAX];
+
+    if (object_cnt > 0)
+    {
+        object_list_entry* obj = &object_idx[object_cur];
+
+        if ((obj->type == OBJ_NORMAL) && k_info[obj->idx].aware)
+        {
+            strnfmt(status, sizeof(status),
+                "%d object%s in %s. Recall available.", object_cnt,
+                (object_cnt == 1) ? "" : "s",
+                object_group_text[grp_idx[grp_cur]]);
+        }
+        else
+        {
+            strnfmt(status, sizeof(status),
+                "%d object%s in %s. Recall works for identified base items.",
+                object_cnt, (object_cnt == 1) ? "" : "s",
+                object_group_text[grp_idx[grp_cur]]);
+        }
+    }
+    else
+    {
+        SDL_strlcpy(status, "No known objects yet.", sizeof(status));
+    }
+
+    panel = knowledge_scene_begin(scene, page, tabs_focus, status);
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore - Objects");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Object");
+    knowledge_scene_add_group_detail_lines(panel, grp_idx, object_group_text,
+        grp_cnt, grp_cur, grp_top);
+    knowledge_scene_append_object_rows(panel, object_idx, object_cnt,
+        object_cur);
+    app_ui_panel_set_row_offset(panel, (s16b)object_top);
+    knowledge_scene_add_footer_actions(panel, true,
+        (object_cnt > 0)
+        && (object_idx[object_cur].type == OBJ_NORMAL)
+        && k_info[object_idx[object_cur].idx].aware);
+    knowledge_scene_set_focus(panel, tabs_focus);
+    return true;
+}
+
+static bool knowledge_build_monster_browser_scene(app_ui_scene* scene, int page,
+    bool tabs_focus, int grp_idx[], int grp_cnt, int grp_cur, int grp_top,
+    monster_list_entry mon_idx[], int mon_cnt, int mon_top, int mon_cur)
+{
+    app_ui_panel* panel;
+    char status[APP_UI_TEXT_MAX];
+
+    if (mon_cnt > 0)
+        knowledge_monster_summary(status, sizeof(status), grp_idx[grp_cur]);
+    else
+        SDL_strlcpy(status, "No known monsters in this group yet.",
+            sizeof(status));
+
+    panel = knowledge_scene_begin(scene, page, tabs_focus, status);
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore - Monsters");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Monster");
+    knowledge_scene_add_group_detail_lines(panel, grp_idx, monster_group_text,
+        grp_cnt, grp_cur, grp_top);
+    knowledge_scene_append_monster_rows(panel, mon_idx, mon_cnt, mon_cur);
+    app_ui_panel_set_row_offset(panel, (s16b)mon_top);
+    knowledge_scene_add_footer_actions(panel, true, mon_cnt > 0);
+    knowledge_scene_set_focus(panel, tabs_focus);
+    return true;
+}
+
+static bool knowledge_build_curse_browser_scene(app_ui_scene* scene, int page,
+    bool tabs_focus, int curse_idx[], int curse_cnt, int curse_top,
+    int curse_cur)
+{
+    app_ui_panel* panel;
+    char status[APP_UI_TEXT_MAX];
+
+    if (curse_cnt > 0)
+    {
+        curse_type* c = &cu_info[curse_idx[curse_cur]];
+        cptr power = cu_text + c->power;
+
+        strnfmt(status, sizeof(status), "Effect: %s",
+            (power && power[0]) ? power : "[no additional effect listed]");
+    }
+    else
+    {
+        SDL_strlcpy(status, "No known curses yet.", sizeof(status));
+    }
+
+    panel = knowledge_scene_begin(scene, page, tabs_focus, status);
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore - Curses");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Known curses");
+    knowledge_scene_append_curse_rows(panel, curse_idx, curse_cnt, curse_cur);
+    if (curse_cnt > 0)
+        knowledge_scene_add_curse_detail(panel, curse_idx[curse_cur]);
+    app_ui_panel_set_row_offset(panel, (s16b)curse_top);
+    knowledge_scene_add_footer_actions(panel, false, curse_cnt > 0);
+    knowledge_scene_set_focus(panel, tabs_focus);
+    return true;
+}
+
+static bool knowledge_build_root_menu_scene(app_ui_scene* scene, int selected)
+{
+    static const struct {
+        int id;
+        cptr key;
+        cptr label;
+    } entries[] = {
+        { 1, "1", "Display known lore browser" },
+        { 2, "2", "Display supplies overview" },
+        { 3, "3", "Display names of the fallen" },
+        { 4, "4", "Display kill counts" },
+        { 5, "5", "Display character notes file" },
+        { 6, "6", "Display oath status" }
+    };
+    app_ui_panel* panel;
+    size_t i;
+
+    panel = knowledge_scene_begin(scene, KNOWLEDGE_PAGE_ARTEFACTS, false,
+        "Browser, history, and oath records.");
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Display current knowledge");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Choose a screen");
+    panel->tab_count = 0;
+    panel->body_line_count = 0;
+
+    for (i = 0; i < N_ELEMENTS(entries); i++)
+    {
+        if (!app_ui_panel_add_row(panel, (s16b)entries[i].id, TERM_WHITE, true,
+                (int)i == selected, entries[i].key, entries[i].label, ""))
+        {
+            return false;
+        }
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Esc", "Back");
+    knowledge_scene_set_focus(panel, false);
+    return true;
+}
+
 void do_cmd_knowledge_browser_page(int page)
 {
     ui_information_scene_scope info_scope;
@@ -2764,27 +3304,10 @@ void do_cmd_knowledge_browser_page(int page)
                 artefact_cnt = collect_artefacts(
                     artefact_grp_idx[state.group_cur[page]], artefact_idx);
 
-            knowledge_draw_frame(&layout, page, true, "Artefact",
-                state.tabs_focus);
-            knowledge_display_groups(&layout, artefact_grp_idx, object_group_text,
-                artefact_grp_cnt, state.group_cur[page], state.group_top[page]);
-            knowledge_display_artefacts(&layout, artefact_idx, artefact_cnt,
-                state.entry_cur[page], state.entry_top[page]);
-
             if (artefact_cnt > 0)
             {
                 selected_artefact = artefact_idx[state.entry_cur[page]];
-                strnfmt(status, sizeof(status), "%d artefact%s in %s.",
-                    artefact_cnt, (artefact_cnt == 1) ? "" : "s",
-                    object_group_text[artefact_grp_idx[state.group_cur[page]]]);
             }
-            else
-            {
-                SDL_strlcpy(status, "No known artefacts yet.", sizeof(status));
-            }
-            if (layout.status_row != layout.prompt_row)
-                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
-            knowledge_draw_prompt(&layout);
 
             if (selected_artefact != artefact_old)
             {
@@ -2792,32 +3315,70 @@ void do_cmd_knowledge_browser_page(int page)
                 artefact_old = selected_artefact;
             }
 
-            if (state.tabs_focus)
-            {
-                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-            }
-            else if (artefact_grp_cnt > 0)
-            {
-                if (state.column[page] == 0)
-                    Term_gotoxy(0, layout.list_row
-                        + (state.group_cur[page] - state.group_top[page]));
-                else
-                    Term_gotoxy(layout.list_col, layout.list_row
-                        + (state.entry_cur[page] - state.entry_top[page]));
-            }
-
             if (use_information_scene)
             {
-                if (!ui_information_scene_present_term())
+                app_ui_scene scene;
+
+                if (!knowledge_build_artefact_browser_scene(&scene, page,
+                        state.tabs_focus, artefact_grp_idx, artefact_grp_cnt,
+                        state.group_cur[page],
+                        state.group_top[page], artefact_idx, artefact_cnt,
+                        state.entry_top[page], state.entry_cur[page])
+                    || !ui_information_scene_present_ui(&scene))
                 {
                     ui_information_scene_leave(&info_scope);
                     use_information_scene = false;
                     screen_save();
-                    Term_fresh();
                 }
             }
-            else
+
+            if (!use_information_scene)
             {
+                knowledge_draw_frame(&layout, page, true, "Artefact",
+                    state.tabs_focus);
+                knowledge_display_groups(&layout, artefact_grp_idx,
+                    object_group_text, artefact_grp_cnt, state.group_cur[page],
+                    state.group_top[page]);
+                knowledge_display_artefacts(&layout, artefact_idx,
+                    artefact_cnt, state.entry_cur[page],
+                    state.entry_top[page]);
+
+                if (artefact_cnt > 0)
+                {
+                    strnfmt(status, sizeof(status), "%d artefact%s in %s.",
+                        artefact_cnt, (artefact_cnt == 1) ? "" : "s",
+                        object_group_text[artefact_grp_idx[state.group_cur[page]]]);
+                }
+                else
+                {
+                    SDL_strlcpy(status, "No known artefacts yet.",
+                        sizeof(status));
+                }
+                if (layout.status_row != layout.prompt_row)
+                {
+                    Term_putstr(0, layout.status_row, layout.term_wid,
+                        TERM_L_BLUE, status);
+                }
+                knowledge_draw_prompt(&layout);
+
+                if (state.tabs_focus)
+                {
+                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+                }
+                else if (artefact_grp_cnt > 0)
+                {
+                    if (state.column[page] == 0)
+                    {
+                        Term_gotoxy(0, layout.list_row
+                            + (state.group_cur[page] - state.group_top[page]));
+                    }
+                    else
+                    {
+                        Term_gotoxy(layout.list_col, layout.list_row
+                            + (state.entry_cur[page] - state.entry_top[page]));
+                    }
+                }
+
                 Term_fresh();
             }
 
@@ -2887,43 +3448,11 @@ void do_cmd_knowledge_browser_page(int page)
                 object_cnt = collect_objects(
                     object_grp_idx[state.group_cur[page]], object_idx);
 
-            knowledge_draw_frame(&layout, page, true, "Object",
-                state.tabs_focus);
-            knowledge_display_groups(&layout, object_grp_idx, object_group_text,
-                object_grp_cnt, state.group_cur[page], state.group_top[page]);
-            knowledge_display_objects(&layout, object_idx, object_cnt,
-                state.entry_cur[page], state.entry_top[page]);
-
             if ((object_cnt > 0)
                 && (object_idx[state.entry_cur[page]].type == OBJ_NORMAL))
             {
                 tracked_kind = object_idx[state.entry_cur[page]].idx;
             }
-
-            if (object_cnt > 0)
-            {
-                object_list_entry* obj = &object_idx[state.entry_cur[page]];
-                if ((obj->type == OBJ_NORMAL) && k_info[obj->idx].aware)
-                {
-                    strnfmt(status, sizeof(status), "%d object%s in %s. Recall available.",
-                        object_cnt, (object_cnt == 1) ? "" : "s",
-                        object_group_text[object_grp_idx[state.group_cur[page]]]);
-                }
-                else
-                {
-                    strnfmt(status, sizeof(status),
-                        "%d object%s in %s. Recall works for identified base items.",
-                        object_cnt, (object_cnt == 1) ? "" : "s",
-                        object_group_text[object_grp_idx[state.group_cur[page]]]);
-                }
-            }
-            else
-            {
-                SDL_strlcpy(status, "No known objects yet.", sizeof(status));
-            }
-            if (layout.status_row != layout.prompt_row)
-                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
-            knowledge_draw_prompt(&layout);
 
             if (tracked_kind != object_old)
             {
@@ -2932,32 +3461,84 @@ void do_cmd_knowledge_browser_page(int page)
                 object_old = tracked_kind;
             }
 
-            if (state.tabs_focus)
-            {
-                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-            }
-            else if (object_grp_cnt > 0)
-            {
-                if (state.column[page] == 0)
-                    Term_gotoxy(0, layout.list_row
-                        + (state.group_cur[page] - state.group_top[page]));
-                else
-                    Term_gotoxy(layout.list_col, layout.list_row
-                        + (state.entry_cur[page] - state.entry_top[page]));
-            }
-
             if (use_information_scene)
             {
-                if (!ui_information_scene_present_term())
+                app_ui_scene scene;
+
+                if (!knowledge_build_object_browser_scene(&scene, page,
+                        state.tabs_focus, object_grp_idx, object_grp_cnt,
+                        state.group_cur[page],
+                        state.group_top[page], object_idx, object_cnt,
+                        state.entry_top[page], state.entry_cur[page])
+                    || !ui_information_scene_present_ui(&scene))
                 {
                     ui_information_scene_leave(&info_scope);
                     use_information_scene = false;
                     screen_save();
-                    Term_fresh();
                 }
             }
-            else
+
+            if (!use_information_scene)
             {
+                knowledge_draw_frame(&layout, page, true, "Object",
+                    state.tabs_focus);
+                knowledge_display_groups(&layout, object_grp_idx,
+                    object_group_text, object_grp_cnt, state.group_cur[page],
+                    state.group_top[page]);
+                knowledge_display_objects(&layout, object_idx, object_cnt,
+                    state.entry_cur[page], state.entry_top[page]);
+
+                if (object_cnt > 0)
+                {
+                    object_list_entry* obj = &object_idx[state.entry_cur[page]];
+
+                    if ((obj->type == OBJ_NORMAL) && k_info[obj->idx].aware)
+                    {
+                        strnfmt(status, sizeof(status),
+                            "%d object%s in %s. Recall available.",
+                            object_cnt, (object_cnt == 1) ? "" : "s",
+                            object_group_text[object_grp_idx[
+                                state.group_cur[page]]]);
+                    }
+                    else
+                    {
+                        strnfmt(status, sizeof(status),
+                            "%d object%s in %s. Recall works for identified base items.",
+                            object_cnt, (object_cnt == 1) ? "" : "s",
+                            object_group_text[object_grp_idx[
+                                state.group_cur[page]]]);
+                    }
+                }
+                else
+                {
+                    SDL_strlcpy(status, "No known objects yet.",
+                        sizeof(status));
+                }
+                if (layout.status_row != layout.prompt_row)
+                {
+                    Term_putstr(0, layout.status_row, layout.term_wid,
+                        TERM_L_BLUE, status);
+                }
+                knowledge_draw_prompt(&layout);
+
+                if (state.tabs_focus)
+                {
+                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+                }
+                else if (object_grp_cnt > 0)
+                {
+                    if (state.column[page] == 0)
+                    {
+                        Term_gotoxy(0, layout.list_row
+                            + (state.group_cur[page] - state.group_top[page]));
+                    }
+                    else
+                    {
+                        Term_gotoxy(layout.list_col, layout.list_row
+                            + (state.entry_cur[page] - state.entry_top[page]));
+                    }
+                }
+
                 Term_fresh();
             }
 
@@ -3031,27 +3612,8 @@ void do_cmd_knowledge_browser_page(int page)
                 monster_cnt = collect_monsters(
                     monster_grp_idx[state.group_cur[page]], mon_idx, 0x00);
 
-            knowledge_draw_frame(&layout, page, true, "Monster",
-                state.tabs_focus);
-            knowledge_display_groups(&layout, monster_grp_idx, monster_group_text,
-                monster_grp_cnt, state.group_cur[page], state.group_top[page]);
-            knowledge_display_monsters(&layout, mon_idx, monster_cnt,
-                state.entry_cur[page], state.entry_top[page]);
-
             if (monster_cnt > 0)
-            {
                 selected_r_idx = mon_idx[state.entry_cur[page]].r_idx;
-                knowledge_monster_summary(status, sizeof(status),
-                    monster_grp_idx[state.group_cur[page]]);
-            }
-            else
-            {
-                SDL_strlcpy(status, "No known monsters in this group yet.",
-                    sizeof(status));
-            }
-            if (layout.status_row != layout.prompt_row)
-                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
-            knowledge_draw_prompt(&layout);
 
             if (selected_r_idx != monster_old)
             {
@@ -3060,32 +3622,68 @@ void do_cmd_knowledge_browser_page(int page)
                 monster_old = selected_r_idx;
             }
 
-            if (state.tabs_focus)
-            {
-                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-            }
-            else if (monster_grp_cnt > 0)
-            {
-                if (state.column[page] == 0)
-                    Term_gotoxy(0, layout.list_row
-                        + (state.group_cur[page] - state.group_top[page]));
-                else
-                    Term_gotoxy(layout.list_col, layout.list_row
-                        + (state.entry_cur[page] - state.entry_top[page]));
-            }
-
             if (use_information_scene)
             {
-                if (!ui_information_scene_present_term())
+                app_ui_scene scene;
+
+                if (!knowledge_build_monster_browser_scene(&scene, page,
+                        state.tabs_focus, monster_grp_idx, monster_grp_cnt,
+                        state.group_cur[page],
+                        state.group_top[page], mon_idx, monster_cnt,
+                        state.entry_top[page], state.entry_cur[page])
+                    || !ui_information_scene_present_ui(&scene))
                 {
                     ui_information_scene_leave(&info_scope);
                     use_information_scene = false;
                     screen_save();
-                    Term_fresh();
                 }
             }
-            else
+
+            if (!use_information_scene)
             {
+                knowledge_draw_frame(&layout, page, true, "Monster",
+                    state.tabs_focus);
+                knowledge_display_groups(&layout, monster_grp_idx,
+                    monster_group_text, monster_grp_cnt, state.group_cur[page],
+                    state.group_top[page]);
+                knowledge_display_monsters(&layout, mon_idx, monster_cnt,
+                    state.entry_cur[page], state.entry_top[page]);
+
+                if (monster_cnt > 0)
+                {
+                    knowledge_monster_summary(status, sizeof(status),
+                        monster_grp_idx[state.group_cur[page]]);
+                }
+                else
+                {
+                    SDL_strlcpy(status, "No known monsters in this group yet.",
+                        sizeof(status));
+                }
+                if (layout.status_row != layout.prompt_row)
+                {
+                    Term_putstr(0, layout.status_row, layout.term_wid,
+                        TERM_L_BLUE, status);
+                }
+                knowledge_draw_prompt(&layout);
+
+                if (state.tabs_focus)
+                {
+                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+                }
+                else if (monster_grp_cnt > 0)
+                {
+                    if (state.column[page] == 0)
+                    {
+                        Term_gotoxy(0, layout.list_row
+                            + (state.group_cur[page] - state.group_top[page]));
+                    }
+                    else
+                    {
+                        Term_gotoxy(layout.list_col, layout.list_row
+                            + (state.entry_cur[page] - state.entry_top[page]));
+                    }
+                }
+
                 Term_fresh();
             }
 
@@ -3161,48 +3759,58 @@ void do_cmd_knowledge_browser_page(int page)
             knowledge_init_layout(&layout, 0, false);
             knowledge_clamp_list_state(&state.entry_cur[page], &state.entry_top[page],
                 curse_cnt, layout.list_rows);
-            knowledge_draw_frame(&layout, page, false, "Known curses",
-                state.tabs_focus);
-            knowledge_display_curses(&layout, curse_idx, curse_cnt,
-                state.entry_cur[page], state.entry_top[page]);
-
-            if (curse_cnt > 0)
-            {
-                curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
-                cptr cpower = cu_text + c->power;
-                strnfmt(status, sizeof(status), "Effect: %s",
-                    (*cpower) ? cpower : "[no additional effect listed]");
-            }
-            else
-            {
-                SDL_strlcpy(status, "No known curses yet.", sizeof(status));
-            }
-            if (layout.status_row != layout.prompt_row)
-                Term_putstr(0, layout.status_row, layout.term_wid, TERM_L_BLUE, status);
-            knowledge_draw_prompt(&layout);
-
-            if (state.tabs_focus)
-            {
-                Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-            }
-            else if (curse_cnt > 0)
-            {
-                Term_gotoxy(0, layout.list_row
-                    + (state.entry_cur[page] - state.entry_top[page]));
-            }
-
             if (use_information_scene)
             {
-                if (!ui_information_scene_present_term())
+                app_ui_scene scene;
+
+                if (!knowledge_build_curse_browser_scene(&scene, page,
+                        state.tabs_focus, curse_idx, curse_cnt,
+                        state.entry_top[page], state.entry_cur[page])
+                    || !ui_information_scene_present_ui(&scene))
                 {
                     ui_information_scene_leave(&info_scope);
                     use_information_scene = false;
                     screen_save();
-                    Term_fresh();
                 }
             }
-            else
+
+            if (!use_information_scene)
             {
+                knowledge_draw_frame(&layout, page, false, "Known curses",
+                    state.tabs_focus);
+                knowledge_display_curses(&layout, curse_idx, curse_cnt,
+                    state.entry_cur[page], state.entry_top[page]);
+
+                if (curse_cnt > 0)
+                {
+                    curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
+                    cptr cpower = cu_text + c->power;
+
+                    strnfmt(status, sizeof(status), "Effect: %s",
+                        (*cpower) ? cpower : "[no additional effect listed]");
+                }
+                else
+                {
+                    SDL_strlcpy(status, "No known curses yet.",
+                        sizeof(status));
+                }
+                if (layout.status_row != layout.prompt_row)
+                {
+                    Term_putstr(0, layout.status_row, layout.term_wid,
+                        TERM_L_BLUE, status);
+                }
+                knowledge_draw_prompt(&layout);
+
+                if (state.tabs_focus)
+                {
+                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
+                }
+                else if (curse_cnt > 0)
+                {
+                    Term_gotoxy(0, layout.list_row
+                        + (state.entry_cur[page] - state.entry_top[page]));
+                }
+
                 Term_fresh();
             }
 
@@ -3771,6 +4379,7 @@ void do_cmd_knowledge(void)
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
     char ch;
+    int selected = 0;
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
@@ -3789,43 +4398,71 @@ void do_cmd_knowledge(void)
     /* Interact until done */
     while (1)
     {
-        /* Clear screen */
-        Term_clear();
-
-        /* Ask for a choice */
-        prt("Display current knowledge", 2, 0);
-
-        /* Give some choices */
-        prt("(1) Display known lore browser", 4, 5);
-        prt("(2) Display supplies overview", 5, 5);
-        prt("(3) Display names of the fallen", 6, 5);
-        prt("(4) Display kill counts", 7, 5);
-
-        /*allow the player to see the notes taken if that option is selected*/
-        c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
-        prt("(6) Display oath status", 9, 5);
-
-        /* Prompt */
-        prt("Command: ", 11, 0);
-
-        /* Prompt */
         if (use_information_scene)
         {
-            if (!ui_information_scene_present_term())
+            app_ui_scene scene;
+
+            if (!knowledge_build_root_menu_scene(&scene, selected)
+                || !ui_information_scene_present_ui(&scene))
             {
                 ui_information_scene_leave(&info_scope);
                 use_information_scene = false;
                 screen_save();
-                Term_fresh();
             }
         }
-        else
+
+        if (!use_information_scene)
         {
+            /* Clear screen */
+            Term_clear();
+
+            /* Ask for a choice */
+            prt("Display current knowledge", 2, 0);
+
+            /* Give some choices */
+            prt("(1) Display known lore browser", 4, 5);
+            prt("(2) Display supplies overview", 5, 5);
+            prt("(3) Display names of the fallen", 6, 5);
+            prt("(4) Display kill counts", 7, 5);
+
+            /*allow the player to see the notes taken if that option is selected*/
+            c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
+            prt("(6) Display oath status", 9, 5);
+
+            /* Prompt */
+            prt("Command: ", 11, 0);
             Term_fresh();
         }
 
         ch = use_information_scene ? (char)ui_information_scene_wait_key()
                                    : inkey();
+        if (steamdeck_controls_active() && ch == steamdeck_back_key())
+            ch = ESCAPE;
+
+        if (use_information_scene)
+        {
+            int d = target_dir(ch);
+
+            if (d && !ddx[d] && ddy[d] < 0)
+            {
+                if (selected > 0)
+                    selected--;
+                continue;
+            }
+            if (d && !ddx[d] && ddy[d] > 0)
+            {
+                if (selected < 5)
+                    selected++;
+                continue;
+            }
+            if (ch == '\r' || ch == '\n' || ch == ' '
+                || ch == INPUT_BIND_CONFIRM
+                || (steamdeck_confirm_key() != GAMEPAD_BIND_NONE
+                    && ch == steamdeck_confirm_key()))
+            {
+                ch = (char)('1' + selected);
+            }
+        }
 
         /* Done */
         if (ch == ESCAPE)
