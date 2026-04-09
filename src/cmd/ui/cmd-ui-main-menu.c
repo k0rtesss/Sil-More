@@ -1482,7 +1482,7 @@ static bool hint_message_show_information_scene(int index, int* look_y,
             return false;
         }
 
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1612,7 +1612,7 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
             }
         }
 
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1842,7 +1842,7 @@ static bool do_cmd_messages_information_scene(void)
                 TERM_WHITE, prompt);
         }
 
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

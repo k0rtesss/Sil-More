@@ -1207,10 +1207,10 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                                 if (ui_information_scene_capture_term(
                                     &info_scene)
                                     && app_information_scene_add_text(
-                                        &info_scene, (s16b)Term->scr->cy,
+                                    &info_scene, (s16b)Term->scr->cy,
                                         (s16b)Term->scr->cx, TERM_WHITE,
                                         recall_prompt)
-                                    && ui_information_scene_present(
+                                    && ui_information_scene_present_document(
                                         &info_scene))
                                 {
                                     query = (char)ui_information_scene_wait_key();

@@ -12,6 +12,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "ui/ui-file-viewer.h"
 #include "ui/ui-information-scene.h"
 
 #include <stdint.h>
@@ -34,6 +35,7 @@ typedef struct object_info_screen_capture
 {
     int width;
     int height;
+    byte blank_attr;
     byte* attrs;
     char* chars;
     byte* story;
@@ -43,24 +45,16 @@ static void object_info_screen_multi_body(const object_type** objects,
     const char** headings, int count, bool clear_current_line);
 static bool object_info_buffer_append(const void* data, size_t len);
 static bool object_info_buffer_append_byte(unsigned char value);
+static void object_info_screen_capture_free(
+    object_info_screen_capture* capture);
+static bool note_info_screen_capture_build(const object_type* o_ptr,
+    object_info_screen_capture* capture);
+static bool object_info_screen_capture_view_document(
+    const object_info_screen_capture* capture, byte prompt_attr,
+    cptr exit_prompt);
 
-static char object_info_wait_key(void)
+static char object_info_wait_key_legacy(void)
 {
-    ui_information_scene_scope info_scope;
-
-    if (ui_information_scene_enter(&info_scope))
-    {
-        if (ui_information_scene_present_term())
-        {
-            char ch = (char)ui_information_scene_wait_key();
-
-            ui_information_scene_leave(&info_scope);
-            return ch;
-        }
-
-        ui_information_scene_leave(&info_scope);
-    }
-
     {
         app_wait_scope scope;
         char ch;
@@ -71,6 +65,14 @@ static char object_info_wait_key(void)
         app_session_pop_wait_scope(app_session_current(), &scope);
         return ch;
     }
+}
+
+static char object_info_wait_key(void)
+{
+    if (ui_information_scene_is_active())
+        return (char)ui_information_scene_wait_key();
+
+    return object_info_wait_key_legacy();
 }
 
 static bool object_info_buffer_reserve(size_t needed)
@@ -1807,6 +1809,19 @@ static bool screen_out_head(const object_type* o_ptr)
  */
 void note_info_screen(const object_type* o_ptr)
 {
+    object_info_screen_capture capture;
+
+    if (ui_information_scene_supported()
+        && note_info_screen_capture_build(o_ptr, &capture))
+    {
+        bool shown = object_info_screen_capture_view_document(
+            &capture, TERM_L_WHITE + TERM_SHADE, "(press any key)");
+
+        object_info_screen_capture_free(&capture);
+        if (shown)
+            return;
+    }
+
     /* Redirect output to the screen */
     text_out_hook = text_out_to_screen;
 
@@ -1846,6 +1861,14 @@ void note_info_screen(const object_type* o_ptr)
  */
 void object_info_screen(const object_type* o_ptr)
 {
+    if (ui_information_scene_supported())
+    {
+        const object_type* objects[1] = {o_ptr};
+
+        object_info_screen_multi(objects, NULL, 1);
+        return;
+    }
+
     bool has_description, has_info;
 
     log_trace("object_info_screen: Starting item description display");
@@ -2028,6 +2051,7 @@ static void object_info_screen_capture_free(
 
     capture->width = 0;
     capture->height = 0;
+    capture->blank_attr = 0;
 }
 
 static int object_info_screen_capture_used_rows(term* t)
@@ -2049,6 +2073,36 @@ static int object_info_screen_capture_used_rows(term* t)
     }
 
     return 0;
+}
+
+static bool object_info_screen_capture_copy_from_term(
+    object_info_screen_capture* capture, const term* t, int width, int height)
+{
+    if (!capture || !t || !t->scr || width <= 0 || height <= 0)
+        return false;
+
+    capture->width = width;
+    capture->height = height;
+    capture->blank_attr = t->attr_blank;
+    capture->attrs = mem_alloc_array(capture->width * capture->height, byte);
+    capture->chars = mem_alloc_array(capture->width * capture->height, char);
+    capture->story = mem_alloc_array(capture->width * capture->height, byte);
+    if (!capture->attrs || !capture->chars || !capture->story)
+        return false;
+
+    for (int y = 0; y < capture->height; y++)
+    {
+        for (int x = 0; x < capture->width; x++)
+        {
+            int idx = y * capture->width + x;
+
+            capture->attrs[idx] = t->scr->a[y][x];
+            capture->chars[idx] = t->scr->c[y][x];
+            capture->story[idx] = t->scr->story[y][x];
+        }
+    }
+
+    return true;
 }
 
 static bool object_info_screen_capture_build(
@@ -2096,25 +2150,8 @@ static bool object_info_screen_capture_build(
     used_rows = object_info_screen_capture_used_rows(Term);
     if (used_rows < 1)
         used_rows = 1;
-
-    capture->width = term_wid;
-    capture->height = used_rows;
-    capture->attrs = mem_alloc_array(capture->width * capture->height, byte);
-    capture->chars = mem_alloc_array(capture->width * capture->height, char);
-    capture->story = mem_alloc_array(capture->width * capture->height, byte);
-
-    for (int y = 0; y < capture->height; y++)
-    {
-        for (int x = 0; x < capture->width; x++)
-        {
-            int idx = y * capture->width + x;
-            capture->attrs[idx] = scratch.scr->a[y][x];
-            capture->chars[idx] = scratch.scr->c[y][x];
-            capture->story[idx] = scratch.scr->story[y][x];
-        }
-    }
-
-    success = true;
+    success = object_info_screen_capture_copy_from_term(
+        capture, &scratch, term_wid, used_rows);
 
 cleanup:
     text_out_hook = old_hook;
@@ -2134,21 +2171,214 @@ cleanup:
     return success;
 }
 
-static void object_info_screen_capture_draw(
-    const object_info_screen_capture* capture, int scroll)
+static bool note_info_screen_capture_build(const object_type* o_ptr,
+    object_info_screen_capture* capture)
+{
+    term scratch;
+    term* saved_term = Term;
+    void (*old_hook)(byte, cptr) = text_out_hook;
+    int old_wrap = text_out_wrap;
+    int old_indent = text_out_indent;
+    bool old_paragraph = new_paragraph;
+    bool scratch_ready = false;
+    bool success = false;
+    int term_wid = 80;
+    int term_hgt = 24;
+
+    if (!capture || !o_ptr || !saved_term)
+        return false;
+
+    memset(capture, 0, sizeof(*capture));
+    memset(&scratch, 0, sizeof(scratch));
+
+    Term_get_size(&term_wid, &term_hgt);
+    if (term_wid < 20)
+        term_wid = 20;
+    if (term_hgt < 24)
+        term_hgt = 24;
+
+    if (term_init(&scratch, term_wid, 255, 16) != 0)
+        goto cleanup;
+    scratch_ready = true;
+
+    Term_activate(&scratch);
+    text_out_hook = text_out_to_screen;
+    text_out_wrap = 60;
+    text_out_indent = 14;
+    new_paragraph = false;
+
+    Term_clear();
+    Term_gotoxy(text_out_indent, 0);
+    text_out_c(TERM_L_WHITE + TERM_SHADE, "The note here reads:\n\n");
+    Term_gotoxy(text_out_indent, 2);
+    text_out_to_screen(TERM_WHITE, k_text + k_info[o_ptr->k_idx].text);
+
+    term_hgt = object_info_screen_capture_used_rows(Term);
+    if (term_hgt < 1)
+        term_hgt = 1;
+
+    success = object_info_screen_capture_copy_from_term(
+        capture, &scratch, term_wid, term_hgt);
+
+cleanup:
+    text_out_hook = old_hook;
+    text_out_wrap = old_wrap;
+    text_out_indent = old_indent;
+    new_paragraph = old_paragraph;
+
+    if (saved_term && Term != saved_term)
+        Term_activate(saved_term);
+
+    if (scratch_ready)
+        term_nuke(&scratch);
+
+    if (!success)
+        object_info_screen_capture_free(capture);
+
+    return success;
+}
+
+static int object_info_screen_capture_row_end(
+    const object_info_screen_capture* capture, int row)
+{
+    int end;
+
+    if (!capture || row < 0 || row >= capture->height)
+        return 0;
+
+    end = capture->width;
+    while (end > 0)
+    {
+        int idx = row * capture->width + (end - 1);
+
+        if (capture->chars[idx] != ' '
+            || capture->attrs[idx] != capture->blank_attr
+            || capture->story[idx] != 0)
+        {
+            break;
+        }
+        end--;
+    }
+
+    return end;
+}
+
+static bool object_info_screen_capture_run_has_text(
+    const object_info_screen_capture* capture, int row, int start, int end)
+{
+    for (int x = start; x < end; x++)
+    {
+        if (capture->chars[row * capture->width + x] != ' ')
+            return true;
+    }
+
+    return false;
+}
+
+static bool object_info_scene_add_text_run(app_information_scene* scene,
+    s16b row, s16b col, byte attr, byte story, const char* text, int len)
+{
+    char buf[APP_INFORMATION_TEXT_MAX];
+    const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
+
+    if (!scene || !text || len <= 0)
+        return true;
+
+    while (len > 0)
+    {
+        int chunk = MIN(len, max_chunk);
+
+        memcpy(buf, text, (size_t)chunk);
+        buf[chunk] = '\0';
+        if (!app_information_scene_add_text_ex(
+                scene, row, col, attr, story, buf))
+        {
+            return false;
+        }
+        col += (s16b)chunk;
+        text += chunk;
+        len -= chunk;
+    }
+
+    return true;
+}
+
+static bool object_info_scene_add_capture_row(app_information_scene* scene,
+    const object_info_screen_capture* capture, int src_row, int dst_row)
+{
+    int end;
+
+    if (!scene || !capture || src_row < 0 || src_row >= capture->height)
+        return false;
+
+    end = object_info_screen_capture_row_end(capture, src_row);
+    for (int start = 0; start < end;)
+    {
+        int idx = src_row * capture->width + start;
+        byte attr = capture->attrs[idx];
+        byte story = capture->story[idx];
+        int run_end = start + 1;
+
+        while (run_end < end)
+        {
+            int run_idx = src_row * capture->width + run_end;
+
+            if (capture->attrs[run_idx] != attr
+                || capture->story[run_idx] != story)
+            {
+                break;
+            }
+            run_end++;
+        }
+
+        if (object_info_screen_capture_run_has_text(
+                capture, src_row, start, run_end))
+        {
+            char buf[APP_INFORMATION_TEXT_MAX];
+            const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
+            int offset = start;
+
+            while (offset < run_end)
+            {
+                int chunk = MIN(run_end - offset, max_chunk);
+
+                for (int i = 0; i < chunk; i++)
+                {
+                    unsigned char ch
+                        = (unsigned char)capture->chars[src_row * capture->width
+                            + offset + i];
+
+                    buf[i] = (char)(isprint(ch) || ch == ' ' ? ch : ' ');
+                }
+                buf[chunk] = '\0';
+                if (!object_info_scene_add_text_run(scene, (s16b)dst_row,
+                        (s16b)offset, attr, story, buf, chunk))
+                {
+                    return false;
+                }
+                offset += chunk;
+            }
+        }
+
+        start = run_end;
+    }
+
+    return true;
+}
+
+static bool object_info_screen_capture_build_scene(
+    app_information_scene* scene, const object_info_screen_capture* capture,
+    int scroll, byte prompt_attr, cptr exit_prompt)
 {
     int term_wid = 80;
     int term_hgt = 24;
     int visible_rows;
     int prompt_row;
     int max_scroll;
-    char prompt[96];
     char scroll_buf[32];
-    bool old_story_active = false;
-    bool old_story_grid = false;
 
-    if (!capture || !capture->attrs || !capture->chars || !capture->story)
-        return;
+    if (!scene || !capture || !capture->attrs || !capture->chars || !capture->story)
+        return false;
 
     Term_get_size(&term_wid, &term_hgt);
     visible_rows = MAX(1, term_hgt - 1);
@@ -2160,10 +2390,7 @@ static void object_info_screen_capture_draw(
     if (scroll > max_scroll)
         scroll = max_scroll;
 
-    old_story_active = Term->story_font_active;
-    old_story_grid = Term->story_font_grid;
-
-    Term_clear();
+    app_information_scene_init(scene);
 
     for (int row = 0; row < visible_rows; row++)
     {
@@ -2171,67 +2398,74 @@ static void object_info_screen_capture_draw(
 
         if (src_row >= capture->height)
             break;
-
-        for (int col = 0; col < capture->width && col < term_wid; col++)
-        {
-            int idx = src_row * capture->width + col;
-
-            Term->story_font_active =
-                ((capture->story[idx] & STORY_FLAG_USE) != 0);
-            Term->story_font_grid =
-                ((capture->story[idx] & STORY_FLAG_CELL_ALIGN) != 0);
-
-            Term_queue_char(
-                col, row, capture->attrs[idx], capture->chars[idx], 0, 0);
-        }
+        if (!object_info_scene_add_capture_row(scene, capture, src_row, row))
+            return false;
     }
 
-    Term->story_font_active = old_story_active;
-    Term->story_font_grid = old_story_grid;
+    if (max_scroll <= 0)
+    {
+        if (!exit_prompt)
+            exit_prompt = "(press any key)";
+
+        return app_information_scene_add_text(
+            scene, (s16b)prompt_row, 0, prompt_attr, exit_prompt);
+    }
 
     if (term_wid >= 70)
     {
-        SDL_strlcpy(prompt,
-            "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)",
-            sizeof(prompt));
+        if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+                TERM_SLATE,
+                "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 7, TERM_L_WHITE, "ESC")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 20, TERM_L_WHITE, "Space")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 41, TERM_L_WHITE, "Arrows")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 48, TERM_L_WHITE, "Keypad"))
+        {
+            return false;
+        }
     }
     else if (term_wid >= 40)
     {
-        SDL_strlcpy(prompt, "(ESC exit, Space page, Arrows scroll)",
-            sizeof(prompt));
+        if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+                TERM_SLATE, "(ESC exit, Space page, Arrows scroll)")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 1, TERM_L_WHITE, "ESC")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 11, TERM_L_WHITE, "Space")
+            || !app_information_scene_add_text(
+                scene, (s16b)prompt_row, 23, TERM_L_WHITE, "Arrows"))
+        {
+            return false;
+        }
     }
-    else
+    else if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+                 TERM_SLATE, "(ESC exit, Arrows scroll)"))
     {
-        SDL_strlcpy(prompt, "(ESC exit, Arrows scroll)", sizeof(prompt));
+        return false;
     }
 
-    Term_putstr(0, prompt_row, -1, TERM_SLATE, prompt);
-
-    if (max_scroll > 0)
-    {
-        int scroll_col;
-
-        strnfmt(scroll_buf, sizeof(scroll_buf), "[%d/%d]", scroll + 1,
-            max_scroll + 1);
-        scroll_col = term_wid - (int)strlen(scroll_buf);
-        if (scroll_col < 0)
-            scroll_col = 0;
-        Term_putstr(scroll_col, prompt_row, -1, TERM_SLATE, scroll_buf);
-    }
-
-    Term_fresh();
+    strnfmt(scroll_buf, sizeof(scroll_buf), "[%d/%d]", scroll + 1, max_scroll + 1);
+    return app_information_scene_add_text(scene, (s16b)prompt_row,
+        (s16b)MAX(0, term_wid - (int)strlen(scroll_buf)), TERM_SLATE, scroll_buf);
 }
 
-static void object_info_screen_capture_view(
-    const object_info_screen_capture* capture)
+static bool object_info_screen_capture_view_document(
+    const object_info_screen_capture* capture, byte prompt_attr,
+    cptr exit_prompt)
 {
+    ui_information_scene_scope scope;
     int scroll = 0;
 
-    if (!capture)
-        return;
+    if (!capture || !ui_information_scene_enter(&scope))
+        return false;
 
     while (true)
     {
+        app_information_scene scene;
         int term_wid = 80;
         int term_hgt = 24;
         int visible_rows;
@@ -2246,9 +2480,18 @@ static void object_info_screen_capture_view(
         if (scroll > max_scroll)
             scroll = max_scroll;
 
-        object_info_screen_capture_draw(capture, scroll);
+        if (!object_info_screen_capture_build_scene(
+                &scene, capture, scroll, prompt_attr, exit_prompt)
+            || !ui_information_scene_present_document(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
 
-        ch = object_info_wait_key();
+        ch = (char)ui_information_scene_wait_key();
+        if (max_scroll <= 0)
+            break;
+
         dir = target_dir(ch);
         if ((dir == 8) || (dir == 2))
             ch = I2D(dir);
@@ -2280,6 +2523,9 @@ static void object_info_screen_capture_view(
             break;
         }
     }
+
+    ui_information_scene_leave(&scope);
+    return true;
 }
 
 void object_info_screen_multi(const object_type** objects, const char** headings, int count)
@@ -2294,19 +2540,26 @@ void object_info_screen_multi(const object_type** objects, const char** headings
     if (Term && Term->hgt > 0)
         term_hgt = Term->hgt;
 
+    if (ui_information_scene_supported()
+        && object_info_screen_capture_build(objects, headings, count, &capture))
+    {
+        bool shown = object_info_screen_capture_view_document(
+            &capture, TERM_L_BLUE, "(press any key)");
+
+        object_info_screen_capture_free(&capture);
+        text_out_hook = text_out_to_screen;
+        text_out_wrap = 0;
+        text_out_indent = 0;
+        new_paragraph = false;
+        if (shown)
+            return;
+    }
+
     overflow_text = capture_object_info_screen_multi_text(objects, headings, count);
     if (overflow_text && object_info_buffer_line_count(overflow_text) > term_hgt - 4)
     {
         screen_save();
-        if (object_info_screen_capture_build(objects, headings, count, &capture))
-        {
-            object_info_screen_capture_view(&capture);
-            object_info_screen_capture_free(&capture);
-        }
-        else
-        {
-            show_buffer(overflow_text, 0);
-        }
+        show_buffer(overflow_text, 0);
         screen_load();
 
         mem_free_null(overflow_text);

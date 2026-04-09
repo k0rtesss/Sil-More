@@ -40,30 +40,92 @@ static app_information_snapshot* ui_information_scene_clone_snapshot(
     return copy;
 }
 
+static app_menu_snapshot* ui_information_scene_clone_menu_snapshot(
+    const app_menu_snapshot* snapshot)
+{
+    app_menu_snapshot* copy;
+
+    if (!snapshot)
+        return NULL;
+
+    copy = mem_alloc(app_menu_snapshot);
+    if (!copy)
+        return NULL;
+
+    app_menu_snapshot_init(copy);
+    copy->snapshot = snapshot->snapshot;
+    copy->snapshot.blobs = copy->blobs;
+    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
+    copy->blobs[0].kind = snapshot->blobs[0].kind;
+    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
+    copy->blobs[0].data = (const byte*)&copy->scene;
+    copy->blobs[0].size = sizeof(copy->scene);
+    copy->scene = snapshot->scene;
+
+    return copy;
+}
+
 static bool ui_information_scene_restore_snapshot(app_session* session,
     const ui_information_scene_scope* scope)
 {
-    if (!session || !scope || !scope->previous_information_snapshot)
+    if (!session || !scope)
         return false;
 
-    return app_session_publish_information_scene(session,
-        &scope->previous_information_snapshot->scene);
+    if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
+        && scope->previous_menu_snapshot)
+    {
+        return app_session_publish_menu_scene(session,
+            &scope->previous_menu_snapshot->scene);
+    }
+
+    if (scope->previous_snapshot.scene == APP_SCENE_KIND_INFORMATION
+        && scope->previous_information_snapshot)
+    {
+        return app_session_publish_information_scene(session,
+            &scope->previous_information_snapshot->scene);
+    }
+
+    return false;
 }
 
 static bool ui_information_scene_publish(const app_information_scene* scene,
     bool refresh)
 {
     app_session* session = app_session_current();
+    app_ui_scene ui_scene;
 
     if (!session || !scene)
         return false;
 
-    if (!app_session_publish_information_scene(session, scene))
+    if (app_ui_scene_from_information_document(&ui_scene, scene))
+    {
+        if (!app_session_publish_menu_scene(session, &ui_scene))
+            return false;
+    }
+    else if (!app_session_publish_information_scene(session, scene))
+    {
         return false;
+    }
 
     if (refresh)
         ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
 
+    return true;
+}
+
+bool ui_information_scene_present_document(const app_information_scene* scene)
+{
+    app_session* session = app_session_current();
+    app_ui_scene ui_scene;
+
+    if (!scene || !session)
+        return false;
+    if (!app_ui_scene_from_information_document(&ui_scene, scene))
+        return false;
+    if (!app_session_publish_menu_scene(session, &ui_scene))
+        return false;
+
+    ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
     return true;
 }
 
@@ -114,6 +176,13 @@ bool ui_information_scene_enter(ui_information_scene_scope* scope)
             = ui_information_scene_clone_snapshot(
                 app_session_information_snapshot(session));
         if (!scope->previous_information_snapshot)
+            return false;
+    }
+    else if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
+    {
+        scope->previous_menu_snapshot = ui_information_scene_clone_menu_snapshot(
+            app_session_menu_snapshot(session));
+        if (!scope->previous_menu_snapshot)
             return false;
     }
 
@@ -352,6 +421,7 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
     g_ui_information_scene_active = scope->previous_active;
     scope->previous_information_snapshot
         = mem_free(scope->previous_information_snapshot);
+    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
     if (!restored_information
         && scope->previous_snapshot.scene == APP_SCENE_KIND_DUNGEON

@@ -1,6 +1,6 @@
 # UI Render Replacement Plan
 
-Status: active on April 3, 2026. This plan supersedes
+Status: active on April 9, 2026. This plan supersedes
 [`ui_architecture_migration_plan.md`](./ui_architecture_migration_plan.md) for
 all forward UI work.
 
@@ -18,7 +18,7 @@ all forward UI work.
   - replace runtime legacy `Term` UI with one semantic UI system
   - delete term-grid bridges instead of carrying them forward
 
-## Current Status On 2026-04-03
+## Current Status On 2026-04-09
 ### Landed
 - `src/app/*` already carries session, input, snapshot, event, and host
   surfaces.
@@ -31,6 +31,9 @@ all forward UI work.
   direct `app_ui_scene` entrypoints for overlay rendering.
 - `src/sdl-scene-menu.c` now renders `app_ui_panel` modal/browser panels
   directly, and the old `app_menu_scene` compatibility adapter was deleted.
+- Shared semantic document panels now exist in `app-ui`, and the SDL menu
+  compositor renders them directly with proportional mono/story-font text
+  layout.
 - `src/app/app-scene-dungeon.*` now publish persistent chrome through
   `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
   the top strip, left status rail, and bottom strip.
@@ -54,6 +57,14 @@ all forward UI work.
 - The main menu now opens as a dungeon overlay menu, and the overlay is
   published before the first wait cycle to avoid a stale-frame flash from the
   old background.
+- Normal semantic document producers now publish through the shared document
+  panel path instead of the standalone information-scene presentation path:
+  help, file viewer, quest/score browsers, main-menu document screens, and the
+  targeting recall prompt.
+- The object-info family is now on the shared document viewer in SDL snapshot
+  mode: note text, single-item inspection, and multi-item compare/info screens
+  use semantic document scenes for paging and pause/input rather than the old
+  per-frame `present_term()` loop.
 - `tools/ui_debt_audit.py` and `tests/ui_debt_audit_baseline.json` already give
   a measurable debt baseline.
 - Independent scaling already exists in seed form:
@@ -76,15 +87,21 @@ all forward UI work.
   - `ui_information_scene_capture_term()`
   - `ui_information_scene_present_term()`
   - `app_information_scene`
+- The remaining concentrated browser/document bridge debt is now the
+  monster-recall family plus character/settings/knowledge-style screens that
+  still capture or present legacy term content.
 - Large UI families still own layout through `Term->wid`, `Term->hgt`,
   `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
 ### Remaining Debt Snapshot
-- `inkey()` call sites: 39 files / 89 matches
-- `screen_save()` + `screen_load()` call sites: 33 files / 215 matches
-- direct `Term_*` render/control calls: 65 files / 1,697 matches
+- `inkey()` call sites: 40 files / 90 matches
+- `screen_save()` + `screen_load()` call sites: 34 files / 221 matches
+- direct `Term_*` render/control calls: 67 files / 1,736 matches
 - `#include "platform-ui.h"`: 0 files / 0 matches
-- `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 208 matches
+- `get_sdl_*` / `set_sdl_*` outside platform code: 7 files / 209 matches
+- The checked-in audit baseline is stale relative to the current branch and
+  should be refreshed after the next deletion-heavy slice rather than treated
+  as a release gate in the meantime.
 
 ## Decisions
 ### 1. One Runtime UI System
@@ -216,8 +233,8 @@ Goal:
 - replace the current split between dungeon overlay payloads, menu payloads,
   and information-scene bridges with one shared semantic UI system
 
-Status on 2026-04-03:
-- In progress, with the first big chrome/menu slice landed.
+Status on 2026-04-09:
+- In progress, with the first big chrome/menu/document slice landed.
 - Done:
   - added `src/app/app-ui.[ch]`
   - added dungeon `chrome_scene`
@@ -239,10 +256,20 @@ Status on 2026-04-03:
   - deleted the information-scene term-mirror flag and mirror-enter helper
   - fixed the semantic status rail to measure and draw proportional text runs
     instead of synthetic fixed-grid glyph spacing
+  - added a shared document widget path to `app-ui` plus direct SDL document
+    rendering in `sdl-scene-menu.c`
+  - moved semantic help/file-viewer/quest/score/main-menu document producers
+    onto that shared document path
+  - migrated the object-info family (`src/obj-info.c`) off the old
+    `present_term()` browser loop in SDL snapshot mode while preserving the
+    existing Sil visual treatment
 - Still to do before Slice A can exit:
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`
+  - next concentrated removal target: monster-recall document overlays
+    (look/targeting/knowledge/history) so the remaining bridge-heavy browser
+    family moves together instead of caller-by-caller
 
 Primary write set:
 - `src/app/*`

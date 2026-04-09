@@ -157,7 +157,7 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
         (void)wid;
         line = show_buffer_clamp_line(line, size, hgt);
         show_buffer_build_information_scene(&scene, main_buffer, line, size, hgt);
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -429,7 +429,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                 TERM_L_WHITE, "Keypad");
         }
 
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

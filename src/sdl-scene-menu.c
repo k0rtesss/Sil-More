@@ -1496,6 +1496,359 @@ static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
     return true;
 }
 
+typedef struct sdl_menu_document_metrics {
+    int origin_x;
+    int origin_y;
+    int cell_w;
+    int cell_h;
+    int cols;
+    int rows;
+    TTF_Font* mono_font;
+    TTF_Font* story_font;
+} sdl_menu_document_metrics;
+
+static int sdl_menu_measure_text_n(TTF_Font* font, cptr text, size_t len)
+{
+    int measured_w = 0;
+
+    if (!font || !text || len == 0)
+        return 0;
+
+    if (!TTF_MeasureString(font, text, len, 0, &measured_w, NULL))
+        return 0;
+
+    return measured_w;
+}
+
+static int sdl_menu_document_cell_width(int cell_h, TTF_Font* mono_font,
+    TTF_Font* story_font)
+{
+    int cell_w = (int)((float)cell_h * 0.57f + 0.5f);
+    int mono_m_w = sdl_menu_measure_text_n(mono_font, "M", 1);
+    int story_m_w = sdl_menu_measure_text_n(story_font, "M", 1);
+
+    if (mono_m_w > cell_w)
+        cell_w = mono_m_w;
+    if (story_m_w > cell_w)
+        cell_w = story_m_w;
+    if (cell_w < 1)
+        cell_w = 1;
+
+    return cell_w;
+}
+
+static bool sdl_menu_panel_has_document(const app_ui_scene* scene,
+    const app_ui_panel* panel)
+{
+    if (!scene || !panel || panel->document_op_count == 0)
+        return false;
+
+    return (u16b)(panel->document_op_first + panel->document_op_count)
+        <= scene->document_op_count;
+}
+
+static bool sdl_menu_resolve_document_metrics(const sdl_view* main_view,
+    const app_ui_panel* panel, sdl_menu_document_metrics* metrics)
+{
+    int canvas_w;
+    int canvas_h;
+    int desired_px;
+    int min_px;
+    int pixel_height;
+    int rows;
+    int cols;
+    int margin_x;
+    int margin_y;
+    TTF_Font* fallback_mono = NULL;
+    TTF_Font* fallback_story = NULL;
+    int fallback_cell_w = 0;
+    int fallback_cell_h = 0;
+
+    if (!main_view || !panel || !metrics)
+        return false;
+
+    rows = panel->document_rows ? panel->document_rows : 1;
+    cols = panel->document_cols ? panel->document_cols : 1;
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    desired_px = sdl_menu_scale_px(
+        (float)sdl_menu_font_size_logical(main_view));
+    min_px = sdl_menu_scale_px(10.0f);
+    if (min_px < 10)
+        min_px = 10;
+    if (desired_px < min_px)
+        desired_px = min_px;
+
+    margin_x = sdl_menu_scale_px(2.0f);
+    margin_y = 0;
+
+    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
+    {
+        TTF_Font* mono_font = sdl_ui_font_for_height(pixel_height);
+        TTF_Font* story_font = sdl_story_font_for_height(pixel_height);
+        int mono_h;
+        int story_h = 0;
+        int cell_h;
+        int cell_w;
+
+        if (!mono_font)
+            continue;
+        if (!story_font)
+            story_font = mono_font;
+
+        mono_h = TTF_GetFontHeight(mono_font);
+        if (story_font)
+            story_h = TTF_GetFontHeight(story_font);
+        cell_h = MAX(pixel_height, MAX(mono_h, story_h));
+        cell_w = sdl_menu_document_cell_width(cell_h, mono_font, story_font);
+
+        fallback_mono = mono_font;
+        fallback_story = story_font;
+        fallback_cell_w = cell_w;
+        fallback_cell_h = cell_h;
+
+        if ((cols * cell_w) <= (canvas_w - margin_x * 2)
+            && (rows * cell_h) <= (canvas_h - margin_y * 2))
+        {
+            metrics->origin_x = margin_x;
+            metrics->origin_y = margin_y;
+            metrics->cell_w = cell_w;
+            metrics->cell_h = cell_h;
+            metrics->cols = cols;
+            metrics->rows = rows;
+            metrics->mono_font = mono_font;
+            metrics->story_font = story_font;
+            return true;
+        }
+    }
+
+    if (!fallback_mono)
+        return false;
+
+    metrics->origin_x = margin_x;
+    metrics->origin_y = margin_y;
+    metrics->cell_w = fallback_cell_w;
+    metrics->cell_h = fallback_cell_h;
+    metrics->cols = cols;
+    metrics->rows = rows;
+    metrics->mono_font = fallback_mono;
+    metrics->story_font = fallback_story ? fallback_story : fallback_mono;
+    return true;
+}
+
+static int sdl_menu_render_document_text_run_px(TTF_Font* font, float x_px,
+    float y_px, SDL_Color color, cptr text, size_t len, int target_h,
+    float max_w_px)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    SDL_Rect previous_clip;
+    SDL_Rect clip_rect;
+    SDL_Rect* clip_ptr = NULL;
+    bool had_clip = false;
+    char buf[APP_UI_TEXT_MAX + 1];
+    int advance_w;
+    float scale = 1.0f;
+    size_t copy_len = len;
+
+    if (!font || !text || len == 0)
+        return 0;
+
+    if (copy_len >= sizeof(buf))
+        copy_len = sizeof(buf) - 1;
+    memcpy(buf, text, copy_len);
+    buf[copy_len] = '\0';
+
+    surface = TTF_RenderText_Blended(font, buf, 0, color);
+    if (!surface)
+        return 0;
+
+    advance_w = sdl_menu_measure_text_n(font, buf, copy_len);
+    dst.x = x_px;
+    dst.y = y_px;
+    dst.w = (float)surface->w;
+    dst.h = (float)surface->h;
+
+    if (target_h > 0 && surface->h > target_h)
+    {
+        scale = (float)target_h / (float)surface->h;
+        dst.w *= scale;
+        dst.h *= scale;
+        advance_w = (int)((float)advance_w * scale + 0.5f);
+    }
+    if (target_h > 0 && dst.h < (float)target_h)
+        dst.y += ((float)target_h - dst.h) * 0.5f;
+
+    if (max_w_px > 0.0f)
+    {
+        if ((float)advance_w > max_w_px)
+            advance_w = (int)max_w_px;
+        if (dst.w > max_w_px)
+        {
+            clip_rect.x = (int)x_px;
+            clip_rect.y = (int)y_px;
+            clip_rect.w = (int)(max_w_px + 0.999f);
+            clip_rect.h = (int)(dst.h + 0.999f);
+            if (clip_rect.w > 0 && clip_rect.h > 0)
+                clip_ptr = &clip_rect;
+        }
+    }
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (texture)
+    {
+        if (clip_ptr)
+        {
+            had_clip = SDL_GetRenderClipRect(g_state.renderer, &previous_clip);
+            SDL_SetRenderClipRect(g_state.renderer, clip_ptr);
+        }
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+        if (clip_ptr)
+            SDL_SetRenderClipRect(g_state.renderer,
+                had_clip ? &previous_clip : NULL);
+        SDL_DestroyTexture(texture);
+    }
+
+    SDL_DestroySurface(surface);
+    return advance_w;
+}
+
+static float sdl_menu_measure_document_text_run_px(TTF_Font* font, cptr text,
+    size_t len, int target_h, float max_w_px)
+{
+    int width_px;
+    int font_h;
+    float scaled_w;
+
+    if (!font || !text || len == 0)
+        return 0.0f;
+
+    width_px = sdl_menu_measure_text_n(font, text, len);
+    if (width_px <= 0)
+        return 0.0f;
+
+    scaled_w = (float)width_px;
+    font_h = TTF_GetFontHeight(font);
+    if (target_h > 0 && font_h > target_h)
+        scaled_w *= (float)target_h / (float)font_h;
+
+    if (max_w_px > 0.0f && scaled_w > max_w_px)
+        scaled_w = max_w_px;
+
+    return scaled_w;
+}
+
+static void sdl_menu_render_document_text(
+    const sdl_menu_document_metrics* metrics, const app_ui_document_op* op)
+{
+    SDL_FRect background;
+    char text_buf[APP_UI_TEXT_MAX];
+    SDL_Color color;
+    bool use_story;
+    bool grid_align;
+    size_t len;
+    TTF_Font* run_font;
+    float background_w;
+    float max_run_w;
+    float x_px;
+    float y_px;
+
+    if (!metrics || !op || op->kind != APP_UI_DOCUMENT_OP_TEXT || !op->text[0])
+        return;
+    if (op->row < 0 || op->row >= metrics->rows || op->col >= metrics->cols)
+        return;
+
+    len = strlen(op->text);
+    if (len == 0)
+        return;
+    if (op->col < 0)
+        return;
+    if ((size_t)op->col + len > (size_t)metrics->cols)
+        len = (size_t)(metrics->cols - op->col);
+    if (len == 0)
+        return;
+    memcpy(text_buf, op->text, len);
+    text_buf[len] = '\0';
+
+    color = sdl_menu_color(op->attr);
+    use_story = (op->story & STORY_FLAG_USE) != 0;
+    grid_align = (op->story & STORY_FLAG_CELL_ALIGN) != 0;
+    x_px = (float)(metrics->origin_x + op->col * metrics->cell_w);
+    y_px = (float)(metrics->origin_y + op->row * metrics->cell_h);
+    max_run_w = (float)(len * metrics->cell_w);
+    run_font = (use_story && metrics->story_font)
+        ? metrics->story_font
+        : metrics->mono_font;
+    background_w = max_run_w;
+    if (!grid_align && run_font)
+    {
+        float measured_w = sdl_menu_measure_document_text_run_px(run_font,
+            text_buf, len, metrics->cell_h, max_run_w);
+
+        if (measured_w > 0.0f)
+            background_w = measured_w;
+    }
+
+    background.x = x_px;
+    background.y = y_px;
+    background.w = background_w;
+    background.h = (float)metrics->cell_h;
+    sdl_menu_fill_rect(&background, (SDL_Color){ 0, 0, 0, 255 });
+
+    if (grid_align)
+    {
+        sdl_menu_render_fixed_text(run_font, x_px, y_px, metrics->cell_w,
+            metrics->cell_h, color, text_buf);
+        return;
+    }
+
+    (void)sdl_menu_render_document_text_run_px(run_font, x_px, y_px, color,
+        text_buf, len, metrics->cell_h, max_run_w);
+}
+
+static bool sdl_menu_render_document_panel(const sdl_view* main_view,
+    const app_ui_scene* scene, const app_ui_panel* panel)
+{
+    sdl_menu_document_metrics metrics;
+    SDL_FRect canvas_rect;
+    u16b i;
+    u16b start;
+    u16b end;
+    int canvas_w;
+    int canvas_h;
+
+    if (!main_view || !scene || !panel || !sdl_menu_panel_has_document(scene,
+            panel))
+    {
+        return false;
+    }
+    if (!sdl_menu_resolve_document_metrics(main_view, panel, &metrics))
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (!(scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP))
+    {
+        canvas_rect.x = 0.0f;
+        canvas_rect.y = 0.0f;
+        canvas_rect.w = (float)canvas_w;
+        canvas_rect.h = (float)canvas_h;
+        sdl_menu_fill_rect(&canvas_rect, (SDL_Color){ 0, 0, 0, 255 });
+    }
+
+    start = panel->document_op_first;
+    end = (u16b)(panel->document_op_first + panel->document_op_count);
+    for (i = start; i < end && i < scene->document_op_count; i++)
+        sdl_menu_render_document_text(&metrics, &scene->document_ops[i]);
+
+    return true;
+}
+
 bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
     const app_ui_scene* scene)
 {
@@ -1537,6 +1890,13 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
         if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
         {
             if (!sdl_menu_render_status_rail_panel(main_view, panel))
+                return false;
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_DOCUMENT)
+        {
+            if (!sdl_menu_render_document_panel(main_view, scene, panel))
                 return false;
             continue;
         }

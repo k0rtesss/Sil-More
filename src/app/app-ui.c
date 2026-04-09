@@ -289,6 +289,60 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     return true;
 }
 
+bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
+    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story, cptr text)
+{
+    app_ui_document_op* op;
+    size_t len;
+    int cols;
+
+    if (!scene || !panel || !text || !text[0])
+        return false;
+    if (scene->document_op_count >= APP_UI_DOCUMENT_OP_MAX)
+        return false;
+
+    len = strlen(text);
+    if (len >= APP_UI_TEXT_MAX)
+        len = APP_UI_TEXT_MAX - 1u;
+    if (len == 0)
+        return false;
+
+    if (panel->document_op_count == 0)
+        panel->document_op_first = scene->document_op_count;
+    else if ((u16b)(panel->document_op_first + panel->document_op_count)
+        != scene->document_op_count)
+    {
+        return false;
+    }
+
+    op = &scene->document_ops[scene->document_op_count++];
+    memset(op, 0, sizeof(*op));
+    op->kind = APP_UI_DOCUMENT_OP_TEXT;
+    op->attr = attr;
+    op->story = story;
+    op->row = row;
+    op->col = col;
+    memcpy(op->text, text, len);
+    op->text[len] = '\0';
+
+    panel->document_op_count++;
+    if (row >= 0 && (u16b)(row + 1) > panel->document_rows)
+        panel->document_rows = (u16b)(row + 1);
+
+    cols = (col >= 0) ? (int)col + (int)len : (int)len;
+    if (cols > 0 && (u16b)cols > panel->document_cols)
+        panel->document_cols = (u16b)cols;
+
+    return true;
+}
+
+bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
+    s16b row, s16b col, byte attr, cptr text)
+{
+    return app_ui_panel_add_document_text_ex(scene, panel, row, col, attr, 0,
+        text);
+}
+
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction)
 {
@@ -375,4 +429,46 @@ bool app_ui_scene_from_interaction(app_ui_scene* scene,
     }
 
     return true;
+}
+
+bool app_ui_scene_from_information_document(app_ui_scene* scene,
+    const app_information_scene* information_scene)
+{
+    app_ui_panel* panel;
+    u16b i;
+
+    if (!scene || !information_scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    if ((information_scene->flags & APP_INFORMATION_SCENE_FLAG_OVERLAY_DUNGEON)
+        != 0)
+    {
+        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
+    }
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+
+    for (i = 0; i < information_scene->op_count
+        && i < APP_INFORMATION_OP_MAX; i++)
+    {
+        const app_information_op* op = &information_scene->ops[i];
+
+        if (op->kind != APP_INFORMATION_OP_KIND_TEXT || !op->text[0])
+            return false;
+
+        if (!app_ui_panel_add_document_text_ex(scene, panel, op->row, op->col,
+                op->attr, op->story, op->text))
+        {
+            return false;
+        }
+    }
+
+    return panel->document_op_count > 0;
 }

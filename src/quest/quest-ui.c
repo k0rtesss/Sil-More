@@ -627,7 +627,7 @@ static bool do_cmd_quest_status_information_scene(void)
     quest_scene_add_line(&scene, col, &row, "Press any key to return.",
         TERM_L_WHITE);
 
-    if (!ui_information_scene_present(&scene))
+    if (!ui_information_scene_present_document(&scene))
     {
         ui_information_scene_leave(&scope);
         return false;

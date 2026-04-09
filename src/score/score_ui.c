@@ -1339,7 +1339,7 @@ static char display_scores_pages_information(const high_score* entries,
             score_scene_put_fit(&scene, TERM_L_WHITE, "(press any key)",
                 footer_row, 2, term_wid);
         }
-        (void)ui_information_scene_present(&scene);
+        (void)ui_information_scene_present_document(&scene);
         (void)ui_information_scene_wait_key_nonrepeat();
         ui_information_scene_leave(&scope);
         return 0;
@@ -1468,7 +1468,7 @@ static char display_scores_pages_information(const high_score* entries,
             score_scene_put_fit(&scene, TERM_L_WHITE, footer, footer_row, 1,
                 term_wid);
 
-            if (!ui_information_scene_present(&scene))
+            if (!ui_information_scene_present_document(&scene))
             {
                 log_warn("scores: failed to present information-scene page");
                 ui_information_scene_leave(&scope);
@@ -2320,7 +2320,7 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
                 footer_row, 0, term_wid);
         }
 
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

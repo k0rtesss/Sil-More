@@ -2,13 +2,14 @@
 #define INCLUDED_APP_UI_H
 
 #include "app-interaction.h"
+#include "app-scene-information.h"
 #include "h-basic.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 1u
+#define APP_UI_FORMAT_VERSION 2u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -20,6 +21,7 @@ extern "C" {
 #define APP_UI_FOOTER_ACTION_MAX 8u
 #define APP_UI_TAB_MAX 8u
 #define APP_UI_PANEL_MAX 4u
+#define APP_UI_DOCUMENT_OP_MAX 256u
 
 typedef enum app_ui_scene_flag {
     APP_UI_SCENE_FLAG_NONE = 0x0000u,
@@ -39,7 +41,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_DEFAULT = 0,
     APP_UI_PANEL_STYLE_PLAIN = 1,
     APP_UI_PANEL_STYLE_STATUS_RAIL = 2,
-    APP_UI_PANEL_STYLE_STRIP = 3
+    APP_UI_PANEL_STYLE_STRIP = 3,
+    APP_UI_PANEL_STYLE_DOCUMENT = 4
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {
@@ -105,6 +108,21 @@ typedef struct app_ui_tab {
     char label[APP_UI_LABEL_MAX];
 } app_ui_tab;
 
+typedef enum app_ui_document_op_kind {
+    APP_UI_DOCUMENT_OP_NONE = 0,
+    APP_UI_DOCUMENT_OP_TEXT = 1
+} app_ui_document_op_kind;
+
+typedef struct app_ui_document_op {
+    byte kind;
+    byte attr;
+    byte story;
+    byte reserved;
+    s16b row;
+    s16b col;
+    char text[APP_UI_TEXT_MAX];
+} app_ui_document_op;
+
 typedef struct app_ui_panel {
     u16b layer;
     u16b flags;
@@ -120,6 +138,10 @@ typedef struct app_ui_panel {
     u16b detail_line_count;
     u16b footer_action_count;
     u16b tab_count;
+    u16b document_op_first;
+    u16b document_op_count;
+    u16b document_rows;
+    u16b document_cols;
     byte title_attr;
     byte subtitle_attr;
     byte detail_title_attr;
@@ -138,8 +160,9 @@ typedef struct app_ui_scene {
     u16b format_version;
     u16b flags;
     u16b panel_count;
-    u16b reserved;
+    u16b document_op_count;
     app_ui_panel panels[APP_UI_PANEL_MAX];
+    app_ui_document_op document_ops[APP_UI_DOCUMENT_OP_MAX];
 } app_ui_scene;
 
 void app_ui_panel_init(app_ui_panel* panel, u16b layer);
@@ -166,8 +189,14 @@ bool app_ui_panel_add_footer_action(app_ui_panel* panel, s16b id, byte attr,
     bool enabled, cptr key, cptr label);
 bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
+bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
+    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story, cptr text);
+bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
+    s16b row, s16b col, byte attr, cptr text);
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction);
+bool app_ui_scene_from_information_document(app_ui_scene* scene,
+    const app_information_scene* information_scene);
 
 #ifdef __cplusplus
 }

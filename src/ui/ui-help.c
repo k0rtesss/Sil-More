@@ -1607,7 +1607,7 @@ static bool do_cmd_help_information_scene(void)
 
         help_build_information_scene(&scene, page, total_pages, hgt,
             page_starts[page - 1], page_ends[page - 1]);
-        if (!ui_information_scene_present(&scene))
+        if (!ui_information_scene_present_document(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
