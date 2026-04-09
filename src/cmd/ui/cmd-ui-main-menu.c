@@ -10,6 +10,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "platform-story-font.h"
+#include "platform-input.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"
@@ -104,6 +105,17 @@ static bool main_menu_choice_is_disabled(int choice)
         || (choice == MAIN_MENU_SAVE_QUIT);
 }
 
+static void main_menu_prompt_label(int binding, const char* fallback,
+    char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
+        SDL_strlcpy(buf, fallback, buflen);
+}
+
 static int main_menu_about_count_rows(int indent, int wrap_right,
     const main_menu_about_line* lines, const bool* blank_visible)
 {
@@ -188,7 +200,7 @@ static void main_menu_about(void)
         { TERM_WHITE, "Gamedesigner: k0rtess." },
         { TERM_WHITE, "Tileset: MicroChasm." },
         { TERM_WHITE, "Main music theme: sinefabula." },
-        { TERM_WHITE, "Ambient music theme: westwinnd." },
+        { TERM_WHITE, "Ambient music theme: West Wind." },
         { TERM_WHITE, "Logo: sinefabula." },
         { TERM_WHITE, "" },
         { TERM_WHITE, "Our love to Maedhros aka Carcharos for playing so much," },
@@ -197,8 +209,8 @@ static void main_menu_about(void)
         { TERM_L_BLUE, "developers: half, Scatha and Quirk." },
         { TERM_WHITE, "" },
         { TERM_WHITE, "Honorable mentions:" },
-        { TERM_WHITE, "Sound: Kenney, qubodup, TomMusic, Leohpaz." },
-        { TERM_WHITE, "Tiles: Wolffius, Pine Druid, Backterria, SciGho." },
+        { TERM_WHITE, "Sound: Kenney, qubodup, TomMusic, LeoHPaz." },
+        { TERM_WHITE, "Walls: Wolffius, Pine Druid, Backterria, Ninjikin." },
         { TERM_WHITE, "" },
         { TERM_L_RED, "And our deep love to Tolkien and his timeless creations." },
         { TERM_WHITE, "" },
@@ -323,7 +335,7 @@ static void main_menu_about(void)
                     },
                     {
                         { TERM_YELLOW, "Ambient music theme:" },
-                        { TERM_WHITE, " westwinnd." },
+                        { TERM_WHITE, " West Wind." },
                     },
                     {
                         { TERM_YELLOW, "Logo:" },
@@ -350,8 +362,21 @@ static void main_menu_about(void)
     if (row >= hgt)
         row = hgt - 1;
 
-    Term_putstr(text_indent, row, -1, TERM_L_WHITE,
-        "[Press any key to return]");
+    if (steamdeck_controls_active())
+    {
+        char back_label[16];
+        char prompt_buf[48];
+
+        main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] return", back_label);
+        Term_putstr(text_indent, row, -1, TERM_L_WHITE, prompt_buf);
+    }
+    else
+    {
+        Term_putstr(text_indent, row, -1, TERM_L_WHITE,
+            "[Press any key to return]");
+    }
     Term_fresh();
 
     flush();
@@ -597,6 +622,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
     char ch;
     int i;
     bool death_view = death_spectator_active();
+    bool steamdeck = steamdeck_controls_active();
     bool use_menu_scene = menu_scene_scope && menu_scene_scope->active
         && main_menu_scene_present(menu_scene_scope, *highlight, death_view);
 
@@ -719,6 +745,29 @@ static int main_menu_aux(int* highlight, bool scene_active,
         }
     }
 
+    if (steamdeck && Term)
+    {
+        int prompt_row = row_top + menu_h;
+        char confirm_label[16];
+        char back_label[16];
+        char prompt_buf[96];
+
+        if (prompt_row >= Term->hgt)
+            prompt_row = Term->hgt - 1;
+        if (prompt_row >= 0)
+        {
+            Term_erase(0, prompt_row, 255);
+            main_menu_prompt_label(steamdeck_confirm_key(), "A",
+                confirm_label, sizeof(confirm_label));
+            main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
+                sizeof(back_label));
+            strnfmt(prompt_buf, sizeof(prompt_buf),
+                "D-pad select  %s open  %s back",
+                confirm_label, back_label);
+            Term_putstr(col_main, prompt_row, -1, TERM_SLATE, prompt_buf);
+        }
+    }
+
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
     if (scene_active)
@@ -789,7 +838,8 @@ static int main_menu_aux(int* highlight, bool scene_active,
     }
 
     /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6')
+        || (steamdeck && ch == steamdeck_confirm_key()))
     {
         return (*highlight);
     }
@@ -827,7 +877,8 @@ static int main_menu_aux(int* highlight, bool scene_active,
     }
 
     /* Leave menu */
-    if ((ch == ESCAPE) || (ch == '4'))
+    if ((ch == ESCAPE) || (ch == '4')
+        || (steamdeck && ch == steamdeck_back_key()))
     {
         return (-1);
     }

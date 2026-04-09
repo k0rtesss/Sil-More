@@ -1810,6 +1810,14 @@ errr init_sdl(int argc, char **argv)
     }
 
 #ifdef __ANDROID__
+    if (!config_exists) {
+        config.steamdeck_mode = (g_gamepad_state.pad_count > 0);
+        log_info("Android first-start Steam Deck UI mode set to %s (%d gamepad%s detected)",
+            config.steamdeck_mode ? "on" : "off",
+            g_gamepad_state.pad_count,
+            (g_gamepad_state.pad_count == 1) ? "" : "s");
+    }
+
     sdl_ensure_default_pane_configs_present(false);
     sdl_ensure_touch_pane_config_present();
 

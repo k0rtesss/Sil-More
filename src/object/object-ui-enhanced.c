@@ -981,6 +981,7 @@ void show_equip_enhanced(void)
     story_font_term_state story_state;
     int story_term_w = 0;
     int i, k, l;
+    int clear_col;
     int col, len, lim;
     int term_wid = menu_term_width();
     int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
@@ -1048,6 +1049,7 @@ void show_equip_enhanced(void)
     }
 
     col = menu_center_col_for_len(term_wid, len);
+    clear_col = menu_overlay_clear_col(col);
     if (k > 0)
     {
         highlight_index = 0;
@@ -1067,8 +1069,8 @@ void show_equip_enhanced(void)
                 int total_row = INVEN_TOTAL - INVEN_WIELD + 1;
                 int text_row = total_row + 1;
 
-                Term_erase(col, total_row, 255);
-                Term_erase(col, text_row, 255);
+                Term_erase(clear_col, total_row, 255);
+                Term_erase(clear_col, text_row, 255);
                 story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
                     "--------");
                 strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
@@ -1076,7 +1078,7 @@ void show_equip_enhanced(void)
                 story_print_text_grid(text_row, MAX(0, weight_col - 8), 16,
                     TERM_SLATE, tmp_val);
                 if (k && (k + 3 < term_hgt - 1))
-                    Term_erase(0, k + 3, 255);
+                    Term_erase(clear_col, k + 3, 255);
             }
         }
         else
@@ -1156,7 +1158,7 @@ void show_equip_enhanced(void)
             if (display_row > 0)
             {
                 o_ptr = &inventory[highlighted_slot];
-                prt("", display_row, col);
+                Term_erase(clear_col, display_row, 255);
                 strnfmt(tmp_val, sizeof(tmp_val), "%-12s: ",
                     mention_use(highlighted_slot));
                 c_put_str(TERM_L_BLUE, tmp_val, display_row, col);

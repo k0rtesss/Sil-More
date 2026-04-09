@@ -523,7 +523,7 @@ void resize(const SDL_Rect* screen)
 
     const char* font_path = config.monospace_font[0] != '\0'
         ? config.monospace_font
-        : "lib/xtra/font/InputMono-Bold.ttf";
+        : "lib/xtra/font/VictorMono-Medium.ttf";
 
     for (int i = 1; i < MAX_TERM_DATA; i++) {
         sdl_view_destroy(&g_views[i]);

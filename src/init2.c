@@ -18,6 +18,7 @@
 #include "platform-audio.h"
 #include "runtime-cli.h"
 #include "platform-config.h"
+#include "platform-input.h"
 #include "platform-time.h"
 #include "platform-story-font.h"
 #include "metarun.h"
@@ -429,6 +430,8 @@ static int welcome_screen_intro_row(int rel_row,
     const welcome_intro_layout* layout);
 static int welcome_screen_intro_last_row(const welcome_intro_layout* layout);
 static int welcome_screen_intro_total_rows(const welcome_intro_layout* layout);
+static void welcome_prompt_label(int binding, const char* fallback,
+    char* buf, size_t buflen);
 static int welcome_screen_footer_rows(bool show_wizard, bool show_sep,
     bool show_blank, bool show_prompt);
 static void welcome_screen_compute_layout(int hgt, bool show_wizard,
@@ -442,6 +445,17 @@ static int welcome_screen_current_intro_style(void)
     if (op_ptr->intro_style == INTRO_STYLE_RANDOM)
         return (int)(platform_monotonic_ms() % 7u);
     return (int)op_ptr->intro_style;
+}
+
+static void welcome_prompt_label(int binding, const char* fallback,
+    char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
+        SDL_strlcpy(buf, fallback, buflen);
 }
 
 static bool welcome_screen_visit_intro_lines(const welcome_intro_layout* layout,
@@ -685,13 +699,36 @@ static bool welcome_screen_visit_footer_lines(int intro_col,
     const char* wizard_line =
         "Resurrecting a character is a form of cheating.";
     const char* sep_line = "- - - - - - - - - - - -";
-    const char* menu_line = (metarun_created == true)
-        ? "[Space] Begin    [Q/Esc] Quit"
-        : "[Space] Continue  [Q/Esc] Quit";
+    char menu_line[96];
+    bool steamdeck = steamdeck_controls_active();
     int bottom_row = 0;
 
     if (!sink)
         return false;
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        welcome_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        welcome_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(menu_line, sizeof(menu_line),
+            (metarun_created == true)
+                ? "[%s] Begin    [%s] Quit"
+                : "[%s] Continue  [%s] Quit",
+            confirm_label, back_label);
+    }
+    else
+    {
+        SDL_strlcpy(menu_line,
+            (metarun_created == true)
+                ? "[Space] Begin    [Q/Esc] Quit"
+                : "[Space] Continue  [Q/Esc] Quit",
+            sizeof(menu_line));
+    }
 
     if (show_prompt)
     {
@@ -823,6 +860,16 @@ static int welcome_screen_base_col(void)
 
     if (wid < legacy_term_wid)
     {
+#ifdef __ANDROID__
+        if (!get_sdl_steamdeck_mode())
+        {
+            shift = (wid - compact_block_wid) / 2;
+            if (shift < 0)
+                shift = 0;
+
+            return shift;
+        }
+#endif
         shift = (wid - compact_block_wid) / 2;
         if (shift < 0)
             shift = 0;
@@ -1201,6 +1248,7 @@ NavResult initial_menu(bool* start_new)
     int ch;
     NavResult result = NAV_BACK;
     bool intro_story_font = false;
+    bool steamdeck = steamdeck_controls_active();
     bool show_wizard_line = runtime_cli_wizard();
     app_session* session = app_session_current();
     app_wait_scope bootstrap_wait_scope;
@@ -1247,7 +1295,8 @@ NavResult initial_menu(bool* start_new)
     ch = inkey();
     inkey_set_cursor_hidden(saved_hide_cursor);
 
-    if (ch == '\n' || ch == '\r' || ch == ' ')
+    if (ch == '\n' || ch == '\r' || ch == ' '
+        || (steamdeck && ch == steamdeck_confirm_key()))
     {
         log_info("initial_menu: User pressed space/enter - starting game");
         run_mode_set_pending(RUN_MODE_STORY);
@@ -1256,7 +1305,8 @@ NavResult initial_menu(bool* start_new)
         goto menu_done;
     }
 
-    if (ch == 'q' || ch == ESCAPE)
+    if (ch == 'q' || ch == ESCAPE
+        || (steamdeck && ch == steamdeck_back_key()))
     {
         result = NAV_QUIT;
         goto menu_done;

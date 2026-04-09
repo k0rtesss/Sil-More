@@ -35,6 +35,7 @@ int menu_term_width(void);
 int menu_weight_col_for_width(int term_wid);
 int menu_label_col_for_width(int term_wid, bool display_weights);
 int menu_center_col_for_len(int term_wid, int len);
+int menu_overlay_clear_col(int col);
 int menu_desc_limit(int text_col, int label_col, int weight_col, bool display_weights);
 int menu_inventory_row_width(cptr desc, const object_type* o_ptr,
     bool display_weights);

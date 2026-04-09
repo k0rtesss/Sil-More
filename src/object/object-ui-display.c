@@ -243,6 +243,15 @@ int menu_center_col_for_len(int term_wid, int len)
     return (term_wid - len) / 2;
 }
 
+int menu_overlay_clear_col(int col)
+{
+    /* Keep a one-cell gutter so centered overlays stay visually separate. */
+    if (col > 0)
+        return col - 1;
+
+    return 0;
+}
+
 int menu_desc_limit(int text_col, int label_col, int weight_col,
     bool display_weights)
 {
@@ -316,6 +325,7 @@ void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
     cptr weight_text, byte weight_attr, cptr label_text, byte label_attr,
     const object_type* o_ptr, bool highlight, int story_term_w)
 {
+    int clear_col = menu_overlay_clear_col(col);
     int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
     int highlight_cols = term_wid;
     int label_col = menu_label_col_for_width(term_wid, display_weights);
@@ -323,7 +333,7 @@ void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
     const int label_width = MENU_LABEL_FIELD_WIDTH;
     bool has_object = (o_ptr && o_ptr->k_idx);
 
-    Term_erase(col, row, 255);
+    Term_erase(clear_col, row, 255);
     if (highlight)
         story_fill_rect(row, col, highlight_cols - col, TERM_L_BLUE);
 
@@ -358,6 +368,7 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
     byte* out_color, char out_desc[][80], bool highlight_active,
     int highlight_index, bool display_weights, int story_term_w)
 {
+    int clear_col = menu_overlay_clear_col(col);
     int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
     int label_col_base = menu_label_col_for_width(term_wid, display_weights);
     int weight_col = menu_weight_col_for_width(term_wid);
@@ -382,7 +393,7 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
                 row, slot, has_object, out_desc[idx]);
         }
 
-        Term_erase(col, row, 255);
+        Term_erase(clear_col, row, 255);
         if (is_highlight)
         {
             log_trace("draw_equipment_story_rows: Filling highlight rect at row %d", row);
@@ -940,6 +951,7 @@ void show_inven(void)
 void show_equip(void)
 {
     int i, j, k, l;
+    int clear_col;
     int col, len, lim;
     int term_wid = menu_term_width();
     int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
@@ -1019,6 +1031,7 @@ void show_equip(void)
     }
 
     col = menu_center_col_for_len(term_wid, len);
+    clear_col = menu_overlay_clear_col(col);
 
     for (j = 0; j < k; j++)
     {
@@ -1058,7 +1071,7 @@ void show_equip(void)
             continue;
         }
 
-        prt("", j + 1, col);
+        Term_erase(clear_col, j + 1, 255);
 
         log_trace("show_equip: Row %d - put_str prefix '%s'", j + 1, prefix_buf);
         put_str(prefix_buf, j + 1, col);
@@ -1095,9 +1108,9 @@ void show_equip(void)
     if (j && (j < term_hgt - 1))
     {
         if (use_story_font)
-            Term_erase(col, j + 1, 255);
+            Term_erase(clear_col, j + 1, 255);
         else
-            prt("", j + 1, col);
+            Term_erase(clear_col, j + 1, 255);
     }
 
     if (armour_weight)
@@ -1107,8 +1120,8 @@ void show_equip(void)
         int col_total = 52;
         if (use_story_font)
         {
-            Term_erase(col, text_row, 255);
-            Term_erase(col, total_row, 255);
+            Term_erase(clear_col, text_row, 255);
+            Term_erase(clear_col, total_row, 255);
             story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
                 "--------");
             strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
@@ -1116,7 +1129,7 @@ void show_equip(void)
             story_print_text_grid(text_row, MAX(0, weight_col - 8), 16,
                 TERM_SLATE, tmp_val);
             if (j && (j + 3 < term_hgt - 1))
-                Term_erase(col, j + 3, 255);
+                Term_erase(clear_col, j + 3, 255);
         }
         else
         {

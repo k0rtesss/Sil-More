@@ -15,7 +15,7 @@ static const char* sdl_ui_font_path(void)
 {
     return config.monospace_font[0] != '\0'
         ? config.monospace_font
-        : "lib/xtra/font/InputMono-Bold.ttf";
+        : "lib/xtra/font/VictorMono-Medium.ttf";
 }
 
 static int sdl_ui_font_signature(void)
