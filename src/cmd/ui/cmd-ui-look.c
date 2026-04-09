@@ -206,29 +206,14 @@ static void unified_look_show_monster_recall(const monster_type* m_ptr)
 
     if (unified_look_snapshot_active())
     {
-        ui_information_scene_scope info_scope;
-
         unified_look_snapshot_clear();
-        if (!ui_information_scene_enter(&info_scope))
+        if (!ui_information_scene_show_monster_recall(m_ptr->r_idx, m_ptr,
+                NULL, true, NULL))
         {
-            log_error("unified-look: snapshot recall scene could not enter "
-                "mirror scope");
+            log_error("unified-look: snapshot recall scene unavailable");
             bell("Monster recall screen unavailable.");
             return;
         }
-
-        screen_roff(m_ptr->r_idx, m_ptr);
-        if (!ui_information_scene_present_term())
-        {
-            ui_information_scene_leave(&info_scope);
-            log_error("unified-look: snapshot recall scene could not "
-                "capture/present");
-            bell("Monster recall screen unavailable.");
-            return;
-        }
-
-        (void)ui_information_scene_wait_key();
-        ui_information_scene_leave(&info_scope);
         return;
     }
 

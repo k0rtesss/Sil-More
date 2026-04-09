@@ -57,6 +57,111 @@ static cptr app_ui_confirm_label(const app_interaction_state* interaction)
     }
 }
 
+static app_ui_document_op* app_ui_panel_append_document_op(app_ui_scene* scene,
+    app_ui_panel* panel)
+{
+    app_ui_document_op* op;
+
+    if (!scene || !panel)
+        return NULL;
+    if (scene->document_op_count >= APP_UI_DOCUMENT_OP_MAX)
+        return NULL;
+
+    if (panel->document_op_count == 0)
+        panel->document_op_first = scene->document_op_count;
+    else if ((u16b)(panel->document_op_first + panel->document_op_count)
+        != scene->document_op_count)
+    {
+        return NULL;
+    }
+
+    op = &scene->document_ops[scene->document_op_count++];
+    memset(op, 0, sizeof(*op));
+    panel->document_op_count++;
+    return op;
+}
+
+static app_ui_rich_paragraph* app_ui_panel_append_rich_paragraph(
+    app_ui_scene* scene, app_ui_panel* panel)
+{
+    app_ui_rich_paragraph* paragraph;
+
+    if (!scene || !panel)
+        return NULL;
+    if (scene->rich_paragraph_count >= APP_UI_RICH_PARAGRAPH_MAX)
+        return NULL;
+
+    if (panel->rich_paragraph_count == 0)
+        panel->rich_paragraph_first = scene->rich_paragraph_count;
+    else if ((u16b)(panel->rich_paragraph_first + panel->rich_paragraph_count)
+        != scene->rich_paragraph_count)
+    {
+        return NULL;
+    }
+
+    paragraph = &scene->rich_paragraphs[scene->rich_paragraph_count++];
+    memset(paragraph, 0, sizeof(*paragraph));
+    panel->rich_paragraph_count++;
+    return paragraph;
+}
+
+static app_ui_rich_paragraph* app_ui_panel_current_rich_paragraph(
+    app_ui_scene* scene, app_ui_panel* panel)
+{
+    if (!scene || !panel || panel->rich_paragraph_count == 0)
+        return NULL;
+
+    return &scene->rich_paragraphs[(u16b)(panel->rich_paragraph_first
+        + panel->rich_paragraph_count - 1)];
+}
+
+static app_ui_rich_run* app_ui_panel_append_rich_run(app_ui_scene* scene,
+    app_ui_panel* panel)
+{
+    app_ui_rich_paragraph* paragraph;
+    app_ui_rich_run* run;
+
+    if (!scene || !panel)
+        return NULL;
+    if (scene->rich_run_count >= APP_UI_RICH_RUN_MAX)
+        return NULL;
+
+    paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
+    if (!paragraph)
+        paragraph = app_ui_panel_append_rich_paragraph(scene, panel);
+    if (!paragraph)
+        return NULL;
+
+    if (paragraph->run_count == 0)
+        paragraph->run_first = scene->rich_run_count;
+    else if ((u16b)(paragraph->run_first + paragraph->run_count)
+        != scene->rich_run_count)
+    {
+        return NULL;
+    }
+
+    run = &scene->rich_runs[scene->rich_run_count++];
+    memset(run, 0, sizeof(*run));
+    paragraph->run_count++;
+    return run;
+}
+
+static void app_ui_panel_note_document_extent(app_ui_panel* panel, s16b row,
+    s16b col, u16b width)
+{
+    int cols;
+
+    if (!panel)
+        return;
+
+    if (row >= 0 && (u16b)(row + 1) > panel->document_rows)
+        panel->document_rows = (u16b)(row + 1);
+
+    cols = (col >= 0) ? (int)col + (int)width : (int)width;
+    if (cols > 0 && (u16b)cols > panel->document_cols)
+        panel->document_cols = (u16b)cols;
+}
+
 void app_ui_panel_init(app_ui_panel* panel, u16b layer)
 {
     if (!panel)
@@ -97,6 +202,15 @@ app_ui_panel* app_ui_scene_append_panel(app_ui_scene* scene, u16b layer)
     panel = &scene->panels[scene->panel_count++];
     app_ui_panel_init(panel, layer);
     return panel;
+}
+
+void app_ui_panel_set_icon(app_ui_panel* panel, byte attr, char ch)
+{
+    if (!panel)
+        return;
+
+    panel->icon_attr = attr;
+    panel->icon_char = ch;
 }
 
 void app_ui_panel_set_title(app_ui_panel* panel, byte attr, cptr text)
@@ -294,11 +408,8 @@ bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
 {
     app_ui_document_op* op;
     size_t len;
-    int cols;
 
     if (!scene || !panel || !text || !text[0])
-        return false;
-    if (scene->document_op_count >= APP_UI_DOCUMENT_OP_MAX)
         return false;
 
     len = strlen(text);
@@ -307,31 +418,19 @@ bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
     if (len == 0)
         return false;
 
-    if (panel->document_op_count == 0)
-        panel->document_op_first = scene->document_op_count;
-    else if ((u16b)(panel->document_op_first + panel->document_op_count)
-        != scene->document_op_count)
-    {
+    op = app_ui_panel_append_document_op(scene, panel);
+    if (!op)
         return false;
-    }
 
-    op = &scene->document_ops[scene->document_op_count++];
-    memset(op, 0, sizeof(*op));
     op->kind = APP_UI_DOCUMENT_OP_TEXT;
     op->attr = attr;
     op->story = story;
+    op->width = 1;
     op->row = row;
     op->col = col;
     memcpy(op->text, text, len);
     op->text[len] = '\0';
-
-    panel->document_op_count++;
-    if (row >= 0 && (u16b)(row + 1) > panel->document_rows)
-        panel->document_rows = (u16b)(row + 1);
-
-    cols = (col >= 0) ? (int)col + (int)len : (int)len;
-    if (cols > 0 && (u16b)cols > panel->document_cols)
-        panel->document_cols = (u16b)cols;
+    app_ui_panel_note_document_extent(panel, row, col, (u16b)len);
 
     return true;
 }
@@ -341,6 +440,121 @@ bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
 {
     return app_ui_panel_add_document_text_ex(scene, panel, row, col, attr, 0,
         text);
+}
+
+bool app_ui_panel_add_document_cell_ex(app_ui_scene* scene,
+    app_ui_panel* panel, s16b row, s16b col, byte attr, char ch,
+    byte terrain_attr, char terrain_char, byte story, byte width)
+{
+    app_ui_document_op* op;
+
+    if (!scene || !panel)
+        return false;
+
+    op = app_ui_panel_append_document_op(scene, panel);
+    if (!op)
+        return false;
+
+    op->kind = APP_UI_DOCUMENT_OP_CELL;
+    op->attr = attr;
+    op->story = story;
+    op->width = width ? width : 1;
+    op->row = row;
+    op->col = col;
+    op->terrain_attr = terrain_attr;
+    op->ch = ch;
+    op->terrain_char = terrain_char;
+    app_ui_panel_note_document_extent(panel, row, col, op->width);
+    return true;
+}
+
+bool app_ui_panel_add_document_cursor(app_ui_scene* scene, app_ui_panel* panel,
+    s16b row, s16b col, byte attr, byte width)
+{
+    app_ui_document_op* op;
+
+    if (!scene || !panel)
+        return false;
+
+    op = app_ui_panel_append_document_op(scene, panel);
+    if (!op)
+        return false;
+
+    op->kind = APP_UI_DOCUMENT_OP_CURSOR;
+    op->attr = attr;
+    op->width = width ? width : 1;
+    op->row = row;
+    op->col = col;
+    app_ui_panel_note_document_extent(panel, row, col, op->width);
+    return true;
+}
+
+bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene, app_ui_panel* panel)
+{
+    if (!scene || !panel)
+        return false;
+
+    return app_ui_panel_append_rich_paragraph(scene, panel) != NULL;
+}
+
+bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, byte story, cptr text)
+{
+    app_ui_rich_paragraph* paragraph;
+    app_ui_rich_run* run;
+    size_t len;
+
+    if (!scene || !panel || !text || !text[0])
+        return false;
+
+    paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
+    if (!paragraph && !app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+    paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
+    if (!paragraph)
+        return false;
+
+    len = strlen(text);
+    if (len >= APP_UI_TEXT_MAX)
+        len = APP_UI_TEXT_MAX - 1u;
+    if (len == 0)
+        return false;
+
+    if (paragraph->run_count > 0)
+    {
+        run = &scene->rich_runs[(u16b)(paragraph->run_first
+            + paragraph->run_count - 1)];
+        if (run->attr == attr && run->story == story)
+        {
+            size_t current_len = strlen(run->text);
+            size_t available = APP_UI_TEXT_MAX - 1u - current_len;
+
+            if (available > 0)
+            {
+                if (len > available)
+                    len = available;
+                memcpy(run->text + current_len, text, len);
+                run->text[current_len + len] = '\0';
+                return len > 0;
+            }
+        }
+    }
+
+    run = app_ui_panel_append_rich_run(scene, panel);
+    if (!run)
+        return false;
+
+    run->attr = attr;
+    run->story = story;
+    memcpy(run->text, text, len);
+    run->text[len] = '\0';
+    return true;
+}
+
+bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, cptr text)
+{
+    return app_ui_panel_add_rich_text_ex(scene, panel, attr, 0, text);
 }
 
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
@@ -460,12 +674,36 @@ bool app_ui_scene_from_information_document(app_ui_scene* scene,
     {
         const app_information_op* op = &information_scene->ops[i];
 
-        if (op->kind != APP_INFORMATION_OP_KIND_TEXT || !op->text[0])
-            return false;
-
-        if (!app_ui_panel_add_document_text_ex(scene, panel, op->row, op->col,
-                op->attr, op->story, op->text))
+        switch (op->kind)
         {
+        case APP_INFORMATION_OP_KIND_TEXT:
+            if (!op->text[0])
+                return false;
+            if (!app_ui_panel_add_document_text_ex(scene, panel, op->row,
+                    op->col, op->attr, op->story, op->text))
+            {
+                return false;
+            }
+            break;
+
+        case APP_INFORMATION_OP_KIND_CELL:
+            if (!app_ui_panel_add_document_cell_ex(scene, panel, op->row,
+                    op->col, op->attr, op->ch, op->terrain_attr,
+                    op->terrain_char, op->story, op->width))
+            {
+                return false;
+            }
+            break;
+
+        case APP_INFORMATION_OP_KIND_CURSOR:
+            if (!app_ui_panel_add_document_cursor(scene, panel, op->row,
+                    op->col, op->attr, op->width))
+            {
+                return false;
+            }
+            break;
+
+        default:
             return false;
         }
     }

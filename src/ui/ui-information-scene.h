@@ -11,6 +11,7 @@ extern "C" {
 typedef struct ui_information_scene_scope {
     bool active;
     bool previous_active;
+    bool published_overlay;
     app_snapshot previous_snapshot;
     app_information_snapshot* previous_information_snapshot;
     app_menu_snapshot* previous_menu_snapshot;
@@ -24,6 +25,9 @@ bool ui_information_scene_capture_term(app_information_scene* scene);
 bool ui_information_scene_present(const app_information_scene* scene);
 bool ui_information_scene_present_document(
     const app_information_scene* scene);
+bool ui_information_scene_show_monster_recall(int r_idx,
+    const monster_type* m_ptr, cptr prompt, bool overlay_dungeon,
+    int* out_key);
 bool ui_information_scene_present_term(void);
 int ui_information_scene_wait_key(void);
 int ui_information_scene_wait_key_nonrepeat(void);

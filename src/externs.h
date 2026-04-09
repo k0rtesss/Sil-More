@@ -692,6 +692,10 @@ extern void roff_top(int r_idx);
 extern void screen_roff(int r_idx, const monster_type* m_ptr);
 extern void display_roff(int r_idx, const monster_type* m_ptr);
 
+/* ui/ui-information-scene.c */
+extern bool ui_information_scene_capture_term_buffer(
+    app_information_scene* scene, const term* source);
+
 /* monster2.c */
 extern s16b poly_r_idx(const monster_type* m_ptr);
 extern void delete_monster_idx(int i);

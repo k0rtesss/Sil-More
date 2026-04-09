@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 2u
+#define APP_UI_FORMAT_VERSION 3u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -22,6 +22,8 @@ extern "C" {
 #define APP_UI_TAB_MAX 8u
 #define APP_UI_PANEL_MAX 4u
 #define APP_UI_DOCUMENT_OP_MAX 256u
+#define APP_UI_RICH_PARAGRAPH_MAX 96u
+#define APP_UI_RICH_RUN_MAX 512u
 
 typedef enum app_ui_scene_flag {
     APP_UI_SCENE_FLAG_NONE = 0x0000u,
@@ -110,18 +112,36 @@ typedef struct app_ui_tab {
 
 typedef enum app_ui_document_op_kind {
     APP_UI_DOCUMENT_OP_NONE = 0,
-    APP_UI_DOCUMENT_OP_TEXT = 1
+    APP_UI_DOCUMENT_OP_TEXT = 1,
+    APP_UI_DOCUMENT_OP_CELL = 2,
+    APP_UI_DOCUMENT_OP_CURSOR = 3
 } app_ui_document_op_kind;
 
 typedef struct app_ui_document_op {
     byte kind;
     byte attr;
     byte story;
-    byte reserved;
+    byte width;
     s16b row;
     s16b col;
+    byte terrain_attr;
+    char ch;
+    char terrain_char;
+    byte reserved;
     char text[APP_UI_TEXT_MAX];
 } app_ui_document_op;
+
+typedef struct app_ui_rich_paragraph {
+    u16b run_first;
+    u16b run_count;
+} app_ui_rich_paragraph;
+
+typedef struct app_ui_rich_run {
+    byte attr;
+    byte story;
+    u16b reserved;
+    char text[APP_UI_TEXT_MAX];
+} app_ui_rich_run;
 
 typedef struct app_ui_panel {
     u16b layer;
@@ -142,10 +162,15 @@ typedef struct app_ui_panel {
     u16b document_op_count;
     u16b document_rows;
     u16b document_cols;
+    u16b rich_paragraph_first;
+    u16b rich_paragraph_count;
     byte title_attr;
     byte subtitle_attr;
     byte detail_title_attr;
     byte accent_attr;
+    byte icon_attr;
+    char icon_char;
+    u16b reserved;
     char title[APP_UI_TITLE_MAX];
     char subtitle[APP_UI_TEXT_MAX];
     char detail_title[APP_UI_TITLE_MAX];
@@ -161,13 +186,18 @@ typedef struct app_ui_scene {
     u16b flags;
     u16b panel_count;
     u16b document_op_count;
+    u16b rich_paragraph_count;
+    u16b rich_run_count;
     app_ui_panel panels[APP_UI_PANEL_MAX];
     app_ui_document_op document_ops[APP_UI_DOCUMENT_OP_MAX];
+    app_ui_rich_paragraph rich_paragraphs[APP_UI_RICH_PARAGRAPH_MAX];
+    app_ui_rich_run rich_runs[APP_UI_RICH_RUN_MAX];
 } app_ui_scene;
 
 void app_ui_panel_init(app_ui_panel* panel, u16b layer);
 void app_ui_scene_init(app_ui_scene* scene);
 app_ui_panel* app_ui_scene_append_panel(app_ui_scene* scene, u16b layer);
+void app_ui_panel_set_icon(app_ui_panel* panel, byte attr, char ch);
 void app_ui_panel_set_title(app_ui_panel* panel, byte attr, cptr text);
 void app_ui_panel_set_subtitle(app_ui_panel* panel, byte attr, cptr text);
 void app_ui_panel_set_detail_title(app_ui_panel* panel, byte attr, cptr text);
@@ -193,6 +223,17 @@ bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
     app_ui_panel* panel, s16b row, s16b col, byte attr, byte story, cptr text);
 bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
     s16b row, s16b col, byte attr, cptr text);
+bool app_ui_panel_add_document_cell_ex(app_ui_scene* scene,
+    app_ui_panel* panel, s16b row, s16b col, byte attr, char ch,
+    byte terrain_attr, char terrain_char, byte story, byte width);
+bool app_ui_panel_add_document_cursor(app_ui_scene* scene, app_ui_panel* panel,
+    s16b row, s16b col, byte attr, byte width);
+bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene,
+    app_ui_panel* panel);
+bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, byte story, cptr text);
+bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, cptr text);
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction);
 bool app_ui_scene_from_information_document(app_ui_scene* scene,

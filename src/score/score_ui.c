@@ -3023,27 +3023,12 @@ static void run_history_examine_monster(const score_run_detail_block* details,
     mem_free(order);
 
     if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max) {
-        ui_information_scene_scope monster_scope;
-        if (!ui_information_scene_enter(&monster_scope))
+        if (!ui_information_scene_show_monster_recall(entry->r_idx, NULL,
+                NULL, false, NULL))
         {
-            log_warn("run history: monster recall requires information-scene scope");
-            bell("Monster information not available.");
-            return;
-        }
-
-        screen_save();
-        screen_roff(entry->r_idx, NULL);
-        if (!ui_information_scene_present_term())
-        {
-            screen_load();
-            ui_information_scene_leave(&monster_scope);
             log_warn("run history: failed to present monster recall scene");
             bell("Monster information not available.");
-            return;
         }
-        (void)ui_information_scene_wait_key();
-        screen_load();
-        ui_information_scene_leave(&monster_scope);
     } else {
         bell("Monster information not available.");
     }

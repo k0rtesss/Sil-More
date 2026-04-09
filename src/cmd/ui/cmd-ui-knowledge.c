@@ -3113,14 +3113,18 @@ void do_cmd_knowledge_browser_page(int page)
                     if (use_information_scene
                         && !knowledge_pause_information_scene(&info_scope))
                         break;
-                    screen_roff(mon_idx[state.entry_cur[page]].r_idx, NULL);
                     if (use_information_scene)
                     {
-                        (void)ui_information_scene_present_term();
-                        (void)ui_information_scene_wait_key();
+                        if (!ui_information_scene_show_monster_recall(
+                                mon_idx[state.entry_cur[page]].r_idx, NULL,
+                                NULL, false, NULL))
+                        {
+                            bell("Monster recall screen unavailable.");
+                        }
                     }
                     else
                     {
+                        screen_roff(mon_idx[state.entry_cur[page]].r_idx, NULL);
                         (void)inkey();
                     }
                     if (use_information_scene

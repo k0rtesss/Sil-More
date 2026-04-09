@@ -34,6 +34,10 @@ all forward UI work.
 - Shared semantic document panels now exist in `app-ui`, and the SDL menu
   compositor renders them directly with proportional mono/story-font text
   layout.
+- Shared semantic document panels now preserve fixed-grid cell/tile runs and
+  cursor highlights, so document-style viewers can keep classic Sil header
+  glyphs and bigtile visuals without falling back to the legacy information
+  renderer.
 - `src/app/app-scene-dungeon.*` now publish persistent chrome through
   `chrome_scene`, and the SDL dungeon renderer consumes that semantic scene for
   the top strip, left status rail, and bottom strip.
@@ -65,6 +69,11 @@ all forward UI work.
   mode: note text, single-item inspection, and multi-item compare/info screens
   use semantic document scenes for paging and pause/input rather than the old
   per-frame `present_term()` loop.
+- The monster-recall overlay family now uses scratch-built shared document
+  scenes instead of live `Term` capture/presentation in SDL snapshot mode:
+  unified look, targeting recall, knowledge-monster recall, and run-history
+  monster recall all render through the shared document path while preserving
+  the existing recall text layout and title glyph/tile treatment.
 - The post-sync debt regression was cleaned back out: settings/options menu
   chrome no longer adds raw `Term_*` debt, the merged touch-confirm special
   case is back on the legacy input bridge, and the extra direct `Term_*`
@@ -93,8 +102,8 @@ all forward UI work.
   - `ui_information_scene_present_term()`
   - `app_information_scene`
 - The remaining concentrated browser/document bridge debt is now the
-  monster-recall family plus character/settings/knowledge-style screens that
-  still capture or present legacy term content.
+  character/settings/knowledge-style screens plus browser shells such as
+  run-history detail that still capture or present legacy term content.
 - Large UI families still own layout through `Term->wid`, `Term->hgt`,
   `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
@@ -268,6 +277,12 @@ Status on 2026-04-09:
   - migrated the object-info family (`src/obj-info.c`) off the old
     `present_term()` browser loop in SDL snapshot mode while preserving the
     existing Sil visual treatment
+  - taught the shared document path to preserve fixed-grid cell/tile runs and
+    cursor highlights instead of text-only rows
+  - migrated the monster-recall overlay family (unified look, targeting
+    recall, knowledge monster recall, and run-history monster recall) off
+    live `ui_information_scene_capture_term()` /
+    `ui_information_scene_present_term()` usage in SDL snapshot mode
   - removed the merged raw-`Term` regression from settings/options menu chrome
     and the associated one-off additions in touch input, main-menu footer,
     score detail, and object-overlay chrome so the audit baseline passes again
@@ -275,9 +290,9 @@ Status on 2026-04-09:
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`
-  - next concentrated removal target: monster-recall document overlays
-    (look/targeting/knowledge/history) so the remaining bridge-heavy browser
-    family moves together instead of caller-by-caller
+  - next concentrated removal target: character/settings/knowledge-style
+    browser shells and related document viewers so the remaining bridge-heavy
+    browser family moves together instead of caller-by-caller
 
 Primary write set:
 - `src/app/*`

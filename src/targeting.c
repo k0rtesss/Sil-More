@@ -1184,46 +1184,25 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     {
                         if (targeting_snapshot_active())
                         {
-                            ui_information_scene_scope info_scope;
+                            int recall_key = ESCAPE;
+                            char recall_prompt[APP_INFORMATION_TEXT_MAX];
 
                             app_session_clear_interaction(
                                 app_session_current());
-                            if (!ui_information_scene_enter(&info_scope))
+                            strnfmt(recall_prompt, sizeof(recall_prompt),
+                                "  [(r)ecall, %s]", info);
+                            if (!ui_information_scene_show_monster_recall(
+                                    m_ptr->r_idx, m_ptr, recall_prompt, true,
+                                    &recall_key))
                             {
-                                log_error("targeting: snapshot recall scene "
-                                    "could not enter mirror scope");
+                                log_error("targeting: snapshot recall "
+                                    "scene unavailable");
                                 bell("Monster recall screen unavailable.");
                                 query = '\r';
                             }
                             else
                             {
-                                app_information_scene info_scene;
-                                char recall_prompt[APP_INFORMATION_TEXT_MAX];
-
-                                screen_roff(m_ptr->r_idx, m_ptr);
-                                strnfmt(recall_prompt, sizeof(recall_prompt),
-                                    "  [(r)ecall, %s]", info);
-
-                                if (ui_information_scene_capture_term(
-                                    &info_scene)
-                                    && app_information_scene_add_text(
-                                    &info_scene, (s16b)Term->scr->cy,
-                                        (s16b)Term->scr->cx, TERM_WHITE,
-                                        recall_prompt)
-                                    && ui_information_scene_present_document(
-                                        &info_scene))
-                                {
-                                    query = (char)ui_information_scene_wait_key();
-                                }
-                                else
-                                {
-                                    log_error("targeting: snapshot recall "
-                                        "scene could not capture/present");
-                                    bell("Monster recall screen unavailable.");
-                                    query = '\r';
-                                }
-
-                                ui_information_scene_leave(&info_scope);
+                                query = (char)recall_key;
                             }
                         }
                         else
