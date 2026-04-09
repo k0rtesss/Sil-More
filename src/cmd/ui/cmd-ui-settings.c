@@ -562,7 +562,7 @@ static void settings_ui_put_fitted(int row, int col, byte attr, cptr text)
     int width = settings_ui_line_width(col);
 
     settings_ui_fit_text(buf, sizeof(buf), text, width);
-    Term_putstr(col, row, width, attr, buf);
+    c_prt(attr, buf, row, col);
 }
 
 static void settings_ui_format_field(char* buf, size_t buflen, cptr text,
@@ -602,6 +602,170 @@ static void settings_ui_format_auto_value(char* buf, size_t buflen, int value,
     settings_ui_fit_text(buf, buflen,
         settings_ui_pick_label(max_chars, auto_long, auto_long, auto_short),
         max_chars);
+}
+
+typedef struct settings_choice_entry {
+    int id;
+    char hotkey;
+    cptr label;
+    bool disabled;
+} settings_choice_entry;
+
+static int settings_choice_find_index_by_id(
+    const settings_choice_entry* entries, int entry_count, int id)
+{
+    int i;
+
+    for (i = 0; i < entry_count; i++)
+    {
+        if (entries[i].id == id)
+            return i;
+    }
+
+    return -1;
+}
+
+static int settings_choice_find_index_by_hotkey(
+    const settings_choice_entry* entries, int entry_count, int ch)
+{
+    char needle = (char)tolower((unsigned char)ch);
+    int i;
+
+    for (i = 0; i < entry_count; i++)
+    {
+        if ((char)tolower((unsigned char)entries[i].hotkey) == needle)
+            return i;
+    }
+
+    return -1;
+}
+
+static int settings_choice_next_enabled(const settings_choice_entry* entries,
+    int entry_count, int start, int step)
+{
+    int i;
+    int index;
+
+    if (!entries || entry_count <= 0)
+        return -1;
+
+    index = start % entry_count;
+    if (index < 0)
+        index += entry_count;
+
+    for (i = 0; i < entry_count; i++)
+    {
+        if (!entries[index].disabled)
+            return index;
+
+        index = (index + step) % entry_count;
+        if (index < 0)
+            index += entry_count;
+    }
+
+    return -1;
+}
+
+static int settings_choice_menu(cptr title,
+    const settings_choice_entry* entries, int entry_count, int* highlight,
+    int cancel_id)
+{
+    int selected;
+    int hotkey_index;
+    int title_row;
+    int row;
+    int term_hgt = Term ? Term->hgt : 24;
+    int ch;
+    char verbuf[128];
+
+    if (!entries || entry_count <= 0 || !highlight)
+        return 0;
+
+    selected = settings_choice_find_index_by_id(entries, entry_count,
+        *highlight);
+    if (selected < 0)
+        selected = settings_choice_next_enabled(entries, entry_count, 0, 1);
+    else if (entries[selected].disabled)
+        selected = settings_choice_next_enabled(entries, entry_count,
+            selected + 1, 1);
+
+    if (selected < 0)
+        return 0;
+
+    *highlight = entries[selected].id;
+
+    clear_from(0);
+
+    title_row = (Term && Term->hgt < 20) ? 0 : 1;
+    row = title_row + 2;
+    settings_ui_put_fitted(title_row, 2, TERM_WHITE, title ? title : "");
+
+    for (int i = 0; i < entry_count; i++)
+    {
+        byte attr = entries[i].disabled ? TERM_L_DARK
+            : ((i == selected) ? TERM_L_BLUE : TERM_WHITE);
+
+        settings_ui_put_fitted(row + i, 2, attr, entries[i].label);
+    }
+
+    strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
+    if (row + entry_count < term_hgt)
+        settings_ui_put_fitted(row + entry_count, 2, TERM_SLATE, verbuf);
+
+    settings_present();
+
+    inkey_set_cursor_hidden(true);
+    ch = settings_wait_key();
+    inkey_set_cursor_hidden(false);
+
+    hotkey_index = settings_choice_find_index_by_hotkey(entries, entry_count,
+        ch);
+    if (hotkey_index >= 0)
+    {
+        if (entries[hotkey_index].disabled)
+        {
+            msg_print("You can no longer take that action.");
+            return 0;
+        }
+
+        *highlight = entries[hotkey_index].id;
+        return entries[hotkey_index].id;
+    }
+
+    if ((ch == ESCAPE) || (ch == 'q') || (ch == 'Q'))
+    {
+        *highlight = cancel_id;
+        return cancel_id;
+    }
+
+    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+    {
+        if (entries[selected].disabled)
+        {
+            msg_print("You can no longer take that action.");
+            return 0;
+        }
+
+        return entries[selected].id;
+    }
+
+    if (ch == '8')
+    {
+        selected = settings_choice_next_enabled(entries, entry_count,
+            selected - 1, -1);
+        if (selected >= 0)
+            *highlight = entries[selected].id;
+    }
+
+    if (ch == '2')
+    {
+        selected = settings_choice_next_enabled(entries, entry_count,
+            selected + 1, 1);
+        if (selected >= 0)
+            *highlight = entries[selected].id;
+    }
+
+    return 0;
 }
 
 static bool option_menu_use_compact_layout(void)
@@ -3213,140 +3377,22 @@ static bool legacy_options_choice_is_disabled(int choice)
 
 static int legacy_options_menu(int* highlight)
 {
-    int ch;
-    int options = 7;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int title_row = 1;
-    int row;
     bool death_view = death_spectator_active();
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_hgt < 20)
-        title_row = 0;
-
-    if (*highlight < 1)
-        *highlight = 1;
-    else if (*highlight > options)
-        *highlight = options;
+    const settings_choice_entry entries[] = {
+        { 1, 'j', "j) Load a 'Pref' File", false },
+        { 2, 'k', "k) Append Options to a 'Pref' File", false },
+        { 3, 'l', "l) Set Macros", false },
+        { 4, 'm', "m) Set Colours", false },
+        { 5, 'n', "n) Write a note", false },
+        { 6, 's', "s) Suicide", death_view },
+        { 7, 'o', "o) Return to Options", false },
+    };
 
     if (death_view && legacy_options_choice_is_disabled(*highlight))
-        *highlight = options;
-
-    row = title_row + 2;
-
-    Term_putstr(2, title_row, -1, TERM_WHITE, "Legacy Options");
-
-    Term_putstr(2, row++, -1, (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE,
-        "j) Load a 'Pref' File");
-    Term_putstr(2, row++, -1, (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE,
-        "k) Append Options to a 'Pref' File");
-    Term_putstr(2, row++, -1, (*highlight == 3) ? TERM_L_BLUE : TERM_WHITE,
-        "l) Set Macros");
-    Term_putstr(2, row++, -1, (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
-        "m) Set Colours");
-    Term_putstr(2, row++, -1, (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
-        "n) Write a note");
-
-    {
-        byte suicide_color = death_view ? TERM_L_DARK
-            : ((*highlight == 6) ? TERM_L_BLUE : TERM_WHITE);
-        Term_putstr(2, row++, -1, suicide_color, "s) Suicide");
-    }
-
-    Term_putstr(2, row++, -1, (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE,
-        "o) Return to Options");
-
-    {
-        char verbuf[128];
-        strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        if (row < term_hgt)
-            Term_putstr(2, row, term_wid - 2, TERM_SLATE, verbuf);
-    }
-
-    settings_present();
-
-    Term_gotoxy(2, title_row + 1 + *highlight);
-
-    inkey_set_cursor_hidden(true);
-    ch = settings_wait_key();
-    inkey_set_cursor_hidden(false);
-
-    if ((ch == 'j') || (ch == 'J'))
-    {
-        *highlight = 1;
-        return (1);
-    }
-
-    if ((ch == 'k') || (ch == 'K'))
-    {
-        *highlight = 2;
-        return (2);
-    }
-
-    if ((ch == 'l') || (ch == 'L'))
-    {
-        *highlight = 3;
-        return (3);
-    }
-
-    if ((ch == 'm') || (ch == 'M'))
-    {
-        *highlight = 4;
-        return (4);
-    }
-
-    if ((ch == 'n') || (ch == 'N'))
-    {
-        *highlight = 5;
-        return (5);
-    }
-
-    if ((ch == 's') || (ch == 'S'))
-    {
-        if (death_view)
-        {
-            msg_print("You can no longer take that action.");
-            return (0);
-        }
-
-        *highlight = 6;
-        return (6);
-    }
-
-    if ((ch == 'o') || (ch == 'O') || (ch == 'q') || (ch == 'Q')
-        || (ch == ESCAPE))
-    {
         *highlight = 7;
-        return (7);
-    }
 
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        if (death_view && legacy_options_choice_is_disabled(*highlight))
-        {
-            msg_print("You can no longer take that action.");
-            return (0);
-        }
-
-        return (*highlight);
-    }
-
-    if (ch == '8')
-    {
-        *highlight = (*highlight + (options - 2)) % options + 1;
-        while (death_view && legacy_options_choice_is_disabled(*highlight))
-            *highlight = (*highlight + (options - 2)) % options + 1;
-    }
-
-    if (ch == '2')
-    {
-        *highlight = *highlight % options + 1;
-        while (death_view && legacy_options_choice_is_disabled(*highlight))
-            *highlight = *highlight % options + 1;
-    }
-
-    return (0);
+    return settings_choice_menu("Legacy Options", entries,
+        (int)N_ELEMENTS(entries), highlight, 7);
 }
 
 static void do_cmd_legacy_options(void)
@@ -3356,7 +3402,7 @@ static void do_cmd_legacy_options(void)
     bool return_to_options = false;
     char ftmp[80];
 
-    Term_clear();
+    clear_from(0);
 
     while (!return_to_options)
     {
@@ -3367,20 +3413,19 @@ static void do_cmd_legacy_options(void)
         case 1:
         {
             do_cmd_pref_file_hack(12);
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 2:
         {
-            Term_putstr(2, 14, -1, TERM_SLATE, "(Escape to cancel)");
-
+            settings_ui_put_fitted(14, 2, TERM_SLATE, "(Escape to cancel)");
             prt("File: ", 12, 2);
 
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             if (!askfor_aux(ftmp, sizeof(ftmp)))
             {
-                Term_clear();
+                clear_from(0);
                 continue;
             }
 
@@ -3389,38 +3434,38 @@ static void do_cmd_legacy_options(void)
             else
                 msg_print("Done.");
 
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 3:
         {
             do_cmd_macros();
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 4:
         {
             do_cmd_colors();
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 5:
         {
             do_cmd_note("", p_ptr->depth);
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 6:
         {
             do_cmd_suicide();
             return_to_options = true;
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 7:
         {
             return_to_options = true;
-            Term_clear();
+            clear_from(0);
             break;
         }
         }
@@ -3429,179 +3474,45 @@ static void do_cmd_legacy_options(void)
 
 int options_menu(int* highlight)
 {
-    int ch;
-    int options = 12;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int title_row = 1;
-    int row;
     bool allow_debug_menu = false;
+    settings_choice_entry entries[13];
+    int entry_count = 0;
 #ifdef SHOW_DEBUG_OPTIONS_MENU
     allow_debug_menu = true;
 #endif
-    if (allow_debug_menu && p_ptr->noscore)
-        options++;
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_hgt < 20)
-        title_row = 0;
-
-    if (*highlight < 1)
-        *highlight = 1;
-    else if (*highlight > options)
-        *highlight = options;
-
-    row = title_row + 2;
-
-    Term_putstr(2, title_row, -1, TERM_WHITE, "Options and misc");
-
-    Term_putstr(2, row++, -1, (*highlight == 1) ? TERM_L_BLUE : TERM_WHITE,
-        "a) Set Keybinds");
-    Term_putstr(2, row++, -1, (*highlight == 2) ? TERM_L_BLUE : TERM_WHITE,
-        "b) Controller Settings");
-    Term_putstr(2, row++, -1, (*highlight == 3) ? TERM_L_BLUE : TERM_WHITE,
-        "c) Touch Settings");
-    Term_putstr(2, row++, -1, (*highlight == 4) ? TERM_L_BLUE : TERM_WHITE,
-        "d) Pane Settings");
-    Term_putstr(2, row++, -1, (*highlight == 5) ? TERM_L_BLUE : TERM_WHITE,
-        "e) Interface Options");
-    Term_putstr(2, row++, -1, (*highlight == 6) ? TERM_L_BLUE : TERM_WHITE,
-        "f) Efficiency Options");
-    Term_putstr(2, row++, -1, (*highlight == 7) ? TERM_L_BLUE : TERM_WHITE,
-        "g) Visual Options");
-    Term_putstr(2, row++, -1, (*highlight == 8) ? TERM_L_BLUE : TERM_WHITE,
-        "t) Text Options");
-    Term_putstr(2, row++, -1, (*highlight == 9) ? TERM_L_BLUE : TERM_WHITE,
-        "h) Gameplay Options");
-    Term_putstr(2, row++, -1, (*highlight == 10) ? TERM_L_BLUE : TERM_WHITE,
-        "i) Sound Options");
-    Term_putstr(2, row++, -1, (*highlight == 11) ? TERM_L_BLUE : TERM_WHITE,
-        "j) Legacy Options");
-    Term_putstr(2, row++, -1, (*highlight == 12) ? TERM_L_BLUE : TERM_WHITE,
-        "o) Return to Game");
+    entries[entry_count++] = (settings_choice_entry){ 1, 'a',
+        "a) Set Keybinds", false };
+    entries[entry_count++] = (settings_choice_entry){ 2, 'b',
+        "b) Controller Settings", false };
+    entries[entry_count++] = (settings_choice_entry){ 3, 'c',
+        "c) Touch Settings", false };
+    entries[entry_count++] = (settings_choice_entry){ 4, 'd',
+        "d) Pane Settings", false };
+    entries[entry_count++] = (settings_choice_entry){ 5, 'e',
+        "e) Interface Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 6, 'f',
+        "f) Efficiency Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 7, 'g',
+        "g) Visual Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 8, 't',
+        "t) Text Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 9, 'h',
+        "h) Gameplay Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 10, 'i',
+        "i) Sound Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 11, 'j',
+        "j) Legacy Options", false };
+    entries[entry_count++] = (settings_choice_entry){ 12, 'o',
+        "o) Return to Game", false };
 
     if (allow_debug_menu && p_ptr->noscore)
     {
-        Term_putstr(2, row++, -1, (*highlight == 13) ? TERM_L_BLUE : TERM_WHITE,
-            "p) Debugging Options");
+        entries[entry_count++] = (settings_choice_entry){ 13, 'p',
+            "p) Debugging Options", false };
     }
 
-    /* Show product name and version on the bottom of the menu */
-    {
-        char verbuf[128];
-        strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME, VERSION_STRING);
-        if (row < term_hgt)
-            Term_putstr(2, row, term_wid - 2, TERM_SLATE, verbuf);
-    }
-
-    /* Flush the prompt */
-    settings_present();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(2, title_row + 1 + *highlight);
-
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = settings_wait_key();
-    inkey_set_cursor_hidden(false);
-
-    if ((ch == 'a') || (ch == 'A'))
-    {
-        *highlight = 1;
-        return (1);
-    }
-
-    if ((ch == 'b') || (ch == 'B'))
-    {
-        *highlight = 2;
-        return (2);
-    }
-
-    if ((ch == 'c') || (ch == 'C'))
-    {
-        *highlight = 3;
-        return (3);
-    }
-
-    if ((ch == 'd') || (ch == 'D'))
-    {
-        *highlight = 4;
-        return (4);
-    }
-
-    if ((ch == 'e') || (ch == 'E'))
-    {
-        *highlight = 5;
-        return (5);
-    }
-
-    if ((ch == 'f') || (ch == 'F'))
-    {
-        *highlight = 6;
-        return (6);
-    }
-
-    if ((ch == 'g') || (ch == 'G'))
-    {
-        *highlight = 7;
-        return (7);
-    }
-
-    if ((ch == 't') || (ch == 'T'))
-    {
-        *highlight = 8;
-        return (8);
-    }
-
-    if ((ch == 'h') || (ch == 'H'))
-    {
-        *highlight = 9;
-        return (9);
-    }
-
-    if ((ch == 'i') || (ch == 'I'))
-    {
-        *highlight = 10;
-        return (10);
-    }
-
-    if ((ch == 'j') || (ch == 'J'))
-    {
-        *highlight = 11;
-        return (11);
-    }
-
-    if ((ch == 'o') || (ch == 'O') || (ch == ESCAPE) || (ch == 'q'))
-    {
-        *highlight = 12;
-        return (12);
-    }
-
-    if (allow_debug_menu && p_ptr->noscore && ((ch == 'p') || (ch == 'P')))
-    {
-        *highlight = 13;
-        return (13);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        *highlight = (*highlight + (options - 2)) % options + 1;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        *highlight = *highlight % options + 1;
-    }
-
-    return (0);
+    return settings_choice_menu("Options and misc", entries, entry_count,
+        highlight, 12);
 }
 
 /*
@@ -3632,7 +3543,7 @@ void do_cmd_options(void)
         screen_save();
 
     /* Clear screen */
-    Term_clear();
+    clear_from(0);
 
     /* Process Events until "Return to Game" is selected */
     while (!return_to_game)
@@ -3644,61 +3555,61 @@ void do_cmd_options(void)
         case 1:
         {
             do_cmd_keybinds();
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 2:
         {
             do_cmd_controller_settings();
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 3:
         {
             do_cmd_touch_pane_button_editor(NULL);
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 4:
         {
             do_cmd_pane_settings();
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 5:
         {
             do_cmd_options_aux(INTERFACE_PAGE, "Interface Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 6:
         {
             do_cmd_options_aux(EFFICIENCY_PAGE, "Efficiency Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 7:
         {
             do_cmd_options_aux(VISUAL_PAGE, "Visual Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 8:
         {
             do_cmd_options_aux(TEXT_PAGE, "Text Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 9:
         {
             do_cmd_options_aux(GAMEPLAY_PAGE, "Gameplay Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 10:
         {
             do_cmd_options_aux(SOUND_PAGE, "Sound Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 11:
@@ -3706,21 +3617,21 @@ void do_cmd_options(void)
             do_cmd_legacy_options();
             if (p_ptr && (p_ptr->leaving || !p_ptr->playing))
                 return_to_game = true;
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 12:
         {
             /* Return to Game */
             return_to_game = true;
-            Term_clear();
+            clear_from(0);
             break;
         }
         case 13:
         {
             /* Debugging Options (only reachable when p_ptr->noscore) */
             do_cmd_options_aux(DEBUG_PAGE, "Debugging Options");
-            Term_clear();
+            clear_from(0);
             break;
         }
         }

@@ -728,7 +728,7 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
 
     if (sdl_touch_pane_confirm_binding(binding)) {
         if (long_press && character_dungeon) {
-            Term_keypress('z');
+            sdl_submit_legacy_input_byte('z');
         } else {
             sdl_touch_pane_send_confirm_action();
         }

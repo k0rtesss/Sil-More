@@ -65,6 +65,11 @@ all forward UI work.
   mode: note text, single-item inspection, and multi-item compare/info screens
   use semantic document scenes for paging and pause/input rather than the old
   per-frame `present_term()` loop.
+- The post-sync debt regression was cleaned back out: settings/options menu
+  chrome no longer adds raw `Term_*` debt, the merged touch-confirm special
+  case is back on the legacy input bridge, and the extra direct `Term_*`
+  additions in main-menu, score detail, and object-overlay chrome were removed.
+- `py -3 tools/ui_debt_audit.py --check` passes again on this branch.
 - `tools/ui_debt_audit.py` and `tests/ui_debt_audit_baseline.json` already give
   a measurable debt baseline.
 - Independent scaling already exists in seed form:
@@ -94,14 +99,14 @@ all forward UI work.
   `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
 ### Remaining Debt Snapshot
-- `inkey()` call sites: 40 files / 90 matches
-- `screen_save()` + `screen_load()` call sites: 34 files / 221 matches
-- direct `Term_*` render/control calls: 67 files / 1,736 matches
+- `inkey()` call sites: 39 files / 88 matches
+- `screen_save()` + `screen_load()` call sites: 33 files / 215 matches
+- direct `Term_*` render/control calls: 65 files / 1,646 matches
 - `#include "platform-ui.h"`: 0 files / 0 matches
-- `get_sdl_*` / `set_sdl_*` outside platform code: 7 files / 209 matches
-- The checked-in audit baseline is stale relative to the current branch and
-  should be refreshed after the next deletion-heavy slice rather than treated
-  as a release gate in the meantime.
+- `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 208 matches
+- The checked-in audit baseline now passes again after the merge-regression
+  cleanup; keep using it as a guardrail until the next deletion-heavy slice
+  justifies refreshing it.
 
 ## Decisions
 ### 1. One Runtime UI System
@@ -263,6 +268,9 @@ Status on 2026-04-09:
   - migrated the object-info family (`src/obj-info.c`) off the old
     `present_term()` browser loop in SDL snapshot mode while preserving the
     existing Sil visual treatment
+  - removed the merged raw-`Term` regression from settings/options menu chrome
+    and the associated one-off additions in touch input, main-menu footer,
+    score detail, and object-overlay chrome so the audit baseline passes again
 - Still to do before Slice A can exit:
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off

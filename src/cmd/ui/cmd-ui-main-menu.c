@@ -31,6 +31,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-file-viewer.h"
 #include "ui/ui-information-scene.h"
 
 #define MAIN_MENU_CHARACTER 1
@@ -150,38 +151,158 @@ static bool main_menu_about_drop_bottom_blank(bool* blank_visible,
     return false;
 }
 
-static void main_menu_about_draw_line(int row, int indent, int wrap_right,
-    byte attr, cptr text)
+static bool main_menu_about_scene_add_text_run(app_information_scene* scene,
+    int row, int col, byte attr, const char* text, int len)
 {
-    int old_wrap = text_out_wrap;
-    int old_indent = text_out_indent;
+    char buf[APP_INFORMATION_TEXT_MAX];
+    const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
 
-    text_out_wrap = wrap_right;
-    text_out_indent = indent;
-    Term_gotoxy(indent, row);
-    text_out_to_screen(attr, text ? text : "");
-    text_out_wrap = old_wrap;
-    text_out_indent = old_indent;
+    if (!scene || !text || len <= 0)
+        return true;
+
+    while (len > 0)
+    {
+        int chunk = MIN(len, max_chunk);
+
+        memcpy(buf, text, (size_t)chunk);
+        buf[chunk] = '\0';
+        if (!app_information_scene_add_text(
+                scene, (s16b)row, (s16b)col, attr, buf))
+        {
+            return false;
+        }
+        col += chunk;
+        text += chunk;
+        len -= chunk;
+    }
+
+    return true;
 }
 
-static void main_menu_about_draw_spans(int row, int indent, int wrap_right,
-    const main_menu_about_span* spans, int span_count)
+static bool main_menu_about_scene_add_attr_runs(app_information_scene* scene,
+    int row, int col, const char* text, const byte* attrs, int len)
 {
-    int old_wrap = text_out_wrap;
-    int old_indent = text_out_indent;
+    int start = 0;
 
-    text_out_wrap = wrap_right;
-    text_out_indent = indent;
-    Term_gotoxy(indent, row);
+    if (!scene || !text || !attrs || len <= 0)
+        return true;
+
+    while (start < len)
+    {
+        byte attr = attrs[start];
+        int end = start + 1;
+
+        while (end < len && attrs[end] == attr)
+            end++;
+        if (!main_menu_about_scene_add_text_run(
+                scene, row, col, attr, text + start, end - start))
+        {
+            return false;
+        }
+        col += end - start;
+        start = end;
+    }
+
+    return true;
+}
+
+static int main_menu_about_flatten_spans(const main_menu_about_span* spans,
+    int span_count, byte fallback_attr, char* out_text, byte* out_attrs,
+    size_t cap)
+{
+    int len = 0;
+
+    if (!out_text || !out_attrs || cap < 2 || !spans || span_count <= 0)
+        return 0;
+
     for (int i = 0; i < span_count; i++)
-        text_out_to_screen(spans[i].attr, spans[i].text);
-    text_out_wrap = old_wrap;
-    text_out_indent = old_indent;
+    {
+        cptr text = spans[i].text ? spans[i].text : "";
+        byte attr = spans[i].attr ? spans[i].attr : fallback_attr;
+
+        while (*text && (size_t)(len + 1) < cap)
+        {
+            out_text[len] = *text++;
+            out_attrs[len] = attr;
+            len++;
+        }
+    }
+
+    out_text[len] = '\0';
+    return len;
 }
 
-static void main_menu_about(void)
+static bool main_menu_about_scene_add_wrapped_spans(
+    app_information_scene* scene, int* row, int indent, int wrap_right,
+    const main_menu_about_span* spans, int span_count, byte fallback_attr)
 {
-    int wid, hgt;
+    char flat_text[256];
+    byte flat_attrs[256];
+    int width = wrap_right - indent;
+    int total;
+    int start = 0;
+
+    if (!scene || !row || !spans || span_count <= 0)
+        return false;
+
+    if (width < 1)
+        width = 1;
+
+    total = main_menu_about_flatten_spans(
+        spans, span_count, fallback_attr, flat_text, flat_attrs, sizeof(flat_text));
+    if (total <= 0)
+        return true;
+
+    while (start < total)
+    {
+        int remaining = total - start;
+        int len = MIN(remaining, width);
+
+        if (start + len < total)
+        {
+            int break_at = -1;
+
+            for (int i = start; i < start + len; i++)
+            {
+                if (flat_text[i] == ' ')
+                    break_at = i;
+            }
+
+            if (break_at > start)
+                len = break_at - start;
+        }
+
+        if (len <= 0)
+            len = MIN(remaining, width);
+        if (!main_menu_about_scene_add_attr_runs(
+                scene, *row, indent, flat_text + start, flat_attrs + start, len))
+        {
+            return false;
+        }
+
+        (*row)++;
+        start += len;
+        while (start < total && flat_text[start] == ' ')
+            start++;
+    }
+
+    return true;
+}
+
+static bool main_menu_about_scene_add_wrapped_line(app_information_scene* scene,
+    int* row, int indent, int wrap_right, byte attr, cptr text)
+{
+    const main_menu_about_span span = { attr, text ? text : "" };
+
+    return main_menu_about_scene_add_wrapped_spans(
+        scene, row, indent, wrap_right, &span, 1, attr);
+}
+
+static bool main_menu_about_build_information_scene(
+    app_information_scene* scene)
+{
+    int wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    int hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
     int menu_w;
     int box_w;
     int box_left;
@@ -190,8 +311,7 @@ static void main_menu_about(void)
     int body_rows;
     int row_top;
     int row;
-    char ch;
-    bool saved_hide_cursor;
+    int prompt_row;
     static const main_menu_about_line about_lines[] = {
         { TERM_WHITE, "Sil-More is an evolution of SilQ, a famous roguelike" },
         { TERM_WHITE, "taking place in the First Age of Beleriand." },
@@ -217,16 +337,8 @@ static void main_menu_about(void)
         { 0, NULL }
     };
 
-    if (p_ptr && p_ptr->playing)
-        sdl_music_play_death();
-
-    screen_save();
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
+    if (!scene)
+        return false;
 
     menu_w = main_menu_calc_width();
     box_w = MIN(MAX(menu_w + 24, 68), 76);
@@ -241,8 +353,7 @@ static void main_menu_about(void)
 
     text_indent = box_left + 2;
     wrap_right = box_left + box_w - 1;
-
-    Term_clear();
+    app_information_scene_init(scene);
 
     {
         int line_count = 0;
@@ -269,21 +380,14 @@ static void main_menu_about(void)
         row_top = (hgt > body_rows + 2) ? 1 : 0;
 
         {
-            int panel_h = body_rows + 2;
-            if (panel_h > hgt - row_top)
-                panel_h = hgt - row_top;
-            for (int i = 0; i < panel_h; i++)
-            {
-                int y = row_top + i;
-                if (y >= 0 && y < hgt)
-                    Term_erase(box_left, y, box_w);
-            }
-        }
-
-        {
             cptr title = "About Sil-More";
             int title_x = box_left + MAX((box_w - (int)strlen(title)) / 2 - 2, 0);
-            Term_putstr(title_x, row_top, -1, TERM_YELLOW, title);
+
+            if (!app_information_scene_add_text(
+                    scene, (s16b)row_top, (s16b)title_x, TERM_YELLOW, title))
+            {
+                return false;
+            }
         }
 
         row = row_top + 1;
@@ -298,9 +402,6 @@ static void main_menu_about(void)
                 continue;
             }
 
-            main_menu_about_draw_line(row, text_indent, wrap_right,
-                about_lines[i].attr, text);
-
             if (i == 0)
             {
                 static const main_menu_about_span intro_label_spans[] = {
@@ -309,10 +410,15 @@ static void main_menu_about(void)
                     { TERM_L_BLUE, "SilQ" },
                     { TERM_WHITE, ", a famous roguelike" },
                 };
-                main_menu_about_draw_spans(row, text_indent, wrap_right,
-                    intro_label_spans,
-                    (int)(sizeof(intro_label_spans)
-                        / sizeof(intro_label_spans[0])));
+
+                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
+                        text_indent, wrap_right, intro_label_spans,
+                        (int)(sizeof(intro_label_spans)
+                            / sizeof(intro_label_spans[0])),
+                        about_lines[i].attr))
+                {
+                    return false;
+                }
             }
             else if ((i >= 3) && (i <= 8))
             {
@@ -343,24 +449,38 @@ static void main_menu_about(void)
                     },
                 };
                 int label_index = i - 3;
-                main_menu_about_draw_spans(row, text_indent, wrap_right,
-                    label_spans[label_index], 2);
+
+                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
+                        text_indent, wrap_right, label_spans[label_index], 2,
+                        about_lines[i].attr))
+                {
+                    return false;
+                }
             }
             else if (i == 15)
             {
                 static const main_menu_about_span mentions_spans[] = {
                     { TERM_YELLOW, "Honorable mentions:" },
                 };
-                main_menu_about_draw_spans(row, text_indent, wrap_right,
-                    mentions_spans, 1);
-            }
 
-            row += count_wrapped_lines(text, wrap_right, text_indent);
+                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
+                        text_indent, wrap_right, mentions_spans, 1,
+                        about_lines[i].attr))
+                {
+                    return false;
+                }
+            }
+            else if (!main_menu_about_scene_add_wrapped_line(scene, &row,
+                         text_indent, wrap_right, about_lines[i].attr, text))
+            {
+                return false;
+            }
         }
     }
 
-    if (row >= hgt)
-        row = hgt - 1;
+    prompt_row = row;
+    if (prompt_row >= hgt)
+        prompt_row = hgt - 1;
 
     if (steamdeck_controls_active())
     {
@@ -370,23 +490,65 @@ static void main_menu_about(void)
         main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] return", back_label);
-        Term_putstr(text_indent, row, -1, TERM_L_WHITE, prompt_buf);
+        return app_information_scene_add_text(
+            scene, (s16b)prompt_row, (s16b)text_indent, TERM_L_WHITE, prompt_buf);
+    }
+
+    return app_information_scene_add_text(scene, (s16b)prompt_row,
+        (s16b)text_indent, TERM_L_WHITE, "[Press any key to return]");
+}
+
+static void main_menu_about(void)
+{
+    static const char about_text[] =
+        "About Sil-More\n"
+        "\n"
+        "Sil-More is an evolution of SilQ, a famous roguelike\n"
+        "taking place in the First Age of Beleriand.\n"
+        "\n"
+        "Developers: k0rtess and sinefabula.\n"
+        "Gamedesigner: k0rtess.\n"
+        "Tileset: MicroChasm.\n"
+        "Main music theme: sinefabula.\n"
+        "Ambient music theme: West Wind.\n"
+        "Logo: sinefabula.\n"
+        "\n"
+        "Our love to Maedhros aka Carcharos for playing so much,\n"
+        "finding those pescy bugs and giving cool ideas.\n"
+        "Special thanks to original Sil and SilQ developers:\n"
+        "half, Scatha and Quirk.\n"
+        "\n"
+        "Honorable mentions:\n"
+        "Sound: Kenney, qubodup, TomMusic, LeoHPaz.\n"
+        "Walls: Wolffius, Pine Druid, Backterria, Ninjikin.\n"
+        "\n"
+        "And our deep love to Tolkien and his timeless creations.\n";
+
+    ui_information_scene_scope scope;
+
+    if (p_ptr && p_ptr->playing)
+        sdl_music_play_death();
+
+    if (ui_information_scene_enter(&scope))
+    {
+        app_information_scene scene;
+
+        if (main_menu_about_build_information_scene(&scene)
+            && ui_information_scene_present_document(&scene))
+        {
+            (void)ui_information_scene_wait_key_nonrepeat();
+            ui_information_scene_leave(&scope);
+        }
+        else
+        {
+            ui_information_scene_leave(&scope);
+            show_buffer(about_text, 0);
+        }
     }
     else
     {
-        Term_putstr(text_indent, row, -1, TERM_L_WHITE,
-            "[Press any key to return]");
+        show_buffer(about_text, 0);
     }
-    Term_fresh();
-
-    flush();
-    saved_hide_cursor = inkey_cursor_hidden();
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(saved_hide_cursor);
-    (void)ch;
-
-    screen_load();
 
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
@@ -756,7 +918,6 @@ static int main_menu_aux(int* highlight, bool scene_active,
             prompt_row = Term->hgt - 1;
         if (prompt_row >= 0)
         {
-            Term_erase(0, prompt_row, 255);
             main_menu_prompt_label(steamdeck_confirm_key(), "A",
                 confirm_label, sizeof(confirm_label));
             main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
@@ -764,7 +925,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
             strnfmt(prompt_buf, sizeof(prompt_buf),
                 "D-pad select  %s open  %s back",
                 confirm_label, back_label);
-            Term_putstr(col_main, prompt_row, -1, TERM_SLATE, prompt_buf);
+            c_prt(TERM_SLATE, prompt_buf, prompt_row, col_main);
         }
     }
 

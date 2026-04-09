@@ -622,8 +622,8 @@ static void run_detail_text_view_put(run_detail_text_view* view, byte attr,
 
     relative_row = view->logical_row - view->scroll_top;
     if (relative_row >= 0 && relative_row < view->visible_rows) {
-        Term_putstr(0, view->first_row + relative_row, view->term_wid, attr,
-            text ? text : "");
+        score_ui_put_fit(attr, text ? text : "",
+            view->first_row + relative_row, 0, view->term_wid);
     }
 
     view->logical_row++;
@@ -3352,8 +3352,6 @@ static void run_history_show_detail(const run_history_entry* entry)
         } else if (footer) {
             score_ui_put_fit(TERM_L_DARK, footer, term_hgt - 2, 0, term_wid);
         }
-        Term_fresh();
-
         if (!ui_information_scene_present_term())
         {
             log_warn("run history detail: failed to present information-scene frame");

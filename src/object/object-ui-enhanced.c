@@ -1069,8 +1069,8 @@ void show_equip_enhanced(void)
                 int total_row = INVEN_TOTAL - INVEN_WIELD + 1;
                 int text_row = total_row + 1;
 
-                Term_erase(clear_col, total_row, 255);
-                Term_erase(clear_col, text_row, 255);
+                prt("", total_row, clear_col);
+                prt("", text_row, clear_col);
                 story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
                     "--------");
                 strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
@@ -1078,7 +1078,7 @@ void show_equip_enhanced(void)
                 story_print_text_grid(text_row, MAX(0, weight_col - 8), 16,
                     TERM_SLATE, tmp_val);
                 if (k && (k + 3 < term_hgt - 1))
-                    Term_erase(clear_col, k + 3, 255);
+                    prt("", k + 3, clear_col);
             }
         }
         else
@@ -1158,7 +1158,7 @@ void show_equip_enhanced(void)
             if (display_row > 0)
             {
                 o_ptr = &inventory[highlighted_slot];
-                Term_erase(clear_col, display_row, 255);
+                prt("", display_row, clear_col);
                 strnfmt(tmp_val, sizeof(tmp_val), "%-12s: ",
                     mention_use(highlighted_slot));
                 c_put_str(TERM_L_BLUE, tmp_val, display_row, col);

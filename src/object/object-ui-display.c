@@ -1071,7 +1071,7 @@ void show_equip(void)
             continue;
         }
 
-        Term_erase(clear_col, j + 1, 255);
+        prt("", j + 1, clear_col);
 
         log_trace("show_equip: Row %d - put_str prefix '%s'", j + 1, prefix_buf);
         put_str(prefix_buf, j + 1, col);
@@ -1107,10 +1107,7 @@ void show_equip(void)
 
     if (j && (j < term_hgt - 1))
     {
-        if (use_story_font)
-            Term_erase(clear_col, j + 1, 255);
-        else
-            Term_erase(clear_col, j + 1, 255);
+        prt("", j + 1, clear_col);
     }
 
     if (armour_weight)
@@ -1120,8 +1117,8 @@ void show_equip(void)
         int col_total = 52;
         if (use_story_font)
         {
-            Term_erase(clear_col, text_row, 255);
-            Term_erase(clear_col, total_row, 255);
+            prt("", text_row, clear_col);
+            prt("", total_row, clear_col);
             story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
                 "--------");
             strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
@@ -1129,7 +1126,7 @@ void show_equip(void)
             story_print_text_grid(text_row, MAX(0, weight_col - 8), 16,
                 TERM_SLATE, tmp_val);
             if (j && (j + 3 < term_hgt - 1))
-                Term_erase(clear_col, j + 3, 255);
+                prt("", j + 3, clear_col);
         }
         else
         {

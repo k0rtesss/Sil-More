@@ -867,7 +867,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         int row=-1; int item_index=0; int floor_slot=-1;                            \
         if (p_ptr->command_wrk == (USE_INVEN) && highlight_row < vis_inven_cnt) {   \
             row = highlight_row; item_index = vis_inven[highlight_row];             \
-            Term_erase(menu_overlay_clear_col(col), row+1, 255);                    \
+            prt("", row + 1, menu_overlay_clear_col(col));                          \
             int label_col = label_col_base;                                         \
             if (item_index == SUPPLIES_INDEX) {                                     \
                 char label = supplies_label_char();                                 \
@@ -913,7 +913,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             row = highlight_row; item_index = vis_equip[highlight_row];             \
             object_type* o_ptr=&inventory[item_index];                              \
             object_desc(tmp,sizeof(tmp),o_ptr,true,3); tmp[lim]='\0';               \
-            Term_erase(menu_overlay_clear_col(col), row+1, 255);                    \
+            prt("", row + 1, menu_overlay_clear_col(col));                          \
             { char usebuf[32]; strnfmt(usebuf,sizeof(usebuf),"%-12s: ", mention_use(item_index)); \
               DRAW_HIGHLIGHT_IF_STORY({                                             \
                   char lab[8]; sprintf(lab, "(%c)", index_to_label(item_index));    \

@@ -860,16 +860,6 @@ static int welcome_screen_base_col(void)
 
     if (wid < legacy_term_wid)
     {
-#ifdef __ANDROID__
-        if (!get_sdl_steamdeck_mode())
-        {
-            shift = (wid - compact_block_wid) / 2;
-            if (shift < 0)
-                shift = 0;
-
-            return shift;
-        }
-#endif
         shift = (wid - compact_block_wid) / 2;
         if (shift < 0)
             shift = 0;
