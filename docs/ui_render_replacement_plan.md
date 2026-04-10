@@ -138,6 +138,23 @@ all forward UI work.
   - density
   - overall visual tone
   - panel hierarchy
+- Failure mode to avoid:
+  - the April 10, 2026 knowledge-browser regression routed a migrated lore
+    screen through the generic semantic panel skin and produced blue boxed
+    tabs/buttons that did not match the shipped Sil browser treatment
+  - the April 10, 2026 help-screen regression kept inline-colored prose as
+    grid-positioned document fragments, so the pixel renderer still showed
+    terminal-like spacing/gaps between colored spans even after the screen was
+    semantic
+  - semantic migration is not allowed to restyle a screen family just because
+    the payload is now pixel-based
+  - when a legacy family has its own flat browser shell, dividers, and text
+    emphasis rules, the semantic renderer must preserve that family-specific
+    look instead of collapsing it into the default modal/menu chrome
+  - when a screen is prose with inline color emphasis, use semantic rich
+    paragraphs/runs; reserve fixed-grid document ops for true tables,
+    fixed-layout diagrams, tiles, cursors, or other genuinely cell-aligned
+    content
 - Treat that as the default shipped style, not as a permanent typography or
   layout cage.
 - The architecture must support future style directions, including non-mono
@@ -283,6 +300,13 @@ Status on 2026-04-09:
     recall, knowledge monster recall, and run-history monster recall) off
     live `ui_information_scene_capture_term()` /
     `ui_information_scene_present_term()` usage in SDL snapshot mode
+  - migrated the character-screen tutorial in
+    `src/ui/ui-character-screen.c` onto the shared semantic document path so
+    SDL snapshot mode no longer republishes that flow through
+    `ui_information_scene_present_term()`
+  - moved the main help screen off grid-positioned document fragments and onto
+    direct `app_ui_scene` rich paragraphs so inline color emphasis renders as
+    semantic prose instead of preserving terminal column gaps
   - removed the merged raw-`Term` regression from settings/options menu chrome
     and the associated one-off additions in touch input, main-menu footer,
     score detail, and object-overlay chrome so the audit baseline passes again
@@ -290,9 +314,10 @@ Status on 2026-04-09:
   - add the shared list-detail, document, table, tab, and minimap widgets
   - migrate normal browser/document paths off
     `ui_information_scene_present_term()` / `capture_term()`
-  - next concentrated removal target: character/settings/knowledge-style
-    browser shells and related document viewers so the remaining bridge-heavy
-    browser family moves together instead of caller-by-caller
+  - next concentrated removal target: the remaining character/settings
+    browser shells plus the dense standard/compact character-sheet surfaces so
+    the remaining bridge-heavy browser/document family moves together instead
+    of caller-by-caller
 
 Primary write set:
 - `src/app/*`
@@ -391,6 +416,15 @@ Exit when:
 - migrated browsers no longer use `present_term()` or mirrored term capture
 - the information-scene bridge is gone from normal SDL runtime UI
 
+Status on 2026-04-10:
+- Knowledge browser/document SDL snapshot paths are now semantic and no longer
+  depend on `present_term()`.
+- The character tutorial also now uses the shared semantic document presenter.
+- The remaining concentrated character debt is the standard/compact sheet
+  renderers in `src/cmd/ui/cmd-ui-character.c` and
+  `src/ui/ui-character-screen.c`, which still derive layout from legacy term
+  drawing helpers.
+
 ### Slice D: Bespoke Workflow Family And Final Removal
 Goal:
 - migrate the remaining bespoke workflows and finish runtime legacy UI removal
@@ -444,6 +478,13 @@ Still pending:
   `Term->hgt`.
 - visual parity is judged against the existing Sil presentation, not against
   terminal-era width restrictions.
+- browser and document families must keep their original Sil treatment; routing
+  them through the generic semantic panel skin is a regression even if the
+  payload is no longer term-grid based.
+- inline-colored prose/document screens must not be emitted as cell-positioned
+  fragments just to preserve color; that recreates a terminal net in the pixel
+  renderer. Use rich semantic text runs unless the content is genuinely
+  fixed-layout.
 - run:
   - `py -3 tools/ui_debt_audit.py`
   - `ctest -R sil_ui0_audit --output-on-failure`

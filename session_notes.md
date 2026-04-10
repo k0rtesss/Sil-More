@@ -8885,7 +8885,47 @@ The script now fully matches the game's drop generation logic for all item types
 - `src/cmd/ui/cmd-ui-knowledge.c` now builds semantic `app_ui_scene` browsers for artefacts, objects, monsters, curses, and the root knowledge menu on the SDL snapshot path; the old `Term` drawing remains only as the non-snapshot fallback.
 - The semantic knowledge browser keeps page tabs, row selection, row icons/meta, group visibility, and browser footer actions without deriving SDL layout from `Term->wid` / `Term->hgt` or calling `ui_information_scene_present_term()` in the migrated loops.
 - `src/sdl-scene-menu.c` now routes browser-style panels through a dedicated lore/browser compositor instead of the generic boxed panel skin, preserving the flatter classic Sil browser look (plain tabs/footer text, split columns, text-color selection) while staying semantic/pixel-based.
-- Remaining knowledge-family debt after this slice: `knowledge_show_curse_detail()` and `do_cmd_knowledge_supplies()` still use the information-scene term bridge / saved-screen flow.
+- `src/cmd/ui/cmd-ui-knowledge.c` now also builds a semantic browser scene for the supplies overview on the SDL snapshot path, keeping the classic split-column shell and deleting the old `ui_information_scene_present_term()` dependency from that browser loop.
+- `docs/ui_render_replacement_plan.md` now records the April 10 "blue boxes" regression explicitly: routing migrated browsers through the generic semantic panel skin is a visual regression even when the payload is no longer term-grid based.
+- Curse recall detail in `src/cmd/ui/cmd-ui-knowledge.c` now uses a semantic document pager in SDL snapshot mode and only falls back to the old saved-screen path if semantic presentation fails; the knowledge module no longer calls `ui_information_scene_present_term()`.
+- Remaining knowledge-family bridge debt is now outside this module (for example legacy fallback and other non-knowledge document/browser families); the knowledge SDL snapshot path itself is off `present_term()`.
+- Validation:
+  - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R sil_ui0_audit --output-on-failure`
+
+## 2026-04-10: Character tutorial semantic document slice
+- Finished the in-progress `display_character_tutorial()` migration in `src/ui/ui-character-screen.c` so every tutorial page now renders through a semantic `app_information_scene` target in SDL snapshot mode instead of mixing semantic setup with late `Term_putstr()` / `c_put_str()` writes.
+- The tutorial now presents through `ui_information_scene_present_document(&scene)` and keeps the old term path only as the non-snapshot fallback; the exit cleanup also no longer clears the terminal when the semantic presenter stayed active.
+- Updated `docs/ui_render_replacement_plan.md` so Slice A / Slice C explicitly record the tutorial as completed semantic document work and name the remaining character-sheet renderer surfaces as the next concentrated removal target.
+- Validation:
+  - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R sil_ui0_audit --output-on-failure`
+
+## 2026-04-10: Character sheet bridge layout correction
+- Fixed the standard character-sheet SDL snapshot regression where the still-legacy `display_player()` renderer was laying itself out against the live wide/tall `Term` and then getting captured as a semantic document, which preserved giant horizontal/vertical margins and pushed the prompt row off-screen.
+- `src/cmd/ui/cmd-ui-character.c` now clamps the bridged semantic character-sheet loop to canonical `80x24` layout bounds while it remains on `ui_information_scene_present_term()`.
+- `src/ui/ui-character-screen.c` now exposes a local layout-override helper used only by the character-sheet render path so standard/compact sheet placement logic centers and wraps against the canonical sheet size instead of the live SDL term geometry; the tutorial keeps using real viewport dimensions.
+- Validation:
+  - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R sil_ui0_audit --output-on-failure`
+
+## 2026-04-10: Help/document viewer geometry correction
+- Fixed the same semantic document regression in the help family: the snapshot help pager and semantic file/help viewer were paginating against the live SDL `Term` height, so the shared document renderer shrank the text to fit oversized row counts and pushed footer prompts out of view.
+- `src/ui/ui-help.c` now pages the semantic help screen against canonical `80x24` document bounds.
+- `src/ui/ui-file-viewer.c` now does the same for the semantic `show_buffer_*` and `show_file_*` document viewers so plain help/file screens keep classic help geometry while they remain document-scene based.
+- Validation:
+  - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `ctest -R sil_ui0_audit --output-on-failure`
+
+## 2026-04-10: Help inline-color rich-text correction
+- Fixed the remaining help-screen "terminal net" artifact: the semantic help page was still encoded as cell-positioned color fragments, so inline emphasis words kept legacy column spacing inside the pixel renderer.
+- `src/ui/ui-help.c` now publishes the main help page as direct `app_ui_scene` rich text instead of document-grid fragments, reconstructing each legacy row as semantic inline runs with explicit spaces/newlines.
+- `src/sdl-scene-menu.c` rich-text measurement/rendering now honors explicit `\n` line breaks and leading indentation, which the help page needs and which future rich semantic prose screens can reuse.
+- `docs/ui_render_replacement_plan.md` now records the rule for agents: browser/document migration must not preserve inline-colored prose as cell-positioned fragments; rich runs are required unless the content is truly fixed-layout.
 - Validation:
   - `cmake --build build-standard --parallel 1` with MSYS2 `PATH` seeded
   - `py -3 tools/ui_debt_audit.py --check`

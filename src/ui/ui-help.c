@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "ui-help.h"
 #include "ui-information-scene.h"
 #include "externs.h"
@@ -767,44 +768,95 @@ static int help_dynamic_build_document_pages(
     return page_count;
 }
 
-static void help_build_information_scene(app_information_scene* scene, int page,
-    int total_pages, int term_hgt, int doc_start_y, int doc_end_y)
+static bool help_ui_append_spaces(app_ui_scene* scene, app_ui_panel* panel,
+    int count, byte attr)
 {
+    char spaces[APP_UI_TEXT_MAX];
+
+    if (!scene || !panel || count <= 0)
+        return true;
+
+    memset(spaces, ' ', sizeof(spaces) - 1u);
+    spaces[sizeof(spaces) - 1u] = '\0';
+    while (count > 0)
+    {
+        int chunk = count;
+
+        if (chunk >= (int)sizeof(spaces))
+            chunk = (int)sizeof(spaces) - 1;
+        spaces[chunk] = '\0';
+        if (!app_ui_panel_add_rich_text(scene, panel, attr, spaces))
+        {
+            spaces[chunk] = ' ';
+            return false;
+        }
+        spaces[chunk] = ' ';
+        count -= chunk;
+    }
+
+    return true;
+}
+
+static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
+    int doc_start_y, int doc_end_y)
+{
+    app_ui_panel* panel;
     char header[96];
     char nav[160];
-    const int col = 1;
-    const int top = 2;
+    int row;
 
     if (!scene)
-        return;
+        return false;
 
-    app_information_scene_init(scene);
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+    panel->accent_attr = TERM_SLATE;
+    panel->min_width_px = 1600;
+    panel->width_cap_px = 2800;
 
     strnfmt(header, sizeof(header),
         "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
         page, total_pages);
-    (void)app_information_scene_add_text(scene, 0, col,
-        help_role_attr(ROLE_HEADER), header);
+    app_ui_panel_set_title(panel, help_role_attr(ROLE_HEADER), header);
 
-    for (int op = 0; op < g_help_doc_ops_n; op++)
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+
+    for (row = doc_start_y; row <= doc_end_y; row++)
     {
-        byte attr;
-        int y = g_help_doc_ops[op].y;
-        int x = g_help_doc_ops[op].x;
-        int screen_y;
+        int cursor_x = 0;
 
-        if (y < doc_start_y || y > doc_end_y)
-            continue;
+        if (row > doc_start_y
+            && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n"))
+        {
+            return false;
+        }
 
-        screen_y = top + (y - doc_start_y);
-        if (screen_y < top || screen_y >= term_hgt - 1)
-            continue;
+        for (int op = 0; op < g_help_doc_ops_n; op++)
+        {
+            int gap;
+            byte attr;
+            const help_draw_op_t* draw = &g_help_doc_ops[op];
 
-        attr = g_help_doc_ops[op].use_role
-            ? help_role_attr(g_help_doc_ops[op].role)
-            : g_help_doc_ops[op].attr;
-        (void)app_information_scene_add_text(scene, (s16b)screen_y, (s16b)x,
-            attr, g_help_doc_ops[op].text);
+            if (draw->y != row || !draw->text || !draw->text[0])
+                continue;
+
+            gap = draw->x - cursor_x;
+            if (gap > 0 && !help_ui_append_spaces(scene, panel, gap, TERM_WHITE))
+                return false;
+
+            attr = draw->use_role ? help_role_attr(draw->role) : draw->attr;
+            if (!app_ui_panel_add_rich_text(scene, panel, attr, draw->text))
+                return false;
+
+            cursor_x = MAX(cursor_x, draw->x + (int)strlen(draw->text));
+        }
     }
 
     if (steamdeck_controls_active())
@@ -826,8 +878,13 @@ static void help_build_information_scene(app_information_scene* scene, int page,
             sizeof(nav));
     }
 
-    (void)app_information_scene_add_text(scene, (s16b)(term_hgt - 1), 1,
-        TERM_WHITE, nav);
+    if (!app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n\n")
+        || !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, nav))
+    {
+        return false;
+    }
+
+    return true;
 }
 
 /* -------- Help pages ----------------------------------------------------- */
@@ -1587,14 +1644,15 @@ static bool do_cmd_help_information_scene(void)
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
         int wid;
         int hgt;
         int total_pages;
         int ch;
 
         Term_get_size(&wid, &hgt);
-        (void)wid;
+        wid = 80;
+        hgt = 24;
         help_build_document_ops(&doc_hgt, row_has_content, row_has_heading);
         total_pages = help_dynamic_build_document_pages(hgt, doc_hgt,
             row_has_content, row_has_heading, page_starts, page_ends);
@@ -1605,9 +1663,9 @@ static bool do_cmd_help_information_scene(void)
         if (page > total_pages)
             page = total_pages;
 
-        help_build_information_scene(&scene, page, total_pages, hgt,
-            page_starts[page - 1], page_ends[page - 1]);
-        if (!ui_information_scene_present_document(&scene))
+        if (!help_build_ui_scene(&scene, page, total_pages,
+                page_starts[page - 1], page_ends[page - 1])
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

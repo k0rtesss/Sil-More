@@ -13,6 +13,8 @@ enum {
 };
 
 void display_player(int mode);
+void display_player_set_layout_override(int wid, int hgt);
+void display_player_clear_layout_override(void);
 void display_player_compact_set_scroll(int scroll);
 int display_player_compact_get_max_scroll(void);
 void display_player_compact_stats_skills_highlighted(int selected_skill);

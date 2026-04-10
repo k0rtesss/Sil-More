@@ -2443,7 +2443,7 @@ static void knowledge_display_curses(const knowledge_browser_layout* layout,
     }
 }
 
-static void knowledge_detail_prompt(int row, bool steamdeck, cptr title,
+static void knowledge_detail_prompt_legacy(int row, bool steamdeck, cptr title,
     cptr accept_label)
 {
     Term_erase(0, row, 255);
@@ -2458,20 +2458,332 @@ static void knowledge_detail_prompt(int row, bool steamdeck, cptr title,
         Term_putstr(1, row, -1, TERM_L_WHITE, "(press any key)");
     }
 
-    if (ui_information_scene_is_active())
-    {
-        (void)ui_information_scene_present_term();
-        (void)ui_information_scene_wait_key();
-    }
-    else
-    {
-        (void)inkey();
-    }
+    (void)inkey();
     Term_clear();
     Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, title);
 }
 
-static void knowledge_show_curse_detail(int curse_id)
+static void knowledge_scene_add_wrapped_document_text(
+    app_information_scene* scene, int col, int* row, cptr text, byte color,
+    int term_wid)
+{
+    char line_buf[256];
+    int line_pos = 0;
+    int effective_width;
+    int text_len;
+    int word_start = 0;
+    int i = 0;
+    int loop_count = 0;
+
+    if (!scene || !row || !text)
+        return;
+
+    effective_width = term_wid - col - 1;
+    if (effective_width < 20)
+        effective_width = 20;
+    text_len = (int)strlen(text);
+    line_buf[0] = '\0';
+
+    while (i <= text_len)
+    {
+        loop_count++;
+        if (loop_count > 1000)
+        {
+            log_warn("knowledge_scene_add_wrapped_document_text: safety break");
+            break;
+        }
+
+        if (i == text_len || text[i] == ' ')
+        {
+            int word_len = i - word_start;
+            char word[128];
+
+            if (word_len > 0 && word_len < (int)sizeof(word))
+            {
+                int copy_len = word_len;
+
+                if (copy_len >= (int)sizeof(word))
+                    copy_len = (int)sizeof(word) - 1;
+                for (int j = 0; j < copy_len; j++)
+                    word[j] = text[word_start + j];
+                word[copy_len] = '\0';
+
+                if (line_pos + (line_pos > 0 ? 1 : 0) + copy_len
+                    > effective_width && line_pos > 0)
+                {
+                    (void)app_information_scene_add_text(scene, (s16b)(*row),
+                        (s16b)col, color, line_buf);
+                    (*row)++;
+
+                    if (copy_len > effective_width)
+                    {
+                        int word_pos = 0;
+
+                        while (word_pos < copy_len)
+                        {
+                            int chunk_len = effective_width;
+                            char chunk[256];
+                            int k;
+
+                            if (word_pos + chunk_len > copy_len)
+                                chunk_len = copy_len - word_pos;
+
+                            for (k = 0; k < chunk_len
+                                && word_pos + k < copy_len; k++)
+                            {
+                                chunk[k] = word[word_pos + k];
+                            }
+                            chunk[k] = '\0';
+
+                            (void)app_information_scene_add_text(scene,
+                                (s16b)(*row), (s16b)col, color, chunk);
+                            (*row)++;
+                            word_pos += chunk_len;
+                        }
+
+                        line_buf[0] = '\0';
+                        line_pos = 0;
+                    }
+                    else
+                    {
+                        SDL_strlcpy(line_buf, word, sizeof(line_buf));
+                        line_pos = copy_len;
+                    }
+                }
+                else
+                {
+                    if (line_pos > 0)
+                    {
+                        SDL_strlcat(line_buf, " ", sizeof(line_buf));
+                        line_pos++;
+                    }
+                    SDL_strlcat(line_buf, word, sizeof(line_buf));
+                    line_pos += copy_len;
+                }
+            }
+
+            while (i < text_len && text[i] == ' ')
+                i++;
+            word_start = i;
+        }
+        else
+        {
+            i++;
+        }
+    }
+
+    if (line_pos > 0)
+    {
+        (void)app_information_scene_add_text(scene, (s16b)(*row), (s16b)col,
+            color, line_buf);
+        (*row)++;
+    }
+}
+
+static bool knowledge_present_curse_detail_document_page(
+    app_information_scene* scene, int footer_row, bool steamdeck,
+    cptr accept_label)
+{
+    if (!scene)
+        return false;
+
+    if (steamdeck)
+    {
+        char hint_buf[48];
+
+        strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
+        if (!app_information_scene_add_text(scene, (s16b)footer_row, 1,
+                TERM_L_WHITE, hint_buf))
+        {
+            return false;
+        }
+    }
+    else if (!app_information_scene_add_text(scene, (s16b)footer_row, 1,
+            TERM_L_WHITE, "(press any key)"))
+    {
+        return false;
+    }
+
+    if (!ui_information_scene_present_document(scene))
+        return false;
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    return true;
+}
+
+static bool knowledge_show_curse_detail_ui(int curse_id)
+{
+    curse_type* c;
+    cptr cname;
+    cptr cdesc;
+    cptr cpower;
+    cptr bname;
+    cptr bdesc;
+    cptr bpower;
+    bool steamdeck = steamdeck_controls_active();
+    bool has_blessing_text;
+    bool has_blessing_effect;
+    bool has_blessing_info;
+    char accept_label[16] = "";
+    char effect_line[256];
+    char blessing_line[256];
+    int term_wid;
+    int term_hgt;
+    int footer_row;
+    int page_limit;
+    int row;
+    app_information_scene scene;
+
+    if (curse_id < 0 || curse_id >= z_info->cu_max)
+        return false;
+
+    c = &cu_info[curse_id];
+    cname = cu_name + c->name;
+    cdesc = cu_text + c->text;
+    cpower = cu_text + c->power;
+    bname = knowledge_blessing_display_name(curse_id);
+    bdesc = (c->blessing_text) ? (cu_text + c->blessing_text) : "";
+    bpower = (c->blessing_power) ? (cu_text + c->blessing_power) : "";
+    has_blessing_text = bdesc && *bdesc;
+    has_blessing_effect = bpower && *bpower;
+    has_blessing_info = has_blessing_text || has_blessing_effect
+        || (c->blessing_name != 0);
+
+    if (steamdeck)
+    {
+        controller_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+
+    term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
+    if (term_wid < 40)
+        term_wid = 40;
+    if (term_hgt < 8)
+        term_hgt = 8;
+
+    footer_row = term_hgt - 1;
+    page_limit = footer_row - 1;
+
+    app_information_scene_init(&scene);
+    if (!app_information_scene_add_text(&scene, 0, 1, TERM_L_WHITE + TERM_SHADE,
+            "Known Curse:")
+        || !app_information_scene_add_text(&scene, 2, 1, TERM_L_RED, cname))
+    {
+        return false;
+    }
+    row = 3;
+
+    if (row + count_wrapped_lines(cdesc, term_wid - 4, 3) >= page_limit)
+    {
+        if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
+                steamdeck, accept_label))
+        {
+            return false;
+        }
+        app_information_scene_init(&scene);
+        if (!app_information_scene_add_text(&scene, 0, 1,
+                TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+        {
+            return false;
+        }
+        row = 2;
+    }
+    knowledge_scene_add_wrapped_document_text(&scene, 3, &row, cdesc,
+        TERM_WHITE, term_wid);
+
+    strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
+        (*cpower) ? cpower : "[no additional effect listed]");
+    if (row + count_wrapped_lines(effect_line, term_wid - 4, 3) >= page_limit)
+    {
+        if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
+                steamdeck, accept_label))
+        {
+            return false;
+        }
+        app_information_scene_init(&scene);
+        if (!app_information_scene_add_text(&scene, 0, 1,
+                TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+        {
+            return false;
+        }
+        row = 2;
+    }
+    knowledge_scene_add_wrapped_document_text(&scene, 3, &row, effect_line,
+        TERM_RED, term_wid);
+
+    if (has_blessing_info)
+    {
+        row++;
+        if (row + 1 >= page_limit)
+        {
+            if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
+                    steamdeck, accept_label))
+            {
+                return false;
+            }
+            app_information_scene_init(&scene);
+            if (!app_information_scene_add_text(&scene, 0, 1,
+                    TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+            {
+                return false;
+            }
+            row = 2;
+        }
+
+        if (!app_information_scene_add_text(&scene, (s16b)row++, 3,
+                TERM_L_GREEN, format("Blessing: %s", bname)))
+        {
+            return false;
+        }
+
+        if (has_blessing_text)
+        {
+            if (row + count_wrapped_lines(bdesc, term_wid - 6, 5) >= page_limit)
+            {
+                if (!knowledge_present_curse_detail_document_page(&scene,
+                        footer_row, steamdeck, accept_label))
+                {
+                    return false;
+                }
+                app_information_scene_init(&scene);
+                if (!app_information_scene_add_text(&scene, 0, 1,
+                        TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+                {
+                    return false;
+                }
+                row = 2;
+            }
+            knowledge_scene_add_wrapped_document_text(&scene, 5, &row, bdesc,
+                TERM_WHITE, term_wid);
+        }
+
+        strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
+            has_blessing_effect ? bpower : "[no additional effect listed]");
+        if (row + count_wrapped_lines(blessing_line, term_wid - 6, 5) >= page_limit)
+        {
+            if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
+                    steamdeck, accept_label))
+            {
+                return false;
+            }
+            app_information_scene_init(&scene);
+            if (!app_information_scene_add_text(&scene, 0, 1,
+                    TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+            {
+                return false;
+            }
+            row = 2;
+        }
+        knowledge_scene_add_wrapped_document_text(&scene, 5, &row,
+            blessing_line, TERM_L_GREEN, term_wid);
+    }
+
+    return knowledge_present_curse_detail_document_page(&scene, footer_row,
+        steamdeck, accept_label);
+}
+
+static void knowledge_show_curse_detail_legacy(int curse_id)
 {
     int row = 2;
     int wrap_width = Term->wid - 4;
@@ -2510,7 +2822,8 @@ static void knowledge_show_curse_detail(int curse_id)
     c_put_str(TERM_L_RED, cname, row++, 1);
 
     if (row + count_wrapped_lines(cdesc, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+        knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
+            accept_label);
     Term_gotoxy(3, row);
     text_out_c(TERM_WHITE, cdesc);
     row += count_wrapped_lines(cdesc, text_out_wrap, 3);
@@ -2518,7 +2831,8 @@ static void knowledge_show_curse_detail(int curse_id)
     strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
         (*cpower) ? cpower : "[no additional effect listed]");
     if (row + count_wrapped_lines(effect_line, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+        knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
+            accept_label);
     Term_gotoxy(3, row);
     text_out_c(TERM_RED, "Effect: ");
     text_out_c(TERM_L_DARK, (*cpower) ? cpower : "[no additional effect listed]");
@@ -2531,14 +2845,15 @@ static void knowledge_show_curse_detail(int curse_id)
         char blessing_line[256];
 
         if (row + 1 >= page_limit)
-            knowledge_detail_prompt(row, steamdeck, "Known Curse:", accept_label);
+            knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
+                accept_label);
 
         Term_putstr(3, row++, -1, TERM_L_GREEN, format("Blessing: %s", bname));
 
         if (has_blessing_text)
         {
             if (row + count_wrapped_lines(bdesc, text_out_wrap, 5) >= page_limit)
-                knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+                knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
                     accept_label);
             Term_gotoxy(5, row);
             text_out_c(TERM_WHITE, bdesc);
@@ -2548,7 +2863,7 @@ static void knowledge_show_curse_detail(int curse_id)
         strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
             has_blessing_effect ? bpower : "[no additional effect listed]");
         if (row + count_wrapped_lines(blessing_line, text_out_wrap, 5) >= page_limit)
-            knowledge_detail_prompt(row, steamdeck, "Known Curse:",
+            knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
                 accept_label);
         Term_gotoxy(5, row);
         text_out_c(TERM_L_GREEN, "Effect: ");
@@ -2560,7 +2875,8 @@ static void knowledge_show_curse_detail(int curse_id)
     if (row + 1 >= Term->hgt)
         row = Term->hgt - 2;
 
-    knowledge_detail_prompt(row + 1, steamdeck, "Known Curse:", accept_label);
+    knowledge_detail_prompt_legacy(row + 1, steamdeck, "Known Curse:",
+        accept_label);
     screen_load();
 }
 
@@ -3205,6 +3521,225 @@ static bool knowledge_build_root_menu_scene(app_ui_scene* scene, int selected)
     return true;
 }
 
+static void knowledge_scene_add_supply_footer_actions(app_ui_panel* panel)
+{
+    char recall_key[APP_UI_KEY_MAX];
+    char use_key[APP_UI_KEY_MAX];
+    char confirm_key[APP_UI_KEY_MAX];
+    char drop_key[APP_UI_KEY_MAX];
+    char back_key[APP_UI_KEY_MAX];
+    char use_confirm_key[APP_UI_KEY_MAX];
+
+    if (!panel)
+        return;
+
+    if (steamdeck_controls_active())
+    {
+        controller_prompt_label(steamdeck_info_key(), "RS", recall_key,
+            sizeof(recall_key));
+        controller_prompt_label(steamdeck_alt_action_key(), "X", use_key,
+            sizeof(use_key));
+        controller_prompt_label(steamdeck_confirm_key(), "A", confirm_key,
+            sizeof(confirm_key));
+        controller_prompt_label('d', "d", drop_key, sizeof(drop_key));
+        controller_prompt_label(steamdeck_back_key(), "B", back_key,
+            sizeof(back_key));
+        strnfmt(use_confirm_key, sizeof(use_confirm_key), "%s/%s", use_key,
+            confirm_key);
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "D-pad", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            recall_key, "Recall");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            use_confirm_key, "Use");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            drop_key, "Drop");
+        (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            back_key, "Back");
+        return;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "4/6", "Group");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "r", "Recall");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "u/Space", "Use");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "d", "Drop");
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+        "Esc", "Back");
+}
+
+static void knowledge_scene_add_supply_group_detail_lines(app_ui_panel* panel,
+    int grp_idx[], int grp_cnt, int grp_cur, int grp_top, int group_totals[])
+{
+    int start;
+    int i;
+
+    if (!panel || !grp_idx || !group_totals || grp_cnt <= 0)
+        return;
+
+    panel->flags |= APP_UI_PANEL_FLAG_DETAIL_LEADING;
+    app_ui_panel_set_detail_title(panel, TERM_SLATE, "Group");
+
+    start = grp_top;
+    if (start < 0)
+        start = 0;
+    if (start >= grp_cnt)
+        start = grp_cnt - 1;
+    if ((start + (int)APP_UI_DETAIL_LINE_MAX) > grp_cnt)
+        start = MAX(0, grp_cnt - (int)APP_UI_DETAIL_LINE_MAX);
+
+    for (i = start; i < grp_cnt && panel->detail_line_count < APP_UI_DETAIL_LINE_MAX;
+        i++)
+    {
+        int grp = grp_idx[i];
+        byte attr;
+        char buf[APP_UI_TEXT_MAX];
+
+        switch (grp)
+        {
+        case SUPPLY_GROUP_HERBS:
+            attr = TERM_GREEN;
+            break;
+        case SUPPLY_GROUP_POTIONS:
+            attr = TERM_VIOLET;
+            break;
+        case SUPPLY_GROUP_GEMS:
+            attr = TERM_BLUE;
+            break;
+        default:
+            attr = TERM_WHITE;
+            break;
+        }
+
+        if (i == grp_cur)
+            attr = TERM_L_WHITE;
+        else if (group_totals[grp] == 0)
+            attr = TERM_L_DARK;
+
+        strnfmt(buf, sizeof(buf), "%-8s %3d", supply_group_text[grp],
+            group_totals[grp]);
+        (void)app_ui_panel_add_detail_line(panel, attr, buf);
+    }
+}
+
+static void knowledge_scene_append_supply_rows(app_ui_panel* panel,
+    supply_list_entry entries[], int entry_cnt, int entry_cur, bool focus_rows)
+{
+    int i;
+
+    if (!panel || !entries || entry_cnt <= 0)
+        return;
+
+    for (i = 0; i < entry_cnt; i++)
+    {
+        supply_list_entry* entry = &entries[i];
+        object_type* o_ptr;
+        object_type fake;
+        object_kind* k_ptr;
+        bool aware;
+        byte base_attr;
+        byte cursor_attr;
+        byte attr;
+        char name[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+
+        if (entry->k_idx < 0 || entry->k_idx >= z_info->k_max)
+            continue;
+
+        k_ptr = &k_info[entry->k_idx];
+        aware = k_ptr->aware;
+
+        if (entry->total == 0)
+        {
+            base_attr = TERM_L_DARK;
+            cursor_attr = TERM_SLATE;
+        }
+        else
+        {
+            base_attr = get_supply_item_color(entry->k_idx, aware);
+            cursor_attr = aware ? TERM_L_WHITE : TERM_WHITE;
+        }
+
+        attr = (focus_rows && i == entry_cur) ? cursor_attr : base_attr;
+
+        if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+        {
+            o_ptr = &inventory[entry->item_idx];
+        }
+        else
+        {
+            object_wipe(&fake);
+            object_prep(&fake, entry->k_idx);
+            if (aware)
+                fake.ident |= IDENT_KNOWN;
+            fake.number = (entry->total > 0) ? entry->total : 1;
+            o_ptr = &fake;
+        }
+
+        object_desc(name, sizeof(name), o_ptr, true, 3);
+        strnfmt(meta, sizeof(meta), "x%-3d", entry->total);
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, attr, attr,
+                object_attr(o_ptr), object_char(o_ptr), true, false, "",
+                name, meta))
+        {
+            break;
+        }
+    }
+}
+
+static bool knowledge_build_supplies_browser_scene(app_ui_scene* scene,
+    int grp_idx[], int grp_cnt, int grp_cur, int grp_top, int group_totals[],
+    supply_list_entry entries[], int entry_cnt, int entry_top, int entry_cur,
+    int column, cptr weight_text)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_WHITE;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Supplies - Herbs, Potions, Gems");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Name / Qty / Sym");
+    if (weight_text && weight_text[0])
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE, weight_text);
+
+    knowledge_scene_add_supply_group_detail_lines(panel, grp_idx, grp_cnt,
+        grp_cur, grp_top, group_totals);
+    knowledge_scene_append_supply_rows(panel, entries, entry_cnt, entry_cur,
+        column == 1);
+    app_ui_panel_set_row_offset(panel, (s16b)entry_top);
+    knowledge_scene_add_supply_footer_actions(panel);
+
+    if (column == 0 && panel->detail_line_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_DETAIL;
+    }
+    else if (panel->row_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->focus_id = panel->rows[MIN(entry_cur, (int)panel->row_count - 1)].id;
+    }
+
+    return true;
+}
+
 void do_cmd_knowledge_browser_page(int page)
 {
     ui_information_scene_scope info_scope;
@@ -3832,13 +4367,24 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 if (curse_cnt > 0)
                 {
-                    if (use_information_scene
-                        && !knowledge_pause_information_scene(&info_scope))
-                        break;
-                    knowledge_show_curse_detail(curse_idx[state.entry_cur[page]]);
-                    if (use_information_scene
-                        && !knowledge_resume_information_scene(&info_scope))
-                        return;
+                    if (use_information_scene)
+                    {
+                        if (!knowledge_show_curse_detail_ui(
+                                curse_idx[state.entry_cur[page]]))
+                        {
+                            if (!knowledge_pause_information_scene(&info_scope))
+                                break;
+                            knowledge_show_curse_detail_legacy(
+                                curse_idx[state.entry_cur[page]]);
+                            if (!knowledge_resume_information_scene(&info_scope))
+                                return;
+                        }
+                    }
+                    else
+                    {
+                        knowledge_show_curse_detail_legacy(
+                            curse_idx[state.entry_cur[page]]);
+                    }
                 }
                 else
                     bell("Nothing to recall.");
@@ -4011,7 +4557,23 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
         if (grp_top < 0)
             grp_top = 0;
 
-        if (redraw)
+        if (use_information_scene)
+        {
+            app_ui_scene scene;
+
+            if (!knowledge_build_supplies_browser_scene(&scene, grp_idx,
+                    grp_cnt, grp_cur, grp_top, group_totals, entries,
+                    entry_cnt, entry_top, entry_cur, column, weight_buf)
+                || !ui_information_scene_present_ui(&scene))
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+                screen_save();
+                redraw = true;
+            }
+        }
+
+        if (!use_information_scene && redraw)
         {
             Term_clear();
             Term_putstr(0, layout.title_row, layout.term_wid, TERM_L_WHITE + TERM_SHADE,
@@ -4032,57 +4594,47 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
             redraw = false;
         }
 
-        display_supply_group_list(0, layout.list_row, layout.group_w, layout.list_rows, grp_idx,
-            grp_cur, grp_top, group_totals);
-        display_supply_list(layout.list_col, layout.list_row, layout.list_rows,
-            entries, entry_cnt, entry_cur, entry_top, count_col, sym_col,
-            grp_idx[grp_cur], column);
-
-        /* Bottom bar: grey text with white first letters */
-        Term_erase(0, layout.prompt_row, 255);
-        if (steamdeck_controls_active()) {
-            char recall_label[16];
-            char use_label[16];
-            char confirm_label[16];
-            char drop_label[16];
-            char back_label[16];
-            char prompt_buf[160];
-
-            /* Steam Deck UI: RS Right=recall, X=use, A=confirm, d=drop, B=back */
-            controller_prompt_label(steamdeck_info_key(), "RS Right", recall_label, sizeof(recall_label));
-            controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
-            controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-            controller_prompt_label('d', "d", drop_label, sizeof(drop_label));
-            controller_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-
-            strnfmt(prompt_buf, sizeof(prompt_buf),
-                "D-pad move  [%s] recall  [%s/%s] use  [%s] drop  [%s] back",
-                recall_label, use_label, confirm_label, drop_label, back_label);
-            Term_putstr(1, layout.prompt_row, -1, TERM_L_DARK, prompt_buf);
-        } else {
-            Term_putstr(0, layout.prompt_row, layout.term_wid, TERM_SLATE,
-                "Dir move  r recall  u/Space use  d drop  Esc");
-        }
-
-        if (!column)
-            Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
-        else if (entry_cnt)
-            Term_gotoxy(layout.list_col, layout.list_row + (entry_cur - entry_top));
-        else
-            Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
-
-        if (use_information_scene)
+        if (!use_information_scene)
         {
-            if (!ui_information_scene_present_term())
-            {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-                screen_save();
-                Term_fresh();
+            display_supply_group_list(0, layout.list_row, layout.group_w, layout.list_rows, grp_idx,
+                grp_cur, grp_top, group_totals);
+            display_supply_list(layout.list_col, layout.list_row, layout.list_rows,
+                entries, entry_cnt, entry_cur, entry_top, count_col, sym_col,
+                grp_idx[grp_cur], column);
+
+            /* Bottom bar: grey text with white first letters */
+            Term_erase(0, layout.prompt_row, 255);
+            if (steamdeck_controls_active()) {
+                char recall_label[16];
+                char use_label[16];
+                char confirm_label[16];
+                char drop_label[16];
+                char back_label[16];
+                char prompt_buf[160];
+
+                /* Steam Deck UI: RS Right=recall, X=use, A=confirm, d=drop, B=back */
+                controller_prompt_label(steamdeck_info_key(), "RS Right", recall_label, sizeof(recall_label));
+                controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
+                controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
+                controller_prompt_label('d', "d", drop_label, sizeof(drop_label));
+                controller_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
+
+                strnfmt(prompt_buf, sizeof(prompt_buf),
+                    "D-pad move  [%s] recall  [%s/%s] use  [%s] drop  [%s] back",
+                    recall_label, use_label, confirm_label, drop_label, back_label);
+                Term_putstr(1, layout.prompt_row, -1, TERM_L_DARK, prompt_buf);
+            } else {
+                Term_putstr(0, layout.prompt_row, layout.term_wid, TERM_SLATE,
+                    "Dir move  r recall  u/Space use  d drop  Esc");
             }
-        }
-        else
-        {
+
+            if (!column)
+                Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
+            else if (entry_cnt)
+                Term_gotoxy(layout.list_col, layout.list_row + (entry_cur - entry_top));
+            else
+                Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
+
             Term_fresh();
         }
 

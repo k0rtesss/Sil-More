@@ -699,12 +699,24 @@ static int sdl_menu_measure_rich_paragraph_height(TTF_Font* mono_font,
 
         while (cursor && *cursor)
         {
+            if (*cursor == '\n')
+            {
+                lines++;
+                current_x = 0.0f;
+                line_started = false;
+                cursor++;
+                continue;
+            }
+
             bool spaces = (*cursor == ' ');
             size_t len = 0;
             float token_w;
 
-            while (cursor[len] != '\0' && ((cursor[len] == ' ') == spaces))
+            while (cursor[len] != '\0' && cursor[len] != '\n'
+                && ((cursor[len] == ' ') == spaces))
+            {
                 len++;
+            }
             if (len == 0)
                 break;
 
@@ -712,10 +724,18 @@ static int sdl_menu_measure_rich_paragraph_height(TTF_Font* mono_font,
                 line_h, run, cursor, len);
             if (spaces)
             {
-                if (line_started && current_x + token_w <= (float)width_px)
+                if (current_x + token_w <= (float)width_px)
+                {
                     current_x += token_w;
-                else if (current_x >= (float)width_px)
+                    if (current_x > 0.0f)
+                        line_started = true;
+                }
+                else
+                {
+                    lines++;
+                    current_x = 0.0f;
                     line_started = false;
+                }
                 cursor += len;
                 continue;
             }
@@ -790,12 +810,24 @@ static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
 
         while (cursor && *cursor)
         {
+            if (*cursor == '\n')
+            {
+                current_x = 0.0f;
+                current_y += line_h + line_gap;
+                line_started = false;
+                cursor++;
+                continue;
+            }
+
             bool spaces = (*cursor == ' ');
             size_t len = 0;
             float token_w;
 
-            while (cursor[len] != '\0' && ((cursor[len] == ' ') == spaces))
+            while (cursor[len] != '\0' && cursor[len] != '\n'
+                && ((cursor[len] == ' ') == spaces))
+            {
                 len++;
+            }
             if (len == 0)
                 break;
 
@@ -803,10 +835,18 @@ static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
                 line_h, run, cursor, len);
             if (spaces)
             {
-                if (line_started && current_x + token_w <= (float)width_px)
+                if (current_x + token_w <= (float)width_px)
+                {
                     current_x += token_w;
-                else if (current_x >= (float)width_px)
+                    if (current_x > 0.0f)
+                        line_started = true;
+                }
+                else
+                {
+                    current_x = 0.0f;
+                    current_y += line_h + line_gap;
                     line_started = false;
+                }
                 cursor += len;
                 continue;
             }

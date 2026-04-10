@@ -59,6 +59,14 @@ static int show_buffer_clamp_line(int line, int size, int hgt)
     return line;
 }
 
+static void show_file_document_layout_size(int* wid, int* hgt)
+{
+    if (wid)
+        *wid = 80;
+    if (hgt)
+        *hgt = 24;
+}
+
 static void show_buffer_build_information_scene(app_information_scene* scene,
     cptr main_buffer, int line, int size, int hgt)
 {
@@ -153,8 +161,7 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
         int dir;
         int ch;
 
-        Term_get_size(&wid, &hgt);
-        (void)wid;
+        show_file_document_layout_size(&wid, &hgt);
         line = show_buffer_clamp_line(line, size, hgt);
         show_buffer_build_information_scene(&scene, main_buffer, line, size, hgt);
         if (!ui_information_scene_present_document(&scene))
@@ -241,7 +248,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
     for (i = 0; i < 26; i++)
         hook[i][0] = '\0';
 
-    Term_get_size(&wid, &hgt);
+    show_file_document_layout_size(&wid, &hgt);
 
     SDL_strlcpy(filename, name, sizeof(filename));
     n = strlen(filename);
@@ -314,7 +321,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
         app_information_scene scene;
 
         app_information_scene_init(&scene);
-        Term_get_size(&wid, &hgt);
+        show_file_document_layout_size(&wid, &hgt);
 
         if (line > (size - (hgt - 5)))
             line = size - (hgt - 5);

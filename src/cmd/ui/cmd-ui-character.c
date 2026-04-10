@@ -234,6 +234,11 @@ void do_cmd_character_sheet(void)
             wid = 80;
         if (hgt < 1)
             hgt = 24;
+        if (use_information_scene)
+        {
+            wid = 80;
+            hgt = 24;
+        }
 
         compact_sheet = (wid < 80);
         compact_pages = compact_sheet ? 2 : 1;
@@ -267,6 +272,10 @@ void do_cmd_character_sheet(void)
             display_player_compact_set_scroll(0);
 
         /* Display the player */
+        if (use_information_scene)
+            display_player_set_layout_override(wid, hgt);
+        else
+            display_player_clear_layout_override();
         display_player(mode);
         if (compact_sheet && sheet_page == 0)
         {
@@ -278,6 +287,7 @@ void do_cmd_character_sheet(void)
                 display_player(mode);
             }
         }
+        display_player_clear_layout_override();
 
         if (compact_sheet && hgt <= 18)
             indicator_row = 0;

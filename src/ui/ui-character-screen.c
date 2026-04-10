@@ -12,6 +12,43 @@
 
 #include <ctype.h>
 
+static int display_player_layout_override_wid = 0;
+static int display_player_layout_override_hgt = 0;
+
+static void display_player_get_layout_size(int* wid, int* hgt)
+{
+    int current_wid = 80;
+    int current_hgt = 24;
+
+    Term_get_size(&current_wid, &current_hgt);
+    if (display_player_layout_override_wid > 0)
+        current_wid = display_player_layout_override_wid;
+    if (display_player_layout_override_hgt > 0)
+        current_hgt = display_player_layout_override_hgt;
+
+    if (current_wid < 1)
+        current_wid = 80;
+    if (current_hgt < 1)
+        current_hgt = 24;
+
+    if (wid)
+        *wid = current_wid;
+    if (hgt)
+        *hgt = current_hgt;
+}
+
+void display_player_set_layout_override(int wid, int hgt)
+{
+    display_player_layout_override_wid = (wid > 0) ? wid : 0;
+    display_player_layout_override_hgt = (hgt > 0) ? hgt : 0;
+}
+
+void display_player_clear_layout_override(void)
+{
+    display_player_layout_override_wid = 0;
+    display_player_layout_override_hgt = 0;
+}
+
 static void display_skill(int skill, int row, int col)
 {
     /* Enable story font for skill name (if enabled) */
@@ -61,7 +98,7 @@ static bool display_player_compact_tight_spacing(void)
     int wid = 80;
     int hgt = 24;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     (void)wid;
     if (hgt < 1)
         hgt = 24;
@@ -395,7 +432,7 @@ static void display_player_xtra_info(int mode)
 
     byte history_attr = (mode == 2) ? TERM_YELLOW : TERM_WHITE;
 
-    Term_get_size(&term_wid, &term_hgt);
+    display_player_get_layout_size(&term_wid, &term_hgt);
     if (term_wid < 1)
         term_wid = 80;
     if (term_hgt < 1)
@@ -864,69 +901,102 @@ static void tutorial_prompt_label(int binding, const char* fallback, char* out,
         SDL_strlcpy(out, fallback, out_size);
 }
 
-static void tutorial_put_centered(int row, byte attr, const char* text)
+typedef struct tutorial_render_target {
+    app_information_scene* scene;
+    int width;
+    int height;
+} tutorial_render_target;
+
+static void tutorial_render_text(tutorial_render_target* target, int col,
+    int row, byte attr, const char* text)
 {
-    if (!text)
+    if (!target || !text || !text[0])
         return;
 
-    int wid = 80;
-    int hgt = 24;
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
+    if (target->scene)
+    {
+        (void)app_information_scene_add_text(target->scene, (s16b)row,
+            (s16b)col, attr, text);
+        return;
+    }
 
-    int len = (int)strlen(text);
+    Term_putstr(col, row, -1, attr, text);
+}
+
+static void tutorial_put_centered(tutorial_render_target* target, int row,
+    byte attr, const char* text)
+{
+    int wid = 80;
+    int len;
     int col = 0;
+
+    if (!target || !text)
+        return;
+
+    if (target->width > 0)
+        wid = target->width;
+    len = (int)strlen(text);
     if (len < wid)
         col = (wid - len) / 2;
     if (col < 0)
         col = 0;
 
-    Term_putstr(col, row, -1, attr, text);
+    tutorial_render_text(target, col, row, attr, text);
 }
 
-static int tutorial_put_trunc(int col, int row, int max_wid, byte attr,
-    const char* text)
+static int tutorial_put_trunc(tutorial_render_target* target, int col, int row,
+    int max_wid, byte attr, const char* text)
 {
+    char buf[256];
+    size_t len;
+    int keep;
+
     if (!text || !text[0])
         return 0;
 
     if (max_wid < 4)
         max_wid = 4;
 
-    size_t len = strlen(text);
+    len = strlen(text);
     if ((int)len <= max_wid)
     {
-        Term_putstr(col, row, -1, attr, text);
+        tutorial_render_text(target, col, row, attr, text);
         return 1;
     }
 
-    char buf[256];
     if (max_wid >= (int)sizeof(buf))
         max_wid = (int)sizeof(buf) - 1;
 
-    int keep = max_wid - 3;
+    keep = max_wid - 3;
     if (keep < 0)
         keep = 0;
     SDL_strlcpy(buf, text, (size_t)keep + 1);
     SDL_strlcat(buf, "...", sizeof(buf));
-    Term_putstr(col, row, -1, attr, buf);
+    tutorial_render_text(target, col, row, attr, buf);
     return 1;
 }
 
-static int tutorial_put_wrapped_limited(const char* text, int start_col,
-    int start_row, int max_width, int max_row, byte color)
+static int tutorial_put_wrapped_limited(tutorial_render_target* target,
+    const char* text, int start_col, int start_row, int max_width, int max_row,
+    byte color)
 {
+    int term_width = 80;
+    int term_height = 24;
+    char line_buf[512];
+    int row = start_row;
+    int line_pos = 0;
+    const char* p = text;
+
     if (!text || !text[0])
         return 0;
 
-    int term_width = 80;
-    int term_height = 24;
-    Term_get_size(&term_width, &term_height);
-    if (term_width < 1)
-        term_width = 80;
-    if (term_height < 1)
-        term_height = 24;
+    if (target)
+    {
+        if (target->width > 0)
+            term_width = target->width;
+        if (target->height > 0)
+            term_height = target->height;
+    }
 
     if (max_width <= 0)
         max_width = term_width - start_col - 1;
@@ -935,11 +1005,6 @@ static int tutorial_put_wrapped_limited(const char* text, int start_col,
 
     if (max_row <= 0 || max_row > term_height)
         max_row = term_height;
-
-    char line_buf[512];
-    int row = start_row;
-    int line_pos = 0;
-    const char* p = text;
 
     while (*p && row < max_row)
     {
@@ -951,7 +1016,7 @@ static int tutorial_put_wrapped_limited(const char* text, int start_col,
             line_buf[line_pos] = '\0';
             if (line_pos > 0)
             {
-                Term_putstr(start_col, row, -1, color, line_buf);
+                tutorial_render_text(target, start_col, row, color, line_buf);
                 row++;
             }
             line_pos = 0;
@@ -968,7 +1033,7 @@ static int tutorial_put_wrapped_limited(const char* text, int start_col,
             if (wrap_pos > 0)
             {
                 line_buf[wrap_pos] = '\0';
-                Term_putstr(start_col, row, -1, color, line_buf);
+                tutorial_render_text(target, start_col, row, color, line_buf);
 
                 int remaining = line_pos - wrap_pos - 1;
                 for (int i = 0; i < remaining; i++)
@@ -978,7 +1043,7 @@ static int tutorial_put_wrapped_limited(const char* text, int start_col,
             else
             {
                 line_buf[line_pos] = '\0';
-                Term_putstr(start_col, row, -1, color, line_buf);
+                tutorial_render_text(target, start_col, row, color, line_buf);
                 line_pos = 0;
             }
             row++;
@@ -993,7 +1058,7 @@ static int tutorial_put_wrapped_limited(const char* text, int start_col,
     if (line_pos > 0 && row < max_row)
     {
         line_buf[line_pos] = '\0';
-        Term_putstr(start_col, row, -1, color, line_buf);
+        tutorial_render_text(target, start_col, row, color, line_buf);
         row++;
     }
 
@@ -1061,9 +1126,9 @@ static int tutorial_count_wrapped_lines_ex(const char* text, int max_width,
     return count;
 }
 
-static int tutorial_put_wrapped_slice_ex(const char* text, int start_col,
-    int start_row, int max_width, int max_row, byte color, int skip_lines,
-    int max_lines, bool preserve_empty)
+static int tutorial_put_wrapped_slice_ex(tutorial_render_target* target,
+    const char* text, int start_col, int start_row, int max_width, int max_row,
+    byte color, int skip_lines, int max_lines, bool preserve_empty)
 {
     if (!text || !text[0])
         return 0;
@@ -1097,7 +1162,8 @@ static int tutorial_put_wrapped_slice_ex(const char* text, int start_col,
                     if (line_pos > 0)
                     {
                         line_buf[line_pos] = '\0';
-                        Term_putstr(start_col, row, -1, color, line_buf);
+                        tutorial_render_text(target, start_col, row, color,
+                            line_buf);
                     }
                     row++;
                     drawn++;
@@ -1124,7 +1190,8 @@ static int tutorial_put_wrapped_slice_ex(const char* text, int start_col,
                 else
                     line_buf[line_pos] = '\0';
                 if (line_buf[0])
-                    Term_putstr(start_col, row, -1, color, line_buf);
+                    tutorial_render_text(target, start_col, row, color,
+                        line_buf);
                 row++;
                 drawn++;
                 if (drawn >= max_lines || row >= max_row)
@@ -1157,7 +1224,7 @@ static int tutorial_put_wrapped_slice_ex(const char* text, int start_col,
         if (line_index >= skip_lines)
         {
             line_buf[line_pos] = '\0';
-            Term_putstr(start_col, row, -1, color, line_buf);
+            tutorial_render_text(target, start_col, row, color, line_buf);
             row++;
             drawn++;
         }
@@ -1647,33 +1714,48 @@ void display_character_tutorial(void)
         if (page >= total_pages)
             page = total_pages - 1;
 
-        Term_clear();
+        app_information_scene scene;
+        tutorial_render_target target;
+
+        target.width = wid;
+        target.height = hgt;
+        if (use_information_scene)
+        {
+            app_information_scene_init(&scene);
+            target.scene = &scene;
+        }
+        else
+        {
+            target.scene = NULL;
+            Term_clear();
+        }
 
         {
             char title[96];
             strnfmt(title, sizeof(title), "TUTORIAL  %d/%d", page + 1, total_pages);
-            tutorial_put_centered(header_row, TERM_L_BLUE, title);
+            tutorial_put_centered(&target, header_row, TERM_L_BLUE, title);
         }
 
         int row = content_top;
 
         if (page == page_core_1)
         {
-            Term_putstr(2, row++, -1, TERM_WHITE, "CORE STATISTICS (1/2)");
+            tutorial_render_text(&target, 2, row++, TERM_WHITE,
+                "CORE STATISTICS (1/2)");
             row++;
             {
                 char buf[128];
                 strnfmt(buf, sizeof(buf), "Exp: %ld/%ld", (long)p_ptr->new_exp, (long)p_ptr->exp);
-                Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                row += tutorial_put_wrapped_limited(
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                row += tutorial_put_wrapped_limited(&target,
                     "Awarded for depth progress, identifying items, spotting and killing monsters.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
                 long cur_wgt = p_ptr->total_weight / 10;
                 long max_wgt = weight_limit() / 10;
                 strnfmt(buf, sizeof(buf), "Burden: %ld/%ld lbs", cur_wgt, max_wgt);
-                Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                row += tutorial_put_wrapped_limited(
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                row += tutorial_put_wrapped_limited(&target,
                     "Weight carried / maximum capacity.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
@@ -1682,8 +1764,8 @@ void display_character_tutorial(void)
                     long cur_d = p_ptr->depth * 50;
                     long min_d = min_depth() * 50;
                     strnfmt(buf, sizeof(buf), "Depth: %ld/%ld", cur_d, min_d);
-                    Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                    row += tutorial_put_wrapped_limited(
+                    tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                    row += tutorial_put_wrapped_limited(&target,
                         "Current depth / minimum return depth (rises over time).",
                         text_col, row, text_w, content_max_row, TERM_SLATE);
                 }
@@ -1692,43 +1774,44 @@ void display_character_tutorial(void)
                 {
                     char line[128];
                     strnfmt(line, sizeof(line), "Turn: %s", buf);
-                    Term_putstr(2, row++, -1, TERM_L_GREEN, line);
+                    tutorial_render_text(&target, 2, row++, TERM_L_GREEN, line);
                 }
-                row += tutorial_put_wrapped_limited(
+                row += tutorial_put_wrapped_limited(&target,
                     "Total game turns elapsed.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
                 {
                     char line[64];
                     strnfmt(line, sizeof(line), "Light: %d", p_ptr->cur_light);
-                    Term_putstr(2, row++, -1, TERM_L_GREEN, line);
+                    tutorial_render_text(&target, 2, row++, TERM_L_GREEN, line);
                 }
-                row += tutorial_put_wrapped_limited(
+                row += tutorial_put_wrapped_limited(&target,
                     "Current light radius.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
             }
         }
         else if (page == page_core_2)
         {
-            Term_putstr(2, row++, -1, TERM_WHITE, "CORE STATISTICS (2/2)");
+            tutorial_render_text(&target, 2, row++, TERM_WHITE,
+                "CORE STATISTICS (2/2)");
             row++;
             {
                 char buf[128];
                 strnfmt(buf, sizeof(buf), "Melee: (%+d,%dd%d)", p_ptr->skill_use[S_MEL], p_ptr->mdd, p_ptr->mds);
-                Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                row += tutorial_put_wrapped_limited(
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                row += tutorial_put_wrapped_limited(&target,
                     "Main hand: (chance to hit, damage dice).",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
                 strnfmt(buf, sizeof(buf), "Bows:  (%+d,%dd%d)", p_ptr->skill_use[S_ARC], p_ptr->add, p_ptr->ads);
-                Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                row += tutorial_put_wrapped_limited(
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                row += tutorial_put_wrapped_limited(&target,
                     "Ranged: (chance to hit, damage dice).",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
                 strnfmt(buf, sizeof(buf), "Armor: [%+d,%d-%d]", p_ptr->skill_use[S_EVN], p_min(GF_HURT, true), p_max(GF_HURT, true));
-                Term_putstr(2, row++, -1, TERM_L_GREEN, buf);
-                row += tutorial_put_wrapped_limited(
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, buf);
+                row += tutorial_put_wrapped_limited(&target,
                     "[evasion, protection] = hit-avoid chance and damage absorption.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
@@ -1738,9 +1821,9 @@ void display_character_tutorial(void)
                     char line[64];
                     byte col = (p_ptr->chp >= p_ptr->mhp) ? TERM_L_GREEN : (p_ptr->chp > p_ptr->mhp / 4) ? TERM_YELLOW : TERM_RED;
                     strnfmt(line, sizeof(line), "Health: %d/%d", cur_hp, max_hp);
-                    Term_putstr(2, row++, -1, col, line);
+                    tutorial_render_text(&target, 2, row++, col, line);
                 }
-                row += tutorial_put_wrapped_limited(
+                row += tutorial_put_wrapped_limited(&target,
                     "Hit points: current / maximum.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
 
@@ -1750,18 +1833,18 @@ void display_character_tutorial(void)
                     char line[64];
                     byte col = (p_ptr->csp >= p_ptr->msp) ? TERM_L_GREEN : (p_ptr->csp > p_ptr->msp / 4) ? TERM_YELLOW : TERM_RED;
                     strnfmt(line, sizeof(line), "Voice:  %d/%d", cur_sp, max_sp);
-                    Term_putstr(2, row++, -1, col, line);
+                    tutorial_render_text(&target, 2, row++, col, line);
                 }
-                row += tutorial_put_wrapped_limited(
+                row += tutorial_put_wrapped_limited(&target,
                     "Song points: current / maximum.",
                     text_col, row, text_w, content_max_row, TERM_SLATE);
             }
         }
         else if (page == page_attrs)
         {
-            Term_putstr(2, row++, -1, TERM_WHITE, "ATTRIBUTES");
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, "ATTRIBUTES");
             row++;
-            row += tutorial_put_wrapped_limited(
+            row += tutorial_put_wrapped_limited(&target,
                 "Current = Base + equip + misc - drain. Green = boosted, orange = reduced.",
                 text_col, row, text_w, content_max_row, TERM_SLATE);
             row++;
@@ -1775,14 +1858,15 @@ void display_character_tutorial(void)
                 if (use > base) a = TERM_L_GREEN;
                 else if (use < base) a = TERM_ORANGE;
                 strnfmt(line, sizeof(line), "%s: %d", stat_names[stat], use);
-                Term_putstr(2, row++, -1, a, line);
+                tutorial_render_text(&target, 2, row++, a, line);
 
                 const char* desc = NULL;
                 if (stat == A_STR) desc = "Strength: melee dice and weight capacity.";
                 else if (stat == A_DEX) desc = "Dexterity: melee/evasion/archery/stealth.";
                 else if (stat == A_CON) desc = "Constitution: hit points.";
                 else if (stat == A_GRA) desc = "Grace: will/perception/song/smithing and voice.";
-                row += tutorial_put_wrapped_limited(desc, text_col, row, text_w, content_max_row, TERM_SLATE);
+                row += tutorial_put_wrapped_limited(&target, desc, text_col,
+                    row, text_w, content_max_row, TERM_SLATE);
             }
         }
         else if (page >= page_skills_start && page < page_skills_start + skill_pages)
@@ -1794,12 +1878,12 @@ void display_character_tutorial(void)
             else
                 SDL_strlcpy(heading, "SKILLS", sizeof(heading));
 
-            Term_putstr(2, row++, -1, TERM_WHITE, heading);
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, heading);
             row++;
 
             if (sub == 0)
             {
-                row += tutorial_put_wrapped_limited(
+                row += tutorial_put_wrapped_limited(&target,
                     skills_intro,
                     text_col, row, text_w, content_max_row, TERM_SLATE);
                 row++;
@@ -1813,30 +1897,36 @@ void display_character_tutorial(void)
                 char line[128];
                 strnfmt(line, sizeof(line), "%s: %d (base %d)",
                     skill_names_full[sid], p_ptr->skill_use[sid], p_ptr->skill_base[sid]);
-                Term_putstr(2, row++, -1, TERM_L_GREEN, line);
-                row += tutorial_put_wrapped_limited(skill_desc[sid], text_col, row, text_w, content_max_row, TERM_SLATE);
+                tutorial_render_text(&target, 2, row++, TERM_L_GREEN, line);
+                row += tutorial_put_wrapped_limited(&target, skill_desc[sid],
+                    text_col, row, text_w, content_max_row, TERM_SLATE);
             }
         }
         else if (page == page_traits_legend)
         {
-            Term_putstr(2, row++, -1, TERM_WHITE, "TRAITS LEGEND");
+            tutorial_render_text(&target, 2, row++, TERM_WHITE,
+                "TRAITS LEGEND");
             row++;
 
-            c_put_str(TERM_L_GREEN, "++", row, 2);
-            Term_putstr(6, row++, -1, TERM_SLATE, "Mastery");
-            c_put_str(TERM_GREEN, "+", row, 2);
-            Term_putstr(6, row++, -1, TERM_SLATE, "Affinity");
-            c_put_str(TERM_RED, "--", row, 2);
-            Term_putstr(6, row++, -1, TERM_SLATE, "Major penalty");
-            c_put_str(TERM_L_RED, "-", row, 2);
-            Term_putstr(6, row++, -1, TERM_SLATE, "Minor penalty");
-            c_put_str(TERM_VIOLET, "UNIQUE", row, 2);
-            Term_putstr(10, row++, -1, TERM_SLATE, "Special ability");
-            c_put_str(TERM_UMBER, "CURSE", row, 2);
-            Term_putstr(10, row++, -1, TERM_SLATE, "Character curse");
+            tutorial_render_text(&target, 2, row, TERM_L_GREEN, "++");
+            tutorial_render_text(&target, 6, row++, TERM_SLATE, "Mastery");
+            tutorial_render_text(&target, 2, row, TERM_GREEN, "+");
+            tutorial_render_text(&target, 6, row++, TERM_SLATE, "Affinity");
+            tutorial_render_text(&target, 2, row, TERM_RED, "--");
+            tutorial_render_text(&target, 6, row++, TERM_SLATE,
+                "Major penalty");
+            tutorial_render_text(&target, 2, row, TERM_L_RED, "-");
+            tutorial_render_text(&target, 6, row++, TERM_SLATE,
+                "Minor penalty");
+            tutorial_render_text(&target, 2, row, TERM_VIOLET, "UNIQUE");
+            tutorial_render_text(&target, 10, row++, TERM_SLATE,
+                "Special ability");
+            tutorial_render_text(&target, 2, row, TERM_UMBER, "CURSE");
+            tutorial_render_text(&target, 10, row++, TERM_SLATE,
+                "Character curse");
             row++;
 
-            row += tutorial_put_wrapped_limited(
+            row += tutorial_put_wrapped_limited(&target,
                 "Next page shows your current traits.",
                 text_col, row, text_w, content_max_row, TERM_SLATE);
         }
@@ -1845,12 +1935,13 @@ void display_character_tutorial(void)
             int sub = page - page_traits_list_start;
             char heading[64];
             strnfmt(heading, sizeof(heading), "YOUR TRAITS (%d/%d)", sub + 1, trait_pages);
-            Term_putstr(2, row++, -1, TERM_WHITE, heading);
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, heading);
             row++;
 
             if (trait_n <= 0)
             {
-                Term_putstr(2, row++, -1, TERM_SLATE, "(No special traits)");
+                tutorial_render_text(&target, 2, row++, TERM_SLATE,
+                    "(No special traits)");
             }
             else
             {
@@ -1876,11 +1967,13 @@ void display_character_tutorial(void)
                 {
                     if (idx >= end)
                         break;
-                    tutorial_put_trunc(col1, row, colw, traits[idx].col, traits[idx].txt);
+                    tutorial_put_trunc(&target, col1, row, colw, traits[idx].col,
+                        traits[idx].txt);
                     idx++;
                     if (two_col && idx < end)
                     {
-                        tutorial_put_trunc(col2, row, colw, traits[idx].col, traits[idx].txt);
+                        tutorial_put_trunc(&target, col2, row, colw,
+                            traits[idx].col, traits[idx].txt);
                         idx++;
                     }
                     row++;
@@ -1896,13 +1989,13 @@ void display_character_tutorial(void)
             else
                 SDL_strlcpy(heading, "HISTORY", sizeof(heading));
 
-            Term_putstr(2, row++, -1, TERM_WHITE, heading);
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, heading);
             row++;
 
             if (p_ptr->history[0])
             {
                 int skip = sub * history_cap;
-                tutorial_put_wrapped_slice_ex(
+                tutorial_put_wrapped_slice_ex(&target,
                     p_ptr->history,
                     text_col,
                     row,
@@ -1915,7 +2008,8 @@ void display_character_tutorial(void)
             }
             else
             {
-                Term_putstr(2, row++, -1, TERM_SLATE, "(No history)");
+                tutorial_render_text(&target, 2, row++, TERM_SLATE,
+                    "(No history)");
             }
         }
         else if (page >= page_controls_start && page < page_controls_start + ctl_pages)
@@ -1923,7 +2017,7 @@ void display_character_tutorial(void)
             int sub = page - page_controls_start;
             char heading[64];
             strnfmt(heading, sizeof(heading), "ESSENTIAL CONTROLS (%d/%d)", sub + 1, ctl_pages);
-            Term_putstr(2, row++, -1, TERM_WHITE, heading);
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, heading);
             row++;
 
             int start = sub * ctl_items_per_page;
@@ -1954,7 +2048,8 @@ void display_character_tutorial(void)
                         strnfmt(line, sizeof(line), "%s - %s", controls[idx].key, controls[idx].desc);
                     else
                         SDL_strlcpy(line, controls[idx].desc, sizeof(line));
-                    tutorial_put_trunc(col1, row, colw, TERM_SLATE, line);
+                    tutorial_put_trunc(&target, col1, row, colw, TERM_SLATE,
+                        line);
                 }
                 idx++;
 
@@ -1965,7 +2060,8 @@ void display_character_tutorial(void)
                         strnfmt(line, sizeof(line), "%s - %s", controls[idx].key, controls[idx].desc);
                     else
                         SDL_strlcpy(line, controls[idx].desc, sizeof(line));
-                    tutorial_put_trunc(col2, row, colw, TERM_SLATE, line);
+                    tutorial_put_trunc(&target, col2, row, colw, TERM_SLATE,
+                        line);
                     idx++;
                 }
                 row++;
@@ -1980,13 +2076,13 @@ void display_character_tutorial(void)
             else
                 SDL_strlcpy(heading, "CHARACTER CREATION (COMPACT SCREENS)", sizeof(heading));
 
-            Term_putstr(2, row++, -1, TERM_WHITE, heading);
+            tutorial_render_text(&target, 2, row++, TERM_WHITE, heading);
             row++;
 
             {
                 int birth_cap = content_rows - 2;
                 int skip = sub * birth_cap;
-                tutorial_put_wrapped_slice_ex(
+                tutorial_put_wrapped_slice_ex(&target,
                     birth_text,
                     text_col,
                     row,
@@ -2001,9 +2097,10 @@ void display_character_tutorial(void)
 
         {
             if (page == total_pages - 1)
-                tutorial_put_centered(hint_row, TERM_L_GREEN, "Tutorial complete!");
+                tutorial_put_centered(&target, hint_row, TERM_L_GREEN,
+                    "Tutorial complete!");
             else
-                tutorial_put_centered(hint_row, TERM_YELLOW,
+                tutorial_put_centered(&target, hint_row, TERM_YELLOW,
                     steamdeck ? "D-pad left/right to navigate" : "Use left/right (or any key) to navigate");
 
             if (steamdeck)
@@ -2018,7 +2115,7 @@ void display_character_tutorial(void)
                     strnfmt(nav, sizeof(nav), "(D-Left Prev)   (%s Next)   (%s Exit)", next_label, back_label);
                 else
                     strnfmt(nav, sizeof(nav), "(%s Next)   (%s Exit)", next_label, back_label);
-                tutorial_put_centered(nav_row, TERM_SLATE, nav);
+                tutorial_put_centered(&target, nav_row, TERM_SLATE, nav);
             }
             else
             {
@@ -2027,13 +2124,13 @@ void display_character_tutorial(void)
                     strnfmt(nav, sizeof(nav), "(4/<- Prev)   (6/-> Next)   (ESC Exit)");
                 else
                     strnfmt(nav, sizeof(nav), "(6/-> Next)   (ESC Exit)");
-                tutorial_put_centered(nav_row, TERM_SLATE, nav);
+                tutorial_put_centered(&target, nav_row, TERM_SLATE, nav);
             }
         }
 
         if (use_information_scene)
         {
-            if (!ui_information_scene_present_term())
+            if (!ui_information_scene_present_document(&scene))
             {
                 ui_information_scene_leave(&info_scope);
                 use_information_scene = false;
@@ -2073,7 +2170,8 @@ void display_character_tutorial(void)
         }
     }
 
-    Term_clear();
+    if (!use_information_scene)
+        Term_clear();
     if (use_information_scene)
         ui_information_scene_leave(&info_scope);
 }
@@ -2099,7 +2197,7 @@ static void display_player_misc_info(void)
             c_name + current_character_profile->alt_name);
     }
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid > 0)
     {
         int name_len = (int)strlen(name);
@@ -2124,7 +2222,7 @@ static int display_player_compact_summary_block(int row_start)
     int wid = 80;
     int hgt = 24;
     bool tight_spacing = display_player_compact_tight_spacing();
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1)
         wid = 80;
     if (hgt < 1)
@@ -2542,7 +2640,7 @@ static bool display_player_compact_can_embed_traits(int row_start)
     int trait_width;
     int trait_max_chars;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1)
         wid = 80;
     if (hgt < 1)
@@ -2606,7 +2704,7 @@ static int display_player_compact_wrapped_offset(const char* text, int start_row
     if (!text || !text[0])
         return start_row;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1)
         wid = 80;
     if (hgt < 1)
@@ -2691,7 +2789,7 @@ static void display_player_compact_history_column(int row_start, int col, int wr
     int wid = 80;
     int hgt = 24;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -2779,7 +2877,7 @@ static void display_player_compact_description_and_flags(int row_start,
         visible_row_start);
     int content_row = row_start;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -3008,7 +3106,7 @@ static void display_player_compact_attributes(int row_start, int max_cols)
     int row = row_start;
     int col = 1;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -3118,7 +3216,7 @@ static void display_player_compact_attributes_and_skills(int row_start)
 {
     int wid = 80;
     int hgt = 24;
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -3192,7 +3290,7 @@ static void display_player_compact_skills_list(int row_start)
     int row = row_start;
     int col = 1;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -3216,7 +3314,7 @@ static void display_player_compact_history(int row_start)
     int wid = 80;
     int hgt = 24;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     if (wid < 1) wid = 80;
     if (hgt < 1) hgt = 24;
 
@@ -3425,7 +3523,7 @@ void display_player(int mode)
     int wide_offset = 0;
     bool narrow = false;
 
-    Term_get_size(&wid, &hgt);
+    display_player_get_layout_size(&wid, &hgt);
     (void)hgt;
     narrow = (wid > 0 && wid < 80);
     if (wid > 80)
