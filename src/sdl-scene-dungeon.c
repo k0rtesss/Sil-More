@@ -2126,12 +2126,16 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     sdl_scene_render_combat_overlay(main_view, &layout, map, panes);
     if (chrome_scene)
-        (void)sdl_scene_ui_render_overlay(main_view, chrome_scene);
+        (void)sdl_scene_ui_render_overlay(main_view,
+            main_view->cols * main_view->cell_w,
+            main_view->rows * main_view->cell_h, chrome_scene);
     sdl_scene_render_animations(main_view, &layout, map, animations,
         animation_count, now_ns);
     sdl_scene_draw_absolute_cursor(main_view, &map->cursor);
     if (transient_scene)
-        (void)sdl_scene_ui_render_overlay(main_view, transient_scene);
+        (void)sdl_scene_ui_render_overlay(main_view,
+            main_view->cols * main_view->cell_w,
+            main_view->rows * main_view->cell_h, transient_scene);
     sdl_scene_render_interaction_overlay(main_view, &layout, interaction);
 
     SDL_SetRenderTarget(g_state.renderer, NULL);

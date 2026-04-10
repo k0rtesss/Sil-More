@@ -215,10 +215,10 @@ bool sdl_scene_information_render_overlay(SDL_Texture* canvas,
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_ui_scene* scene);
-bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
-    const app_ui_scene* scene);
+    int canvas_w, int canvas_h, const app_ui_scene* scene);
+bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
+    int canvas_h, const app_ui_scene* scene);
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_menu_snapshot* snapshot);
+    int canvas_w, int canvas_h, const app_menu_snapshot* snapshot);
 
 #endif /* INCLUDED_SDL_MAIN_INTERNAL_H */

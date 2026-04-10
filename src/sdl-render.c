@@ -51,6 +51,18 @@ static bool sdl_legacy_input_pending(void)
     return app_session_pending_input_count(session) > 0;
 }
 
+static bool sdl_information_scene_needs_term_capture(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!ui_information_scene_is_active() || !session)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    return snapshot && snapshot->scene == APP_SCENE_KIND_INFORMATION;
+}
+
 sdl_view* sdl_view_from_term(term* t)
 {
     if (!t)
@@ -302,7 +314,7 @@ static errr callback_sdl_xtra(int n, int v)
         return 0;
 
     case TERM_XTRA_FRESH:
-        if (ui_information_scene_is_active())
+        if (sdl_information_scene_needs_term_capture())
             (void)ui_information_scene_present_term();
         sdl_present_if_needed(d);
         return 0;
@@ -323,7 +335,7 @@ static errr callback_sdl_xtra(int n, int v)
                 sdl_handle_event(&g_state, &ev);
             sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
             sdl_drain_legacy_input_queue();
-            if (ui_information_scene_is_active())
+            if (sdl_information_scene_needs_term_capture())
                 (void)ui_information_scene_present_term();
             sdl_present_if_needed(d);
         }

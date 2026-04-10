@@ -573,12 +573,10 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
 }
 
 static bool sdl_menu_render_term_plain_panel(const sdl_view* main_view,
-    const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* font = NULL;
     SDL_FRect clear_rect;
-    int canvas_w;
-    int canvas_h;
     int desired_px;
     int min_px;
     int pixel_height;
@@ -595,9 +593,6 @@ static bool sdl_menu_render_term_plain_panel(const sdl_view* main_view,
 
     if (!main_view || !panel || !sdl_menu_is_plain_panel(panel))
         return false;
-
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -1134,12 +1129,10 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
 }
 
 static bool sdl_menu_render_browser_panel(const sdl_view* main_view,
-    const app_ui_panel* ui_panel)
+    int canvas_w, int canvas_h, const app_ui_panel* ui_panel)
 {
     TTF_Font* font;
     SDL_Color line_color = sdl_menu_color(TERM_L_DARK);
-    int canvas_w;
-    int canvas_h;
     int pixel_height;
     int line_h;
     int line_gap;
@@ -1171,8 +1164,6 @@ static bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (!main_view || !ui_panel)
         return false;
 
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -1393,7 +1384,8 @@ static bool sdl_menu_render_browser_panel(const sdl_view* main_view,
 }
 
 static bool sdl_menu_render_panel_internal(const sdl_view* main_view,
-    const app_ui_scene* scene, const app_ui_panel* ui_panel)
+    int canvas_w, int canvas_h, const app_ui_scene* scene,
+    const app_ui_panel* ui_panel)
 {
     TTF_Font* font;
     TTF_Font* story_font = NULL;
@@ -1403,8 +1395,6 @@ static bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     SDL_Rect left_clip;
     SDL_Rect right_clip;
     SDL_Rect footer_clip;
-    int canvas_w;
-    int canvas_h;
     int pixel_height;
     int line_h;
     int line_gap;
@@ -1457,13 +1447,12 @@ static bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         return false;
 
     if (sdl_menu_is_plain_panel(ui_panel)
-        && sdl_menu_render_term_plain_panel(main_view, ui_panel))
+        && sdl_menu_render_term_plain_panel(main_view, canvas_w, canvas_h,
+            ui_panel))
     {
         return true;
     }
 
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -2035,14 +2024,12 @@ static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
 }
 
 static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
-    const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* mono_font = NULL;
     TTF_Font* story_font = NULL;
     SDL_FRect clear_rect;
     SDL_Rect clip_rect;
-    int canvas_w;
-    int canvas_h;
     int desired_px;
     int min_px;
     int pixel_height;
@@ -2057,9 +2044,6 @@ static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
 
     if (!main_view || !panel || panel->row_count == 0)
         return false;
-
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -2290,12 +2274,10 @@ static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
 }
 
 static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
-    const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* font;
     SDL_Rect clip_rect;
-    int canvas_w;
-    int canvas_h;
     int pixel_height;
     int line_h;
     int rows;
@@ -2306,9 +2288,6 @@ static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
 
     if (!main_view || !panel)
         return false;
-
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -2705,12 +2684,11 @@ static void sdl_menu_render_minimap_widget(const sdl_view* main_view,
 }
 
 static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
-    const app_ui_scene* scene, const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_scene* scene,
+    const app_ui_panel* panel)
 {
     TTF_Font* font;
     SDL_FRect minimap_rect;
-    int canvas_w;
-    int canvas_h;
     int pixel_height;
     int line_h;
     int line_gap;
@@ -2725,8 +2703,6 @@ static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
     if (!main_view || !scene || !panel || !sdl_menu_panel_has_minimap(panel))
         return false;
 
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -2791,7 +2767,8 @@ static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
 }
 
 static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
-    const app_ui_scene* scene, const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_scene* scene,
+    const app_ui_panel* panel)
 {
     TTF_Font* mono_font = NULL;
     TTF_Font* story_font = NULL;
@@ -2800,8 +2777,6 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     bool has_minimap;
     bool fallback_fit = false;
     float minimap_aspect = 1.0f;
-    int canvas_w;
-    int canvas_h;
     int desired_px;
     int min_px;
     int pixel_height;
@@ -2829,8 +2804,6 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     if (!main_view || !scene || !panel)
         return false;
 
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -3199,11 +3172,9 @@ static bool sdl_menu_panel_has_document(const app_ui_scene* scene,
 }
 
 static bool sdl_menu_resolve_document_metrics(const sdl_view* main_view,
-    const app_ui_panel* panel,
+    int canvas_w, int canvas_h, const app_ui_panel* panel,
     sdl_menu_document_metrics* metrics)
 {
-    int canvas_w;
-    int canvas_h;
     int desired_px;
     int min_px;
     int pixel_height;
@@ -3221,8 +3192,6 @@ static bool sdl_menu_resolve_document_metrics(const sdl_view* main_view,
 
     rows = panel->document_rows ? panel->document_rows : 1;
     cols = panel->document_cols ? panel->document_cols : 1;
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
@@ -3549,26 +3518,23 @@ static void sdl_menu_render_document_cursor(
 }
 
 static bool sdl_menu_render_document_panel(const sdl_view* main_view,
-    const app_ui_scene* scene, const app_ui_panel* panel)
+    int canvas_w, int canvas_h, const app_ui_scene* scene,
+    const app_ui_panel* panel)
 {
     sdl_menu_document_metrics metrics;
     SDL_FRect canvas_rect;
     u16b i;
     u16b start;
     u16b end;
-    int canvas_w;
-    int canvas_h;
 
     if (!main_view || !scene || !panel || !sdl_menu_panel_has_document(scene,
             panel))
     {
         return false;
     }
-    if (!sdl_menu_resolve_document_metrics(main_view, panel, &metrics))
+    if (!sdl_menu_resolve_document_metrics(main_view, canvas_w, canvas_h, panel,
+            &metrics))
         return false;
-
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if (!(scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP))
     {
         canvas_rect.x = 0.0f;
@@ -3601,13 +3567,11 @@ static bool sdl_menu_render_document_panel(const sdl_view* main_view,
     return true;
 }
 
-bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
-    const app_ui_scene* scene)
+bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
+    int canvas_h, const app_ui_scene* scene)
 {
     const app_ui_panel* panel;
     SDL_Color scrim_color = { 0, 0, 0, 112 };
-    int canvas_w;
-    int canvas_h;
     u16b i;
 
     if (!main_view || !scene)
@@ -3617,8 +3581,6 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
     if (!panel)
         return false;
 
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if ((scene->flags & APP_UI_SCENE_FLAG_DIM_BACKDROP)
         && canvas_w > 0 && canvas_h > 0)
     {
@@ -3634,74 +3596,107 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
 
         if (panel->style == APP_UI_PANEL_STYLE_STRIP)
         {
-            if (!sdl_menu_render_strip_panel(main_view, panel))
+            if (!sdl_menu_render_strip_panel(main_view, canvas_w, canvas_h,
+                    panel))
+            {
+                log_warn("ui render: strip panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
         {
-            if (!sdl_menu_render_status_rail_panel(main_view, panel))
+            if (!sdl_menu_render_status_rail_panel(main_view, canvas_w,
+                    canvas_h, panel))
+            {
+                log_warn("ui render: status rail panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_DOCUMENT)
         {
-            if (!sdl_menu_render_document_panel(main_view, scene, panel))
+            if (!sdl_menu_render_document_panel(main_view, canvas_w, canvas_h,
+                    scene, panel))
+            {
+                log_warn("ui render: document panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_CHARACTER_SHEET)
         {
-            if (!sdl_menu_render_character_sheet_panel(main_view, scene, panel))
+            if (!sdl_menu_render_character_sheet_panel(main_view, canvas_w,
+                    canvas_h, scene, panel))
+            {
+                log_warn("ui render: character sheet panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_MINIMAP)
         {
-            if (!sdl_menu_render_minimap_panel(main_view, scene, panel))
+            if (!sdl_menu_render_minimap_panel(main_view, canvas_w, canvas_h,
+                    scene, panel))
+            {
+                log_warn("ui render: minimap panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_BROWSER)
         {
-            if (!sdl_menu_render_browser_panel(main_view, panel))
+            if (!sdl_menu_render_browser_panel(main_view, canvas_w, canvas_h,
+                    panel))
+            {
+                log_warn("ui render: browser panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
+            }
             continue;
         }
 
-        if (!sdl_menu_render_panel_internal(main_view, scene, panel))
+        if (!sdl_menu_render_panel_internal(main_view, canvas_w, canvas_h, scene,
+                panel))
+        {
+            log_warn("ui render: default panel failed (canvas=%dx%d rect=%dx%d style=%u)",
+                canvas_w, canvas_h, main_view->rect.w, main_view->rect.h,
+                panel->style);
             return false;
+        }
     }
 
     return true;
 }
 
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_ui_scene* scene)
+    int canvas_w, int canvas_h, const app_ui_scene* scene)
 {
-    int canvas_w;
-    int canvas_h;
-
     if (!canvas || !main_view || !scene)
         return false;
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
-    canvas_w = main_view->cols * main_view->cell_w;
-    canvas_h = main_view->rows * main_view->cell_h;
     if ((scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)
         && main_view->canvas && canvas_w > 0 && canvas_h > 0)
     {
+        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+        SDL_RenderClear(g_state.renderer);
         SDL_RenderTexture(g_state.renderer, main_view->canvas, NULL,
             &(SDL_FRect){
-                .x = 0.0f,
-                .y = 0.0f,
-                .w = (float)canvas_w,
-                .h = (float)canvas_h
+                .x = (float)main_view->margin_x,
+                .y = (float)main_view->margin_y,
+                .w = (float)(main_view->cols * main_view->cell_w),
+                .h = (float)(main_view->rows * main_view->cell_h)
             });
     }
     else
@@ -3710,7 +3705,7 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
         SDL_RenderClear(g_state.renderer);
     }
 
-    if (!sdl_scene_ui_render_overlay(main_view, scene))
+    if (!sdl_scene_ui_render_overlay(main_view, canvas_w, canvas_h, scene))
     {
         SDL_SetRenderTarget(g_state.renderer, NULL);
         return false;
@@ -3721,7 +3716,7 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
 }
 
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_menu_snapshot* snapshot)
+    int canvas_w, int canvas_h, const app_menu_snapshot* snapshot)
 {
     if (!canvas || !main_view || !snapshot)
         return false;
@@ -3733,5 +3728,6 @@ bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
         return false;
     }
 
-    return sdl_scene_ui_render(canvas, main_view, &snapshot->scene);
+    return sdl_scene_ui_render(canvas, main_view, canvas_w, canvas_h,
+        &snapshot->scene);
 }

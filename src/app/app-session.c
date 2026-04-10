@@ -2,6 +2,7 @@
 
 #include "app-session.h"
 #include "externs.h"
+#include "log/log.h"
 #include "runtime-cli.h"
 
 typedef struct app_input_queue {
@@ -859,6 +860,10 @@ bool app_session_publish_menu_scene(app_session* session,
     if (!session || !scene)
         return false;
 
+    log_debug("publish_menu_scene: panels=%u first_style=%u flags=0x%04X next_revision=%u",
+        scene->panel_count,
+        scene->panel_count ? scene->panels[0].style : 0,
+        scene->flags, session->next_snapshot_revision);
     session->menu_snapshot.scene = *scene;
     app_session_sync_menu_blob(session);
     session->menu_snapshot.snapshot.flags

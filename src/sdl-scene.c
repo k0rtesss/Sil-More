@@ -329,6 +329,21 @@ static void sdl_scene_stack_update_layers(app_session* session)
         && ((snapshot->scene != APP_SCENE_KIND_DUNGEON)
             || !sdl_scene_stack_wait_reason_allows_snapshot(wait_state));
 
+    if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU && !next_menu_active)
+    {
+        const app_menu_snapshot* menu_snapshot = app_session_menu_snapshot(session);
+
+        log_warn("scene stack: menu snapshot inactive (enabled=%d term_ready=%d snapshot_rev=%llu menu_rev=%llu cols=%d rows=%d cell=%dx%d)",
+            g_scene_stack.enabled ? 1 : 0,
+            g_views[0].term_ready ? 1 : 0,
+            (unsigned long long)snapshot->revision,
+            (unsigned long long)(menu_snapshot
+                ? menu_snapshot->snapshot.revision
+                : 0),
+            g_views[0].cols, g_views[0].rows,
+            g_views[0].cell_w, g_views[0].cell_h);
+    }
+
     if (next_dungeon_active != g_scene_stack.dungeon_active
         || next_bootstrap_active != g_scene_stack.bootstrap_active
         || next_information_active != g_scene_stack.information_active
@@ -336,6 +351,14 @@ static void sdl_scene_stack_update_layers(app_session* session)
         || next_overlay_active != g_scene_stack.overlay_active
         || next_modal_active != g_scene_stack.modal_active)
     {
+        log_debug("scene stack layers: snapshot_scene=%u dungeon=%d bootstrap=%d info=%d menu=%d overlay=%d modal=%d",
+            snapshot ? snapshot->scene : 0,
+            next_dungeon_active ? 1 : 0,
+            next_bootstrap_active ? 1 : 0,
+            next_information_active ? 1 : 0,
+            next_menu_active ? 1 : 0,
+            next_overlay_active ? 1 : 0,
+            next_modal_active ? 1 : 0);
         g_scene_stack.frame_dirty = true;
         g_state.need_present = true;
     }
@@ -359,8 +382,16 @@ static bool sdl_scene_stack_ensure_canvas(void)
         return false;
     }
 
-    required_w = g_views[0].cols * g_views[0].cell_w;
-    required_h = g_views[0].rows * g_views[0].cell_h;
+    if (g_scene_stack.menu_active)
+    {
+        required_w = g_views[0].rect.w;
+        required_h = g_views[0].rect.h;
+    }
+    else
+    {
+        required_w = g_views[0].cols * g_views[0].cell_w;
+        required_h = g_views[0].rows * g_views[0].cell_h;
+    }
 
     if (g_scene_stack.dungeon_canvas
         && g_scene_stack.dungeon_canvas_w == required_w
@@ -407,6 +438,20 @@ static void sdl_scene_stack_render_texture(SDL_Texture* texture,
         .y = (float)(view->rect.y + view->margin_y),
         .w = dst_w,
         .h = dst_h
+    });
+}
+
+static void sdl_scene_stack_render_texture_full_view(SDL_Texture* texture,
+    const sdl_view* view)
+{
+    if (!texture || !view || view->rect.w <= 0 || view->rect.h <= 0)
+        return;
+
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &(SDL_FRect){
+        .x = (float)view->rect.x,
+        .y = (float)view->rect.y,
+        .w = (float)view->rect.w,
+        .h = (float)view->rect.h
     });
 }
 
@@ -705,11 +750,19 @@ bool sdl_scene_stack_render_main_layer(void)
         else if (g_scene_stack.menu_active)
         {
             rendered = sdl_scene_menu_render(g_scene_stack.dungeon_canvas,
-                &g_views[0], menu_snapshot);
+                &g_views[0], g_views[0].rect.w, g_views[0].rect.h,
+                menu_snapshot);
         }
 
         if (!rendered)
         {
+            if (g_scene_stack.menu_active)
+            {
+                log_warn("scene stack: menu render failed (rect=%dx%d cols=%d rows=%d cell=%dx%d canvas=%dx%d)",
+                    g_views[0].rect.w, g_views[0].rect.h, g_views[0].cols,
+                    g_views[0].rows, g_views[0].cell_w, g_views[0].cell_h,
+                    g_scene_stack.dungeon_canvas_w, g_scene_stack.dungeon_canvas_h);
+            }
             return false;
         }
 
@@ -740,7 +793,11 @@ bool sdl_scene_stack_render_main_layer(void)
         }
     }
 
-    sdl_scene_stack_render_texture(g_scene_stack.dungeon_canvas, &g_views[0]);
+    if (g_scene_stack.menu_active)
+        sdl_scene_stack_render_texture_full_view(g_scene_stack.dungeon_canvas,
+            &g_views[0]);
+    else
+        sdl_scene_stack_render_texture(g_scene_stack.dungeon_canvas, &g_views[0]);
     return true;
 }
 
