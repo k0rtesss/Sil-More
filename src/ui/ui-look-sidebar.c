@@ -589,6 +589,280 @@ static cptr unified_look_object_filter_tag(const unified_look_state* state)
     }
 }
 
+typedef struct unified_sidebar_snapshot_layout {
+    int line;
+    int max_display_line;
+    int term_wid;
+    int pictogram_col;
+    int name_col;
+} unified_sidebar_snapshot_layout;
+
+static void unified_sidebar_snapshot_layout_init(
+    unified_sidebar_snapshot_layout* layout)
+{
+    int term_wid = 80;
+    int term_hgt = 24;
+
+    if (!layout)
+        return;
+
+    if (Term)
+    {
+        term_wid = Term->wid;
+        term_hgt = Term->hgt;
+    }
+
+    layout->line = 1;
+    layout->max_display_line = term_hgt - 2;
+    layout->term_wid = term_wid;
+    layout->pictogram_col = 0;
+    layout->name_col = 2;
+}
+
+static void unified_sidebar_pad_bigtile_pair(char* primary,
+    size_t primary_size, char* secondary, size_t secondary_size)
+{
+    int primary_len;
+    int secondary_len;
+    int total_span;
+    int pad_needed;
+
+    if (!use_bigtile || !primary || !secondary)
+        return;
+
+    primary_len = (int)strlen(primary);
+    secondary_len = (int)strlen(secondary);
+    total_span = primary_len + secondary_len;
+
+    if (total_span < 13)
+    {
+        pad_needed = 13 - total_span;
+
+        while (pad_needed > 0 && primary_len + 1 < (int)primary_size)
+        {
+            primary[primary_len++] = ' ';
+            pad_needed--;
+        }
+        primary[primary_len] = '\0';
+        total_span = primary_len + secondary_len;
+
+        while (pad_needed > 0 && secondary_len + 1 < (int)secondary_size)
+        {
+            secondary[secondary_len++] = ' ';
+            pad_needed--;
+        }
+        secondary[secondary_len] = '\0';
+        total_span = primary_len + secondary_len;
+    }
+
+    if ((total_span % 2) == 0)
+    {
+        if (secondary_len + 1 < (int)secondary_size)
+        {
+            secondary[secondary_len++] = ' ';
+            secondary[secondary_len] = '\0';
+        }
+        else if (primary_len + 1 < (int)primary_size)
+        {
+            primary[primary_len++] = ' ';
+            primary[primary_len] = '\0';
+        }
+    }
+}
+
+static void unified_sidebar_pad_bigtile_single(char* text, size_t text_size)
+{
+    int text_len;
+    int pad_needed;
+
+    if (!use_bigtile || !text)
+        return;
+
+    text_len = (int)strlen(text);
+    if (text_len < 13)
+    {
+        pad_needed = 13 - text_len;
+        while (pad_needed > 0 && text_len + 1 < (int)text_size)
+        {
+            text[text_len++] = ' ';
+            pad_needed--;
+        }
+        text[text_len] = '\0';
+    }
+
+    text_len = (int)strlen(text);
+    if ((text_len % 2) == 0 && text_len + 1 < (int)text_size)
+    {
+        text[text_len++] = ' ';
+        text[text_len] = '\0';
+    }
+}
+
+static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
+    const monster_race* r_ptr, int term_wid, int name_col, char* display_name,
+    size_t display_name_size, char* morale_display,
+    size_t morale_display_size, byte* morale_attr, int* display_name_len)
+{
+    char monster_name[80];
+    char truncated_name[80];
+    char hp_bar[10];
+    char hp_display[12];
+    int hp_len = 0;
+    int available_width;
+    int max_name_len;
+    int morale_num = 0;
+    byte meta_attr = TERM_WHITE;
+
+    if (!m_ptr || !r_ptr || !display_name || !morale_display)
+        return;
+
+    monster_desc_race(monster_name, sizeof(monster_name), m_ptr->r_idx);
+    if (m_ptr->maxhp > 0)
+        hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
+
+    if (m_ptr->confused && m_ptr->stunned)
+        strncpy(hp_bar, "cscscscs", hp_len);
+    else if (m_ptr->confused)
+        strncpy(hp_bar, "cccccccc", hp_len);
+    else if (m_ptr->stunned)
+        strncpy(hp_bar, "ssssssss", hp_len);
+    else
+        strncpy(hp_bar, "********", hp_len);
+    hp_bar[hp_len] = '\0';
+
+    if (m_ptr->alertness < ALERTNESS_UNWARY)
+    {
+        meta_attr = TERM_BLUE;
+        morale_num = m_ptr->alertness;
+    }
+    else if (m_ptr->alertness < ALERTNESS_ALERT)
+    {
+        meta_attr = TERM_L_BLUE;
+        morale_num = m_ptr->alertness;
+    }
+    else if (m_ptr->morale >= 0)
+    {
+        morale_num = (m_ptr->morale + 9) / 10;
+    }
+    else
+    {
+        morale_num = m_ptr->morale / 10;
+    }
+
+    hp_display[0] = '\0';
+    if (hp_bar[0])
+        strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
+
+    strnfmt(morale_display, morale_display_size, " %d", morale_num);
+
+    available_width = term_wid - name_col - 2;
+    if (available_width < 10)
+        available_width = 10;
+
+    max_name_len = available_width - (int)strlen(hp_display)
+        - (int)strlen(morale_display);
+    if (max_name_len < 4)
+        max_name_len = 4;
+    if (max_name_len > (int)sizeof(truncated_name) - 1)
+        max_name_len = (int)sizeof(truncated_name) - 1;
+
+    memset(truncated_name, 0, sizeof(truncated_name));
+    SDL_strlcpy(truncated_name, monster_name, sizeof(truncated_name));
+    if ((int)strlen(truncated_name) > max_name_len)
+        truncated_name[max_name_len] = '\0';
+
+    strnfmt(display_name, display_name_size, "%s%s", truncated_name,
+        hp_display);
+    unified_sidebar_pad_bigtile_pair(display_name, display_name_size,
+        morale_display, morale_display_size);
+
+    if (morale_attr)
+        *morale_attr = meta_attr;
+    if (display_name_len)
+        *display_name_len = (int)strlen(display_name);
+}
+
+static void unified_sidebar_format_object_row(
+    const unified_sidebar_sorted_object* entry, int term_wid, int name_col,
+    char* display_name, size_t display_name_size, byte* base_color,
+    int* display_name_len)
+{
+    object_type* o_ptr;
+    char object_name[60];
+    char name_source[80];
+    char weight_buf[16];
+    char smith_buf[16];
+    int available_name_width;
+    int weight_len;
+    int smith_len;
+    int max_name_len;
+
+    if (!entry || !display_name || display_name_size == 0)
+        return;
+
+    o_ptr = entry->o_ptr;
+    if (!o_ptr)
+        return;
+
+    object_desc_floor(object_name, sizeof(object_name), o_ptr, false, 4);
+    SDL_strlcpy(name_source, object_name, sizeof(name_source));
+    if (entry->is_artifact && object_known_p(o_ptr))
+    {
+        size_t len = strlen(name_source);
+
+        if (len + 1 < sizeof(name_source))
+        {
+            memmove(name_source + 1, name_source, len + 1);
+            name_source[0] = '*';
+        }
+    }
+
+    if (base_color)
+    {
+        *base_color = weapon_glows(o_ptr)
+            ? object_display_color(o_ptr, TERM_L_BLUE)
+            : object_display_color(o_ptr,
+                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+    }
+
+    strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d",
+        (o_ptr->weight * o_ptr->number) / 10,
+        (o_ptr->weight * o_ptr->number) % 10);
+    smith_buf[0] = '\0';
+    if (op_ptr->opt[OPT_show_smithing_difficulty_look]
+        && object_known_p(o_ptr)
+        && object_uses_smithing_difficulty(o_ptr))
+    {
+        int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
+        int sd = object_smithing_difficulty(o_ptr);
+        int wr = object_weight_rarity(o_ptr, depth);
+
+        strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
+    }
+
+    available_name_width = term_wid - name_col - 2;
+    if (available_name_width < 10)
+        available_name_width = 10;
+
+    weight_len = (int)strlen(weight_buf);
+    smith_len = (int)strlen(smith_buf);
+    max_name_len = available_name_width - weight_len - smith_len - 1;
+    if (max_name_len < 4)
+        max_name_len = 4;
+    if (max_name_len > (int)display_name_size - weight_len - 1)
+        max_name_len = (int)display_name_size - weight_len - 1;
+
+    sidebar_compact_name(name_source, max_name_len, display_name,
+        display_name_size);
+    SDL_strlcat(display_name, weight_buf, display_name_size);
+    if (smith_buf[0])
+        SDL_strlcat(display_name, smith_buf, display_name_size);
+    unified_sidebar_pad_bigtile_single(display_name, display_name_size);
+
+    if (display_name_len)
+        *display_name_len = (int)strlen(display_name);
+}
+
 static bool unified_look_menu_add_section(app_ui_panel* panel, byte attr,
     cptr label)
 {
@@ -636,6 +910,7 @@ static void unified_look_select_highlight(unified_look_state* state, int y,
 bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     app_ui_scene* scene)
 {
+    unified_sidebar_snapshot_layout layout;
     app_ui_panel* panel;
     bool has_sidebar_selection;
     bool selected_row_found = false;
@@ -651,17 +926,18 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_STATUS_RAIL;
+    panel->style = APP_UI_PANEL_STYLE_OVERLAY_RAIL;
     panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
         | APP_UI_PANEL_FLAG_LEFT_ANCHORED
         | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_widths(panel, 0, 0);
     (void)title;
 
     has_sidebar_selection = (state->selected_entity >= 0)
         && (state->in_sidebar_mode || (state->look_mode == 0));
     unified_look_clear_highlight_state(state);
+    unified_sidebar_snapshot_layout_init(&layout);
 
     if (state->show_monsters && panel->row_count < APP_UI_ROW_MAX)
     {
@@ -675,15 +951,10 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
             int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
             monster_type* m_ptr;
             monster_race* r_ptr;
+            byte label_attr;
+            byte meta_attr = TERM_WHITE;
             char label[APP_UI_LABEL_MAX];
             char meta[APP_UI_META_MAX];
-            char hp_bar[10];
-            char hp_display[12];
-            char monster_name[80];
-            int hp_len = 0;
-            int morale_num = 0;
-            byte label_attr;
-            byte meta_attr;
             bool selected;
 
             if (!m_idx)
@@ -696,51 +967,11 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
             if (!m_ptr->ml)
                 continue;
 
-            monster_desc_race(monster_name, sizeof(monster_name), m_ptr->r_idx);
-            if (m_ptr->maxhp > 0)
-                hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
-
-            if (m_ptr->confused && m_ptr->stunned)
-                strncpy(hp_bar, "cscscscs", hp_len);
-            else if (m_ptr->confused)
-                strncpy(hp_bar, "cccccccc", hp_len);
-            else if (m_ptr->stunned)
-                strncpy(hp_bar, "ssssssss", hp_len);
-            else
-                strncpy(hp_bar, "********", hp_len);
-            hp_bar[hp_len] = '\0';
-
-            meta_attr = TERM_WHITE;
-            if (m_ptr->alertness < ALERTNESS_UNWARY)
-            {
-                meta_attr = TERM_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else if (m_ptr->alertness < ALERTNESS_ALERT)
-            {
-                meta_attr = TERM_L_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else if (m_ptr->morale >= 0)
-            {
-                morale_num = (m_ptr->morale + 9) / 10;
-            }
-            else
-            {
-                morale_num = m_ptr->morale / 10;
-            }
-
-            hp_display[0] = '\0';
-            if (hp_bar[0])
-                strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
-            strnfmt(label, sizeof(label), "%s%s", monster_name, hp_display);
-            if (hp_bar[0])
-                strnfmt(meta, sizeof(meta), " %d", morale_num);
-            else
-                strnfmt(meta, sizeof(meta), " %d", morale_num);
-
             selected = has_sidebar_selection
                 && (state->selected_entity == monster_count);
+            unified_sidebar_format_monster_row(m_ptr, r_ptr, layout.term_wid,
+                layout.name_col, label, sizeof(label), meta, sizeof(meta),
+                &meta_attr, NULL);
             label_attr = selected ? TERM_L_BLUE : TERM_WHITE;
             if (!app_ui_panel_add_row_ex(panel, monster_count, label_attr,
                     selected ? TERM_L_BLUE : meta_attr, monster_attr(r_ptr),
@@ -782,14 +1013,8 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
         {
             unified_sidebar_sorted_object* entry = &objects[i];
             object_type* o_ptr = entry->o_ptr;
-            char object_name[80];
             char label[APP_UI_LABEL_MAX];
-            char meta[APP_UI_META_MAX];
-            char weight_buf[16];
-            char smith_buf[16];
-            int weight_total;
-            byte row_attr;
-            byte label_attr;
+            byte row_attr = TERM_WHITE;
             bool selected;
 
             if (state->limit_objects_top_five
@@ -799,42 +1024,16 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
             }
 
             group_display_counts[entry->group]++;
-
-            object_desc_floor(object_name, sizeof(object_name), o_ptr, false, 4);
-            sidebar_compact_name(object_name, 40, label, sizeof(label));
-
-            weight_total = o_ptr->weight * o_ptr->number;
-            strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d", weight_total / 10,
-                weight_total % 10);
-            smith_buf[0] = '\0';
-            if (op_ptr->opt[OPT_show_smithing_difficulty_look]
-                && object_known_p(o_ptr)
-                && object_uses_smithing_difficulty(o_ptr))
-            {
-                int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
-                int sd = object_smithing_difficulty(o_ptr);
-                int wr = object_weight_rarity(o_ptr, depth);
-
-                strnfmt(smith_buf, sizeof(smith_buf), "{%d,%d}", sd, wr);
-            }
-
-            if (smith_buf[0])
-                strnfmt(meta, sizeof(meta), "%s %s", weight_buf, smith_buf);
-            else
-                SDL_strlcpy(meta, weight_buf, sizeof(meta));
-
-            row_attr = weapon_glows(o_ptr)
-                ? object_display_color(o_ptr, TERM_L_BLUE)
-                : object_display_color(o_ptr,
-                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
             selected = has_sidebar_selection
                 && (state->selected_entity == (object_start + object_count));
-            label_attr = selected ? TERM_L_BLUE : row_attr;
-
+            unified_sidebar_format_object_row(entry, layout.term_wid,
+                layout.name_col, label, sizeof(label), &row_attr, NULL);
             if (!app_ui_panel_add_row_ex(panel,
                     object_start + object_count,
-                    label_attr, label_attr, object_attr(o_ptr),
-                    object_char(o_ptr), true, selected, "", label, meta))
+                    selected ? TERM_L_BLUE : row_attr,
+                    selected ? TERM_L_BLUE : row_attr,
+                    object_attr(o_ptr), object_char(o_ptr), true, selected,
+                    "", label, ""))
             {
                 break;
             }

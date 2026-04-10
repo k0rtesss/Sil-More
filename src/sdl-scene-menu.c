@@ -2260,6 +2260,174 @@ static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
     return true;
 }
 
+static bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
+    int canvas_w, int canvas_h, const app_ui_panel* panel)
+{
+    TTF_Font* mono_font = NULL;
+    TTF_Font* story_font = NULL;
+    SDL_Rect clip_rect;
+    int desired_px;
+    int min_px;
+    int pixel_height;
+    int line_h = 0;
+    int icon_slot_w = 0;
+    int gap_px = 0;
+    int row_top = 1;
+    int panel_w_px = 0;
+    int row_visible;
+    int screen_rows = 0;
+    u16b i;
+
+    if (!main_view || !panel || panel->row_count == 0)
+        return false;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    desired_px = sdl_menu_scale_px(
+        (float)sdl_menu_font_size_logical(main_view));
+    min_px = sdl_menu_scale_px(10.0f);
+    if (min_px < 10)
+        min_px = 10;
+    if (desired_px < min_px)
+        desired_px = min_px;
+
+    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
+    {
+        int mono_h;
+        int story_h = 0;
+        int candidate_w_px = 0;
+        int max_w_px;
+        u16b row_index;
+
+        mono_font = sdl_ui_font_for_height(pixel_height);
+        story_font = sdl_story_font_for_height(pixel_height);
+        if (!mono_font)
+            continue;
+
+        mono_h = TTF_GetFontHeight(mono_font);
+        if (story_font)
+            story_h = TTF_GetFontHeight(story_font);
+        line_h = MAX(pixel_height, MAX(mono_h, story_h));
+        if (line_h < 1)
+            line_h = 1;
+        icon_slot_w = sdl_menu_status_rail_icon_slot_px(mono_font, line_h);
+        gap_px = sdl_menu_status_rail_gap_px(mono_font);
+
+        for (row_index = 0; row_index < panel->row_count; row_index++)
+        {
+            candidate_w_px = MAX(candidate_w_px,
+                sdl_menu_status_rail_row_width_px(mono_font, story_font,
+                    line_h, &panel->rows[row_index]));
+        }
+        if (panel->min_width_px > 0)
+        {
+            int min_w_px = sdl_menu_scale_px((float)panel->min_width_px);
+
+            candidate_w_px = MAX(candidate_w_px, min_w_px);
+        }
+        max_w_px = panel->width_cap_px > 0
+            ? sdl_menu_scale_px((float)panel->width_cap_px)
+            : 0;
+        if (max_w_px > 0 && candidate_w_px > max_w_px)
+            candidate_w_px = max_w_px;
+
+        screen_rows = canvas_h / line_h;
+        if (candidate_w_px <= 0 || candidate_w_px > canvas_w
+            || screen_rows <= row_top)
+        {
+            continue;
+        }
+
+        panel_w_px = candidate_w_px;
+        break;
+    }
+
+    if (!mono_font || line_h <= 0 || panel_w_px <= 0 || screen_rows <= row_top)
+    {
+        return false;
+    }
+
+    row_visible = MIN((int)panel->row_count, screen_rows - row_top);
+    if (row_visible <= 0)
+        return false;
+
+    clip_rect.x = 0;
+    clip_rect.y = row_top * line_h;
+    clip_rect.w = panel_w_px;
+    clip_rect.h = row_visible * line_h;
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    for (i = 0; i < (u16b)row_visible; i++)
+    {
+        const app_ui_row* row = &panel->rows[i];
+        const char* label_text = sdl_menu_status_rail_label_text(row);
+        byte label_attr = row->attr ? row->attr : TERM_WHITE;
+        byte meta_attr = row->meta_attr ? row->meta_attr : label_attr;
+        int label_w = sdl_menu_status_rail_label_width_px(mono_font,
+            story_font, row, label_text);
+        int meta_w = sdl_menu_measure_text(mono_font, row->meta);
+        int row_w = sdl_menu_status_rail_row_width_px(mono_font, story_font,
+            line_h, row);
+        float x_px = 0.0f;
+        float y_px = (float)((row_top + (int)i) * line_h);
+        bool has_tail = false;
+
+        if (row_w > 0)
+        {
+            sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, y_px, (float)row_w,
+                (float)line_h }, (SDL_Color){ 0, 0, 0, 176 });
+        }
+
+        if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+        {
+            sdl_menu_render_status_rail_label(mono_font, story_font, 0.0f,
+                y_px, line_h, label_attr, row->flags,
+                row->label[0] ? row->label : row->key);
+            continue;
+        }
+
+        if (row->icon_char)
+        {
+            sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                icon_slot_w, line_h, row->icon_attr, row->icon_char);
+            x_px += (float)icon_slot_w;
+            if (label_text[0] || row->meta[0] || row->extra_icon_char)
+                x_px += (float)gap_px;
+        }
+
+        if (label_text[0])
+        {
+            sdl_menu_render_status_rail_label(mono_font, story_font, x_px,
+                y_px, line_h, label_attr, row->flags, label_text);
+            x_px += (float)label_w;
+            has_tail = true;
+        }
+
+        if (row->extra_icon_char)
+        {
+            if (has_tail)
+                x_px += (float)gap_px;
+            sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                icon_slot_w, line_h, row->extra_icon_attr,
+                row->extra_icon_char);
+            x_px += (float)icon_slot_w;
+            has_tail = true;
+        }
+
+        if (row->meta[0])
+        {
+            if (has_tail)
+                x_px += (float)gap_px;
+            sdl_menu_render_text(mono_font, x_px, y_px, line_h,
+                sdl_menu_color(meta_attr), row->meta);
+            x_px += (float)meta_w;
+        }
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    return true;
+}
+
 static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
 {
     u16b i;
@@ -3617,6 +3785,18 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
                     canvas_h, panel))
             {
                 log_warn("ui render: status rail panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
+                return false;
+            }
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_OVERLAY_RAIL)
+        {
+            if (!sdl_menu_render_overlay_rail_panel(main_view, canvas_w,
+                    canvas_h, panel))
+            {
+                log_warn("ui render: overlay rail panel failed (canvas=%dx%d rect=%dx%d)",
                     canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
             }

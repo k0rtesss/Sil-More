@@ -51,6 +51,11 @@ forward UI work.
   rather than browser-menu chrome, and the item commands enter those menus
   through snapshot-only wrappers instead of owning `screen_save()` around
   them.
+- The `l` look sidebar now renders through a dedicated semantic pixel overlay
+  rail in SDL snapshot mode rather than borrowing the status-rail panel
+  surface, so it scales with the overlay UI like inventory and equipment
+  while keeping a transparent overlay treatment instead of an opaque menu
+  block.
 - The main character-sheet command is semantic now, but legacy
   `display_player()` rendering still exists for other workflows such as birth,
   death, file dump, and status-adjacent helpers.

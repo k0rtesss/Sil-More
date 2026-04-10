@@ -50,7 +50,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_DOCUMENT = 4,
     APP_UI_PANEL_STYLE_BROWSER = 5,
     APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6,
-    APP_UI_PANEL_STYLE_MINIMAP = 7
+    APP_UI_PANEL_STYLE_MINIMAP = 7,
+    APP_UI_PANEL_STYLE_OVERLAY_RAIL = 8
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {
