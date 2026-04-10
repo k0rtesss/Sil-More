@@ -696,25 +696,17 @@ void do_cmd_inven(void)
 
     enhanced_inventory_selected_item = -1;
 
-    /* Save screen */
-    screen_save();
-    log_debug("do_cmd_inven: Screen saved");
-
     /* Hack -- show empty slots */
     item_tester_full = true;
 
     /* Force viewing mode */
     p_ptr->command_see = true;
 
-    /* Display the inventory with scrolling capability */
-    show_inven_enhanced();
+    /* Display the inventory with snapshot-aware overlay rendering. */
+    run_inven_enhanced_menu();
 
     /* Hack -- hide empty slots */
     item_tester_full = false;
-
-    /* Load screen */
-    screen_load();
-    log_debug("do_cmd_inven: Screen loaded");
 
     extern int enhanced_menu_action;
     extern int enhanced_inventory_selected_item;
@@ -823,25 +815,17 @@ void do_cmd_equip(void)
 
     enhanced_equipment_selected_item = -1;
 
-    /* Save screen */
-    screen_save();
-    log_debug("do_cmd_equip: Screen saved");
-
     /* Hack -- show empty slots */
     item_tester_full = true;
 
     /* Force viewing mode */
     p_ptr->command_see = true;
 
-    /* Display the equipment with scrolling capability */
-    show_equip_enhanced();
+    /* Display the equipment with snapshot-aware overlay rendering. */
+    run_equip_enhanced_menu();
 
     /* Hack -- undo the hack above */
     item_tester_full = false;
-
-    /* Load screen */
-    screen_load();
-    log_debug("do_cmd_equip: Screen loaded");
 
     extern int enhanced_equip_action;
     extern int enhanced_equipment_selected_item;

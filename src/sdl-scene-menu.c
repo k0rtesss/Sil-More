@@ -135,6 +135,7 @@ static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_FRect dst;
     float render_w;
     float render_h;
+    float scale = 1.0f;
 
     if (!font || !text || !text[0] || line_h <= 0)
         return;
@@ -153,7 +154,11 @@ static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
     render_w = (float)surface->w;
     render_h = (float)surface->h;
     if (render_h > (float)line_h && render_h > 0.0f)
-        render_h = (float)line_h;
+    {
+        scale = (float)line_h / render_h;
+        render_w *= scale;
+        render_h *= scale;
+    }
 
     dst.x = x_px;
     dst.y = y_px;

@@ -12,6 +12,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "object/object-desc.h"
+#include "object/object-display.h"
 #include "object/object-slot.h"
 #include "object/object-ui-display.h"
 #include "object/object-ui-enhanced.h"
@@ -47,39 +48,9 @@ static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope
     if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
         return false;
 
+    app_session_clear_interaction(session);
     scope->previous_snapshot = *snapshot;
     scope->active = true;
-    return true;
-}
-
-static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* scope)
-{
-    app_session* session = app_session_current();
-    const app_interaction_state* interaction;
-    app_ui_scene scene;
-    app_ui_panel* panel;
-
-    if (!scope || !scope->active || !session)
-        return false;
-
-    interaction = app_session_interaction(session);
-    if (!interaction || interaction->kind == APP_INTERACTION_KIND_NONE)
-        return false;
-
-    if (!app_ui_scene_from_interaction(&scene, interaction))
-        return false;
-
-    scene.flags |= APP_UI_SCENE_FLAG_USE_BACKDROP
-        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = (scene.panel_count > 0) ? &scene.panels[0] : NULL;
-    if (!panel)
-        return false;
-    panel->min_width_px = MAX(panel->min_width_px, 340);
-
-    if (!app_session_publish_menu_scene(session, &scene))
-        return false;
-
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
     return true;
 }
 
@@ -139,108 +110,430 @@ static void item_selector_format_weight(char* buf, size_t buf_size,
     strnfmt(buf, buf_size, "%2d.%1d lb", weight / 10, weight % 10);
 }
 
-static void item_selector_sync_snapshot(cptr prompt, int current_mode,
+static bool item_selector_mode_enabled(int mode, bool use_inven, bool use_equip,
+    bool use_floor)
+{
+    if (mode == (USE_INVEN))
+        return use_inven;
+    if (mode == (USE_EQUIP))
+        return use_equip;
+    if (mode == (USE_FLOOR))
+        return use_floor;
+
+    return false;
+}
+
+static cptr item_selector_mode_name(int mode)
+{
+    if (mode == (USE_INVEN))
+        return "Inventory";
+    if (mode == (USE_EQUIP))
+        return "Equipment";
+    if (mode == (USE_FLOOR))
+        return "Floor";
+
+    return "Items";
+}
+
+static int item_selector_selected_entry(int current_mode, const int* floor_list,
+    int vis_inven_cnt, const int* vis_inven, int vis_equip_cnt,
+    const int* vis_equip, int vis_floor_cnt, const int* vis_floor,
+    int highlight_row)
+{
+    if (highlight_row < 0)
+        return -10000;
+
+    if (current_mode == (USE_INVEN))
+    {
+        if (highlight_row < vis_inven_cnt)
+            return vis_inven[highlight_row];
+    }
+    else if (current_mode == (USE_EQUIP))
+    {
+        if (highlight_row < vis_equip_cnt)
+            return vis_equip[highlight_row];
+    }
+    else if (current_mode == (USE_FLOOR))
+    {
+        if (highlight_row < vis_floor_cnt)
+            return 0 - floor_list[vis_floor[highlight_row]];
+    }
+
+    return -10000;
+}
+
+static byte item_selector_row_attr(const object_type* o_ptr, bool empty_slot)
+{
+    if (!o_ptr || empty_slot || !o_ptr->k_idx)
+        return TERM_L_DARK;
+
+    if (weapon_glows(o_ptr))
+        return object_display_color(o_ptr, TERM_L_BLUE);
+
+    return object_display_color(o_ptr,
+        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+}
+
+static void item_selector_add_tabs(app_ui_panel* panel, int current_mode,
+    bool use_inven, bool use_equip, bool use_floor)
+{
+    if (!panel)
+        return;
+
+    if (use_inven)
+    {
+        (void)app_ui_panel_add_tab(panel, (s16b)(USE_INVEN),
+            (current_mode == (USE_INVEN)) ? TERM_L_BLUE : TERM_SLATE,
+            current_mode == (USE_INVEN), "Inventory");
+    }
+    if (use_equip)
+    {
+        (void)app_ui_panel_add_tab(panel, (s16b)(USE_EQUIP),
+            (current_mode == (USE_EQUIP)) ? TERM_L_BLUE : TERM_SLATE,
+            current_mode == (USE_EQUIP), "Equipment");
+    }
+    if (use_floor)
+    {
+        (void)app_ui_panel_add_tab(panel, (s16b)(USE_FLOOR),
+            (current_mode == (USE_FLOOR)) ? TERM_L_BLUE : TERM_SLATE,
+            current_mode == (USE_FLOOR), "Floor");
+    }
+}
+
+static void item_selector_add_footer_actions(app_ui_panel* panel,
+    bool can_switch)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Space", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "x", "Examine");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "8/2", "Move");
+    if (can_switch)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "/", "Switch");
+    }
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+        "Esc", "Cancel");
+}
+
+static void item_selector_add_selected_detail(app_ui_panel* panel,
+    int current_mode, const int* floor_list, int vis_inven_cnt,
+    const int* vis_inven, int vis_equip_cnt, const int* vis_equip,
+    int vis_floor_cnt, const int* vis_floor, int highlight_row)
+{
+    char buf[APP_UI_TEXT_MAX];
+    int selected_entry;
+    object_type* o_ptr = NULL;
+    bool floor_item = false;
+
+    if (!panel)
+        return;
+
+    selected_entry = item_selector_selected_entry(current_mode, floor_list,
+        vis_inven_cnt, vis_inven, vis_equip_cnt, vis_equip, vis_floor_cnt,
+        vis_floor, highlight_row);
+    if (selected_entry == -10000)
+        return;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected");
+
+    if (selected_entry == SUPPLIES_INDEX)
+    {
+        format_supply_summary(buf, sizeof(buf));
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Shared potion, herb, and gem cache.");
+        return;
+    }
+
+    if (selected_entry < 0)
+    {
+        floor_item = true;
+        o_ptr = &o_list[0 - selected_entry];
+    }
+    else
+    {
+        o_ptr = &inventory[selected_entry];
+    }
+
+    if (floor_item)
+        object_desc_floor(buf, sizeof(buf), o_ptr, true, 3);
+    else if (o_ptr->k_idx)
+        object_desc(buf, sizeof(buf), o_ptr, true, 3);
+    else
+        SDL_strlcpy(buf, describe_empty_slot(selected_entry), sizeof(buf));
+    (void)app_ui_panel_add_detail_line(panel,
+        item_selector_row_attr(o_ptr, !floor_item && !o_ptr->k_idx), buf);
+
+    if (floor_item)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Location: floor");
+    }
+    else if (selected_entry >= INVEN_WIELD)
+    {
+        strnfmt(buf, sizeof(buf), "Slot: %s", mention_use(selected_entry));
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+    else
+    {
+        char label = index_to_label(selected_entry);
+
+        strnfmt(buf, sizeof(buf), "Slot: %c", label ? label : '?');
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+
+    if (o_ptr->k_idx && o_ptr->weight)
+    {
+        int weight = o_ptr->weight * o_ptr->number;
+
+        strnfmt(buf, sizeof(buf), "Weight: %d.%d lb", weight / 10, weight % 10);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+        "Press x to inspect and compare.");
+}
+
+static bool item_selector_append_inventory_rows(app_ui_panel* panel,
+    int vis_inven_cnt, const int* vis_inven, int highlight_row)
+{
+    int i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < vis_inven_cnt; i++)
+    {
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        char key[APP_UI_KEY_MAX];
+        byte attr = TERM_WHITE;
+        byte icon_attr = 0;
+        char icon_char = '\0';
+        int item_index = vis_inven[i];
+
+        label[0] = '\0';
+        meta[0] = '\0';
+        key[0] = '\0';
+        if (item_index == SUPPLIES_INDEX)
+        {
+            int virtual_slot = supplies_virtual_slot();
+            char tag = supplies_label_char();
+
+            format_supply_summary(label, sizeof(label));
+            attr = TERM_L_WHITE;
+            if (!tag && virtual_slot >= 0)
+                tag = index_to_label(virtual_slot);
+            if (tag)
+                strnfmt(key, sizeof(key), "%c", tag);
+        }
+        else
+        {
+            object_type* o_ptr = &inventory[item_index];
+
+            object_desc(label, sizeof(label), o_ptr, true, 3);
+            item_selector_format_weight(meta, sizeof(meta), o_ptr);
+            attr = item_selector_row_attr(o_ptr, false);
+            icon_attr = object_attr(o_ptr);
+            icon_char = object_char(o_ptr);
+            strnfmt(key, sizeof(key), "%c", index_to_label(item_index));
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)item_index, attr, attr,
+                icon_attr, icon_char, true, highlight_row == i, key, label,
+                meta))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool item_selector_append_equipment_rows(app_ui_panel* panel,
+    int vis_equip_cnt, const int* vis_equip, int highlight_row)
+{
+    int i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < vis_equip_cnt; i++)
+    {
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        char desc[80];
+        char key[APP_UI_KEY_MAX];
+        int item_index = vis_equip[i];
+        object_type* o_ptr = &inventory[item_index];
+        bool empty_slot = !o_ptr->k_idx;
+        byte attr;
+        byte icon_attr = 0;
+        char icon_char = '\0';
+
+        if (!empty_slot)
+            object_desc(desc, sizeof(desc), o_ptr, true, 3);
+        else
+            SDL_strlcpy(desc, describe_empty_slot(item_index), sizeof(desc));
+        strnfmt(label, sizeof(label), "%s: %s", mention_use(item_index), desc);
+        item_selector_format_weight(meta, sizeof(meta), o_ptr);
+        strnfmt(key, sizeof(key), "%c", index_to_label(item_index));
+        attr = item_selector_row_attr(o_ptr, empty_slot);
+        if (!empty_slot)
+        {
+            icon_attr = object_attr(o_ptr);
+            icon_char = object_char(o_ptr);
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)item_index, attr,
+                empty_slot ? TERM_SLATE : attr, icon_attr, icon_char, true,
+                highlight_row == i, key, label, meta))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool item_selector_append_floor_rows(app_ui_panel* panel,
+    const int* floor_list, int vis_floor_cnt, const int* vis_floor,
+    int highlight_row)
+{
+    int i;
+
+    if (!panel || !floor_list)
+        return false;
+
+    for (i = 0; i < vis_floor_cnt; i++)
+    {
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        char key[APP_UI_KEY_MAX];
+        int floor_slot = vis_floor[i];
+        int object_index = floor_list[floor_slot];
+        object_type* o_ptr = &o_list[object_index];
+        byte attr = item_selector_row_attr(o_ptr, false);
+
+        object_desc_floor(label, sizeof(label), o_ptr, true, 3);
+        item_selector_format_weight(meta, sizeof(meta), o_ptr);
+        strnfmt(key, sizeof(key), "%c", index_to_label(floor_slot));
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)(0 - object_index), attr,
+                attr, object_attr(o_ptr), object_char(o_ptr), true,
+                highlight_row == i, key, label, meta))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool item_selector_build_ui_scene(app_ui_scene* scene, cptr prompt,
+    int current_mode, bool use_inven, bool use_equip, bool use_floor,
     const int* floor_list, int vis_inven_cnt, const int* vis_inven,
     int vis_equip_cnt, const int* vis_equip, int vis_floor_cnt,
     const int* vis_floor, int highlight_row)
 {
-    app_session* session = app_session_current();
-    char detail[APP_INTERACTION_TEXT_MAX];
-    int i;
+    app_ui_panel* panel;
+    char controls[APP_UI_TEXT_MAX];
+    int available_modes = 0;
 
-    if (!session)
-        return;
+    if (!scene)
+        return false;
 
-    app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
-        APP_WAIT_REASON_LIST_SELECTION,
-        APP_INTERACTION_FLAG_CAN_CONFIRM
-            | APP_INTERACTION_FLAG_CAN_CANCEL
-            | APP_INTERACTION_FLAG_SHOW_OPTIONS);
-    app_session_set_interaction_prompt(session, TERM_WHITE, prompt);
-    SDL_strlcpy(detail,
-        "Enter/Space selects, x examines, / switches panes, - selects floor, Esc cancels.",
-        sizeof(detail));
-    app_session_set_interaction_detail(session, TERM_SLATE, detail);
+    if (use_inven)
+        available_modes++;
+    if (use_equip)
+        available_modes++;
+    if (use_floor)
+        available_modes++;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 760, 1220);
+    app_ui_panel_set_title(panel, TERM_L_WHITE,
+        (prompt && prompt[0]) ? prompt : "Select item");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        item_selector_mode_name(current_mode));
+    item_selector_add_tabs(panel, current_mode, use_inven, use_equip, use_floor);
+
+    SDL_strlcpy(controls, "Enter/Space selects, x examines, 8/2 moves.",
+        sizeof(controls));
+    if (available_modes > 1)
+        SDL_strlcat(controls, " / switches panes.", sizeof(controls));
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE, controls);
+    item_selector_add_footer_actions(panel, available_modes > 1);
 
     if (current_mode == (USE_INVEN))
     {
-        for (i = 0; i < vis_inven_cnt; i++)
+        if (!item_selector_append_inventory_rows(panel, vis_inven_cnt, vis_inven,
+                highlight_row))
         {
-            char label[APP_INTERACTION_LABEL_MAX];
-            char meta[APP_INTERACTION_META_MAX];
-            char tag = 'a';
-            int item_index = vis_inven[i];
-
-            label[0] = '\0';
-            meta[0] = '\0';
-            if (item_index == SUPPLIES_INDEX)
-            {
-                int virtual_slot = supplies_virtual_slot();
-
-                format_supply_summary(label, sizeof(label));
-                tag = supplies_label_char();
-                if (!tag && virtual_slot >= 0)
-                    tag = index_to_label(virtual_slot);
-                if (!tag)
-                    tag = 'a';
-            }
-            else
-            {
-                object_type* o_ptr = &inventory[item_index];
-
-                object_desc(label, sizeof(label), o_ptr, true, 3);
-                tag = index_to_label(item_index);
-                item_selector_format_weight(meta, sizeof(meta), o_ptr);
-            }
-
-            (void)app_session_add_interaction_option(session, TERM_WHITE, tag,
-                true, highlight_row == i, label, meta);
+            return false;
         }
     }
     else if (current_mode == (USE_EQUIP))
     {
-        for (i = 0; i < vis_equip_cnt; i++)
+        if (!item_selector_append_equipment_rows(panel, vis_equip_cnt, vis_equip,
+                highlight_row))
         {
-            char label[APP_INTERACTION_LABEL_MAX];
-            char meta[APP_INTERACTION_META_MAX];
-            char desc[80];
-            int item_index = vis_equip[i];
-            object_type* o_ptr = &inventory[item_index];
-
-            if (o_ptr->k_idx)
-                object_desc(desc, sizeof(desc), o_ptr, true, 3);
-            else
-                SDL_strlcpy(desc, "(empty slot)", sizeof(desc));
-            strnfmt(label, sizeof(label), "%s: %s", mention_use(item_index),
-                desc);
-            item_selector_format_weight(meta, sizeof(meta), o_ptr);
-
-            (void)app_session_add_interaction_option(session, TERM_WHITE,
-                index_to_label(item_index), true, highlight_row == i, label,
-                meta);
+            return false;
         }
     }
     else if (current_mode == (USE_FLOOR))
     {
-        for (i = 0; i < vis_floor_cnt; i++)
+        if (!item_selector_append_floor_rows(panel, floor_list, vis_floor_cnt,
+                vis_floor, highlight_row))
         {
-            char label[APP_INTERACTION_LABEL_MAX];
-            char meta[APP_INTERACTION_META_MAX];
-            int floor_slot = vis_floor[i];
-            int object_index = floor_list[floor_slot];
-            object_type* o_ptr = &o_list[object_index];
-
-            object_desc_floor(label, sizeof(label), o_ptr, true, 3);
-            item_selector_format_weight(meta, sizeof(meta), o_ptr);
-
-            (void)app_session_add_interaction_option(session, TERM_WHITE,
-                index_to_label(floor_slot), true, highlight_row == i, label,
-                meta);
+            return false;
         }
     }
 
-    app_session_set_interaction_selected(session,
-        (highlight_row >= 0) ? (s16b)highlight_row : -1);
+    if (panel->row_count == 0
+        && item_selector_mode_enabled(current_mode, use_inven, use_equip,
+            use_floor))
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "No selectable entries in this pane.");
+    }
+
+    item_selector_add_selected_detail(panel, current_mode, floor_list,
+        vis_inven_cnt, vis_inven, vis_equip_cnt, vis_equip, vis_floor_cnt,
+        vis_floor, highlight_row);
+
+    return true;
+}
+
+static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* scope,
+    const app_ui_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session || !scene)
+        return false;
+    if (!app_session_publish_menu_scene(session, scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
 }
 
 /*
@@ -1069,10 +1362,16 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
         if (snapshot_interaction)
         {
-            item_selector_sync_snapshot(out_val, p_ptr->command_wrk,
-                floor_list, vis_inven_cnt, vis_inven, vis_equip_cnt, vis_equip,
-                vis_floor_cnt, vis_floor, highlight_active ? highlight_row : -1);
-            (void)item_selector_menu_scene_present(&menu_scene_scope);
+            app_ui_scene scene;
+
+            if (item_selector_build_ui_scene(&scene, out_val,
+                    p_ptr->command_wrk, use_inven, use_equip, use_floor,
+                    floor_list, vis_inven_cnt, vis_inven, vis_equip_cnt,
+                    vis_equip, vis_floor_cnt, vis_floor,
+                    highlight_active ? highlight_row : -1))
+            {
+                (void)item_selector_menu_scene_present(&menu_scene_scope, &scene);
+            }
         }
         else
             put_str(out_val, 0, 0);

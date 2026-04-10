@@ -184,9 +184,7 @@ static bool fletchery_choose_source(fletch_choice_t* out_choice)
     enhanced_menu_action = ENHANCED_ACTION_NONE;
     enhanced_inventory_selected_item = -1;
 
-    screen_save();
-    show_inven_enhanced();
-    screen_load();
+    run_inven_enhanced_menu();
 
     inventory_menu_set_include_equip(false);
 
