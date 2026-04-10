@@ -180,7 +180,8 @@ void do_cmd_character_sheet(void)
             const bool include_curses = false;
 #endif
 
-            character_sheet_build_prompt(steamdeck, include_curses, 80,
+            character_sheet_build_prompt(steamdeck, include_curses,
+                (int)sizeof(prompt_buf) - 1,
                 prompt_buf, sizeof(prompt_buf));
         }
 

@@ -48,6 +48,48 @@ static void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst)
     SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, dst);
 }
 
+static void sdl_menu_render_fixed_glyph(TTF_Font* font, float x_px, float y_px,
+    int cell_w, int cell_h, SDL_Color color, char ch);
+
+static void sdl_menu_draw_view_glyph(const sdl_view* view,
+    const SDL_FRect* dst, SDL_Color color, char ch)
+{
+    unsigned char glyph = (unsigned char)(ch ? ch : ' ');
+    SDL_FRect src;
+
+    if (!view || !dst || dst->w <= 0.0f || dst->h <= 0.0f || glyph == ' ')
+        return;
+
+    if (!view->font_atlas)
+    {
+        TTF_Font* font = sdl_ui_font_for_height(MAX(1, (int)(dst->h + 0.5f)));
+
+        if (font)
+        {
+            sdl_menu_render_fixed_glyph(font, dst->x, dst->y,
+                MAX(1, (int)(dst->w + 0.5f)),
+                MAX(1, (int)(dst->h + 0.5f)), color, ch);
+        }
+        return;
+    }
+
+    SDL_SetTextureColorMod(view->font_atlas, color.r, color.g, color.b);
+    SDL_SetTextureAlphaMod(view->font_atlas, 255);
+
+    src.x = (float)((glyph & 15) * view->cell_w);
+    src.y = (float)((glyph >> 4) * view->cell_h);
+    src.w = (float)view->cell_w;
+    src.h = (float)view->cell_h;
+
+    if (use_graphics == GRAPHICS_PSEUDO && solid_walls
+        && (glyph == '#' || glyph == '%'))
+    {
+        sdl_menu_fill_rect(dst, color);
+    }
+
+    SDL_RenderTexture(g_state.renderer, view->font_atlas, &src, dst);
+}
+
 static int sdl_menu_scale_px(float logical_value)
 {
     return sdl_ui_scale_px(logical_value);
@@ -2547,45 +2589,242 @@ static void sdl_menu_render_character_stat_row(TTF_Font* mono_font,
     }
 }
 
+static bool sdl_menu_panel_has_minimap(const app_ui_panel* panel)
+{
+    return panel && panel->minimap_cell_count > 0 && panel->minimap_width > 0
+        && panel->minimap_height > 0;
+}
+
+static void sdl_menu_render_minimap_widget(const sdl_view* main_view,
+    const app_ui_scene* scene, const app_ui_panel* panel, const SDL_FRect* rect)
+{
+    const app_ui_minimap_cell* cells;
+    SDL_FRect map_rect;
+    float base_cell_w;
+    float base_cell_h;
+    float scale;
+    float cell_w;
+    float cell_h;
+    float map_w;
+    float map_h;
+    int y;
+    bool bigtile_map;
+
+    if (!main_view || !scene || !panel || !rect || rect->w <= 0.0f
+        || rect->h <= 0.0f)
+    {
+        return;
+    }
+    if (!sdl_menu_panel_has_minimap(panel))
+        return;
+    if ((size_t)panel->minimap_cell_first + (size_t)panel->minimap_cell_count
+        > (size_t)scene->minimap_cell_count)
+    {
+        return;
+    }
+
+    bigtile_map = use_bigtile && !graphics_are_ascii();
+    base_cell_w = (float)main_view->cell_w * (bigtile_map ? 2.0f : 1.0f);
+    base_cell_h = (float)main_view->cell_h;
+    if (base_cell_w <= 0.0f || base_cell_h <= 0.0f)
+        return;
+
+    scale = MIN(rect->w / ((float)panel->minimap_width * base_cell_w),
+        rect->h / ((float)panel->minimap_height * base_cell_h));
+    scale = MIN(scale, 1.0f);
+    if (scale <= 0.0f)
+        return;
+
+    cell_w = base_cell_w * scale;
+    cell_h = base_cell_h * scale;
+    map_w = cell_w * (float)panel->minimap_width;
+    map_h = cell_h * (float)panel->minimap_height;
+    map_rect.x = rect->x + (rect->w - map_w) * 0.5f;
+    map_rect.y = rect->y + (rect->h - map_h) * 0.5f;
+    map_rect.w = map_w;
+    map_rect.h = map_h;
+
+    sdl_menu_fill_rect(&map_rect, (SDL_Color){ 0, 0, 0, 255 });
+    if (panel->minimap_border_attr)
+        sdl_menu_draw_rect(&map_rect, sdl_menu_color(panel->minimap_border_attr));
+
+    cells = scene->minimap_cells + panel->minimap_cell_first;
+    for (y = 0; y < panel->minimap_height; y++)
+    {
+        int x;
+
+        for (x = 0; x < panel->minimap_width; x++)
+        {
+            const app_ui_minimap_cell* cell = cells
+                + (size_t)y * (size_t)panel->minimap_width + (size_t)x;
+            SDL_FRect dst = {
+                map_rect.x + (float)x * cell_w,
+                map_rect.y + (float)y * cell_h,
+                cell_w,
+                cell_h
+            };
+
+            sdl_menu_fill_rect(&dst, (SDL_Color){ 0, 0, 0, 255 });
+
+            if (sdl_menu_document_cell_is_raw(cell->attr, cell->ch,
+                    cell->terrain_attr, cell->terrain_char))
+            {
+                if (g_state.use_tiles && g_state.tileset)
+                {
+                    if ((cell->terrain_attr & TILE_FLAG)
+                        && (((byte)cell->terrain_char) & TILE_FLAG))
+                    {
+                        sdl_menu_draw_tile(cell->terrain_attr,
+                            (byte)cell->terrain_char, &dst);
+                    }
+                    if (cell->attr & GRAPHICS_GLOW_MASK)
+                        sdl_menu_draw_misc_icon(&dst, ICON_GLOW);
+                    sdl_menu_draw_tile(cell->attr, (byte)cell->ch, &dst);
+                    if (cell->terrain_attr & GRAPHICS_SLEEP_MASK)
+                        sdl_menu_draw_misc_icon(&dst, ICON_SLEEPING);
+                    if (((byte)cell->terrain_char) & GRAPHICS_SEEN_MASK)
+                        sdl_menu_draw_misc_icon(&dst,
+                            ICON_MONSTER_SEES_PLAYER);
+                    if (((byte)cell->ch) & GRAPHICS_ALERT_MASK)
+                        sdl_menu_draw_misc_icon(&dst, ICON_ALERT);
+                }
+                continue;
+            }
+
+            if (cell->ch && cell->ch != ' ')
+            {
+                SDL_FRect glyph_dst = dst;
+
+                if (bigtile_map)
+                    glyph_dst.w = cell_w * 0.5f;
+                sdl_menu_draw_view_glyph(main_view, &glyph_dst,
+                    sdl_menu_color(cell->attr), cell->ch);
+            }
+        }
+    }
+}
+
+static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
+    const app_ui_scene* scene, const app_ui_panel* panel)
+{
+    TTF_Font* font;
+    SDL_FRect minimap_rect;
+    int canvas_w;
+    int canvas_h;
+    int pixel_height;
+    int line_h;
+    int line_gap;
+    int section_gap;
+    int margin_x;
+    int margin_y;
+    int content_y;
+    int prompt_h = 0;
+    int prompt_y;
+    u16b i;
+
+    if (!main_view || !scene || !panel || !sdl_menu_panel_has_minimap(panel))
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    font = sdl_ui_font_for_height(pixel_height);
+    if (!font)
+        return false;
+
+    line_h = MAX(pixel_height, TTF_GetFontHeight(font));
+    line_gap = MAX(1, sdl_menu_scale_px(2.0f));
+    section_gap = MAX(line_h / 2, sdl_menu_scale_px(12.0f));
+    margin_x = MAX(line_h, sdl_menu_scale_px(24.0f));
+    margin_y = MAX(line_h / 2, sdl_menu_scale_px(16.0f));
+    content_y = margin_y;
+
+    sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)canvas_w,
+        (float)canvas_h }, (SDL_Color){ 0, 0, 0, 255 });
+
+    if (panel->title[0])
+    {
+        int title_w = sdl_menu_measure_text(font, panel->title);
+        int title_x = (canvas_w - title_w) / 2;
+
+        if (title_x < margin_x)
+            title_x = margin_x;
+        sdl_menu_render_text(font, (float)title_x, (float)content_y, line_h,
+            sdl_menu_color(panel->title_attr), panel->title);
+        content_y += line_h + section_gap;
+    }
+
+    if (panel->body_line_count > 0)
+    {
+        prompt_h = panel->body_line_count * line_h
+            + (panel->body_line_count - 1) * line_gap;
+    }
+    prompt_y = canvas_h - margin_y - prompt_h;
+
+    minimap_rect.x = (float)margin_x;
+    minimap_rect.y = (float)content_y;
+    minimap_rect.w = (float)(canvas_w - margin_x * 2);
+    minimap_rect.h = (float)(prompt_y - content_y
+        - ((prompt_h > 0) ? section_gap : 0));
+    if (minimap_rect.h <= 0.0f)
+        return false;
+
+    sdl_menu_render_minimap_widget(main_view, scene, panel, &minimap_rect);
+
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+        int text_w = sdl_menu_measure_text(font, line->text);
+        int text_x = (canvas_w - text_w) / 2;
+
+        if (text_x < margin_x)
+            text_x = margin_x;
+        sdl_menu_render_text(font, (float)text_x, (float)prompt_y, line_h,
+            sdl_menu_color(line->attr), line->text);
+        prompt_y += line_h + line_gap;
+    }
+
+    return true;
+}
+
 static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     const app_ui_scene* scene, const app_ui_panel* panel)
 {
     TTF_Font* mono_font = NULL;
     TTF_Font* story_font = NULL;
     SDL_Rect history_clip;
+    SDL_FRect minimap_rect;
+    bool has_minimap;
+    bool fallback_fit = false;
+    float minimap_aspect = 1.0f;
     int canvas_w;
     int canvas_h;
     int desired_px;
     int min_px;
     int pixel_height;
+    int chosen_pixel_height = 0;
     int line_h = 0;
     int line_gap = 0;
-    int section_gap = 0;
     int label_gap = 0;
     int token_gap = 0;
-    int margin_x = 0;
-    int margin_y = 0;
     int layout_x = 0;
-    int layout_w = 0;
     int metrics_x = 0;
     int traits_x = 0;
     int stats_x = 0;
     int metrics_w = 0;
-    int traits_w = 0;
     int stats_w = 0;
-    int bottom_reserve = 0;
-    int title_y;
-    int columns_y;
-    int history_y;
+    int title_y = 0;
+    int columns_y = 0;
+    int history_y = 0;
+    int history_x = 0;
+    int history_w = 0;
+    int history_box_h = 0;
     int top_rows;
     int top_h;
-    int available_h;
-    int history_available_h;
-    int history_h;
     int i;
-    int max_metric_w = 0;
-    int max_trait_w = 0;
-    int max_stat_w = 0;
 
     if (!main_view || !scene || !panel)
         return false;
@@ -2595,6 +2834,13 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
+    has_minimap = sdl_menu_panel_has_minimap(panel);
+    if (has_minimap && panel->minimap_height > 0)
+    {
+        minimap_aspect = (float)panel->minimap_width
+            / (float)panel->minimap_height;
+    }
+
     desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
     min_px = sdl_menu_scale_px(8.0f);
     if (min_px < 8)
@@ -2602,15 +2848,45 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     if (desired_px < min_px)
         desired_px = min_px;
 
+    minimap_rect.x = 0.0f;
+    minimap_rect.y = 0.0f;
+    minimap_rect.w = 0.0f;
+    minimap_rect.h = 0.0f;
+
     for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
     {
+        int candidate_line_h;
+        int candidate_line_gap;
+        int candidate_section_gap;
+        int candidate_label_gap;
+        int candidate_token_gap;
+        int candidate_column_gap;
+        int candidate_margin_x;
+        int candidate_margin_y;
+        int candidate_bottom_reserve;
         int max_available_w;
-        int char_w;
-        int preferred_w;
-        int required_metrics_w;
-        int required_traits_w;
-        int required_stats_w;
-        int required_layout_w;
+        int available_h;
+        int bottom_available_h;
+        int max_metric_w = 0;
+        int max_trait_w = 0;
+        int max_stat_w = 0;
+        int title_w = 0;
+        int candidate_layout_w;
+        int candidate_layout_x;
+        int candidate_metrics_w;
+        int candidate_traits_w;
+        int candidate_stats_w;
+        int candidate_metrics_x;
+        int candidate_traits_x;
+        int candidate_stats_x;
+        int candidate_title_y;
+        int candidate_columns_y;
+        int candidate_history_y;
+        int candidate_history_x;
+        int candidate_history_w;
+        int candidate_history_box_h;
+        int candidate_history_h = 0;
+        SDL_FRect candidate_minimap_rect = { 0 };
 
         mono_font = sdl_ui_font_for_height(pixel_height);
         story_font = sdl_story_font_for_height(pixel_height);
@@ -2619,28 +2895,32 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
         if (!story_font)
             story_font = mono_font;
 
-        line_h = MAX(pixel_height, MAX(TTF_GetFontHeight(mono_font),
+        candidate_line_h = MAX(pixel_height, MAX(TTF_GetFontHeight(mono_font),
             TTF_GetFontHeight(story_font)));
-        line_gap = MAX(1, line_h / 6);
-        section_gap = MAX(line_h / 2, line_gap * 3);
-        label_gap = MAX(line_h / 2, line_gap * 3);
-        token_gap = MAX(4, line_h / 4);
-        margin_x = MAX(line_h, sdl_menu_scale_px(24.0f));
-        margin_y = MAX(line_gap * 2, sdl_menu_scale_px(12.0f));
-        bottom_reserve = line_h + section_gap;
-        max_available_w = canvas_w - margin_x * 2;
+        candidate_line_gap = MAX(1, candidate_line_h / 6);
+        candidate_section_gap = MAX(candidate_line_h / 2, candidate_line_gap * 3);
+        candidate_label_gap = MAX(candidate_line_h / 2, candidate_line_gap * 3);
+        candidate_token_gap = MAX(4, candidate_line_h / 4);
+        candidate_column_gap = MAX(candidate_section_gap, candidate_label_gap);
+        candidate_margin_x = MAX(candidate_line_h, sdl_menu_scale_px(24.0f));
+        candidate_margin_y = MAX(candidate_line_gap * 2,
+            sdl_menu_scale_px(12.0f));
+        candidate_bottom_reserve = candidate_line_h + candidate_section_gap;
+        max_available_w = canvas_w - candidate_margin_x * 2;
         if (max_available_w <= 0)
             continue;
 
-        max_metric_w = 0;
+        if (panel->title[0])
+            title_w = sdl_menu_measure_text(story_font, panel->title);
+
         for (i = 0; i < panel->character_metric_count; i++)
         {
             max_metric_w = MAX(max_metric_w,
                 sdl_menu_character_metric_row_width(mono_font, story_font,
-                    &panel->character_metrics[i], label_gap, token_gap));
+                    &panel->character_metrics[i], candidate_label_gap,
+                    candidate_token_gap));
         }
 
-        max_trait_w = 0;
         for (i = 0; i < panel->detail_line_count; i++)
         {
             TTF_Font* font = ((panel->detail_lines[i].story & STORY_FLAG_USE) != 0
@@ -2650,49 +2930,29 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
                 sdl_menu_measure_text(font, panel->detail_lines[i].text));
         }
 
-        max_stat_w = 0;
         for (i = 0; i < panel->character_stat_count; i++)
         {
             max_stat_w = MAX(max_stat_w,
                 sdl_menu_character_stat_row_width(mono_font, story_font,
-                    &panel->character_stats[i], label_gap, token_gap));
+                    &panel->character_stats[i], candidate_label_gap,
+                    candidate_token_gap));
         }
 
-        char_w = sdl_menu_measure_text(mono_font, "M");
-        if (char_w < line_h / 2)
-            char_w = MAX(1, line_h / 2);
-        preferred_w = char_w * 80;
-        required_metrics_w = ((max_metric_w + label_gap) * 80 + 22) / 23;
-        required_traits_w = ((max_trait_w + label_gap) * 80 + 17) / 18;
-        required_stats_w = (max_stat_w * 80 + 38) / 39;
-        required_layout_w = MAX(preferred_w,
-            MAX(required_metrics_w, MAX(required_traits_w, required_stats_w)));
-        if (required_layout_w > max_available_w)
-        {
-            layout_w = max_available_w;
-            layout_x = margin_x;
-        }
-        else
-        {
-            layout_w = required_layout_w;
-            layout_x = (canvas_w - layout_w) / 2;
-        }
-        metrics_x = layout_x;
-        traits_x = layout_x + (layout_w * 23) / 80;
-        stats_x = layout_x + (layout_w * 41) / 80;
-        if (traits_x <= metrics_x || stats_x <= traits_x)
+        candidate_metrics_w = max_metric_w + candidate_token_gap * 2;
+        candidate_traits_w = max_trait_w + candidate_token_gap * 2;
+        candidate_stats_w = max_stat_w + candidate_token_gap * 2;
+        candidate_layout_w = candidate_metrics_w + candidate_traits_w
+            + candidate_stats_w + candidate_column_gap * 2;
+        candidate_layout_w = MAX(candidate_layout_w, title_w);
+        if (candidate_layout_w > max_available_w)
             continue;
 
-        metrics_w = traits_x - metrics_x - label_gap;
-        traits_w = stats_x - traits_x - label_gap;
-        stats_w = layout_x + layout_w - stats_x;
-        if (metrics_w <= 0 || traits_w <= 0 || stats_w <= 0)
-            continue;
-        if (max_metric_w > metrics_w || max_trait_w > traits_w
-            || max_stat_w > stats_w)
-        {
-            continue;
-        }
+        candidate_layout_x = (canvas_w - candidate_layout_w) / 2;
+        candidate_metrics_x = candidate_layout_x;
+        candidate_traits_x = candidate_metrics_x + candidate_metrics_w
+            + candidate_column_gap;
+        candidate_stats_x = candidate_traits_x + candidate_traits_w
+            + candidate_column_gap;
 
         top_rows = panel->character_metric_count;
         if ((int)panel->detail_line_count > top_rows)
@@ -2701,21 +2961,117 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
             top_rows = panel->character_stat_count;
         if (top_rows < 1)
             top_rows = 1;
-        top_h = top_rows * line_h + (top_rows - 1) * line_gap;
 
-        title_y = margin_y;
-        columns_y = title_y + line_h + section_gap;
-        available_h = canvas_h - margin_y - bottom_reserve - columns_y;
+        top_h = top_rows * candidate_line_h + (top_rows - 1) * candidate_line_gap;
+        candidate_title_y = candidate_margin_y;
+        candidate_columns_y = candidate_title_y + candidate_line_h
+            + candidate_section_gap;
+        available_h = canvas_h - candidate_margin_y - candidate_bottom_reserve
+            - candidate_columns_y;
         if (available_h < top_h)
             continue;
 
-        history_h = sdl_menu_measure_rich_text_height(mono_font, story_font,
-            line_h, line_gap, line_h, layout_w, scene, panel);
-        if (history_h <= 0)
-            break;
+        candidate_history_y = candidate_columns_y + top_h;
+        bottom_available_h = available_h - top_h;
+        if ((panel->rich_paragraph_count > 0 || has_minimap)
+            && bottom_available_h > candidate_section_gap)
+        {
+            candidate_history_y += candidate_section_gap;
+            bottom_available_h -= candidate_section_gap;
+        }
+        if (bottom_available_h < 0)
+            bottom_available_h = 0;
 
-        history_available_h = available_h - top_h - section_gap;
-        if (history_available_h < line_h)
+        candidate_history_x = candidate_layout_x;
+        candidate_history_w = candidate_layout_w;
+        candidate_history_box_h = bottom_available_h;
+
+        if (has_minimap && bottom_available_h > 0)
+        {
+            int min_map_w = sdl_menu_scale_px(96.0f);
+            int preferred_map_w = (int)((float)bottom_available_h
+                * minimap_aspect + 0.5f);
+            int max_map_w = candidate_layout_w / 3;
+            int history_min_w = (panel->rich_paragraph_count > 0)
+                ? sdl_menu_scale_px(240.0f)
+                : 0;
+
+            if (max_map_w < min_map_w)
+                max_map_w = min_map_w;
+            if (preferred_map_w > max_map_w)
+                preferred_map_w = max_map_w;
+            if (preferred_map_w < min_map_w)
+                preferred_map_w = min_map_w;
+
+            if (panel->rich_paragraph_count > 0)
+            {
+                while (preferred_map_w > min_map_w
+                    && (candidate_layout_w - preferred_map_w
+                        - candidate_column_gap) < history_min_w)
+                {
+                    preferred_map_w -= candidate_line_h;
+                }
+
+                if ((candidate_layout_w - preferred_map_w - candidate_column_gap)
+                    >= history_min_w)
+                {
+                    candidate_history_w = candidate_layout_w - preferred_map_w
+                        - candidate_column_gap;
+                    candidate_minimap_rect.x = (float)(candidate_layout_x
+                        + candidate_history_w + candidate_column_gap);
+                }
+                else
+                {
+                    preferred_map_w = 0;
+                    candidate_history_w = candidate_layout_w;
+                }
+            }
+            else
+            {
+                if (preferred_map_w > candidate_layout_w)
+                    preferred_map_w = candidate_layout_w;
+                candidate_minimap_rect.x = (float)(candidate_layout_x
+                    + (candidate_layout_w - preferred_map_w) / 2);
+            }
+
+            if (preferred_map_w > 0)
+            {
+                candidate_minimap_rect.y = (float)candidate_history_y;
+                candidate_minimap_rect.w = (float)preferred_map_w;
+                candidate_minimap_rect.h = (float)bottom_available_h;
+            }
+        }
+
+        if (panel->rich_paragraph_count > 0 && candidate_history_w > 0
+            && candidate_history_box_h > 0)
+        {
+            candidate_history_h = sdl_menu_measure_rich_text_height(mono_font,
+                story_font, candidate_line_h, candidate_line_gap,
+                candidate_line_h, candidate_history_w, scene, panel);
+        }
+
+        chosen_pixel_height = pixel_height;
+        line_h = candidate_line_h;
+        line_gap = candidate_line_gap;
+        label_gap = candidate_label_gap;
+        token_gap = candidate_token_gap;
+        layout_x = candidate_layout_x;
+        metrics_x = candidate_metrics_x;
+        traits_x = candidate_traits_x;
+        stats_x = candidate_stats_x;
+        metrics_w = candidate_metrics_w;
+        stats_w = candidate_stats_w;
+        title_y = candidate_title_y;
+        columns_y = candidate_columns_y;
+        history_y = candidate_history_y;
+        history_x = candidate_history_x;
+        history_w = candidate_history_w;
+        history_box_h = candidate_history_box_h;
+        minimap_rect = candidate_minimap_rect;
+        fallback_fit = true;
+
+        if (panel->rich_paragraph_count > 0 && candidate_history_h > 0
+            && candidate_history_h > candidate_history_box_h)
         {
             continue;
         }
@@ -2723,13 +3079,19 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
         break;
     }
 
-    if (!mono_font || !story_font || line_h <= 0 || layout_w <= 0)
+    if (!fallback_fit || chosen_pixel_height <= 0)
         return false;
+
+    mono_font = sdl_ui_font_for_height(chosen_pixel_height);
+    story_font = sdl_story_font_for_height(chosen_pixel_height);
+    if (!mono_font)
+        return false;
+    if (!story_font)
+        story_font = mono_font;
 
     sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)canvas_w,
         (float)canvas_h }, (SDL_Color){ 0, 0, 0, 255 });
 
-    title_y = margin_y;
     if (panel->title[0])
     {
         int title_w = sdl_menu_measure_text(story_font, panel->title);
@@ -2741,7 +3103,6 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
             line_h, sdl_menu_color(panel->title_attr), panel->title);
     }
 
-    columns_y = title_y + line_h + section_gap;
     for (i = 0; i < panel->character_metric_count; i++)
     {
         const app_ui_character_metric* metric = &panel->character_metrics[i];
@@ -2769,32 +3130,20 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
             y_px, stats_w, label_gap, token_gap, line_h);
     }
 
-    history_h = sdl_menu_measure_rich_text_height(mono_font, story_font, line_h,
-        line_gap, line_h, layout_w, scene, panel);
-    if (history_h > 0)
+    if (panel->rich_paragraph_count > 0 && history_w > 0 && history_box_h > 0)
     {
-        top_rows = panel->character_metric_count;
-        if ((int)panel->detail_line_count > top_rows)
-            top_rows = panel->detail_line_count;
-        if ((int)panel->character_stat_count > top_rows)
-            top_rows = panel->character_stat_count;
-        if (top_rows < 1)
-            top_rows = 1;
-        top_h = top_rows * line_h + (top_rows - 1) * line_gap;
-        history_y = columns_y + top_h + section_gap;
-        history_clip.x = layout_x;
+        history_clip.x = history_x;
         history_clip.y = history_y;
-        history_clip.w = layout_w;
-        history_clip.h = canvas_h - bottom_reserve - margin_y - history_y;
-        if (history_clip.h > 0)
-        {
-            SDL_SetRenderClipRect(g_state.renderer, &history_clip);
-            (void)sdl_menu_render_rich_text(scene, panel, mono_font, story_font,
-                &history_clip, line_h, line_gap, line_h, history_y);
-            SDL_SetRenderClipRect(g_state.renderer, NULL);
-        }
+        history_clip.w = history_w;
+        history_clip.h = history_box_h;
+        SDL_SetRenderClipRect(g_state.renderer, &history_clip);
+        (void)sdl_menu_render_rich_text(scene, panel, mono_font, story_font,
+            &history_clip, line_h, line_gap, line_h, history_y);
+        SDL_SetRenderClipRect(g_state.renderer, NULL);
     }
 
+    if (minimap_rect.w > 0.0f && minimap_rect.h > 0.0f)
+        sdl_menu_render_minimap_widget(main_view, scene, panel, &minimap_rect);
     return true;
 }
 
@@ -3307,6 +3656,13 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
         if (panel->style == APP_UI_PANEL_STYLE_CHARACTER_SHEET)
         {
             if (!sdl_menu_render_character_sheet_panel(main_view, scene, panel))
+                return false;
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_MINIMAP)
+        {
+            if (!sdl_menu_render_minimap_panel(main_view, scene, panel))
                 return false;
             continue;
         }

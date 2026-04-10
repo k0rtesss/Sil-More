@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 7u
+#define APP_UI_FORMAT_VERSION 9u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -26,6 +26,7 @@ extern "C" {
 #define APP_UI_RICH_RUN_MAX 512u
 #define APP_UI_CHARACTER_METRIC_MAX 24u
 #define APP_UI_CHARACTER_STAT_MAX 24u
+#define APP_UI_MINIMAP_CELL_MAX 54000u
 
 typedef enum app_ui_scene_flag {
     APP_UI_SCENE_FLAG_NONE = 0x0000u,
@@ -48,7 +49,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_STRIP = 3,
     APP_UI_PANEL_STYLE_DOCUMENT = 4,
     APP_UI_PANEL_STYLE_BROWSER = 5,
-    APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6
+    APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6,
+    APP_UI_PANEL_STYLE_MINIMAP = 7
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {
@@ -178,6 +180,13 @@ typedef struct app_ui_character_stat {
     char mod3[APP_UI_KEY_MAX];
 } app_ui_character_stat;
 
+typedef struct app_ui_minimap_cell {
+    byte attr;
+    char ch;
+    byte terrain_attr;
+    char terrain_char;
+} app_ui_minimap_cell;
+
 typedef struct app_ui_panel {
     u16b layer;
     u16b flags;
@@ -201,12 +210,20 @@ typedef struct app_ui_panel {
     u16b rich_paragraph_count;
     u16b character_metric_count;
     u16b character_stat_count;
+    u16b minimap_cell_first;
+    u16b minimap_cell_count;
+    u16b minimap_width;
+    u16b minimap_height;
     byte title_attr;
     byte subtitle_attr;
     byte detail_title_attr;
     byte accent_attr;
     byte icon_attr;
     char icon_char;
+    s16b minimap_player_x;
+    s16b minimap_player_y;
+    byte minimap_border_attr;
+    byte minimap_player_attr;
     u16b reserved;
     char title[APP_UI_TITLE_MAX];
     char subtitle[APP_UI_TEXT_MAX];
@@ -227,10 +244,12 @@ typedef struct app_ui_scene {
     u16b document_op_count;
     u16b rich_paragraph_count;
     u16b rich_run_count;
+    u16b minimap_cell_count;
     app_ui_panel panels[APP_UI_PANEL_MAX];
     app_ui_document_op document_ops[APP_UI_DOCUMENT_OP_MAX];
     app_ui_rich_paragraph rich_paragraphs[APP_UI_RICH_PARAGRAPH_MAX];
     app_ui_rich_run rich_runs[APP_UI_RICH_RUN_MAX];
+    app_ui_minimap_cell minimap_cells[APP_UI_MINIMAP_CELL_MAX];
 } app_ui_scene;
 
 void app_ui_panel_init(app_ui_panel* panel, u16b layer);
@@ -273,6 +292,9 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, byte story, cptr text);
 bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, cptr text);
+bool app_ui_panel_set_minimap(app_ui_scene* scene, app_ui_panel* panel,
+    u16b width, u16b height, s16b player_x, s16b player_y,
+    byte border_attr, byte player_attr, const app_ui_minimap_cell* cells);
 bool app_ui_panel_add_character_metric(app_ui_panel* panel, byte label_attr,
     cptr label, byte value_attr, cptr value, char separator,
     byte secondary_attr, cptr secondary);

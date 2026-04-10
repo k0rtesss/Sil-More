@@ -501,60 +501,105 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, byte story, cptr text)
 {
     app_ui_rich_paragraph* paragraph;
-    app_ui_rich_run* run;
-    size_t len;
+    bool wrote_any = false;
+    cptr cursor;
 
     if (!scene || !panel || !text || !text[0])
         return false;
 
-    paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
-    if (!paragraph && !app_ui_panel_begin_rich_paragraph(scene, panel))
-        return false;
-    paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
-    if (!paragraph)
-        return false;
-
-    len = strlen(text);
-    if (len >= APP_UI_TEXT_MAX)
-        len = APP_UI_TEXT_MAX - 1u;
-    if (len == 0)
-        return false;
-
-    if (paragraph->run_count > 0)
+    cursor = text;
+    while (*cursor)
     {
-        run = &scene->rich_runs[(u16b)(paragraph->run_first
-            + paragraph->run_count - 1)];
-        if (run->attr == attr && run->story == story)
-        {
-            size_t current_len = strlen(run->text);
-            size_t available = APP_UI_TEXT_MAX - 1u - current_len;
+        app_ui_rich_run* run;
+        size_t len;
 
-            if (available > 0)
+        paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
+        if (!paragraph && !app_ui_panel_begin_rich_paragraph(scene, panel))
+            return false;
+        paragraph = app_ui_panel_current_rich_paragraph(scene, panel);
+        if (!paragraph)
+            return false;
+
+        if (paragraph->run_count > 0)
+        {
+            run = &scene->rich_runs[(u16b)(paragraph->run_first
+                + paragraph->run_count - 1)];
+            if (run->attr == attr && run->story == story)
             {
-                if (len > available)
-                    len = available;
-                memcpy(run->text + current_len, text, len);
-                run->text[current_len + len] = '\0';
-                return len > 0;
+                size_t current_len = strlen(run->text);
+                size_t available = APP_UI_TEXT_MAX - 1u - current_len;
+
+                if (available > 0)
+                {
+                    len = strlen(cursor);
+                    if (len > available)
+                        len = available;
+                    memcpy(run->text + current_len, cursor, len);
+                    run->text[current_len + len] = '\0';
+                    cursor += len;
+                    wrote_any = true;
+                    continue;
+                }
             }
         }
+
+        run = app_ui_panel_append_rich_run(scene, panel);
+        if (!run)
+            return false;
+
+        len = strlen(cursor);
+        if (len >= APP_UI_TEXT_MAX)
+            len = APP_UI_TEXT_MAX - 1u;
+        if (len == 0)
+            break;
+
+        run->attr = attr;
+        run->story = story;
+        memcpy(run->text, cursor, len);
+        run->text[len] = '\0';
+        cursor += len;
+        wrote_any = true;
     }
 
-    run = app_ui_panel_append_rich_run(scene, panel);
-    if (!run)
-        return false;
-
-    run->attr = attr;
-    run->story = story;
-    memcpy(run->text, text, len);
-    run->text[len] = '\0';
-    return true;
+    return wrote_any;
 }
 
 bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, cptr text)
 {
     return app_ui_panel_add_rich_text_ex(scene, panel, attr, 0, text);
+}
+
+bool app_ui_panel_set_minimap(app_ui_scene* scene, app_ui_panel* panel,
+    u16b width, u16b height, s16b player_x, s16b player_y,
+    byte border_attr, byte player_attr, const app_ui_minimap_cell* cells)
+{
+    size_t cell_count;
+    u16b first;
+
+    if (!scene || !panel || !cells || width == 0 || height == 0)
+        return false;
+
+    cell_count = (size_t)width * (size_t)height;
+    if (cell_count == 0 || cell_count > APP_UI_MINIMAP_CELL_MAX)
+        return false;
+    if ((size_t)scene->minimap_cell_count + cell_count > APP_UI_MINIMAP_CELL_MAX)
+        return false;
+
+    first = scene->minimap_cell_count;
+    memcpy(scene->minimap_cells + first, cells,
+        cell_count * sizeof(scene->minimap_cells[0]));
+    scene->minimap_cell_count = (u16b)(scene->minimap_cell_count + cell_count);
+
+    panel->minimap_cell_first = first;
+    panel->minimap_cell_count = (u16b)cell_count;
+    panel->minimap_width = width;
+    panel->minimap_height = height;
+    panel->minimap_player_x = player_x;
+    panel->minimap_player_y = player_y;
+    panel->minimap_border_attr = border_attr;
+    panel->minimap_player_attr = player_attr;
+    return true;
 }
 
 bool app_ui_panel_add_character_metric(app_ui_panel* panel, byte label_attr,

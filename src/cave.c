@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -2928,6 +2929,136 @@ void display_map(int* cy, int* cx)
         (*cx) = col + 1;
 }
 
+static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
+{
+    int min_x;
+    int max_x;
+    int min_y;
+    int max_y;
+    int explored_wid;
+    int explored_hgt;
+    int player_x;
+    int player_y;
+    byte player_attr = TERM_L_BLUE;
+    app_ui_minimap_cell* cells = NULL;
+    bool use_full_map = false;
+    bool ok = true;
+    int y;
+
+    if (!scene || !panel || p_ptr->cur_map_wid <= 0 || p_ptr->cur_map_hgt <= 0)
+        return true;
+
+    min_x = p_ptr->cur_map_wid;
+    max_x = 0;
+    min_y = p_ptr->cur_map_hgt;
+    max_y = 0;
+
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+    {
+        int x;
+
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            if (!(cave_info[y][x] & CAVE_MARK))
+                continue;
+
+            if (x < min_x)
+                min_x = x;
+            if (x > max_x)
+                max_x = x;
+            if (y < min_y)
+                min_y = y;
+            if (y > max_y)
+                max_y = y;
+        }
+    }
+
+    explored_wid = max_x - min_x + 1;
+    explored_hgt = max_y - min_y + 1;
+    if (explored_wid < 1 || explored_hgt < 1)
+    {
+        min_x = 0;
+        min_y = 0;
+        max_x = p_ptr->cur_map_wid - 1;
+        max_y = p_ptr->cur_map_hgt - 1;
+        explored_wid = p_ptr->cur_map_wid;
+        explored_hgt = p_ptr->cur_map_hgt;
+        use_full_map = true;
+    }
+
+    if (explored_wid < 1 || explored_hgt < 1)
+        return true;
+    if (((size_t)explored_wid * (size_t)explored_hgt) > APP_UI_MINIMAP_CELL_MAX)
+        return false;
+
+    cells = mem_alloc_array((size_t)explored_wid * (size_t)explored_hgt,
+        app_ui_minimap_cell);
+    if (!cells)
+        return false;
+
+    for (y = min_y; y <= max_y; y++)
+    {
+        int x;
+
+        for (x = min_x; x <= max_x; x++)
+        {
+            size_t index = (size_t)(y - min_y) * (size_t)explored_wid
+                + (size_t)(x - min_x);
+
+            if (!use_full_map && !(cave_info[y][x] & CAVE_MARK))
+            {
+                cells[index].attr = TERM_DARK;
+                cells[index].ch = ' ';
+                cells[index].terrain_attr = 0;
+                cells[index].terrain_char = 0;
+                continue;
+            }
+
+            {
+                map_info(y, x, &cells[index].attr, &cells[index].ch,
+                    &cells[index].terrain_attr, &cells[index].terrain_char);
+            }
+        }
+    }
+
+    if (r_info[0].x_attr)
+        player_attr = (byte)(r_info[0].x_attr & 0x0Fu);
+
+    player_x = p_ptr->px - min_x;
+    player_y = p_ptr->py - min_y;
+    ok = app_ui_panel_set_minimap(scene, panel, (u16b)explored_wid,
+        (u16b)explored_hgt, (s16b)player_x, (s16b)player_y, TERM_SLATE,
+        player_attr, cells);
+    mem_free_null(cells);
+    return ok;
+}
+
+static bool view_map_build_ui_scene(app_ui_scene* scene, cptr prompt)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_MINIMAP;
+    app_ui_panel_set_title(panel, TERM_WHITE, "Map");
+
+    if (!view_map_add_minimap(scene, panel))
+        return false;
+    if (prompt && prompt[0]
+        && !app_ui_panel_add_body_line(panel, TERM_SLATE, prompt))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 /*
  * Display a "small-scale" map of the dungeon.
  *
@@ -2936,56 +3067,30 @@ void display_map(int* cy, int* cx)
 void do_cmd_view_map(void)
 {
     ui_information_scene_scope scope;
-    int cy, cx;
+    app_ui_scene scene;
     cptr prompt = "Hit any key to continue";
-    bool scene_active = ui_information_scene_enter(&scope);
 
-    if (!scene_active)
+    if (!ui_information_scene_supported())
     {
-        /* Note */
-        prt("Please wait...", 0, 0);
-
-        /* Flush */
-        Term_fresh();
+        log_warn("map view: snapshot renderer required; legacy renderer removed");
+        msg_print("Map view requires the snapshot UI renderer.");
+        return;
     }
 
-    /* Clear the screen */
-    Term_clear();
+    if (!ui_information_scene_enter(&scope))
+        return;
 
-    /* Display the map */
-    display_map(&cy, &cx);
-
-    /* Show the prompt */
-    put_str(prompt, Term->hgt - 1, Term->wid / 2 - strlen(prompt) / 2);
-
-    /* Hilite the player */
-    Term_gotoxy(cx, cy);
-
-    /* Get any key */
-    if (scene_active)
+    if (!view_map_build_ui_scene(&scene, prompt)
+        || !ui_information_scene_present_ui(&scene))
     {
-        if (!ui_information_scene_present_term())
-        {
-            ui_information_scene_leave(&scope);
-            scene_active = false;
-        }
-    }
-
-    if (scene_active)
-    {
-        (void)ui_information_scene_wait_key_nonrepeat();
-    }
-    else
-    {
-        app_wait_scope wait_scope;
-        app_session_push_wait_scope(app_session_current(), &wait_scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &wait_scope);
-    }
-
-    if (scene_active)
         ui_information_scene_leave(&scope);
+        log_warn("map view: semantic scene presentation failed");
+        msg_print("Map view unavailable.");
+        return;
+    }
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    ui_information_scene_leave(&scope);
     do_cmd_redraw();
 }
 
