@@ -557,6 +557,62 @@ bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     return app_ui_panel_add_rich_text_ex(scene, panel, attr, 0, text);
 }
 
+bool app_ui_panel_add_character_metric(app_ui_panel* panel, byte label_attr,
+    cptr label, byte value_attr, cptr value, char separator,
+    byte secondary_attr, cptr secondary)
+{
+    app_ui_character_metric* metric;
+
+    if (!panel
+        || panel->character_metric_count >= APP_UI_CHARACTER_METRIC_MAX)
+    {
+        return false;
+    }
+
+    metric = &panel->character_metrics[panel->character_metric_count++];
+    memset(metric, 0, sizeof(*metric));
+    metric->label_attr = label_attr;
+    metric->value_attr = value_attr;
+    metric->secondary_attr = secondary_attr;
+    metric->separator = separator;
+    app_ui_copy_text(metric->label, sizeof(metric->label), label);
+    app_ui_copy_text(metric->value, sizeof(metric->value), value);
+    app_ui_copy_text(metric->secondary, sizeof(metric->secondary), secondary);
+    return true;
+}
+
+bool app_ui_panel_add_character_stat(app_ui_panel* panel, byte label_attr,
+    cptr label, byte value_attr, cptr value, byte separator_attr,
+    char separator, byte base_attr, cptr base, byte mod1_attr, cptr mod1,
+    byte mod2_attr, cptr mod2, byte mod3_attr, cptr mod3)
+{
+    app_ui_character_stat* stat;
+
+    if (!panel
+        || panel->character_stat_count >= APP_UI_CHARACTER_STAT_MAX)
+    {
+        return false;
+    }
+
+    stat = &panel->character_stats[panel->character_stat_count++];
+    memset(stat, 0, sizeof(*stat));
+    stat->label_attr = label_attr;
+    stat->value_attr = value_attr;
+    stat->separator_attr = separator_attr;
+    stat->base_attr = base_attr;
+    stat->mod1_attr = mod1_attr;
+    stat->mod2_attr = mod2_attr;
+    stat->mod3_attr = mod3_attr;
+    stat->separator = separator;
+    app_ui_copy_text(stat->label, sizeof(stat->label), label);
+    app_ui_copy_text(stat->value, sizeof(stat->value), value);
+    app_ui_copy_text(stat->base, sizeof(stat->base), base);
+    app_ui_copy_text(stat->mod1, sizeof(stat->mod1), mod1);
+    app_ui_copy_text(stat->mod2, sizeof(stat->mod2), mod2);
+    app_ui_copy_text(stat->mod3, sizeof(stat->mod3), mod3);
+    return true;
+}
+
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction)
 {

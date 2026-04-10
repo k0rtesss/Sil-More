@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 6u
+#define APP_UI_FORMAT_VERSION 7u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -24,6 +24,8 @@ extern "C" {
 #define APP_UI_DOCUMENT_OP_MAX 256u
 #define APP_UI_RICH_PARAGRAPH_MAX 96u
 #define APP_UI_RICH_RUN_MAX 512u
+#define APP_UI_CHARACTER_METRIC_MAX 24u
+#define APP_UI_CHARACTER_STAT_MAX 24u
 
 typedef enum app_ui_scene_flag {
     APP_UI_SCENE_FLAG_NONE = 0x0000u,
@@ -45,7 +47,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_STATUS_RAIL = 2,
     APP_UI_PANEL_STYLE_STRIP = 3,
     APP_UI_PANEL_STYLE_DOCUMENT = 4,
-    APP_UI_PANEL_STYLE_BROWSER = 5
+    APP_UI_PANEL_STYLE_BROWSER = 5,
+    APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6
 } app_ui_panel_style;
 
 typedef enum app_ui_panel_flag {
@@ -145,6 +148,36 @@ typedef struct app_ui_rich_run {
     char text[APP_UI_TEXT_MAX];
 } app_ui_rich_run;
 
+typedef struct app_ui_character_metric {
+    byte label_attr;
+    byte value_attr;
+    byte secondary_attr;
+    byte reserved;
+    char separator;
+    char reserved_text[3];
+    char label[APP_UI_LABEL_MAX];
+    char value[APP_UI_META_MAX];
+    char secondary[APP_UI_META_MAX];
+} app_ui_character_metric;
+
+typedef struct app_ui_character_stat {
+    byte label_attr;
+    byte value_attr;
+    byte separator_attr;
+    byte base_attr;
+    byte mod1_attr;
+    byte mod2_attr;
+    byte mod3_attr;
+    char separator;
+    char reserved;
+    char label[APP_UI_LABEL_MAX];
+    char value[APP_UI_KEY_MAX];
+    char base[APP_UI_KEY_MAX];
+    char mod1[APP_UI_KEY_MAX];
+    char mod2[APP_UI_KEY_MAX];
+    char mod3[APP_UI_KEY_MAX];
+} app_ui_character_stat;
+
 typedef struct app_ui_panel {
     u16b layer;
     u16b flags;
@@ -166,6 +199,8 @@ typedef struct app_ui_panel {
     u16b document_cols;
     u16b rich_paragraph_first;
     u16b rich_paragraph_count;
+    u16b character_metric_count;
+    u16b character_stat_count;
     byte title_attr;
     byte subtitle_attr;
     byte detail_title_attr;
@@ -181,6 +216,8 @@ typedef struct app_ui_panel {
     app_ui_text_line detail_lines[APP_UI_DETAIL_LINE_MAX];
     app_ui_footer_action footer_actions[APP_UI_FOOTER_ACTION_MAX];
     app_ui_tab tabs[APP_UI_TAB_MAX];
+    app_ui_character_metric character_metrics[APP_UI_CHARACTER_METRIC_MAX];
+    app_ui_character_stat character_stats[APP_UI_CHARACTER_STAT_MAX];
 } app_ui_panel;
 
 typedef struct app_ui_scene {
@@ -236,6 +273,13 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, byte story, cptr text);
 bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, cptr text);
+bool app_ui_panel_add_character_metric(app_ui_panel* panel, byte label_attr,
+    cptr label, byte value_attr, cptr value, char separator,
+    byte secondary_attr, cptr secondary);
+bool app_ui_panel_add_character_stat(app_ui_panel* panel, byte label_attr,
+    cptr label, byte value_attr, cptr value, byte separator_attr,
+    char separator, byte base_attr, cptr base, byte mod1_attr, cptr mod1,
+    byte mod2_attr, cptr mod2, byte mod3_attr, cptr mod3);
 bool app_ui_scene_from_interaction(app_ui_scene* scene,
     const app_interaction_state* interaction);
 bool app_ui_scene_from_information_document(app_ui_scene* scene,

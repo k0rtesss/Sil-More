@@ -1,6 +1,7 @@
 /* File: ui/ui-character-screen.c */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "externs.h"
 
 #include "log/log.h"
@@ -12,19 +13,12 @@
 
 #include <ctype.h>
 
-static int display_player_layout_override_wid = 0;
-static int display_player_layout_override_hgt = 0;
-
 static void display_player_get_layout_size(int* wid, int* hgt)
 {
     int current_wid = 80;
     int current_hgt = 24;
 
     Term_get_size(&current_wid, &current_hgt);
-    if (display_player_layout_override_wid > 0)
-        current_wid = display_player_layout_override_wid;
-    if (display_player_layout_override_hgt > 0)
-        current_hgt = display_player_layout_override_hgt;
 
     if (current_wid < 1)
         current_wid = 80;
@@ -35,18 +29,6 @@ static void display_player_get_layout_size(int* wid, int* hgt)
         *wid = current_wid;
     if (hgt)
         *hgt = current_hgt;
-}
-
-void display_player_set_layout_override(int wid, int hgt)
-{
-    display_player_layout_override_wid = (wid > 0) ? wid : 0;
-    display_player_layout_override_hgt = (hgt > 0) ? hgt : 0;
-}
-
-void display_player_clear_layout_override(void)
-{
-    display_player_layout_override_wid = 0;
-    display_player_layout_override_hgt = 0;
 }
 
 static void display_skill(int skill, int row, int col)
@@ -113,19 +95,6 @@ static int display_player_compact_start_row(void)
 
 static int display_player_compact_scroll = 0;
 static int display_player_compact_max_scroll = 0;
-
-void display_player_compact_set_scroll(int scroll)
-{
-    if (scroll < 0)
-        scroll = 0;
-
-    display_player_compact_scroll = scroll;
-}
-
-int display_player_compact_get_max_scroll(void)
-{
-    return display_player_compact_max_scroll;
-}
 
 static void put_label_fit(int x, int y, const char* label, int start)
 {
@@ -3514,6 +3483,391 @@ static void display_player_sust_info(void)
     display_player_equippy(row + 5, col);
 
     sdl_story_font_disable();
+}
+
+static void character_sheet_build_name(char* buf, size_t buf_size)
+{
+    if (!buf || buf_size == 0)
+        return;
+
+    if (p_ptr->oaths_broken)
+    {
+        strnfmt(buf, buf_size, "%s the Oathbreaker", op_ptr->full_name);
+        return;
+    }
+
+    strnfmt(buf, buf_size, "%s%s", op_ptr->full_name,
+        c_name + current_character_profile->alt_name);
+}
+
+static void character_sheet_copy_trimmed(char* dst, size_t dst_size, cptr text,
+    int max_chars)
+{
+    size_t len;
+
+    if (!dst || dst_size == 0)
+        return;
+
+    dst[0] = '\0';
+    if (!text || !text[0] || max_chars <= 0)
+        return;
+
+    len = strlen(text);
+    while (len > 0 && text[len - 1] == ' ')
+        len--;
+    if ((int)len > max_chars)
+        len = (size_t)max_chars;
+    if (len >= dst_size)
+        len = dst_size - 1u;
+
+    memcpy(dst, text, len);
+    dst[len] = '\0';
+}
+
+static bool character_sheet_add_metric_pair(app_ui_panel* panel, cptr label,
+    cptr current, byte current_attr, char separator, cptr rhs, byte rhs_attr)
+{
+    return app_ui_panel_add_character_metric(panel, TERM_WHITE, label,
+        current_attr, current, separator, rhs_attr, rhs);
+}
+
+static bool character_sheet_add_metric_value(app_ui_panel* panel, cptr label,
+    byte value_attr, cptr value)
+{
+    return app_ui_panel_add_character_metric(panel, TERM_WHITE, label,
+        value_attr, value, '\0', TERM_WHITE, "");
+}
+
+static bool character_sheet_build_summary(app_ui_panel* panel)
+{
+    char cur[32];
+    char rhs[32];
+    char val[64];
+    char buf[160];
+    byte value_attr;
+
+    if (!panel)
+        return false;
+
+    strnfmt(cur, sizeof(cur), "%ld", (long)p_ptr->new_exp);
+    strnfmt(rhs, sizeof(rhs), "%ld", (long)p_ptr->exp);
+    if (!character_sheet_add_metric_pair(panel, "Exp", cur, TERM_L_GREEN, '/',
+            rhs, TERM_L_GREEN))
+    {
+        return false;
+    }
+
+    {
+        long cur_b = (long)(p_ptr->total_weight / 10L);
+        long max_b = (long)(weight_limit() / 10L);
+
+        strnfmt(cur, sizeof(cur), "%ld", cur_b);
+        strnfmt(rhs, sizeof(rhs), "%ld", max_b);
+        if (!character_sheet_add_metric_pair(panel, "Burden", cur,
+                (cur_b <= max_b) ? TERM_L_GREEN : TERM_YELLOW, '/',
+                rhs, TERM_L_GREEN))
+        {
+            return false;
+        }
+    }
+
+    if (turn > 0)
+    {
+        long cur_d = (long)(p_ptr->depth * 50);
+        long min_d = (long)(min_depth() * 50);
+
+        if (cur_d > 1000)
+            cur_d = 1000;
+        if (min_d > 1000)
+            min_d = 1000;
+
+        strnfmt(cur, sizeof(cur), "%ld", cur_d);
+        strnfmt(rhs, sizeof(rhs), "%ld", min_d);
+        if (!character_sheet_add_metric_pair(panel, "Depth c/m", cur,
+                (cur_d >= min_d) ? TERM_L_GREEN : TERM_YELLOW, '/',
+                rhs, TERM_L_GREEN))
+        {
+            return false;
+        }
+        if (format_min_depth_progress_bar(buf, sizeof(buf), LINEW20)
+            && !app_ui_panel_add_character_metric(panel, TERM_WHITE, "",
+                TERM_L_BLUE, buf, '\0', TERM_WHITE, ""))
+        {
+            return false;
+        }
+    }
+
+    value_attr = format_deep_call_value(val, sizeof(val), 12);
+    if (!character_sheet_add_metric_value(panel, "Deep Call", value_attr, val))
+        return false;
+
+    comma_number(buf, playerturn);
+    if (!character_sheet_add_metric_value(panel, "Turn", TERM_L_GREEN, buf))
+        return false;
+
+    strnfmt(val, sizeof(val), "%d", p_ptr->cur_light);
+    if (!character_sheet_add_metric_value(panel, "Light", TERM_L_GREEN, val))
+        return false;
+
+    if (!app_ui_panel_add_character_metric(panel, TERM_WHITE, "", TERM_WHITE,
+            "", '\0', TERM_WHITE, ""))
+    {
+        return false;
+    }
+
+    strnfmt(val, sizeof(val), "(%+d,%dd%d)", p_ptr->skill_use[S_MEL],
+        p_ptr->mdd, p_ptr->mds);
+    if (!character_sheet_add_metric_value(panel, "Melee", TERM_L_BLUE, val))
+        return false;
+
+    if (p_ptr->active_ability[S_MEL][MEL_RAPID_ATTACK]
+        && !character_sheet_add_metric_value(panel, "Melee x2", TERM_L_BLUE,
+            val))
+    {
+        return false;
+    }
+
+    if (p_ptr->mds2 > 0)
+    {
+        strnfmt(val, sizeof(val), "(%+d,%dd%d)",
+            p_ptr->skill_use[S_MEL] + p_ptr->offhand_mel_mod,
+            p_ptr->mdd2, p_ptr->mds2);
+        if (!character_sheet_add_metric_value(panel, "Offhand", TERM_L_BLUE,
+                val))
+        {
+            return false;
+        }
+    }
+
+    strnfmt(val, sizeof(val), "(%+d,%dd%d)", p_ptr->skill_use[S_ARC],
+        p_ptr->add, p_ptr->ads);
+    if (!character_sheet_add_metric_value(panel, "Bows", TERM_L_BLUE, val))
+        return false;
+
+    strnfmt(val, sizeof(val), "[%+d,%d-%d]", p_ptr->skill_use[S_EVN],
+        p_min(GF_HURT, true), p_max(GF_HURT, true));
+    if (!character_sheet_add_metric_value(panel, "Armor", TERM_L_BLUE, val))
+        return false;
+
+    {
+        int chp = p_ptr->chp;
+        int mhp = p_ptr->mhp;
+
+        if (chp > 999)
+            chp = 999;
+        if (mhp > 999)
+            mhp = 999;
+        strnfmt(cur, sizeof(cur), "%d", chp);
+        strnfmt(rhs, sizeof(rhs), "%d", mhp);
+        if (!character_sheet_add_metric_pair(panel, "Health", cur, TERM_L_BLUE,
+                '/', rhs, TERM_L_BLUE))
+        {
+            return false;
+        }
+    }
+
+    {
+        int csp = p_ptr->csp;
+        int msp = p_ptr->msp;
+
+        if (csp > 999)
+            csp = 999;
+        if (msp > 999)
+            msp = 999;
+        strnfmt(cur, sizeof(cur), "%d", csp);
+        strnfmt(rhs, sizeof(rhs), "%d", msp);
+        if (!character_sheet_add_metric_pair(panel, "Voice", cur, TERM_L_BLUE,
+                '/', rhs, TERM_L_BLUE))
+        {
+            return false;
+        }
+    }
+
+    if (p_ptr->song1 != SNG_NOTHING)
+    {
+        strnfmt(val, sizeof(val), "%s",
+            b_name + (&b_info[ability_index(S_SNG, p_ptr->song1)])->name);
+        if (!character_sheet_add_metric_value(panel, "Song", TERM_L_BLUE, val))
+            return false;
+    }
+    if (p_ptr->song2 != SNG_NOTHING)
+    {
+        strnfmt(val, sizeof(val), "%s",
+            b_name + (&b_info[ability_index(S_SNG, p_ptr->song2)])->name);
+        if (!character_sheet_add_metric_value(panel, "Song", TERM_L_BLUE, val))
+            return false;
+    }
+
+    return true;
+}
+
+static bool character_sheet_build_traits(app_ui_panel* panel)
+{
+    compact_trait_line traits[96];
+    int i;
+    byte story = story_character_enabled() ? STORY_FLAG_USE : 0;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < collect_compact_trait_lines(traits, N_ELEMENTS(traits)); i++)
+    {
+        if (!app_ui_panel_add_detail_line_ex(panel, traits[i].col, story,
+                traits[i].txt))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool character_sheet_build_stats(app_ui_panel* panel)
+{
+    int i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < A_MAX; i++)
+    {
+        const char* stat_label = (p_ptr->stat_drain[i] < 0)
+            ? stat_names_reduced[i]
+            : stat_names[i];
+        char label[32];
+        char value[APP_UI_KEY_MAX];
+        char base[APP_UI_KEY_MAX];
+        char mod1[APP_UI_KEY_MAX];
+        char mod2[APP_UI_KEY_MAX];
+        char mod3[APP_UI_KEY_MAX];
+
+        character_sheet_copy_trimmed(label, sizeof(label), stat_label, 12);
+        mod1[0] = '\0';
+        mod2[0] = '\0';
+        mod3[0] = '\0';
+        cnv_stat(p_ptr->stat_use[i], value);
+        base[0] = '\0';
+
+        if (p_ptr->stat_equip_mod[i] != 0 || p_ptr->stat_drain[i] != 0
+            || p_ptr->stat_misc_mod[i] != 0)
+        {
+            cnv_stat(p_ptr->stat_base[i], base);
+            if (p_ptr->stat_equip_mod[i] != 0)
+                strnfmt(mod1, sizeof(mod1), "%+3d", p_ptr->stat_equip_mod[i]);
+            if (p_ptr->stat_drain[i] != 0)
+                strnfmt(mod2, sizeof(mod2), "%+3d", p_ptr->stat_drain[i]);
+            if (p_ptr->stat_misc_mod[i] != 0)
+                strnfmt(mod3, sizeof(mod3), "%+3d", p_ptr->stat_misc_mod[i]);
+        }
+
+        if (!app_ui_panel_add_character_stat(panel, TERM_WHITE, label,
+                (p_ptr->stat_drain[i] < 0) ? TERM_YELLOW : TERM_L_GREEN, value,
+                TERM_SLATE, base[0] ? '=' : '\0', TERM_GREEN, base, TERM_SLATE,
+                mod1, TERM_SLATE, mod2, TERM_SLATE, mod3))
+        {
+            return false;
+        }
+    }
+
+    if (!app_ui_panel_add_character_stat(panel, TERM_WHITE, "", TERM_WHITE, "",
+            TERM_WHITE, '\0', TERM_WHITE, "", TERM_WHITE, "", TERM_WHITE, "",
+            TERM_WHITE, ""))
+    {
+        return false;
+    }
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        char value[APP_UI_KEY_MAX];
+        char base[APP_UI_KEY_MAX];
+        char mod1[APP_UI_KEY_MAX];
+        char mod2[APP_UI_KEY_MAX];
+        char mod3[APP_UI_KEY_MAX];
+
+        if (i == S_SPC)
+            continue;
+
+        strnfmt(value, sizeof(value), "%d", p_ptr->skill_use[i]);
+        strnfmt(base, sizeof(base), "%d", p_ptr->skill_base[i]);
+        mod1[0] = '\0';
+        mod2[0] = '\0';
+        mod3[0] = '\0';
+        if (p_ptr->skill_stat_mod[i] != 0)
+            strnfmt(mod1, sizeof(mod1), "%+d", p_ptr->skill_stat_mod[i]);
+        if (p_ptr->skill_equip_mod[i] != 0)
+            strnfmt(mod2, sizeof(mod2), "%+d", p_ptr->skill_equip_mod[i]);
+        if (p_ptr->skill_misc_mod[i] != 0)
+            strnfmt(mod3, sizeof(mod3), "%+d", p_ptr->skill_misc_mod[i]);
+
+        if (!app_ui_panel_add_character_stat(panel, TERM_WHITE,
+                skill_names_full[i], TERM_L_GREEN, value, TERM_SLATE, '=',
+                TERM_GREEN, base, TERM_SLATE, mod1, TERM_SLATE, mod2,
+                TERM_SLATE, mod3))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool character_sheet_build_history(app_ui_scene* scene,
+    app_ui_panel* panel)
+{
+    byte story = story_character_enabled() ? STORY_FLAG_USE : 0;
+
+    if (!scene || !panel || !p_ptr->history[0])
+        return true;
+
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+
+    return app_ui_panel_add_rich_text_ex(scene, panel, TERM_WHITE, story,
+        p_ptr->history);
+}
+
+bool build_character_sheet_ui_scene(app_ui_scene* scene, cptr prompt_text)
+{
+    app_ui_panel* panel;
+    char name[64];
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_CHARACTER_SHEET;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    character_sheet_build_name(name, sizeof(name));
+    app_ui_panel_set_title(panel, p_ptr->oaths_broken ? TERM_RED : TERM_L_BLUE,
+        name);
+
+    if (!character_sheet_build_summary(panel)
+        || !character_sheet_build_traits(panel)
+        || !character_sheet_build_stats(panel)
+        || !character_sheet_build_history(scene, panel))
+    {
+        return false;
+    }
+
+    if (prompt_text && prompt_text[0])
+    {
+        app_ui_panel* strip = app_ui_scene_append_panel(scene,
+            APP_UI_LAYER_CHROME);
+
+        if (!strip)
+            return false;
+        strip->style = APP_UI_PANEL_STYLE_STRIP;
+        strip->flags |= APP_UI_PANEL_FLAG_BOTTOM_ANCHORED;
+        if (!app_ui_panel_add_body_line(strip, TERM_L_WHITE, prompt_text))
+            return false;
+    }
+
+    return true;
 }
 
 void display_player(int mode)

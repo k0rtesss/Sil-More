@@ -2318,6 +2318,486 @@ static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
     return true;
 }
 
+static int sdl_menu_character_metric_group_width(TTF_Font* mono_font,
+    const app_ui_character_metric* metric, int token_gap)
+{
+    int width = 0;
+
+    if (!mono_font || !metric)
+        return 0;
+
+    if (metric->value[0])
+        width += sdl_menu_measure_text(mono_font, metric->value);
+    if (metric->separator && metric->secondary[0])
+    {
+        if (width > 0)
+            width += token_gap;
+        width += sdl_menu_measure_text(mono_font,
+            (char[]){ metric->separator, '\0' });
+        width += token_gap;
+        width += sdl_menu_measure_text(mono_font, metric->secondary);
+    }
+
+    return width;
+}
+
+static int sdl_menu_character_metric_row_width(TTF_Font* mono_font,
+    TTF_Font* story_font, const app_ui_character_metric* metric, int label_gap,
+    int token_gap)
+{
+    int label_w = 0;
+    int group_w;
+
+    if (!mono_font || !metric)
+        return 0;
+
+    if (metric->label[0])
+        label_w = sdl_menu_measure_text(story_font ? story_font : mono_font,
+            metric->label);
+    group_w = sdl_menu_character_metric_group_width(mono_font, metric,
+        token_gap);
+    if (label_w > 0 && group_w > 0)
+        return label_w + label_gap + group_w;
+
+    return label_w + group_w;
+}
+
+static int sdl_menu_character_stat_group_width(TTF_Font* mono_font,
+    const app_ui_character_stat* stat, int token_gap)
+{
+    int width = 0;
+    bool first = true;
+    const char* tokens[5];
+    int i;
+
+    if (!mono_font || !stat)
+        return 0;
+
+    tokens[0] = stat->value;
+    tokens[1] = stat->base[0] ? (char[]){ stat->separator ? stat->separator : '=',
+        '\0' } : "";
+    tokens[2] = stat->base;
+    tokens[3] = stat->mod1;
+    tokens[4] = stat->mod2;
+
+    for (i = 0; i < 5; i++)
+    {
+        if (!tokens[i][0])
+            continue;
+        if (!first)
+            width += token_gap;
+        width += sdl_menu_measure_text(mono_font, tokens[i]);
+        first = false;
+    }
+
+    if (stat->mod3[0])
+    {
+        if (!first)
+            width += token_gap;
+        width += sdl_menu_measure_text(mono_font, stat->mod3);
+    }
+
+    return width;
+}
+
+static int sdl_menu_character_stat_row_width(TTF_Font* mono_font,
+    TTF_Font* story_font, const app_ui_character_stat* stat, int label_gap,
+    int token_gap)
+{
+    int label_w = 0;
+    int group_w;
+
+    if (!mono_font || !stat)
+        return 0;
+
+    if (stat->label[0])
+        label_w = sdl_menu_measure_text(story_font ? story_font : mono_font,
+            stat->label);
+    group_w = sdl_menu_character_stat_group_width(mono_font, stat, token_gap);
+    if (label_w > 0 && group_w > 0)
+        return label_w + label_gap + group_w;
+
+    return label_w + group_w;
+}
+
+static void sdl_menu_render_story_or_mono(TTF_Font* mono_font,
+    TTF_Font* story_font, float x_px, float y_px, int line_h, byte attr,
+    byte story, cptr text)
+{
+    TTF_Font* font;
+
+    if (!text || !text[0])
+        return;
+
+    font = ((story & STORY_FLAG_USE) != 0 && story_font) ? story_font : mono_font;
+    sdl_menu_render_text(font ? font : mono_font, x_px, y_px, line_h,
+        sdl_menu_color(attr), text);
+}
+
+static void sdl_menu_render_character_metric_row(TTF_Font* mono_font,
+    TTF_Font* story_font, const app_ui_character_metric* metric, int x_px,
+    int y_px, int width_px, int label_gap, int token_gap, int line_h)
+{
+    int label_w = 0;
+    int group_w;
+    int cursor_x;
+    char sep_buf[2] = { '\0', '\0' };
+
+    if (!mono_font || !metric)
+        return;
+    if (!metric->label[0] && !metric->value[0] && !metric->secondary[0])
+        return;
+
+    if (!metric->label[0])
+    {
+        sdl_menu_render_text(mono_font, (float)x_px, (float)y_px, line_h,
+            sdl_menu_color(metric->value_attr), metric->value);
+        return;
+    }
+
+    label_w = sdl_menu_measure_text(story_font ? story_font : mono_font,
+        metric->label);
+    sdl_menu_render_text(story_font ? story_font : mono_font, (float)x_px,
+        (float)y_px, line_h, sdl_menu_color(metric->label_attr),
+        metric->label);
+
+    group_w = sdl_menu_character_metric_group_width(mono_font, metric,
+        token_gap);
+    cursor_x = x_px + width_px - group_w;
+    if (group_w > 0 && cursor_x < x_px + label_w + label_gap)
+        cursor_x = x_px + label_w + label_gap;
+
+    if (metric->value[0])
+    {
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(metric->value_attr), metric->value);
+        cursor_x += sdl_menu_measure_text(mono_font, metric->value);
+    }
+
+    if (metric->separator && metric->secondary[0])
+    {
+        sep_buf[0] = metric->separator;
+        cursor_x += token_gap;
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(TERM_WHITE), sep_buf);
+        cursor_x += sdl_menu_measure_text(mono_font, sep_buf) + token_gap;
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(metric->secondary_attr), metric->secondary);
+    }
+}
+
+static void sdl_menu_render_character_stat_row(TTF_Font* mono_font,
+    TTF_Font* story_font, const app_ui_character_stat* stat, int x_px, int y_px,
+    int width_px, int label_gap, int token_gap, int line_h)
+{
+    int label_w = 0;
+    int group_w;
+    int cursor_x;
+    char sep_buf[2] = { '\0', '\0' };
+    const char* tokens[5];
+    byte attrs[5];
+    int i;
+
+    if (!mono_font || !stat)
+        return;
+    if (!stat->label[0] && !stat->value[0] && !stat->base[0] && !stat->mod1[0]
+        && !stat->mod2[0] && !stat->mod3[0])
+    {
+        return;
+    }
+
+    if (stat->label[0])
+    {
+        label_w = sdl_menu_measure_text(story_font ? story_font : mono_font,
+            stat->label);
+        sdl_menu_render_text(story_font ? story_font : mono_font, (float)x_px,
+            (float)y_px, line_h, sdl_menu_color(stat->label_attr), stat->label);
+    }
+
+    group_w = sdl_menu_character_stat_group_width(mono_font, stat, token_gap);
+    cursor_x = x_px + width_px - group_w;
+    if (label_w > 0 && group_w > 0 && cursor_x < x_px + label_w + label_gap)
+        cursor_x = x_px + label_w + label_gap;
+
+    sep_buf[0] = stat->separator ? stat->separator : '=';
+    tokens[0] = stat->value;
+    tokens[1] = stat->base[0] ? sep_buf : "";
+    tokens[2] = stat->base;
+    tokens[3] = stat->mod1;
+    tokens[4] = stat->mod2;
+    attrs[0] = stat->value_attr;
+    attrs[1] = stat->separator_attr;
+    attrs[2] = stat->base_attr;
+    attrs[3] = stat->mod1_attr;
+    attrs[4] = stat->mod2_attr;
+
+    for (i = 0; i < 5; i++)
+    {
+        if (!tokens[i][0])
+            continue;
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(attrs[i]), tokens[i]);
+        cursor_x += sdl_menu_measure_text(mono_font, tokens[i]) + token_gap;
+    }
+
+    if (stat->mod3[0])
+    {
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(stat->mod3_attr), stat->mod3);
+    }
+}
+
+static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
+    const app_ui_scene* scene, const app_ui_panel* panel)
+{
+    TTF_Font* mono_font = NULL;
+    TTF_Font* story_font = NULL;
+    SDL_Rect history_clip;
+    int canvas_w;
+    int canvas_h;
+    int desired_px;
+    int min_px;
+    int pixel_height;
+    int line_h = 0;
+    int line_gap = 0;
+    int section_gap = 0;
+    int label_gap = 0;
+    int token_gap = 0;
+    int margin_x = 0;
+    int margin_y = 0;
+    int layout_x = 0;
+    int layout_w = 0;
+    int metrics_x = 0;
+    int traits_x = 0;
+    int stats_x = 0;
+    int metrics_w = 0;
+    int traits_w = 0;
+    int stats_w = 0;
+    int bottom_reserve = 0;
+    int title_y;
+    int columns_y;
+    int history_y;
+    int top_rows;
+    int top_h;
+    int available_h;
+    int history_available_h;
+    int history_h;
+    int i;
+    int max_metric_w = 0;
+    int max_trait_w = 0;
+    int max_stat_w = 0;
+
+    if (!main_view || !scene || !panel)
+        return false;
+
+    canvas_w = main_view->cols * main_view->cell_w;
+    canvas_h = main_view->rows * main_view->cell_h;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+
+    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    min_px = sdl_menu_scale_px(8.0f);
+    if (min_px < 8)
+        min_px = 8;
+    if (desired_px < min_px)
+        desired_px = min_px;
+
+    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
+    {
+        int max_available_w;
+        int char_w;
+        int preferred_w;
+        int required_metrics_w;
+        int required_traits_w;
+        int required_stats_w;
+        int required_layout_w;
+
+        mono_font = sdl_ui_font_for_height(pixel_height);
+        story_font = sdl_story_font_for_height(pixel_height);
+        if (!mono_font)
+            continue;
+        if (!story_font)
+            story_font = mono_font;
+
+        line_h = MAX(pixel_height, MAX(TTF_GetFontHeight(mono_font),
+            TTF_GetFontHeight(story_font)));
+        line_gap = MAX(1, line_h / 6);
+        section_gap = MAX(line_h / 2, line_gap * 3);
+        label_gap = MAX(line_h / 2, line_gap * 3);
+        token_gap = MAX(4, line_h / 4);
+        margin_x = MAX(line_h, sdl_menu_scale_px(24.0f));
+        margin_y = MAX(line_gap * 2, sdl_menu_scale_px(12.0f));
+        bottom_reserve = line_h + section_gap;
+        max_available_w = canvas_w - margin_x * 2;
+        if (max_available_w <= 0)
+            continue;
+
+        max_metric_w = 0;
+        for (i = 0; i < panel->character_metric_count; i++)
+        {
+            max_metric_w = MAX(max_metric_w,
+                sdl_menu_character_metric_row_width(mono_font, story_font,
+                    &panel->character_metrics[i], label_gap, token_gap));
+        }
+
+        max_trait_w = 0;
+        for (i = 0; i < panel->detail_line_count; i++)
+        {
+            TTF_Font* font = ((panel->detail_lines[i].story & STORY_FLAG_USE) != 0
+                && story_font) ? story_font : mono_font;
+
+            max_trait_w = MAX(max_trait_w,
+                sdl_menu_measure_text(font, panel->detail_lines[i].text));
+        }
+
+        max_stat_w = 0;
+        for (i = 0; i < panel->character_stat_count; i++)
+        {
+            max_stat_w = MAX(max_stat_w,
+                sdl_menu_character_stat_row_width(mono_font, story_font,
+                    &panel->character_stats[i], label_gap, token_gap));
+        }
+
+        char_w = sdl_menu_measure_text(mono_font, "M");
+        if (char_w < line_h / 2)
+            char_w = MAX(1, line_h / 2);
+        preferred_w = char_w * 80;
+        required_metrics_w = ((max_metric_w + label_gap) * 80 + 22) / 23;
+        required_traits_w = ((max_trait_w + label_gap) * 80 + 17) / 18;
+        required_stats_w = (max_stat_w * 80 + 38) / 39;
+        required_layout_w = MAX(preferred_w,
+            MAX(required_metrics_w, MAX(required_traits_w, required_stats_w)));
+        if (required_layout_w > max_available_w)
+        {
+            layout_w = max_available_w;
+            layout_x = margin_x;
+        }
+        else
+        {
+            layout_w = required_layout_w;
+            layout_x = (canvas_w - layout_w) / 2;
+        }
+        metrics_x = layout_x;
+        traits_x = layout_x + (layout_w * 23) / 80;
+        stats_x = layout_x + (layout_w * 41) / 80;
+        if (traits_x <= metrics_x || stats_x <= traits_x)
+            continue;
+
+        metrics_w = traits_x - metrics_x - label_gap;
+        traits_w = stats_x - traits_x - label_gap;
+        stats_w = layout_x + layout_w - stats_x;
+        if (metrics_w <= 0 || traits_w <= 0 || stats_w <= 0)
+            continue;
+        if (max_metric_w > metrics_w || max_trait_w > traits_w
+            || max_stat_w > stats_w)
+        {
+            continue;
+        }
+
+        top_rows = panel->character_metric_count;
+        if ((int)panel->detail_line_count > top_rows)
+            top_rows = panel->detail_line_count;
+        if ((int)panel->character_stat_count > top_rows)
+            top_rows = panel->character_stat_count;
+        if (top_rows < 1)
+            top_rows = 1;
+        top_h = top_rows * line_h + (top_rows - 1) * line_gap;
+
+        title_y = margin_y;
+        columns_y = title_y + line_h + section_gap;
+        available_h = canvas_h - margin_y - bottom_reserve - columns_y;
+        if (available_h < top_h)
+            continue;
+
+        history_h = sdl_menu_measure_rich_text_height(mono_font, story_font,
+            line_h, line_gap, line_h, layout_w, scene, panel);
+        if (history_h <= 0)
+            break;
+
+        history_available_h = available_h - top_h - section_gap;
+        if (history_available_h < line_h)
+        {
+            continue;
+        }
+
+        break;
+    }
+
+    if (!mono_font || !story_font || line_h <= 0 || layout_w <= 0)
+        return false;
+
+    sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)canvas_w,
+        (float)canvas_h }, (SDL_Color){ 0, 0, 0, 255 });
+
+    title_y = margin_y;
+    if (panel->title[0])
+    {
+        int title_w = sdl_menu_measure_text(story_font, panel->title);
+        int title_x = (canvas_w - title_w) / 2;
+
+        if (title_x < layout_x)
+            title_x = layout_x;
+        sdl_menu_render_text(story_font, (float)title_x, (float)title_y,
+            line_h, sdl_menu_color(panel->title_attr), panel->title);
+    }
+
+    columns_y = title_y + line_h + section_gap;
+    for (i = 0; i < panel->character_metric_count; i++)
+    {
+        const app_ui_character_metric* metric = &panel->character_metrics[i];
+        int y_px = columns_y + i * (line_h + line_gap);
+
+        sdl_menu_render_character_metric_row(mono_font, story_font, metric,
+            metrics_x, y_px, metrics_w, label_gap, token_gap, line_h);
+    }
+
+    for (i = 0; i < panel->detail_line_count; i++)
+    {
+        int y_px = columns_y + i * (line_h + line_gap);
+
+        sdl_menu_render_story_or_mono(mono_font, story_font, (float)traits_x,
+            (float)y_px, line_h, panel->detail_lines[i].attr,
+            panel->detail_lines[i].story, panel->detail_lines[i].text);
+    }
+
+    for (i = 0; i < panel->character_stat_count; i++)
+    {
+        const app_ui_character_stat* stat = &panel->character_stats[i];
+        int y_px = columns_y + i * (line_h + line_gap);
+
+        sdl_menu_render_character_stat_row(mono_font, story_font, stat, stats_x,
+            y_px, stats_w, label_gap, token_gap, line_h);
+    }
+
+    history_h = sdl_menu_measure_rich_text_height(mono_font, story_font, line_h,
+        line_gap, line_h, layout_w, scene, panel);
+    if (history_h > 0)
+    {
+        top_rows = panel->character_metric_count;
+        if ((int)panel->detail_line_count > top_rows)
+            top_rows = panel->detail_line_count;
+        if ((int)panel->character_stat_count > top_rows)
+            top_rows = panel->character_stat_count;
+        if (top_rows < 1)
+            top_rows = 1;
+        top_h = top_rows * line_h + (top_rows - 1) * line_gap;
+        history_y = columns_y + top_h + section_gap;
+        history_clip.x = layout_x;
+        history_clip.y = history_y;
+        history_clip.w = layout_w;
+        history_clip.h = canvas_h - bottom_reserve - margin_y - history_y;
+        if (history_clip.h > 0)
+        {
+            SDL_SetRenderClipRect(g_state.renderer, &history_clip);
+            (void)sdl_menu_render_rich_text(scene, panel, mono_font, story_font,
+                &history_clip, line_h, line_gap, line_h, history_y);
+            SDL_SetRenderClipRect(g_state.renderer, NULL);
+        }
+    }
+
+    return true;
+}
+
 typedef struct sdl_menu_document_metrics {
     int origin_x;
     int origin_y;
@@ -2820,6 +3300,13 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view,
         if (panel->style == APP_UI_PANEL_STYLE_DOCUMENT)
         {
             if (!sdl_menu_render_document_panel(main_view, scene, panel))
+                return false;
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_CHARACTER_SHEET)
+        {
+            if (!sdl_menu_render_character_sheet_panel(main_view, scene, panel))
                 return false;
             continue;
         }
