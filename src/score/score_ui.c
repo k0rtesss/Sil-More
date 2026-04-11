@@ -65,7 +65,6 @@ typedef enum run_monster_sort_mode {
 } run_monster_sort_mode;
 
 typedef struct run_detail_list_state {
-    int top;
     int highlight;
 } run_detail_list_state;
 
@@ -78,14 +77,6 @@ typedef struct run_detail_view_state {
     run_detail_list_state monsters;
     run_monster_sort_mode monster_sort_mode;
 } run_detail_view_state;
-
-typedef struct run_detail_text_view {
-    int first_row;
-    int visible_rows;
-    int scroll_top;
-    int logical_row;
-    int term_wid;
-} run_detail_text_view;
 
 static void run_history_show_detail(const run_history_entry* entry);
 static bool run_history_prepare_artefact_object(
@@ -175,16 +166,6 @@ static void score_ui_get_term_size(int* wid, int* hgt)
 static bool score_ui_compact_width(int term_wid)
 {
     return (term_wid < 70);
-}
-
-static void score_ui_put_fit(byte attr, cptr text, int row, int col, int term_wid)
-{
-    int max = term_wid - col;
-
-    if (!text || row < 0 || col < 0 || max <= 0)
-        return;
-
-    Term_putstr(col, row, max, attr, text);
 }
 
 static void score_scene_put_fit(app_information_scene* scene, byte attr,
@@ -516,146 +497,6 @@ static void truncate_with_ellipsis(const char* src, char* dst, size_t dst_size,
     strnfmt(dst, dst_size, "%.*s...", max_width - 3, src);
 }
 
-static int run_history_detail_body_rows(int term_hgt, int first_row)
-{
-    int footer_row = term_hgt - 2;
-    int last_content_row = footer_row - 1;
-    int rows = last_content_row - first_row + 1;
-
-    if (rows < 1)
-        rows = 1;
-
-    return rows;
-}
-
-static void run_history_clamp_scroll(int* top, int rows, int total_lines)
-{
-    int max_top;
-
-    if (!top)
-        return;
-
-    if (rows < 1)
-        rows = 1;
-    if (total_lines < 0)
-        total_lines = 0;
-
-    max_top = total_lines - rows;
-    if (max_top < 0)
-        max_top = 0;
-
-    if (*top < 0)
-        *top = 0;
-    if (*top > max_top)
-        *top = max_top;
-}
-
-static bool run_history_handle_scroll_key(int* top, int ch, int rows,
-                                          int total_lines)
-{
-    int delta = 0;
-
-    if (!top)
-        return false;
-
-    if (rows < 1)
-        rows = 1;
-
-    switch (ch) {
-    case '2':
-    case 'j':
-    case 'J':
-#ifdef ARROW_DOWN
-    case ARROW_DOWN:
-#endif
-        delta = 1;
-        break;
-    case '8':
-    case 'k':
-    case 'K':
-#ifdef ARROW_UP
-    case ARROW_UP:
-#endif
-        delta = -1;
-        break;
-    case '3':
-    case 'n':
-    case 'N':
-        delta = rows;
-        break;
-    case '-':
-    case '7':
-    case 'p':
-    case 'P':
-        delta = -rows;
-        break;
-    default:
-        return false;
-    }
-
-    *top += delta;
-    run_history_clamp_scroll(top, rows, total_lines);
-    return true;
-}
-
-static void run_detail_text_view_init(run_detail_text_view* view, int first_row,
-                                      int visible_rows, int scroll_top,
-                                      int term_wid)
-{
-    if (!view)
-        return;
-
-    view->first_row = first_row;
-    view->visible_rows = (visible_rows < 1) ? 1 : visible_rows;
-    view->scroll_top = (scroll_top < 0) ? 0 : scroll_top;
-    view->logical_row = 0;
-    view->term_wid = (term_wid < 1) ? 80 : term_wid;
-}
-
-static void run_detail_text_view_put(run_detail_text_view* view, byte attr,
-                                     const char* text)
-{
-    int relative_row;
-
-    if (!view)
-        return;
-
-    relative_row = view->logical_row - view->scroll_top;
-    if (relative_row >= 0 && relative_row < view->visible_rows) {
-        score_ui_put_fit(attr, text ? text : "",
-            view->first_row + relative_row, 0, view->term_wid);
-    }
-
-    view->logical_row++;
-}
-
-static int run_detail_text_view_row_y(const run_detail_text_view* view)
-{
-    int relative_row;
-
-    if (!view)
-        return -1;
-
-    relative_row = view->logical_row - view->scroll_top;
-    if (relative_row < 0 || relative_row >= view->visible_rows)
-        return -1;
-
-    return view->first_row + relative_row;
-}
-
-static void run_detail_text_view_advance(run_detail_text_view* view)
-{
-    if (!view)
-        return;
-    view->logical_row++;
-}
-
-static void run_detail_text_view_blank(run_detail_text_view* view)
-{
-    if (!view)
-        return;
-    view->logical_row++;
-}
 extern void display_single_score(
     byte attr, int row, int col, int place, int fake, high_score* the_score)
 {
@@ -2535,35 +2376,689 @@ static const char* run_detail_panel_names[RUN_PANEL_COUNT] = {
     "General", "Stats", "Abilities", "Milestones", "Artefacts", "Monsters"
 };
 
-static const char* run_detail_panel_names_compact[RUN_PANEL_COUNT] = {
-    "Gen", "Stat", "Abil", "Mile", "Art", "Mon"
-};
+#define RUN_HISTORY_UI_PAGE_STEP 8
+#define RUN_HISTORY_UI_LIST_WINDOW 64
 
-static void run_history_draw_panel_tabs(run_detail_panel active,
-                                        const bool available[RUN_PANEL_COUNT])
+static int* run_history_build_monster_order(
+    const score_run_detail_block* details, run_monster_sort_mode mode,
+    int total);
+static const char* run_history_format_depth_label(
+    const score_run_milestone_v1* entry, char* buffer, size_t len);
+static const char* run_history_monster_sort_labels[RUN_MON_SORT_COUNT];
+
+static void run_history_ui_add_tabs(app_ui_panel* panel,
+    run_detail_panel active, const bool available[RUN_PANEL_COUNT])
 {
-    int col = 0;
-    int active_idx = (int)active;
-    int term_wid = 80;
-    int term_hgt = 24;
-    bool compact;
+    int i;
 
-    score_ui_get_term_size(&term_wid, &term_hgt);
-    compact = (term_wid < 72);
-    for (int i = 0; i < RUN_PANEL_COUNT; i++) {
-        char buffer[32];
-        strnfmt(buffer, sizeof(buffer), "%s%s%s",
-            (i == active_idx) ? "[" : " ",
-            compact ? run_detail_panel_names_compact[i]
-                    : run_detail_panel_names[i],
-            (i == active_idx) ? "]" : " ");
-        byte color = available[i] ? TERM_L_WHITE : TERM_SLATE;
-        if (i == active_idx)
-            color = available[i] ? TERM_WHITE : TERM_SLATE;
-        score_ui_put_fit(color, buffer, 0, col, term_wid);
-        col += (int)strlen(buffer) + 1;
+    if (!panel)
+        return;
+
+    for (i = 0; i < RUN_PANEL_COUNT; i++)
+    {
+        byte attr = available && available[i] ? TERM_L_WHITE : TERM_SLATE;
+
+        if (i == (int)active)
+            attr = available && available[i] ? TERM_L_BLUE : TERM_SLATE;
+        (void)app_ui_panel_add_tab(panel, (s16b)i, attr,
+            i == (int)active, run_detail_panel_names[i]);
     }
-    score_ui_put_fit(TERM_L_DARK, "Left/Right change views", 1, 0, term_wid);
+}
+
+static bool run_history_ui_add_section_row(app_ui_panel* panel, cptr label)
+{
+    app_ui_row* row;
+
+    if (!panel || !label)
+        return false;
+    if (!app_ui_panel_add_row_ex(panel, -1, TERM_L_BLUE, TERM_L_BLUE,
+            0, '\0', true, false, "", label, ""))
+    {
+        return false;
+    }
+
+    row = &panel->rows[panel->row_count - 1];
+    row->flags |= APP_UI_ITEM_FLAG_SECTION;
+    return true;
+}
+
+static bool run_history_ui_add_value_row(app_ui_panel* panel, byte label_attr,
+    cptr label, byte value_attr, cptr value)
+{
+    return app_ui_panel_add_row_ex(panel, -1, label_attr, value_attr, 0, '\0',
+        true, false, "", label ? label : "", value ? value : "");
+}
+
+static bool run_history_ui_handle_scroll_key(int* offset, int ch, int total)
+{
+    int delta = 0;
+
+    if (!offset || total <= 0)
+        return false;
+
+    switch (ch)
+    {
+    case '2':
+    case 'j':
+    case 'J':
+#ifdef ARROW_DOWN
+    case ARROW_DOWN:
+#endif
+        delta = 1;
+        break;
+    case '8':
+    case 'k':
+    case 'K':
+#ifdef ARROW_UP
+    case ARROW_UP:
+#endif
+        delta = -1;
+        break;
+    case '3':
+    case 'n':
+    case 'N':
+        delta = RUN_HISTORY_UI_PAGE_STEP;
+        break;
+    case '-':
+    case '7':
+    case 'p':
+    case 'P':
+        delta = -RUN_HISTORY_UI_PAGE_STEP;
+        break;
+    default:
+        return false;
+    }
+
+    *offset += delta;
+    if (*offset < 0)
+        *offset = 0;
+    if (*offset >= total)
+        *offset = total - 1;
+    return true;
+}
+
+static void run_history_ui_window(int total, int highlight, int* start,
+    int* end)
+{
+    int window_start;
+
+    if (start)
+        *start = 0;
+    if (end)
+        *end = 0;
+    if (total <= 0)
+        return;
+
+    window_start = highlight - (RUN_HISTORY_UI_LIST_WINDOW / 2);
+    if (window_start < 0)
+        window_start = 0;
+    if (window_start > total - RUN_HISTORY_UI_LIST_WINDOW)
+        window_start = MAX(0, total - RUN_HISTORY_UI_LIST_WINDOW);
+
+    if (start)
+        *start = window_start;
+    if (end)
+        *end = MIN(total, window_start + RUN_HISTORY_UI_LIST_WINDOW);
+}
+
+static void run_history_ui_build_header(char* title, size_t title_size,
+    char* subtitle, size_t subtitle_size, const score_record_v1* rec,
+    cptr player, cptr race_name, cptr status_label)
+{
+    if (title && title_size > 0)
+        strnfmt(title, title_size, "Run #%u Details",
+            rec ? rec->record_id : 0u);
+    if (subtitle && subtitle_size > 0)
+    {
+        strnfmt(subtitle, subtitle_size, "%s  |  %s  |  %s",
+            player ? player : "<unknown>",
+            race_name ? race_name : "<unknown>",
+            status_label ? status_label : "<unknown>");
+    }
+}
+
+static void run_history_ui_add_general_rows(app_ui_panel* panel,
+    const score_record_v1* rec, const run_history_entry* entry, cptr created,
+    cptr completed, bool current_run)
+{
+    char buf[APP_UI_META_MAX];
+    byte status_color;
+
+    if (!panel || !rec || !entry)
+        return;
+
+    status_color = (rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN
+        : (rec->status == SCORE_RECORD_DEAD) ? TERM_L_RED
+        : TERM_ORANGE;
+
+    (void)run_history_ui_add_section_row(panel, "Run");
+    strnfmt(buf, sizeof(buf), "%d points", entry->rating);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Rating", TERM_WHITE,
+        buf);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Status",
+        status_color, score_run_status_label(rec->status));
+    if (current_run)
+    {
+        strnfmt(buf, sizeof(buf), "%s (run in progress)", created);
+        (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Started",
+            TERM_L_GREEN, buf);
+    }
+    else
+    {
+        (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Started",
+            TERM_SLATE, created);
+        (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Completed",
+            TERM_SLATE, completed);
+    }
+
+    (void)run_history_ui_add_section_row(panel, "Progress");
+    strnfmt(buf, sizeof(buf), "%d ft", rec->max_depth * 50);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Max depth",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%d ft", rec->exit_depth * 50);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Exit depth",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->silmarils);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Silmarils",
+        rec->silmarils > 0 ? TERM_VIOLET : TERM_L_DARK, buf);
+
+    (void)run_history_ui_add_section_row(panel, "Totals");
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->quests_completed);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Quests completed",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->uniques_killed);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Uniques defeated",
+        rec->uniques_killed > 0 ? TERM_YELLOW : TERM_L_DARK, buf);
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->artefacts_found);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Artefacts found",
+        rec->artefacts_found > 0 ? TERM_YELLOW : TERM_L_DARK, buf);
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->skills_learned);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Skills learned",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%u", (unsigned)rec->abilities_learned);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Abilities learned",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%lu", (unsigned long)rec->kills_seen);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Monsters seen",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%lu", (unsigned long)rec->kills_total);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Monsters killed",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%lu", (unsigned long)rec->xp_earned);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Experience gained",
+        TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%lu", (unsigned long)rec->turns_spent);
+    (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Turns spent",
+        TERM_WHITE, buf);
+
+    if (rec->status == SCORE_RECORD_DEAD && rec->cause_of_death[0])
+    {
+        (void)run_history_ui_add_section_row(panel, "Death");
+        (void)run_history_ui_add_value_row(panel, TERM_L_RED, "Cause",
+            TERM_L_RED, rec->cause_of_death);
+    }
+}
+
+static void run_history_ui_add_stats_rows(app_ui_panel* panel,
+    const score_run_detail_block* details)
+{
+    int i;
+
+    if (!panel || !details)
+        return;
+
+    (void)run_history_ui_add_section_row(panel, "Stats");
+    if (!details->stats || details->stats_count == 0)
+    {
+        (void)run_history_ui_add_value_row(panel, TERM_L_DARK, "No stat data",
+            TERM_L_DARK, "Recorded stat data is unavailable for this run.");
+    }
+    else
+    {
+        for (i = 0; i < details->stats_count; i++)
+        {
+            const score_run_stat_v1* entry = &details->stats[i];
+            const char* label = (entry->stat_index < A_MAX)
+                ? stat_names_full[entry->stat_index]
+                : "<unknown>";
+            char meta[APP_UI_META_MAX];
+
+            strnfmt(meta, sizeof(meta), "Base %d  Drain %d  Current %d",
+                entry->base, entry->drain, entry->current);
+            (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, label,
+                TERM_WHITE, meta);
+        }
+    }
+
+    (void)run_history_ui_add_section_row(panel, "Skills");
+    if (!details->skills || details->skills_count == 0)
+    {
+        (void)run_history_ui_add_value_row(panel, TERM_L_DARK, "No skill data",
+            TERM_L_DARK, "Recorded skill data is unavailable for this run.");
+    }
+    else
+    {
+        for (i = 0; i < details->skills_count; i++)
+        {
+            const score_run_skill_v1* entry = &details->skills[i];
+            const char* label = (entry->skill_index < S_MAX)
+                ? skill_names_full[entry->skill_index]
+                : "<unknown>";
+            char meta[APP_UI_META_MAX];
+
+            strnfmt(meta, sizeof(meta),
+                "Base %d  Current %d  Stat %+d  Other %+d",
+                entry->base, entry->current, entry->stat_bonus,
+                entry->item_bonus);
+            (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, label,
+                TERM_WHITE, meta);
+        }
+    }
+}
+
+static void run_history_ui_add_list_footer(app_ui_panel* panel,
+    run_detail_panel active_panel, bool can_inspect, bool can_sort)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "4/6", "View");
+    if (active_panel == RUN_PANEL_GENERAL || active_panel == RUN_PANEL_STATS)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Scroll");
+    }
+    else
+    {
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+    }
+    if (can_inspect)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "Enter", "Inspect");
+    }
+    if (can_sort)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "s", "Sort");
+    }
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "Esc", "Back");
+}
+
+static void run_history_ui_add_ability_rows(app_ui_panel* panel,
+    const score_run_detail_block* details, run_detail_list_state* state)
+{
+    int total = details ? details->ability_count : 0;
+    int start;
+    int end;
+
+    if (!panel || !details || total <= 0)
+        return;
+    if (state->highlight < 0)
+        state->highlight = 0;
+    if (state->highlight >= total)
+        state->highlight = total - 1;
+
+    run_history_ui_window(total, state->highlight, &start, &end);
+    for (int idx = start; idx < end; idx++)
+    {
+        const score_run_ability_v1* entry = &details->abilities[idx];
+        const char* skill = (entry->skill_index < S_MAX)
+            ? skill_names_full[entry->skill_index]
+            : "<unknown skill>";
+        const char* ability_name = "<unknown ability>";
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+
+        if (entry->skill_index < S_MAX && entry->ability_index < ABILITIES_MAX)
+        {
+            ability_type* b_ptr = &b_info[ability_index(entry->skill_index,
+                entry->ability_index)];
+
+            if (b_ptr && b_ptr->name && b_name)
+                ability_name = b_name + b_ptr->name;
+        }
+
+        strnfmt(label, sizeof(label), "%s - %s", skill, ability_name);
+        strnfmt(meta, sizeof(meta), "Turn %lu  %d ft",
+            (unsigned long)entry->player_turn, entry->depth * 50);
+        (void)app_ui_panel_add_row_ex(panel, (s16b)idx,
+            TERM_WHITE, TERM_SLATE, 0, '\0', true,
+            idx == state->highlight, "", label, meta);
+    }
+
+    if (state->highlight >= 0 && state->highlight < total)
+    {
+        const score_run_ability_v1* entry = &details->abilities[state->highlight];
+        const char* skill = (entry->skill_index < S_MAX)
+            ? skill_names_full[entry->skill_index]
+            : "<unknown skill>";
+        const char* ability_name = "<unknown ability>";
+        char buf[APP_UI_TEXT_MAX];
+
+        if (entry->skill_index < S_MAX && entry->ability_index < ABILITIES_MAX)
+        {
+            ability_type* b_ptr = &b_info[ability_index(entry->skill_index,
+                entry->ability_index)];
+
+            if (b_ptr && b_ptr->name && b_name)
+                ability_name = b_name + b_ptr->name;
+        }
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Ability");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_WHITE, ability_name);
+        strnfmt(buf, sizeof(buf), "Skill: %s", skill);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Order: %u", entry->order);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Turn: %lu", (unsigned long)entry->player_turn);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Depth: %d ft", entry->depth * 50);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+}
+
+static void run_history_ui_add_milestone_rows(app_ui_panel* panel,
+    const score_run_detail_block* details, run_detail_list_state* state)
+{
+    int total = details ? details->milestone_count : 0;
+    int start;
+    int end;
+
+    if (!panel || !details || total <= 0)
+        return;
+    if (state->highlight < 0)
+        state->highlight = 0;
+    if (state->highlight >= total)
+        state->highlight = total - 1;
+
+    run_history_ui_window(total, state->highlight, &start, &end);
+    for (int idx = start; idx < end; idx++)
+    {
+        const score_run_milestone_v1* entry = &details->milestones[idx];
+        char depth_buf[16];
+        char meta[APP_UI_META_MAX];
+
+        strnfmt(meta, sizeof(meta), "Turn %lu  %s",
+            (unsigned long)entry->player_turn,
+            run_history_format_depth_label(entry, depth_buf, sizeof(depth_buf)));
+        (void)app_ui_panel_add_row_ex(panel, (s16b)idx, TERM_WHITE,
+            TERM_SLATE, 0, '\0', true, idx == state->highlight, "",
+            entry->note[0] ? entry->note : "(no note)", meta);
+    }
+
+    if (state->highlight >= 0 && state->highlight < total)
+    {
+        const score_run_milestone_v1* entry
+            = &details->milestones[state->highlight];
+        char depth_buf[16];
+        char buf[APP_UI_TEXT_MAX];
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Milestone");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_WHITE,
+            entry->note[0] ? entry->note : "(no note)");
+        strnfmt(buf, sizeof(buf), "Turn: %lu",
+            (unsigned long)entry->player_turn);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Depth: %s",
+            run_history_format_depth_label(entry, depth_buf, sizeof(depth_buf)));
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+}
+
+static void run_history_ui_add_artefact_rows(app_ui_panel* panel,
+    const score_run_detail_block* details, run_detail_list_state* state)
+{
+    int total;
+    int start;
+    int end;
+
+    if (!panel || !details)
+        return;
+
+    total = details->header.artefact_count;
+    if (total > details->header.artefact_capacity)
+        total = details->header.artefact_capacity;
+    if (total <= 0)
+        return;
+    if (state->highlight < 0)
+        state->highlight = 0;
+    if (state->highlight >= total)
+        state->highlight = total - 1;
+
+    run_history_ui_window(total, state->highlight, &start, &end);
+    for (int idx = start; idx < end; idx++)
+    {
+        const score_run_artefact_v1* entry = &details->artefacts[idx];
+        object_type temp_obj;
+        char full_desc[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte icon_attr = TERM_WHITE;
+        char icon_char = '?';
+
+        full_desc[0] = '\0';
+        meta[0] = '\0';
+        if (run_history_prepare_artefact_object(entry, &temp_obj))
+        {
+            object_desc(full_desc, sizeof(full_desc), &temp_obj, true, 0);
+            icon_attr = object_attr(&temp_obj);
+            icon_char = object_char(&temp_obj);
+        }
+        else if (z_info && entry->a_idx > 0 && entry->a_idx < z_info->art_max)
+        {
+            artefact_type* art = &a_info[entry->a_idx];
+
+            if (art && art->name[0])
+                SDL_strlcpy(full_desc, art->name, sizeof(full_desc));
+        }
+        if (!full_desc[0])
+            SDL_strlcpy(full_desc, "<unknown artefact>", sizeof(full_desc));
+        SDL_strlcpy(meta, entry->forged ? "Forged" : "Artefact", sizeof(meta));
+
+        (void)app_ui_panel_add_row_ex(panel, (s16b)idx, TERM_YELLOW,
+            TERM_SLATE, icon_attr, icon_char, true, idx == state->highlight,
+            "", full_desc, meta);
+    }
+
+    if (state->highlight >= 0 && state->highlight < total)
+    {
+        const score_run_artefact_v1* entry = &details->artefacts[state->highlight];
+        object_type temp_obj;
+        char desc[APP_UI_TEXT_MAX];
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Artefact");
+        if (run_history_prepare_artefact_object(entry, &temp_obj))
+            object_desc(desc, sizeof(desc), &temp_obj, true, 0);
+        else
+            SDL_strlcpy(desc, "<unknown artefact>", sizeof(desc));
+        (void)app_ui_panel_add_detail_line(panel, TERM_YELLOW, desc);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            entry->forged ? "Forged during this run." : "Recovered artefact.");
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+            "Press Enter to inspect.");
+    }
+}
+
+static void run_history_ui_add_monster_rows(app_ui_panel* panel,
+    const score_run_detail_block* details, run_detail_list_state* state,
+    run_monster_sort_mode sort_mode)
+{
+    int total;
+    int start;
+    int end;
+    int* order;
+
+    if (!panel || !details)
+        return;
+
+    total = details->header.monster_count;
+    if (total > details->header.monster_capacity)
+        total = details->header.monster_capacity;
+    if (total <= 0)
+        return;
+    if (state->highlight < 0)
+        state->highlight = 0;
+    if (state->highlight >= total)
+        state->highlight = total - 1;
+
+    order = run_history_build_monster_order(details, sort_mode, total);
+    if (!order)
+        return;
+
+    run_history_ui_window(total, state->highlight, &start, &end);
+    for (int idx = start; idx < end; idx++)
+    {
+        const score_run_monster_v1* entry = &details->monsters[order[idx]];
+        const char* name = run_history_monster_name(entry->r_idx);
+        monster_race* r_ptr = NULL;
+        char meta[APP_UI_META_MAX];
+        byte icon_attr = TERM_WHITE;
+        char icon_char = '?';
+
+        if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max)
+            r_ptr = &r_info[entry->r_idx];
+        if (r_ptr)
+        {
+            icon_attr = monster_attr(r_ptr);
+            icon_char = monster_char(r_ptr);
+        }
+
+        strnfmt(meta, sizeof(meta), "Seen %u  Slain %u  Deaths %u",
+            (unsigned)entry->seen, (unsigned)entry->killed,
+            (unsigned)entry->deaths);
+        (void)app_ui_panel_add_row_ex(panel, (s16b)idx,
+            entry->killed > 0 ? TERM_L_GREEN : TERM_WHITE, TERM_SLATE,
+            icon_attr, icon_char, true, idx == state->highlight,
+            "", name, meta);
+    }
+
+    if (state->highlight >= 0 && state->highlight < total)
+    {
+        const score_run_monster_v1* entry = &details->monsters[order[state->highlight]];
+        char buf[APP_UI_TEXT_MAX];
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Monster");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_WHITE,
+            run_history_monster_name(entry->r_idx));
+        strnfmt(buf, sizeof(buf), "Seen: %u", (unsigned)entry->seen);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Slain: %u", (unsigned)entry->killed);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Deaths: %u", (unsigned)entry->deaths);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        strnfmt(buf, sizeof(buf), "Sort: %s",
+            run_history_monster_sort_labels[sort_mode]);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+            "Press Enter to inspect. Press s to sort.");
+    }
+
+    mem_free(order);
+}
+
+static int run_history_ui_build_scene(app_ui_scene* scene,
+    const run_history_entry* entry, const score_run_detail_block* details,
+    bool have_details, bool current_run, cptr player, cptr race_name,
+    cptr created, cptr completed, const bool available[RUN_PANEL_COUNT],
+    run_detail_panel active_panel, run_detail_view_state* view)
+{
+    app_ui_panel* panel;
+    char title[APP_UI_TITLE_MAX];
+    char subtitle[APP_UI_TEXT_MAX];
+    const score_record_v1* rec = entry ? &entry->record : NULL;
+    int total_rows = 0;
+
+    if (!scene || !entry || !view || !rec)
+        return -1;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return -1;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1180, 2200);
+    run_history_ui_build_header(title, sizeof(title), subtitle,
+        sizeof(subtitle), rec, player, race_name,
+        score_run_status_label(rec->status));
+    app_ui_panel_set_title(panel, TERM_L_WHITE, title);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+    run_history_ui_add_tabs(panel, active_panel, available);
+
+    switch (active_panel)
+    {
+    case RUN_PANEL_GENERAL:
+        run_history_ui_add_general_rows(panel, rec, entry, created, completed,
+            current_run);
+        app_ui_panel_set_row_offset(panel, (s16b)view->general_top);
+        total_rows = panel->row_count;
+        break;
+    case RUN_PANEL_STATS:
+        if (have_details)
+            run_history_ui_add_stats_rows(panel, details);
+        else
+            (void)run_history_ui_add_value_row(panel, TERM_L_DARK,
+                "No detail data", TERM_L_DARK,
+                "This run does not have a recorded detail payload.");
+        app_ui_panel_set_row_offset(panel, (s16b)view->stats_top);
+        total_rows = panel->row_count;
+        break;
+    case RUN_PANEL_ABILITIES:
+        if (have_details && details->ability_count > 0)
+            run_history_ui_add_ability_rows(panel, details, &view->abilities);
+        else
+            (void)run_history_ui_add_value_row(panel, TERM_L_DARK,
+                "No ability timeline", TERM_L_DARK,
+                "No ability timeline was recorded for this run.");
+        total_rows = have_details ? details->ability_count : 0;
+        break;
+    case RUN_PANEL_MILESTONES:
+        if (have_details && details->milestone_count > 0)
+            run_history_ui_add_milestone_rows(panel, details, &view->milestones);
+        else
+            (void)run_history_ui_add_value_row(panel, TERM_L_DARK,
+                "No milestones", TERM_L_DARK,
+                "No milestone log was recorded for this run.");
+        total_rows = have_details ? details->milestone_count : 0;
+        break;
+    case RUN_PANEL_ARTEFACTS:
+        if (have_details && details->header.artefact_count > 0)
+            run_history_ui_add_artefact_rows(panel, details, &view->artefacts);
+        else
+            (void)run_history_ui_add_value_row(panel, TERM_L_DARK,
+                "No artefacts", TERM_L_DARK,
+                "No artefact data was recorded for this run.");
+        total_rows = have_details ? MIN(details->header.artefact_count,
+            details->header.artefact_capacity) : 0;
+        break;
+    case RUN_PANEL_MONSTERS:
+        if (have_details && details->header.monster_count > 0)
+            run_history_ui_add_monster_rows(panel, details, &view->monsters,
+                view->monster_sort_mode);
+        else
+            (void)run_history_ui_add_value_row(panel, TERM_L_DARK,
+                "No monster encounters", TERM_L_DARK,
+                "No monster encounter data was recorded for this run.");
+        total_rows = have_details ? MIN(details->header.monster_count,
+            details->header.monster_capacity) : 0;
+        break;
+    default:
+        break;
+    }
+
+    run_history_ui_add_list_footer(panel, active_panel,
+        total_rows > 0
+            && (active_panel == RUN_PANEL_ARTEFACTS
+                || active_panel == RUN_PANEL_MONSTERS),
+        total_rows > 0 && active_panel == RUN_PANEL_MONSTERS);
+    return total_rows;
 }
 
 static const char* run_history_monster_sort_labels[RUN_MON_SORT_COUNT] = {
@@ -2638,258 +3133,6 @@ static int* run_history_build_monster_order(const score_run_detail_block* detail
     return order;
 }
 
-static int run_history_draw_general_panel(const score_record_v1* rec,
-                                          const run_history_entry* entry,
-                                          const char* player,
-                                          const char* race_name,
-                                          const char* status_label,
-                                          const char* created,
-                                          const char* completed,
-                                          bool current_run,
-                                          int scroll_top,
-                                          int term_hgt,
-                                          int term_wid)
-{
-    char line[160];
-    run_detail_text_view view;
-
-    byte status_color = (rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN :
-                        (rec->status == SCORE_RECORD_DEAD) ? TERM_L_RED : TERM_ORANGE;
-
-    run_detail_text_view_init(&view, 3, run_history_detail_body_rows(term_hgt, 3),
-        scroll_top, term_wid);
-
-    strnfmt(line, sizeof(line), "Player:      %s", player);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Race:        %s", race_name);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Status:      %s", status_label);
-    run_detail_text_view_put(&view, status_color, line);
-
-    strnfmt(line, sizeof(line), "Rating:      %d points", entry->rating);
-    run_detail_text_view_put(&view, TERM_SLATE, line);
-    run_detail_text_view_blank(&view);
-
-    if (!current_run) {
-        strnfmt(line, sizeof(line), "Started:     %s", created);
-        run_detail_text_view_put(&view, TERM_L_DARK, line);
-        strnfmt(line, sizeof(line), "Completed:   %s", completed);
-        run_detail_text_view_put(&view, TERM_L_DARK, line);
-    } else {
-        strnfmt(line, sizeof(line), "Started:     %s  (Run in progress)", created);
-        run_detail_text_view_put(&view, TERM_L_GREEN, line);
-    }
-    run_detail_text_view_blank(&view);
-
-    strnfmt(line, sizeof(line), "Max depth:      %d ft", rec->max_depth * 50);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Current depth:  %d ft", rec->exit_depth * 50);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    byte sil_color = (rec->silmarils > 0) ? TERM_VIOLET : TERM_L_DARK;
-    strnfmt(line, sizeof(line), "Silmarils:      %u", (unsigned)rec->silmarils);
-    run_detail_text_view_put(&view, sil_color, line);
-    run_detail_text_view_blank(&view);
-
-    strnfmt(line, sizeof(line), "Quests completed:     %u", (unsigned)rec->quests_completed);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    byte unique_color = (rec->uniques_killed > 0) ? TERM_YELLOW : TERM_L_DARK;
-    strnfmt(line, sizeof(line), "Uniques defeated:     %u", (unsigned)rec->uniques_killed);
-    run_detail_text_view_put(&view, unique_color, line);
-
-    byte art_color = (rec->artefacts_found > 0) ? TERM_YELLOW : TERM_L_DARK;
-    strnfmt(line, sizeof(line), "Artefacts found:      %u", (unsigned)rec->artefacts_found);
-    run_detail_text_view_put(&view, art_color, line);
-
-    strnfmt(line, sizeof(line), "Skills learned:       %u", (unsigned)rec->skills_learned);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Abilities learned:    %u", (unsigned)rec->abilities_learned);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-    run_detail_text_view_blank(&view);
-
-    strnfmt(line, sizeof(line), "Monsters seen:        %lu", (unsigned long)rec->kills_seen);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Monsters killed:      %lu", (unsigned long)rec->kills_total);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Experience gained:    %lu", (unsigned long)rec->xp_earned);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    strnfmt(line, sizeof(line), "Turns spent:          %lu", (unsigned long)rec->turns_spent);
-    run_detail_text_view_put(&view, TERM_L_WHITE, line);
-
-    if (rec->status == SCORE_RECORD_DEAD) {
-        run_detail_text_view_blank(&view);
-        strnfmt(line, sizeof(line), "Cause of death:  %s", rec->cause_of_death);
-        run_detail_text_view_put(&view, TERM_L_RED, line);
-    }
-
-    return view.logical_row;
-}
-
-static int run_history_draw_stats_panel(const score_run_detail_block* details,
-                                        int scroll_top,
-                                        int term_hgt,
-                                        int term_wid)
-{
-    const int stat_base_col = 14;
-    const int stat_drain_col = 22;
-    const int stat_current_col = 30;
-    const int skill_base_col = 18;
-    const int skill_current_col = 28;
-    const int skill_stat_col = 38;
-    const int skill_other_col = 46;
-    run_detail_text_view view;
-
-    run_detail_text_view_init(&view, 3, run_history_detail_body_rows(term_hgt, 3),
-        scroll_top, term_wid);
-
-    if (!details->stats || details->stats_count == 0) {
-        run_detail_text_view_put(&view, TERM_L_DARK,
-            "No stat data recorded for this run.");
-        run_detail_text_view_blank(&view);
-    } else {
-        int y;
-
-        run_detail_text_view_put(&view, TERM_L_BLUE, "=== Stats ===");
-        y = run_detail_text_view_row_y(&view);
-        if (y >= 0) {
-            c_prt(TERM_L_UMBER, "Stat", y, 0);
-            c_prt(TERM_L_UMBER, "Base", y, stat_base_col);
-            c_prt(TERM_L_UMBER, "Drain", y, stat_drain_col);
-            c_prt(TERM_L_UMBER, "Current", y, stat_current_col);
-        }
-        run_detail_text_view_advance(&view);
-        for (u16b i = 0; i < details->stats_count; i++) {
-            const score_run_stat_v1* entry = &details->stats[i];
-            const char* label = (entry->stat_index < A_MAX)
-                ? stat_names_full[entry->stat_index] : "<unknown>";
-            y = run_detail_text_view_row_y(&view);
-            if (y >= 0) {
-                c_prt(TERM_L_WHITE, label, y, 0);
-                c_prt(TERM_L_WHITE, format("%5d", entry->base), y,
-                    stat_base_col);
-                c_prt(TERM_L_WHITE, format("%5d", entry->drain), y,
-                    stat_drain_col);
-                c_prt(TERM_L_WHITE, format("%7d", entry->current), y,
-                    stat_current_col);
-            }
-            run_detail_text_view_advance(&view);
-        }
-        run_detail_text_view_blank(&view);
-    }
-
-    if (!details->skills || details->skills_count == 0) {
-        run_detail_text_view_put(&view, TERM_L_DARK,
-            "No skill data recorded for this run.");
-    } else {
-        int y;
-
-        run_detail_text_view_put(&view, TERM_L_BLUE, "=== Skills ===");
-        y = run_detail_text_view_row_y(&view);
-        if (y >= 0) {
-            c_prt(TERM_L_UMBER, "Skill", y, 0);
-            c_prt(TERM_L_UMBER, "Base", y, skill_base_col);
-            c_prt(TERM_L_UMBER, "Current", y, skill_current_col);
-            c_prt(TERM_L_UMBER, "Stat", y, skill_stat_col);
-            c_prt(TERM_L_UMBER, "Other", y, skill_other_col);
-        }
-        run_detail_text_view_advance(&view);
-        for (u16b i = 0; i < details->skills_count; i++) {
-            const score_run_skill_v1* entry = &details->skills[i];
-            const char* label = (entry->skill_index < S_MAX)
-                ? skill_names_full[entry->skill_index] : "<unknown>";
-            y = run_detail_text_view_row_y(&view);
-            if (y >= 0) {
-                c_prt(TERM_L_WHITE, label, y, 0);
-                c_prt(TERM_L_WHITE, format("%5d", entry->base), y,
-                    skill_base_col);
-                c_prt(TERM_L_WHITE, format("%7d", entry->current), y,
-                    skill_current_col);
-                c_prt(TERM_L_WHITE, format("%5d", entry->stat_bonus), y,
-                    skill_stat_col);
-                c_prt(TERM_L_WHITE, format("%5d", entry->item_bonus), y,
-                    skill_other_col);
-            }
-            run_detail_text_view_advance(&view);
-        }
-    }
-
-    return view.logical_row;
-}
-
-static void run_history_clamp_list_state(run_detail_list_state* state,
-                                         int rows, int total)
-{
-    if (total <= 0) {
-        state->top = 0;
-        state->highlight = 0;
-        return;
-    }
-    if (rows < 1)
-        rows = 1;
-    if (state->highlight < 0)
-        state->highlight = 0;
-    if (state->highlight >= total)
-        state->highlight = total - 1;
-    if (state->top < 0)
-        state->top = 0;
-    if (state->top > total - rows)
-        state->top = MAX(total - rows, 0);
-    if (state->highlight < state->top)
-        state->top = state->highlight;
-    if (state->highlight >= state->top + rows)
-        state->top = state->highlight - rows + 1;
-}
-
-static bool run_history_handle_list_key(run_detail_list_state* state,
-                                        int ch, int rows, int total)
-{
-    if (total <= 0)
-        return false;
-
-    switch (ch) {
-    case '2':
-    case 'j':
-    case 'J':
-#ifdef ARROW_DOWN
-    case ARROW_DOWN:
-#endif
-        state->highlight++;
-        break;
-    case '8':
-    case 'k':
-    case 'K':
-#ifdef ARROW_UP
-    case ARROW_UP:
-#endif
-        state->highlight--;
-        break;
-    case '3':
-    case 'n':
-    case 'N':
-        state->highlight += rows;
-        break;
-    case '-':
-    case '7':
-    case 'p':
-    case 'P':
-        state->highlight -= rows;
-        break;
-    default:
-        return false;
-    }
-
-    run_history_clamp_list_state(state, rows, total);
-    return true;
-}
-
 static const char* run_history_format_depth_label(const score_run_milestone_v1* entry,
                                                   char* buffer, size_t len)
 {
@@ -2904,87 +3147,6 @@ static const char* run_history_format_depth_label(const score_run_milestone_v1* 
     }
     strnfmt(buffer, len, "%5d ft", feet);
     return buffer;
-}
-
-static int run_history_draw_abilities_panel(const score_run_detail_block* details,
-                                            run_detail_list_state* state,
-                                            int term_hgt)
-{
-    int total = details->ability_count;
-    int rows = run_history_detail_body_rows(term_hgt, 5);
-
-    if (total <= 0) {
-        c_prt(TERM_L_DARK, "No ability timeline recorded for this run.", 3, 0);
-        return rows;
-    }
-
-    run_history_clamp_list_state(state, rows, total);
-
-    c_prt(TERM_L_BLUE, format("=== Abilities Acquired (%d total) ===", total), 2, 0);
-    c_prt(TERM_L_UMBER, "Seq  Turn     Depth    Ability", 4, 0);
-
-    for (int row = 0; row < rows; row++) {
-        int idx = state->top + row;
-        if (idx >= total)
-            break;
-        const score_run_ability_v1* entry = &details->abilities[idx];
-        const char* skill = (entry->skill_index < S_MAX)
-            ? skill_names_full[entry->skill_index] : "<unknown skill>";
-        const char* ability_name = "<unknown ability>";
-        if (entry->skill_index < S_MAX && entry->ability_index < ABILITIES_MAX) {
-            ability_type* b_ptr = &b_info[ability_index(entry->skill_index, entry->ability_index)];
-            if (b_ptr && b_ptr->name && b_name)
-                ability_name = b_name + b_ptr->name;
-        }
-        byte color = (idx == state->highlight) ? TERM_L_GREEN : TERM_L_WHITE;
-        char depth_buf[16];
-        strnfmt(depth_buf, sizeof(depth_buf), "%5d ft", entry->depth * 50);
-        c_prt(color,
-            format("%3u  %7lu  %-7s  %s - %s",
-                entry->order,
-                (unsigned long)entry->player_turn,
-                depth_buf,
-                skill,
-                ability_name),
-            5 + row, 0);
-    }
-
-    return rows;
-}
-
-static int run_history_draw_milestones_panel(const score_run_detail_block* details,
-                                             run_detail_list_state* state,
-                                             int term_hgt)
-{
-    int total = details->milestone_count;
-    int rows = run_history_detail_body_rows(term_hgt, 5);
-
-    if (total <= 0 || !details->milestones) {
-        c_prt(TERM_L_DARK, "No milestone log recorded for this run.", 3, 0);
-        return rows;
-    }
-
-    run_history_clamp_list_state(state, rows, total);
-    c_prt(TERM_L_BLUE, "=== Milestones ===", 2, 0);
-    c_prt(TERM_L_UMBER, "Turn      Depth    Note", 4, 0);
-
-    for (int row = 0; row < rows; row++) {
-        int idx = state->top + row;
-        if (idx >= total)
-            break;
-        const score_run_milestone_v1* entry = &details->milestones[idx];
-        char depth_buf[16];
-        const char* depth = run_history_format_depth_label(entry, depth_buf, sizeof(depth_buf));
-        byte color = (idx == state->highlight) ? TERM_L_GREEN : TERM_L_WHITE;
-        c_prt(color,
-            format("%7lu  %-8s  %-60.60s",
-                (unsigned long)entry->player_turn,
-                depth,
-                entry->note[0] ? entry->note : "(no note)"),
-            5 + row, 0);
-    }
-
-    return rows;
 }
 
 static void run_history_examine_artefact(const score_run_detail_block* details,
@@ -3034,143 +3196,6 @@ static void run_history_examine_monster(const score_run_detail_block* details,
     }
 }
 
-static int run_history_draw_artefact_panel(const score_run_detail_block* details,
-                                           run_detail_list_state* state,
-                                           int term_hgt)
-{
-    int total = details->header.artefact_count;
-    if (total > details->header.artefact_capacity)
-        total = details->header.artefact_capacity;
-    int rows = run_history_detail_body_rows(term_hgt, 5);
-
-    if (total <= 0 || !details->artefacts) {
-        c_prt(TERM_L_DARK, "No artefact data recorded for this run.", 3, 0);
-        return rows;
-    }
-
-    run_history_clamp_list_state(state, rows, total);
-    c_prt(TERM_L_BLUE, format("=== Artefacts Recovered (%d total) ===", total), 2, 0);
-    c_prt(TERM_L_UMBER, "Artefact", 4, 4);
-
-    for (int row = 0; row < rows; row++) {
-        int idx = state->top + row;
-        if (idx >= total)
-            break;
-        const score_run_artefact_v1* entry = &details->artefacts[idx];
-        char full_desc[120] = "<unknown artefact>";
-        byte color = TERM_WHITE;
-        byte pict_attr = TERM_WHITE;
-        char pict_char = '?';
-        object_type temp_obj;
-        if (run_history_prepare_artefact_object(entry, &temp_obj)) {
-            color = TERM_YELLOW;
-            object_desc(full_desc, sizeof(full_desc), &temp_obj, true, 0);
-            pict_attr = object_attr(&temp_obj);
-            pict_char = object_char(&temp_obj);
-        } else if (z_info && entry->a_idx > 0 && entry->a_idx < z_info->art_max) {
-            artefact_type* art = &a_info[entry->a_idx];
-            if (art && art->name[0])
-                SDL_strlcpy(full_desc, art->name, sizeof(full_desc));
-        }
-
-        bool selected = (idx == state->highlight);
-        int y = 5 + row;
-        c_prt(selected ? TERM_L_GREEN : color, selected ? ">" : " ", y, 0);
-        Term_putch(2, y, pict_attr, pict_char);
-        if (use_bigtile)
-            Term_putch(3, y, 255, -1);
-        c_prt(selected ? TERM_L_GREEN : color,
-            format("%-72.72s", full_desc), y, 4);
-    }
-
-    return rows;
-}
-
-static int run_history_draw_monster_panel(const score_run_detail_block* details,
-                                          run_detail_list_state* state,
-                                          run_monster_sort_mode sort_mode,
-                                          int term_hgt)
-{
-    int term_wid = 80;
-    int total = details->header.monster_count;
-    if (total > details->header.monster_capacity)
-        total = details->header.monster_capacity;
-    int rows = run_history_detail_body_rows(term_hgt, 5);
-
-    if (total <= 0 || !details->monsters) {
-        c_prt(TERM_L_DARK, "No monster encounters were tracked for this run.", 3, 0);
-        return rows;
-    }
-
-    run_history_clamp_list_state(state, rows, total);
-    int* order = run_history_build_monster_order(details, sort_mode, total);
-    if (!order) {
-        c_prt(TERM_L_DARK, "Unable to build monster list.", 3, 0);
-        return rows;
-    }
-
-    score_ui_get_term_size(&term_wid, NULL);
-
-    c_prt(TERM_L_BLUE,
-          format("=== Monster Encounters (%d total, %s) ===",
-                 total, run_history_monster_sort_labels[sort_mode]),
-          2, 0);
-    c_prt(TERM_L_UMBER, "Monster", 4, 2);
-    if (score_ui_compact_width(term_wid)) {
-        int seen_col = term_wid - 10;
-        int slain_col = term_wid - 5;
-        c_prt(TERM_L_UMBER, "Seen", 4, seen_col);
-        c_prt(TERM_L_UMBER, "Slay", 4, slain_col);
-    } else {
-        c_prt(TERM_L_UMBER, "Seen", 4, 58);
-        c_prt(TERM_L_UMBER, "Slain", 4, 68);
-    }
-
-    for (int row = 0; row < rows; row++) {
-        int idx = state->top + row;
-        if (idx >= total)
-            break;
-        const score_run_monster_v1* entry = &details->monsters[order[idx]];
-        const char* name = run_history_monster_name(entry->r_idx);
-        byte pic_color = TERM_WHITE;
-        char pic_char = '?';
-        if (z_info && entry->r_idx > 0 && entry->r_idx < z_info->r_max) {
-            monster_race* r_ptr = &r_info[entry->r_idx];
-            pic_char = monster_char(r_ptr);
-            pic_color = monster_attr(r_ptr);
-        }
-
-        byte color = (entry->killed > 0) ? TERM_L_GREEN : TERM_L_WHITE;
-        byte display_color = (idx == state->highlight) ? TERM_YELLOW : color;
-        int y = 5 + row;
-        bool compact = score_ui_compact_width(term_wid);
-        c_prt(display_color, (idx == state->highlight) ? ">" : " ", y, 0);
-        Term_putch(2, y, pic_color, pic_char);
-        if (use_bigtile) {
-            Term_putch(3, y, 255, -1);
-        }
-        if (compact) {
-            int seen_col = term_wid - 10;
-            int slain_col = term_wid - 5;
-            int name_width = seen_col - 5;
-            if (name_width < 8)
-                name_width = 8;
-            Term_putstr(4, y, name_width, display_color, name);
-            c_prt(display_color, format("%4u", (unsigned)entry->seen), y,
-                seen_col);
-            c_prt(display_color, format("%4u", (unsigned)entry->killed), y,
-                slain_col);
-        } else {
-            c_prt(display_color, format("%-52.52s", name), y, 4);
-            c_prt(display_color, format("%5u", (unsigned)entry->seen), y, 58);
-            c_prt(display_color, format("%5u", (unsigned)entry->killed), y, 68);
-        }
-    }
-
-    mem_free(order);
-    return rows;
-}
-
 static void run_history_show_detail(const run_history_entry* entry)
 {
     if (!entry)
@@ -3206,7 +3231,6 @@ static void run_history_show_detail(const run_history_entry* entry)
     run_history_format_timestamp(rec->created_utc, true, created, sizeof(created));
     run_history_format_timestamp(rec->completed_utc, true, completed, sizeof(completed));
 
-    const char* status = score_run_status_label(rec->status);
     const char* race_name = run_history_race_name(rec->race_id);
 
     bool panel_has_data[RUN_PANEL_COUNT];
@@ -3220,10 +3244,6 @@ static void run_history_show_detail(const run_history_entry* entry)
     run_detail_panel panel = RUN_PANEL_GENERAL;
     run_detail_view_state view = {0};
     bool done = false;
-    int term_hgt = 24;
-    int term_wid = 80;
-    int general_total_lines = 0;
-    int stats_total_lines = 0;
     ui_information_scene_scope detail_scope;
     if (!ui_information_scene_enter(&detail_scope))
     {
@@ -3236,110 +3256,15 @@ static void run_history_show_detail(const run_history_entry* entry)
 
     while (!done) {
         bool steamdeck = steamdeck_controls_active();
-        char confirm_label[16] = "";
-        char back_label[16] = "";
-        char sort_label[16] = "";
+        app_ui_scene scene;
+        int current_total_rows;
 
-        Term_clear();
-
-        if (steamdeck) {
-            score_prompt_label(steamdeck_confirm_key(), "A",
-                confirm_label, sizeof(confirm_label));
-            score_prompt_label(steamdeck_back_key(), "B",
-                back_label, sizeof(back_label));
-            score_prompt_label(steamdeck_secondary_key(), "Y",
-                sort_label, sizeof(sort_label));
-        }
-
-        score_ui_get_term_size(&term_wid, &term_hgt);
-        run_history_draw_panel_tabs(panel, panel_has_data);
-
-        const char* footer = NULL;
-        int text_rows = run_history_detail_body_rows(term_hgt, 3);
-        int artefact_rows = 0;
-        int monster_rows = 0;
-        int ability_rows = 0;
-        int milestone_rows = 0;
-
-        switch (panel) {
-        case RUN_PANEL_GENERAL:
-            c_prt(TERM_L_BLUE, format("=== Run #%u Details ===", rec->record_id), 2, 0);
-            run_history_clamp_scroll(&view.general_top, text_rows,
-                general_total_lines);
-            general_total_lines = run_history_draw_general_panel(rec, entry,
-                player, race_name, status, created, completed, current_run,
-                view.general_top, term_hgt, term_wid);
-            footer = steamdeck
-                ? ((general_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [%s] back"
-                    : "[Left/Right] view  [%s] back")
-                : ((general_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [Esc] back"
-                    : "[Left/Right] view  [Esc] back");
-            break;
-        case RUN_PANEL_STATS:
-            c_prt(TERM_L_BLUE, format("=== Run #%u Details ===", rec->record_id), 2, 0);
-            run_history_clamp_scroll(&view.stats_top, text_rows,
-                stats_total_lines);
-            stats_total_lines = run_history_draw_stats_panel(&details,
-                view.stats_top, term_hgt, term_wid);
-            footer = steamdeck
-                ? ((stats_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [%s] back"
-                    : "[Left/Right] view  [%s] back")
-                : ((stats_total_lines > text_rows)
-                    ? "[Up/Down] scroll  [Left/Right] view  [Esc] back"
-                    : "[Left/Right] view  [Esc] back");
-            break;
-        case RUN_PANEL_ABILITIES:
-            ability_rows = run_history_draw_abilities_panel(&details, &view.abilities, term_hgt);
-            footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] back"
-                : "[Up/Down] navigate  [Left/Right] view  [Esc] back";
-            break;
-        case RUN_PANEL_MILESTONES:
-            milestone_rows = run_history_draw_milestones_panel(&details, &view.milestones, term_hgt);
-            footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] back"
-                : "[Up/Down] navigate  [Left/Right] view  [Esc] back";
-            break;
-        case RUN_PANEL_ARTEFACTS:
-            artefact_rows = run_history_draw_artefact_panel(&details, &view.artefacts, term_hgt);
-            footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] inspect  [%s] back"
-                : "[Up/Down] navigate  [Space/Enter] inspect  [Left/Right] view  [Esc] back";
-            break;
-        case RUN_PANEL_MONSTERS:
-            monster_rows = run_history_draw_monster_panel(&details, &view.monsters,
-                view.monster_sort_mode, term_hgt);
-            footer = steamdeck
-                ? "[Up/Down] navigate  [Left/Right] view  [%s] inspect  [%s] sort  [%s] back"
-                : "[Up/Down] navigate  [Space/Enter] inspect  [S] sort  [Left/Right] view  [Esc] back";
-            break;
-        default:
-            break;
-        }
-
-        if (steamdeck && footer) {
-            if (panel == RUN_PANEL_GENERAL || panel == RUN_PANEL_STATS ||
-                panel == RUN_PANEL_ABILITIES || panel == RUN_PANEL_MILESTONES) {
-                score_ui_put_fit(TERM_L_DARK, format(footer, back_label),
-                    term_hgt - 2, 0, term_wid);
-            } else if (panel == RUN_PANEL_ARTEFACTS) {
-                score_ui_put_fit(TERM_L_DARK,
-                    format(footer, confirm_label, back_label),
-                    term_hgt - 2, 0, term_wid);
-            } else if (panel == RUN_PANEL_MONSTERS) {
-                score_ui_put_fit(TERM_L_DARK,
-                    format(footer, confirm_label, sort_label, back_label),
-                    term_hgt - 2, 0, term_wid);
-            }
-        } else if (footer) {
-            score_ui_put_fit(TERM_L_DARK, footer, term_hgt - 2, 0, term_wid);
-        }
-        if (!ui_information_scene_present_term())
+        current_total_rows = run_history_ui_build_scene(&scene, entry, &details,
+            have_details, current_run, player, race_name, created, completed,
+            panel_has_data, panel, &view);
+        if (current_total_rows < 0 || !ui_information_scene_present_ui(&scene))
         {
-            log_warn("run history detail: failed to present information-scene frame");
+            log_warn("run history detail: failed to present semantic scene");
             msg_print("Run history detail viewer unavailable.");
             break;
         }
@@ -3381,20 +3306,20 @@ static void run_history_show_detail(const run_history_entry* entry)
             bool handled = false;
             switch (panel) {
             case RUN_PANEL_GENERAL:
-                handled = run_history_handle_scroll_key(&view.general_top, ch,
-                    text_rows, general_total_lines);
+                handled = run_history_ui_handle_scroll_key(&view.general_top,
+                    ch, current_total_rows);
                 break;
             case RUN_PANEL_STATS:
-                handled = run_history_handle_scroll_key(&view.stats_top, ch,
-                    text_rows, stats_total_lines);
+                handled = run_history_ui_handle_scroll_key(&view.stats_top, ch,
+                    current_total_rows);
                 break;
             case RUN_PANEL_ABILITIES:
-                handled = run_history_handle_list_key(&view.abilities, ch,
-                    ability_rows, details.ability_count);
+                handled = run_history_ui_handle_scroll_key(
+                    &view.abilities.highlight, ch, current_total_rows);
                 break;
             case RUN_PANEL_MILESTONES:
-                handled = run_history_handle_list_key(&view.milestones, ch,
-                    milestone_rows, details.milestone_count);
+                handled = run_history_ui_handle_scroll_key(
+                    &view.milestones.highlight, ch, current_total_rows);
                 break;
             case RUN_PANEL_ARTEFACTS:
                 if (ch == ' ' || ch == '\r' || ch == '\n' ||
@@ -3402,11 +3327,8 @@ static void run_history_show_detail(const run_history_entry* entry)
                     run_history_examine_artefact(&details, &view.artefacts);
                     handled = true;
                 } else {
-                    int total = details.header.artefact_count;
-                    if (total > details.header.artefact_capacity)
-                        total = details.header.artefact_capacity;
-                    handled = run_history_handle_list_key(&view.artefacts, ch,
-                        artefact_rows, total);
+                    handled = run_history_ui_handle_scroll_key(
+                        &view.artefacts.highlight, ch, current_total_rows);
                 }
                 break;
             case RUN_PANEL_MONSTERS:
@@ -3418,15 +3340,10 @@ static void run_history_show_detail(const run_history_entry* entry)
                 } else if (ch == 's' || ch == 'S') {
                     view.monster_sort_mode =
                         (run_monster_sort_mode)((view.monster_sort_mode + 1) % RUN_MON_SORT_COUNT);
-                    run_history_clamp_list_state(&view.monsters, monster_rows,
-                        MIN(details.header.monster_count, details.header.monster_capacity));
                     handled = true;
                 } else {
-                    int total = details.header.monster_count;
-                    if (total > details.header.monster_capacity)
-                        total = details.header.monster_capacity;
-                    handled = run_history_handle_list_key(&view.monsters, ch,
-                        monster_rows, total);
+                    handled = run_history_ui_handle_scroll_key(
+                        &view.monsters.highlight, ch, current_total_rows);
                 }
                 break;
             default:

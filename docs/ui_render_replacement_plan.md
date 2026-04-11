@@ -56,6 +56,13 @@ forward UI work.
   surface, so it scales with the overlay UI like inventory and equipment
   while keeping a transparent overlay treatment instead of an opaque menu
   block.
+- Main-menu hint message list and detail, message recall, and the
+  information-scene main-menu fallback now publish direct semantic
+  `app_ui_scene` output instead of routing normal SDL use through live term
+  capture or document bridging.
+- Run-history detail in `src/score/score_ui.c` now publishes a direct
+  semantic browser scene instead of a live term-capture frame, with tabs,
+  list/detail rails, and direct semantic detail text.
 - The main character-sheet command is semantic now, but legacy
   `display_player()` rendering still exists for other workflows such as birth,
   death, file dump, and status-adjacent helpers.
@@ -80,10 +87,8 @@ forward UI work.
   - internal auto-capture support in `src/sdl-render.c`
 - User-facing `ui_information_scene_present_term()` callers still exist in:
   - `src/cmd/ui/cmd-ui-settings.c`
-  - `src/cmd/ui/cmd-ui-main-menu.c`
   - `src/melee/melee-combat-display.c`
   - `src/quest/quest-ui.c`
-  - `src/score/score_ui.c`
   - `src/metarun.c`
   - `src/ui/ui-story.c`
   - `src/ui/ui-death.c`
@@ -96,7 +101,7 @@ forward UI work.
   - file viewer
   - object-info and compare/info screens
   - score and quest document pages
-  - main-menu about, hint-detail, hint-list, and message-recall pages
+  - main-menu about page
   - character tutorial
   - thrall reward
   - some knowledge detail flows
@@ -137,11 +142,16 @@ Why this is next:
 
 Primary targets:
 - `src/cmd/ui/cmd-ui-settings.c`
-- `src/cmd/ui/cmd-ui-main-menu.c` recall, hint, and message viewers
 - `src/melee/melee-combat-display.c`
-- `src/score/score_ui.c` run-history detail
 - `src/quest/quest-ui.c` only where the flow is browser or detail shaped, not
   bespoke typewriter-story flow
+
+Current chunk landed:
+- `src/cmd/ui/cmd-ui-main-menu.c` recall, hint, and message viewers now build
+  semantic panels directly, and the information-scene main-menu fallback no
+  longer mirrors the legacy term buffer.
+- `src/score/score_ui.c` run-history detail now uses a direct semantic
+  browser scene and no longer owns dead term-render helper code.
 
 Approach:
 - build `app_ui_scene` directly when the screen is interactive or

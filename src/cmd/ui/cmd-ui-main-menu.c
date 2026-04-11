@@ -601,14 +601,12 @@ static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
         highlight == id, "", label, meta ? meta : "");
 }
 
-static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
+static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
     bool death_view)
 {
-    app_session* session = app_session_current();
-    app_ui_scene scene;
     app_ui_panel* panel;
 
-    if (!scope || !scope->active || !session)
+    if (!scene)
         return false;
 
     if (highlight < 1 || highlight > MAIN_MENU_MAX)
@@ -616,51 +614,60 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
     if (death_view && main_menu_choice_is_disabled(highlight))
         highlight = MAIN_MENU_RETURN_GAME;
 
-    app_ui_scene_init(&scene);
-    scene.flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
     if (!panel)
         return false;
 
     panel->style = APP_UI_PANEL_STYLE_PLAIN;
     app_ui_panel_set_widths(panel, 300, 460);
 
-    if (!main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
-            death_view, "Character sheet      (c)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_KNOWLEDGE, highlight,
+    return main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
+               death_view, "Character sheet      (c)", "")
+        && main_menu_scene_add_row(panel, MAIN_MENU_KNOWLEDGE, highlight,
             death_view, "Known lore           (a)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_QUEST_STATUS, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_QUEST_STATUS, highlight,
             death_view, "Quest status         (t)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_HALLS_OF_MANDOS, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_HALLS_OF_MANDOS, highlight,
             death_view, "Halls of Mandos      (d)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_RUN_HISTORY, highlight,
-            death_view,
-            "Run history          (v)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_RUN_HISTORY, highlight,
+            death_view, "Run history          (v)", "")
+        && main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight,
             death_view, "Map                  (m)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_LOG, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_LOG, highlight,
             death_view, "Log                  (l)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_COMBAT_HISTORY, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_COMBAT_HISTORY, highlight,
             death_view, "Combat history       (x)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_HINT_MESSAGES, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_HINT_MESSAGES, highlight,
             death_view, "Hint messages        (i)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_STORY, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_STORY, highlight,
             death_view, "The story so far     (y)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_OPTIONS, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_OPTIONS, highlight,
             death_view, "Options and misc     (o)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight,
             death_view, "Help                 (h)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_ABOUT, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_ABOUT, highlight,
             death_view, "About                (b)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight,
             death_view, "Save                 (s)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_SAVE_QUIT, highlight,
+        && main_menu_scene_add_row(panel, MAIN_MENU_SAVE_QUIT, highlight,
             death_view, "Quit with save       (q)", "")
-        || !main_menu_scene_add_row(panel, MAIN_MENU_RETURN_GAME, highlight,
-            death_view, "Return to game       (r)", ""))
-    {
+        && main_menu_scene_add_row(panel, MAIN_MENU_RETURN_GAME, highlight,
+            death_view, "Return to game       (r)", "");
+}
+
+static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
+    bool death_view)
+{
+    app_session* session = app_session_current();
+    app_ui_scene scene;
+
+    if (!scope || !scope->active || !session)
         return false;
-    }
+
+    if (!main_menu_build_ui_scene(&scene, highlight, death_view))
+        return false;
 
     app_session_clear_interaction(session);
     if (!app_session_publish_dungeon_overlay_scene(session, &scene))
@@ -668,6 +675,20 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
     return true;
+}
+
+static bool main_menu_information_scene_present(int highlight, bool death_view)
+{
+    app_session* session = app_session_current();
+    app_ui_scene scene;
+
+    if (!session)
+        return false;
+    if (!main_menu_build_ui_scene(&scene, highlight, death_view))
+        return false;
+
+    app_session_clear_interaction(session);
+    return ui_information_scene_present_ui(&scene);
 }
 
 static void main_menu_scene_leave(main_menu_scene_scope* scope)
@@ -816,7 +837,14 @@ static int main_menu_aux(int* highlight, bool scene_active,
     if (death_view && main_menu_choice_is_disabled(*highlight))
         *highlight = MAIN_MENU_RETURN_GAME;
 
-    if (!use_menu_scene)
+    if (!use_menu_scene && scene_active
+        && !main_menu_information_scene_present(*highlight, death_view))
+    {
+        log_warn("main menu: failed to present semantic information scene");
+        return -1;
+    }
+
+    if (!use_menu_scene && !scene_active)
     {
         for (i = 0; i < menu_h; i++)
         {
@@ -890,8 +918,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
         main_menu_publish_interaction(*highlight, death_view);
 
         /* Flush the prompt */
-        if (!scene_active || !ui_information_scene_present_term())
-            Term_fresh();
+        Term_fresh();
 
         /* Place cursor at current choice */
         {
@@ -1268,6 +1295,10 @@ void do_cmd_message_one(void)
     c_prt(message_color(0), format("> %s", message_str(0)), 0, 0);
 }
 
+#define HINT_MESSAGE_UI_ROW_WINDOW 48
+#define MESSAGE_RECALL_UI_PAGE_SIZE 18
+#define MESSAGE_RECALL_UI_OFFSET_STEP 24
+
 static bool hint_message_has_source(const hint_message_meta* meta)
 {
     return meta && meta->source_y >= 0 && meta->source_x >= 0
@@ -1337,25 +1368,39 @@ static int hint_message_match_length(const char* line, int offset,
     return best_len;
 }
 
-static bool hint_message_add_information_segment(app_information_scene* scene,
-    s16b row, s16b col, byte attr, byte story, const char* text)
+static bool hint_message_append_rich_span(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte story, const char* text, size_t len)
 {
-    if (!scene || !text || !text[0])
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!scene || !panel || !text || len == 0)
         return true;
 
-    return app_information_scene_add_text_ex(scene, row, col, attr, story,
-        text);
+    while (len > 0)
+    {
+        size_t chunk = len;
+
+        if (chunk >= sizeof(buf))
+            chunk = sizeof(buf) - 1u;
+        memcpy(buf, text, chunk);
+        buf[chunk] = '\0';
+        if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, story, buf))
+            return false;
+        text += chunk;
+        len -= chunk;
+    }
+
+    return true;
 }
 
-static bool hint_message_build_information_colored_line(
-    app_information_scene* scene, int row, int col, byte base_attr,
-    byte story, const char* line, const hint_message_meta* meta)
+static bool hint_message_append_colored_rich_line(app_ui_scene* scene,
+    app_ui_panel* panel, byte base_attr, byte story, const char* line,
+    const hint_message_meta* meta)
 {
     int start = 0;
-    int cursor = col;
     int len;
 
-    if (!scene)
+    if (!scene || !panel)
         return false;
     if (!line)
         line = "";
@@ -1370,32 +1415,18 @@ static bool hint_message_build_information_colored_line(
         {
             if (i > start)
             {
-                char plain[100];
-                int plain_len = i - start;
-
-                memcpy(plain, line + start, plain_len);
-                plain[plain_len] = '\0';
-                if (!hint_message_add_information_segment(scene, (s16b)row,
-                        (s16b)cursor, base_attr, story, plain))
+                if (!hint_message_append_rich_span(scene, panel, base_attr,
+                        story, line + start, (size_t)(i - start)))
                 {
                     return false;
                 }
-                cursor += plain_len;
             }
 
+            if (!hint_message_append_rich_span(scene, panel, match_attr, story,
+                    line + i, (size_t)match_len))
             {
-                char special[HINT_MESSAGE_CUE_TEXT_MAX + 1];
-
-                memcpy(special, line + i, match_len);
-                special[match_len] = '\0';
-                if (!hint_message_add_information_segment(scene, (s16b)row,
-                        (s16b)cursor, match_attr, story, special))
-                {
-                    return false;
-                }
+                return false;
             }
-
-            cursor += match_len;
             i += match_len;
             start = i;
         }
@@ -1407,13 +1438,8 @@ static bool hint_message_build_information_colored_line(
 
     if (start < len)
     {
-        char tail[100];
-        int tail_len = len - start;
-
-        memcpy(tail, line + start, tail_len);
-        tail[tail_len] = '\0';
-        if (!hint_message_add_information_segment(scene, (s16b)row,
-                (s16b)cursor, base_attr, story, tail))
+        if (!hint_message_append_rich_span(scene, panel, base_attr, story,
+                line + start, (size_t)(len - start)))
         {
             return false;
         }
@@ -1435,7 +1461,7 @@ static const char* hint_message_title(int index)
     return "";
 }
 
-static void hint_message_build_title(char* buf, size_t buf_sz, const char* title,
+static void hint_message_fit_text(char* buf, size_t buf_sz, const char* title,
     int max_len)
 {
     if (!buf || buf_sz == 0)
@@ -1453,116 +1479,176 @@ static void hint_message_build_title(char* buf, size_t buf_sz, const char* title
     strnfmt(buf, buf_sz, "%.*s...", max_len - 3, title);
 }
 
-static bool hint_message_build_information_list_row(app_information_scene* scene,
-    int row, int idx, bool selected, int wid)
+static void hint_message_build_cue_summary(const hint_message_meta* meta,
+    char* buf, size_t buf_sz)
+{
+    if (!buf || buf_sz == 0)
+        return;
+
+    buf[0] = '\0';
+    if (!meta || meta->cue_count <= 0)
+        return;
+
+    for (int cue = 0; cue < meta->cue_count; ++cue)
+    {
+        char cue_buf[48];
+
+        cue_buf[0] = '\0';
+        if (cue > 0)
+            SDL_strlcat(buf, "; ", buf_sz);
+        if (meta->cue_dists[cue][0] && meta->cue_dirs[cue][0])
+        {
+            strnfmt(cue_buf, sizeof(cue_buf), "%s %s",
+                meta->cue_dists[cue], meta->cue_dirs[cue]);
+        }
+        else if (meta->cue_dists[cue][0])
+        {
+            SDL_strlcpy(cue_buf, meta->cue_dists[cue], sizeof(cue_buf));
+        }
+        else if (meta->cue_dirs[cue][0])
+        {
+            SDL_strlcpy(cue_buf, meta->cue_dirs[cue], sizeof(cue_buf));
+        }
+        SDL_strlcat(buf, cue_buf, buf_sz);
+    }
+}
+
+static void hint_message_add_list_footer_actions(app_ui_panel* panel,
+    bool can_look)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Open");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, can_look,
+        "l", "Look");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "Esc", "Back");
+}
+
+static void hint_message_add_detail_footer_actions(app_ui_panel* panel,
+    bool can_look)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, can_look,
+        "l", "Look");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Esc", "Back");
+}
+
+static void hint_message_add_list_detail(app_ui_panel* panel, int index)
 {
     hint_message_meta meta;
-    char prefix[8];
-    char title_buf[96];
-    const char* title = hint_message_title(idx);
-    byte prefix_attr = selected ? TERM_L_BLUE : TERM_WHITE;
-    byte title_attr = selected ? TERM_L_WHITE : TERM_WHITE;
-    byte chrome_attr = TERM_SLATE;
-    int col = 0;
-    int title_room;
+    byte line_count;
+    char cue_buf[APP_UI_TEXT_MAX];
 
-    if (!scene)
-        return false;
+    if (!panel)
+        return;
 
-    hint_messages_message_meta(idx, &meta);
+    line_count = hint_messages_message_line_count(index);
+    if (!line_count)
+        return;
 
-    strnfmt(prefix, sizeof(prefix), "%2d) ", idx + 1);
-    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-            prefix_attr, prefix))
+    hint_messages_message_meta(index, &meta);
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected");
+
+    for (int li = 0; li < line_count
+        && panel->detail_line_count < APP_UI_DETAIL_LINE_MAX; ++li)
     {
-        return false;
-    }
-    col += (int)strlen(prefix);
+        const char* line = hint_messages_message_line(index, li);
 
-    title_room = MAX(8, wid - col - 1);
-    if (meta.cue_count > 0)
-        title_room = MIN(title_room, MAX(wid / 2, 24));
-    hint_message_build_title(title_buf, sizeof(title_buf), title, title_room);
-    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-            title_attr, title_buf))
-    {
-        return false;
-    }
-    col += (int)strlen(title_buf);
-
-    if (meta.cue_count <= 0 || col >= wid - 4)
-        return true;
-
-    if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-            chrome_attr, " ["))
-    {
-        return false;
-    }
-    col += 2;
-
-    for (int cue = 0; cue < meta.cue_count && col < wid - 1; ++cue)
-    {
-        if (cue > 0)
-        {
-            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-                    chrome_attr, "; "))
-            {
-                return false;
-            }
-            col += 2;
-        }
-
-        if (meta.cue_dists[cue][0])
-        {
-            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-                    TERM_YELLOW, meta.cue_dists[cue]))
-            {
-                return false;
-            }
-            col += (int)strlen(meta.cue_dists[cue]);
-        }
-
-        if (meta.cue_dists[cue][0] && meta.cue_dirs[cue][0] && col < wid - 1)
-        {
-            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-                    chrome_attr, " "))
-            {
-                return false;
-            }
-            col += 1;
-        }
-
-        if (meta.cue_dirs[cue][0] && col < wid - 1)
-        {
-            if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-                    TERM_L_BLUE, meta.cue_dirs[cue]))
-            {
-                return false;
-            }
-            col += (int)strlen(meta.cue_dirs[cue]);
-        }
+        if (!line || !line[0])
+            continue;
+        (void)app_ui_panel_add_detail_line_ex(panel,
+            (li == 0) ? TERM_L_WHITE : TERM_WHITE,
+            STORY_FLAG_USE, line);
     }
 
-    if (col < wid - 1)
+    hint_message_build_cue_summary(&meta, cue_buf, sizeof(cue_buf));
+    if (cue_buf[0] && panel->detail_line_count < APP_UI_DETAIL_LINE_MAX)
     {
-        if (!app_information_scene_add_text(scene, (s16b)row, (s16b)col,
-                chrome_attr, "]"))
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, cue_buf);
+    }
+
+    if (hint_message_has_source(&meta)
+        && panel->detail_line_count < APP_UI_DETAIL_LINE_MAX)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+            "Press l to look at the skeleton.");
+    }
+}
+
+static bool hint_message_build_ui_list_scene(app_ui_scene* scene, int n,
+    int sel)
+{
+    app_ui_panel* panel;
+    int window_start;
+    int window_end;
+    char subtitle[64];
+    hint_message_meta selected_meta;
+
+    if (!scene || n <= 0)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Hint Messages");
+    strnfmt(subtitle, sizeof(subtitle), "%d remembered on this level", n);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    window_start = sel - (HINT_MESSAGE_UI_ROW_WINDOW / 2);
+    if (window_start < 0)
+        window_start = 0;
+    if (window_start > n - HINT_MESSAGE_UI_ROW_WINDOW)
+        window_start = MAX(0, n - HINT_MESSAGE_UI_ROW_WINDOW);
+    window_end = MIN(n, window_start + HINT_MESSAGE_UI_ROW_WINDOW);
+
+    for (int idx = window_start; idx < window_end; ++idx)
+    {
+        hint_message_meta meta;
+        char title_buf[APP_UI_LABEL_MAX];
+        char cue_buf[APP_UI_META_MAX];
+        const char* title = hint_message_title(idx);
+
+        hint_messages_message_meta(idx, &meta);
+        hint_message_fit_text(title_buf, sizeof(title_buf), title,
+            APP_UI_LABEL_MAX - 1);
+        hint_message_build_cue_summary(&meta, cue_buf, sizeof(cue_buf));
+        if (!app_ui_panel_add_row_ex(panel, (s16b)idx,
+                (idx == sel) ? TERM_L_WHITE : TERM_WHITE,
+                cue_buf[0] ? TERM_SLATE : TERM_WHITE,
+                0, '\0', true, idx == sel, "", title_buf, cue_buf))
         {
             return false;
         }
     }
 
+    hint_messages_message_meta(sel, &selected_meta);
+    hint_message_add_list_detail(panel, sel);
+    hint_message_add_list_footer_actions(panel,
+        hint_message_has_source(&selected_meta));
     return true;
 }
 
-static bool hint_message_build_information_detail_scene(
-    app_information_scene* scene, int index, int hgt)
+static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
 {
+    app_ui_panel* panel;
     hint_message_meta meta;
     byte line_count;
-    byte story = STORY_FLAG_USE;
-    int row = 4;
-    int col = 8;
 
     if (!scene)
         return false;
@@ -1573,47 +1659,60 @@ static bool hint_message_build_information_detail_scene(
         return false;
 
     hint_messages_message_meta(index, &meta);
-    app_information_scene_init(scene);
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
 
-    for (int li = 0; li < line_count && row + li < hgt - 1; ++li)
-    {
-        const char* line = hint_messages_message_line(index, li);
-        byte base_attr = (li == 0) ? TERM_L_WHITE : TERM_WHITE;
-        const hint_message_meta* line_meta = (li == 0) ? NULL : &meta;
-
-        if (!hint_message_build_information_colored_line(scene, row + li, col,
-                base_attr, story, line, line_meta))
-        {
-            return false;
-        }
-    }
-
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+    panel->accent_attr = TERM_SLATE;
+    app_ui_panel_set_widths(panel, 1500, 2800);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, hint_message_title(index));
     if (hint_message_has_source(&meta))
     {
-        if (!app_information_scene_add_text(scene, (s16b)(hgt - 1), 0,
-                TERM_WHITE,
-                "[Press any key to continue, or 'l' to look at the skeleton]"))
-        {
-            return false;
-        }
+        app_ui_panel_set_subtitle(panel, TERM_L_BLUE,
+            "Press l to look at the skeleton.");
     }
     else
     {
-        if (!app_information_scene_add_text(scene, (s16b)(hgt - 1), 0,
-                TERM_WHITE, "[Press any key to continue]"))
+        app_ui_panel_set_subtitle(panel, TERM_SLATE,
+            "Press Esc to return.");
+    }
+
+    for (int li = 0; li < line_count; ++li)
+    {
+        const char* line = hint_messages_message_line(index, li);
+        const hint_message_meta* line_meta = (li == 0) ? NULL : &meta;
+
+        if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+            return false;
+        if (line && line[0])
+        {
+            if (!hint_message_append_colored_rich_line(scene, panel,
+                    (li == 0) ? TERM_L_WHITE : TERM_WHITE, STORY_FLAG_USE,
+                    line, line_meta))
+            {
+                return false;
+            }
+        }
+        else if (!app_ui_panel_add_rich_text_ex(scene, panel, TERM_WHITE,
+                     STORY_FLAG_USE, " "))
         {
             return false;
         }
     }
 
+    hint_message_add_detail_footer_actions(panel, hint_message_has_source(&meta));
     return true;
 }
 
-static bool hint_message_show_information_scene(int index, int* look_y,
+static bool hint_message_show_ui_scene(int index, int* look_y,
     int* look_x, bool* out_request_look)
 {
     ui_information_scene_scope scope;
-    app_information_scene scene;
+    app_ui_scene scene;
     hint_message_meta meta;
     byte line_count;
 
@@ -1632,18 +1731,15 @@ static bool hint_message_show_information_scene(int index, int* look_y,
 
     while (1)
     {
-        int wid;
-        int hgt;
         char ch;
 
-        Term_get_size(&wid, &hgt);
-        if (!hint_message_build_information_detail_scene(&scene, index, hgt))
+        if (!hint_message_build_ui_detail_scene(&scene, index))
         {
             ui_information_scene_leave(&scope);
             return false;
         }
 
-        if (!ui_information_scene_present_document(&scene))
+        if (!ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1682,10 +1778,10 @@ void show_hint_message_screen(int index)
         return;
     }
 
-    if (!hint_message_show_information_scene(index, &look_y, &look_x,
+    if (!hint_message_show_ui_scene(index, &look_y, &look_x,
             &request_look))
     {
-        log_warn("hint message detail: information-scene presentation failed on the snapshot renderer path");
+        log_warn("hint message detail: semantic scene presentation failed on the snapshot renderer path");
         msg_print("Hint message viewer unavailable.");
         return;
     }
@@ -1706,7 +1802,6 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
     int look_x = -1;
     int n;
     int sel = 0;
-    int top = 0;
 
     hint_messages_ensure_level_state();
     n = (int)hint_messages_count_for_save();
@@ -1718,62 +1813,16 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
 
     while (1)
     {
-        app_information_scene scene;
-        int wid;
-        int hgt;
-        int rows;
+        app_ui_scene scene;
         char ch;
-
-        app_information_scene_init(&scene);
-        Term_get_size(&wid, &hgt);
-
-        rows = hgt - 4;
-        if (rows < 1)
-            rows = 1;
 
         if (sel < 0)
             sel = 0;
         if (sel >= n)
             sel = n - 1;
 
-        if (sel < top)
-            top = sel;
-        if (sel >= top + rows)
-            top = sel - rows + 1;
-        if (top < 0)
-            top = 0;
-        if (top > n - rows)
-            top = n - rows;
-        if (top < 0)
-            top = 0;
-
-        {
-            char title[64];
-
-            strnfmt(title, sizeof(title), "Hint Messages (%d)", n);
-            if (!app_information_scene_add_text(&scene, 0, 0, TERM_WHITE, title)
-                || !app_information_scene_add_text(&scene, (s16b)(hgt - 1), 0,
-                    TERM_WHITE,
-                    "[Press '8'/'2' to move, Enter to read, 'l' to look, or ESCAPE]"))
-            {
-                ui_information_scene_leave(&scope);
-                return false;
-            }
-        }
-
-        for (int row = 0; row < rows && top + row < n; ++row)
-        {
-            int idx = top + row;
-
-            if (!hint_message_build_information_list_row(&scene, 2 + row, idx,
-                    idx == sel, wid))
-            {
-                ui_information_scene_leave(&scope);
-                return false;
-            }
-        }
-
-        if (!ui_information_scene_present_document(&scene))
+        if (!hint_message_build_ui_list_scene(&scene, n, sel)
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1803,7 +1852,7 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
 
             bool request_look = false;
 
-            if (!hint_message_show_information_scene(sel, &selected_look_y,
+            if (!hint_message_show_ui_scene(sel, &selected_look_y,
                     &selected_look_x, &request_look))
             {
                 ui_information_scene_leave(&scope);
@@ -1881,7 +1930,7 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     if (!do_cmd_hint_messages_information_scene(out_pending_look,
             out_look_y, out_look_x))
     {
-        log_warn("hint messages: information-scene presentation failed on the snapshot renderer path");
+        log_warn("hint messages: semantic scene presentation failed on the snapshot renderer path");
         msg_print("Hint message browser unavailable.");
     }
 }
@@ -1936,74 +1985,110 @@ static bool do_cmd_messages_information_scene(void)
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
         int n = message_num();
-        int wid;
-        int hgt;
-        int shown;
         int old_i;
         char ch;
+        app_ui_panel* panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int shown = 0;
+        int last_shown;
 
-        app_information_scene_init(&scene);
-        Term_get_size(&wid, &hgt);
+        app_ui_scene_init(&scene);
+        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+        if (!panel)
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
 
-        for (shown = 0; (shown < hgt - 4) && (i + shown < n); shown++)
+        panel->style = APP_UI_PANEL_STYLE_PLAIN;
+        panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+            | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+        panel->accent_attr = TERM_SLATE;
+        app_ui_panel_set_widths(panel, 1500, 2800);
+        app_ui_panel_set_title(panel, TERM_WHITE, "Message Recall");
+
+        shown = MIN(MESSAGE_RECALL_UI_PAGE_SIZE, MAX(0, n - i));
+        last_shown = (shown > 0) ? (i + shown - 1) : i;
+        strnfmt(subtitle, sizeof(subtitle), "%d-%d of %d, offset %d",
+            i, last_shown, n, q);
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+        if (shower[0])
+        {
+            char filter_buf[APP_UI_TEXT_MAX];
+
+            strnfmt(filter_buf, sizeof(filter_buf), "Highlight: %s", shower);
+            (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, filter_buf);
+        }
+
+        for (shown = shown - 1; shown >= 0; --shown)
         {
             cptr msg = message_str((s16b)(i + shown));
             byte attr = message_color((s16b)(i + shown));
-            char visible[APP_INFORMATION_TEXT_MAX];
+            cptr visible = "";
 
             if ((int)strlen(msg) >= q)
-                SDL_strlcpy(visible, msg + q, sizeof(visible));
-            else
-                visible[0] = '\0';
+                visible = msg + q;
 
-            (void)app_information_scene_add_text(&scene,
-                (s16b)(hgt - 3 - shown), 0, attr, visible);
-
-            if (shower[0])
+            if (!app_ui_panel_begin_rich_paragraph(&scene, panel))
             {
-                cptr str = visible;
+                ui_information_scene_leave(&scope);
+                return false;
+            }
 
-                while ((str = strstr(str, shower)) != NULL)
+            if (shower[0] && visible[0])
+            {
+                cptr cursor = visible;
+                size_t needle_len = strlen(shower);
+
+                while (needle_len > 0)
                 {
-                    size_t len = strlen(shower);
-                    char highlight[APP_INFORMATION_TEXT_MAX];
+                    cptr match = strstr(cursor, shower);
 
-                    if (len >= sizeof(highlight))
-                        len = sizeof(highlight) - 1;
-                    memcpy(highlight, str, len);
-                    highlight[len] = '\0';
-
-                    (void)app_information_scene_add_text(&scene,
-                        (s16b)(hgt - 3 - shown), (s16b)(str - visible),
-                        TERM_YELLOW, highlight);
-
-                    if (len == 0)
+                    if (!match)
                         break;
-                    str += len;
+                    if (!hint_message_append_rich_span(&scene, panel, attr, 0,
+                            cursor, (size_t)(match - cursor))
+                        || !hint_message_append_rich_span(&scene, panel,
+                            TERM_YELLOW, 0, match, needle_len))
+                    {
+                        ui_information_scene_leave(&scope);
+                        return false;
+                    }
+                    cursor = match + needle_len;
                 }
+
+                if (cursor[0]
+                    && !hint_message_append_rich_span(&scene, panel, attr, 0,
+                        cursor, strlen(cursor)))
+                {
+                    ui_information_scene_leave(&scope);
+                    return false;
+                }
+            }
+            else if (visible[0]
+                && !app_ui_panel_add_rich_text(&scene, panel, attr, visible))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
             }
         }
 
-        {
-            char header[APP_INFORMATION_TEXT_MAX];
-            char prompt[APP_INFORMATION_TEXT_MAX];
-            int last_shown = (shown > 0) ? (i + shown - 1) : i;
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "p", "Older");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+            "n", "Newer");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "4/6", "View");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "=", "Show");
+        (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "/", "Find");
+        (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+            "Esc", "Back");
 
-            strnfmt(header, sizeof(header),
-                "Message Recall (%d-%d of %d), Offset %d", i, last_shown, n, q);
-            (void)app_information_scene_add_text(&scene, 0, 0, TERM_WHITE,
-                header);
-
-            SDL_strlcpy(prompt,
-                "[Press 'p' for older, 'n' for newer, ..., or ESCAPE]",
-                sizeof(prompt));
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 1), 0,
-                TERM_WHITE, prompt);
-        }
-
-        if (!ui_information_scene_present_document(&scene))
+        if (!ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -2018,13 +2103,15 @@ static bool do_cmd_messages_information_scene(void)
 
         if (ch == '4')
         {
-            q = (q >= wid / 2) ? (q - wid / 2) : 0;
+            q = (q >= MESSAGE_RECALL_UI_OFFSET_STEP)
+                ? (q - MESSAGE_RECALL_UI_OFFSET_STEP)
+                : 0;
             continue;
         }
 
         if (ch == '6')
         {
-            q += wid / 2;
+            q += MESSAGE_RECALL_UI_OFFSET_STEP;
             continue;
         }
 
@@ -2128,7 +2215,7 @@ void do_cmd_messages(void)
 
     if (!do_cmd_messages_information_scene())
     {
-        log_warn("message recall: information-scene presentation failed on the snapshot renderer path");
+        log_warn("message recall: semantic scene presentation failed on the snapshot renderer path");
         msg_print("Message recall unavailable.");
     }
     return;
