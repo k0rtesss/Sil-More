@@ -90,25 +90,6 @@ static void item_selector_menu_scene_restore(
         (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
-static void item_selector_suspend_snapshot_ui(
-    item_selector_menu_scene_scope* scope)
-{
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot;
-
-    item_selector_menu_scene_restore(scope, false);
-    if (session)
-    {
-        app_session_clear_interaction(session);
-        snapshot = app_session_snapshot(session);
-        if (scope && scope->active && snapshot
-            && snapshot->scene == APP_SCENE_KIND_DUNGEON)
-        {
-            scope->previous_snapshot = *snapshot;
-        }
-    }
-}
-
 static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope)
 {
     if (!scope)
@@ -875,7 +856,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (!item_selector_get_item_allow_no_flash(selected_item))
                 break;
 
@@ -908,7 +888,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 if (!get_item_okay(selected_item))
                     continue;
 
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
                 if (!item_selector_get_item_allow_no_flash(selected_item))
                     continue;
 
@@ -993,7 +972,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
@@ -1048,7 +1026,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
@@ -1076,7 +1053,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                     break;
                 }
 
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
                 if (!item_selector_get_item_allow_no_flash(selected_item))
                 {
                     done = true;
@@ -1126,7 +1102,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
@@ -1189,7 +1164,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (verify && !item_selector_verify_item_no_flash("Try",
                     selected_item))
             {
@@ -1197,7 +1171,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;

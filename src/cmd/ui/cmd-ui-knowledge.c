@@ -30,7 +30,6 @@ extern struct sound_config g_sound_config;
 #include "ui/ui-information-scene.h"
 #include "cmd-ui.h"
 
-typedef struct knowledge_browser_layout knowledge_browser_layout;
 typedef struct knowledge_browser_state knowledge_browser_state;
 
 #define BROWSER_ROWS 16
@@ -70,25 +69,6 @@ struct supply_list_entry
     int supply_idx; /* Index inside the supply cache (-1 if not present) */
 };
 
-struct knowledge_browser_layout
-{
-    int term_wid;
-    int term_hgt;
-    int title_row;
-    int tabs_row;
-    int header_row;
-    int divider_row;
-    int list_row;
-    int list_rows;
-    int status_row;
-    int prompt_row;
-    int group_col;
-    int group_w;
-    int divider_col;
-    int list_col;
-    int list_w;
-};
-
 struct knowledge_browser_state
 {
     int column[4];
@@ -118,6 +98,46 @@ static bool knowledge_resume_information_scene(
         return false;
 
     return ui_information_scene_enter(scope);
+}
+
+static bool knowledge_enter_information_scene_or_report(
+    ui_information_scene_scope* scope, cptr log_name, cptr required_message,
+    cptr unavailable_message)
+{
+    if (!ui_information_scene_supported())
+    {
+        log_warn("%s: snapshot renderer required; legacy renderer removed",
+            log_name ? log_name : "knowledge");
+        if (required_message && required_message[0])
+            msg_print(required_message);
+        return false;
+    }
+
+    if (ui_information_scene_enter(scope))
+        return true;
+
+    log_warn("%s: semantic scene unavailable on the snapshot renderer path",
+        log_name ? log_name : "knowledge");
+    if (unavailable_message && unavailable_message[0])
+        msg_print(unavailable_message);
+    return false;
+}
+
+static bool knowledge_present_ui_scene_or_abort(
+    ui_information_scene_scope* scope, bool build_ok, app_ui_scene* scene,
+    cptr scene_name, cptr user_message)
+{
+    if (build_ok && scene && ui_information_scene_present_ui(scene))
+        return true;
+
+    log_error("knowledge: failed to present SDL semantic scene for %s",
+        scene_name ? scene_name : "unknown knowledge screen");
+    if (scope && scope->active)
+        ui_information_scene_leave(scope);
+    bell(user_message ? user_message : "Knowledge screen unavailable.");
+    if (user_message && user_message[0])
+        msg_print(user_message);
+    return false;
 }
 
 static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
@@ -819,131 +839,6 @@ static byte get_supply_item_color(int k_idx, bool aware)
     }
 }
 
-static void display_supply_group_list(int col, int row, int wid, int per_page,
-    int grp_idx[], int grp_cur, int grp_top, int group_totals[])
-{
-    int i;
-    int total_col = col + wid - 3;
-
-    for (i = 0; i < per_page && (grp_idx[i] >= 0); i++)
-    {
-        int grp = grp_idx[grp_top + i];
-        byte base_color;
-        byte attr;
-        char buf[8];
-
-        /* Assign color based on group type */
-        switch (grp)
-        {
-            case SUPPLY_GROUP_HERBS:   base_color = TERM_GREEN; break;
-            case SUPPLY_GROUP_POTIONS: base_color = TERM_VIOLET;  break;
-            case SUPPLY_GROUP_GEMS:    base_color = TERM_BLUE;    break;
-            default:                   base_color = TERM_WHITE;   break;
-        }
-
-        /* Highlight cursor with white, dim if empty */
-        if (grp_top + i == grp_cur)
-            attr = TERM_L_WHITE;
-        else if (group_totals[grp] == 0)
-            attr = TERM_L_DARK;
-        else
-            attr = base_color;
-
-        Term_erase(col, row + i, wid);
-        c_put_str(attr, supply_group_text[grp], row + i, col);
-
-        strnfmt(buf, sizeof(buf), "%3d", group_totals[grp]);
-        c_put_str(attr, buf, row + i, total_col);
-    }
-}
-
-static void display_supply_list(int col, int row, int per_page,
-    supply_list_entry entries[], int entry_cnt, int entry_cur, int entry_top,
-    int count_col, int sym_col, int current_group, int column)
-{
-    int i;
-
-    (void)current_group; /* Not used since we color by specific item type now */
-
-    for (i = 0; i < per_page; i++)
-    {
-        int idx = entry_top + i;
-        int y = row + i;
-
-        Term_erase(col, y, 255);
-
-        if (idx >= entry_cnt)
-            continue;
-
-        supply_list_entry* entry = &entries[idx];
-        object_type* o_ptr;
-        object_type fake;
-        object_kind* k_ptr;
-        bool aware;
-        byte base_attr, cursor_attr, attr;
-        byte sym_attr;
-        char sym_char;
-        char name[80];
-        char count_buf[8];
-
-        if (entry->k_idx < 0 || entry->k_idx >= z_info->k_max)
-            continue;
-
-        k_ptr = &k_info[entry->k_idx];
-        aware = k_ptr->aware;
-        /* Items with 0 count should be grey */
-        if (entry->total == 0)
-        {
-            base_attr = TERM_L_DARK;
-            cursor_attr = TERM_SLATE;
-        }
-        else
-        {
-            /* Get color based on specific item type */
-            base_attr = get_supply_item_color(entry->k_idx, aware);
-            cursor_attr = aware ? TERM_L_WHITE : TERM_WHITE;
-        }
-        /* Only highlight when right panel is active (column == 1) */
-        attr = (column == 1 && idx == entry_cur) ? cursor_attr : base_attr;
-
-        if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
-        {
-            o_ptr = &inventory[entry->item_idx];
-        }
-        else
-        {
-            object_wipe(&fake);
-            object_prep(&fake, entry->k_idx);
-            if (aware)
-                fake.ident |= IDENT_KNOWN;
-            fake.number = (entry->total > 0) ? entry->total : 1;
-            o_ptr = &fake;
-        }
-
-        object_desc(name, sizeof(name), o_ptr, true, 3);
-        c_prt(attr, name, y, col);
-
-        strnfmt(count_buf, sizeof(count_buf), "x%-3d", entry->total);
-        c_put_str(attr, count_buf, y, count_col);
-
-        sym_attr = object_attr(o_ptr);
-        sym_char = object_char(o_ptr);
-        Term_putch(sym_col, y, sym_attr, sym_char);
-        if (use_bigtile)
-        {
-            if (sym_attr & 0x80)
-                Term_putch(sym_col + 1, y, 255, -1);
-            else
-                Term_putch(sym_col + 1, y, 0, ' ');
-        }
-    }
-
-    for (; i < per_page; i++)
-    {
-        Term_erase(col, row + i, 255);
-    }
-}
-
 /*
  * Move the cursor in a browser window
  */
@@ -1130,9 +1025,6 @@ void desc_art_fake(int a_idx)
     /* Hack -- Handle stuff */
     handle_stuff();
 
-    /* Reset the cursor */
-    Term_gotoxy(0, 0);
-
     object_info_screen(i_ptr);
 }
 
@@ -1315,131 +1207,6 @@ static int collect_monsters(int grp_cur, monster_list_entry* mon_idx, int mode)
     /* Return the number of races */
     return (mon_count);
 }
-
-#if 0
-/*
- * Display the monsters in a group.
- */
-static void display_monster_list(int col, int row, int per_page,
-    monster_list_entry* mon_idx, int mon_cur, int mon_top, int grp_cur)
-{
-    int i;
-
-    u32b known_uniques, dead_uniques, slay_count;
-
-    /* Start with 0 kills*/
-    known_uniques = dead_uniques = slay_count = 0;
-
-    /* Count up monster kill counts */
-    for (i = 1; i < z_info->r_max - 1; i++)
-    {
-        monster_race* r_ptr = &r_info[i];
-        monster_lore* l_ptr = &l_list[i];
-
-        // skip monsters that cannot be generated
-        if ((r_ptr->rarity == 0) || (r_ptr->level > 25))
-            continue;
-
-        /* Require non-unique monsters */
-        if (r_ptr->flags1 & RF1_UNIQUE)
-        {
-            /*Count if we have seen the unique*/
-            if (l_ptr->tsights)
-            {
-                known_uniques++;
-
-                /*Count if the unique is dead*/
-                if (r_ptr->max_num == 0)
-                {
-                    dead_uniques++;
-                    slay_count++;
-                }
-            }
-
-            // increase the uniques count anyway for forewarned or cheaters
-            else if (know_monster_info || cheat_know)
-            {
-                known_uniques++;
-            }
-        }
-
-        /* Collect "appropriate" monsters */
-        else
-            slay_count += l_ptr->pkills;
-    }
-
-    /* Display lines until done */
-    for (i = 0; i < per_page && mon_idx[i].r_idx; i++)
-    {
-        byte attr;
-
-        /* Get the race index */
-        int r_idx = mon_idx[mon_top + i].r_idx;
-
-        /* Access the race */
-        monster_race* r_ptr = &r_info[r_idx];
-        monster_lore* l_ptr = &l_list[r_idx];
-
-        char race_name[80];
-
-        /* Get the monster race name (singular)*/
-        monster_desc_race(race_name, sizeof(race_name), r_idx);
-
-        /* Choose a color */
-        attr = ((i + mon_top == mon_cur) ? TERM_L_BLUE : TERM_WHITE);
-
-        /* Display the name */
-        c_prt(attr, race_name, row + i, col);
-
-        if (cheat_know)
-        {
-            c_prt(attr, format("%d", r_idx), row + i, 60);
-        }
-
-        /* Display symbol */
-        Term_putch(68, row + i, r_ptr->x_attr, r_ptr->x_char);
-        if (use_bigtile)
-        {
-            if ((byte)(r_ptr->x_attr) & 0x80)
-                Term_putch(69, row + i, 255, -1);
-            else
-                Term_putch(69, row + i, 0, ' ');
-        }
-
-        /* Display kills */
-        if (r_ptr->flags1 & (RF1_UNIQUE))
-        {
-            /*use alive/dead for uniques*/
-            put_str(format("%s", (r_ptr->max_num == 0) ? " dead" : "alive"),
-                row + i, 73);
-        }
-        else
-            put_str(format("%5d", l_ptr->pkills), row + i, 73);
-    }
-
-    /* Clear remaining lines */
-    for (; i < per_page; i++)
-    {
-        Term_erase(col, row + i, 255);
-    }
-
-    /*Clear the monster count line*/
-    Term_erase(0, 22, 255);
-
-    if (monster_group_char[grp_cur] != (char*)-1L)
-    {
-        c_put_str(TERM_L_BLUE,
-            format("Total Creatures Slain: %d. ", slay_count), 22, col + 2);
-    }
-    else
-    {
-        c_put_str(TERM_L_BLUE,
-            format("Known Uniques: %d, Slain Uniques: %d.", known_uniques,
-                dead_uniques),
-            22, col + 2);
-    }
-}
-#endif
 
 /*
  * Display known monsters.
@@ -1641,134 +1408,7 @@ static void desc_obj_fake(int k_idx)
     /* Hack -- Handle stuff */
     handle_stuff();
 
-    /* Reset the cursor */
-    Term_gotoxy(0, 0);
-
     object_info_screen(i_ptr);
-}
-
-#if 0
-/*
- * Display the objects in a group. (Incorporates some code from jdh)
- */
-static void display_object_list(int col, int row, int per_page,
-    object_list_entry object_idx[], int object_cur, int object_top)
-{
-    int i;
-
-    /* Display lines until done */
-    for (i = 0; i < per_page && object_idx[i].type != OBJ_NONE; i++)
-    {
-        char buf[80];
-
-        /* Get the object index */
-        int oidx = object_top + i;
-        object_list_entry* obj = &object_idx[oidx];
-        object_kind* k_ptr;
-        ego_item_type* e_ptr;
-        byte attr, cursor;
-
-        switch (obj->type)
-        {
-        case OBJ_NORMAL:
-            /* Access the object */
-            k_ptr = &k_info[obj->idx];
-
-            /* Choose a color */
-            attr = ((k_ptr->aware) ? TERM_WHITE : TERM_SLATE);
-            cursor = ((k_ptr->aware) ? TERM_L_BLUE : TERM_BLUE);
-            attr = ((oidx == object_cur) ? cursor : attr);
-
-            /* Acquire the basic "name" of the object*/
-            strip_name(buf, obj->idx);
-
-            /* Display the name */
-            c_prt(attr, buf, row + i, col);
-
-            if (cheat_know)
-                c_prt(attr, format("%d", obj->idx), row + i, 70);
-
-            if (k_ptr->aware)
-            {
-                /* Obtain attr/char */
-                byte a = k_ptr->flavor ? (flavor_info[k_ptr->flavor].x_attr)
-                                       : k_ptr->d_attr;
-                byte c = k_ptr->flavor ? (flavor_info[k_ptr->flavor].x_char)
-                                       : k_ptr->d_char;
-
-                /* Display symbol */
-                Term_putch(76, row + i, a, c);
-            }
-
-            break;
-
-        case OBJ_SPECIAL:
-            e_ptr = &e_info[obj->e_idx];
-
-            /* Choose a color */
-            attr = ((e_ptr->aware) ? TERM_WHITE : TERM_SLATE);
-            cursor = ((e_ptr->aware) ? TERM_L_BLUE : TERM_BLUE);
-            attr = ((oidx == object_cur) ? cursor : attr);
-
-            if (obj->sval == -1)
-            {
-                buf[0] = '\0';
-                snprintf(buf, sizeof(buf), "  %s", &e_name[e_ptr->name]);
-            }
-            else
-            {
-                int j;
-                char buf2[80];
-
-                /* Find the specific type */
-                buf[0] = '\0';
-                buf2[0] = '\0';
-                for (j = 0; j < z_info->k_max; ++j)
-                {
-                    if ((k_info[j].tval == obj->tval)
-                        && (k_info[j].sval == obj->sval))
-                    {
-                        strip_name(buf2, j);
-                        break;
-                    }
-                }
-
-                snprintf(buf, sizeof(buf), "%s %s", buf2, &e_name[e_ptr->name]);
-            }
-
-            c_prt(attr, buf, row + i, col);
-
-            break;
-
-        case OBJ_NONE:
-        default:
-            break;
-        }
-    }
-
-    /* Clear remaining lines */
-    for (; i < per_page; i++)
-    {
-        Term_erase(col, row + i, 255);
-    }
-}
-#endif
-
-static cptr knowledge_page_name(int page)
-{
-    switch (page)
-    {
-    case KNOWLEDGE_PAGE_ARTEFACTS:
-        return "Artefacts";
-    case KNOWLEDGE_PAGE_OBJECTS:
-        return "Objects";
-    case KNOWLEDGE_PAGE_MONSTERS:
-        return "Monsters";
-    case KNOWLEDGE_PAGE_CURSES:
-        return "Curses";
-    default:
-        return "Known";
-    }
 }
 
 static int knowledge_normalize_page(int page)
@@ -1792,204 +1432,6 @@ static cptr knowledge_tab_label(int page)
         return "";
 
     return labels[page];
-}
-
-static int knowledge_tab_col(int page)
-{
-    int i;
-    int col = 0;
-
-    for (i = KNOWLEDGE_PAGE_ARTEFACTS; i < page; i++)
-        col += (int)strlen(knowledge_tab_label(i)) + 1;
-
-    return col;
-}
-
-static void knowledge_init_layout(knowledge_browser_layout* layout,
-    int max_group_len, bool has_groups)
-{
-    int min_group_w = 8;
-    int min_list_w = 16;
-
-    Term_get_size(&layout->term_wid, &layout->term_hgt);
-
-    if (layout->term_wid < 1)
-        layout->term_wid = 80;
-    if (layout->term_hgt < 1)
-        layout->term_hgt = 24;
-
-    layout->title_row = 0;
-    layout->tabs_row = (layout->term_hgt > 1) ? 1 : 0;
-    layout->header_row = (layout->term_hgt > 2) ? 2 : layout->tabs_row;
-    layout->divider_row = (layout->term_hgt > 3) ? 3 : layout->header_row;
-    layout->list_row = layout->divider_row + 1;
-    layout->prompt_row = layout->term_hgt - 1;
-    layout->status_row = (layout->prompt_row > layout->list_row)
-        ? (layout->prompt_row - 1)
-        : layout->prompt_row;
-    layout->list_rows = layout->status_row - layout->list_row;
-    if (layout->list_rows < 1)
-        layout->list_rows = 1;
-
-    if (!has_groups)
-    {
-        layout->group_col = 0;
-        layout->group_w = 0;
-        layout->divider_col = -1;
-        layout->list_col = 0;
-        layout->list_w = layout->term_wid;
-        return;
-    }
-
-    layout->group_col = 0;
-    layout->group_w = max_group_len;
-    if (layout->group_w < 10)
-        layout->group_w = 10;
-    if (layout->group_w > layout->term_wid / 3)
-        layout->group_w = layout->term_wid / 3;
-    if (layout->group_w < min_group_w)
-        layout->group_w = min_group_w;
-
-    while ((layout->group_w > min_group_w)
-        && (layout->term_wid - (layout->group_w + 3) < min_list_w))
-    {
-        layout->group_w--;
-    }
-
-    if (layout->term_wid - (layout->group_w + 3) < min_list_w)
-    {
-        layout->group_w = layout->term_wid - min_list_w - 3;
-        if (layout->group_w < min_group_w)
-            layout->group_w = min_group_w;
-    }
-
-    layout->divider_col = layout->group_w + 1;
-    layout->list_col = layout->divider_col + 2;
-    layout->list_w = layout->term_wid - layout->list_col;
-    if (layout->list_w < 1)
-        layout->list_w = 1;
-}
-
-static void knowledge_draw_tabs(const knowledge_browser_layout* layout, int page,
-    bool tabs_focus)
-{
-    int i;
-    int col = 0;
-
-    Term_erase(0, layout->tabs_row, 255);
-
-    for (i = KNOWLEDGE_PAGE_ARTEFACTS; i <= KNOWLEDGE_PAGE_CURSES; i++)
-    {
-        cptr label = knowledge_tab_label(i);
-        byte attr = TERM_SLATE;
-        int remaining = layout->term_wid - col;
-        int len;
-
-        if (remaining <= 0)
-            break;
-
-        if (i == page)
-            attr = tabs_focus ? TERM_YELLOW : TERM_L_BLUE;
-
-        len = (int)strlen(label);
-        Term_putstr(col, layout->tabs_row, remaining, attr, label);
-        col += len;
-
-        if ((i < KNOWLEDGE_PAGE_CURSES) && (col < layout->term_wid))
-        {
-            Term_putstr(col, layout->tabs_row, layout->term_wid - col,
-                TERM_SLATE, " ");
-            col++;
-        }
-    }
-}
-
-static void knowledge_draw_frame(const knowledge_browser_layout* layout, int page,
-    bool has_groups, cptr list_label, bool tabs_focus)
-{
-    int i;
-    char title[64];
-    char page_buf[16];
-
-    Term_clear();
-
-    strnfmt(title, sizeof(title), "Known lore - %s", knowledge_page_name(page));
-    Term_putstr(0, layout->title_row, layout->term_wid, TERM_L_WHITE + TERM_SHADE,
-        title);
-
-    strnfmt(page_buf, sizeof(page_buf), "%d/4", page + 1);
-    if ((int)strlen(page_buf) < layout->term_wid)
-    {
-        int page_col = layout->term_wid - (int)strlen(page_buf);
-        Term_putstr(page_col, layout->title_row, layout->term_wid - page_col,
-            TERM_SLATE, page_buf);
-    }
-
-    knowledge_draw_tabs(layout, page, tabs_focus);
-
-    Term_erase(0, layout->header_row, 255);
-    if (has_groups)
-    {
-        Term_putstr(layout->group_col, layout->header_row, layout->group_w,
-            TERM_SLATE, "Group");
-        Term_putstr(layout->list_col, layout->header_row, layout->list_w,
-            TERM_SLATE, list_label);
-    }
-    else
-    {
-        Term_putstr(0, layout->header_row, layout->term_wid, TERM_SLATE,
-            list_label);
-    }
-
-    for (i = 0; i < layout->term_wid; i++)
-    {
-        Term_putch(i, layout->divider_row, TERM_L_DARK, '=');
-    }
-
-    if (has_groups && layout->divider_col >= 0)
-    {
-        for (i = 0; i < layout->list_rows; i++)
-        {
-            Term_putch(layout->divider_col, layout->list_row + i, TERM_L_DARK, '|');
-        }
-    }
-
-    if (layout->status_row != layout->prompt_row)
-        Term_erase(0, layout->status_row, 255);
-    Term_erase(0, layout->prompt_row, 255);
-}
-
-static void knowledge_draw_prompt(const knowledge_browser_layout* layout)
-{
-    char prompt[128];
-
-    if (steamdeck_controls_active())
-    {
-        char prev_label[16];
-        char next_label[16];
-        char confirm_label[16];
-        char recall_label[16];
-        char back_label[16];
-
-        controller_prompt_label('e', "L1", prev_label, sizeof(prev_label));
-        controller_prompt_label('i', "R1", next_label, sizeof(next_label));
-        controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-            sizeof(confirm_label));
-        controller_prompt_label(steamdeck_info_key(), "RS", recall_label,
-            sizeof(recall_label));
-        controller_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        strnfmt(prompt, sizeof(prompt),
-            "D-pad move  [%s/%s] page  [%s/%s] recall  [%s] back",
-            prev_label, next_label, confirm_label, recall_label, back_label);
-        Term_putstr(0, layout->prompt_row, layout->term_wid, TERM_L_DARK, prompt);
-    }
-    else
-    {
-        SDL_strlcpy(prompt, "Dir move  e/i page  Up at top=tabs  Space/r recall  Esc",
-            sizeof(prompt));
-        Term_putstr(0, layout->prompt_row, layout->term_wid, TERM_SLATE, prompt);
-    }
 }
 
 static void knowledge_clamp_group_state(int* column, int* grp_cur, int* grp_top,
@@ -2065,198 +1507,6 @@ static void knowledge_clamp_list_state(int* cur, int* top, int count, int per_pa
         *top = 0;
 }
 
-static void knowledge_display_groups(const knowledge_browser_layout* layout,
-    int grp_idx[], cptr group_text[], int grp_cnt, int grp_cur, int grp_top)
-{
-    int i;
-
-    for (i = 0; i < layout->list_rows; i++)
-    {
-        int y = layout->list_row + i;
-        int idx = grp_top + i;
-
-        Term_erase(layout->group_col, y, layout->group_w);
-
-        if (idx >= grp_cnt)
-            continue;
-
-        Term_putstr(layout->group_col, y, layout->group_w,
-            (idx == grp_cur) ? TERM_L_BLUE : TERM_WHITE,
-            group_text[grp_idx[idx]]);
-    }
-}
-
-static void knowledge_display_artefacts(const knowledge_browser_layout* layout,
-    int artefact_idx[], int artefact_cnt, int artefact_cur, int artefact_top)
-{
-    bool show_debug = cheat_know && (layout->term_wid >= 78);
-    int idx_col = layout->term_wid - 12;
-    int dep_col = layout->term_wid - 8;
-    int rar_col = layout->term_wid - 4;
-    int name_w = layout->list_w;
-    int i;
-
-    if (show_debug)
-    {
-        name_w = idx_col - layout->list_col - 1;
-        if (name_w < 12)
-            show_debug = false;
-    }
-
-    if (show_debug)
-    {
-        Term_putstr(idx_col, layout->header_row, 3, TERM_SLATE, "Idx");
-        Term_putstr(dep_col, layout->header_row, 3, TERM_SLATE, "Dep");
-        Term_putstr(rar_col, layout->header_row, 3, TERM_SLATE, "Rar");
-    }
-
-    for (i = 0; i < layout->list_rows; i++)
-    {
-        int row = layout->list_row + i;
-        int idx = artefact_top + i;
-        object_type object_type_body;
-        object_type* i_ptr = &object_type_body;
-        char o_name[80];
-        byte attr;
-
-        Term_erase(layout->list_col, row, 255);
-
-        if (idx >= artefact_cnt)
-            continue;
-
-        attr = (idx == artefact_cur) ? TERM_L_BLUE : TERM_WHITE;
-        object_wipe(i_ptr);
-        prepare_fake_artefact(i_ptr, artefact_idx[idx]);
-        object_desc(o_name, sizeof(o_name), i_ptr, true, 0);
-        Term_putstr(layout->list_col, row, name_w, attr, o_name);
-
-        if (show_debug)
-        {
-            artefact_type* a_ptr = &a_info[artefact_idx[idx]];
-            c_prt(attr, format("%3d", artefact_idx[idx]), row, idx_col);
-            c_prt(attr, format("%3d", a_ptr->level), row, dep_col);
-            c_prt(attr, format("%3d", a_ptr->rarity), row, rar_col);
-        }
-    }
-}
-
-static void knowledge_display_objects(const knowledge_browser_layout* layout,
-    object_list_entry object_idx[], int object_cnt, int object_cur, int object_top)
-{
-    bool show_idx = cheat_know && (layout->term_wid >= 70);
-    bool show_sym = (layout->term_wid >= 44);
-    int idx_col = layout->term_wid - 5;
-    int sym_col = layout->term_wid - (use_bigtile ? 2 : 1);
-    int name_w = layout->list_w;
-    int i;
-
-    if (show_idx)
-    {
-        name_w = idx_col - layout->list_col - 1;
-        if (name_w < 12)
-            show_idx = false;
-    }
-
-    if (show_sym)
-    {
-        int sym_name_w = sym_col - layout->list_col - 1;
-        if (sym_name_w < name_w)
-            name_w = sym_name_w;
-        if (name_w < 12)
-            show_sym = false;
-    }
-
-    if (show_idx)
-        Term_putstr(idx_col, layout->header_row, 3, TERM_SLATE, "Idx");
-    if (show_sym)
-        Term_putstr(sym_col, layout->header_row, 3, TERM_SLATE, "Sym");
-
-    for (i = 0; i < layout->list_rows; i++)
-    {
-        int row = layout->list_row + i;
-        int oidx = object_top + i;
-        object_list_entry* obj;
-        object_kind* k_ptr;
-        ego_item_type* e_ptr;
-        byte attr;
-        byte cursor;
-        char buf[80];
-
-        Term_erase(layout->list_col, row, 255);
-
-        if (oidx >= object_cnt)
-            continue;
-
-        obj = &object_idx[oidx];
-
-        switch (obj->type)
-        {
-        case OBJ_NORMAL:
-            k_ptr = &k_info[obj->idx];
-            attr = k_ptr->aware ? TERM_WHITE : TERM_SLATE;
-            cursor = k_ptr->aware ? TERM_L_BLUE : TERM_BLUE;
-            attr = (oidx == object_cur) ? cursor : attr;
-
-            strip_name(buf, obj->idx);
-            Term_putstr(layout->list_col, row, name_w, attr, buf);
-
-            if (show_idx)
-                c_prt(attr, format("%d", obj->idx), row, idx_col);
-
-            if (show_sym && k_ptr->aware)
-            {
-                byte a = k_ptr->flavor ? flavor_info[k_ptr->flavor].x_attr : k_ptr->d_attr;
-                byte c = k_ptr->flavor ? flavor_info[k_ptr->flavor].x_char : k_ptr->d_char;
-                Term_putch(sym_col, row, a, c);
-                if (use_bigtile)
-                {
-                    if (a & 0x80)
-                        Term_putch(sym_col + 1, row, 255, -1);
-                    else
-                        Term_putch(sym_col + 1, row, 0, ' ');
-                }
-            }
-            break;
-
-        case OBJ_SPECIAL:
-            e_ptr = &e_info[obj->e_idx];
-            attr = e_ptr->aware ? TERM_WHITE : TERM_SLATE;
-            cursor = e_ptr->aware ? TERM_L_BLUE : TERM_BLUE;
-            attr = (oidx == object_cur) ? cursor : attr;
-
-            if (obj->sval == -1)
-            {
-                strnfmt(buf, sizeof(buf), "  %s", &e_name[e_ptr->name]);
-            }
-            else
-            {
-                int j;
-                char buf2[80];
-
-                buf[0] = '\0';
-                buf2[0] = '\0';
-                for (j = 0; j < z_info->k_max; ++j)
-                {
-                    if ((k_info[j].tval == obj->tval) && (k_info[j].sval == obj->sval))
-                    {
-                        strip_name(buf2, j);
-                        break;
-                    }
-                }
-
-                strnfmt(buf, sizeof(buf), "%s %s", buf2, &e_name[e_ptr->name]);
-            }
-
-            Term_putstr(layout->list_col, row, name_w, attr, buf);
-            break;
-
-        case OBJ_NONE:
-        default:
-            break;
-        }
-    }
-}
-
 static void knowledge_monster_summary(char* buf, size_t buflen, int grp_cur)
 {
     int i;
@@ -2305,75 +1555,6 @@ static void knowledge_monster_summary(char* buf, size_t buflen, int grp_cur)
     }
 }
 
-static void knowledge_display_monsters(const knowledge_browser_layout* layout,
-    monster_list_entry mon_idx[], int mon_cnt, int mon_cur, int mon_top)
-{
-    bool show_sym = (layout->term_wid >= 44);
-    bool show_kills = (layout->term_wid >= 56);
-    int kills_col = layout->term_wid - 5;
-    int sym_col = show_kills ? (kills_col - 2) : (layout->term_wid - (use_bigtile ? 2 : 1));
-    int name_w = layout->list_w;
-    int i;
-
-    if (show_sym)
-    {
-        int sym_name_w = sym_col - layout->list_col - 1;
-        if (sym_name_w < name_w)
-            name_w = sym_name_w;
-        if (name_w < 12)
-            show_sym = false;
-    }
-
-    if (show_sym)
-        Term_putstr(sym_col, layout->header_row, 3, TERM_SLATE, "Sym");
-    if (show_kills)
-        Term_putstr(kills_col, layout->header_row, 5, TERM_SLATE, "Kills");
-
-    for (i = 0; i < layout->list_rows; i++)
-    {
-        int row = layout->list_row + i;
-        int idx = mon_top + i;
-        int r_idx;
-        monster_race* r_ptr;
-        monster_lore* l_ptr;
-        byte attr;
-        char race_name[80];
-
-        Term_erase(layout->list_col, row, 255);
-
-        if (idx >= mon_cnt)
-            continue;
-
-        r_idx = mon_idx[idx].r_idx;
-        r_ptr = &r_info[r_idx];
-        l_ptr = &l_list[r_idx];
-        attr = (idx == mon_cur) ? TERM_L_BLUE : TERM_WHITE;
-
-        monster_desc_race(race_name, sizeof(race_name), r_idx);
-        Term_putstr(layout->list_col, row, name_w, attr, race_name);
-
-        if (show_sym)
-        {
-            Term_putch(sym_col, row, r_ptr->x_attr, r_ptr->x_char);
-            if (use_bigtile)
-            {
-                if ((byte)(r_ptr->x_attr) & 0x80)
-                    Term_putch(sym_col + 1, row, 255, -1);
-                else
-                    Term_putch(sym_col + 1, row, 0, ' ');
-            }
-        }
-
-        if (show_kills)
-        {
-            if (r_ptr->flags1 & RF1_UNIQUE)
-                put_str((r_ptr->max_num == 0) ? " dead" : "alive", row, kills_col);
-            else
-                put_str(format("%5d", l_ptr->pkills), row, kills_col);
-        }
-    }
-}
-
 static int knowledge_collect_curses(int curse_idx[])
 {
     int id;
@@ -2418,51 +1599,6 @@ static cptr knowledge_blessing_display_name(int idx)
 
     return knowledge_curse_display_name(idx);
 }
-
-static void knowledge_display_curses(const knowledge_browser_layout* layout,
-    int curse_idx[], int curse_cnt, int curse_cur, int curse_top)
-{
-    int i;
-
-    for (i = 0; i < layout->list_rows; i++)
-    {
-        int row = layout->list_row + i;
-        int idx = curse_top + i;
-        int id;
-        byte attr;
-
-        Term_erase(0, row, 255);
-
-        if (idx >= curse_cnt)
-            continue;
-
-        id = curse_idx[idx];
-        attr = (idx == curse_cur) ? TERM_L_BLUE : TERM_L_RED;
-        Term_putstr(0, row, layout->term_wid, attr,
-            knowledge_curse_display_name(id));
-    }
-}
-
-static void knowledge_detail_prompt_legacy(int row, bool steamdeck, cptr title,
-    cptr accept_label)
-{
-    Term_erase(0, row, 255);
-    if (steamdeck)
-    {
-        char hint_buf[48];
-        strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
-        Term_putstr(1, row, -1, TERM_L_WHITE, hint_buf);
-    }
-    else
-    {
-        Term_putstr(1, row, -1, TERM_L_WHITE, "(press any key)");
-    }
-
-    (void)inkey();
-    Term_clear();
-    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, title);
-}
-
 static void knowledge_scene_add_wrapped_document_text(
     app_ui_scene* scene, app_ui_panel* panel, int col, int* row, cptr text,
     byte color, int term_wid)
@@ -2803,103 +1939,6 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
 
     return knowledge_present_curse_detail_document_page(&scene, panel,
         footer_row, steamdeck, accept_label);
-}
-
-static void knowledge_show_curse_detail_legacy(int curse_id)
-{
-    int row = 2;
-    int wrap_width = Term->wid - 4;
-    int page_limit = Term->hgt - 3;
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    curse_type* c = &cu_info[curse_id];
-    cptr cname = cu_name + c->name;
-    cptr cdesc = cu_text + c->text;
-    cptr cpower = cu_text + c->power;
-    cptr bname = knowledge_blessing_display_name(curse_id);
-    cptr bdesc = (c->blessing_text) ? (cu_text + c->blessing_text) : "";
-    cptr bpower = (c->blessing_power) ? (cu_text + c->blessing_power) : "";
-    bool has_blessing_text = bdesc && *bdesc;
-    bool has_blessing_effect = bpower && *bpower;
-    bool has_blessing_info = has_blessing_text || has_blessing_effect
-        || (c->blessing_name != 0);
-    char effect_line[256];
-
-    if (wrap_width < 20)
-        wrap_width = 20;
-
-    if (steamdeck)
-    {
-        controller_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-    }
-
-    screen_save();
-    Term_clear();
-    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, "Known Curse:");
-
-    text_out_hook = text_out_to_screen;
-    text_out_wrap = wrap_width;
-
-    c_put_str(TERM_L_RED, cname, row++, 1);
-
-    if (row + count_wrapped_lines(cdesc, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
-            accept_label);
-    Term_gotoxy(3, row);
-    text_out_c(TERM_WHITE, cdesc);
-    row += count_wrapped_lines(cdesc, text_out_wrap, 3);
-
-    strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
-        (*cpower) ? cpower : "[no additional effect listed]");
-    if (row + count_wrapped_lines(effect_line, text_out_wrap, 3) >= page_limit)
-        knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
-            accept_label);
-    Term_gotoxy(3, row);
-    text_out_c(TERM_RED, "Effect: ");
-    text_out_c(TERM_L_DARK, (*cpower) ? cpower : "[no additional effect listed]");
-    row += count_wrapped_lines(effect_line, text_out_wrap, 3);
-
-    row++;
-
-    if (has_blessing_info)
-    {
-        char blessing_line[256];
-
-        if (row + 1 >= page_limit)
-            knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
-                accept_label);
-
-        Term_putstr(3, row++, -1, TERM_L_GREEN, format("Blessing: %s", bname));
-
-        if (has_blessing_text)
-        {
-            if (row + count_wrapped_lines(bdesc, text_out_wrap, 5) >= page_limit)
-                knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
-                    accept_label);
-            Term_gotoxy(5, row);
-            text_out_c(TERM_WHITE, bdesc);
-            row += count_wrapped_lines(bdesc, text_out_wrap, 5);
-        }
-
-        strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
-            has_blessing_effect ? bpower : "[no additional effect listed]");
-        if (row + count_wrapped_lines(blessing_line, text_out_wrap, 5) >= page_limit)
-            knowledge_detail_prompt_legacy(row, steamdeck, "Known Curse:",
-                accept_label);
-        Term_gotoxy(5, row);
-        text_out_c(TERM_L_GREEN, "Effect: ");
-        text_out_c(TERM_WHITE,
-            has_blessing_effect ? bpower : "[no additional effect listed]");
-        row += count_wrapped_lines(blessing_line, text_out_wrap, 5);
-    }
-
-    if (row + 1 >= Term->hgt)
-        row = Term->hgt - 2;
-
-    knowledge_detail_prompt_legacy(row + 1, steamdeck, "Known Curse:",
-        accept_label);
-    screen_load();
 }
 
 static bool knowledge_handle_page_input(char ch, int* page)
@@ -3765,23 +2804,18 @@ static bool knowledge_build_supplies_browser_scene(app_ui_scene* scene,
 void do_cmd_knowledge_browser_page(int page)
 {
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    int page_rows = BROWSER_ROWS;
     int i;
     int artefact_grp_idx[100];
     int object_grp_idx[100];
     int monster_grp_idx[100];
-    int* artefact_idx = mem_alloc_array(z_info->art_max, int);
-    object_list_entry* object_idx =
-        mem_alloc_array(z_info->k_max + z_info->e_max + 1, object_list_entry);
-    monster_list_entry* mon_idx =
-        mem_alloc_array(z_info->r_max, monster_list_entry);
-    int* curse_idx = mem_alloc_array(z_info->cu_max, int);
+    int* artefact_idx = NULL;
+    object_list_entry* object_idx = NULL;
+    monster_list_entry* mon_idx = NULL;
+    int* curse_idx = NULL;
     int artefact_grp_cnt = 0;
     int object_grp_cnt = 0;
     int monster_grp_cnt = 0;
-    int artefact_group_w = 0;
-    int object_group_w = 0;
-    int monster_group_w = 0;
     int curse_cnt = 0;
     int artefact_old = -1;
     int object_old = -1;
@@ -3801,15 +2835,22 @@ void do_cmd_knowledge_browser_page(int page)
         do_cmd_redraw();
     }
 
+    if (!knowledge_enter_information_scene_or_report(&info_scope,
+            "knowledge browser",
+            "Known lore browser requires the snapshot UI renderer.",
+            "Known lore browser unavailable."))
+    {
+        return;
+    }
+
+    artefact_idx = mem_alloc_array(z_info->art_max, int);
+    object_idx = mem_alloc_array(z_info->k_max + z_info->e_max + 1,
+        object_list_entry);
+    mon_idx = mem_alloc_array(z_info->r_max, monster_list_entry);
+    curse_idx = mem_alloc_array(z_info->cu_max, int);
+
     for (i = 0; object_group_text[i] != NULL; i++)
     {
-        int len = (int)strlen(object_group_text[i]);
-
-        if (len > artefact_group_w)
-            artefact_group_w = len;
-        if (len > object_group_w)
-            object_group_w = len;
-
         if (collect_artefacts(i, artefact_idx))
             artefact_grp_idx[artefact_grp_cnt++] = i;
         if (collect_objects(i, NULL))
@@ -3818,10 +2859,6 @@ void do_cmd_knowledge_browser_page(int page)
 
     for (i = 0; monster_group_text[i] != NULL; i++)
     {
-        int len = (int)strlen(monster_group_text[i]);
-
-        if (len > monster_group_w)
-            monster_group_w = len;
         if ((monster_group_char[i] == (char*)-1L)
             || collect_monsters(i, mon_idx, 0x01))
         {
@@ -3834,12 +2871,8 @@ void do_cmd_knowledge_browser_page(int page)
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
 
-    if (!use_information_scene)
-        screen_save();
-
     while (!done)
     {
-        knowledge_browser_layout layout;
         int ch;
 
         switch (page)
@@ -3848,15 +2881,13 @@ void do_cmd_knowledge_browser_page(int page)
         {
             int artefact_cnt = 0;
             int selected_artefact = -1;
-            char status[96];
 
-            knowledge_init_layout(&layout, artefact_group_w, true);
             if (artefact_grp_cnt > 0)
                 artefact_cnt = collect_artefacts(
                     artefact_grp_idx[state.group_cur[page]], artefact_idx);
             knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
                 &state.group_top[page], artefact_grp_cnt, &state.entry_cur[page],
-                &state.entry_top[page], artefact_cnt, layout.list_rows);
+                &state.entry_top[page], artefact_cnt, page_rows);
             if (artefact_grp_cnt > 0)
                 artefact_cnt = collect_artefacts(
                     artefact_grp_idx[state.group_cur[page]], artefact_idx);
@@ -3872,75 +2903,23 @@ void do_cmd_knowledge_browser_page(int page)
                 artefact_old = selected_artefact;
             }
 
-            if (use_information_scene)
             {
                 app_ui_scene scene;
 
-                if (!knowledge_build_artefact_browser_scene(&scene, page,
-                        state.tabs_focus, artefact_grp_idx, artefact_grp_cnt,
-                        state.group_cur[page],
-                        state.group_top[page], artefact_idx, artefact_cnt,
-                        state.entry_top[page], state.entry_cur[page])
-                    || !ui_information_scene_present_ui(&scene))
+                if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                        knowledge_build_artefact_browser_scene(&scene, page,
+                            state.tabs_focus, artefact_grp_idx,
+                            artefact_grp_cnt, state.group_cur[page],
+                            state.group_top[page], artefact_idx, artefact_cnt,
+                            state.entry_top[page], state.entry_cur[page]),
+                        &scene, "knowledge artefact browser",
+                        "Artefact knowledge screen unavailable."))
                 {
-                    ui_information_scene_leave(&info_scope);
-                    use_information_scene = false;
-                    screen_save();
+                    goto cleanup;
                 }
             }
 
-            if (!use_information_scene)
-            {
-                knowledge_draw_frame(&layout, page, true, "Artefact",
-                    state.tabs_focus);
-                knowledge_display_groups(&layout, artefact_grp_idx,
-                    object_group_text, artefact_grp_cnt, state.group_cur[page],
-                    state.group_top[page]);
-                knowledge_display_artefacts(&layout, artefact_idx,
-                    artefact_cnt, state.entry_cur[page],
-                    state.entry_top[page]);
-
-                if (artefact_cnt > 0)
-                {
-                    strnfmt(status, sizeof(status), "%d artefact%s in %s.",
-                        artefact_cnt, (artefact_cnt == 1) ? "" : "s",
-                        object_group_text[artefact_grp_idx[state.group_cur[page]]]);
-                }
-                else
-                {
-                    SDL_strlcpy(status, "No known artefacts yet.",
-                        sizeof(status));
-                }
-                if (layout.status_row != layout.prompt_row)
-                {
-                    Term_putstr(0, layout.status_row, layout.term_wid,
-                        TERM_L_BLUE, status);
-                }
-                knowledge_draw_prompt(&layout);
-
-                if (state.tabs_focus)
-                {
-                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-                }
-                else if (artefact_grp_cnt > 0)
-                {
-                    if (state.column[page] == 0)
-                    {
-                        Term_gotoxy(0, layout.list_row
-                            + (state.group_cur[page] - state.group_top[page]));
-                    }
-                    else
-                    {
-                        Term_gotoxy(layout.list_col, layout.list_row
-                            + (state.entry_cur[page] - state.entry_top[page]));
-                    }
-                }
-
-                Term_fresh();
-            }
-
-            ch = use_information_scene ? ui_information_scene_wait_key()
-                                       : inkey();
+            ch = ui_information_scene_wait_key();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -3960,13 +2939,11 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 if (artefact_cnt > 0)
                 {
-                    if (use_information_scene
-                        && !knowledge_pause_information_scene(&info_scope))
-                        break;
+                    if (!knowledge_pause_information_scene(&info_scope))
+                        goto cleanup;
                     desc_art_fake(artefact_idx[state.entry_cur[page]]);
-                    if (use_information_scene
-                        && !knowledge_resume_information_scene(&info_scope))
-                        return;
+                    if (!knowledge_resume_information_scene(&info_scope))
+                        goto cleanup;
                 }
                 else
                     bell("Nothing to recall.");
@@ -3982,7 +2959,7 @@ void do_cmd_knowledge_browser_page(int page)
             default:
                 browser_cursor_with_rows((char)ch, &state.column[page],
                     &state.group_cur[page], artefact_grp_cnt,
-                    &state.entry_cur[page], artefact_cnt, layout.list_rows);
+                    &state.entry_cur[page], artefact_cnt, page_rows);
                 break;
             }
             break;
@@ -3992,15 +2969,13 @@ void do_cmd_knowledge_browser_page(int page)
         {
             int object_cnt = 0;
             int tracked_kind = 0;
-            char status[112];
 
-            knowledge_init_layout(&layout, object_group_w, true);
             if (object_grp_cnt > 0)
                 object_cnt = collect_objects(
                     object_grp_idx[state.group_cur[page]], object_idx);
             knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
                 &state.group_top[page], object_grp_cnt, &state.entry_cur[page],
-                &state.entry_top[page], object_cnt, layout.list_rows);
+                &state.entry_top[page], object_cnt, page_rows);
             if (object_grp_cnt > 0)
                 object_cnt = collect_objects(
                     object_grp_idx[state.group_cur[page]], object_idx);
@@ -4018,89 +2993,23 @@ void do_cmd_knowledge_browser_page(int page)
                 object_old = tracked_kind;
             }
 
-            if (use_information_scene)
             {
                 app_ui_scene scene;
 
-                if (!knowledge_build_object_browser_scene(&scene, page,
-                        state.tabs_focus, object_grp_idx, object_grp_cnt,
-                        state.group_cur[page],
-                        state.group_top[page], object_idx, object_cnt,
-                        state.entry_top[page], state.entry_cur[page])
-                    || !ui_information_scene_present_ui(&scene))
+                if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                        knowledge_build_object_browser_scene(&scene, page,
+                            state.tabs_focus, object_grp_idx, object_grp_cnt,
+                            state.group_cur[page], state.group_top[page],
+                            object_idx, object_cnt, state.entry_top[page],
+                            state.entry_cur[page]),
+                        &scene, "knowledge object browser",
+                        "Object knowledge screen unavailable."))
                 {
-                    ui_information_scene_leave(&info_scope);
-                    use_information_scene = false;
-                    screen_save();
+                    goto cleanup;
                 }
             }
 
-            if (!use_information_scene)
-            {
-                knowledge_draw_frame(&layout, page, true, "Object",
-                    state.tabs_focus);
-                knowledge_display_groups(&layout, object_grp_idx,
-                    object_group_text, object_grp_cnt, state.group_cur[page],
-                    state.group_top[page]);
-                knowledge_display_objects(&layout, object_idx, object_cnt,
-                    state.entry_cur[page], state.entry_top[page]);
-
-                if (object_cnt > 0)
-                {
-                    object_list_entry* obj = &object_idx[state.entry_cur[page]];
-
-                    if ((obj->type == OBJ_NORMAL) && k_info[obj->idx].aware)
-                    {
-                        strnfmt(status, sizeof(status),
-                            "%d object%s in %s. Recall available.",
-                            object_cnt, (object_cnt == 1) ? "" : "s",
-                            object_group_text[object_grp_idx[
-                                state.group_cur[page]]]);
-                    }
-                    else
-                    {
-                        strnfmt(status, sizeof(status),
-                            "%d object%s in %s. Recall works for identified base items.",
-                            object_cnt, (object_cnt == 1) ? "" : "s",
-                            object_group_text[object_grp_idx[
-                                state.group_cur[page]]]);
-                    }
-                }
-                else
-                {
-                    SDL_strlcpy(status, "No known objects yet.",
-                        sizeof(status));
-                }
-                if (layout.status_row != layout.prompt_row)
-                {
-                    Term_putstr(0, layout.status_row, layout.term_wid,
-                        TERM_L_BLUE, status);
-                }
-                knowledge_draw_prompt(&layout);
-
-                if (state.tabs_focus)
-                {
-                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-                }
-                else if (object_grp_cnt > 0)
-                {
-                    if (state.column[page] == 0)
-                    {
-                        Term_gotoxy(0, layout.list_row
-                            + (state.group_cur[page] - state.group_top[page]));
-                    }
-                    else
-                    {
-                        Term_gotoxy(layout.list_col, layout.list_row
-                            + (state.entry_cur[page] - state.entry_top[page]));
-                    }
-                }
-
-                Term_fresh();
-            }
-
-            ch = use_information_scene ? ui_information_scene_wait_key()
-                                       : inkey();
+            ch = ui_information_scene_wait_key();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -4122,13 +3031,11 @@ void do_cmd_knowledge_browser_page(int page)
                     && (object_idx[state.entry_cur[page]].type == OBJ_NORMAL)
                     && k_info[object_idx[state.entry_cur[page]].idx].aware)
                 {
-                    if (use_information_scene
-                        && !knowledge_pause_information_scene(&info_scope))
-                        break;
+                    if (!knowledge_pause_information_scene(&info_scope))
+                        goto cleanup;
                     desc_obj_fake(object_idx[state.entry_cur[page]].idx);
-                    if (use_information_scene
-                        && !knowledge_resume_information_scene(&info_scope))
-                        return;
+                    if (!knowledge_resume_information_scene(&info_scope))
+                        goto cleanup;
                 }
                 else
                 {
@@ -4146,7 +3053,7 @@ void do_cmd_knowledge_browser_page(int page)
             default:
                 browser_cursor_with_rows((char)ch, &state.column[page],
                     &state.group_cur[page], object_grp_cnt,
-                    &state.entry_cur[page], object_cnt, layout.list_rows);
+                    &state.entry_cur[page], object_cnt, page_rows);
                 break;
             }
             break;
@@ -4156,15 +3063,13 @@ void do_cmd_knowledge_browser_page(int page)
         {
             int monster_cnt = 0;
             int selected_r_idx = 0;
-            char status[96];
 
-            knowledge_init_layout(&layout, monster_group_w, true);
             if (monster_grp_cnt > 0)
                 monster_cnt = collect_monsters(
                     monster_grp_idx[state.group_cur[page]], mon_idx, 0x00);
             knowledge_clamp_group_state(&state.column[page], &state.group_cur[page],
                 &state.group_top[page], monster_grp_cnt, &state.entry_cur[page],
-                &state.entry_top[page], monster_cnt, layout.list_rows);
+                &state.entry_top[page], monster_cnt, page_rows);
             if (monster_grp_cnt > 0)
                 monster_cnt = collect_monsters(
                     monster_grp_idx[state.group_cur[page]], mon_idx, 0x00);
@@ -4179,73 +3084,23 @@ void do_cmd_knowledge_browser_page(int page)
                 monster_old = selected_r_idx;
             }
 
-            if (use_information_scene)
             {
                 app_ui_scene scene;
 
-                if (!knowledge_build_monster_browser_scene(&scene, page,
-                        state.tabs_focus, monster_grp_idx, monster_grp_cnt,
-                        state.group_cur[page],
-                        state.group_top[page], mon_idx, monster_cnt,
-                        state.entry_top[page], state.entry_cur[page])
-                    || !ui_information_scene_present_ui(&scene))
+                if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                        knowledge_build_monster_browser_scene(&scene, page,
+                            state.tabs_focus, monster_grp_idx,
+                            monster_grp_cnt, state.group_cur[page],
+                            state.group_top[page], mon_idx, monster_cnt,
+                            state.entry_top[page], state.entry_cur[page]),
+                        &scene, "knowledge monster browser",
+                        "Monster knowledge screen unavailable."))
                 {
-                    ui_information_scene_leave(&info_scope);
-                    use_information_scene = false;
-                    screen_save();
+                    goto cleanup;
                 }
             }
 
-            if (!use_information_scene)
-            {
-                knowledge_draw_frame(&layout, page, true, "Monster",
-                    state.tabs_focus);
-                knowledge_display_groups(&layout, monster_grp_idx,
-                    monster_group_text, monster_grp_cnt, state.group_cur[page],
-                    state.group_top[page]);
-                knowledge_display_monsters(&layout, mon_idx, monster_cnt,
-                    state.entry_cur[page], state.entry_top[page]);
-
-                if (monster_cnt > 0)
-                {
-                    knowledge_monster_summary(status, sizeof(status),
-                        monster_grp_idx[state.group_cur[page]]);
-                }
-                else
-                {
-                    SDL_strlcpy(status, "No known monsters in this group yet.",
-                        sizeof(status));
-                }
-                if (layout.status_row != layout.prompt_row)
-                {
-                    Term_putstr(0, layout.status_row, layout.term_wid,
-                        TERM_L_BLUE, status);
-                }
-                knowledge_draw_prompt(&layout);
-
-                if (state.tabs_focus)
-                {
-                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-                }
-                else if (monster_grp_cnt > 0)
-                {
-                    if (state.column[page] == 0)
-                    {
-                        Term_gotoxy(0, layout.list_row
-                            + (state.group_cur[page] - state.group_top[page]));
-                    }
-                    else
-                    {
-                        Term_gotoxy(layout.list_col, layout.list_row
-                            + (state.entry_cur[page] - state.entry_top[page]));
-                    }
-                }
-
-                Term_fresh();
-            }
-
-            ch = use_information_scene ? ui_information_scene_wait_key()
-                                       : inkey();
+            ch = ui_information_scene_wait_key();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -4265,26 +3120,16 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 if (monster_cnt > 0)
                 {
-                    if (use_information_scene
-                        && !knowledge_pause_information_scene(&info_scope))
-                        break;
-                    if (use_information_scene)
+                    if (!knowledge_pause_information_scene(&info_scope))
+                        goto cleanup;
+                    if (!ui_information_scene_show_monster_recall(
+                            mon_idx[state.entry_cur[page]].r_idx, NULL, NULL,
+                            false, NULL))
                     {
-                        if (!ui_information_scene_show_monster_recall(
-                                mon_idx[state.entry_cur[page]].r_idx, NULL,
-                                NULL, false, NULL))
-                        {
-                            bell("Monster recall screen unavailable.");
-                        }
+                        bell("Monster recall screen unavailable.");
                     }
-                    else
-                    {
-                        screen_roff(mon_idx[state.entry_cur[page]].r_idx, NULL);
-                        (void)inkey();
-                    }
-                    if (use_information_scene
-                        && !knowledge_resume_information_scene(&info_scope))
-                        return;
+                    if (!knowledge_resume_information_scene(&info_scope))
+                        goto cleanup;
                 }
                 else
                 {
@@ -4302,7 +3147,7 @@ void do_cmd_knowledge_browser_page(int page)
             default:
                 browser_cursor_with_rows((char)ch, &state.column[page],
                     &state.group_cur[page], monster_grp_cnt,
-                    &state.entry_cur[page], monster_cnt, layout.list_rows);
+                    &state.entry_cur[page], monster_cnt, page_rows);
                 break;
             }
             break;
@@ -4311,68 +3156,23 @@ void do_cmd_knowledge_browser_page(int page)
         case KNOWLEDGE_PAGE_CURSES:
         default:
         {
-            char status[256];
-
-            knowledge_init_layout(&layout, 0, false);
             knowledge_clamp_list_state(&state.entry_cur[page], &state.entry_top[page],
-                curse_cnt, layout.list_rows);
-            if (use_information_scene)
+                curse_cnt, page_rows);
             {
                 app_ui_scene scene;
 
-                if (!knowledge_build_curse_browser_scene(&scene, page,
-                        state.tabs_focus, curse_idx, curse_cnt,
-                        state.entry_top[page], state.entry_cur[page])
-                    || !ui_information_scene_present_ui(&scene))
+                if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                        knowledge_build_curse_browser_scene(&scene, page,
+                            state.tabs_focus, curse_idx, curse_cnt,
+                            state.entry_top[page], state.entry_cur[page]),
+                        &scene, "knowledge curse browser",
+                        "Curse knowledge screen unavailable."))
                 {
-                    ui_information_scene_leave(&info_scope);
-                    use_information_scene = false;
-                    screen_save();
+                    goto cleanup;
                 }
             }
 
-            if (!use_information_scene)
-            {
-                knowledge_draw_frame(&layout, page, false, "Known curses",
-                    state.tabs_focus);
-                knowledge_display_curses(&layout, curse_idx, curse_cnt,
-                    state.entry_cur[page], state.entry_top[page]);
-
-                if (curse_cnt > 0)
-                {
-                    curse_type* c = &cu_info[curse_idx[state.entry_cur[page]]];
-                    cptr cpower = cu_text + c->power;
-
-                    strnfmt(status, sizeof(status), "Effect: %s",
-                        (*cpower) ? cpower : "[no additional effect listed]");
-                }
-                else
-                {
-                    SDL_strlcpy(status, "No known curses yet.",
-                        sizeof(status));
-                }
-                if (layout.status_row != layout.prompt_row)
-                {
-                    Term_putstr(0, layout.status_row, layout.term_wid,
-                        TERM_L_BLUE, status);
-                }
-                knowledge_draw_prompt(&layout);
-
-                if (state.tabs_focus)
-                {
-                    Term_gotoxy(knowledge_tab_col(page), layout.tabs_row);
-                }
-                else if (curse_cnt > 0)
-                {
-                    Term_gotoxy(0, layout.list_row
-                        + (state.entry_cur[page] - state.entry_top[page]));
-                }
-
-                Term_fresh();
-            }
-
-            ch = use_information_scene ? ui_information_scene_wait_key()
-                                       : inkey();
+            ch = ui_information_scene_wait_key();
             if (steamdeck_controls_active() && ch == steamdeck_back_key())
                 ch = ESCAPE;
 
@@ -4389,23 +3189,11 @@ void do_cmd_knowledge_browser_page(int page)
             {
                 if (curse_cnt > 0)
                 {
-                    if (use_information_scene)
+                    if (!knowledge_show_curse_detail_ui(
+                            curse_idx[state.entry_cur[page]]))
                     {
-                        if (!knowledge_show_curse_detail_ui(
-                                curse_idx[state.entry_cur[page]]))
-                        {
-                            if (!knowledge_pause_information_scene(&info_scope))
-                                break;
-                            knowledge_show_curse_detail_legacy(
-                                curse_idx[state.entry_cur[page]]);
-                            if (!knowledge_resume_information_scene(&info_scope))
-                                return;
-                        }
-                    }
-                    else
-                    {
-                        knowledge_show_curse_detail_legacy(
-                            curse_idx[state.entry_cur[page]]);
+                        bell("Curse detail unavailable.");
+                        msg_print("Curse detail unavailable.");
                     }
                 }
                 else
@@ -4422,7 +3210,7 @@ void do_cmd_knowledge_browser_page(int page)
             default:
             {
                 int d = target_dir(ch);
-                int page_jump = (layout.list_rows > 0) ? layout.list_rows : 1;
+                int page_jump = page_rows;
 
                 if (curse_cnt <= 0)
                 {
@@ -4450,15 +3238,14 @@ void do_cmd_knowledge_browser_page(int page)
         }
     }
 
+cleanup:
     mem_free_null(curse_idx);
     mem_free_null(mon_idx);
     mem_free_null(object_idx);
     mem_free_null(artefact_idx);
 
-    if (use_information_scene)
+    if (info_scope.active)
         ui_information_scene_leave(&info_scope);
-    else
-        screen_load();
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
 }
@@ -4469,9 +3256,8 @@ void do_cmd_knowledge_browser_page(int page)
 bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 {
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    int page_rows = BROWSER_ROWS;
     int i;
-    int max = 0;
     int grp_cnt = SUPPLY_GROUP_MAX;
     int grp_idx[SUPPLY_GROUP_MAX + 1];
     int group_totals[SUPPLY_GROUP_MAX];
@@ -4482,7 +3268,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     int entry_top = 0;
     int column = 0;
     bool flag = false;
-    bool redraw = true;
     supply_menu_action forced_action = SUPPLY_MENU_ACTION_NONE;
     bool hotkey_mode = false;
     bool acted = false;
@@ -4500,48 +3285,35 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     for (i = 0; i < SUPPLY_GROUP_MAX; i++)
     {
-        int len = strlen(supply_group_text[i]) + 5;
-        if (len > max)
-            max = len;
         grp_idx[i] = i;
     }
     grp_idx[grp_cnt] = -1;
-    max += 2;
+
+    if (!knowledge_enter_information_scene_or_report(&info_scope,
+            "knowledge supplies",
+            "Supplies browser requires the snapshot UI renderer.",
+            "Supplies screen unavailable."))
+    {
+        return false;
+    }
 
     entries = mem_alloc_array(z_info->k_max, supply_list_entry);
-
-    if (!use_information_scene)
-        screen_save();
 
     while (!flag)
     {
         int entry_cnt;
-        knowledge_browser_layout layout;
-        int count_col;
-        int sym_col;
         int used_weight;
         int max_weight;
         char weight_buf[80];
+        char ch;
 
         compute_supply_group_totals(group_totals);
-        knowledge_init_layout(&layout, max, true);
-        count_col = layout.term_wid - 6;
-        sym_col = layout.term_wid - (use_bigtile ? 2 : 1);
         used_weight = supplies_total_weight();
         max_weight = supplies_current_weight_cap();
         strnfmt(weight_buf, sizeof(weight_buf),
             "Supply weight: %d.%1d/%d.%1d lb used",
             used_weight / 10, used_weight % 10,
             max_weight / 10, max_weight % 10);
-
-        if (count_col <= layout.list_col + 8)
-            count_col = layout.list_col + 8;
-        if (sym_col <= count_col + 4)
-            sym_col = count_col + 4;
-        if (sym_col >= layout.term_wid)
-            sym_col = layout.term_wid - (use_bigtile ? 2 : 1);
-        if (count_col >= sym_col)
-            count_col = sym_col - 4;
 
         if (grp_cur >= grp_cnt)
             grp_cur = grp_cnt - 1;
@@ -4566,102 +3338,34 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
             if (entry_cur < entry_top)
                 entry_top = entry_cur;
-            if (entry_cur >= entry_top + layout.list_rows)
-                entry_top = entry_cur - layout.list_rows + 1;
+            if (entry_cur >= entry_top + page_rows)
+                entry_top = entry_cur - page_rows + 1;
             if (entry_top < 0)
                 entry_top = 0;
         }
 
         if (grp_cur < grp_top)
             grp_top = grp_cur;
-        if (grp_cur >= grp_top + layout.list_rows)
-            grp_top = grp_cur - layout.list_rows + 1;
+        if (grp_cur >= grp_top + page_rows)
+            grp_top = grp_cur - page_rows + 1;
         if (grp_top < 0)
             grp_top = 0;
 
-        if (use_information_scene)
         {
             app_ui_scene scene;
 
-            if (!knowledge_build_supplies_browser_scene(&scene, grp_idx,
-                    grp_cnt, grp_cur, grp_top, group_totals, entries,
-                    entry_cnt, entry_top, entry_cur, column, weight_buf)
-                || !ui_information_scene_present_ui(&scene))
+            if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                    knowledge_build_supplies_browser_scene(&scene, grp_idx,
+                        grp_cnt, grp_cur, grp_top, group_totals, entries,
+                        entry_cnt, entry_top, entry_cur, column, weight_buf),
+                    &scene, "knowledge supplies browser",
+                    "Supplies screen unavailable."))
             {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-                screen_save();
-                redraw = true;
+                goto cleanup;
             }
         }
 
-        if (!use_information_scene && redraw)
-        {
-            Term_clear();
-            Term_putstr(0, layout.title_row, layout.term_wid, TERM_L_WHITE + TERM_SHADE,
-                "Supplies - Herbs, Potions, Gems");
-            Term_putstr(0, layout.tabs_row, layout.term_wid, TERM_SLATE, weight_buf);
-            Term_putstr(0, layout.header_row, layout.group_w, TERM_SLATE, "Group");
-            Term_putstr(layout.list_col, layout.header_row, layout.list_w, TERM_SLATE,
-                "Name");
-            Term_putstr(count_col, layout.header_row, 3, TERM_SLATE, "Qty");
-            Term_putstr(sym_col, layout.header_row, 3, TERM_SLATE, "Sym");
-
-            for (i = 0; i < layout.term_wid; i++)
-                Term_putch(i, layout.divider_row, TERM_L_DARK, '=');
-
-            for (i = 0; i < layout.list_rows; i++)
-                Term_putch(layout.divider_col, layout.list_row + i, TERM_L_DARK, '|');
-
-            redraw = false;
-        }
-
-        if (!use_information_scene)
-        {
-            display_supply_group_list(0, layout.list_row, layout.group_w, layout.list_rows, grp_idx,
-                grp_cur, grp_top, group_totals);
-            display_supply_list(layout.list_col, layout.list_row, layout.list_rows,
-                entries, entry_cnt, entry_cur, entry_top, count_col, sym_col,
-                grp_idx[grp_cur], column);
-
-            /* Bottom bar: grey text with white first letters */
-            Term_erase(0, layout.prompt_row, 255);
-            if (steamdeck_controls_active()) {
-                char recall_label[16];
-                char use_label[16];
-                char confirm_label[16];
-                char drop_label[16];
-                char back_label[16];
-                char prompt_buf[160];
-
-                /* Steam Deck UI: RS Right=recall, X=use, A=confirm, d=drop, B=back */
-                controller_prompt_label(steamdeck_info_key(), "RS Right", recall_label, sizeof(recall_label));
-                controller_prompt_label(steamdeck_alt_action_key(), "X", use_label, sizeof(use_label));
-                controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-                controller_prompt_label('d', "d", drop_label, sizeof(drop_label));
-                controller_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    "D-pad move  [%s] recall  [%s/%s] use  [%s] drop  [%s] back",
-                    recall_label, use_label, confirm_label, drop_label, back_label);
-                Term_putstr(1, layout.prompt_row, -1, TERM_L_DARK, prompt_buf);
-            } else {
-                Term_putstr(0, layout.prompt_row, layout.term_wid, TERM_SLATE,
-                    "Dir move  r recall  u/Space use  d drop  Esc");
-            }
-
-            if (!column)
-                Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
-            else if (entry_cnt)
-                Term_gotoxy(layout.list_col, layout.list_row + (entry_cur - entry_top));
-            else
-                Term_gotoxy(0, layout.list_row + (grp_cur - grp_top));
-
-            Term_fresh();
-        }
-
-        char ch = use_information_scene ? (char)ui_information_scene_wait_key()
-                                        : inkey();
+        ch = (char)ui_information_scene_wait_key();
         if (steamdeck_controls_active() && ch == steamdeck_back_key())
             ch = ESCAPE;
 
@@ -4692,30 +3396,24 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 supply_list_entry* entry = &entries[entry_cur];
                 if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
                 {
-                    if (use_information_scene
-                        && !knowledge_pause_information_scene(&info_scope))
-                        break;
+                    if (!knowledge_pause_information_scene(&info_scope))
+                        goto cleanup;
                     (void)player_try_identify_smithing_object_on_examine(
                         &inventory[entry->item_idx], false);
                     object_info_screen(&inventory[entry->item_idx]);
-                    if (use_information_scene
-                        && !knowledge_resume_information_scene(&info_scope))
-                        return acted;
-                    redraw = true;
+                    if (!knowledge_resume_information_scene(&info_scope))
+                        goto cleanup;
                 }
                 else if (entry->k_idx >= 0)
                 {
                     object_kind* k_ptr = &k_info[entry->k_idx];
                     if (k_ptr->aware)
                     {
-                        if (use_information_scene
-                            && !knowledge_pause_information_scene(&info_scope))
-                            break;
+                        if (!knowledge_pause_information_scene(&info_scope))
+                            goto cleanup;
                         desc_obj_fake(entry->k_idx);
-                        if (use_information_scene
-                            && !knowledge_resume_information_scene(&info_scope))
-                            return acted;
-                        redraw = true;
+                        if (!knowledge_resume_information_scene(&info_scope))
+                            goto cleanup;
                     }
                     else
                     {
@@ -4787,7 +3485,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (handled)
                 {
                     acted = true;
-                    redraw = true;
                     refresh_after_close = true;
                     if (hotkey_mode || forced_action == SUPPLY_MENU_ACTION_USE)
                         flag = true;
@@ -4830,7 +3527,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
                 if (dropped)
                 {
                     acted = true;
-                    redraw = true;
                     handle_stuff();
                     refresh_after_close = true;
                     if (hotkey_mode || forced_action == SUPPLY_MENU_ACTION_DROP)
@@ -4841,16 +3537,15 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
         default:
             browser_cursor_with_rows(ch, &column, &grp_cur, grp_cnt, &entry_cur,
-                entry_cnt, layout.list_rows);
+                entry_cnt, page_rows);
             break;
         }
     }
 
+cleanup:
     mem_free_null(entries);
-    if (use_information_scene)
+    if (info_scope.active)
         ui_information_scene_leave(&info_scope);
-    else
-        screen_load();
 
     if (refresh_after_close)
     {
@@ -4951,7 +3646,6 @@ void do_cmd_knowledge_kills(void)
 void do_cmd_knowledge(void)
 {
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
     char ch;
     int selected = 0;
 
@@ -4965,55 +3659,32 @@ void do_cmd_knowledge(void)
         do_cmd_redraw();
     }
 
-    /* Save screen */
-    if (!use_information_scene)
-        screen_save();
+    if (!knowledge_enter_information_scene_or_report(&info_scope,
+            "knowledge menu",
+            "Knowledge menu requires the snapshot UI renderer.",
+            "Knowledge menu unavailable."))
+    {
+        return;
+    }
 
     /* Interact until done */
     while (1)
     {
-        if (use_information_scene)
         {
             app_ui_scene scene;
 
-            if (!knowledge_build_root_menu_scene(&scene, selected)
-                || !ui_information_scene_present_ui(&scene))
+            if (!knowledge_present_ui_scene_or_abort(&info_scope,
+                    knowledge_build_root_menu_scene(&scene, selected), &scene,
+                    "knowledge root menu", "Knowledge menu unavailable."))
             {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-                screen_save();
+                goto cleanup;
             }
         }
 
-        if (!use_information_scene)
-        {
-            /* Clear screen */
-            Term_clear();
-
-            /* Ask for a choice */
-            prt("Display current knowledge", 2, 0);
-
-            /* Give some choices */
-            prt("(1) Display known lore browser", 4, 5);
-            prt("(2) Display supplies overview", 5, 5);
-            prt("(3) Display names of the fallen", 6, 5);
-            prt("(4) Display kill counts", 7, 5);
-
-            /*allow the player to see the notes taken if that option is selected*/
-            c_put_str(TERM_WHITE, "(5) Display character notes file", 8, 5);
-            prt("(6) Display oath status", 9, 5);
-
-            /* Prompt */
-            prt("Command: ", 11, 0);
-            Term_fresh();
-        }
-
-        ch = use_information_scene ? (char)ui_information_scene_wait_key()
-                                   : inkey();
+        ch = (char)ui_information_scene_wait_key();
         if (steamdeck_controls_active() && ch == steamdeck_back_key())
             ch = ESCAPE;
 
-        if (use_information_scene)
         {
             int d = target_dir(ch);
 
@@ -5045,74 +3716,62 @@ void do_cmd_knowledge(void)
         /* Known lore browser */
         if (ch == '1')
         {
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             do_cmd_knowledge_browser_page(g_knowledge_last_page);
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Scores */
         else if (ch == '2')
         {
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             do_cmd_knowledge_supplies(NULL);
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Scores */
         else if (ch == '3')
         {
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             show_scores_interactive(true);
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Kill counts */
         else if (ch == '4')
         {
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             do_cmd_knowledge_kills();
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Notes file, if one exists */
         else if (ch == '5')
         {
             /* Spawn */
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             do_cmd_knowledge_notes();
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Oath status */
         else if (ch == '6')
         {
-            if (use_information_scene
-                && !knowledge_pause_information_scene(&info_scope))
-                break;
+            if (!knowledge_pause_information_scene(&info_scope))
+                goto cleanup;
             do_cmd_knowledge_oaths();
-            if (use_information_scene
-                && !knowledge_resume_information_scene(&info_scope))
-                return;
+            if (!knowledge_resume_information_scene(&info_scope))
+                goto cleanup;
         }
 
         /* Unknown option */
@@ -5125,10 +3784,8 @@ void do_cmd_knowledge(void)
         message_flush();
     }
 
-    /* Load screen */
-    if (use_information_scene)
+cleanup:
+    if (info_scope.active)
         ui_information_scene_leave(&info_scope);
-    else
-        screen_load();
 }
 

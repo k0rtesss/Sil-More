@@ -9,10 +9,37 @@ static int g_prompt_snapshot_silent_clear_depth = 0;
 
 typedef struct prompt_menu_scene_scope {
     bool active;
+    bool restore_previous_snapshot;
     app_snapshot previous_snapshot;
+    app_menu_snapshot* previous_menu_snapshot;
+    app_wait_scope wait_scope;
 } prompt_menu_scene_scope;
 
 static bool prompt_snapshot_interaction_active(void);
+
+static app_menu_snapshot* prompt_menu_scene_clone_snapshot(
+    const app_menu_snapshot* snapshot)
+{
+    app_menu_snapshot* copy;
+
+    if (!snapshot)
+        return NULL;
+
+    copy = mem_alloc(app_menu_snapshot);
+    if (!copy)
+        return NULL;
+
+    app_menu_snapshot_init(copy);
+    copy->snapshot = snapshot->snapshot;
+    copy->snapshot.blobs = copy->blobs;
+    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
+    copy->blobs[0].kind = snapshot->blobs[0].kind;
+    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
+    copy->blobs[0].data = (const byte*)&copy->scene;
+    copy->blobs[0].size = sizeof(copy->scene);
+    copy->scene = snapshot->scene;
+    return copy;
+}
 
 /*
  * Get some input at the cursor location.
@@ -116,6 +143,26 @@ static bool prompt_snapshot_should_present(void)
     return !inkey_can_consume_immediately();
 }
 
+static bool prompt_menu_scene_supported(void)
+{
+    app_session* session = app_session_current();
+
+    return runtime_cli_snapshot_renderer() && session
+        && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
+}
+
+static bool prompt_menu_scene_menu_snapshot_active(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!prompt_menu_scene_supported() || !session)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    return snapshot && snapshot->scene == APP_SCENE_KIND_MENU;
+}
+
 static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
@@ -125,14 +172,27 @@ static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
         return false;
 
     memset(scope, 0, sizeof(*scope));
-    if (!runtime_cli_snapshot_renderer() || !session)
+    if (!prompt_menu_scene_supported() || !session)
         return false;
 
     snapshot = app_session_snapshot(session);
-    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+    if (!snapshot || (snapshot->scene != APP_SCENE_KIND_DUNGEON
+            && snapshot->scene != APP_SCENE_KIND_MENU))
         return false;
 
+    scope->restore_previous_snapshot = true;
     scope->previous_snapshot = *snapshot;
+    if (snapshot->scene == APP_SCENE_KIND_MENU)
+    {
+        scope->previous_menu_snapshot = prompt_menu_scene_clone_snapshot(
+            app_session_menu_snapshot(session));
+        if (!scope->previous_menu_snapshot)
+            return false;
+    }
+
+    app_session_push_wait_scope(session, &scope->wait_scope,
+        APP_WAIT_REASON_CONFIRM, 0, 0);
+    app_session_clear_inputs(session);
     scope->active = true;
     return true;
 }
@@ -158,7 +218,27 @@ static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
     if (!scope || !scope->active || !session)
         return;
 
-    app_session_set_snapshot(session, &scope->previous_snapshot);
+    app_session_clear_inputs(session);
+    if (scope->restore_previous_snapshot)
+    {
+        if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
+            && scope->previous_menu_snapshot)
+        {
+            (void)app_session_publish_menu_scene(session,
+                &scope->previous_menu_snapshot->scene);
+        }
+        else if (scope->previous_snapshot.scene == APP_SCENE_KIND_NONE)
+        {
+            app_session_set_snapshot(session, NULL);
+        }
+        else
+        {
+            app_session_set_snapshot(session, &scope->previous_snapshot);
+        }
+    }
+
+    app_session_pop_wait_scope(session, &scope->wait_scope);
+    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
@@ -228,6 +308,222 @@ static void prompt_menu_scene_add_wrapped_text(app_ui_panel* panel,
     }
 }
 
+static void prompt_menu_scene_format_value(char* buf, size_t buf_size,
+    cptr value, size_t cursor_index)
+{
+    size_t value_len;
+
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (!value)
+        value = "";
+
+    value_len = strlen(value);
+    if (cursor_index > value_len)
+        cursor_index = value_len;
+
+    if (value_len + 1 >= buf_size)
+        value_len = buf_size - 2;
+    if (cursor_index > value_len)
+        cursor_index = value_len;
+
+    memcpy(buf, value, cursor_index);
+    buf[cursor_index] = '|';
+    memcpy(buf + cursor_index + 1, value + cursor_index, value_len - cursor_index);
+    buf[value_len + 1] = '\0';
+}
+
+static bool prompt_menu_scene_build_text_input_scene(app_ui_scene* scene,
+    cptr prompt, cptr detail, cptr value, size_t cursor_index,
+    bool allow_randomize)
+{
+    app_ui_panel* panel;
+    char value_buf[APP_UI_TEXT_MAX];
+
+    if (!scene)
+        return false;
+
+    prompt_menu_scene_format_value(value_buf, sizeof(value_buf), value,
+        cursor_index);
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, prompt ? prompt : "Input");
+    if (detail && detail[0])
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, detail);
+    if (!app_ui_panel_add_body_line(panel, TERM_YELLOW, value_buf))
+        return false;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+        "Enter", "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Esc", "Cancel");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "Bksp", "Erase");
+    if (allow_randomize)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "Tab", "Random");
+    }
+
+    return true;
+}
+
+static bool prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
+    cptr detail, bool allow_randomize)
+{
+    prompt_menu_scene_scope menu_scope;
+    char ch = ESCAPE;
+    size_t k = 0;
+
+    if (!buf || len < 1)
+        return false;
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return false;
+
+    buf[len - 1] = '\0';
+    k = strlen(buf);
+    if (k >= len)
+        k = len - 1;
+
+    while (true)
+    {
+        app_ui_scene scene;
+
+        if (!prompt_menu_scene_build_text_input_scene(&scene, prompt, detail,
+                buf, k, allow_randomize)
+            || !prompt_menu_scene_present(&menu_scope, &scene))
+        {
+            break;
+        }
+
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+        if (ch == ESCAPE)
+            break;
+        if (ch == '\n' || ch == '\r')
+        {
+            k = strlen(buf);
+            break;
+        }
+        if (ch == 0x7F || ch == '\010')
+        {
+            if (k > 0)
+                k--;
+            else
+                bell("Nothing to erase.");
+        }
+        else if (allow_randomize && ch == '\t')
+        {
+            make_random_name(buf, len);
+            k = strlen(buf);
+        }
+        else if ((k < len - 1) && isprint((unsigned char)ch))
+        {
+            buf[k++] = ch;
+        }
+        else
+        {
+            bell("Illegal edit key!");
+        }
+
+        buf[k] = '\0';
+    }
+
+    prompt_menu_scene_leave(&menu_scope);
+    return (ch != ESCAPE);
+}
+
+static bool prompt_menu_scene_build_confirm_scene(app_ui_scene* scene,
+    cptr prompt, cptr detail, bool allow_space, char other)
+{
+    app_ui_panel* panel;
+    char other_buf[32];
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Confirm");
+    prompt_menu_scene_add_wrapped_text(panel, TERM_WHITE,
+        prompt ? prompt : "", 60);
+    if (detail && detail[0])
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, detail);
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+        allow_space ? "Y/Enter/Space" : "Y", "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "N/Esc", "Cancel");
+    if (other)
+    {
+        strnfmt(other_buf, sizeof(other_buf), "%c", other);
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            other_buf, "Other");
+    }
+
+    return true;
+}
+
+static int prompt_menu_scene_run_confirm(cptr prompt, cptr detail,
+    bool allow_space, char other)
+{
+    prompt_menu_scene_scope menu_scope;
+    char ch;
+    int result = 0;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -1;
+
+    while (true)
+    {
+        app_ui_scene scene;
+
+        if (!prompt_menu_scene_build_confirm_scene(&scene, prompt, detail,
+                allow_space, other)
+            || !prompt_menu_scene_present(&menu_scope, &scene))
+        {
+            result = -1;
+            break;
+        }
+
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+        if (strchr("Yy", ch)
+            || (allow_space && (ch == ' ' || ch == '\r' || ch == '\n')))
+        {
+            result = 1;
+            break;
+        }
+        if (other && (ch == toupper((unsigned char)other)
+                || ch == tolower((unsigned char)other)))
+        {
+            result = 2;
+            break;
+        }
+        if (quick_messages || ch == ESCAPE || strchr("Nn", ch))
+            break;
+
+        bell("Illegal response to question!");
+    }
+
+    prompt_menu_scene_leave(&menu_scope);
+    return result;
+}
+
 bool askfor_aux(char* buf, size_t len)
 {
     int y, x;
@@ -239,6 +535,13 @@ bool askfor_aux(char* buf, size_t len)
     char ch = '\0';
 
     bool done = false;
+
+    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    {
+        return prompt_menu_scene_run_text_input(
+            g_prompt_interaction_label ? g_prompt_interaction_label : "Input:",
+            buf, len, "Enter accepts, Esc cancels, Backspace erases.", false);
+    }
 
     /* Locate the cursor */
     if (snapshot_interaction)
@@ -375,6 +678,12 @@ bool askfor_name(char* buf, size_t len)
 
     bool done = false;
     bool new_default_name = false;
+
+    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    {
+        return prompt_menu_scene_run_text_input("Name:", buf, len,
+            "Enter accepts, Esc cancels, Tab randomizes.", true);
+    }
 
     /* Locate the cursor */
     if (snapshot_interaction)
@@ -531,6 +840,12 @@ bool term_get_string(cptr prompt, char* buf, size_t len)
 
     /* Paranoia XXX XXX XXX */
     message_flush();
+
+    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    {
+        return prompt_menu_scene_run_text_input(prompt, buf, len,
+            "Enter accepts, Esc cancels, Backspace erases.", false);
+    }
 
     /* Display prompt */
     if (!snapshot_interaction)
@@ -808,6 +1123,15 @@ int get_check_other(cptr prompt, char other)
     /* Paranoia XXX XXX XXX */
     message_flush();
 
+    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    {
+        int scene_result = prompt_menu_scene_run_confirm(prompt,
+            "Y confirms, N declines.", false, other);
+
+        if (scene_result >= 0)
+            return scene_result;
+    }
+
     /* Hack -- Build a "useful" prompt */
     if (snapshot_interaction)
     {
@@ -888,6 +1212,17 @@ bool get_check(cptr prompt)
 
     /* Paranoia XXX XXX XXX */
     message_flush();
+
+    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    {
+        int scene_result = prompt_menu_scene_run_confirm(prompt,
+            portable ? "Y, Enter, or Space confirms, N declines."
+                     : "Y confirms, N declines.",
+            portable, '\0');
+
+        if (scene_result >= 0)
+            return scene_result == 1;
+    }
 
     /* Hack -- Build a "useful" prompt */
     if (snapshot_interaction)

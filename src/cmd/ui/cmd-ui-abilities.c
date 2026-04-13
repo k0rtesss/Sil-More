@@ -8,6 +8,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "app/app-ui.h"
 #include "platform-input.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
@@ -27,45 +28,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
-
-#define COL_SKILL 2
-#define COL_ABILITY 16
-#define COL_DESCRIPTION 41
-#define ABILITY_MENU_LIST_WIDTH (COL_DESCRIPTION - COL_ABILITY)
-
-static bool ability_menu_use_compact_layout(void)
-{
-    int wid = Term ? Term->wid : 80;
-
-    if (wid < 1)
-        wid = 80;
-
-    return (wid < 80);
-}
-static int ability_menu_list_col(void)
-{
-    return ability_menu_use_compact_layout() ? COL_SKILL : COL_ABILITY;
-}
-
-static int ability_menu_description_col(void)
-{
-    return ability_menu_use_compact_layout()
-        ? COL_SKILL + ABILITY_MENU_LIST_WIDTH
-        : COL_DESCRIPTION;
-}
-
-static int ability_menu_description_wrap(int desc_col)
-{
-    int wid = Term ? Term->wid : 80;
-
-    if (wid < 1)
-        wid = 80;
-
-    if (wid <= desc_col)
-        return desc_col + 1;
-
-    return wid - 1;
-}
+#include "ui/ui-information-scene.h"
 
 static int ability_purchase_exp_cost(int skilltype)
 {
@@ -86,17 +49,6 @@ static int ability_purchase_exp_cost(int skilltype)
     return exp_cost;
 }
 
-static int ability_menu_text_width(int desc_col, int indent)
-{
-    int wrap = ability_menu_description_wrap(desc_col);
-    int start = desc_col + indent;
-
-    if (wrap < start)
-        return 1;
-
-    return wrap - start + 1;
-}
-
 static void ability_menu_format_amount_line(char* buf, size_t buflen,
     cptr long_label, cptr short_label, int need, int have, int max_width)
 {
@@ -104,93 +56,6 @@ static void ability_menu_format_amount_line(char* buf, size_t buflen,
         strnfmt(buf, buflen, "%s %d / %d", short_label, need, have);
     else
         strnfmt(buf, buflen, "%d %s (you have %d)", need, long_label, have);
-}
-
-static int ability_menu_next_row_after_text(int desc_col, int fallback_row)
-{
-    int x = desc_col;
-    int y = fallback_row;
-
-    Term_locate(&x, &y);
-
-    if (x > desc_col)
-        y++;
-
-    return y;
-}
-
-static void ability_menu_render_prerequisites_block(int skilltype,
-    const ability_type* b_ptr, int desc_col)
-{
-    int j;
-    int row = ability_menu_next_row_after_text(desc_col, 3);
-    int info_width = ability_menu_text_width(desc_col, 2);
-    char buf[80];
-
-    Term_putstr(desc_col, row, -1, TERM_YELLOW, "Prerequisites:");
-
-    ability_menu_format_amount_line(buf, sizeof(buf), "skill points", "Skill",
-        b_ptr->level, p_ptr->skill_base[skilltype], info_width);
-
-    Term_putstr(desc_col + 2, row + 1, -1,
-        (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
-                                                       : TERM_L_DARK,
-        buf);
-
-    row += 2;
-
-    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
-    {
-        for (j = 0; j < b_ptr->prereqs; j++)
-        {
-            if (j == 0)
-            {
-                strnfmt(buf, sizeof(buf), "%s",
-                    b_name
-                        + (&b_info[ability_index(b_ptr->prereq_skilltype[j],
-                               b_ptr->prereq_abilitynum[j])])
-                              ->name);
-            }
-            else
-            {
-                strnfmt(buf, sizeof(buf), "or %s",
-                    b_name
-                        + (&b_info[ability_index(b_ptr->prereq_skilltype[j],
-                               b_ptr->prereq_abilitynum[j])])
-                              ->name);
-            }
-
-            Term_putstr(j == 0 ? desc_col + 2 : desc_col + 5, row + j, -1,
-                p_ptr->innate_ability[b_ptr->prereq_skilltype[j]]
-                                 [b_ptr->prereq_abilitynum[j]]
-                    ? TERM_L_GREEN
-                    : TERM_L_DARK,
-                buf);
-        }
-
-        row += b_ptr->prereqs;
-    }
-    else if (b_ptr->prereqs > 0)
-    {
-        Term_putstr(desc_col + 2, row, -1, TERM_GREEN, "Quick Study");
-        row++;
-    }
-
-    if (skilltype != S_SPC && prereqs(skilltype, b_ptr->abilitynum))
-    {
-        int exp_cost = ability_purchase_exp_cost(skilltype);
-
-        Term_putstr(desc_col, row, -1, TERM_YELLOW, "Current price:");
-
-        ability_menu_format_amount_line(buf, sizeof(buf), "experience", "Exp",
-            exp_cost, p_ptr->new_exp, info_width);
-        Term_putstr(desc_col + 2, row + 1, -1,
-            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK, buf);
-
-        row += 2;
-    }
-
-    Term_gotoxy(desc_col, row);
 }
 
 /* ------------------------------------------------------------------
@@ -232,711 +97,458 @@ static char song_menu_letter(int song_index)
     return letter;
 }
 
-static int song_index_from_menu_letter(char letter)
+static void ability_semantic_add_description_lines(app_ui_panel* panel,
+    int skilltype, const ability_type* b_ptr);
+
+typedef struct song_semantic_entry {
+    int song;
+    char key;
+    byte attr;
+    char label[APP_UI_LABEL_MAX];
+    char meta[APP_UI_META_MAX];
+} song_semantic_entry;
+
+static void song_semantic_song_name(int song, char* out, size_t outsz)
 {
-    if (letter < 'a' || letter > 'z')
-        return -1;
+    if (!out || outsz == 0)
+        return;
 
-    if (letter == 's')
-        return -1;
+    out[0] = '\0';
+    if (song == SNG_NOTHING)
+    {
+        SDL_strlcpy(out, "Stop singing", outsz);
+        return;
+    }
+    if (song == SNG_EXCHANGE_THEMES)
+    {
+        SDL_strlcpy(out, "Exchange themes", outsz);
+        return;
+    }
+    if (song >= 0 && song < SNG_MAX)
+    {
+        SDL_strlcpy(out,
+            b_name + (&b_info[ability_index(S_SNG, song)])->name, outsz);
+        return;
+    }
 
-    if (letter > 's')
-        letter--;
-
-    return (int)(letter - 'a');
+    SDL_strlcpy(out, "<unknown song>", outsz);
 }
 
-/*
- * Display the available songs (modelled on show_inven) with optional highlighting.
- */
-void show_songs_with_highlight(int highlight)
+static void song_semantic_current_summary(char* out, size_t outsz)
 {
-    int i, j, k = 0;
-    int current_line = 0;
+    char song1[APP_UI_LABEL_MAX];
+    char song2[APP_UI_LABEL_MAX];
 
-    int col = 26;
+    if (!out || outsz == 0)
+        return;
 
-    char tmp_val[80];
-
-    int out_index[24];
-    char out_desc[24][80];
-
-    /* Display the songs */
-    for (k = 0, i = 0; i < SNG_MAX; i++)
+    out[0] = '\0';
+    if (p_ptr->song1 == SNG_NOTHING && p_ptr->song2 == SNG_NOTHING)
     {
-        /* Skip Woven Themes (not a singable song) */
+        SDL_strlcpy(out, "Current: silence", outsz);
+        return;
+    }
+
+    song1[0] = '\0';
+    song2[0] = '\0';
+    if (p_ptr->song1 != SNG_NOTHING)
+        song_semantic_song_name(p_ptr->song1, song1, sizeof(song1));
+    if (p_ptr->song2 != SNG_NOTHING)
+        song_semantic_song_name(p_ptr->song2, song2, sizeof(song2));
+
+    if (song1[0] && song2[0])
+    {
+        strnfmt(out, outsz, "Current: %s + %s", song1, song2);
+    }
+    else if (song1[0])
+    {
+        strnfmt(out, outsz, "Current: %s", song1);
+    }
+    else if (song2[0])
+    {
+        strnfmt(out, outsz, "Current: %s", song2);
+    }
+    else
+    {
+        SDL_strlcpy(out, "Current: silence", outsz);
+    }
+}
+
+static int song_semantic_collect_entries(song_semantic_entry* out, int max_count)
+{
+    int count = 0;
+    int i;
+
+    if (!out || max_count <= 0)
+        return 0;
+
+    memset(&out[count], 0, sizeof(out[count]));
+    out[count].song = SNG_NOTHING;
+    out[count].key = 's';
+    out[count].attr = (p_ptr->song1 == SNG_NOTHING && p_ptr->song2 == SNG_NOTHING)
+        ? TERM_L_BLUE
+        : TERM_SLATE;
+    SDL_strlcpy(out[count].label, "Stop singing", sizeof(out[count].label));
+    if (p_ptr->song1 == SNG_NOTHING && p_ptr->song2 == SNG_NOTHING)
+        SDL_strlcpy(out[count].meta, "Current", sizeof(out[count].meta));
+    count++;
+
+    for (i = 0; i < SNG_MAX && count < max_count; i++)
+    {
         if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
             continue;
-
-        /* Is this song acceptable? */
         if (!p_ptr->active_ability[S_SNG][i])
             continue;
 
-        /* Save the index */
-        out_index[k] = i;
+        memset(&out[count], 0, sizeof(out[count]));
+        out[count].song = i;
+        out[count].key = song_menu_letter(i);
+        out[count].attr = TERM_WHITE;
+        song_semantic_song_name(i, out[count].label, sizeof(out[count].label));
 
-        /* Save the song name */
-        SDL_strlcpy(out_desc[k],
-            b_name + (&b_info[ability_index(S_SNG, i)])->name,
-            sizeof(out_desc[0]));
+        if (p_ptr->song1 == i)
+        {
+            out[count].attr = TERM_L_BLUE;
+            SDL_strlcpy(out[count].meta, "Main", sizeof(out[count].meta));
+        }
+        else if (p_ptr->song2 == i)
+        {
+            out[count].attr = TERM_BLUE;
+            SDL_strlcpy(out[count].meta, "Minor", sizeof(out[count].meta));
+        }
 
-        /* Advance to next "line" */
-        k++;
+        count++;
     }
 
-    // add a line for the 'stop singing' command
-
-    /* Clear the line */
-    prt("", 1, col - 2);
-
-    /* Clear the line with the (possibly indented) index */
-    put_str("s)", 1, col);
-
-    /* Display the entry itself - highlight if selected */
-    if (highlight == current_line)
-        c_put_str(TERM_L_BLUE, "Stop Singing", 1, col + 3);
-    else
-        c_put_str(TERM_SLATE, "Stop Singing", 1, col + 3);
-    current_line++;
-
-    /* Output each entry */
-    for (j = 0; j < k; j++)
+    if (p_ptr->song2 != SNG_NOTHING && count < max_count)
     {
-        /* Get the index */
-        i = out_index[j];
-
-        /* Clear the line */
-        prt("", j + 2, col - 2);
-
-        /* Prepare an index --(-- */
-        sprintf(tmp_val, "%c)", song_menu_letter(i));
-
-        /* Clear the line with the (possibly indented) index */
-        put_str(tmp_val, j + 2, col);
-
-        /* Display the entry itself - highlight if selected */
-        if (highlight == current_line)
-            c_put_str(TERM_L_BLUE, out_desc[j], j + 2, col + 3);
-        else
-            c_put_str(TERM_L_WHITE, out_desc[j], j + 2, col + 3);
-        current_line++;
+        memset(&out[count], 0, sizeof(out[count]));
+        out[count].song = SNG_EXCHANGE_THEMES;
+        out[count].key = 'x';
+        out[count].attr = TERM_L_BLUE;
+        SDL_strlcpy(out[count].label, "Exchange themes",
+            sizeof(out[count].label));
+        SDL_strlcpy(out[count].meta, "Swap", sizeof(out[count].meta));
+        count++;
     }
 
-    // add a line for the 'exchange themes' command
-    if (p_ptr->song2 != SNG_NOTHING)
-    {
-        /* Clear the line */
-        prt("", j + 2, col - 2);
-
-        /* Clear the line with the (possibly indented) index */
-        put_str("x)", j + 2, col);
-
-        /* Display the entry itself - highlight if selected */
-        if (highlight == current_line)
-            c_put_str(TERM_L_BLUE, "Exchange themes", j + 2, col + 3);
-        else
-            c_put_str(TERM_L_BLUE, "Exchange themes", j + 2, col + 3);
-
-        j++;
-    }
-
-    /* Make a "shadow" below the list (only if needed) */
-    if (j && (j < 23))
-        prt("", j + 2, col - 2);
+    return count;
 }
 
-/*
- * Display the available songs (modelled on show_inven).
- */
-void show_songs(void)
-{
-    show_songs_with_highlight(-1); // No highlighting
-}
-
-void do_cmd_change_song()
+static int song_semantic_default_index(const song_semantic_entry* entries,
+    int count)
 {
     int i;
-    bool done = false;
 
-    int options = 0;
+    if (!entries || count <= 0)
+        return 0;
+
+    for (i = 0; i < count; i++)
+    {
+        if (entries[i].song == p_ptr->song1)
+            return i;
+    }
+
+    return 0;
+}
+
+static int song_semantic_find_index_for_key(const song_semantic_entry* entries,
+    int count, int ch)
+{
+    int i;
+    char key = (char)tolower((unsigned char)ch);
+
+    if (!entries)
+        return -1;
+
+    for (i = 0; i < count; i++)
+    {
+        if (entries[i].key == key)
+            return i;
+    }
+
+    return -1;
+}
+
+static void song_semantic_add_detail(app_ui_panel* panel,
+    const song_semantic_entry* entry)
+{
+    ability_type* b_ptr;
+    char title[APP_UI_TITLE_MAX];
+
+    if (!panel || !entry)
+        return;
+
+    song_semantic_song_name(entry->song, title, sizeof(title));
+    app_ui_panel_set_detail_title(panel, TERM_YELLOW, title);
+
+    if (entry->song == SNG_NOTHING)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+            "End your current song or minor theme.");
+        return;
+    }
+
+    if (entry->song == SNG_EXCHANGE_THEMES)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+            "Swap the order of your current major and minor themes.");
+        return;
+    }
+
+    if (p_ptr->song1 == entry->song)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+            "Currently your main song.");
+        if (p_ptr->song2 != SNG_NOTHING)
+        {
+            (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+                "Choosing it again will end the current minor theme.");
+        }
+    }
+    else if (p_ptr->song2 == entry->song)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_BLUE,
+            "Currently your minor theme.");
+    }
+
+    b_ptr = &b_info[ability_index(S_SNG, entry->song)];
+    ability_semantic_add_description_lines(panel, S_SNG, b_ptr);
+}
+
+static bool song_semantic_build_scene(app_ui_scene* scene,
+    const song_semantic_entry* entries, int count, int selected,
+    byte status_attr, cptr status)
+{
+    app_ui_panel* panel;
+    char subtitle[APP_UI_TEXT_MAX];
+
+    if (!scene || !entries || count <= 0)
+        return false;
+
+    if (selected < 0)
+        selected = 0;
+    if (selected >= count)
+        selected = count - 1;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 1700);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Songs of Power");
+    song_semantic_current_summary(subtitle, sizeof(subtitle));
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    if (status && status[0])
+    {
+        (void)app_ui_panel_add_body_line(panel, status_attr, status);
+    }
+    else
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "Choose a song, stop singing, or swap your woven themes.");
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        char keybuf[APP_UI_KEY_MAX];
+
+        strnfmt(keybuf, sizeof(keybuf), "%c", entries[i].key);
+        (void)app_ui_panel_add_row_ex(panel, (s16b)entries[i].song,
+            entries[i].attr, TERM_SLATE, 0, '\0', true, i == selected, keybuf,
+            entries[i].label, entries[i].meta);
+    }
+
+    song_semantic_add_detail(panel, &entries[selected]);
+
+    if (steamdeck_controls_active())
+    {
+        char confirm_label[APP_UI_KEY_MAX];
+        char back_label[APP_UI_KEY_MAX];
+
+        controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "D-pad", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+            confirm_label, "Select");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            back_label, "Back");
+    }
+    else
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "8/2", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+            "Enter", "Select");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "Esc", "Back");
+    }
+
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    return true;
+}
+
+void do_cmd_change_song(void)
+{
+    ui_information_scene_scope scope;
+    song_semantic_entry entries[32];
+    char status[APP_UI_TEXT_MAX];
+    byte status_attr = TERM_SLATE;
+    int entry_count;
+    int selected;
     int song_choice = -1;
-    int highlight = 0; // Add highlight tracking
-
-    char out_val[80];
-    char tmp_val[80];
-
-    char which;
+    bool done = false;
 
     log_debug("Player opening song selection menu");
 
-    // Check for song lockout timer first
     if (p_ptr->song_lockout_timer > 0)
     {
-        msg_format("You cannot sing for %d more turn%s.", 
+        msg_format("You cannot sing for %d more turn%s.",
             p_ptr->song_lockout_timer,
             (p_ptr->song_lockout_timer == 1) ? "" : "s");
         return;
     }
 
-    // count the abilities
-    for (i = 0; i < SNG_MAX; i++)
-    {
-        /* Skip Woven Themes (not a singable song) */
-        if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-            continue;
-
-        // keep track of the number of options and final song
-        if (p_ptr->active_ability[S_SNG][i])
-        {
-            options += 1;
-        }
-    }
-
-    // abort if you know no songs
-    if (options == 0)
+    entry_count = song_semantic_collect_entries(entries, N_ELEMENTS(entries));
+    if (entry_count <= 1)
     {
         log_trace("No songs available - player knows no songs of power");
         msg_print("You do not know any songs of power.");
         return;
     }
-    
-    log_debug("Player has %d songs available", options);
 
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Option to always show a list */
-    if (auto_display_lists)
+    if (!ui_information_scene_supported())
     {
-        p_ptr->command_see = true;
+        log_warn("song selection: snapshot renderer required; legacy renderer removed");
+        msg_print("Song selection requires the snapshot UI renderer.");
+        return;
     }
 
-    /* Start out in "display" mode */
-    if (p_ptr->command_see)
-    {
-        /* Save screen */
-        screen_save();
-    }
-
-    /* Repeat until done */
-    while (!done)
-    {
-        /* Redraw if needed */
-        if (p_ptr->command_see)
-            show_songs_with_highlight(highlight);
-
-        /* Begin the prompt */
-        sprintf(out_val, "Songs: s");
-
-        // count the abilities
-        for (i = 0; i < SNG_MAX; i++)
-        {
-            /* Skip Woven Themes (not a singable song) */
-            if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                continue;
-
-            // keep track of the number of options
-            if (p_ptr->active_ability[S_SNG][i])
-            {
-                SDL_strlcat(out_val, ",", sizeof(out_val));
-                sprintf(tmp_val, "%c", song_menu_letter(i));
-
-                /* Append */
-                SDL_strlcat(out_val, tmp_val, sizeof(out_val));
-            }
-        }
-
-        // add an 'x' option if using woven themes
-        if (p_ptr->song2 != SNG_NOTHING)
-        {
-            /* Append */
-            SDL_strlcat(out_val, ",x", sizeof(out_val));
-        }
-
-        /* Indicate ability to "view" */
-        if (!p_ptr->command_see)
-            SDL_strlcat(out_val, ", * to see", sizeof(out_val));
-
-        /* Build the prompt */
-        strnfmt(tmp_val, sizeof(tmp_val), "(%s) Sing which song: ", out_val);
-
-        /* Show the prompt */
-        prt(tmp_val, 0, 0);
-
-        /* Get a key */
-        which = inkey();
-
-        /* Parse it */
-        switch (which)
-        {
-        case ESCAPE:
-        {
-            log_trace("Song selection cancelled by player");
-            done = true;
-            break;
-        }
-
-        case '\r': // Enter - select highlighted item when menu is visible, otherwise exit
-        {
-            if (p_ptr->command_see)
-            {
-                // Convert highlight to appropriate song choice (same logic as '6' and Space keys)
-                if (highlight == 0)
-                {
-                    song_choice = SNG_NOTHING; // Stop singing
-                }
-                else
-                {
-                    // Find the i-th available song
-                    int song_count = 1;
-                    for (i = 0; i < SNG_MAX; i++)
-                    {
-                        /* Skip Woven Themes (not a singable song) */
-                        if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                            continue;
-
-                        if (p_ptr->active_ability[S_SNG][i])
-                        {
-                            if (song_count == highlight)
-                            {
-                                song_choice = i;
-                                break;
-                            }
-                            song_count++;
-                        }
-                    }
-                    // Check for exchange themes option
-                    if (song_choice == -1 && p_ptr->song2 != SNG_NOTHING && highlight == song_count)
-                    {
-                        song_choice = SNG_EXCHANGE_THEMES;
-                    }
-                }
-                
-                if (song_choice >= 0)
-                {
-                    done = true;
-                }
-            }
-            else
-            {
-                log_trace("Song selection cancelled by player");
-                done = true;
-            }
-            break;
-        }
-
-        case '*':
-        case '?':
-        {
-            /* Hide the list */
-            if (p_ptr->command_see)
-            {
-                /* Flip flag */
-                p_ptr->command_see = false;
-
-                /* Load screen */
-                screen_load();
-            }
-
-            /* Show the list */
-            else
-            {
-                /* Save screen */
-                screen_save();
-
-                /* Flip flag */
-                p_ptr->command_see = true;
-            }
-
-            break;
-        }
-
-        case ' ': // Space - select highlighted item when menu is visible, otherwise toggle menu
-        {
-            if (p_ptr->command_see)
-            {
-                // Convert highlight to appropriate song choice (same logic as '6' key)
-                if (highlight == 0)
-                {
-                    song_choice = SNG_NOTHING; // Stop singing
-                }
-                else
-                {
-                    // Find the i-th available song
-                    int song_count = 1;
-                    for (i = 0; i < SNG_MAX; i++)
-                    {
-                        /* Skip Woven Themes (not a singable song) */
-                        if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                            continue;
-
-                        if (p_ptr->active_ability[S_SNG][i])
-                        {
-                            if (song_count == highlight)
-                            {
-                                song_choice = i;
-                                break;
-                            }
-                            song_count++;
-                        }
-                    }
-                    // Check for exchange themes option
-                    if (song_choice == -1 && p_ptr->song2 != SNG_NOTHING && highlight == song_count)
-                    {
-                        song_choice = SNG_EXCHANGE_THEMES;
-                    }
-                }
-                
-                if (song_choice >= 0)
-                {
-                    done = true;
-                }
-            }
-            else
-            {
-                /* Show the list */
-                /* Save screen */
-                screen_save();
-
-                /* Flip flag */
-                p_ptr->command_see = true;
-            }
-            break;
-        }
-
-        case '2': // Down arrow / scroll down
-        {
-            if (p_ptr->command_see)
-            {
-                // Get total available songs + stop singing + exchange themes
-                int total_options = 1; // "Stop Singing"
-                for (i = 0; i < SNG_MAX; i++)
-                {
-                    /* Skip Woven Themes (not a singable song) */
-                    if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                        continue;
-
-                    if (p_ptr->active_ability[S_SNG][i])
-                        total_options++;
-                }
-                if (p_ptr->song2 != SNG_NOTHING)
-                    total_options++; // "Exchange themes"
-
-                highlight = (highlight + 1) % total_options;
-            }
-            break;
-        }
-
-        case '8': // Up arrow / scroll up
-        {
-            if (p_ptr->command_see)
-            {
-                // Get total available songs + stop singing + exchange themes
-                int total_options = 1; // "Stop Singing"
-                for (i = 0; i < SNG_MAX; i++)
-                {
-                    /* Skip Woven Themes (not a singable song) */
-                    if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                        continue;
-
-                    if (p_ptr->active_ability[S_SNG][i])
-                        total_options++;
-                }
-                if (p_ptr->song2 != SNG_NOTHING)
-                    total_options++; // "Exchange themes"
-
-                highlight = (highlight - 1 + total_options) % total_options;
-            }
-            break;
-        }
-
-        case '6': // Right arrow / select highlighted
-        {
-            if (p_ptr->command_see)
-            {
-                // Convert highlight to appropriate song choice
-                if (highlight == 0)
-                {
-                    song_choice = SNG_NOTHING; // Stop singing
-                }
-                else
-                {
-                    // Find the i-th available song
-                    int song_count = 1;
-                    for (i = 0; i < SNG_MAX; i++)
-                    {
-                        /* Skip Woven Themes (not a singable song) */
-                        if (i == SNG_WOVEN_THEMES || i == SNG_GRA)
-                            continue;
-
-                        if (p_ptr->active_ability[S_SNG][i])
-                        {
-                            if (song_count == highlight)
-                            {
-                                song_choice = i;
-                                break;
-                            }
-                            song_count++;
-                        }
-                    }
-                    // Check for exchange themes option
-                    if (song_choice == -1 && p_ptr->song2 != SNG_NOTHING && highlight == song_count)
-                    {
-                        song_choice = SNG_EXCHANGE_THEMES;
-                    }
-                }
-                
-                if (song_choice >= 0)
-                {
-                    done = true;
-                }
-            }
-            break;
-        }
-
-        case 's':
-        {
-            log_debug("Player selected to stop singing");
-            song_choice = SNG_NOTHING;
-            done = true;
-            break;
-        }
-
-        case 'x':
-        {
-            if (p_ptr->song2 != SNG_NOTHING)
-            {
-                log_debug("Player exchanging woven themes");
-                song_choice = SNG_EXCHANGE_THEMES;
-                done = true;
-                break;
-            }
-            else
-            {
-                log_trace("Illegal song choice - no second theme to exchange");
-                bell("Illegal song choice.");
-                break;
-            }
-        }
-
-        default:
-        {
-            song_choice = song_index_from_menu_letter(which);
-
-            if (song_choice >= 0 && song_choice < SNG_MAX)
-            {
-                /* Skip Woven Themes (not a singable song) */
-                if (song_choice == SNG_WOVEN_THEMES || song_choice == SNG_GRA)
-                {
-                    song_choice = -1;
-                }
-                else if (p_ptr->active_ability[S_SNG][song_choice])
-                {
-                    log_debug("Player selected song %d", song_choice);
-                    done = true;
-                    break;
-                }
-                else
-                {
-                    song_choice = -1;
-                }
-            }
-
-            log_trace("Illegal song choice attempted");
-            bell("Illegal song choice.");
-            break;
-        }
-        }
-    }
-
-    /* Fix the screen if necessary */
-    if (p_ptr->command_see)
-    {
-        /* Load screen */
-        screen_load();
-
-        /* Hack -- Cancel "display" */
-        p_ptr->command_see = false;
-    }
-
-    /* Clear the prompt line */
-    prt("", 0, 0);
-
-    if (song_choice >= 0)
-    {
-        if (song_choice != SNG_NOTHING)
-        {
-            if (chosen_oath(OATH_SILENCE) && !oath_invalid(OATH_SILENCE))
-            {
-                /* Use oath-specific confirmation prompt */
-                char* prompt = oath_confirmation_prompt(OATH_SILENCE);
-                if (!prompt || !prompt[0]) prompt = "Are you certain you wish to break your Oath of Silence?";
-                
-                if (get_check_oath_multiline(prompt))
-                {
-                    log_info("Player broke oath of silence to sing");
-                    
-                    /* Curse message and selection handled by apply_oath_breaking_curse */
-                    do_cmd_note("Broke your oath", p_ptr->depth);
-                    
-                    /* Apply oath breaking consequences */
-                    apply_oath_breaking_curse(OATH_SILENCE);
-                    
-                    /* Only mark oath as broken if player actually has it */
-                    p_ptr->oaths_broken |= OATH_SILENCE_FLAG;
-                }
-                else
-                {
-                    log_debug("Player cancelled song due to oath of silence");
-                    return;
-                }
-            }
-        }
-
-        log_info("Player changed song to %s", song_choice == SNG_NOTHING ? "silence" : 
-                 song_choice == SNG_EXCHANGE_THEMES ? "exchange themes" : "new song");
-        change_song(song_choice);
-    }
-}
-
-void wipe_screen_from(int col)
-{
-    int i;
-    int wid = Term ? Term->wid : 80;
-    int hgt = Term ? Term->hgt : 24;
-
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-    if (col >= wid)
+    if (!ui_information_scene_enter(&scope))
         return;
 
-    for (i = 1; i < hgt; i++)
-        Term_erase(col, i, wid - col);
-}
+    status[0] = '\0';
+    selected = song_semantic_default_index(entries, entry_count);
 
-int bane_menu(int* highlight)
-{
-    int i, k;
-
-    int ch;
-    int options;
-
-    char buf[80];
-
-    byte attr;
-
-    // bane title
-    Term_putstr(COL_DESCRIPTION, 2, -1, TERM_WHITE, "Enemy types");
-
-    // clear the description area
-    wipe_screen_from(COL_DESCRIPTION);
-
-    // list the enemies
-    for (i = 1; i < PLAYER_BANE_TYPES; i++)
+    while (!done)
     {
-        k = bane_type_killed(i);
+        app_ui_scene scene;
+        int ch;
+        int key_index;
 
-        // Determine the appropriate colour
-        if (k >= 4)
+        if (!song_semantic_build_scene(&scene, entries, entry_count, selected,
+                status_attr, status)
+            || !ui_information_scene_present_ui(&scene))
         {
-            attr = TERM_SLATE;
+            ui_information_scene_leave(&scope);
+            log_warn("song selection: semantic scene presentation failed");
+            msg_print("Song selection unavailable.");
+            return;
+        }
+
+        ch = ui_information_scene_wait_key();
+        if (steamdeck_controls_active())
+        {
+            if (ch == steamdeck_back_key())
+                ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key())
+                ch = '\r';
+        }
+
+        status[0] = '\0';
+        key_index = song_semantic_find_index_for_key(entries, entry_count, ch);
+        if (key_index >= 0)
+        {
+            song_choice = entries[key_index].song;
+            done = true;
+            continue;
+        }
+
+        if ((ch == ESCAPE) || (ch == 'q') || (ch == 'Q') || (ch == '4'))
+        {
+            done = true;
+            continue;
+        }
+
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+        {
+            song_choice = entries[selected].song;
+            done = true;
+            continue;
+        }
+
+        if (ch == '8'
+#ifdef ARROW_UP
+            || ch == ARROW_UP
+#endif
+        )
+        {
+            selected = (selected + entry_count - 1) % entry_count;
+            continue;
+        }
+
+        if (ch == '2'
+#ifdef ARROW_DOWN
+            || ch == ARROW_DOWN
+#endif
+        )
+        {
+            selected = (selected + 1) % entry_count;
+            continue;
+        }
+
+        bell("Illegal song choice.");
+        status_attr = TERM_RED;
+        SDL_strlcpy(status, "Illegal song choice.", sizeof(status));
+    }
+
+    ui_information_scene_leave(&scope);
+
+    if (song_choice < 0)
+    {
+        log_trace("Song selection cancelled by player");
+        return;
+    }
+
+    if (song_choice != SNG_NOTHING
+        && chosen_oath(OATH_SILENCE) && !oath_invalid(OATH_SILENCE))
+    {
+        char* prompt = oath_confirmation_prompt(OATH_SILENCE);
+
+        if (!prompt || !prompt[0])
+            prompt =
+                "Are you certain you wish to break your Oath of Silence?";
+
+        if (get_check_oath_multiline(prompt))
+        {
+            log_info("Player broke oath of silence to sing");
+            do_cmd_note("Broke your oath", p_ptr->depth);
+            apply_oath_breaking_curse(OATH_SILENCE);
+            p_ptr->oaths_broken |= OATH_SILENCE_FLAG;
         }
         else
         {
-            attr = TERM_L_DARK;
+            log_debug("Player cancelled song due to oath of silence");
+            return;
         }
-
-        strnfmt(buf, 80, "%c) %s", (char)'a' + i - 1, bane_name[i]);
-        Term_putstr(COL_DESCRIPTION, i + 3, -1, attr, buf);
-
-        if (*highlight == i)
-        {
-            // highlight the label
-            strnfmt(buf, 80, "%c)", (char)'a' + i - 1);
-            Term_putstr(COL_DESCRIPTION, i + 3, -1, TERM_L_BLUE, buf);
-
-            /* Indent output by 2 character, and wrap at column 70 */
-            text_out_wrap = 79;
-            text_out_indent = COL_DESCRIPTION;
-
-            Term_gotoxy(text_out_indent, PLAYER_BANE_TYPES + 4);
-
-            /* Information */
-            if (k >= 4)
-            {
-                strnfmt(buf, 80, "You have slain %d of these foes.", k);
-                text_out_to_screen(TERM_SLATE, buf);
-            }
-            else
-            {
-                strnfmt(buf, 80,
-                    "You have slain %d of these foes,   and need to slay %d "
-                    "more.",
-                    k, 4 - k);
-                text_out_to_screen(TERM_L_DARK, buf);
-            }
-
-            /* Reset text_out() vars */
-            text_out_wrap = 0;
-            text_out_indent = 0;
-        }
-
-        // keep track of the number of options
-        options = i;
     }
 
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(COL_DESCRIPTION, 3 + *highlight);
-
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
-
-    if ((ch >= 'a') && (ch <= (char)'a' + options - 1))
-    {
-        *highlight = (int)ch - 'a' + 1;
-
-        bane_menu(highlight);
-
-        return (*highlight);
-    }
-
-    if ((ch >= 'A') && (ch <= (char)'A' + options - 1))
-    {
-        *highlight = (int)ch - 'A' + 1;
-        return (*highlight);
-    }
-
-    if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
-    {
-        return (PLAYER_BANE_TYPES + 1);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        *highlight = (*highlight + (options - 2)) % options + 1;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        *highlight = *highlight % options + 1;
-    }
-
-    return (0);
+    log_info("Player changed song to %s",
+        song_choice == SNG_NOTHING ? "silence"
+                                   : song_choice == SNG_EXCHANGE_THEMES
+                                       ? "exchange themes"
+                                       : "new song");
+    change_song(song_choice);
 }
 
 #define OATH_TYPES 6
@@ -989,1318 +601,1736 @@ static const char* oath_reward_short(int oath_id)
     return oath_reward[oath_id];
 }
 
-static int oath_menu_put_wrapped(int desc_col, int row, byte attr, cptr text)
+typedef enum ability_semantic_focus {
+    ABILITY_SEMANTIC_FOCUS_SKILLS = 0,
+    ABILITY_SEMANTIC_FOCUS_ABILITIES
+} ability_semantic_focus;
+
+typedef struct ability_ui_entry {
+    const ability_type* ability;
+    int abilitynum;
+    byte attr;
+} ability_ui_entry;
+
+typedef struct ability_semantic_state {
+    int skill_order[S_MAX];
+    int skill_count;
+    int current_skill_slot;
+    int ability_highlight[S_MAX];
+    int bane_highlight;
+    int oath_highlight;
+    ability_semantic_focus focus;
+    byte status_attr;
+    char status[APP_UI_TEXT_MAX];
+} ability_semantic_state;
+
+static bool ability_screen_pause_information_scene(
+    ui_information_scene_scope* scope)
 {
-    int old_wrap = text_out_wrap;
-    int old_indent = text_out_indent;
+    if (!scope || !scope->active)
+        return false;
 
-    text_out_wrap = ability_menu_description_wrap(desc_col);
-    text_out_indent = desc_col;
-    Term_gotoxy(desc_col, row);
-    text_out_to_screen(attr, text);
-
-    row = ability_menu_next_row_after_text(desc_col, row);
-    text_out_wrap = old_wrap;
-    text_out_indent = old_indent;
-
-    return row;
+    ui_information_scene_leave(scope);
+    return true;
 }
 
-int oath_menu(int* highlight)
+static bool ability_screen_resume_information_scene(
+    ui_information_scene_scope* scope)
 {
-    int i, ch;
-    int visible_count = 0;
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    bool compact_layout = ability_menu_use_compact_layout();
-    int ability_col = ability_menu_list_col();
-    int desc_col = ability_menu_description_col();
-    int nav_row_1 = MAX(0, term_hgt - 2);
-    int nav_row_2 = MAX(0, term_hgt - 1);
-    /* Support up to 16 oaths without realloc. */
-    int visible_oaths[16]; // Map display letters to oath indices
-    char buf[80];
-    byte attr;
-    
-    /* Tolkien-themed descriptions for better immersion */
-    char* oath_tolkien_desc[] = {
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter(scope);
+}
+
+static void ability_semantic_set_status(ability_semantic_state* state,
+    byte attr, cptr text)
+{
+    if (!state)
+        return;
+
+    state->status_attr = attr;
+    SDL_strlcpy(state->status, text ? text : "", sizeof(state->status));
+}
+
+static void ability_semantic_bell_status(ability_semantic_state* state,
+    byte attr, cptr text)
+{
+    if (text && text[0])
+        bell(text);
+    ability_semantic_set_status(state, attr, text);
+}
+
+static int ability_semantic_oath_id_for_ability(int abilitynum)
+{
+    switch (abilitynum)
+    {
+    case SPC_OATH_MERCY:
+        return OATH_MERCY;
+    case SPC_OATH_SILENCE:
+        return OATH_SILENCE;
+    case SPC_OATH_IRON:
+        return OATH_IRON;
+    case SPC_OATH_SMITH:
+        return OATH_SMITH;
+    case SPC_OATH_VALOROUS:
+        return OATH_VALOROUS;
+    case SPC_OATH_LIGHT:
+        return OATH_LIGHT;
+    default:
+        return 0;
+    }
+}
+
+static bool ability_semantic_skill_visible(int skilltype)
+{
+    int i;
+
+    if (skilltype < 0 || skilltype >= S_MAX)
+        return false;
+    if (skilltype != S_SPC)
+        return true;
+
+    for (i = 0; i < ABILITIES_MAX; i++)
+    {
+        if (p_ptr->have_ability[S_SPC][i])
+            return true;
+    }
+
+    return false;
+}
+
+static int ability_semantic_collect_visible_skills(int out_skilltypes[S_MAX])
+{
+    int i;
+    int count = 0;
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        if (!ability_semantic_skill_visible(i))
+            continue;
+
+        if (out_skilltypes)
+            out_skilltypes[count] = i;
+        count++;
+    }
+
+    return count;
+}
+
+static byte ability_semantic_entry_attr(int skilltype,
+    const ability_type* b_ptr)
+{
+    if (!b_ptr)
+        return TERM_L_DARK;
+
+    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+    {
+        if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
+            return p_ptr->active_ability[skilltype][b_ptr->abilitynum]
+                ? TERM_WHITE
+                : TERM_RED;
+
+        return p_ptr->active_ability[skilltype][b_ptr->abilitynum]
+            ? TERM_L_GREEN
+            : TERM_RED;
+    }
+
+    if (prereqs(skilltype, b_ptr->abilitynum))
+        return TERM_SLATE;
+
+    return TERM_L_DARK;
+}
+
+static int ability_semantic_collect_visible_abilities(int skilltype,
+    ability_ui_entry out[ABILITIES_MAX])
+{
+    int i;
+    int count = 0;
+
+    for (i = 0; i < z_info->b_max && count < ABILITIES_MAX; i++)
+    {
+        const ability_type* b_ptr = &b_info[i];
+
+        if (!b_ptr->name)
+            continue;
+        if (b_ptr->skilltype != skilltype)
+            continue;
+        if (b_ptr->abilitynum >= ABILITIES_MAX)
+            continue;
+        if (skilltype == S_SPC
+            && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+        {
+            continue;
+        }
+        if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
+            continue;
+
+        if (out)
+        {
+            out[count].ability = b_ptr;
+            out[count].abilitynum = b_ptr->abilitynum;
+            out[count].attr = ability_semantic_entry_attr(skilltype, b_ptr);
+        }
+        count++;
+    }
+
+    return count;
+}
+
+static int ability_semantic_find_entry_index(const ability_ui_entry* entries,
+    int count, int abilitynum)
+{
+    int i;
+
+    for (i = 0; i < count; i++)
+    {
+        if (entries[i].abilitynum == abilitynum)
+            return i;
+    }
+
+    return -1;
+}
+
+static int ability_semantic_current_skill(const ability_semantic_state* state)
+{
+    if (!state || state->skill_count <= 0)
+        return 0;
+    if (state->current_skill_slot < 0)
+        return state->skill_order[0];
+    if (state->current_skill_slot >= state->skill_count)
+        return state->skill_order[state->skill_count - 1];
+    return state->skill_order[state->current_skill_slot];
+}
+
+static void ability_semantic_sync_state(ability_semantic_state* state)
+{
+    int new_order[S_MAX];
+    int count;
+    int current_skill;
+    int i;
+
+    if (!state)
+        return;
+
+    count = ability_semantic_collect_visible_skills(new_order);
+    if (count <= 0)
+    {
+        new_order[0] = 0;
+        count = 1;
+    }
+
+    current_skill = (state->skill_count > 0)
+        ? ability_semantic_current_skill(state)
+        : new_order[0];
+
+    memcpy(state->skill_order, new_order, sizeof(state->skill_order));
+    state->skill_count = count;
+    state->current_skill_slot = 0;
+
+    for (i = 0; i < count; i++)
+    {
+        if (state->skill_order[i] == current_skill)
+        {
+            state->current_skill_slot = i;
+            break;
+        }
+    }
+
+    for (i = 0; i < count; i++)
+    {
+        ability_ui_entry entries[ABILITIES_MAX];
+        int skilltype = state->skill_order[i];
+        int entry_count = ability_semantic_collect_visible_abilities(skilltype,
+            entries);
+        int entry_index;
+
+        if (entry_count <= 0)
+        {
+            state->ability_highlight[skilltype] = 0;
+            continue;
+        }
+
+        entry_index = ability_semantic_find_entry_index(entries, entry_count,
+            state->ability_highlight[skilltype] - 1);
+        if (entry_index < 0)
+            state->ability_highlight[skilltype] = entries[0].abilitynum + 1;
+    }
+
+    if (state->bane_highlight < 1)
+        state->bane_highlight = 1;
+    if (state->oath_highlight < 1)
+        state->oath_highlight = 1;
+
+    if (state->focus == ABILITY_SEMANTIC_FOCUS_ABILITIES)
+    {
+        int skilltype = ability_semantic_current_skill(state);
+
+        if (state->ability_highlight[skilltype] <= 0)
+            state->focus = ABILITY_SEMANTIC_FOCUS_SKILLS;
+    }
+}
+
+static bool ability_semantic_add_wrapped_detail_lines(app_ui_panel* panel,
+    byte attr, cptr text, int wrap_chars)
+{
+    char line_buffer[APP_UI_TEXT_MAX];
+    int line_pos = 0;
+    const char* text_ptr = text;
+
+    if (!panel || !text || !text[0])
+        return true;
+    if (wrap_chars < 8)
+        wrap_chars = 8;
+
+    while (*text_ptr)
+    {
+        while (*text_ptr == ' ' && line_pos == 0)
+            text_ptr++;
+
+        if (*text_ptr == '\n')
+        {
+            line_buffer[line_pos] = '\0';
+            if (line_pos > 0)
+            {
+                if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                    return false;
+            }
+            else if (!app_ui_panel_add_detail_line(panel, attr, " "))
+            {
+                return false;
+            }
+
+            line_pos = 0;
+            text_ptr++;
+            continue;
+        }
+
+        if (line_pos >= wrap_chars)
+        {
+            int wrap_pos = line_pos - 1;
+
+            while (wrap_pos > 0 && line_buffer[wrap_pos] != ' ')
+                wrap_pos--;
+
+            if (wrap_pos > 0)
+            {
+                int remaining = line_pos - wrap_pos - 1;
+
+                line_buffer[wrap_pos] = '\0';
+                if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                    return false;
+
+                memmove(line_buffer, line_buffer + wrap_pos + 1,
+                    (size_t)remaining);
+                line_pos = remaining;
+            }
+            else
+            {
+                line_buffer[line_pos] = '\0';
+                if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                    return false;
+                line_pos = 0;
+            }
+
+            continue;
+        }
+
+        line_buffer[line_pos++] = *text_ptr++;
+    }
+
+    if (line_pos > 0)
+    {
+        line_buffer[line_pos] = '\0';
+        if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+            return false;
+    }
+
+    return true;
+}
+
+static bool ability_semantic_add_detail_break(app_ui_panel* panel)
+{
+    if (!panel)
+        return false;
+    if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+        return false;
+    return app_ui_panel_add_detail_line(panel, TERM_SLATE, " ");
+}
+
+static void ability_semantic_format_row_label(int skilltype,
+    const ability_type* b_ptr, char* out, size_t outsz)
+{
+    if (!out || outsz == 0)
+        return;
+
+    out[0] = '\0';
+    if (!b_ptr)
+        return;
+
+    if (skilltype == S_PER && b_ptr->abilitynum == PER_BANE
+        && p_ptr->bane_type > 0)
+    {
+        strnfmt(out, outsz, "%s-%s", bane_name[p_ptr->bane_type],
+            b_name + b_ptr->name);
+        return;
+    }
+
+    if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH
+        && p_ptr->oath_type > 0)
+    {
+        strnfmt(out, outsz, "%s: %s", b_name + b_ptr->name,
+            oath_name_short(p_ptr->oath_type));
+        return;
+    }
+
+    SDL_strlcpy(out, b_name + b_ptr->name, outsz);
+}
+
+static void ability_semantic_format_row_meta(int skilltype,
+    const ability_type* b_ptr, char* out, size_t outsz)
+{
+    int oath_id;
+
+    if (!out || outsz == 0)
+        return;
+
+    out[0] = '\0';
+    if (!b_ptr)
+        return;
+
+    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+    {
+        oath_id = (skilltype == S_SPC)
+            ? ability_semantic_oath_id_for_ability(b_ptr->abilitynum)
+            : 0;
+
+        if (oath_id > 0 && oath_invalid(oath_id))
+        {
+            SDL_strlcpy(out, "Broken", outsz);
+            return;
+        }
+
+        if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
+        {
+            SDL_strlcpy(out,
+                p_ptr->active_ability[skilltype][b_ptr->abilitynum]
+                    ? "Innate"
+                    : "Innate off",
+                outsz);
+            return;
+        }
+
+        SDL_strlcpy(out,
+            p_ptr->active_ability[skilltype][b_ptr->abilitynum]
+                ? "On"
+                : "Off",
+            outsz);
+        return;
+    }
+
+    if (prereqs(skilltype, b_ptr->abilitynum))
+    {
+        strnfmt(out, outsz, "%d xp", ability_purchase_exp_cost(skilltype));
+        return;
+    }
+
+    if (p_ptr->skill_base[skilltype] < b_ptr->level)
+    {
+        strnfmt(out, outsz, "Need %d skill", b_ptr->level);
+        return;
+    }
+
+    SDL_strlcpy(out, "Need prereq", outsz);
+}
+
+static void ability_semantic_add_prerequisite_lines(app_ui_panel* panel,
+    int skilltype, const ability_type* b_ptr)
+{
+    char buf[APP_UI_TEXT_MAX];
+    int j;
+
+    if (!panel || !b_ptr)
+        return;
+
+    (void)app_ui_panel_add_detail_line(panel, TERM_YELLOW, "Prerequisites:");
+
+    ability_menu_format_amount_line(buf, sizeof(buf), "skill points", "Skill",
+        b_ptr->level, p_ptr->skill_base[skilltype], 80);
+    (void)app_ui_panel_add_detail_line(panel,
+        (b_ptr->level <= p_ptr->skill_base[skilltype]) ? TERM_L_GREEN
+                                                       : TERM_L_DARK,
+        buf);
+
+    if (!p_ptr->active_ability[S_PER][PER_QUICK_STUDY])
+    {
+        for (j = 0; j < b_ptr->prereqs; j++)
+        {
+            strnfmt(buf, sizeof(buf), "%s%s", (j == 0) ? "" : "or ",
+                b_name
+                    + (&b_info[ability_index(b_ptr->prereq_skilltype[j],
+                           b_ptr->prereq_abilitynum[j])])
+                          ->name);
+            (void)app_ui_panel_add_detail_line(panel,
+                p_ptr->innate_ability[b_ptr->prereq_skilltype[j]]
+                                     [b_ptr->prereq_abilitynum[j]]
+                    ? TERM_L_GREEN
+                    : TERM_L_DARK,
+                buf);
+        }
+    }
+    else if (b_ptr->prereqs > 0)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_GREEN, "Quick Study");
+    }
+
+    if (skilltype != S_SPC && prereqs(skilltype, b_ptr->abilitynum))
+    {
+        int exp_cost = ability_purchase_exp_cost(skilltype);
+        char amount[APP_UI_TEXT_MAX];
+
+        ability_menu_format_amount_line(amount, sizeof(amount), "experience",
+            "Exp",
+            exp_cost, p_ptr->new_exp, 80);
+        strnfmt(buf, sizeof(buf), "Current price: %s", amount);
+        (void)app_ui_panel_add_detail_line(panel,
+            (exp_cost <= p_ptr->new_exp) ? TERM_L_GREEN : TERM_L_DARK,
+            buf);
+    }
+}
+
+static void ability_semantic_add_niena_mercy_lines(app_ui_panel* panel)
+{
+    int i;
+    int total_seen = 0;
+    int total_killed = 0;
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel)
+        return;
+
+    for (i = 1; i < z_info->r_max; i++)
+    {
+        monster_lore* l_ptr = &l_list[i];
+        monster_race* r_ptr = &r_info[i];
+
+        if (r_ptr->flags1 & RF1_UNIQUE)
+            continue;
+
+        total_seen += l_ptr->psights;
+        total_killed += l_ptr->pkills;
+    }
+
+    if (total_seen > 0)
+    {
+        int mercy_ratio_times_10 = 10 * (total_seen - total_killed);
+        int stealth_bonus =
+            (mercy_ratio_times_10 + total_seen - 1) / total_seen;
+
+        strnfmt(buf, sizeof(buf),
+            "Current bonus: +%d stealth (%d seen, %d spared)",
+            stealth_bonus, total_seen, total_seen - total_killed);
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN, buf);
+    }
+    else
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Current bonus: +0 stealth (no monsters encountered yet)");
+    }
+}
+
+static void ability_semantic_add_bane_status_lines(app_ui_panel* panel)
+{
+    int killed;
+    int current_bonus;
+    int next_threshold;
+    int threshold;
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || p_ptr->bane_type <= 0)
+        return;
+
+    killed = bane_type_killed(p_ptr->bane_type);
+    current_bonus = bane_bonus_for_type(p_ptr->bane_type);
+    threshold = 2;
+
+    while (threshold <= killed)
+        threshold *= 2;
+    next_threshold = threshold;
+
+    strnfmt(buf, sizeof(buf), "%s-Bane:", bane_name[p_ptr->bane_type]);
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+    strnfmt(buf, sizeof(buf), "%d slain, giving a %+d bonus", killed,
+        current_bonus);
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+
+    if (current_bonus == 0 && killed < 2)
+    {
+        strnfmt(buf, sizeof(buf), "(next bonus at %d slain)", next_threshold);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+    else if (next_threshold <= 64)
+    {
+        strnfmt(buf, sizeof(buf), "(next bonus at %d slain)", next_threshold);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+}
+
+static void ability_semantic_add_unique_bane_lines(app_ui_panel* panel)
+{
+    int uniques_killed;
+    int current_bonus = 0;
+    int next_threshold;
+    int threshold = 2;
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel)
+        return;
+
+    uniques_killed = unique_bane_type_killed();
+    while (threshold <= uniques_killed)
+    {
+        threshold *= 2;
+        current_bonus++;
+    }
+
+    next_threshold = (current_bonus == 0) ? 2 : threshold;
+
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, "Unique Bane:");
+    strnfmt(buf, sizeof(buf), "%d uniques slain, giving a %+d bonus",
+        uniques_killed, current_bonus);
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+
+    if (current_bonus == 0 && uniques_killed < 2)
+    {
+        strnfmt(buf, sizeof(buf), "(next bonus at %d uniques)",
+            next_threshold);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+    else if (next_threshold <= 64)
+    {
+        strnfmt(buf, sizeof(buf), "(next bonus at %d uniques)",
+            next_threshold);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+}
+
+static void ability_semantic_add_oath_status_lines(app_ui_panel* panel)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || p_ptr->oath_type <= 0)
+        return;
+
+    strnfmt(buf, sizeof(buf), "Oath: %s", oath_name_short(p_ptr->oath_type));
+    (void)app_ui_panel_add_detail_line(panel, TERM_L_BLUE, buf);
+    strnfmt(buf, sizeof(buf), "You have sworn not to %s.",
+        oath_desc2_short(p_ptr->oath_type));
+    (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_WHITE, buf, 58);
+
+    if (oath_invalid(p_ptr->oath_type))
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_RED,
+            "You are an oathbreaker.");
+    }
+    else
+    {
+        strnfmt(buf, sizeof(buf), "Bonus: %s.",
+            oath_reward_short(p_ptr->oath_type));
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+    }
+}
+
+static void ability_semantic_add_description_lines(app_ui_panel* panel,
+    int skilltype, const ability_type* b_ptr)
+{
+    const char* desc_text;
+    const char* effect_text;
+    const char* death_text = NULL;
+    bool has_desc;
+    bool has_effect;
+    int oath_id;
+    bool added_section = false;
+
+    if (!panel || !b_ptr)
+        return;
+
+    desc_text = b_ptr->text ? (b_text + b_ptr->text) : NULL;
+    effect_text = b_ptr->effect ? (b_text + b_ptr->effect) : NULL;
+    has_desc = desc_text && desc_text[0];
+    has_effect = effect_text && effect_text[0];
+
+    oath_id = (skilltype == S_SPC)
+        ? ability_semantic_oath_id_for_ability(b_ptr->abilitynum)
+        : 0;
+    if (oath_id > 0 && oath_invalid(oath_id))
+        death_text = oath_death_message(oath_id);
+
+    if (death_text && death_text[0])
+    {
+        (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_RED,
+            death_text, 58);
+        added_section = true;
+    }
+    else
+    {
+        switch (op_ptr->ability_desc_mode)
+        {
+        case 1:
+            if (has_effect)
+            {
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_L_WHITE, effect_text, 58);
+                added_section = true;
+            }
+            if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                if (added_section)
+                    (void)ability_semantic_add_detail_break(panel);
+                ability_semantic_add_prerequisite_lines(panel, skilltype,
+                    b_ptr);
+                added_section = true;
+            }
+            if (has_desc)
+            {
+                if (added_section)
+                    (void)ability_semantic_add_detail_break(panel);
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_SLATE, desc_text, 58);
+                added_section = true;
+            }
+            break;
+
+        case 2:
+            if (has_effect)
+            {
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_L_WHITE, effect_text, 58);
+                added_section = true;
+            }
+            else if (has_desc)
+            {
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_L_WHITE, desc_text, 58);
+                added_section = true;
+            }
+            if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                if (added_section)
+                    (void)ability_semantic_add_detail_break(panel);
+                ability_semantic_add_prerequisite_lines(panel, skilltype,
+                    b_ptr);
+                added_section = true;
+            }
+            break;
+
+        default:
+            if (has_desc)
+            {
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_SLATE, desc_text, 58);
+                added_section = true;
+            }
+            if (has_effect)
+            {
+                if (added_section)
+                    (void)ability_semantic_add_detail_break(panel);
+                (void)ability_semantic_add_wrapped_detail_lines(panel,
+                    TERM_L_WHITE, effect_text, 58);
+                added_section = true;
+            }
+            if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+            {
+                if (added_section)
+                    (void)ability_semantic_add_detail_break(panel);
+                ability_semantic_add_prerequisite_lines(panel, skilltype,
+                    b_ptr);
+                added_section = true;
+            }
+            break;
+        }
+    }
+
+    if (skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY
+        && p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
+    {
+        if (added_section)
+            (void)ability_semantic_add_detail_break(panel);
+        ability_semantic_add_niena_mercy_lines(panel);
+        added_section = true;
+    }
+
+    if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
+        && skilltype == S_PER && b_ptr->abilitynum == PER_BANE
+        && p_ptr->bane_type > 0)
+    {
+        if (added_section)
+            (void)ability_semantic_add_detail_break(panel);
+        ability_semantic_add_bane_status_lines(panel);
+        added_section = true;
+    }
+    else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
+        && skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH
+        && p_ptr->oath_type > 0)
+    {
+        if (added_section)
+            (void)ability_semantic_add_detail_break(panel);
+        ability_semantic_add_oath_status_lines(panel);
+        added_section = true;
+    }
+    else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
+        && skilltype == S_SPC && b_ptr->abilitynum == SPC_UNIQUE_BANE)
+    {
+        if (added_section)
+            (void)ability_semantic_add_detail_break(panel);
+        ability_semantic_add_unique_bane_lines(panel);
+    }
+}
+
+static void ability_semantic_add_footer_actions(app_ui_panel* panel)
+{
+    bool steamdeck = steamdeck_controls_active();
+
+    if (!panel)
+        return;
+
+    if (steamdeck)
+    {
+        char confirm_label[APP_UI_KEY_MAX];
+        char increase_label[APP_UI_KEY_MAX];
+        char back_label[APP_UI_KEY_MAX];
+
+        controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        controller_prompt_label(steamdeck_alt_action_key(), "X",
+            increase_label, sizeof(increase_label));
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "D-pad", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+            confirm_label, "Select");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            increase_label, "Increase");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            back_label, "Back");
+        return;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "4/6", "Back/Select");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_L_BLUE, true,
+        "Enter", "Use");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "i", "Increase");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "Esc", "Back");
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+        "Tab", "Exit");
+}
+
+static bool ability_semantic_build_scene(app_ui_scene* scene,
+    ability_semantic_state* state)
+{
+    app_ui_panel* panel;
+    ability_ui_entry entries[ABILITIES_MAX];
+    char subtitle[APP_UI_TEXT_MAX];
+    char body[APP_UI_TEXT_MAX];
+    int current_skill;
+    int entry_count;
+    int selected_index = 0;
+    int i;
+
+    if (!scene || !state)
+        return false;
+
+    ability_semantic_sync_state(state);
+    current_skill = ability_semantic_current_skill(state);
+    entry_count = ability_semantic_collect_visible_abilities(current_skill,
+        entries);
+    if (entry_count > 0)
+    {
+        selected_index = ability_semantic_find_entry_index(entries, entry_count,
+            state->ability_highlight[current_skill] - 1);
+        if (selected_index < 0)
+            selected_index = 0;
+        state->ability_highlight[current_skill] =
+            entries[selected_index].abilitynum + 1;
+    }
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1180, 2200);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Abilities");
+
+    strnfmt(subtitle, sizeof(subtitle), "%s %d  |  %d visible  |  %d exp",
+        skill_names_full[current_skill], p_ptr->skill_base[current_skill],
+        entry_count, p_ptr->new_exp);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    for (i = 0; i < state->skill_count; i++)
+    {
+        int skilltype = state->skill_order[i];
+        byte attr = TERM_SLATE;
+
+        if (i == state->current_skill_slot)
+        {
+            attr = (state->focus == ABILITY_SEMANTIC_FOCUS_SKILLS)
+                ? TERM_YELLOW
+                : TERM_L_BLUE;
+        }
+
+        (void)app_ui_panel_add_tab(panel, (s16b)skilltype, attr,
+            i == state->current_skill_slot, skill_names_full[skilltype]);
+    }
+
+    if (state->status[0])
+    {
+        (void)app_ui_panel_add_body_line(panel, state->status_attr,
+            state->status);
+    }
+    else
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+            (state->focus == ABILITY_SEMANTIC_FOCUS_SKILLS)
+                ? "Choose a skill, then press Enter to browse abilities."
+                : "Press Enter to purchase or toggle the selected ability.");
+    }
+
+    strnfmt(body, sizeof(body), "Affinity %d  |  Desc mode %d",
+        affinity_level(current_skill), op_ptr->ability_desc_mode);
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE, body);
+
+    for (i = 0; i < entry_count; i++)
+    {
+        char keybuf[APP_UI_KEY_MAX];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+
+        keybuf[0] = '\0';
+        if (i < 26)
+            strnfmt(keybuf, sizeof(keybuf), "%c", (char)('a' + i));
+        ability_semantic_format_row_label(current_skill, entries[i].ability,
+            label, sizeof(label));
+        ability_semantic_format_row_meta(current_skill, entries[i].ability,
+            meta, sizeof(meta));
+        (void)app_ui_panel_add_row_ex(panel, (s16b)entries[i].abilitynum,
+            entries[i].attr, TERM_SLATE, 0, '\0', true,
+            i == selected_index, keybuf, label, meta);
+    }
+
+    if (entry_count > 0)
+    {
+        char detail_title[APP_UI_TITLE_MAX];
+
+        ability_semantic_format_row_label(current_skill,
+            entries[selected_index].ability, detail_title,
+            sizeof(detail_title));
+        app_ui_panel_set_detail_title(panel, TERM_YELLOW, detail_title);
+        ability_semantic_add_description_lines(panel, current_skill,
+            entries[selected_index].ability);
+    }
+    else
+    {
+        app_ui_panel_set_detail_title(panel, TERM_L_DARK, "No abilities");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_DARK,
+            "No abilities available for this skill.");
+    }
+
+    ability_semantic_add_footer_actions(panel);
+
+    if (state->focus == ABILITY_SEMANTIC_FOCUS_SKILLS && panel->tab_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_TABS;
+        panel->focus_id = panel->tabs[state->current_skill_slot].id;
+    }
+    else if (panel->row_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->focus_id = panel->rows[panel->selected_row].id;
+    }
+
+    return true;
+}
+
+static bool ability_semantic_build_bane_scene(app_ui_scene* scene,
+    int highlight)
+{
+    app_ui_panel* panel;
+    int i;
+    int selected = highlight - 1;
+
+    if (!scene)
+        return false;
+
+    if (selected < 0)
+        selected = 0;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1040, 1700);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Enemy types");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Choose a bane from foes you have slain often enough.");
+
+    for (i = 1; i < PLAYER_BANE_TYPES; i++)
+    {
+        char keybuf[APP_UI_KEY_MAX];
+        char meta[APP_UI_META_MAX];
+        int killed = bane_type_killed(i);
+        byte attr = (killed >= 4) ? TERM_SLATE : TERM_L_DARK;
+
+        strnfmt(keybuf, sizeof(keybuf), "%c", (char)('a' + i - 1));
+        strnfmt(meta, sizeof(meta), "%d slain", killed);
+        (void)app_ui_panel_add_row(panel, (s16b)i, attr, true,
+            (i - 1) == selected, keybuf, bane_name[i], meta);
+    }
+
+    if (selected >= 0 && selected < panel->row_count)
+    {
+        int bane_type = selected + 1;
+        int killed = bane_type_killed(bane_type);
+        char buf[APP_UI_TEXT_MAX];
+
+        app_ui_panel_set_detail_title(panel, TERM_YELLOW, bane_name[bane_type]);
+        if (killed >= 4)
+        {
+            strnfmt(buf, sizeof(buf), "You have slain %d of these foes.",
+                killed);
+            (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+        }
+        else
+        {
+            strnfmt(buf, sizeof(buf),
+                "You have slain %d of these foes and need %d more.",
+                killed, 4 - killed);
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_DARK, buf);
+        }
+    }
+
+    ability_semantic_add_footer_actions(panel);
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    return true;
+}
+
+static int ability_semantic_run_bane_menu(int* highlight)
+{
+    int visible_count = PLAYER_BANE_TYPES - 1;
+
+    if (!highlight)
+        return PLAYER_BANE_TYPES + 1;
+
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > visible_count)
+        *highlight = visible_count;
+
+    while (true)
+    {
+        app_ui_scene scene;
+        int ch;
+
+        if (!ability_semantic_build_bane_scene(&scene, *highlight)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            return PLAYER_BANE_TYPES + 1;
+        }
+
+        ch = ui_information_scene_wait_key();
+        if (steamdeck_controls_active())
+        {
+            if (ch == steamdeck_back_key())
+                ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key())
+                ch = '\r';
+        }
+
+        if ((ch >= 'a') && (ch < 'a' + visible_count))
+        {
+            *highlight = (int)ch - 'a' + 1;
+            continue;
+        }
+        if ((ch >= 'A') && (ch < 'A' + visible_count))
+        {
+            *highlight = (int)ch - 'A' + 1;
+            return *highlight;
+        }
+        if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
+            return PLAYER_BANE_TYPES + 1;
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+            return *highlight;
+        if (ch == '8')
+        {
+            (*highlight)--;
+            if (*highlight < 1)
+                *highlight = visible_count;
+            continue;
+        }
+        if (ch == '2')
+        {
+            (*highlight)++;
+            if (*highlight > visible_count)
+                *highlight = 1;
+            continue;
+        }
+
+        bell("Unknown command.");
+    }
+}
+
+static bool ability_semantic_build_oath_scene(app_ui_scene* scene,
+    int highlight)
+{
+    app_ui_panel* panel;
+    int selected = highlight - 1;
+    int i;
+    static const char* oath_tolkien_desc[] = {
         "",
         "\"Let no blood of the Children stain thy blade in these halls of sorrow\"",
-        "\"In silence came I, and in silence shall I depart, as befits the wise\"", 
+        "\"In silence came I, and in silence shall I depart, as befits the wise\"",
         "\"Though darkness gather and Balrogs rise, I shall not yield nor turn aside\"",
         "\"By mine own hand shall all blades be wrought, and no other's craft shall I bear\"",
         "\"Valor guards the fallen foe; the honorable blade stays when terror takes them\"",
         "\"I will carry unsullied starlight, shunning the shadowed tools that would dim it\""
     };
 
-    // Clear the abilities and description area (following abilities_menu2 pattern)
-    wipe_screen_from(ability_col);
+    if (!scene)
+        return false;
 
-    // Title in the abilities column
-    Term_putstr(ability_col, 2, -1, TERM_WHITE, "Oaths");
+    if (selected < 0)
+        selected = 0;
 
-    // Build visible oaths list and display them (1..OATH_TYPES)
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1100, 1900);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Oaths");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Choose the vow you wish to swear.");
+
     for (i = 1; i <= OATH_TYPES; i++)
     {
-        if (visible_count >= (int)N_ELEMENTS(visible_oaths)) break;
+        char keybuf[APP_UI_KEY_MAX];
+        byte attr = oath_invalid(i) ? TERM_L_RED : TERM_WHITE;
 
-        // Map this visible oath to its position  
-        visible_oaths[visible_count] = i;
-        
-        // Determine display color based on oath status
-        if (oath_invalid(i))
-        {
-            attr = TERM_L_RED; // Broken oaths in red
-        }
-        else
-        {
-            attr = (*highlight == visible_count + 1) ? TERM_L_BLUE : TERM_WHITE;
-        }
-        
-        // Format oath name with status indicator
-        strnfmt(buf, 80, "%c) %s", (char)'a' + visible_count, oath_name_short(i));
-        
-        // Display in abilities column with proper spacing
-        Term_putstr(ability_col, 4 + visible_count, -1, attr, buf);
-        visible_count++;
+        strnfmt(keybuf, sizeof(keybuf), "%c", (char)('a' + i - 1));
+        (void)app_ui_panel_add_row(panel, (s16b)i, attr, true,
+            (i - 1) == selected, keybuf, oath_name_short(i),
+            oath_reward_short(i));
     }
 
-    // Display detailed description for highlighted oath in description column
-    if (*highlight >= 1 && *highlight <= visible_count)
+    if (selected >= 0 && selected < panel->row_count)
     {
-        int oath_idx = visible_oaths[*highlight - 1];
-        
-        // Clear description area first
-        int row = 4;
+        int oath_idx = selected + 1;
 
-        wipe_screen_from(desc_col);
-        
-        // Oath title
-        Term_putstr(desc_col, 2, -1, TERM_WHITE, "Oath Details");
-        
+        app_ui_panel_set_detail_title(panel,
+            oath_invalid(oath_idx) ? TERM_L_RED : TERM_YELLOW,
+            oath_name_short(oath_idx));
         if (oath_invalid(oath_idx))
         {
-            // Menacing text for broken oaths
-            Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_RED,
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_RED,
                 "OATH BROKEN");
-            row++;
-            row = oath_menu_put_wrapped(desc_col, row, TERM_RED,
-                "\"Thy oath lies shattered, thy word worthless as dust.\"");
-            row++;
-            row = oath_menu_put_wrapped(desc_col, row, TERM_L_RED,
-                "\"No Valar shall hear thy voice, no light shall guide thy path.\"");
-            row++;
-            (void)oath_menu_put_wrapped(desc_col, row, TERM_RED,
-                "Forever marked as oathbreaker in this age.");
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_RED,
+                "\"Thy oath lies shattered, thy word worthless as dust.\"",
+                58);
+            (void)ability_semantic_add_detail_break(panel);
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_L_RED,
+                "\"No Valar shall hear thy voice, no light shall guide thy path.\"",
+                58);
+            (void)ability_semantic_add_detail_break(panel);
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_RED,
+                "Forever marked as oathbreaker in this age.", 58);
         }
         else
         {
-            // Tolkien-themed quote
-            char* quote = (oath_idx < (int)N_ELEMENTS(oath_tolkien_desc)) ? oath_tolkien_desc[oath_idx] : "";
-
-            Term_putstr(desc_col, row++, term_wid - desc_col, TERM_YELLOW,
-                "Quote:");
-            row = oath_menu_put_wrapped(desc_col, row, TERM_SLATE, quote);
-            
-            // Oath vow
-            Term_putstr(desc_col, row++, term_wid - desc_col, TERM_WHITE,
-                "Vow:");
-            row = oath_menu_put_wrapped(desc_col, row, TERM_SLATE,
-                (oath_idx >= 0 && oath_idx < (int)N_ELEMENTS(oath_desc1))
-                    ? oath_desc1[oath_idx]
-                    : "");
-            
-            // Restriction
-            if (row < nav_row_1)
-            {
-                Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_RED,
-                    "Restriction:");
-                row = oath_menu_put_wrapped(desc_col, row, TERM_L_RED,
-                    oath_desc2_short(oath_idx));
-            }
-            
-            // Reward
-            if (row < nav_row_1)
-            {
-                Term_putstr(desc_col, row++, term_wid - desc_col, TERM_L_GREEN,
-                    "Reward:");
-                (void)oath_menu_put_wrapped(desc_col, row, TERM_L_GREEN,
-                    oath_reward_short(oath_idx));
-            }
+            (void)app_ui_panel_add_detail_line(panel, TERM_YELLOW, "Quote:");
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_SLATE,
+                oath_tolkien_desc[oath_idx], 58);
+            (void)ability_semantic_add_detail_break(panel);
+            (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, "Vow:");
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_SLATE,
+                oath_desc1[oath_idx], 58);
+            (void)ability_semantic_add_detail_break(panel);
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_RED,
+                "Restriction:");
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_L_RED,
+                oath_desc2_short(oath_idx), 58);
+            (void)ability_semantic_add_detail_break(panel);
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                "Reward:");
+            (void)ability_semantic_add_wrapped_detail_lines(panel, TERM_L_GREEN,
+                oath_reward_short(oath_idx), 58);
         }
-        
-        // Navigation instructions at bottom
-        Term_putstr(desc_col, nav_row_1, term_wid - desc_col, TERM_SLATE,
-            compact_layout ? "8/2 - Navigate" : "2/8 - Navigate");
-        Term_putstr(desc_col, nav_row_2, term_wid - desc_col, TERM_SLATE,
-            compact_layout ? "Enter Select  Esc Back"
-                           : "Enter - Select  ESC - Back");
     }
 
-    // Ensure highlight is within valid range
-    if (*highlight < 1) *highlight = 1;
-    if (*highlight > visible_count) *highlight = visible_count;
+    ability_semantic_add_footer_actions(panel);
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    return true;
+}
 
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
-
-    /* Handle letter selection (a-z) for immediate highlighting */
-    if ((ch >= 'a') && (ch < 'a' + visible_count))
-    {
-        *highlight = (int)ch - 'a' + 1;
-        return oath_menu(highlight); // Recursive call to update display
-    }
-
-    /* Handle capital letter selection (A-Z) for immediate selection */
-    if ((ch >= 'A') && (ch < 'A' + visible_count))
-    {
-        *highlight = (int)ch - 'A' + 1;
-        return visible_oaths[*highlight - 1]; // Return actual oath index
-    }
-
-    /* ESC or 'q' - exit menu */
-    if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
-    {
-        /* Return a sentinel that's outside valid oath indices */
+static int ability_semantic_run_oath_menu(int* highlight)
+{
+    if (!highlight)
         return OATH_TYPES + 1;
-    }
 
-    /* Enter or Space - select current highlighted oath */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+    if (*highlight < 1)
+        *highlight = 1;
+    if (*highlight > OATH_TYPES)
+        *highlight = OATH_TYPES;
+
+    while (true)
     {
-        if (visible_count <= 0) return OATH_TYPES + 1;
-        return visible_oaths[*highlight - 1]; // Return actual oath index
-    }
+        app_ui_scene scene;
+        int ch;
 
-    /* Navigation: Up (8) */
-    if (ch == '8')
-    {
-        (*highlight)--;
-        if (*highlight < 1) *highlight = visible_count;
-    }
+        if (!ability_semantic_build_oath_scene(&scene, *highlight)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            return OATH_TYPES + 1;
+        }
 
-    /* Navigation: Down (2) */
-    if (ch == '2')
-    {
-    (*highlight)++;
-        if (*highlight > visible_count) *highlight = 1;
-    }
+        ch = ui_information_scene_wait_key();
+        if (steamdeck_controls_active())
+        {
+            if (ch == steamdeck_back_key())
+                ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key())
+                ch = '\r';
+        }
 
-    /* Recursive call to continue menu interaction */
-    return oath_menu(highlight);
+        if ((ch >= 'a') && (ch < 'a' + OATH_TYPES))
+        {
+            *highlight = (int)ch - 'a' + 1;
+            continue;
+        }
+        if ((ch >= 'A') && (ch < 'A' + OATH_TYPES))
+        {
+            *highlight = (int)ch - 'A' + 1;
+            return *highlight;
+        }
+        if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
+            return OATH_TYPES + 1;
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+            return *highlight;
+        if (ch == '8')
+        {
+            (*highlight)--;
+            if (*highlight < 1)
+                *highlight = OATH_TYPES;
+            continue;
+        }
+        if (ch == '2')
+        {
+            (*highlight)++;
+            if (*highlight > OATH_TYPES)
+                *highlight = 1;
+            continue;
+        }
+
+        bell("Unknown command.");
+    }
 }
 
-int abilities_menu1(int* highlight)
+static void ability_semantic_grant_ability(int skilltype, int abilitynum,
+    int banechoice, int oathchoice, int exp_cost)
 {
-    int i;
-    int ch;
-    int options = S_MAX;
-    bool show_special = false;
+    p_ptr->innate_ability[skilltype][abilitynum] = true;
+    p_ptr->have_ability[skilltype][abilitynum] = true;
+    p_ptr->active_ability[skilltype][abilitynum] = true;
+    ability_log_record_gain(skilltype, abilitynum);
+    p_ptr->new_exp -= exp_cost;
 
-    // Determine if any special abilities are present (owned or active)
-    for (i = 0; i < ABILITIES_MAX; i++) {
-        if (p_ptr->have_ability[S_SPC][i]) { 
-            show_special = true; 
-            break; 
-        }
-    }
-    
-    // Debug: Always show special menu for unique bane status
-    if (p_ptr->have_ability[S_SPC][SPC_UNIQUE_BANE]) {
-        show_special = true;
-    }
-    
-    if (!show_special) {
-        options = S_MAX - 1; // hide Special category
-    }
-
-    char buf[80];
-
-    // Clear the whole screen body so compact-layout submenu rows do not
-    // linger when returning from an ability list to the skills list.
-    wipe_screen_from(COL_SKILL);
-
-    // title
-    Term_putstr(COL_SKILL, 2, -1, TERM_WHITE, "Skills");
-
-    // list the skills
-    for (i = 0; i < options; i++)
+    if (banechoice <= 0 && oathchoice <= 0)
     {
-        strnfmt(buf, 80, "%c) %s", (char)'a' + i, skill_names_full[i]);
-
-        // Highlight the entire line if selected
-        Term_putstr(COL_SKILL, i + 4, -1,
-            (*highlight == i + 1) ? TERM_L_BLUE : TERM_WHITE, buf);
+        do_cmd_note(format("(%s)",
+                        b_name
+                            + (&b_info[ability_index(skilltype, abilitynum)])
+                                  ->name),
+            p_ptr->depth);
     }
-
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice */
-    Term_gotoxy(COL_SKILL, 3 + *highlight);
-
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
-
-    if ((ch >= 'a') && (ch <= (char)'a' + options - 1))
+    else if (oathchoice <= 0)
     {
-        *highlight = (int)ch - 'a' + 1;
+        p_ptr->bane_type = banechoice;
+        do_cmd_note(format("(%s-%s)", bane_name[banechoice],
+                        b_name
+                            + (&b_info[ability_index(skilltype, abilitynum)])
+                                  ->name),
+            p_ptr->depth);
+    }
+    else
+    {
+        int oath_special = -1;
 
-        // relist the skills
-    for (i = 0; i < options; i++)
+        p_ptr->oath_type = oathchoice;
+
+        switch (oathchoice)
         {
-            strnfmt(buf, 80, "%c) %s", (char)'a' + i, skill_names_full[i]);
-
-            Term_putstr(COL_SKILL, i + 4, -1,
-                (*highlight == i + 1) ? TERM_L_BLUE : TERM_WHITE, buf);
-        }
-
-        return (*highlight);
-    }
-
-    if ((ch >= 'A') && (ch <= (char)'A' + options - 1))
-    {
-        *highlight = (int)ch - 'A' + 1;
-
-        // relist the skills
-    for (i = 0; i < options; i++)
-        {
-            strnfmt(buf, 80, "%c) %s", (char)'a' + i, skill_names_full[i]);
-
-            Term_putstr(COL_SKILL, i + 4, -1,
-                (*highlight == i + 1) ? TERM_L_BLUE : TERM_WHITE, buf);
-        }
-
-        return (*highlight);
-    }
-
-    if ((ch == ESCAPE) || (ch == 'q') || (ch == '\t'))
-    {
-        return (S_MAX + 1);  // Always return S_MAX + 1 to exit, regardless of options
-    }
-
-    if (ch == 'i')
-    {
-        return (S_MAX + 2);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        *highlight = (*highlight + (options - 2)) % options + 1;
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        *highlight = *highlight % options + 1;
-    }
-
-    return (0);
-}
-
-int abilities_menu2(int skilltype, int* highlight)
-{
-    int i;
-    bool compact_layout = ability_menu_use_compact_layout();
-    int ability_col = ability_menu_list_col();
-    int desc_col = ability_menu_description_col();
-    int list_first_row = 3;
-    int list_rows = (Term && Term->hgt > list_first_row) ? (Term->hgt - list_first_row) : 1;
-
-    ability_type* b_ptr;
-    ability_type* visible_entries[ABILITIES_MAX];
-    byte visible_attrs[ABILITIES_MAX];
-
-    int ch;
-    int visible_count = 0; // Count of actually visible abilities
-    int visible_abilities[ABILITIES_MAX]; // Map display letters to ability numbers
-    int top_visible = 0;
-    int highlight_display_index = -1;
-
-    char buf[80];
-
-    byte attr;
-
-    // In compact layout the abilities list reuses the skills column.
-    wipe_screen_from(compact_layout ? COL_SKILL : COL_ABILITY);
-
-    // abilities title with color
-    Term_putstr(ability_col, 1, -1, TERM_L_BLUE, "Abilities");
-
-    // For special abilities, we may need to adjust highlight to first visible ability
-    int first_visible_ability = -1;
-
-    /* Pre-scan for Special abilities to adjust highlight before display */
-    if (skilltype == S_SPC)
-    {
-        int temp_visible_count = 0;
-        int temp_first_visible = -1;
-        
-        for (i = 0; i < z_info->b_max; i++)
-        {
-            b_ptr = &b_info[i];
-            if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
-            
-            if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-            {
-                if (temp_first_visible == -1)
-                {
-                    temp_first_visible = b_ptr->abilitynum;
-                }
-                temp_visible_count++;
-            }
-        }
-        
-        /* Adjust highlight before display if needed */
-        if (temp_visible_count > 0 && temp_first_visible != -1)
-        {
-            /* Check if current highlight corresponds to a visible ability */
-            int current_ability_num = *highlight - 1; /* Convert 1-based to 0-based */
-            bool highlight_is_visible = false;
-            
-            for (i = 0; i < z_info->b_max; i++)
-            {
-                b_ptr = &b_info[i];
-                if (!b_ptr->name || b_ptr->skilltype != skilltype) continue;
-                
-                if (b_ptr->abilitynum == current_ability_num && p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                {
-                    highlight_is_visible = true;
-                    break;
-                }
-            }
-            
-            if (!highlight_is_visible)
-            {
-                *highlight = temp_first_visible + 1; /* Convert back to 1-based */
-            }
-        }
-    }
-
-    // list the abilities
-    for (i = 0; i < z_info->b_max; i++)
-    {
-        b_ptr = &b_info[i];
-
-        /* Skip non-entries */
-        if (!b_ptr->name)
-            continue;
-
-        /* Skip entries for the wrong skill type */
-        if (b_ptr->skilltype != skilltype)
-            continue;
-
-        /* For special abilities, only show granted abilities */
-        if (skilltype == S_SPC && !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-        {
-            continue;
-        }
-
-        /* Hide deprecated WIL_OATH ability from menu (now handled at birth) */
-        if (skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH)
-            continue;
-
-        // Safety check for ability number bounds
-        if (b_ptr->abilitynum >= ABILITIES_MAX) {
-            continue;
-        }
-
-        // Safety check for array bounds
-        if (visible_count >= ABILITIES_MAX) {
+        case OATH_MERCY:
+            oath_special = SPC_OATH_MERCY;
+            break;
+        case OATH_SILENCE:
+            oath_special = SPC_OATH_SILENCE;
+            break;
+        case OATH_IRON:
+            oath_special = SPC_OATH_IRON;
+            break;
+        case OATH_SMITH:
+            oath_special = SPC_OATH_SMITH;
+            break;
+        case OATH_VALOROUS:
+            oath_special = SPC_OATH_VALOROUS;
+            break;
+        case OATH_LIGHT:
+            oath_special = SPC_OATH_LIGHT;
             break;
         }
 
-        /* Determine the appropriate colour. */
-        if (p_ptr->have_ability[skilltype][b_ptr->abilitynum])
+        if (oath_special >= 0)
         {
-            if (p_ptr->innate_ability[skilltype][b_ptr->abilitynum])
-            {
-                if (p_ptr->active_ability[skilltype][b_ptr->abilitynum])
-                    attr = TERM_WHITE;
-                else
-                    attr = TERM_RED;
-            }
-            else
-            {
-                if (p_ptr->active_ability[skilltype][b_ptr->abilitynum])
-                    attr = TERM_L_GREEN;
-                else
-                    attr = TERM_RED;
-            }
-        }
-        else if (prereqs(skilltype, b_ptr->abilitynum))
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
+            p_ptr->have_ability[S_SPC][oath_special] = true;
+            p_ptr->innate_ability[S_SPC][oath_special] = true;
+            p_ptr->active_ability[S_SPC][oath_special] = true;
+            ability_log_record_gain(S_SPC, oath_special);
         }
 
-        visible_entries[visible_count] = b_ptr;
-        visible_attrs[visible_count] = attr;
-
-        // Map this visible ability to its position
-        visible_abilities[visible_count] = b_ptr->abilitynum;
-        
-        // Track first visible ability for highlight adjustment
-        if (first_visible_ability == -1) {
-            first_visible_ability = b_ptr->abilitynum;
-        }
-
-        visible_count++;
+        do_cmd_note(format("(%s: %s)",
+                        b_name
+                            + (&b_info[ability_index(skilltype, abilitynum)])
+                                  ->name,
+                        oath_name_short(oathchoice)),
+            p_ptr->depth);
     }
 
-    /* Safety check: if no abilities are visible, show message and exit */
-    if (visible_count == 0) {
-        Term_putstr(ability_col, 4, -1, TERM_L_DARK, "No abilities available for this skill.");
-        Term_fresh();
-        inkey(); /* Wait for keypress */
-        return (ABILITIES_MAX + 1); /* Return to skills menu */
-    }
-
-    for (i = 0; i < visible_count; i++)
-    {
-        if (visible_abilities[i] == *highlight - 1)
-        {
-            highlight_display_index = i;
-            break;
-        }
-    }
-
-    if (highlight_display_index < 0)
-        highlight_display_index = 0;
-
-    if (list_rows < 1)
-        list_rows = 1;
-
-    if (highlight_display_index < top_visible)
-        top_visible = highlight_display_index;
-    if (highlight_display_index >= top_visible + list_rows)
-        top_visible = highlight_display_index - list_rows + 1;
-    if (top_visible < 0)
-        top_visible = 0;
-    if (top_visible > visible_count - list_rows)
-        top_visible = visible_count - list_rows;
-    if (top_visible < 0)
-        top_visible = 0;
-
-    if (visible_count > list_rows)
-    {
-        strnfmt(buf, sizeof(buf), "[%d-%d/%d]", top_visible + 1,
-            MIN(top_visible + list_rows, visible_count), visible_count);
-        Term_putstr(ability_col, 2, -1, TERM_SLATE, buf);
-    }
-
-    for (i = top_visible; i < visible_count && i < top_visible + list_rows; i++)
-    {
-        int display_row = list_first_row + (i - top_visible);
-
-        b_ptr = visible_entries[i];
-        attr = visible_attrs[i];
-
-        if ((skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
-            && (p_ptr->bane_type > 0))
-        {
-            strnfmt(buf, 80, "%c) %s-%s", (char)'a' + i,
-                bane_name[p_ptr->bane_type], (b_name + b_ptr->name));
-        }
-        else if ((skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
-            && (p_ptr->oath_type > 0))
-        {
-            strnfmt(buf, 80, "%c) %s: %s", (char)'a' + i,
-                (b_name + b_ptr->name), oath_name_short(p_ptr->oath_type));
-        }
-        else
-        {
-            strnfmt(buf, 80, "%c) %s", (char)'a' + i, (b_name + b_ptr->name));
-        }
-
-        Term_putstr(ability_col, display_row, -1, attr, buf);
-
-        if (*highlight == b_ptr->abilitynum + 1)
-        {
-            /* Highlight the label with bright blue */
-            strnfmt(buf, 80, "%c)", (char)'a' + i);
-            Term_putstr(ability_col, display_row, -1, TERM_L_BLUE, buf);
-
-            /* Print the description of the highlighted ability. */
-            /* (ability_type::text is an offset, so it's always non-negative) */
-            /* Determine compact mode from terminal height; use single newline between
-             * sections when space is tight, double newline when there is room. */
-            int term_hgt_ab = Term ? Term->hgt : 24;
-            bool compact_mode = (term_hgt_ab < 28);
-            const char *desc_sep = compact_mode ? "\n" : "\n\n";
-            int post_desc_row = 3; /* updated after description renders */
-            {
-                /* Check if this is a broken oath ability and use Q: text instead */
-                char* description_text = NULL;
-                bool use_death_message = false;
-                
-                if (skilltype == S_SPC && 
-                    (b_ptr->abilitynum == SPC_OATH_MERCY || 
-                     b_ptr->abilitynum == SPC_OATH_SILENCE || 
-                     b_ptr->abilitynum == SPC_OATH_IRON ||
-                     b_ptr->abilitynum == SPC_OATH_SMITH ||
-                     b_ptr->abilitynum == SPC_OATH_VALOROUS ||
-                     b_ptr->abilitynum == SPC_OATH_LIGHT))
-                {
-                    /* Check if this oath is broken */
-                    int oath_id = 0;
-                    if (b_ptr->abilitynum == SPC_OATH_MERCY) oath_id = OATH_MERCY;
-                    else if (b_ptr->abilitynum == SPC_OATH_SILENCE) oath_id = OATH_SILENCE;
-                    else if (b_ptr->abilitynum == SPC_OATH_IRON) oath_id = OATH_IRON;
-                    else if (b_ptr->abilitynum == SPC_OATH_SMITH) oath_id = OATH_SMITH;
-                    else if (b_ptr->abilitynum == SPC_OATH_VALOROUS) oath_id = OATH_VALOROUS;
-                    else if (b_ptr->abilitynum == SPC_OATH_LIGHT) oath_id = OATH_LIGHT;
-                    
-                    if (oath_id > 0 && oath_invalid(oath_id))
-                    {
-                        description_text = oath_death_message(oath_id);
-                        use_death_message = true;
-                    }
-                }
-                
-                /* Clear description area first */
-                wipe_screen_from(desc_col);
-                
-                /* Display ability name in description area with appropriate color */
-                Term_putstr(desc_col, 1, -1, TERM_YELLOW, b_name + b_ptr->name);
-                
-                /* Wrap to the active terminal width so compact layouts do not overflow. */
-                text_out_wrap = ability_menu_description_wrap(desc_col);
-                text_out_indent = desc_col;
-
-                /* Description starts at row 3 for more space */
-                Term_gotoxy(text_out_indent, 3);
-                
-                if (use_death_message && description_text && description_text[0])
-                {
-                    /* Display Q: text in red for broken oaths */
-                    text_out_to_screen(TERM_RED, description_text);
-                }
-                else
-                {
-                    /* Display ability description based on ability_desc_mode */
-                    const char *desc_text = (b_ptr->text) ? b_text + b_ptr->text : NULL;
-                    const char *effect_text = (b_ptr->effect) ? b_text + b_ptr->effect : NULL;
-                    bool has_desc = desc_text && desc_text[0];
-                    bool has_effect = effect_text && effect_text[0];
-
-                    switch (op_ptr->ability_desc_mode)
-                    {
-                    case 1: /* Effect first, then description */
-                        if (has_effect) text_out_to_screen(TERM_L_WHITE, effect_text);
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_effect) text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
-                                b_ptr, desc_col);
-                        }
-                        if (has_desc) {
-                            if (has_effect
-                                || !p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            text_out_to_screen(TERM_SLATE, desc_text);
-                        }
-                        break;
-                    case 2: /* Effect only */
-                        if (has_effect) text_out_to_screen(TERM_L_WHITE, effect_text);
-                        else if (has_desc) text_out_to_screen(TERM_L_WHITE, desc_text);
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_effect || has_desc)
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
-                                b_ptr, desc_col);
-                        }
-                        break;
-                    default: /* 0: Description first, then effect */
-                        if (has_desc) text_out_to_screen(TERM_SLATE, desc_text);
-                        if (has_effect) {
-                            if (has_desc) text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            text_out_to_screen(TERM_L_WHITE, effect_text);
-                        }
-                        if (!p_ptr->have_ability[skilltype][b_ptr->abilitynum])
-                        {
-                            if (has_desc || has_effect)
-                                text_out_to_screen(TERM_L_WHITE, desc_sep);
-                            ability_menu_render_prerequisites_block(skilltype,
-                                b_ptr, desc_col);
-                        }
-                        break;
-                    }
-
-                    /* For Nienna's Gift of Mercy, show current bonus */
-                    if (skilltype == S_SPC && b_ptr->abilitynum == SPC_NIENA_MERCY && 
-                        p_ptr->have_ability[S_SPC][SPC_NIENA_MERCY])
-                    {
-                        /* Calculate current stealth bonus (same logic as in xtra1.c) */
-                        int total_monsters_seen = 0;
-                        int total_monsters_killed = 0;
-                        
-                        /* Sum up global monster tracking (excluding uniques) */
-                        for (int i = 1; i < z_info->r_max; i++)
-                        {
-                            monster_lore *l_ptr = &l_list[i];
-                            monster_race *r_ptr = &r_info[i];
-                            
-                            if (r_ptr->flags1 & RF1_UNIQUE) continue;
-                            
-                            total_monsters_seen += l_ptr->psights;
-                            total_monsters_killed += l_ptr->pkills;
-                        }
-                        
-                        if (total_monsters_seen > 0)
-                        {
-                            /* Calculate stealth bonus: 10*(seen-killed)/seen, rounded up */
-                            int mercy_ratio_times_10 = (10 * (total_monsters_seen - total_monsters_killed));
-                            int stealth_bonus = (mercy_ratio_times_10 + total_monsters_seen - 1) / total_monsters_seen;
-                            
-                            char bonus_text[100];
-                            strnfmt(bonus_text, sizeof(bonus_text), 
-                                   "\n\nCurrent bonus: +%d stealth (%d seen, %d spared)",
-                                   stealth_bonus, total_monsters_seen, 
-                                   total_monsters_seen - total_monsters_killed);
-                            text_out_to_screen(TERM_L_GREEN, bonus_text);
-                        }
-                        else
-                        {
-                            text_out_to_screen(TERM_SLATE, "\n\nCurrent bonus: +0 stealth (no monsters encountered yet)");
-                        }
-                    }
-                }
-
-                /* Capture the row where description text ended for dynamic placement */
-                {
-                    int pdx;
-                    Term_locate(&pdx, &post_desc_row);
-                    if (pdx > text_out_indent) post_desc_row++;
-                }
-
-                /* Reset text_out() vars */
-                text_out_wrap = 0;
-                text_out_indent = 0;
-            }
-
-            // if you have the ability and it is Bane...
-            if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_PER) && (b_ptr->abilitynum == PER_BANE)
-                && (p_ptr->bane_type > 0))
-            {
-                int killed = bane_type_killed(p_ptr->bane_type);
-                int current_bonus = bane_bonus_for_type(p_ptr->bane_type);
-                int next_threshold = 2;
-                
-                // Calculate next threshold using same formula as bane
-                int threshold = 2;
-                while (threshold <= killed)
-                {
-                    threshold *= 2;
-                }
-                next_threshold = threshold;  // This is the next power of 2
-                
-                /* Place bane stats dynamically after description text */
-                int bane_row = post_desc_row + (compact_mode ? 1 : 2);
-                Term_putstr(desc_col, bane_row, -1, TERM_WHITE,
-                    format("%s-Bane:", bane_name[p_ptr->bane_type]));
-                Term_putstr(desc_col, bane_row + 2, -1, TERM_WHITE,
-                    format("  %d slain, giving a %+d bonus", killed, current_bonus));
-                    
-                if (current_bonus == 0 && killed < 2) {
-                    Term_putstr(desc_col, bane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d slain)", next_threshold));
-                } else if (next_threshold <= 64) {  // Don't show if threshold is too high
-                    Term_putstr(desc_col, bane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d slain)", next_threshold));
-                }
-            }
-            else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_WIL) && (b_ptr->abilitynum == WIL_OATH)
-                && (p_ptr->oath_type > 0))
-            {
-                /* Place oath info dynamically after description text */
-                int oath_row = post_desc_row + (compact_mode ? 1 : 2);
-                Term_putstr(desc_col, oath_row, -1, TERM_WHITE, "Oath:");
-                Term_putstr(desc_col + 6, oath_row, -1, TERM_L_BLUE,
-                    oath_name_short(p_ptr->oath_type));
-
-                /* Wrap to the active terminal width here too. */
-                text_out_wrap = ability_menu_description_wrap(desc_col);
-                text_out_indent = desc_col;
-
-                /* History */
-                Term_gotoxy(text_out_indent, oath_row + 1);
-                strnfmt(buf, 80, "You have sworn not to %s.",
-                    oath_desc2_short(p_ptr->oath_type));
-                text_out_to_screen(TERM_L_WHITE, buf);
-
-                /* Reset text_out() vars */
-                text_out_wrap = 0;
-                text_out_indent = 0;
-
-                if (oath_invalid(p_ptr->oath_type))
-                    Term_putstr(desc_col, oath_row + 4, -1, TERM_RED,
-                        "You are an oathbreaker.");
-                else
-                    Term_putstr(desc_col, oath_row + 4, -1, TERM_WHITE,
-                        format("Bonus: %s.", oath_reward_short(p_ptr->oath_type)));
-            }
-            // if you have the unique bane special ability
-            else if (p_ptr->have_ability[skilltype][b_ptr->abilitynum]
-                && (skilltype == S_SPC) && (b_ptr->abilitynum == SPC_UNIQUE_BANE))
-            {
-                int uniques_killed = unique_bane_type_killed();
-                int current_bonus = 0;
-                int next_threshold = 2;
-                
-                // Calculate current bonus using same formula as bane
-                int threshold = 2;
-                while (threshold <= uniques_killed)
-                {
-                    threshold *= 2;
-                    current_bonus++;
-                }
-                
-                // Calculate next threshold
-                if (current_bonus == 0) {
-                    next_threshold = 2;
-                } else {
-                    next_threshold = threshold;  // This is the next power of 2
-                }
-                
-                /* Place unique bane stats dynamically after description text */
-                int ubane_row = post_desc_row + (compact_mode ? 1 : 2);
-                Term_putstr(desc_col, ubane_row, -1, TERM_WHITE, "Unique Bane:");
-                Term_putstr(desc_col, ubane_row + 2, -1, TERM_WHITE,
-                    format("  %d uniques slain, giving a %+d bonus", 
-                           uniques_killed, current_bonus));
-                           
-                if (current_bonus == 0 && uniques_killed < 2) {
-                    Term_putstr(desc_col, ubane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d uniques)", next_threshold));
-                } else if (next_threshold <= 64) {  // Don't show if threshold is too high
-                    Term_putstr(desc_col, ubane_row + 3, -1, TERM_SLATE,
-                        format("  (next bonus at %d uniques)", next_threshold));
-                }
-            }
-        }
-
-    }
-    
-    /* Flush the prompt */
-    Term_fresh();
-
-    /* Place cursor at current choice - single column layout */
-    if (highlight_display_index >= 0)
-    {
-        int cursor_row = list_first_row + (highlight_display_index - top_visible);
-        if (cursor_row >= list_first_row && cursor_row < list_first_row + list_rows)
-            Term_gotoxy(ability_col, cursor_row);
-    }
-
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
-
-    if ((ch >= 'a') && (ch <= (char)'a' + visible_count - 1))
-    {
-        int selected_index = (int)ch - 'a';
-        /* Bounds check for safety */
-        if (selected_index >= 0 && selected_index < visible_count) {
-            *highlight = visible_abilities[selected_index] + 1;
-            return abilities_menu2(skilltype, highlight);
-        }
-    }
-
-    if ((ch >= 'A') && (ch <= (char)'A' + visible_count - 1))
-    {
-        int selected_index = (int)ch - 'A';
-        /* Bounds check for safety */
-        if (selected_index >= 0 && selected_index < visible_count) {
-            *highlight = visible_abilities[selected_index] + 1;
-            return abilities_menu2(skilltype, highlight);
-        }
-    }
-
-    if ((ch == ESCAPE) || (ch == 'q') || (ch == '4'))
-    {
-        return (ABILITIES_MAX + 1);
-    }
-
-    if (ch == '\t')
-    {
-        return (ABILITIES_MAX + 2);
-    }
-
-    if (ch == 'i')
-    {
-        return (ABILITIES_MAX + 3);
-    }
-
-    /* Choose current  */
-    if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
-    {
-        return (*highlight);
-    }
-
-    /* Prev item */
-    if (ch == '8')
-    {
-        /* Only navigate if there are visible abilities */
-        if (visible_count > 0) {
-            /* Find current visible index */
-            int current_visible_index = -1;
-            for (int i = 0; i < visible_count; i++) {
-                if (visible_abilities[i] + 1 == *highlight) {
-                    current_visible_index = i;
-                    break;
-                }
-            }
-            
-            /* Move to previous visible ability */
-            if (current_visible_index > 0) {
-                *highlight = visible_abilities[current_visible_index - 1] + 1;
-            } else if (current_visible_index == 0) {
-                *highlight = visible_abilities[visible_count - 1] + 1;
-            } else {
-                /* Fallback if not found - go to first visible */
-                *highlight = visible_abilities[0] + 1;
-            }
-        }
-    }
-
-    /* Next item */
-    if (ch == '2')
-    {
-        /* Only navigate if there are visible abilities */
-        if (visible_count > 0) {
-            /* Find current visible index */
-            int current_visible_index = -1;
-            for (int i = 0; i < visible_count; i++) {
-                if (visible_abilities[i] + 1 == *highlight) {
-                    current_visible_index = i;
-                    break;
-                }
-            }
-            
-            /* Move to next visible ability */
-            if (current_visible_index >= 0 && current_visible_index < visible_count - 1) {
-                *highlight = visible_abilities[current_visible_index + 1] + 1;
-            } else if (current_visible_index == visible_count - 1) {
-                *highlight = visible_abilities[0] + 1;
-            } else {
-                /* Fallback if not found - go to first visible */
-                *highlight = visible_abilities[0] + 1;
-            }
-        }
-    }
-
-    return (0);
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
+    p_ptr->update |= (PU_BONUS | PU_MANA);
+    handle_stuff();
 }
 
-/*
- * Hack -- ability screen
- */
-void do_cmd_ability_screen(void)
+static void ability_semantic_toggle_existing_ability(int skilltype,
+    int abilitynum, ability_semantic_state* state)
 {
-    int skilltype = -1;
-    int abilitynum = -1;
-    int banechoice = -1;
-    int oathchoice = -1;
+    bool changed = false;
 
-    int highlight1 = 1;
-    int highlight2 = 1;
-    int highlight3 = 1;
-
-    bool return_to_game = false;
-    bool return_to_skills = false;
-    bool return_to_abilities = false;
-
-    bool skip_purchase = false;
-
-    log_trace("ABILITY_SCREEN: Entering ability screen");
-
-    /* Save screen */
-    screen_save();
-
-    /* Clear screen */
-    Term_clear();
-
-    log_trace("ABILITY_SCREEN: Starting main ability loop");
-
-    /* Process Events until "Return to Game" is selected */
-    while (!return_to_game)
+    if (skilltype == S_SPC
+        && (abilitynum == SPC_OATH_MERCY
+            || abilitynum == SPC_OATH_SILENCE
+            || abilitynum == SPC_OATH_IRON
+            || abilitynum == SPC_OATH_SMITH
+            || abilitynum == SPC_OATH_VALOROUS
+            || abilitynum == SPC_OATH_LIGHT))
     {
-        int menu1_choice;
+        int oath_id = ability_semantic_oath_id_for_ability(abilitynum);
 
-        log_trace("ABILITY_SCREEN: Calling abilities_menu1 with highlight1=%d", highlight1);
-        menu1_choice = abilities_menu1(&highlight1);
-
-        if (menu1_choice == (S_MAX + 2))
+        if (p_ptr->active_ability[skilltype][abilitynum])
         {
-            log_trace("ABILITY_SCREEN: in-menu skill increase requested (menu1)");
-            (void)gain_skills();
+            ability_semantic_set_status(state, TERM_WHITE,
+                "Sacred oaths cannot be deactivated once sworn.");
+        }
+        else if (oath_id > 0 && oath_invalid(oath_id))
+        {
+            ability_semantic_set_status(state, TERM_RED,
+                "Broken oaths cannot be reactivated. They are lost forever.");
+        }
+        else
+        {
+            p_ptr->active_ability[skilltype][abilitynum] = true;
+            ability_semantic_set_status(state, TERM_WHITE,
+                "Oath ability reactivated.");
+            changed = true;
+        }
+    }
+    else if (p_ptr->active_ability[skilltype][abilitynum])
+    {
+        p_ptr->active_ability[skilltype][abilitynum] = false;
+        ability_semantic_set_status(state, TERM_WHITE,
+            "Ability now switched off.");
+        changed = true;
+
+        if (skilltype == S_SNG && abilitynum == SNG_WOVEN_THEMES)
+            p_ptr->song2 = SNG_NOTHING;
+    }
+    else
+    {
+        p_ptr->active_ability[skilltype][abilitynum] = true;
+        ability_semantic_set_status(state, TERM_WHITE,
+            "Ability now switched on.");
+        changed = true;
+    }
+
+    if (changed)
+    {
+        p_ptr->redraw |= (PR_EXP | PR_BASIC);
+        p_ptr->update |= (PU_BONUS | PU_MANA);
+        handle_stuff();
+    }
+}
+
+static bool ability_semantic_activate_selected(int skilltype, int abilitynum,
+    ability_semantic_state* state)
+{
+    ability_type* b_ptr = &b_info[ability_index(skilltype, abilitynum)];
+
+    if (!p_ptr->have_ability[skilltype][abilitynum])
+    {
+        int banechoice = -1;
+        int oathchoice = -1;
+        int exp_cost;
+        bool has_skill_prereq;
+        bool has_ability_prereq;
+
+        if (skilltype == S_SPC)
+        {
+            ability_semantic_bell_status(state, TERM_WHITE,
+                "This special ability cannot be purchased.");
+            return false;
+        }
+
+        has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
+        has_ability_prereq = ability_prereqs_met(skilltype, abilitynum);
+
+        if (!has_skill_prereq || !has_ability_prereq)
+        {
+            ability_semantic_bell_status(state,
+                has_skill_prereq ? TERM_RED : TERM_L_DARK,
+                has_skill_prereq
+                    ? "Insufficient prerequisite abilities for ability!"
+                    : "Insufficient skill points for ability!");
+            return false;
+        }
+
+        exp_cost = ability_purchase_exp_cost(skilltype);
+        if (exp_cost > p_ptr->new_exp)
+        {
+            ability_semantic_bell_status(state, TERM_L_DARK,
+                "You do not have enough experience to acquire this ability.");
+            return false;
+        }
+
+        if (skilltype == S_PER && abilitynum == PER_BANE)
+        {
+            banechoice = ability_semantic_run_bane_menu(&state->bane_highlight);
+            if (banechoice == PLAYER_BANE_TYPES + 1)
+                return true;
+
+            if (bane_type_killed(banechoice) < 4)
+            {
+                ability_semantic_bell_status(state, TERM_L_DARK,
+                    "Insufficient kills to become a bane.");
+                return false;
+            }
+        }
+
+        if (skilltype == S_WIL && abilitynum == WIL_OATH)
+        {
+            oathchoice = ability_semantic_run_oath_menu(&state->oath_highlight);
+            if (oathchoice == OATH_TYPES + 1)
+                return true;
+
+            if (oath_invalid(oathchoice))
+            {
+                ability_semantic_bell_status(state, TERM_RED,
+                    "This oath was broken before it was made.");
+                return false;
+            }
+        }
+
+        if (skilltype == S_SMT && abilitynum == SMT_MASTERPIECE
+            && p_ptr->have_ability[S_SPC][SPC_AULE])
+        {
+            ability_semantic_bell_status(state, TERM_RED,
+                "Aule's Forge supersedes Masterpiece; you cannot purchase it.");
+            return false;
+        }
+
+        if (get_check("Are you sure you wish to gain this ability? "))
+        {
+            ability_semantic_grant_ability(skilltype, abilitynum, banechoice,
+                oathchoice, exp_cost);
+            ability_semantic_set_status(state, TERM_WHITE, "Ability gained.");
+        }
+        else
+        {
+            ability_semantic_set_status(state, TERM_SLATE,
+                "Ability gain canceled.");
+        }
+
+        return false;
+    }
+
+    ability_semantic_toggle_existing_ability(skilltype, abilitynum, state);
+    return false;
+}
+
+static void do_cmd_ability_screen_semantic(void)
+{
+    ability_semantic_state state;
+    ui_information_scene_scope scope;
+    bool done = false;
+
+    memset(&state, 0, sizeof(state));
+    state.focus = ABILITY_SEMANTIC_FOCUS_SKILLS;
+    state.bane_highlight = 1;
+    state.oath_highlight = 1;
+    ability_semantic_sync_state(&state);
+
+    if (!ui_information_scene_enter(&scope))
+    {
+        log_warn("ability screen: information-scene scope unavailable");
+        msg_print("Ability screen unavailable.");
+        return;
+    }
+
+    while (!done)
+    {
+        app_ui_scene scene;
+        ability_ui_entry entries[ABILITIES_MAX];
+        int current_skill;
+        int entry_count;
+        int ch;
+        bool exit_after_activate;
+
+        ability_semantic_sync_state(&state);
+        current_skill = ability_semantic_current_skill(&state);
+        entry_count = ability_semantic_collect_visible_abilities(current_skill,
+            entries);
+
+        if (!ability_semantic_build_scene(&scene, &state)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            log_warn("ability screen: semantic scene presentation failed");
+            msg_print("Ability screen unavailable.");
+            return;
+        }
+
+        ch = ui_information_scene_wait_key();
+        if (steamdeck_controls_active())
+        {
+            if (ch == steamdeck_back_key())
+                ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key())
+                ch = '\r';
+            else if (ch == steamdeck_alt_action_key())
+                ch = 'i';
+        }
+
+        if (ch == '\t')
+        {
+            done = true;
+            continue;
+        }
+
+        if (ch == 'i')
+        {
+            if (!ability_screen_pause_information_scene(&scope))
+                break;
+            gain_skills();
+            if (!ability_screen_resume_information_scene(&scope))
+                return;
             p_ptr->redraw |= (PR_EXP | PR_BASIC);
             p_ptr->update |= (PU_BONUS | PU_MANA);
             handle_stuff();
+            ability_semantic_set_status(&state, TERM_SLATE, "");
             continue;
         }
 
-        skilltype = menu1_choice - 1;
-
-        log_trace("ABILITY_SCREEN: abilities_menu1 returned skilltype=%d", skilltype);
-
-        // if a skill has been selected...
-        if ((skilltype >= 0) && (skilltype < S_MAX))
+        if (state.focus == ABILITY_SEMANTIC_FOCUS_SKILLS)
         {
-            log_trace("ABILITY_SCREEN: Valid skill selected (%d), entering abilities loop", skilltype);
-            
-            /* Reset highlight2 to 1 when entering a new skill category */
-            highlight2 = 1;
-            
-            while (!return_to_skills)
+            if ((ch == ESCAPE) || (ch == 'q') || (ch == 'Q'))
             {
-                int menu2_choice;
-
-                log_trace("ABILITY_SCREEN: Calling abilities_menu2 for skilltype=%d with highlight2=%d", skilltype, highlight2);
-                menu2_choice = abilities_menu2(skilltype, &highlight2);
-
-                if (menu2_choice == (ABILITIES_MAX + 3))
-                {
-                    log_trace("ABILITY_SCREEN: in-menu skill increase requested (menu2)");
-                    (void)gain_skills();
-                    p_ptr->redraw |= (PR_EXP | PR_BASIC);
-                    p_ptr->update |= (PU_BONUS | PU_MANA);
-                    handle_stuff();
-                    continue;
-                }
-
-                abilitynum = menu2_choice - 1;
-
-                log_trace("ABILITY_SCREEN: abilities_menu2 returned abilitynum=%d", abilitynum);
-
-                if ((abilitynum >= 0) && (abilitynum < ABILITIES_MAX))
-                {
-                    if (!p_ptr->have_ability[skilltype][abilitynum])
-                    {
-                        // Special abilities cannot be purchased
-                        if (skilltype == S_SPC) {
-                            bell("This special ability cannot be purchased.");
-                            continue;
-                        }
-                        ability_type* b_ptr = &b_info[ability_index(skilltype, abilitynum)];
-                        bool has_skill_prereq = (p_ptr->skill_base[skilltype] >= b_ptr->level);
-                        bool has_ability_prereq
-                            = ability_prereqs_met(skilltype, abilitynum);
-
-                        if (has_skill_prereq && has_ability_prereq)
-                        {
-                            int exp_cost = ability_purchase_exp_cost(skilltype);
-
-                            if (exp_cost > p_ptr->new_exp)
-                            {
-                                bell("You do not have enough experience to "
-                                     "acquire this "
-                                     "ability.");
-                            }
-                            else
-                            {
-                                // special menu for bane
-                                if ((skilltype == S_PER)
-                                    && (abilitynum == PER_BANE))
-                                {
-                                    while (!return_to_abilities)
-                                    {
-                                        skip_purchase = false;
-
-                                        banechoice = bane_menu(&highlight3);
-
-                                        if ((banechoice >= 1)
-                                            && (banechoice <= PLAYER_BANE_TYPES))
-                                        {
-                                            if (bane_type_killed(banechoice)
-                                                < 4)
-                                            {
-                                                return_to_abilities = false;
-                                                skip_purchase = true;
-                                                bell("Insufficient kills to "
-                                                     "become a bane.");
-                                            }
-                                            else
-                                            {
-                                                return_to_abilities = true;
-                                            }
-                                        }
-                                        else if (banechoice
-                                            == PLAYER_BANE_TYPES + 1)
-                                        {
-                                            return_to_abilities = true;
-                                            return_to_skills = true;
-                                            return_to_game = true;
-                                            skip_purchase = true;
-                                        }
-                                    }
-
-                                    return_to_abilities = false;
-                                }
-                                // special menu for Oath //XXX Oaths
-                                if ((skilltype == S_WIL)
-                                    && (abilitynum == WIL_OATH))
-                                {
-                                    while (!return_to_abilities)
-                                    {
-                                        skip_purchase = false;
-
-                                        oathchoice = oath_menu(&highlight3);
-
-                                        if ((oathchoice >= 1)
-                                            && (oathchoice <= OATH_TYPES))
-                                        {
-                                            if (oath_invalid(oathchoice))
-                                            {
-                                                return_to_abilities = false;
-                                                skip_purchase = true;
-                                                bell("This oath was broken "
-                                                     "before it was made.");
-                                            }
-                                            else
-                                            {
-                                                return_to_abilities = true;
-                                            }
-                                        }
-                                        else if (oathchoice == OATH_TYPES + 1)
-                                        {
-                                            return_to_abilities = true;
-                                            return_to_skills = true;
-                                            return_to_game = true;
-                                            skip_purchase = true;
-                                        }
-                                    }
-
-                                    return_to_abilities = false;
-                                }
-
-                                // Block purchasing Masterpiece if Aule's Forge already owned
-                                if (skilltype == S_SMT && abilitynum == SMT_MASTERPIECE && p_ptr->have_ability[S_SPC][SPC_AULE]) {
-                                    bell("Aule's Forge supersedes Masterpiece; you cannot purchase it.");
-                                    skip_purchase = true;
-                                }
-
-                                if (!skip_purchase)
-                                {
-                                    if (get_check("Are you sure you wish to "
-                                                  "gain this ability? "))
-                                    {
-                                        p_ptr->innate_ability[skilltype]
-                                                             [abilitynum]
-                                            = true;
-                                        p_ptr->have_ability[skilltype]
-                                                           [abilitynum]
-                                            = true;
-                                        p_ptr->active_ability[skilltype]
-                                                             [abilitynum]
-                                            = true;
-                                        ability_log_record_gain(skilltype, abilitynum);
-                                        Term_putstr(0, 0, -1, TERM_WHITE,
-                                            "Ability gained.");
-                                        p_ptr->new_exp -= exp_cost;
-
-                                        if (banechoice <= 0 && oathchoice <= 0)
-                                        {
-                                            // make a note in the notes file
-                                            do_cmd_note(
-                                                format("(%s)",
-                                                    b_name
-                                                        + (&b_info[ability_index(
-                                                               skilltype,
-                                                               abilitynum)])
-                                                              ->name),
-                                                p_ptr->depth);
-                                        }
-                                        else if (oathchoice <= 0)
-                                        {
-                                            // set the new bane type
-                                            p_ptr->bane_type = banechoice;
-
-                                            // and make a note in the notes file
-                                            do_cmd_note(
-                                                format("(%s-%s)",
-                                                    bane_name[banechoice],
-                                                    b_name
-                                                        + (&b_info[ability_index(
-                                                               skilltype,
-                                                               abilitynum)])
-                                                              ->name),
-                                                p_ptr->depth);
-                                        }
-                                        else
-                                        {
-                                            // set the new bane type
-                                            p_ptr->oath_type = oathchoice;
-                                            
-                                            /* Activate the matching oath ability */
-                                            int oath_special = -1;
-                                            switch (oathchoice) {
-                                                case OATH_MERCY: oath_special = SPC_OATH_MERCY; break;
-                                                case OATH_SILENCE: oath_special = SPC_OATH_SILENCE; break;
-                                                case OATH_IRON: oath_special = SPC_OATH_IRON; break;
-                                                case OATH_SMITH: oath_special = SPC_OATH_SMITH; break;
-                                                case OATH_VALOROUS: oath_special = SPC_OATH_VALOROUS; break;
-                                                case OATH_LIGHT: oath_special = SPC_OATH_LIGHT; break;
-                                            }
-                                            if (oath_special >= 0) {
-                                                p_ptr->have_ability[S_SPC][oath_special] = true;
-                                                p_ptr->innate_ability[S_SPC][oath_special] = true;
-                                                p_ptr->active_ability[S_SPC][oath_special] = true;
-                                                ability_log_record_gain(S_SPC, oath_special);
-                                            }
-
-                                            // and make a note in the notes file
-                                            do_cmd_note(
-                                                format("(%s: %s)",
-                                                    b_name
-                                                        + (&b_info[ability_index(
-                                                               skilltype,
-                                                               abilitynum)])
-                                                              ->name,
-                                                    oath_name_short(oathchoice)),
-                                                p_ptr->depth);
-                                        }
-
-                                        /* Set the redraw flag for everything */
-                                        p_ptr->redraw |= (PR_EXP | PR_BASIC);
-
-                                        /* Recalculate bonuses */
-                                        p_ptr->update |= (PU_BONUS);
-                                        p_ptr->update |= (PU_MANA);
-                                    }
-                                }
-                                skip_purchase = false;
-                                banechoice = -1;
-                                oathchoice = -1;
-                            }
-                        }
-                        else
-                        {
-                            if (!has_skill_prereq)
-                                bell("Insufficient skill points for ability!");
-                            else
-                                bell("Insufficient prerequisite abilities for ability!");
-                        }
-                    }
-
-                    // if you already have the ability...
-                    else
-                    {
-                        // Prevent oath special abilities from being deactivated or reactivated when broken
-                        if (skilltype == S_SPC && (abilitynum == SPC_OATH_MERCY || 
-                                                   abilitynum == SPC_OATH_SILENCE || 
-                                                   abilitynum == SPC_OATH_IRON ||
-                                                   abilitynum == SPC_OATH_SMITH ||
-                                                   abilitynum == SPC_OATH_VALOROUS ||
-                                                   abilitynum == SPC_OATH_LIGHT))
-                        {
-                            /* Check if oath is broken */
-                            bool oath_broken = false;
-                            if (abilitynum == SPC_OATH_MERCY && oath_invalid(OATH_MERCY)) oath_broken = true;
-                            if (abilitynum == SPC_OATH_SILENCE && oath_invalid(OATH_SILENCE)) oath_broken = true;
-                            if (abilitynum == SPC_OATH_IRON && oath_invalid(OATH_IRON)) oath_broken = true;
-                            if (abilitynum == SPC_OATH_SMITH && oath_invalid(OATH_SMITH)) oath_broken = true;
-                            if (abilitynum == SPC_OATH_VALOROUS && oath_invalid(OATH_VALOROUS)) oath_broken = true;
-                            if (abilitynum == SPC_OATH_LIGHT && oath_invalid(OATH_LIGHT)) oath_broken = true;
-                            
-                            if (p_ptr->active_ability[skilltype][abilitynum])
-                            {
-                                Term_putstr(0, 0, -1, TERM_WHITE,
-                                    "Sacred oaths cannot be deactivated once sworn.");
-                            }
-                            else if (oath_broken)
-                            {
-                                Term_putstr(0, 0, -1, TERM_RED,
-                                    "Broken oaths cannot be reactivated. They are lost forever.");
-                            }
-                            else
-                            {
-                                p_ptr->active_ability[skilltype][abilitynum] = true;
-                                Term_putstr(0, 0, -1, TERM_WHITE,
-                                    "Oath ability reactivated.");
-                            }
-                        }
-                        else
-                        {
-                            // toggle its activity for non-oath abilities
-                            if (p_ptr->active_ability[skilltype][abilitynum])
-                            {
-                                p_ptr->active_ability[skilltype][abilitynum]
-                                    = false;
-                                Term_putstr(0, 0, -1, TERM_WHITE,
-                                    "Ability now switched off.");
-
-                                // need to cancel second song in some cases
-                                if ((skilltype == S_SNG)
-                                    && (abilitynum == SNG_WOVEN_THEMES))
-                                {
-                                    p_ptr->song2 = SNG_NOTHING;
-                                }
-                            }
-                            else
-                            {
-                                p_ptr->active_ability[skilltype][abilitynum] = true;
-                                Term_putstr(0, 0, -1, TERM_WHITE,
-                                    "Ability now switched on. ");
-                            }
-                        }
-
-                        /* Set the redraw flag for everything */
-                        p_ptr->redraw |= (PR_EXP | PR_BASIC);
-
-                        /* Recalculate bonuses */
-                        p_ptr->update |= (PU_BONUS);
-                        p_ptr->update |= (PU_MANA);
-                    }
-                }
-                else if (abilitynum == ABILITIES_MAX)
-                {
-                    return_to_skills = true;
-                }
-                else if (abilitynum == ABILITIES_MAX + 1)
-                {
-                    return_to_skills = true;
-                    return_to_game = true;
-                }
+                done = true;
+                continue;
             }
 
-            // reset some things for the next time around
-            highlight2 = 1;
-            return_to_skills = false;
+            if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+            {
+                if (entry_count > 0)
+                {
+                    state.focus = ABILITY_SEMANTIC_FOCUS_ABILITIES;
+                }
+                else
+                {
+                    ability_semantic_bell_status(&state, TERM_L_DARK,
+                        "No abilities available for this skill.");
+                }
+                continue;
+            }
+
+            if ((ch >= 'a') && (ch < 'a' + state.skill_count))
+            {
+                state.current_skill_slot = (int)ch - 'a';
+                if (state.ability_highlight[
+                        state.skill_order[state.current_skill_slot]] > 0)
+                {
+                    state.focus = ABILITY_SEMANTIC_FOCUS_ABILITIES;
+                }
+                else
+                {
+                    ability_semantic_bell_status(&state, TERM_L_DARK,
+                        "No abilities available for this skill.");
+                }
+                continue;
+            }
+            if ((ch >= 'A') && (ch < 'A' + state.skill_count))
+            {
+                state.current_skill_slot = (int)ch - 'A';
+                if (state.ability_highlight[
+                        state.skill_order[state.current_skill_slot]] > 0)
+                {
+                    state.focus = ABILITY_SEMANTIC_FOCUS_ABILITIES;
+                }
+                else
+                {
+                    ability_semantic_bell_status(&state, TERM_L_DARK,
+                        "No abilities available for this skill.");
+                }
+                continue;
+            }
+
+            if (ch == '8'
+#ifdef ARROW_UP
+                || ch == ARROW_UP
+#endif
+            )
+            {
+                state.current_skill_slot =
+                    (state.current_skill_slot + state.skill_count - 1)
+                    % state.skill_count;
+                continue;
+            }
+            if (ch == '2'
+#ifdef ARROW_DOWN
+                || ch == ARROW_DOWN
+#endif
+            )
+            {
+                state.current_skill_slot =
+                    (state.current_skill_slot + 1) % state.skill_count;
+                continue;
+            }
+
+            ability_semantic_bell_status(&state, TERM_RED,
+                "Illegal command for ability screen!");
+            continue;
         }
-        else if (skilltype >= S_MAX)
+
+        if ((ch == ESCAPE) || (ch == 'q') || (ch == 'Q') || (ch == '4'))
         {
-            return_to_game = true;
+            state.focus = ABILITY_SEMANTIC_FOCUS_SKILLS;
+            continue;
         }
+
+        if (entry_count <= 0)
+        {
+            state.focus = ABILITY_SEMANTIC_FOCUS_SKILLS;
+            continue;
+        }
+
+        if ((ch >= 'a') && (ch < 'a' + entry_count))
+        {
+            state.ability_highlight[current_skill] =
+                entries[(int)ch - 'a'].abilitynum + 1;
+            continue;
+        }
+        if ((ch >= 'A') && (ch < 'A' + entry_count))
+        {
+            state.ability_highlight[current_skill] =
+                entries[(int)ch - 'A'].abilitynum + 1;
+            continue;
+        }
+
+        if (ch == '8'
+#ifdef ARROW_UP
+            || ch == ARROW_UP
+#endif
+        )
+        {
+            int selected = ability_semantic_find_entry_index(entries, entry_count,
+                state.ability_highlight[current_skill] - 1);
+
+            if (selected < 0)
+                selected = 0;
+            selected = (selected + entry_count - 1) % entry_count;
+            state.ability_highlight[current_skill] =
+                entries[selected].abilitynum + 1;
+            continue;
+        }
+
+        if (ch == '2'
+#ifdef ARROW_DOWN
+            || ch == ARROW_DOWN
+#endif
+        )
+        {
+            int selected = ability_semantic_find_entry_index(entries, entry_count,
+                state.ability_highlight[current_skill] - 1);
+
+            if (selected < 0)
+                selected = 0;
+            selected = (selected + 1) % entry_count;
+            state.ability_highlight[current_skill] =
+                entries[selected].abilitynum + 1;
+            continue;
+        }
+
+        if ((ch == '\r') || (ch == '\n') || (ch == ' ') || (ch == '6'))
+        {
+            int selected = ability_semantic_find_entry_index(entries, entry_count,
+                state.ability_highlight[current_skill] - 1);
+
+            if (selected < 0)
+                selected = 0;
+            exit_after_activate = ability_semantic_activate_selected(
+                current_skill, entries[selected].abilitynum, &state);
+            if (exit_after_activate)
+                done = true;
+            continue;
+        }
+
+        ability_semantic_bell_status(&state, TERM_RED,
+            "Illegal command for ability screen!");
     }
 
-    /* Flush messages */
-    // message_flush();
-
-    /* Load screen */
-    screen_load();
+    ui_information_scene_leave(&scope);
+    p_ptr->redraw |= (PR_EXP | PR_BASIC);
     handle_stuff();
     inven_enforce_current_pack_limits();
+}
+
+void do_cmd_ability_screen(void)
+{
+    if (!ui_information_scene_supported())
+    {
+        log_warn("ability screen: snapshot renderer required; legacy renderer removed");
+        msg_print("Ability screen requires the snapshot UI renderer.");
+        return;
+    }
+
+    do_cmd_ability_screen_semantic();
 }

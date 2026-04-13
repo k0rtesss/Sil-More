@@ -893,6 +893,7 @@ static bool main_menu_action_opens_scene(int actiontype)
         || actiontype == MAIN_MENU_LOG
         || actiontype == MAIN_MENU_COMBAT_HISTORY
         || actiontype == MAIN_MENU_HINT_MESSAGES
+        || actiontype == MAIN_MENU_STORY
         || actiontype == MAIN_MENU_OPTIONS
         || actiontype == MAIN_MENU_HELP
         || actiontype == MAIN_MENU_ABOUT;
@@ -1313,11 +1314,7 @@ void do_cmd_main_menu(void)
     }
     case 10: // The story so far (y)
     {
-        /* Save screen before showing story */
-        screen_save();
         print_story(15, 1);
-        /* Load screen after story */
-        screen_load();
         break;
     }
     case 11: // Options and misc (o)
@@ -2035,25 +2032,6 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
  *
  * Attempt to only hilite the matching portions of the string.
  */
-static bool message_recall_information_scene_pause(
-    ui_information_scene_scope* scope)
-{
-    if (!scope)
-        return false;
-
-    ui_information_scene_leave(scope);
-    return true;
-}
-
-static bool message_recall_information_scene_resume(
-    ui_information_scene_scope* scope)
-{
-    if (!scope)
-        return false;
-
-    return ui_information_scene_enter(scope);
-}
-
 static bool do_cmd_messages_information_scene(void)
 {
     ui_information_scene_scope scope;
@@ -2202,18 +2180,8 @@ static bool do_cmd_messages_information_scene(void)
 
         if (ch == '=')
         {
-            if (!message_recall_information_scene_pause(&scope))
-                break;
-
             if (!term_get_string("Show: ", shower, sizeof(shower)))
-            {
-                if (!message_recall_information_scene_resume(&scope))
-                    return false;
                 continue;
-            }
-
-            if (!message_recall_information_scene_resume(&scope))
-                return false;
 
             continue;
         }
@@ -2221,9 +2189,6 @@ static bool do_cmd_messages_information_scene(void)
         if (ch == '/')
         {
             s16b z;
-
-            if (!message_recall_information_scene_pause(&scope))
-                break;
 
             if (term_get_string("Find: ", finder, sizeof(finder)))
             {
@@ -2240,9 +2205,6 @@ static bool do_cmd_messages_information_scene(void)
                     }
                 }
             }
-
-            if (!message_recall_information_scene_resume(&scope))
-                return false;
 
             continue;
         }

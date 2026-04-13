@@ -15,8 +15,6 @@
 #include "externs.h"
 #include "log/log.h"
 
-static int smith_ui_last_desc_row = -1;
-
 static bool smith_ui_snapshot_active(void);
 static bool smith_ui_base_item_snapshot_menu(void);
 static void smith_ui_numbers_snapshot_menu(void);
@@ -42,143 +40,6 @@ static char smith_ui_inkey_with_wait_reason(void)
     app_session_pop_wait_scope(session, &scope);
     return ch;
 }
-
-static int smith_ui_term_wid(void)
-{
-    return (Term && (Term->wid > 0)) ? Term->wid : 80;
-}
-
-static int smith_ui_term_hgt(void)
-{
-    return (Term && (Term->hgt > 0)) ? Term->hgt : 24;
-}
-
-static bool smith_ui_compact_width(void)
-{
-    return (smith_ui_term_wid() < 72);
-}
-
-static bool smith_ui_compact_height(void)
-{
-    return (smith_ui_term_hgt() <= 18);
-}
-
-static int smith_ui_secondary_col(void)
-{
-    return smith_ui_compact_width() ? COL_SMT2 : 36;
-}
-
-static int smith_ui_cost_col(void)
-{
-    int wid = smith_ui_term_wid();
-    int col = wid - (smith_ui_compact_width() ? 15 : 18);
-    int min_col = smith_ui_secondary_col() + 14;
-
-    if (col < min_col)
-        col = min_col;
-    if (col < 32)
-        col = 32;
-    if (col > wid - 1)
-        col = wid - 1;
-
-    return col;
-}
-
-static int smith_ui_cost_title_row(void)
-{
-    return smith_ui_compact_height() ? 6 : 8;
-}
-
-static int smith_ui_cost_item_row(int index0)
-{
-    return smith_ui_cost_title_row() + 2 + index0;
-}
-
-static int smith_ui_desc_col(void)
-{
-    return COL_SMT1;
-}
-
-static bool smith_ui_show_lore(void)
-{
-    return (smith_ui_term_hgt() > 18);
-}
-
-static int smith_ui_preferred_desc_lines(void)
-{
-    int hgt = smith_ui_term_hgt();
-
-    if (hgt <= 18)
-        return 2;
-    if (hgt <= 20)
-        return 3;
-    if (hgt <= 22)
-        return 4;
-
-    return 5;
-}
-
-static void smith_ui_reset_description_state(void)
-{
-    smith_ui_last_desc_row = -1;
-}
-
-static void smith_ui_clear_from_row(int row)
-{
-    int wid = smith_ui_term_wid();
-    int hgt = smith_ui_term_hgt();
-
-    if (row < 0)
-        row = 0;
-    if (row >= hgt)
-        return;
-
-    for (int y = row; y < hgt; y++)
-        Term_erase(0, y, wid);
-}
-
-static int smith_ui_used_bottom_row(void)
-{
-    if (!Term || !Term->scr)
-        return 0;
-
-    for (int y = smith_ui_term_hgt() - 1; y >= 0; y--)
-    {
-        for (int x = 0; x < smith_ui_term_wid(); x++)
-        {
-            if ((Term->scr->c[y][x] != ' ')
-                || (Term->scr->a[y][x] != Term->attr_blank)
-                || (Term->scr->story[y][x] != 0))
-            {
-                return y;
-            }
-        }
-    }
-
-    return 0;
-}
-
-static int smith_ui_description_row(void)
-{
-    int hgt = smith_ui_term_hgt();
-    int row = MAX(
-        smith_ui_used_bottom_row() + 1, hgt - smith_ui_preferred_desc_lines());
-    int min_lines = smith_ui_show_lore() ? 2 : 1;
-
-    if ((row >= hgt) || ((hgt - row) < min_lines))
-        return -1;
-
-    return row;
-}
-
-static void smith_ui_put_cost_line(int index0, byte attr, cptr text)
-{
-    Term_putstr(smith_ui_cost_col() + 2, smith_ui_cost_item_row(index0), -1,
-        attr, text);
-}
-
-#define COL_SMT3 (smith_ui_secondary_col())
-#define COL_SMT4 (smith_ui_cost_col())
 
 /*
  * A list of tvals and their textual names
@@ -912,387 +773,6 @@ int wgt_min(void)
     return (weight);
 }
 
-/*
- * Moves the light blue highlighted letter.
- */
-void move_displayed_highlight(
-    int old_highlight, byte old_attr, int new_highlight, int col)
-{
-    char buf[80];
-
-    // remove highlight from the old label
-    strnfmt(buf, 80, "%c)", (char)'a' + old_highlight - 1);
-    Term_putstr(col, old_highlight + 1, -1, old_attr, buf);
-
-    // highlight the new label
-    strnfmt(buf, 80, "%c)", (char)'a' + new_highlight - 1);
-    Term_putstr(col, new_highlight + 1, -1, TERM_L_BLUE, buf);
-}
-
-void wipe_object_description(void)
-{
-    if (smith_ui_last_desc_row >= 0)
-        smith_ui_clear_from_row(smith_ui_last_desc_row);
-
-    smith_ui_reset_description_state();
-}
-
-/*
- * Displays the object's name and description at the bottom of the screen.
- */
-void prt_object_description(void)
-{
-    char o_desc[80];
-    char buf[80];
-    int display_flag;
-    int desc_row;
-    int desc_col;
-    int desc_width;
-
-    wipe_object_description();
-
-    // abort if there is no object to display
-    if (smith_o_ptr->tval == 0)
-        return;
-
-    desc_row = smith_ui_description_row();
-    if (desc_row < 0)
-        return;
-
-    smith_ui_last_desc_row = desc_row;
-    smith_ui_clear_from_row(desc_row);
-
-    desc_col = smith_ui_desc_col();
-    desc_width = smith_ui_term_wid() - desc_col;
-
-    if (smith_o_ptr->number > 1)
-        display_flag = true;
-    else
-        display_flag = false;
-
-    object_desc(o_desc, sizeof(o_desc), smith_o_ptr, display_flag, 2);
-
-    SDL_strlcat(o_desc,
-        format("   %d.%d lb", smith_o_ptr->weight * smith_o_ptr->number / 10,
-            (smith_o_ptr->weight * smith_o_ptr->number) % 10),
-        sizeof(o_desc));
-
-    if (p_ptr->smithing_leftover)
-    {
-        strnfmt(buf, sizeof(buf), "In progress: %d turns left",
-            p_ptr->smithing_leftover);
-        Term_putstr(desc_col, desc_row, desc_width, TERM_L_BLUE, buf);
-        desc_row++;
-        if (desc_row >= smith_ui_term_hgt())
-            return;
-    }
-
-    Term_putstr(desc_col, desc_row, desc_width, TERM_L_WHITE, o_desc);
-    desc_row++;
-    if (desc_row >= smith_ui_term_hgt())
-        return;
-
-    Term_gotoxy(desc_col, desc_row);
-
-    /* Set hooks for character dump */
-    object_info_out_flags = object_flags;
-
-    /* Set the indent/wrap */
-    text_out_indent = desc_col;
-    text_out_wrap = smith_ui_term_wid() - 1;
-
-    text_out_hook = text_out_to_screen;
-
-    if (smith_ui_show_lore())
-    {
-        text_out_c(TERM_WHITE, k_text + k_info[smith_o_ptr->k_idx].text);
-
-        if ((k_text + k_info[smith_o_ptr->k_idx].text)[0] != '\0')
-            text_out(" ");
-    }
-
-    /* Dump only the mechanical info on short screens. */
-    if (object_info_out(smith_o_ptr) && smith_ui_show_lore())
-        text_out("\n");
-
-    /* Reset indent/wrap */
-    text_out_indent = 0;
-    text_out_wrap = 0;
-}
-
-/*
- * Determines whether an item is too difficult to make.
- */
-void prt_object_difficulty(void)
-{
-    int dif;
-    char buf[80];
-    int turn_multiplier = 10;
-    int costs = 0;
-    byte attr;
-    bool affordable = true;
-    bool compact = smith_ui_compact_width();
-    int cost_title_row = smith_ui_cost_title_row();
-
-    Term_putstr(COL_SMT4, 3, -1, TERM_WHITE, "                 ");
-
-    // abort if there is no object to display
-    if (smith_o_ptr->tval == 0)
-        return;
-
-    // display difficulty information
-    if (too_difficult(smith_o_ptr))
-        attr = TERM_L_DARK;
-    else
-        attr = TERM_SLATE;
-
-    Term_putstr(COL_SMT4, 2, -1, attr, "Difficulty:");
-
-    // change colour if smithing drain is required
-    if ((smithing_cost.drain > 0)
-        && (smithing_cost.drain <= p_ptr->skill_base[S_SMT]))
-    {
-        attr = TERM_BLUE;
-    }
-
-    // calculate difficulty (and costs)
-    dif = object_difficulty(smith_o_ptr);
-
-    sprintf(buf, "%d", dif);
-    Term_putstr(COL_SMT4 + 2, 4, -1, attr, buf);
-
-    if (compact)
-        strnfmt(buf, sizeof(buf), "/%d",
-            p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-    else
-        strnfmt(buf, sizeof(buf), "(max %d)",
-            p_ptr->skill_use[S_SMT] + forge_bonus(p_ptr->py, p_ptr->px));
-    Term_putstr(COL_SMT4 + (compact ? 4 : 5), 4, -1, TERM_L_DARK, buf);
-
-    // display cost information
-    if (smithing_cost.weaponsmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Weaponsmith");
-        costs++;
-    }
-    if (smithing_cost.armoursmith)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Armoursmith");
-        costs++;
-    }
-    if (smithing_cost.jeweller)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Jeweller");
-        costs++;
-    }
-    if (smithing_cost.enchantment)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Enchantment");
-        costs++;
-    }
-    if (smithing_cost.artifice)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Artifice");
-        costs++;
-    }
-    if (smithing_cost.alloy_mastery)
-    {
-        smith_ui_put_cost_line(costs, TERM_RED, "Alloy Mastery");
-        costs++;
-    }
-    if (smithing_cost.uses > 0)
-    {
-        if (forge_uses(p_ptr->py, p_ptr->px) >= smithing_cost.uses)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        if (smithing_cost.uses == 1)
-        {
-            sprintf(buf, "%d Use", smithing_cost.uses);
-        }
-        else
-        {
-            sprintf(buf, "%d Uses", smithing_cost.uses);
-        }
-        if (compact)
-        {
-            strnfmt(buf, sizeof(buf), "%d/%d uses", smithing_cost.uses,
-                forge_uses(p_ptr->py, p_ptr->px));
-            smith_ui_put_cost_line(costs, attr, buf);
-        }
-        else
-        {
-            smith_ui_put_cost_line(costs, attr, buf);
-            strnfmt(buf, sizeof(buf), "(of %d)", forge_uses(p_ptr->py, p_ptr->px));
-            Term_putstr(COL_SMT4 + 9, smith_ui_cost_item_row(costs), -1,
-                TERM_L_DARK, buf);
-        }
-        costs++;
-    }
-    if (smithing_cost.drain > 0)
-    {
-        if (smithing_cost.drain <= p_ptr->skill_base[S_SMT])
-        {
-            attr = TERM_BLUE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Smithing", smithing_cost.drain);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.mithril > 0)
-    {
-        if (smithing_cost.mithril <= mithril_carried())
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, compact ? "%d.%d lb Mith" : "%d.%d lb Mithril",
-            smithing_cost.mithril / 10,
-            smithing_cost.mithril % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.star_iron > 0)
-    {
-        if (smithing_cost.star_iron <= star_iron_carried())
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, compact ? "%d.%d lb StIron" : "%d.%d lb Star Iron",
-            smithing_cost.star_iron / 10,
-            smithing_cost.star_iron % 10);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.str > 0)
-    {
-        if (p_ptr->stat_base[A_STR] + p_ptr->stat_drain[A_STR]
-                - smithing_cost.str
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Str", smithing_cost.str);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.dex > 0)
-    {
-        if (p_ptr->stat_base[A_DEX] + p_ptr->stat_drain[A_DEX]
-                - smithing_cost.dex
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Dex", smithing_cost.dex);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.con > 0)
-    {
-        if (p_ptr->stat_base[A_CON] + p_ptr->stat_drain[A_CON]
-                - smithing_cost.con
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Con", smithing_cost.con);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.gra > 0)
-    {
-        if (p_ptr->stat_base[A_GRA] + p_ptr->stat_drain[A_GRA]
-                - smithing_cost.gra
-            >= -5)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Gra", smithing_cost.gra);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (smithing_cost.exp > 0)
-    {
-        if (p_ptr->new_exp >= smithing_cost.exp)
-        {
-            attr = TERM_SLATE;
-        }
-        else
-        {
-            attr = TERM_L_DARK;
-            affordable = false;
-        }
-        sprintf(buf, "%d Exp", smithing_cost.exp);
-        smith_ui_put_cost_line(costs, attr, buf);
-        costs++;
-    }
-    if (p_ptr->active_ability[S_SMT][SMT_EXPERTISE])
-    {
-        turn_multiplier /= 2;
-    }
-
-    attr = TERM_SLATE;
-    sprintf(buf, "%d Turns", MAX(10, dif * turn_multiplier));
-    smith_ui_put_cost_line(costs, attr, buf);
-    costs++;
-
-    // if (costs == 0)
-    //{
-    //	Term_putstr(COL_SMT4 + 2, 10 + costs, -1, TERM_SLATE, "-");
-    //}
-
-    // display cost title
-    if (affordable)
-        attr = TERM_SLATE;
-    else
-        attr = TERM_L_DARK;
-    Term_putstr(COL_SMT4, cost_title_row, -1, attr, "Cost:");
-}
-
-/*
- * Checks whether you can pay the costs in terms of ability points and
- * experience needed to make the object.
- */
 typedef struct reforge_preview_type
 {
     int scaled_difficulty;
@@ -2696,52 +2176,24 @@ bool has_ability(artefact_type* a_ptr, int skilltype, int abilitynum)
     return (false);
 }
 
-void artefact_ability_menu(int skill)
-{
-    smith_ui_artefact_ability_snapshot_menu(skill);
-}
-
 /*
  * Allows the player to choose a new name for an artefact.
  */
-void rename_artefact(void)
+static void rename_artefact(void)
 {
     char tmp[20];
     char old_name[20];
-    char o_desc[30];
     bool name_selected = false;
-    bool snapshot_mode = smith_ui_snapshot_active();
-    int row = (smith_ui_last_desc_row >= 0) ? smith_ui_last_desc_row
-                                            : (smith_ui_term_hgt() - 1);
-    int col = smith_ui_desc_col();
 
     // Clear the names
     tmp[0] = '\0';
     old_name[0] = '\0';
-
-    if (!snapshot_mode)
-    {
-        /* Clear object name */
-        Term_erase(0, row, smith_ui_term_wid());
-
-        /* Determine object name */
-        object_desc(o_desc, sizeof(o_desc), smith_o_ptr, false, -1);
-
-        /* Display shortened object name */
-        Term_putstr(col, row, smith_ui_term_wid() - col, TERM_L_WHITE, o_desc);
-    }
 
     // use old name as a default
     SDL_strlcpy(tmp, smith2_a_ptr->name, sizeof(tmp));
 
     // save a copy too
     SDL_strlcpy(old_name, op_ptr->full_name, sizeof(old_name));
-
-    if (!snapshot_mode)
-    {
-        /* Prompt for a new name */
-        Term_gotoxy(col + strlen(o_desc) + 1, row);
-    }
 
     while (!name_selected)
     {
@@ -6510,10 +5962,7 @@ static void smith_ui_artefact_snapshot_menu(void)
 
         if (highlight == count)
         {
-            smith_ui_snapshot_scene_close(&scope);
             rename_artefact();
-            if (!smith_ui_snapshot_scene_enter(&scope))
-                return;
             smith_ui_artefact_backup_current_state();
         }
         else if (highlight <= MAX_CATS)
@@ -6944,9 +6393,6 @@ void do_cmd_smithing_screen(void)
 
         /* Handle stuff */
         handle_stuff();
-
-        /* Refresh */
-        Term_fresh();
     }
 
     else
@@ -6964,6 +6410,7 @@ void do_cmd_smithing_screen(void)
 
     app_session_clear_dungeon_overlay_scene(app_session_current());
     app_session_clear_interaction(app_session_current());
+    smith_ui_snapshot_refresh();
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 

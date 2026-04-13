@@ -1,5 +1,19 @@
 # Session notes
 
+## 2026-04-14: UI render replacement P1-F metarun narrative isolation
+- Replaced the post-escape `src/metarun.c` handoff to `print_story(3, true)` with a metarun-local semantic recap sequence:
+  - added `metarun_collect_story_indices()` to gather the current run's unlocked story fragments using the same selection/order rules as the old story flow
+  - added `metarun_show_recent_story_parts_semantic()` to present the last story parts as semantic story modals under the information-scene renderer
+- `src/metarun.c` no longer includes `ui/ui-story.h` and no longer depends on the broader `ui-story.c` blocking story presenter for the normal metarun escape-victory path.
+- Replaced `show_known_curses_menu()` with a metarun-owned semantic browser scene instead of delegating to the shared knowledge browser:
+  - added `metarun_show_known_curses_information_scene()` for the list/detail loop
+  - added `metarun_ui_add_known_curse_detail_lines()` so curse lore detail can render locally from metarun-owned data
+- Narrowed Steam Deck detection in the metarun menus from raw `get_sdl_steamdeck_mode()` reads to `steamdeck_controls_active()` where those screens only need the high-level controller-style UI state.
+- Validation:
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/metarun.c.obj --parallel`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` is currently blocked by unrelated concurrent errors in `src/cmd/ui/cmd-ui-knowledge.c`; the metarun object itself now compiles.
+
 ## 2026-04-14: UI render replacement N3-G blitz slice assessment
 - Checked the `Agent N3-G` write set and confirmed `src/blitz.c` already has no local `inkey()`, `screen_save()` / `screen_load()`, or direct `Term_*` UI debt.
 - `src/blitz.c` only owns the run-mode state plus the semantic blitz end-summary modal (`blitz_show_end_summary_ui()`), so there was no safe blitz-only migration patch to land inside that file.

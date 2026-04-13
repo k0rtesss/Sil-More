@@ -14,9 +14,6 @@ typedef struct object_type object_type;
 
 void display_inven(void);
 void display_equip(void);
-void show_inven(void);
-void show_equip(void);
-void show_floor(const int* floor_list, int floor_num);
 
 void story_print_equipment_prefix(int row, int col, byte attr, cptr prefix);
 void story_prepare_equipment_desc(char* dest, size_t dest_size, cptr src,

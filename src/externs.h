@@ -779,10 +779,7 @@ extern char object_char_graphics_override(
     const object_type* o_ptr, char base_char);
 extern void display_inven(void);
 extern void display_equip(void);
-extern void show_inven(void);
-extern void show_equip(void);
 extern void inventory_menu_set_include_equip(bool include);
-extern void show_floor(const int* floor_list, int floor_num);
 extern bool player_can_treat_as_throwing(const object_type* o_ptr);
 extern bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
 extern bool weapon_is_impale_eligible(const object_type* o_ptr);

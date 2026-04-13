@@ -31,7 +31,6 @@
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "ui/ui-information-scene.h"
-#include "ui/ui-story.h"
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */
 #include "supplies.h"
@@ -65,6 +64,7 @@
 #define METARUN_CHALLENGE_TULKAS_BLUNT_FLAG 0x08
 #define METARUN_CHALLENGE_TORCHLIGHT_FLAG 0x10
 #define METARUN_RUNTIME_CHALLENGE_COUNT_BASE 1
+#define METARUN_KNOWN_CURSE_PAGE_SIZE 12
 
 /* =========================  globals  =========================== */
 metarun         metar;
@@ -1130,6 +1130,7 @@ static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
     app_ui_panel* panel, const char* const* paragraphs, const byte* attrs,
     int paragraph_count);
 static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id);
+static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id);
 static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label);
@@ -1147,6 +1148,8 @@ static int metarun_ui_choose_curse_scene(int n,
     const int picks[CURSE_MENU_LINES], bool steamdeck,
     const char* accept_label);
 static void metarun_log_blessing_key(const char* context, int mode, int key);
+static bool metarun_show_known_curses_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label);
 /* =======================  load / save  ========================= */
 
 /*
@@ -2902,6 +2905,120 @@ static bool metarun_ui_show_story_modal_best_effort(const char* title,
     return presented;
 }
 
+static int metarun_collect_story_indices(int* indices, int capacity)
+{
+    int total = 0;
+    int max_st;
+    byte rt = metar.type;
+    int sils = metar.silmarils;
+
+    if (!indices || capacity <= 0 || !z_info || !st_info)
+        return 0;
+
+    max_st = z_info->st_max;
+    if (max_st > capacity)
+        max_st = capacity;
+
+    for (int i = 0; i < max_st; i++)
+    {
+        story_type* st = &st_info[i];
+
+        if (!st->name && !st->text)
+            continue;
+        if (st->st_type != 0)
+            continue;
+        if (!(st->runtypes == 0
+            || (rt < 32 && (st->runtypes & (1UL << rt)))))
+        {
+            continue;
+        }
+        if (st->order <= (byte)sils)
+            indices[total++] = i;
+    }
+
+    for (int i = 1; i < total; i++)
+    {
+        int key = indices[i];
+        byte key_ord = st_info[key].order;
+        int j = i - 1;
+
+        while (j >= 0 && st_info[indices[j]].order > key_ord)
+        {
+            indices[j + 1] = indices[j];
+            j--;
+        }
+        indices[j + 1] = key;
+    }
+
+    return total;
+}
+
+static void metarun_show_recent_story_parts_semantic(int last_parts)
+{
+    int selected[1024];
+    int total;
+    int start;
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+
+    total = metarun_collect_story_indices(selected, N_ELEMENTS(selected));
+    if (total <= 0)
+    {
+        log_debug("metarun: no story parts available for semantic recap");
+        return;
+    }
+
+    if (steamdeck)
+    {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+
+    start = (last_parts > 0 && last_parts < total) ? total - last_parts : 0;
+    for (int idx = start; idx < total; idx++)
+    {
+        story_type* st = &st_info[selected[idx]];
+        const char* story_title = st->name ? st_name + st->name : NULL;
+        const char* story_text = st->text ? st_text + st->text : NULL;
+        const char* paragraphs[2];
+        byte attrs[2];
+        int paragraph_count = 0;
+        int page = idx - start + 1;
+        int page_total = total - start;
+        char title[APP_UI_TEXT_MAX];
+
+        if (!story_text || !story_text[0])
+            continue;
+
+        if (page_total > 1)
+        {
+            strnfmt(title, sizeof(title), "The Tale So Far (%d/%d)", page,
+                page_total);
+        }
+        else
+        {
+            SDL_strlcpy(title, "The Tale So Far", sizeof(title));
+        }
+
+        if (story_title && story_title[0])
+        {
+            paragraphs[paragraph_count] = story_title;
+            attrs[paragraph_count++] = TERM_L_BLUE;
+        }
+        paragraphs[paragraph_count] = story_text;
+        attrs[paragraph_count++] = TERM_WHITE;
+
+        if (!metarun_ui_show_story_modal_best_effort(title, TERM_YELLOW,
+                paragraphs, attrs, paragraph_count, steamdeck, accept_label,
+                metarun_prompt_action_label(PROMPT_CONTINUE_TALE)))
+        {
+            log_warn("metarun: failed to present semantic story recap part %d/%d",
+                page, page_total);
+            break;
+        }
+    }
+}
+
 static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
     bool allow_treachery, bool allow_kinslay)
 {
@@ -3402,7 +3519,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     log_info("Added %d Silmarils to metarun total (now %d)", final_sils,
         metar.silmarils);
     refresh_current_metar_score();
-    print_story(3, true);
+    metarun_show_recent_story_parts_semantic(3);
 
     if (challenge_disconnected) {
         metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
@@ -3759,6 +3876,145 @@ static void show_all_active_curses(void)
     (void)metarun_show_active_effects_information_scene(steamdeck,
         accept_label, back_label);
     ui_information_scene_leave(&info_scope);
+}
+
+static bool metarun_show_known_curses_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
+{
+    int known_ids[METAR_CURSE_SLOTS];
+    int known_count = 0;
+    int selected = 0;
+    int row_offset = 0;
+    int limit;
+
+    if (!z_info || !cu_info)
+        return false;
+
+    limit = MIN(METAR_CURSE_SLOTS, z_info->cu_max);
+    for (int id = 0; id < limit; id++)
+    {
+        if (!cu_info[id].name || !CURSE_SEEN(id))
+            continue;
+        known_ids[known_count++] = id;
+    }
+
+    if (known_count == 0)
+    {
+        const char* lines[] = {
+            "No curse lore has been uncovered in this story run yet."
+        };
+        const byte attrs[] = { TERM_L_DARK };
+
+        return metarun_ui_show_notice_modal("Known Curses", TERM_L_RED,
+            lines, attrs, (int)N_ELEMENTS(lines), steamdeck, accept_label);
+    }
+
+    while (true)
+    {
+        app_ui_scene scene;
+        app_ui_panel* panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
+
+        if (selected < 0)
+            selected = 0;
+        if (selected >= known_count)
+            selected = known_count - 1;
+        if (row_offset > selected)
+            row_offset = selected;
+        if (selected >= row_offset + METARUN_KNOWN_CURSE_PAGE_SIZE)
+            row_offset = selected - METARUN_KNOWN_CURSE_PAGE_SIZE + 1;
+        if (row_offset < 0)
+            row_offset = 0;
+
+        strnfmt(subtitle, sizeof(subtitle), "%d known curse%s",
+            known_count, (known_count == 1) ? "" : "s");
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_L_RED,
+            "Known Curses", TERM_SLATE, subtitle);
+        if (!panel)
+            return false;
+
+        for (int i = 0; i < known_count; i++)
+        {
+            const char* blessing_name = blessing_display_name(known_ids[i]);
+            const char* curse_name = curse_display_name(known_ids[i]);
+            char meta[APP_UI_META_MAX];
+            byte meta_attr = TERM_SLATE;
+
+            meta[0] = '\0';
+            if (blessing_name && blessing_name[0]
+                && strcmp(blessing_name, curse_name) != 0)
+            {
+                SDL_strlcpy(meta, blessing_name, sizeof(meta));
+                meta_attr = TERM_L_GREEN;
+            }
+
+            if (!app_ui_panel_add_row_ex(panel, known_ids[i], TERM_L_RED,
+                    meta_attr, 0, '\0', true, i == selected, "", curse_name,
+                    meta))
+            {
+                return false;
+            }
+        }
+
+        app_ui_panel_set_row_offset(panel, (s16b)row_offset);
+        if (!metarun_ui_add_known_curse_detail_lines(panel, known_ids[selected]))
+            return false;
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Enter", "Close");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        if (known_count > METARUN_KNOWN_CURSE_PAGE_SIZE)
+        {
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "4/6", "Page");
+        }
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            steamdeck ? back_label : "Esc", "Back");
+
+        if (!ui_information_scene_present_ui(&scene))
+            return false;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == '8' || key == 'k' || key == '-')
+        {
+            selected = (selected + known_count - 1) % known_count;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+')
+        {
+            selected = (selected + 1) % known_count;
+            continue;
+        }
+        if (known_count > METARUN_KNOWN_CURSE_PAGE_SIZE
+            && (key == '4' || key == 'h' || key == 'H'))
+        {
+            selected -= METARUN_KNOWN_CURSE_PAGE_SIZE;
+            if (selected < 0)
+                selected = 0;
+            continue;
+        }
+        if (known_count > METARUN_KNOWN_CURSE_PAGE_SIZE && key == '6')
+        {
+            selected += METARUN_KNOWN_CURSE_PAGE_SIZE;
+            if (selected >= known_count)
+                selected = known_count - 1;
+            continue;
+        }
+        if (key == ESCAPE || key == '\r' || key == '\n'
+            || (steamdeck
+                && (key == steamdeck_confirm_key() || key == steamdeck_back_key())))
+        {
+            metarun_ui_clear_pending_input();
+            break;
+        }
+
+        metarun_ui_clear_pending_input();
+        break;
+    }
+
+    return true;
 }
 
 static int blessing_points_remaining(void)
@@ -4735,7 +4991,7 @@ static void open_blessing_exchange(void)
 {
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = get_sdl_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
 
@@ -4835,7 +5091,7 @@ static void metarun_stats_prepare_view_model(metarun_stats_view_model* view)
     view->earned_points = metar.blessing_points;
     view->spent_points = metar.blessing_points_spent;
     view->available_points = view->earned_points - view->spent_points;
-    view->steamdeck = get_sdl_steamdeck_mode();
+    view->steamdeck = steamdeck_controls_active();
     view->blitz_enabled = (op_ptr && op_ptr->opt[OPT_unlock_blitz_mode]);
     view->major_total = metarun_major_blessing_count();
 
@@ -5267,6 +5523,103 @@ static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
     {
         if (!app_ui_panel_add_detail_line(panel, TERM_L_DARK,
                 "(Effect not yet identified)"))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id)
+{
+    curse_type* cu;
+    const char* curse_name;
+    const char* blessing_name;
+    const char* curse_desc = NULL;
+    const char* curse_power = NULL;
+    const char* blessing_desc = NULL;
+    const char* blessing_power = NULL;
+    bool show_blessing_name = false;
+    char line[APP_UI_TEXT_MAX];
+
+    if (!panel || !z_info || !cu_info || id < 0 || id >= z_info->cu_max
+        || !CURSE_SEEN(id) || !cu_info[id].name)
+    {
+        return false;
+    }
+
+    cu = &cu_info[id];
+    curse_name = curse_display_name(id);
+    blessing_name = blessing_display_name(id);
+    show_blessing_name = blessing_name && blessing_name[0]
+        && strcmp(blessing_name, curse_name) != 0;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_RED, curse_name);
+
+    if (show_blessing_name)
+    {
+        strnfmt(line, sizeof(line), "Blessing: %s", blessing_name);
+        if (!app_ui_panel_add_detail_line(panel, TERM_L_GREEN, line))
+            return false;
+    }
+
+    curse_desc = cu->text ? cu_text + cu->text : NULL;
+    curse_power = cu->power ? cu_text + cu->power : NULL;
+    blessing_desc = cu->blessing_text ? cu_text + cu->blessing_text : NULL;
+    blessing_power = cu->blessing_power ? cu_text + cu->blessing_power : NULL;
+
+    if (curse_desc && *curse_desc)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+            return false;
+        if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE, curse_desc))
+            return false;
+    }
+
+    if (curse_power && *curse_power)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+            return false;
+        strnfmt(line, sizeof(line), "Effect: %s", curse_power);
+        if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_RED, line))
+            return false;
+    }
+
+    if ((blessing_desc && *blessing_desc) || (blessing_power && *blessing_power))
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+            return false;
+        if (show_blessing_name)
+        {
+            if (!app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                    "Blessing Aspect"))
+            {
+                return false;
+            }
+        }
+
+        if (blessing_desc && *blessing_desc
+            && !metarun_ui_add_wrapped_detail_lines(panel, TERM_L_GREEN,
+                blessing_desc))
+        {
+            return false;
+        }
+
+        if (blessing_power && *blessing_power)
+        {
+            strnfmt(line, sizeof(line), "Blessing effect: %s", blessing_power);
+            if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_L_GREEN, line))
+                return false;
+        }
+    }
+
+    if ((!curse_desc || !*curse_desc) && (!curse_power || !*curse_power)
+        && (!blessing_desc || !*blessing_desc)
+        && (!blessing_power || !*blessing_power))
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_L_DARK,
+                "(No lore text recorded)"))
         {
             return false;
         }
@@ -5721,7 +6074,7 @@ static void adjust_blessing_threshold_menu(void)
     bool use_information_scene = ui_information_scene_enter(&info_scope);
 
     metarun_blessing_threshold_mode current_mode = metarun_get_threshold_mode(&metar);
-    bool steamdeck = get_sdl_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
 
@@ -6060,7 +6413,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
         ? z_info->rt_max - 1 : 0;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = get_sdl_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
     char status_msg[APP_UI_TEXT_MAX] = "";
@@ -6329,7 +6682,7 @@ void list_metaruns(void)
 {
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = get_sdl_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
     if (steamdeck) {
@@ -6558,7 +6911,34 @@ void list_metaruns(void)
 
 void show_known_curses_menu(void)
 {
-    do_cmd_knowledge_browser_page(KNOWLEDGE_PAGE_CURSES);
+    ui_information_scene_scope info_scope;
+    bool use_information_scene;
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    char back_label[16] = "";
+
+    if (steamdeck)
+    {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+    }
+
+    use_information_scene = ui_information_scene_enter(&info_scope);
+    if (!use_information_scene)
+    {
+        log_error("show_known_curses_menu: semantic scene unavailable");
+        return;
+    }
+
+    if (!metarun_show_known_curses_information_scene(steamdeck, accept_label,
+            back_label))
+    {
+        log_error("show_known_curses_menu: failed to publish semantic scene");
+    }
+
+    ui_information_scene_leave(&info_scope);
 }
 
 /* Public wrapper for difficulty selection menu */

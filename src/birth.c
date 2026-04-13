@@ -1361,101 +1361,10 @@ static int character_choice_index_by_name(cptr choice_name)
     return -1;
 }
 
-static int birth_prompt_row(void);
-
 static cptr character_selection_header_text(bool character_phase)
 {
     (void)character_phase;
     return "Character Selection:";
-}
-
-static int birth_prompt_row(void)
-{
-    int wid = 80;
-    int hgt = 24;
-    int row;
-
-    Term_get_size(&wid, &hgt);
-    (void)wid;
-    if (hgt < 1)
-        hgt = 24;
-
-    row = hgt - 1;
-    if (row < TABLE_ROW)
-        row = TABLE_ROW;
-
-    return row;
-}
-
-
-static int birth_wrap_col(int indent)
-{
-    int wid = 80;
-    int hgt = 24;
-
-    Term_get_size(&wid, &hgt);
-    (void)hgt;
-    if (wid < 1)
-        wid = 80;
-    if (indent < 0)
-        indent = 0;
-
-    if (wid <= indent + 1)
-        return indent + 1;
-
-    return wid - 1;
-}
-
-static int birth_wrapped_line_count(cptr text, int indent)
-{
-    if (!text || !text[0])
-        return 0;
-
-    return count_wrapped_lines(text, birth_wrap_col(indent), indent);
-}
-
-static void birth_put_wrapped_text(byte attr, cptr text, int row, int col)
-{
-    if (!text || !text[0])
-        return;
-
-    text_out_wrap = birth_wrap_col(col);
-    text_out_indent = col;
-    Term_gotoxy(col, row);
-    text_out_to_screen(attr, text);
-    text_out_wrap = 0;
-    text_out_indent = 0;
-}
-
-static void birth_put_str_fit(byte attr, cptr text, int row, int col)
-{
-    int wid = 80;
-    int hgt = 24;
-    int max_len;
-    char buf[256];
-
-    if (!text || !text[0])
-        return;
-
-    Term_get_size(&wid, &hgt);
-    (void)hgt;
-    if (wid < 1)
-        wid = 80;
-
-    if (col < 0)
-        col = 0;
-    if (col >= wid)
-        return;
-
-    max_len = wid - col;
-    if (max_len < 1)
-        return;
-
-    SDL_strlcpy(buf, text, sizeof(buf));
-    if ((int)strlen(buf) > max_len)
-        buf[max_len] = '\0';
-
-    Term_putstr(col, row, -1, attr, buf);
 }
 
 static void birth_choice_full_name(birth_menu choice, char* full_name,
@@ -1957,13 +1866,12 @@ static void display_character_description_screen(birth_menu choice)
 static int get_player_choice(birth_menu* choices, int num, int def, int col,
     int wid, void (*hook)(birth_menu), bool allow_full_description_screen)
 {
-    int top = 0, next;
+    int next;
     int i, dir;
     char c;
     bool done = false;
     int cur = (def) ? def : 0;
     bool steamdeck = steamdeck_controls_active();
-    int hgt;
 
     (void)col;
     (void)wid;
@@ -1977,10 +1885,7 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
     {
         app_ui_scene scene;
 
-        hgt = birth_prompt_row() - TABLE_ROW - 1;
-        if (hgt < 4)
-            hgt = 4;
-        if (!birth_selection_build_ui_scene(&scene, choices, num, top, cur,
+        if (!birth_selection_build_ui_scene(&scene, choices, num, 0, cur,
                 allow_full_description_screen)
             || !birth_menu_scene_present(&scene))
         {
@@ -2102,11 +2007,6 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
                 /* Move selection */
                 if (next != -1)
                     cur = next;
-                /* if (cur != 0) cur--; */
-
-                /* Scroll up */
-                if ((top > 0) && ((cur - top) < 4))
-                    top--;
             }
 
             /* Going down? */
@@ -2124,21 +2024,12 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
                 /* Move selection */
                 if (next != -1)
                     cur = next;
-                /* if (cur != (num - 1)) cur++; */
-
-                /* Scroll down */
-                if ((top + hgt < (num - 1)) && ((top + hgt - cur) < 4))
-                    top++;
             }
         }
 
         /* Invalid input */
         else
             bell("Illegal response to question!");
-
-        /* If choice is off screen, move it to the top */
-        if ((cur < top) || (cur > top + hgt))
-            top = cur;
     }
 
     return (INVALID_CHOICE);
@@ -2677,58 +2568,6 @@ static void blitz_pick_random_race_and_character(void)
     current_character_profile = &c_info[p_ptr->pcharacter];
 }
 
-static void blitz_setup_draw(const blitz_setup* setup, int selected)
-{
-    char buf[160];
-    int wid = 80;
-    int hgt = 24;
-    bool steamdeck = steamdeck_controls_active();
-
-    Term_get_size(&wid, &hgt);
-    Term_clear();
-
-    c_put_str(TERM_YELLOW, "Blitz Setup", 1, MAX((wid - 11) / 2, 0));
-    birth_put_wrapped_text(TERM_SLATE,
-        "Configure a self-contained Blitz run. Story progress stays untouched.",
-        3, 2);
-
-    strnfmt(buf, sizeof(buf), "Character: %s", blitz_character_mode_name(setup->character_mode));
-    birth_put_str_fit(selected == 0 ? TERM_L_BLUE : TERM_WHITE, buf, 6, 4);
-
-    strnfmt(buf, sizeof(buf), "Oaths: %s", setup->oaths_enabled ? "Yes" : "No");
-    birth_put_str_fit(selected == 1 ? TERM_L_BLUE : TERM_WHITE, buf, 7, 4);
-
-    strnfmt(buf, sizeof(buf), "Blessings: %d", setup->blessing_count);
-    birth_put_str_fit(selected == 2 ? TERM_L_BLUE : TERM_WHITE, buf, 8, 4);
-
-    strnfmt(buf, sizeof(buf), "Curses: %d", setup->curse_count);
-    birth_put_str_fit(selected == 3 ? TERM_L_BLUE : TERM_WHITE, buf, 9, 4);
-
-    strnfmt(buf, sizeof(buf), "Effect picks: %s", blitz_effect_mode_name(setup->effect_mode));
-    birth_put_str_fit(selected == 4 ? TERM_L_BLUE : TERM_WHITE, buf, 10, 4);
-
-    if (steamdeck)
-    {
-        char confirm_label[16];
-        char back_label[16];
-        char prompt_buf[96];
-
-        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-            sizeof(confirm_label));
-        birth_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf),
-            "D-pad navigate/change  %s begin  %s back",
-            confirm_label, back_label);
-        birth_put_str_fit(TERM_L_DARK, prompt_buf, 13, 2);
-    }
-    else
-    {
-        birth_put_str_fit(TERM_L_DARK,
-            "8/2 navigate  4/6 change  Enter begin  Esc back", 13, 2);
-    }
-}
-
 static bool blitz_setup_build_ui_scene(app_ui_scene* scene,
     const blitz_setup* setup, int selected)
 {
@@ -2868,49 +2707,39 @@ static NavResult blitz_setup_menu(void)
     int selected = 0;
     bool steamdeck = steamdeck_controls_active();
     birth_menu_scene_scope scene_scope;
-    bool semantic_menu_active = false;
 
     blitz_setup_clamp(setup);
-    semantic_menu_active = birth_menu_scene_enter(&scene_scope,
-        APP_WAIT_REASON_LIST_SELECTION);
+    if (!birth_menu_scene_enter(&scene_scope, APP_WAIT_REASON_LIST_SELECTION))
+    {
+        log_warn("blitz setup: semantic menu scene unavailable");
+        return NAV_TO_MAIN;
+    }
 
     while (1)
     {
+        app_ui_scene scene;
         char key;
 
-        if (semantic_menu_active)
+        if (!blitz_setup_build_ui_scene(&scene, setup, selected)
+            || !birth_menu_scene_present(&scene))
         {
-            app_ui_scene scene;
-
-            if (!blitz_setup_build_ui_scene(&scene, setup, selected)
-                || !birth_menu_scene_present(&scene))
-            {
-                log_warn("blitz setup: semantic scene presentation failed");
-                birth_menu_scene_leave(&scene_scope);
-                return NAV_TO_MAIN;
-            }
-        }
-        else
-        {
-            blitz_setup_draw(setup, selected);
+            log_warn("blitz setup: semantic scene presentation failed");
+            birth_menu_scene_leave(&scene_scope);
+            return NAV_TO_MAIN;
         }
         key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
         {
-            if (semantic_menu_active)
-                birth_menu_scene_leave(&scene_scope);
+            birth_menu_scene_leave(&scene_scope);
             return NAV_TO_MAIN;
         }
 
         if (key == '\n' || key == '\r' || key == ' '
             || (steamdeck && key == steamdeck_confirm_key()))
         {
-            if (semantic_menu_active)
-            {
-                scene_scope.restore_previous_snapshot = false;
-                birth_menu_scene_leave(&scene_scope);
-            }
+            scene_scope.restore_previous_snapshot = false;
+            birth_menu_scene_leave(&scene_scope);
             return NAV_OK;
         }
 
@@ -3683,224 +3512,145 @@ static int blitz_weighted_random_blessing_pick(void)
     return eligible[0];
 }
 
-static int blitz_select_effect_from_list(bool blessing, bool show_effects, int ordinal, int total)
+static bool blitz_effect_picker_build_ui_scene(app_ui_scene* scene,
+    bool blessing, bool show_effects, int ordinal, int total,
+    const int ids[], int count, int selected)
+{
+    app_ui_panel* panel;
+    int selected_id;
+    curse_type* cu;
+    cptr desc;
+    cptr power;
+    bool steamdeck = steamdeck_controls_active();
+    char title[80];
+
+    if (!scene || !ids || count <= 0 || selected < 0 || selected >= count)
+        return false;
+
+    selected_id = ids[selected];
+    cu = &cu_info[selected_id];
+    desc = blessing
+        ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
+        : (cu->text ? cu_text + cu->text : "");
+    power = blessing
+        ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
+        : (cu->power ? cu_text + cu->power : "");
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->selected_row = selected;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 1800);
+    strnfmt(title, sizeof(title), "Choose %s %d of %d",
+        blessing ? "Blessing" : "Curse", ordinal, total);
+    app_ui_panel_set_title(panel, TERM_YELLOW, title);
+    app_ui_panel_set_subtitle(panel, blessing ? TERM_L_GREEN : TERM_L_RED,
+        blessing ? "Blessings" : "Curses");
+
+    for (int row = 0; row < count; row++)
+    {
+        int id = ids[row];
+        cptr name = blessing ? blitz_blessing_name_str(id)
+                             : blitz_curse_name_str(id);
+        byte attr = (row == selected)
+            ? TERM_L_BLUE
+            : (blessing ? TERM_L_GREEN : TERM_L_RED);
+
+        if (!app_ui_panel_add_row(panel, id, attr, true,
+                row == selected, "", name, ""))
+        {
+            return false;
+        }
+    }
+
+    app_ui_panel_set_detail_title(panel, TERM_WHITE,
+        blessing ? blitz_blessing_name_str(selected_id)
+                 : blitz_curse_name_str(selected_id));
+    if (desc && desc[0]
+        && !birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE, desc, true))
+    {
+        return false;
+    }
+
+    if (show_effects && power && power[0])
+    {
+        char power_line[512];
+
+        if (panel->detail_line_count > 0
+            && !app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+        {
+            return false;
+        }
+
+        strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
+        if (!birth_ui_panel_add_wrapped_lines(panel,
+                blessing ? TERM_L_GREEN : TERM_L_RED, power_line, true))
+        {
+            return false;
+        }
+    }
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Select")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back")
+            && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "D-pad", "Navigate");
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Select")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back")
+        && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "8/2", "Navigate");
+}
+
+static int blitz_select_effect_from_list(bool blessing, bool show_effects,
+    int ordinal, int total)
 {
     int ids[METAR_CURSE_SLOTS];
-    int count = blitz_collect_eligible_effect_ids(blessing, ids, METAR_CURSE_SLOTS);
+    int count = blitz_collect_eligible_effect_ids(blessing, ids,
+        METAR_CURSE_SLOTS);
     int selected = 0;
-    int top = 0;
     bool steamdeck = steamdeck_controls_active();
 
     if (count <= 0)
         return -1;
+    if (!birth_semantic_assignment_active)
+    {
+        log_warn("blitz effect picker: semantic assignment scene unavailable");
+        return -1;
+    }
 
     while (1)
     {
-        bool use_semantic_scene = birth_semantic_assignment_active;
-        int wid = 80;
-        int hgt = 24;
-        int list_rows;
-        int selected_id;
-        int row;
+        app_ui_scene scene;
+        int selected_id = ids[selected];
         char key;
-        char title[80];
 
-        Term_get_size(&wid, &hgt);
-        list_rows = show_effects ? MAX(4, hgt - 11) : MAX(4, hgt - 10);
-
-        if (selected < top)
-            top = selected;
-        if (selected >= top + list_rows)
-            top = selected - list_rows + 1;
-
-        selected_id = ids[selected];
-        if (use_semantic_scene)
+        if (!blitz_effect_picker_build_ui_scene(&scene, blessing,
+                show_effects, ordinal, total, ids, count, selected)
+            || !ui_information_scene_present_ui(&scene))
         {
-            app_ui_scene scene;
-            app_ui_panel* panel;
-            curse_type* cu = &cu_info[selected_id];
-            cptr desc = blessing
-                ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
-                : (cu->text ? cu_text + cu->text : "");
-            cptr power = blessing
-                ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
-                : (cu->power ? cu_text + cu->power : "");
-
-            app_ui_scene_init(&scene);
-            panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
-            if (!panel)
-            {
-                log_warn("blitz effect picker: semantic scene unavailable");
-                return -1;
-            }
-
-            panel->style = APP_UI_PANEL_STYLE_BROWSER;
-            panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
-                | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-            panel->focus_area = APP_UI_FOCUS_ROWS;
-            panel->selected_row = selected;
-            panel->accent_attr = TERM_L_BLUE;
-            app_ui_panel_set_widths(panel, 980, 1800);
-            strnfmt(title, sizeof(title), "Choose %s %d of %d",
-                blessing ? "Blessing" : "Curse", ordinal, total);
-            app_ui_panel_set_title(panel, TERM_YELLOW, title);
-            app_ui_panel_set_subtitle(panel, blessing ? TERM_L_GREEN : TERM_L_RED,
-                blessing ? "Blessings" : "Curses");
-            app_ui_panel_set_row_offset(panel, (s16b)top);
-
-            for (row = 0; row < count; row++)
-            {
-                int id = ids[row];
-                cptr name = blessing ? blitz_blessing_name_str(id)
-                                     : blitz_curse_name_str(id);
-                byte attr = (row == selected)
-                    ? TERM_L_BLUE
-                    : (blessing ? TERM_L_GREEN : TERM_L_RED);
-
-                if (!app_ui_panel_add_row(panel, id, attr, true,
-                        row == selected, "", name, ""))
-                {
-                    log_warn("blitz effect picker: semantic row list overflow");
-                    return -1;
-                }
-            }
-
-            app_ui_panel_set_detail_title(panel, TERM_WHITE,
-                blessing ? blitz_blessing_name_str(selected_id)
-                         : blitz_curse_name_str(selected_id));
-            if (desc && desc[0]
-                && !birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE, desc,
-                    true))
-            {
-                log_warn("blitz effect picker: semantic detail text overflow");
-                return -1;
-            }
-            if (show_effects && power && power[0])
-            {
-                char power_line[512];
-
-                if (panel->detail_line_count > 0
-                    && !app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
-                {
-                    log_warn("blitz effect picker: semantic detail spacing overflow");
-                    return -1;
-                }
-                strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
-                if (!birth_ui_panel_add_wrapped_lines(panel,
-                        blessing ? TERM_L_GREEN : TERM_L_RED, power_line, true))
-                {
-                    log_warn("blitz effect picker: semantic power detail overflow");
-                    return -1;
-                }
-            }
-
-            if (steamdeck)
-            {
-                char confirm_label[16];
-                char back_label[16];
-
-                birth_prompt_label(steamdeck_confirm_key(), "A",
-                    confirm_label, sizeof(confirm_label));
-                birth_prompt_label(steamdeck_back_key(), "B", back_label,
-                    sizeof(back_label));
-                if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                        confirm_label, "Select")
-                    || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
-                        true, back_label, "Back")
-                    || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
-                        true, "D-pad", "Navigate"))
-                {
-                    log_warn("blitz effect picker: semantic footer overflow");
-                    return -1;
-                }
-            }
-            else if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                    "Enter", "Select")
-                || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                    "Esc", "Back")
-                || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                    "8/2", "Navigate"))
-            {
-                log_warn("blitz effect picker: semantic footer overflow");
-                return -1;
-            }
-
-            if (!ui_information_scene_present_ui(&scene))
-            {
-                log_warn("blitz effect picker: semantic scene presentation failed");
-                return -1;
-            }
-        }
-        else
-        {
-            Term_clear();
-
-            strnfmt(title, sizeof(title), "Choose %s %d of %d",
-                blessing ? "Blessing" : "Curse", ordinal, total);
-            c_put_str(TERM_YELLOW, title, 1,
-                MAX((wid - (int)strlen(title)) / 2, 0));
-
-            for (row = 0; row < list_rows && top + row < count; row++)
-            {
-                int idx = top + row;
-                cptr name = blessing ? blitz_blessing_name_str(ids[idx])
-                                     : blitz_curse_name_str(ids[idx]);
-                char line[128];
-                strnfmt(line, sizeof(line), "%s", name);
-                birth_put_str_fit(
-                    idx == selected ? TERM_L_BLUE
-                                    : (blessing ? TERM_L_GREEN : TERM_L_RED),
-                    line, 3 + row, 4);
-            }
-
-            {
-                curse_type* cu = &cu_info[selected_id];
-                cptr desc = blessing
-                    ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
-                    : (cu->text ? cu_text + cu->text : "");
-                cptr power = blessing
-                    ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
-                    : (cu->power ? cu_text + cu->power : "");
-                int desc_row = 4 + list_rows;
-
-                c_put_str(TERM_WHITE,
-                    blessing ? blitz_blessing_name_str(selected_id)
-                             : blitz_curse_name_str(selected_id),
-                    desc_row++, 2);
-                if (desc && desc[0])
-                {
-                    birth_put_wrapped_text(TERM_SLATE, desc, desc_row, 2);
-                    desc_row += birth_wrapped_line_count(desc, 2);
-                }
-                if (show_effects && power && power[0])
-                {
-                    char power_line[512];
-                    strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
-                    birth_put_wrapped_text(blessing ? TERM_L_GREEN : TERM_L_RED,
-                        power_line, desc_row + 1, 2);
-                }
-            }
-
-            if (steamdeck)
-            {
-                char confirm_label[16];
-                char back_label[16];
-                char prompt_buf[96];
-
-                birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                    sizeof(confirm_label));
-                birth_prompt_label(steamdeck_back_key(), "B", back_label,
-                    sizeof(back_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    "D-pad navigate  %s select  %s back",
-                    confirm_label, back_label);
-                birth_put_str_fit(TERM_L_DARK, prompt_buf, hgt - 1, 2);
-            }
-            else
-            {
-                birth_put_str_fit(TERM_L_DARK,
-                    "8/2 navigate  Enter select  Esc back", hgt - 1, 2);
-            }
+            log_warn("blitz effect picker: semantic scene presentation failed");
+            return -1;
         }
 
         key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
@@ -3929,94 +3679,25 @@ static void blitz_apply_effect_pick(int id, bool blessing)
     CURSE_SEEN_SET(id);
 }
 
-static void blitz_show_effect_summary(void)
+static bool blitz_effect_summary_build_ui_scene(app_ui_scene* scene)
 {
-    int wid = 80;
-    int hgt = 24;
-    int row = 3;
+    app_ui_panel* panel;
+    bool steamdeck = steamdeck_controls_active();
 
-    if (birth_semantic_assignment_active)
-    {
-        app_ui_scene scene;
-        app_ui_panel* panel;
-        bool steamdeck = steamdeck_controls_active();
+    if (!scene)
+        return false;
 
-        app_ui_scene_init(&scene);
-        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
-        if (!panel)
-        {
-            log_warn("blitz effect summary: semantic panel unavailable");
-            return;
-        }
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
 
-        panel->style = APP_UI_PANEL_STYLE_BROWSER;
-        panel->accent_attr = TERM_L_BLUE;
-        app_ui_panel_set_widths(panel, 900, 1600);
-        app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Effects");
-        app_ui_panel_set_subtitle(panel, TERM_SLATE,
-            "Starting blessings and curses for this Blitz run.");
-
-        for (int id = 0; z_info && id < z_info->cu_max; id++)
-        {
-            int stacks = CURSE_GET(id);
-            char line[128];
-
-            if (stacks == 0)
-                continue;
-
-            strnfmt(line, sizeof(line), "%s x%d",
-                (stacks < 0)
-                    ? blitz_blessing_name_str(id)
-                    : blitz_curse_name_str(id),
-                (stacks < 0) ? -stacks : stacks);
-            if (!app_ui_panel_add_body_line(panel,
-                    stacks < 0 ? TERM_L_GREEN : TERM_L_RED, line))
-            {
-                log_warn("blitz effect summary: semantic body overflow");
-                return;
-            }
-        }
-
-        if (panel->body_line_count == 0
-            && !app_ui_panel_add_body_line(panel, TERM_SLATE,
-                "No blessings or curses selected."))
-        {
-            log_warn("blitz effect summary: semantic empty-state overflow");
-            return;
-        }
-
-        if (steamdeck)
-        {
-            char confirm_label[16];
-
-            birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                sizeof(confirm_label));
-            if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                    confirm_label, "Continue"))
-            {
-                log_warn("blitz effect summary: semantic footer overflow");
-                return;
-            }
-        }
-        else if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                "Any key", "Continue"))
-        {
-            log_warn("blitz effect summary: semantic footer overflow");
-            return;
-        }
-
-        if (!ui_information_scene_present_ui(&scene))
-        {
-            log_warn("blitz effect summary: semantic scene presentation failed");
-            return;
-        }
-        (void)birth_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
-        return;
-    }
-
-    Term_get_size(&wid, &hgt);
-    Term_clear();
-    c_put_str(TERM_YELLOW, "Blitz Effects", 1, MAX((wid - 13) / 2, 0));
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 900, 1600);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Effects");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Starting blessings and curses for this Blitz run.");
 
     for (int id = 0; z_info && id < z_info->cu_max; id++)
     {
@@ -4027,31 +3708,54 @@ static void blitz_show_effect_summary(void)
             continue;
 
         strnfmt(line, sizeof(line), "%s x%d",
-            (stacks < 0) ? blitz_blessing_name_str(id) : blitz_curse_name_str(id),
+            (stacks < 0) ? blitz_blessing_name_str(id)
+                         : blitz_curse_name_str(id),
             (stacks < 0) ? -stacks : stacks);
-        birth_put_str_fit(stacks < 0 ? TERM_L_GREEN : TERM_L_RED, line,
-            row++, 4);
+        if (!app_ui_panel_add_body_line(panel,
+                stacks < 0 ? TERM_L_GREEN : TERM_L_RED, line))
+        {
+            return false;
+        }
     }
 
-    if (row == 3)
-        birth_put_str_fit(TERM_SLATE, "No blessings or curses selected.",
-            row++, 4);
+    if (panel->body_line_count == 0
+        && !app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "No blessings or curses selected."))
+    {
+        return false;
+    }
 
-    if (steamdeck_controls_active())
+    if (steamdeck)
     {
         char confirm_label[16];
-        char prompt_buf[48];
 
         birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] continue", confirm_label);
-        birth_put_str_fit(TERM_L_BLUE, prompt_buf, MIN(row + 1, hgt - 1), 2);
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            confirm_label, "Continue");
     }
-    else
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Any key", "Continue");
+}
+
+static void blitz_show_effect_summary(void)
+{
+    app_ui_scene scene;
+
+    if (!birth_semantic_assignment_active)
     {
-        birth_put_str_fit(TERM_L_BLUE, "Press any key to continue.",
-            MIN(row + 1, hgt - 1), 2);
+        log_warn("blitz effect summary: semantic assignment scene unavailable");
+        return;
     }
+
+    if (!blitz_effect_summary_build_ui_scene(&scene)
+        || !ui_information_scene_present_ui(&scene))
+    {
+        log_warn("blitz effect summary: semantic scene presentation failed");
+        return;
+    }
+
     (void)birth_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
 }
 
@@ -4306,13 +4010,6 @@ static NavResult player_birth_aux_2(void)
     while (1)
     {
         bool steamdeck = steamdeck_controls_active();
-        int wid = 80;
-        int hgt = 24;
-        Term_get_size(&wid, &hgt);
-        if (wid < 1) wid = 80;
-        if (hgt < 1) hgt = 24;
-        (void)wid;
-        (void)hgt;
 
         /* Reset cost */
         cost = 0;
@@ -4492,14 +4189,6 @@ extern NavResult gain_skills(void)
         }
 
         update_stuff();
-
-        int wid = 80;
-        int hgt = 24;
-        Term_get_size(&wid, &hgt);
-        if (wid < 1) wid = 80;
-        if (hgt < 1) hgt = 24;
-        (void)wid;
-        (void)hgt;
 
         if (!birth_present_skills_allocation_ui_scene(skill, old_base,
                 skill_gain, p_ptr->new_exp, steamdeck))

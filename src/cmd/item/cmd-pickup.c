@@ -9,11 +9,14 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
+#include "runtime-cli.h"
 #include "metarun.h"
 #include <math.h>
 
@@ -177,6 +180,362 @@ static void format_staff_prompt_name(char* buf, size_t max,
         strnfmt(buf, max, "a %s", staff_of);
 }
 
+typedef struct pickup_pile_scene_scope {
+    bool active;
+    app_snapshot previous_snapshot;
+} pickup_pile_scene_scope;
+
+typedef struct pickup_pile_snapshot_entry {
+    int floor_slot;
+    int floor_o_idx;
+    byte attr;
+    byte icon_attr;
+    char icon_char;
+    char key[APP_UI_KEY_MAX];
+    char label[APP_UI_LABEL_MAX];
+    char meta[APP_UI_META_MAX];
+} pickup_pile_snapshot_entry;
+
+typedef struct pickup_pile_snapshot_state {
+    pickup_pile_snapshot_entry entries[MAX_FLOOR_STACK];
+    int entry_count;
+} pickup_pile_snapshot_state;
+
+static byte pickup_pile_row_attr(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return TERM_L_DARK;
+
+    if (weapon_glows(o_ptr))
+        return object_display_color(o_ptr, TERM_L_BLUE);
+
+    return object_display_color(o_ptr,
+        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+}
+
+static void pickup_pile_format_weight(char* buf, size_t buf_size,
+                                      const object_type* o_ptr)
+{
+    int wgt;
+
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (!show_weights || !o_ptr || !o_ptr->k_idx || !o_ptr->weight)
+        return;
+
+    wgt = o_ptr->weight * o_ptr->number;
+    strnfmt(buf, buf_size, "%2d.%1d lb", wgt / 10, wgt % 10);
+}
+
+static void pickup_pile_format_meta(char* buf, size_t buf_size,
+                                    const object_type* o_ptr, int floor_slot)
+{
+    char weight_buf[16];
+    char tag_buf[8];
+
+    if (!buf || !buf_size)
+        return;
+
+    pickup_pile_format_weight(weight_buf, sizeof(weight_buf), o_ptr);
+    strnfmt(tag_buf, sizeof(tag_buf), "(%c)", index_to_label(floor_slot));
+
+    if (weight_buf[0])
+        strnfmt(buf, buf_size, "%s  %s", weight_buf, tag_buf);
+    else
+        SDL_strlcpy(buf, tag_buf, buf_size);
+}
+
+static bool pickup_pile_prompt_for_floor_item(cptr prompt, int floor_o_idx)
+{
+    char o_name[80];
+    char out_val[160];
+    object_type* o_ptr;
+
+    if (floor_o_idx <= 0)
+        return false;
+
+    o_ptr = &o_list[floor_o_idx];
+    object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
+    strnfmt(out_val, sizeof(out_val), "%s %s? ", prompt, o_name);
+    return get_check(out_val);
+}
+
+static bool pickup_pile_allow_floor_item(int floor_o_idx)
+{
+    cptr note_text;
+    cptr marker;
+    object_type* o_ptr;
+
+    if (floor_o_idx <= 0)
+        return false;
+
+    o_ptr = &o_list[floor_o_idx];
+    if (!o_ptr->obj_note)
+        return true;
+
+    note_text = quark_str(o_ptr->obj_note);
+    marker = strchr(note_text, '!');
+
+    while (marker)
+    {
+        if ((marker[1] == p_ptr->command_cmd) || (marker[1] == '*'))
+        {
+            if (!pickup_pile_prompt_for_floor_item("Really try", floor_o_idx))
+                return false;
+        }
+
+        marker = strchr(marker + 1, '!');
+    }
+
+    return true;
+}
+
+static bool pickup_pile_scene_enter(pickup_pile_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    if (!runtime_cli_snapshot_renderer() || !session)
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return false;
+
+    app_session_clear_interaction(session);
+    scope->previous_snapshot = *snapshot;
+    scope->active = true;
+    return true;
+}
+
+static bool pickup_pile_scene_present(pickup_pile_scene_scope* scope,
+                                      const app_ui_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !scene || !session)
+        return false;
+    if (!app_session_publish_menu_scene(session, scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
+static void pickup_pile_scene_restore(pickup_pile_scene_scope* scope,
+                                      bool refresh)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    app_session_set_snapshot(session, &scope->previous_snapshot);
+    if (refresh)
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+}
+
+static void pickup_pile_scene_capture(pickup_pile_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    snapshot = app_session_snapshot(session);
+    if (snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON)
+        scope->previous_snapshot = *snapshot;
+}
+
+static void pickup_pile_scene_suspend(pickup_pile_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+
+    pickup_pile_scene_restore(scope, false);
+    if (session)
+        app_session_clear_interaction(session);
+}
+
+static void pickup_pile_scene_close(pickup_pile_scene_scope* scope)
+{
+    if (!scope)
+        return;
+
+    pickup_pile_scene_restore(scope, true);
+    scope->active = false;
+}
+
+static void pickup_pile_build_snapshot_state(
+    pickup_pile_snapshot_state* state, const int* floor_list, int floor_num)
+{
+    int i;
+
+    if (!state)
+        return;
+
+    memset(state, 0, sizeof(*state));
+    if (!floor_list)
+        return;
+
+    for (i = 0; i < floor_num && state->entry_count < MAX_FLOOR_STACK; i++)
+    {
+        pickup_pile_snapshot_entry* entry;
+        object_type* o_ptr = &o_list[floor_list[i]];
+
+        if (!item_tester_okay(o_ptr))
+            continue;
+
+        entry = &state->entries[state->entry_count++];
+        memset(entry, 0, sizeof(*entry));
+        entry->floor_slot = i;
+        entry->floor_o_idx = floor_list[i];
+        entry->attr = pickup_pile_row_attr(o_ptr);
+        entry->icon_attr = object_attr(o_ptr);
+        entry->icon_char = object_char(o_ptr);
+        strnfmt(entry->key, sizeof(entry->key), "%c", index_to_label(i));
+        object_desc_floor(entry->label, sizeof(entry->label), o_ptr, true, 3);
+        pickup_pile_format_meta(entry->meta, sizeof(entry->meta), o_ptr, i);
+    }
+}
+
+static int pickup_pile_clamp_highlight(const pickup_pile_snapshot_state* state,
+                                       int highlight_row)
+{
+    if (!state || state->entry_count <= 0)
+        return -1;
+
+    if (highlight_row < 0 || highlight_row >= state->entry_count)
+        return 0;
+
+    return highlight_row;
+}
+
+static bool pickup_pile_build_ui_scene(app_ui_scene* scene,
+                                       const pickup_pile_snapshot_state* state,
+                                       int highlight_row)
+{
+    app_ui_panel* panel;
+    char subtitle[APP_UI_TEXT_MAX];
+
+    if (!scene || !state)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 760, 1220);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Pick Up Objects");
+    strnfmt(subtitle, sizeof(subtitle), "%d object%s on the floor",
+        state->entry_count, (state->entry_count == 1) ? "" : "s");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Enter/Space picks up, x examines, 8/2 moves.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Pick Up");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Space", "Pick Up");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "x", "Examine");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "Esc", "Cancel");
+
+    if (state->entry_count <= 0)
+    {
+        return app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "No pickable objects remain on this tile.");
+    }
+
+    for (int i = 0; i < state->entry_count; i++)
+    {
+        const pickup_pile_snapshot_entry* entry = &state->entries[i];
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)(0 - entry->floor_o_idx),
+                (highlight_row == i) ? TERM_L_BLUE : entry->attr,
+                (highlight_row == i) ? TERM_L_BLUE : entry->attr,
+                entry->icon_attr, entry->icon_char, true,
+                highlight_row == i, entry->key, entry->label, entry->meta))
+        {
+            return false;
+        }
+    }
+
+    if (highlight_row >= 0 && highlight_row < state->entry_count)
+    {
+        const pickup_pile_snapshot_entry* entry = &state->entries[highlight_row];
+        object_type* o_ptr = &o_list[entry->floor_o_idx];
+        char detail[APP_UI_TEXT_MAX];
+        char weight_buf[16];
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, entry->label);
+        strnfmt(detail, sizeof(detail), "Hotkey: %c",
+            index_to_label(entry->floor_slot));
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+
+        pickup_pile_format_weight(weight_buf, sizeof(weight_buf), o_ptr);
+        if (weight_buf[0])
+        {
+            strnfmt(detail, sizeof(detail), "Weight: %s", weight_buf);
+            (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+        }
+
+        if (supplies_is_supply_object(o_ptr))
+        {
+            (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                "Supply items can merge directly into your cache.");
+        }
+
+        if (smith_oath_forbids_object(o_ptr))
+        {
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_RED,
+                "Picking this up will break your Oath of the Smith.");
+        }
+
+        if (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2)
+        {
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_RED,
+                "You cannot lift it at your current carrying weight.");
+        }
+
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Use x to inspect the item without picking it up.");
+    }
+
+    return true;
+}
+
+static int pickup_pile_find_hotkey_entry(
+    const pickup_pile_snapshot_state* state, char which)
+{
+    int i;
+
+    if (!state)
+        return -1;
+
+    for (i = 0; i < state->entry_count; i++)
+    {
+        if (index_to_label(state->entries[i].floor_slot) == which)
+            return i;
+    }
+
+    return -1;
+}
+
 bool is_smithed_by_player(const object_type* o_ptr)
 {
     return (o_ptr->unused1 != 0);
@@ -231,30 +590,6 @@ static bool pickup_select_pack_item(int* item, cptr prompt, cptr empty_prompt,
         return false;
 
     return pickup_choice_is_valid_pack_item(*item);
-}
-
-static bool pickup_select_floor_item_from_pile(int* floor_o_idx)
-{
-    int item;
-
-    if (!floor_o_idx)
-        return false;
-
-    /*
-     * Keep floor selection on the shared get_item() path so SDL snapshot play
-     * keeps using the semantic floor selector.
-     */
-    if (!get_item(&item, "Pick up which object? ", NULL, (USE_FLOOR)))
-        return false;
-
-    if (item >= 0)
-    {
-        bell("Illegal object choice!");
-        return false;
-    }
-
-    *floor_o_idx = 0 - item;
-    return true;
 }
 
 /*
@@ -556,6 +891,172 @@ static bool pickup_handle_floor_object(int floor_o_idx,
     return true;
 }
 
+static bool pickup_run_snapshot_pile_menu(bool* out_picked_up_item)
+{
+    pickup_pile_scene_scope scene_scope;
+    app_wait_scope wait_scope;
+    bool picked_up_item = false;
+    int highlight_row = -1;
+
+    if (out_picked_up_item)
+        *out_picked_up_item = false;
+
+    if (!pickup_pile_scene_enter(&scene_scope))
+        return false;
+
+    app_session_push_wait_scope(app_session_current(), &wait_scope,
+        APP_WAIT_REASON_LIST_SELECTION, 0, 0);
+
+    while (true)
+    {
+        int floor_list[MAX_FLOOR_STACK];
+        int floor_num;
+        pickup_pile_snapshot_state state;
+        app_ui_scene scene;
+        char command = '\0';
+
+        handle_stuff();
+        pickup_pile_scene_capture(&scene_scope);
+
+        floor_num = scan_floor(
+            floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px, 0x00);
+        pickup_pile_build_snapshot_state(&state, floor_list, floor_num);
+
+        if (state.entry_count < 1)
+        {
+            if (picked_up_item)
+                msg_print("There are no more objects where you are standing.");
+            else
+                msg_print("There are no objects where you are standing.");
+            break;
+        }
+
+        highlight_row = pickup_pile_clamp_highlight(&state, highlight_row);
+        if (!pickup_pile_build_ui_scene(&scene, &state, highlight_row))
+        {
+            log_warn("pickup pile: failed to build snapshot UI scene");
+            app_session_pop_wait_scope(app_session_current(), &wait_scope);
+            pickup_pile_scene_close(&scene_scope);
+            return false;
+        }
+        if (!pickup_pile_scene_present(&scene_scope, &scene))
+        {
+            log_warn("pickup pile: failed to present snapshot UI scene");
+            app_session_pop_wait_scope(app_session_current(), &wait_scope);
+            pickup_pile_scene_close(&scene_scope);
+            return false;
+        }
+
+        if (!get_com("Pick up command: ", &command))
+            break;
+
+        switch (command)
+        {
+        case '8':
+#ifdef ARROW_UP
+        case ARROW_UP:
+#endif
+            if (state.entry_count > 0)
+            {
+                highlight_row = (highlight_row + state.entry_count - 1)
+                    % state.entry_count;
+            }
+            break;
+
+        case '2':
+#ifdef ARROW_DOWN
+        case ARROW_DOWN:
+#endif
+            if (state.entry_count > 0)
+                highlight_row = (highlight_row + 1) % state.entry_count;
+            break;
+
+        case 'x':
+        case 'X':
+#ifdef ARROW_RIGHT
+        case ARROW_RIGHT:
+#endif
+            if (highlight_row >= 0 && highlight_row < state.entry_count)
+            {
+                pickup_pile_scene_suspend(&scene_scope);
+                describe_item_with_comparisons(
+                    0 - state.entries[highlight_row].floor_o_idx, true);
+            }
+            else
+            {
+                bell("No highlighted item to examine.");
+            }
+            break;
+
+        case ' ':
+        case '\n':
+        case '\r':
+        case '-':
+            if (highlight_row >= 0 && highlight_row < state.entry_count)
+            {
+                int floor_o_idx = state.entries[highlight_row].floor_o_idx;
+
+                pickup_pile_scene_suspend(&scene_scope);
+                if (!pickup_pile_allow_floor_item(floor_o_idx))
+                    break;
+                if (pickup_handle_floor_object(floor_o_idx, false))
+                    picked_up_item = true;
+            }
+            else
+            {
+                bell("No highlighted item to pick up.");
+            }
+            break;
+
+        default:
+            if (isalpha((unsigned char)command))
+            {
+                bool verify = isupper((unsigned char)command) ? true : false;
+                int entry_index = pickup_pile_find_hotkey_entry(&state,
+                    (char)tolower((unsigned char)command));
+
+                if (entry_index < 0)
+                {
+                    bell("Illegal object choice!");
+                    break;
+                }
+
+                highlight_row = entry_index;
+                pickup_pile_scene_suspend(&scene_scope);
+                if (verify
+                    && !pickup_pile_prompt_for_floor_item("Try",
+                        state.entries[entry_index].floor_o_idx))
+                {
+                    break;
+                }
+                if (!pickup_pile_allow_floor_item(
+                        state.entries[entry_index].floor_o_idx))
+                {
+                    break;
+                }
+                if (pickup_handle_floor_object(
+                        state.entries[entry_index].floor_o_idx, false))
+                {
+                    picked_up_item = true;
+                }
+            }
+            else
+            {
+                bell("Invalid command!");
+            }
+            break;
+        }
+    }
+
+    app_session_pop_wait_scope(app_session_current(), &wait_scope);
+    pickup_pile_scene_close(&scene_scope);
+
+    if (out_picked_up_item)
+        *out_picked_up_item = picked_up_item;
+
+    return true;
+}
+
 /*
  * Allow the player to sort through items in a pile and
  * pickup what they want.  This command does not use
@@ -566,41 +1067,11 @@ void do_cmd_pickup_from_pile(void)
 {
     bool picked_up_item = false;
 
-    /*
-     * Loop through and pick up objects until escape is hit or the pile is
-     * exhausted.
-     */
-    while (true)
+    if (!pickup_run_snapshot_pile_menu(&picked_up_item))
     {
-        int floor_list[MAX_FLOOR_STACK];
-        int floor_num;
-        int floor_o_idx;
-
-        /*start with everything updated*/
-        handle_stuff();
-
-        /* Scan for floor objects */
-        floor_num = scan_floor(
-            floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px, 0x00);
-
-        /* No pile */
-        if (floor_num < 1)
-        {
-            if (picked_up_item)
-                msg_format("There are no more objects where you are standing.");
-            else
-                msg_format("There are no objects where you are standing.");
-            break;
-        }
-
-        if (!pickup_select_floor_item_from_pile(&floor_o_idx))
-            break;
-
-        if (!pickup_handle_floor_object(floor_o_idx, false))
-            continue;
-
-        /*Mark that we picked something up*/
-        picked_up_item = true;
+        log_warn("pickup pile: snapshot menu required; legacy fallback removed");
+        msg_print("Pile pickup requires active snapshot UI rendering.");
+        return;
     }
 
     /* Combine / Reorder the pack */

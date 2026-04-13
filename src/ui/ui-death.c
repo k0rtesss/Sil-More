@@ -531,63 +531,6 @@ static bool death_build_final_menu_scene(app_ui_scene* scene, int highlight,
             (highlight == 7) ? TERM_L_BLUE : TERM_WHITE, 0, option_g);
 }
 
-static bool death_show_character_sheet_legacy(void)
-{
-    int term_wid;
-    int term_hgt;
-
-    death_get_term_size(&term_wid, &term_hgt);
-    display_player(0);
-    Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
-        "(press any key)");
-    Term_fresh();
-
-    return inkey() == ESCAPE;
-}
-
-static bool death_show_equipment_legacy(void)
-{
-    int term_wid;
-    int term_hgt;
-    bool escaped;
-    bool saved_item_tester_full = item_tester_full;
-
-    death_get_term_size(&term_wid, &term_hgt);
-    Term_clear();
-    item_tester_full = true;
-    show_equip();
-    item_tester_full = saved_item_tester_full;
-    prt("You are using:", 0, 0);
-    Term_putstr(MAX(0, term_wid - 18), term_hgt - 2, -1, TERM_L_WHITE,
-        "(press any key)");
-    Term_fresh();
-
-    escaped = (inkey() == ESCAPE);
-    return escaped;
-}
-
-static bool death_show_inventory_legacy(void)
-{
-    int term_wid;
-    int term_hgt;
-    bool escaped;
-    bool saved_item_tester_full = item_tester_full;
-
-    death_get_term_size(&term_wid, &term_hgt);
-    Term_clear();
-    item_tester_full = true;
-    show_inven();
-    item_tester_full = saved_item_tester_full;
-    prt("You are carrying:", 0, 0);
-    Term_putstr(MAX(0, term_wid - 18),
-        MIN(p_ptr->inven_cnt + 2, term_hgt - 2), -1, TERM_L_WHITE,
-        "(press any key)");
-    Term_fresh();
-
-    escaped = (inkey() == ESCAPE);
-    return escaped;
-}
-
 static char death_wait_final_menu_key_legacy(int highlight,
     bool morgoth_victory)
 {
@@ -736,81 +679,68 @@ void ui_death_show_character_info(void)
         item_tester_full = saved_item_tester_full;
     }
 
-    if (have_character_scene && have_equipment_scene && have_inventory_scene
-        && ui_information_scene_enter(&scope))
+    if (!have_character_scene || !have_equipment_scene || !have_inventory_scene)
     {
-        if (death_present_ui_page(&character_scene, &escaped))
-        {
-            if (escaped)
-            {
-                ui_information_scene_leave(&scope);
-                return;
-            }
+        log_warn("death character info: semantic scene build failed; legacy fallback removed");
+        do_cmd_knowledge_notes();
+        return;
+    }
 
-            if (have_equipment)
-            {
-                if (!death_present_ui_page(&equipment_scene, &escaped))
-                {
-                    ui_information_scene_leave(&scope);
-                }
-                else if (escaped)
-                {
-                    ui_information_scene_leave(&scope);
-                    return;
-                }
-                else if (have_inventory)
-                {
-                    if (!death_present_ui_page(&inventory_scene, &escaped))
-                    {
-                        ui_information_scene_leave(&scope);
-                    }
-                    else
-                    {
-                        ui_information_scene_leave(&scope);
-                        if (escaped)
-                            return;
-                        do_cmd_knowledge_notes();
-                        return;
-                    }
-                }
-                else
-                {
-                    ui_information_scene_leave(&scope);
-                    do_cmd_knowledge_notes();
-                    return;
-                }
-            }
-            else if (have_inventory)
-            {
-                if (death_present_ui_page(&inventory_scene, &escaped))
-                {
-                    ui_information_scene_leave(&scope);
-                    if (escaped)
-                        return;
-                    do_cmd_knowledge_notes();
-                    return;
-                }
+    if (!ui_information_scene_enter(&scope))
+    {
+        log_warn("death character info: semantic scene entry required; legacy fallback removed");
+        do_cmd_knowledge_notes();
+        return;
+    }
 
-                ui_information_scene_leave(&scope);
-            }
-            else
-            {
-                ui_information_scene_leave(&scope);
-                do_cmd_knowledge_notes();
-                return;
-            }
-        }
-        else
+    if (!death_present_ui_page(&character_scene, &escaped))
+    {
+        ui_information_scene_leave(&scope);
+        log_warn("death character info: failed to present character sheet scene");
+        do_cmd_knowledge_notes();
+        return;
+    }
+
+    if (escaped)
+    {
+        ui_information_scene_leave(&scope);
+        return;
+    }
+
+    if (have_equipment)
+    {
+        if (!death_present_ui_page(&equipment_scene, &escaped))
         {
             ui_information_scene_leave(&scope);
+            log_warn("death character info: failed to present equipment scene");
+            do_cmd_knowledge_notes();
+            return;
+        }
+        if (escaped)
+        {
+            ui_information_scene_leave(&scope);
+            return;
         }
     }
 
-    if (death_show_character_sheet_legacy())
-        return;
-    if (have_equipment && death_show_equipment_legacy())
-        return;
-    if (have_inventory && death_show_inventory_legacy())
+    if (have_inventory)
+    {
+        if (!death_present_ui_page(&inventory_scene, &escaped))
+        {
+            ui_information_scene_leave(&scope);
+            log_warn("death character info: failed to present inventory scene");
+            do_cmd_knowledge_notes();
+            return;
+        }
+        if (escaped)
+        {
+            ui_information_scene_leave(&scope);
+            return;
+        }
+    }
+
+    ui_information_scene_leave(&scope);
+    if (escaped)
         return;
 
     do_cmd_knowledge_notes();
