@@ -1118,8 +1118,21 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit);
 static void print_heading_fade(cptr title, byte final_attr);
 static bool print_paragraph_fade(cptr txt, byte final_attr, int row);
 static void adjust_blessing_threshold_menu(void);
-static void metarun_present_term(void);
-static char metarun_wait_key(void);
+static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
+    bool selected);
+static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
+    byte title_attr, const char* title, byte subtitle_attr,
+    const char* subtitle);
+static void metarun_ui_clear_pending_input(void);
+static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
+    const char* text);
+static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id);
+static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
+    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
+    const char* accept_label);
+static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
+    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
+    const char* accept_label, const char* back_label);
 /* =======================  load / save  ========================= */
 
 /*
@@ -2656,6 +2669,191 @@ static void show_completed_quests_summary(void)
     int term_height, term_width;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    char back_label[16] = "";
+
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+    }
+
+    if (use_information_scene) {
+        struct quest_summary_entry {
+            bool challenge_entry;
+            int id;
+            int count;
+            int unlock_count;
+        } entries[96];
+        int entry_count = 0;
+        int completed_quests = 0;
+        int selected = 0;
+        const int challenge_ids[] = {
+            CHALLENGE_DISCONNECTED,
+            CHALLENGE_SINGLE_STAIR,
+            CHALLENGE_FIXED_50K_XP,
+            CHALLENGE_TULKAS_BLUNT,
+            CHALLENGE_TORCHLIGHT
+        };
+
+        if (z_info && quest_info) {
+            for (int i = 1; i < z_info->quest_max
+                && entry_count < (int)N_ELEMENTS(entries); i++)
+            {
+                quest_type *q_ptr = &quest_info[i];
+                u32b flag;
+                int count;
+
+                if (!q_ptr->name) continue;
+                flag = quest_metarun_flag(i);
+                if (!flag) continue;
+                count = metarun_quest_completion_count(flag);
+                if (count <= 0) continue;
+
+                entries[entry_count].challenge_entry = false;
+                entries[entry_count].id = i;
+                entries[entry_count].count = count;
+                entries[entry_count].unlock_count = q_ptr->challenge_unlock
+                    ? metarun_challenge_completion_count(q_ptr->challenge_unlock)
+                    : 0;
+                entry_count++;
+                completed_quests++;
+            }
+        }
+
+        for (int i = 0; i < (int)N_ELEMENTS(challenge_ids)
+            && entry_count < (int)N_ELEMENTS(entries); i++)
+        {
+            entries[entry_count].challenge_entry = true;
+            entries[entry_count].id = challenge_ids[i];
+            entries[entry_count].count =
+                metarun_challenge_completion_count(challenge_ids[i]);
+            entries[entry_count].unlock_count = 0;
+            entry_count++;
+        }
+
+        while (true) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            char subtitle[APP_UI_TEXT_MAX];
+            int key;
+
+            if (selected < 0) selected = 0;
+            if (selected >= entry_count) selected = entry_count - 1;
+
+            strnfmt(subtitle, sizeof(subtitle), "%d completed quest%s",
+                completed_quests, (completed_quests == 1) ? "" : "s");
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Completed Quests", TERM_SLATE, subtitle);
+            if (!panel)
+                break;
+
+            if (completed_quests == 0) {
+                (void)app_ui_panel_add_body_line(panel, TERM_L_DARK,
+                    "No quests completed yet in this metarun.");
+            }
+
+            for (int i = 0; i < entry_count; i++) {
+                char meta[APP_UI_META_MAX];
+                byte attr;
+
+                if (entries[i].challenge_entry) {
+                    strnfmt(meta, sizeof(meta), "completed %d",
+                        entries[i].count);
+                    attr = TERM_WHITE;
+                    if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                            i == selected, "", challenge_display_name(
+                                entries[i].id), meta))
+                    {
+                        break;
+                    }
+                } else {
+                    strnfmt(meta, sizeof(meta), "x%d", entries[i].count);
+                    attr = TERM_WHITE;
+                    if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                            i == selected, "",
+                            quest_display_title(entries[i].id), meta))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (selected >= 0 && selected < entry_count) {
+                char line[APP_UI_TEXT_MAX];
+
+                if (entries[selected].challenge_entry) {
+                    app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                        "Challenge");
+                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                            challenge_display_name(entries[selected].id)))
+                    {
+                        break;
+                    }
+                    strnfmt(line, sizeof(line), "Completed %d time%s.",
+                        entries[selected].count,
+                        (entries[selected].count == 1) ? "" : "s");
+                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                        break;
+                } else {
+                    quest_type *q_ptr = &quest_info[entries[selected].id];
+                    app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                        "Quest");
+                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                            quest_display_title(entries[selected].id)))
+                    {
+                        break;
+                    }
+                    strnfmt(line, sizeof(line), "Completed %d time%s.",
+                        entries[selected].count,
+                        (entries[selected].count == 1) ? "" : "s");
+                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                        break;
+                    if (q_ptr->challenge_unlock) {
+                        strnfmt(line, sizeof(line), "Unlocks %s (completed %d)",
+                            challenge_display_name(q_ptr->challenge_unlock),
+                            entries[selected].unlock_count);
+                        if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                                line))
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Any", "Close");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            if (steamdeck) {
+                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                    true, back_label, "Back");
+            }
+
+            if (!ui_information_scene_present_ui(&scene))
+                break;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == '8' || key == 'k' || key == '-') {
+                selected = (selected + entry_count - 1) % entry_count;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected = (selected + 1) % entry_count;
+                continue;
+            }
+
+            metarun_ui_clear_pending_input();
+            ui_information_scene_leave(&info_scope);
+            return;
+        }
+
+        ui_information_scene_leave(&info_scope);
+        use_information_scene = false;
+    }
 
     Term_get_size(&term_width, &term_height);
 
@@ -2716,10 +2914,8 @@ static void show_completed_quests_summary(void)
     Term_putstr(col, row++, -1, TERM_WHITE, line);
 
     Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
-    (void)metarun_wait_key();
+    (void)inkey();
     screen_load();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
 }
 
 static void show_mandos_third_unlock_message(void)
@@ -3812,27 +4008,95 @@ static int metarun_render_active_effect_block(int id, int row, int term_width)
     return row;
 }
 
-static void metarun_present_term(void)
+static bool metarun_show_active_effects_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
 {
-    if (ui_information_scene_is_active())
+    int active_count = 0;
+    int active_ids[64];
+    int selected = 0;
+
+    for (int id = 0; id < z_info->cu_max && active_count < 64; id++)
     {
-        if (!ui_information_scene_present_term())
-            Term_fresh();
-        return;
+        if (CURSE_GET(id) != 0)
+            active_ids[active_count++] = id;
     }
 
-    Term_fresh();
-}
-
-static char metarun_wait_key(void)
-{
-    if (ui_information_scene_is_active())
+    if (active_count == 0)
     {
-        (void)ui_information_scene_present_term();
-        return (char)ui_information_scene_wait_key();
+        const char* lines[] = {
+            "No active curses or blessings remain on this saga."
+        };
+        const byte attrs[] = { TERM_L_DARK };
+
+        return metarun_ui_show_notice_modal("All Active Effects", TERM_YELLOW,
+            lines, attrs, (int)N_ELEMENTS(lines), steamdeck, accept_label);
     }
 
-    return inkey();
+    while (true)
+    {
+        app_ui_scene scene;
+        app_ui_panel* panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
+
+        strnfmt(subtitle, sizeof(subtitle), "%d active effect%s",
+            active_count, (active_count == 1) ? "" : "s");
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "All Active Effects", TERM_SLATE, subtitle);
+        if (!panel)
+            return false;
+
+        for (int i = 0; i < active_count; i++)
+        {
+            if (!metarun_ui_add_effect_row_ex(panel, active_ids[i],
+                    i == selected))
+            {
+                return false;
+            }
+        }
+
+        if (!metarun_ui_add_effect_detail_lines(panel, active_ids[selected]))
+            return false;
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Any", "Close");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        if (steamdeck)
+        {
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                back_label, "Back");
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+            return false;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == '8' || key == 'k' || key == '-')
+        {
+            selected = (selected + active_count - 1) % active_count;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+')
+        {
+            selected = (selected + 1) % active_count;
+            continue;
+        }
+        if (steamdeck)
+        {
+            if (key == steamdeck_back_key()
+                || key == steamdeck_confirm_key()
+                || key == '\r' || key == '\n' || key == ESCAPE)
+            {
+                metarun_ui_clear_pending_input();
+                return true;
+            }
+            continue;
+        }
+
+        metarun_ui_clear_pending_input();
+        return true;
+    }
 }
 
 /* Show all active curses in a dedicated screen with pagination */
@@ -3840,19 +4104,35 @@ static void show_all_active_curses(void)
 {
     int term_height, term_width;
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-
-    screen_save();
+    bool use_information_scene;
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
+    char back_label[16] = "";
 
-    if (steamdeck) {
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
+    if (steamdeck)
+    {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
     }
-    
+
+    use_information_scene = ui_information_scene_enter(&info_scope);
+    if (use_information_scene)
+    {
+        bool presented = metarun_show_active_effects_information_scene(
+            steamdeck, accept_label, back_label);
+
+        ui_information_scene_leave(&info_scope);
+        if (presented)
+            return;
+    }
+
+    screen_save();
+
     /* Get actual terminal dimensions */
     Term_get_size(&term_width, &term_height);
-    
+
     /* Count active effects and build list */
     int active_count = 0;
     int active_ids[64];
@@ -3861,7 +4141,7 @@ static void show_all_active_curses(void)
             active_ids[active_count++] = id;
         }
     }
-    
+
     if (active_count == 0) {
         Term_clear();
         Term_putstr(2, 1, -1, TERM_YELLOW, "=== All Active Effects ===");
@@ -3873,13 +4153,11 @@ static void show_all_active_curses(void)
         } else {
             Term_putstr(2, 5, -1, TERM_L_DARK, "Press any key to return.");
         }
-        (void)metarun_wait_key();
+        (void)inkey();
         screen_load();
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
         return;
     }
-    
+
     int available_lines = term_height - 4;
     if (available_lines < 1) available_lines = 1;
 
@@ -3906,34 +4184,31 @@ static void show_all_active_curses(void)
     void (*old_text_out_hook)(byte, cptr) = text_out_hook;
     int old_text_out_indent = text_out_indent;
     int old_text_out_wrap = text_out_wrap;
-    
+
     while (true) {
         Term_clear();
-        
+
         /* Title with page info */
         char title_buf[80];
         if (total_pages > 1) {
-            snprintf(title_buf, sizeof title_buf, "=== Active Effects (Page %d/%d) ===", 
+            snprintf(title_buf, sizeof title_buf, "=== Active Effects (Page %d/%d) ===",
                      current_page + 1, total_pages);
         } else {
             SDL_strlcpy(title_buf, "=== All Active Effects ===", sizeof title_buf);
         }
         Term_putstr(2, 1, -1, TERM_YELLOW, title_buf);
-        
+
         int start_idx = page_starts[current_page];
         int end_idx = (current_page + 1 < total_pages) ? page_starts[current_page + 1] : active_count;
-        
+
         int row = 3;
         for (int i = start_idx; i < end_idx; i++) {
             row = metarun_render_active_effect_block(active_ids[i], row, term_width);
         }
-        
+
         /* Footer with navigation instructions */
         char footer_buf[100];
-        char back_label[16] = "";
         if (steamdeck) {
-            /* Steam Deck UI: A=ok, B=back */
-            metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
             if (total_pages > 1) {
                 snprintf(footer_buf, sizeof footer_buf,
                          "D-pad navigate  [%s] ok  [%s] back", accept_label, back_label);
@@ -3943,26 +4218,26 @@ static void show_all_active_curses(void)
             }
         } else {
             if (total_pages > 1) {
-                snprintf(footer_buf, sizeof footer_buf, 
+                snprintf(footer_buf, sizeof footer_buf,
                          "Use arrows (left/right) to navigate. Any other key to return.");
             } else {
                 SDL_strlcpy(footer_buf, "Press any key to return.", sizeof footer_buf);
             }
         }
-        
+
         /* Ensure minimum 80 width for footer */
         size_t footer_len = strlen(footer_buf);
         if (footer_len < 80 && footer_len + 2 < sizeof footer_buf) {
             memset(footer_buf + footer_len, ' ', 80 - footer_len);
             footer_buf[80] = '\0';
         }
-        
+
         Term_putstr(0, term_height - 1, -1, TERM_L_DARK, footer_buf);
-        metarun_present_term();
-        
+        Term_fresh();
+
         /* Get input */
-        char key = metarun_wait_key();
-        
+        char key = inkey();
+
         /* Arrow navigation: 6 = right, 4 = left (keypad directions) */
         if (total_pages > 1 && key == '6') {
             /* Next page */
@@ -3985,10 +4260,8 @@ static void show_all_active_curses(void)
     text_out_hook = old_text_out_hook;
     text_out_indent = old_text_out_indent;
     text_out_wrap = old_text_out_wrap;
-    
+
     screen_load();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
 }
 
 static int blessing_points_remaining(void)
@@ -4024,6 +4297,303 @@ static void blessing_commit_changes(bool apply_runtime)
     save_metaruns();
 }
 
+typedef struct metarun_major_blessing_choice {
+    int idx;
+    char key;
+    int cost;
+} metarun_major_blessing_choice;
+
+typedef enum metarun_blessing_scene_mode {
+    METARUN_BLESSING_SCENE_MAIN = 0,
+    METARUN_BLESSING_SCENE_REMOVE = 1,
+    METARUN_BLESSING_SCENE_MINOR = 2,
+    METARUN_BLESSING_SCENE_MAJOR = 3
+} metarun_blessing_scene_mode;
+
+static int blessing_collect_removable_curses(int *ids, int capacity)
+{
+    int count = 0;
+
+    if (!ids || capacity <= 0)
+        return 0;
+
+    for (int id = 0; id < z_info->cu_max && count < capacity; id++) {
+        if (CURSE_CURSE_STACK(id) > 0)
+            ids[count++] = id;
+    }
+
+    return count;
+}
+
+static bool blessing_apply_remove_curse_choice(int curse_id, char *result_msg,
+    size_t msg_size, byte *result_attr)
+{
+    int current_stacks;
+
+    if (curse_id < 0 || curse_id >= z_info->cu_max
+        || CURSE_CURSE_STACK(curse_id) <= 0)
+    {
+        if (result_msg && msg_size > 0) {
+            SDL_strlcpy(result_msg, "No curses cling to this saga.", msg_size);
+            if (result_attr) *result_attr = TERM_L_DARK;
+        }
+        return false;
+    }
+
+    current_stacks = CURSE_CURSE_STACK(curse_id);
+    if (current_stacks > 1)
+        CURSE_SET(curse_id, current_stacks - 1);
+    else
+        CURSE_SET(curse_id, 0);
+    CURSE_SEEN_SET(curse_id);
+
+    blessing_spend_points(1);
+
+    metar.pending_blessing_count = 0;
+    for (int i = 0; i < 3; i++)
+        metar.pending_blessing_choices[i] = 255;
+
+    blessing_commit_changes(true);
+
+    if (result_msg && msg_size > 0) {
+        if (current_stacks > 1) {
+            snprintf(result_msg, msg_size,
+                "One stack of %s is lifted. (%d remain%s)",
+                curse_display_name(curse_id), current_stacks - 1,
+                (current_stacks - 1 == 1) ? "s" : "");
+        } else {
+            snprintf(result_msg, msg_size, "The curse of %s is lifted.",
+                curse_display_name(curse_id));
+        }
+        if (result_attr) *result_attr = TERM_L_BLUE;
+    }
+
+    return true;
+}
+
+static bool blessing_prepare_minor_choices(int *options, int *out_picks,
+    char *result_msg, size_t msg_size, byte *result_attr)
+{
+    int picks = 0;
+    bool have_valid_pending = false;
+
+    if (!options || !out_picks)
+        return false;
+
+    if (metar.pending_blessing_count > 0) {
+        for (int i = 0; i < metar.pending_blessing_count && i < 3; i++) {
+            int id = metar.pending_blessing_choices[i];
+            curse_type *c;
+            int stacks;
+            int blessing_stacks;
+
+            if (id == 255) continue;
+            c = &cu_info[id];
+            if (!c->blessing_name) continue;
+
+            stacks = CURSE_GET(id);
+            if (stacks > 0) continue;
+
+            blessing_stacks = (stacks < 0) ? -stacks : 0;
+            if (CURSE_BLESSING_CAP(id) > 0
+                && blessing_stacks >= CURSE_BLESSING_CAP(id))
+            {
+                continue;
+            }
+
+            options[picks++] = id;
+        }
+
+        if (picks > 0)
+            have_valid_pending = true;
+    }
+
+    if (!have_valid_pending) {
+        int eligible[METAR_CURSE_SLOTS];
+        int weights[METAR_CURSE_SLOTS];
+        int count = 0;
+        int total_weight = 0;
+
+        for (int id = 0; id < z_info->cu_max; id++) {
+            curse_type *c = &cu_info[id];
+            int stacks;
+            int blessing_stacks;
+            int base_weight;
+            int effective_weight;
+
+            if (!c->blessing_name) continue;
+
+            stacks = CURSE_GET(id);
+            if (stacks > 0) continue;
+
+            blessing_stacks = (stacks < 0) ? -stacks : 0;
+            if (CURSE_BLESSING_CAP(id) > 0
+                && blessing_stacks >= CURSE_BLESSING_CAP(id))
+            {
+                continue;
+            }
+
+            if (count >= METAR_CURSE_SLOTS)
+                continue;
+
+            eligible[count] = id;
+            base_weight = c->weight > 0 ? c->weight : 1;
+            effective_weight = base_weight / (blessing_stacks + 1);
+            weights[count] = (effective_weight > 0) ? effective_weight : 1;
+            total_weight += weights[count];
+            count++;
+        }
+
+        if (count == 0) {
+            if (result_msg && msg_size > 0) {
+                SDL_strlcpy(result_msg,
+                    "No blessings are presently available.", msg_size);
+                if (result_attr) *result_attr = TERM_L_DARK;
+            }
+            *out_picks = 0;
+            return false;
+        }
+
+        picks = MIN(3, count);
+        for (int i = 0; i < picks; i++) {
+            int roll = rand_int(total_weight);
+            int sum = 0;
+            int selected = 0;
+
+            for (int j = 0; j < count; j++) {
+                sum += weights[j];
+                if (roll < sum) {
+                    selected = j;
+                    break;
+                }
+            }
+
+            options[i] = eligible[selected];
+            total_weight -= weights[selected];
+            eligible[selected] = eligible[count - 1];
+            weights[selected] = weights[count - 1];
+            count--;
+        }
+
+        metar.pending_blessing_count = picks;
+        for (int i = 0; i < 3; i++) {
+            metar.pending_blessing_choices[i] = (i < picks)
+                ? options[i] : 255;
+        }
+        save_metaruns();
+    }
+
+    *out_picks = picks;
+    return picks > 0;
+}
+
+static bool blessing_apply_minor_choice(int blessing_id, char *result_msg,
+    size_t msg_size, byte *result_attr)
+{
+    int stacks = CURSE_GET(blessing_id);
+    int blessing_stacks = (stacks < 0) ? -stacks : 0;
+
+    if (blessing_id < 0 || blessing_id >= z_info->cu_max
+        || !cu_info[blessing_id].blessing_name)
+    {
+        if (result_msg && msg_size > 0) {
+            SDL_strlcpy(result_msg, "That blessing is no longer available.",
+                msg_size);
+            if (result_attr) *result_attr = TERM_L_DARK;
+        }
+        return false;
+    }
+
+    if (CURSE_BLESSING_CAP(blessing_id) > 0
+        && blessing_stacks >= CURSE_BLESSING_CAP(blessing_id))
+    {
+        if (result_msg && msg_size > 0) {
+            SDL_strlcpy(result_msg,
+                "That blessing cannot grow any stronger.", msg_size);
+            if (result_attr) *result_attr = TERM_L_DARK;
+        }
+        return false;
+    }
+
+    CURSE_ADD(blessing_id, -1);
+    CURSE_SEEN_SET(blessing_id);
+    blessing_spend_points(1);
+
+    metar.pending_blessing_count = 0;
+    for (int i = 0; i < 3; i++)
+        metar.pending_blessing_choices[i] = 255;
+
+    blessing_commit_changes(true);
+
+    if (result_msg && msg_size > 0) {
+        snprintf(result_msg, msg_size, "You receive the %s.",
+            blessing_display_name(blessing_id));
+        if (result_attr) *result_attr = TERM_L_GREEN;
+    }
+
+    return true;
+}
+
+static int blessing_collect_major_choices(
+    metarun_major_blessing_choice *options, int capacity, int *out_min_cost)
+{
+    int option_count = 0;
+    int min_cost = INT_MAX;
+    int cap;
+
+    if (out_min_cost)
+        *out_min_cost = 0;
+
+    metarun_sanitize_major_blessing_bits(&metar);
+    cap = major_blessing_capacity();
+    if (cap <= 0 || !mb_info || !options || capacity <= 0)
+        return 0;
+
+    for (int i = 0; i < cap && option_count < capacity; i++) {
+        int cost;
+
+        if (metarun_has_major_blessing_index(i)) continue;
+        if (!major_blessing_def(i)) continue;
+
+        cost = major_blessing_cost(i);
+        if (cost < 0) cost = 0;
+        options[option_count].idx = i;
+        options[option_count].key = (char)('a' + option_count);
+        options[option_count].cost = cost;
+        if (cost < min_cost)
+            min_cost = cost;
+        option_count++;
+    }
+
+    if (out_min_cost) {
+        *out_min_cost = (min_cost == INT_MAX) ? 0 : min_cost;
+    }
+
+    return option_count;
+}
+
+static bool blessing_apply_major_choice(int choice_idx, char *result_msg,
+    size_t msg_size, byte *result_attr)
+{
+    metar.major_blessings |= (1U << choice_idx);
+    blessing_spend_points(major_blessing_cost(choice_idx));
+    blessing_commit_changes(true);
+
+    if (result_msg && msg_size > 0) {
+        const char *msg = major_blessing_unlock_msg(choice_idx);
+
+        if (msg && *msg) {
+            SDL_strlcpy(result_msg, msg, msg_size);
+        } else {
+            snprintf(result_msg, msg_size, "You seal the %s.",
+                major_blessing_name_str(choice_idx));
+        }
+        if (result_attr) *result_attr = TERM_YELLOW;
+    }
+
+    return true;
+}
+
 static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *result_attr)
 {
     int ids[METAR_CURSE_SLOTS];
@@ -4056,6 +4626,125 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
+
+    if (ui_information_scene_is_active()) {
+        while (choice < 0) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Remove a Curse", TERM_SLATE, "Cost: 1 blessing point");
+            if (!panel)
+                return false;
+
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+                "Choose which curse to lift.");
+
+            for (int i = 0; i < count; i++) {
+                int id = ids[i];
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "stacks: %d",
+                    CURSE_CURSE_STACK(id));
+                if (!app_ui_panel_add_row(panel, id, TERM_RED, true,
+                        i == selected, key_buf, curse_display_name(id), meta))
+                {
+                    return false;
+                }
+            }
+
+            if (selected >= 0 && selected < count) {
+                int id = ids[selected];
+                curse_type *c = &cu_info[id];
+                char line[APP_UI_TEXT_MAX];
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Curse");
+                strnfmt(line, sizeof(line), "%s", curse_display_name(id));
+                if (!app_ui_panel_add_detail_line(panel, TERM_RED, line))
+                    return false;
+                strnfmt(line, sizeof(line), "Stacks: %d",
+                    CURSE_CURSE_STACK(id));
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                    return false;
+                if (c->text
+                    && !metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
+                        cu_text + c->text))
+                {
+                    return false;
+                }
+                if (CURSE_SEEN(id) && c->power) {
+                    strnfmt(line, sizeof(line), "Effect: %s",
+                        cu_text + c->power);
+                    if (!metarun_ui_add_wrapped_detail_lines(panel,
+                            TERM_SLATE, line))
+                    {
+                        return false;
+                    }
+                } else if (!CURSE_SEEN(id)) {
+                    if (!app_ui_panel_add_detail_line(panel, TERM_L_DARK,
+                            "(Effect not yet identified)"))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Lift");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Cancel");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                metarun_ui_clear_pending_input();
+                return false;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key())
+                || key == '6')
+            {
+                choice = selected;
+                metarun_ui_clear_pending_input();
+                break;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selected = (selected + count - 1) % count;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected = (selected + 1) % count;
+                continue;
+            }
+
+            int idx = key - 'a';
+            if (idx >= 0 && idx < count) {
+                choice = idx;
+                metarun_ui_clear_pending_input();
+            } else if (key >= 'A' && key <= 'Z') {
+                idx = key - 'A';
+                if (idx >= 0 && idx < count) {
+                    choice = idx;
+                    metarun_ui_clear_pending_input();
+                } else {
+                    bell("Invalid selection.");
+                }
+            } else {
+                bell("Invalid selection.");
+            }
+        }
+    } else {
     
     /* Setup text wrapping */
     text_out_hook = text_out_to_screen;
@@ -4119,7 +4808,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
             Term_putstr(2, line + 1, -1, TERM_L_DARK,
                         "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
         }
-        char key = metarun_wait_key();
+        char key = inkey();
         screen_load();
 
         /* Handle back/cancel - ESC or B button in Steam Deck mode */
@@ -4153,6 +4842,7 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
             bell("Invalid selection.");
         }
     }
+    }
 
     int curse_id = ids[choice];
     int current_stacks = CURSE_CURSE_STACK(curse_id);
@@ -4165,9 +4855,11 @@ static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *resul
     }
     CURSE_SEEN_SET(curse_id);
 
-    /* Reset text wrapping */
-    text_out_wrap = 0;
-    text_out_indent = 0;
+    if (!ui_information_scene_is_active()) {
+        /* Reset text wrapping */
+        text_out_wrap = 0;
+        text_out_indent = 0;
+    }
 
     blessing_spend_points(1);
     
@@ -4315,6 +5007,114 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
+
+    if (ui_information_scene_is_active()) {
+        while (choice < 0) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Receive a Blessing", TERM_SLATE, "Cost: 1 blessing point");
+            if (!panel)
+                return false;
+
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+                "Select a gift to accept.");
+
+            for (int i = 0; i < picks; i++) {
+                int id = options[i];
+                int stacks = CURSE_GET(id);
+                int blessing_stacks = (stacks < 0) ? -stacks : 0;
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "current: %d", blessing_stacks);
+                if (!app_ui_panel_add_row(panel, id, TERM_L_GREEN, true,
+                        i == selected, key_buf, blessing_display_name(id),
+                        meta))
+                {
+                    return false;
+                }
+            }
+
+            if (selected >= 0 && selected < picks) {
+                curse_type *c = &cu_info[options[selected]];
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Blessing");
+                if (!app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                        blessing_display_name(options[selected])))
+                {
+                    return false;
+                }
+                if (c->blessing_text
+                    && !metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
+                        cu_text + c->blessing_text))
+                {
+                    return false;
+                }
+                if (c->blessing_power
+                    && !metarun_ui_add_wrapped_detail_lines(panel,
+                        TERM_L_GREEN, cu_text + c->blessing_power))
+                {
+                    return false;
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Accept");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Cancel");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                metarun_ui_clear_pending_input();
+                return false;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key())
+                || key == '6')
+            {
+                choice = selected;
+                metarun_ui_clear_pending_input();
+                break;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selected = (selected + picks - 1) % picks;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected = (selected + 1) % picks;
+                continue;
+            }
+
+            int idx = key - 'a';
+            if (idx >= 0 && idx < picks) {
+                choice = idx;
+                metarun_ui_clear_pending_input();
+            } else if (key >= 'A' && key <= 'Z') {
+                idx = key - 'A';
+                if (idx >= 0 && idx < picks) {
+                    choice = idx;
+                    metarun_ui_clear_pending_input();
+                } else {
+                    bell("Invalid selection.");
+                }
+            } else {
+                bell("Invalid selection.");
+            }
+        }
+    } else {
     while (choice < 0) {
         screen_save();
         Term_clear();
@@ -4359,7 +5159,7 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
             Term_putstr(2, line + 1, -1, TERM_L_DARK,
                         "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
         }
-        char key = metarun_wait_key();
+        char key = inkey();
         screen_load();
 
         /* Handle back/cancel - ESC or B button in Steam Deck mode */
@@ -4389,6 +5189,8 @@ static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_
         } else {
             bell("Invalid selection.");
         }
+    }
+
     }
 
     int blessing_id = options[choice];
@@ -4489,7 +5291,157 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
         }
         return false;
     }
-    
+
+    if (ui_information_scene_is_active()) {
+        while (true) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Unlock a Major Blessing", TERM_SLATE,
+                "Forge a covenant for this saga.");
+            if (!panel)
+                return false;
+
+            for (int i = 0; i < option_count; i++) {
+                int idx = options[i].idx;
+                int cost = major_blessing_cost(idx);
+                bool affordable = (cost <= available);
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", options[i].key);
+                strnfmt(meta, sizeof(meta), "cost %d", cost);
+                if (!app_ui_panel_add_row(panel, idx,
+                        affordable ? TERM_L_GREEN : TERM_L_DARK, affordable,
+                        i == selected, key_buf, major_blessing_name_str(idx),
+                        meta))
+                {
+                    return false;
+                }
+            }
+
+            if (selected >= 0 && selected < option_count) {
+                int idx = options[selected].idx;
+                int cost = major_blessing_cost(idx);
+                bool affordable = (cost <= available);
+                const char *detail = major_blessing_detail_desc(idx);
+                char line[APP_UI_TEXT_MAX];
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Covenant");
+                if (!app_ui_panel_add_detail_line(panel,
+                        affordable ? TERM_L_GREEN : TERM_L_DARK,
+                        major_blessing_name_str(idx)))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Cost: %d blessing point%s", cost,
+                    (cost == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel,
+                        affordable ? TERM_WHITE : TERM_L_DARK, line))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Available: %d", available);
+                if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE, line))
+                    return false;
+                if (detail && *detail
+                    && !metarun_ui_add_wrapped_detail_lines(panel,
+                        affordable ? TERM_WHITE : TERM_SLATE, detail))
+                {
+                    return false;
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Unlock");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Cancel");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                metarun_ui_clear_pending_input();
+                return false;
+            }
+
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key())
+                || key == '6')
+            {
+                key = options[selected].key;
+            } else if (key == '8' || key == 'k' || key == '-') {
+                int start = selected;
+                do {
+                    selected = (selected + option_count - 1) % option_count;
+                    if (major_blessing_cost(options[selected].idx) <= available)
+                        break;
+                } while (selected != start);
+                continue;
+            } else if (key == '2' || key == 'j' || key == '+') {
+                int start = selected;
+                do {
+                    selected = (selected + 1) % option_count;
+                    if (major_blessing_cost(options[selected].idx) <= available)
+                        break;
+                } while (selected != start);
+                continue;
+            }
+
+            int choice_idx = -1;
+            char lowered = tolower((unsigned char)key);
+            if (lowered >= 'a' && lowered <= 'z') {
+                for (int i = 0; i < option_count; i++) {
+                    if (lowered == options[i].key) {
+                        if (major_blessing_cost(options[i].idx) > available) {
+                            bell("Not enough blessing points for that covenant.");
+                            choice_idx = -2;
+                            break;
+                        }
+                        choice_idx = options[i].idx;
+                        selected = i;
+                        break;
+                    }
+                }
+            }
+
+            if (choice_idx == -2)
+                continue;
+            if (choice_idx < 0) {
+                bell("Invalid selection.");
+                continue;
+            }
+
+            int cost = major_blessing_cost(choice_idx);
+
+            metar.major_blessings |= (1U << choice_idx);
+            blessing_spend_points(cost);
+            blessing_commit_changes(true);
+            metarun_ui_clear_pending_input();
+
+            if (result_msg && msg_size > 0) {
+                const char *msg = major_blessing_unlock_msg(choice_idx);
+                if (msg && *msg) {
+                    SDL_strlcpy(result_msg, msg, msg_size);
+                } else {
+                    snprintf(result_msg, msg_size, "You seal the %s.",
+                        major_blessing_name_str(choice_idx));
+                }
+                if (result_attr) *result_attr = TERM_YELLOW;
+            }
+            return true;
+        }
+    }
+
     while (true) {
         screen_save();
         Term_clear();
@@ -4552,7 +5504,7 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
                         "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
         }
 
-        char key = metarun_wait_key();
+        char key = inkey();
         screen_load();
 
         /* Handle back/cancel - ESC or B button in Steam Deck mode */
@@ -4630,6 +5582,602 @@ static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *resul
     }
 }
 
+static bool open_blessing_exchange_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
+{
+    metarun_blessing_scene_mode mode = METARUN_BLESSING_SCENE_MAIN;
+    int selected_main = 0;
+    int selected_remove = 0;
+    int selected_minor = 0;
+    int selected_major = 0;
+    char status_msg[256] = "";
+    byte status_attr = TERM_WHITE;
+    bool clear_status_on_next_key = false;
+
+    while (true) {
+        int available;
+        int earned;
+        int spent;
+        int main_option_count = 3;
+        int min_major_cost = 0;
+        metarun_major_blessing_choice major_options[16];
+        int major_option_count;
+        bool major_available;
+        bool major_affordable;
+
+        compute_blessing_pool();
+        available = blessing_points_remaining();
+        earned = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
+        spent = metar.blessing_points_spent;
+        major_option_count = blessing_collect_major_choices(major_options,
+            (int)N_ELEMENTS(major_options), &min_major_cost);
+        major_available = major_option_count > 0;
+        major_affordable = major_available && (min_major_cost <= available);
+
+        if (mode == METARUN_BLESSING_SCENE_MAIN) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            char subtitle[APP_UI_TEXT_MAX];
+            char buf[APP_UI_TEXT_MAX];
+            int key;
+            u32b threshold = metarun_threshold_value(&metar);
+
+            if (threshold == 0) threshold = 1;
+            if (selected_main < 0) selected_main = 0;
+            if (selected_main >= main_option_count)
+                selected_main = main_option_count - 1;
+
+            strnfmt(subtitle, sizeof(subtitle),
+                "%d available (%d spent / %d earned)", available, spent,
+                earned);
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Blessing Exchange", TERM_SLATE, subtitle);
+            if (!panel)
+                return false;
+
+            strnfmt(buf, sizeof(buf),
+                "Fallen score pool: %lu total, %lu / %lu to next blessing",
+                (unsigned long)metar.fallen_score_total,
+                (unsigned long)metar.fallen_score_pool,
+                (unsigned long)threshold);
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE, buf);
+            if (status_msg[0] != '\0')
+                (void)app_ui_panel_add_body_line(panel, status_attr, status_msg);
+
+            if (!app_ui_panel_add_row(panel, 0, TERM_WHITE, true,
+                    selected_main == 0, "r", "Remove a curse", "cost 1"))
+            {
+                return false;
+            }
+            if (!app_ui_panel_add_row(panel, 1, TERM_WHITE, true,
+                    selected_main == 1, "m", "Gain a minor blessing",
+                    "cost 1"))
+            {
+                return false;
+            }
+            if (major_available) {
+                strnfmt(buf, sizeof(buf), "cost %d", min_major_cost);
+                if (!app_ui_panel_add_row(panel, 2,
+                        major_affordable ? TERM_WHITE : TERM_L_DARK, true,
+                        selected_main == 2, "u",
+                        "Unlock a major blessing", buf))
+                {
+                    return false;
+                }
+            } else {
+                if (!app_ui_panel_add_row(panel, 2, TERM_L_DARK, true,
+                        selected_main == 2, "u",
+                        "Unlock a major blessing", "none available"))
+                {
+                    return false;
+                }
+            }
+
+            app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Option");
+            if (selected_main == 0) {
+                (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                    "Lift one stack from an active curse.");
+                (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+                    "Available immediately if you have a blessing point.");
+            } else if (selected_main == 1) {
+                (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                    "Accept one of three offered minor blessings.");
+                (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+                    "Offered gifts persist until chosen or invalidated.");
+            } else {
+                if (major_available) {
+                    strnfmt(buf, sizeof(buf), "Lowest available cost: %d",
+                        min_major_cost);
+                    (void)app_ui_panel_add_detail_line(panel,
+                        major_affordable ? TERM_YELLOW : TERM_L_DARK,
+                        "Seal a permanent major blessing for this metarun.");
+                    (void)app_ui_panel_add_detail_line(panel,
+                        major_affordable ? TERM_WHITE : TERM_L_DARK, buf);
+                    if (!major_affordable) {
+                        strnfmt(buf, sizeof(buf),
+                            "You need %d blessing points to unlock one.",
+                            min_major_cost);
+                        (void)app_ui_panel_add_detail_line(panel, TERM_ORANGE,
+                            buf);
+                    }
+                } else {
+                    (void)app_ui_panel_add_detail_line(panel, TERM_L_DARK,
+                        "All major blessings have already been sealed.");
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Choose");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Leave");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (clear_status_on_next_key || key == '8' || key == 'k'
+                || key == '-' || key == '2' || key == 'j' || key == '+')
+            {
+                status_msg[0] = '\0';
+                clear_status_on_next_key = false;
+            }
+
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                metarun_ui_clear_pending_input();
+                return true;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selected_main = (selected_main + main_option_count - 1)
+                    % main_option_count;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected_main = (selected_main + 1) % main_option_count;
+                continue;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                key = (selected_main == 0) ? 'r'
+                    : (selected_main == 1) ? 'm' : 'u';
+            }
+
+            if (key == 'r' || key == 'R') {
+                if (available < 1) {
+                    SDL_strlcpy(status_msg,
+                        "You need at least one blessing point to lift a curse.",
+                        sizeof(status_msg));
+                    status_attr = TERM_ORANGE;
+                    clear_status_on_next_key = true;
+                } else {
+                    mode = METARUN_BLESSING_SCENE_REMOVE;
+                }
+                continue;
+            }
+            if (key == 'm' || key == 'M') {
+                if (available < 1) {
+                    SDL_strlcpy(status_msg,
+                        "You need at least one blessing point to receive a gift.",
+                        sizeof(status_msg));
+                    status_attr = TERM_ORANGE;
+                    clear_status_on_next_key = true;
+                } else {
+                    mode = METARUN_BLESSING_SCENE_MINOR;
+                }
+                continue;
+            }
+            if (key == 'u' || key == 'U') {
+                if (!major_available) {
+                    SDL_strlcpy(status_msg,
+                        "All major blessings have already been sealed.",
+                        sizeof(status_msg));
+                    status_attr = TERM_L_DARK;
+                    clear_status_on_next_key = true;
+                } else if (!major_affordable) {
+                    snprintf(status_msg, sizeof(status_msg),
+                        "You need %d blessing points to unlock a major blessing.",
+                        min_major_cost);
+                    status_attr = TERM_ORANGE;
+                    clear_status_on_next_key = true;
+                } else {
+                    mode = METARUN_BLESSING_SCENE_MAJOR;
+                }
+                continue;
+            }
+
+            bell("Unrecognised option.");
+            continue;
+        }
+
+        if (mode == METARUN_BLESSING_SCENE_REMOVE) {
+            int ids[METAR_CURSE_SLOTS];
+            int count = blessing_collect_removable_curses(ids,
+                (int)N_ELEMENTS(ids));
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+
+            if (count <= 0) {
+                SDL_strlcpy(status_msg, "No curses cling to this saga.",
+                    sizeof(status_msg));
+                status_attr = TERM_L_DARK;
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            if (selected_remove < 0) selected_remove = 0;
+            if (selected_remove >= count) selected_remove = count - 1;
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Remove a Curse", TERM_SLATE, "Cost: 1 blessing point");
+            if (!panel)
+                return false;
+
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+                "Choose which curse to lift.");
+
+            for (int i = 0; i < count; i++) {
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "stacks: %d",
+                    CURSE_CURSE_STACK(ids[i]));
+                if (!app_ui_panel_add_row(panel, ids[i], TERM_RED, true,
+                        i == selected_remove, key_buf,
+                        curse_display_name(ids[i]), meta))
+                {
+                    return false;
+                }
+            }
+
+            if (!metarun_ui_add_effect_detail_lines(panel, ids[selected_remove]))
+                return false;
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Lift");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Back");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selected_remove = (selected_remove + count - 1) % count;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected_remove = (selected_remove + 1) % count;
+                continue;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                (void)blessing_apply_remove_curse_choice(ids[selected_remove],
+                    status_msg, sizeof(status_msg), &status_attr);
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            {
+                int idx = (key >= 'A' && key <= 'Z') ? key - 'A' : key - 'a';
+                if (idx >= 0 && idx < count) {
+                    selected_remove = idx;
+                    (void)blessing_apply_remove_curse_choice(ids[idx],
+                        status_msg, sizeof(status_msg), &status_attr);
+                    clear_status_on_next_key = true;
+                    mode = METARUN_BLESSING_SCENE_MAIN;
+                    continue;
+                }
+            }
+
+            bell("Invalid selection.");
+            continue;
+        }
+
+        if (mode == METARUN_BLESSING_SCENE_MINOR) {
+            int options[3];
+            int picks = 0;
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+
+            if (!blessing_prepare_minor_choices(options, &picks, status_msg,
+                    sizeof(status_msg), &status_attr))
+            {
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            if (selected_minor < 0) selected_minor = 0;
+            if (selected_minor >= picks) selected_minor = picks - 1;
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Receive a Blessing", TERM_SLATE, "Cost: 1 blessing point");
+            if (!panel)
+                return false;
+
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+                "Select a gift to accept.");
+
+            for (int i = 0; i < picks; i++) {
+                int blessing_stacks = 0;
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+                int stacks = CURSE_GET(options[i]);
+
+                if (stacks < 0)
+                    blessing_stacks = -stacks;
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "current: %d", blessing_stacks);
+                if (!app_ui_panel_add_row(panel, options[i], TERM_L_GREEN, true,
+                        i == selected_minor, key_buf,
+                        blessing_display_name(options[i]), meta))
+                {
+                    return false;
+                }
+            }
+
+            {
+                curse_type *c = &cu_info[options[selected_minor]];
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Blessing");
+                (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                    blessing_display_name(options[selected_minor]));
+                if (c->blessing_text) {
+                    if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
+                            cu_text + c->blessing_text))
+                    {
+                        return false;
+                    }
+                }
+                if (c->blessing_power) {
+                    if (!metarun_ui_add_wrapped_detail_lines(panel,
+                            TERM_L_GREEN, cu_text + c->blessing_power))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Accept");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Back");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selected_minor = (selected_minor + picks - 1) % picks;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selected_minor = (selected_minor + 1) % picks;
+                continue;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                (void)blessing_apply_minor_choice(options[selected_minor],
+                    status_msg, sizeof(status_msg), &status_attr);
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            {
+                int idx = (key >= 'A' && key <= 'Z') ? key - 'A' : key - 'a';
+                if (idx >= 0 && idx < picks) {
+                    selected_minor = idx;
+                    (void)blessing_apply_minor_choice(options[idx], status_msg,
+                        sizeof(status_msg), &status_attr);
+                    clear_status_on_next_key = true;
+                    mode = METARUN_BLESSING_SCENE_MAIN;
+                    continue;
+                }
+            }
+
+            bell("Invalid selection.");
+            continue;
+        }
+
+        if (mode == METARUN_BLESSING_SCENE_MAJOR) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int key;
+            int first_affordable = -1;
+
+            if (!major_available) {
+                SDL_strlcpy(status_msg,
+                    "All major blessings have already been sealed.",
+                    sizeof(status_msg));
+                status_attr = TERM_L_DARK;
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            for (int i = 0; i < major_option_count; i++) {
+                if (major_options[i].cost <= available) {
+                    first_affordable = i;
+                    break;
+                }
+            }
+            if (first_affordable < 0) {
+                snprintf(status_msg, sizeof(status_msg),
+                    "You need %d blessing points to unlock a major blessing.",
+                    min_major_cost);
+                status_attr = TERM_ORANGE;
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+            if (selected_major < 0 || selected_major >= major_option_count
+                || major_options[selected_major].cost > available)
+            {
+                selected_major = first_affordable;
+            }
+
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Unlock a Major Blessing", TERM_SLATE,
+                "Forge a covenant for this saga.");
+            if (!panel)
+                return false;
+
+            for (int i = 0; i < major_option_count; i++) {
+                bool affordable = (major_options[i].cost <= available);
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", major_options[i].key);
+                strnfmt(meta, sizeof(meta), "cost %d", major_options[i].cost);
+                if (!app_ui_panel_add_row(panel, major_options[i].idx,
+                        affordable ? TERM_L_GREEN : TERM_L_DARK, true,
+                        i == selected_major, key_buf,
+                        major_blessing_name_str(major_options[i].idx), meta))
+                {
+                    return false;
+                }
+            }
+
+            {
+                int idx = major_options[selected_major].idx;
+                const char *detail = major_blessing_detail_desc(idx);
+                char line[APP_UI_TEXT_MAX];
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Covenant");
+                (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                    major_blessing_name_str(idx));
+                strnfmt(line, sizeof(line), "Cost: %d blessing point%s",
+                    major_options[selected_major].cost,
+                    (major_options[selected_major].cost == 1) ? "" : "s");
+                (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, line);
+                strnfmt(line, sizeof(line), "Available: %d", available);
+                (void)app_ui_panel_add_detail_line(panel, TERM_L_BLUE, line);
+                if (detail && *detail) {
+                    if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
+                            detail))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Unlock");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Back");
+
+            if (!ui_information_scene_present_ui(&scene))
+                return false;
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || key == '4'
+                || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                int start = selected_major;
+                do {
+                    selected_major = (selected_major + major_option_count - 1)
+                        % major_option_count;
+                    if (major_options[selected_major].cost <= available)
+                        break;
+                } while (selected_major != start);
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                int start = selected_major;
+                do {
+                    selected_major = (selected_major + 1) % major_option_count;
+                    if (major_options[selected_major].cost <= available)
+                        break;
+                } while (selected_major != start);
+                continue;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                (void)blessing_apply_major_choice(
+                    major_options[selected_major].idx, status_msg,
+                    sizeof(status_msg), &status_attr);
+                clear_status_on_next_key = true;
+                mode = METARUN_BLESSING_SCENE_MAIN;
+                continue;
+            }
+
+            {
+                int choice_idx = -1;
+                char lowered = tolower((unsigned char)key);
+
+                if (lowered >= 'a' && lowered <= 'z') {
+                    for (int i = 0; i < major_option_count; i++) {
+                        if (lowered != major_options[i].key)
+                            continue;
+                        if (major_options[i].cost > available) {
+                            bell("Not enough blessing points for that covenant.");
+                            choice_idx = -2;
+                            break;
+                        }
+                        choice_idx = i;
+                        break;
+                    }
+                }
+
+                if (choice_idx == -2)
+                    continue;
+                if (choice_idx >= 0) {
+                    selected_major = choice_idx;
+                    (void)blessing_apply_major_choice(
+                        major_options[choice_idx].idx, status_msg,
+                        sizeof(status_msg), &status_attr);
+                    clear_status_on_next_key = true;
+                    mode = METARUN_BLESSING_SCENE_MAIN;
+                    continue;
+                }
+            }
+
+            bell("Invalid selection.");
+            continue;
+        }
+    }
+}
+
 static void open_blessing_exchange(void)
 {
     bool done = false;
@@ -4647,6 +6195,15 @@ static void open_blessing_exchange(void)
         /* Steam Deck UI: A=accept, B=back */
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
+    }
+
+    if (use_information_scene) {
+        bool semantic_ok = open_blessing_exchange_information_scene(
+            steamdeck, accept_label, back_label);
+        ui_information_scene_leave(&info_scope);
+        if (semantic_ok)
+            return;
+        use_information_scene = false;
     }
 
     while (!done) {
@@ -4740,7 +6297,7 @@ static void open_blessing_exchange(void)
             Term_putstr(2, 14, -1, status_attr, status_msg);
         }
 
-        char key = metarun_wait_key();
+        char key = inkey();
         screen_load();
         
         /* Clear status message on navigation or if flagged */
@@ -4983,7 +6540,8 @@ static bool metarun_ui_add_value_row(app_ui_panel* panel, byte label_attr,
         true, false, "", label ? label : "", value ? value : "");
 }
 
-static bool metarun_ui_add_effect_row(app_ui_panel* panel, int id)
+static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
+    bool selected)
 {
     const curse_type* cu;
     const char* effect = NULL;
@@ -5024,7 +6582,12 @@ static bool metarun_ui_add_effect_row(app_ui_panel* panel, int id)
         strnfmt(meta, sizeof(meta), "%c%d", icon, magnitude);
 
     return app_ui_panel_add_row_ex(panel, id, attr, attr, attr, icon, true,
-        false, "", label, meta);
+        selected, "", label, meta);
+}
+
+static bool metarun_ui_add_effect_row(app_ui_panel* panel, int id)
+{
+    return metarun_ui_add_effect_row_ex(panel, id, false);
 }
 
 static void metarun_trim_first_line(char* dst, size_t dst_size,
@@ -5039,6 +6602,351 @@ static void metarun_trim_first_line(char* dst, size_t dst_size,
     newline = strchr(dst, '\n');
     if (newline)
         *newline = '\0';
+}
+
+#define METARUN_UI_WRAP_WIDTH 68
+#define METARUN_HISTORY_PAGE_SIZE 48
+
+static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
+    byte title_attr, const char* title, byte subtitle_attr,
+    const char* subtitle)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, title_attr, title ? title : "");
+    if (subtitle && subtitle[0])
+        app_ui_panel_set_subtitle(panel, subtitle_attr, subtitle);
+
+    return panel;
+}
+
+static app_ui_panel* metarun_ui_begin_modal_scene(app_ui_scene* scene,
+    byte title_attr, const char* title)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 340, 620);
+    app_ui_panel_set_title(panel, title_attr, title ? title : "");
+    return panel;
+}
+
+static bool metarun_ui_add_wrapped_text_lines(app_ui_panel* panel, byte attr,
+    const char* text, bool detail)
+{
+    const char* cursor = text;
+
+    if (!panel || !text || !text[0])
+        return true;
+
+    while (*cursor)
+    {
+        const char* start;
+        const char* split = NULL;
+        size_t len = 0;
+        char line[APP_UI_TEXT_MAX];
+
+        while (*cursor == ' ' || *cursor == '\t')
+            cursor++;
+
+        if (*cursor == '\n')
+        {
+            cursor++;
+            if (detail)
+            {
+                if (!app_ui_panel_add_detail_line(panel, attr, " "))
+                    return false;
+            }
+            else if (!app_ui_panel_add_body_line(panel, attr, " "))
+            {
+                return false;
+            }
+            continue;
+        }
+
+        if (detail)
+        {
+            if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+                break;
+        }
+        else if (panel->body_line_count >= APP_UI_BODY_LINE_MAX)
+        {
+            break;
+        }
+
+        start = cursor;
+        while (cursor[len] && cursor[len] != '\n')
+        {
+            if (len < METARUN_UI_WRAP_WIDTH)
+            {
+                if (cursor[len] == ' ')
+                    split = cursor + len;
+            }
+            else if (split)
+            {
+                break;
+            }
+            else if (len >= (sizeof(line) - 1))
+            {
+                break;
+            }
+            len++;
+        }
+
+        if (cursor[len] && cursor[len] != '\n' && split && split > start)
+            len = (size_t)(split - start);
+        else if (len == 0 && cursor[len] && cursor[len] != '\n')
+            len = 1;
+
+        if (len >= sizeof(line))
+            len = sizeof(line) - 1;
+
+        memcpy(line, start, len);
+        line[len] = '\0';
+        while (len > 0 && isspace((unsigned char)line[len - 1]))
+            line[--len] = '\0';
+
+        if (line[0])
+        {
+            if (detail)
+            {
+                if (!app_ui_panel_add_detail_line(panel, attr, line))
+                    return false;
+            }
+            else if (!app_ui_panel_add_body_line(panel, attr, line))
+            {
+                return false;
+            }
+        }
+
+        cursor = start + len;
+        while (*cursor == ' ' || *cursor == '\t')
+            cursor++;
+        if (*cursor == '\n')
+            cursor++;
+    }
+
+    return true;
+}
+
+static bool metarun_ui_add_wrapped_body_lines(app_ui_panel* panel, byte attr,
+    const char* text)
+{
+    return metarun_ui_add_wrapped_text_lines(panel, attr, text, false);
+}
+
+static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
+    const char* text)
+{
+    return metarun_ui_add_wrapped_text_lines(panel, attr, text, true);
+}
+
+static void metarun_ui_clear_pending_input(void)
+{
+    app_session* session = app_session_current();
+
+    if (session)
+        app_session_clear_inputs(session);
+    flush();
+}
+
+static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
+{
+    const curse_type* cu;
+    const char* desc = NULL;
+    const char* power = NULL;
+    const char* name;
+    char line[APP_UI_TEXT_MAX];
+    int stacks;
+    int magnitude;
+    bool is_blessing;
+    byte attr;
+
+    if (!panel || id < 0 || id >= z_info->cu_max)
+        return false;
+
+    stacks = CURSE_GET(id);
+    if (!stacks)
+        return true;
+
+    is_blessing = (stacks < 0);
+    magnitude = is_blessing ? -stacks : stacks;
+    name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
+    attr = is_blessing ? TERM_L_GREEN : TERM_RED;
+    cu = &cu_info[id];
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Effect");
+    strnfmt(line, sizeof(line), "%s", name);
+    if (!app_ui_panel_add_detail_line(panel, attr, line))
+        return false;
+    strnfmt(line, sizeof(line), "%s stacks: %d",
+        is_blessing ? "Blessing" : "Curse", magnitude);
+    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+        return false;
+
+    desc = is_blessing
+        ? (cu->blessing_text ? cu_text + cu->blessing_text : NULL)
+        : (cu->text ? cu_text + cu->text : NULL);
+    if (desc && *desc)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+            return false;
+        if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE, desc))
+            return false;
+    }
+
+    if (CURSE_SEEN(id))
+    {
+        power = is_blessing
+            ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
+            : (cu->power ? cu_text + cu->power : NULL);
+    }
+
+    if (power && *power)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+            return false;
+        strnfmt(line, sizeof(line), "Effect: %s", power);
+        if (!metarun_ui_add_wrapped_detail_lines(panel, attr, line))
+            return false;
+    }
+    else if (!CURSE_SEEN(id))
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_L_DARK,
+                "(Effect not yet identified)"))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
+    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
+    const char* accept_label)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+
+    panel = metarun_ui_begin_modal_scene(&scene, title_attr, title);
+    if (!panel)
+        return false;
+
+    for (int i = 0; i < line_count; i++)
+    {
+        byte attr = attrs ? attrs[i] : TERM_WHITE;
+
+        if (!lines || !lines[i] || !lines[i][0])
+            continue;
+        if (!metarun_ui_add_wrapped_body_lines(panel, attr, lines[i]))
+            return false;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        steamdeck ? accept_label : "Any", "Continue");
+
+    if (!ui_information_scene_present_ui(&scene))
+        return false;
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    metarun_ui_clear_pending_input();
+    return true;
+}
+
+static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
+    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
+    const char* accept_label, const char* back_label)
+{
+    while (true)
+    {
+        app_ui_scene scene;
+        app_ui_panel* panel;
+        int key;
+
+        panel = metarun_ui_begin_modal_scene(&scene, title_attr, title);
+        if (!panel)
+            return false;
+
+        for (int i = 0; i < line_count; i++)
+        {
+            byte attr = attrs ? attrs[i] : TERM_WHITE;
+
+            if (!lines || !lines[i] || !lines[i][0])
+                continue;
+            if (!metarun_ui_add_wrapped_body_lines(panel, attr, lines[i]))
+                return false;
+        }
+
+        if (steamdeck)
+        {
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                accept_label, "Confirm");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Cancel");
+        }
+        else
+        {
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                "Y/Enter", "Confirm");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "N/Esc", "Cancel");
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+            return false;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (steamdeck)
+        {
+            if (key == steamdeck_confirm_key() || key == '\r' || key == '\n'
+                || key == '6')
+            {
+                metarun_ui_clear_pending_input();
+                return true;
+            }
+            if (key == steamdeck_back_key() || key == ESCAPE || key == '4')
+            {
+                metarun_ui_clear_pending_input();
+                return false;
+            }
+        }
+        else
+        {
+            if (key == 'y' || key == 'Y' || key == '\r' || key == '\n'
+                || key == '6')
+            {
+                metarun_ui_clear_pending_input();
+                return true;
+            }
+            if (key == 'n' || key == 'N' || key == ESCAPE || key == '4'
+                || key == 'h' || key == 'H')
+            {
+                metarun_ui_clear_pending_input();
+                return false;
+            }
+        }
+    }
 }
 
 /*
@@ -5587,6 +7495,168 @@ static void adjust_blessing_threshold_menu(void)
     bool accepted = false;
     metarun_blessing_threshold_mode chosen_mode = current_mode;
 
+    if (use_information_scene) {
+        bool semantic_ok = true;
+
+        while (true) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            char subtitle[APP_UI_TEXT_MAX];
+            int key;
+
+            strnfmt(subtitle, sizeof(subtitle), "Current: %s",
+                threshold_mode_name(current_mode));
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Blessing Threshold", TERM_SLATE, subtitle);
+            if (!panel) {
+                semantic_ok = false;
+                break;
+            }
+
+            for (int i = 0; i < option_count; i++) {
+                metarun_blessing_threshold_mode mode = order[i];
+                u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
+                byte attr = (mode == METARUN_BLESSING_THRESHOLD_EASIER)
+                    ? TERM_L_GREEN
+                    : (mode == METARUN_BLESSING_THRESHOLD_HARDER)
+                        ? TERM_ORANGE : TERM_WHITE;
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "%lu pts",
+                    (unsigned long)mode_threshold);
+                if (!app_ui_panel_add_row(panel, i, attr, true,
+                        i == selection, key_buf, labels[i], meta))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+            }
+            if (!semantic_ok)
+                break;
+
+            {
+                metarun_blessing_threshold_mode mode = order[selection];
+                u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
+                char buf[APP_UI_TEXT_MAX];
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Mode");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                        labels[selection]))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(buf, sizeof(buf), "Requires %lu points per blessing.",
+                    (unsigned long)mode_threshold);
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, buf))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                if (mode == current_mode
+                    && !app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                        "Current setting."))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_SLATE,
+                        descs[selection]))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Apply");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Cancel");
+
+            if (!ui_information_scene_present_ui(&scene)) {
+                semantic_ok = false;
+                break;
+            }
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                metarun_ui_clear_pending_input();
+                break;
+            }
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                accepted = true;
+                chosen_mode = order[selection];
+                metarun_ui_clear_pending_input();
+                break;
+            }
+            if (key == '8' || key == 'k' || key == '-') {
+                selection = (selection + option_count - 1) % option_count;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                selection = (selection + 1) % option_count;
+                continue;
+            }
+            if (key >= 'a' && key < 'a' + option_count) {
+                selection = key - 'a';
+                continue;
+            }
+            if (key >= 'A' && key < 'A' + option_count) {
+                selection = key - 'A';
+                continue;
+            }
+        }
+
+        if (accepted && chosen_mode != current_mode) {
+            metarun_set_threshold_mode(&metar, chosen_mode);
+            update_blessing_ledger(&metar);
+            if (!sync_current_metarun_slot(false)) {
+                log_warn("Threshold change: unable to sync metarun slot (idx=%d, max=%d)", current_run, metarun_max);
+            }
+            save_metaruns();
+        }
+
+        if (accepted) {
+            char line1[APP_UI_TEXT_MAX];
+            char line2[APP_UI_TEXT_MAX];
+            const char *lines[2];
+            byte attrs[2];
+            int line_count = 0;
+
+            if (chosen_mode != current_mode) {
+                u32b new_threshold = metarun_threshold_value(&metar);
+                strnfmt(line1, sizeof(line1), "Blessing threshold set to %s.",
+                    threshold_mode_name(chosen_mode));
+                strnfmt(line2, sizeof(line2),
+                    "New requirement: %lu points per blessing.",
+                    (unsigned long)new_threshold);
+                lines[line_count] = line1;
+                attrs[line_count++] = TERM_L_GREEN;
+                lines[line_count] = line2;
+                attrs[line_count++] = TERM_WHITE;
+            } else {
+                lines[line_count] = "Blessing threshold remains unchanged.";
+                attrs[line_count++] = TERM_L_DARK;
+            }
+            (void)metarun_ui_show_notice_modal("Blessing Threshold",
+                TERM_YELLOW, lines, attrs, line_count, steamdeck, accept_label);
+        }
+
+        ui_information_scene_leave(&info_scope);
+        if (semantic_ok)
+            return;
+        use_information_scene = false;
+    }
+
     screen_save();
 
     while (true) {
@@ -5638,7 +7708,7 @@ static void adjust_blessing_threshold_menu(void)
                         "Use arrows or a/b/c to choose. Enter accepts, Esc cancels.");
         }
 
-        char key = metarun_wait_key();
+        char key = inkey();
 
         /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
@@ -5698,13 +7768,11 @@ static void adjust_blessing_threshold_menu(void)
         } else {
             Term_putstr(2, 6, -1, TERM_L_DARK, "Press any key to continue.");
         }
-        metarun_present_term();
-        (void)metarun_wait_key();
+        Term_fresh();
+        (void)inkey();
     }
 
     screen_load();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
 }
 
 /* Updated print_metarun_stats(): prettier layout, star & death bars, curses list */
@@ -6235,7 +8303,7 @@ void print_metarun_stats(void)
         Term_fresh();
     }
 
-    char key = use_information_scene ? (char)ui_information_scene_wait_key()
+    char key = use_information_scene ? (char)ui_information_scene_wait_key_nonrepeat()
                                      : inkey();
     if (steamdeck) {
         int back_key = steamdeck_back_key();
@@ -6378,11 +8446,11 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
     int max_difficulty = (runtype_info && z_info->rt_max > 0) ? z_info->rt_max - 1 : 0;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-    
-    screen_save();
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
     char back_label[16] = "";
+    char status_msg[APP_UI_TEXT_MAX] = "";
+    byte status_attr = TERM_RED;
 
     if (steamdeck) {
         /* Steam Deck UI: A=accept, B=back */
@@ -6390,165 +8458,393 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
     
-    while (true)
-    {
-        Term_clear();
+    if (use_information_scene) {
+        bool semantic_ok = true;
+        bool canceled = false;
 
-        /* Title */
-        Term_putstr(2, 1, -1, TERM_YELLOW, "=== Select Difficulty Level ===");
-        
-        int row = 3;
-        for (int i = 0; i <= max_difficulty; i++)
+        while (true)
         {
-            byte name_color, desc_color;
-            byte runtype_color = TERM_WHITE; /* default color */
-            bool is_locked = (i < metar.max_difficulty_reached); /* Lock easier difficulties */
-            
-            /* Get runtype color from U: field */
-            if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            char subtitle[APP_UI_TEXT_MAX];
+            int key;
+
+            strnfmt(subtitle, sizeof(subtitle), "Current difficulty: %s",
+                (runtype_info && metar.type < z_info->rt_max
+                    && runtype_info[metar.type].name[0])
+                    ? runtype_info[metar.type].name : "Unknown");
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+                "Select Difficulty Level", TERM_SLATE, subtitle);
+            if (!panel) {
+                semantic_ok = false;
+                break;
+            }
+
+            if (status_msg[0]) {
+                (void)app_ui_panel_add_body_line(panel, status_attr, status_msg);
+            }
+
+            for (int i = 0; i <= max_difficulty; i++)
             {
-                runtype_color = runtype_info[i].colour;
+                byte runtype_color = TERM_WHITE;
+                bool is_locked = (i < metar.max_difficulty_reached);
+                const char *rt_name = "Unknown";
+                char key_buf[APP_UI_KEY_MAX];
+                char meta[APP_UI_META_MAX];
+                int win_goal = WINCON_SILMARILS;
+
+                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
+                {
+                    runtype_color = runtype_info[i].colour;
+                    rt_name = runtype_info[i].name;
+                    win_goal = runtype_info[i].win_con
+                        ? runtype_info[i].win_con : WINCON_SILMARILS;
+                }
+
+                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+                strnfmt(meta, sizeof(meta), "%d sil%s%s", win_goal,
+                    (win_goal == 1) ? "" : "s",
+                    is_locked ? " locked" : "");
+                if (!app_ui_panel_add_row(panel, i,
+                        is_locked ? TERM_L_DARK : runtype_color, !is_locked,
+                        i == choice, key_buf, rt_name, meta))
+                {
+                    semantic_ok = false;
+                    break;
+                }
             }
-            else
+            if (!semantic_ok)
+                break;
+
             {
-                runtype_color = TERM_WHITE; /* fallback if runtype not loaded */
+                bool is_locked = (choice < metar.max_difficulty_reached);
+                const char *rt_name = "Unknown";
+                char line[APP_UI_TEXT_MAX];
+                char curse_buf[64];
+                int win_goal = WINCON_SILMARILS;
+                u32b blessing_thresh = runtype_threshold_for_mode(choice,
+                    METARUN_BLESSING_THRESHOLD_NORMAL);
+                byte runtype_color = TERM_WHITE;
+
+                if (runtype_info && choice < z_info->rt_max
+                    && runtype_info[choice].name[0])
+                {
+                    rt_name = runtype_info[choice].name;
+                    win_goal = runtype_info[choice].win_con
+                        ? runtype_info[choice].win_con : WINCON_SILMARILS;
+                    runtype_color = runtype_info[choice].colour;
+                }
+                get_curse_description(choice, curse_buf, sizeof(curse_buf));
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Selected Difficulty");
+                if (!app_ui_panel_add_detail_line(panel,
+                        is_locked ? TERM_L_DARK : runtype_color, rt_name))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Win condition: %d Silmaril%s",
+                    win_goal, (win_goal == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel,
+                        is_locked ? TERM_L_DARK : TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Blessing threshold: %lu points",
+                    (unsigned long)blessing_thresh);
+                if (!app_ui_panel_add_detail_line(panel,
+                        is_locked ? TERM_L_DARK : TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                if (!app_ui_panel_add_detail_line(panel,
+                        is_locked ? TERM_L_DARK : TERM_SLATE, curse_buf))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                if (is_locked) {
+                    if (!app_ui_panel_add_detail_line(panel, TERM_RED,
+                            "Locked for this story run."))
+                    {
+                        semantic_ok = false;
+                        break;
+                    }
+                } else if (choice > metar.type) {
+                    if (!app_ui_panel_add_detail_line(panel, TERM_ORANGE,
+                            "Increasing difficulty is permanent for this metarun."))
+                    {
+                        semantic_ok = false;
+                        break;
+                    }
+                } else if (choice == metar.type) {
+                    if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                            "Current setting."))
+                    {
+                        semantic_ok = false;
+                        break;
+                    }
+                }
             }
-            
-            if (is_locked) {
-                /* Locked (easier) difficulties - greyed out */
-                name_color = TERM_L_DARK;
-                desc_color = TERM_L_DARK;
-                Term_putstr(2, row, -1, TERM_L_DARK, "-");
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Select");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                steamdeck ? back_label : "Esc", "Cancel");
+
+            if (!ui_information_scene_present_ui(&scene)) {
+                semantic_ok = false;
+                break;
             }
-            else if (i == choice) {
-                /* Highlight selected difficulty - use runtype color but brighter */
-                name_color = runtype_color;
-                desc_color = TERM_L_WHITE;
-                Term_putstr(2, row, -1, runtype_color, ">");
-            } else if (i == metar.type) {
-                /* Show current difficulty in its runtype color but dimmed */
-                name_color = runtype_color;
-                desc_color = TERM_SLATE;
-                Term_putstr(2, row, -1, TERM_L_DARK, " ");
-            } else {
-                /* Normal difficulty in its runtype color */
-                name_color = runtype_color;
-                desc_color = TERM_L_DARK;
-                Term_putstr(2, row, -1, TERM_L_DARK, " ");
-            }
-            
-            /* Get dynamic name and stats from runtype */
-            const char *rt_name = "Unknown";
-            int win_goal = WINCON_SILMARILS;
-            u32b blessing_thresh = runtype_threshold_for_mode(i, METARUN_BLESSING_THRESHOLD_NORMAL);
-            
-            if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
+                || (!steamdeck && (key == 'h' || key == 'H')))
             {
-                rt_name = runtype_info[i].name;
-                win_goal = runtype_info[i].win_con ? runtype_info[i].win_con : WINCON_SILMARILS;
+                metarun_ui_clear_pending_input();
+                canceled = true;
+                break;
             }
-            
-            char desc_buf[128];
-            char curse_buf[64];
-            get_curse_description(i, curse_buf, sizeof(curse_buf));
-            
-            if (is_locked) {
-                snprintf(desc_buf, sizeof(desc_buf), "[LOCKED] Win: %d Silmarils, Threshold: %lu points, %s", 
-                         win_goal, (unsigned long)blessing_thresh, curse_buf);
-            } else {
-                snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Threshold: %lu points, %s", 
-                         win_goal, (unsigned long)blessing_thresh, curse_buf);
+            if (key == '\r' || key == '\n'
+                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+            {
+                if (choice < metar.max_difficulty_reached) {
+                    SDL_strlcpy(status_msg,
+                        "Cannot select easier difficulty - locked for this story run!",
+                        sizeof(status_msg));
+                    status_attr = TERM_RED;
+                    continue;
+                }
+                metarun_ui_clear_pending_input();
+                break;
             }
-            
-            char name_buf[128];
-            if (is_locked) {
-                snprintf(name_buf, sizeof(name_buf), "%c) %s [LOCKED]", 'a'+i, rt_name);
-            } else {
-                snprintf(name_buf, sizeof(name_buf), "%c) %s", 'a'+i, rt_name);
+            if (key == '8' || key == 'k' || key == '-') {
+                int new_choice = choice - 1;
+                while (new_choice >= 0
+                    && new_choice < metar.max_difficulty_reached)
+                {
+                    new_choice--;
+                }
+                if (new_choice >= 0)
+                    choice = new_choice;
+                status_msg[0] = '\0';
+                continue;
             }
-            
-            Term_putstr(4, row++, -1, name_color, name_buf);
-            Term_putstr(7, row++, -1, desc_color, desc_buf);
-            
-            /* Add extra spacing between options */
-            row++;
+            if (key == '2' || key == 'j' || key == '+') {
+                if (choice < max_difficulty)
+                    choice++;
+                status_msg[0] = '\0';
+                continue;
+            }
+            if (key >= 'a' && key <= 'z') {
+                int new_choice = key - 'a';
+                if (new_choice <= max_difficulty) {
+                    if (new_choice < metar.max_difficulty_reached) {
+                        SDL_strlcpy(status_msg,
+                            "Cannot select easier difficulty - locked for this story run!",
+                            sizeof(status_msg));
+                        status_attr = TERM_RED;
+                    } else {
+                        choice = new_choice;
+                        status_msg[0] = '\0';
+                    }
+                }
+                continue;
+            }
+            if (key >= 'A' && key <= 'Z') {
+                int new_choice = key - 'A';
+                if (new_choice <= max_difficulty) {
+                    if (new_choice < metar.max_difficulty_reached) {
+                        SDL_strlcpy(status_msg,
+                            "Cannot select easier difficulty - locked for this story run!",
+                            sizeof(status_msg));
+                        status_attr = TERM_RED;
+                    } else {
+                        choice = new_choice;
+                        status_msg[0] = '\0';
+                    }
+                }
+                continue;
+            }
         }
-        
-        /* Instructions */
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
-            Term_putstr(2, row + 1, -1, TERM_L_WHITE, hint_buf);
-        } else {
-            Term_putstr(2, row + 1, -1, TERM_L_WHITE,
-                        "Arrows to navigate     Space/Enter Accept     Esc Cancel");
-        }
-        
-        /* Get input */
-        char key = metarun_wait_key();
-        
-        /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
-        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H')))
-        {
-            screen_load();
-            if (use_information_scene)
-                ui_information_scene_leave(&info_scope);
+
+        if (!semantic_ok) {
+            ui_information_scene_leave(&info_scope);
+            use_information_scene = false;
+        } else if (canceled) {
+            ui_information_scene_leave(&info_scope);
             if (reopen_stats_on_exit)
                 print_metarun_stats();
             return;
         }
-        else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6')  /* Enter/A button/6 key */
+    }
+
+    if (!use_information_scene) {
+        screen_save();
+
+        while (true)
         {
-            /* Check if trying to select a locked difficulty */
-            if (choice < metar.max_difficulty_reached) {
-                /* Show warning and stay in menu */
-                Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                metarun_present_term();
-                Term_xtra(TERM_XTRA_DELAY, 2000);
-                continue;
-            }
-            break;  /* Confirm selection */
-        }
-        else if (key == '8' || key == 'k' || key == '-')  /* Up */
-        {
-            /* Navigate up but skip locked difficulties */
-            int new_choice = choice - 1;
-            while (new_choice >= 0 && new_choice < metar.max_difficulty_reached) {
-                new_choice--;
-            }
-            if (new_choice >= 0) choice = new_choice;
-        }
-        else if (key == '2' || key == 'j' || key == '+')  /* Down */
-        {
-            /* Navigate down normally */
-            if (choice < max_difficulty) choice++;
-        }
-        else if (key >= 'a' && key <= 'z')  /* Letter selection */
-        {
-            int new_choice = key - 'a';
-            if (new_choice <= max_difficulty) {
-                if (new_choice < metar.max_difficulty_reached) {
-                    /* Show warning for locked difficulty */
-                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                    metarun_present_term();
-                    Term_xtra(TERM_XTRA_DELAY, 2000);
+            Term_clear();
+
+            /* Title */
+            Term_putstr(2, 1, -1, TERM_YELLOW, "=== Select Difficulty Level ===");
+            
+            int row = 3;
+            for (int i = 0; i <= max_difficulty; i++)
+            {
+                byte name_color, desc_color;
+                byte runtype_color = TERM_WHITE; /* default color */
+                bool is_locked = (i < metar.max_difficulty_reached); /* Lock easier difficulties */
+                
+                /* Get runtype color from U: field */
+                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
+                {
+                    runtype_color = runtype_info[i].colour;
+                }
+                else
+                {
+                    runtype_color = TERM_WHITE; /* fallback if runtype not loaded */
+                }
+                
+                if (is_locked) {
+                    /* Locked (easier) difficulties - greyed out */
+                    name_color = TERM_L_DARK;
+                    desc_color = TERM_L_DARK;
+                    Term_putstr(2, row, -1, TERM_L_DARK, "-");
+                }
+                else if (i == choice) {
+                    /* Highlight selected difficulty - use runtype color but brighter */
+                    name_color = runtype_color;
+                    desc_color = TERM_L_WHITE;
+                    Term_putstr(2, row, -1, runtype_color, ">");
+                } else if (i == metar.type) {
+                    /* Show current difficulty in its runtype color but dimmed */
+                    name_color = runtype_color;
+                    desc_color = TERM_SLATE;
+                    Term_putstr(2, row, -1, TERM_L_DARK, " ");
                 } else {
-                    choice = new_choice;
+                    /* Normal difficulty in its runtype color */
+                    name_color = runtype_color;
+                    desc_color = TERM_L_DARK;
+                    Term_putstr(2, row, -1, TERM_L_DARK, " ");
+                }
+                
+                /* Get dynamic name and stats from runtype */
+                const char *rt_name = "Unknown";
+                int win_goal = WINCON_SILMARILS;
+                u32b blessing_thresh = runtype_threshold_for_mode(i, METARUN_BLESSING_THRESHOLD_NORMAL);
+                
+                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
+                {
+                    rt_name = runtype_info[i].name;
+                    win_goal = runtype_info[i].win_con ? runtype_info[i].win_con : WINCON_SILMARILS;
+                }
+                
+                char desc_buf[128];
+                char curse_buf[64];
+                get_curse_description(i, curse_buf, sizeof(curse_buf));
+                
+                if (is_locked) {
+                    snprintf(desc_buf, sizeof(desc_buf), "[LOCKED] Win: %d Silmarils, Threshold: %lu points, %s", 
+                             win_goal, (unsigned long)blessing_thresh, curse_buf);
+                } else {
+                    snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Threshold: %lu points, %s", 
+                             win_goal, (unsigned long)blessing_thresh, curse_buf);
+                }
+                
+                char name_buf[128];
+                if (is_locked) {
+                    snprintf(name_buf, sizeof(name_buf), "%c) %s [LOCKED]", 'a'+i, rt_name);
+                } else {
+                    snprintf(name_buf, sizeof(name_buf), "%c) %s", 'a'+i, rt_name);
+                }
+                
+                Term_putstr(4, row++, -1, name_color, name_buf);
+                Term_putstr(7, row++, -1, desc_color, desc_buf);
+                
+                /* Add extra spacing between options */
+                row++;
+            }
+            
+            /* Instructions */
+            if (steamdeck) {
+                char hint_buf[96];
+                strnfmt(hint_buf, sizeof(hint_buf),
+                        "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
+                Term_putstr(2, row + 1, -1, TERM_L_WHITE, hint_buf);
+            } else {
+                Term_putstr(2, row + 1, -1, TERM_L_WHITE,
+                            "Arrows to navigate     Space/Enter Accept     Esc Cancel");
+            }
+            
+            /* Get input */
+            char key = inkey();
+            
+            /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
+            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H')))
+            {
+                screen_load();
+                if (reopen_stats_on_exit)
+                    print_metarun_stats();
+                return;
+            }
+            else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6')  /* Enter/A button/6 key */
+            {
+                /* Check if trying to select a locked difficulty */
+                if (choice < metar.max_difficulty_reached) {
+                    /* Show warning and stay in menu */
+                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
+                    Term_fresh();
+                    Term_xtra(TERM_XTRA_DELAY, 2000);
+                    continue;
+                }
+                break;  /* Confirm selection */
+            }
+            else if (key == '8' || key == 'k' || key == '-')  /* Up */
+            {
+                /* Navigate up but skip locked difficulties */
+                int new_choice = choice - 1;
+                while (new_choice >= 0 && new_choice < metar.max_difficulty_reached) {
+                    new_choice--;
+                }
+                if (new_choice >= 0) choice = new_choice;
+            }
+            else if (key == '2' || key == 'j' || key == '+')  /* Down */
+            {
+                /* Navigate down normally */
+                if (choice < max_difficulty) choice++;
+            }
+            else if (key >= 'a' && key <= 'z')  /* Letter selection */
+            {
+                int new_choice = key - 'a';
+                if (new_choice <= max_difficulty) {
+                    if (new_choice < metar.max_difficulty_reached) {
+                        /* Show warning for locked difficulty */
+                        Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
+                        Term_fresh();
+                        Term_xtra(TERM_XTRA_DELAY, 2000);
+                    } else {
+                        choice = new_choice;
+                    }
                 }
             }
-        }
-        else if (key >= 'A' && key <= 'Z')  /* Capital letter selection */
-        {
-            int new_choice = key - 'A';
-            if (new_choice <= max_difficulty) {
-                if (new_choice < metar.max_difficulty_reached) {
-                    /* Show warning for locked difficulty */
-                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                    metarun_present_term();
-                    Term_xtra(TERM_XTRA_DELAY, 2000);
-                } else {
-                    choice = new_choice;
+            else if (key >= 'A' && key <= 'Z')  /* Capital letter selection */
+            {
+                int new_choice = key - 'A';
+                if (new_choice <= max_difficulty) {
+                    if (new_choice < metar.max_difficulty_reached) {
+                        /* Show warning for locked difficulty */
+                        Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
+                        Term_fresh();
+                        Term_xtra(TERM_XTRA_DELAY, 2000);
+                    } else {
+                        choice = new_choice;
+                    }
                 }
             }
         }
@@ -6559,50 +8855,67 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
     {
         /* Warn if increasing difficulty */
         if (choice > metar.type) {
-            int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-            screen_save();
-            Term_clear();
-            Term_putstr(2, 5, -1, TERM_YELLOW, "WARNING: Increasing Difficulty");
-            if (term_wid < 70)
-            {
-                Term_putstr(2, 7, term_wid - 2, TERM_WHITE,
-                    "You cannot return to an easier level");
-                Term_putstr(2, 8, term_wid - 2, TERM_WHITE,
-                    "for the rest of this story run.");
-            }
-            else
-            {
-                Term_putstr(2, 7, -1, TERM_WHITE, "If you increase the difficulty level, you will NOT be able to");
-                Term_putstr(2, 8, -1, TERM_WHITE, "go back to an easier level for the rest of this story run.");
-            }
-            Term_putstr(2, 10, -1, TERM_L_RED, "This change is PERMANENT for this meta-run!");
-            if (steamdeck) {
-                char prompt_buf[64];
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                        "Continue? [%s] yes  [%s] no", accept_label, back_label);
-                Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE, prompt_buf);
-            } else {
-                Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE,
-                    "Do you want to continue? (y/n)");
-            }
-            
-            char confirm = metarun_wait_key();
-            screen_load();
+            if (use_information_scene) {
+                const char *lines[] = {
+                    "If you increase the difficulty level, you will not be able to return to an easier level for the rest of this story run.",
+                    "This change is permanent for this meta-run."
+                };
+                const byte attrs[] = { TERM_WHITE, TERM_L_RED };
+                bool confirm = metarun_ui_confirm_modal(
+                    "Increase Difficulty", TERM_YELLOW, lines, attrs,
+                    (int)N_ELEMENTS(lines), steamdeck, accept_label,
+                    back_label);
 
-            if (steamdeck) {
-                if (confirm == ' ' || confirm == '\r' || confirm == '\n')
-                    confirm = 'y';
-                else if (confirm == ESCAPE || confirm == 'h' || confirm == 'H')
-                    confirm = 'n';
-            }
-            
-            if (confirm != 'y' && confirm != 'Y') {
-                screen_load();
-                if (use_information_scene)
+                if (!confirm) {
                     ui_information_scene_leave(&info_scope);
-                if (reopen_stats_on_exit)
-                    print_metarun_stats();
-                return; /* Cancel the change */
+                    if (reopen_stats_on_exit)
+                        print_metarun_stats();
+                    return; /* Cancel the change */
+                }
+            } else {
+                int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+                screen_save();
+                Term_clear();
+                Term_putstr(2, 5, -1, TERM_YELLOW, "WARNING: Increasing Difficulty");
+                if (term_wid < 70)
+                {
+                    Term_putstr(2, 7, term_wid - 2, TERM_WHITE,
+                        "You cannot return to an easier level");
+                    Term_putstr(2, 8, term_wid - 2, TERM_WHITE,
+                        "for the rest of this story run.");
+                }
+                else
+                {
+                    Term_putstr(2, 7, -1, TERM_WHITE, "If you increase the difficulty level, you will NOT be able to");
+                    Term_putstr(2, 8, -1, TERM_WHITE, "go back to an easier level for the rest of this story run.");
+                }
+                Term_putstr(2, 10, -1, TERM_L_RED, "This change is PERMANENT for this meta-run!");
+                if (steamdeck) {
+                    char prompt_buf[64];
+                    strnfmt(prompt_buf, sizeof(prompt_buf),
+                            "Continue? [%s] yes  [%s] no", accept_label, back_label);
+                    Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE, prompt_buf);
+                } else {
+                    Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE,
+                        "Do you want to continue? (y/n)");
+                }
+                
+                char confirm = inkey();
+                screen_load();
+
+                if (steamdeck) {
+                    if (confirm == ' ' || confirm == '\r' || confirm == '\n')
+                        confirm = 'y';
+                    else if (confirm == ESCAPE || confirm == 'h' || confirm == 'H')
+                        confirm = 'n';
+                }
+                
+                if (confirm != 'y' && confirm != 'Y') {
+                    screen_load();
+                    if (reopen_stats_on_exit)
+                        print_metarun_stats();
+                    return; /* Cancel the change */
+                }
             }
         }
         
@@ -6659,7 +8972,8 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
         msg_print(format("Difficulty changed to: %s", new_name));
     }
     
-    screen_load();
+    if (!use_information_scene)
+        screen_load();
     if (use_information_scene)
         ui_information_scene_leave(&info_scope);
     
@@ -6673,21 +8987,17 @@ void list_metaruns(void)
 {
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-
-    screen_save();
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
+    char back_label[16] = "";
     int term_h = (Term && Term->hgt > 0) ? Term->hgt : 24;
     int footer_row = term_h - 1;
 
     if (steamdeck) {
         /* Steam Deck UI: A=ok */
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
-    Term_clear();
-    c_prt(TERM_L_GREEN, "Meta-run history", 1, 2);
-    c_put_str(TERM_L_DARK,
-              " *ID      Score     Sil  Dth  Res  Last played", 3, 2);
 
     refresh_current_metar_score();
 
@@ -6703,6 +9013,212 @@ void list_metaruns(void)
         for (s16b i = 0; i < metarun_max; i++) order[i] = i;
         qsort(order, metarun_max, sizeof(s16b), compare_metarun_indices);
     }
+
+    if (use_information_scene) {
+        bool semantic_ok = true;
+        int highlight = 0;
+
+        for (s16b i = 0; i < metarun_max; i++) {
+            s16b idx = order ? order[i] : i;
+            if (idx == current_run) {
+                highlight = i;
+                break;
+            }
+        }
+
+        if (metarun_max <= 0 || !metaruns) {
+            const char *lines[] = { "No metaruns have been recorded yet." };
+            const byte attrs[] = { TERM_L_DARK };
+            (void)metarun_ui_show_notice_modal("Meta-run History",
+                TERM_L_GREEN, lines, attrs, (int)N_ELEMENTS(lines), steamdeck,
+                accept_label);
+            ui_information_scene_leave(&info_scope);
+            order = mem_free(order);
+            return;
+        }
+
+        while (true) {
+            app_ui_scene scene;
+            app_ui_panel *panel;
+            int page_start;
+            int page_end;
+            char subtitle[APP_UI_TEXT_MAX];
+            int key;
+
+            if (highlight < 0)
+                highlight = 0;
+            if (highlight >= metarun_max)
+                highlight = metarun_max - 1;
+
+            page_start = (highlight / METARUN_HISTORY_PAGE_SIZE)
+                * METARUN_HISTORY_PAGE_SIZE;
+            page_end = MIN(metarun_max, page_start + METARUN_HISTORY_PAGE_SIZE);
+
+            strnfmt(subtitle, sizeof(subtitle), "%d-%d of %d",
+                page_start + 1, page_end, metarun_max);
+            panel = metarun_ui_begin_browser_scene(&scene, TERM_L_GREEN,
+                "Meta-run History", TERM_SLATE, subtitle);
+            if (!panel) {
+                semantic_ok = false;
+                break;
+            }
+
+            for (int i = page_start; i < page_end; i++) {
+                s16b idx = order ? order[i] : i;
+                const metarun *m = &metaruns[idx];
+                int win_goal = WINCON_SILMARILS;
+                int death_limit = LOSECON_DEATHS;
+                char label[APP_UI_LABEL_MAX];
+                char meta[APP_UI_META_MAX];
+                char date[16];
+                char res;
+                byte attr;
+
+                if (runtype_info && m->type < z_info->rt_max)
+                {
+                    win_goal = runtype_info[m->type].win_con
+                        ? runtype_info[m->type].win_con : WINCON_SILMARILS;
+                }
+
+                res = (m->silmarils >= win_goal) ? 'W'
+                    : (m->deaths >= death_limit) ? 'L' : ' ';
+                strftime(date, sizeof date, "%Y-%m-%d",
+                    localtime((time_t*)&m->last_played));
+                attr = (idx == current_run) ? TERM_YELLOW : TERM_WHITE;
+                strnfmt(label, sizeof(label), "%c%08u",
+                    (idx == current_run) ? '*' : ' ', (unsigned)m->id);
+                strnfmt(meta, sizeof(meta), "%lu  S:%d D:%d %c  %s",
+                    (unsigned long)m->score, m->silmarils, m->deaths, res,
+                    date);
+                if (!app_ui_panel_add_row(panel, idx, attr, true,
+                        i == highlight, "", label, meta))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+            }
+            if (!semantic_ok)
+                break;
+
+            if (highlight >= page_start && highlight < page_end) {
+                s16b idx = order ? order[highlight] : highlight;
+                const metarun *m = &metaruns[idx];
+                const char *diff_name = "Unknown";
+                int win_goal = WINCON_SILMARILS;
+                int death_limit = LOSECON_DEATHS;
+                char line[APP_UI_TEXT_MAX];
+                char date[16];
+                char res;
+
+                if (runtype_info && m->type < z_info->rt_max) {
+                    if (runtype_info[m->type].name[0])
+                        diff_name = runtype_info[m->type].name;
+                    win_goal = runtype_info[m->type].win_con
+                        ? runtype_info[m->type].win_con : WINCON_SILMARILS;
+                }
+                res = (m->silmarils >= win_goal) ? 'W'
+                    : (m->deaths >= death_limit) ? 'L' : ' ';
+                strftime(date, sizeof date, "%Y-%m-%d",
+                    localtime((time_t*)&m->last_played));
+
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Run");
+                strnfmt(line, sizeof(line), "Run %08u", (unsigned)m->id);
+                if (!app_ui_panel_add_detail_line(panel,
+                        (idx == current_run) ? TERM_YELLOW : TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Difficulty: %s", diff_name);
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Score: %lu",
+                    (unsigned long)m->score);
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Silmarils / Deaths: %d / %d",
+                    m->silmarils, m->deaths);
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Result: %c", res ? res : ' ');
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+                strnfmt(line, sizeof(line), "Last played: %s", date);
+                if (!app_ui_panel_add_detail_line(panel, TERM_SLATE, line))
+                {
+                    semantic_ok = false;
+                    break;
+                }
+            }
+
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                steamdeck ? accept_label : "Enter", "Close");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            if (metarun_max > METARUN_HISTORY_PAGE_SIZE) {
+                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                    "4/6", "Page");
+            }
+            if (steamdeck) {
+                (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                    back_label, "Back");
+            }
+
+            if (!ui_information_scene_present_ui(&scene)) {
+                semantic_ok = false;
+                break;
+            }
+
+            key = ui_information_scene_wait_key_nonrepeat();
+            if (key == '8' || key == 'k' || key == '-') {
+                highlight = (highlight + metarun_max - 1) % metarun_max;
+                continue;
+            }
+            if (key == '2' || key == 'j' || key == '+') {
+                highlight = (highlight + 1) % metarun_max;
+                continue;
+            }
+            if (metarun_max > METARUN_HISTORY_PAGE_SIZE && key == '4') {
+                highlight -= METARUN_HISTORY_PAGE_SIZE;
+                if (highlight < 0)
+                    highlight = 0;
+                continue;
+            }
+            if (metarun_max > METARUN_HISTORY_PAGE_SIZE && key == '6') {
+                highlight += METARUN_HISTORY_PAGE_SIZE;
+                if (highlight >= metarun_max)
+                    highlight = metarun_max - 1;
+                continue;
+            }
+            metarun_ui_clear_pending_input();
+            break;
+        }
+
+        ui_information_scene_leave(&info_scope);
+        if (semantic_ok) {
+            order = mem_free(order);
+            return;
+        }
+        use_information_scene = false;
+    }
+
+    screen_save();
+    Term_clear();
+    c_prt(TERM_L_GREEN, "Meta-run history", 1, 2);
+    c_put_str(TERM_L_DARK,
+              " *ID      Score     Sil  Dth  Res  Last played", 3, 2);
 
     int row = 4;
     for (s16b i = 0; i < metarun_max; i++) {
@@ -6743,7 +9259,7 @@ void list_metaruns(void)
             } else {
                 c_put_str(TERM_L_DARK, "[more - any key]", footer_row, 2);
             }
-            (void)metarun_wait_key();  Term_clear();
+            (void)inkey();  Term_clear();
             row = 4;
             c_prt(TERM_L_GREEN, "Meta-run history (cont.)", 1, 2);
             c_put_str(TERM_L_DARK,
@@ -6751,7 +9267,6 @@ void list_metaruns(void)
         }
     }
 
-    order = mem_free(order);
     if (steamdeck) {
         char hint_buf[64];
         strnfmt(hint_buf, sizeof(hint_buf), "Press %s to return.", accept_label);
@@ -6760,10 +9275,9 @@ void list_metaruns(void)
         c_put_str(TERM_L_DARK, "Press any key to return.",
             MIN(row + 1, footer_row), 2);
     }
-    (void)metarun_wait_key();
+    (void)inkey();
     screen_load();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
+    order = mem_free(order);
 }
 
 void show_known_curses_menu(void)

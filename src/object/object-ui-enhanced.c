@@ -335,9 +335,10 @@ static void enhanced_item_build_prompt_line(char* buf, size_t buf_size,
         else
         {
             strnfmt(buf, buf_size, inventory_mode
-                ? "%s-use  %s-desc  <- drop  (Inventory)"
+                ? "%s-%s  %s-desc  <- drop  (Inventory)"
                 : "%s-remove  %s-desc  <- drop  (Equipment)",
-                confirm_label, desc_label);
+                confirm_label, (current_menu_command == 'w') ? "wield" : "use",
+                desc_label);
         }
         return;
     }
@@ -358,8 +359,9 @@ static void enhanced_item_build_prompt_line(char* buf, size_t buf_size,
         }
         else
         {
-            SDL_strlcpy(buf,
-                "Space-Use, -> description, <- drop  (Inventory)",
+            SDL_strlcpy(buf, (current_menu_command == 'w')
+                ? "Space-Wield, -> description, <- drop  (Inventory)"
+                : "Space-Use, -> description, <- drop  (Inventory)",
                 buf_size);
         }
     }
@@ -717,6 +719,22 @@ static bool enhanced_item_build_snapshot_scene(app_ui_scene* scene,
     return enhanced_item_append_armour_total_rows(panel, state);
 }
 
+static int enhanced_item_selected_action(
+    const enhanced_item_snapshot_state* state, int entry_index,
+    bool examine_action)
+{
+    const enhanced_item_snapshot_entry* entry;
+
+    if (!state || entry_index < 0 || entry_index >= state->entry_count)
+        return ENHANCED_ACTION_NONE;
+
+    entry = &state->entries[entry_index];
+    if (entry->is_supply)
+        return ENHANCED_ACTION_SUPPLIES;
+
+    return examine_action ? ENHANCED_ACTION_EXAMINE : ENHANCED_ACTION_USE;
+}
+
 static bool enhanced_item_run_snapshot_menu(int mode)
 {
     enhanced_item_snapshot_scope scene_scope;
@@ -779,7 +797,15 @@ static bool enhanced_item_run_snapshot_menu(int mode)
             }
             else if (highlight_row >= 0 && highlight_row < state.entry_count)
             {
-                enhanced_item_set_result(mode, ENHANCED_ACTION_EXAMINE,
+                int action = enhanced_item_selected_action(&state,
+                    highlight_row, true);
+
+                if (action != ENHANCED_ACTION_EXAMINE
+                    && !death_spectator_allow_menu_action())
+                {
+                    break;
+                }
+                enhanced_item_set_result(mode, action,
                     state.entries[highlight_row].item_index);
                 done = true;
             }
@@ -810,7 +836,15 @@ static bool enhanced_item_run_snapshot_menu(int mode)
         case '6':
             if (highlight_row >= 0 && highlight_row < state.entry_count)
             {
-                enhanced_item_set_result(mode, ENHANCED_ACTION_EXAMINE,
+                int action = enhanced_item_selected_action(&state,
+                    highlight_row, true);
+
+                if (action != ENHANCED_ACTION_EXAMINE
+                    && !death_spectator_allow_menu_action())
+                {
+                    break;
+                }
+                enhanced_item_set_result(mode, action,
                     state.entries[highlight_row].item_index);
                 done = true;
             }
@@ -840,9 +874,8 @@ static bool enhanced_item_run_snapshot_menu(int mode)
         case '\r':
             if (highlight_row >= 0 && highlight_row < state.entry_count)
             {
-                int action = (current_menu_command == 'x')
-                    ? ENHANCED_ACTION_EXAMINE
-                    : ENHANCED_ACTION_USE;
+                int action = enhanced_item_selected_action(&state,
+                    highlight_row, current_menu_command == 'x');
 
                 if (action != ENHANCED_ACTION_EXAMINE
                     && !death_spectator_allow_menu_action())
@@ -871,9 +904,8 @@ static bool enhanced_item_run_snapshot_menu(int mode)
 
                 if (current_menu_command != 0)
                 {
-                    int action = (current_menu_command == 'x')
-                        ? ENHANCED_ACTION_EXAMINE
-                        : ENHANCED_ACTION_USE;
+                    int action = enhanced_item_selected_action(&state,
+                        entry_index, current_menu_command == 'x');
 
                     if (action != ENHANCED_ACTION_EXAMINE
                         && !death_spectator_allow_menu_action())
@@ -886,9 +918,12 @@ static bool enhanced_item_run_snapshot_menu(int mode)
                 else if (state.entries[entry_index].is_floor
                     || state.entries[entry_index].is_supply)
                 {
+                    int action = enhanced_item_selected_action(&state,
+                        entry_index, false);
+
                     if (!death_spectator_allow_menu_action())
                         break;
-                    enhanced_item_set_result(mode, ENHANCED_ACTION_USE,
+                    enhanced_item_set_result(mode, action,
                         state.entries[entry_index].item_index);
                 }
                 else

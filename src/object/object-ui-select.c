@@ -755,6 +755,63 @@ static void item_selector_format_prompt(char* out_val, size_t out_val_size,
     }
 }
 
+static void item_selector_legacy_overlay_begin(void)
+{
+    if (p_ptr->command_see)
+        screen_save();
+}
+
+static void item_selector_legacy_overlay_close(void)
+{
+    if (!p_ptr->command_see)
+        return;
+
+    screen_load();
+    p_ptr->command_see = false;
+}
+
+static void item_selector_legacy_overlay_toggle(void)
+{
+    if (p_ptr->command_see)
+    {
+        p_ptr->command_see = false;
+        screen_load();
+    }
+    else
+    {
+        screen_save();
+        p_ptr->command_see = true;
+    }
+}
+
+static void item_selector_legacy_overlay_refresh_after_switch(void)
+{
+    if (!p_ptr->command_see)
+        return;
+
+    screen_load();
+    screen_save();
+}
+
+static void item_selector_legacy_overlay_show_current_list(
+    const int* floor_list, int floor_num)
+{
+    if (!p_ptr->command_see)
+        return;
+
+    if (p_ptr->command_wrk == (USE_INVEN))
+        show_inven();
+    else if (p_ptr->command_wrk == (USE_EQUIP))
+        show_equip();
+    else if (p_ptr->command_wrk == (USE_FLOOR))
+        show_floor(floor_list, floor_num);
+}
+
+static char item_selector_legacy_wait_key(void)
+{
+    return inkey();
+}
+
 static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
     bool use_equip, bool use_floor, bool allow_inven, bool allow_equip,
     bool allow_floor, int i1, int i2, int e1, int e2, int f1, int f2,
@@ -1677,13 +1734,10 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
     /*
      * Snapshot ownership lives entirely in item_selector_run_snapshot_loop().
-     * The remaining loop is the legacy term-overlay fallback.
+     * The remaining loop is the legacy term-overlay fallback, with its
+     * screen/input ownership isolated in the helpers above.
      */
-    if (p_ptr->command_see)
-    {
-        /* Save screen */
-        screen_save();
-    }
+    item_selector_legacy_overlay_begin();
 
     /* Repeat until done */
     /* Row-based display mappings (built when list is visible) */
@@ -1964,29 +2018,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         BUILD_VISIBLE_LIST();
 
         /* Viewing inventory */
-        if (p_ptr->command_see)
-        {
-            /* Inventory screen */
-            if (p_ptr->command_wrk == (USE_INVEN))
-            {
-                /* Show the inventory */
-                show_inven();
-            }
-
-            /* Equipment screen */
-            else if (p_ptr->command_wrk == (USE_EQUIP))
-            {
-                /* Show the equipment */
-                show_equip();
-            }
-
-            /* Floor screen */
-            else if (p_ptr->command_wrk == (USE_FLOOR))
-            {
-                /* Show the floor */
-                show_floor(floor_list, floor_num);
-            }
-        }
+        item_selector_legacy_overlay_show_current_list(floor_list, floor_num);
 
         if (p_ptr->command_see)
         {
@@ -1998,7 +2030,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         put_str(out_val, 0, 0);
 
         /* Get a key */
-        which = inkey();
+        which = item_selector_legacy_wait_key();
 
         switch (which)
         {
@@ -2062,24 +2094,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 break;
 
             /* Hide the list */
-            if (p_ptr->command_see)
-            {
-                /* Flip flag */
-                p_ptr->command_see = false;
-
-                /* Load screen */
-                screen_load();
-            }
-
-            /* Show the list */
-            else
-            {
-                /* Save screen */
-                screen_save();
-
-                /* Flip flag */
-                p_ptr->command_see = true;
-            }
+            item_selector_legacy_overlay_toggle();
 
             break;
         }
@@ -2106,14 +2121,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Hack -- Fix screen */
-            if (p_ptr->command_see)
-            {
-                /* Load screen */
-                screen_load();
-
-                /* Save screen */
-                screen_save();
-            }
+            item_selector_legacy_overlay_refresh_after_switch();
 
             /* Need to redraw */
             break;
@@ -2536,14 +2544,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 get_item_done:
 
     /* Fix the screen if necessary */
-    if (p_ptr->command_see)
-    {
-        /* Load screen */
-        screen_load();
-
-        /* Hack -- Cancel "display" */
-        p_ptr->command_see = false;
-    }
+    item_selector_legacy_overlay_close();
 
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 

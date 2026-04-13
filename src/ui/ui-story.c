@@ -4,6 +4,7 @@
 #include "externs.h"
 
 #include "log/log.h"
+#include "app/app-ui.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "metarun.h"
@@ -11,13 +12,377 @@
 #include "ui/ui-information-scene.h"
 #include "ui/ui-story.h"
 
+typedef struct story_semantic_row {
+    bool used;
+    s16b col;
+    byte attr;
+    byte story;
+    char text[APP_UI_TEXT_MAX];
+} story_semantic_row;
+
+typedef struct story_semantic_scene {
+    bool active;
+    bool failed;
+    int wid;
+    int hgt;
+    story_semantic_row rows[APP_UI_DOCUMENT_OP_MAX];
+} story_semantic_scene;
+
+static story_semantic_scene g_story_semantic_scene;
+
+static byte story_current_flags(void)
+{
+    byte flags = 0;
+
+    if (sdl_is_story_font_enabled())
+        flags |= STORY_FLAG_USE;
+    if (sdl_is_story_font_grid())
+        flags |= STORY_FLAG_CELL_ALIGN;
+
+    return flags;
+}
+
+static void story_semantic_end(void)
+{
+    memset(&g_story_semantic_scene, 0, sizeof(g_story_semantic_scene));
+}
+
+static void story_semantic_clear(void)
+{
+    if (!g_story_semantic_scene.active)
+        return;
+
+    memset(g_story_semantic_scene.rows, 0, sizeof(g_story_semantic_scene.rows));
+}
+
+static void story_semantic_begin(int wid, int hgt)
+{
+    story_semantic_end();
+
+    if (wid <= 0 || hgt <= 0 || hgt > (int)N_ELEMENTS(g_story_semantic_scene.rows))
+    {
+        g_story_semantic_scene.failed = true;
+        return;
+    }
+
+    g_story_semantic_scene.active = true;
+    g_story_semantic_scene.wid = wid;
+    g_story_semantic_scene.hgt = hgt;
+}
+
+static void story_semantic_clear_row(int row)
+{
+    if (!g_story_semantic_scene.active || row < 0
+        || row >= g_story_semantic_scene.hgt
+        || row >= (int)N_ELEMENTS(g_story_semantic_scene.rows))
+    {
+        return;
+    }
+
+    memset(&g_story_semantic_scene.rows[row], 0,
+        sizeof(g_story_semantic_scene.rows[row]));
+}
+
+static void story_semantic_set_row(int row, int col, byte attr, byte story,
+    cptr text)
+{
+    story_semantic_row* semantic_row;
+
+    if (!g_story_semantic_scene.active || row < 0 || col < 0
+        || row >= g_story_semantic_scene.hgt
+        || row >= (int)N_ELEMENTS(g_story_semantic_scene.rows))
+    {
+        return;
+    }
+
+    semantic_row = &g_story_semantic_scene.rows[row];
+    memset(semantic_row, 0, sizeof(*semantic_row));
+    if (!text || !text[0])
+        return;
+
+    semantic_row->used = true;
+    semantic_row->col = (s16b)col;
+    semantic_row->attr = attr;
+    semantic_row->story = story;
+    SDL_strlcpy(semantic_row->text, text, sizeof(semantic_row->text));
+}
+
+static int story_measure_text_width(cptr text, int len, bool use_story,
+    int cell_width)
+{
+    int width;
+
+    if (!text || len <= 0)
+        return 0;
+
+    if (!use_story)
+        return len * cell_width;
+
+    width = sdl_story_font_text_width(text, len);
+    if (width <= 0)
+        width = len * cell_width;
+    return width;
+}
+
+static int story_space_width(bool use_story, int cell_width)
+{
+    int width;
+
+    if (!use_story)
+        return cell_width;
+
+    width = sdl_story_font_text_width(" ", 1);
+    if (width <= 0)
+        width = cell_width;
+    return width;
+}
+
+static bool story_semantic_mirror_wrapped_text(cptr text, int row, int indent,
+    int wrap_width, byte attr, byte story)
+{
+    const char* s = text ? text : "";
+    bool use_story = (story & STORY_FLAG_USE) != 0;
+    int cell_width = sdl_get_cell_width();
+    int wrap_pixels;
+    int indent_pixels;
+    int current_pixels;
+    int space_pixels;
+    int current_row = row;
+    bool wrote_any = false;
+    char line[APP_UI_TEXT_MAX];
+    int line_len = 0;
+
+    if (!g_story_semantic_scene.active)
+        return true;
+
+    if (cell_width <= 0)
+        cell_width = 1;
+    if (wrap_width <= 0)
+        wrap_width = (g_story_semantic_scene.wid > 0)
+            ? g_story_semantic_scene.wid
+            : 80;
+
+    wrap_pixels = wrap_width * cell_width;
+    indent_pixels = indent * cell_width;
+    current_pixels = indent_pixels;
+    space_pixels = story_space_width(use_story, cell_width);
+    if (space_pixels <= 0)
+        space_pixels = cell_width;
+
+    while (*s)
+    {
+        if (*s == '\n')
+        {
+            line[line_len] = '\0';
+            if (line_len > 0)
+                story_semantic_set_row(current_row, indent, attr, story, line);
+            else
+                story_semantic_clear_row(current_row);
+            wrote_any = true;
+            current_row++;
+            line_len = 0;
+            current_pixels = indent_pixels;
+            s++;
+            continue;
+        }
+
+        while (*s == ' ')
+        {
+            if (line_len < (int)sizeof(line) - 1)
+                line[line_len++] = ' ';
+            current_pixels += space_pixels;
+            s++;
+
+            if (current_pixels >= wrap_pixels)
+            {
+                line[line_len] = '\0';
+                if (line_len > 0)
+                    story_semantic_set_row(current_row, indent, attr, story,
+                        line);
+                else
+                    story_semantic_clear_row(current_row);
+                wrote_any = true;
+                current_row++;
+                line_len = 0;
+                current_pixels = indent_pixels;
+            }
+        }
+
+        if (!*s)
+            break;
+        if (*s == '\n')
+            continue;
+
+        {
+            const char* word_start = s;
+            int word_chars = 0;
+            int word_pixels;
+
+            while (s[word_chars] && s[word_chars] != ' ' && s[word_chars] != '\n')
+                word_chars++;
+            if (word_chars == 0)
+                continue;
+
+            word_pixels = story_measure_text_width(word_start, word_chars,
+                use_story, cell_width);
+            if (current_pixels > indent_pixels
+                && (current_pixels + word_pixels) > wrap_pixels)
+            {
+                line[line_len] = '\0';
+                if (line_len > 0)
+                    story_semantic_set_row(current_row, indent, attr, story,
+                        line);
+                else
+                    story_semantic_clear_row(current_row);
+                wrote_any = true;
+                current_row++;
+                line_len = 0;
+                current_pixels = indent_pixels;
+            }
+
+            for (int i = 0; i < word_chars; i++)
+            {
+                if (line_len < (int)sizeof(line) - 1)
+                    line[line_len++] = word_start[i];
+            }
+
+            current_pixels += word_pixels;
+            s += word_chars;
+        }
+    }
+
+    line[line_len] = '\0';
+    if (line_len > 0 || !wrote_any)
+        story_semantic_set_row(current_row, indent, attr, story, line);
+
+    return true;
+}
+
+static bool story_semantic_present(void)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    bool wrote_any = false;
+
+    if (!g_story_semantic_scene.active || g_story_semantic_scene.failed)
+        return false;
+
+    app_ui_scene_init(&scene);
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+    {
+        g_story_semantic_scene.failed = true;
+        return false;
+    }
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+
+    for (int row = 0; row < g_story_semantic_scene.hgt; row++)
+    {
+        story_semantic_row* semantic_row = &g_story_semantic_scene.rows[row];
+
+        if (!semantic_row->used || !semantic_row->text[0])
+            continue;
+
+        if (!app_ui_panel_add_document_text_ex(&scene, panel, (s16b)row,
+                semantic_row->col, semantic_row->attr, semantic_row->story,
+                semantic_row->text))
+        {
+            g_story_semantic_scene.failed = true;
+            return false;
+        }
+
+        wrote_any = true;
+    }
+
+    if (!wrote_any)
+    {
+        if (!app_ui_panel_add_document_text(&scene, panel, 0, 0, TERM_WHITE,
+                " "))
+        {
+            g_story_semantic_scene.failed = true;
+            return false;
+        }
+    }
+
+    if (!ui_information_scene_present_ui(&scene))
+    {
+        g_story_semantic_scene.failed = true;
+        return false;
+    }
+
+    return true;
+}
+
+static void story_clear_screen(void)
+{
+    Term_clear();
+    story_semantic_clear();
+}
+
+static void story_erase_row(int col, int row, int width)
+{
+    Term_erase(col, row, width);
+    if (col <= 0)
+        story_semantic_clear_row(row);
+}
+
+static void story_putstr(int col, int row, byte attr, cptr text)
+{
+    Term_putstr(col, row, -1, attr, text ? text : "");
+    if (!g_story_semantic_scene.active)
+        return;
+
+    if (!text || !text[0])
+    {
+        story_semantic_clear_row(row);
+        return;
+    }
+
+    story_semantic_set_row(row, col, attr, story_current_flags(), text);
+}
+
+static int story_draw_wrapped_text(byte attr, cptr text, int row, int indent,
+    int wrap_width)
+{
+    int cursor_x;
+    int cursor_y;
+
+    text_out_indent = indent;
+    text_out_wrap = wrap_width;
+    Term_gotoxy(indent, row);
+    text_out_to_screen(attr, text);
+    text_out_wrap = 0;
+    text_out_indent = 0;
+    Term_locate(&cursor_x, &cursor_y);
+    (void)cursor_x;
+
+    if (g_story_semantic_scene.active)
+    {
+        (void)story_semantic_mirror_wrapped_text(text, row, indent,
+            wrap_width, attr, story_current_flags());
+    }
+
+    return cursor_y;
+}
+
+static void story_disable_information_scene(ui_information_scene_scope* scope,
+    bool* use_information_scene)
+{
+    if (!scope || !use_information_scene || !*use_information_scene)
+        return;
+
+    ui_information_scene_leave(scope);
+    *use_information_scene = false;
+    story_semantic_end();
+}
+
 static bool story_information_scene_active(void)
 {
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
-
-    return ui_information_scene_supported() && snapshot
-        && (snapshot->scene == APP_SCENE_KIND_INFORMATION);
+    return ui_information_scene_supported() && ui_information_scene_is_active()
+        && app_session_current() != NULL;
 }
 
 static errr story_term_inkey(char* out_key, bool wait, bool take)
@@ -25,17 +390,22 @@ static errr story_term_inkey(char* out_key, bool wait, bool take)
     return Term_inkey(out_key, wait, take);
 }
 
-static void story_present(void)
+static bool story_present(void)
 {
     if (story_information_scene_active())
     {
-        if (!ui_information_scene_present_term())
+        if (!story_semantic_present())
+        {
             Term_fresh();
+            return false;
+        }
     }
     else
     {
         Term_fresh();
     }
+
+    return true;
 }
 
 static bool story_peek_key(char* out_key)
@@ -92,10 +462,7 @@ static void story_consume_peeked_key(char* out_key)
 static char story_wait_key(void)
 {
     if (story_information_scene_active())
-    {
-        (void)ui_information_scene_present_term();
         return (char)ui_information_scene_wait_key();
-    }
 
     return inkey();
 }
@@ -117,23 +484,15 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
         if (story_peek_key(&ch))
         {
             story_consume_peeked_key(&ch);
-            text_out_indent = indent;
-            text_out_wrap = wrap_width;
-            Term_gotoxy(indent, row);
-            text_out_to_screen(TERM_WHITE, text);
-            text_out_wrap = 0;
-            text_out_indent = 0;
-            story_present();
+            (void)story_draw_wrapped_text(TERM_WHITE, text, row, indent,
+                wrap_width);
+            (void)story_present();
             return (ch == ESCAPE) ? 2 : 1;
         }
 
-        text_out_indent = indent;
-        text_out_wrap = wrap_width;
-        Term_gotoxy(indent, row);
-        text_out_to_screen(fade_cols[s], text);
-        text_out_wrap = 0;
-        text_out_indent = 0;
-        story_present();
+        (void)story_draw_wrapped_text(fade_cols[s], text, row, indent,
+            wrap_width);
+        (void)story_present();
         Term_xtra(TERM_XTRA_DELAY, 125);
     }
 
@@ -188,9 +547,9 @@ static void story_print_hint(int indent, int h)
 
         strnfmt(prompt_buf, sizeof(prompt_buf),
             "[%s] next  *  [%s] fast forward", next_label, esc_label);
-        Term_putstr(indent, h - 1, -1, TERM_SLATE, prompt_buf);
+        story_putstr(indent, h - 1, TERM_SLATE, prompt_buf);
     } else {
-        Term_putstr(indent, h - 1, -1, TERM_SLATE,
+        story_putstr(indent, h - 1, TERM_SLATE,
             "[Enter] next  *  [Esc] fast forward");
     }
 }
@@ -423,8 +782,8 @@ void print_fade_centered_at_row(cptr text, int row_start, bool fade_in,
             (void)print_paragraph_fade(buf, row_start + printed_lines, indent, avail);
         else
         {
-            c_put_str(TERM_ORANGE, buf, row_start + printed_lines, indent);
-            story_present();
+            story_putstr(indent, row_start + printed_lines, TERM_ORANGE, buf);
+            (void)story_present();
         }
 
         printed_lines++;
@@ -459,9 +818,6 @@ void print_story(int last_parts, bool fade_in)
         last_parts, fade_in ? "true" : "false");
     log_debug("last_parts=%d, fade_in=%s", last_parts,
         fade_in ? "true" : "false");
-
-    if (use_information_scene)
-        fade_in = false;
 
 #define REDRAW_HINT() story_print_hint(indent, h)
 
@@ -514,9 +870,11 @@ void print_story(int last_parts, bool fade_in)
     log_debug("Story range: start=%d, total=%d", start, total);
 
     Term_get_size(&wid, &h);
+    if (use_information_scene)
+        story_semantic_begin(wid, h);
     if (saved_screen)
         screen_save();
-    Term_clear();
+    story_clear_screen();
     (void)Term_get_cursor(&saved_cursor_state);
     saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
@@ -524,7 +882,7 @@ void print_story(int last_parts, bool fade_in)
 
     sdl_story_font_enable();
 
-    Term_putstr(indent, 0, -1, TERM_YELLOW, "=== The Tale So Far ===");
+    story_putstr(indent, 0, TERM_YELLOW, "=== The Tale So Far ===");
 
     {
         int row = 2;
@@ -556,26 +914,23 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    if (use_information_scene
-                        && !ui_information_scene_present_term())
-                    {
-                        ui_information_scene_leave(&info_scope);
-                        use_information_scene = false;
-                    }
+                    if (use_information_scene && !story_present())
+                        story_disable_information_scene(&info_scope,
+                            &use_information_scene);
                     ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
                         fast_forward = true;
                         fade_in = false;
-                        Term_erase(0, h - 1, wid);
+                        story_erase_row(0, h - 1, wid);
                         log_debug(
                             "User pressed ESC - enabling fast forward mode");
                     }
                     else
                     {
                         row = 2;
-                        Term_clear();
-                        Term_putstr(indent, 0, -1, TERM_YELLOW,
+                        story_clear_screen();
+                        story_putstr(indent, 0, TERM_YELLOW,
                             "=== The Tale So Far ===");
                         REDRAW_HINT();
                     }
@@ -583,13 +938,13 @@ void print_story(int last_parts, bool fade_in)
                 else
                 {
                     row = 2;
-                    Term_clear();
-                    Term_putstr(indent, 0, -1, TERM_YELLOW,
+                    story_clear_screen();
+                    story_putstr(indent, 0, TERM_YELLOW,
                         "=== The Tale So Far ===");
                 }
             }
 
-            Term_putstr(indent, row, -1, TERM_L_BLUE, st_name + st->name);
+            story_putstr(indent, row, TERM_L_BLUE, st_name + st->name);
             row++;
 
             if (fade_in && !fast_forward && !show_page_instantly)
@@ -597,6 +952,9 @@ void print_story(int last_parts, bool fade_in)
                 int fade_result =
                     print_paragraph_fade(text, row, indent, wrap_width);
 
+                if (use_information_scene && g_story_semantic_scene.failed)
+                    story_disable_information_scene(&info_scope,
+                        &use_information_scene);
                 if (fade_result == 2)
                 {
                     fast_forward = true;
@@ -607,12 +965,11 @@ void print_story(int last_parts, bool fade_in)
             }
             else
             {
-                text_out_indent = indent;
-                text_out_wrap = wrap_width;
-                Term_gotoxy(indent, row);
-                text_out_to_screen(TERM_WHITE, text);
-                text_out_wrap = 0;
-                text_out_indent = 0;
+                (void)story_draw_wrapped_text(TERM_WHITE, text, row, indent,
+                    wrap_width);
+                if (use_information_scene && !story_present())
+                    story_disable_information_scene(&info_scope,
+                        &use_information_scene);
                 if (!fast_forward && !show_page_instantly)
                     Term_xtra(TERM_XTRA_DELAY, 1000);
             }
@@ -636,27 +993,24 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    if (use_information_scene
-                        && !ui_information_scene_present_term())
-                    {
-                        ui_information_scene_leave(&info_scope);
-                        use_information_scene = false;
-                    }
+                    if (use_information_scene && !story_present())
+                        story_disable_information_scene(&info_scope,
+                            &use_information_scene);
                     ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
                         fast_forward = true;
                         fade_in = false;
-                        Term_erase(0, h - 1, wid);
+                        story_erase_row(0, h - 1, wid);
                         log_debug(
                             "User pressed ESC - enabling fast forward mode");
                     }
                     else
                     {
                         row = 2;
-                        Term_clear();
+                        story_clear_screen();
                         sdl_story_font_enable();
-                        Term_putstr(indent, 0, -1, TERM_YELLOW,
+                        story_putstr(indent, 0, TERM_YELLOW,
                             "=== The Tale So Far ===");
                         sdl_story_font_disable();
                         REDRAW_HINT();
@@ -666,37 +1020,34 @@ void print_story(int last_parts, bool fade_in)
                 else
                 {
                     row = 2;
-                    Term_clear();
-                    Term_putstr(indent, 0, -1, TERM_YELLOW,
+                    story_clear_screen();
+                    story_putstr(indent, 0, TERM_YELLOW,
                         "=== The Tale So Far ===");
                 }
             }
 
             if (will_add_blank_line && !paginated)
             {
-                Term_putstr(indent, row, -1, TERM_WHITE, "");
+                story_putstr(indent, row, TERM_WHITE, "");
                 row++;
             }
         }
     }
 
-    Term_erase(0, h - 1, wid);
+    story_erase_row(0, h - 1, wid);
     if (steamdeck_controls_active()) {
         char next_label[16];
         char prompt_buf[64];
 
         story_prompt_label(' ', "A", next_label, sizeof(next_label));
         strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] continue", next_label);
-        Term_putstr(indent, h - 1, -1, TERM_L_WHITE, prompt_buf);
+        story_putstr(indent, h - 1, TERM_L_WHITE, prompt_buf);
     } else {
-        Term_putstr(indent, h - 1, -1, TERM_L_WHITE,
+        story_putstr(indent, h - 1, TERM_L_WHITE,
             "[Press any key to continue]");
     }
-    if (use_information_scene && !ui_information_scene_present_term())
-    {
-        ui_information_scene_leave(&info_scope);
-        use_information_scene = false;
-    }
+    if (use_information_scene && !story_present())
+        story_disable_information_scene(&info_scope, &use_information_scene);
     (void)story_wait_key();
 
     Term_flush();
@@ -706,6 +1057,7 @@ void print_story(int last_parts, bool fade_in)
         ui_information_scene_leave(&info_scope);
     else if (saved_screen)
         screen_load();
+    story_semantic_end();
     (void)Term_set_cursor(saved_cursor_state);
     inkey_set_cursor_hidden(saved_hide_cursor);
 

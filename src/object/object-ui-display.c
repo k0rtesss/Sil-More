@@ -774,6 +774,7 @@ void show_inven(void)
     story_font_term_state story_state;
     int story_term_w = 0;
     set_story_inventory_list_active(use_story_font);
+    set_story_equipment_list_active(false);
     story_font_term_push(use_story_font, false, &story_state);
     if (use_story_font)
     {
@@ -979,6 +980,7 @@ void show_equip(void)
     story_font_term_state story_state;
     int story_term_w = 0;
     set_story_equipment_list_active(use_story_font);
+    set_story_inventory_list_active(false);
     story_font_term_push(use_story_font, false, &story_state);
     if (use_story_font)
     {
@@ -1172,6 +1174,14 @@ void show_floor(const int* floor_list, int floor_num)
     int out_index[MAX_FLOOR_STACK];
     byte out_color[MAX_FLOOR_STACK];
     char out_desc[MAX_FLOOR_STACK][80];
+
+    /*
+     * Floor fallback rendering is still mono-only; clear any stale story-list
+     * mode from the inventory or equipment pane before the selector highlight
+     * pass runs.
+     */
+    set_story_inventory_list_active(false);
+    set_story_equipment_list_active(false);
 
     len = 29;
 

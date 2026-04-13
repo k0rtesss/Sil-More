@@ -39,6 +39,23 @@ static void pickup_preview_equipment_replacement(void)
     screen_load();
 }
 
+static void pickup_prepare_legacy_replacement_prompt(bool preview_equipment)
+{
+    /*
+     * Snapshot selectors own their own semantic overlay loop, so keep the
+     * legacy story-font and equipment-preview preparation fenced to the old
+     * term-overlay fallback only.
+     */
+    if (pickup_snapshot_active())
+        return;
+
+    if (sdl_is_story_font_enabled())
+        sdl_story_font_disable();
+
+    if (preview_equipment)
+        pickup_preview_equipment_replacement();
+}
+
 void give_player_item(object_type * o_ptr)
 {
     char o_name[80];
@@ -212,9 +229,7 @@ static bool prompt_replace_pack_item(const object_type* incoming)
     char incoming_name[80];
     char prompt[160];
 
-    /* Ensure story font is disabled before showing messages */
-    if (sdl_is_story_font_enabled())
-        sdl_story_font_disable();
+    pickup_prepare_legacy_replacement_prompt(false);
 
     object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
     msg_format("No room for %s.", incoming_name);
@@ -516,9 +531,7 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
     const object_type* old_filter = replacement_filter_incoming;
 
-    /* Ensure story font is disabled before showing messages */
-    if (sdl_is_story_font_enabled())
-        sdl_story_font_disable();
+    pickup_prepare_legacy_replacement_prompt(false);
 
     if (label)
         msg_format("You already carry %s (limit %d).", label, limit);
@@ -615,7 +628,7 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
         return PICKUP_FAILURE_ABORT;
     }
 
-    pickup_preview_equipment_replacement();
+    pickup_prepare_legacy_replacement_prompt(true);
 
     char equipped_name[80];
     object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);

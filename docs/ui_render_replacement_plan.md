@@ -93,11 +93,18 @@ forward UI work.
 - `src/ui/ui-character-screen.c` tutorial pages for compact birth-context
   help now build a direct document-style `app_ui_scene`, though the rest of
   that tutorial flow still falls back to the older document adapter path.
+- `src/init2.c` welcome screen now builds and presents a direct semantic
+  welcome panel scene from `welcome_screen_build_ui_scene()` and
+  `welcome_screen_present_ui()`.
+- `src/metarun.c` now builds a direct semantic browser scene for the main
+  "Current Story Statistics" screen through
+  `metarun_build_stats_browser_scene()`, though the submenus launched from
+  that screen still remain legacy.
 - `py -3 tools/ui_debt_audit.py --check` passes on this branch.
 - Current audit counts on April 13, 2026:
-  - `inkey()` call sites: 36 files / 87 matches
-  - `screen_save()` + `screen_load()` call sites: 28 files / 197 matches
-  - direct `Term_*` render/control calls: 63 files / 1,558 matches
+  - `inkey()` call sites: 37 files / 74 matches
+  - `screen_save()` + `screen_load()` call sites: 28 files / 187 matches
+  - direct `Term_*` render/control calls: 62 files / 1,529 matches
   - `#include "platform-ui.h"`: 0 files / 0 matches
   - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 208 matches
 
@@ -117,11 +124,19 @@ forward UI work.
   - `ui_information_scene_present_document()`
 - `ui_information_scene_present_document()` no longer has in-tree callers, but
   the API still exists and should be deleted.
-- The remaining non-core adapter users are:
-  - `src/cmd/ui/cmd-ui-settings.c`
-  - `src/melee/melee-combat-display.c`
-  - `src/metarun.c`
-  - `src/ui/ui-character-screen.c`
+- The document adapter core is now effectively dead from gameplay-module
+  call sites, but it still exists in the bridge implementation and should not
+  be deleted until the remaining live term-capture bridge is gone too.
+- The main "Current Story Statistics" screen is semantic now, but the submenu
+  family launched from `src/metarun.c:print_metarun_stats()` is still legacy:
+  - `show_all_active_curses()`
+  - `open_blessing_exchange()`
+  - `adjust_blessing_threshold_menu()`
+  - `choose_difficulty_menu()`
+  - `list_metaruns()`
+  - `show_completed_quests_summary()`
+  - shared live-term helpers `metarun_present_term()` and
+    `metarun_wait_key()`
 - Inventory, equipment, and floor selectors now have their own migration slice:
   - the base selector overlay and direct `i` / `e` enhanced menus are
     semantic in SDL snapshot mode
@@ -141,46 +156,54 @@ forward UI work.
 - Older plan text that says tabs, minimap, browser or list-detail shells, or
   character-sheet widgets are still missing is stale.
 - The current blocker is no longer "invent the shared widgets first."
-- The current blocker is no longer "migrate the document producers first" or
-  "replace raw interaction panels first"; those slices are effectively done.
-- The current blocker is now the narrower information-scene adapter debt:
-  term capture into `app_information_scene`, conversion back into
-  `app_ui_scene`, and late bespoke workflows that still publish live `Term`
-  content.
+- The current blocker is no longer "migrate the document producers first".
+- The welcome screen and the main story-statistics screen are no longer part
+  of the remaining debt.
+- The current blocker is now the remaining legacy term-owned submenu families
+  and bespoke live-term workflows:
+  - the metarun story-statistics submenus
+  - the remaining item-family loops
+  - quest typewriter flow
+  - story flow
+  - death flow
+  - only after those, the final bridge cleanup
 
 ## Next Slices
-### Slice: Collapse The Remaining Information-Scene Adapter
+### Slice: Migrate Metarun Story-Statistics Submenus
 Goal:
-- stop capturing `Term` into `app_information_scene` just to immediately turn
-  it back into `app_ui_scene`
-- delete dead document-presentation API surface that no longer has callers
+- migrate the legacy submenu family launched from the semantic
+  "Current Story Statistics" screen
+- remove the metarun-specific live-term helper path from those submenus
 
 Why this is next:
-- user-facing document producers are already migrated
-- raw interaction panels are already deleted
-- the remaining adapter users are concentrated and block bridge deletion
+- the top-level story-statistics screen is already semantic
+- the remaining debt is concentrated in one file
+- those submenus are user-facing and still term-owned even on the SDL path
 
 Primary targets:
-- `src/cmd/ui/cmd-ui-settings.c`
-- `src/melee/melee-combat-display.c`
 - `src/metarun.c`
-- `src/ui/ui-character-screen.c` tutorial pages still using
-  `app_information_scene`
+  - `show_all_active_curses()`
+  - `open_blessing_exchange()`
+  - `adjust_blessing_threshold_menu()`
+  - `choose_difficulty_menu()`
+  - `list_metaruns()`
+  - `show_completed_quests_summary()`
 
 Approach:
-- build `app_ui_scene` directly in the remaining adapter users
-- delete `ui_information_scene_present_document()` once its last dead
-  declaration and implementation are no longer needed
-- keep `app_information_scene` only as long as `ui_information_scene_capture_term()`
-  or tutorial fallback paths still depend on it
-- do not add new `app_ui_scene_from_information_document()` usage
+- keep the main story-statistics screen semantic
+- migrate each submenu to direct `app_ui_scene` presentation
+- remove the need for `metarun_present_term()` and `metarun_wait_key()` in
+  those submenu flows
+- leave truly narrative or heavily scripted metarun flows for the later
+  bespoke-workflow slice
 
 Exit when:
-- no non-core callers remain for `app_ui_scene_from_information_document()`
-- no non-core callers remain for `ui_information_scene_capture_term()`
-- `ui_information_scene_present_document()` is deleted
-- no new SDL browser or document surface depends on `Term` capture as an
-  intermediate representation
+- no submenu launched from `print_metarun_stats()` depends on live term
+  presentation
+- the metarun story-statistics submenu family no longer depends on
+  `metarun_present_term()`
+- any remaining metarun legacy flows are clearly outside the
+  story-statistics submenu family
 
 ### Slice: Item Selector Overlay Family
 Goal:
@@ -238,9 +261,10 @@ Exit when:
 
 ### Slice: Finish Bespoke Workflows
 - remaining likely late movers:
+  - metarun history and any remaining metarun side flows not covered by the
+    story-statistics submenu slice
   - story
   - death
-  - metarun history and any remaining metarun side flows
   - birth
   - smithing
   - blitz
@@ -253,70 +277,26 @@ Top-level implementation agents should use `gpt-5.4` with xhigh reasoning.
 Read-only grep or code-reading subagents can use `gpt-5.4-mini` with xhigh
 reasoning.
 
-### Phase 1: Launch In Parallel Now
+### Phase Status
+- Old Phase 1 adapter work is now effectively done in:
+  - `src/cmd/ui/cmd-ui-settings.c`
+  - `src/melee/melee-combat-display.c`
+  - `src/metarun.c` main story-statistics screen only
+  - `src/ui/ui-character-screen.c`
+  - `src/init2.c` welcome screen
+- Old Phase 1 item-family work is not done yet:
+  - `src/object/object-ui-select.c`
+  - `src/object/object-ui-enhanced.c`
+  - `src/object/object-ui-display.c`
+  - `src/cmd/item/cmd-item-activate.c`
+  - `src/cmd/item/cmd-pickup.c`
+- The metarun story-statistics submenus were previously only implied under
+  broad metarun cleanup. They are now an explicit next slice.
+
+### Next Parallel Slice: Launch In Parallel Now
 These write sets are disjoint and can run at the same time.
 
-#### Agent P1-A: Settings Adapter
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/cmd/ui/cmd-ui-settings.c
-
-Goal:
-- remove the remaining information-scene adapter in this file
-- stop capturing the current Term into app_information_scene just to turn it
-  back into app_ui_scene
-- build and present app_ui_scene directly for the settings browser/detail flow
-
-Constraints:
-- preserve current option layout, hotkeys, highlight behavior, prompts, and
-  legacy fallback behavior
-- do not edit ui-information-scene core files, SDL renderer files, or any other
-  UI family
-- do not introduce new dependencies on app_information_scene or
-  app_ui_scene_from_information_document()
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "app_ui_scene_from_information_document|ui_information_scene_capture_term" src/cmd/ui/cmd-ui-settings.c returns no matches
-```
-
-#### Agent P1-B: Combat History Adapter
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/melee/melee-combat-display.c
-
-Goal:
-- remove the remaining information-scene adapter in combat history
-- stop capturing Term into app_information_scene for
-  do_cmd_combat_history_information_scene()
-- build and present app_ui_scene directly
-
-Constraints:
-- preserve paging, 4/6 horizontal movement, / search, = filter prompt, ESC
-  behavior, and existing content layout
-- do not edit story, death, metarun, settings, ui-information-scene core, or
-  SDL renderer files
-- do not introduce new dependencies on app_information_scene or
-  app_ui_scene_from_information_document()
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "app_ui_scene_from_information_document|ui_information_scene_capture_term" src/melee/melee-combat-display.c returns no matches
-```
-
-#### Agent P1-C: Metarun Adapter
+#### Agent N1-A: Metarun Story-Statistics Submenus
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -328,55 +308,33 @@ Write set:
 - src/metarun.c
 
 Goal:
-- remove the remaining information-scene adapter in print_metarun_stats()
-- stop capturing the current Term into app_information_scene just to present it
-  as app_ui_scene
-- build and present app_ui_scene directly for the metarun stats screen
+- keep the main "Current Story Statistics" screen semantic
+- migrate the submenu family launched from print_metarun_stats() off legacy
+  term-owned presentation
+- target these flows explicitly:
+  - show_all_active_curses()
+  - open_blessing_exchange()
+  - adjust_blessing_threshold_menu()
+  - choose_difficulty_menu()
+  - list_metaruns()
+  - show_completed_quests_summary()
+- remove the need for metarun_present_term() and metarun_wait_key() in those
+  submenu flows
 
 Constraints:
-- preserve current compact/full layouts, Steam Deck prompts, action routing,
-  blessing displays, and fallback behavior
-- do not change metarun history, story, or other metarun side workflows unless
-  a tiny glue fix is strictly required
-- do not edit ui-information-scene core, SDL renderer files, or unrelated UI
-  modules
+- preserve the already-landed semantic main stats screen
+- preserve Steam Deck prompts, action routing, and current submenu behavior
+- do not edit quest-ui.c, ui-story.c, ui-death.c, or bridge/core files
+- if you encounter truly narrative metarun flows, isolate them clearly and
+  leave them for the later bespoke-workflow slice
 
 Validation:
 - run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "app_ui_scene_from_information_document|ui_information_scene_capture_term" src/metarun.c returns no matches
+- summarize which metarun flows, if any, still intentionally depend on live
+  term presentation after your change
 ```
 
-#### Agent P1-D: Character Tutorial Adapter
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/ui/ui-character-screen.c
-
-Goal:
-- finish removing the remaining document adapter path from the character-screen
-  tutorial flow
-- stop routing tutorial pages through app_information_scene plus
-  app_ui_scene_from_information_document()
-- build and present app_ui_scene directly for all information-scene tutorial
-  pages that still use the adapter
-
-Constraints:
-- preserve tutorial paging, navigation, birth-context behavior, and legacy
-  fallback behavior
-- leave the already-semantic main character sheet flow alone
-- do not edit ui-information-scene core, app-ui core, or SDL renderer files
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "app_ui_scene_from_information_document|app_information_scene" src/ui/ui-character-screen.c still only returns intentional fallback-free results you explain explicitly
-```
-
-#### Agent P1-E: Selector Snapshot Ownership
+#### Agent N1-B: Selector Snapshot Ownership
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -406,7 +364,7 @@ Validation:
 - summarize which selector-owned legacy branch remains, if any, and why
 ```
 
-#### Agent P1-F: Enhanced Inventory And Equipment Menus
+#### Agent N1-C: Enhanced Inventory And Equipment Menus
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -434,7 +392,7 @@ Validation:
 - summarize any remaining intentional term-shaped fallback left in this file
 ```
 
-#### Agent P1-G: Wider Item Family Raw Loops
+#### Agent N1-D: Wider Item Family Raw Loops
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -466,10 +424,7 @@ Validation:
 - summarize which raw item loops remain and why
 ```
 
-### Phase 2: Launch After Phase 1 Merges
-These depend on the adapter and item-family landing first.
-
-#### Agent P2-A: Quest Typewriter Workflow
+#### Agent N1-E: Quest Typewriter Workflow
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -495,7 +450,7 @@ Validation:
 - confirm rg -n "ui_information_scene_present_term\\(" src/quest/quest-ui.c returns no matches
 ```
 
-#### Agent P2-B: Story Workflow
+#### Agent N1-F: Story Workflow
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -521,7 +476,7 @@ Validation:
 - confirm rg -n "ui_information_scene_present_term\\(" src/ui/ui-story.c returns no matches
 ```
 
-#### Agent P2-C: Death Workflow
+#### Agent N1-G: Death Workflow
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -547,10 +502,8 @@ Validation:
 - confirm rg -n "ui_information_scene_present_term\\(" src/ui/ui-death.c returns no matches
 ```
 
-### Phase 3: Final Bridge Cleanup
-Launch only after Phases 1 and 2 are merged and verified.
-
-#### Agent P3-A: Delete The Dead Information-Scene Bridge
+### Final Cleanup: Launch After The Next Slice Merges
+#### Agent F1-A: Delete The Dead Information-Scene Bridge
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 

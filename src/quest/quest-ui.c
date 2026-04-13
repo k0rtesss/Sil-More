@@ -108,6 +108,161 @@ static app_ui_panel* quest_scene_begin_document(app_ui_scene* scene)
     return panel;
 }
 
+enum {
+    QUEST_TYPEWRITER_SCENE_LINE_MAX = APP_UI_DOCUMENT_OP_MAX
+};
+
+typedef struct quest_typewriter_scene_line {
+    bool used;
+    int col;
+    byte attr;
+    char text[APP_UI_TEXT_MAX];
+} quest_typewriter_scene_line;
+
+typedef struct quest_typewriter_scene_state {
+    bool active;
+    quest_typewriter_scene_line lines[QUEST_TYPEWRITER_SCENE_LINE_MAX];
+} quest_typewriter_scene_state;
+
+static void quest_typewriter_scene_init(quest_typewriter_scene_state* state,
+    bool active)
+{
+    if (!state)
+        return;
+
+    memset(state, 0, sizeof(*state));
+    state->active = active;
+}
+
+static void quest_typewriter_scene_clear(quest_typewriter_scene_state* state)
+{
+    if (!state || !state->active)
+        return;
+
+    memset(state->lines, 0, sizeof(state->lines));
+}
+
+static void quest_typewriter_scene_set_text(quest_typewriter_scene_state* state,
+    int row, int col, byte attr, cptr text)
+{
+    quest_typewriter_scene_line* line;
+
+    if (!state || !state->active || row < 0
+        || row >= QUEST_TYPEWRITER_SCENE_LINE_MAX)
+    {
+        return;
+    }
+
+    line = &state->lines[row];
+    memset(line, 0, sizeof(*line));
+
+    if (!text || !text[0])
+        return;
+
+    line->used = true;
+    line->col = col;
+    line->attr = attr;
+    SDL_strlcpy(line->text, text, sizeof(line->text));
+}
+
+static void quest_typewriter_scene_put_char(quest_typewriter_scene_state* state,
+    int row, int col, byte attr, char ch)
+{
+    quest_typewriter_scene_line* line;
+    size_t len;
+    int gap;
+
+    if (!state || !state->active || row < 0
+        || row >= QUEST_TYPEWRITER_SCENE_LINE_MAX || ch == '\0')
+    {
+        return;
+    }
+
+    line = &state->lines[row];
+    if (!line->used)
+    {
+        memset(line, 0, sizeof(*line));
+        line->used = true;
+        line->col = col;
+        line->attr = attr;
+    }
+
+    if (line->attr != attr)
+        return;
+
+    len = strlen(line->text);
+    gap = col - (line->col + (int)len);
+    if (gap < 0)
+        return;
+
+    while (gap > 0 && len < sizeof(line->text) - 1u)
+    {
+        line->text[len++] = ' ';
+        gap--;
+    }
+
+    if (len < sizeof(line->text) - 1u)
+    {
+        line->text[len++] = ch;
+        line->text[len] = '\0';
+    }
+}
+
+static bool quest_typewriter_scene_publish(
+    const quest_typewriter_scene_state* state)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    bool has_text = false;
+
+    if (!state || !state->active)
+        return true;
+
+    panel = quest_scene_begin_document(&scene);
+    if (!panel)
+        return false;
+
+    for (int row = 0; row < QUEST_TYPEWRITER_SCENE_LINE_MAX; row++)
+    {
+        const quest_typewriter_scene_line* line = &state->lines[row];
+
+        if (!line->used || !line->text[0])
+            continue;
+
+        if (!app_ui_panel_add_document_text(&scene, panel, (s16b)row,
+                (s16b)line->col, line->attr, line->text))
+        {
+            return false;
+        }
+
+        has_text = true;
+    }
+
+    if (!has_text)
+        return false;
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+static void quest_typewriter_present(quest_typewriter_scene_state* state,
+    bool* scene_active, ui_information_scene_scope* info_scope)
+{
+    if (!state || !scene_active || !*scene_active || !state->active)
+    {
+        Term_fresh();
+        return;
+    }
+
+    if (!quest_typewriter_scene_publish(state))
+    {
+        log_warn("quest typewriter: semantic scene publish failed; falling back to terminal refresh");
+        ui_information_scene_leave(info_scope);
+        *scene_active = false;
+        state->active = false;
+        Term_fresh();
+    }
+}
+
 static bool quest_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
     s16b row, s16b col, byte color, cptr text)
 {
@@ -1509,10 +1664,11 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     bool skipped = false;
     ui_information_scene_scope info_scope;
     bool scene_active = ui_information_scene_enter(&info_scope);
+    quest_typewriter_scene_state scene_state;
+    int title_y = 1;
+    int title_col;
 
-    /* Disable fade/typewriter in information scene mode */
-    if (scene_active)
-        skipped = true;
+    quest_typewriter_scene_init(&scene_state, scene_active);
     
     /* Get terminal size */
     Term_get_size(&wid, &h);
@@ -1522,10 +1678,14 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     if (!scene_active)
         screen_save();
     Term_clear();
+    quest_typewriter_scene_clear(&scene_state);
     
     /* Display title */
-    int title_y = 1;
-    Term_putstr((wid - strlen(title)) / 2, title_y, -1, title_color, title);
+    title_col = (wid - strlen(title)) / 2;
+    Term_putstr(title_col, title_y, -1, title_color, title);
+    quest_typewriter_scene_set_text(&scene_state, title_y, title_col,
+        title_color, title);
+    quest_typewriter_present(&scene_state, &scene_active, &info_scope);
     
     int row = 3, col = 0;
     
@@ -1558,19 +1718,16 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
         /* Check if we have enough space for the whole paragraph */
         if (row + lines_needed >= h - 2) {
             Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
+            quest_typewriter_scene_set_text(&scene_state, h - 1, 15,
+                TERM_L_WHITE, "(press any key to continue)");
+            quest_typewriter_present(&scene_state, &scene_active, &info_scope);
             {
                 char k;
-                if (scene_active)
-                {
-                    (void)ui_information_scene_present_term();
-                    k = (char)ui_information_scene_wait_key();
-                }
-                else
-                {
-                    k = inkey();
-                }
+                k = scene_active ? (char)ui_information_scene_wait_key()
+                                 : inkey();
                 if (k == 'Q' || k == 'q') { /* Q/q skips remaining dialog */
                     Term_clear();
+                    quest_typewriter_scene_clear(&scene_state);
                     if (scene_active)
                         ui_information_scene_leave(&info_scope);
                     else
@@ -1579,8 +1736,12 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                 }
             }
             Term_clear();
+            quest_typewriter_scene_clear(&scene_state);
             /* Redisplay title */
-            Term_putstr((wid - strlen(title)) / 2, title_y, -1, title_color, title);
+            Term_putstr(title_col, title_y, -1, title_color, title);
+            quest_typewriter_scene_set_text(&scene_state, title_y, title_col,
+                title_color, title);
+            quest_typewriter_present(&scene_state, &scene_active, &info_scope);
             row = 3;
         }
         
@@ -1627,6 +1788,8 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                 /* Skip mode: print entire word instantly */
                 for (int j = word_start; j < word_start + word_len; j++) {
                     Term_putch(indent + col, row, text_color, s[j]);
+                    quest_typewriter_scene_put_char(&scene_state, row,
+                        indent + col, text_color, s[j]);
                     col++;
                 }
             }
@@ -1643,6 +1806,8 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                             /* Print rest of current word instantly */
                             for (int k = j; k < word_start + word_len; k++) {
                                 Term_putch(indent + col, row, text_color, s[k]);
+                                quest_typewriter_scene_put_char(&scene_state,
+                                    row, indent + col, text_color, s[k]);
                                 col++;
                             }
                             break; /* Exit to continue with rest of text in skip mode */
@@ -1652,7 +1817,10 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                     
                     /* Print character with typewriter effect */
                     Term_putch(indent + col, row, text_color, s[j]);
-                    Term_fresh();
+                    quest_typewriter_scene_put_char(&scene_state, row,
+                        indent + col, text_color, s[j]);
+                    quest_typewriter_present(&scene_state, &scene_active,
+                        &info_scope);
                     col++;
                     
                     /* Delay 25 ms after each character for typewriter effect */
@@ -1666,7 +1834,11 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                     /* Only print space if we're not at the end of a line */
                     if (col < wrap_width) {
                         Term_putch(indent + col, row, text_color, ' ');
-                        if (!skipped) Term_fresh();
+                        quest_typewriter_scene_put_char(&scene_state, row,
+                            indent + col, text_color, ' ');
+                        if (!skipped)
+                            quest_typewriter_present(&scene_state,
+                                &scene_active, &info_scope);
                         col++;
                         
                         /* Delay for space too (unless skipped) */
@@ -1679,7 +1851,11 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                     int tab_spaces = 4 - (col % 4);
                     for (int t = 0; t < tab_spaces && col < wrap_width; t++) {
                         Term_putch(indent + col, row, text_color, ' ');
-                        if (!skipped) Term_fresh();
+                        quest_typewriter_scene_put_char(&scene_state, row,
+                            indent + col, text_color, ' ');
+                        if (!skipped)
+                            quest_typewriter_present(&scene_state,
+                                &scene_active, &info_scope);
                         col++;
                         
                         /* Delay for tab spaces (unless skipped) */
@@ -1699,24 +1875,24 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     }
     
     /* Refresh screen to show all text if skipped */
-    if (skipped) Term_fresh();
+    if (skipped)
+        quest_typewriter_present(&scene_state, &scene_active, &info_scope);
     
     /* Final prompt */
     Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
+    quest_typewriter_scene_set_text(&scene_state, h - 1, 15, TERM_L_WHITE,
+        "(press any key to continue)");
+    quest_typewriter_present(&scene_state, &scene_active, &info_scope);
     if (scene_active)
-    {
-        (void)ui_information_scene_present_term();
         (void)ui_information_scene_wait_key();
-    }
     else
-    {
         inkey();
-    }
     
     /* Flush any queued keypresses that accumulated during the typewriter effect */
     Term_flush();
     
     Term_clear();
+    quest_typewriter_scene_clear(&scene_state);
     if (scene_active)
         ui_information_scene_leave(&info_scope);
     else
