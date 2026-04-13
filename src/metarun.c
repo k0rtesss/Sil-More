@@ -4794,11 +4794,97 @@ static void open_blessing_exchange(void)
     }
 }
 
+typedef struct metarun_stats_render_target {
+    app_ui_scene* scene;
+    app_ui_panel* panel;
+    bool scene_failed;
+} metarun_stats_render_target;
+
+static bool metarun_begin_document_ui_scene(app_ui_scene* scene,
+    app_ui_panel** out_panel)
+{
+    app_ui_panel* panel;
+
+    if (!scene || !out_panel)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    *out_panel = panel;
+    return true;
+}
+
+static void metarun_stats_render_target_init(
+    metarun_stats_render_target* target, app_ui_scene* scene,
+    app_ui_panel* panel)
+{
+    if (!target)
+        return;
+
+    target->scene = scene;
+    target->panel = panel;
+    target->scene_failed = false;
+}
+
+static bool metarun_scene_add_text_run(metarun_stats_render_target* target,
+    s16b row, s16b col, byte attr, const char* text, int len)
+{
+    char buf[APP_UI_TEXT_MAX];
+    const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
+
+    if (!target || !target->scene || !target->panel || !text || len <= 0)
+        return true;
+
+    while (len > 0)
+    {
+        int chunk = MIN(len, max_chunk);
+
+        memcpy(buf, text, (size_t)chunk);
+        buf[chunk] = '\0';
+        if (!app_ui_panel_add_document_text(target->scene, target->panel,
+                row, col, attr, buf))
+        {
+            return false;
+        }
+        col += (s16b)chunk;
+        text += chunk;
+        len -= chunk;
+    }
+
+    return true;
+}
+
+static void metarun_putstr(metarun_stats_render_target* target, int col,
+    int row, byte attr, const char* text)
+{
+    if (!text || !text[0])
+        return;
+
+    if (target && target->scene && target->panel)
+    {
+        if (!target->scene_failed
+            && !metarun_scene_add_text_run(target, (s16b)row, (s16b)col, attr,
+                text, (int)strlen(text)))
+        {
+            target->scene_failed = true;
+        }
+    }
+
+    Term_putstr(col, row, -1, attr, text);
+}
+
 /*
  * Draw a simple blessing pool progress indicator.
  * Displays on the right side of the screen in light blue.
  */
-static void draw_blessing_meter(int col, int start_row, int height, u32b current, u32b threshold)
+static void draw_blessing_meter(metarun_stats_render_target* target, int col,
+    int start_row, int height, u32b current, u32b threshold)
 {
     if (height < 5 || threshold == 0) return;
     
@@ -4807,10 +4893,10 @@ static void draw_blessing_meter(int col, int start_row, int height, u32b current
     if (percent > 100) percent = 100;
     
     /* Draw title */
-    Term_putstr(col, start_row, -1, TERM_L_BLUE, "Blessing Pool");
+    metarun_putstr(target, col, start_row, TERM_L_BLUE, "Blessing Pool");
     
     /* Draw top border */
-    Term_putstr(col, start_row + 1, -1, TERM_L_BLUE, "+----------+");
+    metarun_putstr(target, col, start_row + 1, TERM_L_BLUE, "+----------+");
     
     /* Draw the meter from bottom to top using simple ASCII */
     int meter_start = start_row + 2;
@@ -4822,15 +4908,15 @@ static void draw_blessing_meter(int col, int start_row, int height, u32b current
         int rows_from_bottom = meter_end - row - 1;
         if (rows_from_bottom < filled_height) {
             /* Filled portion - use # for filled */
-            Term_putstr(col, row, -1, TERM_L_BLUE, "|##########|");
+            metarun_putstr(target, col, row, TERM_L_BLUE, "|##########|");
         } else {
             /* Empty portion */
-            Term_putstr(col, row, -1, TERM_L_BLUE, "|          |");
+            metarun_putstr(target, col, row, TERM_L_BLUE, "|          |");
         }
     }
     
     /* Draw bottom border */
-    Term_putstr(col, meter_end, -1, TERM_L_BLUE, "+----------+");
+    metarun_putstr(target, col, meter_end, TERM_L_BLUE, "+----------+");
     
     /* Draw progress text below the meter */
     char progress_buf[20];
@@ -4838,7 +4924,7 @@ static void draw_blessing_meter(int col, int start_row, int height, u32b current
              (unsigned long)current, (unsigned long)threshold);
     int text_col = col + (12 - (int)strlen(progress_buf)) / 2;
     if (text_col < col) text_col = col;
-    Term_putstr(text_col, meter_end + 1, -1, TERM_L_BLUE, progress_buf);
+    metarun_putstr(target, text_col, meter_end + 1, TERM_L_BLUE, progress_buf);
 }
 
 static void metarun_truncate_for_width(char *buf, int max_width)
@@ -4862,7 +4948,8 @@ static void metarun_truncate_for_width(char *buf, int max_width)
     }
 }
 
-static void metarun_put_prompt_line(int term_width, int term_height, byte attr, const char *text)
+static void metarun_put_prompt_line(metarun_stats_render_target* target,
+    int term_width, int term_height, byte attr, const char *text)
 {
     if (term_width <= 0 || term_height <= 0) return;
 
@@ -4879,7 +4966,7 @@ static void metarun_put_prompt_line(int term_width, int term_height, byte attr, 
         memcpy(line, text, tlen);
     }
 
-    Term_putstr(0, term_height - 1, -1, attr, line);
+    metarun_putstr(target, 0, term_height - 1, attr, line);
 }
 
 typedef struct {
@@ -5088,7 +5175,8 @@ static void metarun_pick_best_variant(char *out,
     metarun_truncate_for_width(out, max_width);
 }
 
-static void metarun_put_adaptive_line(int col,
+static void metarun_put_adaptive_line(metarun_stats_render_target* target,
+                                      int col,
                                       int *row,
                                       int term_width,
                                       byte attr,
@@ -5103,7 +5191,7 @@ static void metarun_put_adaptive_line(int col,
 
     char line[256];
     metarun_pick_best_variant(line, sizeof(line), max_width, v1, v2, v3, v4);
-    Term_putstr(col, (*row)++, -1, attr, line);
+    metarun_putstr(target, col, (*row)++, attr, line);
 }
 
 /*
@@ -5278,27 +5366,34 @@ void print_metarun_stats(void)
     char buf[160];
     int term_height, term_width;
     ui_information_scene_scope info_scope;
+    app_ui_scene metarun_scene;
+    app_ui_panel* metarun_panel = NULL;
+    metarun_stats_render_target render_target;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-#define METARUN_PRESENT_CURRENT_UI_SCENE()                                     \
-    do {                                                                       \
-        app_information_scene metarun_document;                                \
-        app_ui_scene metarun_scene;                                            \
-                                                                               \
-        if (!ui_information_scene_capture_term(&metarun_document)              \
-            || !app_ui_scene_from_information_document(&metarun_scene,         \
-                &metarun_document)                                             \
-            || !ui_information_scene_present_ui(&metarun_scene))               \
-        {                                                                      \
-            ui_information_scene_leave(&info_scope);                           \
-            use_information_scene = false;                                     \
-        }                                                                      \
-    } while (0)
+
+    if (use_information_scene
+        && !metarun_begin_document_ui_scene(&metarun_scene, &metarun_panel))
+    {
+        ui_information_scene_leave(&info_scope);
+        use_information_scene = false;
+    }
+    metarun_stats_render_target_init(&render_target,
+        use_information_scene ? &metarun_scene : NULL,
+        use_information_scene ? metarun_panel : NULL);
+
+#define Term_putstr(x, y, n, a, s) \
+    metarun_putstr(&render_target, (x), (y), (a), (s))
+#define METARUN_CLOSE_SCREEN() do { \
+    screen_load(); \
+    if (use_information_scene) \
+        ui_information_scene_leave(&info_scope); \
+} while (0)
+
+    screen_save();
 
     refresh_current_metar_score();
 
     if (current_run < 0 || current_run >= metarun_max) {
-        if (!use_information_scene)
-            screen_save();
         Term_clear();
         Term_putstr(2, 5, -1, TERM_RED, "Error: No metarun data available.");
         Term_putstr(2, 6, -1, TERM_L_WHITE, "Please start a new game first.");
@@ -5310,22 +5405,19 @@ void print_metarun_stats(void)
         } else {
             Term_putstr(2, 8, -1, TERM_L_DARK, "Press any key to return.");
         }
-        if (use_information_scene)
+        if (use_information_scene
+            && (render_target.scene_failed
+                || !ui_information_scene_present_ui(&metarun_scene)))
         {
-            METARUN_PRESENT_CURRENT_UI_SCENE();
+            ui_information_scene_leave(&info_scope);
+            use_information_scene = false;
         }
-        else
-        {
-            Term_fresh();
-        }
+        Term_fresh();
         if (use_information_scene)
             (void)ui_information_scene_wait_key_nonrepeat();
         else
             (void)inkey();
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         return;
     }
 
@@ -5367,8 +5459,6 @@ void print_metarun_stats(void)
     int spent_points = metar.blessing_points_spent;
     int available_points = earned_points - spent_points;
 
-    if (!use_information_scene)
-        screen_save();
     Term_clear();
     Term_get_size(&term_width, &term_height);
     bool steamdeck = get_sdl_steamdeck_mode();
@@ -5427,7 +5517,8 @@ void print_metarun_stats(void)
         if (meter_height > max_meter_height) meter_height = max_meter_height;
 
         /* Draw blessing meter on the right side */
-        draw_blessing_meter(meter_col, 2, meter_height, remainder, threshold);
+        draw_blessing_meter(&render_target, meter_col, 2, meter_height,
+            remainder, threshold);
 
         Term_putstr(col, row++, -1, TERM_YELLOW, "=== Current Story Statistics ===");
 
@@ -5497,7 +5588,7 @@ void print_metarun_stats(void)
         if (compact_width < 10) compact_width = 10;
         int summary_row_limit = term_height - 4;
 
-        metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW,
+        metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_YELLOW,
                                   "=== Story Statistics ===",
                                   "=== Story Stats ===",
                                   "== Story Stats ==",
@@ -5510,7 +5601,7 @@ void print_metarun_stats(void)
             strnfmt(line2, sizeof(line2), "ID:%u  Difficulty:%s", metar.id, diff_name);
             strnfmt(line3, sizeof(line3), "ID:%u  Diff:%s", metar.id, diff_name);
             strnfmt(line4, sizeof(line4), "ID:%u %s", metar.id, diff_name);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_L_BLUE, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_L_BLUE, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -5518,7 +5609,7 @@ void print_metarun_stats(void)
             strnfmt(line2, sizeof(line2), "Meta:%lu  Best:%lu", (unsigned long)metar.score, (unsigned long)best_run);
             strnfmt(line3, sizeof(line3), "Score:%lu  Best:%lu", (unsigned long)metar.score, (unsigned long)best_run);
             strnfmt(line4, sizeof(line4), "M:%lu B:%lu", (unsigned long)metar.score, (unsigned long)best_run);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -5527,7 +5618,7 @@ void print_metarun_stats(void)
             strnfmt(line3, sizeof(line3), "Sil:%d/%d  Alive:%d/%d", metar.silmarils, win_goal, alive, required_survivors);
             strnfmt(line4, sizeof(line4), "S:%d/%d A:%d/%d", metar.silmarils, win_goal, alive, required_survivors);
             byte sil_alive_attr = (alive < required_survivors) ? TERM_RED : TERM_L_GREEN;
-            metarun_put_adaptive_line(col, &row, term_width, sil_alive_attr, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, sil_alive_attr, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -5536,7 +5627,7 @@ void print_metarun_stats(void)
             strnfmt(line3, sizeof(line3), "Deaths:%d  BP:%d", metar.deaths, available_points);
             strnfmt(line4, sizeof(line4), "D:%d BP:%d", metar.deaths, available_points);
             byte bp_attr = (available_points > 0) ? TERM_L_GREEN : TERM_WHITE;
-            metarun_put_adaptive_line(col, &row, term_width, bp_attr, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, bp_attr, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -5554,7 +5645,7 @@ void print_metarun_stats(void)
             strnfmt(line3, sizeof(line3), "Pool:%lu/%lu  %s",
                     (unsigned long)remainder, (unsigned long)threshold, threshold_mode);
             strnfmt(line4, sizeof(line4), "P:%lu/%lu", (unsigned long)remainder, (unsigned long)threshold);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
         }
 
         if (row < summary_row_limit) {
@@ -5562,7 +5653,7 @@ void print_metarun_stats(void)
             strnfmt(line2, sizeof(line2), "Major:%d", unlocked_major);
             strnfmt(line3, sizeof(line3), "Major:%d", unlocked_major);
             strnfmt(line4, sizeof(line4), "M:%d", unlocked_major);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW, line1, line2, line3, line4);
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_YELLOW, line1, line2, line3, line4);
         }
 
         if (unlocked_major > 0 && row < summary_row_limit) {
@@ -5590,7 +5681,7 @@ void print_metarun_stats(void)
         }
 
         if (row < term_height - 2) {
-            metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW,
+            metarun_put_adaptive_line(&render_target, col, &row, term_width, TERM_YELLOW,
                                       "Active Curses & Blessings:",
                                       "Curses & Blessings:",
                                       "Effects:",
@@ -5710,7 +5801,8 @@ void print_metarun_stats(void)
                                     blitz_enabled,
                                     prompt_buf, sizeof(prompt_buf));
         metarun_truncate_for_width(prompt_buf, term_width);
-        metarun_put_prompt_line(term_width, term_height, TERM_L_DARK, prompt_buf);
+        metarun_put_prompt_line(&render_target, term_width, term_height,
+            TERM_L_DARK, prompt_buf);
     } else {
         /* --- Compact layout --- */
         int max_display_width = term_width - col - 1;
@@ -5844,17 +5936,18 @@ void print_metarun_stats(void)
                                     blitz_enabled,
                                     prompt_buf, sizeof(prompt_buf));
         metarun_truncate_for_width(prompt_buf, term_width);
-        metarun_put_prompt_line(term_width, term_height, TERM_L_DARK, prompt_buf);
+        metarun_put_prompt_line(&render_target, term_width, term_height,
+            TERM_L_DARK, prompt_buf);
     }
 
-    if (use_information_scene)
+    if (use_information_scene
+        && (render_target.scene_failed
+            || !ui_information_scene_present_ui(&metarun_scene)))
     {
-        METARUN_PRESENT_CURRENT_UI_SCENE();
+        ui_information_scene_leave(&info_scope);
+        use_information_scene = false;
     }
-    else
-    {
-        Term_fresh();
-    }
+    Term_fresh();
 
     char key = use_information_scene ? (char)ui_information_scene_wait_key()
                                      : inkey();
@@ -5869,17 +5962,11 @@ void print_metarun_stats(void)
         
         if (key == back_key) {
             /* B button = exit/back */
-            if (use_information_scene)
-                ui_information_scene_leave(&info_scope);
-            else
-                screen_load();
+            METARUN_CLOSE_SCREEN();
             return;
         } else if (key == confirm_key || key == '\r' || key == '\n') {
             /* A button = continue (exit) */
-            if (use_information_scene)
-                ui_information_scene_leave(&info_scope);
-            else
-                screen_load();
+            METARUN_CLOSE_SCREEN();
             return;
         } else if (key == alt_key) {
             /* X button = spend blessings */
@@ -5899,70 +5986,47 @@ void print_metarun_stats(void)
         }
     }
     if (key == 'b' || key == 'B') {
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         open_blessing_exchange();
         print_metarun_stats();
         return;
     } else if (key == 'c' || key == 'C') {
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         choose_difficulty_menu();
         return;
     } else if (key == 'f' || key == 'F') {
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         adjust_blessing_threshold_menu();
         print_metarun_stats();
         return;
     } else if (key == 'u' || key == 'U') {
         /* Show the full list of active curses/blessings separately */
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         show_all_active_curses();
         print_metarun_stats();
         return;
     } else if (key == 's' || key == 'S') {
         /* Show history only */
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         list_metaruns();
         print_metarun_stats();
         return;
     } else if (key == 't' || key == 'T') {
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         show_completed_quests_summary();
         print_metarun_stats();
         return;
     } else if ((key == 'x' || key == 'X') && blitz_enabled) {
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
-        else
-            screen_load();
+        METARUN_CLOSE_SCREEN();
         run_mode_set_pending(RUN_MODE_BLITZ);
         run_mode_set_current(RUN_MODE_BLITZ);
         return;
     }
 
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
-    else
-        screen_load();
+    METARUN_CLOSE_SCREEN();
 
-#undef METARUN_PRESENT_CURRENT_UI_SCENE
+#undef Term_putstr
+#undef METARUN_CLOSE_SCREEN
 }
 
 

@@ -1509,9 +1509,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     int floor_list[MAX_FLOOR_STACK];
     int floor_num;
     bool snapshot_interaction = item_selector_snapshot_active();
-    item_selector_menu_scene_scope menu_scene_scope;
-
-    memset(&menu_scene_scope, 0, sizeof(menu_scene_scope));
 
 #ifdef ALLOW_REPEAT
 
@@ -1676,12 +1673,13 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             item = snapshot_item;
             goto get_item_done;
         }
-
-        snapshot_interaction = false;
     }
 
-    /* Start out in "display" mode */
-    if (p_ptr->command_see && !snapshot_interaction)
+    /*
+     * Snapshot ownership lives entirely in item_selector_run_snapshot_loop().
+     * The remaining loop is the legacy term-overlay fallback.
+     */
+    if (p_ptr->command_see)
     {
         /* Save screen */
         screen_save();
@@ -1966,7 +1964,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         BUILD_VISIBLE_LIST();
 
         /* Viewing inventory */
-        if (p_ptr->command_see && !snapshot_interaction)
+        if (p_ptr->command_see)
         {
             /* Inventory screen */
             if (p_ptr->command_wrk == (USE_INVEN))
@@ -1990,65 +1988,14 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
         }
 
-        if (p_ptr->command_see && !snapshot_interaction)
+        if (p_ptr->command_see)
         {
             DRAW_HIGHLIGHT();
         }
 
-        /* Build the prompt */
-        if (p_ptr->command_see)
-        {
-            /* Viewing inventory */
-            if (p_ptr->command_wrk == (USE_INVEN))
-            {
-                strnfmt(out_val, sizeof(out_val), 
-                    "(Inven:%c-%c, ESC, %s) %s",
-                    index_to_label(i1), index_to_label(i2),
-                    use_equip ? "/ for Equip" : "- for floor,", pmt);
-            }
-
-            /* Viewing equipment */
-            else if (p_ptr->command_wrk == (USE_EQUIP))
-            {
-                strnfmt(out_val, sizeof(out_val), 
-                    "(Equip:%c-%c, ESC, %s) %s",
-                    index_to_label(e1), index_to_label(e2),
-                    use_inven ? "/ for Inven" : "- for floor,", pmt);
-            }
-
-            /* Viewing floor */
-            else
-            {
-                strnfmt(out_val, sizeof(out_val), 
-                    "(Floor:%c-%c, ESC, %s) %s",
-                    index_to_label(f1), index_to_label(f2),
-                    use_inven ? "/ for Inven" : use_equip ? "/ for Equip" : "",
-                    pmt);
-            }
-        }
-
-        /* Not viewing inventory */
-        else
-        {
-            /* Prompt */
-            strnfmt(out_val, sizeof(out_val), "(Items, ESC) %s", pmt);
-        }
-
-        if (snapshot_interaction)
-        {
-            app_ui_scene scene;
-
-            if (item_selector_build_ui_scene(&scene, out_val,
-                    p_ptr->command_wrk, use_inven, use_equip, use_floor,
-                    floor_list, vis_inven_cnt, vis_inven, vis_equip_cnt,
-                    vis_equip, vis_floor_cnt, vis_floor,
-                    highlight_active ? highlight_row : -1))
-            {
-                (void)item_selector_menu_scene_present(&menu_scene_scope, &scene);
-            }
-        }
-        else
-            put_str(out_val, 0, 0);
+        item_selector_format_prompt(out_val, sizeof(out_val), pmt,
+            p_ptr->command_wrk, use_inven, use_equip, i1, i2, e1, e2, f1, f2);
+        put_str(out_val, 0, 0);
 
         /* Get a key */
         which = inkey();
@@ -2092,9 +2039,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (have_selection)
                 {
-                    if (snapshot_interaction)
-                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
-
                     if ((k >= 0 && k < INVEN_WIELD && !allow_inven) ||
                         (k >= INVEN_WIELD && k < INVEN_TOTAL && !allow_equip) ||
                         (k < 0 && !allow_floor) ||
@@ -2115,9 +2059,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             if (handled_space)
-                break;
-
-            if (snapshot_interaction)
                 break;
 
             /* Hide the list */
@@ -2165,7 +2106,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
             }
 
             /* Hack -- Fix screen */
-            if (p_ptr->command_see && !snapshot_interaction)
+            if (p_ptr->command_see)
             {
                 /* Load screen */
                 screen_load();
@@ -2196,10 +2137,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 /* Skip non-okay objects */
                 if (!get_item_okay(k))
                     continue;
-
-                /* Allow player to "refuse" certain actions */
-                if (snapshot_interaction)
-                    item_selector_suspend_snapshot_ui(&menu_scene_scope);
 
                 if (!get_item_allow(k))
                     continue;
@@ -2244,8 +2181,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 
                 if (have_selection)
                 {
-                    if (snapshot_interaction)
-                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
                     describe_item_with_comparisons(examine_index, true);
                 }
                 else
@@ -2329,10 +2264,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 break;
             }
 
-            /* Allow player to "refuse" certain actions */
-            if (snapshot_interaction)
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
-
             if (!get_item_allow(k))
             {
                 done = true;
@@ -2391,10 +2322,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 break;
             }
 
-            /* Allow player to "refuse" certain actions */
-            if (snapshot_interaction)
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
-
             if (!get_item_allow(k))
             {
                 done = true;
@@ -2432,9 +2359,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     break;
                 }
                 if (!get_item_okay(k)) { bell("Illegal object choice (highlight)!"); break; }
-                if (snapshot_interaction) {
-                    item_selector_suspend_snapshot_ui(&menu_scene_scope);
-                }
                 if (!get_item_allow(k)) { done = true; break; }
                 (*cp)=k; item=true; done=true; break;
             }
@@ -2482,10 +2406,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 break;
             }
 
-            /* Allow player to "refuse" certain actions */
-            if (snapshot_interaction)
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
-
             if (!get_item_allow(k))
             {
                 done = true;
@@ -2521,9 +2441,6 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                     if (!get_item_okay(k)) {
                         bell("Illegal object choice (highlight)!");
                         break;
-                    }
-                    if (snapshot_interaction) {
-                        item_selector_suspend_snapshot_ui(&menu_scene_scope);
                     }
                     if (!get_item_allow(k)) {
                         done=true;
@@ -2588,19 +2505,11 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
                 break;
             }
 
-            /* Verify the item */
-            if (snapshot_interaction)
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
-
             if (verify && !verify_item("Try", k))
             {
                 done = true;
                 break;
             }
-
-            /* Allow player to "refuse" certain actions */
-            if (snapshot_interaction)
-                item_selector_suspend_snapshot_ui(&menu_scene_scope);
 
             if (!get_item_allow(k))
             {
@@ -2630,15 +2539,12 @@ get_item_done:
     if (p_ptr->command_see)
     {
         /* Load screen */
-        if (!snapshot_interaction)
-            screen_load();
+        screen_load();
 
         /* Hack -- Cancel "display" */
         p_ptr->command_see = false;
     }
 
-    if (snapshot_interaction)
-        item_selector_menu_scene_close(&menu_scene_scope);
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 
     set_story_inventory_list_active(false);

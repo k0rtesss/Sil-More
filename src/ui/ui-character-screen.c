@@ -871,7 +871,6 @@ static void tutorial_prompt_label(int binding, const char* fallback, char* out,
 }
 
 typedef struct tutorial_render_target {
-    app_information_scene* scene;
     app_ui_scene* ui_scene;
     app_ui_panel* ui_panel;
     int width;
@@ -908,13 +907,6 @@ static void tutorial_render_text(tutorial_render_target* target, int col,
     {
         (void)app_ui_panel_add_document_text(target->ui_scene,
             target->ui_panel, (s16b)row, (s16b)col, attr, text);
-        return;
-    }
-
-    if (target->scene)
-    {
-        (void)app_information_scene_add_text(target->scene, (s16b)row,
-            (s16b)col, attr, text);
         return;
     }
 
@@ -1712,19 +1704,14 @@ void display_character_tutorial(void)
         if (page >= total_pages)
             page = total_pages - 1;
 
-        app_information_scene scene;
         app_ui_scene ui_scene;
         tutorial_render_target target;
-        bool use_direct_ui_scene = use_information_scene && birth_context
-            && page >= page_birth_start
-            && page < page_birth_start + birth_pages;
 
         target.width = wid;
         target.height = hgt;
-        target.scene = NULL;
         target.ui_scene = NULL;
         target.ui_panel = NULL;
-        if (use_direct_ui_scene)
+        if (use_information_scene)
         {
             app_ui_panel* panel = NULL;
 
@@ -1737,18 +1724,11 @@ void display_character_tutorial(void)
             {
                 ui_information_scene_leave(&info_scope);
                 use_information_scene = false;
-                use_direct_ui_scene = false;
                 Term_clear();
             }
         }
-        else if (use_information_scene)
-        {
-            app_information_scene_init(&scene);
-            target.scene = &scene;
-        }
         else
         {
-            target.scene = NULL;
             Term_clear();
         }
 
@@ -2152,22 +2132,7 @@ void display_character_tutorial(void)
 
         if (use_information_scene)
         {
-            bool presented;
-
-            if (use_direct_ui_scene)
-            {
-                presented = ui_information_scene_present_ui(&ui_scene);
-            }
-            else
-            {
-                app_ui_scene bridged_scene;
-
-                presented = app_ui_scene_from_information_document(
-                    &bridged_scene, &scene)
-                    && ui_information_scene_present_ui(&bridged_scene);
-            }
-
-            if (!presented)
+            if (!ui_information_scene_present_ui(&ui_scene))
             {
                 ui_information_scene_leave(&info_scope);
                 use_information_scene = false;

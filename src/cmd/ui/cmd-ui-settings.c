@@ -30,28 +30,173 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
-#include "ui/ui-information-scene.h"
 #include "ui/ui-look-sidebar.h"
 #include "ui/ui-information-scene.h"
 
 #define COLOR_SAMPLE "###"
 
+static bool settings_scene_cell_is_raw(byte attr, char ch, byte terrain_attr,
+    char terrain_char)
+{
+    unsigned char raw = (unsigned char)ch;
+    unsigned char terrain_raw = (unsigned char)terrain_char;
+
+    if (((attr & 0x80) && (raw & 0x80)) || (attr == 255 && raw == 0xFF))
+        return true;
+    if (terrain_attr || terrain_raw)
+        return true;
+
+    return false;
+}
+
+static byte settings_scene_cell_width(const term* source, int y, int x,
+    int term_wid)
+{
+    if (!source || !source->scr || y < 0 || y >= source->hgt || x < 0
+        || x >= term_wid)
+    {
+        return 1;
+    }
+
+    if ((x + 1) < term_wid
+        && (source->scr->a[y][x] & 0x80)
+        && (((unsigned char)source->scr->c[y][x]) & 0x80)
+        && source->scr->a[y][x + 1] == 255
+        && (unsigned char)source->scr->c[y][x + 1] == 0xFF)
+    {
+        return 2;
+    }
+
+    return 1;
+}
+
 /*
  * Settings scene bridge: when an information scene scope is active, capture
- * the current Term contents into an app_ui_scene and present that through
- * the information scene channel.  Falls back to inkey() in legacy mode.
+ * the current Term contents directly into an app_ui_scene document panel and
+ * present that through the information scene channel.  Falls back to inkey()
+ * in legacy mode.
  */
 static bool settings_present_ui_scene(void)
 {
-    app_information_scene document;
     app_ui_scene scene;
+    app_ui_panel* panel;
+    int term_wid = 0;
+    int term_hgt = 0;
+    bool cursor_visible = false;
+    int cursor_x = 0;
+    int cursor_y = 0;
 
-    if (!ui_information_scene_capture_term(&document))
-        return false;
-    if (!app_ui_scene_from_information_document(&scene, &document))
+    if (!Term || !Term->scr)
         return false;
 
-    return ui_information_scene_present_ui(&scene);
+    app_ui_scene_init(&scene);
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+
+    term_wid = Term->wid;
+    term_hgt = Term->hgt;
+
+    for (int y = 0; y < term_hgt; y++)
+    {
+        int last_nonblank = -1;
+
+        for (int x = 0; x < term_wid; x++)
+        {
+            unsigned char ch = (unsigned char)Term->scr->c[y][x];
+            byte attr = Term->scr->a[y][x];
+            byte terrain_attr = Term->scr->ta[y][x];
+            char terrain_char = Term->scr->tc[y][x];
+
+            if (settings_scene_cell_is_raw(attr, Term->scr->c[y][x],
+                    terrain_attr, terrain_char))
+            {
+                last_nonblank = x;
+                continue;
+            }
+
+            if (ch != 0 && ch != ' ')
+                last_nonblank = x;
+        }
+
+        if (last_nonblank < 0)
+            continue;
+
+        for (int x = 0; x <= last_nonblank;)
+        {
+            byte attr = Term->scr->a[y][x];
+            byte story = Term->scr->story[y][x];
+            byte terrain_attr = Term->scr->ta[y][x];
+            char terrain_char = Term->scr->tc[y][x];
+            unsigned char raw = (unsigned char)Term->scr->c[y][x];
+
+            if (settings_scene_cell_is_raw(attr, Term->scr->c[y][x],
+                    terrain_attr, terrain_char))
+            {
+                byte width = settings_scene_cell_width(Term, y, x, term_wid);
+
+                if (!app_ui_panel_add_document_cell_ex(&scene, panel, (s16b)y,
+                        (s16b)x, attr, (char)raw, terrain_attr, terrain_char,
+                        story, width))
+                {
+                    return false;
+                }
+                x += width;
+                continue;
+            }
+
+            {
+                char buf[APP_UI_TEXT_MAX];
+                int len = 0;
+                int start = x;
+
+                while (x <= last_nonblank && Term->scr->a[y][x] == attr
+                    && Term->scr->story[y][x] == story
+                    && !settings_scene_cell_is_raw(Term->scr->a[y][x],
+                        Term->scr->c[y][x], Term->scr->ta[y][x],
+                        Term->scr->tc[y][x])
+                    && len < (int)sizeof(buf) - 1)
+                {
+                    raw = (unsigned char)Term->scr->c[y][x];
+                    buf[len++] = raw ? (char)raw : ' ';
+                    x++;
+                }
+
+                buf[len] = '\0';
+                if (len > 0
+                    && !app_ui_panel_add_document_text_ex(&scene, panel,
+                        (s16b)y, (s16b)start, attr, story, buf))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    cursor_visible = Term->scr->cv && !Term->scr->cu;
+    if (cursor_visible)
+    {
+        cursor_x = Term->scr->cx;
+        cursor_y = Term->scr->cy;
+        if (cursor_x >= 0 && cursor_x < term_wid
+            && cursor_y >= 0 && cursor_y < term_hgt)
+        {
+            if (!app_ui_panel_add_document_cursor(&scene, panel,
+                    (s16b)cursor_y, (s16b)cursor_x, TERM_L_BLUE,
+                    settings_scene_cell_width(Term, cursor_y, cursor_x,
+                        term_wid)))
+            {
+                return false;
+            }
+        }
+    }
+
+    return panel->document_op_count > 0
+        && ui_information_scene_present_ui(&scene);
 }
 
 /*

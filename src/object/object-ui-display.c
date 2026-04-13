@@ -747,6 +747,10 @@ void display_equip(void)
 /*
  * Display the inventory.
  *
+ * Legacy Term renderer used by fallback selector paths and a few remaining
+ * non-snapshot surfaces. Snapshot-aware item selection publishes semantic
+ * scenes from object-ui-select.c instead of drawing through this helper.
+ *
  * Hack -- do not display "trailing" empty slots
  */
 void show_inven(void)
@@ -947,6 +951,9 @@ void show_inven(void)
 
 /*
  * Display the equipment.
+ *
+ * This remains the shared Term fallback renderer. SDL snapshot equipment
+ * menus and selectors use semantic overlay scenes instead of this path.
  */
 void show_equip(void)
 {
@@ -1145,6 +1152,9 @@ void show_equip(void)
 
 /*
  * Display a list of the items on the floor at the given location.
+ *
+ * This is still needed for classic fallback item selection. Snapshot-aware
+ * floor selection publishes its own semantic overlay scene.
  */
 void show_floor(const int* floor_list, int floor_num)
 {

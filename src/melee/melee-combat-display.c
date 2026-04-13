@@ -1310,15 +1310,414 @@ static bool combat_history_information_scene_resume(
     return ui_information_scene_enter(scope);
 }
 
-static bool combat_history_present_ui_scene(void)
+static app_ui_panel* combat_history_begin_document_scene(app_ui_scene* scene)
 {
-    app_information_scene document;
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    return panel;
+}
+
+static bool combat_history_scene_add_clipped_text(app_ui_scene* scene,
+    app_ui_panel* panel, int row, int view_col, int view_width, int col,
+    byte attr, cptr text)
+{
+    char clipped[APP_UI_TEXT_MAX];
+    size_t len;
+    int left;
+    int right;
+    int copy_len;
+
+    if (!scene || !panel)
+        return false;
+    if (!text || !text[0] || view_width <= 0)
+        return true;
+
+    len = strlen(text);
+    if (len == 0)
+        return true;
+
+    left = MAX(col, view_col);
+    right = MIN(col + (int)len, view_col + view_width);
+    if (right <= left)
+        return true;
+
+    copy_len = right - left;
+    if (copy_len >= (int)sizeof(clipped))
+        copy_len = (int)sizeof(clipped) - 1;
+    memcpy(clipped, text + (left - col), (size_t)copy_len);
+    clipped[copy_len] = '\0';
+
+    return app_ui_panel_add_document_text_ex(scene, panel, (s16b)row,
+        (s16b)(left - view_col), attr, STORY_FLAG_CELL_ALIGN, clipped);
+}
+
+static int combat_history_scene_glyph_display_width(void)
+{
+    return (use_bigtile && !graphics_are_ascii()) ? 2 : 1;
+}
+
+static byte combat_history_scene_glyph_render_width(byte attr, char ch)
+{
+    if (use_bigtile && !graphics_are_ascii() && (attr & TILE_FLAG)
+        && (((byte)ch) & TILE_FLAG))
+    {
+        return 2;
+    }
+
+    return 1;
+}
+
+static bool combat_history_scene_add_glyph(app_ui_scene* scene,
+    app_ui_panel* panel, int row, int view_col, int view_width, int col,
+    byte attr, char ch)
+{
+    int dst_col;
+    byte render_width;
+
+    if (!scene || !panel)
+        return false;
+    if (view_width <= 0 || col < view_col || col >= view_col + view_width)
+        return true;
+
+    dst_col = col - view_col;
+    render_width = combat_history_scene_glyph_render_width(attr, ch);
+    if (render_width > (byte)(view_width - dst_col))
+    {
+        if (render_width > 1)
+            return true;
+        render_width = 1;
+    }
+
+    return app_ui_panel_add_document_cell_ex(scene, panel, (s16b)row,
+        (s16b)dst_col, attr, ch, 0, 0, 0, render_width);
+}
+
+static bool combat_history_build_ui_scene(app_ui_scene* scene, int start_index,
+    int offset, int wid, int hgt, int total_rolls, cptr shower, int* out_shown)
+{
+    app_ui_panel* panel;
+    int j;
+    char buf[120];
+
+    (void)shower;
+
+    if (!scene)
+        return false;
+
+    panel = combat_history_begin_document_scene(scene);
+    if (!panel)
+        return false;
+
+    for (j = 0; (j < hgt - 4) && (start_index + j < total_rolls); j++)
+    {
+        int history_idx = -1;
+        int roll_idx = -1;
+        combat_history_round* round;
+        combat_roll* roll;
+        int a_att;
+        int a_evn;
+        int a_hit;
+        int a_dam_roll;
+        int a_prot_roll;
+        int a_net_dam;
+        bool is_player_attack;
+        int line_y = hgt - 3 - j;
+        int col = 0;
+
+        if (!combat_history_locate_roll(start_index + j, &history_idx,
+                &roll_idx))
+        {
+            continue;
+        }
+
+        round = &combat_history[history_idx];
+        roll = &round->rolls[roll_idx];
+        if (roll->att_type == COMBAT_ROLL_NONE)
+            continue;
+
+        is_player_attack = (roll->attacker_char == r_info[0].d_char)
+            && (roll->attacker_attr == r_info[0].d_attr);
+
+        if (is_player_attack)
+        {
+            a_att = TERM_L_BLUE;
+            a_evn = TERM_WHITE;
+            a_hit = TERM_L_RED;
+            a_dam_roll = TERM_L_BLUE;
+            a_net_dam = TERM_L_RED;
+            if (roll->prt_percent >= 100)
+                a_prot_roll = TERM_WHITE;
+            else if (roll->prt_percent >= 1)
+                a_prot_roll = TERM_SLATE;
+            else
+                a_prot_roll = TERM_DARK;
+        }
+        else
+        {
+            a_att = TERM_WHITE;
+            a_evn = TERM_L_BLUE;
+            a_hit = TERM_L_RED;
+            a_dam_roll = TERM_WHITE;
+            a_net_dam = TERM_L_RED;
+            if (roll->prt_percent >= 100)
+                a_prot_roll = TERM_L_BLUE;
+            else if (roll->prt_percent >= 1)
+                a_prot_roll = TERM_BLUE;
+            else
+                a_prot_roll = TERM_DARK;
+        }
+
+        if (roll_idx == 0)
+        {
+            strnfmt(buf, sizeof(buf), "Turn %d:", round->turn_count);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, TERM_L_DARK, buf))
+            {
+                return false;
+            }
+            col += 9;
+        }
+        else
+        {
+            col += 9;
+        }
+
+        col += 1;
+        if (!combat_history_scene_add_glyph(scene, panel, line_y, offset, wid,
+                col, roll->attacker_attr, roll->attacker_char))
+        {
+            return false;
+        }
+        col += combat_history_scene_glyph_display_width();
+
+        if (roll->att_type == COMBAT_ROLL_ROLL)
+        {
+            int net_att;
+
+            if (roll->att < 10)
+                strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
+            else
+                strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_att, buf))
+            {
+                return false;
+            }
+            col += strlen(buf);
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_att, buf))
+            {
+                return false;
+            }
+            col += 4;
+
+            net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
+            if (net_att > 0)
+                strnfmt(buf, sizeof(buf), "%4d", net_att);
+            else
+                SDL_strlcpy(buf, "   -", sizeof(buf));
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col,
+                    (net_att > 0) ? a_hit : TERM_SLATE, buf))
+            {
+                return false;
+            }
+            col += 4;
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_evn, buf))
+            {
+                return false;
+            }
+            col += 4;
+
+            if (roll->evn < 10)
+                strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
+            else
+                strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_evn, buf))
+            {
+                return false;
+            }
+            col += strlen(buf);
+
+            col += 1;
+            if (!combat_history_scene_add_glyph(scene, panel, line_y, offset,
+                    wid, col, roll->defender_attr, roll->defender_char))
+            {
+                return false;
+            }
+            col += combat_history_scene_glyph_display_width();
+
+            if (net_att > 0)
+            {
+                int net_dam;
+
+                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                        offset, wid, col, TERM_L_DARK, "  ->"))
+                {
+                    return false;
+                }
+                col += 4;
+
+                if (roll->ds < 10)
+                    strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd,
+                        roll->ds);
+                else
+                    strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd,
+                        roll->ds);
+                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                        offset, wid, col, a_dam_roll, buf))
+                {
+                    return false;
+                }
+                col += strlen(buf);
+
+                strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                        offset, wid, col, a_dam_roll, buf))
+                {
+                    return false;
+                }
+                col += 4;
+
+                net_dam = roll->dam - roll->prot;
+                if (net_dam < 0)
+                    net_dam = 0;
+
+                if (net_dam > 0)
+                    strnfmt(buf, sizeof(buf), "%4d", net_dam);
+                else
+                    SDL_strlcpy(buf, "   -", sizeof(buf));
+                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                        offset, wid, col,
+                        (net_dam > 0) ? a_net_dam : TERM_SLATE, buf))
+                {
+                    return false;
+                }
+                col += 4;
+
+                strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                        offset, wid, col, a_prot_roll, buf))
+                {
+                    return false;
+                }
+                col += 4;
+            }
+        }
+        else if (roll->att_type == COMBAT_ROLL_AUTO)
+        {
+            int net_dam;
+
+            col += 25;
+            col += 1;
+            if (!combat_history_scene_add_glyph(scene, panel, line_y, offset,
+                    wid, col, roll->defender_attr, roll->defender_char))
+            {
+                return false;
+            }
+            col += combat_history_scene_glyph_display_width();
+
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, TERM_L_DARK, "  ->"))
+            {
+                return false;
+            }
+            col += 4;
+
+            if (roll->ds < 10)
+                strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
+            else
+                strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_dam_roll, buf))
+            {
+                return false;
+            }
+            col += strlen(buf);
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->dam);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_dam_roll, buf))
+            {
+                return false;
+            }
+            col += 4;
+
+            net_dam = roll->dam - roll->prot;
+            if (net_dam < 0)
+                net_dam = 0;
+
+            if (net_dam > 0)
+                strnfmt(buf, sizeof(buf), "%4d", net_dam);
+            else
+                SDL_strlcpy(buf, "   -", sizeof(buf));
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col,
+                    (net_dam > 0) ? a_net_dam : TERM_SLATE, buf))
+            {
+                return false;
+            }
+            col += 4;
+
+            strnfmt(buf, sizeof(buf), "%4d", roll->prot);
+            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
+                    offset, wid, col, a_prot_roll, buf))
+            {
+                return false;
+            }
+            col += 4;
+        }
+    }
+
+    if (out_shown)
+        *out_shown = j;
+
+    strnfmt(buf, sizeof(buf), "Combat History (%d-%d of %d rolls), Offset %d",
+        start_index, start_index + j - 1, total_rolls, offset);
+    if (!combat_history_scene_add_clipped_text(scene, panel, 0, 0, wid, 0,
+            TERM_WHITE, buf))
+    {
+        return false;
+    }
+
+    if (!combat_history_scene_add_clipped_text(scene, panel, hgt - 1, 0, wid,
+            0,
+            TERM_WHITE,
+            "[Press 'p' for older, 'n' for newer, '=' to highlight, '/' to search, or ESCAPE]"))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+static bool combat_history_present_ui_scene(int start_index, int offset, int wid,
+    int hgt, int total_rolls, cptr shower)
+{
     app_ui_scene scene;
 
-    if (!ui_information_scene_capture_term(&document))
+    if (!combat_history_build_ui_scene(&scene, start_index, offset, wid, hgt,
+            total_rolls, shower, NULL))
+    {
         return false;
-    if (!app_ui_scene_from_information_document(&scene, &document))
-        return false;
+    }
 
     return ui_information_scene_present_ui(&scene);
 }
@@ -1347,9 +1746,7 @@ static bool do_cmd_combat_history_information_scene(void)
         char ch;
 
         Term_get_size(&wid, &hgt);
-        combat_history_draw_screen(i, q, hgt, n, NULL);
-
-        if (!combat_history_present_ui_scene())
+        if (!combat_history_present_ui_scene(i, q, wid, hgt, n, shower))
         {
             ui_information_scene_leave(&scope);
             return false;

@@ -154,6 +154,10 @@ static bool sanctity_choose_target(const object_type* gem_o_ptr,
     item_tester_tval = 0;
     item_tester_hook = item_tester_hook_sanctity_target;
 
+    /*
+     * Deliberately reuse get_item() so SDL snapshot play stays on the shared
+     * semantic selector path rather than owning a bespoke chooser loop here.
+     */
     if (!get_item(&chosen_item, "Cleanse which item? ",
             "You have no target to cleanse.",
             (USE_INVEN | USE_EQUIP | USE_FLOOR)))

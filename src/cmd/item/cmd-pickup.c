@@ -18,6 +18,27 @@
 #include "metarun.h"
 #include <math.h>
 
+static bool pickup_snapshot_active(void)
+{
+    return app_session_interactions_enabled(app_session_current());
+}
+
+static void pickup_preview_equipment_replacement(void)
+{
+    /*
+     * Snapshot mode keeps the live dungeon UI in place and the replacement
+     * prompt already names both items, so only the legacy term path redraws
+     * the full equipment list here.
+     */
+    if (pickup_snapshot_active())
+        return;
+
+    screen_save();
+    show_equip();
+    msg_print(NULL);
+    screen_load();
+}
+
 void give_player_item(object_type * o_ptr)
 {
     char o_name[80];
@@ -594,10 +615,7 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
         return PICKUP_FAILURE_ABORT;
     }
 
-    screen_save();
-    show_equip();
-    msg_print(NULL);
-    screen_load();
+    pickup_preview_equipment_replacement();
 
     char equipped_name[80];
     object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);
