@@ -1395,10 +1395,11 @@ static int next_thrall_reward_selection(const thrall_reward_option options[],
     return current;
 }
 
-static bool thrall_reward_build_information_scene(app_information_scene* scene,
+static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
     const monster_type* m_ptr, const thrall_reward_option options[],
     int option_count, int selected, bool pending_reward)
 {
+    app_ui_panel* panel;
     int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
     int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
     bool compact;
@@ -1417,8 +1418,15 @@ static bool thrall_reward_build_information_scene(app_information_scene* scene,
     prompt_row = MAX(0, term_hgt - 1);
     info_row = prompt_row - 1;
 
-    app_information_scene_init(scene);
-    if (!app_information_scene_add_text(scene, title_row, 0,
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+
+    if (!app_ui_panel_add_document_text(scene, panel, title_row, 0,
             (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL) ? TERM_L_BLUE : TERM_YELLOW,
             compact ? ((m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
                            ? "Elven Thrall"
@@ -1430,7 +1438,8 @@ static bool thrall_reward_build_information_scene(app_information_scene* scene,
         return false;
     }
 
-    if (!app_information_scene_add_text(scene, intro_row, 0, TERM_L_WHITE,
+    if (!app_ui_panel_add_document_text(scene, panel, intro_row, 0,
+            TERM_L_WHITE,
             pending_reward
                 ? (compact ? "Choose your reward."
                            : "The boon you earned is still yours to claim.")
@@ -1454,17 +1463,19 @@ static bool thrall_reward_build_information_scene(app_information_scene* scene,
 
         strnfmt(label, sizeof(label), "%c) %s", options[i].hotkey,
             options[i].label);
-        if (!app_information_scene_add_text(scene, (s16b)row, 0, prefix_attr,
+        if (!app_ui_panel_add_document_text(scene, panel, (s16b)row, 0,
+                prefix_attr,
                 (i == selected) ? "> " : "  ")
-            || !app_information_scene_add_text(
-                scene, (s16b)row, 2, label_attr, label))
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)row, 2, label_attr, label))
         {
             return false;
         }
     }
 
     if (info_row > intro_row
-        && !app_information_scene_add_text(scene, (s16b)info_row, 0, TERM_L_DARK,
+        && !app_ui_panel_add_document_text(scene, panel, (s16b)info_row, 0,
+            TERM_L_DARK,
             compact ? "Grey = unavailable."
                     : "Greyed options need a suitable item in inventory or equipment."))
     {
@@ -1497,8 +1508,8 @@ static bool thrall_reward_build_information_scene(app_information_scene* scene,
             sizeof(prompt));
     }
 
-    return app_information_scene_add_text(
-        scene, (s16b)prompt_row, 0, TERM_L_DARK, prompt);
+    return app_ui_panel_add_document_text(
+        scene, panel, (s16b)prompt_row, 0, TERM_L_DARK, prompt);
 }
 
 static int choose_thrall_reward_information_scene(monster_type* m_ptr,
@@ -1518,13 +1529,13 @@ static int choose_thrall_reward_information_scene(monster_type* m_ptr,
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
         char key;
         int dir;
 
-        if (!thrall_reward_build_information_scene(
+        if (!thrall_reward_build_ui_scene(
                 &scene, m_ptr, options, option_count, selected, pending_reward)
-            || !ui_information_scene_present_document(&scene))
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return THRALL_REWARD_LATER;

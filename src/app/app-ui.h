@@ -1,7 +1,6 @@
 #ifndef INCLUDED_APP_UI_H
 #define INCLUDED_APP_UI_H
 
-#include "app-interaction.h"
 #include "app-scene-information.h"
 #include "h-basic.h"
 
@@ -303,8 +302,6 @@ bool app_ui_panel_add_character_stat(app_ui_panel* panel, byte label_attr,
     cptr label, byte value_attr, cptr value, byte separator_attr,
     char separator, byte base_attr, cptr base, byte mod1_attr, cptr mod1,
     byte mod2_attr, cptr mod2, byte mod3_attr, cptr mod3);
-bool app_ui_scene_from_interaction(app_ui_scene* scene,
-    const app_interaction_state* interaction);
 bool app_ui_scene_from_information_document(app_ui_scene* scene,
     const app_information_scene* information_scene);
 

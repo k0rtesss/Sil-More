@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -1309,6 +1310,19 @@ static bool combat_history_information_scene_resume(
     return ui_information_scene_enter(scope);
 }
 
+static bool combat_history_present_ui_scene(void)
+{
+    app_information_scene document;
+    app_ui_scene scene;
+
+    if (!ui_information_scene_capture_term(&document))
+        return false;
+    if (!app_ui_scene_from_information_document(&scene, &document))
+        return false;
+
+    return ui_information_scene_present_ui(&scene);
+}
+
 static bool do_cmd_combat_history_information_scene(void)
 {
     ui_information_scene_scope scope;
@@ -1335,7 +1349,7 @@ static bool do_cmd_combat_history_information_scene(void)
         Term_get_size(&wid, &hgt);
         combat_history_draw_screen(i, q, hgt, n, NULL);
 
-        if (!ui_information_scene_present_term())
+        if (!combat_history_present_ui_scene())
         {
             ui_information_scene_leave(&scope);
             return false;

@@ -344,11 +344,7 @@ void do_cmd_pickup_from_pile(void)
     while (true)
     {
         int item;
-
-        char prompt[80];
-
         int floor_list[MAX_FLOOR_STACK];
-
         int floor_num;
 
         /*start with everything updated*/
@@ -356,7 +352,7 @@ void do_cmd_pickup_from_pile(void)
 
         /* Scan for floor objects */
         floor_num = scan_floor(
-            floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px, 0x01);
+            floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px, 0x00);
 
         /* No pile */
         if (floor_num < 1)
@@ -382,36 +378,23 @@ void do_cmd_pickup_from_pile(void)
             break;
         }
 
-        /* Save screen */
-        screen_save();
-
-        /* Display */
-        show_floor(floor_list, floor_num);
-
-        SDL_strlcpy(
-            prompt, "Pick up which object? (ESC to cancel):", sizeof(prompt));
-
-        /*clear the restriction*/
-        item_tester_hook = NULL;
-
-        /* Get the object number to be bought */
-        item = get_menu_choice(floor_num, prompt);
-
-        /*player chose escape*/
-        if (item == -1)
+        if (!get_item(&item, "Pick up which object? ",
+                NULL, (USE_FLOOR)))
         {
-            screen_load();
             break;
         }
 
+        if (item >= 0)
+        {
+            bell("Illegal object choice!");
+            continue;
+        }
+
         /* Pick up the object */
-        py_pickup_aux(floor_list[item]);
+        py_pickup_aux(0 - item);
 
         /*Mark that we picked something up*/
         picked_up_item = true;
-
-        /* Load screen */
-        screen_load();
     }
 
     /*clear the restriction*/

@@ -2275,13 +2275,32 @@ static bool object_info_screen_capture_run_has_text(
     return false;
 }
 
-static bool object_info_scene_add_text_run(app_information_scene* scene,
-    s16b row, s16b col, byte attr, byte story, const char* text, int len)
+static app_ui_panel* object_info_begin_document_scene(app_ui_scene* scene)
 {
-    char buf[APP_INFORMATION_TEXT_MAX];
-    const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
+    app_ui_panel* panel;
 
-    if (!scene || !text || len <= 0)
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    return panel;
+}
+
+static bool object_info_scene_add_text_run(app_ui_scene* scene,
+    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story,
+    const char* text, int len)
+{
+    char buf[APP_UI_TEXT_MAX];
+    const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
+
+    if (!scene || !panel || !text || len <= 0)
         return true;
 
     while (len > 0)
@@ -2290,8 +2309,8 @@ static bool object_info_scene_add_text_run(app_information_scene* scene,
 
         memcpy(buf, text, (size_t)chunk);
         buf[chunk] = '\0';
-        if (!app_information_scene_add_text_ex(
-                scene, row, col, attr, story, buf))
+        if (!app_ui_panel_add_document_text_ex(
+                scene, panel, row, col, attr, story, buf))
         {
             return false;
         }
@@ -2303,12 +2322,13 @@ static bool object_info_scene_add_text_run(app_information_scene* scene,
     return true;
 }
 
-static bool object_info_scene_add_capture_row(app_information_scene* scene,
-    const object_info_screen_capture* capture, int src_row, int dst_row)
+static bool object_info_scene_add_capture_row(app_ui_scene* scene,
+    app_ui_panel* panel, const object_info_screen_capture* capture, int src_row,
+    int dst_row)
 {
     int end;
 
-    if (!scene || !capture || src_row < 0 || src_row >= capture->height)
+    if (!scene || !panel || !capture || src_row < 0 || src_row >= capture->height)
         return false;
 
     end = object_info_screen_capture_row_end(capture, src_row);
@@ -2334,8 +2354,8 @@ static bool object_info_scene_add_capture_row(app_information_scene* scene,
         if (object_info_screen_capture_run_has_text(
                 capture, src_row, start, run_end))
         {
-            char buf[APP_INFORMATION_TEXT_MAX];
-            const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
+            char buf[APP_UI_TEXT_MAX];
+            const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
             int offset = start;
 
             while (offset < run_end)
@@ -2351,8 +2371,8 @@ static bool object_info_scene_add_capture_row(app_information_scene* scene,
                     buf[i] = (char)(isprint(ch) || ch == ' ' ? ch : ' ');
                 }
                 buf[chunk] = '\0';
-                if (!object_info_scene_add_text_run(scene, (s16b)dst_row,
-                        (s16b)offset, attr, story, buf, chunk))
+                if (!object_info_scene_add_text_run(scene, panel,
+                        (s16b)dst_row, (s16b)offset, attr, story, buf, chunk))
                 {
                     return false;
                 }
@@ -2367,9 +2387,10 @@ static bool object_info_scene_add_capture_row(app_information_scene* scene,
 }
 
 static bool object_info_screen_capture_build_scene(
-    app_information_scene* scene, const object_info_screen_capture* capture,
+    app_ui_scene* scene, const object_info_screen_capture* capture,
     int scroll, byte prompt_attr, cptr exit_prompt)
 {
+    app_ui_panel* panel;
     int term_wid = 80;
     int term_hgt = 24;
     int visible_rows;
@@ -2390,7 +2411,9 @@ static bool object_info_screen_capture_build_scene(
     if (scroll > max_scroll)
         scroll = max_scroll;
 
-    app_information_scene_init(scene);
+    panel = object_info_begin_document_scene(scene);
+    if (!panel)
+        return false;
 
     for (int row = 0; row < visible_rows; row++)
     {
@@ -2398,7 +2421,8 @@ static bool object_info_screen_capture_build_scene(
 
         if (src_row >= capture->height)
             break;
-        if (!object_info_scene_add_capture_row(scene, capture, src_row, row))
+        if (!object_info_scene_add_capture_row(scene, panel, capture, src_row,
+                row))
             return false;
     }
 
@@ -2407,50 +2431,51 @@ static bool object_info_screen_capture_build_scene(
         if (!exit_prompt)
             exit_prompt = "(press any key)";
 
-        return app_information_scene_add_text(
-            scene, (s16b)prompt_row, 0, prompt_attr, exit_prompt);
+        return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
+            0, prompt_attr, exit_prompt);
     }
 
     if (term_wid >= 70)
     {
-        if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+        if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
                 TERM_SLATE,
                 "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 7, TERM_L_WHITE, "ESC")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 20, TERM_L_WHITE, "Space")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 41, TERM_L_WHITE, "Arrows")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 48, TERM_L_WHITE, "Keypad"))
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 7, TERM_L_WHITE, "ESC")
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 20, TERM_L_WHITE, "Space")
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 41, TERM_L_WHITE, "Arrows")
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 48, TERM_L_WHITE, "Keypad"))
         {
             return false;
         }
     }
     else if (term_wid >= 40)
     {
-        if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+        if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
                 TERM_SLATE, "(ESC exit, Space page, Arrows scroll)")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 1, TERM_L_WHITE, "ESC")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 11, TERM_L_WHITE, "Space")
-            || !app_information_scene_add_text(
-                scene, (s16b)prompt_row, 23, TERM_L_WHITE, "Arrows"))
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 1, TERM_L_WHITE, "ESC")
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 11, TERM_L_WHITE, "Space")
+            || !app_ui_panel_add_document_text(
+                scene, panel, (s16b)prompt_row, 23, TERM_L_WHITE, "Arrows"))
         {
             return false;
         }
     }
-    else if (!app_information_scene_add_text(scene, (s16b)prompt_row, 0,
+    else if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
                  TERM_SLATE, "(ESC exit, Arrows scroll)"))
     {
         return false;
     }
 
     strnfmt(scroll_buf, sizeof(scroll_buf), "[%d/%d]", scroll + 1, max_scroll + 1);
-    return app_information_scene_add_text(scene, (s16b)prompt_row,
-        (s16b)MAX(0, term_wid - (int)strlen(scroll_buf)), TERM_SLATE, scroll_buf);
+    return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
+        (s16b)MAX(0, term_wid - (int)strlen(scroll_buf)), TERM_SLATE,
+        scroll_buf);
 }
 
 static bool object_info_screen_capture_view_document(
@@ -2465,7 +2490,7 @@ static bool object_info_screen_capture_view_document(
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
         int term_wid = 80;
         int term_hgt = 24;
         int visible_rows;
@@ -2482,7 +2507,7 @@ static bool object_info_screen_capture_view_document(
 
         if (!object_info_screen_capture_build_scene(
                 &scene, capture, scroll, prompt_attr, exit_prompt)
-            || !ui_information_scene_present_document(&scene))
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

@@ -151,13 +151,13 @@ static bool main_menu_about_drop_bottom_blank(bool* blank_visible,
     return false;
 }
 
-static bool main_menu_about_scene_add_text_run(app_information_scene* scene,
-    int row, int col, byte attr, const char* text, int len)
+static bool main_menu_about_scene_add_text_run(app_ui_scene* scene,
+    app_ui_panel* panel, int row, int col, byte attr, const char* text, int len)
 {
-    char buf[APP_INFORMATION_TEXT_MAX];
-    const int max_chunk = (int)APP_INFORMATION_TEXT_MAX - 1;
+    char buf[APP_UI_TEXT_MAX];
+    const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
 
-    if (!scene || !text || len <= 0)
+    if (!scene || !panel || !text || len <= 0)
         return true;
 
     while (len > 0)
@@ -166,8 +166,8 @@ static bool main_menu_about_scene_add_text_run(app_information_scene* scene,
 
         memcpy(buf, text, (size_t)chunk);
         buf[chunk] = '\0';
-        if (!app_information_scene_add_text(
-                scene, (s16b)row, (s16b)col, attr, buf))
+        if (!app_ui_panel_add_document_text(
+                scene, panel, (s16b)row, (s16b)col, attr, buf))
         {
             return false;
         }
@@ -179,12 +179,13 @@ static bool main_menu_about_scene_add_text_run(app_information_scene* scene,
     return true;
 }
 
-static bool main_menu_about_scene_add_attr_runs(app_information_scene* scene,
-    int row, int col, const char* text, const byte* attrs, int len)
+static bool main_menu_about_scene_add_attr_runs(app_ui_scene* scene,
+    app_ui_panel* panel, int row, int col, const char* text,
+    const byte* attrs, int len)
 {
     int start = 0;
 
-    if (!scene || !text || !attrs || len <= 0)
+    if (!scene || !panel || !text || !attrs || len <= 0)
         return true;
 
     while (start < len)
@@ -195,7 +196,7 @@ static bool main_menu_about_scene_add_attr_runs(app_information_scene* scene,
         while (end < len && attrs[end] == attr)
             end++;
         if (!main_menu_about_scene_add_text_run(
-                scene, row, col, attr, text + start, end - start))
+                scene, panel, row, col, attr, text + start, end - start))
         {
             return false;
         }
@@ -233,7 +234,8 @@ static int main_menu_about_flatten_spans(const main_menu_about_span* spans,
 }
 
 static bool main_menu_about_scene_add_wrapped_spans(
-    app_information_scene* scene, int* row, int indent, int wrap_right,
+    app_ui_scene* scene, app_ui_panel* panel, int* row, int indent,
+    int wrap_right,
     const main_menu_about_span* spans, int span_count, byte fallback_attr)
 {
     char flat_text[256];
@@ -242,7 +244,7 @@ static bool main_menu_about_scene_add_wrapped_spans(
     int total;
     int start = 0;
 
-    if (!scene || !row || !spans || span_count <= 0)
+    if (!scene || !panel || !row || !spans || span_count <= 0)
         return false;
 
     if (width < 1)
@@ -275,7 +277,8 @@ static bool main_menu_about_scene_add_wrapped_spans(
         if (len <= 0)
             len = MIN(remaining, width);
         if (!main_menu_about_scene_add_attr_runs(
-                scene, *row, indent, flat_text + start, flat_attrs + start, len))
+                scene, panel, *row, indent, flat_text + start,
+                flat_attrs + start, len))
         {
             return false;
         }
@@ -289,18 +292,19 @@ static bool main_menu_about_scene_add_wrapped_spans(
     return true;
 }
 
-static bool main_menu_about_scene_add_wrapped_line(app_information_scene* scene,
-    int* row, int indent, int wrap_right, byte attr, cptr text)
+static bool main_menu_about_scene_add_wrapped_line(app_ui_scene* scene,
+    app_ui_panel* panel, int* row, int indent, int wrap_right, byte attr,
+    cptr text)
 {
     const main_menu_about_span span = { attr, text ? text : "" };
 
     return main_menu_about_scene_add_wrapped_spans(
-        scene, row, indent, wrap_right, &span, 1, attr);
+        scene, panel, row, indent, wrap_right, &span, 1, attr);
 }
 
-static bool main_menu_about_build_information_scene(
-    app_information_scene* scene)
+static bool main_menu_about_build_ui_scene(app_ui_scene* scene)
 {
+    app_ui_panel* panel;
     int wid = (Term && Term->wid > 0) ? Term->wid : 80;
     int hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
     int menu_w;
@@ -353,7 +357,13 @@ static bool main_menu_about_build_information_scene(
 
     text_indent = box_left + 2;
     wrap_right = box_left + box_w - 1;
-    app_information_scene_init(scene);
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
 
     {
         int line_count = 0;
@@ -383,8 +393,9 @@ static bool main_menu_about_build_information_scene(
             cptr title = "About Sil-More";
             int title_x = box_left + MAX((box_w - (int)strlen(title)) / 2 - 2, 0);
 
-            if (!app_information_scene_add_text(
-                    scene, (s16b)row_top, (s16b)title_x, TERM_YELLOW, title))
+            if (!app_ui_panel_add_document_text(
+                    scene, panel, (s16b)row_top, (s16b)title_x, TERM_YELLOW,
+                    title))
             {
                 return false;
             }
@@ -411,8 +422,8 @@ static bool main_menu_about_build_information_scene(
                     { TERM_WHITE, ", a famous roguelike" },
                 };
 
-                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
-                        text_indent, wrap_right, intro_label_spans,
+                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
+                        &row, text_indent, wrap_right, intro_label_spans,
                         (int)(sizeof(intro_label_spans)
                             / sizeof(intro_label_spans[0])),
                         about_lines[i].attr))
@@ -450,8 +461,9 @@ static bool main_menu_about_build_information_scene(
                 };
                 int label_index = i - 3;
 
-                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
-                        text_indent, wrap_right, label_spans[label_index], 2,
+                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
+                        &row, text_indent, wrap_right,
+                        label_spans[label_index], 2,
                         about_lines[i].attr))
                 {
                     return false;
@@ -463,15 +475,16 @@ static bool main_menu_about_build_information_scene(
                     { TERM_YELLOW, "Honorable mentions:" },
                 };
 
-                if (!main_menu_about_scene_add_wrapped_spans(scene, &row,
-                        text_indent, wrap_right, mentions_spans, 1,
+                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
+                        &row, text_indent, wrap_right, mentions_spans, 1,
                         about_lines[i].attr))
                 {
                     return false;
                 }
             }
-            else if (!main_menu_about_scene_add_wrapped_line(scene, &row,
-                         text_indent, wrap_right, about_lines[i].attr, text))
+            else if (!main_menu_about_scene_add_wrapped_line(scene, panel,
+                         &row, text_indent, wrap_right, about_lines[i].attr,
+                         text))
             {
                 return false;
             }
@@ -490,11 +503,12 @@ static bool main_menu_about_build_information_scene(
         main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] return", back_label);
-        return app_information_scene_add_text(
-            scene, (s16b)prompt_row, (s16b)text_indent, TERM_L_WHITE, prompt_buf);
+        return app_ui_panel_add_document_text(
+            scene, panel, (s16b)prompt_row, (s16b)text_indent, TERM_L_WHITE,
+            prompt_buf);
     }
 
-    return app_information_scene_add_text(scene, (s16b)prompt_row,
+    return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
         (s16b)text_indent, TERM_L_WHITE, "[Press any key to return]");
 }
 
@@ -531,10 +545,10 @@ static void main_menu_about(void)
 
     if (ui_information_scene_enter(&scope))
     {
-        app_information_scene scene;
+        app_ui_scene scene;
 
-        if (main_menu_about_build_information_scene(&scene)
-            && ui_information_scene_present_document(&scene))
+        if (main_menu_about_build_ui_scene(&scene)
+            && ui_information_scene_present_ui(&scene))
         {
             (void)ui_information_scene_wait_key_nonrepeat();
             ui_information_scene_leave(&scope);

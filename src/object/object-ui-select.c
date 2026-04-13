@@ -30,6 +30,11 @@ typedef struct item_selector_menu_scene_scope {
     app_snapshot previous_snapshot;
 } item_selector_menu_scene_scope;
 
+static bool verify_item(cptr prompt, int item);
+static bool get_item_allow(int item);
+static bool get_item_okay(int item);
+static int get_tag(int* cp, char tag);
+
 static bool item_selector_snapshot_active(void)
 {
     return app_session_interactions_enabled(app_session_current());
@@ -536,6 +541,666 @@ static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* sco
     return true;
 }
 
+typedef struct item_selector_visible_state {
+    int vis_inven[INVEN_PACK + 1];
+    int vis_inven_cnt;
+    int vis_equip[INVEN_TOTAL - INVEN_WIELD];
+    int vis_equip_cnt;
+    int vis_floor[MAX_FLOOR_STACK];
+    int vis_floor_cnt;
+    int highlight_row;
+    bool highlight_active;
+} item_selector_visible_state;
+
+static bool item_selector_mode_allows_item(int item, bool allow_inven,
+    bool allow_equip, bool allow_floor)
+{
+    if (item == SUPPLIES_INDEX)
+        return allow_inven;
+    if (item < 0)
+        return allow_floor;
+    if (item < INVEN_WIELD)
+        return allow_inven;
+
+    return allow_equip;
+}
+
+static void item_selector_build_visible_state(
+    item_selector_visible_state* state, int current_mode,
+    const int* floor_list, int floor_num)
+{
+    int count = 0;
+
+    if (!state)
+        return;
+
+    state->vis_inven_cnt = 0;
+    state->vis_equip_cnt = 0;
+    state->vis_floor_cnt = 0;
+
+    if (!p_ptr->command_see)
+    {
+        state->highlight_row = -1;
+        state->highlight_active = false;
+        return;
+    }
+
+    if (current_mode == (USE_INVEN))
+    {
+        bool has_supplies = supplies_visible_for_current_filter();
+
+        if (has_supplies && state->vis_inven_cnt < INVEN_PACK)
+            state->vis_inven[state->vis_inven_cnt++] = SUPPLIES_INDEX;
+
+        for (int ii = 0; ii < INVEN_PACK && state->vis_inven_cnt < INVEN_PACK;
+             ii++)
+        {
+            if (inventory[ii].k_idx && get_item_okay(ii))
+                state->vis_inven[state->vis_inven_cnt++] = ii;
+        }
+
+        count = state->vis_inven_cnt;
+    }
+    else if (current_mode == (USE_EQUIP))
+    {
+        for (int ii = INVEN_WIELD; ii < INVEN_TOTAL; ii++)
+        {
+            bool include_slot = false;
+
+            if (inventory[ii].k_idx)
+                include_slot = get_item_okay(ii);
+            else if (throw_slot_menu_active && throw_slot_enabled[ii])
+                include_slot = true;
+
+            if (include_slot)
+                state->vis_equip[state->vis_equip_cnt++] = ii;
+        }
+
+        count = state->vis_equip_cnt;
+    }
+    else if (current_mode == (USE_FLOOR))
+    {
+        for (int ii = 0; ii < floor_num; ii++)
+        {
+            int obj_idx = floor_list[ii];
+
+            if (get_item_okay(0 - obj_idx))
+                state->vis_floor[state->vis_floor_cnt++] = ii;
+        }
+
+        count = state->vis_floor_cnt;
+    }
+
+    if (count <= 0)
+    {
+        state->highlight_row = -1;
+        state->highlight_active = false;
+        return;
+    }
+
+    if (!state->highlight_active || state->highlight_row < 0)
+        state->highlight_row = 0;
+    else if (state->highlight_row >= count)
+        state->highlight_row = count - 1;
+
+    state->highlight_active = true;
+}
+
+static void item_selector_move_highlight(item_selector_visible_state* state,
+    int current_mode, int dir)
+{
+    int count = 0;
+
+    if (!state || !state->highlight_active)
+        return;
+
+    if (current_mode == (USE_INVEN))
+        count = state->vis_inven_cnt;
+    else if (current_mode == (USE_EQUIP))
+        count = state->vis_equip_cnt;
+    else if (current_mode == (USE_FLOOR))
+        count = state->vis_floor_cnt;
+
+    if (count <= 0)
+        return;
+
+    state->highlight_row = (state->highlight_row + count + dir) % count;
+}
+
+static bool item_selector_highlighted_item(const item_selector_visible_state* state,
+    int current_mode, const int* floor_list, int* out_item)
+{
+    int item;
+
+    if (!state || !out_item)
+        return false;
+
+    item = item_selector_selected_entry(current_mode, floor_list,
+        state->vis_inven_cnt, state->vis_inven, state->vis_equip_cnt,
+        state->vis_equip, state->vis_floor_cnt, state->vis_floor,
+        state->highlight_row);
+    if (item == -10000)
+        return false;
+
+    *out_item = item;
+    return true;
+}
+
+static int item_selector_inventory_hotkey_item(
+    const item_selector_visible_state* state, char which)
+{
+    int i;
+    char target = (char)tolower((unsigned char)which);
+
+    if (!state)
+        return -10000;
+
+    for (i = 0; i < state->vis_inven_cnt; i++)
+    {
+        int item_index = state->vis_inven[i];
+        char key = '\0';
+
+        if (item_index == SUPPLIES_INDEX)
+        {
+            int virtual_slot = supplies_virtual_slot();
+
+            key = supplies_label_char();
+            if (!key && virtual_slot >= 0)
+                key = index_to_label(virtual_slot);
+        }
+        else if (item_index >= 0 && item_index < INVEN_WIELD)
+        {
+            key = index_to_label(item_index);
+        }
+
+        if (key && (char)tolower((unsigned char)key) == target)
+            return item_index;
+    }
+
+    return -10000;
+}
+
+static void item_selector_format_prompt(char* out_val, size_t out_val_size,
+    cptr pmt, int current_mode, bool use_inven, bool use_equip, int i1, int i2,
+    int e1, int e2, int f1, int f2)
+{
+    if (!out_val || !out_val_size)
+        return;
+
+    if (p_ptr->command_see)
+    {
+        if (current_mode == (USE_INVEN))
+        {
+            strnfmt(out_val, out_val_size, "(Inven:%c-%c, ESC, %s) %s",
+                index_to_label(i1), index_to_label(i2),
+                use_equip ? "/ for Equip" : "- for floor,", pmt);
+        }
+        else if (current_mode == (USE_EQUIP))
+        {
+            strnfmt(out_val, out_val_size, "(Equip:%c-%c, ESC, %s) %s",
+                index_to_label(e1), index_to_label(e2),
+                use_inven ? "/ for Inven" : "- for floor,", pmt);
+        }
+        else
+        {
+            strnfmt(out_val, out_val_size, "(Floor:%c-%c, ESC, %s) %s",
+                index_to_label(f1), index_to_label(f2),
+                use_inven ? "/ for Inven" : use_equip ? "/ for Equip" : "",
+                pmt);
+        }
+    }
+    else
+    {
+        strnfmt(out_val, out_val_size, "(Items, ESC) %s", pmt);
+    }
+}
+
+static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
+    bool use_equip, bool use_floor, bool allow_inven, bool allow_equip,
+    bool allow_floor, int i1, int i2, int e1, int e2, int f1, int f2,
+    const int* floor_list, int floor_num, bool* toggle, bool* out_item)
+{
+    item_selector_menu_scene_scope menu_scene_scope;
+    item_selector_visible_state visible_state;
+    bool done = false;
+    bool item = false;
+
+    memset(&menu_scene_scope, 0, sizeof(menu_scene_scope));
+    memset(&visible_state, 0, sizeof(visible_state));
+    visible_state.highlight_row = -1;
+
+    if (!item_selector_menu_scene_enter(&menu_scene_scope))
+        return false;
+
+    p_ptr->command_see = true;
+
+    while (!done)
+    {
+        char out_val[160];
+        char which;
+        int j;
+        int ni = 0;
+        int ne = 0;
+
+        for (j = 0; j < ANGBAND_TERM_MAX; j++)
+        {
+            if (!angband_term[j])
+                continue;
+
+            if (op_ptr->window_flag[j] & (PW_INVEN))
+                ni++;
+            if (op_ptr->window_flag[j] & (PW_EQUIP))
+                ne++;
+        }
+
+        if (((p_ptr->command_wrk == (USE_EQUIP)) && ni && !ne)
+            || ((p_ptr->command_wrk == (USE_INVEN)) && !ni && ne))
+        {
+            toggle_inven_equip();
+            if (toggle)
+                *toggle = !(*toggle);
+        }
+
+        p_ptr->window |= (PW_INVEN | PW_EQUIP);
+        window_stuff();
+
+        item_selector_build_visible_state(&visible_state, p_ptr->command_wrk,
+            floor_list, floor_num);
+        item_selector_format_prompt(out_val, sizeof(out_val), pmt,
+            p_ptr->command_wrk, use_inven, use_equip, i1, i2, e1, e2, f1, f2);
+
+        {
+            app_ui_scene scene;
+
+            if (item_selector_build_ui_scene(&scene, out_val,
+                    p_ptr->command_wrk, use_inven, use_equip, use_floor,
+                    floor_list, visible_state.vis_inven_cnt,
+                    visible_state.vis_inven, visible_state.vis_equip_cnt,
+                    visible_state.vis_equip, visible_state.vis_floor_cnt,
+                    visible_state.vis_floor,
+                    visible_state.highlight_active
+                        ? visible_state.highlight_row
+                        : -1))
+            {
+                (void)item_selector_menu_scene_present(&menu_scene_scope, &scene);
+            }
+        }
+
+        which = inkey();
+
+        switch (which)
+        {
+        case ESCAPE:
+            done = true;
+            break;
+
+        case '*':
+        case '?':
+            break;
+
+        case ' ':
+        {
+            int selected_item;
+
+            if (!visible_state.highlight_active
+                || !item_selector_highlighted_item(&visible_state,
+                    p_ptr->command_wrk, floor_list, &selected_item))
+            {
+                break;
+            }
+
+            if (!item_selector_mode_allows_item(selected_item, allow_inven,
+                    allow_equip, allow_floor)
+                || !get_item_okay(selected_item))
+            {
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (!get_item_allow(selected_item))
+                break;
+
+            *cp = selected_item;
+            item = true;
+            done = true;
+            break;
+        }
+
+        case '/':
+            if (use_inven && (p_ptr->command_wrk != (USE_INVEN)))
+                p_ptr->command_wrk = (USE_INVEN);
+            else if (use_equip && (p_ptr->command_wrk != (USE_EQUIP)))
+                p_ptr->command_wrk = (USE_EQUIP);
+            else
+                bell("Cannot switch item selector!");
+            break;
+
+        case '-':
+            if (!allow_floor)
+            {
+                bell("Cannot select floor!");
+                break;
+            }
+
+            for (int i = 0; i < floor_num; i++)
+            {
+                int selected_item = 0 - floor_list[i];
+
+                if (!get_item_okay(selected_item))
+                    continue;
+
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+                if (!get_item_allow(selected_item))
+                    continue;
+
+                *cp = selected_item;
+                item = true;
+                done = true;
+                break;
+            }
+            break;
+
+        case 'x':
+        case 'X':
+#ifdef ARROW_RIGHT
+        case ARROW_RIGHT:
+#endif
+        {
+            int selected_item;
+
+            if (!visible_state.highlight_active
+                || !item_selector_highlighted_item(&visible_state,
+                    p_ptr->command_wrk, floor_list, &selected_item))
+            {
+                bell("No highlighted item to examine.");
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            describe_item_with_comparisons(selected_item, true);
+            break;
+        }
+
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+            int selected_item = 0;
+            bool tag_found = get_tag(&selected_item, which);
+
+            if (!tag_found && visible_state.highlight_active
+                && (which == '2' || which == '8' || which == '6'))
+            {
+                if (which == '8')
+                {
+                    item_selector_move_highlight(&visible_state,
+                        p_ptr->command_wrk, -1);
+                    break;
+                }
+                if (which == '2')
+                {
+                    item_selector_move_highlight(&visible_state,
+                        p_ptr->command_wrk, +1);
+                    break;
+                }
+                if (!item_selector_highlighted_item(&visible_state,
+                        p_ptr->command_wrk, floor_list, &selected_item))
+                {
+                    break;
+                }
+            }
+            else if (!tag_found)
+            {
+                bell("Illegal object choice (tag)!");
+                break;
+            }
+
+            if (!item_selector_mode_allows_item(selected_item, allow_inven,
+                    allow_equip, allow_floor))
+            {
+                bell("Illegal object choice (tag)!");
+                break;
+            }
+
+            if (!get_item_okay(selected_item))
+            {
+                bell("Illegal object choice (tag)!");
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (!get_item_allow(selected_item))
+            {
+                done = true;
+                break;
+            }
+
+            *cp = selected_item;
+            item = true;
+            done = true;
+            break;
+        }
+
+        case '[':
+        case ']':
+        {
+            int selected_item = 0;
+            bool item_found = false;
+
+            if (p_ptr->command_wrk == (USE_INVEN))
+            {
+                for (int i = INVEN_PACK; i >= 0; i--)
+                {
+                    if (get_item_okay(i) && ((which == '[') || !item_found))
+                    {
+                        selected_item = i;
+                        item_found = true;
+                    }
+                }
+            }
+            else if (p_ptr->command_wrk == (USE_EQUIP))
+            {
+                for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+                {
+                    if (get_item_okay(i) && ((which == ']') || !item_found))
+                    {
+                        selected_item = i;
+                        item_found = true;
+                    }
+                }
+            }
+
+            if (!item_found)
+            {
+                bell("No valid items found.");
+                break;
+            }
+
+            if (!item_selector_mode_allows_item(selected_item, allow_inven,
+                    allow_equip, allow_floor))
+            {
+                bell("Illegal object choice (tag)!");
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (!get_item_allow(selected_item))
+            {
+                done = true;
+                break;
+            }
+
+            *cp = selected_item;
+            item = true;
+            done = true;
+            break;
+        }
+
+        case '\n':
+        case '\r':
+        {
+            int selected_item = 0;
+
+            if (visible_state.highlight_active
+                && item_selector_highlighted_item(&visible_state,
+                    p_ptr->command_wrk, floor_list, &selected_item))
+            {
+                if (!get_item_okay(selected_item))
+                {
+                    bell("Illegal object choice (highlight)!");
+                    break;
+                }
+
+                item_selector_suspend_snapshot_ui(&menu_scene_scope);
+                if (!get_item_allow(selected_item))
+                {
+                    done = true;
+                    break;
+                }
+
+                *cp = selected_item;
+                item = true;
+                done = true;
+                break;
+            }
+
+            if (p_ptr->command_wrk == (USE_INVEN))
+            {
+                if (i1 != i2)
+                {
+                    bell("Illegal object choice (default)!");
+                    break;
+                }
+
+                selected_item = i1;
+            }
+            else if (p_ptr->command_wrk == (USE_EQUIP))
+            {
+                if (e1 != e2)
+                {
+                    bell("Illegal object choice (default)!");
+                    break;
+                }
+
+                selected_item = e1;
+            }
+            else
+            {
+                if (f1 != f2)
+                {
+                    bell("Illegal object choice (default)!");
+                    break;
+                }
+
+                selected_item = 0 - floor_list[f1];
+            }
+
+            if (!get_item_okay(selected_item))
+            {
+                bell("Illegal object choice (default)!");
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (!get_item_allow(selected_item))
+            {
+                done = true;
+                break;
+            }
+
+            *cp = selected_item;
+            item = true;
+            done = true;
+            break;
+        }
+
+        default:
+        {
+            int selected_item = 0;
+            bool verify;
+
+            verify = (isupper((unsigned char)which) ? true : false);
+            which = (char)tolower((unsigned char)which);
+
+            if (p_ptr->command_wrk == (USE_INVEN))
+            {
+                selected_item = item_selector_inventory_hotkey_item(
+                    &visible_state, which);
+                if (selected_item == -10000)
+                    selected_item = label_to_inven(which);
+
+                if (selected_item < 0)
+                {
+                    bell("Illegal object choice (inven)!");
+                    break;
+                }
+            }
+            else if (p_ptr->command_wrk == (USE_EQUIP))
+            {
+                selected_item = label_to_equip(which);
+
+                if (selected_item < 0)
+                {
+                    bell("Illegal object choice (equip)!");
+                    break;
+                }
+            }
+            else
+            {
+                int floor_slot = (islower((unsigned char)which) ? A2I(which) : -1);
+
+                if (floor_slot < 0 || floor_slot >= floor_num)
+                {
+                    bell("Illegal object choice (floor)!");
+                    break;
+                }
+
+                selected_item = 0 - floor_list[floor_slot];
+            }
+
+            if (!get_item_okay(selected_item))
+            {
+                bell("Illegal object choice (normal)!");
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (verify && !verify_item("Try", selected_item))
+            {
+                done = true;
+                break;
+            }
+
+            item_selector_suspend_snapshot_ui(&menu_scene_scope);
+            if (!get_item_allow(selected_item))
+            {
+                done = true;
+                break;
+            }
+
+            *cp = selected_item;
+            item = true;
+            done = true;
+            break;
+        }
+        }
+    }
+
+    item_selector_menu_scene_close(&menu_scene_scope);
+    p_ptr->command_see = false;
+    if (out_item)
+        *out_item = item;
+
+    return true;
+}
+
 /*
  * Flip "inven" and "equip" in any sub-windows
  */
@@ -1000,11 +1665,20 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
         p_ptr->command_see = true;
     }
 
-    if (snapshot_interaction)
-        p_ptr->command_see = true;
+    if (!done && snapshot_interaction)
+    {
+        bool snapshot_item = false;
 
-    if (snapshot_interaction)
-        (void)item_selector_menu_scene_enter(&menu_scene_scope);
+        if (item_selector_run_snapshot_loop(cp, pmt, use_inven, use_equip,
+                use_floor, allow_inven, allow_equip, allow_floor, i1, i2, e1,
+                e2, f1, f2, floor_list, floor_num, &toggle, &snapshot_item))
+        {
+            item = snapshot_item;
+            goto get_item_done;
+        }
+
+        snapshot_interaction = false;
+    }
 
     /* Start out in "display" mode */
     if (p_ptr->command_see && !snapshot_interaction)
@@ -1949,6 +2623,8 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
 #undef DRAW_HIGHLIGHT_STORY_VARS
 #undef DRAW_HIGHLIGHT_STORY_UPDATE
 #undef DRAW_HIGHLIGHT_IF_STORY
+
+get_item_done:
 
     /* Fix the screen if necessary */
     if (p_ptr->command_see)

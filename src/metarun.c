@@ -24,6 +24,7 @@
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "reliability-checks.h"
+#include "app/app-ui.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
 #include "runtime/runtime-game.h"
@@ -5278,6 +5279,20 @@ void print_metarun_stats(void)
     int term_height, term_width;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
+#define METARUN_PRESENT_CURRENT_UI_SCENE()                                     \
+    do {                                                                       \
+        app_information_scene metarun_document;                                \
+        app_ui_scene metarun_scene;                                            \
+                                                                               \
+        if (!ui_information_scene_capture_term(&metarun_document)              \
+            || !app_ui_scene_from_information_document(&metarun_scene,         \
+                &metarun_document)                                             \
+            || !ui_information_scene_present_ui(&metarun_scene))               \
+        {                                                                      \
+            ui_information_scene_leave(&info_scope);                           \
+            use_information_scene = false;                                     \
+        }                                                                      \
+    } while (0)
 
     refresh_current_metar_score();
 
@@ -5297,11 +5312,7 @@ void print_metarun_stats(void)
         }
         if (use_information_scene)
         {
-            if (!ui_information_scene_present_term())
-            {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-            }
+            METARUN_PRESENT_CURRENT_UI_SCENE();
         }
         else
         {
@@ -5838,11 +5849,7 @@ void print_metarun_stats(void)
 
     if (use_information_scene)
     {
-        if (!ui_information_scene_present_term())
-        {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        }
+        METARUN_PRESENT_CURRENT_UI_SCENE();
     }
     else
     {
@@ -5954,6 +5961,8 @@ void print_metarun_stats(void)
         ui_information_scene_leave(&info_scope);
     else
         screen_load();
+
+#undef METARUN_PRESENT_CURRENT_UI_SCENE
 }
 
 

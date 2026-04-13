@@ -2464,8 +2464,8 @@ static void knowledge_detail_prompt_legacy(int row, bool steamdeck, cptr title,
 }
 
 static void knowledge_scene_add_wrapped_document_text(
-    app_information_scene* scene, int col, int* row, cptr text, byte color,
-    int term_wid)
+    app_ui_scene* scene, app_ui_panel* panel, int col, int* row, cptr text,
+    byte color, int term_wid)
 {
     char line_buf[256];
     int line_pos = 0;
@@ -2475,7 +2475,7 @@ static void knowledge_scene_add_wrapped_document_text(
     int i = 0;
     int loop_count = 0;
 
-    if (!scene || !row || !text)
+    if (!scene || !panel || !row || !text)
         return;
 
     effective_width = term_wid - col - 1;
@@ -2511,8 +2511,8 @@ static void knowledge_scene_add_wrapped_document_text(
                 if (line_pos + (line_pos > 0 ? 1 : 0) + copy_len
                     > effective_width && line_pos > 0)
                 {
-                    (void)app_information_scene_add_text(scene, (s16b)(*row),
-                        (s16b)col, color, line_buf);
+                    (void)app_ui_panel_add_document_text(scene, panel,
+                        (s16b)(*row), (s16b)col, color, line_buf);
                     (*row)++;
 
                     if (copy_len > effective_width)
@@ -2535,7 +2535,7 @@ static void knowledge_scene_add_wrapped_document_text(
                             }
                             chunk[k] = '\0';
 
-                            (void)app_information_scene_add_text(scene,
+                            (void)app_ui_panel_add_document_text(scene, panel,
                                 (s16b)(*row), (s16b)col, color, chunk);
                             (*row)++;
                             word_pos += chunk_len;
@@ -2574,17 +2574,50 @@ static void knowledge_scene_add_wrapped_document_text(
 
     if (line_pos > 0)
     {
-        (void)app_information_scene_add_text(scene, (s16b)(*row), (s16b)col,
-            color, line_buf);
+        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(*row),
+            (s16b)col, color, line_buf);
         (*row)++;
     }
 }
 
-static bool knowledge_present_curse_detail_document_page(
-    app_information_scene* scene, int footer_row, bool steamdeck,
-    cptr accept_label)
+static bool knowledge_begin_curse_detail_document_page(app_ui_scene* scene,
+    app_ui_panel** out_panel, int* out_row, bool include_name, cptr cname)
 {
-    if (!scene)
+    app_ui_panel* panel;
+
+    if (!scene || !out_panel || !out_row)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    if (!app_ui_panel_add_document_text(scene, panel, 0, 1,
+            TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+    {
+        return false;
+    }
+
+    if (include_name
+        && !app_ui_panel_add_document_text(scene, panel, 2, 1, TERM_L_RED,
+            cname ? cname : ""))
+    {
+        return false;
+    }
+
+    *out_panel = panel;
+    *out_row = include_name ? 3 : 2;
+    return true;
+}
+
+static bool knowledge_present_curse_detail_document_page(app_ui_scene* scene,
+    app_ui_panel* panel, int footer_row, bool steamdeck, cptr accept_label)
+{
+    if (!scene || !panel)
         return false;
 
     if (steamdeck)
@@ -2592,19 +2625,19 @@ static bool knowledge_present_curse_detail_document_page(
         char hint_buf[48];
 
         strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
-        if (!app_information_scene_add_text(scene, (s16b)footer_row, 1,
+        if (!app_ui_panel_add_document_text(scene, panel, (s16b)footer_row, 1,
                 TERM_L_WHITE, hint_buf))
         {
             return false;
         }
     }
-    else if (!app_information_scene_add_text(scene, (s16b)footer_row, 1,
+    else if (!app_ui_panel_add_document_text(scene, panel, (s16b)footer_row, 1,
             TERM_L_WHITE, "(press any key)"))
     {
         return false;
     }
 
-    if (!ui_information_scene_present_document(scene))
+    if (!ui_information_scene_present_ui(scene))
         return false;
 
     (void)ui_information_scene_wait_key_nonrepeat();
@@ -2632,7 +2665,8 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
     int footer_row;
     int page_limit;
     int row;
-    app_information_scene scene;
+    app_ui_scene scene;
+    app_ui_panel* panel = NULL;
 
     if (curse_id < 0 || curse_id >= z_info->cu_max)
         return false;
@@ -2665,51 +2699,45 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
     footer_row = term_hgt - 1;
     page_limit = footer_row - 1;
 
-    app_information_scene_init(&scene);
-    if (!app_information_scene_add_text(&scene, 0, 1, TERM_L_WHITE + TERM_SHADE,
-            "Known Curse:")
-        || !app_information_scene_add_text(&scene, 2, 1, TERM_L_RED, cname))
+    if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row, true,
+            cname))
     {
         return false;
     }
-    row = 3;
 
     if (row + count_wrapped_lines(cdesc, term_wid - 4, 3) >= page_limit)
     {
-        if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
-                steamdeck, accept_label))
+        if (!knowledge_present_curse_detail_document_page(&scene, panel,
+                footer_row, steamdeck, accept_label))
         {
             return false;
         }
-        app_information_scene_init(&scene);
-        if (!app_information_scene_add_text(&scene, 0, 1,
-                TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+        if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row,
+                false, cname))
         {
             return false;
         }
-        row = 2;
     }
-    knowledge_scene_add_wrapped_document_text(&scene, 3, &row, cdesc,
+    knowledge_scene_add_wrapped_document_text(&scene, panel, 3, &row, cdesc,
         TERM_WHITE, term_wid);
 
     strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
         (*cpower) ? cpower : "[no additional effect listed]");
     if (row + count_wrapped_lines(effect_line, term_wid - 4, 3) >= page_limit)
     {
-        if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
-                steamdeck, accept_label))
+        if (!knowledge_present_curse_detail_document_page(&scene, panel,
+                footer_row, steamdeck, accept_label))
         {
             return false;
         }
-        app_information_scene_init(&scene);
-        if (!app_information_scene_add_text(&scene, 0, 1,
-                TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+        if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row,
+                false, cname))
         {
             return false;
         }
-        row = 2;
     }
-    knowledge_scene_add_wrapped_document_text(&scene, 3, &row, effect_line,
+    knowledge_scene_add_wrapped_document_text(&scene, panel, 3, &row,
+        effect_line,
         TERM_RED, term_wid);
 
     if (has_blessing_info)
@@ -2717,21 +2745,19 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
         row++;
         if (row + 1 >= page_limit)
         {
-            if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
-                    steamdeck, accept_label))
+            if (!knowledge_present_curse_detail_document_page(&scene, panel,
+                    footer_row, steamdeck, accept_label))
             {
                 return false;
             }
-            app_information_scene_init(&scene);
-            if (!app_information_scene_add_text(&scene, 0, 1,
-                    TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+            if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
+                    &row, false, cname))
             {
                 return false;
             }
-            row = 2;
         }
 
-        if (!app_information_scene_add_text(&scene, (s16b)row++, 3,
+        if (!app_ui_panel_add_document_text(&scene, panel, (s16b)row++, 3,
                 TERM_L_GREEN, format("Blessing: %s", bname)))
         {
             return false;
@@ -2741,46 +2767,42 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
         {
             if (row + count_wrapped_lines(bdesc, term_wid - 6, 5) >= page_limit)
             {
-                if (!knowledge_present_curse_detail_document_page(&scene,
+                if (!knowledge_present_curse_detail_document_page(&scene, panel,
                         footer_row, steamdeck, accept_label))
                 {
                     return false;
                 }
-                app_information_scene_init(&scene);
-                if (!app_information_scene_add_text(&scene, 0, 1,
-                        TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+                if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
+                        &row, false, cname))
                 {
                     return false;
                 }
-                row = 2;
             }
-            knowledge_scene_add_wrapped_document_text(&scene, 5, &row, bdesc,
-                TERM_WHITE, term_wid);
+            knowledge_scene_add_wrapped_document_text(&scene, panel, 5, &row,
+                bdesc, TERM_WHITE, term_wid);
         }
 
         strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
             has_blessing_effect ? bpower : "[no additional effect listed]");
         if (row + count_wrapped_lines(blessing_line, term_wid - 6, 5) >= page_limit)
         {
-            if (!knowledge_present_curse_detail_document_page(&scene, footer_row,
-                    steamdeck, accept_label))
+            if (!knowledge_present_curse_detail_document_page(&scene, panel,
+                    footer_row, steamdeck, accept_label))
             {
                 return false;
             }
-            app_information_scene_init(&scene);
-            if (!app_information_scene_add_text(&scene, 0, 1,
-                    TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
+            if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
+                    &row, false, cname))
             {
                 return false;
             }
-            row = 2;
         }
-        knowledge_scene_add_wrapped_document_text(&scene, 5, &row,
+        knowledge_scene_add_wrapped_document_text(&scene, panel, 5, &row,
             blessing_line, TERM_L_GREEN, term_wid);
     }
 
-    return knowledge_present_curse_detail_document_page(&scene, footer_row,
-        steamdeck, accept_label);
+    return knowledge_present_curse_detail_document_page(&scene, panel,
+        footer_row, steamdeck, accept_label);
 }
 
 static void knowledge_show_curse_detail_legacy(int curse_id)

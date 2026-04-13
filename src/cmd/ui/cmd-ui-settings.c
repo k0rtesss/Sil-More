@@ -25,6 +25,7 @@ extern struct sound_config g_sound_config;
 #include "log/log.h"
 #include <ctype.h>
 #include "h-define.h"
+#include "app/app-ui.h"
 #include "metarun.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
@@ -36,6 +37,24 @@ extern struct sound_config g_sound_config;
 #define COLOR_SAMPLE "###"
 
 /*
+ * Settings scene bridge: when an information scene scope is active, capture
+ * the current Term contents into an app_ui_scene and present that through
+ * the information scene channel.  Falls back to inkey() in legacy mode.
+ */
+static bool settings_present_ui_scene(void)
+{
+    app_information_scene document;
+    app_ui_scene scene;
+
+    if (!ui_information_scene_capture_term(&document))
+        return false;
+    if (!app_ui_scene_from_information_document(&scene, &document))
+        return false;
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+/*
  * Settings scene bridge: when an information scene scope is active, mirror
  * the current Term contents into the scene and wait for input through the
  * information scene channel.  Falls back to inkey() in legacy mode.
@@ -44,21 +63,21 @@ static int settings_wait_key(void)
 {
     if (ui_information_scene_is_active())
     {
-        (void)ui_information_scene_present_term();
+        (void)settings_present_ui_scene();
         return ui_information_scene_wait_key();
     }
     return inkey();
 }
 
 /*
- * Scene-aware Term_fresh: present through the information scene when a
- * scope is active so prompts are visible on the SDL scene renderer path.
- * Falls back to Term_fresh() in legacy mode.
+ * Scene-aware Term_fresh: present through the information scene as an
+ * app_ui_scene when a scope is active so prompts are visible on the SDL
+ * scene renderer path.  Falls back to Term_fresh() in legacy mode.
  */
 static void settings_present(void)
 {
     if (ui_information_scene_is_active())
-        (void)ui_information_scene_present_term();
+        (void)settings_present_ui_scene();
     else
         Term_fresh();
 }

@@ -67,9 +67,37 @@ static void show_file_document_layout_size(int* wid, int* hgt)
         *hgt = 24;
 }
 
-static void show_buffer_build_information_scene(app_information_scene* scene,
+static app_ui_panel* show_file_begin_document_scene(app_ui_scene* scene)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    return panel;
+}
+
+static bool show_file_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
+    s16b row, s16b col, byte attr, cptr text)
+{
+    if (!text || !text[0])
+        return true;
+
+    return app_ui_panel_add_document_text(scene, panel, row, col, attr, text);
+}
+
+static bool show_buffer_build_ui_scene(app_ui_scene* scene,
     cptr main_buffer, int line, int size, int hgt)
 {
+    app_ui_panel* panel;
     int i;
     int j;
     int k;
@@ -78,9 +106,11 @@ static void show_buffer_build_information_scene(app_information_scene* scene,
     char buf[1024];
 
     if (!scene)
-        return;
+        return false;
 
-    app_information_scene_init(scene);
+    panel = show_file_begin_document_scene(scene);
+    if (!panel)
+        return false;
     line = show_buffer_clamp_line(line, size, hgt);
 
     for (j = 0; true; j++)
@@ -115,32 +145,33 @@ static void show_buffer_build_information_scene(app_information_scene* scene,
         }
         buf[k] = '\0';
 
-        (void)app_information_scene_add_text(scene, (s16b)(i + 2), 0,
-            TERM_WHITE, buf);
+        if (!show_file_scene_add_text(scene, panel, (s16b)(i + 2), 0,
+                TERM_WHITE, buf))
+        {
+            return false;
+        }
         i++;
     }
 
     if (size <= hgt - 5)
     {
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 1,
-            TERM_SLATE, "(press ESC to exit)");
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 8,
-            TERM_L_WHITE, "ESC");
+        return show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 1,
+                   TERM_SLATE, "(press ESC to exit)")
+            && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 8,
+                TERM_L_WHITE, "ESC");
     }
-    else
-    {
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 1,
-            TERM_SLATE,
-            "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)");
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 8,
-            TERM_L_WHITE, "ESC");
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 21,
-            TERM_L_WHITE, "Space");
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 42,
-            TERM_L_WHITE, "Arrows");
-        (void)app_information_scene_add_text(scene, (s16b)(hgt - 2), 49,
+
+    return show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 1,
+               TERM_SLATE,
+               "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
+        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 8,
+            TERM_L_WHITE, "ESC")
+        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 21,
+            TERM_L_WHITE, "Space")
+        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 42,
+            TERM_L_WHITE, "Arrows")
+        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 49,
             TERM_L_WHITE, "Keypad");
-    }
 }
 
 static bool show_buffer_information_scene(cptr main_buffer, int line)
@@ -155,7 +186,7 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
         int wid;
         int hgt;
         int dir;
@@ -163,8 +194,8 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
 
         show_file_document_layout_size(&wid, &hgt);
         line = show_buffer_clamp_line(line, size, hgt);
-        show_buffer_build_information_scene(&scene, main_buffer, line, size, hgt);
-        if (!ui_information_scene_present_document(&scene))
+        if (!show_buffer_build_ui_scene(&scene, main_buffer, line, size, hgt)
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -318,9 +349,15 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
 
     while (true)
     {
-        app_information_scene scene;
+        app_ui_scene scene;
+        app_ui_panel* panel;
 
-        app_information_scene_init(&scene);
+        panel = show_file_begin_document_scene(&scene);
+        if (!panel)
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
         show_file_document_layout_size(&wid, &hgt);
 
         if (line > (size - (hgt - 5)))
@@ -352,8 +389,14 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
         }
 
         if (caption[0])
-            (void)app_information_scene_add_text(&scene, 0, 0, TERM_L_BLUE,
-                caption);
+        {
+            if (!show_file_scene_add_text(&scene, panel, 0, 0, TERM_L_BLUE,
+                    caption))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
+        }
 
         for (i = 0; i < hgt - 5;)
         {
@@ -377,8 +420,12 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
 
             find = NULL;
 
-            (void)app_information_scene_add_text(&scene, (s16b)(i + 2), 0,
-                TERM_WHITE, buf);
+            if (!show_file_scene_add_text(&scene, panel, (s16b)(i + 2), 0,
+                    TERM_WHITE, buf))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
 
             if (shower[0])
             {
@@ -387,13 +434,16 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                 while ((str = strstr(str, shower)) != NULL)
                 {
                     int len = strlen(shower);
-                    char match[APP_INFORMATION_TEXT_MAX];
+                    char match[APP_UI_TEXT_MAX];
 
                     strnfmt(match, sizeof(match), "%.*s", len,
                         &buf[str - lc_buf]);
-                    (void)app_information_scene_add_text(&scene,
-                        (s16b)(i + 2), (s16b)(str - lc_buf), TERM_YELLOW,
-                        match);
+                    if (!show_file_scene_add_text(&scene, panel, (s16b)(i + 2),
+                            (s16b)(str - lc_buf), TERM_YELLOW, match))
+                    {
+                        ui_information_scene_leave(&scope);
+                        return false;
+                    }
                     str += len;
                 }
             }
@@ -411,32 +461,44 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
 
         if (menu)
         {
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 1), 0,
-                TERM_WHITE, "[Press a Number, or ESC to exit.]");
+            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 1), 0,
+                    TERM_WHITE, "[Press a Number, or ESC to exit.]"))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
         }
         else if (size <= hgt - 5)
         {
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 1,
-                TERM_SLATE, "(press ESC to exit)");
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 8,
-                TERM_L_WHITE, "ESC");
+            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 1,
+                    TERM_SLATE, "(press ESC to exit)")
+                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 8,
+                    TERM_L_WHITE, "ESC"))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
         }
         else
         {
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 1,
-                TERM_SLATE,
-                "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)");
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 8,
-                TERM_L_WHITE, "ESC");
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 21,
-                TERM_L_WHITE, "Space");
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 42,
-                TERM_L_WHITE, "Arrows");
-            (void)app_information_scene_add_text(&scene, (s16b)(hgt - 2), 49,
-                TERM_L_WHITE, "Keypad");
+            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 1,
+                    TERM_SLATE,
+                    "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
+                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 8,
+                    TERM_L_WHITE, "ESC")
+                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 21,
+                    TERM_L_WHITE, "Space")
+                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 42,
+                    TERM_L_WHITE, "Arrows")
+                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 49,
+                    TERM_L_WHITE, "Keypad"))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
+            }
         }
 
-        if (!ui_information_scene_present_document(&scene))
+        if (!ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;

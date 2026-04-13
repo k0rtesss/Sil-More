@@ -872,15 +872,44 @@ static void tutorial_prompt_label(int binding, const char* fallback, char* out,
 
 typedef struct tutorial_render_target {
     app_information_scene* scene;
+    app_ui_scene* ui_scene;
+    app_ui_panel* ui_panel;
     int width;
     int height;
 } tutorial_render_target;
+
+static bool tutorial_begin_document_ui_scene(app_ui_scene* scene,
+    app_ui_panel** out_panel)
+{
+    app_ui_panel* panel;
+
+    if (!scene || !out_panel)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->min_width_px = 0;
+    panel->width_cap_px = 0;
+    *out_panel = panel;
+    return true;
+}
 
 static void tutorial_render_text(tutorial_render_target* target, int col,
     int row, byte attr, const char* text)
 {
     if (!target || !text || !text[0])
         return;
+
+    if (target->ui_scene && target->ui_panel)
+    {
+        (void)app_ui_panel_add_document_text(target->ui_scene,
+            target->ui_panel, (s16b)row, (s16b)col, attr, text);
+        return;
+    }
 
     if (target->scene)
     {
@@ -1684,11 +1713,35 @@ void display_character_tutorial(void)
             page = total_pages - 1;
 
         app_information_scene scene;
+        app_ui_scene ui_scene;
         tutorial_render_target target;
+        bool use_direct_ui_scene = use_information_scene && birth_context
+            && page >= page_birth_start
+            && page < page_birth_start + birth_pages;
 
         target.width = wid;
         target.height = hgt;
-        if (use_information_scene)
+        target.scene = NULL;
+        target.ui_scene = NULL;
+        target.ui_panel = NULL;
+        if (use_direct_ui_scene)
+        {
+            app_ui_panel* panel = NULL;
+
+            if (tutorial_begin_document_ui_scene(&ui_scene, &panel))
+            {
+                target.ui_scene = &ui_scene;
+                target.ui_panel = panel;
+            }
+            else
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+                use_direct_ui_scene = false;
+                Term_clear();
+            }
+        }
+        else if (use_information_scene)
         {
             app_information_scene_init(&scene);
             target.scene = &scene;
@@ -2099,7 +2152,22 @@ void display_character_tutorial(void)
 
         if (use_information_scene)
         {
-            if (!ui_information_scene_present_document(&scene))
+            bool presented;
+
+            if (use_direct_ui_scene)
+            {
+                presented = ui_information_scene_present_ui(&ui_scene);
+            }
+            else
+            {
+                app_ui_scene bridged_scene;
+
+                presented = app_ui_scene_from_information_document(
+                    &bridged_scene, &scene)
+                    && ui_information_scene_present_ui(&bridged_scene);
+            }
+
+            if (!presented)
             {
                 ui_information_scene_leave(&info_scope);
                 use_information_scene = false;
