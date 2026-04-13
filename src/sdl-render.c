@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "sdl-main-internal.h"
-#include "ui/ui-information-scene.h"
 
 sdl_state g_state;
 sdl_view g_views[MAX_TERM_DATA];
@@ -49,18 +48,6 @@ static bool sdl_legacy_input_pending(void)
         return false;
 
     return app_session_pending_input_count(session) > 0;
-}
-
-static bool sdl_information_scene_needs_term_capture(void)
-{
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot;
-
-    if (!ui_information_scene_is_active() || !session)
-        return false;
-
-    snapshot = app_session_snapshot(session);
-    return snapshot && snapshot->scene == APP_SCENE_KIND_INFORMATION;
 }
 
 sdl_view* sdl_view_from_term(term* t)
@@ -314,8 +301,6 @@ static errr callback_sdl_xtra(int n, int v)
         return 0;
 
     case TERM_XTRA_FRESH:
-        if (sdl_information_scene_needs_term_capture())
-            (void)ui_information_scene_present_term();
         sdl_present_if_needed(d);
         return 0;
 
@@ -335,8 +320,6 @@ static errr callback_sdl_xtra(int n, int v)
                 sdl_handle_event(&g_state, &ev);
             sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
             sdl_drain_legacy_input_queue();
-            if (sdl_information_scene_needs_term_capture())
-                (void)ui_information_scene_present_term();
             sdl_present_if_needed(d);
         }
         return 0;

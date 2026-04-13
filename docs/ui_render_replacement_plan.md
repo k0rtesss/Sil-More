@@ -98,13 +98,22 @@ forward UI work.
   `welcome_screen_present_ui()`.
 - `src/metarun.c` now builds a direct semantic browser scene for the main
   "Current Story Statistics" screen through
-  `metarun_build_stats_browser_scene()`, though the submenus launched from
-  that screen still remain legacy.
+  `metarun_build_stats_browser_scene()`.
+- The metarun story-statistics submenu family now also has direct semantic SDL
+  paths for:
+  - completed quest summary
+  - active effects
+  - blessing exchange
+  - blessing threshold
+  - difficulty selection
+  - metarun history
+- `src/quest/quest-ui.c`, `src/ui/ui-story.c`, and `src/ui/ui-death.c` no
+  longer call `ui_information_scene_present_term()` on the SDL path.
 - `py -3 tools/ui_debt_audit.py --check` passes on this branch.
 - Current audit counts on April 13, 2026:
-  - `inkey()` call sites: 37 files / 74 matches
+  - `inkey()` call sites: 37 files / 86 matches
   - `screen_save()` + `screen_load()` call sites: 28 files / 187 matches
-  - direct `Term_*` render/control calls: 62 files / 1,529 matches
+  - direct `Term_*` render/control calls: 62 files / 1,511 matches
   - `#include "platform-ui.h"`: 0 files / 0 matches
   - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 208 matches
 
@@ -113,30 +122,18 @@ forward UI work.
   - `ui_information_scene_capture_term()`
   - `ui_information_scene_present_term()`
   - internal auto-capture support in `src/sdl-render.c`
-- User-facing `ui_information_scene_present_term()` callers are now narrowed
-  to bespoke workflows in:
-  - `src/quest/quest-ui.c`
-  - `src/ui/ui-story.c`
-  - `src/ui/ui-death.c`
+- No user-facing gameplay-module callers remain for
+  `ui_information_scene_present_term()`.
 - The document bridge still exists:
   - `app_information_scene`
   - `app_ui_scene_from_information_document()`
   - `ui_information_scene_present_document()`
 - `ui_information_scene_present_document()` no longer has in-tree callers, but
   the API still exists and should be deleted.
-- The document adapter core is now effectively dead from gameplay-module
-  call sites, but it still exists in the bridge implementation and should not
-  be deleted until the remaining live term-capture bridge is gone too.
-- The main "Current Story Statistics" screen is semantic now, but the submenu
-  family launched from `src/metarun.c:print_metarun_stats()` is still legacy:
-  - `show_all_active_curses()`
-  - `open_blessing_exchange()`
-  - `adjust_blessing_threshold_menu()`
-  - `choose_difficulty_menu()`
-  - `list_metaruns()`
-  - `show_completed_quests_summary()`
-  - shared live-term helpers `metarun_present_term()` and
-    `metarun_wait_key()`
+- No non-core callers remain for:
+  - `app_ui_scene_from_information_document()`
+  - `ui_information_scene_capture_term()`
+- The dead information-scene bridge is now isolated to core and renderer files.
 - Inventory, equipment, and floor selectors now have their own migration slice:
   - the base selector overlay and direct `i` / `e` enhanced menus are
     semantic in SDL snapshot mode
@@ -144,11 +141,17 @@ forward UI work.
     than browser-menu scenes
   - the snapshot selector path now owns its own semantic blocking loop in
     `src/object/object-ui-select.c`
-  - but ownership still lives in legacy or term-shaped blocking loops in
-    `src/object/object-ui-select.c` and `src/object/object-ui-enhanced.c`
-  - and the wider item family still depends on legacy list layout, compare
-    flows, and term-owned side screens in `src/object/object-ui-display.c`,
-    `src/object/object-ui-enhanced.c`, and `src/cmd/item/*`
+  - and the remaining item-family debt is now concentrated in:
+    - isolated legacy fallback in `src/object/object-ui-select.c`
+    - shared term-era display helpers in `src/object/object-ui-display.c`
+    - bespoke side flows in `src/cmd/item/cmd-item-activate.c`
+    - pickup-from-pile flow in `src/cmd/item/cmd-pickup.c`
+- Remaining late bespoke workflow debt is concentrated in:
+  - `src/metarun.c` side or narrative flows outside the semantic
+    story-statistics or history surfaces
+  - `src/birth.c`
+  - `src/ui/smithing/ui-smithing-screen.c`
+  - `src/blitz.c`
 - Some UI families still derive behavior or layout from `Term->wid`,
   `Term->hgt`, `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
@@ -157,114 +160,98 @@ forward UI work.
   character-sheet widgets are still missing is stale.
 - The current blocker is no longer "invent the shared widgets first."
 - The current blocker is no longer "migrate the document producers first".
-- The welcome screen and the main story-statistics screen are no longer part
-  of the remaining debt.
-- The current blocker is now the remaining legacy term-owned submenu families
-  and bespoke live-term workflows:
-  - the metarun story-statistics submenus
-  - the remaining item-family loops
-  - quest typewriter flow
-  - story flow
-  - death flow
-  - only after those, the final bridge cleanup
+- The welcome screen, the main story-statistics screen, the metarun
+  story-statistics submenu family, and the quest or story or death
+  `present_term()` slice are no longer part of the remaining debt.
+- The current blocker is now:
+  - deleting the dead information-scene bridge core
+  - finishing the remaining item side loops and isolated fallback paths
+  - finishing the late bespoke workflow families such as birth, smithing,
+    blitz, and remaining metarun side flows
 
 ## Next Slices
-### Slice: Migrate Metarun Story-Statistics Submenus
+### Slice: Delete The Dead Information-Scene Bridge
 Goal:
-- migrate the legacy submenu family launched from the semantic
-  "Current Story Statistics" screen
-- remove the metarun-specific live-term helper path from those submenus
+- delete the dead document and live-term capture bridge now that gameplay
+  modules no longer call it
 
 Why this is next:
-- the top-level story-statistics screen is already semantic
-- the remaining debt is concentrated in one file
-- those submenus are user-facing and still term-owned even on the SDL path
+- `ui_information_scene_present_document()` has no callers
+- `app_ui_scene_from_information_document()` has no non-core callers
+- `ui_information_scene_capture_term()` and
+  `ui_information_scene_present_term()` have no non-core callers
+- the remaining bridge is isolated to core and renderer files
 
 Primary targets:
-- `src/metarun.c`
-  - `show_all_active_curses()`
-  - `open_blessing_exchange()`
-  - `adjust_blessing_threshold_menu()`
-  - `choose_difficulty_menu()`
-  - `list_metaruns()`
-  - `show_completed_quests_summary()`
+- `src/ui/ui-information-scene.c`
+- `src/ui/ui-information-scene.h`
+- `src/app/app-scene-information.c`
+- `src/app/app-scene-information.h`
+- `src/app/app-session.c`
+- `src/app/app-session.h`
+- `src/app/app-ui.c`
+- `src/app/app-ui.h`
+- `src/sdl-render.c`
+- `src/sdl-scene-information.c`
+- `src/externs.h`
 
 Approach:
-- keep the main story-statistics screen semantic
-- migrate each submenu to direct `app_ui_scene` presentation
-- remove the need for `metarun_present_term()` and `metarun_wait_key()` in
-  those submenu flows
-- leave truly narrative or heavily scripted metarun flows for the later
-  bespoke-workflow slice
+- remove `ui_information_scene_present_document()`
+- remove `ui_information_scene_capture_term()` and
+  `ui_information_scene_present_term()`
+- remove `app_information_scene` and
+  `app_ui_scene_from_information_document()`
+- remove the information-scene snapshot plumbing and SDL auto-capture support
+  once no runtime flow depends on them
 
 Exit when:
-- no submenu launched from `print_metarun_stats()` depends on live term
-  presentation
-- the metarun story-statistics submenu family no longer depends on
-  `metarun_present_term()`
-- any remaining metarun legacy flows are clearly outside the
-  story-statistics submenu family
+- `rg -n "ui_information_scene_present_document\\(" src` returns no matches
+- `rg -n "app_ui_scene_from_information_document\\(" src` returns no matches
+- `rg -n "ui_information_scene_capture_term\\(|ui_information_scene_present_term\\(" src`
+  only returns no matches
+- no SDL runtime path depends on information-scene document bridging or live
+  term capture
 
-### Slice: Item Selector Overlay Family
+### Slice: Finish Remaining Item Side Loops
 Goal:
-- finish migrating inventory, equipment, and floor selection into dedicated
-  semantic overlay menus and remove the remaining legacy selector ownership
+- finish the remaining item-family side loops and isolated fallback paths now
+  that the main SDL snapshot selector path is semantic
 
 Status:
 - In progress.
 - Current chunk landed:
-  - `src/object/object-ui-select.c` now builds a dedicated `app_ui_scene`
-    browser overlay directly instead of routing the selector through
-    `app_interaction_state` plus `app_ui_scene_from_interaction()`
-  - the snapshot selector now has explicit tabs, item icons, weights, footer
-    actions, and selected-item detail lines
-  - `src/object/object-ui-enhanced.c` now builds direct semantic overlay
-    panels for the direct `i` / `e` inventory and equipment menus in SDL
-    snapshot mode, using overlay list presentation instead of browser-menu
-    chrome
-  - `src/cmd/item/cmd-item-core.c` and `src/cmd/item/cmd-fletchery.c` now
-    enter the enhanced menus through snapshot-only wrappers instead of owning
-    `screen_save()` around those menu surfaces
+  - `src/object/object-ui-select.c` snapshot mode now owns semantic scene
+    presentation in `item_selector_run_snapshot_loop()`
+  - legacy `show_inven_enhanced()` and `show_equip_enhanced()` now forward to
+    the semantic snapshot menu path in `src/object/object-ui-enhanced.c`
+  - `src/cmd/item/cmd-item-core.c` direct inventory and equipment entry points
+    already route through the semantic snapshot menus
 
 Primary write set:
-- `src/object/object-ui-select.c`
 - `src/object/object-ui-display.c`
-- `src/object/object-ui-enhanced.c`
-- `src/cmd/item/*`
+- `src/cmd/item/cmd-item-activate.c`
+- `src/cmd/item/cmd-pickup.c`
+- optional cleanup-only pass in `src/object/object-ui-select.c` if removing the
+  isolated legacy fallback is safe
 
 Next big chunks:
-- move compare/detail and item-action side flows onto semantic detail panels
-  and footer actions
-- route remaining item-family submenus and chooser flows onto the same
-  semantic scene family instead of bespoke term redraw loops
-- delete the remaining selector-specific `screen_save()` / `screen_load()`
-  ownership and term list rendering from the item family
+- remove or isolate the remaining term-era side flows that are still used in
+  normal SDL play
+- keep shared display helpers only where they are still needed for true legacy
+  fallback or bespoke flows
+- avoid regressing the semantic SDL snapshot selector path
 
 Exit when:
-- inventory, equipment, and floor selection no longer depend on legacy term
-  list rendering in normal SDL play
-- selector flows no longer need `screen_save()` / `screen_load()` to own their
-  overlays
+- the remaining item-family raw loops are either gone or clearly isolated to
+  true fallback or bespoke workflows
+- normal SDL play no longer routes item side flows through term-era chooser
+  loops
 
 ## After That
-### Slice: Delete The Remaining Term-Capture Bridge
-- convert the remaining bespoke `present_term()` workflows off live term
-  capture:
-  - `src/quest/quest-ui.c` typewriter-story flow
-  - `src/ui/ui-story.c`
-  - `src/ui/ui-death.c`
-- remove `ui_information_scene_capture_term()`
-- remove `ui_information_scene_present_term()`
-- remove internal auto-capture support in `src/sdl-render.c`
-- delete `app_information_scene` and the information-scene snapshot path once
-  no runtime flow depends on them
-
 ### Slice: Finish Bespoke Workflows
 - remaining likely late movers:
-  - metarun history and any remaining metarun side flows not covered by the
-    story-statistics submenu slice
-  - story
-  - death
+  - metarun side or narrative flows outside the semantic story-statistics and
+    history surfaces
   - birth
   - smithing
   - blitz
@@ -281,229 +268,26 @@ reasoning.
 - Old Phase 1 adapter work is now effectively done in:
   - `src/cmd/ui/cmd-ui-settings.c`
   - `src/melee/melee-combat-display.c`
-  - `src/metarun.c` main story-statistics screen only
+  - `src/metarun.c` main story-statistics screen
   - `src/ui/ui-character-screen.c`
   - `src/init2.c` welcome screen
-- Old Phase 1 item-family work is not done yet:
-  - `src/object/object-ui-select.c`
-  - `src/object/object-ui-enhanced.c`
-  - `src/object/object-ui-display.c`
-  - `src/cmd/item/cmd-item-activate.c`
-  - `src/cmd/item/cmd-pickup.c`
-- The metarun story-statistics submenus were previously only implied under
-  broad metarun cleanup. They are now an explicit next slice.
+- Old Phase 2 bridge-work slice is now effectively done:
+  - no gameplay-module callers remain for
+    `ui_information_scene_present_term()`
+  - no non-core callers remain for
+    `ui_information_scene_capture_term()`
+  - no non-core callers remain for
+    `app_ui_scene_from_information_document()`
+  - the metarun story-statistics submenu family is semantic on the SDL path
+  - quest typewriter, story, and death no longer rely on live term capture on
+    the SDL path
+- The remaining item-family work is now mostly isolated side loops and
+  fallback paths, not the main semantic selector path.
 
 ### Next Parallel Slice: Launch In Parallel Now
 These write sets are disjoint and can run at the same time.
 
-#### Agent N1-A: Metarun Story-Statistics Submenus
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/metarun.c
-
-Goal:
-- keep the main "Current Story Statistics" screen semantic
-- migrate the submenu family launched from print_metarun_stats() off legacy
-  term-owned presentation
-- target these flows explicitly:
-  - show_all_active_curses()
-  - open_blessing_exchange()
-  - adjust_blessing_threshold_menu()
-  - choose_difficulty_menu()
-  - list_metaruns()
-  - show_completed_quests_summary()
-- remove the need for metarun_present_term() and metarun_wait_key() in those
-  submenu flows
-
-Constraints:
-- preserve the already-landed semantic main stats screen
-- preserve Steam Deck prompts, action routing, and current submenu behavior
-- do not edit quest-ui.c, ui-story.c, ui-death.c, or bridge/core files
-- if you encounter truly narrative metarun flows, isolate them clearly and
-  leave them for the later bespoke-workflow slice
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which metarun flows, if any, still intentionally depend on live
-  term presentation after your change
-```
-
-#### Agent N1-B: Selector Snapshot Ownership
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/object/object-ui-select.c
-
-Goal:
-- finish the selector snapshot family in this file
-- keep the semantic SDL snapshot scene path
-- remove or isolate remaining selector-owned screen_save(), screen_load(),
-  inkey(), and direct Term-owned overlay control where it is only serving the
-  old non-snapshot overlay path
-
-Constraints:
-- preserve inventory/equipment/floor selection behavior, highlight logic,
-  compare or verify side flows, and fallback behavior
-- do not edit object-ui-enhanced.c, object-ui-display.c, or cmd/item/*
-- if a wider change looks necessary, stop and report rather than widening the
-  write set
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which selector-owned legacy branch remains, if any, and why
-```
-
-#### Agent N1-C: Enhanced Inventory And Equipment Menus
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/object/object-ui-enhanced.c
-
-Goal:
-- finish the semantic migration of the direct i/e enhanced menus
-- preserve app_session_publish_dungeon_overlay_scene() semantic presentation
-- remove remaining legacy inkey()/Term_* ownership from show_inven_enhanced()
-  and show_equip_enhanced() wherever it only exists for the old terminal
-  overlay presentation
-
-Constraints:
-- preserve story-font parity where still required
-- do not edit object-ui-select.c, object-ui-display.c, or cmd/item/*
-- do not regress death spectator or portable-controls behavior
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize any remaining intentional term-shaped fallback left in this file
-```
-
-#### Agent N1-D: Wider Item Family Raw Loops
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/object/object-ui-display.c
-- src/cmd/item/cmd-item-activate.c
-- src/cmd/item/cmd-pickup.c
-
-Goal:
-- isolate or remove remaining terminal-era item selection loops outside the
-  semantic snapshot menus
-- keep show_inven(), show_equip(), and show_floor() only where they are still
-  needed as shared helpers or true legacy fallback
-- focus on raw-loop owners such as sanctity-style choosers and pickup-from-pile
-  flows
-
-Constraints:
-- do not edit object-ui-select.c or object-ui-enhanced.c
-- preserve behavior and prompts
-- if a workflow is truly bespoke and should stay late, isolate it clearly
-  instead of half-migrating it
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which raw item loops remain and why
-```
-
-#### Agent N1-E: Quest Typewriter Workflow
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/quest/quest-ui.c
-
-Goal:
-- remove the remaining ui_information_scene_present_term() usage from the
-  quest typewriter-story flow
-- preserve the quest status semantic scene that already exists
-- migrate only the bespoke typewriter or story-like presentation path
-
-Constraints:
-- preserve pacing, skip behavior, pagination, and prompts
-- do not edit ui-story.c, ui-death.c, or bridge/core files
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "ui_information_scene_present_term\\(" src/quest/quest-ui.c returns no matches
-```
-
-#### Agent N1-F: Story Workflow
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/ui/ui-story.c
-
-Goal:
-- remove the remaining ui_information_scene_present_term() usage from story
-  presentation
-- preserve fade, paging, fast-forward, story-font behavior, and prompts
-- replace live term presentation with direct semantic scene updates
-
-Constraints:
-- do not edit quest-ui.c, ui-death.c, or bridge/core files
-- preserve fallback behavior if semantic presentation is unavailable
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "ui_information_scene_present_term\\(" src/ui/ui-story.c returns no matches
-```
-
-#### Agent N1-G: Death Workflow
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/ui/ui-death.c
-
-Goal:
-- remove the remaining ui_information_scene_present_term() usage from death and
-  epilogue workflows
-- preserve character info review, final menu behavior, prompts, and legacy
-  fallback behavior
-
-Constraints:
-- do not edit quest-ui.c, ui-story.c, or bridge/core files
-- do not restyle the death flow
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- confirm rg -n "ui_information_scene_present_term\\(" src/ui/ui-death.c returns no matches
-```
-
-### Final Cleanup: Launch After The Next Slice Merges
-#### Agent F1-A: Delete The Dead Information-Scene Bridge
+#### Agent N2-A: Delete The Dead Information-Scene Bridge
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -543,6 +327,178 @@ Validation:
 - run py -3 tools/ui_debt_audit.py --check
 - confirm the rg above returns no matches in src
 - summarize any intentionally retained bridge code and why
+```
+
+#### Agent N2-B: Remaining Item Side Loops
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/object/object-ui-display.c
+- src/cmd/item/cmd-item-activate.c
+- src/cmd/item/cmd-pickup.c
+
+Goal:
+- isolate or remove remaining terminal-era item selection loops outside the
+  semantic snapshot menus
+- keep shared display helpers only where they are still needed as shared
+  helpers or true fallback
+- focus on raw-loop owners such as activation choosers and pickup-from-pile
+  flows
+
+Constraints:
+- do not edit object-ui-select.c or object-ui-enhanced.c
+- preserve behavior and prompts
+- if a workflow is truly bespoke and should stay late, isolate it clearly
+  instead of half-migrating it
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which raw item loops remain and why
+```
+
+#### Agent N2-C: Item Selector Legacy Fallback Cleanup
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/object/object-ui-select.c
+
+Goal:
+- keep the semantic SDL snapshot selector path
+- remove or further isolate the remaining non-snapshot legacy overlay fallback
+  in this file if that is safe
+- do not change the landed snapshot loop behavior
+
+Constraints:
+- preserve inventory/equipment/floor selection behavior, highlight logic,
+  compare or verify side flows, and fallback behavior
+- do not edit object-ui-enhanced.c, object-ui-display.c, or cmd/item/*
+- if removing the legacy fallback is risky, isolate it more cleanly and report
+  the remaining boundary rather than forcing deletion
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which selector-owned legacy fallback remains, if any, and why
+```
+
+#### Agent N2-D: Metarun Side And Narrative Workflows
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/metarun.c
+
+Goal:
+- leave the already-semantic story-statistics screen and semantic submenu
+  family alone
+- focus only on the remaining metarun side or narrative workflows that still
+  own blocking term loops outside those landed surfaces
+- isolate or migrate those remaining bespoke metarun flows as appropriate
+
+Constraints:
+- do not regress the semantic stats screen, blessing exchange, threshold,
+  difficulty, active-effects, quest-summary, or metarun-history surfaces
+- do not edit bridge/core files
+- if a flow is truly late-stage bespoke, isolate it clearly and report it
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which metarun flows remain legacy after your change
+```
+
+#### Agent N2-E: Birth Workflow
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/birth.c
+
+Goal:
+- start or continue migrating the birth workflow off term-owned blocking loops
+- preserve current birth behavior, prompts, paging, and return-to-main-menu
+  behavior
+- use semantic UI where safe, but do not destabilize gameplay setup
+
+Constraints:
+- do not edit main-menu, bridge/core, or unrelated gameplay files
+- if the flow is too large to finish cleanly, carve out one coherent semantic
+  surface and isolate the remaining legacy boundary
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what part of the birth workflow is still term-owned after your
+  change
+```
+
+#### Agent N2-F: Smithing Workflow
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/ui/smithing/ui-smithing-screen.c
+
+Goal:
+- start or continue migrating the smithing workflow off term-owned blocking
+  loops
+- preserve smithing behavior, prompts, dense lists, and action routing
+- use semantic UI where safe, but do not regress smithing calculations or state
+
+Constraints:
+- do not edit gameplay calculation code outside smithing UI unless a tiny glue
+  change is strictly required
+- if the flow is too large to finish cleanly, carve out one coherent semantic
+  surface and isolate the remaining legacy boundary
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what part of smithing remains term-owned after your change
+```
+
+#### Agent N2-G: Blitz Workflow
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+
+Write set:
+- src/blitz.c
+
+Goal:
+- migrate the remaining blitz UI off term-owned blocking loops where safe
+- preserve blitz behavior, prompts, and summary screens
+- isolate any remaining legacy blitz boundary clearly if a full migration is
+  too large for one slice
+
+Constraints:
+- do not edit unrelated metarun, bridge/core, or story files
+- preserve gameplay behavior and result flow
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what part of blitz remains term-owned after your change
 ```
 
 ## Guardrails

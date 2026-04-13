@@ -1,10 +1,13 @@
 #include "angband.h"
 #include "app/app-session.h"
+#include "app/app-ui.h"
 
 #include "blitz.h"
 #include "externs.h"
 #include "fs/path.h"
+#include "log/log.h"
 #include "metarun.h"
+#include "ui/ui-information-scene.h"
 
 static run_mode g_pending_run_mode = RUN_MODE_STORY;
 static run_mode g_current_run_mode = RUN_MODE_STORY;
@@ -20,6 +23,76 @@ static blitz_setup g_blitz_setup = {
 static int8_t g_blitz_curse_stacks[METAR_CURSE_SLOTS];
 static u64b g_blitz_curses_seen = 0;
 static bool g_blitz_end_summary_shown = false;
+
+static void blitz_format_end_summary_line(byte sil_count, char* buf, size_t len)
+{
+    if (!buf || !len)
+        return;
+
+    if (sil_count == 1)
+        SDL_strlcpy(buf, "1 Silmaril was stolen.", len);
+    else
+        strnfmt(buf, len, "%u Silmarils were stolen.", (unsigned)sil_count);
+}
+
+static bool blitz_build_end_summary_ui_scene(app_ui_scene* scene,
+    byte sil_count)
+{
+    app_ui_panel* panel;
+    char result_line[APP_UI_TEXT_MAX];
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 320, 560);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Result");
+
+    blitz_format_end_summary_line(sil_count, result_line, sizeof(result_line));
+    if (!app_ui_panel_add_body_line(panel, TERM_L_WHITE, result_line))
+        return false;
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true, "Any",
+        "Continue");
+}
+
+static bool blitz_show_end_summary_ui(byte sil_count)
+{
+    ui_information_scene_scope scope;
+    app_ui_scene scene;
+    app_session* session = app_session_current();
+
+    if (!ui_information_scene_supported())
+    {
+        log_warn("blitz summary: snapshot renderer required; legacy renderer removed");
+        msg_print("Blitz result summary requires the snapshot UI renderer.");
+        return false;
+    }
+
+    if (!session || !ui_information_scene_enter(&scope))
+        return false;
+
+    if (!blitz_build_end_summary_ui_scene(&scene, sil_count)
+        || !ui_information_scene_present_ui(&scene))
+    {
+        ui_information_scene_leave(&scope);
+        log_warn("blitz summary: semantic scene presentation failed");
+        msg_print("Blitz result summary unavailable.");
+        return false;
+    }
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    app_session_clear_inputs(session);
+    ui_information_scene_leave(&scope);
+    return true;
+}
 
 int8_t* active_curse_stacks(void)
 {
@@ -168,42 +241,9 @@ void blitz_runtime_restore(const int8_t* stacks, u64b seen)
 
 void blitz_show_end_summary(byte sil_count)
 {
-    int wid = 80;
-    int hgt = 24;
-    int row = 4;
-    char result_line[64];
-
     if (g_blitz_end_summary_shown)
         return;
 
     g_blitz_end_summary_shown = true;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-
-    screen_save();
-    Term_clear();
-
-    c_put_str(TERM_YELLOW, "Blitz Result", 1, MAX((wid - 12) / 2, 0));
-
-    if (sil_count == 1)
-        SDL_strlcpy(result_line, "1 Silmaril was stolen.", sizeof(result_line));
-    else
-        strnfmt(result_line, sizeof(result_line), "%u Silmarils were stolen.",
-            (unsigned)sil_count);
-
-    c_put_str(TERM_L_WHITE, result_line, row, MAX((wid - (int)strlen(result_line)) / 2, 0));
-    c_put_str(TERM_L_BLUE, "Press any key to continue.", MIN(row + 3, hgt - 1), 2);
-    Term_fresh();
-    {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-        (void)inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
-    }
-    screen_load();
+    (void)blitz_show_end_summary_ui(sil_count);
 }

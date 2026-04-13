@@ -1155,8 +1155,9 @@ void show_equip(void)
 /*
  * Display a list of the items on the floor at the given location.
  *
- * This is still needed for classic fallback item selection. Snapshot-aware
- * floor selection publishes its own semantic overlay scene.
+ * This is the floor-list renderer for the classic get_item() fallback only.
+ * Snapshot-aware floor selection and item-side workflows keep ownership in the
+ * semantic selector paths instead of drawing directly through this helper.
  */
 void show_floor(const int* floor_list, int floor_num)
 {

@@ -21,15 +21,10 @@ typedef struct ui_information_scene_scope {
 bool ui_information_scene_supported(void);
 bool ui_information_scene_set_refresh_enabled(bool enabled);
 bool ui_information_scene_enter(ui_information_scene_scope* scope);
-bool ui_information_scene_capture_term(app_information_scene* scene);
-bool ui_information_scene_present(const app_information_scene* scene);
-bool ui_information_scene_present_document(
-    const app_information_scene* scene);
 bool ui_information_scene_present_ui(const app_ui_scene* scene);
 bool ui_information_scene_show_monster_recall(int r_idx,
     const monster_type* m_ptr, cptr prompt, bool overlay_dungeon,
     int* out_key);
-bool ui_information_scene_present_term(void);
 int ui_information_scene_wait_key(void);
 int ui_information_scene_wait_key_nonrepeat(void);
 bool ui_information_scene_is_active(void);

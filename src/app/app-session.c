@@ -163,12 +163,18 @@ static void app_session_sync_information_blob(app_session* session)
         return;
 
     session->information_snapshot.snapshot.scene = APP_SCENE_KIND_INFORMATION;
-    session->information_snapshot.snapshot.blobs = session->information_snapshot.blobs;
-    session->information_snapshot.snapshot.blob_count = N_ELEMENTS(session->information_snapshot.blobs);
-    session->information_snapshot.blobs[0].kind = APP_SNAPSHOT_BLOB_INFORMATION;
-    session->information_snapshot.blobs[0].format_version = APP_INFORMATION_FORMAT_VERSION;
-    session->information_snapshot.blobs[0].data = (const byte*)&session->information_snapshot.scene;
-    session->information_snapshot.blobs[0].size = sizeof(session->information_snapshot.scene);
+    session->information_snapshot.snapshot.blobs
+        = session->information_snapshot.blobs;
+    session->information_snapshot.snapshot.blob_count
+        = N_ELEMENTS(session->information_snapshot.blobs);
+    session->information_snapshot.blobs[0].kind
+        = APP_SNAPSHOT_BLOB_INFORMATION;
+    session->information_snapshot.blobs[0].format_version
+        = APP_INFORMATION_FORMAT_VERSION;
+    session->information_snapshot.blobs[0].data
+        = (const byte*)&session->information_snapshot.scene;
+    session->information_snapshot.blobs[0].size
+        = sizeof(session->information_snapshot.scene);
 }
 
 static void app_session_sync_bootstrap_blob(app_session* session)

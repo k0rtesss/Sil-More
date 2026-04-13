@@ -1,11 +1,11 @@
-/* --------------------------------------------------------------------
- *  src/metarun.c   (2025-07-06)   – final, crash-free, warning-free
+﻿/* --------------------------------------------------------------------
+ *  src/metarun.c   (2025-07-06)   â€“ final, crash-free, warning-free
  * --------------------------------------------------------------------
- *  Tracks a “meta-run” that ends after 15 Silmarils (win) or
+ *  Tracks a â€œmeta-runâ€ that ends after 15 Silmarils (win) or
  *  15 deaths (lose).  Finished runs are appended to meta.raw so
  *  the entire history is preserved.  Includes:
- *     • list_metaruns()  – compact history view
- *     • print_metarun_stats() – details for current run
+ *     â€¢ list_metaruns()  â€“ compact history view
+ *     â€¢ print_metarun_stats() â€“ details for current run
  * -------------------------------------------------------------------- */
 
 #ifndef WINDOWS
@@ -1123,16 +1123,28 @@ static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
 static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     byte title_attr, const char* title, byte subtitle_attr,
     const char* subtitle);
+static app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
+    byte title_attr, const char* title);
 static void metarun_ui_clear_pending_input(void);
 static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
     const char* text);
+static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
+    app_ui_panel* panel, const char* const* paragraphs, const byte* attrs,
+    int paragraph_count);
 static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id);
 static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label);
+static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
+    const char* const* paragraphs, const byte* attrs, int paragraph_count,
+    bool steamdeck, const char* accept_label, const char* action_label);
 static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label, const char* back_label);
+static cptr metarun_curse_choice_label(int n);
+static int metarun_ui_choose_curse_scene(int n,
+    const int picks[CURSE_MENU_LINES], bool steamdeck,
+    const char* accept_label);
 static void metarun_log_blessing_key(const char* context, int mode, int key);
 /* =======================  load / save  ========================= */
 
@@ -1624,7 +1636,7 @@ errr load_metaruns(bool create_if_missing)
 
 /* ------------------------------------------------------------------ *
  *  Safely write the meta-run array.  Bail out if the indices look     *
- *  wrong – avoids dereferencing a freed/reallocated block.           *
+ *  wrong â€“ avoids dereferencing a freed/reallocated block.           *
  * ------------------------------------------------------------------ */
 static errr backup_file(const char *filepath)
 {
@@ -2072,18 +2084,18 @@ static int weighted_random_curse(void)
     bool tilt = (p_info[p_ptr->prace].flags  & RHF_CURSE) ||
                 (c_info[p_ptr->pcharacter].flags & RHF_CURSE);
 
-    /* Pass 1 – find the largest weight and (later) build the total */
+    /* Pass 1 â€“ find the largest weight and (later) build the total */
     for (int i = 0; i < z_info->cu_max; i++)
     {
-        if (!cu_info[i].name) continue;          /* ← unused slot */
+        if (!cu_info[i].name) continue;          /* â† unused slot */
         byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
         if (w > w_max) w_max = w;
     }
 
-    /* Pass 2 — sum effective weights */
+    /* Pass 2 â€” sum effective weights */
     for (int i = 0; i < z_info->cu_max; i++)
     {
-        if (!cu_info[i].name) continue;          /* ← unused slot */
+        if (!cu_info[i].name) continue;          /* â† unused slot */
         byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
         int  cnt = CURSE_CURSE_STACK(i);
         byte cap = (byte)CURSE_CURSE_CAP(i);
@@ -2101,11 +2113,11 @@ static int weighted_random_curse(void)
 
     if (!total) return rng_int(z_info->cu_max);    /* safety net */
 
-    /* Pass 3 — roulette wheel */
+    /* Pass 3 â€” roulette wheel */
     long pick = rng_int(total), run = 0;
     for (int i = 0; i < z_info->cu_max; i++)
     {
-        if (!cu_info[i].name) continue;          /* ← unused slot */
+        if (!cu_info[i].name) continue;          /* â† unused slot */
         byte w   = cu_info[i].weight ? cu_info[i].weight : 1;
         int  cnt = CURSE_CURSE_STACK(i);
         byte cap = (byte)CURSE_CURSE_CAP(i);
@@ -2141,13 +2153,27 @@ void add_curse_stack(int idx)
     save_metaruns();
 }
 
+static cptr metarun_curse_choice_label(int n)
+{
+    switch (n) {
+        case 1: return "the second";
+        case 2: return "the third";
+        case 3: return "the fourth";
+        default: return "a";
+    }
+}
+
 int menu_choose_one_curse(int n)
 {
-    /* if any active curse has the "no‐choice" flag, skip the menu */
+    /* if any active curse has the "noâ€choice" flag, skip the menu */
     if (any_curse_flag_active(CUR_NOCHOICE))
         return weighted_random_curse();
 
-    int pick[CURSE_MENU_LINES], sel;
+    int pick[CURSE_MENU_LINES];
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    ui_information_scene_scope info_scope;
+    bool owns_info_scene = false;
 
     for (int i = 0; i < CURSE_MENU_LINES; i++) {
         bool dup;
@@ -2163,185 +2189,34 @@ int menu_choose_one_curse(int n)
         } while (dup);
     }
 
-    screen_save();  Term_clear();
-    
-    /* Fade in the title */
-    char str[60];
-    const char* seq[] = { "a", "the second", "the third" };
-    strnfmt(str, sizeof(str), "Dark powers demand their price - choose %s curse:", seq[n]);
-    print_heading_fade(str, TERM_YELLOW);
-
-    /* dynamic vertical layout – ask util.c to count wrapped lines   */
-    int row = 4;                                     /* first free row */
-    text_out_hook = text_out_to_screen;
-    text_out_wrap = Term->wid - 2;                   /* full width     */
-
-    /* Show each curse one by one with fade-in effect */
-    bool fast_forward = false;
-    
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        curse_type *cu = &cu_info[pick[i]];
-        char name_buf[128];
-        strnfmt(name_buf, sizeof name_buf, "%c) %s", 'a'+i, cu_name + cu->name);
-        
-        const char *txt = cu_text + cu->text;
-        int need_lines = count_wrapped_lines(txt, text_out_wrap, 4);
-        
-#ifdef DEBUG_CURSES
-        const char *pow = cu_text + cu->power;
-        int need_pow_lines = 0;
-        if (*pow) {
-            need_pow_lines = count_wrapped_lines(pow, text_out_wrap, 4);
-        }
-#endif
-
-        /* Fade in all text for this curse simultaneously */
-        const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE };
-        const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-
-        for (int s = 0; s < steps && !fast_forward; s++)
-        {
-            /* Check for ESC key to skip fade */
-            char ch;
-            if (Term_inkey(&ch, false, false) == 0 && ch == ESCAPE)
-            {
-                fast_forward = true;
-                break;
-            }
-
-            /* Name line */
-            c_put_str(s == steps - 1 ? TERM_L_RED : fade_cols[s], name_buf, row, 2);
-            
-            /* Poem text */
-            Term_gotoxy(4, row + 2);
-            text_out_c(s == steps - 1 ? TERM_SLATE : fade_cols[s], txt);
-
-#ifdef DEBUG_CURSES
-            /* Power text if present */
-            if (*pow) {
-                Term_gotoxy(4, row + need_lines + 2);
-                text_out_c(s == steps - 1 ? TERM_L_RED : fade_cols[s], pow);
-            }
-#endif
-            
-            Term_fresh();
-            Term_xtra(TERM_XTRA_DELAY, 200);
-        }
-
-        /* If fade was interrupted, show final state immediately */
-        if (fast_forward) {
-            c_put_str(TERM_L_RED, name_buf, row, 2);
-            Term_gotoxy(4, row + 2);
-            text_out_c(TERM_SLATE, txt);
-
-#ifdef DEBUG_CURSES
-            if (*pow) {
-                Term_gotoxy(4, row + need_lines + 2);
-                text_out_c(TERM_L_RED, pow);
-            }
-#endif
-        }
-
-        /* Move to next curse position */
-#ifdef DEBUG_CURSES
-        if (*pow)
-            row += need_lines + need_pow_lines + 3;
-        else
-#endif
-            row += need_lines + 3;
-
-        /* 1 second delay between curses (except for the last one) */
-        if (i < CURSE_MENU_LINES - 1) {
-            Term_xtra(TERM_XTRA_DELAY, 1000);
-        }
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+    if (!ui_information_scene_is_active())
+        owns_info_scene = ui_information_scene_enter(&info_scope);
+    if (!ui_information_scene_is_active()) {
+        log_error("menu_choose_one_curse: semantic scene unavailable; defaulting to first option");
+        return pick[0];
     }
 
-    /* Show the prompt immediately without fade */
-    c_put_str(TERM_L_DARK, "Arrows to navigate     Space/Enter Accept     a/b/c Select", row + 1, 2);
-    
-    /* Menu navigation variables */
-    int highlight = 0;  /* Currently highlighted option (0, 1, 2) */
-    bool menu_done = false;
-    int option_rows[CURSE_MENU_LINES];  /* Store the row for each option */
-    
-    /* Calculate row positions for each option */
-    int calc_row = 4;
-    for (int i = 0; i < CURSE_MENU_LINES; i++) {
-        option_rows[i] = calc_row;
-        curse_type *cu = &cu_info[pick[i]];
-        const char *txt = cu_text + cu->text;
-        int need_lines = count_wrapped_lines(txt, text_out_wrap, 4);
-        calc_row += need_lines + 3;
+    {
+        int semantic_choice = metarun_ui_choose_curse_scene(n, pick, steamdeck,
+            accept_label);
+
+        if (owns_info_scene)
+            ui_information_scene_leave(&info_scope);
+        if (semantic_choice >= 0)
+            return semantic_choice;
     }
-    
-    while (!menu_done) {
-        /* Ensure text output settings are consistent */
-        text_out_hook = text_out_to_screen;
-        text_out_wrap = Term->wid - 2;
-        
-        /* Update highlight display for each option */
-        for (int i = 0; i < CURSE_MENU_LINES; i++) {
-            curse_type *cu = &cu_info[pick[i]];
-            char name_buf[128];
-            strnfmt(name_buf, sizeof name_buf, "%c) %s", 'a'+i, cu_name + cu->name);
-            
-            /* Clear the line first to remove any previous highlighting */
-            Term_erase(2, option_rows[i], strlen(name_buf));
-            
-            /* Display the option with highlighting */
-            if (i == highlight) {
-                c_put_str(TERM_RED, name_buf, option_rows[i], 2);     /* Highlighted - red */
-            } else {
-                c_put_str(TERM_L_RED, name_buf, option_rows[i], 2);   /* Normal - light red */
-            }
-        }
-        
-        /* Position cursor at the end of the highlighted option text */
-        curse_type *highlighted_cu = &cu_info[pick[highlight]];
-        char highlighted_name_buf[128];
-        strnfmt(highlighted_name_buf, sizeof highlighted_name_buf, "%c) %s", 'a'+highlight, cu_name + highlighted_cu->name);
-        int cursor_col = 2 + strlen(highlighted_name_buf);
-        Term_gotoxy(cursor_col, option_rows[highlight]);
-        Term_fresh();
-        char key = inkey();
-        
-        /* Handle input */
-        if (key >= 'a' && key < 'a' + CURSE_MENU_LINES) {
-            /* Letter shortcuts */
-            sel = key - 'a';
-            menu_done = true;
-        }
-        else if (key >= 'A' && key < 'A' + CURSE_MENU_LINES) {
-            /* Capital letter shortcuts */
-            sel = key - 'A';
-            menu_done = true;
-        }
-        else if (key == '\r' || key == '\n' || key == ' ' || key == '6') {
-            /* Enter, Space, or numpad 6 - select current highlight */
-            sel = highlight;
-            menu_done = true;
-        }
-        else if (key == '8' || key == 'k') {
-            /* Up navigation */
-            highlight = (highlight + CURSE_MENU_LINES - 1) % CURSE_MENU_LINES;
-        }
-        else if (key == '2' || key == 'j') {
-            /* Down navigation */
-            highlight = (highlight + 1) % CURSE_MENU_LINES;
-        }
-        else if (key == ESCAPE) {
-            /* Escape - default to first option */
-            sel = 0;
-            menu_done = true;
-        }
-    }
-    screen_load();
-    return pick[sel];
+
+    log_error("menu_choose_one_curse: semantic scene failed; defaulting to first option");
+    return pick[0];
 }
 
 
 /* ------------------------------------------------------------------ *
- *  Debug helper – wipe every active curse for the current meta-run.  *
+ *  Debug helper â€“ wipe every active curse for the current meta-run.  *
  * ------------------------------------------------------------------ */
 void metarun_clear_all_curses(void)
 {
@@ -2363,25 +2238,25 @@ void metarun_clear_all_curses(void)
  *  Main entry point used by game exits, deaths, escapes, etc.        *
  * ------------------------------------------------------------------ */
 /*
- * Metarun narrative & exit logic - refactor **v4** (30 Jul 2025)
+ * Metarun narrative & exit logic - refactor **v4** (30â€¯Julâ€¯2025)
  * ------------------------------------------------------------------
- *  ✧ Re‑orders the sequence so NOTHING is overwritten:
- *      0. Escape‑curse chooser (UI)  → clears screen once finished.
- *      1. Chosen‑curse line(s).
- *      2. Victory banner & Silmaril count paragraph.
- *      3. Temptation of Treachery (escalating 1‑3 lines).
- *      4. Story Fragment (depends on Silmarils & Treachery flag).
- *      5. Echoes of Kinslaying (escalating 1‑3 lines)
- *      6. Final pause, then deferred side‑effects.
+ *  âœ§Â Reâ€‘orders the sequence so NOTHING is overwritten:
+ *      0.Â Escapeâ€‘curse chooser (UI)  â†’ clears screen once finished.
+ *      1.Â Chosenâ€‘curse line(s).
+ *      2.Â Victoryâ€¯banner & Silmaril count paragraph.
+ *      3.Â TemptationÂ ofÂ Treachery (escalating 1â€‘3 lines).
+ *      4.Â StoryÂ Fragment (depends on Silmarils & Treachery flag).
+ *      5.Â EchoesÂ ofÂ Kinslaying (escalating 1â€‘3 lines)
+ *      6.Â Final pause, then deferred sideâ€‘effects.
  *
- *  ✧ `choose_escape_curses_ui()` now **returns** the indices chosen and
- *    does NOT leave the menu clutter on screen. We re‑render the
- *    “The curse of X binds your fate.” lines after a clean clear.
+ *  âœ§Â `choose_escape_curses_ui()` now **returns** the indices chosen and
+ *    does NOT leave the menu clutter on screen. We reâ€‘render the
+ *    â€œThe curse of X binds your fate.â€ lines after a clean clear.
  *
- *  ✧ Adds `print_story_fragment()` – a short narrative bridge keyed off
- *    Silmaril count (1‑3) and whether treachery was overcome.
+ *  âœ§Â Adds `print_story_fragment()` â€“ a short narrative bridge keyed off
+ *    Silmaril count (1â€‘3) and whether treachery was overcome.
  *
- *  ✧ Tested matrix: {treachery flag × kinslayer flag × silmarils (1‑3)}
+ *  âœ§Â Tested matrix: {treachery flagâ€¯Ã—â€¯kinslayer flagâ€¯Ã—â€¯silmarils (1â€‘3)}
  *    All show in the intended order with no garbled overlaps.
  */
 
@@ -2504,7 +2379,7 @@ static cptr blessing_display_name(int idx)
     return curse_display_name(idx);
 }
 
-/****************  Escape‑curse chooser (clean version) ************/
+/****************  Escapeâ€‘curse chooser (clean version) ************/
 
 /*
  * Presents the menu *n* times (or once if CUR_NOCHOICE). Returns the
@@ -2515,44 +2390,48 @@ int choose_escape_curses_ui(int n, int out[4])
 {
     // int rolls = any_curse_flag_active(CUR_NOCHOICE) ? 1 : n;
     int taken = 0;
-    bool fast_forward = false;
-
-    /* Display intro with fade-in effect */
-    screen_save();
-    Term_clear();
-    
-    print_heading_fade("The Valar's Judgment", TERM_L_BLUE);
-    
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
     char intro_text[512];
+
     strnfmt(intro_text, sizeof(intro_text),
             "The Valar watch silently as Morgoth's malice reaches out from shadow-"
             "Your triumph has drawn his wrath. His dark will twists fate, "
             "forcing upon you the final choice-%s curse%s you must bear.",
             (n == 1) ? "a" : (n == 2) ? "two" : (n == 3) ? "three" : "four",
             (n == 1) ? "" : "s");
-    
-    if (!print_paragraph_fade(intro_text, TERM_L_WHITE, 4))
-        fast_forward = true;
-    
-    wait_for_keypress_with_prompt("[Press any key to face your destiny]");
-    Term_clear();
+
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+    if (use_information_scene) {
+        const char* paragraphs[] = { intro_text };
+        const byte attrs[] = { TERM_WHITE };
+
+        if (!metarun_ui_show_story_modal("The Valar's Judgment", TERM_L_BLUE,
+                paragraphs, attrs, 1, steamdeck, accept_label, "Continue"))
+        {
+            ui_information_scene_leave(&info_scope);
+            use_information_scene = false;
+        }
+    } else {
+        log_error("choose_escape_curses_ui: semantic story scene unavailable; continuing without intro modal");
+    }
 
     for (int i = 0; i < n; i++)
     {
         int idx = menu_choose_one_curse(i);   /* weighted picker, UI */
         log_debug("Player selected curse %d: %s", idx, cu_name + cu_info[idx].name);
-        add_curse_stack(idx);                /* gameplay side‑effect */
+        add_curse_stack(idx);                /* gameplay sideâ€‘effect */
         if (taken < 4) out[taken++] = idx;
     }
 
-    /* Wipe the menu clutter so narrative starts clean */
-    Term_clear();
-    
-    /* Restore screen state to fix character_icky imbalance */
-    screen_load();
-    
-    /* Avoid unused variable warning */
-    (void)fast_forward;
+    if (use_information_scene) {
+        ui_information_scene_leave(&info_scope);
+    }
     
     return taken;
 }
@@ -2566,68 +2445,58 @@ int choose_escape_curses_ui(int n, int out[4])
  */
 int choose_oath_breaking_curse_ui(int oath_id)
 {
-    bool fast_forward = false;
-    
-    /* Display curse message with fade-in effect */
-    screen_save();
-    Term_clear();
-    
-    /* Add Tolkien-style heading */
-    print_heading_fade("The Sundering of Sacred Vows", TERM_L_RED);
-    
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
+
     /* Get oath-specific permanent message (E: field from oath.txt) */
     char* perm_msg = oath_permanent_message(oath_id);
-    
-    /* Add empty line before E: text */
-    Term_putstr(2, 4, -1, TERM_SLATE, "");
-    
-    /* Show only the permanent message (E: field) with fade */
-    if (perm_msg && perm_msg[0]) {
-        if (!print_paragraph_fade(perm_msg, TERM_L_RED, 5))
-            fast_forward = true;
-    } else {
-        if (!print_paragraph_fade("Your oath is forever broken in this age.", TERM_L_RED, 5))
-            fast_forward = true;
-    }
-    
-    /* Hold the message for 3 seconds if not fast-forwarded */
-    if (!fast_forward) {
-        Term_xtra(TERM_XTRA_DELAY, 3000);
-    }
-    
-    /* Add empty line before attention text */
-    Term_putstr(2, 8, -1, TERM_SLATE, "");
-    
-    /* Show Morgoth's attention text with fade in red */
     char intro_text[256];
     strnfmt(intro_text, sizeof(intro_text),
             "The breach of your sacred vow has drawn Morgoth's attention. "
             "His malice reaches out to compound your suffering with a curse you must bear.");
-    
-    if (!print_paragraph_fade(intro_text, TERM_RED, 9))
-        fast_forward = true;
-    
-    wait_for_keypress_with_prompt("[Press any key to face your judgment]");
-    Term_clear();
+
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+    if (use_information_scene) {
+        const char* first_paragraphs[] = {
+            (perm_msg && perm_msg[0]) ? perm_msg
+                : "Your oath is forever broken in this age."
+        };
+        const byte first_attrs[] = { TERM_L_RED };
+        const char* second_paragraphs[] = { intro_text };
+        const byte second_attrs[] = { TERM_RED };
+
+        if (!metarun_ui_show_story_modal("The Sundering of Sacred Vows",
+                TERM_L_RED, first_paragraphs, first_attrs, 1, steamdeck,
+                accept_label, "Continue")
+            || !metarun_ui_show_story_modal("The Sundering of Sacred Vows",
+                TERM_L_RED, second_paragraphs, second_attrs, 1, steamdeck,
+                accept_label, "Choose"))
+        {
+            ui_information_scene_leave(&info_scope);
+            use_information_scene = false;
+        }
+    } else {
+        log_error("choose_oath_breaking_curse_ui: semantic story scene unavailable; continuing without oath modal");
+    }
 
     /* Let the player choose 1 curse from 3 options */
     int idx = menu_choose_one_curse(0);
     log_debug("Player selected curse %d for oath breaking", idx);
-    
-    /* Wipe the menu clutter so narrative starts clean */
-    Term_clear();
-    
-    /* Restore screen state */
-    screen_load();
-    
-    /* Avoid unused variable warning */
-    (void)fast_forward;
+
+    if (use_information_scene) {
+        ui_information_scene_leave(&info_scope);
+    }
     
     return idx;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Standard “Press any key…” prompts – use enum, not raw strings     */
+/*  Standard â€œPress any keyâ€¦â€ prompts â€“ use enum, not raw strings     */
 /* ------------------------------------------------------------------ */
 typedef enum {
     PROMPT_CONTINUE_TALE,
@@ -3111,16 +2980,16 @@ static void resolve_nienia_pacifist_quest_on_exit(bool died, bool escaped)
 }
 
 /* ------------------------------------------------------------------
- * metarun_update_on_exit() – v5, 30 Jul 2025
+ * metarun_update_on_exit() â€“ v5, 30â€¯Julâ€¯2025
  * ------------------------------------------------------------------
  * Implements the finalised story/logic flow discussed in chat:
- *   0.  Escape check (silmarils? gift‑of‑Eru?)
- *   1.  Escape‑curse chooser UI
+ *   0.  Escape check (silmarils? giftâ€‘ofâ€‘Eru?)
+ *   1.  Escapeâ€‘curse chooser UI
  *   2.  Victory banner & Silmaril paragraph
- *   3.  Temptation of Treachery (3 rolls – stolen Silmarils don't count)
- *   4.  Story Fragment (pure vs tainted, 1‑3 jewels)
+ *   3.  Temptation of Treachery (3 rolls â€“ stolen Silmarils don't count)
+ *   4.  Story Fragment (pure vs tainted, 1â€‘3 jewels)
  *   5.  Echoes of Kinslaying / "Kill a Kin" (stop at first kill)
- *   6.  Final pause → apply deferred effects
+ *   6.  Final pause â†’ apply deferred effects
  *   7.  Persist silmaril/death counters, check run end, save
  *
  *  All narrative helpers (print_heading(), print_paragraph(),
@@ -3191,28 +3060,41 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
     /* ------------------------------------------------------------- */
     /* 0. Branch: did we return with Silmarils?                      */
-    /*    – any path that reaches here counts as a "run end" event  */
+    /*    â€“ any path that reaches here counts as a "run end" event  */
     /* ------------------------------------------------------------- */
     if (morgoth_victory)
     {
-        log_info("Metarun: Morgoth victory branch (sil_count=%d)", sil_count);
-        screen_save();
-        Term_clear();
-
-        print_heading_fade("Beyond Fate", TERM_YELLOW);
-        print_paragraph_fade(
+        bool steamdeck = steamdeck_controls_active();
+        char accept_label[16] = "";
+        ui_information_scene_scope info_scope;
+        bool use_information_scene;
+        const char* paragraphs[] = {
             "The illusion of Morgoth lies shattered at your feet.",
-            TERM_WHITE, 4);
-        print_paragraph_fade(
             "From Valinor, the Valar proclaim your impossible triumph and pour out their blessing.",
-            TERM_L_BLUE, 7);
-        print_paragraph_fade(
-            "Though the true Dark Enemy waits beyond this trial, three Silmarils are counted to your name.",
-            TERM_L_BLUE, 10);
+            "Though the true Dark Enemy waits beyond this trial, three Silmarils are counted to your name."
+        };
+        const byte attrs[] = { TERM_WHITE, TERM_L_BLUE, TERM_L_BLUE };
 
-        wait_prompt(PROMPT_CONTINUE_TALE);
-
-        screen_load();
+        log_info("Metarun: Morgoth victory branch (sil_count=%d)", sil_count);
+        if (steamdeck) {
+            metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+                sizeof(accept_label));
+        }
+        use_information_scene = ui_information_scene_enter(&info_scope);
+        if (use_information_scene) {
+            if (!metarun_ui_show_story_modal("Beyond Fate", TERM_YELLOW,
+                    paragraphs, attrs, (int)N_ELEMENTS(paragraphs), steamdeck,
+                    accept_label, "Continue"))
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+            }
+        } else {
+            log_error("metarun_update_on_exit: semantic Morgoth-victory scene unavailable");
+        }
+        if (use_information_scene) {
+            ui_information_scene_leave(&info_scope);
+        }
 
         if (challenge_disconnected) {
             metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
@@ -3260,10 +3142,21 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     }
     else if (died)
     {
+        bool steamdeck = steamdeck_controls_active();
+        char accept_label[16] = "";
+        ui_information_scene_scope info_scope;
+        bool use_information_scene;
+
         log_info("Player died - displaying death narrative");
         /*****  NEW DEATH-NARRATIVE *****/
-        screen_save();
-        Term_clear();
+        if (steamdeck) {
+            metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+                sizeof(accept_label));
+        }
+        use_information_scene = ui_information_scene_enter(&info_scope);
+        if (!use_information_scene) {
+            log_error("metarun_update_on_exit: semantic death scene unavailable");
+        }
 
         /* Pick correct sequence number: 0 when Gift-of-Eru fires,
          * otherwise 1-based death counter that was just incremented. */
@@ -3273,7 +3166,8 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         int *pool = mem_alloc_array(z_info->st_max, int);
         int pool_sz = 0;
         if (!pool) {
-            screen_load();                 /* restore game view            */
+            if (use_information_scene)
+                ui_information_scene_leave(&info_scope);
             u32b pool_before = metar.fallen_score_total;
             refresh_current_metar_score();
             compute_blessing_pool();
@@ -3291,14 +3185,14 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         for (int i = 0; i < z_info->st_max && pool; i++) {
             story_type *st = &st_info[i];
             if (!st->name)            continue;                /* unused slot   */
-            if (st->st_type != 1)     continue;                /* not “death”   */
+            if (st->st_type != 1)     continue;                /* not â€œdeathâ€   */
             if (st->order != target_order) continue;           /* wrong order   */
             if (st->runtypes &&
                !(st->runtypes & (1u << metar.type))) continue; /* wrong run-type*/
             pool[pool_sz++] = i;
         }
 
-        /* Fallback – allow any order-0 message if nothing matched.   */
+        /* Fallback â€“ allow any order-0 message if nothing matched.   */
         if (!pool_sz && target_order) {
             for (int i = 0; i < z_info->st_max && pool; i++) {
                 story_type *st = &st_info[i];
@@ -3315,23 +3209,28 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
             story_type *pick = &st_info[ pool[rng_int(pool_sz)] ];
             cptr title = st_name + pick->name;
             cptr text  = st_text + pick->text;
-
-            print_heading_fade(title, TERM_RED);
-            print_paragraph_fade(text, TERM_WHITE, 4);
-
             char transition_text[256];
+
             strnfmt(transition_text, sizeof(transition_text),
                     "The hero whose mantle you took has fallen, their tale ends in shadow. "
                     "Yet your spirit returns, for the Valar's trial is not yet complete.");
 
-            if (!fast_forward && !print_paragraph_fade(transition_text, TERM_L_BLUE, 8))
-                fast_forward = true;
-            else if (fast_forward)
-                print_paragraph(transition_text, TERM_L_BLUE);
-            wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
+            if (use_information_scene) {
+                const char* paragraphs[] = { text, transition_text };
+                const byte attrs[] = { TERM_WHITE, TERM_L_BLUE };
+
+                if (!metarun_ui_show_story_modal(title, TERM_RED, paragraphs,
+                        attrs, 2, steamdeck, accept_label, "Return"))
+                {
+                    ui_information_scene_leave(&info_scope);
+                    use_information_scene = false;
+                    log_error("metarun_update_on_exit: failed to publish death narrative scene");
+                }
+            }
         }
 
-        screen_load();                 /* restore game view            */
+        if (use_information_scene)
+            ui_information_scene_leave(&info_scope);
         pool = mem_free(pool);
         u32b pool_before = metar.fallen_score_total;
         refresh_current_metar_score();
@@ -3358,7 +3257,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     }
 
     /* ------------------------------------------------------------- */
-    /*        Enhanced Narrative Path – escaped with ≥1 Silmaril     */
+    /*        Enhanced Narrative Path â€“ escaped with â‰¥1 Silmaril     */
     /* ------------------------------------------------------------- */
     log_info("Player escaped with %d Silmarils - displaying victory narrative", sil_count);
     screen_save();
@@ -3541,7 +3440,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
         for (int k = 0; k < sil_count; ++k)
         {
-            /* One roll only – use kin_pct[] here and *skip* the roll
+            /* One roll only â€“ use kin_pct[] here and *skip* the roll
              * inside kinslayer_try_kill() later.                        */
             /* one-shot probability (keep a local alias for UI)        */
             bool fail = (rand_int(100) < kin_pct[k]);
@@ -3662,7 +3561,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 
         wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
     } else {
-        /* no kinslaying scene – still give one clean exit prompt   */
+        /* no kinslaying scene â€“ still give one clean exit prompt   */
         wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
     }
 
@@ -3760,52 +3659,85 @@ void check_run_end(void)
 
     /* Loss takes precedence over victory */
     if (alive < required_survivors) {
+        bool steamdeck = steamdeck_controls_active();
+        char accept_label[16] = "";
+        ui_information_scene_scope info_scope;
+        bool use_information_scene;
+        char defeat_text[256];
+
         log_info("Metarun DEFEAT: alive=%d required=%d (remaining silmarils=%d)",
                  alive, required_survivors, remaining_silmarils);
-
-        screen_save();
-        Term_clear();
-
-        print_heading_fade("The Trial's End", TERM_RED);
-
-        char defeat_text[256];
         strnfmt(defeat_text, sizeof defeat_text,
                 "Only %d hero%s remain, yet %d must endure to reclaim the remaining Silmarils. "
                 "This tale falls into shadow; begin anew to kindle hope once more.",
                 alive, (alive == 1) ? "" : "es",
                 required_survivors);
+        if (steamdeck) {
+            metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+                sizeof(accept_label));
+        }
 
-        print_paragraph_fade(defeat_text, TERM_WHITE, 4);
+        use_information_scene = ui_information_scene_enter(&info_scope);
+        if (use_information_scene) {
+            const char* paragraphs[] = { defeat_text };
+            const byte attrs[] = { TERM_WHITE };
 
-        wait_for_keypress_with_prompt("[Press any key to begin anew]");
-        screen_load();
+            if (!metarun_ui_show_story_modal("The Trial's End", TERM_RED,
+                    paragraphs, attrs, 1, steamdeck, accept_label,
+                    "Begin Anew"))
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+            }
+        } else {
+            log_error("check_run_end: semantic defeat scene unavailable");
+        }
+        if (use_information_scene) {
+            ui_information_scene_leave(&info_scope);
+        }
 
         start_new_metarun();
         return;
     }
 
     if (metar.silmarils >= win_goal) {
-        log_info("Metarun VICTORY: %d Silmarils collected (goal: %d)", metar.silmarils, win_goal);
-        screen_save();
-        Term_clear();
-
-        print_heading_fade("The Trial's End", TERM_YELLOW);
-
+        bool steamdeck = steamdeck_controls_active();
+        char accept_label[16] = "";
+        ui_information_scene_scope info_scope;
+        bool use_information_scene;
         char victory_text[256];
+        const char *implementation_note = "(This final trial is yet to be implemented.)";
+
+        log_info("Metarun VICTORY: %d Silmarils collected (goal: %d)", metar.silmarils, win_goal);
         strnfmt(victory_text, sizeof victory_text,
                 "%d Silmarils reclaimed from Morgoth's crown! "
                 "Hope kindles anew; your long trial approaches its end. "
                 "Yet one final ordeal awaits: your ultimate destiny, "
                 "as your true self faces the Last Trial.",
                 win_goal);
+        if (steamdeck) {
+            metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+                sizeof(accept_label));
+        }
 
-        print_paragraph_fade(victory_text, TERM_L_GREEN, 4);
+        use_information_scene = ui_information_scene_enter(&info_scope);
+        if (use_information_scene) {
+            const char* paragraphs[] = { victory_text, implementation_note };
+            const byte attrs[] = { TERM_L_GREEN, TERM_L_DARK };
 
-        const char *implementation_note = "(This final trial is yet to be implemented.)";
-        print_paragraph_fade(implementation_note, TERM_L_DARK, 8);
-
-        wait_for_keypress_with_prompt("[Press any key to begin anew]");
-        screen_load();
+            if (!metarun_ui_show_story_modal("The Trial's End", TERM_YELLOW,
+                    paragraphs, attrs, 2, steamdeck, accept_label,
+                    "Begin Anew"))
+            {
+                ui_information_scene_leave(&info_scope);
+                use_information_scene = false;
+            }
+        } else {
+            log_error("check_run_end: semantic victory scene unavailable");
+        }
+        if (use_information_scene) {
+            ui_information_scene_leave(&info_scope);
+        }
 
         start_new_metarun();
     }
@@ -3900,7 +3832,7 @@ static void start_new_metarun(void)
     apply_difficulty_curses(&metar);
 
     /* Persist and prepare */
-    save_metaruns();      /* safe now that metaruns≠NULL */ 
+    save_metaruns();      /* safe now that metarunsâ‰ NULL */ 
     ensure_run_dir(&metar);
     log_info("New metarun %d created and initialized", metar.id);
 }
@@ -6701,6 +6633,26 @@ static app_ui_panel* metarun_ui_begin_modal_scene(app_ui_scene* scene,
     return panel;
 }
 
+static app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
+    byte title_attr, const char* title)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 720, 1180);
+    app_ui_panel_set_title(panel, title_attr, title ? title : "");
+    return panel;
+}
+
 static bool metarun_ui_add_wrapped_text_lines(app_ui_panel* panel, byte attr,
     const char* text, bool detail)
 {
@@ -6811,6 +6763,48 @@ static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
     return metarun_ui_add_wrapped_text_lines(panel, attr, text, true);
 }
 
+static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
+    app_ui_panel* panel, const char* const* paragraphs, const byte* attrs,
+    int paragraph_count)
+{
+    bool wrote_any = false;
+
+    if (!scene || !panel)
+        return false;
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+
+    for (int i = 0; i < paragraph_count; i++)
+    {
+        const char* text = paragraphs ? paragraphs[i] : NULL;
+        byte attr = attrs ? attrs[i] : TERM_WHITE;
+
+        if (!text || !text[0])
+            continue;
+        if (wrote_any
+            && !app_ui_panel_add_rich_text_ex(scene, panel, TERM_WHITE,
+                STORY_FLAG_USE, "\n\n"))
+        {
+            return false;
+        }
+        if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, STORY_FLAG_USE,
+                text))
+        {
+            return false;
+        }
+        wrote_any = true;
+    }
+
+    if (!wrote_any
+        && !app_ui_panel_add_rich_text_ex(scene, panel, TERM_WHITE,
+            STORY_FLAG_USE, " "))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 static void metarun_ui_clear_pending_input(void)
 {
     app_session* session = app_session_current();
@@ -6891,6 +6885,34 @@ static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
         }
     }
 
+    return true;
+}
+
+static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
+    const char* const* paragraphs, const byte* attrs, int paragraph_count,
+    bool steamdeck, const char* accept_label, const char* action_label)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+
+    panel = metarun_ui_begin_story_scene(&scene, title_attr, title);
+    if (!panel)
+        return false;
+    if (!metarun_ui_add_story_paragraphs(&scene, panel, paragraphs, attrs,
+            paragraph_count))
+    {
+        return false;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        steamdeck ? accept_label : "Any",
+        (action_label && action_label[0]) ? action_label : "Continue");
+
+    if (!ui_information_scene_present_ui(&scene))
+        return false;
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    metarun_ui_clear_pending_input();
     return true;
 }
 
@@ -6997,6 +7019,104 @@ static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
                 metarun_ui_clear_pending_input();
                 return false;
             }
+        }
+    }
+}
+
+static int metarun_ui_choose_curse_scene(int n,
+    const int picks[CURSE_MENU_LINES], bool steamdeck,
+    const char* accept_label)
+{
+    int selected = 0;
+    char subtitle[APP_UI_TEXT_MAX];
+
+    strnfmt(subtitle, sizeof(subtitle),
+        "Dark powers demand their price. Choose %s curse.",
+        metarun_curse_choice_label(n));
+
+    while (true)
+    {
+        app_ui_scene scene;
+        app_ui_panel* panel;
+        const curse_type* cu;
+        int key;
+
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "The Valar's Judgment", TERM_SLATE, subtitle);
+        if (!panel)
+            return -1;
+
+        (void)app_ui_panel_add_body_line(panel, TERM_L_DARK,
+            "Choose the curse you must bear.");
+
+        for (int i = 0; i < CURSE_MENU_LINES; i++)
+        {
+            char key_buf[APP_UI_KEY_MAX];
+
+            strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+            if (!app_ui_panel_add_row(panel, picks[i], TERM_L_RED, true,
+                    i == selected, key_buf,
+                    cu_name + cu_info[picks[i]].name, ""))
+            {
+                return -1;
+            }
+        }
+
+        cu = &cu_info[picks[selected]];
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected Curse");
+        if (!app_ui_panel_add_detail_line(panel, TERM_L_RED,
+                cu_name + cu->name))
+        {
+            return -1;
+        }
+        if (cu->text
+            && !metarun_ui_add_wrapped_detail_lines(panel, TERM_SLATE,
+                cu_text + cu->text))
+        {
+            return -1;
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Enter", "Accept");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        if (!steamdeck) {
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "A-C", "Select");
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+            return -1;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == '\r' || key == '\n' || key == ' '
+            || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+        {
+            metarun_ui_clear_pending_input();
+            return picks[selected];
+        }
+        if (key == '8' || key == 'k' || key == '-') {
+            selected = (selected + CURSE_MENU_LINES - 1) % CURSE_MENU_LINES;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+') {
+            selected = (selected + 1) % CURSE_MENU_LINES;
+            continue;
+        }
+        if (key == ESCAPE
+            || (steamdeck && key == steamdeck_back_key())
+            || (!steamdeck && (key == 'h' || key == 'H')))
+        {
+            metarun_ui_clear_pending_input();
+            return picks[0];
+        }
+        if (key >= 'a' && key < 'a' + CURSE_MENU_LINES) {
+            metarun_ui_clear_pending_input();
+            return picks[key - 'a'];
+        }
+        if (key >= 'A' && key < 'A' + CURSE_MENU_LINES) {
+            metarun_ui_clear_pending_input();
+            return picks[key - 'A'];
         }
     }
 }

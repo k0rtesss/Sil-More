@@ -527,6 +527,11 @@ void do_cmd_play_instrument(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    /*
+     * Selection stays upstream on get_item() / semantic snapshot selectors.
+     * This branch only owns the follow-up equip confirmation when the chosen
+     * horn is not already in the horn slot.
+     */
     if (o_ptr != &inventory[INVEN_HORN])
     {
         object_type* equipped = &inventory[INVEN_HORN];
@@ -658,6 +663,11 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    /*
+     * The staff choice is already resolved before we get here. Keep this path
+     * to the equip-or-replace confirmation only instead of growing a separate
+     * chooser loop for snapshot play.
+     */
     if (o_ptr->tval == TV_STAFF && o_ptr != &inventory[INVEN_STAFF])
     {
         object_type* wielded = &inventory[INVEN_STAFF];

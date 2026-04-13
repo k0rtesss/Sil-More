@@ -11,50 +11,11 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
-#include "platform-story-font.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include <math.h>
-
-static bool pickup_snapshot_active(void)
-{
-    return app_session_interactions_enabled(app_session_current());
-}
-
-static void pickup_preview_equipment_replacement(void)
-{
-    /*
-     * Snapshot mode keeps the live dungeon UI in place and the replacement
-     * prompt already names both items, so only the legacy term path redraws
-     * the full equipment list here.
-     */
-    if (pickup_snapshot_active())
-        return;
-
-    screen_save();
-    show_equip();
-    msg_print(NULL);
-    screen_load();
-}
-
-static void pickup_prepare_legacy_replacement_prompt(bool preview_equipment)
-{
-    /*
-     * Snapshot selectors own their own semantic overlay loop, so keep the
-     * legacy story-font and equipment-preview preparation fenced to the old
-     * term-overlay fallback only.
-     */
-    if (pickup_snapshot_active())
-        return;
-
-    if (sdl_is_story_font_enabled())
-        sdl_story_font_disable();
-
-    if (preview_equipment)
-        pickup_preview_equipment_replacement();
-}
 
 void give_player_item(object_type * o_ptr)
 {
@@ -229,8 +190,6 @@ static bool prompt_replace_pack_item(const object_type* incoming)
     char incoming_name[80];
     char prompt[160];
 
-    pickup_prepare_legacy_replacement_prompt(false);
-
     object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
     msg_format("No room for %s.", incoming_name);
     msg_print("Choose an item to replace.");
@@ -270,6 +229,18 @@ static bool prompt_replace_pack_item(const object_type* incoming)
         return true;
     }
 }
+
+typedef enum
+{
+    PICKUP_FAILURE_ABORT = 0,
+    PICKUP_FAILURE_RETRY,
+    PICKUP_FAILURE_EQUIPPED
+} pickup_failure_result;
+
+static pickup_failure_result resolve_pickup_failure(object_type* incoming,
+                                                    int floor_o_idx,
+                                                    const char* incoming_name,
+                                                    bool attempted_replacement);
 
 /*
  * Helper routine for py_pickup() and py_pickup_floor().
@@ -363,6 +334,168 @@ void py_pickup_aux(int o_idx)
     delete_object_idx(o_idx);
 }
 
+static bool pickup_try_channel_floor_staff(object_type* o_ptr, int floor_o_idx)
+{
+    int target_slot = -1;
+    object_type* target = NULL;
+
+    if (!o_ptr || !o_ptr->k_idx || o_ptr->tval != TV_STAFF || o_ptr->pval <= 0
+        || !p_ptr->active_ability[S_WIL][WIL_CHANNELING])
+    {
+        return false;
+    }
+
+    object_type* wielded = &inventory[INVEN_STAFF];
+    if (wielded->k_idx && wielded->k_idx == o_ptr->k_idx)
+    {
+        target = wielded;
+        target_slot = INVEN_STAFF;
+    }
+
+    if (!target)
+    {
+        for (int i = 0; i < INVEN_PACK; i++)
+        {
+            object_type* pack_obj = &inventory[i];
+
+            if (!pack_obj->k_idx)
+                continue;
+            if (pack_obj->tval != TV_STAFF)
+                continue;
+            if (pack_obj->k_idx != o_ptr->k_idx)
+                continue;
+
+            target = pack_obj;
+            target_slot = i;
+            break;
+        }
+    }
+
+    if (target)
+    {
+        int mult = CHANNELING_CHARGE_MULTIPLIER;
+        int existing_raw = MAX(target->pval, 0);
+        int donor_raw = MAX(o_ptr->pval, 0);
+        int existing_uses = existing_raw / mult;
+        int donor_uses = donor_raw / mult;
+
+        if (donor_uses > 0)
+        {
+            double existing_term = pow((double)existing_uses, 1.5);
+            double donor_term = pow((double)donor_uses, 1.5);
+            double combined_uses_raw = 0.0;
+            double sum_terms = existing_term + donor_term;
+
+            if (sum_terms > 0.0)
+                combined_uses_raw = pow(sum_terms, 2.0 / 3.0);
+
+            int combined_uses = (int)(combined_uses_raw + 0.5);
+            long combined_pval = (long)combined_uses * mult;
+            long max_pval = (long)(32767 / mult) * mult;
+
+            if (combined_pval > max_pval)
+                combined_pval = max_pval;
+
+            combined_uses = (int)(combined_pval / mult);
+
+            int gain_uses = combined_uses - existing_uses;
+            if (gain_uses > 0)
+            {
+                char target_name[80];
+                char donor_name[80];
+                char prompt[120];
+
+                format_staff_prompt_name(
+                    target_name, sizeof(target_name), target, false);
+                format_staff_prompt_name(
+                    donor_name, sizeof(donor_name), o_ptr, true);
+
+                log_debug("Channeling: donor floor staff k_idx=%d pval=%d number=%d, target inv slot %d k_idx=%d pval=%d number=%d",
+                    o_ptr->k_idx, o_ptr->pval, o_ptr->number, target_slot,
+                    target->k_idx, target->pval, target->number);
+
+                strnfmt(prompt, sizeof(prompt),
+                    "Channel %s into your %s (%d charges)?", donor_name,
+                    target_name, combined_uses);
+                if (get_check(prompt))
+                {
+                    target->pval = (s16b)combined_pval;
+                    target->ident &= ~(IDENT_EMPTY);
+                    o_ptr->pval = 0;
+                    o_ptr->ident |= IDENT_EMPTY;
+
+                    log_debug("Channeling complete: target now has pval=%d number=%d, donor has pval=%d number=%d",
+                        target->pval, target->number, o_ptr->pval,
+                        o_ptr->number);
+
+                    if (target_slot >= 0 && target_slot < INVEN_TOTAL)
+                        inven_item_charges(target_slot);
+                    p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
+                    p_ptr->window |= (PW_EQUIP | PW_PLAYER_0 | PW_INVEN);
+                    msg_format("You channel %d charge%s into your %s (now %d).",
+                        gain_uses, (gain_uses == 1) ? "" : "s", target_name,
+                        combined_uses);
+                    delete_object_idx(floor_o_idx);
+
+                    log_debug("Channeling: deleted floor object idx %d",
+                        floor_o_idx);
+
+                    p_ptr->previous_action[0] = ACTION_MISC;
+                    p_ptr->energy_use = 100;
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool pickup_handle_floor_object(int floor_o_idx,
+                                       bool consume_pickup_turn)
+{
+    object_type* o_ptr = &o_list[floor_o_idx];
+    char o_name[80];
+    bool attempted_replacement = false;
+
+    if (!o_ptr->k_idx)
+        return false;
+
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+
+    if (pickup_try_channel_floor_staff(o_ptr, floor_o_idx))
+        return true;
+
+    while (!inven_carry_okay(o_ptr))
+    {
+        pickup_failure_result failure = resolve_pickup_failure(
+            o_ptr, floor_o_idx, o_name, attempted_replacement);
+
+        if (failure == PICKUP_FAILURE_RETRY)
+        {
+            attempted_replacement = true;
+            continue;
+        }
+
+        return (failure == PICKUP_FAILURE_EQUIPPED);
+    }
+
+    if (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2)
+    {
+        msg_format("You cannot lift %s.", o_name);
+        return false;
+    }
+
+    if (consume_pickup_turn)
+    {
+        p_ptr->previous_action[0] = ACTION_MISC;
+        p_ptr->energy_use = 100;
+    }
+
+    py_pickup_aux(floor_o_idx);
+    return true;
+}
+
 /*
  * Allow the player to sort through items in a pile and
  * pickup what they want.  This command does not use
@@ -374,8 +507,8 @@ void do_cmd_pickup_from_pile(void)
     bool picked_up_item = false;
 
     /*
-     * Loop through and pick up objects until escape is hit or the backpack
-     * can't hold anything else.
+     * Loop through and pick up objects until escape is hit or the pile is
+     * exhausted.
      */
     while (true)
     {
@@ -400,20 +533,6 @@ void do_cmd_pickup_from_pile(void)
             break;
         }
 
-        /* Restrict the choices */
-        item_tester_hook = inven_carry_okay;
-
-        /* re-test to see if we can pick any of them up */
-        floor_num = scan_floor(
-            floor_list, MAX_FLOOR_STACK, p_ptr->py, p_ptr->px, 0x01);
-
-        /* Nothing can be picked up */
-        if (floor_num < 1)
-        {
-            msg_format("Your backpack is full.");
-            break;
-        }
-
         if (!get_item(&item, "Pick up which object? ",
                 NULL, (USE_FLOOR)))
         {
@@ -426,15 +545,17 @@ void do_cmd_pickup_from_pile(void)
             continue;
         }
 
-        /* Pick up the object */
-        py_pickup_aux(0 - item);
+        /*
+         * Keep selection on the shared get_item() path so snapshot play uses
+         * the semantic floor selector, but run the richer single-object pickup
+         * handling here once an item has been chosen.
+         */
+        if (!pickup_handle_floor_object(0 - item, false))
+            continue;
 
         /*Mark that we picked something up*/
         picked_up_item = true;
     }
-
-    /*clear the restriction*/
-    item_tester_hook = NULL;
 
     /* Combine / Reorder the pack */
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -477,13 +598,6 @@ static void report_pack_limit_failure(const char* o_name, bool still)
     else
         msg_format("You have no room for %s.", o_name);
 }
-
-typedef enum
-{
-    PICKUP_FAILURE_ABORT = 0,
-    PICKUP_FAILURE_RETRY,
-    PICKUP_FAILURE_EQUIPPED
-} pickup_failure_result;
 
 static bool item_tester_limit_group(const object_type* o_ptr)
 {
@@ -530,8 +644,6 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     byte old_item_tester_tval = item_tester_tval;
     bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
     const object_type* old_filter = replacement_filter_incoming;
-
-    pickup_prepare_legacy_replacement_prompt(false);
 
     if (label)
         msg_format("You already carry %s (limit %d).", label, limit);
@@ -628,8 +740,6 @@ static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,
         return PICKUP_FAILURE_ABORT;
     }
 
-    pickup_prepare_legacy_replacement_prompt(true);
-
     char equipped_name[80];
     object_desc(equipped_name, sizeof(equipped_name), equip_ptr, true, 3);
 
@@ -696,8 +806,6 @@ void py_pickup(void)
 
     object_type* o_ptr;
 
-    char o_name[80];
-
     /* Automatically destroy squelched items in pile if necessary */
     do_squelch_pile(py, px);
 
@@ -706,9 +814,6 @@ void py_pickup(void)
     {
         /* Get the object */
         o_ptr = &o_list[this_o_idx];
-
-        /* Describe the object */
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
 
         /* Get the next object */
         next_o_idx = o_ptr->next_o_idx;
@@ -724,158 +829,8 @@ void py_pickup(void)
             continue;
         }
 
-        bool attempted_replacement = false;
-        bool skip_current_item = false;
-
-        if (p_ptr->active_ability[S_WIL][WIL_CHANNELING] && o_ptr->tval == TV_STAFF && o_ptr->pval > 0)
-        {
-            int target_slot = -1;
-            object_type* target = NULL;
-
-            object_type* wielded = &inventory[INVEN_STAFF];
-            if (wielded->k_idx && wielded->k_idx == o_ptr->k_idx)
-            {
-                target = wielded;
-                target_slot = INVEN_STAFF;
-            }
-
-            if (!target)
-            {
-                for (int i = 0; i < INVEN_PACK; i++)
-                {
-                    object_type* pack_obj = &inventory[i];
-                    if (!pack_obj->k_idx)
-                        continue;
-                    if (pack_obj->tval != TV_STAFF)
-                        continue;
-                    if (pack_obj->k_idx != o_ptr->k_idx)
-                        continue;
-                    target = pack_obj;
-                    target_slot = i;
-                    break;
-                }
-            }
-
-            if (target)
-            {
-                int mult = CHANNELING_CHARGE_MULTIPLIER;
-                int existing_raw = MAX(target->pval, 0);
-                int donor_raw = MAX(o_ptr->pval, 0);
-                int existing_uses = existing_raw / mult;
-                int donor_uses = donor_raw / mult;
-                if (donor_uses > 0)
-                {
-                    double existing_term = pow((double)existing_uses, 1.5);
-                    double donor_term = pow((double)donor_uses, 1.5);
-                    double combined_uses_raw = 0.0;
-                    double sum_terms = existing_term + donor_term;
-                    if (sum_terms > 0.0)
-                        combined_uses_raw = pow(sum_terms, 2.0 / 3.0);
-                    int combined_uses = (int)(combined_uses_raw + 0.5);
-                    long combined_pval = (long)combined_uses * mult;
-                    long max_pval = (long)(32767 / mult) * mult;
-                    if (combined_pval > max_pval)
-                        combined_pval = max_pval;
-                    combined_uses = (int)(combined_pval / mult);
-                    int gain_uses = combined_uses - existing_uses;
-                    if (gain_uses > 0)
-                    {
-                        char target_name[80];
-                        char donor_name[80];
-                        char prompt[120];
-                        format_staff_prompt_name(
-                            target_name, sizeof(target_name), target, false);
-                        format_staff_prompt_name(
-                            donor_name, sizeof(donor_name), o_ptr, true);
-                        
-                        log_debug("Channeling: donor floor staff k_idx=%d pval=%d number=%d, target inv slot %d k_idx=%d pval=%d number=%d",
-                                  o_ptr->k_idx, o_ptr->pval, o_ptr->number,
-                                  target_slot, target->k_idx, target->pval, target->number);
-                        
-                        strnfmt(prompt, sizeof(prompt),
-                            "Channel %s into your %s (%d charges)?",
-                            donor_name, target_name, combined_uses);
-                        if (get_check(prompt))
-                        {
-                            target->pval = (s16b)combined_pval;
-                            target->ident &= ~(IDENT_EMPTY);
-                            o_ptr->pval = 0;
-                            o_ptr->ident |= IDENT_EMPTY;
-                            
-                            log_debug("Channeling complete: target now has pval=%d number=%d, donor has pval=%d number=%d",
-                                      target->pval, target->number, o_ptr->pval, o_ptr->number);
-                            
-                            if (target_slot >= 0 && target_slot < INVEN_TOTAL)
-                                inven_item_charges(target_slot);
-                            p_ptr->redraw |= (PR_EQUIPPY | PR_RESIST);
-                            p_ptr->window |= (PW_EQUIP | PW_PLAYER_0 | PW_INVEN);
-                            msg_format("You channel %d charge%s into your %s (now %d).",
-                                gain_uses, (gain_uses == 1) ? "" : "s",
-                                target_name, combined_uses);
-                            delete_object_idx(this_o_idx);
-                            
-                            log_debug("Channeling: deleted floor object idx %d", this_o_idx);
-                            
-                            done_pickup = true;
-                            p_ptr->previous_action[0] = ACTION_MISC;
-                            p_ptr->energy_use = 100;
-                            skip_current_item = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (skip_current_item)
-            continue;
-
-        while (!inven_carry_okay(o_ptr))
-        {
-            pickup_failure_result failure = resolve_pickup_failure(
-                o_ptr, this_o_idx, o_name, attempted_replacement);
-
-            if (failure == PICKUP_FAILURE_RETRY)
-            {
-                attempted_replacement = true;
-                continue;
-            }
-
-            if (failure == PICKUP_FAILURE_EQUIPPED)
-            {
-                done_pickup = true;
-                skip_current_item = true;
-            }
-            else
-            {
-                skip_current_item = true;
-            }
-
-            break;
-        }
-
-        if (skip_current_item)
-            continue;
-
-        // Check whether it would be too heavy
-        if (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2)
-        {
-            if (o_ptr->k_idx)
-                msg_format("You cannot lift %s.", o_name);
-
-            /* Check the next object */
-            continue;
-        }
-
-        // store the action type
-        p_ptr->previous_action[0] = ACTION_MISC;
-
-        /* Take a turn */
-        p_ptr->energy_use = 100;
-
-        /* Pick up the object */
-        py_pickup_aux(this_o_idx);
-
-        done_pickup = true;
+        if (pickup_handle_floor_object(this_o_idx, true))
+            done_pickup = true;
     }
 
     if (!done_pickup)

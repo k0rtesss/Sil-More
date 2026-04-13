@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "app/app-session.h"
+#include "app/app-ui.h"
 #include "externs.h"
 #include "blitz.h"
 #include "fs/path.h"
@@ -21,6 +22,7 @@
 #include "metarun.h"
 #include "score/score_entry.h"
 #include "ui/ui-character-screen.h"
+#include "ui/ui-information-scene.h"
 #include "z-term.h"
 
 static bool skill_gain_in_progress = false;
@@ -1225,6 +1227,107 @@ static int choice_description_line_count(cptr text)
     return birth_wrapped_line_count(text, 2);
 }
 
+static void birth_choice_full_name(birth_menu choice, char* full_name,
+    size_t full_name_len)
+{
+    int character_idx;
+
+    if (!full_name || full_name_len == 0)
+        return;
+
+    character_idx = character_choice_index_by_name(choice.name);
+    if (character_idx >= 0)
+    {
+        strnfmt(full_name, full_name_len, "%s%s",
+            c_name + c_info[character_idx].name,
+            c_name + c_info[character_idx].alt_name);
+    }
+    else
+    {
+        strnfmt(full_name, full_name_len, "%s",
+            choice.name ? choice.name : "");
+    }
+}
+
+static bool birth_description_scene_add_footer(app_ui_panel* panel)
+{
+    if (!panel)
+        return false;
+
+    if (steamdeck_controls_active())
+    {
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            back_label, "Return");
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Any key", "Return");
+}
+
+static bool birth_build_description_ui_scene(app_ui_scene* scene,
+    cptr title, cptr text)
+{
+    app_ui_panel* panel;
+    byte story = sdl_is_story_font_enabled() ? STORY_FLAG_USE : 0;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 900, 1600);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, title ? title : "");
+    if (text && text[0])
+    {
+        if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+            return false;
+        if (!app_ui_panel_add_rich_text_ex(scene, panel, TERM_WHITE, story,
+                text))
+        {
+            return false;
+        }
+    }
+
+    return birth_description_scene_add_footer(panel);
+}
+
+static bool birth_show_description_ui_scene(birth_menu choice)
+{
+    ui_information_scene_scope scope;
+    app_ui_scene scene;
+    char full_name[64];
+
+    if (!ui_information_scene_enter(&scope))
+    {
+        log_warn("birth description: semantic scene unavailable");
+        return false;
+    }
+
+    birth_choice_full_name(choice, full_name, sizeof(full_name));
+    if (!birth_build_description_ui_scene(&scene, full_name, choice.text)
+        || !ui_information_scene_present_ui(&scene))
+    {
+        ui_information_scene_leave(&scope);
+        log_warn("birth description: semantic scene presentation failed");
+        return false;
+    }
+
+    (void)ui_information_scene_wait_key_nonrepeat();
+    ui_information_scene_leave(&scope);
+    return true;
+}
+
 static int collect_character_starting_abilities(int character, cptr out[], int out_max)
 {
     int count = 0;
@@ -1262,82 +1365,7 @@ static int collect_character_starting_abilities(int character, cptr out[], int o
 
 static void display_character_description_screen(birth_menu choice)
 {
-    int wid = 80;
-    int hgt = 24;
-    int character_idx;
-    char full_name[64];
-    int name_col = 2;
-    int text_top_row = 2;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-    if (hgt <= 18)
-        text_top_row = 1;
-
-    character_idx = character_choice_index_by_name(choice.name);
-    if (character_idx >= 0)
-    {
-        strnfmt(full_name, sizeof(full_name), "%s%s",
-            c_name + c_info[character_idx].name,
-            c_name + c_info[character_idx].alt_name);
-    }
-    else
-    {
-        strnfmt(full_name, sizeof(full_name), "%s", choice.name ? choice.name : "");
-    }
-
-    if ((int)strlen(full_name) < wid)
-        name_col = (wid - (int)strlen(full_name)) / 2;
-    if (name_col < 2)
-        name_col = 2;
-
-    screen_save();
-    Term_clear();
-
-    Term_putstr(name_col, 0, -1, TERM_L_BLUE, full_name);
-
-    if (choice.text && choice.text[0] && (hgt > text_top_row))
-    {
-        int text_row = text_top_row;
-        int text_rows = birth_wrapped_line_count(choice.text, 2);
-        int available_rows = hgt - text_top_row - 1;
-
-        if ((hgt > 18) && (text_rows < available_rows))
-            text_row = text_top_row + ((available_rows - text_rows) / 2);
-        if (text_row < text_top_row)
-            text_row = text_top_row;
-        if (text_row > hgt - 2)
-            text_row = hgt - 2;
-
-        birth_put_wrapped_text(TERM_WHITE, choice.text, text_row, 2);
-    }
-
-    if (hgt > 0)
-    {
-        if (steamdeck_controls_active())
-        {
-            char back_label[16];
-            char prompt_buf[48];
-
-            birth_prompt_label(steamdeck_back_key(), "B", back_label,
-                sizeof(back_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] return", back_label);
-            birth_put_str_fit(TERM_SLATE, prompt_buf, hgt - 1, 2);
-        }
-        else
-        {
-            birth_put_str_fit(TERM_SLATE, "Press any key to return", hgt - 1,
-                2);
-        }
-    }
-
-    Term_fresh();
-    (void)birth_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
-
-    screen_load();
+    (void)birth_show_description_ui_scene(choice);
 }
 
 /*
