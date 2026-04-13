@@ -180,6 +180,9 @@ int sdl_ui_font_size_logical(const sdl_view* view);
 TTF_Font* sdl_ui_font_for_height(int pixel_height);
 void sdl_ui_font_cache_clear(void);
 int sdl_ui_measure_text(TTF_Font* font, cptr text);
+int sdl_ui_text_left_padding(TTF_Font* font, int target_h);
+int sdl_ui_text_pair_left_padding(TTF_Font* primary, TTF_Font* secondary,
+    int target_h);
 void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text);
 void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col);

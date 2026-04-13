@@ -358,6 +358,7 @@ static int sdl_scene_ui_left_reserved_cols(const sdl_view* view,
     int line_h;
     int mono_h;
     int story_h = 0;
+    int left_inset_px = 0;
     u16b i;
 
     if (!view || !layout || !scene || view->cell_w <= 0)
@@ -381,11 +382,14 @@ static int sdl_scene_ui_left_reserved_cols(const sdl_view* view,
     line_h = MAX(pixel_height, MAX(mono_h, story_h));
     if (line_h < 1)
         line_h = 1;
+    left_inset_px = MAX(sdl_scene_ui_scale_px(4.0f),
+        sdl_ui_text_pair_left_padding(mono_font,
+            story_font ? story_font : mono_font, line_h));
 
     for (i = 0; i < panel->row_count; i++)
         max_w_px = MAX(max_w_px,
-            sdl_scene_ui_status_row_width_px(mono_font, story_font, line_h,
-                &panel->rows[i]));
+            left_inset_px + sdl_scene_ui_status_row_width_px(mono_font,
+                story_font, line_h, &panel->rows[i]));
     if (panel->min_width_px > 0)
     {
         max_w_px = MAX(max_w_px,

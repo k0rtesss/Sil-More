@@ -130,6 +130,53 @@ int sdl_ui_measure_text(TTF_Font* font, cptr text)
     return measured_w;
 }
 
+int sdl_ui_text_left_padding(TTF_Font* font, int target_h)
+{
+    int pad_px = 0;
+    int font_h;
+    int ch;
+
+    if (!font)
+        return 0;
+
+    for (ch = 33; ch < 127; ch++)
+    {
+        int minx = 0;
+        int maxx = 0;
+        int miny = 0;
+        int maxy = 0;
+        int advance = 0;
+
+        if (!TTF_GetGlyphMetrics(font, (Uint32)ch, &minx, &maxx, &miny,
+                &maxy, &advance))
+        {
+            continue;
+        }
+
+        if (minx < 0 && -minx > pad_px)
+            pad_px = -minx;
+    }
+
+    if (pad_px <= 0)
+        return 0;
+
+    font_h = TTF_GetFontHeight(font);
+    if (target_h > 0 && font_h > target_h)
+    {
+        pad_px = (int)((float)pad_px * (float)target_h / (float)font_h
+            + 0.999f);
+    }
+
+    return pad_px;
+}
+
+int sdl_ui_text_pair_left_padding(TTF_Font* primary, TTF_Font* secondary,
+    int target_h)
+{
+    return MAX(sdl_ui_text_left_padding(primary, target_h),
+        sdl_ui_text_left_padding(secondary, target_h));
+}
+
 void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text)
 {

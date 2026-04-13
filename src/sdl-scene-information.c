@@ -179,12 +179,13 @@ static bool sdl_information_resolve_fixed_metrics(const sdl_view* main_view,
     int pixel_height;
     int cols;
     int rows;
-    int margin_x;
+    int base_margin_x;
     int margin_y;
     TTF_Font* fallback_mono = NULL;
     TTF_Font* fallback_story = NULL;
     int fallback_cell_w = 0;
     int fallback_cell_h = 0;
+    int fallback_margin_x = 0;
 
     if (!main_view || !scene || !metrics)
         return false;
@@ -204,7 +205,7 @@ static bool sdl_information_resolve_fixed_metrics(const sdl_view* main_view,
     if (desired_px < min_px)
         desired_px = min_px;
 
-    margin_x = sdl_ui_scale_px(2.0f);
+    base_margin_x = sdl_ui_scale_px(4.0f);
     margin_y = 0;
 
     for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
@@ -215,6 +216,7 @@ static bool sdl_information_resolve_fixed_metrics(const sdl_view* main_view,
         int story_h;
         int cell_h;
         int cell_w;
+        int margin_x;
 
         if (!mono_font || !story_font)
             continue;
@@ -226,11 +228,14 @@ static bool sdl_information_resolve_fixed_metrics(const sdl_view* main_view,
             cell_h = story_h;
         cell_w = sdl_information_fixed_cell_width(cell_h, mono_font,
             story_font);
+        margin_x = MAX(base_margin_x,
+            sdl_ui_text_pair_left_padding(mono_font, story_font, cell_h));
 
         fallback_mono = mono_font;
         fallback_story = story_font;
         fallback_cell_w = cell_w;
         fallback_cell_h = cell_h;
+        fallback_margin_x = margin_x;
 
         if ((cols * cell_w) <= (canvas_w - margin_x * 2)
             && (rows * cell_h) <= (canvas_h - margin_y * 2))
@@ -250,7 +255,7 @@ static bool sdl_information_resolve_fixed_metrics(const sdl_view* main_view,
     if (!fallback_mono || !fallback_story)
         return false;
 
-    metrics->origin_x = margin_x;
+    metrics->origin_x = fallback_margin_x;
     metrics->origin_y = margin_y;
     metrics->cell_w = fallback_cell_w;
     metrics->cell_h = fallback_cell_h;
