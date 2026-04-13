@@ -50,8 +50,12 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_BROWSER = 5,
     APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6,
     APP_UI_PANEL_STYLE_MINIMAP = 7,
-    APP_UI_PANEL_STYLE_OVERLAY_RAIL = 8
+    APP_UI_PANEL_STYLE_OVERLAY_RAIL = 8,
+    APP_UI_PANEL_STYLE_WELCOME = 9
 } app_ui_panel_style;
+
+#define APP_UI_TEXT_FLAG_WELCOME_COL_MASK 0x00FFu
+#define APP_UI_TEXT_FLAG_WELCOME_BLANK 0x0100u
 
 typedef enum app_ui_panel_flag {
     APP_UI_PANEL_FLAG_NONE = 0x0000u,

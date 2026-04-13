@@ -2526,6 +2526,236 @@ static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
     return true;
 }
 
+static bool sdl_menu_welcome_line_blank(const app_ui_text_line* line)
+{
+    return line && ((line->flags & APP_UI_TEXT_FLAG_WELCOME_BLANK) != 0);
+}
+
+static int sdl_menu_welcome_line_col(const app_ui_text_line* line)
+{
+    return line ? (int)(line->flags & APP_UI_TEXT_FLAG_WELCOME_COL_MASK) : 0;
+}
+
+static int sdl_menu_welcome_cell_width(int line_h)
+{
+    int cell_w;
+
+    if (line_h <= 0)
+        return 1;
+
+    cell_w = (int)((float)line_h * 0.57f + 0.5f);
+    if (cell_w < 1)
+        cell_w = 1;
+    return cell_w;
+}
+
+static int sdl_menu_welcome_footer_rows(const app_ui_panel* panel)
+{
+    if (!panel)
+        return 0;
+    if (panel->footer_action_count > 0)
+        return 3 + panel->detail_line_count;
+    if (panel->detail_line_count > 0)
+        return 1;
+
+    return 0;
+}
+
+static bool sdl_menu_welcome_choose_layout(const sdl_view* main_view,
+    int canvas_w, int canvas_h, const app_ui_panel* panel, TTF_Font** out_story,
+    TTF_Font** out_mono, int* out_line_h, int* out_cell_w, int* out_base_x)
+{
+    static const int logical_sizes[] = { 28, 26, 24, 22, 20, 18, 16, 14 };
+    const int logical_cols = 80;
+    int margin_x;
+    size_t i;
+    TTF_Font* fallback_story = NULL;
+    TTF_Font* fallback_mono = NULL;
+    int fallback_line_h = 0;
+    int fallback_cell_w = 0;
+    int fallback_base_x = 0;
+
+    if (!main_view || !panel || !out_story || !out_mono || !out_line_h
+        || !out_cell_w || !out_base_x)
+    {
+        return false;
+    }
+
+    margin_x = sdl_menu_scale_px(12.0f);
+
+    for (i = 0; i < N_ELEMENTS(logical_sizes); i++)
+    {
+        int pixel_height = sdl_menu_scale_px((float)logical_sizes[i]);
+        TTF_Font* story_font = sdl_story_font_for_height(pixel_height);
+        TTF_Font* mono_font = sdl_ui_font_for_height(pixel_height);
+        int line_h;
+        int cell_w;
+        int design_w;
+        int top_extent;
+        int bottom_extent;
+
+        if (!story_font || !mono_font)
+            continue;
+
+        line_h = MAX(pixel_height, MAX(TTF_GetFontHeight(story_font),
+            TTF_GetFontHeight(mono_font)));
+        cell_w = sdl_menu_welcome_cell_width(line_h);
+        design_w = logical_cols * cell_w;
+        top_extent = (panel->body_line_count + 1) * line_h;
+        bottom_extent = sdl_menu_welcome_footer_rows(panel) * line_h;
+
+        fallback_story = story_font;
+        fallback_mono = mono_font;
+        fallback_line_h = line_h;
+        fallback_cell_w = cell_w;
+        fallback_base_x = (canvas_w - design_w) / 2;
+        if (fallback_base_x < 0)
+            fallback_base_x = 0;
+
+        if (design_w + margin_x * 2 > canvas_w)
+            continue;
+        if (top_extent + bottom_extent > canvas_h)
+            continue;
+
+        *out_story = story_font;
+        *out_mono = mono_font;
+        *out_line_h = line_h;
+        *out_cell_w = cell_w;
+        *out_base_x = fallback_base_x;
+        return true;
+    }
+
+    if (!fallback_story || !fallback_mono)
+        return false;
+
+    *out_story = fallback_story;
+    *out_mono = fallback_mono;
+    *out_line_h = fallback_line_h;
+    *out_cell_w = fallback_cell_w;
+    *out_base_x = fallback_base_x;
+    return true;
+}
+
+static void sdl_menu_welcome_format_prompt(const app_ui_panel* panel,
+    char* buf, size_t buflen)
+{
+    u16b i;
+
+    if (!buf || buflen == 0)
+        return;
+
+    buf[0] = '\0';
+    if (!panel)
+        return;
+
+    for (i = 0; i < panel->footer_action_count; i++)
+    {
+        const app_ui_footer_action* action = &panel->footer_actions[i];
+        char token[APP_UI_LABEL_MAX + APP_UI_KEY_MAX + 8];
+
+        if (!action->label[0])
+            continue;
+
+        if (action->key[0])
+            strnfmt(token, sizeof(token), "[%s] %s", action->key, action->label);
+        else
+            SDL_strlcpy(token, action->label, sizeof(token));
+
+        if (buf[0])
+            SDL_strlcat(buf, "    ", buflen);
+        SDL_strlcat(buf, token, buflen);
+    }
+}
+
+static bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
+    int canvas_w, int canvas_h, const app_ui_panel* panel)
+{
+    TTF_Font* story_font;
+    TTF_Font* mono_font;
+    int line_h;
+    int cell_w;
+    int base_x;
+    int intro_x;
+    u16b i;
+
+    if (!main_view || !panel)
+        return false;
+    if (canvas_w <= 0 || canvas_h <= 0)
+        return false;
+    if (!sdl_menu_welcome_choose_layout(main_view, canvas_w, canvas_h, panel,
+            &story_font, &mono_font, &line_h, &cell_w, &base_x))
+    {
+        return false;
+    }
+
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(g_state.renderer);
+
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+        TTF_Font* font = (line->story & STORY_FLAG_USE) ? story_font : mono_font;
+        int x_px;
+        int y_px;
+
+        if (sdl_menu_welcome_line_blank(line) || !line->text[0])
+            continue;
+
+        x_px = base_x + sdl_menu_welcome_line_col(line) * cell_w;
+        y_px = (int)(i + 1) * line_h;
+        sdl_menu_render_text(font, (float)x_px, (float)y_px, line_h,
+            sdl_menu_color(line->attr), line->text);
+    }
+
+    intro_x = base_x + 14 * cell_w;
+    if (panel->footer_action_count > 0)
+    {
+        char prompt_buf[APP_UI_TEXT_MAX];
+
+        sdl_menu_welcome_format_prompt(panel, prompt_buf, sizeof(prompt_buf));
+        if (prompt_buf[0])
+        {
+            sdl_menu_render_text(mono_font, (float)intro_x,
+                (float)(canvas_h - line_h), line_h, sdl_menu_color(TERM_SLATE),
+                prompt_buf);
+        }
+
+        sdl_menu_render_text(mono_font, (float)intro_x,
+            (float)(canvas_h - line_h * 3), line_h,
+            sdl_menu_color(TERM_L_DARK), "- - - - - - - - - - - -");
+
+        for (i = 0; i < panel->detail_line_count; i++)
+        {
+            const app_ui_text_line* line = &panel->detail_lines[i];
+            int y_px = canvas_h - (int)(panel->detail_line_count - i + 3) * line_h;
+
+            if (!line->text[0])
+                continue;
+            sdl_menu_render_text(mono_font, (float)intro_x, (float)y_px, line_h,
+                sdl_menu_color(line->attr), line->text);
+        }
+    }
+    else if (panel->detail_line_count > 0)
+    {
+        const app_ui_text_line* line = &panel->detail_lines[0];
+        int text_w;
+        int x_px;
+
+        if (line->text[0])
+        {
+            text_w = sdl_menu_measure_text(mono_font, line->text);
+            x_px = (canvas_w - text_w) / 2;
+            if (x_px < 0)
+                x_px = 0;
+            sdl_menu_render_text(mono_font, (float)x_px,
+                (float)(canvas_h - line_h), line_h, sdl_menu_color(line->attr),
+                line->text);
+        }
+    }
+
+    return true;
+}
+
 static int sdl_menu_character_metric_group_width(TTF_Font* mono_font,
     const app_ui_character_metric* metric, int token_gap)
 {
@@ -3816,6 +4046,18 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
                     canvas_h, panel))
             {
                 log_warn("ui render: overlay rail panel failed (canvas=%dx%d rect=%dx%d)",
+                    canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
+                return false;
+            }
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_WELCOME)
+        {
+            if (!sdl_menu_render_welcome_panel(main_view, canvas_w, canvas_h,
+                    panel))
+            {
+                log_warn("ui render: welcome panel failed (canvas=%dx%d rect=%dx%d)",
                     canvas_w, canvas_h, main_view->rect.w, main_view->rect.h);
                 return false;
             }

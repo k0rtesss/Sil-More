@@ -641,7 +641,7 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
 
 int ui_information_scene_wait_key(void)
 {
-    return ui_information_scene_wait_key_internal(0);
+    return (int)(unsigned char)inkey();
 }
 
 int ui_information_scene_wait_key_nonrepeat(void)

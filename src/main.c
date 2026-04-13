@@ -493,12 +493,8 @@ int main(int argc, char* argv[])
     /* Catch nasty signals */
     signals_init();
 
-    /* Initialize */
-    init_angband();
-
     {
         app_session_config session_config;
-        app_snapshot snapshot;
 
         memset(&session_config, 0, sizeof(session_config));
         session_config.api_version = APP_SESSION_API_VERSION;
@@ -511,13 +507,11 @@ int main(int argc, char* argv[])
             quit("Unable to create UI session.");
 
         app_session_make_current(session);
-
-        memset(&snapshot, 0, sizeof(snapshot));
-        snapshot.scene = APP_SCENE_KIND_BOOTSTRAP;
-        snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
-        app_session_set_snapshot(session, &snapshot);
         app_session_set_state(session, APP_SESSION_STATE_IDLE);
     }
+
+    /* Initialize */
+    init_angband();
 
     /* Initialize sound system (requires ANGBAND_DIR_XTRA to be set) */
     sdl_init_sounds();
@@ -539,12 +533,6 @@ int main(int argc, char* argv[])
         if (!game_in_progress) {
             bool      start_new = false;
             NavResult mn;
-            app_snapshot snapshot;
-
-            memset(&snapshot, 0, sizeof(snapshot));
-            snapshot.scene = APP_SCENE_KIND_BOOTSTRAP;
-            snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
-            app_session_set_snapshot(session, &snapshot);
 
             /* loop until the player chooses a valid action */
             while (!game_in_progress) {

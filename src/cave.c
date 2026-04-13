@@ -2929,6 +2929,66 @@ void display_map(int* cy, int* cx)
         (*cx) = col + 1;
 }
 
+/*
+ * Keep sparse map views from zooming past the current dungeon viewport scale.
+ */
+static void view_map_expand_bounds_to_viewport(int* min_y, int* max_y,
+    int* min_x, int* max_x)
+{
+    int viewport_min_y;
+    int viewport_max_y;
+    int viewport_min_x;
+    int viewport_max_x;
+    int viewport_hgt;
+    int viewport_wid;
+    int explored_hgt;
+    int explored_wid;
+
+    if (!min_y || !max_y || !min_x || !max_x)
+        return;
+
+    explored_hgt = *max_y - *min_y + 1;
+    explored_wid = *max_x - *min_x + 1;
+    if (explored_hgt < 1 || explored_wid < 1)
+        return;
+    if (SCREEN_HGT <= 0 || SCREEN_WID <= 0)
+        return;
+
+    viewport_min_y = p_ptr->wy;
+    viewport_min_x = p_ptr->wx;
+    if (viewport_min_y < 0)
+        viewport_min_y = 0;
+    if (viewport_min_x < 0)
+        viewport_min_x = 0;
+
+    viewport_max_y = viewport_min_y + SCREEN_HGT - 1;
+    viewport_max_x = viewport_min_x + SCREEN_WID - 1;
+    if (viewport_max_y >= p_ptr->cur_map_hgt)
+        viewport_max_y = p_ptr->cur_map_hgt - 1;
+    if (viewport_max_x >= p_ptr->cur_map_wid)
+        viewport_max_x = p_ptr->cur_map_wid - 1;
+    if (viewport_max_y < viewport_min_y || viewport_max_x < viewport_min_x)
+        return;
+
+    viewport_hgt = viewport_max_y - viewport_min_y + 1;
+    viewport_wid = viewport_max_x - viewport_min_x + 1;
+
+    if (explored_hgt < viewport_hgt)
+    {
+        if (viewport_min_y < *min_y)
+            *min_y = viewport_min_y;
+        if (viewport_max_y > *max_y)
+            *max_y = viewport_max_y;
+    }
+    if (explored_wid < viewport_wid)
+    {
+        if (viewport_min_x < *min_x)
+            *min_x = viewport_min_x;
+        if (viewport_max_x > *max_x)
+            *max_x = viewport_max_x;
+    }
+}
+
 static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
 {
     int min_x;
@@ -2984,6 +3044,12 @@ static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
         explored_wid = p_ptr->cur_map_wid;
         explored_hgt = p_ptr->cur_map_hgt;
         use_full_map = true;
+    }
+    else
+    {
+        view_map_expand_bounds_to_viewport(&min_y, &max_y, &min_x, &max_x);
+        explored_wid = max_x - min_x + 1;
+        explored_hgt = max_y - min_y + 1;
     }
 
     if (explored_wid < 1 || explored_hgt < 1)

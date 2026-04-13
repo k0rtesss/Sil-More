@@ -24,6 +24,15 @@
 #include "metarun.h"
 #include "item_set.h"
 #include "init/init2-internal.h"
+#include "ui/ui-information-scene.h"
+
+static int g_welcome_scene_intro_style = -1;
+
+static void welcome_screen_begin_session(void);
+static bool welcome_screen_present_ui(cptr status_line, bool show_footer);
+static int welcome_screen_current_intro_style(void);
+static void welcome_prompt_label(int binding, const char* fallback,
+    char* buf, size_t buflen);
 
 void autoinscribe_clean(void)
 {
@@ -82,9 +91,7 @@ void re_init_some_things(void)
     autoinscribe_clean();
     autoinscribe_init();
 
-    sdl_story_font_enable();
     display_introduction();
-    sdl_story_font_reset();
 
     mem_free_null(view_g);
     view_g = mem_alloc_array(VIEW_MAX, u16b);
@@ -380,19 +387,7 @@ static errr init_alloc(void)
 
 static void note(cptr str)
 {
-    int term_wid = 80;
-    int term_hgt = 24;
-    int col;
-    int row;
-
-    Term_get_size(&term_wid, &term_hgt);
-    row = term_hgt - 1;
-    col = MAX(0, (term_wid - (int)strlen(str)) / 2);
-
-    Term_erase(0, row, 255);
-    Term_putstr(col, row, term_wid - col, TERM_SLATE, str);
-    Term_fresh();
-    (void)Term_xtra(TERM_XTRA_EVENT, 0);
+    (void)welcome_screen_present_ui(str, false);
 }
 
 static void init_angband_aux(cptr why)
@@ -403,40 +398,179 @@ static void init_angband_aux(cptr why)
         "See the manual for more information."));
 }
 
-typedef struct welcome_intro_layout {
-    int top_pad;
-    bool drop_gap_1;
-    bool drop_gap_2;
-    bool drop_gap_3;
-} welcome_intro_layout;
+typedef struct welcome_ui_line {
+    byte attr;
+    byte story;
+    byte col;
+    cptr text;
+} welcome_ui_line;
 
-typedef bool (*welcome_screen_line_sink)(void* user, int row, int col,
-    byte attr, byte flags, cptr text);
+#define WELCOME_STORY(_col, _attr, _text) { (_attr), STORY_FLAG_USE, (_col), (_text) }
+#define WELCOME_TEXT(_col, _attr, _text) { (_attr), 0, (_col), (_text) }
+#define WELCOME_BLANK() { TERM_WHITE, 0, 0, "" }
+#define WELCOME_END() { 0, 0, 0, NULL }
 
-typedef struct welcome_screen_term_render_context {
-    int term_hgt;
-} welcome_screen_term_render_context;
+static const welcome_ui_line welcome_intro_lines_0[] = {
+    WELCOME_STORY(14, TERM_L_BLUE, "\"In the beginning Eru, the One,"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  made the Ainur of his thought;"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  and they sang, and he was glad.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Ainulindale"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "In the deeps of Angband, beyond"),
+    WELCOME_STORY(14, TERM_WHITE, "gates of iron and pits of flame,"),
+    WELCOME_STORY(14, TERM_WHITE, "Morgoth hoards the Silmarils --"),
+    WELCOME_STORY(14, TERM_WHITE, "three jewels of living light."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_YELLOW, "Take up blade and burden. Descend."),
+    WELCOME_STORY(14, TERM_YELLOW, "Oaths, quests, blessings of the Valar"),
+    WELCOME_STORY(14, TERM_YELLOW, "await in the First Age reborn."),
+    WELCOME_END()
+};
 
-#define WELCOME_SCREEN_LEGACY_BASE_COL 14
-#define WELCOME_SCREEN_SUBTITLE_OFFSET 6
-#define WELCOME_SCREEN_TITLE_OFFSET 8
-#define WELCOME_SCREEN_QUOTE_ATTR_OFFSET 20
-#define WELCOME_SCREEN_SONG_ATTR_OFFSET 14
+static const welcome_ui_line welcome_intro_lines_1[] = {
+    WELCOME_STORY(14, TERM_L_BLUE, "\"Be he foe or friend,"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  be he foul or clean..."),
+    WELCOME_STORY(14, TERM_L_BLUE, "  he shall defend, shall be held mine.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Oath of Feanor"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "In the pits beneath the mountains"),
+    WELCOME_STORY(14, TERM_WHITE, "Morgoth broods upon his throne."),
+    WELCOME_STORY(14, TERM_WHITE, "Three jewels burn upon his crown --"),
+    WELCOME_STORY(14, TERM_WHITE, "stolen light that is not his own."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_YELLOW, "Take up blade and burden. Descend."),
+    WELCOME_STORY(14, TERM_YELLOW, "Oaths, quests, blessings of the Valar"),
+    WELCOME_STORY(14, TERM_YELLOW, "await in the First Age reborn."),
+    WELCOME_END()
+};
 
-static void display_introduction_with_layout(
-    const welcome_intro_layout* layout);
-static int welcome_screen_base_col(void);
-static int welcome_screen_intro_row(int rel_row,
-    const welcome_intro_layout* layout);
-static int welcome_screen_intro_last_row(const welcome_intro_layout* layout);
-static int welcome_screen_intro_total_rows(const welcome_intro_layout* layout);
-static void welcome_prompt_label(int binding, const char* fallback,
-    char* buf, size_t buflen);
-static int welcome_screen_footer_rows(bool show_wizard, bool show_sep,
-    bool show_blank, bool show_prompt);
-static void welcome_screen_compute_layout(int hgt, bool show_wizard,
-    welcome_intro_layout* out_layout, bool* out_show_sep,
-    bool* out_show_blank, bool* out_show_prompt);
+static const welcome_ui_line welcome_intro_lines_2[] = {
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "Before the Sun and Moon were wrought"),
+    WELCOME_STORY(14, TERM_WHITE, "the Eldar walked by starlight alone."),
+    WELCOME_STORY(14, TERM_WHITE, "Now shadow stirs beneath the earth"),
+    WELCOME_STORY(14, TERM_WHITE, "where Morgoth sits upon his throne."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "Three jewels blaze upon his crown --"),
+    WELCOME_STORY(14, TERM_WHITE, "stolen fire none may reclaim..."),
+    WELCOME_STORY(14, TERM_WHITE, "unless one dares the iron dark"),
+    WELCOME_STORY(14, TERM_WHITE, "and walks through everlasting flame."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_L_BLUE, "\"...and the light that blazed in them"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  no power could dim or mar.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Of the Silmarils"),
+    WELCOME_END()
+};
+
+static const welcome_ui_line welcome_intro_lines_3[] = {
+    WELCOME_STORY(14, TERM_L_BLUE, "\"The leaves were long, the grass was green,"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  the hemlock-umbels tall and fair,"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  and in the glade a light was seen"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  of stars in shadow shimmering.\""),
+    WELCOME_STORY(28, TERM_SLATE, "-- Of Beren and Luthien"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "Even in the deepest dark, a song"),
+    WELCOME_STORY(14, TERM_WHITE, "may still undo the mightiest door."),
+    WELCOME_STORY(14, TERM_WHITE, "Dare the throne-hall of the Enemy"),
+    WELCOME_STORY(14, TERM_WHITE, "and seize what Morgoth stole of old."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_YELLOW, "Oaths, quests, blessings of the Valar"),
+    WELCOME_STORY(14, TERM_YELLOW, "await in the First Age reborn."),
+    WELCOME_END()
+};
+
+static const welcome_ui_line welcome_intro_lines_4[] = {
+    WELCOME_STORY(14, TERM_L_BLUE, "\"The day shall come again when you"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  shall see the Sun once more.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Words of Hurin"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "No chain can hold a will unbroken."),
+    WELCOME_STORY(14, TERM_WHITE, "Though Morgoth's shadow covers all,"),
+    WELCOME_STORY(14, TERM_WHITE, "the free may still defy the dark"),
+    WELCOME_STORY(14, TERM_WHITE, "and wrest a jewel from his crown."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_YELLOW, "Take up blade and burden. Descend."),
+    WELCOME_STORY(14, TERM_YELLOW, "Oaths, quests, blessings of the Valar"),
+    WELCOME_STORY(14, TERM_YELLOW, "await in the First Age reborn."),
+    WELCOME_STORY(14, TERM_L_BLUE, "\"Aure entuluva!\""),
+    WELCOME_END()
+};
+
+static const welcome_ui_line welcome_intro_lines_5[] = {
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "By silver waters Elves first woke"),
+    WELCOME_STORY(14, TERM_WHITE, "beneath the stars ere morning broke."),
+    WELCOME_STORY(14, TERM_WHITE, "No sun had risen, no moon shone --"),
+    WELCOME_STORY(14, TERM_WHITE, "just heaven's light on lake and stone."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "Then Morgoth's shadow veiled the land"),
+    WELCOME_STORY(14, TERM_WHITE, "and stole the Light with iron hand."),
+    WELCOME_STORY(14, TERM_WHITE, "Yet still a whisper stirs the deep:"),
+    WELCOME_STORY(14, TERM_WHITE, "what darkness took, the bold may reap."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_L_BLUE, "\"...the starlight glittered"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  on the waters of Cuivienen.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Of the Coming of the Elves"),
+    WELCOME_END()
+};
+
+static const welcome_ui_line welcome_intro_lines_6[] = {
+    WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
+    WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "In Valinor the Two Trees shone"),
+    WELCOME_STORY(14, TERM_WHITE, "with gold and silver, leaf and bough."),
+    WELCOME_STORY(14, TERM_WHITE, "Their mingled light is dead and gone --"),
+    WELCOME_STORY(14, TERM_WHITE, "the world lies under shadow now."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_WHITE, "Across the ice the exiles came,"),
+    WELCOME_STORY(14, TERM_WHITE, "the Noldor burning with their oath."),
+    WELCOME_STORY(14, TERM_WHITE, "They traded bliss for grief and flame"),
+    WELCOME_STORY(14, TERM_WHITE, "and lost the blessing of them both."),
+    WELCOME_BLANK(),
+    WELCOME_STORY(14, TERM_L_BLUE, "\"...and the Noldor wept"),
+    WELCOME_STORY(14, TERM_L_BLUE, "  for the beauty of Telperion and Laurelin.\""),
+    WELCOME_STORY(34, TERM_SLATE, "-- Of the Darkening of Valinor"),
+    WELCOME_END()
+};
+
+static const welcome_ui_line* welcome_screen_intro_lines_for_style(int style)
+{
+    switch (style)
+    {
+    case 1:
+        return welcome_intro_lines_1;
+    case 2:
+        return welcome_intro_lines_2;
+    case 3:
+        return welcome_intro_lines_3;
+    case 4:
+        return welcome_intro_lines_4;
+    case 5:
+        return welcome_intro_lines_5;
+    case 6:
+        return welcome_intro_lines_6;
+    case 0:
+    default:
+        return welcome_intro_lines_0;
+    }
+}
 
 static int welcome_screen_current_intro_style(void)
 {
@@ -458,252 +592,81 @@ static void welcome_prompt_label(int binding, const char* fallback,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-static bool welcome_screen_visit_intro_lines(const welcome_intro_layout* layout,
-    int intro_col, int intro_style, welcome_screen_line_sink sink, void* user)
+static int welcome_screen_active_intro_style(void)
 {
-    int top_pad = 1;
-    const int subtitle_col = intro_col + WELCOME_SCREEN_SUBTITLE_OFFSET;
-    const int title_col = intro_col + WELCOME_SCREEN_TITLE_OFFSET;
-    const int quote_attr_col = intro_col + WELCOME_SCREEN_QUOTE_ATTR_OFFSET;
-    const int song_attr_col = intro_col + WELCOME_SCREEN_SONG_ATTR_OFFSET;
-    int y;
+    if (g_welcome_scene_intro_style < 0 || g_welcome_scene_intro_style > 6)
+        g_welcome_scene_intro_style = welcome_screen_current_intro_style();
 
-    if (!sink)
+    return g_welcome_scene_intro_style;
+}
+
+static void welcome_screen_begin_session(void)
+{
+    g_welcome_scene_intro_style = welcome_screen_current_intro_style();
+}
+
+static bool welcome_screen_status_has_visible_text(cptr text)
+{
+    if (!text)
         return false;
-    if (layout)
-        top_pad = layout->top_pad;
-    if (top_pad < 0)
-        top_pad = 0;
-    y = top_pad;
 
-#define INTRO_ROW(_rel) (y + welcome_screen_intro_row((_rel), layout) - 1)
-#define EMIT_LINE(_col, _row, _attr, _text) \
-    do { \
-        if (!sink(user, (_row), (_col), (_attr), \
-                APP_BOOTSTRAP_OP_FLAG_NONE, (_text))) \
-        { \
-            return false; \
-        } \
-    } while (0)
-
-    switch (intro_style)
+    while (*text)
     {
-    case 0:
-    default:
-        EMIT_LINE(intro_col, INTRO_ROW(1), TERM_L_BLUE,
-            "\"In the beginning Eru, the One,");
-        EMIT_LINE(intro_col, INTRO_ROW(2), TERM_L_BLUE,
-            "  made the Ainur of his thought;");
-        EMIT_LINE(intro_col, INTRO_ROW(3), TERM_L_BLUE,
-            "  and they sang, and he was glad.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(4), TERM_SLATE,
-            "-- Ainulindale");
-        EMIT_LINE(title_col, INTRO_ROW(6), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(7), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "In the deeps of Angband, beyond");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "gates of iron and pits of flame,");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "Morgoth hoards the Silmarils --");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "three jewels of living light.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_YELLOW,
-            "Take up blade and burden. Descend.");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_YELLOW,
-            "Oaths, quests, blessings of the Valar");
-        EMIT_LINE(intro_col, INTRO_ROW(16), TERM_YELLOW,
-            "await in the First Age reborn.");
-        break;
-
-    case 1:
-        EMIT_LINE(intro_col, INTRO_ROW(1), TERM_L_BLUE,
-            "\"Be he foe or friend,");
-        EMIT_LINE(intro_col, INTRO_ROW(2), TERM_L_BLUE,
-            "  be he foul or clean...");
-        EMIT_LINE(intro_col, INTRO_ROW(3), TERM_L_BLUE,
-            "  he shall defend, shall be held mine.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(4), TERM_SLATE,
-            "-- Oath of Feanor");
-        EMIT_LINE(title_col, INTRO_ROW(6), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(7), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "In the pits beneath the mountains");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "Morgoth broods upon his throne.");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "Three jewels burn upon his crown --");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "stolen light that is not his own.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_YELLOW,
-            "Take up blade and burden. Descend.");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_YELLOW,
-            "Oaths, quests, blessings of the Valar");
-        EMIT_LINE(intro_col, INTRO_ROW(16), TERM_YELLOW,
-            "await in the First Age reborn.");
-        break;
-
-    case 2:
-        EMIT_LINE(title_col, INTRO_ROW(1), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(2), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_WHITE,
-            "Before the Sun and Moon were wrought");
-        EMIT_LINE(intro_col, INTRO_ROW(5), TERM_WHITE,
-            "the Eldar walked by starlight alone.");
-        EMIT_LINE(intro_col, INTRO_ROW(6), TERM_WHITE,
-            "Now shadow stirs beneath the earth");
-        EMIT_LINE(intro_col, INTRO_ROW(7), TERM_WHITE,
-            "where Morgoth sits upon his throne.");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "Three jewels blaze upon his crown --");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "stolen fire none may reclaim...");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "unless one dares the iron dark");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "and walks through everlasting flame.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_L_BLUE,
-            "\"...and the light that blazed in them");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_L_BLUE,
-            "  no power could dim or mar.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(16), TERM_SLATE,
-            "-- Of the Silmarils");
-        break;
-
-    case 3:
-        EMIT_LINE(intro_col, INTRO_ROW(1), TERM_L_BLUE,
-            "\"The leaves were long, the grass was green,");
-        EMIT_LINE(intro_col, INTRO_ROW(2), TERM_L_BLUE,
-            "  the hemlock-umbels tall and fair,");
-        EMIT_LINE(intro_col, INTRO_ROW(3), TERM_L_BLUE,
-            "  and in the glade a light was seen");
-        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_L_BLUE,
-            "  of stars in shadow shimmering.\"");
-        EMIT_LINE(song_attr_col, INTRO_ROW(5), TERM_SLATE,
-            "-- Of Beren and Luthien");
-        EMIT_LINE(title_col, INTRO_ROW(7), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(8), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "Even in the deepest dark, a song");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "may still undo the mightiest door.");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "Dare the throne-hall of the Enemy");
-        EMIT_LINE(intro_col, INTRO_ROW(13), TERM_WHITE,
-            "and seize what Morgoth stole of old.");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_YELLOW,
-            "Oaths, quests, blessings of the Valar");
-        EMIT_LINE(intro_col, INTRO_ROW(16), TERM_YELLOW,
-            "await in the First Age reborn.");
-        break;
-
-    case 4:
-        EMIT_LINE(intro_col, INTRO_ROW(1), TERM_L_BLUE,
-            "\"The day shall come again when you");
-        EMIT_LINE(intro_col, INTRO_ROW(2), TERM_L_BLUE,
-            "  shall see the Sun once more.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(3), TERM_SLATE,
-            "-- Words of Hurin");
-        EMIT_LINE(title_col, INTRO_ROW(5), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(6), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(8), TERM_WHITE,
-            "No chain can hold a will unbroken.");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "Though Morgoth's shadow covers all,");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "the free may still defy the dark");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "and wrest a jewel from his crown.");
-        EMIT_LINE(intro_col, INTRO_ROW(13), TERM_YELLOW,
-            "Take up blade and burden. Descend.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_YELLOW,
-            "Oaths, quests, blessings of the Valar");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_YELLOW,
-            "await in the First Age reborn.");
-        EMIT_LINE(intro_col, INTRO_ROW(16), TERM_L_BLUE,
-            "\"Aure entuluva!\"");
-        break;
-
-    case 5:
-        EMIT_LINE(title_col, INTRO_ROW(1), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(2), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_WHITE,
-            "By silver waters Elves first woke");
-        EMIT_LINE(intro_col, INTRO_ROW(5), TERM_WHITE,
-            "beneath the stars ere morning broke.");
-        EMIT_LINE(intro_col, INTRO_ROW(6), TERM_WHITE,
-            "No sun had risen, no moon shone --");
-        EMIT_LINE(intro_col, INTRO_ROW(7), TERM_WHITE,
-            "just heaven's light on lake and stone.");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "Then Morgoth's shadow veiled the land");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "and stole the Light with iron hand.");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "Yet still a whisper stirs the deep:");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "what darkness took, the bold may reap.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_L_BLUE,
-            "\"...the starlight glittered");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_L_BLUE,
-            "  on the waters of Cuivienen.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(16), TERM_SLATE,
-            "-- Of the Coming of the Elves");
-        break;
-
-    case 6:
-        EMIT_LINE(title_col, INTRO_ROW(1), TERM_WHITE, "S I L - M O R E");
-        EMIT_LINE(subtitle_col, INTRO_ROW(2), TERM_L_BLUE,
-            "~ Shining  Darkness ~");
-        EMIT_LINE(intro_col, INTRO_ROW(4), TERM_WHITE,
-            "In Valinor the Two Trees shone");
-        EMIT_LINE(intro_col, INTRO_ROW(5), TERM_WHITE,
-            "with gold and silver, leaf and bough.");
-        EMIT_LINE(intro_col, INTRO_ROW(6), TERM_WHITE,
-            "Their mingled light is dead and gone --");
-        EMIT_LINE(intro_col, INTRO_ROW(7), TERM_WHITE,
-            "the world lies under shadow now.");
-        EMIT_LINE(intro_col, INTRO_ROW(9), TERM_WHITE,
-            "Across the ice the exiles came,");
-        EMIT_LINE(intro_col, INTRO_ROW(10), TERM_WHITE,
-            "the Noldor burning with their oath.");
-        EMIT_LINE(intro_col, INTRO_ROW(11), TERM_WHITE,
-            "They traded bliss for grief and flame");
-        EMIT_LINE(intro_col, INTRO_ROW(12), TERM_WHITE,
-            "and lost the blessing of them both.");
-        EMIT_LINE(intro_col, INTRO_ROW(14), TERM_L_BLUE,
-            "\"...and the Noldor wept");
-        EMIT_LINE(intro_col, INTRO_ROW(15), TERM_L_BLUE,
-            "  for the beauty of Telperion and Laurelin.\"");
-        EMIT_LINE(quote_attr_col, INTRO_ROW(16), TERM_SLATE,
-            "-- Of the Darkening of Valinor");
-        break;
+        if (!isspace((unsigned char)(*text)))
+            return true;
+        text++;
     }
 
-#undef EMIT_LINE
-#undef INTRO_ROW
+    return false;
+}
+
+static bool welcome_screen_append_intro_line(app_ui_panel* panel,
+    const welcome_ui_line* line)
+{
+    app_ui_text_line* target;
+
+    if (!panel || !line || panel->body_line_count >= APP_UI_BODY_LINE_MAX)
+        return false;
+
+    target = &panel->body_lines[panel->body_line_count++];
+    memset(target, 0, sizeof(*target));
+    target->attr = line->attr;
+    target->story = line->story;
+    target->flags = (u16b)(line->col & APP_UI_TEXT_FLAG_WELCOME_COL_MASK);
+    if (!line->text || !line->text[0])
+        target->flags |= APP_UI_TEXT_FLAG_WELCOME_BLANK;
+    else
+        SDL_strlcpy(target->text, line->text, sizeof(target->text));
 
     return true;
 }
 
-static bool welcome_screen_visit_footer_lines(int intro_col,
-    bool show_wizard_line, bool show_sep, bool show_blank, bool show_prompt,
-    welcome_screen_line_sink sink, void* user)
+static bool welcome_screen_add_intro_content(app_ui_panel* panel,
+    int intro_style)
 {
-    const char* wizard_line =
-        "Resurrecting a character is a form of cheating.";
-    const char* sep_line = "- - - - - - - - - - - -";
-    char menu_line[96];
-    bool steamdeck = steamdeck_controls_active();
-    int bottom_row = 0;
+    const welcome_ui_line* lines = welcome_screen_intro_lines_for_style(
+        intro_style);
+    int i;
 
-    if (!sink)
+    if (!panel || !lines)
+        return false;
+
+    for (i = 0; lines[i].text; i++)
+    {
+        if (!welcome_screen_append_intro_line(panel, &lines[i]))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
+{
+    bool steamdeck = steamdeck_controls_active();
+
+    if (!panel)
         return false;
 
     if (steamdeck)
@@ -715,286 +678,77 @@ static bool welcome_screen_visit_footer_lines(int intro_col,
             sizeof(confirm_label));
         welcome_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
-        strnfmt(menu_line, sizeof(menu_line),
-            (metarun_created == true)
-                ? "[%s] Begin    [%s] Quit"
-                : "[%s] Continue  [%s] Quit",
-            confirm_label, back_label);
-    }
-    else
-    {
-        SDL_strlcpy(menu_line,
-            (metarun_created == true)
-                ? "[Space] Begin    [Q/Esc] Quit"
-                : "[Space] Continue  [Q/Esc] Quit",
-            sizeof(menu_line));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                   confirm_label,
+                   metarun_created ? "Begin" : "Continue")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Quit");
     }
 
-    if (show_prompt)
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+               "Space", metarun_created ? "Begin" : "Continue")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Q/Esc", "Quit");
+}
+
+static bool welcome_screen_build_ui_scene(app_ui_scene* scene,
+    cptr status_line, bool show_footer)
+{
+    app_ui_panel* panel;
+    bool show_status = welcome_screen_status_has_visible_text(status_line);
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_WELCOME;
+
+    if (!welcome_screen_add_intro_content(panel, welcome_screen_active_intro_style()))
     {
-        if (!sink(user, bottom_row, intro_col, TERM_SLATE,
-                APP_BOOTSTRAP_OP_FLAG_BOTTOM_ANCHORED, menu_line))
-        {
-            return false;
-        }
-        bottom_row++;
+        return false;
     }
 
-    if (show_blank && show_prompt)
-        bottom_row++;
-
-    if (show_sep)
+    if (show_footer && runtime_cli_wizard())
     {
-        if (!sink(user, bottom_row, intro_col, TERM_L_DARK,
-                APP_BOOTSTRAP_OP_FLAG_BOTTOM_ANCHORED, sep_line))
-        {
-            return false;
-        }
-        bottom_row++;
-    }
-
-    if (show_wizard_line)
-    {
-        if (!sink(user, bottom_row, intro_col, TERM_BLUE,
-                APP_BOOTSTRAP_OP_FLAG_BOTTOM_ANCHORED, wizard_line))
+        if (!app_ui_panel_add_detail_line(panel, TERM_BLUE,
+                "Resurrecting a character is a form of cheating."))
         {
             return false;
         }
     }
 
-    return true;
-}
-
-static bool welcome_screen_term_emit(void* user, int row, int col, byte attr,
-    byte flags, cptr text)
-{
-    welcome_screen_term_render_context* context = user;
-    int y = row;
-
-    if (!context || !text)
+    if (show_footer && !welcome_screen_add_footer_actions(panel))
         return false;
 
-    if (flags & APP_BOOTSTRAP_OP_FLAG_BOTTOM_ANCHORED)
-        y = context->term_hgt - row - 1;
-
-    if (y < 0 || y >= context->term_hgt)
-        return true;
-
-    Term_putstr(col, y, -1, attr, text);
-    return true;
-}
-
-static bool welcome_screen_bootstrap_emit(void* user, int row, int col,
-    byte attr, byte flags, cptr text)
-{
-    app_bootstrap_scene* scene = user;
-
-    return app_bootstrap_scene_add_text_ex(scene, (s16b)row, (s16b)col, attr,
-        flags, text);
-}
-
-static bool welcome_screen_publish_bootstrap(bool show_wizard_line)
-{
-    app_session* session = app_session_current();
-    app_bootstrap_scene scene;
-    welcome_intro_layout layout;
-    int term_hgt = Term ? Term->hgt : 24;
-    bool show_sep = true;
-    bool show_blank = true;
-    bool show_prompt = true;
-    int intro_col = welcome_screen_base_col();
-
-    if (!runtime_cli_snapshot_renderer() || !session)
-        return false;
-
-    welcome_screen_compute_layout(term_hgt, show_wizard_line, &layout,
-        &show_sep, &show_blank, &show_prompt);
-
-    app_bootstrap_scene_init(&scene);
-    if (!welcome_screen_visit_intro_lines(&layout, intro_col,
-            welcome_screen_current_intro_style(),
-            welcome_screen_bootstrap_emit, &scene))
+    if (show_status)
     {
-        return false;
+        if (!app_ui_panel_add_detail_line(panel, TERM_SLATE, status_line))
+            return false;
     }
 
-    if (!welcome_screen_visit_footer_lines(intro_col, show_wizard_line,
-            show_sep, show_blank, show_prompt,
-            welcome_screen_bootstrap_emit, &scene))
-    {
-        return false;
-    }
-
-    if (!app_session_publish_bootstrap_scene(session, &scene))
-        return false;
-
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
     return true;
+}
+
+static bool welcome_screen_present_ui(cptr status_line, bool show_footer)
+{
+    app_ui_scene scene;
+
+    if (!runtime_cli_snapshot_renderer())
+        return false;
+    if (!welcome_screen_build_ui_scene(&scene, status_line, show_footer))
+        return false;
+
+    return ui_information_scene_present_ui(&scene);
 }
 
 void display_introduction(void)
 {
-    int term_wid = 80;
-    int term_hgt = 24;
-    welcome_intro_layout layout;
-
-    Term_get_size(&term_wid, &term_hgt);
-    (void)term_wid;
-    welcome_screen_compute_layout(term_hgt, runtime_cli_wizard(), &layout,
-        NULL, NULL, NULL);
-    display_introduction_with_layout(&layout);
-}
-
-static int welcome_screen_base_col(void)
-{
-    int wid = 80;
-    int hgt = 24;
-    const int legacy_term_wid = 80;
-    const int legacy_base_col = 14;
-    const int compact_block_wid = 43;
-    int shift;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = legacy_term_wid;
-
-    if (wid < legacy_term_wid)
-    {
-        shift = (wid - compact_block_wid) / 2;
-        if (shift < 0)
-            shift = 0;
-
-        return shift;
-    }
-
-    shift = (wid - legacy_term_wid) / 2;
-    if (legacy_base_col + shift < 0)
-        shift = -legacy_base_col;
-
-    return legacy_base_col + shift;
-}
-
-static int welcome_screen_intro_row(int rel_row,
-    const welcome_intro_layout* layout)
-{
-    int row = rel_row;
-
-    if (!layout)
-        return row;
-
-    if (layout->drop_gap_1 && row >= 6)
-        row--;
-    if (layout->drop_gap_2 && row >= 9)
-        row--;
-    if (layout->drop_gap_3 && row >= 14)
-        row--;
-
-    return row;
-}
-
-static int welcome_screen_intro_last_row(const welcome_intro_layout* layout)
-{
-    return welcome_screen_intro_row(16, layout);
-}
-
-static int welcome_screen_intro_total_rows(const welcome_intro_layout* layout)
-{
-    int top_pad = 1;
-
-    if (layout)
-        top_pad = layout->top_pad;
-    if (top_pad < 0)
-        top_pad = 0;
-
-    return top_pad + welcome_screen_intro_last_row(layout);
-}
-
-static int welcome_screen_footer_rows(bool show_wizard, bool show_sep,
-    bool show_blank, bool show_prompt)
-{
-    int rows = 0;
-
-    if (show_prompt)
-        rows++;
-    if (show_blank && show_prompt)
-        rows++;
-    if (show_sep)
-        rows++;
-    if (show_wizard)
-        rows++;
-
-    return rows;
-}
-
-static void welcome_screen_compute_layout(int hgt, bool show_wizard,
-    welcome_intro_layout* out_layout, bool* out_show_sep,
-    bool* out_show_blank, bool* out_show_prompt)
-{
-    welcome_intro_layout layout = { 1, false, false, false };
-    bool show_sep = true;
-    bool show_blank = true;
-    bool show_prompt = true;
-
-    if (hgt < 1)
-        hgt = 24;
-
-#define FITS_NOW() \
-    (welcome_screen_intro_total_rows(&layout) \
-        + welcome_screen_footer_rows(show_wizard, show_sep, show_blank, show_prompt) \
-        <= hgt)
-
-    if (!FITS_NOW())
-        layout.top_pad = 0;
-
-    if (!FITS_NOW())
-        show_blank = false;
-
-    if (!FITS_NOW())
-        show_sep = false;
-
-    if (!FITS_NOW())
-        layout.drop_gap_3 = true;
-    if (!FITS_NOW())
-        layout.drop_gap_2 = true;
-    if (!FITS_NOW())
-        layout.drop_gap_1 = true;
-
-    if (!FITS_NOW())
-        show_prompt = false;
-
-    if (!show_prompt)
-        show_blank = false;
-
-#undef FITS_NOW
-
-    if (out_layout)
-        *out_layout = layout;
-    if (out_show_sep)
-        *out_show_sep = show_sep;
-    if (out_show_blank)
-        *out_show_blank = show_blank;
-    if (out_show_prompt)
-        *out_show_prompt = show_prompt;
-}
-
-static void display_introduction_with_layout(
-    const welcome_intro_layout* layout)
-{
-    bool saved_cursor_state = false;
-    welcome_screen_term_render_context context;
-
-    Term_clear();
-    context.term_hgt = Term ? Term->hgt : 24;
-    if (context.term_hgt < 1)
-        context.term_hgt = 24;
-
-    (void)Term_get_cursor(&saved_cursor_state);
-    (void)Term_set_cursor(false);
-    (void)welcome_screen_visit_intro_lines(layout, welcome_screen_base_col(),
-        welcome_screen_current_intro_style(), welcome_screen_term_emit,
-        &context);
-    Term_fresh();
-    (void)Term_set_cursor(saved_cursor_state);
+    welcome_screen_begin_session();
+    (void)welcome_screen_present_ui(NULL, false);
 }
 
 void init_angband(void)
@@ -1007,9 +761,7 @@ void init_angband(void)
     platform_load_app_options();
     run_mode_reset();
 
-    sdl_story_font_enable();
     display_introduction();
-    sdl_story_font_reset();
 
 #ifdef SIL_USE_LOCAL_DATA
     path_build(buf, sizeof(buf), ANGBAND_DIR_APEX, "scores.raw");
@@ -1237,48 +989,15 @@ NavResult initial_menu(bool* start_new)
 
     int ch;
     NavResult result = NAV_BACK;
-    bool intro_story_font = false;
     bool steamdeck = steamdeck_controls_active();
-    bool show_wizard_line = runtime_cli_wizard();
     app_session* session = app_session_current();
     app_wait_scope bootstrap_wait_scope;
-    bool bootstrap_scene_active = false;
 
     memset(&bootstrap_wait_scope, 0, sizeof(bootstrap_wait_scope));
-    if (runtime_cli_snapshot_renderer() && session)
-    {
+    if (session)
         app_session_push_wait_scope(session, &bootstrap_wait_scope,
             APP_WAIT_REASON_BOOTSTRAP, 0, 0);
-        bootstrap_scene_active = welcome_screen_publish_bootstrap(
-            show_wizard_line);
-    }
-
-    if (!bootstrap_scene_active)
-    {
-        int wid, hgt;
-        welcome_intro_layout intro_layout;
-        bool show_sep;
-        bool show_blank;
-        bool show_prompt;
-        welcome_screen_term_render_context context;
-
-        intro_story_font = true;
-        sdl_story_font_enable();
-        Term_get_size(&wid, &hgt);
-        (void)wid;
-
-        welcome_screen_compute_layout(hgt, show_wizard_line, &intro_layout,
-            &show_sep, &show_blank, &show_prompt);
-        display_introduction_with_layout(&intro_layout);
-
-        context.term_hgt = hgt;
-        if (context.term_hgt < 1)
-            context.term_hgt = 24;
-        (void)welcome_screen_visit_footer_lines(welcome_screen_base_col(),
-            show_wizard_line, show_sep, show_blank, show_prompt,
-            welcome_screen_term_emit, &context);
-        Term_fresh();
-    }
+    (void)welcome_screen_present_ui(NULL, true);
 
     bool saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
@@ -1311,8 +1030,6 @@ menu_done:
         sdl_config_mark_intro_seen();
         save_pane_config_to_json();
     }
-    if (intro_story_font)
-        sdl_story_font_reset();
     return result;
 }
 
