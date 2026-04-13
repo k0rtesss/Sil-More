@@ -693,9 +693,12 @@ const app_snapshot* app_session_snapshot(const app_session* session)
 void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot)
 {
+    u16b previous_scene;
+
     if (!session)
         return;
 
+    previous_scene = session->snapshot.scene;
     if (snapshot)
         session->snapshot = *snapshot;
     else
@@ -705,6 +708,17 @@ void app_session_set_snapshot(app_session* session,
     {
         session->snapshot.scene = APP_SCENE_KIND_NONE;
         session->snapshot.flags = 0;
+    }
+
+    if ((previous_scene == APP_SCENE_KIND_MENU
+            || previous_scene == APP_SCENE_KIND_INFORMATION
+            || session->snapshot.scene == APP_SCENE_KIND_MENU
+            || session->snapshot.scene == APP_SCENE_KIND_INFORMATION)
+        && previous_scene != session->snapshot.scene)
+    {
+        log_debug("[metarun-esc-trace] app_session_set_snapshot %u->%u rev=%u flags=0x%04X",
+            (unsigned)previous_scene, (unsigned)session->snapshot.scene,
+            (unsigned)session->snapshot.revision, (unsigned)session->snapshot.flags);
     }
 
     if (session->snapshot.scene != APP_SCENE_KIND_DUNGEON)
@@ -1272,6 +1286,11 @@ void app_session_clear_inputs(app_session* session)
     if (!session)
         return;
 
+    if (session->inputs.count > 0)
+    {
+        log_debug("[metarun-esc-trace] app_session_clear_inputs count=%u snapshot_scene=%u",
+            (unsigned)session->inputs.count, (unsigned)session->snapshot.scene);
+    }
     app_input_queue_clear(&session->inputs);
 }
 

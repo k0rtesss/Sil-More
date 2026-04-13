@@ -2,6 +2,7 @@
 
 #include "ui-information-scene.h"
 #include "externs.h"
+#include "log/log.h"
 #include "runtime-cli.h"
 
 static bool g_ui_information_scene_active = false;
@@ -269,6 +270,8 @@ static bool ui_information_scene_restore_snapshot(app_session* session,
     if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
         && scope->previous_menu_snapshot)
     {
+        log_debug("[metarun-esc-trace] ui_information_scene_restore_snapshot -> menu rev=%u",
+            (unsigned)scope->previous_menu_snapshot->snapshot.revision);
         return app_session_publish_menu_scene(session,
             &scope->previous_menu_snapshot->scene);
     }
@@ -276,6 +279,8 @@ static bool ui_information_scene_restore_snapshot(app_session* session,
     if (scope->previous_snapshot.scene == APP_SCENE_KIND_INFORMATION
         && scope->previous_information_snapshot)
     {
+        log_debug("[metarun-esc-trace] ui_information_scene_restore_snapshot -> information rev=%u",
+            (unsigned)scope->previous_information_snapshot->snapshot.revision);
         return app_session_publish_information_scene(session,
             &scope->previous_information_snapshot->scene);
     }
@@ -631,6 +636,10 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
             if (input.flags & ignored_flags)
                 continue;
 
+            if ((int)(input.payload.key.logical_key & 0xFFu) == ESCAPE) {
+                log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal esc flags=0x%04x layer=%d type=%d",
+                    (unsigned)input.flags, (int)input.layer, (int)input.type);
+            }
             return (int)(input.payload.key.logical_key & 0xFFu);
         }
 
@@ -659,6 +668,9 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
 
     if (session)
     {
+        log_debug("[metarun-esc-trace] ui_information_scene_leave begin prev_scene=%u published_overlay=%d prev_active=%d",
+            (unsigned)scope->previous_snapshot.scene,
+            scope->published_overlay ? 1 : 0, scope->previous_active ? 1 : 0);
         app_session_clear_inputs(session);
         restored_information = ui_information_scene_restore_snapshot(session,
             scope);
@@ -674,6 +686,9 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
         = mem_free(scope->previous_information_snapshot);
     scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
+    log_debug("[metarun-esc-trace] ui_information_scene_leave end restored_information=%d current_scene=%u",
+        restored_information ? 1 : 0,
+        (unsigned)(session ? app_session_snapshot(session)->scene : 0));
     if (!restored_information
         && scope->previous_snapshot.scene == APP_SCENE_KIND_DUNGEON
         && Term

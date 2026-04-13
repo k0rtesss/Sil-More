@@ -1133,6 +1133,7 @@ static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
 static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label, const char* back_label);
+static void metarun_log_blessing_key(const char* context, int mode, int key);
 /* =======================  load / save  ========================= */
 
 /*
@@ -4310,6 +4311,32 @@ typedef enum metarun_blessing_scene_mode {
     METARUN_BLESSING_SCENE_MAJOR = 3
 } metarun_blessing_scene_mode;
 
+static const char* metarun_blessing_scene_mode_name(int mode)
+{
+    switch (mode) {
+    case METARUN_BLESSING_SCENE_MAIN:
+        return "main";
+    case METARUN_BLESSING_SCENE_REMOVE:
+        return "remove";
+    case METARUN_BLESSING_SCENE_MINOR:
+        return "minor";
+    case METARUN_BLESSING_SCENE_MAJOR:
+        return "major";
+    default:
+        return "unknown";
+    }
+}
+
+static void metarun_log_blessing_key(const char* context, int mode, int key)
+{
+    char printable = ((key >= 32) && (key <= 126)) ? (char)key : '?';
+
+    log_debug("[metarun-esc-trace] %s mode=%s key=%d char=%c esc=%d active=%d",
+        context ? context : "blessing", metarun_blessing_scene_mode_name(mode),
+        key, printable, key == ESCAPE ? 1 : 0,
+        ui_information_scene_is_active() ? 1 : 0);
+}
+
 static int blessing_collect_removable_curses(int *ids, int capacity)
 {
     int count = 0;
@@ -5594,6 +5621,8 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
     byte status_attr = TERM_WHITE;
     bool clear_status_on_next_key = false;
 
+    log_debug("[metarun-esc-trace] blessing exchange semantic enter");
+
     while (true) {
         int available;
         int earned;
@@ -5717,6 +5746,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 return false;
 
             key = ui_information_scene_wait_key_nonrepeat();
+            metarun_log_blessing_key("blessing-scene-read", mode, key);
             if (clear_status_on_next_key || key == '8' || key == 'k'
                 || key == '-' || key == '2' || key == 'j' || key == '+')
             {
@@ -5755,6 +5785,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     status_attr = TERM_ORANGE;
                     clear_status_on_next_key = true;
                 } else {
+                    log_debug("[metarun-esc-trace] blessing mode main->remove");
                     mode = METARUN_BLESSING_SCENE_REMOVE;
                 }
                 continue;
@@ -5767,6 +5798,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     status_attr = TERM_ORANGE;
                     clear_status_on_next_key = true;
                 } else {
+                    log_debug("[metarun-esc-trace] blessing mode main->minor");
                     mode = METARUN_BLESSING_SCENE_MINOR;
                 }
                 continue;
@@ -5785,6 +5817,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     status_attr = TERM_ORANGE;
                     clear_status_on_next_key = true;
                 } else {
+                    log_debug("[metarun-esc-trace] blessing mode main->major");
                     mode = METARUN_BLESSING_SCENE_MAJOR;
                 }
                 continue;
@@ -5851,10 +5884,12 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 return false;
 
             key = ui_information_scene_wait_key_nonrepeat();
+            metarun_log_blessing_key("blessing-scene-read", mode, key);
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
             {
+                log_debug("[metarun-esc-trace] blessing mode remove->main via back");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -5872,6 +5907,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 (void)blessing_apply_remove_curse_choice(ids[selected_remove],
                     status_msg, sizeof(status_msg), &status_attr);
                 clear_status_on_next_key = true;
+                log_debug("[metarun-esc-trace] blessing mode remove->main via apply");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -5883,6 +5919,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     (void)blessing_apply_remove_curse_choice(ids[idx],
                         status_msg, sizeof(status_msg), &status_attr);
                     clear_status_on_next_key = true;
+                    log_debug("[metarun-esc-trace] blessing mode remove->main via letter");
                     mode = METARUN_BLESSING_SCENE_MAIN;
                     continue;
                 }
@@ -5969,10 +6006,12 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 return false;
 
             key = ui_information_scene_wait_key_nonrepeat();
+            metarun_log_blessing_key("blessing-scene-read", mode, key);
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
             {
+                log_debug("[metarun-esc-trace] blessing mode minor->main via back");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -5990,6 +6029,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 (void)blessing_apply_minor_choice(options[selected_minor],
                     status_msg, sizeof(status_msg), &status_attr);
                 clear_status_on_next_key = true;
+                log_debug("[metarun-esc-trace] blessing mode minor->main via apply");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -6001,6 +6041,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     (void)blessing_apply_minor_choice(options[idx], status_msg,
                         sizeof(status_msg), &status_attr);
                     clear_status_on_next_key = true;
+                    log_debug("[metarun-esc-trace] blessing mode minor->main via letter");
                     mode = METARUN_BLESSING_SCENE_MAIN;
                     continue;
                 }
@@ -6104,10 +6145,12 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 return false;
 
             key = ui_information_scene_wait_key_nonrepeat();
+            metarun_log_blessing_key("blessing-scene-read", mode, key);
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
             {
+                log_debug("[metarun-esc-trace] blessing mode major->main via back");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -6137,6 +6180,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     major_options[selected_major].idx, status_msg,
                     sizeof(status_msg), &status_attr);
                 clear_status_on_next_key = true;
+                log_debug("[metarun-esc-trace] blessing mode major->main via apply");
                 mode = METARUN_BLESSING_SCENE_MAIN;
                 continue;
             }
@@ -6167,6 +6211,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                         major_options[choice_idx].idx, status_msg,
                         sizeof(status_msg), &status_attr);
                     clear_status_on_next_key = true;
+                    log_debug("[metarun-esc-trace] blessing mode major->main via letter");
                     mode = METARUN_BLESSING_SCENE_MAIN;
                     continue;
                 }
@@ -6197,9 +6242,14 @@ static void open_blessing_exchange(void)
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
 
+    log_debug("[metarun-esc-trace] open_blessing_exchange enter info_scene=%d",
+        use_information_scene ? 1 : 0);
+
     if (use_information_scene) {
         bool semantic_ok = open_blessing_exchange_information_scene(
             steamdeck, accept_label, back_label);
+        log_debug("[metarun-esc-trace] open_blessing_exchange semantic returned ok=%d",
+            semantic_ok ? 1 : 0);
         ui_information_scene_leave(&info_scope);
         if (semantic_ok)
             return;
@@ -6765,6 +6815,8 @@ static void metarun_ui_clear_pending_input(void)
 {
     app_session* session = app_session_current();
 
+    log_debug("[metarun-esc-trace] clear_pending_input active=%d",
+        ui_information_scene_is_active() ? 1 : 0);
     if (session)
         app_session_clear_inputs(session);
     flush();
@@ -7790,10 +7842,11 @@ void print_metarun_stats(void)
     screen_load(); \
     if (use_information_scene) \
         ui_information_scene_leave(&info_scope); \
-} while (0)
+    } while (0)
 
     screen_save();
 
+metarun_redraw:
     refresh_current_metar_score();
 
     if (current_run < 0 || current_run >= metarun_max) {
@@ -8305,6 +8358,12 @@ void print_metarun_stats(void)
 
     char key = use_information_scene ? (char)ui_information_scene_wait_key_nonrepeat()
                                      : inkey();
+    if (key == ESCAPE || key == 'b' || key == 'B') {
+        log_debug("[metarun-esc-trace] stats key=%d char=%c use_information_scene=%d",
+            (int)(unsigned char)key,
+            ((key >= 32) && (key <= 126)) ? key : '?',
+            use_information_scene ? 1 : 0);
+    }
     if (steamdeck) {
         int back_key = steamdeck_back_key();
         int confirm_key = steamdeck_confirm_key();
@@ -8340,32 +8399,56 @@ void print_metarun_stats(void)
         }
     }
     if (key == 'b' || key == 'B') {
+        if (use_information_scene) {
+            open_blessing_exchange();
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         open_blessing_exchange();
         print_metarun_stats();
         return;
     } else if (key == 'c' || key == 'C') {
+        if (use_information_scene) {
+            choose_difficulty_menu(false);
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         choose_difficulty_menu(true);
         return;
     } else if (key == 'f' || key == 'F') {
+        if (use_information_scene) {
+            adjust_blessing_threshold_menu();
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         adjust_blessing_threshold_menu();
         print_metarun_stats();
         return;
     } else if (key == 'u' || key == 'U') {
         /* Show the full list of active curses/blessings separately */
+        if (use_information_scene) {
+            show_all_active_curses();
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         show_all_active_curses();
         print_metarun_stats();
         return;
     } else if (key == 's' || key == 'S') {
         /* Show history only */
+        if (use_information_scene) {
+            list_metaruns();
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         list_metaruns();
         print_metarun_stats();
         return;
     } else if (key == 't' || key == 'T') {
+        if (use_information_scene) {
+            show_completed_quests_summary();
+            goto metarun_redraw;
+        }
         METARUN_CLOSE_SCREEN();
         show_completed_quests_summary();
         print_metarun_stats();

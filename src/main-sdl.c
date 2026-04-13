@@ -151,6 +151,11 @@ static void sdl_enqueue_legacy_key_to_term_screen(int key)
     if (!key)
         return;
 
+    if (key == ESCAPE)
+    {
+        log_debug("[metarun-esc-trace] sdl_enqueue_legacy_key_to_term_screen esc");
+    }
+
     if (term_screen && sdl_term_queue_keypress(term_screen, key) >= 0)
         return;
 
@@ -215,6 +220,12 @@ void sdl_drain_legacy_input_queue(void)
     while (app_session_pop_input(session, &input)) {
         if (input.layer != APP_INPUT_LAYER_LEGACY || input.type != APP_INPUT_TYPE_KEY)
             continue;
+
+        if ((int)(input.payload.key.logical_key & 0xFFu) == ESCAPE)
+        {
+            log_debug("[metarun-esc-trace] sdl_drain_legacy_input_queue esc flags=0x%04x seq=%u",
+                (unsigned)input.flags, (unsigned)input.sequence);
+        }
 
         sdl_enqueue_legacy_key_to_term_screen((int)(input.payload.key.logical_key & 0xFFu));
     }

@@ -2051,6 +2051,8 @@ static void process_command(void)
     }
     case ESCAPE:
     {
+        log_debug("[metarun-esc-trace] process_command esc easy_main_menu=%d character_icky=%d",
+            easy_main_menu ? 1 : 0, character_icky ? 1 : 0);
         if (easy_main_menu)
             do_cmd_main_menu();
         break;

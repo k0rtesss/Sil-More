@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "log/log.h"
 #include "ui/ui-information-scene.h"
 
 int macro_find_check(cptr pat);
@@ -113,6 +114,10 @@ static errr inkey_information_scene(char* ch, bool wait, bool take)
             }
 
             *ch = (char)(input.payload.key.logical_key & 0xFFu);
+            if (*ch == ESCAPE) {
+                log_debug("[metarun-esc-trace] inkey_information_scene esc wait=%d take=%d flags=0x%04x",
+                    wait ? 1 : 0, take ? 1 : 0, (unsigned)input.flags);
+            }
             if (take)
             {
                 app_input consumed;
@@ -592,6 +597,11 @@ void request_command(void)
 
             /* Get a command */
             ch = inkey_with_wait_reason(APP_WAIT_REASON_COMMAND_INPUT);
+            if (ch == ESCAPE) {
+                log_debug("[metarun-esc-trace] request_command read esc command_new=%d info_scene=%d",
+                    p_ptr->command_new ? 1 : 0,
+                    ui_information_scene_is_active() ? 1 : 0);
+            }
         }
 
         /* Clear top line */
