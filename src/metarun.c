@@ -1115,8 +1115,6 @@ static bool sync_current_metarun_slot(bool stamp_time)
 /* forward declarations */
 static void start_new_metarun(void);
 static void choose_difficulty_menu(bool reopen_stats_on_exit);
-static void print_heading_fade(cptr title, byte final_attr);
-static bool print_paragraph_fade(cptr txt, byte final_attr, int row);
 static void adjust_blessing_threshold_menu(void);
 static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
     bool selected);
@@ -1141,6 +1139,9 @@ static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
 static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label, const char* back_label);
+static void metarun_present_story_texts(const char* title,
+    cptr texts[], int total_texts, byte title_attr,
+    byte text_attr, const char* action_label);
 static cptr metarun_curse_choice_label(int n);
 static int metarun_ui_choose_curse_scene(int n,
     const int picks[CURSE_MENU_LINES], bool steamdeck,
@@ -2260,103 +2261,6 @@ void metarun_clear_all_curses(void)
  *    All show in the intended order with no garbled overlaps.
  */
 
-/********************  Enhanced UI helpers with fade-in effects  ***************************/
-
-static void print_heading_fade(cptr title, byte final_attr)
-{
-    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, final_attr };
-    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-    int w, h; 
-    Term_get_size(&w, &h);
-    
-    // Center the heading
-    int title_len = strlen(title);
-    int start_col = (w - title_len) / 2;
-    if (start_col < 1) start_col = 1;
-    
-    sdl_story_font_enable();
-    
-    for (int s = 0; s < steps; s++)
-    {
-        c_prt(fade_cols[s], title, 2, start_col);
-        Term_fresh();
-        Term_xtra(TERM_XTRA_DELAY, 150);
-    }
-    Term_xtra(TERM_XTRA_DELAY, 500); // Extra pause after heading
-    
-    sdl_story_font_disable();
-}
-
-static bool print_paragraph_fade(cptr txt, byte final_attr, int row)
-{
-    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, final_attr };
-    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-    
-    text_out_hook   = text_out_to_screen;
-    text_out_indent = 2;
-    text_out_wrap   = Term->wid - 4;
-
-    sdl_story_font_enable();
-
-    for (int s = 0; s < steps; s++)
-    {
-        // Check for ESC key to skip fade
-        char ch;
-        if (Term_inkey(&ch, false, false) == 0 && ch == ESCAPE)
-        {
-            // Show final state immediately and return interrupted status
-            Term_gotoxy(2, row);
-            text_out_c(final_attr, txt);
-            text_out("\n");
-            Term_fresh();
-            sdl_story_font_disable();
-            return false;
-        }
-        
-        Term_gotoxy(2, row);
-        text_out_c(fade_cols[s], txt);
-        text_out("\n");
-        Term_fresh();
-        Term_xtra(TERM_XTRA_DELAY, 125);
-    }
-    
-    Term_xtra(TERM_XTRA_DELAY, 1000); // Pause after paragraph
-    
-    sdl_story_font_disable();
-    return true;
-}
-
-static void print_paragraph(cptr txt, byte attr)
-{
-    text_out_hook   = text_out_to_screen;
-    text_out_indent = 1;
-    text_out_wrap   = Term->wid - 2;
-
-    sdl_story_font_enable();
-
-    Term_addstr(0, attr, "");
-    text_out_c(attr, txt);
-    text_out("\n");
-    
-    sdl_story_font_disable();
-}
-
-static void wait_for_keypress_with_prompt(cptr prompt)
-{
-    int w, h;
-    Term_get_size(&w, &h);
-    
-    // Clear bottom line and show prompt
-    Term_erase(0, h - 1, w);
-    c_prt(TERM_L_WHITE, prompt ? prompt : "[Press any key to continue]", h - 1, 2);
-    Term_fresh();
-    
-    (void)inkey();
-    
-    // Clear the prompt line
-    Term_erase(0, h - 1, w);
-}
-
 static cptr curse_display_name(int idx)
 {
     cptr raw = cu_name + cu_info[idx].name;
@@ -2390,11 +2294,8 @@ int choose_escape_curses_ui(int n, int out[4])
 {
     // int rolls = any_curse_flag_active(CUR_NOCHOICE) ? 1 : n;
     int taken = 0;
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
     char intro_text[512];
+    const char* paragraphs[] = { intro_text };
 
     strnfmt(intro_text, sizeof(intro_text),
             "The Valar watch silently as Morgoth's malice reaches out from shadow-"
@@ -2403,23 +2304,8 @@ int choose_escape_curses_ui(int n, int out[4])
             (n == 1) ? "a" : (n == 2) ? "two" : (n == 3) ? "three" : "four",
             (n == 1) ? "" : "s");
 
-    if (steamdeck) {
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-    }
-    if (use_information_scene) {
-        const char* paragraphs[] = { intro_text };
-        const byte attrs[] = { TERM_WHITE };
-
-        if (!metarun_ui_show_story_modal("The Valar's Judgment", TERM_L_BLUE,
-                paragraphs, attrs, 1, steamdeck, accept_label, "Continue"))
-        {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        }
-    } else {
-        log_error("choose_escape_curses_ui: semantic story scene unavailable; continuing without intro modal");
-    }
+    metarun_present_story_texts("The Valar's Judgment", (cptr*)paragraphs, 1,
+        TERM_L_BLUE, TERM_WHITE, "Continue");
 
     for (int i = 0; i < n; i++)
     {
@@ -2427,10 +2313,6 @@ int choose_escape_curses_ui(int n, int out[4])
         log_debug("Player selected curse %d: %s", idx, cu_name + cu_info[idx].name);
         add_curse_stack(idx);                /* gameplay sideâ€‘effect */
         if (taken < 4) out[taken++] = idx;
-    }
-
-    if (use_information_scene) {
-        ui_information_scene_leave(&info_scope);
     }
     
     return taken;
@@ -2445,11 +2327,6 @@ int choose_escape_curses_ui(int n, int out[4])
  */
 int choose_oath_breaking_curse_ui(int oath_id)
 {
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-
     /* Get oath-specific permanent message (E: field from oath.txt) */
     char* perm_msg = oath_permanent_message(oath_id);
     char intro_text[256];
@@ -2457,40 +2334,22 @@ int choose_oath_breaking_curse_ui(int oath_id)
             "The breach of your sacred vow has drawn Morgoth's attention. "
             "His malice reaches out to compound your suffering with a curse you must bear.");
 
-    if (steamdeck) {
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-    }
-    if (use_information_scene) {
-        const char* first_paragraphs[] = {
+    {
+        cptr first_paragraphs[] = {
             (perm_msg && perm_msg[0]) ? perm_msg
                 : "Your oath is forever broken in this age."
         };
-        const byte first_attrs[] = { TERM_L_RED };
-        const char* second_paragraphs[] = { intro_text };
-        const byte second_attrs[] = { TERM_RED };
+        cptr second_paragraphs[] = { intro_text };
 
-        if (!metarun_ui_show_story_modal("The Sundering of Sacred Vows",
-                TERM_L_RED, first_paragraphs, first_attrs, 1, steamdeck,
-                accept_label, "Continue")
-            || !metarun_ui_show_story_modal("The Sundering of Sacred Vows",
-                TERM_L_RED, second_paragraphs, second_attrs, 1, steamdeck,
-                accept_label, "Choose"))
-        {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        }
-    } else {
-        log_error("choose_oath_breaking_curse_ui: semantic story scene unavailable; continuing without oath modal");
+        metarun_present_story_texts("The Sundering of Sacred Vows",
+            first_paragraphs, 1, TERM_L_RED, TERM_L_RED, "Continue");
+        metarun_present_story_texts("The Sundering of Sacred Vows",
+            second_paragraphs, 1, TERM_L_RED, TERM_RED, "Choose");
     }
 
     /* Let the player choose 1 curse from 3 options */
     int idx = menu_choose_one_curse(0);
     log_debug("Player selected curse %d for oath breaking", idx);
-
-    if (use_information_scene) {
-        ui_information_scene_leave(&info_scope);
-    }
     
     return idx;
 }
@@ -2508,18 +2367,19 @@ typedef enum {
     PROMPT_RETURN_MIDDLE_EARTH
 } prompt_t;
 
-static const char *prompt_text[] = {
-    "[Press any key to continue your tale]",
-    "[Press any key to face temptation]",
-    "[Press any key to continue]",
-    "[Press any key to face the echoes]",
-    "[Press any key to conclude your tale]",
-    "[Press any key to witness the consequences]",
-    "[Press any key to return to Middle-earth]"
-};
-
-static void wait_prompt(prompt_t id) {         /* tiny wrapper */
-    wait_for_keypress_with_prompt(prompt_text[id]);
+static const char* metarun_prompt_action_label(prompt_t id)
+{
+    switch (id) {
+        case PROMPT_FACE_TEMPTATION: return "Temptation";
+        case PROMPT_FACE_ECHOES: return "Echoes";
+        case PROMPT_CONCLUDE_TALE: return "Conclude";
+        case PROMPT_WITNESS_CONSEQUENCES: return "Witness";
+        case PROMPT_RETURN_MIDDLE_EARTH: return "Return";
+        case PROMPT_CONTINUE_TALE:
+        case PROMPT_CONTINUE_GENERIC:
+        default:
+            return "Continue";
+    }
 }
 
 static const char* challenge_display_name(int challenge_id)
@@ -2536,12 +2396,16 @@ static const char* challenge_display_name(int challenge_id)
 
 static void show_completed_quests_summary(void)
 {
-    int term_height, term_width;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
     bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
+
+    if (!use_information_scene) {
+        log_error("show_completed_quests_summary: semantic scene unavailable");
+        return;
+    }
 
     if (steamdeck) {
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
@@ -2550,7 +2414,7 @@ static void show_completed_quests_summary(void)
             sizeof(back_label));
     }
 
-    if (use_information_scene) {
+    {
         struct quest_summary_entry {
             bool challenge_entry;
             int id;
@@ -2717,75 +2581,65 @@ static void show_completed_quests_summary(void)
             }
 
             metarun_ui_clear_pending_input();
-            ui_information_scene_leave(&info_scope);
-            return;
+            break;
         }
+    }
 
+    ui_information_scene_leave(&info_scope);
+}
+
+static bool metarun_ui_show_story_texts(const char* title, byte title_attr,
+    cptr texts[], int total_texts, byte text_attr, bool steamdeck,
+    const char* accept_label, const char* action_label)
+{
+    byte* attrs = NULL;
+    bool presented = false;
+
+    if (total_texts > 0)
+    {
+        attrs = mem_alloc_array(total_texts, byte);
+        if (!attrs)
+            return false;
+        for (int i = 0; i < total_texts; i++)
+            attrs[i] = text_attr;
+    }
+
+    presented = metarun_ui_show_story_modal(title, title_attr,
+        (const char* const*)texts, attrs, total_texts, steamdeck,
+        accept_label, action_label);
+    mem_free_null(attrs);
+    return presented;
+}
+
+static void metarun_present_story_texts(const char* title,
+    cptr texts[], int total_texts, byte title_attr,
+    byte text_attr, const char* action_label)
+{
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    ui_information_scene_scope info_scope;
+    bool owns_info_scene = false;
+    bool presented = false;
+
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+    if (!ui_information_scene_is_active() && ui_information_scene_supported())
+        owns_info_scene = ui_information_scene_enter(&info_scope);
+
+    if (ui_information_scene_is_active()) {
+        presented = metarun_ui_show_story_texts(title, title_attr, texts,
+            total_texts, text_attr, steamdeck, accept_label,
+            action_label ? action_label : "Continue");
+        if (!presented) {
+            log_error("metarun: failed to present story texts '%s'",
+                title ? title : "(untitled)");
+        }
+    }
+
+    if (owns_info_scene)
         ui_information_scene_leave(&info_scope);
-        use_information_scene = false;
-    }
-
-    Term_get_size(&term_width, &term_height);
-
-    screen_save();
-    Term_clear();
-
-    int row = 1;
-    int col = 2;
-    char line[120];
-    bool any = false;
-
-    Term_putstr(col, row++, -1, TERM_YELLOW, "Completed Quests (this metarun)");
-
-    if (z_info && quest_info) {
-        for (int i = 1; i < z_info->quest_max && row < term_height - 3; i++) {
-            quest_type *q_ptr = &quest_info[i];
-            if (!q_ptr->name) continue;
-            u32b flag = quest_metarun_flag(i);
-            if (!flag) continue;
-            int count = metarun_quest_completion_count(flag);
-            if (count <= 0) continue;
-            any = true;
-
-            cptr title = quest_display_title(i);
-            strnfmt(line, sizeof(line), "%-34.34s x%d", title ? title : "Quest", count);
-            Term_putstr(col, row++, -1, TERM_WHITE, line);
-
-            if (q_ptr->challenge_unlock) {
-                int ch_id = q_ptr->challenge_unlock;
-                int ch_count = metarun_challenge_completion_count(ch_id);
-                cptr cname = challenge_display_name(ch_id);
-                strnfmt(line, sizeof(line), "  Unlocks: %s (completed %d)", cname, ch_count);
-                Term_putstr(col, row++, -1, TERM_L_DARK, line);
-            }
-        }
-    }
-
-    if (!any) {
-        Term_putstr(col, row++, -1, TERM_L_DARK, "No quests completed yet in this metarun.");
-    }
-
-    /* Challenge summary */
-    Term_putstr(col, row++, -1, TERM_YELLOW, "Challenges");
-    int dis_count = metarun_challenge_completion_count(CHALLENGE_DISCONNECTED);
-    strnfmt(line, sizeof(line), "Disconnected stairs: completed %d time%s", dis_count, (dis_count == 1) ? "" : "s");
-    Term_putstr(col, row++, -1, TERM_WHITE, line);
-    int single_count = metarun_challenge_completion_count(CHALLENGE_SINGLE_STAIR);
-    strnfmt(line, sizeof(line), "Single stair: completed %d time%s", single_count, (single_count == 1) ? "" : "s");
-    Term_putstr(col, row++, -1, TERM_WHITE, line);
-    int fixed_count = metarun_challenge_completion_count(CHALLENGE_FIXED_50K_XP);
-    strnfmt(line, sizeof(line), "Fixed 50k XP: completed %d time%s", fixed_count, (fixed_count == 1) ? "" : "s");
-    Term_putstr(col, row++, -1, TERM_WHITE, line);
-    int blunt_count = metarun_challenge_completion_count(CHALLENGE_TULKAS_BLUNT);
-    strnfmt(line, sizeof(line), "Blunt arms: completed %d time%s", blunt_count, (blunt_count == 1) ? "" : "s");
-    Term_putstr(col, row++, -1, TERM_WHITE, line);
-    int torch_count = metarun_challenge_completion_count(CHALLENGE_TORCHLIGHT);
-    strnfmt(line, sizeof(line), "Torches-only: completed %d time%s", torch_count, (torch_count == 1) ? "" : "s");
-    Term_putstr(col, row++, -1, TERM_WHITE, line);
-
-    Term_putstr(0, term_height - 1, -1, TERM_L_DARK, "Press any key to return");
-    (void)inkey();
-    screen_load();
 }
 
 static void show_mandos_third_unlock_message(void)
@@ -2796,7 +2650,8 @@ static void show_mandos_third_unlock_message(void)
         "Seek Maeglin's hidden vault between delvings seventeen and nineteen and end his false life.",
         "This third quest stands apart and will not bar other callings."
     };
-    quest_typewriter_menu("Mandos' Final Doom", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+    metarun_present_story_texts("Mandos' Final Doom", lines,
+        N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE, "Continue");
 }
 
 static void activate_orome_great_hunt(void)
@@ -2819,7 +2674,8 @@ static void show_orome_great_hunt_unlock_message(void)
         "Scatha, Smaug, Draugluin, Gostir, Shelob, Thuringwethil. Slay them in any delve.",
         "This hunt runs alongside all other quests until the last mark falls."
     };
-    quest_typewriter_menu("Orome's Great Hunt", lines, N_ELEMENTS(lines), TERM_GREEN, TERM_WHITE);
+    metarun_present_story_texts("Orome's Great Hunt", lines,
+        N_ELEMENTS(lines), TERM_GREEN, TERM_WHITE, "Continue");
 }
 
 static void maybe_unlock_orome_great_hunt(bool challenge_single_stair_active)
@@ -2840,7 +2696,8 @@ static void show_niena_mercy_unlock_message(void)
         "Nienna smiles through tears: her Gift of Mercy may now be learned for 5000 experience.",
         "Find it in the Special abilities list if you would carry her pity into future delvings."
     };
-    quest_typewriter_menu("Nienna's Gift of Mercy", lines, N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE);
+    metarun_present_story_texts("Nienna's Gift of Mercy", lines,
+        N_ELEMENTS(lines), TERM_L_BLUE, TERM_WHITE, "Continue");
 }
 
 static void show_tulkas_blunt_unlock_message(void)
@@ -2850,7 +2707,8 @@ static void show_tulkas_blunt_unlock_message(void)
         "Tulkas roars with laughter and offers the lore of Unique Bane to all your line.",
         "Seek it among your Special abilities for 5000 experience in future delvings."
     };
-    quest_typewriter_menu("Tulkas' Orc-Bane", lines, N_ELEMENTS(lines), TERM_YELLOW, TERM_WHITE);
+    metarun_present_story_texts("Tulkas' Orc-Bane", lines,
+        N_ELEMENTS(lines), TERM_YELLOW, TERM_WHITE, "Continue");
 }
 
 static void show_torchlight_unlock_message(void)
@@ -2860,7 +2718,8 @@ static void show_torchlight_unlock_message(void)
         "The Queen of the Stars will now teach her radiance to any who pay 5000 experience.",
         "Find Queen of the Stars among your Special abilities in future delves."
     };
-    quest_typewriter_menu("Queen of the Stars", lines, N_ELEMENTS(lines), TERM_WHITE, TERM_L_BLUE);
+    metarun_present_story_texts("Queen of the Stars", lines,
+        N_ELEMENTS(lines), TERM_WHITE, TERM_L_BLUE, "Continue");
 }
 
 static int total_player_kills_this_run(void)
@@ -2913,14 +2772,16 @@ static void resolve_niena_morgoth_quest_on_exit(bool escaped_with_sils)
     int completion_count = 0;
     cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_MORGOTH, &completion_count);
     if (completion_texts && completion_count > 0) {
-        quest_typewriter_menu("Nienna's Mercy", completion_texts, completion_count, TERM_L_BLUE, TERM_WHITE);
+        metarun_present_story_texts("Nienna's Mercy", completion_texts,
+            completion_count, TERM_L_BLUE, TERM_WHITE, "Continue");
         free_quest_texts(completion_texts, completion_count);
     } else {
         const char *fallback[] = {
             "Nienna's presence returns as you escape with the Silmaril, untouched by your hand.",
             "'Your restraint has spared even the Black Foe a blow. Carry this mercy into the tales to come.'"
         };
-        quest_typewriter_menu("Nienna's Mercy", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+        metarun_present_story_texts("Nienna's Mercy", fallback,
+            N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE, "Continue");
     }
 
     quest_set_state(QUEST_ID_NIENA_MORGOTH, QUEST_STATE_REWARDED);
@@ -2962,14 +2823,17 @@ static void resolve_nienia_pacifist_quest_on_exit(bool died, bool escaped)
     int completion_count_text = 0;
     cptr *completion_texts = extract_quest_completion_texts(QUEST_ID_NIENA_PACIFIST, &completion_count_text);
     if (completion_texts && completion_count_text > 0) {
-        quest_typewriter_menu("Nienna, Lady of Pity", completion_texts, completion_count_text, TERM_L_BLUE, TERM_WHITE);
+        metarun_present_story_texts("Nienna, Lady of Pity",
+            completion_texts, completion_count_text, TERM_L_BLUE,
+            TERM_WHITE, "Continue");
         free_quest_texts(completion_texts, completion_count_text);
     } else {
         const char *fallback[] = {
             "You return to the surface with no blood on your hands.",
             "Nienna's relief washes over you: the curses that followed you may be lifted once and for all."
         };
-        quest_typewriter_menu("Nienna, Lady of Pity", fallback, N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE);
+        metarun_present_story_texts("Nienna, Lady of Pity", fallback,
+            N_ELEMENTS(fallback), TERM_L_BLUE, TERM_WHITE, "Continue");
     }
 
     quest_set_state(QUEST_ID_NIENA_PACIFIST, QUEST_STATE_REWARDED);
@@ -3005,6 +2869,306 @@ static void announce_blessing_gain(int previous_points)
     msg_format("You gain %d blessing point%s. (%d available)",
                delta, (delta == 1) ? "" : "s", available);
     message_flush();
+}
+
+static bool metarun_ui_show_story_modal_best_effort(const char* title,
+    byte title_attr, const char* const* paragraphs, const byte* attrs,
+    int paragraph_count, bool steamdeck, const char* accept_label,
+    const char* action_label)
+{
+    bool semantic_available = ui_information_scene_is_active()
+        || ui_information_scene_supported();
+    ui_information_scene_scope info_scope;
+    bool owns_info_scene = false;
+    bool presented = false;
+
+    if (!ui_information_scene_is_active() && ui_information_scene_supported())
+        owns_info_scene = ui_information_scene_enter(&info_scope);
+
+    if (ui_information_scene_is_active()) {
+        presented = metarun_ui_show_story_modal(title, title_attr, paragraphs,
+            attrs, paragraph_count, steamdeck, accept_label, action_label);
+        if (!presented) {
+            log_error("metarun: failed to present story modal '%s'",
+                title ? title : "(untitled)");
+        }
+    }
+
+    if (owns_info_scene)
+        ui_information_scene_leave(&info_scope);
+    if (!presented && !semantic_available)
+        log_error("metarun: semantic story modal unavailable for '%s'",
+            title ? title : "(untitled)");
+    return presented;
+}
+
+static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
+    bool allow_treachery, bool allow_kinslay)
+{
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    int curse_count = sil_count;
+    int chosen[4] = { -1, -1, -1, -1 };
+    int chosen_cnt;
+    byte stolen = 0;
+    byte final_sils;
+    bool treachery_occurred;
+    bool deferred_kill[3] = { false, false, false };
+    int kinslaying_victims = 0;
+
+    if (steamdeck) {
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+    }
+
+    if (sil_count == 3)
+        curse_count = 4;
+    chosen_cnt = choose_escape_curses_ui(curse_count, chosen);
+
+    if (chosen_cnt > 0)
+    {
+        char curse_lines[4][128];
+        const char* paragraphs[4];
+        byte attrs[4];
+
+        for (int i = 0; i < chosen_cnt; i++)
+        {
+            strnfmt(curse_lines[i], sizeof(curse_lines[i]),
+                "The curse of %s binds your fate.",
+                curse_display_name(chosen[i]));
+            paragraphs[i] = curse_lines[i];
+            attrs[i] = TERM_RED;
+        }
+
+        metarun_ui_show_story_modal_best_effort("The Binding of Fate",
+            TERM_L_RED, paragraphs, attrs, chosen_cnt, steamdeck,
+            accept_label, metarun_prompt_action_label(PROMPT_CONTINUE_TALE));
+    }
+
+    {
+        const char* victory_text;
+        const char* paragraphs[1];
+        byte attrs[1] = { TERM_WHITE };
+
+        switch (sil_count)
+        {
+            case 1:
+                victory_text = "You emerge victorious from darkness, one holy jewel blazing in your grasp. Morgoth's crown is diminished, yet hope is rekindled, though shadow lingers.";
+                break;
+            case 2:
+                victory_text = "You escape triumphant, two Silmarils blazing fiercely in your hands. Morgoth roars in wrath; his pride is wounded deeply. Your spirit exults, yet your heart begins to feel their burning weight.";
+                break;
+            case 3:
+                victory_text = "All three stolen stars blaze now in your hands; Morgoth's crown lies darkened. Such triumph has not been known since Feanor himself dreamed it-but even as victory soars, your heart trembles beneath their burning glory.";
+                break;
+            default:
+                victory_text = "You have achieved the impossible, claiming more Silmarils than should exist. Reality itself bends before your triumph.";
+                break;
+        }
+
+        paragraphs[0] = victory_text;
+        metarun_ui_show_story_modal_best_effort("Victory Amid Shadow",
+            TERM_YELLOW, paragraphs, attrs, 1, steamdeck, accept_label,
+            metarun_prompt_action_label(allow_treachery
+                ? PROMPT_FACE_TEMPTATION
+                : PROMPT_CONTINUE_GENERIC));
+    }
+
+    if (allow_treachery)
+    {
+        static const int pct[3] = { 20, 50, 95 };
+        static const char *success_msgs[3] = {
+            "The first jewel shines brightly, its pure light uncorrupted. You master desire, choosing honor.",
+            "The second jewel blazes defiant, temptation growing strong-but once more, you cling to honor.",
+            "The third Silmaril's holy flame burns fiercely. Yet against all odds, your will resists corruption."
+        };
+        static const char *failure_msgs[3] = {
+            "Greed whispers softly, and you listen. Secretly you withhold the jewel's light, betraying even yourself.",
+            "Desire gnaws deeper; you falter, concealing its brilliance in shame, light darkened by your betrayal.",
+            "Consumed by lust for its beauty, you claim it secretly, sealing its radiance from all others-a betrayal of all trust."
+        };
+        const char* shadow_text =
+            "In shadows your deeds are recorded-tainted victory shall diminish the jewel's blessing.";
+        const char* paragraphs[4];
+        byte attrs[4];
+        int paragraph_count = 0;
+
+        for (int i = 0; i < sil_count; ++i)
+        {
+            bool fail = (rand_int(100) < pct[i]);
+
+            if (fail)
+                stolen++;
+            paragraphs[paragraph_count] = fail ? failure_msgs[i]
+                                               : success_msgs[i];
+            attrs[paragraph_count++] = fail ? TERM_RED : TERM_WHITE;
+        }
+
+        if (stolen)
+        {
+            paragraphs[paragraph_count] = shadow_text;
+            attrs[paragraph_count++] = TERM_L_DARK;
+        }
+
+        metarun_ui_show_story_modal_best_effort("Temptation of Treachery",
+            TERM_L_UMBER, paragraphs, attrs, paragraph_count, steamdeck,
+            accept_label, metarun_prompt_action_label(PROMPT_CONTINUE_GENERIC));
+    }
+
+    final_sils = sil_count - stolen;
+    treachery_occurred = (stolen > 0);
+
+    {
+        const char* pure_frag[3] = {
+            "A single star reclaimed, hope rekindled faintly in Middle-earth. Yet Morgoth laughs still, for two remain bound in shadow.",
+            "Two jewels shine again beneath sky; Morgoth's power falters greatly. Yet you feel their brilliance burning; temptation ever near.",
+            "All three jewels, radiant and pure, blaze again beneath stars. Morgoth's power breaks. Triumph is absolute, your soul soaring."
+        };
+        const char* tainted_frag[3] = {
+            "Though victory is yours, its memory darkens. Trust is fragile, and your spirit heavy beneath secret betrayal.",
+            "Your heart trembles: Morgoth sees clearly your treachery-he smiles grimly, knowing darkness still dwells in you.",
+            "Greatest triumph now mingled with darkest shame. Morgoth's laughter echoes bitterly-he senses your fall."
+        };
+        const char* paragraphs[1];
+        byte attrs[1];
+
+        paragraphs[0] = treachery_occurred
+            ? tainted_frag[sil_count - 1]
+            : pure_frag[final_sils - 1];
+        attrs[0] = treachery_occurred ? TERM_RED : TERM_L_WHITE;
+        metarun_ui_show_story_modal_best_effort("The Weight of Victory",
+            TERM_L_BLUE, paragraphs, attrs, 1, steamdeck, accept_label,
+            metarun_prompt_action_label(allow_kinslay
+                ? PROMPT_FACE_ECHOES
+                : PROMPT_CONCLUDE_TALE));
+    }
+
+    if (allow_kinslay)
+    {
+        static const int kin_pct[3] = { 20, 50, 95 };
+        const char* doom_text =
+            "Blood now stains your triumph, your fate forever woven with grief and shame.";
+        const char* paragraphs[4];
+        byte attrs[4];
+        int paragraph_count = 0;
+
+        for (int k = 0; k < sil_count; ++k)
+        {
+            bool fail = (rand_int(100) < kin_pct[k]);
+            const char* echo_text = NULL;
+
+            deferred_kill[k] = fail;
+            if (fail)
+                kinslaying_victims++;
+
+            switch (k)
+            {
+                case 0:
+                    echo_text = fail ?
+                        "\"Alqualonde's Grief\"\nBlood stains starlit waves. Your hand remembers the swords at Alqualonde-first grief, first guilt." :
+                        "The sorrow of Alqualonde passes over you-your spirit holds fast, blood unstained.";
+                    break;
+                case 1:
+                    echo_text = fail ?
+                        "\"Ruin of Doriath\"\nAgain your hand recalls tragedy-fallen halls of Menegroth, Dior's blood shed beneath stolen starlight." :
+                        "Memory of Doriath rises briefly, but your blade remains clean, honour upheld.";
+                    break;
+                case 2:
+                    echo_text = fail ?
+                        "\"Tragedy at Sirion\"\nEchoes rise from Sirion-Elwing's flight, blood and betrayal. Once more your blade draws innocent blood, sealing doom anew." :
+                        "You resist dark whispers recalling Sirion-your sword is stayed, mercy unbroken.";
+                    break;
+            }
+
+            paragraphs[paragraph_count] = echo_text;
+            attrs[paragraph_count++] = fail ? TERM_RED : TERM_L_WHITE;
+
+            if (fail)
+                break;
+        }
+
+        if (kinslaying_victims > 0)
+        {
+            paragraphs[paragraph_count] = doom_text;
+            attrs[paragraph_count++] = TERM_L_DARK;
+        }
+
+        metarun_ui_show_story_modal_best_effort("Echoes of Kinslaying",
+            TERM_L_RED, paragraphs, attrs, paragraph_count, steamdeck,
+            accept_label, metarun_prompt_action_label(PROMPT_CONCLUDE_TALE));
+    }
+
+    {
+        const char* paragraphs[1];
+        byte attrs[1] = { TERM_L_GREEN };
+        char summary[256];
+
+        strnfmt(summary, sizeof(summary),
+            "Your legend is written: %d Silmaril%s claimed, %s, %s.",
+            final_sils, (final_sils == 1) ? "" : "s",
+            treachery_occurred ? "tainted by treachery" : "pure of heart",
+            (kinslaying_victims > 0) ? "stained by kinslaying"
+                                     : "with honour intact");
+        paragraphs[0] = summary;
+        metarun_ui_show_story_modal_best_effort("The Tale Concludes",
+            TERM_YELLOW, paragraphs, attrs, 1, steamdeck, accept_label,
+            metarun_prompt_action_label((allow_kinslay && kinslaying_victims > 0)
+                ? PROMPT_CONTINUE_GENERIC
+                : PROMPT_RETURN_MIDDLE_EARTH));
+    }
+
+    if (allow_kinslay && kinslaying_victims > 0)
+    {
+        const char* paragraphs[1];
+        byte attrs[1] = { TERM_RED };
+        char kill_msg[128];
+
+        strnfmt(kill_msg, sizeof(kill_msg),
+            "Your kinslaying echoes through time. %d innocent%s will fall by your hand...",
+            kinslaying_victims, (kinslaying_victims == 1) ? "" : "s");
+        paragraphs[0] = kill_msg;
+        metarun_ui_show_story_modal_best_effort("The Price of Blood",
+            TERM_RED, paragraphs, attrs, 1, steamdeck, accept_label,
+            metarun_prompt_action_label(PROMPT_WITNESS_CONSEQUENCES));
+
+        {
+            char kill_lines[3][96];
+            const char* kill_paragraphs[3];
+            byte kill_attrs[3];
+            int kill_count = 0;
+
+            for (int k = 0; k < 3; k++)
+            {
+                const char* character;
+
+                if (!deferred_kill[k])
+                    continue;
+
+                character = kinslayer_try_kill(k + 1, false);
+                if (!character)
+                    continue;
+
+                metarun_increment_deaths();
+                log_info("Metarun: kinslaying victim counted as death (%u total)",
+                    (unsigned)metar.deaths);
+
+                strnfmt(kill_lines[kill_count], sizeof(kill_lines[kill_count]),
+                    "A hero %s has fallen beneath your blade.", character);
+                kill_paragraphs[kill_count] = kill_lines[kill_count];
+                kill_attrs[kill_count++] = TERM_RED;
+            }
+
+            if (kill_count > 0)
+            {
+                metarun_ui_show_story_modal_best_effort("Blood Is Demanded",
+                    TERM_RED, kill_paragraphs, kill_attrs, kill_count,
+                    steamdeck, accept_label,
+                    metarun_prompt_action_label(PROMPT_RETURN_MIDDLE_EARTH));
+            }
+        }
+    }
+
+    return final_sils;
 }
 
 void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_score)
@@ -3048,7 +3212,6 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     bool allow_kinslay   = (character_flags | f_race) & RHF_KINSLAYER;
 
     bool escaped_with_sils = escaped && (sil_count > 0);
-    bool fast_forward = false; // Track if user wants to skip fade effects
     bool morgoth_victory = (p_ptr->morgoth_slain && !escaped && !died);
 
     resolve_niena_morgoth_quest_on_exit(escaped_with_sils);
@@ -3066,8 +3229,6 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     {
         bool steamdeck = steamdeck_controls_active();
         char accept_label[16] = "";
-        ui_information_scene_scope info_scope;
-        bool use_information_scene;
         const char* paragraphs[] = {
             "The illusion of Morgoth lies shattered at your feet.",
             "From Valinor, the Valar proclaim your impossible triumph and pour out their blessing.",
@@ -3080,21 +3241,9 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
             metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
                 sizeof(accept_label));
         }
-        use_information_scene = ui_information_scene_enter(&info_scope);
-        if (use_information_scene) {
-            if (!metarun_ui_show_story_modal("Beyond Fate", TERM_YELLOW,
-                    paragraphs, attrs, (int)N_ELEMENTS(paragraphs), steamdeck,
-                    accept_label, "Continue"))
-            {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-            }
-        } else {
-            log_error("metarun_update_on_exit: semantic Morgoth-victory scene unavailable");
-        }
-        if (use_information_scene) {
-            ui_information_scene_leave(&info_scope);
-        }
+        (void)metarun_ui_show_story_modal_best_effort("Beyond Fate",
+            TERM_YELLOW, paragraphs, attrs, (int)N_ELEMENTS(paragraphs),
+            steamdeck, accept_label, "Continue");
 
         if (challenge_disconnected) {
             metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
@@ -3144,18 +3293,12 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     {
         bool steamdeck = steamdeck_controls_active();
         char accept_label[16] = "";
-        ui_information_scene_scope info_scope;
-        bool use_information_scene;
 
         log_info("Player died - displaying death narrative");
         /*****  NEW DEATH-NARRATIVE *****/
         if (steamdeck) {
             metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
                 sizeof(accept_label));
-        }
-        use_information_scene = ui_information_scene_enter(&info_scope);
-        if (!use_information_scene) {
-            log_error("metarun_update_on_exit: semantic death scene unavailable");
         }
 
         /* Pick correct sequence number: 0 when Gift-of-Eru fires,
@@ -3166,8 +3309,6 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
         int *pool = mem_alloc_array(z_info->st_max, int);
         int pool_sz = 0;
         if (!pool) {
-            if (use_information_scene)
-                ui_information_scene_leave(&info_scope);
             u32b pool_before = metar.fallen_score_total;
             refresh_current_metar_score();
             compute_blessing_pool();
@@ -3215,22 +3356,15 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
                     "The hero whose mantle you took has fallen, their tale ends in shadow. "
                     "Yet your spirit returns, for the Valar's trial is not yet complete.");
 
-            if (use_information_scene) {
+            {
                 const char* paragraphs[] = { text, transition_text };
                 const byte attrs[] = { TERM_WHITE, TERM_L_BLUE };
 
-                if (!metarun_ui_show_story_modal(title, TERM_RED, paragraphs,
-                        attrs, 2, steamdeck, accept_label, "Return"))
-                {
-                    ui_information_scene_leave(&info_scope);
-                    use_information_scene = false;
-                    log_error("metarun_update_on_exit: failed to publish death narrative scene");
-                }
+                (void)metarun_ui_show_story_modal_best_effort(title, TERM_RED,
+                    paragraphs, attrs, 2, steamdeck, accept_label, "Return");
             }
         }
 
-        if (use_information_scene)
-            ui_information_scene_leave(&info_scope);
         pool = mem_free(pool);
         u32b pool_before = metar.fallen_score_total;
         refresh_current_metar_score();
@@ -3259,319 +3393,16 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     /* ------------------------------------------------------------- */
     /*        Enhanced Narrative Path â€“ escaped with â‰¥1 Silmaril     */
     /* ------------------------------------------------------------- */
-    log_info("Player escaped with %d Silmarils - displaying victory narrative", sil_count);
-    screen_save();
-
-    /* ============================================================= */
-    /* SCENE 1: Escape Curse Selection                              */
-    /* ============================================================= */
-    int curse_count = sil_count;
-    int chosen[4] = { -1, -1, -1, -1 };
-
-    if (sil_count == 3) curse_count = 4;
-
-    int chosen_cnt = choose_escape_curses_ui(curse_count, chosen);
-
-    /* ============================================================= */
-    /* SCENE 2: The Binding of Fate                                 */
-    /* ============================================================= */
-    if (chosen_cnt > 0)
-    {
-        print_heading_fade("The Binding of Fate", TERM_L_RED);
-        
-        for (int i = 0; i < chosen_cnt; ++i)
-        {
-            char buf[128];
-            strnfmt(buf, sizeof buf,
-                    "The curse of %s binds your fate.",
-                    curse_display_name(chosen[i]));
-            
-            if (!fast_forward && print_paragraph_fade(buf, TERM_RED, 4 + i * 2))
-            {
-                // Continue with fade effects
-            }
-            else
-            {
-                fast_forward = true;
-                print_paragraph(buf, TERM_RED);
-            }
-        }
-        
-        wait_prompt(PROMPT_CONTINUE_TALE);
-        Term_clear();
-    }
-
-    /* ============================================================= */
-    /* SCENE 3: Victory Declaration                                  */
-    /* ============================================================= */
-    print_heading_fade("Victory Amid Shadow", TERM_YELLOW);
-    
-    const char *victory_text;
-    switch (sil_count)
-    {
-        case 1:
-            victory_text = "You emerge victorious from darkness, one holy jewel blazing in your grasp. Morgoth's crown is diminished, yet hope is rekindled, though shadow lingers.";
-            break;
-        case 2:
-            victory_text = "You escape triumphant, two Silmarils blazing fiercely in your hands. Morgoth roars in wrath; his pride is wounded deeply. Your spirit exults, yet your heart begins to feel their burning weight.";
-            break;
-        case 3:
-            victory_text = "All three stolen stars blaze now in your hands; Morgoth's crown lies darkened. Such triumph has not been known since Feanor himself dreamed it-but even as victory soars, your heart trembles beneath their burning glory.";
-            break;
-        default:
-            victory_text = "You have achieved the impossible, claiming more Silmarils than should exist. Reality itself bends before your triumph.";
-            break;
-    }
-    
-    if (!fast_forward && !print_paragraph_fade(victory_text, TERM_WHITE, 4))
-        fast_forward = true;
-    else if (fast_forward)
-        print_paragraph(victory_text, TERM_WHITE);
-    
-    if (allow_treachery)
-        wait_prompt(PROMPT_FACE_TEMPTATION);
-    else
-        wait_prompt(PROMPT_CONTINUE_GENERIC);
-    Term_clear();
-
-    /* ============================================================= */
-    /* SCENE 4: Temptation of Treachery (Enhanced Messages)        */
-    /* ============================================================= */
-    byte stolen = 0;
-    if (allow_treachery)
-    {
-        static const int pct[3] = { 20, 50, 95 };
-        
-        /* Enhanced escalating treachery messages */
-        static const char *success_msgs[3] = {
-            "The first jewel shines brightly, its pure light uncorrupted. You master desire, choosing honor.",
-            "The second jewel blazes defiant, temptation growing strong-but once more, you cling to honor.",
-            "The third Silmaril's holy flame burns fiercely. Yet against all odds, your will resists corruption."
-        };
-        
-        static const char *failure_msgs[3] = {
-            "Greed whispers softly, and you listen. Secretly you withhold the jewel's light, betraying even yourself.",
-            "Desire gnaws deeper; you falter, concealing its brilliance in shame, light darkened by your betrayal.",
-            "Consumed by lust for its beauty, you claim it secretly, sealing its radiance from all others-a betrayal of all trust."
-        };
-        
-        print_heading_fade("Temptation of Treachery", TERM_L_UMBER);
-        
-        int current_row = 4;
-
-        for (int i = 0; i < sil_count; ++i)
-        {
-            bool fail = (rand_int(100) < pct[i]);
-            if (fail) stolen++;
-            
-            const char *tempt_text = fail ? failure_msgs[i] : success_msgs[i];
-            
-            if (!fast_forward && !print_paragraph_fade(tempt_text, fail ? TERM_RED : TERM_WHITE, current_row))
-                fast_forward = true;
-            else if (fast_forward)
-                print_paragraph(tempt_text, fail ? TERM_RED : TERM_WHITE);
-            
-            current_row += 3; // Space for next paragraph
-        }
-
-        if (stolen)
-        {
-            const char *shadow_text = "In shadows your deeds are recorded-tainted victory shall diminish the jewel's blessing.";
-            if (!fast_forward && !print_paragraph_fade(shadow_text, TERM_L_DARK, current_row))
-                fast_forward = true;
-            else if (fast_forward)
-                print_paragraph(shadow_text, TERM_L_DARK);
-        }
-        
-        wait_prompt(PROMPT_CONTINUE_GENERIC);
-        Term_clear();
-    }
-
-    byte final_sils = sil_count - stolen;
-    bool treachery_occurred = (stolen > 0);
-
-    /* ============================================================= */
-    /* SCENE 5: The Weight of Victory                               */
-    /* ============================================================= */
-    print_heading_fade("The Weight of Victory", TERM_L_BLUE);
-    
-    const char *weight_text;
-    if (!treachery_occurred)
-    {
-        const char *pure_frag[3] = {
-            "A single star reclaimed, hope rekindled faintly in Middle-earth. Yet Morgoth laughs still, for two remain bound in shadow.",
-            "Two jewels shine again beneath sky; Morgoth's power falters greatly. Yet you feel their brilliance burning; temptation ever near.",
-            "All three jewels, radiant and pure, blaze again beneath stars. Morgoth's power breaks. Triumph is absolute, your soul soaring."
-        };
-        weight_text = pure_frag[final_sils-1];
-    }
-    else
-    {
-        const char *tainted_frag[3] = {
-            "Though victory is yours, its memory darkens. Trust is fragile, and your spirit heavy beneath secret betrayal.",
-            "Your heart trembles: Morgoth sees clearly your treachery-he smiles grimly, knowing darkness still dwells in you.",
-            "Greatest triumph now mingled with darkest shame. Morgoth's laughter echoes bitterly-he senses your fall."
-        };
-        weight_text = tainted_frag[sil_count-1];
-    }
-    
-    if (!fast_forward && !print_paragraph_fade(weight_text, treachery_occurred ? TERM_RED : TERM_L_WHITE, 4))
-        fast_forward = true;
-    else if (fast_forward)
-        print_paragraph(weight_text, treachery_occurred ? TERM_RED : TERM_L_WHITE);
-    
-    if (allow_kinslay)
-        wait_prompt(PROMPT_FACE_ECHOES);
-    else
-        wait_prompt(PROMPT_CONCLUDE_TALE);
-    Term_clear();
-
-    /* ============================================================= */
-    /* SCENE 6: Echoes of Kinslaying (Enhanced Notifications)      */
-    /* ============================================================= */
-    bool deferred_kill[3] = { false, false, false };
-    int kinslaying_victims = 0;
-    if (allow_kinslay)
-    {
-        print_heading_fade("Echoes of Kinslaying", TERM_L_RED);
-        
-        static const int kin_pct[3] = { 20, 50, 95 };
-        int current_row = 4;
-
-        for (int k = 0; k < sil_count; ++k)
-        {
-            /* One roll only â€“ use kin_pct[] here and *skip* the roll
-             * inside kinslayer_try_kill() later.                        */
-            /* one-shot probability (keep a local alias for UI)        */
-            bool fail = (rand_int(100) < kin_pct[k]);
-            deferred_kill[k] = fail;
-            if (fail) kinslaying_victims++;
-
-            const char *echo_text = NULL;
-            switch (k)
-            {
-                case 0: echo_text = fail ?
-                    "\"Alqualonde's Grief\"\nBlood stains starlit waves. Your hand remembers the swords at Alqualonde-first grief, first guilt." :
-                    "The sorrow of Alqualonde passes over you-your spirit holds fast, blood unstained.";
-                    break;
-                case 1: echo_text = fail ?
-                    "\"Ruin of Doriath\"\nAgain your hand recalls tragedy-fallen halls of Menegroth, Dior's blood shed beneath stolen starlight." :
-                    "Memory of Doriath rises briefly, but your blade remains clean, honour upheld.";
-                    break;
-                case 2: echo_text = fail ?
-                    "\"Tragedy at Sirion\"\nEchoes rise from Sirion-Elwing's flight, blood and betrayal. Once more your blade draws innocent blood, sealing doom anew." :
-                    "You resist dark whispers recalling Sirion-your sword is stayed, mercy unbroken.";
-                    break;
-            }
-            
-            if (!fast_forward && !print_paragraph_fade(echo_text, fail ? TERM_RED : TERM_L_WHITE, current_row))
-                fast_forward = true;
-            else if (fast_forward)  print_paragraph(echo_text, fail ? TERM_RED : TERM_L_WHITE);
-            
-            current_row += 4; // Space for next echo
-            
-            /* Stop at first failure */
-            if (fail) break;
-        }
-
-        if (kinslaying_victims > 0)
-        {
-            const char *doom_text = "Blood now stains your triumph, your fate forever woven with grief and shame.";
-            if (!fast_forward && !print_paragraph_fade(doom_text, TERM_L_DARK, current_row))
-                fast_forward = true;
-            else if (fast_forward)
-                print_paragraph(doom_text, TERM_L_DARK);
-        }
-        
-        wait_prompt(PROMPT_CONCLUDE_TALE);
-        Term_clear();
-    }
-
-    /* ============================================================= */
-    /* SCENE 7: Final Summary                                       */
-    /* ============================================================= */
-    print_heading_fade("The Tale Concludes", TERM_YELLOW);
-    
-    char summary[256];
-    strnfmt(summary, sizeof summary,
-            "Your legend is written: %d Silmaril%s claimed, %s, %s.",
-            final_sils,
-            (final_sils == 1) ? "" : "s",
-            treachery_occurred ? "tainted by treachery" : "pure of heart",
-            (kinslaying_victims > 0) ? "stained by kinslaying" : "with honour intact");
-    
-    if (!fast_forward && !print_paragraph_fade(summary, TERM_L_GREEN, 4))
-        fast_forward = true;
-    else if (fast_forward)
-        print_paragraph(summary, TERM_L_GREEN);
-
-    Term_xtra(TERM_XTRA_DELAY, 3000);
-    Term_clear();
-
-    /* ============================================================= */
-    /* SCENE 8: Kinslaying Execution & Notifications               */
-    /* ============================================================= */
-    if (allow_kinslay && kinslaying_victims > 0)
-    {
-        /* Show kinslaying notifications BEFORE screen_load() */
-        print_heading_fade("The Price of Blood", TERM_RED);
-        
-        char kill_msg[128];
-        strnfmt(kill_msg, sizeof kill_msg,
-                "Your kinslaying echoes through time. %d innocent%s will fall by your hand...",
-                kinslaying_victims, (kinslaying_victims == 1) ? "" : "s");
-        
-        if (!fast_forward && !print_paragraph_fade(kill_msg, TERM_RED, 4))
-            fast_forward = true;
-        else if (fast_forward)
-            print_paragraph(kill_msg, TERM_RED);
-        
-        wait_prompt(PROMPT_WITNESS_CONSEQUENCES);
-    }
-
-    /* ------------------------------------------------------------- */
-    /*  SCENE 8-bis: actual executions with cinematic feedback       */
-    /* ------------------------------------------------------------- */
-    if (allow_kinslay && kinslaying_victims > 0) {
-        Term_clear();
-        print_heading_fade("Blood Is Demanded", TERM_RED);
-
-        int row = 4;
-        for (int k = 0; k < 3; k++) {
-            if (!deferred_kill[k]) continue;
-
-            const char *character =
-                kinslayer_try_kill(k + 1, /*do_roll=*/false);
-            if (!character) continue;               /* should not happen */
-
-            metarun_increment_deaths();
-            log_info("Metarun: kinslaying victim counted as death (%u total)", (unsigned)metar.deaths);
-
-            char buf[96];
-            strnfmt(buf, sizeof buf,
-                    "A hero %s has fallen beneath your blade.", character);
-
-            if (!fast_forward && !print_paragraph_fade(buf, TERM_RED, row))
-                fast_forward = true;
-            else if (fast_forward)
-                print_paragraph(buf, TERM_RED);
-
-            row += 3;
-        }
-
-        wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
-    } else {
-        /* no kinslaying scene â€“ still give one clean exit prompt   */
-        wait_prompt(PROMPT_RETURN_MIDDLE_EARTH);
-    }
+    log_info("Player escaped with %d Silmarils - displaying victory narrative",
+        sil_count);
+    byte final_sils = metarun_play_escape_victory_semantic_sequence(
+        sil_count, allow_treachery, allow_kinslay);
 
     metarun_gain_silmarils(final_sils);
-    log_info("Added %d Silmarils to metarun total (now %d)", final_sils, metar.silmarils);
+    log_info("Added %d Silmarils to metarun total (now %d)", final_sils,
+        metar.silmarils);
     refresh_current_metar_score();
     print_story(3, true);
-
-    /* Restore the saved play-screen only after every narrative beat */
-    screen_load();
 
     if (challenge_disconnected) {
         metarun_mark_challenge_completed(CHALLENGE_DISCONNECTED);
@@ -3661,8 +3492,6 @@ void check_run_end(void)
     if (alive < required_survivors) {
         bool steamdeck = steamdeck_controls_active();
         char accept_label[16] = "";
-        ui_information_scene_scope info_scope;
-        bool use_information_scene;
         char defeat_text[256];
 
         log_info("Metarun DEFEAT: alive=%d required=%d (remaining silmarils=%d)",
@@ -3676,24 +3505,13 @@ void check_run_end(void)
             metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
                 sizeof(accept_label));
         }
-
-        use_information_scene = ui_information_scene_enter(&info_scope);
-        if (use_information_scene) {
+        {
             const char* paragraphs[] = { defeat_text };
             const byte attrs[] = { TERM_WHITE };
 
-            if (!metarun_ui_show_story_modal("The Trial's End", TERM_RED,
-                    paragraphs, attrs, 1, steamdeck, accept_label,
-                    "Begin Anew"))
-            {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-            }
-        } else {
-            log_error("check_run_end: semantic defeat scene unavailable");
-        }
-        if (use_information_scene) {
-            ui_information_scene_leave(&info_scope);
+            (void)metarun_ui_show_story_modal_best_effort("The Trial's End",
+                TERM_RED, paragraphs, attrs, 1, steamdeck, accept_label,
+                "Begin Anew");
         }
 
         start_new_metarun();
@@ -3703,8 +3521,6 @@ void check_run_end(void)
     if (metar.silmarils >= win_goal) {
         bool steamdeck = steamdeck_controls_active();
         char accept_label[16] = "";
-        ui_information_scene_scope info_scope;
-        bool use_information_scene;
         char victory_text[256];
         const char *implementation_note = "(This final trial is yet to be implemented.)";
 
@@ -3719,24 +3535,13 @@ void check_run_end(void)
             metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
                 sizeof(accept_label));
         }
-
-        use_information_scene = ui_information_scene_enter(&info_scope);
-        if (use_information_scene) {
+        {
             const char* paragraphs[] = { victory_text, implementation_note };
             const byte attrs[] = { TERM_L_GREEN, TERM_L_DARK };
 
-            if (!metarun_ui_show_story_modal("The Trial's End", TERM_YELLOW,
-                    paragraphs, attrs, 2, steamdeck, accept_label,
-                    "Begin Anew"))
-            {
-                ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-            }
-        } else {
-            log_error("check_run_end: semantic victory scene unavailable");
-        }
-        if (use_information_scene) {
-            ui_information_scene_leave(&info_scope);
+            (void)metarun_ui_show_story_modal_best_effort("The Trial's End",
+                TERM_YELLOW, paragraphs, attrs, 2, steamdeck, accept_label,
+                "Begin Anew");
         }
 
         start_new_metarun();
@@ -3837,110 +3642,6 @@ static void start_new_metarun(void)
     log_info("New metarun %d created and initialized", metar.id);
 }
 
-static int metarun_effect_wrap_width(int term_width)
-{
-    int wrap_width = term_width - 2;
-    if (wrap_width < 5) wrap_width = 5;
-    return wrap_width;
-}
-
-static int metarun_count_effect_lines(cptr text, int wrap_width, int indent)
-{
-    if (!text || !*text) return 0;
-
-    if (sdl_is_story_font_enabled()) {
-        return count_wrapped_lines_story(text, wrap_width, indent);
-    }
-
-    return count_wrapped_lines(text, wrap_width, indent);
-}
-
-static int metarun_active_effect_block_lines(int id, int term_width)
-{
-    const int text_col = 4;
-    const int wrap_width = metarun_effect_wrap_width(term_width);
-    const curse_type *cu = &cu_info[id];
-    int stacks = CURSE_GET(id);
-    bool is_blessing = (stacks < 0);
-    bool seen = CURSE_SEEN(id);
-    int lines = 1; /* Name */
-
-    cptr desc = is_blessing
-        ? (cu->blessing_text ? cu_text + cu->blessing_text : NULL)
-        : (cu->text ? cu_text + cu->text : NULL);
-    if (desc && *desc) {
-        lines += metarun_count_effect_lines(desc, wrap_width, text_col);
-    }
-
-    if (seen) {
-        cptr power = is_blessing
-            ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-            : (cu->power ? cu_text + cu->power : NULL);
-
-        if (power && *power) {
-            char effect_line[1024];
-            strnfmt(effect_line, sizeof(effect_line), "Effect: %s", power);
-            lines += metarun_count_effect_lines(effect_line, wrap_width, text_col);
-        }
-    } else {
-        lines += 1;
-    }
-
-    lines += 1; /* Blank line between effects */
-    return lines;
-}
-
-static int metarun_render_active_effect_block(int id, int row, int term_width)
-{
-    const int name_col = 2;
-    const int text_col = 4;
-    const int wrap_width = metarun_effect_wrap_width(term_width);
-    int stacks = CURSE_GET(id);
-    bool is_blessing = (stacks < 0);
-    int magnitude = is_blessing ? -stacks : stacks;
-    bool seen = CURSE_SEEN(id);
-
-    const curse_type *cu = &cu_info[id];
-    cptr name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
-    byte name_attr = is_blessing ? TERM_L_GREEN : TERM_L_RED;
-
-    char buf[120];
-    strnfmt(buf, sizeof(buf), "%s x%d", name, magnitude);
-    Term_putstr(name_col, row++, -1, name_attr, buf);
-
-    text_out_hook = text_out_to_screen;
-    text_out_indent = text_col;
-    text_out_wrap = wrap_width;
-
-    cptr desc = is_blessing
-        ? (cu->blessing_text ? cu_text + cu->blessing_text : NULL)
-        : (cu->text ? cu_text + cu->text : NULL);
-    if (desc && *desc) {
-        Term_gotoxy(text_col, row);
-        text_out_c(TERM_SLATE, desc);
-        row += metarun_count_effect_lines(desc, wrap_width, text_col);
-    }
-
-    if (seen) {
-        cptr power = is_blessing
-            ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-            : (cu->power ? cu_text + cu->power : NULL);
-
-        if (power && *power) {
-            char effect_line[1024];
-            strnfmt(effect_line, sizeof(effect_line), "Effect: %s", power);
-            Term_gotoxy(text_col, row);
-            text_out_c(name_attr, effect_line);
-            row += metarun_count_effect_lines(effect_line, wrap_width, text_col);
-        }
-    } else {
-        Term_putstr(text_col, row++, -1, TERM_L_DARK, "(Effect not yet identified)");
-    }
-
-    row++;
-    return row;
-}
-
 static bool metarun_show_active_effects_information_scene(bool steamdeck,
     const char* accept_label, const char* back_label)
 {
@@ -4035,10 +3736,9 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
 /* Show all active curses in a dedicated screen with pagination */
 static void show_all_active_curses(void)
 {
-    int term_height, term_width;
     ui_information_scene_scope info_scope;
     bool use_information_scene;
-    bool steamdeck = get_sdl_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     char back_label[16] = "";
 
@@ -4051,150 +3751,14 @@ static void show_all_active_curses(void)
     }
 
     use_information_scene = ui_information_scene_enter(&info_scope);
-    if (use_information_scene)
-    {
-        bool presented = metarun_show_active_effects_information_scene(
-            steamdeck, accept_label, back_label);
-
-        ui_information_scene_leave(&info_scope);
-        if (presented)
-            return;
-    }
-
-    screen_save();
-
-    /* Get actual terminal dimensions */
-    Term_get_size(&term_width, &term_height);
-
-    /* Count active effects and build list */
-    int active_count = 0;
-    int active_ids[64];
-    for (int id = 0; id < z_info->cu_max && active_count < 64; id++) {
-        if (CURSE_GET(id) != 0) {
-            active_ids[active_count++] = id;
-        }
-    }
-
-    if (active_count == 0) {
-        Term_clear();
-        Term_putstr(2, 1, -1, TERM_YELLOW, "=== All Active Effects ===");
-        Term_putstr(2, 3, -1, TERM_L_DARK, "No active curses or blessings");
-        if (steamdeck) {
-            char hint_buf[64];
-            strnfmt(hint_buf, sizeof(hint_buf), "Press [%s] to return.", accept_label);
-            Term_putstr(2, 5, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, 5, -1, TERM_L_DARK, "Press any key to return.");
-        }
-        (void)inkey();
-        screen_load();
+    if (!use_information_scene) {
+        log_error("show_all_active_curses: semantic scene unavailable");
         return;
     }
 
-    int available_lines = term_height - 4;
-    if (available_lines < 1) available_lines = 1;
-
-    int page_starts[64];
-    int total_pages = 0;
-    int lines_used = 0;
-    page_starts[0] = 0;
-
-    for (int i = 0; i < active_count; i++) {
-        int block_lines = metarun_active_effect_block_lines(active_ids[i], term_width);
-
-        if (lines_used > 0 && lines_used + block_lines > available_lines) {
-            total_pages++;
-            page_starts[total_pages] = i;
-            lines_used = 0;
-        }
-
-        lines_used += block_lines;
-    }
-
-    total_pages++;
-    int current_page = 0;
-
-    void (*old_text_out_hook)(byte, cptr) = text_out_hook;
-    int old_text_out_indent = text_out_indent;
-    int old_text_out_wrap = text_out_wrap;
-
-    while (true) {
-        Term_clear();
-
-        /* Title with page info */
-        char title_buf[80];
-        if (total_pages > 1) {
-            snprintf(title_buf, sizeof title_buf, "=== Active Effects (Page %d/%d) ===",
-                     current_page + 1, total_pages);
-        } else {
-            SDL_strlcpy(title_buf, "=== All Active Effects ===", sizeof title_buf);
-        }
-        Term_putstr(2, 1, -1, TERM_YELLOW, title_buf);
-
-        int start_idx = page_starts[current_page];
-        int end_idx = (current_page + 1 < total_pages) ? page_starts[current_page + 1] : active_count;
-
-        int row = 3;
-        for (int i = start_idx; i < end_idx; i++) {
-            row = metarun_render_active_effect_block(active_ids[i], row, term_width);
-        }
-
-        /* Footer with navigation instructions */
-        char footer_buf[100];
-        if (steamdeck) {
-            if (total_pages > 1) {
-                snprintf(footer_buf, sizeof footer_buf,
-                         "D-pad navigate  [%s] ok  [%s] back", accept_label, back_label);
-            } else {
-                snprintf(footer_buf, sizeof footer_buf,
-                         "[%s] ok  [%s] back", accept_label, back_label);
-            }
-        } else {
-            if (total_pages > 1) {
-                snprintf(footer_buf, sizeof footer_buf,
-                         "Use arrows (left/right) to navigate. Any other key to return.");
-            } else {
-                SDL_strlcpy(footer_buf, "Press any key to return.", sizeof footer_buf);
-            }
-        }
-
-        /* Ensure minimum 80 width for footer */
-        size_t footer_len = strlen(footer_buf);
-        if (footer_len < 80 && footer_len + 2 < sizeof footer_buf) {
-            memset(footer_buf + footer_len, ' ', 80 - footer_len);
-            footer_buf[80] = '\0';
-        }
-
-        Term_putstr(0, term_height - 1, -1, TERM_L_DARK, footer_buf);
-        Term_fresh();
-
-        /* Get input */
-        char key = inkey();
-
-        /* Arrow navigation: 6 = right, 4 = left (keypad directions) */
-        if (total_pages > 1 && key == '6') {
-            /* Next page */
-            current_page = (current_page + 1) % total_pages;
-        } else if (total_pages > 1 && key == '4') {
-            /* Previous page */
-            current_page = (current_page + total_pages - 1) % total_pages;
-        } else if (steamdeck && key == steamdeck_back_key()) {
-            /* B button = back in Steam Deck mode */
-            break;
-        } else if (steamdeck && (key == steamdeck_confirm_key() || key == '\r' || key == '\n')) {
-            /* A button = confirm/close in Steam Deck mode */
-            break;
-        } else if (!steamdeck) {
-            /* Exit on any key in non-Steam Deck mode */
-            break;
-        }
-    }
-
-    text_out_hook = old_text_out_hook;
-    text_out_indent = old_text_out_indent;
-    text_out_wrap = old_text_out_wrap;
-
-    screen_load();
+    (void)metarun_show_active_effects_information_scene(steamdeck,
+        accept_label, back_label);
+    ui_information_scene_leave(&info_scope);
 }
 
 static int blessing_points_remaining(void)
@@ -4551,994 +4115,6 @@ static bool blessing_apply_major_choice(int choice_idx, char *result_msg,
     }
 
     return true;
-}
-
-static bool blessing_remove_curse(char *result_msg, size_t msg_size, byte *result_attr)
-{
-    int ids[METAR_CURSE_SLOTS];
-    int count = 0;
-
-    for (int id = 0; id < z_info->cu_max; id++) {
-        if (CURSE_CURSE_STACK(id) > 0) {
-            if (count < METAR_CURSE_SLOTS) {
-                ids[count++] = id;
-            }
-        }
-    }
-
-    if (count == 0) {
-        if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "No curses cling to this saga.", msg_size);
-            if (result_attr) *result_attr = TERM_L_DARK;
-        }
-        return false;
-    }
-
-    int selected = 0;
-    int choice = -1;
-    bool steamdeck = get_sdl_steamdeck_mode();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=cancel */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
-
-    if (ui_information_scene_is_active()) {
-        while (choice < 0) {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            int key;
-
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Remove a Curse", TERM_SLATE, "Cost: 1 blessing point");
-            if (!panel)
-                return false;
-
-            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                "Choose which curse to lift.");
-
-            for (int i = 0; i < count; i++) {
-                int id = ids[i];
-                char key_buf[APP_UI_KEY_MAX];
-                char meta[APP_UI_META_MAX];
-
-                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
-                strnfmt(meta, sizeof(meta), "stacks: %d",
-                    CURSE_CURSE_STACK(id));
-                if (!app_ui_panel_add_row(panel, id, TERM_RED, true,
-                        i == selected, key_buf, curse_display_name(id), meta))
-                {
-                    return false;
-                }
-            }
-
-            if (selected >= 0 && selected < count) {
-                int id = ids[selected];
-                curse_type *c = &cu_info[id];
-                char line[APP_UI_TEXT_MAX];
-
-                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                    "Selected Curse");
-                strnfmt(line, sizeof(line), "%s", curse_display_name(id));
-                if (!app_ui_panel_add_detail_line(panel, TERM_RED, line))
-                    return false;
-                strnfmt(line, sizeof(line), "Stacks: %d",
-                    CURSE_CURSE_STACK(id));
-                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
-                    return false;
-                if (c->text
-                    && !metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
-                        cu_text + c->text))
-                {
-                    return false;
-                }
-                if (CURSE_SEEN(id) && c->power) {
-                    strnfmt(line, sizeof(line), "Effect: %s",
-                        cu_text + c->power);
-                    if (!metarun_ui_add_wrapped_detail_lines(panel,
-                            TERM_SLATE, line))
-                    {
-                        return false;
-                    }
-                } else if (!CURSE_SEEN(id)) {
-                    if (!app_ui_panel_add_detail_line(panel, TERM_L_DARK,
-                            "(Effect not yet identified)"))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Lift");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Cancel");
-
-            if (!ui_information_scene_present_ui(&scene))
-                return false;
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == ESCAPE || key == '4'
-                || (steamdeck && key == steamdeck_back_key())
-                || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                metarun_ui_clear_pending_input();
-                return false;
-            }
-            if (key == '\r' || key == '\n'
-                || (steamdeck && key == steamdeck_confirm_key())
-                || key == '6')
-            {
-                choice = selected;
-                metarun_ui_clear_pending_input();
-                break;
-            }
-            if (key == '8' || key == 'k' || key == '-') {
-                selected = (selected + count - 1) % count;
-                continue;
-            }
-            if (key == '2' || key == 'j' || key == '+') {
-                selected = (selected + 1) % count;
-                continue;
-            }
-
-            int idx = key - 'a';
-            if (idx >= 0 && idx < count) {
-                choice = idx;
-                metarun_ui_clear_pending_input();
-            } else if (key >= 'A' && key <= 'Z') {
-                idx = key - 'A';
-                if (idx >= 0 && idx < count) {
-                    choice = idx;
-                    metarun_ui_clear_pending_input();
-                } else {
-                    bell("Invalid selection.");
-                }
-            } else {
-                bell("Invalid selection.");
-            }
-        }
-    } else {
-    
-    /* Setup text wrapping */
-    text_out_hook = text_out_to_screen;
-    text_out_indent = 6;  /* Indent wrapped lines to match description column */
-    int wrap_width = Term->wid - 8;  /* Leave margin for indentation */
-    text_out_wrap = wrap_width;
-    
-    while (choice < 0) {
-        screen_save();
-        Term_clear();
-
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Remove a Curse (cost 1 blessing point)");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Choose which curse to lift:");
-
-        int line = 5;
-        for (int i = 0; i < count; i++) {
-            int id = ids[i];
-            curse_type *c = &cu_info[id];
-            int stacks = CURSE_CURSE_STACK(id);
-            char label = 'a' + i;
-            
-            /* Display curse name and stacks */
-            char buf[128];
-            snprintf(buf, sizeof buf, "%c) %-28s stacks: %d",
-                     label, curse_display_name(id), stacks);
-            
-            if (i == selected) {
-                Term_putstr(2, line, -1, TERM_L_BLUE, ">");
-                Term_putstr(4, line++, -1, TERM_L_RED, buf);
-                
-                /* Always show description (D:) with wrapping */
-                if (c->text) {
-                    cptr desc = cu_text + c->text;
-                    Term_gotoxy(6, line);
-                    text_out_c(TERM_L_WHITE, desc);
-                    line += count_wrapped_lines(desc, wrap_width, 6);
-                }
-                
-                /* Show power (P:) ONLY if curse is identified, with wrapping */
-                bool is_seen = CURSE_SEEN(id);
-                log_debug("blessing_remove_curse: curse %d (%s) seen=%d power=%d", 
-                          id, curse_display_name(id), is_seen, (c->power != 0));
-                if (is_seen && c->power) {
-                    cptr power = cu_text + c->power;
-                    Term_gotoxy(6, line);
-                    text_out_c(TERM_SLATE, power);
-                    line += count_wrapped_lines(power, wrap_width, 6);
-                }
-            } else {
-                Term_putstr(2, line, -1, TERM_L_DARK, " ");
-                Term_putstr(4, line++, -1, TERM_RED, buf);
-            }
-        }
-
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
-            Term_putstr(2, line + 1, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, line + 1, -1, TERM_L_DARK,
-                        "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
-        }
-        char key = inkey();
-        screen_load();
-
-        /* Handle back/cancel - ESC or B button in Steam Deck mode */
-        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
-            /* Reset text wrapping */
-            text_out_wrap = 0;
-            text_out_indent = 0;
-            return false;
-        } else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6') {
-            choice = selected;
-            break;
-        } else if (key == '8' || key == 'k' || key == '-') {
-            selected = (selected + count - 1) % count;
-            continue;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            selected = (selected + 1) % count;
-            continue;
-        }
-
-        int idx = key - 'a';
-        if (idx >= 0 && idx < count) {
-            choice = idx;
-        } else if (key >= 'A' && key <= 'Z') {
-            idx = key - 'A';
-            if (idx >= 0 && idx < count) {
-                choice = idx;
-            } else {
-                bell("Invalid selection.");
-            }
-        } else {
-            bell("Invalid selection.");
-        }
-    }
-    }
-
-    int curse_id = ids[choice];
-    int current_stacks = CURSE_CURSE_STACK(curse_id);
-    
-    /* Remove only one stack instead of all stacks */
-    if (current_stacks > 1) {
-        CURSE_SET(curse_id, current_stacks - 1);
-    } else {
-        CURSE_SET(curse_id, 0);
-    }
-    CURSE_SEEN_SET(curse_id);
-
-    if (!ui_information_scene_is_active()) {
-        /* Reset text wrapping */
-        text_out_wrap = 0;
-        text_out_indent = 0;
-    }
-
-    blessing_spend_points(1);
-    
-    /* Clear pending blessing choices when removing a curse */
-    /* (removing a curse might make new blessings available) */
-    metar.pending_blessing_count = 0;
-    for (int i = 0; i < 3; i++) {
-        metar.pending_blessing_choices[i] = 255;
-    }
-    
-    blessing_commit_changes(true);
-
-    if (result_msg && msg_size > 0) {
-        if (current_stacks > 1) {
-            snprintf(result_msg, msg_size, "One stack of %s is lifted. (%d remain%s)", 
-                     curse_display_name(curse_id), 
-                     current_stacks - 1,
-                     (current_stacks - 1 == 1) ? "s" : "");
-        } else {
-            snprintf(result_msg, msg_size, "The curse of %s is lifted.", curse_display_name(curse_id));
-        }
-        if (result_attr) *result_attr = TERM_L_BLUE;
-    }
-    return true;
-}
-
-static bool blessing_gain_minor(char *result_msg, size_t msg_size, byte *result_attr)
-{
-    int options[3];
-    int picks = 0;
-    
-    /* Check if we have pending choices that are still valid */
-    bool have_valid_pending = false;
-    if (metar.pending_blessing_count > 0) {
-        /* Validate pending choices - make sure they're still eligible */
-        for (int i = 0; i < metar.pending_blessing_count && i < 3; i++) {
-            int id = metar.pending_blessing_choices[i];
-            if (id == 255) continue; /* Empty slot */
-            
-            curse_type *c = &cu_info[id];
-            if (!c->blessing_name) continue; /* No longer has blessing */
-            
-            int stacks = CURSE_GET(id);
-            if (stacks > 0) continue; /* Currently cursed */
-            
-            int blessing_stacks = (stacks < 0) ? -stacks : 0;
-            if (CURSE_BLESSING_CAP(id) > 0
-                && blessing_stacks >= CURSE_BLESSING_CAP(id))
-                continue; /* At max */
-            
-            /* This pending choice is still valid */
-            options[picks++] = id;
-        }
-        
-        if (picks > 0) {
-            have_valid_pending = true;
-        }
-    }
-    
-    /* If we don't have valid pending choices, generate new ones */
-    if (!have_valid_pending) {
-        int eligible[METAR_CURSE_SLOTS];
-        int weights[METAR_CURSE_SLOTS];
-        int count = 0;
-        int total_weight = 0;
-
-        /* Build list of eligible blessings with their weights */
-        for (int id = 0; id < z_info->cu_max; id++) {
-            curse_type *c = &cu_info[id];
-            if (!c->blessing_name) continue;
-
-            int stacks = CURSE_GET(id);
-            if (stacks > 0) continue; /* currently cursed */
-
-            int blessing_stacks = (stacks < 0) ? -stacks : 0;
-            if (CURSE_BLESSING_CAP(id) > 0
-                && blessing_stacks >= CURSE_BLESSING_CAP(id))
-                continue;
-
-            if (count < METAR_CURSE_SLOTS) {
-                eligible[count] = id;
-                /* Apply weight with diminishing returns for existing stacks (same as curse system) */
-                int base_weight = c->weight > 0 ? c->weight : 1;
-                int effective_weight = base_weight / (blessing_stacks + 1);
-                weights[count] = (effective_weight > 0) ? effective_weight : 1;  /* Minimum weight of 1 */
-                total_weight += weights[count];
-                count++;
-            }
-        }
-
-        if (count == 0) {
-            if (result_msg && msg_size > 0) {
-                SDL_strlcpy(result_msg, "No blessings are presently available.", msg_size);
-                if (result_attr) *result_attr = TERM_L_DARK;
-            }
-            return false;
-        }
-
-        /* Select up to 3 blessings using weighted random selection */
-        picks = MIN(3, count);
-        
-        for (int i = 0; i < picks; i++) {
-            /* Weighted random selection from remaining eligible blessings */
-            int roll = rand_int(total_weight);
-            int sum = 0;
-            int selected = 0;
-            
-            for (int j = 0; j < count; j++) {
-                sum += weights[j];
-                if (roll < sum) {
-                    selected = j;
-                    break;
-                }
-            }
-            
-            options[i] = eligible[selected];
-            
-            /* Remove selected blessing from pool for next iteration */
-            total_weight -= weights[selected];
-            eligible[selected] = eligible[count - 1];
-            weights[selected] = weights[count - 1];
-            count--;
-        }
-        
-        /* Store these choices as pending */
-        metar.pending_blessing_count = picks;
-        for (int i = 0; i < 3; i++) {
-            if (i < picks) {
-                metar.pending_blessing_choices[i] = options[i];
-            } else {
-                metar.pending_blessing_choices[i] = 255; /* Empty */
-            }
-        }
-        save_metaruns();
-    }
-
-    int selected = 0;
-    int choice = -1;
-    bool steamdeck = get_sdl_steamdeck_mode();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=cancel */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
-
-    if (ui_information_scene_is_active()) {
-        while (choice < 0) {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            int key;
-
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Receive a Blessing", TERM_SLATE, "Cost: 1 blessing point");
-            if (!panel)
-                return false;
-
-            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                "Select a gift to accept.");
-
-            for (int i = 0; i < picks; i++) {
-                int id = options[i];
-                int stacks = CURSE_GET(id);
-                int blessing_stacks = (stacks < 0) ? -stacks : 0;
-                char key_buf[APP_UI_KEY_MAX];
-                char meta[APP_UI_META_MAX];
-
-                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
-                strnfmt(meta, sizeof(meta), "current: %d", blessing_stacks);
-                if (!app_ui_panel_add_row(panel, id, TERM_L_GREEN, true,
-                        i == selected, key_buf, blessing_display_name(id),
-                        meta))
-                {
-                    return false;
-                }
-            }
-
-            if (selected >= 0 && selected < picks) {
-                curse_type *c = &cu_info[options[selected]];
-
-                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                    "Selected Blessing");
-                if (!app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
-                        blessing_display_name(options[selected])))
-                {
-                    return false;
-                }
-                if (c->blessing_text
-                    && !metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
-                        cu_text + c->blessing_text))
-                {
-                    return false;
-                }
-                if (c->blessing_power
-                    && !metarun_ui_add_wrapped_detail_lines(panel,
-                        TERM_L_GREEN, cu_text + c->blessing_power))
-                {
-                    return false;
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Accept");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Cancel");
-
-            if (!ui_information_scene_present_ui(&scene))
-                return false;
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == ESCAPE || key == '4'
-                || (steamdeck && key == steamdeck_back_key())
-                || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                metarun_ui_clear_pending_input();
-                return false;
-            }
-            if (key == '\r' || key == '\n'
-                || (steamdeck && key == steamdeck_confirm_key())
-                || key == '6')
-            {
-                choice = selected;
-                metarun_ui_clear_pending_input();
-                break;
-            }
-            if (key == '8' || key == 'k' || key == '-') {
-                selected = (selected + picks - 1) % picks;
-                continue;
-            }
-            if (key == '2' || key == 'j' || key == '+') {
-                selected = (selected + 1) % picks;
-                continue;
-            }
-
-            int idx = key - 'a';
-            if (idx >= 0 && idx < picks) {
-                choice = idx;
-                metarun_ui_clear_pending_input();
-            } else if (key >= 'A' && key <= 'Z') {
-                idx = key - 'A';
-                if (idx >= 0 && idx < picks) {
-                    choice = idx;
-                    metarun_ui_clear_pending_input();
-                } else {
-                    bell("Invalid selection.");
-                }
-            } else {
-                bell("Invalid selection.");
-            }
-        }
-    } else {
-    while (choice < 0) {
-        screen_save();
-        Term_clear();
-
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Receive a Blessing (cost 1 blessing point)");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Select a gift to accept:");
-
-        int line = 5;
-        for (int i = 0; i < picks; i++) {
-            int id = options[i];
-            curse_type *c = &cu_info[id];
-            char label = 'a' + i;
-
-            cptr name = blessing_display_name(id);
-            char buf[160];
-            snprintf(buf, sizeof buf, "%c) %-30s", label, name);
-            if (i == selected) {
-                Term_putstr(2, line, -1, TERM_L_BLUE, ">");
-                Term_putstr(4, line++, -1, TERM_L_GREEN, buf);
-                
-                /* Show both poetic description (E:) and mechanical effect (H:) for selected item */
-                if (c->blessing_text) {
-                    cptr desc = cu_text + c->blessing_text;
-                    Term_putstr(6, line++, -1, TERM_L_WHITE, desc);
-                }
-                if (c->blessing_power) {
-                    cptr power = cu_text + c->blessing_power;
-                    Term_putstr(6, line++, -1, TERM_L_GREEN, power);
-                }
-            } else {
-                Term_putstr(2, line, -1, TERM_L_DARK, " ");
-                Term_putstr(4, line++, -1, TERM_L_GREEN, buf);
-            }
-        }
-
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
-            Term_putstr(2, line + 1, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, line + 1, -1, TERM_L_DARK,
-                        "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
-        }
-        char key = inkey();
-        screen_load();
-
-        /* Handle back/cancel - ESC or B button in Steam Deck mode */
-        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
-            return false;
-        } else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6') {
-            choice = selected;
-            break;
-        } else if (key == '8' || key == 'k' || key == '-') {
-            selected = (selected + picks - 1) % picks;
-            continue;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            selected = (selected + 1) % picks;
-            continue;
-        }
-
-        int idx = key - 'a';
-        if (idx >= 0 && idx < picks) {
-            choice = idx;
-        } else if (key >= 'A' && key <= 'Z') {
-            idx = key - 'A';
-            if (idx >= 0 && idx < picks) {
-                choice = idx;
-            } else {
-                bell("Invalid selection.");
-            }
-        } else {
-            bell("Invalid selection.");
-        }
-    }
-
-    }
-
-    int blessing_id = options[choice];
-    int stacks = CURSE_GET(blessing_id);
-    int blessing_stacks = (stacks < 0) ? -stacks : 0;
-
-    if (CURSE_BLESSING_CAP(blessing_id) > 0
-        && blessing_stacks >= CURSE_BLESSING_CAP(blessing_id)) {
-        if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "That blessing cannot grow any stronger.", msg_size);
-            if (result_attr) *result_attr = TERM_L_DARK;
-        }
-        return false;
-    }
-
-    CURSE_ADD(blessing_id, -1);
-    CURSE_SEEN_SET(blessing_id);
-
-    blessing_spend_points(1);
-    
-    /* Clear pending choices after selection */
-    metar.pending_blessing_count = 0;
-    for (int i = 0; i < 3; i++) {
-        metar.pending_blessing_choices[i] = 255;
-    }
-    
-    blessing_commit_changes(true);
-
-    if (result_msg && msg_size > 0) {
-        snprintf(result_msg, msg_size, "You receive the %s.", blessing_display_name(blessing_id));
-        if (result_attr) *result_attr = TERM_L_GREEN;
-    }
-    return true;
-}
-
-static bool blessing_unlock_major(char *result_msg, size_t msg_size, byte *result_attr)
-{
-    metarun_sanitize_major_blessing_bits(&metar);
-
-    int cap = major_blessing_capacity();
-    if (cap <= 0 || !mb_info) {
-        if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "No major blessings are currently defined.", msg_size);
-            if (result_attr) *result_attr = TERM_L_DARK;
-        }
-        return false;
-    }
-
-    struct {
-        int idx;
-        char key;
-    } options[16];
-
-    int option_count = 0;
-    for (int i = 0; i < cap && option_count < 16; i++) {
-        if (metarun_has_major_blessing_index(i)) continue;
-        if (!major_blessing_def(i)) continue;
-        options[option_count].idx = i;
-        options[option_count].key = (char)('a' + option_count);
-        option_count++;
-    }
-
-    if (option_count == 0) {
-        if (result_msg && msg_size > 0) {
-            SDL_strlcpy(result_msg, "All major blessings are already sealed.", msg_size);
-            if (result_attr) *result_attr = TERM_L_DARK;
-        }
-        return false;
-    }
-
-    int available = blessing_points_remaining();
-    bool steamdeck = get_sdl_steamdeck_mode();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=cancel */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
-    
-    /* Find first affordable option as initial selection */
-    int selected = -1;
-    for (int i = 0; i < option_count; i++) {
-        int cost = major_blessing_cost(options[i].idx);
-        if (cost <= available) {
-            selected = i;
-            break;
-        }
-    }
-    
-    /* If no affordable options, show message and return */
-    if (selected < 0) {
-        if (result_msg && msg_size > 0) {
-            snprintf(result_msg, msg_size, "You need %d blessing points to unlock any major blessing.", 
-                   major_blessing_cost(options[0].idx));
-            if (result_attr) *result_attr = TERM_L_DARK;
-        }
-        return false;
-    }
-
-    if (ui_information_scene_is_active()) {
-        while (true) {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            int key;
-
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Unlock a Major Blessing", TERM_SLATE,
-                "Forge a covenant for this saga.");
-            if (!panel)
-                return false;
-
-            for (int i = 0; i < option_count; i++) {
-                int idx = options[i].idx;
-                int cost = major_blessing_cost(idx);
-                bool affordable = (cost <= available);
-                char key_buf[APP_UI_KEY_MAX];
-                char meta[APP_UI_META_MAX];
-
-                strnfmt(key_buf, sizeof(key_buf), "%c", options[i].key);
-                strnfmt(meta, sizeof(meta), "cost %d", cost);
-                if (!app_ui_panel_add_row(panel, idx,
-                        affordable ? TERM_L_GREEN : TERM_L_DARK, affordable,
-                        i == selected, key_buf, major_blessing_name_str(idx),
-                        meta))
-                {
-                    return false;
-                }
-            }
-
-            if (selected >= 0 && selected < option_count) {
-                int idx = options[selected].idx;
-                int cost = major_blessing_cost(idx);
-                bool affordable = (cost <= available);
-                const char *detail = major_blessing_detail_desc(idx);
-                char line[APP_UI_TEXT_MAX];
-
-                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                    "Selected Covenant");
-                if (!app_ui_panel_add_detail_line(panel,
-                        affordable ? TERM_L_GREEN : TERM_L_DARK,
-                        major_blessing_name_str(idx)))
-                {
-                    return false;
-                }
-                strnfmt(line, sizeof(line), "Cost: %d blessing point%s", cost,
-                    (cost == 1) ? "" : "s");
-                if (!app_ui_panel_add_detail_line(panel,
-                        affordable ? TERM_WHITE : TERM_L_DARK, line))
-                {
-                    return false;
-                }
-                strnfmt(line, sizeof(line), "Available: %d", available);
-                if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE, line))
-                    return false;
-                if (detail && *detail
-                    && !metarun_ui_add_wrapped_detail_lines(panel,
-                        affordable ? TERM_WHITE : TERM_SLATE, detail))
-                {
-                    return false;
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Unlock");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Cancel");
-
-            if (!ui_information_scene_present_ui(&scene))
-                return false;
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == ESCAPE || key == '4'
-                || (steamdeck && key == steamdeck_back_key())
-                || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                metarun_ui_clear_pending_input();
-                return false;
-            }
-
-            if (key == '\r' || key == '\n'
-                || (steamdeck && key == steamdeck_confirm_key())
-                || key == '6')
-            {
-                key = options[selected].key;
-            } else if (key == '8' || key == 'k' || key == '-') {
-                int start = selected;
-                do {
-                    selected = (selected + option_count - 1) % option_count;
-                    if (major_blessing_cost(options[selected].idx) <= available)
-                        break;
-                } while (selected != start);
-                continue;
-            } else if (key == '2' || key == 'j' || key == '+') {
-                int start = selected;
-                do {
-                    selected = (selected + 1) % option_count;
-                    if (major_blessing_cost(options[selected].idx) <= available)
-                        break;
-                } while (selected != start);
-                continue;
-            }
-
-            int choice_idx = -1;
-            char lowered = tolower((unsigned char)key);
-            if (lowered >= 'a' && lowered <= 'z') {
-                for (int i = 0; i < option_count; i++) {
-                    if (lowered == options[i].key) {
-                        if (major_blessing_cost(options[i].idx) > available) {
-                            bell("Not enough blessing points for that covenant.");
-                            choice_idx = -2;
-                            break;
-                        }
-                        choice_idx = options[i].idx;
-                        selected = i;
-                        break;
-                    }
-                }
-            }
-
-            if (choice_idx == -2)
-                continue;
-            if (choice_idx < 0) {
-                bell("Invalid selection.");
-                continue;
-            }
-
-            int cost = major_blessing_cost(choice_idx);
-
-            metar.major_blessings |= (1U << choice_idx);
-            blessing_spend_points(cost);
-            blessing_commit_changes(true);
-            metarun_ui_clear_pending_input();
-
-            if (result_msg && msg_size > 0) {
-                const char *msg = major_blessing_unlock_msg(choice_idx);
-                if (msg && *msg) {
-                    SDL_strlcpy(result_msg, msg, msg_size);
-                } else {
-                    snprintf(result_msg, msg_size, "You seal the %s.",
-                        major_blessing_name_str(choice_idx));
-                }
-                if (result_attr) *result_attr = TERM_YELLOW;
-            }
-            return true;
-        }
-    }
-
-    while (true) {
-        screen_save();
-        Term_clear();
-
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Unlock a Major Blessing");
-        Term_putstr(2, 3, -1, TERM_L_WHITE, "Select which covenant to forge:");
-
-        /* Recalculate in case something changed (shouldn't happen but safe) */
-        available = blessing_points_remaining();
-        
-        int line = 5;
-        for (int i = 0; i < option_count; i++) {
-            int idx = options[i].idx;
-            char key = options[i].key;
-            const char *name = major_blessing_name_str(idx);
-            const char *detail = major_blessing_detail_desc(idx);
-            int cost = major_blessing_cost(idx);
-            bool affordable = (cost <= available);
-
-            char buf[160];
-            snprintf(buf, sizeof buf, "%c) %s (cost %d)", key, name, cost);
-            
-            if (i == selected) {
-                Term_putstr(2, line, -1, TERM_L_BLUE, ">");
-                if (affordable) {
-                    Term_putstr(4, line++, -1, TERM_L_GREEN, buf);
-                } else {
-                    Term_putstr(4, line++, -1, TERM_L_DARK, buf);
-                }
-                
-                /* Show description only for selected item */
-                if (detail && *detail) {
-                    byte desc_color = affordable ? TERM_L_WHITE : TERM_SLATE;
-                    Term_putstr(6, line++, -1, desc_color, detail);
-                }
-            } else {
-                Term_putstr(2, line, -1, TERM_L_DARK, " ");
-                if (affordable) {
-                    Term_putstr(4, line++, -1, TERM_L_GREEN, buf);
-                } else {
-                    Term_putstr(4, line++, -1, TERM_L_DARK, buf);
-                }
-            }
-
-            line++;
-        }
-
-        /* Show available points */
-        char points_msg[80];
-        snprintf(points_msg, sizeof points_msg, "Available blessing points: %d", available);
-        Term_putstr(2, line++, -1, TERM_L_BLUE, points_msg);
-        
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
-            Term_putstr(2, line + 1, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, line + 1, -1, TERM_L_DARK,
-                        "Arrows to navigate  Space/Enter accept  Letter select  Esc cancel");
-        }
-
-        char key = inkey();
-        screen_load();
-
-        /* Handle back/cancel - ESC or B button in Steam Deck mode */
-        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
-            return false;
-        }
-
-        if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6') {
-            key = options[selected].key;
-        } else if (key == '8' || key == 'k' || key == '-') {
-            /* Navigate up, skipping unaffordable options */
-            int start = selected;
-            do {
-                selected = (selected + option_count - 1) % option_count;
-                int cost = major_blessing_cost(options[selected].idx);
-                if (cost <= available) break;
-            } while (selected != start);
-            continue;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            /* Navigate down, skipping unaffordable options */
-            int start = selected;
-            do {
-                selected = (selected + 1) % option_count;
-                int cost = major_blessing_cost(options[selected].idx);
-                if (cost <= available) break;
-            } while (selected != start);
-            continue;
-        }
-
-        int choice_idx = -1;
-        char lowered = tolower((unsigned char)key);
-        if (lowered >= 'a' && lowered <= 'z') {
-            for (int i = 0; i < option_count; i++) {
-                if (lowered == options[i].key) {
-                    int cost = major_blessing_cost(options[i].idx);
-                    if (cost > available) {
-                        bell("Not enough blessing points for that covenant.");
-                        choice_idx = -2; /* Special marker for unaffordable */
-                        break;
-                    }
-                    choice_idx = options[i].idx;
-                    selected = i;
-                    break;
-                }
-            }
-        }
-
-        if (choice_idx == -2) {
-            /* Was unaffordable, already showed bell */
-            continue;
-        }
-        
-        if (choice_idx < 0) {
-            bell("Invalid selection.");
-            continue;
-        }
-
-        /* At this point choice is valid and affordable */
-        int cost = major_blessing_cost(choice_idx);
-        
-        metar.major_blessings |= (1U << choice_idx);
-        blessing_spend_points(cost);
-        blessing_commit_changes(true);
-        
-        if (result_msg && msg_size > 0) {
-            const char *msg = major_blessing_unlock_msg(choice_idx);
-            if (msg && *msg) {
-                SDL_strlcpy(result_msg, msg, msg_size);
-            } else {
-                snprintf(result_msg, msg_size, "You seal the %s.", major_blessing_name_str(choice_idx));
-            }
-            if (result_attr) *result_attr = TERM_YELLOW;
-        }
-        return true;
-    }
 }
 
 static bool open_blessing_exchange_information_scene(bool steamdeck,
@@ -6157,13 +4733,8 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
 
 static void open_blessing_exchange(void)
 {
-    bool done = false;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-    int selected = 0;  /* Track highlighted option: 0=remove curse, 1=minor blessing, 2=major blessing */
-    char status_msg[256] = "";
-    byte status_attr = TERM_WHITE;
-    bool clear_status_on_next_key = false;
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
     char back_label[16] = "";
@@ -6173,206 +4744,22 @@ static void open_blessing_exchange(void)
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
     }
+    if (!use_information_scene) {
+        log_error("adjust_blessing_threshold_menu: semantic scene unavailable");
+        return;
+    }
 
     log_debug("[metarun-esc-trace] open_blessing_exchange enter info_scene=%d",
         use_information_scene ? 1 : 0);
 
-    if (use_information_scene) {
-        bool semantic_ok = open_blessing_exchange_information_scene(
-            steamdeck, accept_label, back_label);
-        log_debug("[metarun-esc-trace] open_blessing_exchange semantic returned ok=%d",
-            semantic_ok ? 1 : 0);
-        ui_information_scene_leave(&info_scope);
-        if (semantic_ok)
-            return;
-        use_information_scene = false;
+    if (!use_information_scene) {
+        log_error("open_blessing_exchange: semantic scene unavailable");
+        return;
     }
 
-    while (!done) {
-        compute_blessing_pool();
-        int available = blessing_points_remaining();
-        int earned = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
-        int spent = metar.blessing_points_spent;
-
-        bool major_available = false;
-        int min_major_cost = INT_MAX;
-        int major_cap = major_blessing_capacity();
-        for (int i = 0; i < major_cap; i++) {
-            if (metarun_has_major_blessing_index(i)) continue;
-            if (!major_blessing_def(i)) continue;
-            major_available = true;
-            int cost = major_blessing_cost(i);
-            if (cost < 0) cost = 0;
-            if (cost < min_major_cost) min_major_cost = cost;
-        }
-        if (!major_available || min_major_cost == INT_MAX) {
-            min_major_cost = 0;
-        }
-        
-        /* Check if major blessing option is actually affordable */
-        bool major_affordable = major_available && (min_major_cost <= available);
-
-        int option_count = major_available ? 3 : 2;
-        if (selected < 0) selected = 0;
-        if (selected >= option_count) selected = option_count - 1;
-
-        screen_save();
-        Term_clear();
-
-        Term_putstr(2, 1, -1, TERM_YELLOW, "Blessing Exchange");
-        char buf[160];
-        snprintf(buf, sizeof buf, "Blessing Points Available: %d (spent %d / earned %d)",
-                 available, spent, earned);
-        Term_putstr(2, 3, -1, TERM_L_WHITE, buf);
-
-        /* Get blessing point threshold from runtype data */
-        u32b threshold = metarun_threshold_value(&metar);
-        if (threshold == 0) threshold = 1;
-        
-        snprintf(buf, sizeof buf, "Fallen Score Pool: %lu (progress %lu / %lu)",
-                 (unsigned long)metar.fallen_score_total,
-                 (unsigned long)metar.fallen_score_pool,
-                 (unsigned long)threshold);
-        Term_putstr(2, 4, -1, TERM_L_WHITE, buf);
-
-        Term_putstr(2, 6, -1, TERM_L_GREEN, "Options:");
-        
-        /* Option 0: Remove curse */
-        cptr marker0 = (selected == 0) ? ">" : " ";
-        byte attr0 = (selected == 0) ? TERM_L_WHITE : TERM_WHITE;
-        Term_putstr(2, 8, -1, TERM_L_BLUE, marker0);
-        Term_putstr(4, 8, -1, attr0, "r) Remove a curse (cost 1)");
-        
-        /* Option 1: Minor blessing */
-        cptr marker1 = (selected == 1) ? ">" : " ";
-        byte attr1 = (selected == 1) ? TERM_L_WHITE : TERM_WHITE;
-        Term_putstr(2, 9, -1, TERM_L_BLUE, marker1);
-        Term_putstr(4, 9, -1, attr1, "m) Gain a minor blessing (cost 1)");
-        
-        /* Option 2: Major blessing */
-        if (major_available) {
-            cptr marker2 = (selected == 2) ? ">" : " ";
-            byte attr2;
-            if (major_affordable) {
-                attr2 = (selected == 2) ? TERM_L_WHITE : TERM_WHITE;
-            } else {
-                attr2 = TERM_L_DARK; /* Grey out if unaffordable */
-            }
-            snprintf(buf, sizeof buf, "u) Unlock a major blessing (cost %d)", min_major_cost);
-            Term_putstr(2, 10, -1, TERM_L_BLUE, marker2);
-            Term_putstr(4, 10, -1, attr2, buf);
-        } else {
-            Term_putstr(4,10, -1, TERM_L_DARK, "u) Unlock a major blessing (none available)");
-        }
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to navigate  [%s] accept  [%s] leave", accept_label, back_label);
-            Term_putstr(2, 12, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, 12, -1, TERM_L_DARK,
-                        "Arrows to navigate  Space/Enter accept  Letter select  ESC leave");
-        }
-        
-        /* Display status message if present */
-        if (status_msg[0] != '\0') {
-            Term_putstr(2, 14, -1, status_attr, status_msg);
-        }
-
-        char key = inkey();
-        screen_load();
-        
-        /* Clear status message on navigation or if flagged */
-        if (clear_status_on_next_key || key == '8' || key == 'k' || key == '-' || 
-            key == '2' || key == 'j' || key == '+') {
-            status_msg[0] = '\0';
-            clear_status_on_next_key = false;
-        }
-
-        /* Handle navigation */
-        if (key == '8' || key == 'k' || key == '-') {
-            /* Navigate up, skipping unaffordable major blessing */
-            int start = selected;
-            do {
-                selected = (selected + option_count - 1) % option_count;
-                if (selected == 2 && !major_affordable) continue; /* Skip unaffordable major */
-                break;
-            } while (selected != start);
-            continue;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            /* Navigate down, skipping unaffordable major blessing */
-            int start = selected;
-            do {
-                selected = (selected + 1) % option_count;
-                if (selected == 2 && !major_affordable) continue; /* Skip unaffordable major */
-                break;
-            } while (selected != start);
-            continue;
-        } else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6') {
-            /* A button/Space/Enter activates highlighted option */
-            if (selected == 0) key = 'r';
-            else if (selected == 1) key = 'm';
-            else if (selected == 2) key = 'u';
-        }
-
-        /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
-        if (key == ESCAPE || key == '4' || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
-            done = true;
-            continue;
-        }
-
-        switch (key) {
-        case 'r':
-        case 'R':
-            if (available < 1) {
-                SDL_strlcpy(status_msg, "You need at least one blessing point to lift a curse.", sizeof(status_msg));
-                status_attr = TERM_ORANGE;
-                clear_status_on_next_key = true;
-            } else if (blessing_remove_curse(status_msg, sizeof(status_msg), &status_attr)) {
-                compute_blessing_pool();
-                clear_status_on_next_key = true;
-            } else {
-                clear_status_on_next_key = true;
-            }
-            break;
-        case 'm':
-        case 'M':
-            if (available < 1) {
-                SDL_strlcpy(status_msg, "You need at least one blessing point to receive a gift.", sizeof(status_msg));
-                status_attr = TERM_ORANGE;
-                clear_status_on_next_key = true;
-            } else if (blessing_gain_minor(status_msg, sizeof(status_msg), &status_attr)) {
-                compute_blessing_pool();
-                clear_status_on_next_key = true;
-            } else {
-                clear_status_on_next_key = true;
-            }
-            break;
-        case 'u':
-        case 'U':
-            if (!major_available) {
-                SDL_strlcpy(status_msg, "All major blessings have already been sealed.", sizeof(status_msg));
-                status_attr = TERM_L_DARK;
-                clear_status_on_next_key = true;
-            } else if (!major_affordable) {
-                snprintf(status_msg, sizeof(status_msg), "You need %d blessing points to unlock a major blessing.", min_major_cost);
-                status_attr = TERM_ORANGE;
-                clear_status_on_next_key = true;
-            } else if (blessing_unlock_major(status_msg, sizeof(status_msg), &status_attr)) {
-                compute_blessing_pool();
-                clear_status_on_next_key = true;
-            } else {
-                clear_status_on_next_key = true;
-            }
-            break;
-        default:
-            bell("Unrecognised option.");
-            break;
-        }
-    }
-
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
+    (void)open_blessing_exchange_information_scene(steamdeck,
+        accept_label, back_label);
+    ui_information_scene_leave(&info_scope);
 }
 
 typedef struct metarun_stats_view_model {
@@ -7121,311 +5508,6 @@ static int metarun_ui_choose_curse_scene(int n,
     }
 }
 
-/*
- * Draw a simple blessing pool progress indicator.
- * Displays on the right side of the screen in light blue.
- */
-static void draw_blessing_meter(int col, int start_row, int height,
-    u32b current, u32b threshold)
-{
-    if (height < 5 || threshold == 0) return;
-
-    int percent = (int)((current * 100) / threshold);
-    if (percent > 100) percent = 100;
-
-    Term_putstr(col, start_row, -1, TERM_L_BLUE, "Blessing Pool");
-    Term_putstr(col, start_row + 1, -1, TERM_L_BLUE, "+----------+");
-
-    int meter_start = start_row + 2;
-    int meter_end = start_row + height - 1;
-    int meter_height = meter_end - meter_start;
-    int filled_height = (meter_height * percent) / 100;
-
-    for (int row = meter_start; row < meter_end; row++) {
-        int rows_from_bottom = meter_end - row - 1;
-        if (rows_from_bottom < filled_height) {
-            Term_putstr(col, row, -1, TERM_L_BLUE, "|##########|");
-        } else {
-            Term_putstr(col, row, -1, TERM_L_BLUE, "|          |");
-        }
-    }
-
-    Term_putstr(col, meter_end, -1, TERM_L_BLUE, "+----------+");
-
-    char progress_buf[20];
-    snprintf(progress_buf, sizeof progress_buf, "%lu/%lu",
-             (unsigned long)current, (unsigned long)threshold);
-    int text_col = col + (12 - (int)strlen(progress_buf)) / 2;
-    if (text_col < col) text_col = col;
-    Term_putstr(text_col, meter_end + 1, -1, TERM_L_BLUE, progress_buf);
-}
-
-static void metarun_truncate_for_width(char *buf, int max_width)
-{
-    if (!buf) return;
-    if (max_width <= 0) {
-        buf[0] = '\0';
-        return;
-    }
-
-    int len = (int)strlen(buf);
-    if (len <= max_width) return;
-
-    if (max_width >= 4) {
-        buf[max_width - 3] = '.';
-        buf[max_width - 2] = '.';
-        buf[max_width - 1] = '.';
-        buf[max_width] = '\0';
-    } else {
-        buf[max_width] = '\0';
-    }
-}
-
-static void metarun_put_prompt_line(int term_width, int term_height, byte attr,
-    const char *text)
-{
-    if (term_width <= 0 || term_height <= 0) return;
-
-    char line[512];
-    int line_width = term_width;
-    if (line_width > (int)sizeof(line) - 1) line_width = (int)sizeof(line) - 1;
-
-    memset(line, ' ', line_width);
-    line[line_width] = '\0';
-
-    if (text && *text) {
-        size_t tlen = strlen(text);
-        if ((int)tlen > line_width) tlen = (size_t)line_width;
-        memcpy(line, text, tlen);
-    }
-
-    Term_putstr(0, term_height - 1, -1, attr, line);
-}
-
-typedef struct {
-    char variants[4][64];
-    int variant_count;
-    int variant_idx;
-    bool enabled;
-    int drop_priority;
-} metarun_prompt_action;
-
-static size_t metarun_render_action_prompt(const metarun_prompt_action *actions,
-                                           int action_count,
-                                           char *out,
-                                           size_t out_size)
-{
-    if (!out || out_size == 0) return 0;
-
-    out[0] = '\0';
-    bool first = true;
-
-    for (int i = 0; i < action_count; i++) {
-        if (!actions[i].enabled) continue;
-        if (actions[i].variant_idx < 0 || actions[i].variant_idx >= actions[i].variant_count) continue;
-
-        if (!first) SDL_strlcat(out, "  ", out_size);
-        SDL_strlcat(out, actions[i].variants[actions[i].variant_idx], out_size);
-        first = false;
-    }
-
-    return strlen(out);
-}
-
-static void metarun_build_action_prompt(int term_width,
-                                        bool steamdeck,
-                                        const char *spend_label,
-                                        const char *threshold_label,
-                                        const char *diff_label,
-                                        const char *full_label,
-                                        const char *history_label,
-                                        const char *blitz_label,
-                                        bool blitz_enabled,
-                                        char *out,
-                                        size_t out_size)
-{
-    if (!out || out_size == 0) return;
-    out[0] = '\0';
-
-    const char *spend = (spend_label && *spend_label) ? spend_label : "X";
-    const char *thr = (threshold_label && *threshold_label) ? threshold_label : "R1";
-    const char *diff = (diff_label && *diff_label) ? diff_label : "L1";
-    const char *full = (full_label && *full_label) ? full_label : "Start";
-    const char *hist = (history_label && *history_label) ? history_label : "Y";
-    const char *blitz = (blitz_label && *blitz_label) ? blitz_label : "Back";
-
-    metarun_prompt_action actions[6];
-    memset(actions, 0, sizeof(actions));
-
-    for (int i = 0; i < 6; i++) {
-        actions[i].variant_count = 4;
-        actions[i].variant_idx = 0;
-        actions[i].enabled = (i < 5) ? true : blitz_enabled;
-    }
-
-    /* Lower number means dropped earlier if space is too tight. */
-    actions[0].drop_priority = 5; /* Blessings */
-    actions[1].drop_priority = 4; /* Threshold */
-    actions[2].drop_priority = 3; /* Difficulty */
-    actions[3].drop_priority = 2; /* Full list */
-    actions[4].drop_priority = 1; /* History */
-    actions[5].drop_priority = 4; /* Blitz */
-
-    if (steamdeck) {
-        strnfmt(actions[0].variants[0], sizeof(actions[0].variants[0]), "[%s] Spend blessings", spend);
-        strnfmt(actions[0].variants[1], sizeof(actions[0].variants[1]), "[%s] Blessings", spend);
-        strnfmt(actions[0].variants[2], sizeof(actions[0].variants[2]), "[%s] Bless", spend);
-        strnfmt(actions[0].variants[3], sizeof(actions[0].variants[3]), "[%s]", spend);
-
-        strnfmt(actions[1].variants[0], sizeof(actions[1].variants[0]), "[%s] Threshold", thr);
-        strnfmt(actions[1].variants[1], sizeof(actions[1].variants[1]), "[%s] Thresh", thr);
-        strnfmt(actions[1].variants[2], sizeof(actions[1].variants[2]), "[%s] Thr", thr);
-        strnfmt(actions[1].variants[3], sizeof(actions[1].variants[3]), "[%s]", thr);
-
-        strnfmt(actions[2].variants[0], sizeof(actions[2].variants[0]), "[%s] Difficulty", diff);
-        strnfmt(actions[2].variants[1], sizeof(actions[2].variants[1]), "[%s] Diff", diff);
-        strnfmt(actions[2].variants[2], sizeof(actions[2].variants[2]), "[%s] D", diff);
-        strnfmt(actions[2].variants[3], sizeof(actions[2].variants[3]), "[%s]", diff);
-
-        strnfmt(actions[3].variants[0], sizeof(actions[3].variants[0]), "[%s] Full list", full);
-        strnfmt(actions[3].variants[1], sizeof(actions[3].variants[1]), "[%s] List", full);
-        strnfmt(actions[3].variants[2], sizeof(actions[3].variants[2]), "[%s] L", full);
-        strnfmt(actions[3].variants[3], sizeof(actions[3].variants[3]), "[%s]", full);
-
-        strnfmt(actions[4].variants[0], sizeof(actions[4].variants[0]), "[%s] History", hist);
-        strnfmt(actions[4].variants[1], sizeof(actions[4].variants[1]), "[%s] Hist", hist);
-        strnfmt(actions[4].variants[2], sizeof(actions[4].variants[2]), "[%s] H", hist);
-        strnfmt(actions[4].variants[3], sizeof(actions[4].variants[3]), "[%s]", hist);
-        strnfmt(actions[5].variants[0], sizeof(actions[5].variants[0]), "[%s] Blitz", blitz);
-        strnfmt(actions[5].variants[1], sizeof(actions[5].variants[1]), "[%s] Blitz", blitz);
-        strnfmt(actions[5].variants[2], sizeof(actions[5].variants[2]), "[%s] Bz", blitz);
-        strnfmt(actions[5].variants[3], sizeof(actions[5].variants[3]), "[%s]", blitz);
-
-    } else {
-        SDL_strlcpy(actions[0].variants[0], "[b] Spend blessings", sizeof(actions[0].variants[0]));
-        SDL_strlcpy(actions[0].variants[1], "[b] Blessings", sizeof(actions[0].variants[1]));
-        SDL_strlcpy(actions[0].variants[2], "[b] Bless", sizeof(actions[0].variants[2]));
-        SDL_strlcpy(actions[0].variants[3], "[b]", sizeof(actions[0].variants[3]));
-
-        SDL_strlcpy(actions[1].variants[0], "[f] Threshold", sizeof(actions[1].variants[0]));
-        SDL_strlcpy(actions[1].variants[1], "[f] Thresh", sizeof(actions[1].variants[1]));
-        SDL_strlcpy(actions[1].variants[2], "[f] Thr", sizeof(actions[1].variants[2]));
-        SDL_strlcpy(actions[1].variants[3], "[f]", sizeof(actions[1].variants[3]));
-
-        SDL_strlcpy(actions[2].variants[0], "[c] Difficulty", sizeof(actions[2].variants[0]));
-        SDL_strlcpy(actions[2].variants[1], "[c] Diff", sizeof(actions[2].variants[1]));
-        SDL_strlcpy(actions[2].variants[2], "[c] D", sizeof(actions[2].variants[2]));
-        SDL_strlcpy(actions[2].variants[3], "[c]", sizeof(actions[2].variants[3]));
-
-        SDL_strlcpy(actions[3].variants[0], "[u] Full list", sizeof(actions[3].variants[0]));
-        SDL_strlcpy(actions[3].variants[1], "[u] List", sizeof(actions[3].variants[1]));
-        SDL_strlcpy(actions[3].variants[2], "[u] L", sizeof(actions[3].variants[2]));
-        SDL_strlcpy(actions[3].variants[3], "[u]", sizeof(actions[3].variants[3]));
-
-        SDL_strlcpy(actions[4].variants[0], "[s] History", sizeof(actions[4].variants[0]));
-        SDL_strlcpy(actions[4].variants[1], "[s] Hist", sizeof(actions[4].variants[1]));
-        SDL_strlcpy(actions[4].variants[2], "[s] H", sizeof(actions[4].variants[2]));
-        SDL_strlcpy(actions[4].variants[3], "[s]", sizeof(actions[4].variants[3]));
-
-        SDL_strlcpy(actions[5].variants[0], "[x] Blitz", sizeof(actions[5].variants[0]));
-        SDL_strlcpy(actions[5].variants[1], "[x] Blitz", sizeof(actions[5].variants[1]));
-        SDL_strlcpy(actions[5].variants[2], "[x]", sizeof(actions[5].variants[2]));
-        SDL_strlcpy(actions[5].variants[3], "[x]", sizeof(actions[5].variants[3]));
-    }
-
-    for (;;) {
-        size_t len = metarun_render_action_prompt(actions, 6, out, out_size);
-        if ((int)len <= term_width) break;
-
-        int best_shrink = -1;
-        int best_save = 0;
-        for (int i = 0; i < 6; i++) {
-            if (!actions[i].enabled) continue;
-            if (actions[i].variant_idx + 1 >= actions[i].variant_count) continue;
-
-            int cur_len = (int)strlen(actions[i].variants[actions[i].variant_idx]);
-            int next_len = (int)strlen(actions[i].variants[actions[i].variant_idx + 1]);
-            int save = cur_len - next_len;
-            if (save > best_save) {
-                best_save = save;
-                best_shrink = i;
-            }
-        }
-
-        if (best_shrink >= 0) {
-            actions[best_shrink].variant_idx++;
-            continue;
-        }
-
-        int drop_idx = -1;
-        int drop_priority = INT_MAX;
-        for (int i = 0; i < 6; i++) {
-            if (!actions[i].enabled) continue;
-            if (actions[i].drop_priority < drop_priority) {
-                drop_priority = actions[i].drop_priority;
-                drop_idx = i;
-            }
-        }
-
-        if (drop_idx < 0) break;
-        actions[drop_idx].enabled = false;
-    }
-
-    if (out[0] == '\0') {
-        if (steamdeck) {
-            strnfmt(out, out_size, "[%s]", spend);
-        } else {
-            SDL_strlcpy(out, blitz_enabled ? "[x]" : "[b]", out_size);
-        }
-    }
-}
-
-static void metarun_pick_best_variant(char *out,
-                                      size_t out_size,
-                                      int max_width,
-                                      const char *v1,
-                                      const char *v2,
-                                      const char *v3,
-                                      const char *v4)
-{
-    if (!out || out_size == 0) return;
-    out[0] = '\0';
-
-    const char *variants[4] = { v1, v2, v3, v4 };
-    const char *fallback = "";
-
-    for (int i = 0; i < 4; i++) {
-        const char *candidate = variants[i];
-        if (!candidate || !*candidate) continue;
-        fallback = candidate;
-        if ((int)strlen(candidate) <= max_width) {
-            SDL_strlcpy(out, candidate, out_size);
-            return;
-        }
-    }
-
-    SDL_strlcpy(out, fallback, out_size);
-    metarun_truncate_for_width(out, max_width);
-}
-
-static void metarun_put_adaptive_line(int col,
-                                      int *row,
-                                      int term_width,
-                                      byte attr,
-                                      const char *v1,
-                                      const char *v2,
-                                      const char *v3,
-                                      const char *v4)
-{
-    if (!row) return;
-    int max_width = term_width - col - 1;
-    if (max_width <= 0) return;
-
-    char line[256];
-    metarun_pick_best_variant(line, sizeof(line), max_width, v1, v2, v3, v4);
-    Term_putstr(col, (*row)++, -1, attr, line);
-}
-
 static bool metarun_build_stats_browser_scene(app_ui_scene* scene,
     const metarun_stats_view_model* view)
 {
@@ -7617,14 +5699,6 @@ static bool metarun_build_stats_browser_scene(app_ui_scene* scene,
     return true;
 }
 
-/*
- * Enhanced print_metarun_stats():
- * - Draws a bracketed progress bar for Silmarils using '*'
- * - Renders deaths as a string of 'x' markers without a fixed limit
- * - Aligns labels & values for a cleaner layout
- * - Lists active curses with D: and (optionally) P: details
- * - Shows a blessing meter on the right side
- */
 static void adjust_blessing_threshold_menu(void)
 {
     const metarun_blessing_threshold_mode order[] = {
@@ -7824,170 +5898,38 @@ static void adjust_blessing_threshold_menu(void)
         }
 
         ui_information_scene_leave(&info_scope);
-        if (semantic_ok)
-            return;
-        use_information_scene = false;
+        if (!semantic_ok)
+            log_error("adjust_blessing_threshold_menu: failed to publish semantic scene");
+        return;
     }
-
-    screen_save();
-
-    while (true) {
-        Term_clear();
-        Term_putstr(2, 1, -1, TERM_YELLOW, "=== Blessing Threshold ===");
-
-        char buf[160];
-        u32b current_threshold = metarun_threshold_value(&metar);
-        snprintf(buf, sizeof buf, "Current: %s (%lu points per blessing)",
-                 threshold_mode_name(current_mode), (unsigned long)current_threshold);
-        Term_putstr(2, 3, -1, TERM_L_BLUE, buf);
-
-        int row = 5;
-        for (int i = 0; i < option_count; i++) {
-            metarun_blessing_threshold_mode mode = order[i];
-            u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
-            bool is_highlighted = (i == selection);
-            bool is_current = (mode == current_mode);
-
-            /* Color scheme: Green for Easier, White for Normal, Orange for Harder */
-            byte base_color = (mode == METARUN_BLESSING_THRESHOLD_EASIER) ? TERM_L_GREEN :
-                             (mode == METARUN_BLESSING_THRESHOLD_HARDER) ? TERM_ORANGE :
-                             TERM_WHITE;
-
-            char option_buf[80];
-            snprintf(option_buf, sizeof option_buf, "%c%c) %s",
-                     is_highlighted ? '>' : ' ', 'a' + i, labels[i]);
-
-            byte name_attr = is_highlighted ? TERM_YELLOW : (is_current ? base_color : base_color);
-            Term_putstr(2, row++, -1, name_attr, option_buf);
-
-            snprintf(option_buf, sizeof option_buf, "    Requires %lu points per blessing",
-                     (unsigned long)mode_threshold);
-            byte threshold_attr = is_highlighted ? TERM_L_WHITE : TERM_L_DARK;
-            Term_putstr(2, row++, -1, threshold_attr, option_buf);
-
-            byte desc_attr = is_highlighted ? TERM_L_WHITE : TERM_SLATE;
-            Term_putstr(4, row++, -1, desc_attr, descs[i]);
-            row++;
-        }
-
-        if (steamdeck) {
-            char hint_buf[96];
-            strnfmt(hint_buf, sizeof(hint_buf),
-                    "D-pad to choose  [%s] accept  [%s] cancel", accept_label, back_label);
-            Term_putstr(2, row + 1, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, row + 1, -1, TERM_L_DARK,
-                        "Use arrows or a/b/c to choose. Enter accepts, Esc cancels.");
-        }
-
-        char key = inkey();
-
-        /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
-        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H'))) {
-            break;
-        } else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6') {
-            accepted = true;
-            chosen_mode = order[selection];
-            break;
-        } else if (key == '8' || key == 'k' || key == '-') {
-            selection = (selection + option_count - 1) % option_count;
-            continue;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            selection = (selection + 1) % option_count;
-            continue;
-        } else if (key >= 'a' && key < 'a' + option_count) {
-            selection = key - 'a';
-            continue;
-        } else if (key >= 'A' && key < 'A' + option_count) {
-            selection = key - 'A';
-            continue;
-        }
-    }
-
-    bool changed = false;
-    u32b new_threshold = 0;
-
-    if (accepted && chosen_mode != current_mode) {
-        metarun_set_threshold_mode(&metar, chosen_mode);
-        update_blessing_ledger(&metar);
-        if (!sync_current_metarun_slot(false)) {
-            log_warn("Threshold change: unable to sync metarun slot (idx=%d, max=%d)", current_run, metarun_max);
-        }
-        save_metaruns();
-        changed = true;
-        new_threshold = metarun_threshold_value(&metar);
-    }
-
-    if (accepted) {
-        Term_clear();
-        if (changed) {
-            char msg[160];
-            snprintf(msg, sizeof msg, "Blessing threshold set to %s.",
-                     threshold_mode_name(chosen_mode));
-            Term_putstr(2, 2, -1, TERM_L_GREEN, msg);
-            snprintf(msg, sizeof msg, "New requirement: %lu points per blessing.",
-                     (unsigned long)new_threshold);
-            Term_putstr(2, 4, -1, TERM_WHITE, msg);
-        } else {
-            Term_putstr(2, 2, -1, TERM_L_DARK,
-                        "Blessing threshold remains unchanged.");
-        }
-        if (steamdeck) {
-            char hint_buf[64];
-            metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-            strnfmt(hint_buf, sizeof(hint_buf), "Press [%s] to continue.", accept_label);
-            Term_putstr(2, 6, -1, TERM_L_DARK, hint_buf);
-        } else {
-            Term_putstr(2, 6, -1, TERM_L_DARK, "Press any key to continue.");
-        }
-        Term_fresh();
-        (void)inkey();
-    }
-
-    screen_load();
 }
 
-/* Updated print_metarun_stats(): prettier layout, star & death bars, curses list */
 void print_metarun_stats(void)
 {
-    int row = 1;
-    int col = 2;
-    char buf[160];
-    int term_height, term_width;
     ui_information_scene_scope info_scope;
     app_ui_scene metarun_scene;
     metarun_stats_view_model view;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
-#define METARUN_CLOSE_SCREEN() do { \
-    screen_load(); \
-    if (use_information_scene) \
-        ui_information_scene_leave(&info_scope); \
-    } while (0)
 
-    screen_save();
+    if (!use_information_scene) {
+        log_error("print_metarun_stats: semantic scene unavailable");
+        return;
+    }
 
 metarun_redraw:
     refresh_current_metar_score();
 
     if (current_run < 0 || current_run >= metarun_max) {
-        if (use_information_scene) {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        }
-        Term_clear();
-        Term_putstr(2, 5, -1, TERM_RED, "Error: No metarun data available.");
-        Term_putstr(2, 6, -1, TERM_L_WHITE, "Please start a new game first.");
-        if (get_sdl_steamdeck_mode()) {
-            char label[16];
-            metarun_prompt_label(steamdeck_confirm_key(), "A", label, sizeof(label));
-            strnfmt(buf, sizeof(buf), "Press %s to return.", label);
-            Term_putstr(2, 8, -1, TERM_L_DARK, buf);
-        } else {
-            Term_putstr(2, 8, -1, TERM_L_DARK, "Press any key to return.");
-        }
-        Term_fresh();
-        (void)inkey();
-        METARUN_CLOSE_SCREEN();
+        const char *lines[] = {
+            "Error: No metarun data available.",
+            "Please start a new game first."
+        };
+        const byte attrs[] = { TERM_RED, TERM_WHITE };
+
+        (void)metarun_ui_show_notice_modal("Current Story Statistics",
+            TERM_YELLOW, lines, attrs, (int)N_ELEMENTS(lines),
+            steamdeck_controls_active(), "A");
+        ui_information_scene_leave(&info_scope);
         return;
     }
 
@@ -7995,596 +5937,64 @@ metarun_redraw:
     metarun_sanitize_major_blessing_bits(&metar);
     metarun_stats_prepare_view_model(&view);
 
-    const char *diff_name = view.diff_name;
-    int win_goal = view.win_goal;
-    int remaining_silmarils = view.remaining_silmarils;
-    char *sil_bar = view.sil_bar;
-    char *death_marks = view.death_marks;
-    int required_survivors = view.required_survivors;
-    int alive = view.alive;
-    u32b best_run = view.best_run;
-    u32b total_pool = view.total_pool;
-    u32b remainder = view.remainder;
-    u32b threshold = view.threshold;
-    const char *threshold_mode = view.threshold_mode;
-    int earned_points = view.earned_points;
-    int spent_points = view.spent_points;
-    int available_points = view.available_points;
-    bool steamdeck = view.steamdeck;
-    char *spend_label = view.spend_label;
-    char *threshold_label = view.threshold_label;
-    char *diff_label = view.diff_label;
-    char *full_label = view.full_label;
-    char *history_label = view.history_label;
-    char *blitz_label = view.blitz_label;
-    bool blitz_enabled = view.blitz_enabled;
-    bool full_layout;
-    int meter_col = 0;
-    int unlocked_major = view.unlocked_major;
-    int major_total = view.major_total;
-
-    if (use_information_scene
-        && metarun_build_stats_browser_scene(&metarun_scene, &view)
-        && ui_information_scene_present_ui(&metarun_scene))
+    if (!metarun_build_stats_browser_scene(&metarun_scene, &view)
+        || !ui_information_scene_present_ui(&metarun_scene))
     {
-        Term_fresh();
+        log_error("print_metarun_stats: failed to publish semantic scene");
+        ui_information_scene_leave(&info_scope);
+        return;
     }
-    else
+
     {
-        if (use_information_scene) {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        }
-
-        Term_clear();
-        Term_get_size(&term_width, &term_height);
-        full_layout = (term_width >= 80 && term_height >= 24);
-
-    if (full_layout) {
-        /* Calculate blessing meter position (right side) */
-        meter_col = term_width - 16;
-        if (meter_col < 60) meter_col = 60; /* Keep some space for main content */
-        if (meter_col > term_width - 13) meter_col = term_width - 13; /* "Blessing Pool" is 13 chars */
-
-        int meter_height = 15;
-        int max_meter_height = term_height - 7;
-        if (max_meter_height < 5) max_meter_height = 5;
-        if (meter_height > max_meter_height) meter_height = max_meter_height;
-
-        /* Draw blessing meter on the right side */
-        draw_blessing_meter(meter_col, 2, meter_height, remainder, threshold);
-
-        Term_putstr(col, row++, -1, TERM_YELLOW, "=== Current Story Statistics ===");
-
-        snprintf(buf, sizeof buf, "Run-ID         : %u", metar.id);
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
-
-        snprintf(buf, sizeof buf, "Difficulty     : %s", diff_name);
-        Term_putstr(col, row++, -1, TERM_L_BLUE, buf);
-
-        snprintf(buf, sizeof buf, "Meta Score     : %lu", (unsigned long)metar.score);
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
-
-        snprintf(buf, sizeof buf, "Best Run Score : %lu", (unsigned long)best_run);
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
-
-        snprintf(buf, sizeof buf, "Silmarils      : %-22s %2d / %d (remaining %d)",
-                 sil_bar, metar.silmarils, win_goal, remaining_silmarils);
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
-
-        byte alive_attr = (alive < required_survivors) ? TERM_RED : TERM_L_GREEN;
-        snprintf(buf, sizeof buf, "Living Heroes  : %d (need >= %d)", alive, required_survivors);
-        Term_putstr(col, row++, -1, alive_attr, buf);
-
-        snprintf(buf, sizeof buf, "Deaths         : %-22s (%d total)",
-                 death_marks, metar.deaths);
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
-
-        byte blessing_attr = (available_points > 0) ? TERM_L_GREEN : TERM_WHITE;
-        snprintf(buf, sizeof buf, "Blessing Points: %d available (%d spent / %d earned)",
-                 available_points, spent_points, earned_points);
-        Term_putstr(col, row++, -1, blessing_attr, buf);
+        int key = ui_information_scene_wait_key_nonrepeat();
+        bool steamdeck = view.steamdeck;
 
         if (steamdeck) {
-            snprintf(buf, sizeof buf, "Blessing Pool  : %lu total (mode: %s, [%s] to change)",
-                     (unsigned long)total_pool, threshold_mode, threshold_label);
-        } else {
-            snprintf(buf, sizeof buf, "Blessing Pool  : %lu total (mode: %s, press 'f' to change)",
-                     (unsigned long)total_pool, threshold_mode);
-        }
-        Term_putstr(col, row++, -1, TERM_WHITE, buf);
+            int back_key = steamdeck_back_key();
+            int confirm_key = steamdeck_confirm_key();
+            int alt_key = steamdeck_alt_action_key();
+            int secondary_key = steamdeck_secondary_key();
 
-        Term_putstr(col, row++, -1, TERM_YELLOW, "Major Blessings:");
-        for (int i = 0; i < major_total; i++) {
-            if (!metarun_has_major_blessing_index(i)) continue;
-            const char *name = major_blessing_name_str(i);
-            const char *desc = major_blessing_short_desc(i);
-            char desc_buf[80];
-            if (desc && *desc) {
-                SDL_strlcpy(desc_buf, desc, sizeof desc_buf);
-                char *nl = strchr(desc_buf, '\n');
-                if (nl) *nl = '\0';
-                snprintf(buf, sizeof buf, "  [X] %s (%s)", name, desc_buf);
-            } else {
-                snprintf(buf, sizeof buf, "  [X] %s", name);
-            }
-            Term_putstr(col, row++, -1, TERM_L_GREEN, buf);
-        }
-        if (unlocked_major == 0) {
-            Term_putstr(col + 2, row++, -1, TERM_L_DARK, "None unlocked yet");
-        }
-
-        row++; /* spacing before lists */
-
-        Term_putstr(col, row++, -1, TERM_YELLOW, "Active Curses & Blessings:");
-    } else {
-        int compact_width = term_width - col - 1;
-        if (compact_width < 10) compact_width = 10;
-        int summary_row_limit = term_height - 4;
-
-        metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW,
-                                  "=== Story Statistics ===",
-                                  "=== Story Stats ===",
-                                  "== Story Stats ==",
-                                  "== Stats ==");
-
-        char line1[192], line2[192], line3[192], line4[192];
-
-        if (row < summary_row_limit) {
-            strnfmt(line1, sizeof(line1), "Run-ID:%u  Difficulty:%s", metar.id, diff_name);
-            strnfmt(line2, sizeof(line2), "ID:%u  Difficulty:%s", metar.id, diff_name);
-            strnfmt(line3, sizeof(line3), "ID:%u  Diff:%s", metar.id, diff_name);
-            strnfmt(line4, sizeof(line4), "ID:%u %s", metar.id, diff_name);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_L_BLUE, line1, line2, line3, line4);
-        }
-
-        if (row < summary_row_limit) {
-            strnfmt(line1, sizeof(line1), "Meta Score:%lu  Best Run:%lu", (unsigned long)metar.score, (unsigned long)best_run);
-            strnfmt(line2, sizeof(line2), "Meta:%lu  Best:%lu", (unsigned long)metar.score, (unsigned long)best_run);
-            strnfmt(line3, sizeof(line3), "Score:%lu  Best:%lu", (unsigned long)metar.score, (unsigned long)best_run);
-            strnfmt(line4, sizeof(line4), "M:%lu B:%lu", (unsigned long)metar.score, (unsigned long)best_run);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
-        }
-
-        if (row < summary_row_limit) {
-            strnfmt(line1, sizeof(line1), "Silmarils:%d/%d (rem %d)  Alive:%d/%d", metar.silmarils, win_goal, remaining_silmarils, alive, required_survivors);
-            strnfmt(line2, sizeof(line2), "Sil:%d/%d rem %d  Alive:%d/%d", metar.silmarils, win_goal, remaining_silmarils, alive, required_survivors);
-            strnfmt(line3, sizeof(line3), "Sil:%d/%d  Alive:%d/%d", metar.silmarils, win_goal, alive, required_survivors);
-            strnfmt(line4, sizeof(line4), "S:%d/%d A:%d/%d", metar.silmarils, win_goal, alive, required_survivors);
-            byte sil_alive_attr = (alive < required_survivors) ? TERM_RED : TERM_L_GREEN;
-            metarun_put_adaptive_line(col, &row, term_width, sil_alive_attr, line1, line2, line3, line4);
-        }
-
-        if (row < summary_row_limit) {
-            strnfmt(line1, sizeof(line1), "Deaths:%d  Blessing Points:%d (%d/%d)", metar.deaths, available_points, spent_points, earned_points);
-            strnfmt(line2, sizeof(line2), "Deaths:%d  BPoints:%d (%d/%d)", metar.deaths, available_points, spent_points, earned_points);
-            strnfmt(line3, sizeof(line3), "Deaths:%d  BP:%d", metar.deaths, available_points);
-            strnfmt(line4, sizeof(line4), "D:%d BP:%d", metar.deaths, available_points);
-            byte bp_attr = (available_points > 0) ? TERM_L_GREEN : TERM_WHITE;
-            metarun_put_adaptive_line(col, &row, term_width, bp_attr, line1, line2, line3, line4);
-        }
-
-        if (row < summary_row_limit) {
-            if (steamdeck) {
-                strnfmt(line1, sizeof(line1), "Blessing Pool:%lu/%lu (%s, [%s] change)",
-                        (unsigned long)remainder, (unsigned long)threshold, threshold_mode, threshold_label);
-                strnfmt(line2, sizeof(line2), "Pool:%lu/%lu  %s  [%s]",
-                        (unsigned long)remainder, (unsigned long)threshold, threshold_mode, threshold_label);
-            } else {
-                strnfmt(line1, sizeof(line1), "Blessing Pool:%lu/%lu (%s, press 'f')",
-                        (unsigned long)remainder, (unsigned long)threshold, threshold_mode);
-                strnfmt(line2, sizeof(line2), "Pool:%lu/%lu  %s (f)",
-                        (unsigned long)remainder, (unsigned long)threshold, threshold_mode);
-            }
-            strnfmt(line3, sizeof(line3), "Pool:%lu/%lu  %s",
-                    (unsigned long)remainder, (unsigned long)threshold, threshold_mode);
-            strnfmt(line4, sizeof(line4), "P:%lu/%lu", (unsigned long)remainder, (unsigned long)threshold);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_WHITE, line1, line2, line3, line4);
-        }
-
-        if (row < summary_row_limit) {
-            strnfmt(line1, sizeof(line1), "Major Blessings:%d", unlocked_major);
-            strnfmt(line2, sizeof(line2), "Major:%d", unlocked_major);
-            strnfmt(line3, sizeof(line3), "Major:%d", unlocked_major);
-            strnfmt(line4, sizeof(line4), "M:%d", unlocked_major);
-            metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW, line1, line2, line3, line4);
-        }
-
-        if (unlocked_major > 0 && row < summary_row_limit) {
-            char majors_line[192];
-            majors_line[0] = '\0';
-            SDL_strlcpy(majors_line, "  ", sizeof(majors_line));
-            bool first = true;
-            for (int i = 0; i < major_total; i++) {
-                if (!metarun_has_major_blessing_index(i)) continue;
-                const char *name = major_blessing_name_str(i);
-                char tmp[96];
-                if (first) {
-                    strnfmt(tmp, sizeof(tmp), "%s", name);
-                    first = false;
-                } else {
-                    strnfmt(tmp, sizeof(tmp), ", %s", name);
-                }
-                if ((int)strlen(majors_line) + (int)strlen(tmp) > compact_width) break;
-                SDL_strlcat(majors_line, tmp, sizeof(majors_line));
-            }
-            if (majors_line[2] != '\0') {
-                metarun_truncate_for_width(majors_line, compact_width);
-                Term_putstr(col, row++, -1, TERM_L_GREEN, majors_line);
+            if (key == back_key || key == confirm_key || key == '\r'
+                || key == '\n')
+            {
+                ui_information_scene_leave(&info_scope);
+                return;
+            } else if (key == alt_key) {
+                key = 'b';
+            } else if (key == secondary_key) {
+                key = 's';
             }
         }
 
-        if (row < term_height - 2) {
-            metarun_put_adaptive_line(col, &row, term_width, TERM_YELLOW,
-                                      "Active Curses & Blessings:",
-                                      "Curses & Blessings:",
-                                      "Effects:",
-                                      "Fx:");
-        }
-    }
-
-    if (full_layout) {
-        /* --- Full (>=80x24) layout: keep existing rendering exactly --- */
-
-        /* Calculate max width for effect display (left side only, meter is separate) */
-        int max_display_width = (meter_col > 60) ? meter_col - 4 : 56;
-
-        int available_lines = term_height - row - 2;
-        if (available_lines < 0) available_lines = 0;
-
-        int active_count = 0;
-        for (int id = 0; id < z_info->cu_max; id++) {
-            if (CURSE_GET(id) != 0) active_count++;
-        }
-
-        bool curses_truncated = false;
-        if (active_count == 0) {
-            Term_putstr(col + 2, row++, -1, TERM_L_DARK, "None active");
-        } else if (available_lines <= 0) {
-            curses_truncated = true;
-            if (steamdeck) {
-                snprintf(buf, sizeof buf, "List truncated - press [%s] to view all effects", full_label);
-                Term_putstr(col + 2, row++, -1, TERM_L_DARK, buf);
-            } else {
-                Term_putstr(col + 2, row++, -1, TERM_L_DARK,
-                            "List truncated - press 'u' to view all effects");
-            }
-        } else {
-            int lines_remaining = available_lines;
-            int entries_remaining = active_count;
-
-            for (int id = 0; id < z_info->cu_max; id++) {
-                int stacks = CURSE_GET(id);
-                if (!stacks) continue;
-
-                if (lines_remaining <= 0) {
-                    curses_truncated = true;
-                    break;
-                }
-
-                entries_remaining--;
-                bool is_blessing = (stacks < 0);
-                int magnitude = is_blessing ? -stacks : stacks;
-                cptr name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
-                byte attr = is_blessing ? TERM_L_GREEN : TERM_RED;
-                bool seen = CURSE_SEEN(id);
-
-                const curse_type *cu = &cu_info[id];
-                cptr effect = NULL;
-
-                /* Only show H:/P: effect if identified */
-                if (seen) {
-                    effect = is_blessing
-                        ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-                        : (cu->power ? cu_text + cu->power : NULL);
-                }
-
-                /* Format with proper alignment - shorten type labels and move closer to left */
-                /* Use shortened labels: "Bless" and "Curse" instead of full words */
-                if (effect && *effect) {
-                    snprintf(buf, sizeof buf, "  %-28s %-5s %d - %s", name,
-                             is_blessing ? "Bless" : "Curse", magnitude, effect);
-                } else {
-                    snprintf(buf, sizeof buf, "  %-28s %-5s %d", name,
-                             is_blessing ? "Bless" : "Curse", magnitude);
-                }
-
-                /* Truncate if too long */
-                if ((int)strlen(buf) > max_display_width) {
-                    buf[max_display_width - 3] = '.';
-                    buf[max_display_width - 2] = '.';
-                    buf[max_display_width - 1] = '.';
-                    buf[max_display_width] = '\0';
-                }
-
-                Term_putstr(col, row++, -1, attr, buf);
-                lines_remaining--;
-
-                if (lines_remaining <= 0 && entries_remaining > 0) {
-                    curses_truncated = true;
-                    break;
-                }
-            }
-
-            if (curses_truncated && lines_remaining > 0) {
-                if (entries_remaining > 0) {
-                    if (steamdeck) {
-                        snprintf(buf, sizeof buf, "... and %d more effect%s (press [%s] to view all)",
-                                 entries_remaining, (entries_remaining == 1) ? "" : "s", full_label);
-                    } else {
-                        snprintf(buf, sizeof buf, "... and %d more effect%s (press 'u' to view all)",
-                                 entries_remaining, (entries_remaining == 1) ? "" : "s");
-                    }
-                } else {
-                    if (steamdeck) {
-                        snprintf(buf, sizeof buf, "List truncated - press [%s] to view all effects", full_label);
-                    } else {
-                        SDL_strlcpy(buf, "List truncated - press 'u' to view all effects",
-                                  sizeof buf);
-                    }
-                }
-                Term_putstr(col, row++, -1, TERM_L_DARK, buf);
-            }
-        }
-
-        /* Prompt line (full): dynamically packed to width */
-        char prompt_buf[256];
-        metarun_build_action_prompt(term_width, steamdeck,
-                                    spend_label, threshold_label, diff_label,
-                                    full_label, history_label, blitz_label,
-                                    blitz_enabled,
-                                    prompt_buf, sizeof(prompt_buf));
-        metarun_truncate_for_width(prompt_buf, term_width);
-        metarun_put_prompt_line(term_width, term_height, TERM_L_DARK,
-            prompt_buf);
-    } else {
-        /* --- Compact layout --- */
-        int max_display_width = term_width - col - 1;
-        if (max_display_width < 10) max_display_width = 10;
-        if (max_display_width > (int)sizeof(buf) - 1) max_display_width = (int)sizeof(buf) - 1;
-
-        int available_lines = term_height - row - 2;
-        if (available_lines < 0) available_lines = 0;
-
-        int active_count = 0;
-        for (int id = 0; id < z_info->cu_max; id++) {
-            if (CURSE_GET(id) != 0) active_count++;
-        }
-
-        bool curses_truncated = false;
-        if (active_count == 0) {
-            Term_putstr(col + 2, row++, -1, TERM_L_DARK, "None active");
-        } else if (available_lines <= 0) {
-            curses_truncated = true;
-            if (steamdeck) {
-                snprintf(buf, sizeof buf, "List truncated - press [%s] to view all effects", full_label);
-                metarun_truncate_for_width(buf, term_width - col - 1);
-                Term_putstr(col + 2, row++, -1, TERM_L_DARK, buf);
-            } else {
-                Term_putstr(col + 2, row++, -1, TERM_L_DARK,
-                            "List truncated - press 'u' to view all effects");
-            }
-        } else {
-            int lines_remaining = available_lines;
-            int entries_remaining = active_count;
-            bool show_effects = (max_display_width >= 36);
-            int value_width = 4;
-            int name_width = max_display_width - 2 - 1 - value_width; /* "  " + name + " " + value */
-            if (show_effects) {
-                int reserve_effect = max_display_width / 3;
-                if (reserve_effect < 10) reserve_effect = 10;
-                int with_effect = max_display_width - 2 - 1 - value_width - 3 - reserve_effect; /* " - " + effect */
-                if (with_effect >= 8) name_width = with_effect;
-            }
-            if (name_width > 26) name_width = 26;
-            if (name_width < 8) name_width = 8;
-
-            for (int id = 0; id < z_info->cu_max; id++) {
-                int stacks = CURSE_GET(id);
-                if (!stacks) continue;
-
-                if (lines_remaining <= 0) {
-                    curses_truncated = true;
-                    break;
-                }
-
-                entries_remaining--;
-                bool is_blessing = (stacks < 0);
-                int magnitude = is_blessing ? -stacks : stacks;
-                cptr name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
-                byte attr = is_blessing ? TERM_L_GREEN : TERM_RED;
-                bool seen = CURSE_SEEN(id);
-
-                const curse_type *cu = &cu_info[id];
-                cptr effect = NULL;
-
-                if (seen && show_effects) {
-                    effect = is_blessing
-                        ? (cu->blessing_power ? cu_text + cu->blessing_power : NULL)
-                        : (cu->power ? cu_text + cu->power : NULL);
-                }
-
-                char sign = is_blessing ? '+' : '-';
-                char value_buf[16];
-                strnfmt(value_buf, sizeof(value_buf), "%c%d", sign, magnitude);
-
-                if (effect && *effect && show_effects) {
-                    snprintf(buf, sizeof buf, "  %-*.*s %*s - %s",
-                             name_width, name_width, name,
-                             value_width, value_buf, effect);
-                } else {
-                    snprintf(buf, sizeof buf, "  %-*.*s %*s",
-                             name_width, name_width, name,
-                             value_width, value_buf);
-                }
-
-                metarun_truncate_for_width(buf, max_display_width);
-                Term_putstr(col, row++, -1, attr, buf);
-                lines_remaining--;
-
-                if (lines_remaining <= 0 && entries_remaining > 0) {
-                    curses_truncated = true;
-                    break;
-                }
-            }
-
-            if (curses_truncated && lines_remaining > 0) {
-                char line1[160], line2[160], line3[160], line4[160];
-                if (entries_remaining > 0) {
-                    if (steamdeck) {
-                        snprintf(line1, sizeof line1, "... and %d more effects (press [%s] for full list)",
-                                 entries_remaining, full_label);
-                        snprintf(line2, sizeof line2, "... and %d more (press [%s] for list)",
-                                 entries_remaining, full_label);
-                        snprintf(line3, sizeof line3, "... %d more [%s]", entries_remaining, full_label);
-                        snprintf(line4, sizeof line4, "... %d more", entries_remaining);
-                    } else {
-                        snprintf(line1, sizeof line1, "... and %d more effects (press 'u' for full list)", entries_remaining);
-                        snprintf(line2, sizeof line2, "... and %d more (press 'u' for list)", entries_remaining);
-                        snprintf(line3, sizeof line3, "... %d more (u)", entries_remaining);
-                        snprintf(line4, sizeof line4, "... %d more", entries_remaining);
-                    }
-                } else {
-                    if (steamdeck) {
-                        snprintf(line1, sizeof line1, "List truncated - press [%s] to view all effects", full_label);
-                        snprintf(line2, sizeof line2, "List truncated - press [%s]", full_label);
-                        snprintf(line3, sizeof line3, "Truncated [%s]", full_label);
-                        SDL_strlcpy(line4, "Truncated", sizeof(line4));
-                    } else {
-                        SDL_strlcpy(line1, "List truncated - press 'u' to view all effects", sizeof(line1));
-                        SDL_strlcpy(line2, "List truncated - press 'u' for list", sizeof(line2));
-                        SDL_strlcpy(line3, "Truncated (u)", sizeof(line3));
-                        SDL_strlcpy(line4, "Truncated", sizeof(line4));
-                    }
-                }
-                metarun_pick_best_variant(buf, sizeof(buf), term_width - col - 1,
-                                          line1, line2, line3, line4);
-                Term_putstr(col, row++, -1, TERM_L_DARK, buf);
-            }
-        }
-
-        char prompt_buf[256];
-        metarun_build_action_prompt(term_width, steamdeck,
-                                    spend_label, threshold_label, diff_label,
-                                    full_label, history_label, blitz_label,
-                                    blitz_enabled,
-                                    prompt_buf, sizeof(prompt_buf));
-        metarun_truncate_for_width(prompt_buf, term_width);
-        metarun_put_prompt_line(term_width, term_height, TERM_L_DARK,
-            prompt_buf);
-    }
-        Term_fresh();
-    }
-
-    char key = use_information_scene ? (char)ui_information_scene_wait_key_nonrepeat()
-                                     : inkey();
-    if (key == ESCAPE || key == 'b' || key == 'B') {
-        log_debug("[metarun-esc-trace] stats key=%d char=%c use_information_scene=%d",
-            (int)(unsigned char)key,
-            ((key >= 32) && (key <= 126)) ? key : '?',
-            use_information_scene ? 1 : 0);
-    }
-    if (steamdeck) {
-        int back_key = steamdeck_back_key();
-        int confirm_key = steamdeck_confirm_key();
-        int alt_key = steamdeck_alt_action_key();
-        int secondary_key = steamdeck_secondary_key();
-        int l1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
-        int r1_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        int start_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
-        
-        if (key == back_key) {
-            /* B button = exit/back */
-            METARUN_CLOSE_SCREEN();
-            return;
-        } else if (key == confirm_key || key == '\r' || key == '\n') {
-            /* A button = continue (exit) */
-            METARUN_CLOSE_SCREEN();
-            return;
-        } else if (key == alt_key) {
-            /* X button = spend blessings */
-            key = 'b';
-        } else if (key == secondary_key) {
-            /* Y button = history */
-            key = 's';
-        } else if (key == l1_key) {
-            /* L1 = difficulty */
-            key = 'c';
-        } else if (key == r1_key) {
-            /* R1 = threshold */
-            key = 'f';
-        } else if (key == start_key) {
-            /* Start = full list */
-            key = 'u';
-        }
-    }
-    if (key == 'b' || key == 'B') {
-        if (use_information_scene) {
+        if (key == 'b' || key == 'B') {
             open_blessing_exchange();
             goto metarun_redraw;
-        }
-        METARUN_CLOSE_SCREEN();
-        open_blessing_exchange();
-        print_metarun_stats();
-        return;
-    } else if (key == 'c' || key == 'C') {
-        if (use_information_scene) {
+        } else if (key == 'c' || key == 'C') {
             choose_difficulty_menu(false);
             goto metarun_redraw;
-        }
-        METARUN_CLOSE_SCREEN();
-        choose_difficulty_menu(true);
-        return;
-    } else if (key == 'f' || key == 'F') {
-        if (use_information_scene) {
+        } else if (key == 'f' || key == 'F') {
             adjust_blessing_threshold_menu();
             goto metarun_redraw;
-        }
-        METARUN_CLOSE_SCREEN();
-        adjust_blessing_threshold_menu();
-        print_metarun_stats();
-        return;
-    } else if (key == 'u' || key == 'U') {
-        /* Show the full list of active curses/blessings separately */
-        if (use_information_scene) {
+        } else if (key == 'u' || key == 'U') {
             show_all_active_curses();
             goto metarun_redraw;
-        }
-        METARUN_CLOSE_SCREEN();
-        show_all_active_curses();
-        print_metarun_stats();
-        return;
-    } else if (key == 's' || key == 'S') {
-        /* Show history only */
-        if (use_information_scene) {
+        } else if (key == 's' || key == 'S') {
             list_metaruns();
             goto metarun_redraw;
-        }
-        METARUN_CLOSE_SCREEN();
-        list_metaruns();
-        print_metarun_stats();
-        return;
-    } else if (key == 't' || key == 'T') {
-        if (use_information_scene) {
+        } else if (key == 't' || key == 'T') {
             show_completed_quests_summary();
             goto metarun_redraw;
+        } else if ((key == 'x' || key == 'X') && view.blitz_enabled) {
+            ui_information_scene_leave(&info_scope);
+            run_mode_set_pending(RUN_MODE_BLITZ);
+            run_mode_set_current(RUN_MODE_BLITZ);
+            return;
         }
-        METARUN_CLOSE_SCREEN();
-        show_completed_quests_summary();
-        print_metarun_stats();
-        return;
-    } else if ((key == 'x' || key == 'X') && blitz_enabled) {
-        METARUN_CLOSE_SCREEN();
-        run_mode_set_pending(RUN_MODE_BLITZ);
-        run_mode_set_current(RUN_MODE_BLITZ);
-        return;
     }
 
-    METARUN_CLOSE_SCREEN();
-
-#undef METARUN_CLOSE_SCREEN
+    ui_information_scene_leave(&info_scope);
 }
-
 
 /* Generate curse description for a runtype */
 static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
@@ -8645,542 +6055,271 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 /* Difficulty selection menu */
 static void choose_difficulty_menu(bool reopen_stats_on_exit)
 {
-    int choice = metar.type;  /* Start with current difficulty */
-    int max_difficulty = (runtype_info && z_info->rt_max > 0) ? z_info->rt_max - 1 : 0;
+    int choice = metar.type;
+    int max_difficulty = (runtype_info && z_info->rt_max > 0)
+        ? z_info->rt_max - 1 : 0;
     ui_information_scene_scope info_scope;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
     char back_label[16] = "";
     char status_msg[APP_UI_TEXT_MAX] = "";
-    byte status_attr = TERM_RED;
+    byte status_attr = TERM_WHITE;
 
     if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=back */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
     }
-    
-    if (use_information_scene) {
-        bool semantic_ok = true;
-        bool canceled = false;
+    if (!use_information_scene) {
+        log_error("choose_difficulty_menu: semantic scene unavailable");
+        if (reopen_stats_on_exit)
+            print_metarun_stats();
+        return;
+    }
 
-        while (true)
+    while (true)
+    {
+        app_ui_scene scene;
+        app_ui_panel *panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
+
+        strnfmt(subtitle, sizeof(subtitle), "Current difficulty: %s",
+            (runtype_info && metar.type < z_info->rt_max
+                && runtype_info[metar.type].name[0])
+                ? runtype_info[metar.type].name : "Unknown");
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "Select Difficulty Level", TERM_SLATE, subtitle);
+        if (!panel) {
+            log_error("choose_difficulty_menu: failed to build semantic scene");
+            break;
+        }
+
+        for (int i = 0; i <= max_difficulty; i++)
         {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            char subtitle[APP_UI_TEXT_MAX];
-            int key;
+            bool is_locked = (i < metar.max_difficulty_reached);
+            byte attr = TERM_WHITE;
+            char key_buf[APP_UI_KEY_MAX];
+            char meta[APP_UI_META_MAX];
+            int win_goal = WINCON_SILMARILS;
+            u32b blessing_thresh = runtype_threshold_for_mode(i,
+                METARUN_BLESSING_THRESHOLD_NORMAL);
+            char curse_buf[64];
+            const char *rt_name = "Unknown";
 
-            strnfmt(subtitle, sizeof(subtitle), "Current difficulty: %s",
-                (runtype_info && metar.type < z_info->rt_max
-                    && runtype_info[metar.type].name[0])
-                    ? runtype_info[metar.type].name : "Unknown");
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Select Difficulty Level", TERM_SLATE, subtitle);
-            if (!panel) {
-                semantic_ok = false;
-                break;
+            if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0]) {
+                rt_name = runtype_info[i].name;
+                win_goal = runtype_info[i].win_con
+                    ? runtype_info[i].win_con : WINCON_SILMARILS;
+                attr = runtype_info[i].colour;
             }
+            if (is_locked)
+                attr = TERM_L_DARK;
 
-            if (status_msg[0]) {
-                (void)app_ui_panel_add_body_line(panel, status_attr, status_msg);
-            }
-
-            for (int i = 0; i <= max_difficulty; i++)
+            get_curse_description(i, curse_buf, sizeof(curse_buf));
+            strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+            strnfmt(meta, sizeof(meta), "Win %d  Threshold %lu  %s",
+                win_goal, (unsigned long)blessing_thresh, curse_buf);
+            if (!app_ui_panel_add_row(panel, i, attr, !is_locked,
+                    i == choice, key_buf, rt_name, meta))
             {
-                byte runtype_color = TERM_WHITE;
-                bool is_locked = (i < metar.max_difficulty_reached);
-                const char *rt_name = "Unknown";
-                char key_buf[APP_UI_KEY_MAX];
-                char meta[APP_UI_META_MAX];
-                int win_goal = WINCON_SILMARILS;
-
-                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
-                {
-                    runtype_color = runtype_info[i].colour;
-                    rt_name = runtype_info[i].name;
-                    win_goal = runtype_info[i].win_con
-                        ? runtype_info[i].win_con : WINCON_SILMARILS;
-                }
-
-                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
-                strnfmt(meta, sizeof(meta), "%d sil%s%s", win_goal,
-                    (win_goal == 1) ? "" : "s",
-                    is_locked ? " locked" : "");
-                if (!app_ui_panel_add_row(panel, i,
-                        is_locked ? TERM_L_DARK : runtype_color, !is_locked,
-                        i == choice, key_buf, rt_name, meta))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-            }
-            if (!semantic_ok)
-                break;
-
-            {
-                bool is_locked = (choice < metar.max_difficulty_reached);
-                const char *rt_name = "Unknown";
-                char line[APP_UI_TEXT_MAX];
-                char curse_buf[64];
-                int win_goal = WINCON_SILMARILS;
-                u32b blessing_thresh = runtype_threshold_for_mode(choice,
-                    METARUN_BLESSING_THRESHOLD_NORMAL);
-                byte runtype_color = TERM_WHITE;
-
-                if (runtype_info && choice < z_info->rt_max
-                    && runtype_info[choice].name[0])
-                {
-                    rt_name = runtype_info[choice].name;
-                    win_goal = runtype_info[choice].win_con
-                        ? runtype_info[choice].win_con : WINCON_SILMARILS;
-                    runtype_color = runtype_info[choice].colour;
-                }
-                get_curse_description(choice, curse_buf, sizeof(curse_buf));
-
-                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                    "Selected Difficulty");
-                if (!app_ui_panel_add_detail_line(panel,
-                        is_locked ? TERM_L_DARK : runtype_color, rt_name))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                strnfmt(line, sizeof(line), "Win condition: %d Silmaril%s",
-                    win_goal, (win_goal == 1) ? "" : "s");
-                if (!app_ui_panel_add_detail_line(panel,
-                        is_locked ? TERM_L_DARK : TERM_WHITE, line))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                strnfmt(line, sizeof(line), "Blessing threshold: %lu points",
-                    (unsigned long)blessing_thresh);
-                if (!app_ui_panel_add_detail_line(panel,
-                        is_locked ? TERM_L_DARK : TERM_WHITE, line))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                if (!app_ui_panel_add_detail_line(panel,
-                        is_locked ? TERM_L_DARK : TERM_SLATE, curse_buf))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                if (is_locked) {
-                    if (!app_ui_panel_add_detail_line(panel, TERM_RED,
-                            "Locked for this story run."))
-                    {
-                        semantic_ok = false;
-                        break;
-                    }
-                } else if (choice > metar.type) {
-                    if (!app_ui_panel_add_detail_line(panel, TERM_ORANGE,
-                            "Increasing difficulty is permanent for this metarun."))
-                    {
-                        semantic_ok = false;
-                        break;
-                    }
-                } else if (choice == metar.type) {
-                    if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
-                            "Current setting."))
-                    {
-                        semantic_ok = false;
-                        break;
-                    }
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Select");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Cancel");
-
-            if (!ui_information_scene_present_ui(&scene)) {
-                semantic_ok = false;
-                break;
-            }
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
-                || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                metarun_ui_clear_pending_input();
-                canceled = true;
-                break;
-            }
-            if (key == '\r' || key == '\n'
-                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
-            {
-                if (choice < metar.max_difficulty_reached) {
-                    SDL_strlcpy(status_msg,
-                        "Cannot select easier difficulty - locked for this story run!",
-                        sizeof(status_msg));
-                    status_attr = TERM_RED;
-                    continue;
-                }
-                metarun_ui_clear_pending_input();
-                break;
-            }
-            if (key == '8' || key == 'k' || key == '-') {
-                int new_choice = choice - 1;
-                while (new_choice >= 0
-                    && new_choice < metar.max_difficulty_reached)
-                {
-                    new_choice--;
-                }
-                if (new_choice >= 0)
-                    choice = new_choice;
-                status_msg[0] = '\0';
-                continue;
-            }
-            if (key == '2' || key == 'j' || key == '+') {
-                if (choice < max_difficulty)
-                    choice++;
-                status_msg[0] = '\0';
-                continue;
-            }
-            if (key >= 'a' && key <= 'z') {
-                int new_choice = key - 'a';
-                if (new_choice <= max_difficulty) {
-                    if (new_choice < metar.max_difficulty_reached) {
-                        SDL_strlcpy(status_msg,
-                            "Cannot select easier difficulty - locked for this story run!",
-                            sizeof(status_msg));
-                        status_attr = TERM_RED;
-                    } else {
-                        choice = new_choice;
-                        status_msg[0] = '\0';
-                    }
-                }
-                continue;
-            }
-            if (key >= 'A' && key <= 'Z') {
-                int new_choice = key - 'A';
-                if (new_choice <= max_difficulty) {
-                    if (new_choice < metar.max_difficulty_reached) {
-                        SDL_strlcpy(status_msg,
-                            "Cannot select easier difficulty - locked for this story run!",
-                            sizeof(status_msg));
-                        status_attr = TERM_RED;
-                    } else {
-                        choice = new_choice;
-                        status_msg[0] = '\0';
-                    }
-                }
-                continue;
+                log_error("choose_difficulty_menu: failed to append row");
+                ui_information_scene_leave(&info_scope);
+                if (reopen_stats_on_exit)
+                    print_metarun_stats();
+                return;
             }
         }
 
-        if (!semantic_ok) {
-            ui_information_scene_leave(&info_scope);
-            use_information_scene = false;
-        } else if (canceled) {
+        {
+            bool is_locked = (choice < metar.max_difficulty_reached);
+            int win_goal = WINCON_SILMARILS;
+            u32b blessing_thresh = runtype_threshold_for_mode(choice,
+                METARUN_BLESSING_THRESHOLD_NORMAL);
+            char curse_buf[64];
+            char line[APP_UI_TEXT_MAX];
+            const char *rt_name = "Unknown";
+
+            if (runtype_info && choice < z_info->rt_max
+                && runtype_info[choice].name[0])
+            {
+                rt_name = runtype_info[choice].name;
+                win_goal = runtype_info[choice].win_con
+                    ? runtype_info[choice].win_con : WINCON_SILMARILS;
+            }
+
+            get_curse_description(choice, curse_buf, sizeof(curse_buf));
+            app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                "Selected Difficulty");
+            (void)app_ui_panel_add_detail_line(panel,
+                is_locked ? TERM_L_DARK : TERM_WHITE, rt_name);
+            strnfmt(line, sizeof(line), "Win condition: %d Silmarils", win_goal);
+            (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, line);
+            strnfmt(line, sizeof(line), "Threshold: %lu points",
+                (unsigned long)blessing_thresh);
+            (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, line);
+            (void)app_ui_panel_add_detail_line(panel,
+                is_locked ? TERM_L_DARK : TERM_SLATE, curse_buf);
+            if (status_msg[0] != '\0')
+                (void)app_ui_panel_add_detail_line(panel, status_attr,
+                    status_msg);
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Enter", "Accept");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            steamdeck ? back_label : "Esc", "Cancel");
+
+        if (!ui_information_scene_present_ui(&scene)) {
+            log_error("choose_difficulty_menu: failed to publish semantic scene");
+            break;
+        }
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
+            || (!steamdeck && (key == 'h' || key == 'H')))
+        {
             ui_information_scene_leave(&info_scope);
             if (reopen_stats_on_exit)
                 print_metarun_stats();
             return;
         }
+        if (key == '\r' || key == '\n'
+            || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+        {
+            if (choice < metar.max_difficulty_reached) {
+                SDL_strlcpy(status_msg,
+                    "Cannot select easier difficulty - locked for this story run!",
+                    sizeof(status_msg));
+                status_attr = TERM_RED;
+                continue;
+            }
+            break;
+        }
+        if (key == '8' || key == 'k' || key == '-') {
+            int new_choice = choice - 1;
+            while (new_choice >= 0 && new_choice < metar.max_difficulty_reached)
+                new_choice--;
+            if (new_choice >= 0)
+                choice = new_choice;
+            status_msg[0] = '\0';
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+') {
+            if (choice < max_difficulty)
+                choice++;
+            status_msg[0] = '\0';
+            continue;
+        }
+        if (key >= 'a' && key <= 'z') {
+            int new_choice = key - 'a';
+            if (new_choice <= max_difficulty) {
+                if (new_choice < metar.max_difficulty_reached) {
+                    SDL_strlcpy(status_msg,
+                        "Cannot select easier difficulty - locked for this story run!",
+                        sizeof(status_msg));
+                    status_attr = TERM_RED;
+                } else {
+                    choice = new_choice;
+                    status_msg[0] = '\0';
+                }
+            }
+            continue;
+        }
+        if (key >= 'A' && key <= 'Z') {
+            int new_choice = key - 'A';
+            if (new_choice <= max_difficulty) {
+                if (new_choice < metar.max_difficulty_reached) {
+                    SDL_strlcpy(status_msg,
+                        "Cannot select easier difficulty - locked for this story run!",
+                        sizeof(status_msg));
+                    status_attr = TERM_RED;
+                } else {
+                    choice = new_choice;
+                    status_msg[0] = '\0';
+                }
+            }
+        }
     }
 
-    if (!use_information_scene) {
-        screen_save();
+    if (choice != metar.type)
+    {
+        if (choice > metar.type) {
+            const char *lines[] = {
+                "If you increase the difficulty level, you will not be able to return to an easier level for the rest of this story run.",
+                "This change is permanent for this meta-run."
+            };
+            const byte attrs[] = { TERM_WHITE, TERM_L_RED };
+            bool confirm = metarun_ui_confirm_modal("Increase Difficulty",
+                TERM_YELLOW, lines, attrs, (int)N_ELEMENTS(lines), steamdeck,
+                accept_label, back_label);
 
-        while (true)
-        {
-            Term_clear();
-
-            /* Title */
-            Term_putstr(2, 1, -1, TERM_YELLOW, "=== Select Difficulty Level ===");
-            
-            int row = 3;
-            for (int i = 0; i <= max_difficulty; i++)
-            {
-                byte name_color, desc_color;
-                byte runtype_color = TERM_WHITE; /* default color */
-                bool is_locked = (i < metar.max_difficulty_reached); /* Lock easier difficulties */
-                
-                /* Get runtype color from U: field */
-                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
-                {
-                    runtype_color = runtype_info[i].colour;
-                }
-                else
-                {
-                    runtype_color = TERM_WHITE; /* fallback if runtype not loaded */
-                }
-                
-                if (is_locked) {
-                    /* Locked (easier) difficulties - greyed out */
-                    name_color = TERM_L_DARK;
-                    desc_color = TERM_L_DARK;
-                    Term_putstr(2, row, -1, TERM_L_DARK, "-");
-                }
-                else if (i == choice) {
-                    /* Highlight selected difficulty - use runtype color but brighter */
-                    name_color = runtype_color;
-                    desc_color = TERM_L_WHITE;
-                    Term_putstr(2, row, -1, runtype_color, ">");
-                } else if (i == metar.type) {
-                    /* Show current difficulty in its runtype color but dimmed */
-                    name_color = runtype_color;
-                    desc_color = TERM_SLATE;
-                    Term_putstr(2, row, -1, TERM_L_DARK, " ");
-                } else {
-                    /* Normal difficulty in its runtype color */
-                    name_color = runtype_color;
-                    desc_color = TERM_L_DARK;
-                    Term_putstr(2, row, -1, TERM_L_DARK, " ");
-                }
-                
-                /* Get dynamic name and stats from runtype */
-                const char *rt_name = "Unknown";
-                int win_goal = WINCON_SILMARILS;
-                u32b blessing_thresh = runtype_threshold_for_mode(i, METARUN_BLESSING_THRESHOLD_NORMAL);
-                
-                if (runtype_info && i < z_info->rt_max && runtype_info[i].name[0])
-                {
-                    rt_name = runtype_info[i].name;
-                    win_goal = runtype_info[i].win_con ? runtype_info[i].win_con : WINCON_SILMARILS;
-                }
-                
-                char desc_buf[128];
-                char curse_buf[64];
-                get_curse_description(i, curse_buf, sizeof(curse_buf));
-                
-                if (is_locked) {
-                    snprintf(desc_buf, sizeof(desc_buf), "[LOCKED] Win: %d Silmarils, Threshold: %lu points, %s", 
-                             win_goal, (unsigned long)blessing_thresh, curse_buf);
-                } else {
-                    snprintf(desc_buf, sizeof(desc_buf), "Win: %d Silmarils, Threshold: %lu points, %s", 
-                             win_goal, (unsigned long)blessing_thresh, curse_buf);
-                }
-                
-                char name_buf[128];
-                if (is_locked) {
-                    snprintf(name_buf, sizeof(name_buf), "%c) %s [LOCKED]", 'a'+i, rt_name);
-                } else {
-                    snprintf(name_buf, sizeof(name_buf), "%c) %s", 'a'+i, rt_name);
-                }
-                
-                Term_putstr(4, row++, -1, name_color, name_buf);
-                Term_putstr(7, row++, -1, desc_color, desc_buf);
-                
-                /* Add extra spacing between options */
-                row++;
-            }
-            
-            /* Instructions */
-            if (steamdeck) {
-                char hint_buf[96];
-                strnfmt(hint_buf, sizeof(hint_buf),
-                        "D-pad to navigate  [%s] accept  [%s] cancel", accept_label, back_label);
-                Term_putstr(2, row + 1, -1, TERM_L_WHITE, hint_buf);
-            } else {
-                Term_putstr(2, row + 1, -1, TERM_L_WHITE,
-                            "Arrows to navigate     Space/Enter Accept     Esc Cancel");
-            }
-            
-            /* Get input */
-            char key = inkey();
-            
-            /* Handle back/cancel - ESC, B button in Steam Deck mode, or 'h' key */
-            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()) || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                screen_load();
+            if (!confirm) {
+                ui_information_scene_leave(&info_scope);
                 if (reopen_stats_on_exit)
                     print_metarun_stats();
                 return;
             }
-            else if (key == '\r' || key == '\n' || (steamdeck && key == steamdeck_confirm_key()) || key == '6')  /* Enter/A button/6 key */
-            {
-                /* Check if trying to select a locked difficulty */
-                if (choice < metar.max_difficulty_reached) {
-                    /* Show warning and stay in menu */
-                    Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                    Term_fresh();
-                    Term_xtra(TERM_XTRA_DELAY, 2000);
-                    continue;
-                }
-                break;  /* Confirm selection */
-            }
-            else if (key == '8' || key == 'k' || key == '-')  /* Up */
-            {
-                /* Navigate up but skip locked difficulties */
-                int new_choice = choice - 1;
-                while (new_choice >= 0 && new_choice < metar.max_difficulty_reached) {
-                    new_choice--;
-                }
-                if (new_choice >= 0) choice = new_choice;
-            }
-            else if (key == '2' || key == 'j' || key == '+')  /* Down */
-            {
-                /* Navigate down normally */
-                if (choice < max_difficulty) choice++;
-            }
-            else if (key >= 'a' && key <= 'z')  /* Letter selection */
-            {
-                int new_choice = key - 'a';
-                if (new_choice <= max_difficulty) {
-                    if (new_choice < metar.max_difficulty_reached) {
-                        /* Show warning for locked difficulty */
-                        Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                        Term_fresh();
-                        Term_xtra(TERM_XTRA_DELAY, 2000);
-                    } else {
-                        choice = new_choice;
-                    }
-                }
-            }
-            else if (key >= 'A' && key <= 'Z')  /* Capital letter selection */
-            {
-                int new_choice = key - 'A';
-                if (new_choice <= max_difficulty) {
-                    if (new_choice < metar.max_difficulty_reached) {
-                        /* Show warning for locked difficulty */
-                        Term_putstr(2, row + 3, -1, TERM_RED, "Cannot select easier difficulty - locked for this story run!");
-                        Term_fresh();
-                        Term_xtra(TERM_XTRA_DELAY, 2000);
-                    } else {
-                        choice = new_choice;
-                    }
-                }
-            }
         }
-    }
-    
-    /* Apply the new difficulty */
-    if (choice != metar.type)
-    {
-        /* Warn if increasing difficulty */
-        if (choice > metar.type) {
-            if (use_information_scene) {
-                const char *lines[] = {
-                    "If you increase the difficulty level, you will not be able to return to an easier level for the rest of this story run.",
-                    "This change is permanent for this meta-run."
-                };
-                const byte attrs[] = { TERM_WHITE, TERM_L_RED };
-                bool confirm = metarun_ui_confirm_modal(
-                    "Increase Difficulty", TERM_YELLOW, lines, attrs,
-                    (int)N_ELEMENTS(lines), steamdeck, accept_label,
-                    back_label);
 
-                if (!confirm) {
-                    ui_information_scene_leave(&info_scope);
-                    if (reopen_stats_on_exit)
-                        print_metarun_stats();
-                    return; /* Cancel the change */
-                }
-            } else {
-                int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-                screen_save();
-                Term_clear();
-                Term_putstr(2, 5, -1, TERM_YELLOW, "WARNING: Increasing Difficulty");
-                if (term_wid < 70)
-                {
-                    Term_putstr(2, 7, term_wid - 2, TERM_WHITE,
-                        "You cannot return to an easier level");
-                    Term_putstr(2, 8, term_wid - 2, TERM_WHITE,
-                        "for the rest of this story run.");
-                }
-                else
-                {
-                    Term_putstr(2, 7, -1, TERM_WHITE, "If you increase the difficulty level, you will NOT be able to");
-                    Term_putstr(2, 8, -1, TERM_WHITE, "go back to an easier level for the rest of this story run.");
-                }
-                Term_putstr(2, 10, -1, TERM_L_RED, "This change is PERMANENT for this meta-run!");
-                if (steamdeck) {
-                    char prompt_buf[64];
-                    strnfmt(prompt_buf, sizeof(prompt_buf),
-                            "Continue? [%s] yes  [%s] no", accept_label, back_label);
-                    Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE, prompt_buf);
-                } else {
-                    Term_putstr(2, 12, term_wid - 2, TERM_L_WHITE,
-                        "Do you want to continue? (y/n)");
-                }
-                
-                char confirm = inkey();
-                screen_load();
-
-                if (steamdeck) {
-                    if (confirm == ' ' || confirm == '\r' || confirm == '\n')
-                        confirm = 'y';
-                    else if (confirm == ESCAPE || confirm == 'h' || confirm == 'H')
-                        confirm = 'n';
-                }
-                
-                if (confirm != 'y' && confirm != 'Y') {
-                    screen_load();
-                    if (reopen_stats_on_exit)
-                        print_metarun_stats();
-                    return; /* Cancel the change */
-                }
-            }
-        }
-        
         log_info("Changing difficulty from %d to %d", metar.type, choice);
-        
-        /* Preserve existing stacks and discovery state */
-        int8_t preserved_stacks[METAR_CURSE_SLOTS];
-        memcpy(preserved_stacks, metar.curse_stacks, sizeof(preserved_stacks));
-        u64b preserved_seen = metar.curses_seen;
 
-        /* Clear to baseline so we can reapply difficulty defaults */
-        memset(metar.curse_stacks, 0, sizeof(metar.curse_stacks));
-        metar.curses_seen = 0;
+        {
+            int8_t preserved_stacks[METAR_CURSE_SLOTS];
+            u64b preserved_seen = metar.curses_seen;
 
-        /* Set new type and apply its base curses */
-        metar.type = (byte)choice;
-        apply_difficulty_curses(&metar);
+            memcpy(preserved_stacks, metar.curse_stacks,
+                sizeof(preserved_stacks));
+            memset(metar.curse_stacks, 0, sizeof(metar.curse_stacks));
+            metar.curses_seen = 0;
+            metar.type = (byte)choice;
+            apply_difficulty_curses(&metar);
 
-        /* Merge preserved stacks with new defaults (signed counts) */
-        int limit = MIN(METAR_CURSE_SLOTS, z_info->cu_max);
-        for (int curse_id = 0; curse_id < limit; curse_id++) {
-            int preserved = preserved_stacks[curse_id];
-            if (!preserved) continue;
+            {
+                int limit = MIN(METAR_CURSE_SLOTS, z_info->cu_max);
+                for (int curse_id = 0; curse_id < limit; curse_id++) {
+                    int preserved = preserved_stacks[curse_id];
+                    int combined;
+                    int curse_cap;
+                    int blessing_cap;
 
-            int combined = preserved + CURSE_GET(curse_id);
-            int curse_cap = CURSE_CURSE_CAP(curse_id);
-            int blessing_cap = CURSE_BLESSING_CAP(curse_id);
-            if (curse_cap > 0 && combined > curse_cap)
-                combined = curse_cap;
-            if (blessing_cap > 0 && combined < -blessing_cap)
-                combined = -blessing_cap;
-            CURSE_SET(curse_id, combined);
+                    if (!preserved) continue;
+                    combined = preserved + CURSE_GET(curse_id);
+                    curse_cap = CURSE_CURSE_CAP(curse_id);
+                    blessing_cap = CURSE_BLESSING_CAP(curse_id);
+                    if (curse_cap > 0 && combined > curse_cap)
+                        combined = curse_cap;
+                    if (blessing_cap > 0 && combined < -blessing_cap)
+                        combined = -blessing_cap;
+                    CURSE_SET(curse_id, combined);
+                }
+            }
+
+            if (choice > metar.max_difficulty_reached)
+                metar.max_difficulty_reached = (byte)choice;
+            metar.curses_seen |= preserved_seen;
         }
 
-        /* Update maximum difficulty reached */
-        if (choice > metar.max_difficulty_reached) {
-            metar.max_difficulty_reached = (byte)choice;
-        }
-
-        /* Restore seen flags */
-        metar.curses_seen |= preserved_seen;
-
-        if (!sync_current_metarun_slot(false)) {
+        if (!sync_current_metarun_slot(false))
             log_warn("Difficulty change failed to sync metarun slot");
-        }
-        
-        /* Save changes */
         save_metaruns();
-        
-        const char *new_name = "Unknown";
-        if (runtype_info && choice < z_info->rt_max && runtype_info[choice].name[0])
-            new_name = runtype_info[choice].name;
-        
-        msg_print(format("Difficulty changed to: %s", new_name));
+
+        {
+            const char *new_name = "Unknown";
+            if (runtype_info && choice < z_info->rt_max
+                && runtype_info[choice].name[0])
+            {
+                new_name = runtype_info[choice].name;
+            }
+            msg_print(format("Difficulty changed to: %s", new_name));
+        }
     }
-    
-    if (!use_information_scene)
-        screen_load();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
-    
-    /* Return to metarun stats to show updated information */
+
+    ui_information_scene_leave(&info_scope);
     if (reopen_stats_on_exit)
         print_metarun_stats();
 }
@@ -9193,13 +6332,14 @@ void list_metaruns(void)
     bool steamdeck = get_sdl_steamdeck_mode();
     char accept_label[16] = "";
     char back_label[16] = "";
-    int term_h = (Term && Term->hgt > 0) ? Term->hgt : 24;
-    int footer_row = term_h - 1;
-
     if (steamdeck) {
         /* Steam Deck UI: A=ok */
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
         metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
+    }
+    if (!use_information_scene) {
+        log_error("list_metaruns: semantic scene unavailable");
+        return;
     }
 
     refresh_current_metar_score();
@@ -9217,7 +6357,7 @@ void list_metaruns(void)
         qsort(order, metarun_max, sizeof(s16b), compare_metarun_indices);
     }
 
-    if (use_information_scene) {
+    {
         bool semantic_ok = true;
         int highlight = 0;
 
@@ -9410,77 +6550,10 @@ void list_metaruns(void)
         }
 
         ui_information_scene_leave(&info_scope);
-        if (semantic_ok) {
-            order = mem_free(order);
-            return;
-        }
-        use_information_scene = false;
+        if (!semantic_ok)
+            log_error("list_metaruns: failed to publish semantic scene");
+        order = mem_free(order);
     }
-
-    screen_save();
-    Term_clear();
-    c_prt(TERM_L_GREEN, "Meta-run history", 1, 2);
-    c_put_str(TERM_L_DARK,
-              " *ID      Score     Sil  Dth  Res  Last played", 3, 2);
-
-    int row = 4;
-    for (s16b i = 0; i < metarun_max; i++) {
-        s16b idx = order ? order[i] : i;
-        const metarun *m = &metaruns[idx];
-
-        /* Get dynamic win/loss conditions for this metarun type */
-        int win_goal = WINCON_SILMARILS;
-        int death_limit = LOSECON_DEATHS; /* hardcoded death limit for all runtypes */
-
-        if (runtype_info && m->type < z_info->rt_max)
-        {
-            win_goal = runtype_info[m->type].win_con ? runtype_info[m->type].win_con : WINCON_SILMARILS;
-        }
-
-        char res = (m->silmarils >= win_goal) ? 'W' :
-                   (m->deaths >= death_limit) ? 'L' : ' ';
-        char date[16];
-        strftime(date, sizeof date, "%Y-%m-%d",
-                 localtime((time_t*)&m->last_played));
-
-        byte attr = (idx == current_run) ? TERM_YELLOW : TERM_WHITE;
-        char marker = (idx == current_run) ? '*' : ' ';
-
-        c_put_str(attr,
-                  format("%c%08u %8lu   %2d   %2d   %c   %s",
-                         marker,
-                         (unsigned)m->id,
-                         (unsigned long)m->score,
-                         m->silmarils, m->deaths, res, date),
-                  row++, 2);
-
-        if (row >= footer_row && i+1 < metarun_max) {   /* page break */
-            if (steamdeck) {
-                char hint_buf[64];
-                strnfmt(hint_buf, sizeof(hint_buf), "[more - press %s]", accept_label);
-                c_put_str(TERM_L_DARK, hint_buf, footer_row, 2);
-            } else {
-                c_put_str(TERM_L_DARK, "[more - any key]", footer_row, 2);
-            }
-            (void)inkey();  Term_clear();
-            row = 4;
-            c_prt(TERM_L_GREEN, "Meta-run history (cont.)", 1, 2);
-            c_put_str(TERM_L_DARK,
-                      " *ID      Score     Sil  Dth  Res  Last played", 3, 2);
-        }
-    }
-
-    if (steamdeck) {
-        char hint_buf[64];
-        strnfmt(hint_buf, sizeof(hint_buf), "Press %s to return.", accept_label);
-        c_put_str(TERM_L_DARK, hint_buf, MIN(row + 1, footer_row), 2);
-    } else {
-        c_put_str(TERM_L_DARK, "Press any key to return.",
-            MIN(row + 1, footer_row), 2);
-    }
-    (void)inkey();
-    screen_load();
-    order = mem_free(order);
 }
 
 void show_known_curses_menu(void)

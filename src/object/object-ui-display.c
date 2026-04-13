@@ -451,7 +451,8 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
 }
 
 /*
- * Choice window "shadow" of the "show_inven()" function
+ * Legacy subwindow renderer for PW_INVEN. SDL snapshot item selection no
+ * longer draws through this helper.
  */
 void display_inven(void)
 {
@@ -565,7 +566,8 @@ void display_inven(void)
         if (o_ptr->weight)
         {
             int wgt = o_ptr->weight * o_ptr->number;
-            sprintf(tmp_val, "%3d.%1d lb", wgt / 10, wgt % 10);
+            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb", wgt / 10,
+                wgt % 10);
             if (use_story_font)
                 story_print_text_grid(i, col, 8, attr, tmp_val);
             else
@@ -585,7 +587,8 @@ void display_inven(void)
 }
 
 /*
- * Choice window "shadow" of the "show_equip()" function
+ * Legacy subwindow renderer for PW_EQUIP. SDL snapshot item selection no
+ * longer draws through this helper.
  */
 void display_equip(void)
 {
@@ -658,7 +661,7 @@ void display_equip(void)
         }
         else
         {
-            sprintf(o_name, "%s", describe_empty_slot(i));
+            SDL_strlcpy(o_name, describe_empty_slot(i), sizeof(o_name));
         }
 
         int max_desc = w - offset - 1;
@@ -685,7 +688,8 @@ void display_equip(void)
         if (o_ptr->weight)
         {
             int wgt = o_ptr->weight * o_ptr->number;
-            sprintf(tmp_val, "%3d.%1d lb ", wgt / 10, wgt % 10);
+            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb ", wgt / 10,
+                wgt % 10);
             if ((i >= INVEN_BODY) && (i <= INVEN_FEET))
             {
                 if (use_story_font)
@@ -726,7 +730,8 @@ void display_equip(void)
         else
         {
             Term_putstr(col, total_row, -1, TERM_L_DARK, "--------");
-            sprintf(tmp_val, "armour: %3d.%1d lb", armour_weight / 10, armour_weight % 10);
+            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+                armour_weight / 10, armour_weight % 10);
             {
                 int armour_col = col - 8;
                 if (armour_col < 0) armour_col = 0;
@@ -917,7 +922,8 @@ void show_inven(void)
                 wgt = supplies_total_weight();
             else
                 wgt = cur_obj->weight * cur_obj->number;
-            sprintf(tmp_val, "%3d.%1d lb", wgt / 10, wgt % 10);
+            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb", wgt / 10,
+                wgt % 10);
             c_put_str(out_color[j], tmp_val, j + 1, weight_col);
         }
 
@@ -929,11 +935,11 @@ void show_inven(void)
                 label = index_to_label(slot);
             if (!label)
                 label = 'a';
-            sprintf(tmp_val, " (%c)", label);
+            strnfmt(tmp_val, sizeof(tmp_val), " (%c)", label);
         }
         else
         {
-            sprintf(tmp_val, " (%c)", index_to_label(idx));
+            strnfmt(tmp_val, sizeof(tmp_val), " (%c)", index_to_label(idx));
         }
 
         put_str(tmp_val, j + 1, label_col);
@@ -1062,7 +1068,8 @@ void show_equip(void)
         if (show_weights && o_ptr->weight)
         {
             int wgt = o_ptr->weight * o_ptr->number;
-            sprintf(weight_buf, "%2d.%1d lb", wgt / 10, wgt % 10);
+            strnfmt(weight_buf, sizeof(weight_buf), "%2d.%1d lb", wgt / 10,
+                wgt % 10);
             weight_ptr = weight_buf;
 
             if ((i >= INVEN_BODY) && (i <= INVEN_FEET))
@@ -1141,7 +1148,8 @@ void show_equip(void)
         {
             prt("", j + 2, col_total);
             c_put_str(TERM_L_DARK, "--------", total_row, weight_col);
-            sprintf(tmp_val, "armour: %3d.%1d lb", armour_weight / 10,
+            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+                armour_weight / 10,
                 armour_weight % 10);
             c_put_str(TERM_SLATE, tmp_val, text_row, MAX(0, weight_col - 8));
             if (j && (j + 3 < term_hgt - 1))
@@ -1237,11 +1245,13 @@ void show_floor(const int* floor_list, int floor_num)
         if (show_weights)
         {
             int wgt = o_ptr->weight * o_ptr->number;
-            sprintf(tmp_val, "%3d.%1d lb", wgt / 10, wgt % 10);
+            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb", wgt / 10,
+                wgt % 10);
             c_put_str(out_color[j], tmp_val, j + 1, weight_col);
         }
 
-        sprintf(tmp_val, " (%c)", index_to_label(out_index[j]));
+        strnfmt(tmp_val, sizeof(tmp_val), " (%c)",
+            index_to_label(out_index[j]));
         put_str(tmp_val, j + 1, label_col);
     }
 

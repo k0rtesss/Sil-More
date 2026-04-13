@@ -28,7 +28,6 @@ struct app_session {
     app_snapshot snapshot;
     app_bootstrap_snapshot bootstrap_snapshot;
     app_dungeon_snapshot dungeon_snapshot;
-    app_information_snapshot information_snapshot;
     app_menu_snapshot menu_snapshot;
     byte dungeon_overlay_scene_active;
     byte dungeon_overlay_scene_reserved[3];
@@ -155,26 +154,6 @@ static void app_session_touch_overlay_menu(app_session* session)
     app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_OVERLAY);
     if (session->snapshot.scene == APP_SCENE_KIND_DUNGEON)
         (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
-}
-
-static void app_session_sync_information_blob(app_session* session)
-{
-    if (!session)
-        return;
-
-    session->information_snapshot.snapshot.scene = APP_SCENE_KIND_INFORMATION;
-    session->information_snapshot.snapshot.blobs
-        = session->information_snapshot.blobs;
-    session->information_snapshot.snapshot.blob_count
-        = N_ELEMENTS(session->information_snapshot.blobs);
-    session->information_snapshot.blobs[0].kind
-        = APP_SNAPSHOT_BLOB_INFORMATION;
-    session->information_snapshot.blobs[0].format_version
-        = APP_INFORMATION_FORMAT_VERSION;
-    session->information_snapshot.blobs[0].data
-        = (const byte*)&session->information_snapshot.scene;
-    session->information_snapshot.blobs[0].size
-        = sizeof(session->information_snapshot.scene);
 }
 
 static void app_session_sync_bootstrap_blob(app_session* session)
@@ -459,7 +438,6 @@ app_session* app_session_create(const app_session_config* config)
     session->snapshot.scene = APP_SCENE_KIND_NONE;
     app_bootstrap_snapshot_init(&session->bootstrap_snapshot);
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
-    app_information_snapshot_init(&session->information_snapshot);
     app_menu_snapshot_init(&session->menu_snapshot);
     app_ui_scene_init(&session->dungeon_overlay_scene);
     session->next_snapshot_revision = 1u;
@@ -717,9 +695,7 @@ void app_session_set_snapshot(app_session* session,
     }
 
     if ((previous_scene == APP_SCENE_KIND_MENU
-            || previous_scene == APP_SCENE_KIND_INFORMATION
-            || session->snapshot.scene == APP_SCENE_KIND_MENU
-            || session->snapshot.scene == APP_SCENE_KIND_INFORMATION)
+            || session->snapshot.scene == APP_SCENE_KIND_MENU)
         && previous_scene != session->snapshot.scene)
     {
         log_debug("[metarun-esc-trace] app_session_set_snapshot %u->%u rev=%u flags=0x%04X",
@@ -743,12 +719,6 @@ const app_dungeon_snapshot* app_session_dungeon_snapshot(
     return session ? &session->dungeon_snapshot : NULL;
 }
 
-const app_information_snapshot* app_session_information_snapshot(
-    const app_session* session)
-{
-    return session ? &session->information_snapshot : NULL;
-}
-
 const app_menu_snapshot* app_session_menu_snapshot(const app_session* session)
 {
     return session ? &session->menu_snapshot : NULL;
@@ -761,32 +731,6 @@ void app_session_clear_bootstrap_snapshot(app_session* session)
 
     app_bootstrap_scene_init(&session->bootstrap_snapshot.scene);
     app_session_sync_bootstrap_blob(session);
-}
-
-void app_session_clear_information_snapshot(app_session* session)
-{
-    if (!session)
-        return;
-
-    app_information_scene_init(&session->information_snapshot.scene);
-    app_session_sync_information_blob(session);
-}
-
-bool app_session_publish_information_scene(app_session* session,
-    const app_information_scene* scene)
-{
-    if (!session || !scene)
-        return false;
-
-    session->information_snapshot.scene = *scene;
-    app_session_sync_information_blob(session);
-    session->information_snapshot.snapshot.flags
-        = APP_SNAPSHOT_FLAG_PARTIAL | APP_SNAPSHOT_FLAG_WAITING;
-    session->information_snapshot.snapshot.revision
-        = session->next_snapshot_revision++;
-    session->snapshot = session->information_snapshot.snapshot;
-    session->snapshot_dirty_mask = 0;
-    return true;
 }
 
 void app_session_clear_menu_snapshot(app_session* session)
@@ -809,52 +753,6 @@ void app_session_clear_dungeon_overlay_scene(app_session* session)
     session->dungeon_overlay_scene_active = 0;
     app_ui_scene_init(&session->dungeon_overlay_scene);
     app_session_touch_overlay_menu(session);
-}
-
-bool app_session_add_information_op(app_session* session, s16b row,
-    s16b col, byte attr, cptr text)
-{
-    return app_session_add_information_op_ex(session, row, col, attr, 0, text);
-}
-
-bool app_session_add_information_op_ex(app_session* session, s16b row,
-    s16b col, byte attr, byte story, cptr text)
-{
-    if (!session)
-        return false;
-
-    return app_information_scene_add_text_ex(
-        &session->information_snapshot.scene, row, col, attr, story, text);
-}
-
-bool app_session_add_information_cell_ex(app_session* session, s16b row,
-    s16b col, byte attr, char ch, byte terrain_attr, char terrain_char,
-    byte story, byte width)
-{
-    if (!session)
-        return false;
-
-    return app_information_scene_add_cell_ex(&session->information_snapshot.scene,
-        row, col, attr, ch, terrain_attr, terrain_char, story, width);
-}
-
-bool app_session_add_information_cursor(app_session* session, s16b row,
-    s16b col, byte attr, byte width)
-{
-    if (!session)
-        return false;
-
-    return app_information_scene_add_cursor(&session->information_snapshot.scene,
-        row, col, attr, width);
-}
-
-bool app_session_publish_information_snapshot(app_session* session)
-{
-    if (!session)
-        return false;
-
-    return app_session_publish_information_scene(session,
-        &session->information_snapshot.scene);
 }
 
 bool app_session_publish_bootstrap_scene(app_session* session,

@@ -1185,7 +1185,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         if (targeting_snapshot_active())
                         {
                             int recall_key = ESCAPE;
-                            char recall_prompt[APP_INFORMATION_TEXT_MAX];
+                            char recall_prompt[160];
 
                             app_session_clear_interaction(
                                 app_session_current());

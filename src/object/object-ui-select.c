@@ -21,6 +21,9 @@
 
 #include <ctype.h>
 
+void prompt_snapshot_push_silent_clear(void);
+void prompt_snapshot_pop_silent_clear(void);
+
 bool item_tester_full = false;
 byte item_tester_tval = 0;
 bool (*item_tester_hook)(const object_type*) = NULL;
@@ -34,6 +37,26 @@ static bool verify_item(cptr prompt, int item);
 static bool get_item_allow(int item);
 static bool get_item_okay(int item);
 static int get_tag(int* cp, char tag);
+
+static bool item_selector_verify_item_no_flash(cptr prompt, int item)
+{
+    bool verified;
+
+    prompt_snapshot_push_silent_clear();
+    verified = verify_item(prompt, item);
+    prompt_snapshot_pop_silent_clear();
+    return verified;
+}
+
+static bool item_selector_get_item_allow_no_flash(int item)
+{
+    bool allowed;
+
+    prompt_snapshot_push_silent_clear();
+    allowed = get_item_allow(item);
+    prompt_snapshot_pop_silent_clear();
+    return allowed;
+}
 
 static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope)
 {
@@ -55,7 +78,7 @@ static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope
 }
 
 static void item_selector_menu_scene_restore(
-    item_selector_menu_scene_scope* scope)
+    item_selector_menu_scene_scope* scope, bool refresh)
 {
     app_session* session = app_session_current();
 
@@ -63,7 +86,8 @@ static void item_selector_menu_scene_restore(
         return;
 
     app_session_set_snapshot(session, &scope->previous_snapshot);
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    if (refresh)
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
 static void item_selector_suspend_snapshot_ui(
@@ -72,7 +96,7 @@ static void item_selector_suspend_snapshot_ui(
     app_session* session = app_session_current();
     const app_snapshot* snapshot;
 
-    item_selector_menu_scene_restore(scope);
+    item_selector_menu_scene_restore(scope, false);
     if (session)
     {
         app_session_clear_interaction(session);
@@ -90,7 +114,7 @@ static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope
     if (!scope)
         return;
 
-    item_selector_suspend_snapshot_ui(scope);
+    item_selector_menu_scene_restore(scope, true);
     scope->active = false;
 }
 
@@ -852,7 +876,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (!get_item_allow(selected_item))
+            if (!item_selector_get_item_allow_no_flash(selected_item))
                 break;
 
             *cp = selected_item;
@@ -885,7 +909,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                     continue;
 
                 item_selector_suspend_snapshot_ui(&menu_scene_scope);
-                if (!get_item_allow(selected_item))
+                if (!item_selector_get_item_allow_no_flash(selected_item))
                     continue;
 
                 *cp = selected_item;
@@ -911,7 +935,6 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 break;
             }
 
-            item_selector_suspend_snapshot_ui(&menu_scene_scope);
             describe_item_with_comparisons(selected_item, true);
             break;
         }
@@ -971,7 +994,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (!get_item_allow(selected_item))
+            if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
                 break;
@@ -1026,7 +1049,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (!get_item_allow(selected_item))
+            if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
                 break;
@@ -1054,7 +1077,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                 }
 
                 item_selector_suspend_snapshot_ui(&menu_scene_scope);
-                if (!get_item_allow(selected_item))
+                if (!item_selector_get_item_allow_no_flash(selected_item))
                 {
                     done = true;
                     break;
@@ -1104,7 +1127,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (!get_item_allow(selected_item))
+            if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
                 break;
@@ -1167,14 +1190,15 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (verify && !verify_item("Try", selected_item))
+            if (verify && !item_selector_verify_item_no_flash("Try",
+                    selected_item))
             {
                 done = true;
                 break;
             }
 
             item_selector_suspend_snapshot_ui(&menu_scene_scope);
-            if (!get_item_allow(selected_item))
+            if (!item_selector_get_item_allow_no_flash(selected_item))
             {
                 done = true;
                 break;

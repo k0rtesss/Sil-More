@@ -5,6 +5,7 @@
 #include "runtime-cli.h"
 
 static cptr g_prompt_interaction_label = NULL;
+static int g_prompt_snapshot_silent_clear_depth = 0;
 
 typedef struct prompt_menu_scene_scope {
     bool active;
@@ -81,12 +82,30 @@ static void prompt_snapshot_clear(void)
     app_session_clear_interaction(app_session_current());
 }
 
+void prompt_snapshot_push_silent_clear(void)
+{
+    g_prompt_snapshot_silent_clear_depth++;
+}
+
+void prompt_snapshot_pop_silent_clear(void)
+{
+    if (g_prompt_snapshot_silent_clear_depth > 0)
+        g_prompt_snapshot_silent_clear_depth--;
+}
+
 static void prompt_snapshot_present(void)
 {
     if (!prompt_snapshot_interaction_active())
         return;
 
     Term_fresh();
+}
+
+static void prompt_snapshot_finish_interaction(void)
+{
+    prompt_snapshot_clear();
+    if (g_prompt_snapshot_silent_clear_depth <= 0)
+        prompt_snapshot_present();
 }
 
 static bool prompt_snapshot_should_present(void)
@@ -332,8 +351,7 @@ bool askfor_aux(char* buf, size_t len)
 
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
 
     /* Done */
@@ -494,8 +512,7 @@ bool askfor_name(char* buf, size_t len)
 
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
 
     /* Done */
@@ -742,8 +759,7 @@ s16b get_quantity(cptr prompt, int max)
 
         if (snapshot_interaction)
         {
-            prompt_snapshot_clear();
-            prompt_snapshot_present();
+            prompt_snapshot_finish_interaction();
         }
         else
         {
@@ -839,8 +855,7 @@ int get_check_other(cptr prompt, char other)
     /* Erase the prompt */
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
     else
         prt("", 0, 0);
@@ -920,8 +935,7 @@ bool get_check(cptr prompt)
     /* Erase the prompt */
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
     else
         prt("", 0, 0);
@@ -1174,8 +1188,7 @@ int get_menu_choice(s16b max, char* prompt)
     /* Clear the prompt */
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
     else
         prt("", 0, 0);
@@ -1220,8 +1233,7 @@ bool get_com(cptr prompt, char* command)
     /* Clear the prompt */
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
     else
         prt("", 0, 0);
@@ -1259,8 +1271,7 @@ void pause_line(int row)
     (void)prompt_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
     if (snapshot_interaction)
     {
-        prompt_snapshot_clear();
-        prompt_snapshot_present();
+        prompt_snapshot_finish_interaction();
     }
     else
         prt("", row, 0);

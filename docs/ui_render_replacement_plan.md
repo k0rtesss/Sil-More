@@ -1,6 +1,6 @@
 # UI Render Replacement Plan
 
-Status: current on April 13, 2026. This is the execution document for SDL
+Status: current on April 14, 2026. This is the execution document for SDL
 runtime UI replacement and supersedes
 [`ui_architecture_migration_plan.md`](./ui_architecture_migration_plan.md) for
 forward UI work.
@@ -110,10 +110,10 @@ forward UI work.
 - `src/quest/quest-ui.c`, `src/ui/ui-story.c`, and `src/ui/ui-death.c` no
   longer call `ui_information_scene_present_term()` on the SDL path.
 - `py -3 tools/ui_debt_audit.py --check` passes on this branch.
-- Current audit counts on April 13, 2026:
-  - `inkey()` call sites: 37 files / 86 matches
-  - `screen_save()` + `screen_load()` call sites: 28 files / 187 matches
-  - direct `Term_*` render/control calls: 62 files / 1,511 matches
+- Current audit counts on April 14, 2026:
+  - `inkey()` call sites: 36 files / 83 matches
+  - `screen_save()` + `screen_load()` call sites: 24 files / 160 matches
+  - direct `Term_*` render/control calls: 60 files / 1,482 matches
   - `#include "platform-ui.h"`: 0 files / 0 matches
   - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 208 matches
 
@@ -134,6 +134,16 @@ forward UI work.
   - `app_ui_scene_from_information_document()`
   - `ui_information_scene_capture_term()`
 - The dead information-scene bridge is now isolated to core and renderer files.
+- Menu-transition flash debt still exists:
+  - stale previous screens can still flash briefly when opening or switching
+    menus
+  - the likely owners are previous-snapshot restore paths and
+    `screen_save()` / `screen_load()` ownership around semantic menu
+    transitions, especially in:
+    - `src/ui/ui-information-scene.c`
+    - `src/cmd/ui/cmd-ui-main-menu.c`
+    - `src/util-prompt.c`
+    - `src/object/object-ui-select.c`
 - Inventory, equipment, and floor selectors now have their own migration slice:
   - the base selector overlay and direct `i` / `e` enhanced menus are
     semantic in SDL snapshot mode
@@ -149,9 +159,11 @@ forward UI work.
 - Remaining late bespoke workflow debt is concentrated in:
   - `src/metarun.c` side or narrative flows outside the semantic
     story-statistics or history surfaces
-  - `src/birth.c`
+  - `src/birth.c`, including the remaining blitz setup and effect-pick flows:
+    - `blitz_setup_menu()`
+    - `blitz_select_effect_from_list()`
+    - `blitz_show_effect_summary()`
   - `src/ui/smithing/ui-smithing-screen.c`
-  - `src/blitz.c`
 - Some UI families still derive behavior or layout from `Term->wid`,
   `Term->hgt`, `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
@@ -165,6 +177,7 @@ forward UI work.
   `present_term()` slice are no longer part of the remaining debt.
 - The current blocker is now:
   - deleting the dead information-scene bridge core
+  - removing stale restore or snapshot flashes when opening menus
   - finishing the remaining item side loops and isolated fallback paths
   - finishing the late bespoke workflow families such as birth, smithing,
     blitz, and remaining metarun side flows
@@ -212,6 +225,37 @@ Exit when:
 - no SDL runtime path depends on information-scene document bridging or live
   term capture
 
+### Slice: Remove Menu Transition Flashes
+Goal:
+- remove stale previous-screen flashes when opening or switching menus on the
+  SDL path
+- stop restoring old snapshots or saved screens as a transitional fallback
+  between semantic menu surfaces
+
+Why this is next:
+- the flash is a visible user-facing regression
+- it is consistent with the remaining `screen_save()` / `screen_load()` and
+  previous-snapshot restore ownership in menu transition code
+- the repo is already far enough along that debt-removal should delete these
+  transitional restore paths instead of preserving them
+
+Primary targets:
+- `src/cmd/ui/cmd-ui-main-menu.c`
+- `src/util-prompt.c`
+- `src/object/object-ui-select.c`
+- any shared restore owner still required after bridge deletion
+
+Approach:
+- remove menu-transition restore flashes on the SDL path
+- do not preserve or add fallback branches to keep old restore behavior alive
+- if a restore path is only there to hide debt, delete it
+
+Exit when:
+- opening or switching semantic menus does not briefly show stale welcome,
+  background, dungeon, or previous menu content
+- no SDL-path menu transition depends on `screen_save()` / `screen_load()` or
+  previous-snapshot restore as a bridge between semantic surfaces
+
 ### Slice: Finish Remaining Item Side Loops
 Goal:
 - finish the remaining item-family side loops and isolated fallback paths now
@@ -252,9 +296,9 @@ Exit when:
 - remaining likely late movers:
   - metarun side or narrative flows outside the semantic story-statistics and
     history surfaces
-  - birth
+  - birth, including the remaining blitz setup and effect-pick UI now owned in
+    `src/birth.c`
   - smithing
-  - blitz
   - any typewriter or heavily scripted workflow still owning its own blocking
     loop
 
@@ -263,6 +307,12 @@ This is the recommended parallel implementation plan for the remaining work.
 Top-level implementation agents should use `gpt-5.4` with xhigh reasoning.
 Read-only grep or code-reading subagents can use `gpt-5.4-mini` with xhigh
 reasoning.
+Debt-removal rule for every agent in this section:
+- do not add, preserve, or widen fallback paths on the SDL path
+- if a debt-removal slice cannot delete a fallback cleanly, stop and report the
+  blocker instead of keeping the fallback alive
+- do not accept stale-screen flashes during menu transitions as an acceptable
+  intermediate state
 
 ### Phase Status
 - Old Phase 1 adapter work is now effectively done in:
@@ -281,19 +331,31 @@ reasoning.
   - the metarun story-statistics submenu family is semantic on the SDL path
   - quest typewriter, story, and death no longer rely on live term capture on
     the SDL path
+- Verification on April 14, 2026: the old N2 batch did not fully land as a
+  cleanup batch.
+  - the dead information-scene bridge core still exists
+  - stale-screen flash debt still exists in menu transition code
+- Verification on April 14, 2026: the old `N3-G` blitz slice was mis-scoped.
+  - `src/blitz.c` already has no local `inkey()`, `screen_save()` /
+    `screen_load()`, or direct `Term_*` UI debt
+  - the remaining blitz setup and effect-pick debt is actually owned by
+    `src/birth.c`
 - The remaining item-family work is now mostly isolated side loops and
   fallback paths, not the main semantic selector path.
 
 ### Next Parallel Slice: Launch In Parallel Now
 These write sets are disjoint and can run at the same time.
 
-#### Agent N2-A: Delete The Dead Information-Scene Bridge
+#### Agent N3-A: Delete The Dead Information-Scene Bridge
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
 You are not alone in the codebase. Do not revert edits by other agents. You may
 spawn read-only subagents for grep or code reading. If you delegate code edits,
 keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+deletion is blocked, stop and report the blocker instead of keeping fallback
+code alive.
 
 Write set:
 - src/ui/ui-information-scene.c
@@ -329,13 +391,50 @@ Validation:
 - summarize any intentionally retained bridge code and why
 ```
 
-#### Agent N2-B: Remaining Item Side Loops
+#### Agent N3-B: Remove Menu Transition Flashes
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
 You are not alone in the codebase. Do not revert edits by other agents. You may
 spawn read-only subagents for grep or code reading. If you delegate code edits,
 keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+restore path is only hiding debt, delete it rather than keeping it.
+
+Write set:
+- src/cmd/ui/cmd-ui-main-menu.c
+- src/util-prompt.c
+- src/object/object-ui-select.c
+
+Goal:
+- remove stale previous-screen flashes when opening or switching menus on the
+  SDL path
+- eliminate previous-snapshot restore and `screen_save()` / `screen_load()`
+  ownership that is only acting as a transition fallback between semantic menu
+  surfaces
+- specifically investigate stale welcome, background, dungeon, or previous-menu
+  content flashing before the new menu paints
+
+Constraints:
+- do not edit bridge/core files owned by Agent N3-A
+- preserve behavior and prompts
+- do not leave a fallback restore path in place "for safety" on the SDL path
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which menu transitions were causing flashes and what restore paths
+  you removed
+```
+
+#### Agent N3-C: Remaining Item Side Loops
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+You are not alone in the codebase. Do not revert edits by other agents. You may
+spawn read-only subagents for grep or code reading. If you delegate code edits,
+keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+workflow is still term-era debt, remove it or isolate it clearly.
 
 Write set:
 - src/object/object-ui-display.c
@@ -353,50 +452,23 @@ Goal:
 Constraints:
 - do not edit object-ui-select.c or object-ui-enhanced.c
 - preserve behavior and prompts
-- if a workflow is truly bespoke and should stay late, isolate it clearly
-  instead of half-migrating it
+- do not leave fallback chooser branches alive on the SDL path just to avoid
+  touching debt
 
 Validation:
 - run py -3 tools/ui_debt_audit.py --check
 - summarize which raw item loops remain and why
 ```
 
-#### Agent N2-C: Item Selector Legacy Fallback Cleanup
+#### Agent N3-D: Metarun Side And Narrative Workflows
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
 You are not alone in the codebase. Do not revert edits by other agents. You may
 spawn read-only subagents for grep or code reading. If you delegate code edits,
 keep the write set disjoint and within your owned files.
-
-Write set:
-- src/object/object-ui-select.c
-
-Goal:
-- keep the semantic SDL snapshot selector path
-- remove or further isolate the remaining non-snapshot legacy overlay fallback
-  in this file if that is safe
-- do not change the landed snapshot loop behavior
-
-Constraints:
-- preserve inventory/equipment/floor selection behavior, highlight logic,
-  compare or verify side flows, and fallback behavior
-- do not edit object-ui-enhanced.c, object-ui-display.c, or cmd/item/*
-- if removing the legacy fallback is risky, isolate it more cleanly and report
-  the remaining boundary rather than forcing deletion
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which selector-owned legacy fallback remains, if any, and why
-```
-
-#### Agent N2-D: Metarun Side And Narrative Workflows
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+metarun workflow is still debt, remove it or isolate it clearly.
 
 Write set:
 - src/metarun.c
@@ -419,13 +491,16 @@ Validation:
 - summarize which metarun flows remain legacy after your change
 ```
 
-#### Agent N2-E: Birth Workflow
+#### Agent N3-E: Birth Workflow
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
 You are not alone in the codebase. Do not revert edits by other agents. You may
 spawn read-only subagents for grep or code reading. If you delegate code edits,
 keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+legacy birth surface cannot be removed cleanly in this slice, isolate the
+remaining boundary and report it.
 
 Write set:
 - src/birth.c
@@ -435,6 +510,11 @@ Goal:
 - preserve current birth behavior, prompts, paging, and return-to-main-menu
   behavior
 - use semantic UI where safe, but do not destabilize gameplay setup
+- also own the remaining blitz setup/effect-pick flows that currently live in
+  this file:
+  - blitz_setup_menu()
+  - blitz_select_effect_from_list()
+  - blitz_show_effect_summary()
 
 Constraints:
 - do not edit main-menu, bridge/core, or unrelated gameplay files
@@ -444,16 +524,19 @@ Constraints:
 Validation:
 - run py -3 tools/ui_debt_audit.py --check
 - summarize what part of the birth workflow is still term-owned after your
-  change
+  change, including any remaining blitz setup/effect debt
 ```
 
-#### Agent N2-F: Smithing Workflow
+#### Agent N3-F: Smithing Workflow
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
 You are not alone in the codebase. Do not revert edits by other agents. You may
 spawn read-only subagents for grep or code reading. If you delegate code edits,
 keep the write set disjoint and within your owned files.
+Debt-removal rule: do not preserve or add fallback paths on the SDL path. If a
+legacy smithing surface cannot be removed cleanly in this slice, isolate the
+remaining boundary and report it.
 
 Write set:
 - src/ui/smithing/ui-smithing-screen.c
@@ -475,32 +558,6 @@ Validation:
 - summarize what part of smithing remains term-owned after your change
 ```
 
-#### Agent N2-G: Blitz Workflow
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-You are not alone in the codebase. Do not revert edits by other agents. You may
-spawn read-only subagents for grep or code reading. If you delegate code edits,
-keep the write set disjoint and within your owned files.
-
-Write set:
-- src/blitz.c
-
-Goal:
-- migrate the remaining blitz UI off term-owned blocking loops where safe
-- preserve blitz behavior, prompts, and summary screens
-- isolate any remaining legacy blitz boundary clearly if a full migration is
-  too large for one slice
-
-Constraints:
-- do not edit unrelated metarun, bridge/core, or story files
-- preserve gameplay behavior and result flow
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize what part of blitz remains term-owned after your change
-```
-
 ## Guardrails
 - Preserve the shipped Sil visual treatment. Semantic migration is not
   permission to restyle screens.
@@ -514,6 +571,12 @@ Validation:
   - `app_information_scene`
   - `app_interaction_panel_snapshot`
   - layout decisions derived from `Term->wid` or `Term->hgt`
+- For debt-removal slices, do not keep or add fallback paths on the SDL path.
+  Delete the debt. If blocked, report the blocker instead of preserving a
+  fallback branch.
+- Do not accept stale-screen flashes during menu transitions. If opening or
+  switching a menu briefly shows welcome, background, dungeon, or previous-menu
+  content, treat that as remaining debt to remove.
 
 ## Validation
 - run `py -3 tools/ui_debt_audit.py --check`

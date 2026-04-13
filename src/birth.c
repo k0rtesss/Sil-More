@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "app/app-session.h"
+#include "app/app-scene-menu.h"
 #include "app/app-ui.h"
 #include "externs.h"
 #include "blitz.h"
@@ -20,12 +21,20 @@
 #include "platform-story-font.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "runtime-cli.h"
 #include "score/score_entry.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-information-scene.h"
 #include "z-term.h"
 
 static bool skill_gain_in_progress = false;
+static bool birth_semantic_assignment_active = false;
+static bool birth_semantic_creation_menu_active = false;
+
+typedef struct birth_compact_flag_line {
+    cptr txt;
+    byte attr;
+} birth_compact_flag_line;
 
 /* Three-column layout constants (same as cmd4.c) */
 #define COL_SKILL 2
@@ -58,6 +67,12 @@ static void copy_start_items(start_item dest[MAX_START_ITEMS],
     const start_item src[MAX_START_ITEMS]);
 static void replace_start_food(start_item list[MAX_START_ITEMS], byte from_sval,
     byte to_sval);
+static const int birth_stat_costs[11];
+static int skill_cost(int base, int points);
+static int collect_character_trait_lines(int race, int character,
+    bool short_labels, birth_compact_flag_line out[], int out_max,
+    int* max_line_len);
+static bool birth_menu_scene_present(const app_ui_scene* scene);
 
 #define BLITZ_MAX_EFFECT_COUNT 9
 
@@ -902,22 +917,6 @@ static void player_outfit(void)
     log_debug("Player equipment setup completed");
 }
 
-/*
- * Clear the previous question
- */
-static void clear_question(void)
-{
-    int i;
-
-Term_erase(TOTAL_AUX_COL, 0, 255);
-
-    for (i = QUESTION_ROW; i < TABLE_ROW; i++)
-    {
-        /* Clear line, position cursor */
-        Term_erase(0, i, 255);
-    }
-}
-
 static void birth_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
@@ -955,45 +954,279 @@ static bool birth_confirm_input(int ch, bool steamdeck)
     return false;
 }
 
-static bool birth_show_compact_description_after_assignment(bool steamdeck)
+static void birth_trimmed_stat_label(int stat, char* buf, size_t buflen)
+{
+    const char* label;
+    size_t len;
+
+    if (!buf || !buflen)
+        return;
+
+    label = (stat >= 0 && stat < A_MAX) ? stat_names[stat] : "";
+    SDL_strlcpy(buf, label ? label : "", buflen);
+    len = strlen(buf);
+    while (len > 0 && buf[len - 1] == ' ')
+    {
+        buf[--len] = '\0';
+    }
+}
+
+static void birth_build_stats_prompt(bool steamdeck, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+        char quit_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        birth_prompt_label('q', "Start", quit_label, sizeof(quit_label));
+        strnfmt(buf, buflen, "D-pad allocate  %s back  %s confirm  %s quit",
+            back_label, confirm_label, quit_label);
+        return;
+    }
+
+    strnfmt(buf, buflen,
+        "Arrows allocate  ESC back  SPACE/ENTER confirm  q quit");
+}
+
+static void birth_build_skills_prompt(bool steamdeck, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+        char quit_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        birth_prompt_label('q', "q", quit_label, sizeof(quit_label));
+        strnfmt(buf, buflen, "D-pad allocate  %s back  %s confirm  %s quit",
+            back_label, confirm_label, quit_label);
+        return;
+    }
+
+    strnfmt(buf, buflen,
+        "Arrows allocate  ESC back  SPACE/ENTER confirm  q quit");
+}
+
+static void birth_build_review_prompt(bool steamdeck, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        strnfmt(buf, buflen, "%s back to assignment  %s continue", back_label,
+            confirm_label);
+        return;
+    }
+
+    strnfmt(buf, buflen, "ESC back to assignment  SPACE/ENTER continue");
+}
+
+static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
+    const int stats[A_MAX], int selected_stat, int points_left, bool steamdeck)
+{
+    app_ui_panel* panel;
+    char prompt[160];
+    char subtitle[64];
+    int i;
+
+    if (!scene || !stats)
+        return false;
+
+    birth_build_stats_prompt(steamdeck, prompt, sizeof(prompt));
+    if (!build_character_sheet_ui_scene(scene, prompt))
+        return false;
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->selected_row = selected_stat;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 420, 560);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Allocate Stats");
+    strnfmt(subtitle, sizeof(subtitle), "Points Left: %d", points_left);
+    app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
+
+    for (i = 0; i < A_MAX; i++)
+    {
+        char label[32];
+        char meta[16];
+        bool selected = (i == selected_stat);
+
+        birth_trimmed_stat_label(i, label, sizeof(label));
+        strnfmt(meta, sizeof(meta), "%d", birth_stat_costs[stats[i] + 4]);
+        if (!app_ui_panel_add_row(panel, i, selected ? TERM_L_BLUE : TERM_WHITE,
+                true, selected, "", label, meta))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool birth_present_stats_allocation_ui_scene(const int stats[A_MAX],
+    int selected_stat, int points_left, bool steamdeck)
+{
+    app_ui_scene scene;
+
+    if (!birth_semantic_assignment_active)
+        return false;
+    if (!birth_build_stats_allocation_ui_scene(&scene, stats, selected_stat,
+            points_left, steamdeck)
+        || !ui_information_scene_present_ui(&scene))
+    {
+        log_warn("birth stats allocation: semantic scene presentation failed");
+        return false;
+    }
+
+    return true;
+}
+
+static bool birth_build_skills_allocation_ui_scene(app_ui_scene* scene,
+    int selected_skill, const int old_base[S_MAX], const int skill_gain[S_MAX],
+    int exp_left, bool steamdeck)
+{
+    app_ui_panel* panel;
+    char prompt[160];
+    char subtitle[64];
+    int i;
+    int selected_row = 0;
+    int row_index = 0;
+
+    if (!scene || !old_base || !skill_gain)
+        return false;
+
+    birth_build_skills_prompt(steamdeck, prompt, sizeof(prompt));
+    if (!build_character_sheet_ui_scene(scene, prompt))
+        return false;
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 420, 640);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Allocate Skills");
+    strnfmt(subtitle, sizeof(subtitle), "Experience Left: %d", exp_left);
+    app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
+
+    for (i = 0; i < S_MAX; i++)
+    {
+        char meta[16];
+        bool selected;
+
+        if (i == S_SPC)
+            continue;
+
+        selected = (i == selected_skill);
+        if (selected)
+            selected_row = row_index;
+        strnfmt(meta, sizeof(meta), "%d", skill_cost(old_base[i],
+            skill_gain[i]));
+        if (!app_ui_panel_add_row(panel, i, selected ? TERM_L_BLUE : TERM_WHITE,
+                true, selected, "", skill_names_full[i], meta))
+        {
+            return false;
+        }
+        row_index++;
+    }
+
+    panel->selected_row = selected_row;
+    return true;
+}
+
+static bool birth_present_skills_allocation_ui_scene(int selected_skill,
+    const int old_base[S_MAX], const int skill_gain[S_MAX], int exp_left,
+    bool steamdeck)
+{
+    app_ui_scene scene;
+
+    if (!birth_semantic_assignment_active)
+        return false;
+    if (!birth_build_skills_allocation_ui_scene(&scene, selected_skill,
+            old_base, skill_gain, exp_left, steamdeck)
+        || !ui_information_scene_present_ui(&scene))
+    {
+        log_warn("birth skills allocation: semantic scene presentation failed");
+        return false;
+    }
+
+    return true;
+}
+
+static bool birth_build_assignment_review_ui_scene(app_ui_scene* scene,
+    bool steamdeck)
+{
+    app_ui_panel* panel;
+    char prompt[160];
+
+    if (!scene)
+        return false;
+
+    birth_build_review_prompt(steamdeck, prompt, sizeof(prompt));
+    if (!build_character_sheet_ui_scene(scene, prompt))
+        return false;
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 420, 560);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Character Review");
+    if (!app_ui_panel_add_body_line(panel, TERM_WHITE,
+            "Review the character sheet before you start."))
+    {
+        return false;
+    }
+    return app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Continue to start, or go back to adjust your assignments.");
+}
+
+static bool birth_show_semantic_assignment_review(bool steamdeck)
 {
     char ch;
-    char buf[160];
 
     while (1)
     {
-        int wid = 80;
-        int hgt = 24;
-        int prompt_row;
+        app_ui_scene scene;
 
-        Term_get_size(&wid, &hgt);
-        if (wid < 1)
-            wid = 80;
-        if (hgt < 1)
-            hgt = 24;
-
-        display_player(DISPLAY_PLAYER_MODE_COMPACT_DESC_FLAGS);
-
-        prompt_row = hgt - 1;
-        if (prompt_row < 0)
-            prompt_row = 0;
-        Term_erase(0, prompt_row, 255);
-
-        if (steamdeck)
+        if (!birth_semantic_assignment_active)
+            return false;
+        if (!birth_build_assignment_review_ui_scene(&scene, steamdeck)
+            || !ui_information_scene_present_ui(&scene))
         {
-            char confirm_label[16];
-            char back_label[16];
-
-            birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-            birth_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-            strnfmt(buf, sizeof(buf), "%s back  %s continue", back_label, confirm_label);
+            log_warn("birth assignment review: semantic scene presentation failed");
+            return false;
         }
-        else
-        {
-            strnfmt(buf, sizeof(buf), "ESC back to assignment  SPACE/ENTER continue");
-        }
-
-        c_put_str(TERM_SLATE, buf, prompt_row, 1);
 
         ch = birth_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
 
@@ -1006,6 +1239,110 @@ static bool birth_show_compact_description_after_assignment(bool steamdeck)
         if (birth_confirm_input(ch, steamdeck) || (ch == '6'))
             return true;
     }
+}
+
+static bool birth_ui_panel_add_wrapped_lines(app_ui_panel* panel, byte attr,
+    cptr text, bool detail_lines)
+{
+    char line_buffer[APP_UI_TEXT_MAX];
+    int line_pos = 0;
+    const char* text_ptr = text;
+    int max_width = APP_UI_TEXT_MAX - 1;
+
+    if (!panel || !text || !text[0])
+        return true;
+
+    while (*text_ptr)
+    {
+        while (*text_ptr == ' ' && line_pos == 0)
+            text_ptr++;
+
+        if (*text_ptr == '\n')
+        {
+            line_buffer[line_pos] = '\0';
+            if (line_pos > 0)
+            {
+                if (detail_lines)
+                {
+                    if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                        return false;
+                }
+                else if (!app_ui_panel_add_body_line(panel, attr, line_buffer))
+                {
+                    return false;
+                }
+            }
+            else if (detail_lines)
+            {
+                if (!app_ui_panel_add_detail_line(panel, attr, " "))
+                    return false;
+            }
+            else if (!app_ui_panel_add_body_line(panel, attr, " "))
+            {
+                return false;
+            }
+
+            line_pos = 0;
+            text_ptr++;
+            continue;
+        }
+
+        if (line_pos >= max_width)
+        {
+            int wrap_pos = line_pos - 1;
+
+            while (wrap_pos > 0 && line_buffer[wrap_pos] != ' ')
+                wrap_pos--;
+
+            if (wrap_pos > 0)
+            {
+                int remaining = line_pos - wrap_pos - 1;
+
+                line_buffer[wrap_pos] = '\0';
+                if (detail_lines)
+                {
+                    if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                        return false;
+                }
+                else if (!app_ui_panel_add_body_line(panel, attr, line_buffer))
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < remaining; i++)
+                    line_buffer[i] = line_buffer[wrap_pos + 1 + i];
+                line_pos = remaining;
+            }
+            else
+            {
+                line_buffer[line_pos] = '\0';
+                if (detail_lines)
+                {
+                    if (!app_ui_panel_add_detail_line(panel, attr, line_buffer))
+                        return false;
+                }
+                else if (!app_ui_panel_add_body_line(panel, attr, line_buffer))
+                {
+                    return false;
+                }
+                line_pos = 0;
+            }
+
+            continue;
+        }
+
+        line_buffer[line_pos++] = *text_ptr++;
+    }
+
+    if (line_pos > 0)
+    {
+        line_buffer[line_pos] = '\0';
+        if (detail_lines)
+            return app_ui_panel_add_detail_line(panel, attr, line_buffer);
+        return app_ui_panel_add_body_line(panel, attr, line_buffer);
+    }
+
+    return true;
 }
 
 static int character_choice_index_by_name(cptr choice_name)
@@ -1025,57 +1362,11 @@ static int character_choice_index_by_name(cptr choice_name)
 }
 
 static int birth_prompt_row(void);
-static int birth_description_base_row(void);
-
-static bool character_description_has_room(void)
-{
-    int min_description_rows = 8;
-    int available_rows = birth_prompt_row() - birth_description_base_row();
-
-    return (available_rows >= min_description_rows);
-}
-
-static bool character_selection_tight_height(void)
-{
-    int wid = 80;
-    int hgt = 24;
-
-    Term_get_size(&wid, &hgt);
-    (void)wid;
-    if (hgt < 1)
-        hgt = 24;
-
-    return (hgt <= 18);
-}
-
-static bool character_flags_need_compact_layout(void)
-{
-    int wid = 80;
-    int hgt = 24;
-    int min_flags_wid = TOTAL_AUX_COL + 21 + 20;
-
-    Term_get_size(&wid, &hgt);
-    (void)hgt;
-    if (wid < 1)
-        wid = 80;
-
-    return (wid < min_flags_wid) || character_selection_tight_height();
-}
 
 static cptr character_selection_header_text(bool character_phase)
 {
-    if (character_phase && character_flags_need_compact_layout())
-        return "Character:";
-
+    (void)character_phase;
     return "Character Selection:";
-}
-
-static void draw_character_selection_header(bool character_phase)
-{
-    cptr header = character_selection_header_text(character_phase);
-
-    Term_erase(0, HEADER_ROW, 255);
-    Term_putstr(QUESTION_COL, HEADER_ROW, -1, TERM_L_BLUE, header);
 }
 
 static int birth_prompt_row(void)
@@ -1096,61 +1387,6 @@ static int birth_prompt_row(void)
     return row;
 }
 
-static int birth_description_base_row(void)
-{
-    int wid = 80;
-    int hgt = 24;
-    int row;
-    int min_row = TABLE_ROW + A_MAX + 3;
-    int max_row = birth_prompt_row() - 1;
-
-    Term_get_size(&wid, &hgt);
-    (void)wid;
-    if (hgt < 1)
-        hgt = 24;
-
-    row = hgt - 5;
-    if (row > DESCRIPTION_ROW)
-        row = DESCRIPTION_ROW;
-    if (row < min_row)
-        row = min_row;
-    if (row > max_row)
-        row = max_row;
-    if (row < TABLE_ROW + 1)
-        row = TABLE_ROW + 1;
-
-    return row;
-}
-
-static int choice_description_row(int visible_rows, bool allow_full_description_screen)
-{
-    int wid = 80;
-    int hgt = 24;
-    int row = birth_description_base_row();
-    int min_row;
-
-    (void)wid;
-
-    if (allow_full_description_screen)
-        return row;
-
-    Term_get_size(&wid, &hgt);
-    if (hgt < 1)
-        hgt = 24;
-
-    if (hgt > 20)
-        return row;
-
-    min_row = TABLE_ROW + visible_rows + 1;
-    row = min_row;
-
-    if (row > birth_prompt_row() - 1)
-        row = birth_prompt_row() - 1;
-    if (row < min_row)
-        row = min_row;
-
-    return row;
-}
 
 static int birth_wrap_col(int indent)
 {
@@ -1220,11 +1456,6 @@ static void birth_put_str_fit(byte attr, cptr text, int row, int col)
         buf[max_len] = '\0';
 
     Term_putstr(col, row, -1, attr, buf);
-}
-
-static int choice_description_line_count(cptr text)
-{
-    return birth_wrapped_line_count(text, 2);
 }
 
 static void birth_choice_full_name(birth_menu choice, char* full_name,
@@ -1363,6 +1594,358 @@ static int collect_character_starting_abilities(int character, cptr out[], int o
     return count;
 }
 
+static void birth_selection_row_key(int index, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (index >= 0 && index < 26)
+    {
+        strnfmt(buf, buflen, "%c", I2A(index));
+        return;
+    }
+    if (index >= 26 && index < 52)
+    {
+        strnfmt(buf, buflen, "%c", (char)('A' + (index - 26)));
+        return;
+    }
+
+    buf[0] = '\0';
+}
+
+static void birth_character_power_stars(int character_idx, char* buf,
+    size_t buflen, byte* attr)
+{
+    byte power = 1;
+
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+    if (attr)
+        *attr = TERM_WHITE;
+
+    if (character_idx >= 0 && character_idx < z_info->c_max)
+        power = c_info[character_idx].power;
+
+    switch (power)
+    {
+    case 0:
+        if (attr)
+            *attr = TERM_RED;
+        strnfmt(buf, buflen, "*");
+        break;
+    case 1:
+        if (attr)
+            *attr = TERM_WHITE;
+        strnfmt(buf, buflen, "**");
+        break;
+    case 2:
+        if (attr)
+            *attr = TERM_GREEN;
+        strnfmt(buf, buflen, "***");
+        break;
+    case 3:
+    case 4:
+        if (attr)
+            *attr = TERM_L_GREEN;
+        strnfmt(buf, buflen, "***");
+        break;
+    default:
+        if (attr)
+            *attr = TERM_WHITE;
+        strnfmt(buf, buflen, "**");
+        break;
+    }
+}
+
+static bool birth_selection_add_race_detail_lines(app_ui_panel* panel,
+    birth_menu choice)
+{
+    int race;
+
+    if (!panel)
+        return false;
+
+    for (race = 0; race < z_info->p_max; race++)
+    {
+        if (!strcmp(choice.name, p_name + p_info[race].name))
+            break;
+    }
+    if (race >= z_info->p_max)
+        return false;
+
+    for (int i = 0; i < A_MAX; i++)
+    {
+        char line[64];
+        int adj = p_info[race].r_adj[i];
+        byte attr = TERM_L_DARK;
+
+        if (adj < 0)
+            attr = TERM_RED;
+        else if (adj == 1)
+            attr = TERM_GREEN;
+        else if (adj == 2)
+            attr = TERM_L_GREEN;
+        else if (adj > 2)
+            attr = TERM_L_BLUE;
+
+        strnfmt(line, sizeof(line), "%s %+d", stat_names[i], adj);
+        if (!app_ui_panel_add_detail_line(panel, attr, line))
+            return false;
+    }
+
+    if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+        return true;
+    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+        return false;
+    return birth_ui_panel_add_wrapped_lines(panel, TERM_WHITE, choice.text, true);
+}
+
+static bool birth_selection_add_character_detail_lines(app_ui_panel* panel,
+    birth_menu choice)
+{
+    int character_idx = character_choice_index_by_name(choice.name);
+    birth_compact_flag_line trait_lines[64];
+    cptr ability_lines[CHARACTER_ABILITY_MAX];
+    int ability_count;
+    int trait_max_len = 0;
+    int trait_count;
+
+    if (!panel || character_idx < 0 || character_idx >= z_info->c_max)
+        return false;
+
+    for (int i = 0; i < A_MAX; i++)
+    {
+        char line[64];
+        int adj = c_info[character_idx].h_adj[i] + rp_ptr->r_adj[i]
+            + curses_stat_adj(i);
+        byte attr = TERM_L_DARK;
+
+        if (adj < 0)
+            attr = TERM_RED;
+        else if (adj == 1)
+            attr = TERM_GREEN;
+        else if (adj == 2)
+            attr = TERM_L_GREEN;
+        else if (adj > 2)
+            attr = TERM_L_BLUE;
+
+        strnfmt(line, sizeof(line), "%s %+d", stat_names[i], adj);
+        if (!app_ui_panel_add_detail_line(panel, attr, line))
+            return false;
+    }
+
+    if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+        return true;
+    ability_count = collect_character_starting_abilities(character_idx,
+        ability_lines, (int)N_ELEMENTS(ability_lines));
+    if (ability_count > 0)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " ")
+            || !app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                "Starting abilities"))
+        {
+            return false;
+        }
+        for (int i = 0; i < ability_count; i++)
+        {
+            if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+                return true;
+            if (!app_ui_panel_add_detail_line(panel, TERM_YELLOW,
+                    ability_lines[i]))
+            {
+                return false;
+            }
+        }
+    }
+
+    trait_count = collect_character_trait_lines(p_ptr->prace, character_idx,
+        false, trait_lines, (int)N_ELEMENTS(trait_lines), &trait_max_len);
+    if (trait_count > 0)
+    {
+        if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " ")
+            || !app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                "Traits and modifiers"))
+        {
+            return false;
+        }
+        for (int i = 0; i < trait_count; i++)
+        {
+            if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+                return true;
+            if (!app_ui_panel_add_detail_line(panel, trait_lines[i].attr,
+                    trait_lines[i].txt))
+            {
+                return false;
+            }
+        }
+    }
+
+    if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+        return true;
+    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+        return false;
+    return birth_ui_panel_add_wrapped_lines(panel, TERM_WHITE, choice.text, true);
+}
+
+static bool birth_selection_build_ui_scene(app_ui_scene* scene,
+    birth_menu* choices, int num, int top, int cur,
+    bool allow_full_description_screen)
+{
+    app_ui_panel* panel;
+    bool steamdeck = steamdeck_controls_active();
+    bool character_phase = allow_full_description_screen;
+    char subtitle[80];
+    int selected_row = cur - top;
+
+    if (!scene || !choices || num <= 0 || cur < 0 || cur >= num)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, TERM_L_BLUE,
+        character_selection_header_text(character_phase));
+
+    if (character_phase)
+    {
+        strnfmt(subtitle, sizeof(subtitle), "Race: %s",
+            p_name + p_info[p_ptr->prace].name);
+        app_ui_panel_set_subtitle(panel, TERM_WHITE, subtitle);
+    }
+
+    for (int i = 0; i < num; i++)
+    {
+        char keybuf[8];
+        char meta[16];
+        byte meta_attr = TERM_WHITE;
+
+        birth_selection_row_key(i, keybuf, sizeof(keybuf));
+        meta[0] = '\0';
+        if (character_phase)
+            birth_character_power_stars(character_choice_index_by_name(
+                choices[i].name), meta, sizeof(meta), &meta_attr);
+
+        if (!app_ui_panel_add_row_ex(panel, i,
+                (i == cur) ? TERM_L_BLUE
+                           : (choices[i].ghost ? TERM_SLATE : TERM_WHITE),
+                meta_attr,
+                0, 0,
+                !choices[i].ghost, i == cur,
+                keybuf, choices[i].name, meta))
+        {
+            return false;
+        }
+    }
+
+    if (selected_row < 0)
+        selected_row = 0;
+    if (selected_row >= panel->row_count)
+        selected_row = panel->row_count - 1;
+    panel->selected_row = (s16b)selected_row;
+    app_ui_panel_set_row_offset(panel, (s16b)top);
+    app_ui_panel_set_detail_title(panel, TERM_WHITE, choices[cur].name);
+
+    if (character_phase)
+    {
+        if (!birth_selection_add_character_detail_lines(panel, choices[cur]))
+            return false;
+    }
+    else
+    {
+        if (!birth_selection_add_race_detail_lines(panel, choices[cur]))
+            return false;
+    }
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char detail_label[16];
+        char back_label[16];
+        char random_label[16];
+        char help_label[16];
+        char quit_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A",
+            confirm_label, sizeof(confirm_label));
+        birth_prompt_label(steamdeck_alt_action_key(), "X",
+            detail_label, sizeof(detail_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        birth_prompt_label('r', "r", random_label, sizeof(random_label));
+        birth_prompt_label('?', "?", help_label, sizeof(help_label));
+        if (streq(help_label, "?"))
+            birth_prompt_label('h', "h", help_label, sizeof(help_label));
+        birth_prompt_label('q', "q", quit_label, sizeof(quit_label));
+
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Select")
+            || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back")
+            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                random_label, "Random"))
+        {
+            return false;
+        }
+        if (allow_full_description_screen
+            && !app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                detail_label, "Description"))
+        {
+            return false;
+        }
+        if (!app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "o", "Options")
+            || !app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+                "s", "Scores")
+            || !app_ui_panel_add_footer_action(panel, 7, TERM_WHITE, true,
+                help_label, "Help")
+            || !app_ui_panel_add_footer_action(panel, 8, TERM_WHITE, true,
+                quit_label, "Quit"))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                "Enter", "Select")
+            || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "Esc", "Back")
+            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "r", "Random"))
+        {
+            return false;
+        }
+        if (allow_full_description_screen
+            && !app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                "f", "Description"))
+        {
+            return false;
+        }
+        if (!app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "o", "Options")
+            || !app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+                "s", "Scores")
+            || !app_ui_panel_add_footer_action(panel, 7, TERM_WHITE, true,
+                "h/?", "Help")
+            || !app_ui_panel_add_footer_action(panel, 8, TERM_WHITE, true,
+                "q", "Quit"))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void display_character_description_screen(birth_menu choice)
 {
     (void)birth_show_description_ui_scene(choice);
@@ -1378,207 +1961,35 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
     int i, dir;
     char c;
     bool done = false;
-    bool show_description;
-    bool compact_flags;
-    int prompt_row;
-    int hgt;
-    byte attr;
-    char prompt[160];
     int cur = (def) ? def : 0;
     bool steamdeck = steamdeck_controls_active();
-    int clear_limit = birth_prompt_row() + 1;
+    int hgt;
+
+    (void)col;
+    (void)wid;
+    (void)hook;
 
     /* Autoselect if able */
     // if (num == 1) done = true;
 
-    /* Clear */
-    if (clear_limit < TABLE_ROW)
-        clear_limit = TABLE_ROW;
-    for (i = TABLE_ROW; i < clear_limit; i++)
-    {
-        /* Clear */
-        Term_erase(col, i, 255/* Term->wid - wid */);
-    }
-
     /* Choose */
     while (true)
     {
-        int description_row = birth_description_base_row();
-        int list_rows_drawn;
+        app_ui_scene scene;
 
         hgt = birth_prompt_row() - TABLE_ROW - 1;
-
-        /*
-         * If we're going to use a tighter, compact traits layout on very short
-         * screens, reserve one extra line above DESCRIPTION_ROW.
-         *
-         * This avoids the menu list occupying the same row we may use for
-         * compact trait output.
-         */
-        if (allow_full_description_screen)
+        if (hgt < 4)
+            hgt = 4;
+        if (!birth_selection_build_ui_scene(&scene, choices, num, top, cur,
+                allow_full_description_screen)
+            || !birth_menu_scene_present(&scene))
         {
-            bool compact_flags = character_flags_need_compact_layout();
-            bool very_short = (Term->hgt > 0) && (Term->hgt <= 20);
-            if (compact_flags && very_short)
-            {
-                int max_hgt = (description_row - 2) - TABLE_ROW;
-                if (max_hgt < 0) max_hgt = 0;
-                if (hgt > max_hgt) hgt = max_hgt;
-            }
-        }
-        else if ((Term->hgt > 0) && (Term->hgt <= 20))
-        {
-            int min_description_rows = (Term->hgt <= 18) ? 5 : 4;
-            int description_rows = choice_description_line_count(choices[cur].text);
-            int max_hgt;
-
-            if (description_rows > min_description_rows)
-                min_description_rows = description_rows;
-
-            max_hgt = birth_prompt_row() - TABLE_ROW - 2 - min_description_rows;
-            if (max_hgt < 0) max_hgt = 0;
-            if (hgt > max_hgt) hgt = max_hgt;
-        }
-
-        /* Redraw the list */
-        for (i = 0; ((i + top < num) && (i <= hgt)); i++)
-        {
-            /* Clear */
-            Term_erase(col, i + TABLE_ROW, wid);
-
-            /* Display name part */
-            if (i == (cur - top))
-            {
-                /* Highlight the current selection */
-                if (choices[i + top].ghost)
-                    attr = TERM_BLUE;
-                else
-                    attr = TERM_L_BLUE;
-            }
-            else
-            {
-                if (choices[i + top].ghost)
-                    attr = TERM_SLATE;
-                else
-                    attr = TERM_WHITE;
-            }
-
-            /* Display character name */
-            char name_part[256];
-            if (choices[i + top].ghost)
-                strnfmt(name_part, sizeof(name_part), "%c %s", 'X', choices[i + top].name);
-            else 
-                strnfmt(name_part, sizeof(name_part), "%s", choices[i + top].name);
-            
-            Term_putstr(col, i + TABLE_ROW, wid, attr, name_part);
-        }
-
-        list_rows_drawn = i;
-
-        if (!allow_full_description_screen)
-            description_row = choice_description_row(list_rows_drawn, false);
-
-        {
-            int clear_from_row = description_row;
-            if (allow_full_description_screen)
-            {
-                bool compact_flags = character_flags_need_compact_layout();
-                bool very_short = (Term->hgt > 0) && (Term->hgt <= 20);
-                if (compact_flags && very_short)
-                    clear_from_row = description_row - 1;
-
-                /*
-                 * On compact screens, the previous race-selection phase can
-                 * leave wrapped description text a few rows above the compact
-                 * character traits area. Clear from the earlier race
-                 * description start as well so stale fragments do not remain
-                 * when switching phases.
-                 */
-                if (compact_flags)
-                {
-                    int race_description_row = choice_description_row(z_info->p_max, false);
-                    if (race_description_row < clear_from_row)
-                        clear_from_row = race_description_row;
-                }
-            }
-            for (i = clear_from_row; i < Term->hgt; i++)
-                Term_erase(0, i, 255);
-        }
-
-        compact_flags = (allow_full_description_screen && character_flags_need_compact_layout());
-        show_description = (!compact_flags);
-
-        if (allow_full_description_screen)
-            show_description = (show_description && character_description_has_room());
-
-        /* Display auxiliary information before the description so the
-         * description text remains the topmost layer on short screens. */
-        if (hook)
-            hook(choices[cur]);
-
-        if (show_description && choices[cur].text != NULL)
-        {
-            /* Indent output by 2 character, and wrap at column 79 */
-            text_out_wrap = 79;
-            text_out_indent = 2;
-
-            /* History */
-            Term_gotoxy(text_out_indent, description_row);
-            text_out_to_screen(TERM_WHITE, choices[cur].text);
-
-            /* Reset text_out() vars */
-            text_out_wrap = 0;
-            text_out_indent = 0;
+            log_warn("birth selection: semantic scene presentation failed");
+            return INVALID_CHOICE;
         }
 
         if (done)
             return (cur);
-
-        if (Term->hgt > 0)
-        {
-            prompt_row = birth_prompt_row();
-            Term_erase(0, prompt_row, 255);
-
-            if (steamdeck)
-            {
-                char confirm_label[16];
-                char detail_label[16];
-                char back_label[16];
-                char random_label[16];
-
-                birth_prompt_label(steamdeck_confirm_key(), "A",
-                    confirm_label, sizeof(confirm_label));
-                birth_prompt_label(steamdeck_alt_action_key(), "X",
-                    detail_label, sizeof(detail_label));
-                birth_prompt_label(steamdeck_back_key(), "B", back_label,
-                    sizeof(back_label));
-                birth_prompt_label('r', "r", random_label,
-                    sizeof(random_label));
-
-                if (allow_full_description_screen)
-                    strnfmt(prompt, sizeof(prompt),
-                        "D-pad move  %s select  %s details  %s back  %s random",
-                        confirm_label, detail_label, back_label, random_label);
-                else
-                    strnfmt(prompt, sizeof(prompt),
-                        "D-pad move  %s select  %s back  %s random",
-                        confirm_label, back_label, random_label);
-            }
-            else if (allow_full_description_screen)
-            {
-                strnfmt(prompt, sizeof(prompt),
-                    "SPACE/ENTER select  f description  ESC back  r random");
-            }
-            else
-            {
-                strnfmt(prompt, sizeof(prompt),
-                    "SPACE/ENTER select  ESC back  r random");
-            }
-            Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE, prompt);
-        }
-
-        /* Move the cursor */
-        put_str("", TABLE_ROW + cur - top, col);
 
         c = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
@@ -1799,11 +2210,6 @@ int curse_flag_delta_cur(u32b cur_flag)
     return delta;
 }
 
-typedef struct {
-    cptr txt;
-    byte attr;
-} birth_compact_flag_line;
-
 static int collect_character_trait_lines(int race, int character, bool short_labels,
     birth_compact_flag_line out[], int out_max, int* max_line_len)
 {
@@ -1934,585 +2340,6 @@ static int collect_character_trait_lines(int race, int character, bool short_lab
 
 
 /*
- * Show race/character flags in priority order.
- * Masteries first, then single-side affinities, then penalties,
- * and finally any “headline / unique” flags.
- */
-static void print_rh_flags(int race, int character, int col, int row)
-{
-    int flags_left  = 0;
-    int flags_right = 0;
-    bool compact_layout = character_flags_need_compact_layout();
-    int description_row = birth_description_base_row();
-    cptr ability_lines[CHARACTER_ABILITY_MAX];
-    int ability_line_n = collect_character_starting_abilities(character,
-        ability_lines, N_ELEMENTS(ability_lines));
-
-    byte attr_affinity = TERM_GREEN;
-    byte attr_mastery  = TERM_L_GREEN;
-    byte attr_penalty  = TERM_RED;
-    byte attr_gr_penalty  = TERM_L_RED;
-
-    const int col_pen = col + 21;
-
-    // Updated struct to support side
-    typedef struct {
-        const char *txt;
-        byte col;
-        int side;  // 0 = left, 1 = right
-    } skill_line;
-
-    skill_line mastery_buf [16], affinity_buf[16], penalty_buf[16], unique_buf[32];
-    int mastery_n = 0, affinity_n = 0, penalty_n = 0, unique_n = 0;
-
-/*
- * Show one skill line according to the new ±2 ↔ mastery / grand-penalty rule.
- *
- *   +1 for every …_AFFINITY bit, −1 for every …_PENALTY bit.
- *
- *        score   meaning            colour / buffer
- *        =====   ===============    =========================
- *          +2    mastery            mastery_buf  / attr_mastery
- *          +1    affinity           affinity_buf / attr_affinity
- *           0    (omit line)        —
- *          −1    penalty            penalty_buf  / attr_penalty
- *          −2    grand penalty      penalty_buf  / attr_penalty
- */
-/* Show one skill line according to the new ±2 rule,
- * now counting curse affinities / penalties too.
- */
-#define HANDLE_SKILL_EX(label, AFF_FLAG, PEN_FLAG)                          \
-    do {                                                                    \
-        int score = 0;                                                      \
-                                                                            \
-        /* race + character bits */                                             \
-        if (p_info[race].flags  & (AFF_FLAG)) score++;                      \
-        if (c_info[character].flags & (AFF_FLAG)) score++;                      \
-        if (p_info[race].flags  & (PEN_FLAG)) score--;                      \
-        if (c_info[character].flags & (PEN_FLAG)) score--;                      \
-                                                                            \
-        /* every copy of the same *RHF* curse flag */                       \
-        score += curse_flag_count_rhf(AFF_FLAG);                            \
-        score -= curse_flag_count_rhf(PEN_FLAG);                            \
-                                                                            \
-        /* clamp so the UI never shows >mastery or >grand-penalty */        \
-        if (score >  2) score =  2;                                         \
-        if (score < -2) score = -2;                                         \
-                                                                            \
-        if (score ==  2) {                                                  \
-            mastery_buf[mastery_n].txt = label " mastery";                  \
-            mastery_buf[mastery_n++].col = attr_mastery;                    \
-        } else if (score == 1) {                                            \
-            affinity_buf[affinity_n].txt = label " affinity";               \
-            affinity_buf[affinity_n++].col = attr_affinity;                 \
-        } else if (score == -1) {                                           \
-            penalty_buf[penalty_n].txt = label " penalty";                  \
-            penalty_buf[penalty_n++].col = attr_penalty;                    \
-        } else if (score == -2) {                                           \
-            penalty_buf[penalty_n].txt = label " grand penalty";            \
-            penalty_buf[penalty_n++].col = attr_gr_penalty;                 \
-        }                                                                   \
-    } while (0)
-
-
-// New: (label, FLAG, COLOR, SIDE) where SIDE = 0 (left) or 1 (right)
-#define HANDLE_UNIQUE(label, FLAG, COLOR, SIDE)                             \
-    do {                                                                    \
-        int race_has     = p_info[race].flags & (FLAG);                     \
-        int character_has = c_info[character].flags & (FLAG);               \
-        if (race_has || character_has) {                                    \
-            unique_buf[unique_n].txt  = label;                              \
-            unique_buf[unique_n].col  = (COLOR);                            \
-            unique_buf[unique_n++].side = (SIDE);                           \
-        }                                                                   \
-    } while (0)
-
-// New: (label, FLAG, COLOR, SIDE) where SIDE = 0 (left) or 1 (right)
-#define HANDLE_UNIQUE_U(label, FLAG, COLOR, SIDE)                             \
-    do {                                                                    \
-        int character_has = c_info[character].flags_u & (FLAG);             \
-        if (character_has) {                                                \
-            unique_buf[unique_n].txt  = label;                              \
-            unique_buf[unique_n].col  = (COLOR);                            \
-            unique_buf[unique_n++].side = (SIDE);                           \
-        }                                                                   \
-    } while (0)
-
-    // Skills
-    HANDLE_SKILL_EX("melee",      RHF_MEL_AFFINITY, RHF_MEL_PENALTY);
-    HANDLE_SKILL_EX("evasion",    RHF_EVN_AFFINITY, RHF_EVN_PENALTY);
-    HANDLE_SKILL_EX("stealth",    RHF_STL_AFFINITY, RHF_STL_PENALTY);
-    HANDLE_SKILL_EX("archery",    RHF_ARC_AFFINITY, RHF_ARC_PENALTY);
-    HANDLE_SKILL_EX("will",       RHF_WIL_AFFINITY, RHF_WIL_PENALTY);
-    HANDLE_SKILL_EX("perception", RHF_PER_AFFINITY, RHF_PER_PENALTY);
-    HANDLE_SKILL_EX("smithing",   RHF_SMT_AFFINITY, RHF_SMT_PENALTY);
-    HANDLE_SKILL_EX("song",       RHF_SNG_AFFINITY, RHF_SNG_PENALTY);
-    HANDLE_SKILL_EX("bow",        RHF_BOW_PROFICIENCY, 0);
-    HANDLE_SKILL_EX("axe",        RHF_AXE_PROFICIENCY, 0);
-
-    // Unique skills: SIDE = 0 (left), 1 (right)
-    HANDLE_UNIQUE_U("Master Artisan",   UNQ_SMT_FEANOR,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE_U("Creator of Galvorn",   UNQ_SMT_EOL,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE_U("One Handed",   UNQ_MEL_MAEDHROS,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE_U("Agarwaen",   UNQ_WIL_TURIN,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE_U("Hidden city",   UNQ_SNG_TURGON,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE_U("Chosen of Ulmo",   UNQ_WIL_TUOR, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Indominable Will",   UNQ_EARENDIL, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Orome Himself",   UNQ_WIL_FIN, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Songs of Power",   UNQ_SNG_FIN, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Elven Dance",   UNQ_SNG_LUT, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Girdle of Melian",   UNQ_SNG_MEL, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Creator of Angrist",   UNQ_SMT_TELCHAR, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Old Master",   UNQ_SMT_GAMIL, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Ring Master",   UNQ_SMT_CELEBRIMBOR, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Aure entuluva",   UNQ_SNG_HURIN, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Voice of Girdle",   UNQ_SNG_THINGOL, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Forgotten",   UNQ_MIM, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Minstrel",   UNQ_MINSTREL, TERM_VIOLET,   1);
-    HANDLE_UNIQUE_U("Woven Master",   UNQ_WOVEN_MASTER, TERM_VIOLET,   1);
-
-    HANDLE_UNIQUE("Gift of Eru",   RHF_GIFTERU,     TERM_VIOLET,     1);
-    HANDLE_UNIQUE("Seafarer",   RHF_FREE, TERM_VIOLET,   1);
-
-    HANDLE_UNIQUE("Kinslayer",   RHF_KINSLAYER, TERM_UMBER,   1); // right
-    HANDLE_UNIQUE("Treacherous",   RHF_TREACHERY, TERM_UMBER,   1); // right
-    HANDLE_UNIQUE("Doom of Mandos",   RHF_CURSE, TERM_UMBER,   1); // right
-    HANDLE_UNIQUE("Morgoth Curse",   RHF_MOR_CURSE, TERM_UMBER,   1); // right
-
-    if (compact_layout)
-    {
-        char line_buf[64];
-        birth_compact_flag_line compact_lines[64];
-        birth_compact_flag_line short_trait_lines[64];
-        int compact_line_n = 0;
-        int compact_max_line_len = 0;
-        int short_trait_n = 0;
-        int short_trait_max_line_len = 0;
-        int prompt_row = birth_prompt_row();
-        bool tight_height = character_selection_tight_height();
-        bool use_swapped_layout = false;
-
-        compact_line_n = collect_character_trait_lines(race, character, false,
-            compact_lines, N_ELEMENTS(compact_lines), &compact_max_line_len);
-        short_trait_n = collect_character_trait_lines(race, character, true,
-            short_trait_lines, N_ELEMENTS(short_trait_lines), &short_trait_max_line_len);
-
-        if (tight_height)
-        {
-            const int target_traits = (short_trait_n < 9) ? short_trait_n : 9;
-            const int target_abilities = (ability_line_n < 3) ? ability_line_n : 3;
-            const int min_upper_two_col_wid = 12;
-            int upper_rows_total = description_row - row;
-            int lower_rows_total = prompt_row - description_row;
-            int upper_col = col;
-            int upper_width = Term->wid - upper_col;
-            int upper_col_gap = 2;
-            int upper_col_wid = (upper_width - upper_col_gap) / 2;
-            bool show_trait_heading = true;
-            bool show_ability_heading = true;
-            bool use_upper_two_columns = false;
-            bool traits_fit = false;
-            bool abilities_fit = false;
-
-            if (upper_rows_total < 0)
-                upper_rows_total = 0;
-            if (lower_rows_total < 0)
-                lower_rows_total = 0;
-            if (upper_col_wid < 0)
-                upper_col_wid = 0;
-
-            if (target_abilities == 0)
-            {
-                show_ability_heading = false;
-                abilities_fit = true;
-            }
-            else if ((lower_rows_total - 1) >= target_abilities)
-            {
-                show_ability_heading = true;
-                abilities_fit = true;
-            }
-            else if (lower_rows_total >= target_abilities)
-            {
-                show_ability_heading = false;
-                abilities_fit = true;
-            }
-
-            if (target_traits == 0)
-            {
-                show_trait_heading = false;
-                traits_fit = true;
-            }
-            else if (upper_col_wid >= min_upper_two_col_wid)
-            {
-                if ((upper_rows_total - 1) > 0 && ((upper_rows_total - 1) * 2 >= target_traits))
-                {
-                    show_trait_heading = true;
-                    use_upper_two_columns = true;
-                    traits_fit = true;
-                }
-                else if (upper_rows_total > 0 && (upper_rows_total * 2 >= target_traits))
-                {
-                    show_trait_heading = false;
-                    use_upper_two_columns = true;
-                    traits_fit = true;
-                }
-            }
-
-            if (!traits_fit && upper_width >= short_trait_max_line_len)
-            {
-                if ((upper_rows_total - 1) >= target_traits)
-                {
-                    show_trait_heading = true;
-                    use_upper_two_columns = false;
-                    traits_fit = true;
-                }
-                else if (upper_rows_total >= target_traits)
-                {
-                    show_trait_heading = false;
-                    use_upper_two_columns = false;
-                    traits_fit = true;
-                }
-            }
-
-            use_swapped_layout = traits_fit && abilities_fit;
-
-            if (use_swapped_layout)
-            {
-                int traits_row = row;
-                int ability_row = description_row;
-
-                if (show_trait_heading && short_trait_n > 0)
-                    Term_putstr(upper_col, traits_row++, -1, TERM_L_BLUE, "Traits:");
-
-                if (use_upper_two_columns)
-                {
-                    int col2 = upper_col + upper_col_wid + upper_col_gap;
-                    int rows_per_col = description_row - traits_row;
-                    int draw_lines;
-                    int left_count;
-                    int right_count;
-
-                    if (rows_per_col < 0)
-                        rows_per_col = 0;
-                    draw_lines = (short_trait_n < rows_per_col * 2)
-                        ? short_trait_n : rows_per_col * 2;
-                    left_count = (draw_lines + 1) / 2;
-                    if (left_count > rows_per_col)
-                        left_count = rows_per_col;
-                    right_count = draw_lines - left_count;
-                    if (right_count > rows_per_col)
-                        right_count = rows_per_col;
-                    left_count = draw_lines - right_count;
-
-                    for (int i = 0; i < left_count; ++i)
-                    {
-                        strnfmt(line_buf, sizeof(line_buf), "%-*.*s", upper_col_wid,
-                            upper_col_wid, short_trait_lines[i].txt);
-                        Term_putstr(upper_col, traits_row + i, -1,
-                            short_trait_lines[i].attr, line_buf);
-                    }
-
-                    for (int i = 0; i < right_count; ++i)
-                    {
-                        int idx = left_count + i;
-                        strnfmt(line_buf, sizeof(line_buf), "%-*.*s", upper_col_wid,
-                            upper_col_wid, short_trait_lines[idx].txt);
-                        Term_putstr(col2, traits_row + i, -1,
-                            short_trait_lines[idx].attr, line_buf);
-                    }
-                }
-                else
-                {
-                    int rows = description_row - traits_row;
-                    int draw_lines;
-
-                    if (rows < 0)
-                        rows = 0;
-                    draw_lines = (short_trait_n < rows) ? short_trait_n : rows;
-
-                    for (int i = 0; i < draw_lines; ++i)
-                        Term_putstr(upper_col, traits_row + i, -1,
-                            short_trait_lines[i].attr, short_trait_lines[i].txt);
-                }
-
-                if (show_ability_heading && ability_line_n > 0)
-                    Term_putstr(2, ability_row++, -1, TERM_L_BLUE, "Abilities:");
-
-                {
-                    int rows = prompt_row - ability_row;
-                    int draw_lines;
-
-                    if (rows < 0)
-                        rows = 0;
-                    draw_lines = (ability_line_n < rows) ? ability_line_n : rows;
-
-                    for (int i = 0; i < draw_lines; ++i)
-                        Term_putstr(2, ability_row + i, -1, TERM_YELLOW, ability_lines[i]);
-                }
-            }
-        }
-
-        if (!use_swapped_layout)
-        {
-            int compact_row = description_row;
-            int compact_col = 2;
-            int col_gap = 2;
-            int col_wid;
-            bool use_two_columns = false;
-            int right_offset = 0; /* 0=normal, -1=right column starts on title row, -2=one row above */
-
-            for (int i = 0; i < ability_line_n && (row + i) < description_row; ++i)
-                Term_putstr(col, row + i, -1, TERM_YELLOW, ability_lines[i]);
-
-            col_wid = (Term->wid - compact_col - col_gap) / 2;
-            if (col_wid < 1)
-                col_wid = 1;
-
-            if (col_wid >= compact_max_line_len)
-                use_two_columns = true;
-
-            {
-                const bool short_screen = (Term->hgt > 0) && (Term->hgt < 24);
-                const int target_limit = tight_height ? 9 : 10;
-                const int target_traits = (compact_line_n < target_limit) ? compact_line_n : target_limit;
-                const int min_col_wid_for_forced_two_cols = 14;
-
-#define MAX0(v) ((v) > 0 ? (v) : 0)
-#define CAPACITY_ONE(_row) (MAX0(Term->hgt - ((_row) + 1) - 1))
-#define CAPACITY_TWO(_row, _roff) \
-    (MAX0(Term->hgt - ((_row) + 1) - 1) + MAX0(Term->hgt - ((_row) + 1 + (_roff)) - 1))
-
-                int base_capacity = use_two_columns ? CAPACITY_TWO(compact_row, right_offset)
-                                                   : CAPACITY_ONE(compact_row);
-
-                if (short_screen && (base_capacity < target_traits))
-                {
-                    if (compact_row > 0)
-                        compact_row = description_row - 1;
-
-                    base_capacity = use_two_columns ? CAPACITY_TWO(compact_row, right_offset)
-                                                   : CAPACITY_ONE(compact_row);
-
-                    if ((base_capacity < target_traits) && !use_two_columns
-                        && (col_wid >= min_col_wid_for_forced_two_cols))
-                    {
-                        use_two_columns = true;
-                        base_capacity = CAPACITY_TWO(compact_row, right_offset);
-                    }
-
-                    if ((base_capacity < target_traits) && use_two_columns)
-                    {
-                        right_offset = -1;
-                        base_capacity = CAPACITY_TWO(compact_row, right_offset);
-                    }
-
-                    if ((base_capacity < target_traits) && use_two_columns && (compact_row > 0))
-                    {
-                        right_offset = -2;
-                        base_capacity = CAPACITY_TWO(compact_row, right_offset);
-                    }
-                }
-
-#undef CAPACITY_TWO
-#undef CAPACITY_ONE
-#undef MAX0
-            }
-
-            {
-                int compact_available = Term->hgt - compact_row - 1;
-
-                if ((compact_available > 0) && (Term->hgt > 0))
-                    Term_putstr(compact_col, compact_row, -1, TERM_L_BLUE, "Character traits:");
-
-                if (use_two_columns)
-                {
-                    int col2 = compact_col + col_wid + col_gap;
-                    int left_start = compact_row + 1;
-                    int right_start = compact_row + 1 + right_offset;
-                    int left_rows = Term->hgt - left_start - 1;
-                    int right_rows = Term->hgt - right_start - 1;
-                    int max_lines;
-                    int draw_lines;
-                    int left_count;
-                    int right_count;
-
-                    if (left_rows < 0) left_rows = 0;
-                    if (right_rows < 0) right_rows = 0;
-
-                    max_lines = left_rows + right_rows;
-                    draw_lines = (compact_line_n < max_lines) ? compact_line_n : max_lines;
-
-                    left_count = (draw_lines + 1) / 2;
-                    if (left_count > left_rows) left_count = left_rows;
-                    right_count = draw_lines - left_count;
-                    if (right_count > right_rows) right_count = right_rows;
-                    if (left_count > (draw_lines - right_count))
-                        left_count = draw_lines - right_count;
-                    draw_lines = left_count + right_count;
-
-                    for (int i = 0; i < left_count; ++i)
-                    {
-                        int y = left_start + i;
-                        strnfmt(line_buf, sizeof(line_buf), "%-*.*s", col_wid, col_wid,
-                            compact_lines[i].txt);
-                        Term_putstr(compact_col, y, -1, compact_lines[i].attr, line_buf);
-                    }
-
-                    for (int i = 0; i < right_count; ++i)
-                    {
-                        int idx = left_count + i;
-                        int y = right_start + i;
-                        strnfmt(line_buf, sizeof(line_buf), "%-*.*s", col_wid, col_wid,
-                            compact_lines[idx].txt);
-                        Term_putstr(col2, y, -1, compact_lines[idx].attr, line_buf);
-                    }
-                }
-                else
-                {
-                    int start_row = compact_row + 1;
-                    int rows = Term->hgt - start_row - 1;
-                    int draw_lines;
-
-                    if (rows < 0)
-                        rows = 0;
-                    draw_lines = (compact_line_n < rows) ? compact_line_n : rows;
-
-                    for (int i = 0; i < draw_lines; ++i)
-                        Term_putstr(compact_col, start_row + i, -1,
-                            compact_lines[i].attr, compact_lines[i].txt);
-                }
-            }
-        }
-    }
-    else
-    {
-        // Left column
-        for (int i = 0; i < unique_n; ++i)
-            if (unique_buf[i].side == 0)
-                Term_putstr(col, row + flags_left++, -1, unique_buf[i].col, unique_buf[i].txt);
-        for (int i = 0; i < mastery_n;  ++i)
-            Term_putstr(col, row + flags_left++, -1, mastery_buf[i].col, mastery_buf[i].txt);
-        for (int i = 0; i < affinity_n; ++i)
-            Term_putstr(col, row + flags_left++, -1, affinity_buf[i].col, affinity_buf[i].txt);
-
-        // Right column
-        for (int i = 0; i < unique_n; ++i)
-            if (unique_buf[i].side == 1)
-                Term_putstr(col_pen, row + flags_right++, -1, unique_buf[i].col, unique_buf[i].txt);
-        for (int i = 0; i < penalty_n; ++i)
-            Term_putstr(col_pen, row + flags_right++, -1, penalty_buf[i].col, penalty_buf[i].txt);
-    }
-
-#undef HANDLE_SKILL_EX
-#undef HANDLE_UNIQUE
-#undef HANDLE_UNIQUE_U
-
-if (!compact_layout)
-{
-    Term_erase(col +7, row - 5, 30);
-
-
-/* Display starting abilities */
-    if (ability_line_n > 0)
-    {
-        const int x     = col + 7;
-        const int y0    = row - 5;
-        const int width = 30;   /* how many cols to clear */
-
-        /* 1) clear out every possible line first */
-        for (int i = 0; i < CHARACTER_ABILITY_MAX - 3; i++)
-        {
-            Term_erase(x, y0 + i, width);
-        }
-
-        /* 2) now draw the actual list */
-        int y = y0;
-        int max_lines = CHARACTER_ABILITY_MAX - 3;
-        if (ability_line_n < max_lines)
-            max_lines = ability_line_n;
-
-        for (int slot = 0; slot < max_lines; slot++)
-            Term_putstr(x, y++, -1, TERM_YELLOW, ability_lines[slot]);
-    }
-}
-}
-
-/*
- * Display additional information about each race during the selection.
- */
-static void race_aux_hook(birth_menu r_str)
-{
-    int race, i, adj;
-    char s[50];
-    byte attr;
-
-    /* Extract the proper race index from the string. */
-    for (race = 0; race < z_info->p_max; race++)
-    {
-        if (!strcmp(r_str.name, p_name + p_info[race].name))
-            break;
-    }
-
-    if (race == z_info->p_max)
-        return;
-
-    /* Display the stats */
-    for (i = 0; i < A_MAX; i++)
-    {
-        /*dump the stats*/
-        strnfmt(s, sizeof(s), "%s", stat_names[i]);
-        Term_putstr(RACE_AUX_COL, TABLE_ROW + i, -1, TERM_WHITE, s);
-
-        adj = p_info[race].r_adj[i];
-        strnfmt(s, sizeof(s), "%+d", adj);
-
-        if (adj < 0)
-            attr = TERM_RED;
-        else if (adj == 0)
-            attr = TERM_L_DARK;
-        else if (adj == 1)
-            attr = TERM_GREEN;
-        else if (adj == 2)
-            attr = TERM_L_GREEN;
-        else
-            attr = TERM_L_BLUE;
-
-        Term_putstr(RACE_AUX_COL + 4, TABLE_ROW + i, -1, attr, s);
-    }
-
-    /* Display the race flags */
-
-    Term_putstr(RACE_AUX_COL, TABLE_ROW + A_MAX + 1, -1, TERM_WHITE,
-        "                         ");
-    Term_putstr(RACE_AUX_COL, TABLE_ROW + A_MAX + 2, -1, TERM_WHITE,
-        "                         ");
-    Term_putstr(RACE_AUX_COL, TABLE_ROW + A_MAX + 3, -1, TERM_WHITE,
-        "                         ");
-    Term_putstr(RACE_AUX_COL, TABLE_ROW + A_MAX + 4, -1, TERM_WHITE,
-        "                        ");
-
-    /* Clear the TOTAL_AUX_COL area (where character info was displayed) */
-    Term_putstr(TOTAL_AUX_COL, HEADER_ROW, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 1, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 2, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 3, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 4, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 5, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 6, -1, TERM_WHITE,
-        "                                         ");
-    Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX + 7, -1, TERM_WHITE,
-        "                                         ");
-
-    // print_rh_flags(race, 0, RACE_AUX_COL, TABLE_ROW + A_MAX + 1);
-}
-
-/*
  * Player race
  */
 static bool get_player_race(void)
@@ -2532,7 +2359,7 @@ static bool get_player_race(void)
     }
 
     race = get_player_choice(
-        races, z_info->p_max, p_ptr->prace, RACE_COL, 15, race_aux_hook, false);
+        races, z_info->p_max, p_ptr->prace, RACE_COL, 15, NULL, false);
 
     /* No selection? */
     if (race == INVALID_CHOICE)
@@ -2572,192 +2399,6 @@ static int is_set(int bit) {
     return (rp_ptr->choice[word] & (1U << shift)) != 0;
 }
 
-/*
- * Display additional information about each character during the selection.
- */
-
-static void character_aux_hook(birth_menu c_str)
-{
-    int character_idx, i, adj;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int description_row = birth_description_base_row();
-    bool compact_layout = character_flags_need_compact_layout();
-    bool tight_height = character_selection_tight_height();
-    int name_col;
-    int fallback_name_col;
-    bool aligned_name_fits;
-    char s[128];
-    byte attr;
-
-    /* Extract the proper character index from the string. */
-    for (character_idx = 0; character_idx < z_info->c_max; character_idx++)
-    {
-        if (!strcmp(c_str.name, c_name + c_info[character_idx].name))
-            break;
-    }
-
-    if (character_idx == z_info->c_max)
-        return;
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
-
-    /* Clear the entire TOTAL_AUX_COL area FIRST before displaying new info */
-    /* Clear from HEADER_ROW down but stop before DESCRIPTION_ROW to preserve history */
-    for (i = HEADER_ROW; i < description_row; i++)
-    {
-        Term_putstr(TOTAL_AUX_COL, i, -1, TERM_WHITE,
-            "                                         ");
-        /* Also clear the right side area where penalties/flags appear */
-        Term_putstr(TOTAL_AUX_COL + 21, i, -1, TERM_WHITE,
-            "                                         ");
-    }
-
-    /* Also clear the abilities area (col + 7) but only in the same range */
-    for (i = 0; i < description_row; i++)
-    {
-        Term_erase(TOTAL_AUX_COL + 7, i, 60);  /* Wider clearing */
-    }
-
-    /* Now display the new stats */
-    for (i = 0; i < A_MAX; i++)
-    {
-        /*dump potential total stats*/
-        strnfmt(s, sizeof(s), "%s", stat_names[i]);
-        Term_putstr(TOTAL_AUX_COL, TABLE_ROW + i, -1, TERM_WHITE, s);
-
-        adj = c_info[character_idx].h_adj[i] + rp_ptr->r_adj[i] + curses_stat_adj(i);
-        strnfmt(s, sizeof(s), "%+d", adj);
-
-        if (adj < 0)
-            attr = TERM_RED;
-        else if (adj == 0)
-            attr = TERM_L_DARK;
-        else if (adj == 1)
-            attr = TERM_GREEN;
-        else if (adj == 2)
-            attr = TERM_L_GREEN;
-        else
-            attr = TERM_L_BLUE;
-
-        Term_putstr(TOTAL_AUX_COL + 4, TABLE_ROW + i, -1, attr, s);
-    }
-    // Check dead
-    // if (c_str.ghost) Term_putstr(TOTAL_AUX_COL, QUESTION_ROW + A_MAX + 7, -1, TERM_RED,
-    //     "Dead");
-    // else Term_putstr(TOTAL_AUX_COL, TABLE_ROW + A_MAX +7, -1, TERM_L_BLUE,
-    //     "Alive");
-    char pretty_name[40];
-    strnfmt(pretty_name, sizeof(pretty_name), "%s%s", c_name + c_info[character_idx].name, c_name + c_info[character_idx].alt_name); 
-    
-    /* Add power stars to the character name */
-    char power_stars[16];
-    byte star_attr;
-    byte power = c_info[character_idx].power;
-    switch (power)
-    {
-        case 0: 
-            star_attr = TERM_RED; 
-            strnfmt(power_stars, sizeof(power_stars), " *"); 
-            break;           /* Weak - 1 red star */
-        case 1: 
-            star_attr = TERM_WHITE; 
-            strnfmt(power_stars, sizeof(power_stars), " **"); 
-            break;          /* Average - 2 white stars */
-        case 2: 
-            star_attr = TERM_GREEN; 
-            strnfmt(power_stars, sizeof(power_stars), " ***"); 
-            break;         /* Powerful - 3 green stars */
-        case 3: 
-        case 4:
-            star_attr = TERM_L_GREEN; 
-            strnfmt(power_stars, sizeof(power_stars), " ***"); 
-            break;        /* Very Powerful - 3 bright green stars (P:3 or P:4) */
-        default: 
-            star_attr = TERM_WHITE; 
-            strnfmt(power_stars, sizeof(power_stars), " **"); 
-            break;         /* Default to average */
-    }
-    
-    fallback_name_col = QUESTION_COL + (int)strlen(character_selection_header_text(true)) + 1;
-    if (fallback_name_col < 0)
-        fallback_name_col = 0;
-    Term_erase(fallback_name_col, HEADER_ROW, 255);
-
-    aligned_name_fits =
-        (TOTAL_AUX_COL + (int)strlen(pretty_name) + (int)strlen(power_stars) < term_wid);
-    name_col = aligned_name_fits ? TOTAL_AUX_COL : fallback_name_col;
-
-    Term_putstr(name_col, HEADER_ROW, -1, TERM_L_BLUE, pretty_name);
-    Term_putstr(name_col + strlen(pretty_name), HEADER_ROW, -1, star_attr, power_stars);
-    
-    {
-        int legend_row = (compact_layout && tight_height) ? 9 : 10;
-        int left_block_width = CLASS_COL - 1;
-
-        if (legend_row < TABLE_ROW + A_MAX + 3)
-            legend_row = TABLE_ROW + A_MAX + 3;
-
-        if (left_block_width < 1)
-            left_block_width = 1;
-
-        if (compact_layout && tight_height)
-        {
-            for (i = legend_row; i < birth_prompt_row(); ++i)
-                Term_erase(0, i, left_block_width);
-        }
-    }
-
-    print_rh_flags(
-        p_ptr->prace, character_idx, TOTAL_AUX_COL, TABLE_ROW + A_MAX + 1);
-
-    {
-        int legend_col = 2;  /* Left side */
-        int legend_row = (compact_layout && tight_height) ? 9 : 10;
-
-        if (legend_row + 3 < birth_prompt_row())
-        {
-            /* Count alive heroes by power level across ALL races */
-            int power_counts[4] = {0, 0, 0, 0};  /* weak, fair, strong, mighty (P:3/P:4) */
-            for (int i = 0; i < z_info->c_max; i++)
-            {
-                /* Count only characters that are NOT dead (alive) */
-                if (highscore_dead(c_name + c_info[i].name) == 0)  /* If NOT dead (alive) */
-                {
-                    byte power = c_info[i].power;
-                    if (power <= 4)
-                    {
-                        if (power == 4)
-                            power_counts[3]++;  /* P:4 counts toward "Mighty" (same group as P:3) */
-                        else
-                            power_counts[power]++;
-                    }
-                }
-            }
-
-            /* Display legend without "Power Rating:" header */
-            Term_putstr(legend_col, legend_row, -1, TERM_L_GREEN, "***");
-            strnfmt(s, sizeof(s), "Mighty %d", power_counts[3]);
-            Term_putstr(legend_col + 4, legend_row, -1, TERM_WHITE, s);
-
-            Term_putstr(legend_col, legend_row + 1, -1, TERM_GREEN, "***");
-            strnfmt(s, sizeof(s), "Strong %d", power_counts[2]);
-            Term_putstr(legend_col + 4, legend_row + 1, -1, TERM_WHITE, s);
-
-            Term_putstr(legend_col, legend_row + 2, -1, TERM_WHITE, "**");
-            strnfmt(s, sizeof(s), "Fair %d", power_counts[1]);
-            Term_putstr(legend_col + 4, legend_row + 2, -1, TERM_WHITE, s);
-
-            Term_putstr(legend_col, legend_row + 3, -1, TERM_RED, "*");
-            strnfmt(s, sizeof(s), "Weak %d", power_counts[0]);
-            Term_putstr(legend_col + 4, legend_row + 3, -1, TERM_WHITE, s);
-        }
-    }
-}
 /*
  * Player character template selection
  */
@@ -2806,7 +2447,7 @@ static bool get_character_profile(void)
     }
 
     character_choice = get_player_choice(
-        character_menu, character, previous_choice, CLASS_COL, 22, character_aux_hook, true);
+        character_menu, character, previous_choice, CLASS_COL, 22, NULL, true);
 
     /* No selection? */
     if (character_choice == INVALID_CHOICE)
@@ -2869,6 +2510,127 @@ static cptr blitz_effect_mode_name(byte mode)
     case BLITZ_EFFECT_SELECTED_DESCR: return "Selected + descriptions";
     default: return "Random";
     }
+}
+
+typedef struct birth_menu_scene_scope {
+    bool active;
+    bool restore_previous_snapshot;
+    app_snapshot previous_snapshot;
+    app_menu_snapshot* previous_menu_snapshot;
+    app_wait_scope wait_scope;
+} birth_menu_scene_scope;
+
+static app_menu_snapshot* birth_menu_scene_clone_snapshot(
+    const app_menu_snapshot* snapshot)
+{
+    app_menu_snapshot* copy;
+
+    if (!snapshot)
+        return NULL;
+
+    copy = mem_alloc(app_menu_snapshot);
+    if (!copy)
+        return NULL;
+
+    app_menu_snapshot_init(copy);
+    copy->snapshot = snapshot->snapshot;
+    copy->snapshot.blobs = copy->blobs;
+    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
+    copy->blobs[0].kind = snapshot->blobs[0].kind;
+    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
+    copy->blobs[0].data = (const byte*)&copy->scene;
+    copy->blobs[0].size = sizeof(copy->scene);
+    copy->scene = snapshot->scene;
+    return copy;
+}
+
+static bool birth_menu_scene_supported(void)
+{
+    app_session* session = app_session_current();
+
+    return runtime_cli_snapshot_renderer() && session
+        && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
+}
+
+static bool birth_menu_scene_enter(birth_menu_scene_scope* scope, u16b reason)
+{
+    app_session* session;
+    const app_snapshot* snapshot;
+
+    if (!scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    if (!birth_menu_scene_supported())
+        return false;
+
+    session = app_session_current();
+    snapshot = app_session_snapshot(session);
+    if (snapshot)
+        scope->previous_snapshot = *snapshot;
+    scope->restore_previous_snapshot = true;
+
+    if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
+    {
+        scope->previous_menu_snapshot = birth_menu_scene_clone_snapshot(
+            app_session_menu_snapshot(session));
+        if (!scope->previous_menu_snapshot)
+            return false;
+    }
+
+    app_session_push_wait_scope(session, &scope->wait_scope, reason, 0, 0);
+    app_session_clear_inputs(session);
+    scope->active = true;
+    return true;
+}
+
+static bool birth_menu_scene_present(const app_ui_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scene || !session)
+        return false;
+    if (!app_session_publish_menu_scene(session, scene))
+        return false;
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    return true;
+}
+
+static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active || !session)
+        return;
+
+    app_session_clear_inputs(session);
+    if (scope->restore_previous_snapshot)
+    {
+        if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
+            && scope->previous_menu_snapshot)
+        {
+            (void)app_session_publish_menu_scene(session,
+                &scope->previous_menu_snapshot->scene);
+        }
+        else if (scope->previous_snapshot.scene == APP_SCENE_KIND_NONE)
+        {
+            app_session_set_snapshot(session, NULL);
+        }
+        else
+        {
+            app_session_set_snapshot(session, &scope->previous_snapshot);
+        }
+    }
+    else
+    {
+        app_session_clear_menu_snapshot(session);
+        app_session_set_snapshot(session, NULL);
+    }
+
+    app_session_pop_wait_scope(session, &scope->wait_scope);
+    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
+    scope->active = false;
 }
 
 static void blitz_setup_clamp(blitz_setup* setup)
@@ -2967,27 +2729,190 @@ static void blitz_setup_draw(const blitz_setup* setup, int selected)
     }
 }
 
+static bool blitz_setup_build_ui_scene(app_ui_scene* scene,
+    const blitz_setup* setup, int selected)
+{
+    static const char* const titles[] = {
+        "Character", "Oaths", "Blessings", "Curses", "Effect Picks"
+    };
+    app_ui_panel* panel;
+    cptr detail = "";
+    char meta[64];
+    char keybuf[16];
+    bool steamdeck = steamdeck_controls_active();
+
+    if (!scene || !setup)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->selected_row = selected;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 1800);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Setup");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Configure a self-contained Blitz run. Story progress stays untouched.");
+
+    strnfmt(meta, sizeof(meta), "%s",
+        blitz_character_mode_name(setup->character_mode));
+    if (!app_ui_panel_add_row(panel, 0, selected == 0 ? TERM_L_BLUE : TERM_WHITE,
+            true, selected == 0, "", titles[0], meta))
+    {
+        return false;
+    }
+
+    strnfmt(meta, sizeof(meta), "%s", setup->oaths_enabled ? "Yes" : "No");
+    if (!app_ui_panel_add_row(panel, 1, selected == 1 ? TERM_L_BLUE : TERM_WHITE,
+            true, selected == 1, "", titles[1], meta))
+    {
+        return false;
+    }
+
+    strnfmt(meta, sizeof(meta), "%d", setup->blessing_count);
+    if (!app_ui_panel_add_row(panel, 2, selected == 2 ? TERM_L_BLUE : TERM_WHITE,
+            true, selected == 2, "", titles[2], meta))
+    {
+        return false;
+    }
+
+    strnfmt(meta, sizeof(meta), "%d", setup->curse_count);
+    if (!app_ui_panel_add_row(panel, 3, selected == 3 ? TERM_L_BLUE : TERM_WHITE,
+            true, selected == 3, "", titles[3], meta))
+    {
+        return false;
+    }
+
+    strnfmt(meta, sizeof(meta), "%s", blitz_effect_mode_name(setup->effect_mode));
+    if (!app_ui_panel_add_row(panel, 4, selected == 4 ? TERM_L_BLUE : TERM_WHITE,
+            true, selected == 4, "", titles[4], meta))
+    {
+        return false;
+    }
+
+    switch (selected)
+    {
+    case 0:
+        detail = "Choose a selected character, a fully random character, or a random character with manual stat assignment.";
+        break;
+    case 1:
+        detail = "Enable oath selection during birth, or skip oaths entirely for this Blitz run.";
+        break;
+    case 2:
+        detail = "Pick how many blessings will be applied before the run starts.";
+        break;
+    case 3:
+        detail = "Pick how many curses will be applied before the run starts. Curses can never be fewer than blessings.";
+        break;
+    case 4:
+        detail = "Choose whether effects are random, selected from a list, or selected with full descriptions and effect text.";
+        break;
+    default:
+        break;
+    }
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+        (selected >= 0 && selected < 5) ? titles[selected] : "Blitz Setup");
+    if (!birth_ui_panel_add_wrapped_lines(panel, TERM_WHITE, detail, true))
+        return false;
+
+    if (steamdeck)
+    {
+        birth_prompt_label(steamdeck_confirm_key(), "A", keybuf,
+            sizeof(keybuf));
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                keybuf, "Begin"))
+        {
+            return false;
+        }
+        birth_prompt_label(steamdeck_back_key(), "B", keybuf,
+            sizeof(keybuf));
+        if (!app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                keybuf, "Back"))
+        {
+            return false;
+        }
+        if (!app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "D-pad", "Move/Change"))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                "Enter", "Begin")
+            || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "Esc", "Back")
+            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "8/2", "Move")
+            || !app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                "4/6", "Change"))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static NavResult blitz_setup_menu(void)
 {
     blitz_setup* setup = blitz_current_setup_mutable();
     int selected = 0;
     bool steamdeck = steamdeck_controls_active();
+    birth_menu_scene_scope scene_scope;
+    bool semantic_menu_active = false;
 
     blitz_setup_clamp(setup);
+    semantic_menu_active = birth_menu_scene_enter(&scene_scope,
+        APP_WAIT_REASON_LIST_SELECTION);
 
     while (1)
     {
         char key;
 
-        blitz_setup_draw(setup, selected);
+        if (semantic_menu_active)
+        {
+            app_ui_scene scene;
+
+            if (!blitz_setup_build_ui_scene(&scene, setup, selected)
+                || !birth_menu_scene_present(&scene))
+            {
+                log_warn("blitz setup: semantic scene presentation failed");
+                birth_menu_scene_leave(&scene_scope);
+                return NAV_TO_MAIN;
+            }
+        }
+        else
+        {
+            blitz_setup_draw(setup, selected);
+        }
         key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
+        {
+            if (semantic_menu_active)
+                birth_menu_scene_leave(&scene_scope);
             return NAV_TO_MAIN;
+        }
 
         if (key == '\n' || key == '\r' || key == ' '
             || (steamdeck && key == steamdeck_confirm_key()))
+        {
+            if (semantic_menu_active)
+            {
+                scene_scope.restore_previous_snapshot = false;
+                birth_menu_scene_leave(&scene_scope);
+            }
             return NAV_OK;
+        }
 
         if (key == '8')
         {
@@ -3149,110 +3074,54 @@ NavResult blitz_character_creation(void)
 NavResult character_creation(void)
 {
     int i;
-
+    birth_menu_scene_scope scene_scope;
     int phase = 1;
 
-    /*** Instructions ***/
-
-    /* Clear screen */
-    Term_clear();
-
-    /* Display some helpful information */
-    draw_character_selection_header(false);
-
-    if (steamdeck_controls_active()) {
-        int prompt_row = birth_prompt_row();
-        char random_label[16];
-        char back_label[16];
-        char options_label[16];
-        char scores_label[16];
-        char full_desc_label[16];
-        char help_label[16];
-        char quit_label[16];
-        char prompt_buf[160];
-
-        birth_prompt_label('r', "r", random_label, sizeof(random_label));
-        birth_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        birth_prompt_label('o', "o", options_label, sizeof(options_label));
-        birth_prompt_label('s', "s", scores_label, sizeof(scores_label));
-        birth_prompt_label(steamdeck_alt_action_key(), "X", full_desc_label,
-            sizeof(full_desc_label));
-        birth_prompt_label('?', "?", help_label, sizeof(help_label));
-        if (streq(help_label, "?"))
-            birth_prompt_label('h', "h", help_label, sizeof(help_label));
-        birth_prompt_label('q', "q", quit_label, sizeof(quit_label));
-
-        strnfmt(prompt_buf, sizeof(prompt_buf),
-            "%s-random  %s-back  %s-options  %s-scores  %s-description  %s-help  %s-quit",
-            random_label, back_label, options_label, scores_label, full_desc_label, help_label, quit_label);
-        Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE, prompt_buf);
-    } else {
-        Term_putstr(QUESTION_COL, birth_prompt_row(), -1, TERM_SLATE,
-            "r -random   ESC -back   o -options   s -scores   f -description   h -help   q -quit");
+    if (!birth_menu_scene_enter(&scene_scope, APP_WAIT_REASON_LIST_SELECTION))
+    {
+        log_warn("character creation: semantic menu scene unavailable");
+        return NAV_TO_MAIN;
     }
+    birth_semantic_creation_menu_active = true;
 
     while (phase <= 2)
     {
-        clear_question();
-
         if (phase == 1)
         {
             /* Choose the player's race */
             if (!get_player_race())
             {
+                birth_menu_scene_leave(&scene_scope);
+                birth_semantic_creation_menu_active = false;
                 return NAV_TO_MAIN; /* Esc at first screen → back to main menu */
             }
-
-            /* Clean up */
-            clear_question();
 
             phase++;
         }
 
         if (phase == 2)
         {
-            draw_character_selection_header(true);
-
             /* Choose the player's character template */
             if (!get_character_profile())
             {
                 phase = 1;          /* Esc here → go back to race */
-                draw_character_selection_header(false);
-                /* Clear the character display area when going back to race selection */
-                for (i = HEADER_ROW; i <= TABLE_ROW + A_MAX + 10; i++)
-                {
-                    Term_erase(TOTAL_AUX_COL, i, 255);
-                }
                 continue;
             }
-
-            /* Clean up */
-            clear_question();
 
             phase++;
         }
     }
+    (void)i;
+
+    scene_scope.restore_previous_snapshot = false;
+    birth_menu_scene_leave(&scene_scope);
+    birth_semantic_creation_menu_active = false;
 
     finalize_character_creation_selection();
 
     /* Done */
     return NAV_OK;
 
-}
-
-static bool oath_menu_use_compact_layout(void)
-{
-    int wid = 80;
-    int hgt = 24;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-
-    return (wid < 80) || (hgt < 24);
 }
 
 static int oath_selectable_max_id(void)
@@ -3332,317 +3201,171 @@ static void oath_move_highlight(int* highlight, int direction, int available_mas
     } while (next != original);
 }
 
-static void oath_center_putstr(int row, byte attr, cptr text)
+static bool oath_build_ui_scene(app_ui_scene* scene, int available_mask,
+    int highlight)
 {
-    int wid = 80;
-    int hgt = 24;
-    int col;
+    app_ui_panel* panel;
+    int visible_oaths[16];
+    int visible_count;
+    bool steamdeck = steamdeck_controls_active();
 
-    if (!text)
-        text = "";
+    if (!scene)
+        return false;
 
-    Term_get_size(&wid, &hgt);
-    (void)hgt;
-    if (wid < 1)
-        wid = 80;
+    visible_count = oath_collect_visible(available_mask, visible_oaths,
+        (int)N_ELEMENTS(visible_oaths));
+    if (visible_count > (int)N_ELEMENTS(visible_oaths))
+        visible_count = (int)N_ELEMENTS(visible_oaths);
 
-    col = (wid - (int)strlen(text)) / 2;
-    if (col < 0)
-        col = 0;
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
 
-    Term_putstr(col, row, -1, attr, text);
-}
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 2048);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, "Choose your Oath");
 
-static void oath_draw_page_indicator(int page, int page_count, int wid, int row)
-{
-    char page_buf[16];
-    int col;
-
-    if (page_count <= 1)
-        return;
-
-    strnfmt(page_buf, sizeof(page_buf), "%d/%d", page + 1, page_count);
-    col = wid - (int)strlen(page_buf) - 1;
-    if (col < 0)
-        col = 0;
-
-    Term_putstr(col, row, -1, TERM_WHITE, page_buf);
-}
-
-static void oath_putstr_fit(int col, int row, int max_width, byte attr, cptr text)
-{
-    char buf[256];
-    int len;
-
-    if (max_width <= 0)
-        return;
-
-    if (!text)
-        text = "";
-
-    len = (int)strlen(text);
-    if (len <= max_width)
+    for (int i = 0; i < visible_count; i++)
     {
-        Term_putstr(col, row, -1, attr, text);
-        return;
-    }
+        int oath_id = visible_oaths[i];
+        char keybuf[8];
+        byte attr;
+        bool enabled = oath_option_selectable(oath_id, available_mask);
 
-    if (max_width <= 3)
-        strnfmt(buf, sizeof(buf), "%.*s", max_width, text);
-    else
-        strnfmt(buf, sizeof(buf), "%.*s...", max_width - 3, text);
-
-    Term_putstr(col, row, -1, attr, buf);
-}
-
-static void oath_render_virtual_line(int col, int max_width, int* draw_row,
-    int row_limit, int* virtual_row, int skip_lines, byte color, cptr text,
-    bool render)
-{
-    if (!text)
-        text = "";
-
-    if ((*virtual_row >= skip_lines) && render && (*draw_row < row_limit))
-        oath_putstr_fit(col, *draw_row, max_width, color, text);
-
-    if ((*virtual_row >= skip_lines) && (*draw_row < row_limit))
-        (*draw_row)++;
-
-    (*virtual_row)++;
-}
-
-static void oath_render_virtual_wrapped_text(cptr text, int col, int max_width,
-    int* draw_row, int row_limit, int* virtual_row, int skip_lines,
-    byte color, bool render)
-{
-    char line_buffer[512];
-    int line_pos = 0;
-    const char* text_ptr = text;
-
-    if (!text || !text[0])
-        return;
-
-    if (max_width <= 0)
-    {
-        int term_width = 80;
-        int term_height = 24;
-
-        Term_get_size(&term_width, &term_height);
-        (void)term_height;
-        if (term_width < 1)
-            term_width = 80;
-        max_width = term_width - col - 2;
-    }
-
-    if (max_width < 8)
-        max_width = 8;
-
-    while (*text_ptr)
-    {
-        while (*text_ptr == ' ' && line_pos == 0)
-            text_ptr++;
-
-        if (*text_ptr == '\n')
-        {
-            line_buffer[line_pos] = '\0';
-            if (line_pos > 0)
-                oath_render_virtual_line(col, max_width, draw_row, row_limit,
-                    virtual_row,
-                    skip_lines, color, line_buffer, render);
-            else
-                oath_render_virtual_line(col, max_width, draw_row, row_limit,
-                    virtual_row,
-                    skip_lines, color, "", render);
-
-            line_pos = 0;
-            text_ptr++;
-            continue;
-        }
-
-        if ((line_pos >= max_width) || (line_pos >= (int)sizeof(line_buffer) - 1))
-        {
-            int wrap_pos = line_pos - 1;
-
-            while (wrap_pos > 0 && line_buffer[wrap_pos] != ' ')
-                wrap_pos--;
-
-            if (wrap_pos > 0)
-            {
-                int remaining = line_pos - wrap_pos - 1;
-
-                line_buffer[wrap_pos] = '\0';
-                oath_render_virtual_line(col, max_width, draw_row, row_limit,
-                    virtual_row,
-                    skip_lines, color, line_buffer, render);
-
-                for (int i = 0; i < remaining; i++)
-                    line_buffer[i] = line_buffer[wrap_pos + 1 + i];
-
-                line_pos = remaining;
-            }
-            else
-            {
-                line_buffer[line_pos] = '\0';
-                oath_render_virtual_line(col, max_width, draw_row, row_limit,
-                    virtual_row,
-                    skip_lines, color, line_buffer, render);
-                line_pos = 0;
-            }
-
-            continue;
-        }
-
-        line_buffer[line_pos++] = *text_ptr++;
-    }
-
-    if (line_pos > 0)
-    {
-        line_buffer[line_pos] = '\0';
-        oath_render_virtual_line(col, max_width, draw_row, row_limit,
-            virtual_row,
-            skip_lines, color, line_buffer, render);
-    }
-}
-
-static int oath_render_detail_content(int oath_id, int col, int start_row,
-    int max_width, int row_limit, int skip_lines, bool render)
-{
-    int draw_row = start_row;
-    int virtual_row = 0;
-    char line_buf[768];
-
-    if (oath_id < 0 || !z_info || oath_id >= z_info->oath_max)
-        return 0;
-
-    if (oath_banned(oath_id) && oath_id > 0)
-    {
-        char* banned_text = oath_banned_text(oath_id);
-
-        oath_render_virtual_line(col, max_width, &draw_row, row_limit,
-            &virtual_row,
-            skip_lines, TERM_L_RED, "OATH BROKEN", render);
-
-        if (banned_text && banned_text[0])
-        {
-            oath_render_virtual_wrapped_text(banned_text, col, max_width,
-                &draw_row, row_limit, &virtual_row, skip_lines, TERM_RED, render);
-        }
+        birth_selection_row_key(i, keybuf, sizeof(keybuf));
+        if (oath_banned(oath_id) && oath_id > 0)
+            attr = (highlight == oath_id) ? TERM_L_RED : TERM_RED;
+        else if (highlight == oath_id)
+            attr = TERM_L_BLUE;
+        else if (oath_id == 0)
+            attr = TERM_WHITE;
         else
+            attr = TERM_WHITE;
+
+        if (!app_ui_panel_add_row(panel, oath_id, attr, enabled,
+                highlight == oath_id, keybuf, oath_name_str(oath_id), ""))
         {
-            oath_render_virtual_wrapped_text(
-                "Thy oath lies shattered, and thy name is marked in shame for this age.",
-                col, max_width, &draw_row, row_limit, &virtual_row, skip_lines,
-                TERM_RED, render);
+            return false;
         }
-
-        return virtual_row;
+        if (highlight == oath_id)
+            panel->selected_row = (s16b)i;
     }
 
-    if (oath_id == 0)
+    app_ui_panel_set_detail_title(panel,
+        oath_banned(highlight) ? TERM_L_RED
+            : (highlight == 0 ? TERM_WHITE : TERM_L_BLUE),
+        oath_name_str(highlight));
+
+    if (oath_banned(highlight) && highlight > 0)
     {
-        oath_render_virtual_wrapped_text("Walk free of binding words.", col,
-            max_width, &draw_row, row_limit, &virtual_row, skip_lines,
-            TERM_SLATE, render);
-        oath_render_virtual_wrapped_text(
-            "Take no oath and remain unbound by sacred vows.", col, max_width,
-            &draw_row, row_limit, &virtual_row, skip_lines, TERM_SLATE, render);
-        return virtual_row;
-    }
+        char* banned_text = oath_banned_text(highlight);
 
-    if (oath_description(oath_id) && oath_description(oath_id)[0])
+        if (!app_ui_panel_add_detail_line(panel, TERM_L_RED, "OATH BROKEN"))
+            return false;
+        if (!birth_ui_panel_add_wrapped_lines(panel, TERM_RED,
+                (banned_text && banned_text[0]) ? banned_text
+                    : "Thy oath lies shattered, and thy name is marked in shame for this age.",
+                true))
+        {
+            return false;
+        }
+    }
+    else if (highlight == 0)
     {
-        strnfmt(line_buf, sizeof(line_buf), "Description: %s",
-            oath_description(oath_id));
-        oath_render_virtual_wrapped_text(line_buf, col, max_width, &draw_row,
-            row_limit, &virtual_row, skip_lines, TERM_SLATE, render);
+        if (!birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE,
+                "Walk free of binding words.", true)
+            || !birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE,
+                "Take no oath and remain unbound by sacred vows.", true))
+        {
+            return false;
+        }
     }
-
-    if (oath_pledge(oath_id) && oath_pledge(oath_id)[0])
+    else
     {
-        strnfmt(line_buf, sizeof(line_buf), "Pledge: %s", oath_pledge(oath_id));
-        oath_render_virtual_wrapped_text(line_buf, col, max_width, &draw_row,
-            row_limit, &virtual_row, skip_lines, TERM_L_BLUE, render);
+        char line_buf[768];
+
+        if (oath_description(highlight) && oath_description(highlight)[0])
+        {
+            strnfmt(line_buf, sizeof(line_buf), "Description: %s",
+                oath_description(highlight));
+            if (!birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE, line_buf,
+                    true))
+            {
+                return false;
+            }
+        }
+        if (oath_pledge(highlight) && oath_pledge(highlight)[0])
+        {
+            strnfmt(line_buf, sizeof(line_buf), "Pledge: %s",
+                oath_pledge(highlight));
+            if (!birth_ui_panel_add_wrapped_lines(panel, TERM_L_BLUE, line_buf,
+                    true))
+            {
+                return false;
+            }
+        }
+        if (oath_reward_text(highlight) && oath_reward_text(highlight)[0])
+        {
+            strnfmt(line_buf, sizeof(line_buf), "Reward: %s",
+                oath_reward_text(highlight));
+            if (!birth_ui_panel_add_wrapped_lines(panel, TERM_L_GREEN, line_buf,
+                    true))
+            {
+                return false;
+            }
+        }
+        if (oath_forbidden(highlight) && oath_forbidden(highlight)[0])
+        {
+            strnfmt(line_buf, sizeof(line_buf), "Forbidden: %s",
+                oath_forbidden(highlight));
+            if (!birth_ui_panel_add_wrapped_lines(panel, TERM_L_RED, line_buf,
+                    true))
+            {
+                return false;
+            }
+        }
     }
 
-    if (oath_reward_text(oath_id) && oath_reward_text(oath_id)[0])
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Oaths grant power, but they bind your actions.");
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Breaking an oath brings curse and shame.");
+
+    if (steamdeck)
     {
-        strnfmt(line_buf, sizeof(line_buf), "Reward: %s",
-            oath_reward_text(oath_id));
-        oath_render_virtual_wrapped_text(line_buf, col, max_width, &draw_row,
-            row_limit, &virtual_row, skip_lines, TERM_L_GREEN, render);
-    }
+        char confirm_label[16];
+        char back_label[16];
 
-    if (oath_forbidden(oath_id) && oath_forbidden(oath_id)[0])
+        birth_prompt_label(steamdeck_confirm_key(), "A",
+            confirm_label, sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Select")
+            || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back")
+            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "D-pad", "Navigate"))
+        {
+            return false;
+        }
+    }
+    else if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Select")
+        || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back")
+        || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "8/2", "Navigate"))
     {
-        strnfmt(line_buf, sizeof(line_buf), "Forbidden: %s",
-            oath_forbidden(oath_id));
-        oath_render_virtual_wrapped_text(line_buf, col, max_width, &draw_row,
-            row_limit, &virtual_row, skip_lines, TERM_L_RED, render);
+        return false;
     }
 
-    return virtual_row;
-}
-
-static void oath_render_wrapped_block(cptr text, int col, int max_width,
-    int* draw_row, int row_limit, byte color)
-{
-    int virtual_row = 0;
-
-    oath_render_virtual_wrapped_text(text, col, max_width, draw_row, row_limit,
-        &virtual_row, 0, color, true);
-}
-
-static void oath_draw_compact_list_summary(int oath_id, int row, int prompt_row,
-    int max_width)
-{
-    char line_buf[512];
-    byte name_attr = TERM_L_BLUE;
-
-    if (row >= prompt_row || max_width <= 0)
-        return;
-
-    if (oath_id == 0)
-        name_attr = TERM_WHITE;
-    else if (oath_banned(oath_id))
-        name_attr = TERM_L_RED;
-
-    oath_putstr_fit(2, row++, max_width, name_attr, oath_name_str(oath_id));
-
-    if (row >= prompt_row)
-        return;
-
-    if (oath_id == 0)
-    {
-        oath_putstr_fit(2, row, max_width, TERM_SLATE,
-            "No oath. No restrictions.");
-        return;
-    }
-
-    if (oath_banned(oath_id))
-    {
-        oath_putstr_fit(2, row, max_width, TERM_RED,
-            "Broken oath: unavailable for this metarun.");
-        return;
-    }
-
-    if (oath_reward_text(oath_id) && oath_reward_text(oath_id)[0])
-    {
-        strnfmt(line_buf, sizeof(line_buf), "Reward: %s",
-            oath_reward_text(oath_id));
-        oath_render_wrapped_block(line_buf, 2, max_width, &row, prompt_row,
-            TERM_L_GREEN);
-    }
-
-    if (row >= prompt_row)
-        return;
-
-    if (oath_forbidden(oath_id) && oath_forbidden(oath_id)[0])
-    {
-        strnfmt(line_buf, sizeof(line_buf), "Forbidden: %s",
-            oath_forbidden(oath_id));
-        oath_render_wrapped_block(line_buf, 2, max_width, &row, prompt_row,
-            TERM_L_RED);
-    }
+    return true;
 }
 
 /*
@@ -3665,8 +3388,6 @@ static NavResult select_oath(void)
 
     int highlight = 1; /* Start highlighting first available oath */
     int choice = 0;
-    int page = 0;
-    int detail_scroll = 0;
     bool steamdeck = steamdeck_controls_active();
 
     /* Find first available oath to highlight */
@@ -3681,215 +3402,22 @@ static NavResult select_oath(void)
 
     while (true)
     {
-        int wid = 80;
-        int hgt = 24;
-        int prompt_row;
         int visible_oaths[16];
         int visible_count;
-        int detail_max_scroll = 0;
-        bool compact;
         char key;
-
-        Term_get_size(&wid, &hgt);
-        if (wid < 1)
-            wid = 80;
-        if (hgt < 1)
-            hgt = 24;
-
-        prompt_row = hgt - 1;
-        if (prompt_row < 0)
-            prompt_row = 0;
-
-        compact = oath_menu_use_compact_layout();
-        if (!compact)
-            page = 0;
+        app_ui_scene scene;
 
         visible_count = oath_collect_visible(available_mask, visible_oaths,
             (int)N_ELEMENTS(visible_oaths));
         if (visible_count > (int)N_ELEMENTS(visible_oaths))
             visible_count = (int)N_ELEMENTS(visible_oaths);
 
-        Term_clear();
-
-        if (compact)
+        if (!oath_build_ui_scene(&scene, available_mask, highlight)
+            || !ui_information_scene_present_ui(&scene))
         {
-            oath_center_putstr(0, TERM_L_BLUE,
-                (page == 0) ? "Choose your Oath" : "Oath Details");
-            oath_draw_page_indicator(page, 2, wid, 0);
-
-            if (page == 0)
-            {
-                int list_row = 4;
-
-                Term_putstr(2, 2, -1, TERM_WHITE, "Available Oaths");
-
-                for (int i = 0; i < visible_count; i++)
-                {
-                    int oath_id = visible_oaths[i];
-                    byte attr;
-                    char buf[96];
-
-                    if (oath_banned(oath_id) && oath_id > 0)
-                        attr = (highlight == oath_id) ? TERM_L_RED : TERM_RED;
-                    else
-                        attr = (highlight == oath_id) ? TERM_L_BLUE : TERM_WHITE;
-
-                    strnfmt(buf, sizeof(buf), "%c) %s", 'a' + i, oath_name_str(oath_id));
-                    Term_putstr(2, list_row + i, -1, attr, buf);
-                }
-
-                oath_draw_compact_list_summary(highlight, list_row + visible_count + 1,
-                    prompt_row, wid - 4);
-
-                if (steamdeck)
-                {
-                    char confirm_label[16];
-                    char back_label[16];
-                    char prompt_buf[96];
-
-                    birth_prompt_label(steamdeck_confirm_key(), "A",
-                        confirm_label, sizeof(confirm_label));
-                    birth_prompt_label(steamdeck_back_key(), "B",
-                        back_label, sizeof(back_label));
-                    strnfmt(prompt_buf, sizeof(prompt_buf),
-                        "D-pad Nav/Page  %s Select  %s Back",
-                        confirm_label, back_label);
-                    oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE, prompt_buf);
-                }
-                else
-                {
-                    oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE,
-                        "8/2 Nav  6 Details  Enter/Space Select  Esc Back");
-                }
-            }
-            else
-            {
-                int content_row = 3;
-                int visible_rows = prompt_row - content_row;
-                int total_lines;
-
-                Term_putstr(2, 1, -1, oath_banned(highlight) ? TERM_L_RED : TERM_L_BLUE,
-                    oath_name_str(highlight));
-
-                total_lines = oath_render_detail_content(highlight, 2, content_row,
-                    wid - 4, prompt_row, 0, false);
-
-                if (visible_rows < 0)
-                    visible_rows = 0;
-
-                detail_max_scroll = (total_lines > visible_rows)
-                    ? (total_lines - visible_rows)
-                    : 0;
-
-                if (detail_scroll > detail_max_scroll)
-                    detail_scroll = detail_max_scroll;
-
-                (void)oath_render_detail_content(highlight, 2, content_row, wid - 4,
-                    prompt_row, detail_scroll, true);
-
-                if (detail_max_scroll > 0)
-                {
-                    char scroll_buf[32];
-
-                    strnfmt(scroll_buf, sizeof(scroll_buf), "Scroll %d/%d",
-                        detail_scroll + 1, detail_max_scroll + 1);
-                    oath_putstr_fit(2, 2, wid - 4, TERM_SLATE, scroll_buf);
-                }
-
-                if (steamdeck)
-                {
-                    char confirm_label[16];
-                    char back_label[16];
-                    char prompt_buf[96];
-
-                    birth_prompt_label(steamdeck_confirm_key(), "A",
-                        confirm_label, sizeof(confirm_label));
-                    birth_prompt_label(steamdeck_back_key(), "B",
-                        back_label, sizeof(back_label));
-                    strnfmt(prompt_buf, sizeof(prompt_buf),
-                        "D-pad Scroll/Page  %s Select  %s Back",
-                        confirm_label, back_label);
-                    oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE, prompt_buf);
-                }
-                else
-                {
-                    oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE,
-                        "8/2 Scroll  4 List  Enter/Space Select  Esc Back");
-                }
-            }
+            log_warn("oath selection: semantic scene presentation failed");
+            return NAV_BACK;
         }
-        else
-        {
-            int footer_row = prompt_row - 3;
-            int details_col = COL_DESCRIPTION - 2;
-            int details_width;
-            int list_width;
-
-            if (details_col < 20)
-                details_col = 20;
-            if (details_col > wid - 12)
-                details_col = wid - 12;
-
-            details_width = wid - details_col - 2;
-            list_width = details_col - 4;
-
-            oath_center_putstr(0, TERM_L_BLUE, "Choose your Oath");
-            Term_putstr(2, 2, -1, TERM_WHITE, "Available Oaths");
-            oath_putstr_fit(details_col, 2, details_width, TERM_WHITE,
-                "Oath Details");
-
-            for (int i = 0; i < visible_count; i++)
-            {
-                int oath_id = visible_oaths[i];
-                byte attr;
-                char buf[96];
-
-                if (oath_banned(oath_id) && oath_id > 0)
-                    attr = (highlight == oath_id) ? TERM_L_RED : TERM_RED;
-                else
-                    attr = (highlight == oath_id) ? TERM_L_BLUE : TERM_WHITE;
-
-                strnfmt(buf, sizeof(buf), "%c) %s", 'a' + i, oath_name_str(oath_id));
-                oath_putstr_fit(2, 4 + i, list_width, attr, buf);
-            }
-
-            (void)oath_render_detail_content(highlight, details_col, 4,
-                details_width, prompt_row, 0, true);
-
-            if (footer_row >= 0)
-            {
-                oath_putstr_fit(2, footer_row, wid - 4, TERM_SLATE,
-                    "Oaths grant power, but they bind your actions.");
-            }
-            if (footer_row + 1 < prompt_row)
-            {
-                oath_putstr_fit(2, footer_row + 1, wid - 4, TERM_SLATE,
-                    "Breaking an oath brings curse and shame.");
-            }
-
-            if (steamdeck)
-            {
-                char confirm_label[16];
-                char back_label[16];
-                char prompt_buf[128];
-
-                birth_prompt_label(steamdeck_confirm_key(), "A",
-                    confirm_label, sizeof(confirm_label));
-                birth_prompt_label(steamdeck_back_key(), "B",
-                    back_label, sizeof(back_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    "D-pad Navigate  %s Select  %s Back",
-                    confirm_label, back_label);
-                oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE, prompt_buf);
-            }
-            else
-            {
-                oath_putstr_fit(2, prompt_row, wid - 4, TERM_SLATE,
-                    "8/2 Navigate  Enter/Space Select  Esc Back");
-            }
-        }
-
-        Term_fresh();
         key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         if (steamdeck && key == steamdeck_back_key())
@@ -3899,20 +3427,7 @@ static NavResult select_oath(void)
             return NAV_BACK; /* Go back to character creation */
         }
 
-        if (compact && key == '4')
-        {
-            page = 0;
-            continue;
-        }
-
-        if (compact && key == '6')
-        {
-            page = 1;
-            continue;
-        }
-
-        if (birth_confirm_input(key, steamdeck)
-            || (!compact && key == '6'))
+        if (birth_confirm_input(key, steamdeck) || key == '6')
         {
             /* Select current highlighted option */
             if (oath_option_selectable(highlight, available_mask))
@@ -3938,28 +3453,12 @@ static NavResult select_oath(void)
 
         if (key == '8')
         {
-            if (compact && page == 1)
-            {
-                if (detail_scroll > 0)
-                    detail_scroll--;
-                continue;
-            }
-
             oath_move_highlight(&highlight, -1, available_mask);
-            detail_scroll = 0;
         }
 
         if (key == '2')
         {
-            if (compact && page == 1)
-            {
-                if (detail_scroll < detail_max_scroll)
-                    detail_scroll++;
-                continue;
-            }
-
             oath_move_highlight(&highlight, 1, available_mask);
-            detail_scroll = 0;
         }
     }
 
@@ -4197,6 +3696,7 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects, int o
 
     while (1)
     {
+        bool use_semantic_scene = birth_semantic_assignment_active;
         int wid = 80;
         int hgt = 24;
         int list_rows;
@@ -4214,26 +3714,10 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects, int o
             top = selected - list_rows + 1;
 
         selected_id = ids[selected];
-        Term_clear();
-
-        strnfmt(title, sizeof(title), "Choose %s %d of %d",
-            blessing ? "Blessing" : "Curse", ordinal, total);
-        c_put_str(TERM_YELLOW, title, 1, MAX((wid - (int)strlen(title)) / 2, 0));
-
-        for (row = 0; row < list_rows && top + row < count; row++)
+        if (use_semantic_scene)
         {
-            int idx = top + row;
-            cptr name = blessing ? blitz_blessing_name_str(ids[idx])
-                                 : blitz_curse_name_str(ids[idx]);
-            char line[128];
-            strnfmt(line, sizeof(line), "%s", name);
-            birth_put_str_fit(
-                idx == selected ? TERM_L_BLUE
-                                : (blessing ? TERM_L_GREEN : TERM_L_RED),
-                line, 3 + row, 4);
-        }
-
-        {
+            app_ui_scene scene;
+            app_ui_panel* panel;
             curse_type* cu = &cu_info[selected_id];
             cptr desc = blessing
                 ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
@@ -4241,45 +3725,184 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects, int o
             cptr power = blessing
                 ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
                 : (cu->power ? cu_text + cu->power : "");
-            int desc_row = 4 + list_rows;
 
-            c_put_str(TERM_WHITE, blessing ? blitz_blessing_name_str(selected_id)
-                                           : blitz_curse_name_str(selected_id),
-                desc_row++, 2);
-            if (desc && desc[0])
+            app_ui_scene_init(&scene);
+            panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+            if (!panel)
             {
-                birth_put_wrapped_text(TERM_SLATE, desc, desc_row, 2);
-                desc_row += birth_wrapped_line_count(desc, 2);
+                log_warn("blitz effect picker: semantic scene unavailable");
+                return -1;
+            }
+
+            panel->style = APP_UI_PANEL_STYLE_BROWSER;
+            panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
+                | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+            panel->focus_area = APP_UI_FOCUS_ROWS;
+            panel->selected_row = selected;
+            panel->accent_attr = TERM_L_BLUE;
+            app_ui_panel_set_widths(panel, 980, 1800);
+            strnfmt(title, sizeof(title), "Choose %s %d of %d",
+                blessing ? "Blessing" : "Curse", ordinal, total);
+            app_ui_panel_set_title(panel, TERM_YELLOW, title);
+            app_ui_panel_set_subtitle(panel, blessing ? TERM_L_GREEN : TERM_L_RED,
+                blessing ? "Blessings" : "Curses");
+            app_ui_panel_set_row_offset(panel, (s16b)top);
+
+            for (row = 0; row < count; row++)
+            {
+                int id = ids[row];
+                cptr name = blessing ? blitz_blessing_name_str(id)
+                                     : blitz_curse_name_str(id);
+                byte attr = (row == selected)
+                    ? TERM_L_BLUE
+                    : (blessing ? TERM_L_GREEN : TERM_L_RED);
+
+                if (!app_ui_panel_add_row(panel, id, attr, true,
+                        row == selected, "", name, ""))
+                {
+                    log_warn("blitz effect picker: semantic row list overflow");
+                    return -1;
+                }
+            }
+
+            app_ui_panel_set_detail_title(panel, TERM_WHITE,
+                blessing ? blitz_blessing_name_str(selected_id)
+                         : blitz_curse_name_str(selected_id));
+            if (desc && desc[0]
+                && !birth_ui_panel_add_wrapped_lines(panel, TERM_SLATE, desc,
+                    true))
+            {
+                log_warn("blitz effect picker: semantic detail text overflow");
+                return -1;
             }
             if (show_effects && power && power[0])
             {
                 char power_line[512];
+
+                if (panel->detail_line_count > 0
+                    && !app_ui_panel_add_detail_line(panel, TERM_WHITE, " "))
+                {
+                    log_warn("blitz effect picker: semantic detail spacing overflow");
+                    return -1;
+                }
                 strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
-                birth_put_wrapped_text(blessing ? TERM_L_GREEN : TERM_L_RED,
-                    power_line, desc_row + 1, 2);
+                if (!birth_ui_panel_add_wrapped_lines(panel,
+                        blessing ? TERM_L_GREEN : TERM_L_RED, power_line, true))
+                {
+                    log_warn("blitz effect picker: semantic power detail overflow");
+                    return -1;
+                }
             }
-        }
 
-        if (steamdeck)
-        {
-            char confirm_label[16];
-            char back_label[16];
-            char prompt_buf[96];
+            if (steamdeck)
+            {
+                char confirm_label[16];
+                char back_label[16];
 
-            birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-                sizeof(confirm_label));
-            birth_prompt_label(steamdeck_back_key(), "B", back_label,
-                sizeof(back_label));
-            strnfmt(prompt_buf, sizeof(prompt_buf),
-                "D-pad navigate  %s select  %s back",
-                confirm_label, back_label);
-            birth_put_str_fit(TERM_L_DARK, prompt_buf, hgt - 1, 2);
+                birth_prompt_label(steamdeck_confirm_key(), "A",
+                    confirm_label, sizeof(confirm_label));
+                birth_prompt_label(steamdeck_back_key(), "B", back_label,
+                    sizeof(back_label));
+                if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                        confirm_label, "Select")
+                    || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
+                        true, back_label, "Back")
+                    || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                        true, "D-pad", "Navigate"))
+                {
+                    log_warn("blitz effect picker: semantic footer overflow");
+                    return -1;
+                }
+            }
+            else if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                    "Enter", "Select")
+                || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                    "Esc", "Back")
+                || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                    "8/2", "Navigate"))
+            {
+                log_warn("blitz effect picker: semantic footer overflow");
+                return -1;
+            }
+
+            if (!ui_information_scene_present_ui(&scene))
+            {
+                log_warn("blitz effect picker: semantic scene presentation failed");
+                return -1;
+            }
         }
         else
         {
-            birth_put_str_fit(TERM_L_DARK,
-                "8/2 navigate  Enter select  Esc back", hgt - 1, 2);
+            Term_clear();
+
+            strnfmt(title, sizeof(title), "Choose %s %d of %d",
+                blessing ? "Blessing" : "Curse", ordinal, total);
+            c_put_str(TERM_YELLOW, title, 1,
+                MAX((wid - (int)strlen(title)) / 2, 0));
+
+            for (row = 0; row < list_rows && top + row < count; row++)
+            {
+                int idx = top + row;
+                cptr name = blessing ? blitz_blessing_name_str(ids[idx])
+                                     : blitz_curse_name_str(ids[idx]);
+                char line[128];
+                strnfmt(line, sizeof(line), "%s", name);
+                birth_put_str_fit(
+                    idx == selected ? TERM_L_BLUE
+                                    : (blessing ? TERM_L_GREEN : TERM_L_RED),
+                    line, 3 + row, 4);
+            }
+
+            {
+                curse_type* cu = &cu_info[selected_id];
+                cptr desc = blessing
+                    ? (cu->blessing_text ? cu_text + cu->blessing_text : "")
+                    : (cu->text ? cu_text + cu->text : "");
+                cptr power = blessing
+                    ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
+                    : (cu->power ? cu_text + cu->power : "");
+                int desc_row = 4 + list_rows;
+
+                c_put_str(TERM_WHITE,
+                    blessing ? blitz_blessing_name_str(selected_id)
+                             : blitz_curse_name_str(selected_id),
+                    desc_row++, 2);
+                if (desc && desc[0])
+                {
+                    birth_put_wrapped_text(TERM_SLATE, desc, desc_row, 2);
+                    desc_row += birth_wrapped_line_count(desc, 2);
+                }
+                if (show_effects && power && power[0])
+                {
+                    char power_line[512];
+                    strnfmt(power_line, sizeof(power_line), "Effect: %s", power);
+                    birth_put_wrapped_text(blessing ? TERM_L_GREEN : TERM_L_RED,
+                        power_line, desc_row + 1, 2);
+                }
+            }
+
+            if (steamdeck)
+            {
+                char confirm_label[16];
+                char back_label[16];
+                char prompt_buf[96];
+
+                birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+                    sizeof(confirm_label));
+                birth_prompt_label(steamdeck_back_key(), "B", back_label,
+                    sizeof(back_label));
+                strnfmt(prompt_buf, sizeof(prompt_buf),
+                    "D-pad navigate  %s select  %s back",
+                    confirm_label, back_label);
+                birth_put_str_fit(TERM_L_DARK, prompt_buf, hgt - 1, 2);
+            }
+            else
+            {
+                birth_put_str_fit(TERM_L_DARK,
+                    "8/2 navigate  Enter select  Esc back", hgt - 1, 2);
+            }
         }
+
         key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
@@ -4311,6 +3934,85 @@ static void blitz_show_effect_summary(void)
     int wid = 80;
     int hgt = 24;
     int row = 3;
+
+    if (birth_semantic_assignment_active)
+    {
+        app_ui_scene scene;
+        app_ui_panel* panel;
+        bool steamdeck = steamdeck_controls_active();
+
+        app_ui_scene_init(&scene);
+        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+        if (!panel)
+        {
+            log_warn("blitz effect summary: semantic panel unavailable");
+            return;
+        }
+
+        panel->style = APP_UI_PANEL_STYLE_BROWSER;
+        panel->accent_attr = TERM_L_BLUE;
+        app_ui_panel_set_widths(panel, 900, 1600);
+        app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Effects");
+        app_ui_panel_set_subtitle(panel, TERM_SLATE,
+            "Starting blessings and curses for this Blitz run.");
+
+        for (int id = 0; z_info && id < z_info->cu_max; id++)
+        {
+            int stacks = CURSE_GET(id);
+            char line[128];
+
+            if (stacks == 0)
+                continue;
+
+            strnfmt(line, sizeof(line), "%s x%d",
+                (stacks < 0)
+                    ? blitz_blessing_name_str(id)
+                    : blitz_curse_name_str(id),
+                (stacks < 0) ? -stacks : stacks);
+            if (!app_ui_panel_add_body_line(panel,
+                    stacks < 0 ? TERM_L_GREEN : TERM_L_RED, line))
+            {
+                log_warn("blitz effect summary: semantic body overflow");
+                return;
+            }
+        }
+
+        if (panel->body_line_count == 0
+            && !app_ui_panel_add_body_line(panel, TERM_SLATE,
+                "No blessings or curses selected."))
+        {
+            log_warn("blitz effect summary: semantic empty-state overflow");
+            return;
+        }
+
+        if (steamdeck)
+        {
+            char confirm_label[16];
+
+            birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+                sizeof(confirm_label));
+            if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                    confirm_label, "Continue"))
+            {
+                log_warn("blitz effect summary: semantic footer overflow");
+                return;
+            }
+        }
+        else if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                "Any key", "Continue"))
+        {
+            log_warn("blitz effect summary: semantic footer overflow");
+            return;
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+        {
+            log_warn("blitz effect summary: semantic scene presentation failed");
+            return;
+        }
+        (void)birth_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
+        return;
+    }
 
     Term_get_size(&wid, &hgt);
     Term_clear();
@@ -4532,142 +4234,12 @@ static NavResult blitz_auto_build_character(void)
     return NAV_OK;
 }
 
-static void birth_display_stats_allocation_compact(const int stats[A_MAX], int selected,
-    int points_left, bool steamdeck)
-{
-    int wid = 80;
-    int hgt = 24;
-    char buf[160];
-    char stat_buf[16];
-    int prompt_row;
-    int info_row;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1) wid = 80;
-    if (hgt < 1) hgt = 24;
-
-    /* Reuse compact character-sheet stats+skills page with in-place highlighted selection. */
-    display_player_compact_stats_skills_highlighted_stat(selected);
-
-    prompt_row = hgt - 1;
-    if (prompt_row < 0)
-        prompt_row = 0;
-    info_row = prompt_row - 1;
-    if (info_row < 0)
-        info_row = 0;
-
-    Term_erase(0, info_row, 255);
-    Term_erase(0, prompt_row, 255);
-
-    if (selected >= 0 && selected < A_MAX)
-    {
-        int cost = birth_stat_costs[stats[selected] + 4];
-        cnv_stat(p_ptr->stat_use[selected], stat_buf);
-
-        strnfmt(buf, sizeof(buf), "Selected: %s %s  Cost: %d  Left: %d",
-            stat_names_full[selected], stat_buf, cost, points_left);
-        c_put_str(TERM_L_BLUE, buf, info_row, 1);
-    }
-    else
-    {
-        strnfmt(buf, sizeof(buf), "Points left: %d", points_left);
-        c_put_str(TERM_L_GREEN, buf, info_row, 1);
-    }
-
-    if (steamdeck)
-    {
-        char confirm_label[16];
-        char back_label[16];
-        char quit_label[16];
-
-        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-        birth_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-        birth_prompt_label('q', "Start", quit_label, sizeof(quit_label));
-
-        strnfmt(buf, sizeof(buf), "D-pad alloc  %s back  %s ok  %s quit",
-            back_label, confirm_label, quit_label);
-    }
-    else
-    {
-        strnfmt(buf, sizeof(buf), "8/2 select  4/6 adjust  ESC back  SPACE/ENTER ok  q quit");
-    }
-
-    c_put_str(TERM_SLATE, buf, prompt_row, 1);
-}
-
-static void birth_display_skill_allocation_compact(int selected_skill, const int old_base[S_MAX],
-    const int skill_gain[S_MAX], int points_left, bool steamdeck)
-{
-    int wid = 80;
-    int hgt = 24;
-    char buf[160];
-    int prompt_row;
-    int info_row;
-
-    Term_get_size(&wid, &hgt);
-    if (wid < 1) wid = 80;
-    if (hgt < 1) hgt = 24;
-
-    /* Reuse compact character-sheet skills page with in-place highlighted selection. */
-    display_player_compact_stats_skills_highlighted(selected_skill);
-
-    prompt_row = hgt - 1;
-    if (prompt_row < 0)
-        prompt_row = 0;
-    info_row = prompt_row - 1;
-    if (info_row < 0)
-        info_row = 0;
-
-    Term_erase(0, info_row, 255);
-    Term_erase(0, prompt_row, 255);
-
-    if (selected_skill >= 0 && selected_skill < S_MAX && selected_skill != S_SPC)
-    {
-        int base = old_base[selected_skill];
-        int gain = skill_gain[selected_skill];
-        int now = base + gain;
-        int cost = skill_cost(base, gain);
-
-        strnfmt(buf, sizeof(buf), "Selected: %s %2d->%2d  Cost: %d  Left: %d",
-            skill_names_full[selected_skill], base, now, cost, points_left);
-        c_put_str(TERM_L_BLUE, buf, info_row, 1);
-    }
-    else
-    {
-        strnfmt(buf, sizeof(buf), "Points left: %d", points_left);
-        c_put_str(TERM_L_GREEN, buf, info_row, 1);
-    }
-
-    if (steamdeck)
-    {
-        char confirm_label[16];
-        char back_label[16];
-        char quit_label[16];
-
-        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-        birth_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-        birth_prompt_label('q', "q", quit_label, sizeof(quit_label));
-
-        strnfmt(buf, sizeof(buf), "D-pad alloc  %s back  %s ok  %s quit",
-            back_label, confirm_label, quit_label);
-    }
-    else
-    {
-        strnfmt(buf, sizeof(buf), "8/2 select  4/6 adjust  ESC back  SPACE/ENTER ok  q quit");
-    }
-
-    c_put_str(TERM_SLATE, buf, prompt_row, 1);
-}
-
 /*
  * Helper function for 'player_birth()'.
  */
 static NavResult player_birth_aux_2(void)
 {
     int i;
-
-    int row = 1;
-    int col = 42;
 
     int stat = 0;
 
@@ -4676,8 +4248,6 @@ static NavResult player_birth_aux_2(void)
     int cost;
 
     char ch;
-
-    char buf[80];
 
     /* Initialize stats */
     for (i = 0; i < A_MAX; i++)
@@ -4741,9 +4311,8 @@ static NavResult player_birth_aux_2(void)
         Term_get_size(&wid, &hgt);
         if (wid < 1) wid = 80;
         if (hgt < 1) hgt = 24;
-        bool compact = (wid < 80);
-        int wide_offset = (wid > 80) ? (wid - 80) / 2 : 0;
-        int sheet_col = col + wide_offset;
+        (void)wid;
+        (void)hgt;
 
         /* Reset cost */
         cost = 0;
@@ -4790,95 +4359,11 @@ static NavResult player_birth_aux_2(void)
         calc_voice();
         p_ptr->csp = p_ptr->msp;
 
-        if (compact)
+        if (!birth_present_stats_allocation_ui_scene(stats, stat,
+                MAX_COST - cost, steamdeck))
         {
-            birth_display_stats_allocation_compact(stats, stat, MAX_COST - cost, steamdeck);
-        }
-        else
-        {
-            int prompt_row = birth_prompt_row();
-
-            /* Display the player */
-            display_player(0);
-
-            /* Display the costs header */
-            c_put_str(TERM_WHITE, "Points Left:", 0, sheet_col + 21);
-            strnfmt(buf, sizeof(buf), "%2d", MAX_COST - cost);
-            c_put_str(TERM_L_GREEN, buf, 0, sheet_col + 34);
-
-            /* Display the costs */
-            for (i = 0; i < A_MAX; i++)
-            {
-                if (i == stat)
-                {
-                    byte attr = TERM_L_BLUE;
-
-                    /* Match the character sheet label rendering: trim trailing spaces.
-                     * (stat_names[] include padding for mono layouts.) */
-                    const char* stat_label = (p_ptr->stat_drain[i] < 0) ? stat_names_reduced[i] : stat_names[i];
-                    char trimmed_label[32];
-                    SDL_strlcpy(trimmed_label, stat_label ? stat_label : "", sizeof(trimmed_label));
-                    int len = (int)strlen(trimmed_label);
-                    while (len > 0 && trimmed_label[len - 1] == ' ') {
-                        trimmed_label[--len] = '\0';
-                    }
-
-                    bool use_story = story_character_enabled();
-                    if (use_story) {
-                        sdl_story_font_enable();
-                    }
-
-                    c_put_str(attr, trimmed_label, row + i, sheet_col - 1);
-
-                    if (use_story) {
-                        sdl_story_font_disable();
-                    }
-
-#ifndef MONOCHROME_MODE
-                    strnfmt(buf, sizeof(buf), "%4d", birth_stat_costs[stats[i] + 4]);
-                    c_put_str(attr, buf, row + i, sheet_col + 32);
-#else
-                    strnfmt(buf, sizeof(buf), "%4d*", birth_stat_costs[stats[i] + 4]);
-                    c_put_str(attr, buf, row + i, sheet_col + 32);
-                    c_put_str(attr, "*", row + i, sheet_col - 2);
-#endif
-                }
-                else
-                {
-                    byte attr = TERM_L_WHITE;
-                    strnfmt(buf, sizeof(buf), "%4d", birth_stat_costs[stats[i] + 4]);
-                    c_put_str(attr, buf, row + i, sheet_col + 32);
-                }
-            }
-
-            /* Bottom bar follows character sheet font setting */
-            if (story_character_enabled()) {
-                sdl_story_font_enable();
-            }
-
-            if (steamdeck) {
-                char confirm_label[16];
-                char back_label[16];
-                char quit_label[16];
-                char prompt_buf[160];
-
-                /* Steam Deck UI: A=confirm, B=back, Start=quit */
-                birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-                birth_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-                birth_prompt_label('q', "Start", quit_label, sizeof(quit_label));
-
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    "D-pad allocate  %s back  %s confirm  %s quit",
-                    back_label, confirm_label, quit_label);
-                Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE, prompt_buf);
-            } else {
-                Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE,
-                    "Arrows -allocate    ESC -back   SPACE/ENTER -confirm   q -quit");
-            }
-
-            if (story_character_enabled()) {
-                sdl_story_font_disable();
-            }
+            log_warn("birth stats allocation: semantic scene unavailable");
+            return NAV_TO_MAIN;
         }
 
         /* Get key */
@@ -4948,9 +4433,6 @@ extern NavResult gain_skills(void)
 {
     int i;
 
-    int row = 6;
-    int col = 42;
-
     int skill = 0;
 
     int old_base[S_MAX];
@@ -4961,11 +4443,7 @@ extern NavResult gain_skills(void)
 
     char ch;
 
-    char buf[80];
-
     NavResult result = NAV_OK;
-
-    int tab = 0;
 
     log_debug("Starting skills allocation with %d experience points", p_ptr->new_exp);
 
@@ -5020,109 +4498,20 @@ extern NavResult gain_skills(void)
         Term_get_size(&wid, &hgt);
         if (wid < 1) wid = 80;
         if (hgt < 1) hgt = 24;
-        bool compact = (wid < 80);
-        int wide_offset = (wid > 80) ? (wid - 80) / 2 : 0;
-        int sheet_col = col + wide_offset;
+        (void)wid;
+        (void)hgt;
 
-        if (compact)
+        if (!birth_present_skills_allocation_ui_scene(skill, old_base,
+                skill_gain, p_ptr->new_exp, steamdeck))
         {
-            birth_display_skill_allocation_compact(skill, old_base, skill_gain, p_ptr->new_exp, steamdeck);
-        }
-        else
-        {
-            int prompt_row = birth_prompt_row();
-
-            /* Display the player */
-            display_player(0);
-
-            /* Display the costs header */
-            if (!character_dungeon)
-            {
-                if (p_ptr->new_exp >= 10000)
-                    tab = 0;
-                else if (p_ptr->new_exp >= 1000)
-                    tab = 1;
-                else if (p_ptr->new_exp >= 100)
-                    tab = 2;
-                else if (p_ptr->new_exp >= 10)
-                    tab = 3;
-                else
-                    tab = 4;
-
-                strnfmt(buf, sizeof(buf), "%6d", p_ptr->new_exp);
-                c_put_str(TERM_L_GREEN, buf, row - 2, sheet_col + 30);
-                c_put_str(TERM_WHITE, "Points Left:", row - 2, sheet_col + 17 + tab);
+            log_warn("birth skills allocation: semantic scene unavailable");
+            p_ptr->new_exp = old_new_exp;
+            for (i = 0; i < S_MAX; i++) {
+                if (i != S_SPC)
+                    p_ptr->skill_base[i] = old_base[i];
             }
-
-            /* Display the costs */
-            for (i = 0; i < S_MAX; i++)
-            {
-                /* Skip Special abilities skill - not trainable */
-                if (i == S_SPC) continue;
-
-                if (i == skill)
-                {
-                    byte attr = TERM_L_BLUE;
-
-                    bool use_story = story_character_enabled();
-                    if (use_story) {
-                        sdl_story_font_enable();
-                    }
-
-                    c_put_str(attr, skill_names_full[i], row + i, sheet_col - 1);
-
-                    if (use_story) {
-                        sdl_story_font_disable();
-                    }
-
-#ifndef MONOCHROME_MODE
-                    strnfmt(buf, sizeof(buf), "%6d",
-                        skill_cost(old_base[i], skill_gain[i]));
-                    c_put_str(attr, buf, row + i, sheet_col + 30);
-#else
-                    strnfmt(buf, sizeof(buf), "%6d*",
-                        skill_cost(old_base[i], skill_gain[i]));
-                    c_put_str(attr, buf, row + i, sheet_col + 30);
-                    c_put_str(attr, "*", row + i, sheet_col - 2);
-#endif
-                }
-                else
-                {
-                    byte attr = TERM_L_WHITE;
-                    strnfmt(buf, sizeof(buf), "%6d",
-                        skill_cost(old_base[i], skill_gain[i]));
-                    c_put_str(attr, buf, row + i, sheet_col + 30);
-                }
-            }
-
-            /* Bottom bar follows character sheet font setting */
-            if (story_character_enabled()) {
-                sdl_story_font_enable();
-            }
-
-            if (steamdeck) {
-                char confirm_label[16];
-                char back_label[16];
-                char quit_label[16];
-                char prompt_buf[160];
-
-                /* Steam Deck UI: A=confirm, B=back, Start=quit */
-                birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label, sizeof(confirm_label));
-                birth_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-                birth_prompt_label('q', "q", quit_label, sizeof(quit_label));
-
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    "D-pad -allocate      %s-back     %s-confirm     %s-quit",
-                    back_label, confirm_label, quit_label);
-                Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE, prompt_buf);
-            } else {
-                Term_putstr(QUESTION_COL, prompt_row, -1, TERM_SLATE,
-                    "Arrows -allocate      ESC -back     SPACE/ENTER -confirm     q -quit");
-            }
-
-            if (story_character_enabled()) {
-                sdl_story_font_disable();
-            }
+            skill_gain_in_progress = false;
+            return NAV_TO_MAIN;
         }
 
         /* Get key */
@@ -5143,9 +4532,9 @@ extern NavResult gain_skills(void)
         /* Done */
         if (birth_confirm_input(ch, steamdeck))
         {
-            if (compact && birth_pending_compact_description_confirm)
+            if (birth_pending_compact_description_confirm)
             {
-                if (!birth_show_compact_description_after_assignment(steamdeck))
+                if (!birth_show_semantic_assignment_review(steamdeck))
                     continue;
                 birth_pending_compact_description_confirm = false;
             }
@@ -5225,6 +4614,10 @@ extern NavResult gain_skills(void)
  */
 static NavResult player_birth_aux(void)
 {
+    NavResult result = NAV_OK;
+    ui_information_scene_scope semantic_scope;
+    bool want_semantic_ui = true;
+
 
     log_debug("Initializing character data and history");
     birth_pending_compact_description_confirm = true;
@@ -5240,6 +4633,10 @@ static NavResult player_birth_aux(void)
     p_ptr->ht = 0;
     p_ptr->age = 0;
 
+    if (want_semantic_ui)
+        birth_semantic_assignment_active
+            = ui_information_scene_enter(&semantic_scope);
+
     /* Oath selection (after character creation, before tutorial/stats) */
     if (run_mode_is_blitz() && !blitz_oaths_enabled())
     {
@@ -5249,7 +4646,11 @@ static NavResult player_birth_aux(void)
     {
         log_debug("Entering oath selection");
         NavResult oath_result = select_oath();
-        if (oath_result != NAV_OK) return oath_result;
+        if (oath_result != NAV_OK)
+        {
+            result = oath_result;
+            goto cleanup_semantic_birth_ui;
+        }
         log_debug("Oath selection completed");
     }
 
@@ -5257,7 +4658,10 @@ static NavResult player_birth_aux(void)
     {
         NavResult blitz_effects = blitz_configure_effects();
         if (blitz_effects != NAV_OK)
-            return blitz_effects;
+        {
+            result = blitz_effects;
+            goto cleanup_semantic_birth_ui;
+        }
     }
 
     /* Point-based flow */
@@ -5265,13 +4669,17 @@ static NavResult player_birth_aux(void)
     {
         NavResult auto_result = blitz_auto_build_character();
         if (auto_result != NAV_OK)
-            return auto_result;
+        {
+            result = auto_result;
+            goto cleanup_semantic_birth_ui;
+        }
     }
     else
     {
         for (;;)
         {
-            display_player(0);
+            if (!birth_semantic_assignment_active)
+                display_player(0);
 
             /* Stats allocation screen */
             log_debug("Entering stats allocation");
@@ -5280,15 +4688,34 @@ static NavResult player_birth_aux(void)
                 /* Skill allocation: may return NAV_BACK / NAV_TO_MAIN */
                 log_debug("Stats accepted, entering skills allocation");
                 NavResult g = gain_skills();
-                if (g != NAV_OK) return g;
+                if (g != NAV_OK)
+                {
+                    result = g;
+                    break;
+                }
                 log_debug("Skills allocation completed");
                 break; /* accepted */
             }
-            if (s == NAV_BACK)   return NAV_BACK;    /* back to Character Selection */
-            if (s == NAV_TO_MAIN) return NAV_TO_MAIN;/* back to main menu */
-            if (s == NAV_QUIT)   return NAV_QUIT;    /* hard exit */
+            if (s == NAV_BACK)
+            {
+                result = NAV_BACK;
+                break;
+            }
+            if (s == NAV_TO_MAIN)
+            {
+                result = NAV_TO_MAIN;
+                break;
+            }
+            if (s == NAV_QUIT)
+            {
+                result = NAV_QUIT;
+                break;
+            }
             /* any other value: loop again */
         }
+
+        if (birth_semantic_assignment_active)
+            goto cleanup_semantic_birth_ui;
     }
 
     // Reset the number of artefacts
@@ -5298,8 +4725,18 @@ static NavResult player_birth_aux(void)
               p_ptr->stat_base[A_STR], p_ptr->stat_base[A_DEX],
               p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA]);
 
+cleanup_semantic_birth_ui:
+    if (birth_semantic_assignment_active)
+    {
+        ui_information_scene_leave(&semantic_scope);
+        birth_semantic_assignment_active = false;
+    }
+
+    if (result != NAV_OK)
+        return result;
+
     /* Accept */
-    return NAV_OK;
+    return result;
 }
 
 /*
@@ -5380,6 +4817,7 @@ NavResult player_birth()
 
     return NAV_OK;
 }
+
 
 
 

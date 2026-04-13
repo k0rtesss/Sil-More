@@ -5,7 +5,6 @@
 #include "angband.h"
 #include "app/app-events.h"
 #include "app/app-host.h"
-#include "app/app-scene-information.h"
 #include "app/app-scene-menu.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
@@ -42,13 +41,34 @@ static app_event_record make_event(u16b kind, u16b scope, u32b sequence,
     return record;
 }
 
-static bool publish_information_scene_to_session(app_session* session,
-    const app_information_scene* scene)
+static bool build_test_menu_scene(app_ui_scene* scene, cptr title, cptr body,
+    int row_id, cptr row_label)
+{
+    app_ui_panel* panel;
+
+    if (!scene || !title || !body || !row_label)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_title(panel, TERM_WHITE, title);
+    return app_ui_panel_add_body_line(panel, TERM_SLATE, body)
+        && app_ui_panel_add_row(panel, (s16b)row_id, TERM_WHITE, true, true,
+            "", row_label, "");
+}
+
+static bool publish_menu_scene_to_session(app_session* session,
+    const app_ui_scene* scene)
 {
     if (!session || !scene)
         return false;
 
-    return app_session_publish_information_scene(session, scene);
+    return app_session_publish_menu_scene(session, scene);
 }
 
 static void test_record_round_trip(void)
@@ -383,8 +403,8 @@ static void test_session_scaffolding(void)
     app_event_record event;
     app_snapshot snapshot;
     app_snapshot_blob blob;
-    app_information_scene info_scene;
-    const app_information_snapshot* info_snapshot;
+    app_ui_scene menu_scene;
+    const app_menu_snapshot* menu_snapshot;
     const app_interaction_state* interaction;
     app_event_span drained;
     const app_session_counters* counters;
@@ -466,44 +486,21 @@ static void test_session_scaffolding(void)
     CHECK(app_session_snapshot(session)->blob_count == 1);
     CHECK(app_session_interactions_enabled(session));
 
-    app_information_scene_init(&info_scene);
-    CHECK(app_information_scene_add_text(&info_scene, 0, 1, TERM_WHITE,
-        "Info Header"));
-    CHECK(app_information_scene_add_cell_ex(&info_scene, 1, 4,
-        (byte)(TILE_FLAG | 3), (char)(TILE_FLAG | 5),
-        (byte)(TILE_FLAG | 1), (char)(TILE_FLAG | 2), 0, 2));
-    CHECK(app_information_scene_add_cursor(&info_scene, 1, 4, TERM_L_BLUE, 2));
-    CHECK(app_information_scene_add_text(&info_scene, 2, 0, TERM_SLATE,
+    CHECK(build_test_menu_scene(&menu_scene, "Info Header",
+        "Some informational text.", 17, "Open details"));
+    app_session_clear_menu_snapshot(session);
+    CHECK(publish_menu_scene_to_session(session, &menu_scene));
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
+    menu_snapshot = app_session_menu_snapshot(session);
+    CHECK(menu_snapshot != NULL);
+    CHECK(menu_snapshot->scene.panel_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].title, "Info Header"));
+    CHECK(menu_snapshot->scene.panels[0].body_line_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].body_lines[0].text,
         "Some informational text."));
-    app_session_clear_information_snapshot(session);
-    CHECK(app_session_add_information_op(session, 0, 1, TERM_WHITE,
-        "Info Header"));
-    CHECK(app_session_add_information_cell_ex(session, 1, 4,
-        (byte)(TILE_FLAG | 3), (char)(TILE_FLAG | 5),
-        (byte)(TILE_FLAG | 1), (char)(TILE_FLAG | 2), 0, 2));
-    CHECK(app_session_add_information_cursor(session, 1, 4, TERM_L_BLUE, 2));
-    CHECK(app_session_add_information_op(session, 2, 0, TERM_SLATE,
-        "Some informational text."));
-    CHECK(app_session_publish_information_snapshot(session));
-    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_INFORMATION);
-    info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot != NULL);
-    CHECK(info_snapshot->scene.op_count == 4);
-    CHECK(info_snapshot->scene.ops[0].kind == APP_INFORMATION_OP_KIND_TEXT);
-    CHECK(streq(info_snapshot->scene.ops[0].text, "Info Header"));
-    CHECK(info_snapshot->scene.ops[1].kind == APP_INFORMATION_OP_KIND_CELL);
-    CHECK(info_snapshot->scene.ops[1].attr == (byte)(TILE_FLAG | 3));
-    CHECK((byte)info_snapshot->scene.ops[1].ch == (byte)(TILE_FLAG | 5));
-    CHECK(info_snapshot->scene.ops[1].terrain_attr == (byte)(TILE_FLAG | 1));
-    CHECK((byte)info_snapshot->scene.ops[1].terrain_char
-        == (byte)(TILE_FLAG | 2));
-    CHECK(info_snapshot->scene.ops[1].width == 2);
-    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CURSOR);
-    CHECK(info_snapshot->scene.ops[2].attr == TERM_L_BLUE);
-    CHECK(info_snapshot->scene.ops[2].width == 2);
-    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_TEXT);
-    CHECK(streq(info_snapshot->scene.ops[3].text,
-        "Some informational text."));
+    CHECK(menu_snapshot->scene.panels[0].row_count == 1);
+    CHECK(menu_snapshot->scene.panels[0].rows[0].id == 17);
+    CHECK(streq(menu_snapshot->scene.panels[0].rows[0].label, "Open details"));
     CHECK(!app_session_interactions_enabled(session));
 
     app_session_set_snapshot(session, &snapshot);
@@ -702,11 +699,11 @@ static void test_information_scene_nested_restore(void)
     app_session* session;
     app_snapshot snapshot;
     app_snapshot_blob blob;
-    app_information_scene outer_scene;
-    app_information_scene inner_scene;
+    app_ui_scene outer_scene;
+    app_ui_scene inner_scene;
     ui_information_scene_scope outer_scope;
     ui_information_scene_scope inner_scope;
-    const app_information_snapshot* info_snapshot;
+    const app_menu_snapshot* menu_snapshot;
     bool snapshot_renderer_enabled;
     bool refresh_enabled;
     static const byte snapshot_bytes[] = { 5, 4, 3, 2 };
@@ -748,78 +745,63 @@ static void test_information_scene_nested_restore(void)
     snapshot.blob_count = 1;
     app_session_set_snapshot(session, &snapshot);
 
-    app_information_scene_init(&outer_scene);
-    CHECK(app_information_scene_add_text_ex(&outer_scene, 0, 0, TERM_WHITE,
-        STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN, "Outer title"));
-    CHECK(app_information_scene_add_text(&outer_scene, 2, 3, TERM_SLATE,
-        "Outer body"));
-    CHECK(app_information_scene_add_cell_ex(&outer_scene, 4, 5,
-        (byte)(TILE_FLAG | 6), (char)(TILE_FLAG | 7),
-        (byte)(TILE_FLAG | 8), (char)(TILE_FLAG | 9), 0, 2));
-    CHECK(app_information_scene_add_cursor(&outer_scene, 4, 5, TERM_L_BLUE, 2));
-
-    app_information_scene_init(&inner_scene);
-    CHECK(app_information_scene_add_text_ex(&inner_scene, 1, 1, TERM_L_RED,
-        STORY_FLAG_USE, "Inner title"));
-    CHECK(app_information_scene_add_text(&inner_scene, 3, 2, TERM_WHITE,
-        "Inner body"));
-    CHECK(app_information_scene_add_cell_ex(&inner_scene, 5, 6,
-        (byte)(TILE_FLAG | 10), (char)(TILE_FLAG | 11),
-        (byte)(TILE_FLAG | 12), (char)(TILE_FLAG | 13), 0, 2));
-    CHECK(app_information_scene_add_cursor(&inner_scene, 5, 6, TERM_L_BLUE, 2));
+    CHECK(build_test_menu_scene(&outer_scene, "Outer title", "Outer body", 7,
+        "Outer action"));
+    CHECK(build_test_menu_scene(&inner_scene, "Inner title", "Inner body", 11,
+        "Inner action"));
 
     outer_entered = ui_information_scene_enter(&outer_scope);
     CHECK(outer_entered);
     if (!outer_entered)
         goto cleanup;
 
-    CHECK(publish_information_scene_to_session(session, &outer_scene));
-    info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 4);
-    CHECK(streq(info_snapshot->scene.ops[0].text, "Outer title"));
-    CHECK(info_snapshot->scene.ops[0].story
-        == (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN));
-    CHECK(streq(info_snapshot->scene.ops[1].text, "Outer body"));
-    CHECK(info_snapshot->scene.ops[1].story == 0);
-    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
-    CHECK(info_snapshot->scene.ops[2].width == 2);
-    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 7));
-    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
-    CHECK(info_snapshot->scene.ops[3].width == 2);
+    CHECK(ui_information_scene_present_ui(&outer_scene));
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
+    menu_snapshot = app_session_menu_snapshot(session);
+    CHECK(menu_snapshot != NULL);
+    CHECK(menu_snapshot->scene.panel_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].title, "Outer title"));
+    CHECK(menu_snapshot->scene.panels[0].body_line_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].body_lines[0].text,
+        "Outer body"));
+    CHECK(menu_snapshot->scene.panels[0].row_count == 1);
+    CHECK(menu_snapshot->scene.panels[0].rows[0].id == 7);
+    CHECK(streq(menu_snapshot->scene.panels[0].rows[0].label,
+        "Outer action"));
 
     inner_entered = ui_information_scene_enter(&inner_scope);
     CHECK(inner_entered);
     if (!inner_entered)
         goto cleanup;
 
-    CHECK(publish_information_scene_to_session(session, &inner_scene));
-    info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 4);
-    CHECK(streq(info_snapshot->scene.ops[0].text, "Inner title"));
-    CHECK(info_snapshot->scene.ops[0].story == STORY_FLAG_USE);
-    CHECK(streq(info_snapshot->scene.ops[1].text, "Inner body"));
-    CHECK(info_snapshot->scene.ops[1].story == 0);
-    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
-    CHECK(info_snapshot->scene.ops[2].width == 2);
-    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 11));
-    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
-    CHECK(info_snapshot->scene.ops[3].width == 2);
+    CHECK(ui_information_scene_present_ui(&inner_scene));
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
+    menu_snapshot = app_session_menu_snapshot(session);
+    CHECK(menu_snapshot != NULL);
+    CHECK(menu_snapshot->scene.panel_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].title, "Inner title"));
+    CHECK(menu_snapshot->scene.panels[0].body_line_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].body_lines[0].text,
+        "Inner body"));
+    CHECK(menu_snapshot->scene.panels[0].row_count == 1);
+    CHECK(menu_snapshot->scene.panels[0].rows[0].id == 11);
+    CHECK(streq(menu_snapshot->scene.panels[0].rows[0].label,
+        "Inner action"));
 
     ui_information_scene_leave(&inner_scope);
     inner_entered = false;
-    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_INFORMATION);
-    info_snapshot = app_session_information_snapshot(session);
-    CHECK(info_snapshot->scene.op_count == 4);
-    CHECK(streq(info_snapshot->scene.ops[0].text, "Outer title"));
-    CHECK(info_snapshot->scene.ops[0].story
-        == (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN));
-    CHECK(streq(info_snapshot->scene.ops[1].text, "Outer body"));
-    CHECK(info_snapshot->scene.ops[1].story == 0);
-    CHECK(info_snapshot->scene.ops[2].kind == APP_INFORMATION_OP_KIND_CELL);
-    CHECK(info_snapshot->scene.ops[2].width == 2);
-    CHECK((byte)info_snapshot->scene.ops[2].ch == (byte)(TILE_FLAG | 7));
-    CHECK(info_snapshot->scene.ops[3].kind == APP_INFORMATION_OP_KIND_CURSOR);
-    CHECK(info_snapshot->scene.ops[3].width == 2);
+    CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
+    menu_snapshot = app_session_menu_snapshot(session);
+    CHECK(menu_snapshot != NULL);
+    CHECK(menu_snapshot->scene.panel_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].title, "Outer title"));
+    CHECK(menu_snapshot->scene.panels[0].body_line_count == 1);
+    CHECK(streq(menu_snapshot->scene.panels[0].body_lines[0].text,
+        "Outer body"));
+    CHECK(menu_snapshot->scene.panels[0].row_count == 1);
+    CHECK(menu_snapshot->scene.panels[0].rows[0].id == 7);
+    CHECK(streq(menu_snapshot->scene.panels[0].rows[0].label,
+        "Outer action"));
 
     ui_information_scene_leave(&outer_scope);
     outer_entered = false;

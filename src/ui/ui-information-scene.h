@@ -1,7 +1,6 @@
 #ifndef INCLUDED_UI_INFORMATION_SCENE_H
 #define INCLUDED_UI_INFORMATION_SCENE_H
 
-#include "app/app-scene-information.h"
 #include "app/app-session.h"
 
 #ifdef __cplusplus
@@ -13,7 +12,6 @@ typedef struct ui_information_scene_scope {
     bool previous_active;
     bool published_overlay;
     app_snapshot previous_snapshot;
-    app_information_snapshot* previous_information_snapshot;
     app_menu_snapshot* previous_menu_snapshot;
     app_wait_scope wait_scope;
 } ui_information_scene_scope;

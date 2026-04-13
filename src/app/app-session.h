@@ -7,7 +7,6 @@
 #include "app-input.h"
 #include "app-scene-bootstrap.h"
 #include "app-scene-dungeon.h"
-#include "app-scene-information.h"
 #include "app-scene-menu.h"
 #include "app-snapshot.h"
 #include "h-basic.h"
@@ -134,26 +133,11 @@ const app_bootstrap_snapshot* app_session_bootstrap_snapshot(
     const app_session* session);
 const app_dungeon_snapshot* app_session_dungeon_snapshot(
     const app_session* session);
-const app_information_snapshot* app_session_information_snapshot(
-    const app_session* session);
 const app_menu_snapshot* app_session_menu_snapshot(
     const app_session* session);
 void app_session_clear_bootstrap_snapshot(app_session* session);
 bool app_session_publish_bootstrap_scene(app_session* session,
     const app_bootstrap_scene* scene);
-void app_session_clear_information_snapshot(app_session* session);
-bool app_session_publish_information_scene(app_session* session,
-    const app_information_scene* scene);
-bool app_session_add_information_op(app_session* session, s16b row,
-    s16b col, byte attr, cptr text);
-bool app_session_add_information_op_ex(app_session* session, s16b row,
-    s16b col, byte attr, byte story, cptr text);
-bool app_session_add_information_cell_ex(app_session* session, s16b row,
-    s16b col, byte attr, char ch, byte terrain_attr, char terrain_char,
-    byte story, byte width);
-bool app_session_add_information_cursor(app_session* session, s16b row,
-    s16b col, byte attr, byte width);
-bool app_session_publish_information_snapshot(app_session* session);
 void app_session_clear_menu_snapshot(app_session* session);
 bool app_session_publish_menu_scene(app_session* session,
     const app_ui_scene* scene);

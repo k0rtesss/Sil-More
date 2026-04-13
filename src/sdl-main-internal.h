@@ -211,10 +211,6 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_dungeon_snapshot* snapshot,
     const sdl_scene_animation* animations, size_t animation_count,
     Uint64 now_ns);
-bool sdl_scene_information_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_information_snapshot* snapshot);
-bool sdl_scene_information_render_overlay(SDL_Texture* canvas,
-    const sdl_view* main_view, const app_information_snapshot* snapshot);
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,

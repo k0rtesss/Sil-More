@@ -112,6 +112,7 @@ bool smith_oath_confirm_break(void)
  * Check if an object was smithed by the player
  */
 static const object_type* replacement_filter_incoming = NULL;
+static bool item_tester_limit_group(const object_type* o_ptr);
 
 static bool pack_item_matches_replacement_type(const object_type* incoming,
                                                const object_type* candidate)
@@ -181,6 +182,81 @@ bool is_smithed_by_player(const object_type* o_ptr)
     return (o_ptr->unused1 != 0);
 }
 
+static bool pickup_choice_is_valid_pack_item(int item)
+{
+    if ((item < 0) || (item >= INVEN_PACK))
+    {
+        bell("Illegal object choice!");
+        return false;
+    }
+
+    if (!inventory[item].k_idx)
+    {
+        bell("That slot is empty.");
+        return false;
+    }
+
+    return true;
+}
+
+static bool pickup_select_pack_item(int* item, cptr prompt, cptr empty_prompt,
+                                    bool (*hook)(const object_type*),
+                                    const object_type* incoming)
+{
+    bool selected;
+    bool old_item_tester_full = item_tester_full;
+    byte old_item_tester_tval = item_tester_tval;
+    bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
+    const object_type* old_filter = replacement_filter_incoming;
+
+    if (!item)
+        return false;
+
+    if (hook)
+    {
+        replacement_filter_incoming = incoming;
+        item_tester_tval = 0;
+        item_tester_hook = hook;
+        item_tester_full = false;
+    }
+
+    selected = get_item(item, prompt, empty_prompt, USE_INVEN);
+
+    replacement_filter_incoming = old_filter;
+    item_tester_hook = old_item_tester_hook;
+    item_tester_tval = old_item_tester_tval;
+    item_tester_full = old_item_tester_full;
+
+    if (!selected)
+        return false;
+
+    return pickup_choice_is_valid_pack_item(*item);
+}
+
+static bool pickup_select_floor_item_from_pile(int* floor_o_idx)
+{
+    int item;
+
+    if (!floor_o_idx)
+        return false;
+
+    /*
+     * Keep floor selection on the shared get_item() path so SDL snapshot play
+     * keeps using the semantic floor selector.
+     */
+    if (!get_item(&item, "Pick up which object? ", NULL, (USE_FLOOR)))
+        return false;
+
+    if (item >= 0)
+    {
+        bell("Illegal object choice!");
+        return false;
+    }
+
+    *floor_o_idx = 0 - item;
+    return true;
+}
+
 /*
  * Prompt the player to drop an inventory item so a new object can be picked up.
  * Returns true if an item was dropped, false if the player declined or nothing was dropped.
@@ -189,6 +265,7 @@ static bool prompt_replace_pack_item(const object_type* incoming)
 {
     char incoming_name[80];
     char prompt[160];
+    int item;
 
     object_desc(incoming_name, sizeof(incoming_name), incoming, true, 3);
     msg_format("No room for %s.", incoming_name);
@@ -196,38 +273,21 @@ static bool prompt_replace_pack_item(const object_type* incoming)
 
     strnfmt(prompt, sizeof(prompt), "Replace which item to pick up %s? ", incoming_name);
 
-    while (true)
+    if (!pickup_select_pack_item(&item, prompt,
+            "You have nothing to replace.", NULL, NULL))
     {
-        int item;
-
-        if (!get_item(&item, prompt,
-                "You have nothing to replace.", (USE_INVEN)))
-        {
-            return false;
-        }
-
-        if ((item < 0) || (item >= INVEN_PACK))
-        {
-            bell("Illegal object choice!");
-            continue;
-        }
-
-        object_type* drop_ptr = &inventory[item];
-
-        if (!drop_ptr->k_idx)
-        {
-            bell("That slot is empty.");
-            continue;
-        }
-
-        inven_drop(item, drop_ptr->number);
-
-        /* Let inventory housekeeping run before we attempt the pickup again */
-        p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-        notice_stuff();
-
-        return true;
+        return false;
     }
+
+    object_type* drop_ptr = &inventory[item];
+
+    inven_drop(item, drop_ptr->number);
+
+    /* Let inventory housekeeping run before we attempt the pickup again */
+    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+    notice_stuff();
+
+    return true;
 }
 
 typedef enum
@@ -512,9 +572,9 @@ void do_cmd_pickup_from_pile(void)
      */
     while (true)
     {
-        int item;
         int floor_list[MAX_FLOOR_STACK];
         int floor_num;
+        int floor_o_idx;
 
         /*start with everything updated*/
         handle_stuff();
@@ -533,24 +593,10 @@ void do_cmd_pickup_from_pile(void)
             break;
         }
 
-        if (!get_item(&item, "Pick up which object? ",
-                NULL, (USE_FLOOR)))
-        {
+        if (!pickup_select_floor_item_from_pile(&floor_o_idx))
             break;
-        }
 
-        if (item >= 0)
-        {
-            bell("Illegal object choice!");
-            continue;
-        }
-
-        /*
-         * Keep selection on the shared get_item() path so snapshot play uses
-         * the semantic floor selector, but run the richer single-object pickup
-         * handling here once an item has been chosen.
-         */
-        if (!pickup_handle_floor_object(0 - item, false))
+        if (!pickup_handle_floor_object(floor_o_idx, false))
             continue;
 
         /*Mark that we picked something up*/
@@ -638,12 +684,7 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     char prompt[160];
     cptr label = inven_carry_limit_label();
     int limit = inven_carry_limit_value();
-    bool replaced = false;
-
-    bool old_item_tester_full = item_tester_full;
-    byte old_item_tester_tval = item_tester_tval;
-    bool (*old_item_tester_hook)(const object_type*) = item_tester_hook;
-    const object_type* old_filter = replacement_filter_incoming;
+    int item;
 
     if (label)
         msg_format("You already carry %s (limit %d).", label, limit);
@@ -655,53 +696,26 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
     strnfmt(prompt, sizeof(prompt),
             "Replace which item to pick up %s? ", incoming_name);
 
-    replacement_filter_incoming = incoming;
-    item_tester_tval = 0;
-    item_tester_hook = item_tester_limit_group;
-    item_tester_full = false;
-
-    while (true)
+    if (!pickup_select_pack_item(&item, prompt,
+            "You have nothing to replace.", item_tester_limit_group, incoming))
     {
-        int item;
-
-        if (!get_item(&item, prompt, "You have nothing to replace.", USE_INVEN))
-            break;
-
-        if ((item < 0) || (item >= INVEN_PACK))
-        {
-            bell("Illegal object choice!");
-            continue;
-        }
-
-        object_type* drop_ptr = &inventory[item];
-
-        if (!drop_ptr->k_idx)
-        {
-            bell("That slot is empty.");
-            continue;
-        }
-
-        if (!inven_carry_limit_can_replace(drop_ptr))
-        {
-            msg_print("That will not make enough room.");
-            continue;
-        }
-
-        inven_drop(item, drop_ptr->number);
-
-        p_ptr->notice |= (PN_COMBINE | PN_REORDER);
-        notice_stuff();
-
-        replaced = true;
-        break;
+        return false;
     }
 
-    replacement_filter_incoming = old_filter;
-    item_tester_hook = old_item_tester_hook;
-    item_tester_tval = old_item_tester_tval;
-    item_tester_full = old_item_tester_full;
+    object_type* drop_ptr = &inventory[item];
 
-    return replaced;
+    if (!inven_carry_limit_can_replace(drop_ptr))
+    {
+        msg_print("That will not make enough room.");
+        return false;
+    }
+
+    inven_drop(item, drop_ptr->number);
+
+    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+    notice_stuff();
+
+    return true;
 }
 
 static pickup_failure_result handle_zero_limit_pickup(object_type* incoming,

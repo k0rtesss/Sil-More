@@ -211,31 +211,6 @@ static bool ui_information_scene_build_monster_recall_ui(app_ui_scene* scene,
     return true;
 }
 
-static app_information_snapshot* ui_information_scene_clone_snapshot(
-    const app_information_snapshot* snapshot)
-{
-    app_information_snapshot* copy;
-
-    if (!snapshot)
-        return NULL;
-
-    copy = mem_alloc(app_information_snapshot);
-    if (!copy)
-        return NULL;
-
-    app_information_snapshot_init(copy);
-    copy->snapshot = snapshot->snapshot;
-    copy->snapshot.blobs = copy->blobs;
-    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
-    copy->blobs[0].kind = snapshot->blobs[0].kind;
-    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
-    copy->blobs[0].data = (const byte*)&copy->scene;
-    copy->blobs[0].size = sizeof(copy->scene);
-    copy->scene = snapshot->scene;
-
-    return copy;
-}
-
 static app_menu_snapshot* ui_information_scene_clone_menu_snapshot(
     const app_menu_snapshot* snapshot)
 {
@@ -274,15 +249,6 @@ static bool ui_information_scene_restore_snapshot(app_session* session,
             (unsigned)scope->previous_menu_snapshot->snapshot.revision);
         return app_session_publish_menu_scene(session,
             &scope->previous_menu_snapshot->scene);
-    }
-
-    if (scope->previous_snapshot.scene == APP_SCENE_KIND_INFORMATION
-        && scope->previous_information_snapshot)
-    {
-        log_debug("[metarun-esc-trace] ui_information_scene_restore_snapshot -> information rev=%u",
-            (unsigned)scope->previous_information_snapshot->snapshot.revision);
-        return app_session_publish_information_scene(session,
-            &scope->previous_information_snapshot->scene);
     }
 
     return false;
@@ -342,15 +308,7 @@ bool ui_information_scene_enter(ui_information_scene_scope* scope)
     session = app_session_current();
     snapshot = app_session_snapshot(session);
     scope->previous_snapshot = *app_session_snapshot(session);
-    if (snapshot && snapshot->scene == APP_SCENE_KIND_INFORMATION)
-    {
-        scope->previous_information_snapshot
-            = ui_information_scene_clone_snapshot(
-                app_session_information_snapshot(session));
-        if (!scope->previous_information_snapshot)
-            return false;
-    }
-    else if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
+    if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
     {
         scope->previous_menu_snapshot = ui_information_scene_clone_menu_snapshot(
             app_session_menu_snapshot(session));
@@ -442,7 +400,7 @@ int ui_information_scene_wait_key_nonrepeat(void)
 void ui_information_scene_leave(ui_information_scene_scope* scope)
 {
     app_session* session = app_session_current();
-    bool restored_information = false;
+    bool restored_snapshot = false;
 
     if (!scope || !scope->active)
         return;
@@ -453,9 +411,9 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
             (unsigned)scope->previous_snapshot.scene,
             scope->published_overlay ? 1 : 0, scope->previous_active ? 1 : 0);
         app_session_clear_inputs(session);
-        restored_information = ui_information_scene_restore_snapshot(session,
+        restored_snapshot = ui_information_scene_restore_snapshot(session,
             scope);
-        if (!restored_information)
+        if (!restored_snapshot)
             app_session_set_snapshot(session, &scope->previous_snapshot);
         if (scope->published_overlay)
             app_session_clear_dungeon_overlay_scene(session);
@@ -463,14 +421,12 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
     }
 
     g_ui_information_scene_active = scope->previous_active;
-    scope->previous_information_snapshot
-        = mem_free(scope->previous_information_snapshot);
     scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
-    log_debug("[metarun-esc-trace] ui_information_scene_leave end restored_information=%d current_scene=%u",
-        restored_information ? 1 : 0,
+    log_debug("[metarun-esc-trace] ui_information_scene_leave end restored_snapshot=%d current_scene=%u",
+        restored_snapshot ? 1 : 0,
         (unsigned)(session ? app_session_snapshot(session)->scene : 0));
-    if (!restored_information
+    if (!restored_snapshot
         && scope->previous_snapshot.scene == APP_SCENE_KIND_DUNGEON
         && Term
         && !scope->previous_active)

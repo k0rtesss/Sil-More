@@ -63,10 +63,43 @@ typedef struct main_menu_about_span {
     cptr text;
 } main_menu_about_span;
 
+typedef enum main_menu_scene_mode {
+    MAIN_MENU_SCENE_MODE_NONE = 0,
+    MAIN_MENU_SCENE_MODE_DUNGEON_OVERLAY,
+    MAIN_MENU_SCENE_MODE_MENU_SNAPSHOT
+} main_menu_scene_mode;
+
 typedef struct main_menu_scene_scope {
     bool active;
+    main_menu_scene_mode mode;
     app_snapshot previous_snapshot;
+    app_menu_snapshot* previous_menu_snapshot;
 } main_menu_scene_scope;
+
+static app_menu_snapshot* main_menu_clone_menu_snapshot(
+    const app_menu_snapshot* snapshot)
+{
+    app_menu_snapshot* copy;
+
+    if (!snapshot)
+        return NULL;
+
+    copy = mem_alloc(app_menu_snapshot);
+    if (!copy)
+        return NULL;
+
+    app_menu_snapshot_init(copy);
+    copy->snapshot = snapshot->snapshot;
+    copy->snapshot.blobs = copy->blobs;
+    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
+    copy->blobs[0].kind = snapshot->blobs[0].kind;
+    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
+    copy->blobs[0].data = (const byte*)&copy->scene;
+    copy->blobs[0].size = sizeof(copy->scene);
+    copy->scene = snapshot->scene;
+
+    return copy;
+}
 
 static int main_menu_calc_width(void)
 {
@@ -584,12 +617,30 @@ static bool main_menu_scene_enter(main_menu_scene_scope* scope)
         return false;
 
     snapshot = app_session_snapshot(session);
-    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+    if (!snapshot)
         return false;
 
     scope->previous_snapshot = *snapshot;
-    scope->active = true;
-    return true;
+    if (snapshot->scene == APP_SCENE_KIND_DUNGEON)
+    {
+        scope->mode = MAIN_MENU_SCENE_MODE_DUNGEON_OVERLAY;
+        scope->active = true;
+        return true;
+    }
+
+    if (snapshot->scene == APP_SCENE_KIND_MENU)
+    {
+        scope->previous_menu_snapshot = main_menu_clone_menu_snapshot(
+            app_session_menu_snapshot(session));
+        if (!scope->previous_menu_snapshot)
+            return false;
+        scope->mode = MAIN_MENU_SCENE_MODE_MENU_SNAPSHOT;
+        scope->active = true;
+        return true;
+    }
+
+    scope->mode = MAIN_MENU_SCENE_MODE_NONE;
+    return false;
 }
 
 static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
@@ -684,38 +735,59 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
         return false;
 
     app_session_clear_interaction(session);
-    if (!app_session_publish_dungeon_overlay_scene(session, &scene))
+    if (scope->mode == MAIN_MENU_SCENE_MODE_DUNGEON_OVERLAY)
+    {
+        if (!app_session_publish_dungeon_overlay_scene(session, &scene))
+            return false;
+    }
+    else if (!app_session_publish_menu_scene(session, &scene))
+    {
         return false;
+    }
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
     return true;
 }
 
-static bool main_menu_information_scene_present(int highlight, bool death_view)
-{
-    app_session* session = app_session_current();
-    app_ui_scene scene;
-
-    if (!session)
-        return false;
-    if (!main_menu_build_ui_scene(&scene, highlight, death_view))
-        return false;
-
-    app_session_clear_interaction(session);
-    return ui_information_scene_present_ui(&scene);
-}
-
-static void main_menu_scene_leave(main_menu_scene_scope* scope)
+static bool main_menu_scene_restore(main_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
 
     if (!scope || !scope->active || !session)
+        return false;
+
+    if (scope->mode == MAIN_MENU_SCENE_MODE_DUNGEON_OVERLAY)
+    {
+        app_session_clear_dungeon_overlay_scene(session);
+        return true;
+    }
+
+    if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
+        && scope->previous_menu_snapshot)
+    {
+        return app_session_publish_menu_scene(session,
+            &scope->previous_menu_snapshot->scene);
+    }
+
+    app_session_set_snapshot(session, &scope->previous_snapshot);
+    return true;
+}
+
+static void main_menu_scene_leave(main_menu_scene_scope* scope, bool refresh)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scope->active)
         return;
 
-    app_session_clear_dungeon_overlay_scene(session);
-    app_session_set_snapshot(session, &scope->previous_snapshot);
+    (void)main_menu_scene_restore(scope);
+    if (session && app_session_interactions_enabled(session))
+        app_session_clear_interaction(session);
+    if (refresh)
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+
+    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
 static void main_menu_publish_interaction(int highlight, bool death_view)
@@ -810,11 +882,27 @@ static void main_menu_publish_interaction(int highlight, bool death_view)
         (s16b)(highlight - 1));
 }
 
+static bool main_menu_action_opens_scene(int actiontype)
+{
+    return actiontype == MAIN_MENU_CHARACTER
+        || actiontype == MAIN_MENU_KNOWLEDGE
+        || actiontype == MAIN_MENU_QUEST_STATUS
+        || actiontype == MAIN_MENU_HALLS_OF_MANDOS
+        || actiontype == MAIN_MENU_RUN_HISTORY
+        || actiontype == MAIN_MENU_MAP
+        || actiontype == MAIN_MENU_LOG
+        || actiontype == MAIN_MENU_COMBAT_HISTORY
+        || actiontype == MAIN_MENU_HINT_MESSAGES
+        || actiontype == MAIN_MENU_OPTIONS
+        || actiontype == MAIN_MENU_HELP
+        || actiontype == MAIN_MENU_ABOUT;
+}
+
 /*
  * Performs the interface and selection work for the main menu.
  */
-static int main_menu_aux(int* highlight, bool scene_active,
-    bool clear_fullscreen, main_menu_scene_scope* menu_scene_scope)
+static int main_menu_aux(int* highlight, bool clear_fullscreen,
+    main_menu_scene_scope* menu_scene_scope)
 {
     char ch;
     int i;
@@ -851,14 +939,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
     if (death_view && main_menu_choice_is_disabled(*highlight))
         *highlight = MAIN_MENU_RETURN_GAME;
 
-    if (!use_menu_scene && scene_active
-        && !main_menu_information_scene_present(*highlight, death_view))
-    {
-        log_warn("main menu: failed to present semantic information scene");
-        return -1;
-    }
-
-    if (!use_menu_scene && !scene_active)
+    if (!use_menu_scene)
     {
         for (i = 0; i < menu_h; i++)
         {
@@ -972,10 +1053,7 @@ static int main_menu_aux(int* highlight, bool scene_active,
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);
-    if (scene_active)
-        ch = (char)ui_information_scene_wait_key();
-    else
-        ch = inkey();
+    ch = inkey();
     inkey_set_cursor_hidden(false);
 
     // choose an option by letter - alphabetical mapping (updated for new order)
@@ -1101,13 +1179,11 @@ void do_cmd_main_menu(void)
     bool pending_hint_look = false;
     int pending_hint_look_y = -1;
     int pending_hint_look_x = -1;
-    ui_information_scene_scope scene_scope;
     main_menu_scene_scope menu_scene_scope;
     bool menu_scene_active;
-    bool allow_information_scene;
-    bool scene_active;
     bool clear_fullscreen;
     bool restore_saved_screen;
+    bool refresh_on_leave;
 
     /* Clear any active banner before opening main menu */
     extern int g_banner_force_redraw_remaining;
@@ -1122,17 +1198,12 @@ void do_cmd_main_menu(void)
         && !main_menu_scene_present(&menu_scene_scope, highlight,
             death_spectator_active()))
     {
-        main_menu_scene_leave(&menu_scene_scope);
+        main_menu_scene_leave(&menu_scene_scope, true);
         menu_scene_active = false;
     }
 
-    allow_information_scene = snapshot
-        && snapshot->scene == APP_SCENE_KIND_INFORMATION
-        && !menu_scene_active;
-    scene_active = allow_information_scene
-        && ui_information_scene_enter(&scene_scope);
-    clear_fullscreen = scene_active;
-    restore_saved_screen = !scene_active && !menu_scene_active;
+    clear_fullscreen = snapshot && snapshot->scene != APP_SCENE_KIND_DUNGEON;
+    restore_saved_screen = !menu_scene_active;
 
     /* Save screen */
     if (restore_saved_screen)
@@ -1140,8 +1211,8 @@ void do_cmd_main_menu(void)
     /* Process Events until "Return to Game" is selected */
     while (!leave_menu)
     {
-        actiontype = main_menu_aux(&highlight, scene_active,
-            clear_fullscreen, &menu_scene_scope);
+        actiontype = main_menu_aux(&highlight, clear_fullscreen,
+            &menu_scene_scope);
 
         if (death_spectator_active() && main_menu_choice_is_disabled(actiontype))
         {
@@ -1180,11 +1251,11 @@ void do_cmd_main_menu(void)
         }
     }
 
+    refresh_on_leave = !main_menu_action_opens_scene(actiontype);
+
     /* Load screen */
-    if (scene_active)
-        ui_information_scene_leave(&scene_scope);
-    else if (menu_scene_active)
-        main_menu_scene_leave(&menu_scene_scope);
+    if (menu_scene_active)
+        main_menu_scene_leave(&menu_scene_scope, refresh_on_leave);
     else if (restore_saved_screen)
         screen_load();
 

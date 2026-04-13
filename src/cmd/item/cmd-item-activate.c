@@ -105,6 +105,60 @@ static void msg_print_object_identified(const object_type* o_ptr)
     msg_format("You identify %s.", o_name);
 }
 
+static object_type* resolve_selected_item_object(int item)
+{
+    if (item == SUPPLIES_INDEX)
+        return NULL;
+
+    if (item >= 0)
+        return &inventory[item];
+
+    return &o_list[0 - item];
+}
+
+static bool activate_select_item_or_open_supplies(int* out_item,
+    object_type** out_o_ptr, byte tval, cptr prompt, cptr empty_prompt,
+    int supply_group)
+{
+    bool allow_supplies = (supply_group >= 0);
+
+    if (!out_item || !out_o_ptr)
+        return false;
+
+    *out_o_ptr = NULL;
+    item_tester_tval = tval;
+
+    if (allow_supplies)
+    {
+        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, supply_group,
+            true);
+    }
+
+    if (!get_item(out_item, prompt, empty_prompt, (USE_INVEN | USE_FLOOR)))
+    {
+        if (allow_supplies)
+            supplies_clear_pending_action();
+        return false;
+    }
+
+    if (*out_item == SUPPLIES_INDEX)
+    {
+        if (allow_supplies)
+        {
+            supplies_clear_pending_action();
+            open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE,
+                supply_group, true, true);
+        }
+        return false;
+    }
+
+    if (allow_supplies)
+        supplies_clear_pending_action();
+
+    *out_o_ptr = resolve_selected_item_object(*out_item);
+    return (*out_o_ptr != NULL);
+}
+
 static const object_type* sanctity_target_excluded = NULL;
 
 static bool item_tester_hook_sanctity_target(const object_type* o_ptr)
@@ -174,8 +228,7 @@ static bool sanctity_choose_target(const object_type* gem_o_ptr,
     item_tester_tval = old_item_tester_tval;
     item_tester_full = old_item_tester_full;
 
-    *target_o_ptr = (chosen_item >= 0) ? &inventory[chosen_item]
-        : &o_list[0 - chosen_item];
+    *target_o_ptr = resolve_selected_item_object(chosen_item);
     return ((*target_o_ptr != NULL) && (*target_o_ptr)->k_idx);
 }
 
@@ -230,7 +283,6 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     object_type* o_ptr = NULL;
     int supply_index = supplies_current_action();
     bool from_supplies = (supply_index >= 0);
-    cptr q, s;
 
     /* Use specified item if possible */
     if (default_o_ptr != NULL)
@@ -241,40 +293,12 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     /* Get an item */
     else
     {
-        /* Restrict choices to food */
-        item_tester_tval = TV_FOOD;
-
-        /* Get an item */
-        q = "Eat which item? ";
-        s = "You have nothing to eat.";
-        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_HERBS, true);
-        if (!get_item(&item, q, s, (USE_INVEN | USE_FLOOR)))
+        if (!activate_select_item_or_open_supplies(&item, &o_ptr, TV_FOOD,
+                "Eat which item? ", "You have nothing to eat.",
+                SUPPLY_GROUP_HERBS))
         {
-            supplies_clear_pending_action();
             return;
         }
-
-        if (item == SUPPLIES_INDEX)
-        {
-            supplies_clear_pending_action();
-            open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_HERBS, true, true);
-            return;
-        }
-
-        supplies_clear_pending_action();
-
-        /* Get the item (in the pack) */
-        if (item >= 0)
-        {
-            o_ptr = &inventory[item];
-        }
-
-        /* Get the item (on the floor) */
-        else
-        {
-            o_ptr = &o_list[0 - item];
-        }
-
         from_supplies = false;
         supply_index = -1;
     }
@@ -370,7 +394,6 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     object_type* o_ptr = NULL;
     int supply_index = supplies_current_action();
     bool from_supplies = (supply_index >= 0);
-    cptr q, s;
 
     /* Use specified item if possible */
     if (default_o_ptr != NULL)
@@ -381,40 +404,12 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
     /* Get an item */
     else
     {
-        /* Restrict choices to potions */
-        item_tester_tval = TV_POTION;
-
-        /* Get an item */
-        q = "Quaff which potion? ";
-        s = "You have no potions to quaff.";
-        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_POTIONS, true);
-        if (!get_item(&item, q, s, (USE_INVEN | USE_FLOOR)))
+        if (!activate_select_item_or_open_supplies(&item, &o_ptr,
+                TV_POTION, "Quaff which potion? ",
+                "You have no potions to quaff.", SUPPLY_GROUP_POTIONS))
         {
-            supplies_clear_pending_action();
             return;
         }
-
-        if (item == SUPPLIES_INDEX)
-        {
-            supplies_clear_pending_action();
-            open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_POTIONS, true, true);
-            return;
-        }
-
-        supplies_clear_pending_action();
-
-        /* Get the item (in the pack) */
-        if (item >= 0)
-        {
-            o_ptr = &inventory[item];
-        }
-
-        /* Get the item (on the floor) */
-        else
-        {
-            o_ptr = &o_list[0 - item];
-        }
-
         from_supplies = false;
         supply_index = -1;
     }
@@ -801,7 +796,6 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
 
     int supply_index = supplies_current_action();
     bool from_supplies = (supply_index >= 0);
-    cptr q, s;
 
     /* Use specified item if possible */
     if (default_o_ptr != NULL)
@@ -812,40 +806,12 @@ void do_cmd_use_gem(object_type* default_o_ptr, int default_item)
     /* Get an item */
     else
     {
-        /* Restrict choices to gems */
-        item_tester_tval = TV_GEM;
-
-        /* Get an item */
-        q = "Use which gem? ";
-        s = "You have no gems to use.";
-        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_GEMS, true);
-        if (!get_item(&item, q, s, (USE_INVEN | USE_FLOOR)))
+        if (!activate_select_item_or_open_supplies(&item, &o_ptr, TV_GEM,
+                "Use which gem? ", "You have no gems to use.",
+                SUPPLY_GROUP_GEMS))
         {
-            supplies_clear_pending_action();
             return;
         }
-
-        if (item == SUPPLIES_INDEX)
-        {
-            supplies_clear_pending_action();
-            open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE, SUPPLY_GROUP_GEMS, true, true);
-            return;
-        }
-
-        supplies_clear_pending_action();
-
-        /* Get the item (in the pack) */
-        if (item >= 0)
-        {
-            o_ptr = &inventory[item];
-        }
-
-        /* Get the item (on the floor) */
-        else
-        {
-            o_ptr = &o_list[0 - item];
-        }
-
         from_supplies = false;
         supply_index = -1;
     }
@@ -976,17 +942,9 @@ void do_cmd_activate(void)
     if (!get_item(&item, q, s, (USE_EQUIP)))
         return;
 
-    /* Get the item (in the pack) */
-    if (item >= 0)
-    {
-        o_ptr = &inventory[item];
-    }
-
-    /* Get the item (on the floor) */
-    else
-    {
-        o_ptr = &o_list[0 - item];
-    }
+    o_ptr = resolve_selected_item_object(item);
+    if (!o_ptr)
+        return;
 
     /* Take a turn */
     p_ptr->energy_use = 100;

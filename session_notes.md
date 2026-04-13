@@ -1,5 +1,17 @@
 # Session notes
 
+## 2026-04-14: UI render replacement N3-G blitz slice assessment
+- Checked the `Agent N3-G` write set and confirmed `src/blitz.c` already has no local `inkey()`, `screen_save()` / `screen_load()`, or direct `Term_*` UI debt.
+- `src/blitz.c` only owns the run-mode state plus the semantic blitz end-summary modal (`blitz_show_end_summary_ui()`), so there was no safe blitz-only migration patch to land inside that file.
+- The remaining blitz setup and effect-pick workflows that still own blocking legacy loops are actually in `src/birth.c`:
+  - `blitz_setup_menu()` around line 2970
+  - `blitz_select_effect_from_list()` around line 4187
+  - `blitz_show_effect_summary()` around line 4309
+- Kept the `N3-G` slice inside its assigned write set instead of widening into the birth slice owned by another agent.
+- Validation:
+  - `rg -n "screen_save\\(|screen_load\\(|inkey\\(|Term_" src/blitz.c src/blitz.h` returned no matches
+  - `py -3 tools/ui_debt_audit.py --check`
+
 ## 2026-04-03: UI render replacement Slice A chrome/menu cut
 - Added the first shared semantic UI payload under `src/app/app-ui.[ch]` and kept the existing menu payload as an adapter source.
 - Routed SDL menu rendering through `app_ui_scene` entrypoints in `src/sdl-scene-menu.c`, with the old menu compositor temporarily used as a panel adapter so current visuals stay intact.

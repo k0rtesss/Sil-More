@@ -408,7 +408,7 @@ static void test_session_wrappers(void)
 
     memset(&snapshot, 0, sizeof(snapshot));
     snapshot.revision = 1234;
-    snapshot.scene = APP_SCENE_KIND_INFORMATION;
+    snapshot.scene = APP_SCENE_KIND_MENU;
     snapshot.flags = APP_SNAPSHOT_FLAG_PARTIAL;
     snapshot.blobs = &blob;
     snapshot.blob_count = 1;
@@ -429,7 +429,7 @@ static void test_session_wrappers(void)
     CHECK(app_wire_deserialize_snapshot_packet(snapshot_packet,
         snapshot_packet_size, &decoded_snapshot, decoded_blobs,
         N_ELEMENTS(decoded_blobs)));
-    CHECK(decoded_snapshot.scene == APP_SCENE_KIND_INFORMATION);
+    CHECK(decoded_snapshot.scene == APP_SCENE_KIND_MENU);
     CHECK(decoded_snapshot.revision == 1234);
     CHECK(decoded_snapshot.blobs[0].kind == APP_SNAPSHOT_BLOB_MESSAGES);
     CHECK(memcmp(decoded_snapshot.blobs[0].data, blob_data,
