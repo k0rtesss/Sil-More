@@ -668,14 +668,12 @@ void do_cmd_fire(int quiver)
                         byte a = PICT_A(p);
                         char c = PICT_C(p);
 
-                        /* Display the visual effects */
-                        print_rel(c, a, ny, nx);
-
-                        move_cursor_relative(ny, nx);
+                        /* Present the semantic projectile animation frame. */
+                        (void)a;
+                        (void)c;
                         platform_frame_present();
                         platform_frame_delay_ms(
                             (u32b)(25 * op_ptr->delay_factor));
-                        lite_spot(ny, nx);
                         platform_frame_present();
                     }
 
@@ -727,13 +725,11 @@ void do_cmd_fire(int quiver)
                 byte a = PICT_A(p);
                 char c = PICT_C(p);
 
-                /* Display the visual effects */
-                print_rel(c, a, y, x);
-
-                move_cursor_relative(y, x);
+                /* Present the semantic projectile animation frame. */
+                (void)a;
+                (void)c;
                 platform_frame_present();
                 platform_frame_delay_ms((u32b)msec);
-                lite_spot(y, x);
                 platform_frame_present();
             }
 
@@ -752,7 +748,7 @@ void do_cmd_fire(int quiver)
 
                 if (abort_for_mercy(m_ptr))
                 {
-                    restore_game_cursor();
+                    dungeon_sync_cursor_state();
                     return;
                 }
 
@@ -1281,7 +1277,7 @@ void do_cmd_fire(int quiver)
     else
         attacks_of_opportunity(0, 0);
 
-    restore_game_cursor();
+    dungeon_sync_cursor_state();
 }
 
 /*handle special effects of throwing certain potions*/
@@ -1335,8 +1331,8 @@ static bool thrown_potion_effects(object_type* o_ptr, bool* is_dead, int m_idx)
             /* Mark as visible */
             m_ptr->ml = true;
 
-            /*re-draw the spot*/
-            lite_spot(y, x);
+            /* re-draw through snapshot invalidation */
+            dungeon_mark_map_for_redraw();
 
             /* Update the monster name*/
             monster_desc(m_name, sizeof(m_name), m_ptr, 0);
@@ -1884,13 +1880,10 @@ void do_cmd_throw(bool automatic)
             /* Only do visuals if the player can "see" the missile */
             if (panel_contains(ny, nx))
             {
-                /* Visual effects */
-                print_rel('*', TERM_L_WHITE, ny, nx);
-                move_cursor_relative(ny, nx);
+                /* Present the semantic projectile animation frame. */
                 platform_frame_present();
                 platform_frame_delay_ms(
                     (u32b)(25 * op_ptr->delay_factor));
-                lite_spot(ny, nx);
                 platform_frame_present();
             }
 
@@ -1911,12 +1904,11 @@ void do_cmd_throw(bool automatic)
         /* Only do visuals if the player can "see" the missile */
         if (panel_contains(y, x) && player_can_see_bold(y, x))
         {
-            /* Visual effects */
-            print_rel(missile_char, missile_attr, y, x);
-            move_cursor_relative(y, x);
+            /* Present the semantic projectile animation frame. */
+            (void)missile_char;
+            (void)missile_attr;
             platform_frame_present();
             platform_frame_delay_ms((u32b)msec);
-            lite_spot(y, x);
             platform_frame_present();
         }
 
@@ -2261,7 +2253,7 @@ void do_cmd_throw(bool automatic)
 
     // Break the truce if creatures see
     break_truce(false);
-    restore_game_cursor();
+    dungeon_sync_cursor_state();
 }
 
 /*

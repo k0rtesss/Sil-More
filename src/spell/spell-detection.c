@@ -51,7 +51,7 @@ void detect_all_doors_traps()
                 cave_info[y][x] |= (CAVE_MARK);
 
                 /* Redraw */
-                lite_spot(y, x);
+                dungeon_mark_map_for_redraw();
             }
         }
     }
@@ -129,7 +129,7 @@ bool detect_doors(void)
                 cave_info[y][x] |= (CAVE_MARK);
 
                 /* Redraw */
-                lite_spot(y, x);
+                dungeon_mark_map_for_redraw();
 
                 detect = true;
             }
@@ -164,7 +164,7 @@ bool detect_stairs(void)
                 cave_info[y][x] |= (CAVE_MARK);
 
                 /* Redraw */
-                lite_spot(y, x);
+                dungeon_mark_map_for_redraw();
 
                 /* Obvious */
                 detect = true;
@@ -228,7 +228,7 @@ bool detect_objects_normal(int radius)
         (void)player_auto_identify_smithing_object(o_ptr, true);
 
         /* Redraw */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
 
         /* Detect */
         detect = true;
@@ -321,7 +321,7 @@ bool detect_objects_magic(void)
             o_ptr->marked = true;
 
             /* Redraw */
-            lite_spot(y, x);
+            dungeon_mark_map_for_redraw();
 
             /* Detect */
             detect = true;

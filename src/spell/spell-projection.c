@@ -591,7 +591,7 @@ static bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
             squelch = do_ident_item(-1, o_ptr);
 
             /* Redraw purple dots */
-            lite_spot(y, x);
+            dungeon_mark_map_for_redraw();
 
             /* Squelch? */
             if (squelch == SQUELCH_YES)
@@ -641,7 +641,7 @@ static bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
                 delete_object_idx(this_o_idx);
 
                 /* Redraw */
-                lite_spot(y, x);
+                dungeon_mark_map_for_redraw();
             }
         }
     }
@@ -1646,7 +1646,7 @@ static bool project_m(
     update_mon(cave_m_idx[y][x], false);
 
     /* Redraw the monster grid */
-    lite_spot(y, x);
+    dungeon_mark_map_for_redraw();
 
     /* Update monster recall window */
     if (p_ptr->monster_race_idx == m_ptr->r_idx)
@@ -2482,33 +2482,17 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                     a = PICT_A(p);
                     c = PICT_C(p);
 
-                    /* Display the visual effects */
-                    print_rel(c, a, y, x);
-                    move_cursor_relative(y, x);
+                    /* Present the semantic projectile animation frame. */
+                    (void)a;
+                    (void)c;
                     if (op_ptr->delay_factor)
                         platform_frame_present();
 
                     /* Delay */
                     platform_frame_delay_ms((u32b)msec);
 
-                    /* Erase the visual effects */
-                    lite_spot(y, x);
                     if (op_ptr->delay_factor)
                         platform_frame_present();
-
-                    /* Re-display the beam  XXX */
-                    if (flg & (PROJECT_BEAM))
-                    {
-                        /* Obtain the explosion pict */
-                        p = bolt_pict(y, x, y, x, typ);
-
-                        /* Extract attr/char */
-                        a = PICT_A(p);
-                        c = PICT_C(p);
-
-                        /* Visual effects */
-                        print_rel(c, a, y, x);
-                    }
 
                     /* Hack -- Activate delay */
                     visual = true;
@@ -2825,12 +2809,13 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                 a = PICT_A(p);
                 c = PICT_C(p);
 
-                /* Visual effects -- Display */
-                print_rel(c, a, y, x);
+                /* Present the semantic blast animation frame. */
+                (void)a;
+                (void)c;
             }
 
             /* Hack -- center the cursor */
-            move_cursor_relative(y2, x2);
+            dungeon_note_cursor_relative(y2, x2);
 
             /* New radius is about to be drawn */
             if ((i == grids - 1) || ((i < grids - 1) && (gd[i + 1] > gd[i])))
@@ -2868,12 +2853,12 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                 /* Hack -- Erase if needed */
                 if (panel_contains(y, x) && player_has_los_bold(y, x))
                 {
-                    lite_spot(y, x);
+                    dungeon_mark_map_for_redraw();
                 }
             }
 
             /* Hack -- center the cursor */
-            move_cursor_relative(y2, x2);
+            dungeon_note_cursor_relative(y2, x2);
 
             /* Flush the explosion */
             if (op_ptr->delay_factor)
@@ -3008,7 +2993,7 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
     if (p_ptr->update)
         update_stuff();
 
-    restore_game_cursor();
+    dungeon_sync_cursor_state();
 
     /* Return "something was noticed" */
     return (notice);

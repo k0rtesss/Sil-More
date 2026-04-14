@@ -667,118 +667,27 @@ void hit_trap(int y, int x)
     }
 }
 
-/*
- * Find the attr/char pair to use for a visual hit effect
- *
- */
-static u16b hit_pict(int net_dam, int dam_type, bool fatal_blow)
-{
-    int base;
-
-    byte k;
-
-    byte a;
-    char c;
-
-    if (!graphics_are_ascii())
-    {
-        a = misc_to_attr[net_dam];
-        c = misc_to_char[net_dam];
-    }
-    else
-    {
-        /* Base graphic '*' */
-        base = 0x30;
-
-        /* Basic hit color */
-        if (fatal_blow)
-        {
-            k = TERM_RED;
-        }
-        else if (net_dam == 0)
-        {
-            // only knock back overrides the default for zero damage hits
-            if (dam_type == GF_SOUND)
-            {
-                k = TERM_L_UMBER;
-            }
-            else
-            {
-                k = TERM_L_WHITE;
-            }
-        }
-        else
-        {
-            if (dam_type == GF_POIS)
-            {
-                k = TERM_GREEN;
-            }
-            else if (dam_type == GF_SOUND)
-            {
-                k = TERM_L_UMBER;
-            }
-            else
-            {
-                k = TERM_L_RED;
-            }
-        }
-
-        /* Obtain attr/char */
-        a = misc_to_attr[base + k];
-        c = misc_to_char[base + k];
-
-        if (net_dam > 0)
-        {
-            // if (net_dam < 20)	c = 48 + (net_dam % 10);
-            c = 48 + (net_dam % 10);
-        }
-    }
-
-    /* Create pict */
-    return (PICT(a, c));
-}
-
 void display_hit(int y, int x, int net_dam, int dam_type, bool fatal_blow)
 {
-    u16b p1;
-    u16b p2;
-
-    int tens = net_dam / 10;
-    int units = net_dam % 10;
-    if (tens > 9)
-    {
-        tens = 9;
-        units = 9;
-    }
+    (void)y;
+    (void)x;
+    (void)net_dam;
+    (void)dam_type;
+    (void)fatal_blow;
 
     // do nothing unless the appropriate option is set
     if (!display_hits)
         return;
-
-    /* Obtain the hit pict */
-    p1 = hit_pict(units, dam_type, fatal_blow);
-    p2 = hit_pict(tens, dam_type, fatal_blow);
-
-    /* Display the visual effects */
-    print_rel(PICT_C(p1), PICT_A(p1), y, x);
-    move_cursor_relative(y, x);
-
-    if (net_dam >= 10)
-    {
-        print_rel(PICT_C(p2), PICT_A(p2), y, x - 1);
-        move_cursor_relative(y, x - 1);
-    }
 
     platform_frame_present();
 
     /* Delay */
     platform_frame_delay_ms((u32b)(25 * op_ptr->delay_factor));
 
-    /* Erase the visual effects */
-    lite_spot(y, x);
-    lite_spot(y, x - 1);
+    /* Restore the live map once the semantic animation frame has elapsed. */
+    dungeon_mark_map_for_redraw();
     platform_frame_present();
-    restore_game_cursor();
+    dungeon_sync_cursor_state();
 }
 
 /*

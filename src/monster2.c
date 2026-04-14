@@ -191,7 +191,7 @@ void delete_monster_idx(int i)
     mon_cnt--;
 
     /* Visual update */
-    lite_spot(y, x);
+    dungeon_mark_map_for_redraw();
 }
 
 static byte listen_hint[MAX_MONSTERS];
@@ -1601,7 +1601,7 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
     // give up if it is a failure
     if (result <= 0)
     {
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
         return false;
     }
 
@@ -1612,12 +1612,12 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
     {
         listen_hint_clear_monster(m_idx);
         m_ptr->ml = true;
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
         return true;
     }
 
     listen_hint_set(m_idx);
-    lite_spot(y, x);
+    dungeon_mark_map_for_redraw();
     return true;
 }
 
@@ -1869,7 +1869,7 @@ void update_mon(int m_idx, bool full)
             }
 
             /* Draw the monster */
-            lite_spot(fy, fx);
+            dungeon_mark_map_for_redraw();
 
             /* Update health bar as needed */
             if (p_ptr->health_who == m_idx)
@@ -1897,7 +1897,7 @@ void update_mon(int m_idx, bool full)
             m_ptr->ml = false;
 
             /* Erase the monster */
-            lite_spot(fy, fx);
+            dungeon_mark_map_for_redraw();
 
             /* Update health bar as needed */
             if (p_ptr->health_who == m_idx)
@@ -2498,8 +2498,8 @@ void monster_swap(int y1, int x1, int y2, int x2)
     cave_m_idx[y2][x2] = m1;
 
     /* Redraw */
-    lite_spot(y1, x1);
-    lite_spot(y2, x2);
+    dungeon_mark_map_for_redraw();
+    dungeon_mark_map_for_redraw();
 
     {
         app_session* session = app_session_current();

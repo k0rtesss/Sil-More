@@ -53,7 +53,7 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   `src/squelch.c`, `src/wizard1.c`, and `src/wizard2.c` no longer own the
   last repo-visible `inkey()` call sites or direct `Term_*` control paths in
   the debug/admin slice, so the audit floor for that family is now zero.
-- Workstream 9 is complete in the working tree on April 15, 2026:
+- The April 15 wrapper-input pass is complete in the working tree:
   `src/util-prompt.c` no longer exports `term_get_string()`, the remaining
   file-name, note, password, inscription, and show/find prompts now call
   `prompt_text_input()` directly, and the last user-facing
@@ -77,14 +77,27 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
 - Targeted search on April 15, 2026 now finds:
   - `term_get_string()`: 0 matches in `src/`
   - `Term_xtra(TERM_XTRA_FRESH, ...)`: confined to `src/z-term.c`
-- The remaining term-legacy work now clusters into three families:
-  - main-map and cursor mirroring in `src/cave.c` plus callers such as
-    `src/ui/ui-status.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
-    `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`,
-    `src/spell/spell-projection.c`, and `src/util-message.c`
-  - shared terminal text, story-font, and editing helpers in
-    `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
-    `src/ui/ui-story.c`, and `src/obj-info.c`
+- Excluding the final backend files in Workstream 10, the remaining counted
+  debt is now 6 files / 53 matches, concentrated in `src/cave.c`,
+  `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
+  `src/ui/ui-story.c`, and `src/obj-info.c`.
+- The remaining term-legacy work now clusters into two families:
+  - one consolidated runtime cleanup slice containing counted debt owners in
+    `src/cave.c`, `src/util-text.c`, `src/ui/story_font.c`,
+    `src/util-editing.c`, `src/ui/ui-story.c`, and `src/obj-info.c`, plus
+    wrapper and caller cleanup around `move_cursor_relative()`,
+    `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`, and
+    `display_map()` across `src/ui/ui-status.c`, `src/targeting.c`,
+    `src/cmd/ui/cmd-ui-look.c`, `src/cmd/combat/cmd-combat.c`,
+    `src/cmd/combat/cmd-ranged.c`, `src/spell/spell-projection.c`,
+    `src/util-message.c`, `src/dungeon.c`,
+    `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
+    `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
+    `src/monster2.c`, `src/object/object-list.c`,
+    `src/object/object-place.c`, `src/spell/spell-detection.c`,
+    `src/spell/spell-terrain.c`, `src/player/player-song-effects.c`,
+    `src/ui/smithing/ui-smithing-screen.c`, `src/wizard2.c`, and declaration
+    surfaces in `src/externs.h`
   - the final build-graph and backend tail in `src/z-term.c`,
     `src/sdl-layout.c`, `src/sdl-render.c`, `src/main-sdl.c`, and related
     SDL term-host files
@@ -114,6 +127,9 @@ Exit when:
   scene current
 
 ### 2. Retire shared terminal text, story, and editing helpers
+Status:
+- folded into consolidated Workstream 9 on April 15, 2026
+
 Goal:
 - remove the shared term-grid text, wrapping, cursor, and editing primitives
   that still underpin semantic information flows and prompt surfaces
@@ -134,6 +150,9 @@ Exit when:
   policy rather than terminal cursor state
 
 ### 3. Remove main-map and cursor term mirroring
+Status:
+- folded into consolidated Workstream 9 on April 15, 2026
+
 Goal:
 - stop mirroring dungeon map, cursor, and transient projectile highlights
   through the term buffer on the SDL runtime path
@@ -288,38 +307,41 @@ Exit when:
 - the UI debt audit reports zero `inkey()` call sites
 - wizard and squelch flows no longer use direct `Term_*` control or rendering
 
-### 9. Drain terminal input/control wrapper debt
+### 9. Drain all remaining runtime term debt before backend removal
 Status:
-- completed in the working tree on April 15, 2026
+- active
 
 Goal:
-- remove the remaining user-facing terminal input and refresh wrappers that
-  survive outside the audit counts, especially `term_get_string()` and
-  `Term_xtra(TERM_XTRA_FRESH, ...)`
+- remove every remaining non-backend term-legacy artifact in one coordinated
+  pass before the final `z-term` / SDL term-host teardown
+- absorb the residual work previously tracked separately under Workstreams 2,
+  3, and the already-landed wrapper-input pass
 
 Primary targets:
-- `src/util-prompt.c`
-- `src/cmd4.c`
-- `src/cmd/ui/cmd-ui-character.c`
-- `src/cmd/ui/cmd-ui-main-menu.c`
-- `src/melee/melee-combat-display.c`
-- `src/cmd/item/cmd-item-utility.c`
-- `src/cmd/ui/cmd-ui-nearby.c`
-- `src/cmd/ui/cmd-ui-look.c`
-- `src/cmd/item/cmd-pickup.c`
-- `src/dungeon.c`
-- `src/randart.c`
-- `src/runtime/runtime-game.c`
-- `src/ui/smithing/ui-smithing-screen.c`
+- counted debt owners in `src/cave.c`, `src/util-text.c`,
+  `src/ui/story_font.c`, `src/util-editing.c`, `src/ui/ui-story.c`, and
+  `src/obj-info.c`
+- wrapper and caller integration in `src/ui/ui-status.c`, `src/targeting.c`,
+  `src/cmd/ui/cmd-ui-look.c`, `src/cmd/combat/cmd-combat.c`,
+  `src/cmd/combat/cmd-ranged.c`, `src/spell/spell-projection.c`,
+  `src/util-message.c`, `src/dungeon.c`,
+  `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
+  `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
+  `src/monster2.c`, `src/object/object-list.c`,
+  `src/object/object-place.c`, `src/spell/spell-detection.c`,
+  `src/spell/spell-terrain.c`, `src/player/player-song-effects.c`,
+  `src/ui/smithing/ui-smithing-screen.c`, `src/wizard2.c`, and
+  declaration surfaces in `src/externs.h`
 
 Exit when:
-- targeted search for `term_get_string(` is empty outside declarations or
-  archived code
-- targeted search for `Term_xtra(TERM_XTRA_FRESH` is empty outside
-  `src/z-term.c`
-- file-name, note, password, inscription, show/find, and similar text-entry
-  flows use the shared semantic input/session path or a narrower non-term host
-  API
+- `py -3 tools/ui_debt_audit.py --details` drops from `8 files / 61 matches`
+  to the final backend-only floor in `src/sdl-layout.c` and
+  `src/sdl-render.c`
+- targeted searches for `move_cursor_relative`, `restore_game_cursor`,
+  `print_rel`, `lite_spot`, `prt_map`, and `display_map` are empty outside
+  archived code or the final backend boundary
+- runtime document, story-font, object-info, map redraw, cursor, and
+  projectile or combat-highlight paths no longer depend on term-grid state
 
 ### 10. Remove `z-term` and the SDL term backend from the build graph
 Goal:
@@ -356,19 +378,21 @@ Exit when:
   normal SDL runtime finish line
 
 ## Parallel Execution
-- Lane A: Workstream 2. Write set: `src/util-text.c`,
-  `src/ui/story_font.c`, `src/util-editing.c`, `src/ui/ui-story.c`, and
-  `src/obj-info.c`.
-- Lane B: Workstream 3. Write set: `src/cave.c`, `src/ui/ui-status.c`,
-  `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
+- Lane A: Workstream 9, text/story/editing core. Write set:
+  `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
+  `src/ui/ui-story.c`, and `src/obj-info.c`.
+- Lane B: Workstream 9, map/cursor core. Write set: `src/cave.c`,
+  `src/ui/ui-status.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
   `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`,
-  `src/spell/spell-projection.c`, and `src/util-message.c`.
-- Lane C: Workstream 9. Write set: `src/util-prompt.c`, `src/cmd4.c`,
-  `src/cmd/ui/cmd-ui-character.c`, `src/cmd/ui/cmd-ui-main-menu.c`,
-  `src/melee/melee-combat-display.c`, `src/cmd/item/cmd-item-utility.c`,
-  `src/cmd/ui/cmd-ui-nearby.c`, `src/cmd/item/cmd-pickup.c`,
-  `src/dungeon.c`, `src/randart.c`, `src/runtime/runtime-game.c`, and
-  `src/ui/smithing/ui-smithing-screen.c`.
+  `src/spell/spell-projection.c`, `src/util-message.c`, and
+  `src/externs.h`.
+- Lane C: Workstream 9, caller sweep. Write set: `src/dungeon.c`,
+  `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
+  `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
+  `src/monster2.c`, `src/object/object-list.c`, `src/object/object-place.c`,
+  `src/spell/spell-detection.c`, `src/spell/spell-terrain.c`,
+  `src/player/player-song-effects.c`, `src/ui/smithing/ui-smithing-screen.c`,
+  and `src/wizard2.c`.
 - Lane D: Workstream 10. Write set: build graph, `z-term`, SDL term backend,
   and direct
   compile-time dependency files.
@@ -385,8 +409,6 @@ Rules:
 ## Validation
 - Run `py -3 tools/ui_debt_audit.py --check`.
 - Run targeted searches for debt the audit does not count, especially:
-  - `Term_xtra`
-  - `term_get_string`
   - `move_cursor_relative`
   - `restore_game_cursor`
   - `print_rel`
@@ -397,11 +419,13 @@ Rules:
 - Smoke-test every touched surface in SDL:
   - main menu
   - prompt or confirm flows
+  - object info or other document-style scenes
   - look or targeting, including cursor movement
   - map redraw, movement, and one projectile or combat animation
   - inventory, equipment, and floor selection
   - message, monster recall, object recall, and player document screens
-  - one debug or admin flow if that slice was touched
+  - one wrapper-heavy path such as search, detection, or wizard map debug if
+    touched
 - Confirm there is no stale-screen flash during menu or prompt transitions.
 
 ## Done When

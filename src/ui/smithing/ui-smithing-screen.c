@@ -1177,7 +1177,7 @@ static void pay_smithing_cost_struct(const smithing_cost_type* cost)
     if (cost->uses > 0)
     {
         cave_feat[p_ptr->py][p_ptr->px] -= cost->uses;
-        lite_spot(p_ptr->py, p_ptr->px);
+        dungeon_mark_map_for_redraw();
     }
     if (cost->drain > 0)
         p_ptr->skill_base[S_SMT] -= cost->drain;
@@ -2284,7 +2284,7 @@ static bool smith_reforge_item(void)
         }
 
         cave_feat[p_ptr->py][p_ptr->px] -= 1;
-        lite_spot(p_ptr->py, p_ptr->px);
+        dungeon_mark_map_for_redraw();
 
         object_desc(new_name, sizeof(new_name), &inventory[slot], true, 0);
         msg_format("You repair %s.", new_name);

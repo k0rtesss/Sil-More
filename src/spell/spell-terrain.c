@@ -671,7 +671,7 @@ static void cave_temp_room_light(void)
         int x = temp_x[i];
 
         /* Redraw the grid */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
 
         /* Process affected monsters */
         if (cave_m_idx[y][x] > 0)
@@ -748,11 +748,8 @@ static void cave_temp_room_darken(void)
     /* Process the grids */
     for (i = 0; i < temp_n; i++)
     {
-        int y = temp_y[i];
-        int x = temp_x[i];
-
         /* Redraw the grid */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
     }
 
     /* None left */

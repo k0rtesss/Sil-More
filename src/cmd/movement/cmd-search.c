@@ -124,7 +124,7 @@ void search_square(int y, int x, int dist, int searching)
             }
 
             /* Redraw */
-            lite_spot(y, x);
+            dungeon_mark_map_for_redraw();
         }
     }
 

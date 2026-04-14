@@ -417,7 +417,7 @@ void set_alertness(monster_type* m_ptr, int alertness)
 
     // redisplay the monster
     if (redisplay)
-        lite_spot(m_ptr->fy, m_ptr->fx);
+        dungeon_mark_map_for_redraw();
 }
 
 /*

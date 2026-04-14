@@ -721,7 +721,7 @@ static void msg_flush(int x)
         if (semantic_cursor)
             app_session_note_cursor_relative(session, p_ptr->py, p_ptr->px);
         else
-            move_cursor_relative(p_ptr->py, p_ptr->px);
+            dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
     }
     if (hilite_target && target_sighted())
     {
@@ -732,7 +732,8 @@ static void msg_flush(int x)
         }
         else
         {
-            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+            dungeon_note_cursor_relative(p_ptr->target_row,
+                p_ptr->target_col);
         }
     }
 
@@ -892,6 +893,28 @@ bool build_message_subwindow_ui_scene(app_ui_scene* scene)
     }
 
     return true;
+}
+
+void message_topline_override(byte color, cptr text)
+{
+    message_topline_reset();
+
+    if (!text || !text[0])
+        return;
+
+    SDL_strlcpy(message_topline, text, sizeof(message_topline));
+    message_topline_type = MSG_GENERIC;
+    message_topline_color = color;
+    message_topline_active = true;
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_MESSAGES);
+}
+
+void message_topline_clear_override(void)
+{
+    message_topline_reset();
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_MESSAGES);
 }
 
 /*

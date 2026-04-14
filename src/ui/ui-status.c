@@ -436,7 +436,6 @@ void redraw_stuff(void)
     {
         p_ptr->redraw &= ~(PR_MAP);
         log_trace("redraw_stuff: redrawing map");
-        prt_map();
     }
 
     /*

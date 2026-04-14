@@ -56,39 +56,7 @@ static bool wizard_poll_for_interrupt(void)
 
 void display_light_map(void)
 {
-    int y, x;
-
-    /* Redraw map */
-    prt_map();
-
-    /* Update map */
-    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT; y++)
-    {
-        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
-        {
-            byte a;
-
-            int light = cave_light[y][x];
-
-            /* Pretty colors by level */
-            if (light < 0)
-                a = TERM_L_DARK;
-            else if (light == 0)
-                a = TERM_SLATE;
-            else
-                a = TERM_WHITE;
-
-            /* Display light */
-            if (light >= 0)
-            {
-                print_rel('0' + (light % 10), a, y, x);
-            }
-            else
-            {
-                print_rel('0' + (-light % 10), a, y, x);
-            }
-        }
-    }
+    dungeon_mark_map_for_redraw();
 }
 
 /*
@@ -97,64 +65,7 @@ void display_light_map(void)
 
 void display_scent_map(void)
 {
-    int y, x;
-    byte a;
-    int age;
-
-    /* Redraw map */
-    prt_map();
-
-    /* Update map */
-    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT; y++)
-    {
-        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
-        {
-            age = get_scent(y, x);
-
-            /* Must have scent */
-            if (age == -1)
-                continue;
-
-            /* Pretty colors by age */
-            if (age < 10)
-                a = TERM_RED;
-            else if (age < 20)
-                a = TERM_L_RED;
-            else if (age < 30)
-                a = TERM_ORANGE;
-            else if (age < 40)
-                a = TERM_YELLOW;
-            else if (age < 50)
-                a = TERM_L_GREEN;
-            else if (age < 60)
-                a = TERM_GREEN;
-            else if (age < 70)
-                a = TERM_L_BLUE;
-            else
-                a = TERM_BLUE;
-
-            /* Display player/floors/walls */
-            if ((y == p_ptr->py) && (x == p_ptr->px))
-            {
-                // do nothing
-            }
-            // ignore closed doors
-            else if (cave_any_closed_door_bold(y, x))
-            {
-                // do nothing
-            }
-            // ignore visible monsters
-            else if ((cave_m_idx[y][x] > 0)
-                && (&mon_list[cave_m_idx[y][x]])->ml)
-            {
-                // do nothing
-            }
-            else
-            {
-                print_rel('0' + (age % 10), a, y, x);
-            }
-        }
-    }
+    dungeon_mark_map_for_redraw();
 }
 
 /*
@@ -163,105 +74,7 @@ void display_scent_map(void)
 
 void display_noise_map(void)
 {
-    int y, x;
-    byte a = TERM_DARK; // default to soothe compilation warnings
-    int dist;
-    int d;
-
-    /* Redraw map */
-    prt_map();
-
-    /* Update map */
-    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT; y++)
-    {
-        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
-        {
-            if (!in_bounds(y, x))
-                continue;
-
-            // default to player noise (i.e. the distance from the player in
-            // terms of how much sound decays)
-            dist = flow_dist(FLOW_PLAYER_NOISE, y, x);
-
-            // if a monster is targetted, then use a monster relevant flow
-            if (p_ptr->health_who > 0)
-            {
-                monster_type* m_ptr = &mon_list[p_ptr->health_who];
-
-                // if it is unwary, use its distance in turns to its wandering
-                // monster destination
-                if (m_ptr->alertness < ALERTNESS_ALERT)
-                    dist = flow_dist(m_ptr->wandering_idx, y, x);
-
-                // otherwise, use its distance in turns to the player
-                else
-                    dist = flow_dist(p_ptr->health_who, y, x);
-            }
-
-            if (dist <= 0)
-                continue;
-
-            d = (dist % 100) / 10;
-
-            switch (d)
-            {
-            case 0:
-                a = TERM_RED;
-                break;
-            case 1:
-                a = TERM_RED + TERM_SHADE;
-                break;
-            case 2:
-                a = TERM_ORANGE;
-                break;
-            case 3:
-                a = TERM_YELLOW;
-                break;
-            case 4:
-                a = TERM_L_GREEN;
-                break;
-            case 5:
-                a = TERM_GREEN;
-                break;
-            case 6:
-                a = TERM_L_BLUE;
-                break;
-            case 7:
-                a = TERM_BLUE + TERM_SHADE;
-                break;
-            case 8:
-                a = TERM_BLUE;
-                break;
-            case 9:
-                a = TERM_VIOLET + TERM_SHADE;
-                break;
-            }
-
-            if (dist < FLOW_MAX_DIST)
-            {
-                /* Display player/floors/walls */
-                if ((y == p_ptr->py) && (x == p_ptr->px))
-                {
-                    // do nothing
-                }
-                // ignore closed doors
-                else if (cave_any_closed_door_bold(y, x))
-                {
-                    // do nothing
-                }
-                // ignore visible monsters
-                else if ((cave_m_idx[y][x] > 0)
-                    && (&mon_list[cave_m_idx[y][x]])->ml)
-                {
-                    // do nothing
-                }
-                else
-                {
-                    print_rel('0' + (dist % 10), a, y, x);
-                }
-            }
-        }
-    }
+    dungeon_mark_map_for_redraw();
 }
 
 /*
@@ -1654,11 +1467,6 @@ extern void do_cmd_wiz_unhide(int d)
  */
 static void do_cmd_wiz_query(void)
 {
-    int py = p_ptr->py;
-    int px = p_ptr->px;
-
-    int y, x;
-
     char cmd;
 
     u16b mask = 0x00;
@@ -1730,50 +1538,11 @@ static void do_cmd_wiz_query(void)
         break;
     }
 
-    /* Scan map */
-    for (y = p_ptr->wy; y < p_ptr->wy + SCREEN_HGT; y++)
-    {
-        for (x = p_ptr->wx; x < p_ptr->wx + SCREEN_WID; x++)
-        {
-            byte a = TERM_RED;
-
-            if (!in_bounds_fully(y, x))
-                continue;
-
-            /* Given mask, show only those grids */
-            if (mask && !(cave_info[y][x] & mask))
-                continue;
-
-            /* Given no mask, show unknown grids */
-            if (!mask && (cave_info[y][x] & (CAVE_MARK)))
-                continue;
-
-            /* Color */
-            if (cave_floor_bold(y, x))
-                a = TERM_YELLOW;
-
-            /* Display player/floors/walls */
-            if ((y == py) && (x == px))
-            {
-                print_rel('@', a, y, x);
-            }
-            else if (cave_floor_bold(y, x))
-            {
-                print_rel('*', a, y, x);
-            }
-            else
-            {
-                print_rel('#', a, y, x);
-            }
-        }
-    }
+    dungeon_mark_map_for_redraw();
 
     /* Get keypress */
-    msg_print("Press any key.");
+    msg_print("Cave-flag overlay unavailable on the SDL runtime path. Press any key.");
     message_flush();
-
-    /* Redraw map */
-    prt_map();
 }
 
 /*

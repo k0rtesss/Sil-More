@@ -31,6 +31,14 @@ typedef struct story_semantic_scene {
 
 static story_semantic_scene g_story_semantic_scene;
 
+static void story_layout_size(int* wid, int* hgt)
+{
+    if (wid)
+        *wid = 80;
+    if (hgt)
+        *hgt = 24;
+}
+
 static byte story_current_flags(void)
 {
     byte flags = 0;
@@ -562,7 +570,7 @@ void print_story(int last_parts, bool fade_in)
         return;
     }
 
-    Term_get_size(&wid, &h);
+    story_layout_size(&wid, &h);
     story_semantic_begin(wid, h);
     story_clear_screen();
     saved_hide_cursor = inkey_cursor_hidden();

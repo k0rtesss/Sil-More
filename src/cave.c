@@ -1356,8 +1356,8 @@ int player_tile_offset()
 /*
  * Extract the attr/char to display at the given (legal) map location
  *
- * Note that this function, since it is called by "lite_spot()" which
- * is called by "update_view()", is a major efficiency concern.
+ * Note that this function feeds the live dungeon snapshot and is called
+ * repeatedly from view updates, so it remains a major efficiency concern.
  *
  * Basically, we examine each "layer" of the world (terrain, objects,
  * monsters/players), from the bottom up, extracting a new attr/char
@@ -2362,116 +2362,35 @@ void map_info_default(int y, int x, byte* ap, char* cp)
     (*cp) = c;
 }
 
-/*
- * Move the cursor to a given map location.
- *
- * The main screen will always be at least 24x80 in size.
- */
-void move_cursor_relative(int y, int x)
+void dungeon_mark_map_for_redraw(void)
 {
-    int ky, kx;
-    int vy, vx;
+    p_ptr->redraw |= PR_MAP;
+    p_ptr->window |= PW_OVERHEAD;
+}
 
-    /* Location relative to panel */
-    ky = y - p_ptr->wy;
-
-    /* Verify location */
-    if ((ky < 0) || (ky >= SCREEN_HGT))
-        return;
-
-    /* Location relative to panel */
-    kx = x - p_ptr->wx;
-
-    /* Verify location */
-    if ((kx < 0) || (kx >= SCREEN_WID))
-        return;
-
-    /* Location in window */
-    vy = ky + ROW_MAP;
-
-    /* Location in window */
-    vx = kx + COL_MAP;
-
-    if (use_bigtile)
-        vx += kx;
-
-    /* Go there */
-    (void)Term_gotoxy(vx, vy);
+void dungeon_note_cursor_relative(int y, int x)
+{
     app_session_note_cursor_relative(app_session_current(), y, x);
 }
 
-/*
- * Restore the steady-state gameplay cursor after a transient animation has
- * moved it elsewhere.
- */
-void restore_game_cursor(void)
+void dungeon_sync_cursor_state(void)
 {
     app_session* session = app_session_current();
 
     if (hilite_target && target_sighted())
     {
-        move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+        dungeon_note_cursor_relative(p_ptr->target_row, p_ptr->target_col);
         return;
     }
 
     if (hilite_player)
     {
-        move_cursor_relative(p_ptr->py, p_ptr->px);
+        dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
         return;
     }
 
     if (session)
         app_session_set_cursor_visible(session, false);
-}
-
-/*
- * Display an attr/char pair at the given map location
- *
- * Note the inline use of "panel_contains()" for efficiency.
- *
- * Note the use of "Term_queue_char()" for efficiency.
- *
- * The main screen will always be at least 24x80 in size.
- */
-void print_rel(char c, byte a, int y, int x)
-{
-    int ky, kx;
-    int vy, vx;
-
-    /* Location relative to panel */
-    ky = y - p_ptr->wy;
-
-    /* Verify location */
-    if ((ky < 0) || (ky >= SCREEN_HGT))
-        return;
-
-    /* Location relative to panel */
-    kx = x - p_ptr->wx;
-
-    /* Verify location */
-    if ((kx < 0) || (kx >= SCREEN_WID))
-        return;
-
-    /* Location in window */
-    vy = ky + ROW_MAP;
-
-    /* Location in window */
-    vx = kx + COL_MAP;
-
-    if (use_bigtile)
-        vx += kx;
-
-    /* Hack -- Queue it */
-    Term_queue_char(vx, vy, a, c, 0, 0);
-
-    if (use_bigtile)
-    {
-        /* Mega-Hack : Queue dummy char */
-        if (a & 0x80)
-            Term_queue_char(vx + 1, vy, 255, -1, 0, 0);
-        else
-            Term_queue_char(vx + 1, vy, TERM_WHITE, ' ', 0, 0);
-    }
 }
 
 /*
@@ -2546,201 +2465,6 @@ void note_spot(int y, int x)
     }
 }
 
-/*
- * Redraw (on the screen) a given map location
- *
- * This function should only be called on "legal" grids.
- *
- * Note the inline use of "print_rel()" for efficiency.
- *
- * The main screen will always be at least 24x80 in size.
- */
-void lite_spot(int y, int x)
-{
-    byte a;
-    char c;
-    byte ta;
-    char tc;
-
-    int ky, kx;
-    int vy, vx;
-
-    /* Location relative to panel */
-    ky = y - p_ptr->wy;
-
-    /* Verify location */
-    if ((ky < 0) || (ky >= SCREEN_HGT))
-        return;
-
-    /* Location relative to panel */
-    kx = x - p_ptr->wx;
-
-    /* Verify location */
-    if ((kx < 0) || (kx >= SCREEN_WID))
-        return;
-
-    /* Location in window */
-    vy = ky + ROW_MAP;
-
-    /* Location in window */
-    vx = kx + COL_MAP;
-
-    if (use_bigtile)
-        vx += kx;
-
-    /* Hack -- redraw the grid */
-    map_info(y, x, &a, &c, &ta, &tc);
-
-    /* Hack -- Queue it */
-    Term_queue_char(vx, vy, a, c, ta, tc);
-
-    if (use_bigtile)
-    {
-        vx++;
-
-        /* Mega-Hack : Queue dummy char */
-        if (a & 0x80)
-            Term_queue_char(vx, vy, 255, -1, 0, 0);
-        else
-            Term_queue_char(vx, vy, TERM_WHITE, ' ', TERM_WHITE, ' ');
-    }
-}
-
-/*
- * Redraw (on the screen) the current map panel
- *
- * Note the inline use of "lite_spot()" for efficiency.
- *
- * The main screen will always be at least 24x80 in size.
- */
-void prt_map(void)
-{
-    byte a;
-    char c;
-    byte ta;
-    char tc;
-
-    int y, x;
-    int vy, vx;
-    int ty, tx;
-
-    /* Assume screen */
-    ty = p_ptr->wy + SCREEN_HGT;
-    tx = p_ptr->wx + SCREEN_WID;
-
-    /* Dump the map */
-    for (y = p_ptr->wy, vy = ROW_MAP; y < ty; vy++, y++)
-    {
-        for (x = p_ptr->wx, vx = COL_MAP; x < tx; vx++, x++)
-        {
-            /* Check bounds */
-            if (!in_bounds(y, x))
-                continue;
-
-            /* Determine what is there */
-            map_info(y, x, &a, &c, &ta, &tc);
-
-            /* Hack -- Queue it */
-            Term_queue_char(vx, vy, a, c, ta, tc);
-
-            if (use_bigtile)
-            {
-                vx++;
-
-                /* Mega-Hack : Queue dummy char */
-                if (a & 0x80)
-                    Term_queue_char(vx, vy, 255, -1, 0, 0);
-                else
-                    Term_queue_char(vx, vy, TERM_WHITE, ' ', TERM_WHITE, ' ');
-            }
-        }
-    }
-}
-
-/*
- * Hack -- priority array (see below)
- *
- * Note that all "walls" always look like "secret doors" (see "map_info()").
- */
-static const int priority_table[13][2] = {
-    /* Dark */
-    { FEAT_NONE, 2 },
-
-    /* Floors */
-    { FEAT_FLOOR, 5 },
-
-    /* Walls */
-    { FEAT_SECRET, 10 },
-
-    /* Quartz */
-    { FEAT_QUARTZ, 11 },
-
-    /* Rubble */
-    { FEAT_RUBBLE, 13 },
-
-    /* Open doors */
-    { FEAT_OPEN, 15 }, { FEAT_BROKEN, 15 },
-
-    /* Closed doors */
-    { FEAT_DOOR_HEAD + 0x00, 17 },
-
-    /* Stairs */
-    { FEAT_LESS, 25 }, { FEAT_MORE, 25 }, { FEAT_LESS_SHAFT, 25 },
-    { FEAT_MORE_SHAFT, 25 },
-
-    /* End */
-    { 0, 0 }
-};
-
-/*
- * Hack -- a priority function (see below)
- */
-static byte priority(byte a, char c)
-{
-    int i, p0, p1;
-
-    feature_type* f_ptr;
-
-    /* Scan the table */
-    for (i = 0; true; i++)
-    {
-        /* Priority level */
-        p1 = priority_table[i][1];
-
-        /* End of table */
-        if (!p1)
-            break;
-
-        /* Feature index */
-        p0 = priority_table[i][0];
-
-        /* Get the feature */
-        f_ptr = &f_info[p0];
-
-        /* Check character and attribute, accept matches */
-        if ((f_ptr->x_char == c) && (f_ptr->x_attr == a))
-            return (p1);
-    }
-
-    /* Default */
-    return (20);
-}
-
-/*
- * Display a "small-scale" map of the dungeon in the active Term.
- *
- * Note that this function must "disable" the special lighting effects so
- * that the "priority" function will work.
- *
- * Note the use of a specialized "priority" function to allow this function
- * to work with any graphic attr/char mappings, and the attempts to optimize
- * this function where possible.
- *
- * If "cy" and "cx" are not NULL, then returns the screen location at which
- * the player was displayed, so the cursor can be moved to that location,
- * and restricts the horizontal map size to SCREEN_WID.  Otherwise, nothing
- * is returned (obviously), and no restrictions are enforced.
- */
 typedef struct cave_map_bounds {
     int min_x;
     int max_x;
@@ -2753,164 +2477,6 @@ typedef struct cave_map_bounds {
 
 static bool cave_map_collect_bounds(cave_map_bounds* bounds,
     bool expand_to_viewport);
-
-void display_map(int* cy, int* cx)
-{
-    int map_hgt, map_wid;
-    int row, col;
-
-    int x, y;
-    cave_map_bounds bounds;
-    int explored_wid, explored_hgt;
-
-    byte ta;
-    char tc;
-
-    byte tp;
-
-    /* Large array on the stack */
-    byte mp[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-
-    monster_race* r_ptr = &r_info[0];
-
-    if (!cave_map_collect_bounds(&bounds, false))
-        return;
-
-    explored_wid = bounds.explored_wid;
-    explored_hgt = bounds.explored_hgt;
-
-    /* Desired map height */
-    map_hgt = Term->hgt - 2;
-    map_wid = Term->wid - 2;
-
-    /* Prevent accidents */
-    if (map_hgt > explored_hgt)
-        map_hgt = explored_hgt;
-    if (map_wid > explored_wid)
-        map_wid = explored_wid;
-
-    /* Prevent accidents */
-    if ((map_wid < 1) || (map_hgt < 1))
-        return;
-
-    /* Nothing here */
-    ta = TERM_WHITE;
-    tc = ' ';
-
-    /* Clear the priorities */
-    for (y = 0; y < map_hgt; ++y)
-    {
-        for (x = 0; x < map_wid; ++x)
-        {
-            /* No priority */
-            mp[y][x] = 0;
-        }
-    }
-
-    /* Clear the screen (but don't force a redraw) */
-    clear_from(0);
-
-    /* Corners */
-    x = map_wid + 1;
-    y = map_hgt + 1;
-
-    /* Draw the corners */
-    Term_putch(0, 0, ta, '+');
-    Term_putch(x, 0, ta, '+');
-    Term_putch(0, y, ta, '+');
-    Term_putch(x, y, ta, '+');
-
-    /* Draw the horizontal edges */
-    for (x = 1; x <= map_wid; x++)
-    {
-        Term_putch(x, 0, ta, '-');
-        Term_putch(x, y, ta, '-');
-    }
-
-    /* Draw the vertical edges */
-    for (y = 1; y <= map_hgt; y++)
-    {
-        Term_putch(0, y, ta, '|');
-        Term_putch(x, y, ta, '|');
-    }
-
-    /* Analyze the actual map (only explored area) */
-    for (y = bounds.min_y; y <= bounds.max_y; y++)
-    {
-        for (x = bounds.min_x; x <= bounds.max_x; x++)
-        {
-            /* Scale based on explored area */
-            row = ((y - bounds.min_y) * map_hgt / explored_hgt);
-            col = ((x - bounds.min_x) * map_wid / explored_wid);
-
-            if (use_bigtile)
-                col = col & ~1;
-
-            /* Get the attr/char at that map location */
-            map_info(y, x, &ta, &tc, &ta, &tc);
-
-            /* Get the priority of that attr/char */
-            tp = priority(ta, tc);
-
-            /* Examine boring grids */
-            if ((tp == 20) && (cave_m_idx[y][x] > 0))
-            {
-                monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
-                monster_race* r_ptr = &r_info[m_ptr->r_idx];
-
-                /* Notice dangerous monsters */
-                /* Sil-y: this may need some tweaking */
-                tp = MAX(20, (int)r_ptr->level - p_ptr->depth + 20);
-
-                /* Ignore invisible monsters */
-                if (!m_ptr->ml)
-                    tp = 20;
-            }
-
-            /* Save "best" */
-            if (mp[row][col] < tp)
-            {
-                /* Add the character */
-                Term_putch(col + 1, row + 1, ta, tc);
-
-                if (use_bigtile)
-                {
-                    if (ta & 0x80)
-                        Term_putch(col + 2, row + 1, 255, -1);
-                    else
-                        Term_putch(col + 2, row + 1, TERM_WHITE, ' ');
-                }
-
-                /* Save priority */
-                mp[row][col] = tp;
-            }
-        }
-    }
-
-    /* Player location (scaled relative to explored area) */
-    row = ((p_ptr->py - bounds.min_y) * map_hgt / explored_hgt);
-    col = ((p_ptr->px - bounds.min_x) * map_wid / explored_wid);
-
-    if (use_bigtile)
-        col = col & ~1;
-
-    /*** Make sure the player is visible ***/
-
-    /* Get the "player" attr */
-    ta = r_ptr->x_attr;
-
-    /* Get the "player" char */
-    tc = r_ptr->x_char;
-
-    /* Draw the player */
-    Term_putch(col + 1, row + 1, ta, tc);
-
-    /* Return player location */
-    if (cy != NULL)
-        (*cy) = row + 1;
-    if (cx != NULL)
-        (*cx) = col + 1;
-}
 
 /*
  * Keep sparse map views from zooming past the current dungeon viewport scale.
@@ -3743,14 +3309,8 @@ void forget_view(void)
     /* Clear them all */
     for (i = 0; i < fast_view_n; i++)
     {
-        int y, x;
-
         /* Grid */
         g = fast_view_g[i];
-
-        /* Location */
-        y = GRID_Y(g);
-        x = GRID_X(g);
 
         /* Clear "CAVE_VIEW" and "CAVE_SEEN" flags */
         fast_cave_info[g] &= ~(CAVE_VIEW | CAVE_SEEN | CAVE_FIRE);
@@ -3758,8 +3318,8 @@ void forget_view(void)
         /* Clear "CAVE_LITE" flag */
         /* fast_cave_info[g] &= ~(CAVE_LITE); */
 
-        /* Redraw */
-        lite_spot(y, x);
+        /* Redraw through snapshot invalidation. */
+        dungeon_mark_map_for_redraw();
     }
 
     /* None left */
@@ -4539,8 +4099,8 @@ void update_view(void)
             /* Note */
             note_spot(y, x);
 
-            /* Redraw */
-            lite_spot(y, x);
+            /* Redraw through snapshot invalidation. */
+            dungeon_mark_map_for_redraw();
         }
     }
 
@@ -4578,14 +4138,8 @@ void update_view(void)
         /* Was "CAVE_SEEN", is now not "CAVE_SEEN" */
         if (!(info & (CAVE_SEEN)))
         {
-            int y, x;
-
-            /* Location */
-            y = GRID_Y(g);
-            x = GRID_X(g);
-
-            /* Redraw */
-            lite_spot(y, x);
+            /* Redraw through snapshot invalidation. */
+            dungeon_mark_map_for_redraw();
         }
     }
 
@@ -4598,8 +4152,8 @@ void update_view(void)
                 && (cave_info[i][j] & (CAVE_VIEW))
                 && !(cave_info[i][j] & (CAVE_SEEN)))
             {
-                /* Redraw */
-                lite_spot(i, j);
+                /* Redraw through snapshot invalidation. */
+                dungeon_mark_map_for_redraw();
             }
         }
     }
@@ -5447,8 +5001,8 @@ void cave_set_feat_with_color(int y, int x, int feat, int color)
         /* Notice */
         note_spot(y, x);
 
-        /* Redraw */
-        lite_spot(y, x);
+        /* Redraw through snapshot invalidation. */
+        dungeon_mark_map_for_redraw();
     }
 }
 

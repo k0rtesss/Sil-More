@@ -134,25 +134,21 @@ int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos)
  */
 void editing_buffer_display(editing_buffer* eb_ptr, int x, int y, byte col)
 {
+    char buf[1024];
+    size_t len;
+
     if (!eb_ptr)
         return;
 
-    Term_erase(x, y, (int)eb_ptr->max_size);
-
-    /* Print the beginning of the buffer */
-    /* In many cases, it is all we have to do */
-
-    /* Here is the reason why the gap should be "clean" */
-    /* It ensures an ending '\0' */
-    Term_putstr(x, y, -1, col, eb_ptr->buf);
-
-    /* Unless this happens */
-
-    /* Here is the reason why we reserved one space in editing_buffer_init */
-    /* Again, it ensures an ending '\0' */
-    if ((eb_ptr->pos < EDITING_BUFFER_LEN(eb_ptr)) && (eb_ptr->gap_size > 0))
-        Term_putstr(x + (int)eb_ptr->pos, y, -1, col,
-            eb_ptr->buf + eb_ptr->pos + eb_ptr->gap_size);
+    /*
+     * This renderer is no longer on the active SDL runtime path, but keep the
+     * helper functional without writing through the term backend directly.
+     */
+    editing_buffer_get_all(eb_ptr, buf, sizeof(buf));
+    len = strlen(buf);
+    c_prt(col, "", y, x);
+    if (len > 0)
+        c_put_str(col, buf, y, x);
 }
 
 /*

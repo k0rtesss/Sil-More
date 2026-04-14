@@ -85,7 +85,7 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
         note_spot(y, x);
 
         /* Redraw */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
     }
 
     /* Result */
@@ -701,7 +701,7 @@ void reveal_trap(int y, int x)
         cave_info[y][x] |= (CAVE_MARK);
 
         /* Redraw */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
     }
 }
 

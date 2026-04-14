@@ -1,9 +1,189 @@
 #include "angband.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
-#include "platform-story-font.h"
-#include "ui/story_font.h"
-#include "log/log.h"
+
+#define UI_TEXT_SURFACE_WID 80
+#define UI_TEXT_SURFACE_HGT 24
+
+typedef struct ui_text_surface {
+    bool initialized;
+    int cursor_x;
+    int cursor_y;
+    char chars[UI_TEXT_SURFACE_HGT][UI_TEXT_SURFACE_WID];
+    byte attrs[UI_TEXT_SURFACE_HGT][UI_TEXT_SURFACE_WID];
+} ui_text_surface;
+
+static ui_text_surface g_ui_text_surface;
+
+static void ui_text_surface_publish_topline(void)
+{
+    char buf[1024];
+    int end = UI_TEXT_SURFACE_WID;
+    int first = 0;
+    byte color = TERM_WHITE;
+
+    while (end > 0 && g_ui_text_surface.chars[0][end - 1] == ' ')
+        end--;
+
+    if (end <= 0)
+    {
+        message_topline_clear_override();
+        return;
+    }
+
+    while (first < end && g_ui_text_surface.chars[0][first] == ' ')
+        first++;
+    if (first >= end)
+    {
+        message_topline_clear_override();
+        return;
+    }
+
+    color = g_ui_text_surface.attrs[0][first];
+    if (end >= (int)sizeof(buf))
+        end = (int)sizeof(buf) - 1;
+
+    memcpy(buf, &g_ui_text_surface.chars[0][0], (size_t)end);
+    buf[end] = '\0';
+    message_topline_override(color, buf);
+}
+
+static void ui_text_surface_ensure(void)
+{
+    if (g_ui_text_surface.initialized)
+        return;
+
+    memset(&g_ui_text_surface, 0, sizeof(g_ui_text_surface));
+    for (int y = 0; y < UI_TEXT_SURFACE_HGT; y++)
+    {
+        for (int x = 0; x < UI_TEXT_SURFACE_WID; x++)
+        {
+            g_ui_text_surface.chars[y][x] = ' ';
+            g_ui_text_surface.attrs[y][x] = TERM_WHITE;
+        }
+    }
+    g_ui_text_surface.initialized = true;
+}
+
+static void ui_text_surface_set_cursor(int x, int y)
+{
+    ui_text_surface_ensure();
+    if (x < 0)
+        x = 0;
+    if (x >= UI_TEXT_SURFACE_WID)
+        x = UI_TEXT_SURFACE_WID - 1;
+    if (y < 0)
+        y = 0;
+    if (y >= UI_TEXT_SURFACE_HGT)
+        y = UI_TEXT_SURFACE_HGT - 1;
+    g_ui_text_surface.cursor_x = x;
+    g_ui_text_surface.cursor_y = y;
+}
+
+static void ui_text_surface_get_cursor(int* x, int* y)
+{
+    ui_text_surface_ensure();
+    if (x)
+        *x = g_ui_text_surface.cursor_x;
+    if (y)
+        *y = g_ui_text_surface.cursor_y;
+}
+
+static void ui_text_surface_erase(int col, int row, int width)
+{
+    int end;
+
+    ui_text_surface_ensure();
+    if (row < 0 || row >= UI_TEXT_SURFACE_HGT)
+        return;
+    if (col < 0)
+        col = 0;
+    if (col >= UI_TEXT_SURFACE_WID)
+        return;
+
+    end = (width <= 0 || width >= 255) ? UI_TEXT_SURFACE_WID
+                                        : MIN(UI_TEXT_SURFACE_WID, col + width);
+    for (int x = col; x < end; x++)
+    {
+        g_ui_text_surface.chars[row][x] = ' ';
+        g_ui_text_surface.attrs[row][x] = TERM_WHITE;
+    }
+
+    ui_text_surface_set_cursor(col, row);
+    if (row == 0)
+        ui_text_surface_publish_topline();
+}
+
+static void ui_text_surface_put_char(int col, int row, byte attr, char ch)
+{
+    unsigned char uch = (unsigned char)ch;
+
+    ui_text_surface_ensure();
+    if (row < 0 || row >= UI_TEXT_SURFACE_HGT || col < 0
+        || col >= UI_TEXT_SURFACE_WID)
+    {
+        return;
+    }
+
+    g_ui_text_surface.chars[row][col]
+        = (char)(isprint(uch) || ch == ' ' ? ch : ' ');
+    g_ui_text_surface.attrs[row][col] = attr;
+}
+
+static void ui_text_surface_put_string(int col, int row, byte attr, cptr str)
+{
+    int x = col;
+
+    ui_text_surface_ensure();
+    if (!str || row < 0 || row >= UI_TEXT_SURFACE_HGT || col >= UI_TEXT_SURFACE_WID)
+        return;
+    if (x < 0)
+        x = 0;
+
+    while (*str && x < UI_TEXT_SURFACE_WID)
+    {
+        ui_text_surface_put_char(x, row, attr, *str);
+        x++;
+        str++;
+    }
+
+    ui_text_surface_set_cursor(x < UI_TEXT_SURFACE_WID ? x : UI_TEXT_SURFACE_WID - 1,
+        row);
+    if (row == 0)
+        ui_text_surface_publish_topline();
+}
+
+static void ui_text_surface_add_char(byte attr, char ch)
+{
+    int x;
+    int y;
+
+    ui_text_surface_get_cursor(&x, &y);
+    ui_text_surface_put_char(x, y, attr, ch);
+    if (x < UI_TEXT_SURFACE_WID - 1)
+        x++;
+    ui_text_surface_set_cursor(x, y);
+    if (y == 0)
+        ui_text_surface_publish_topline();
+}
+
+static void ui_text_surface_get_cell(int col, int row, byte* attr, char* ch)
+{
+    ui_text_surface_ensure();
+    if (attr)
+        *attr = TERM_WHITE;
+    if (ch)
+        *ch = ' ';
+    if (row < 0 || row >= UI_TEXT_SURFACE_HGT || col < 0
+        || col >= UI_TEXT_SURFACE_WID)
+    {
+        return;
+    }
+    if (attr)
+        *attr = g_ui_text_surface.attrs[row][col];
+    if (ch)
+        *ch = g_ui_text_surface.chars[row][col];
+}
 
 static void write_text_out_byte(unsigned char value)
 {
@@ -19,8 +199,7 @@ static void write_text_out_byte(unsigned char value)
  */
 void c_put_str(byte attr, cptr str, int row, int col)
 {
-    /* Position cursor, Dump the attr/text */
-    Term_putstr(col, row, -1, attr, str);
+    ui_text_surface_put_string(col, row, attr, str);
 }
 
 /*
@@ -28,8 +207,7 @@ void c_put_str(byte attr, cptr str, int row, int col)
  */
 void put_str(cptr str, int row, int col)
 {
-    /* Spawn */
-    Term_putstr(col, row, -1, TERM_WHITE, str);
+    c_put_str(TERM_WHITE, str, row, col);
 }
 
 /*
@@ -38,68 +216,8 @@ void put_str(cptr str, int row, int col)
  */
 void c_prt(byte attr, cptr str, int row, int col)
 {
-    /* Log what we're about to print, especially for line 0 */
-    if (row == 0)
-    {
-        log_debug("c_prt: row=0 col=%d attr=%d str='%s' story_font_active=%d",
-            col, attr, str, Term && Term->story_font_active ? 1 : 0);
-
-        /* Log current buffer state before erase */
-        if (Term && Term->scr)
-        {
-            char buffer_content[256];
-            byte* scr_story = Term->scr->story[0];
-            int i;
-            int len = Term->wid;
-            for (i = 0; i < len && i < 80; i++)
-            {
-                char c = Term->scr->c[0][i];
-                buffer_content[i] = (c >= 32 && c <= 126) ? c : '.';
-            }
-            buffer_content[i] = '\0';
-            log_debug("c_prt: BEFORE erase row=0 buffer='%s' story_flags[0-10]=%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-                buffer_content,
-                scr_story[0], scr_story[1], scr_story[2], scr_story[3],
-                scr_story[4], scr_story[5], scr_story[6], scr_story[7],
-                scr_story[8], scr_story[9], scr_story[10]);
-        }
-    }
-
-    /* Clear line, position cursor */
-    Term_erase(col, row, 255);
-
-    /* Log buffer state after erase, before adding text */
-    if (row == 0 && Term && Term->scr)
-    {
-        byte* scr_story = Term->scr->story[0];
-        log_debug("c_prt: AFTER erase row=0 story_flags[0-10]=%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-            scr_story[0], scr_story[1], scr_story[2], scr_story[3],
-            scr_story[4], scr_story[5], scr_story[6], scr_story[7],
-            scr_story[8], scr_story[9], scr_story[10]);
-    }
-
-    /* Dump the attr/text */
-    Term_addstr(-1, attr, str);
-
-    /* Log buffer state after adding text */
-    if (row == 0 && Term && Term->scr)
-    {
-        char buffer_content[256];
-        byte* scr_story = Term->scr->story[0];
-        int i;
-        int len = Term->wid;
-        for (i = 0; i < len && i < 80; i++)
-        {
-            char c = Term->scr->c[0][i];
-            buffer_content[i] = (c >= 32 && c <= 126) ? c : '.';
-        }
-        buffer_content[i] = '\0';
-        log_debug("c_prt: AFTER addstr row=0 buffer='%s' story_flags[0-10]=%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-            buffer_content,
-            scr_story[0], scr_story[1], scr_story[2], scr_story[3],
-            scr_story[4], scr_story[5], scr_story[6], scr_story[7],
-            scr_story[8], scr_story[9], scr_story[10]);
-    }
+    ui_text_surface_erase(col, row, 255);
+    ui_text_surface_put_string(col, row, attr, str);
 }
 
 /*
@@ -145,26 +263,12 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent)
 
 void text_out_to_screen(byte a, cptr str)
 {
-    /* If story font is enabled, use pixel-based wrapping */
-    if (sdl_is_story_font_enabled())
-    {
-        text_out_to_screen_story(a, str);
-        return;
-    }
-
     int x, y;
-
-    int wid, h;
-
+    int wid = UI_TEXT_SURFACE_WID;
     int wrap;
-
     cptr s;
 
-    /* Obtain the size */
-    (void)Term_get_size(&wid, &h);
-
-    /* Obtain the cursor */
-    (void)Term_locate(&x, &y);
+    ui_text_surface_get_cursor(&x, &y);
 
     /* Use special wrapping boundary? */
     if ((text_out_wrap > 0) && (text_out_wrap < wid))
@@ -185,7 +289,7 @@ void text_out_to_screen(byte a, cptr str)
             y++;
 
             /* Clear line, move cursor */
-            Term_erase(x, y, 255);
+            ui_text_surface_erase(x, y, 255);
 
             continue;
         }
@@ -208,7 +312,7 @@ void text_out_to_screen(byte a, cptr str)
                 for (i = wrap - 2; i >= 0; i--)
                 {
                     /* Grab existing attr/char */
-                    Term_what(i, y, &av[i], &cv[i]);
+                    ui_text_surface_get_cell(i, y, &av[i], &cv[i]);
 
                     /* Break on space */
                     if (cv[i] == ' ')
@@ -224,20 +328,21 @@ void text_out_to_screen(byte a, cptr str)
                 n = wrap;
 
             /* Clear line */
-            Term_erase(n, y, 255);
+            ui_text_surface_erase(n, y, 255);
 
             /* Wrap */
             x = text_out_indent;
             y++;
 
             /* Clear line, move cursor */
-            Term_erase(x, y, 255);
+            ui_text_surface_erase(x, y, 255);
+            ui_text_surface_set_cursor(x, y);
 
             /* Wrap the word (if any) */
             for (i = n; i < wrap - 1; i++)
             {
                 /* Dump */
-                Term_addch(av[i], cv[i]);
+                ui_text_surface_add_char(av[i], cv[i]);
 
                 /* Advance (no wrap) */
                 if (++x > wrap)
@@ -246,12 +351,14 @@ void text_out_to_screen(byte a, cptr str)
         }
 
         /* Dump */
-        Term_addch(a, ch);
+        ui_text_surface_add_char(a, ch);
 
         /* Advance */
         if (++x > wrap)
             x = wrap;
     }
+
+    ui_text_surface_set_cursor(x, y);
 }
 
 /*
@@ -396,9 +503,9 @@ void clear_from(int row)
     int y;
 
     /* Erase requested rows */
-    for (y = row; y < Term->hgt; y++)
+    for (y = row; y < UI_TEXT_SURFACE_HGT; y++)
     {
         /* Erase part of the screen */
-        Term_erase(0, y, 255);
+        ui_text_surface_erase(0, y, 255);
     }
 }

@@ -867,7 +867,7 @@ void do_cmd_unified_look(void)
             }
             
             /* Move cursor to position */
-            move_cursor_relative(state.cursor_y, state.cursor_x);
+            dungeon_note_cursor_relative(state.cursor_y, state.cursor_x);
 
             if (unified_look_snapshot_active()
                 && !unified_look_snapshot_publish_menu_scene(&state))
@@ -1822,76 +1822,17 @@ void highlight_entity_on_map(int y, int x, bool highlight)
 
 void highlight_entity_on_map_type(int y, int x, bool highlight, int entity_type)
 {
+    (void)entity_type;
+
     if (highlight)
     {
-        /* Get the original character and color, but show with blue background */
-        char display_char;
-        byte display_attr;
-        object_type* floor_obj = NULL;
-        bool has_live_object = false;
-
-        if (cave_o_idx[y][x] > 0)
-        {
-            floor_obj = &o_list[cave_o_idx[y][x]];
-            has_live_object = floor_obj->k_idx ? true : false;
-        }
-        
-        /* Determine what to display based on entity_type preference */
-        /* entity_type: 0=auto-detect, 1=prefer monster, 2=prefer object */
-        
-        if (entity_type == 2 && has_live_object)
-        {
-            /* Prefer object display */
-            display_char = object_char(floor_obj);
-            display_attr = object_attr(floor_obj); /* Keep original object color */
-            log_trace("Highlighting object '%c' at (%d,%d) -> showing normal color", 
-                     display_char, y, x);
-        }
-        else if (entity_type == 1 && cave_m_idx[y][x] > 0)
-        {
-            /* Prefer monster display */
-            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
-            monster_race* r_ptr = &r_info[m_ptr->r_idx];
-            display_char = monster_char(r_ptr);
-            display_attr = monster_attr(r_ptr); /* Keep original monster color */
-            log_trace("Highlighting monster '%c' at (%d,%d) -> showing normal color", 
-                     display_char, y, x);
-        }
-        else if (cave_m_idx[y][x] > 0)
-        {
-            /* Auto-detect: For monsters, show normal appearance (no color change) */
-            monster_type* m_ptr = &mon_list[cave_m_idx[y][x]];
-            monster_race* r_ptr = &r_info[m_ptr->r_idx];
-            display_char = monster_char(r_ptr);
-            display_attr = monster_attr(r_ptr); /* Keep original monster color */
-            log_trace("Highlighting monster '%c' at (%d,%d) -> showing normal color", 
-                     display_char, y, x);
-        }
-        else if (has_live_object)
-        {
-            /* Auto-detect: For objects, show normal appearance (no color change) */
-            display_char = object_char(floor_obj);
-            display_attr = object_attr(floor_obj); /* Keep original object color */
-            log_trace("Highlighting object '%c' at (%d,%d) -> showing normal color", 
-                     display_char, y, x);
-        }
-        else
-        {
-            /* Empty space - use a cursor */
-            display_char = '+';
-            display_attr = TERM_L_BLUE;
-            log_trace("Highlighting empty space at (%d,%d) -> showing blue cursor", y, x);
-        }
-        
-        /* Draw highlighted character */
-        print_rel(display_char, display_attr, y, x);
-        log_trace("Applied blue highlighting: char='%c', attr=%d", 
-                 display_char, display_attr);
+        dungeon_note_cursor_relative(y, x);
+        log_trace("Applied semantic cursor highlight at (%d,%d)", y, x);
     }
     else
     {
-        /* Restore original display */
-        lite_spot(y, x);
+        /* Restore the steady-state gameplay cursor. */
+        dungeon_sync_cursor_state();
         log_trace("Restored original display at (%d,%d)", y, x);
     }
 }

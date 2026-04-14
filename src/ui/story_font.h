@@ -5,11 +5,8 @@
 
 #include "../h-basic.h"
 
-typedef struct term term;
-
 typedef struct story_font_term_state
 {
-    term* t;
     bool active;
     bool grid;
 } story_font_term_state;

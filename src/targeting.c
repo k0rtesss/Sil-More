@@ -1103,7 +1103,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                 "What you see is not to be believed.  [%s]", info);
 
             targeting_snapshot_prompt(out_val);
-            move_cursor_relative(y, x);
+            dungeon_note_cursor_relative(y, x);
             query = targeting_inkey_with_wait_reason();
 
             /* Stop on everything but "return" */
@@ -1237,7 +1237,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                         targeting_snapshot_prompt(out_val);
 
                         /* Place cursor */
-                        move_cursor_relative(y, x);
+                        dungeon_note_cursor_relative(y, x);
 
                         /* Command */
                         query = targeting_inkey_with_wait_reason();
@@ -1312,7 +1312,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     }
 
                     targeting_snapshot_prompt(out_val);
-                    move_cursor_relative(y, x);
+                    dungeon_note_cursor_relative(y, x);
                     query = targeting_inkey_with_wait_reason();
 
                     /* Stop on everything but "return"/"space" */
@@ -1391,7 +1391,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     }
 
                     targeting_snapshot_prompt(out_val);
-                    move_cursor_relative(y, x);
+                    dungeon_note_cursor_relative(y, x);
                     query = targeting_inkey_with_wait_reason();
 
                     /* Stop on everything but "return"/"space" */
@@ -1472,7 +1472,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             }
 
             targeting_snapshot_prompt(out_val);
-            move_cursor_relative(y, x);
+            dungeon_note_cursor_relative(y, x);
             query = targeting_inkey_with_wait_reason();
 
             /* Stop on everything but "return"/"space" */

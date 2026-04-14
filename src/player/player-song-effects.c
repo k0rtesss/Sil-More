@@ -92,7 +92,7 @@ void sing_song_of_freedom(int score)
 
                     if (cave_info[y][x] & (CAVE_SEEN))
                     {
-                        lite_spot(y, x);
+                        dungeon_mark_map_for_redraw();
                     }
                 }
             }
@@ -1498,7 +1498,7 @@ static void shatter_floor_items(int score)
                             msg_format("%s answers your song with a bitter crack.", o_name);
                         }
 
-                        lite_spot(y, x);
+                        dungeon_mark_map_for_redraw();
                     }
                 }
 
@@ -1537,7 +1537,7 @@ static void song_reveal_items(int range)
         /* Revelation reveals easy smithing items (no distance penalty). */
         (void)player_auto_identify_smithing_object(o_ptr, true);
 
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
     }
 
     for (int i = 1; i < mon_max; i++)
@@ -1637,7 +1637,7 @@ void sing_song_of_revealing(int score, bool primary_song)
                 m_ptr->ml = true;
             }
             
-            lite_spot(m_ptr->fy, m_ptr->fx);
+            dungeon_mark_map_for_redraw();
         }
     }
 

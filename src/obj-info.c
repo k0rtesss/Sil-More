@@ -2383,6 +2383,14 @@ static int object_info_screen_capture_used_rows_from_cells(
     return 0;
 }
 
+static void object_info_document_layout_size(int* wid, int* hgt)
+{
+    if (wid)
+        *wid = 80;
+    if (hgt)
+        *hgt = 24;
+}
+
 static bool object_info_screen_capture_build(
     const object_type** objects, const char** headings, int count,
     object_info_screen_capture* capture)
@@ -2398,7 +2406,7 @@ static bool object_info_screen_capture_build(
     if (!capture || !objects || count <= 0)
         return false;
 
-    Term_get_size(&term_wid, &term_hgt);
+    object_info_document_layout_size(&term_wid, &term_hgt);
     if (term_wid < 20)
         term_wid = 20;
     (void)term_hgt;
@@ -2652,7 +2660,7 @@ static bool object_info_screen_capture_build_scene(
     if (!scene || !capture || !capture->attrs || !capture->chars || !capture->story)
         return false;
 
-    Term_get_size(&term_wid, &term_hgt);
+    object_info_document_layout_size(&term_wid, &term_hgt);
     visible_rows = MAX(1, term_hgt - 1);
     prompt_row = MAX(0, term_hgt - 1);
     max_scroll = MAX(0, capture->height - visible_rows);
@@ -2749,7 +2757,7 @@ static bool object_info_screen_capture_view_document(
         int dir;
         char ch;
 
-        Term_get_size(&term_wid, &term_hgt);
+        object_info_document_layout_size(&term_wid, &term_hgt);
         visible_rows = MAX(1, term_hgt - 1);
         max_scroll = MAX(0, capture->height - visible_rows);
 

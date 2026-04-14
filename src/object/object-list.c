@@ -142,14 +142,8 @@ void delete_object_idx(int o_idx)
     /* Dungeon floor */
     if (!(j_ptr->held_m_idx))
     {
-        int y, x;
-
-        /* Location */
-        y = j_ptr->iy;
-        x = j_ptr->ix;
-
         /* Visual update */
-        lite_spot(y, x);
+        dungeon_mark_map_for_redraw();
     }
 
     /* Wipe the object */
@@ -192,7 +186,7 @@ void delete_object(int y, int x)
     cave_o_idx[y][x] = 0;
 
     /* Visual update */
-    lite_spot(y, x);
+    dungeon_mark_map_for_redraw();
 }
 
 /*

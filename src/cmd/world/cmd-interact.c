@@ -5951,7 +5951,7 @@ void do_cmd_alter(void)
         {
             msg_print("You hit something hard.");
             cave_info[y][x] |= (CAVE_MARK);
-            lite_spot(y, x);
+            dungeon_mark_map_for_redraw();
         }
     }
 

@@ -2913,9 +2913,9 @@ static void process_player(void)
 
         /* Place the cursor on the player or target */
         if (hilite_player)
-            move_cursor_relative(p_ptr->py, p_ptr->px);
+            dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
         if (hilite_target && target_sighted())
-            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+            dungeon_note_cursor_relative(p_ptr->target_row, p_ptr->target_col);
 
         if (cheat_noise)
             display_noise_map();
@@ -3169,9 +3169,10 @@ static void process_player(void)
 
                 /* Place the cursor on the player or target */
                 if (hilite_player)
-                    move_cursor_relative(p_ptr->py, p_ptr->px);
+                    dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
                 if (hilite_target && target_sighted())
-                    move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+                    dungeon_note_cursor_relative(p_ptr->target_row,
+                        p_ptr->target_col);
 
                 /* We are certainly no longer in the process of restoring a game
                  */
@@ -3349,7 +3350,7 @@ static void process_player(void)
                     shimmer_monsters = true;
 
                     /* Redraw regardless */
-                    lite_spot(m_ptr->fy, m_ptr->fx);
+                    dungeon_mark_map_for_redraw();
                 }
             }
 
@@ -4185,9 +4186,10 @@ static void dungeon(void)
 
         /* Place the cursor on the player or target */
         if (hilite_player)
-            move_cursor_relative(p_ptr->py, p_ptr->px);
+            dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
         if (hilite_target && target_sighted())
-            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+            dungeon_note_cursor_relative(p_ptr->target_row,
+                p_ptr->target_col);
 
         /* Handle "leaving" */
     if (p_ptr->leaving) {
@@ -4225,9 +4227,10 @@ static void dungeon(void)
 
         /* Place the cursor on the player or target */
         if (hilite_player)
-            move_cursor_relative(p_ptr->py, p_ptr->px);
+            dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
         if (hilite_target && target_sighted())
-            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+            dungeon_note_cursor_relative(p_ptr->target_row,
+                p_ptr->target_col);
 
         /* Handle "leaving" */
     if (p_ptr->leaving)
@@ -4254,9 +4257,10 @@ static void dungeon(void)
 
         /* Place the cursor on the player or target */
         if (hilite_player)
-            move_cursor_relative(p_ptr->py, p_ptr->px);
+            dungeon_note_cursor_relative(p_ptr->py, p_ptr->px);
         if (hilite_target && target_sighted())
-            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+            dungeon_note_cursor_relative(p_ptr->target_row,
+                p_ptr->target_col);
 
         /* Handle "leaving" */
     if (p_ptr->leaving)
