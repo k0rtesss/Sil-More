@@ -787,7 +787,6 @@ void do_cmd_inven(void)
 
     /* Ensure the main display reflects any changes (drops, etc.) */
     handle_stuff();
-    Term_fresh();
 
     if (action != ENHANCED_ACTION_SWITCH)
         enhanced_menu_action = ENHANCED_ACTION_NONE;
@@ -885,7 +884,6 @@ void do_cmd_equip(void)
 
     /* Ensure the main display reflects any changes (drops, etc.) */
     handle_stuff();
-    Term_fresh();
 
     if (action != ENHANCED_ACTION_SWITCH)
         enhanced_equip_action = ENHANCED_ACTION_NONE;

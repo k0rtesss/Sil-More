@@ -776,21 +776,34 @@ static int prompt_menu_scene_run_confirm(cptr prompt, cptr detail,
     return result;
 }
 
-bool askfor_aux(char* buf, size_t len)
+bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
+    bool allow_randomize)
 {
     bool prompt_scene_supported = prompt_menu_scene_supported();
 
+    if (!buf || len < 1)
+        return false;
+
+    /* Paranoia XXX XXX XXX */
+    message_flush();
+
     if (prompt_scene_supported)
     {
-        int scene_result = prompt_menu_scene_run_text_input(
-            g_prompt_interaction_label ? g_prompt_interaction_label : "Input:",
-            buf, len, "Enter accepts, Esc cancels, Backspace erases.", false);
+        int scene_result = prompt_menu_scene_run_text_input(prompt, buf, len,
+            detail, allow_randomize);
 
         if (scene_result >= 0)
             return scene_result == 1;
     }
 
     return false;
+}
+
+bool askfor_aux(char* buf, size_t len)
+{
+    return prompt_text_input(
+        g_prompt_interaction_label ? g_prompt_interaction_label : "Input:",
+        "Enter accepts, Esc cancels, Backspace erases.", buf, len, false);
 }
 
 /*
@@ -800,18 +813,8 @@ bool askfor_aux(char* buf, size_t len)
  */
 bool askfor_name(char* buf, size_t len)
 {
-    bool prompt_scene_supported = prompt_menu_scene_supported();
-
-    if (prompt_scene_supported)
-    {
-        int scene_result = prompt_menu_scene_run_text_input("Name:", buf, len,
-            "Enter accepts, Esc cancels, Tab randomizes.", true);
-
-        if (scene_result >= 0)
-            return scene_result == 1;
-    }
-
-    return false;
+    return prompt_text_input("Name:",
+        "Enter accepts, Esc cancels, Tab randomizes.", buf, len, true);
 }
 
 /*
@@ -821,21 +824,8 @@ bool askfor_name(char* buf, size_t len)
  */
 bool term_get_string(cptr prompt, char* buf, size_t len)
 {
-    bool res;
-    bool prompt_scene_supported = prompt_menu_scene_supported();
-
-    /* Paranoia XXX XXX XXX */
-    message_flush();
-
-    if (prompt_scene_supported)
-    {
-        g_prompt_interaction_label = prompt;
-        res = askfor_aux(buf, len);
-        g_prompt_interaction_label = NULL;
-        return res;
-    }
-
-    return false;
+    return prompt_text_input(prompt,
+        "Enter accepts, Esc cancels, Backspace erases.", buf, len, false);
 }
 
 /*

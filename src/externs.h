@@ -1002,6 +1002,8 @@ extern void text_out_to_screen(byte a, cptr str);
 extern void text_out(cptr str);
 extern void text_out_c(byte a, cptr str);
 extern void clear_from(int row);
+extern bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
+    bool allow_randomize);
 extern bool askfor_aux(char* buf, size_t len);
 extern bool askfor_name(char* buf, size_t len);
 extern bool term_get_string(cptr prompt, char* buf, size_t len);

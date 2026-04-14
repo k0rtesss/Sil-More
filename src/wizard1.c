@@ -9,11 +9,11 @@
  */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "ui/ui-information-scene.h"
 #include "ui/colors.h"
 
 #ifdef ALLOW_SPOILERS
@@ -998,7 +998,7 @@ void do_cmd_spoilers(void)
     while (1)
     {
         /* Clear screen */
-        Term_clear();
+        clear_from(0);
 
         /* Info */
         prt("Create a spoiler file.", 2, 0);
@@ -1014,13 +1014,8 @@ void do_cmd_spoilers(void)
         prt("Command: ", 13, 0);
 
         /* Get a choice */
-        {
-            app_wait_scope wiz_scope;
-            app_session_push_wait_scope(app_session_current(), &wiz_scope,
-                APP_WAIT_REASON_LIST_SELECTION, 0, 0);
-            ch = inkey();
-            app_session_pop_wait_scope(app_session_current(), &wiz_scope);
-        }
+        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         /* Escape */
         if (ch == ESCAPE)

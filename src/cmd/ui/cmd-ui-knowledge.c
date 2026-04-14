@@ -3508,7 +3508,6 @@ cleanup:
         p_ptr->redraw |= (PR_MAP);
         p_ptr->window |= (PW_MESSAGE);
         handle_stuff();
-        Term_fresh();
     }
 
     return acted;

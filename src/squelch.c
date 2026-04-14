@@ -9,11 +9,11 @@
  */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "ui/ui-information-scene.h"
 
 static void do_qual_squelch(void);
 static int do_ego_item_squelch(void);
@@ -43,6 +43,18 @@ struct tval_insc_desc
 
 byte squelch_level[SQUELCH_BYTES];
 
+static bool squelch_prompt_text_input(cptr prompt, char* buf, size_t len)
+{
+    return prompt_text_input(prompt,
+        "Enter accepts, Esc cancels, Backspace erases.", buf, len, false);
+}
+
+static char squelch_wait_key(void)
+{
+    return (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+        APP_WAIT_REASON_LIST_SELECTION);
+}
+
 static void squelch_get_layout(squelch_layout* layout)
 {
     if (!layout)
@@ -51,7 +63,12 @@ static void squelch_get_layout(squelch_layout* layout)
     layout->term_wid = 80;
     layout->term_hgt = 24;
     if (Term)
-        Term_get_size(&layout->term_wid, &layout->term_hgt);
+    {
+        if (Term->wid > 0)
+            layout->term_wid = Term->wid;
+        if (Term->hgt > 0)
+            layout->term_hgt = Term->hgt;
+    }
     if (layout->term_wid < 1)
         layout->term_wid = 80;
     if (layout->term_hgt < 1)
@@ -66,6 +83,8 @@ static void squelch_put_fit(byte attr, cptr text, int row, int col,
     const squelch_layout* layout)
 {
     int max;
+    size_t clip_size;
+    char clipped[1024];
 
     if (!layout || !text || row < 0 || col < 0 || row >= layout->term_hgt
         || col >= layout->term_wid)
@@ -75,7 +94,12 @@ static void squelch_put_fit(byte attr, cptr text, int row, int col,
     if (max < 1)
         return;
 
-    Term_putstr(col, row, max, attr, text);
+    clip_size = (size_t)max + 1;
+    if (clip_size > sizeof(clipped))
+        clip_size = sizeof(clipped);
+
+    SDL_strlcpy(clipped, text, clip_size);
+    c_put_str(attr, clipped, row, col);
 }
 
 #define LINES_PER_COLUMN 19
@@ -184,7 +208,7 @@ extern int do_cmd_autoinscribe_item(s16b k_idx)
     }
 
     /* Get a new inscription (possibly empty) */
-    if (term_get_string("Autoinscription: ", tmp, sizeof(tmp)))
+    if (squelch_prompt_text_input("Autoinscription: ", tmp, sizeof(tmp)))
     {
         /* Save the inscription */
         add_autoinscription(k_idx, tmp);
@@ -227,7 +251,7 @@ static int do_cmd_squelch_aux(void)
     col_step = layout.compact ? MAX(20, layout.term_wid / 2) : 30;
 
     /* Clear screen */
-    Term_clear();
+    clear_from(0);
 
     /*
      * Print all typeval's and their descriptions
@@ -616,7 +640,7 @@ static int do_cmd_squelch_aux(void)
             int page_end = MIN(max_num, page_base + page_size);
 
             if (display_all)
-                Term_clear();
+                clear_from(0);
 
             /*no objects found*/
             if (!max_num)
@@ -712,8 +736,16 @@ static int do_cmd_squelch_aux(void)
                     /* Print it */
                     squelch_put_fit(((num == active) ? TERM_YELLOW : TERM_WHITE),
                         format("%c)'%c'", ch, sq), row, col, &layout);
-                    Term_putstr(text_col, row, MAX(1, col_width - 7), color,
-                        buf);
+                    {
+                        char clipped[160];
+                        size_t clip_size = (size_t)MAX(1, col_width - 7) + 1;
+
+                        if (clip_size > sizeof(clipped))
+                            clip_size = sizeof(clipped);
+                        SDL_strlcpy(clipped, buf, clip_size);
+                        squelch_put_fit(color, clipped, row, text_col,
+                            &layout);
+                    }
                 }
             }
 
@@ -930,7 +962,7 @@ static void do_qual_squelch(void)
     {
         /* Clear screen */
         if (display_all)
-            Term_clear();
+            clear_from(0);
 
         /* Print all tval's and their descriptions */
         for (num = 0; (num < 60) && tvals[num].tval; num++)
@@ -994,13 +1026,7 @@ static void do_qual_squelch(void)
         move_cursor(2 + (index % rows_per_col), 1 + ((index / rows_per_col) * col_step));
 
         /* Get a key */
-        {
-            app_wait_scope squelch_scope;
-            app_session_push_wait_scope(app_session_current(), &squelch_scope,
-                APP_WAIT_REASON_LIST_SELECTION, 0, 0);
-            ch = inkey();
-            app_session_pop_wait_scope(app_session_current(), &squelch_scope);
-        }
+        ch = squelch_wait_key();
 
         /* Analyze */
         switch (ch)
@@ -1460,7 +1486,7 @@ static int do_ego_item_squelch(void)
         if (display_all)
         {
             /* Clear the screen */
-            Term_clear();
+            clear_from(0);
 
             /* Header */
             c_put_str(TERM_WHITE, "[ ]:", 1, 0);
@@ -1713,7 +1739,7 @@ void do_cmd_squelch_autoinsc(void)
     }
 
     /* Restore the screen */
-    Term_load();
+    do_cmd_redraw();
 
     return;
 }

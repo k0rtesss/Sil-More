@@ -9,10 +9,12 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "platform-frame.h"
 
 #ifdef ALLOW_DEBUG
 
@@ -22,6 +24,31 @@
 static void do_cmd_debug_complete_quest(void);
 static void do_cmd_debug_orome_status(void);
 static void do_cmd_debug_identify_all_items(void);
+
+static bool wizard_prompt_text_input(cptr prompt, char* buf, size_t len)
+{
+    return prompt_text_input(prompt,
+        "Enter accepts, Esc cancels, Backspace erases.", buf, len, false);
+}
+
+static bool wizard_poll_for_interrupt(void)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    platform_frame_process_events(false);
+    if (!input_byte_queue_pending()
+        && (!session || !app_session_peek_input(session, &input)))
+    {
+        return false;
+    }
+
+    input_byte_queue_clear();
+    if (session)
+        app_session_clear_inputs(session);
+
+    return true;
+}
 
 /*
  * Display the dungeon light levels.
@@ -251,13 +278,13 @@ static void prt_binary(u32b flags, int row, int col)
         /* Dump set bits */
         if (flags & bitmask)
         {
-            Term_putch(col++, row, TERM_BLUE, '*');
+            c_put_str(TERM_BLUE, "*", row, col++);
         }
 
         /* Dump unset bits */
         else
         {
-            Term_putch(col++, row, TERM_WHITE, '-');
+            c_put_str(TERM_WHITE, "-", row, col++);
         }
     }
 }
@@ -301,7 +328,7 @@ static void do_cmd_wiz_change_aux(void)
         sprintf(tmp_val, "%d", p_ptr->stat_base[i]);
 
         /* Query */
-        if (!term_get_string(ppp, tmp_val, 4))
+        if (!wizard_prompt_text_input(ppp, tmp_val, 4))
             return;
 
         /* Extract */
@@ -322,7 +349,7 @@ static void do_cmd_wiz_change_aux(void)
     sprintf(tmp_val, "%ld", (long)(p_ptr->new_exp));
 
     /* Query */
-    if (!term_get_string("Experience Pool: ", tmp_val, 10))
+    if (!wizard_prompt_text_input("Experience Pool: ", tmp_val, 10))
         return;
 
     /* Extract */
@@ -345,7 +372,7 @@ static void do_cmd_wiz_change_aux(void)
     sprintf(tmp_val, "%ld", (long)(p_ptr->game_type));
 
     /* Query */
-    if (!term_get_string("Game Type: ", tmp_val, 10))
+    if (!wizard_prompt_text_input("Game Type: ", tmp_val, 10))
         return;
 
     /* Extract */
@@ -431,7 +458,7 @@ static void wiz_display_item(const object_type* o_ptr)
     object_flags(o_ptr, &f1, &f2, &f3);
 
     /* Clear screen */
-    Term_clear();
+    clear_from(0);
 
     /* Describe fully */
     object_desc_spoil(buf, sizeof(buf), o_ptr, true, 3);
@@ -534,7 +561,7 @@ static int wiz_create_itemtype(void)
     char buf[160];
 
     /* Clear screen */
-    Term_clear();
+    clear_from(0);
 
     /* Print all tval's and their descriptions */
     for (num = 0; (num < 60) && tvals[num].tval; num++)
@@ -568,7 +595,7 @@ static int wiz_create_itemtype(void)
     /*** And now we go for k_idx ***/
 
     /* Clear screen */
-    Term_clear();
+    clear_from(0);
 
     /* We have to search the whole itemlist. */
     for (num = 0, i = 1; (num < 60) && (i < z_info->k_max); i++)
@@ -632,28 +659,28 @@ static void wiz_tweak_item(object_type* o_ptr)
 
     p = "Enter new 'att' setting: ";
     sprintf(tmp_val, "%d", o_ptr->att);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!wizard_prompt_text_input(p, tmp_val, 6))
         return;
     o_ptr->att = atoi(tmp_val);
     wiz_display_item(o_ptr);
 
     p = "Enter new 'evn' setting: ";
     sprintf(tmp_val, "%d", o_ptr->evn);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!wizard_prompt_text_input(p, tmp_val, 6))
         return;
     o_ptr->evn = atoi(tmp_val);
     wiz_display_item(o_ptr);
 
     p = "Enter new 'pval' setting: ";
     sprintf(tmp_val, "%d", o_ptr->pval);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!wizard_prompt_text_input(p, tmp_val, 6))
         return;
     o_ptr->pval = atoi(tmp_val);
     wiz_display_item(o_ptr);
 
     p = "Enter new weight: ";
     sprintf(tmp_val, "%d", o_ptr->weight);
-    if (!term_get_string(p, tmp_val, 6))
+    if (!wizard_prompt_text_input(p, tmp_val, 6))
         return;
     o_ptr->weight = atoi(tmp_val);
     wiz_display_item(o_ptr);
@@ -811,9 +838,9 @@ static void wiz_statistics(object_type* o_ptr)
         }
 
         /* Let us know what we are doing */
-        msg_format("Creating a lot of %s items. Base level = %d.", quality,
-            p_ptr->depth);
-        message_flush();
+        msg_format(
+            "Creating a lot of %s items. Base level = %d. Press any key to stop early.",
+            quality, p_ptr->depth);
 
         /* Set counters to zero */
         matches = better = worse = other = 0;
@@ -824,22 +851,8 @@ static void wiz_statistics(object_type* o_ptr)
             /* Output every few rolls */
             if ((i < 100) || (i % 100 == 0))
             {
-                /* Do not wait */
-                inkey_set_scan(true);
-
-                /* Allow interupt */
-                if (inkey())
-                {
-                    /* Flush */
-                    flush();
-
-                    /* Stop rolling */
+                if (wizard_poll_for_interrupt())
                     break;
-                }
-
-                /* Dump the stats */
-                prt(format(q, i, matches, better, worse, other), 0, 0);
-                Term_fresh();
             }
 
             /* Get local object */
@@ -918,7 +931,8 @@ static void wiz_quantity_item(object_type* o_ptr)
     snprintf(tmp_val, sizeof(tmp_val), "%d", o_ptr->number);
 
     /* Query */
-    if (term_get_string("Quantity: ", tmp_val, sizeof(tmp_val) - 1))
+    if (wizard_prompt_text_input("Quantity: ", tmp_val,
+            sizeof(tmp_val) - 1))
     {
         /* Extract */
         tmp_int = atoi(tmp_val);
@@ -1182,7 +1196,7 @@ static void do_cmd_wiz_jump(void)
         sprintf(tmp_val, "%d", p_ptr->depth);
 
         /* Ask for a level */
-        if (!term_get_string(ppp, tmp_val, 11))
+        if (!wizard_prompt_text_input(ppp, tmp_val, 11))
             return;
 
         /* Extract request */

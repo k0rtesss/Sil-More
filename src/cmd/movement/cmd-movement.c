@@ -270,9 +270,6 @@ void do_cmd_rest(void)
 
     /* Handle stuff */
     handle_stuff();
-
-    /* Refresh */
-    Term_fresh();
 }
 
 /*

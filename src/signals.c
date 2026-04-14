@@ -4,6 +4,7 @@
 #include "signals.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "runtime/runtime-game.h"
 
 #ifdef HANDLE_SIGNALS
@@ -23,6 +24,16 @@ static signal_handler_t wrap_signal(int sig, signal_handler_t handler)
 /* Call this instead of calling signal() directly. */
 signal_handler_t (*signal_aux)(int, signal_handler_t) = wrap_signal;
 
+static void signal_present_status_message(cptr message)
+{
+    if (!message || !character_generated || !p_ptr)
+        return;
+
+    msg_print(message);
+    handle_stuff();
+    platform_frame_present();
+}
+
 /*
  * Handle signals -- suspend
  *
@@ -38,23 +49,21 @@ static void handle_signal_suspend(int sig)
 
 #ifdef SIGSTOP
 
-    /* Flush output */
-    Term_fresh();
+    if (character_generated && p_ptr)
+        handle_stuff();
+    platform_frame_present();
 
-    /* Suspend the "Term" */
-    Term_xtra(TERM_XTRA_ALIVE, 0);
+    /* Suspend the active host frame. */
+    platform_frame_set_active(false);
 
     /* Suspend ourself */
     (void)kill(0, SIGSTOP);
 
-    /* Resume the "Term" */
-    Term_xtra(TERM_XTRA_ALIVE, 1);
-
-    /* Redraw the term */
-    Term_redraw();
-
-    /* Flush the term */
-    Term_fresh();
+    /* Resume and rebuild the visible frame. */
+    platform_frame_set_active(true);
+    if (character_generated && p_ptr)
+        do_cmd_redraw();
+    platform_frame_present();
 
 #endif
 
@@ -136,24 +145,15 @@ static void handle_signal_simple(int sig)
     /* Give warning (after 4) */
     else if (signal_count >= 4)
     {
-        /* Make a noise */
-        Term_xtra(TERM_XTRA_NOISE, 0);
-
-        /* Clear the top line */
-        Term_erase(0, 0, 255);
-
-        /* Display the cause */
-        Term_putstr(0, 0, -1, TERM_WHITE, "Contemplating suicide!");
-
-        /* Flush */
-        Term_fresh();
+        platform_frame_notify_noise();
+        log_warn("handle_signal_simple: signal_count=%d", signal_count);
+        signal_present_status_message("Contemplating suicide!");
     }
 
     /* Give warning (after 2) */
     else if (signal_count >= 2)
     {
-        /* Make a noise */
-        Term_xtra(TERM_XTRA_NOISE, 0);
+        platform_frame_notify_noise();
     }
 
     /* Restore handler */
@@ -181,62 +181,25 @@ static void handle_signal_abort(int sig)
     if (!character_generated || character_saved)
         quit(NULL);
 
-    /* Clear the bottom line */
+    signal_present_status_message(
+        "A gruesome software bug LEAPS out at you! Panic save...");
+
+    /* Panic save */
+    p_ptr->panic_save = 1;
+    strnfmt(panic_from, sizeof(panic_from), "(panic save: %s)", signal_text);
+    SDL_strlcpy(p_ptr->died_from, panic_from, sizeof(p_ptr->died_from));
+
+    /* Forbid suspend */
+    signals_ignore_tstp();
+
+    /* Attempt to save */
+    if (save_player())
     {
-        int term_wid = 80;
-        int term_hgt = 24;
-        int status_row;
-        int message_col;
-
-        Term_get_size(&term_wid, &term_hgt);
-        status_row = term_hgt - 1;
-        message_col = MAX(0, term_wid - 21);
-
-        Term_erase(0, status_row, 255);
-
-        /* Give a warning */
-        Term_putstr(
-            0, status_row, -1, TERM_RED,
-            "A gruesome software bug LEAPS out at you!");
-
-        /* Show and log the triggering signal */
-        Term_erase(0, status_row - 1, 255);
-        Term_putstr(0, status_row - 1, -1, TERM_RED, signal_text);
-
-        /* Message */
-        Term_putstr(message_col, status_row, -1, TERM_RED, "Panic save...");
-
-        /* Flush output */
-        Term_fresh();
-
-        /* Panic Save */
-        p_ptr->panic_save = 1;
-
-        /* Panic save */
-        strnfmt(panic_from, sizeof(panic_from), "(panic save: %s)", signal_text);
-        SDL_strlcpy(p_ptr->died_from, panic_from, sizeof(p_ptr->died_from));
-
-        /* Forbid suspend */
-        signals_ignore_tstp();
-
-        /* Attempt to save */
-        if (save_player())
-        {
-            Term_putstr(
-                message_col, status_row, -1, TERM_RED,
-                "Panic save succeeded!");
-        }
-
-        /* Save failed */
-        else
-        {
-            Term_putstr(
-                message_col, status_row, -1, TERM_RED,
-                "Panic save failed!");
-        }
-
-        /* Flush output */
-        Term_fresh();
+        signal_present_status_message("Panic save succeeded!");
+    }
+    else
+    {
+        signal_present_status_message("Panic save failed!");
     }
 
     /* Quit */

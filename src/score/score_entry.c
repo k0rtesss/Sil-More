@@ -176,7 +176,7 @@ errr score_entry_submit(high_score* the_score)
 {
     if (!highscore_fd)
     {
-        Term_putstr(15, 8, -1, TERM_L_DARK, "(no high score file found)");
+        log_warn("score_entry_submit: no high score file found");
         return 1;
     }
 

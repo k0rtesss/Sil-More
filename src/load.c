@@ -3837,9 +3837,6 @@ bool load_player(void)
 
         load_byte_offset = 0; /* reset counter before decoding stream */
 
-        /* Clear screen */
-        Term_clear();
-
         if (!err)
         {
             /* Attempt to load */
