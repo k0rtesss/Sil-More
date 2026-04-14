@@ -14,6 +14,7 @@
 #include "fs/io_sdl.h"
 #include "log/log.h"
 #include "platform-config.h"
+#include "platform-frame.h"
 #include "runtime-cli.h"
 #include "player/killer.h"
 #include "reliability-checks.h"
@@ -191,7 +192,7 @@ static void note(cptr msg)
         y = 2;
 
     /* Flush it */
-    Term_fresh();
+    platform_frame_present();
 }
 
 /*

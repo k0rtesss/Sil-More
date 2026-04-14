@@ -13,6 +13,7 @@
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "player/killer.h"
@@ -544,7 +545,7 @@ void do_cmd_fire(int quiver)
     /* Sound */
     sound(MSG_SHOOT);
     if (use_sound) {
-        Term_xtra(TERM_XTRA_DELAY, 350);
+        platform_frame_delay_ms(350u);
     }
 
     /* Describe the object */
@@ -671,17 +672,19 @@ void do_cmd_fire(int quiver)
                         print_rel(c, a, ny, nx);
 
                         move_cursor_relative(ny, nx);
-                        Term_fresh();
-                        Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
+                        platform_frame_present();
+                        platform_frame_delay_ms(
+                            (u32b)(25 * op_ptr->delay_factor));
                         lite_spot(ny, nx);
-                        Term_fresh();
+                        platform_frame_present();
                     }
 
                     /* Delay anyway for consistency */
                     else
                     {
                         /* Pause anyway, for consistancy */
-                        Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
+                        platform_frame_delay_ms(
+                            (u32b)(25 * op_ptr->delay_factor));
                     }
                 }
 
@@ -728,17 +731,17 @@ void do_cmd_fire(int quiver)
                 print_rel(c, a, y, x);
 
                 move_cursor_relative(y, x);
-                Term_fresh();
-                Term_xtra(TERM_XTRA_DELAY, msec);
+                platform_frame_present();
+                platform_frame_delay_ms((u32b)msec);
                 lite_spot(y, x);
-                Term_fresh();
+                platform_frame_present();
             }
 
             /* Delay anyway for consistency */
             else
             {
                 /* Pause anyway, for consistancy */
-                Term_xtra(TERM_XTRA_DELAY, msec);
+                platform_frame_delay_ms((u32b)msec);
             }
 
             /* Handle monster */
@@ -1884,17 +1887,19 @@ void do_cmd_throw(bool automatic)
                 /* Visual effects */
                 print_rel('*', TERM_L_WHITE, ny, nx);
                 move_cursor_relative(ny, nx);
-                Term_fresh();
-                Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
+                platform_frame_present();
+                platform_frame_delay_ms(
+                    (u32b)(25 * op_ptr->delay_factor));
                 lite_spot(ny, nx);
-                Term_fresh();
+                platform_frame_present();
             }
 
             /* Delay anyway for consistency */
             else
             {
                 /* Pause anyway, for consistancy */
-                Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
+                platform_frame_delay_ms(
+                    (u32b)(25 * op_ptr->delay_factor));
             }
             break;
         }
@@ -1909,17 +1914,17 @@ void do_cmd_throw(bool automatic)
             /* Visual effects */
             print_rel(missile_char, missile_attr, y, x);
             move_cursor_relative(y, x);
-            Term_fresh();
-            Term_xtra(TERM_XTRA_DELAY, msec);
+            platform_frame_present();
+            platform_frame_delay_ms((u32b)msec);
             lite_spot(y, x);
-            Term_fresh();
+            platform_frame_present();
         }
 
         /* Delay anyway for consistency */
         else
         {
             /* Pause anyway, for consistancy */
-            Term_xtra(TERM_XTRA_DELAY, msec);
+            platform_frame_delay_ms((u32b)msec);
         }
 
         /* Handle monster */

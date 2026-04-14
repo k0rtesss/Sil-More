@@ -1,6 +1,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"
 
@@ -69,7 +70,7 @@ static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
         return false;
     }
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 
@@ -86,7 +87,7 @@ static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
         app_session_clear_dungeon_overlay_scene(session);
     app_session_pop_wait_scope(session, &scope->wait_scope);
     scope->active = false;
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
 }
 
 static void prompt_menu_scene_add_wrapped_text(app_ui_panel* panel,

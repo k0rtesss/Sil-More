@@ -11,6 +11,7 @@
 #include "fs/savefile-name.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "platform-frame.h"
 #include "player/killer.h"
 #include "reliability-checks.h"
 #include "score/score_entry.h"
@@ -104,7 +105,7 @@ static bool runtime_present_status_scene(byte title_attr, cptr title,
             return false;
         if (out_overlay)
             *out_overlay = true;
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        platform_frame_present();
         return true;
     }
 
@@ -119,7 +120,7 @@ static void runtime_clear_status_scene(bool overlay_active)
         return;
 
     app_session_clear_dungeon_overlay_scene(session);
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
 }
 
 static char runtime_close_game_prompt_key(void)

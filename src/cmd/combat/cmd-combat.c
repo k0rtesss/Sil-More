@@ -14,6 +14,7 @@
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "platform-frame.h"
 #include "platform-time.h"
 
 static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr);
@@ -768,15 +769,15 @@ void display_hit(int y, int x, int net_dam, int dam_type, bool fatal_blow)
         move_cursor_relative(y, x - 1);
     }
 
-    Term_fresh();
+    platform_frame_present();
 
     /* Delay */
-    Term_xtra(TERM_XTRA_DELAY, 25 * op_ptr->delay_factor);
+    platform_frame_delay_ms((u32b)(25 * op_ptr->delay_factor));
 
     /* Erase the visual effects */
     lite_spot(y, x);
     lite_spot(y, x - 1);
-    Term_fresh();
+    platform_frame_present();
     restore_game_cursor();
 }
 

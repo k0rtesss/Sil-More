@@ -3,6 +3,7 @@
 #include "ui-information-scene.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 
 static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
@@ -21,7 +22,23 @@ static void ui_information_scene_term_xtra(int action, int value)
     if (!g_ui_information_scene_refresh_enabled)
         return;
 
-    (void)Term_xtra(action, value);
+    switch (action)
+    {
+    case TERM_XTRA_EVENT:
+        platform_frame_process_events(value ? true : false);
+        break;
+
+    case TERM_XTRA_FRESH:
+        platform_frame_present();
+        break;
+
+    case TERM_XTRA_DELAY:
+        platform_frame_delay_ms((u32b)MAX(0, value));
+        break;
+
+    default:
+        break;
+    }
 }
 
 static bool ui_information_scene_publish_ui_scene(const app_ui_scene* scene,

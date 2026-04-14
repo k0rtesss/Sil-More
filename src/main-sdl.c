@@ -131,37 +131,6 @@ static bool sdl_session_input_capture_active(void)
     return app_session_input_capture_active(session);
 }
 
-static errr sdl_term_queue_keypress(term* target, int key)
-{
-    if (!target || !key || !target->key_queue || !target->key_size)
-        return -1;
-
-    target->key_queue[target->key_head++] = (char)key;
-    if (target->key_head == target->key_size)
-        target->key_head = 0;
-
-    if (target->key_head != target->key_tail)
-        return 0;
-
-    return 1;
-}
-
-static void sdl_enqueue_legacy_key_to_term_screen(int key)
-{
-    if (!key)
-        return;
-
-    if (key == ESCAPE)
-    {
-        log_debug("[metarun-esc-trace] sdl_enqueue_legacy_key_to_term_screen esc");
-    }
-
-    if (term_screen && sdl_term_queue_keypress(term_screen, key) >= 0)
-        return;
-
-    Term_keypress(key);
-}
-
 static bool sdl_queue_legacy_input_byte_ex(int key, bool repeat)
 {
     app_session* session;
@@ -200,7 +169,7 @@ void sdl_submit_legacy_input_byte(int key)
     if (sdl_queue_legacy_input_byte(key))
         return;
 
-    sdl_enqueue_legacy_key_to_term_screen(key);
+    (void)input_byte_enqueue(key);
 }
 
 void sdl_drain_legacy_input_queue(void)
@@ -227,7 +196,7 @@ void sdl_drain_legacy_input_queue(void)
                 (unsigned)input.flags, (unsigned)input.sequence);
         }
 
-        sdl_enqueue_legacy_key_to_term_screen((int)(input.payload.key.logical_key & 0xFFu));
+        (void)input_byte_enqueue((int)(input.payload.key.logical_key & 0xFFu));
     }
 }
 
@@ -237,6 +206,7 @@ void sdl_clear_legacy_input_queue(void)
 
     if (session)
         app_session_clear_inputs(session);
+    input_byte_queue_clear();
 }
 
 bool sdl_gamepad_shift_active(void)
@@ -1566,7 +1536,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
                 }
                 if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
                     return;
-                sdl_enqueue_legacy_key_to_term_screen(key);
+                (void)input_byte_enqueue(key);
             }
         } else {
             bool shift = ev->key.mod & SDL_KMOD_SHIFT;
@@ -1615,7 +1585,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
             } else {
                 if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
                     return;
-                sdl_enqueue_legacy_key_to_term_screen(key);
+                (void)input_byte_enqueue(key);
             }
         }
         return;
@@ -1668,7 +1638,6 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
 
     if (ev->type == SDL_EVENT_WINDOW_RESTORED || ev->type == SDL_EVENT_WINDOW_EXPOSED) {
         g_state.need_present = true;
-        Term_redraw();
     }
 }
 

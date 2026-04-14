@@ -21,6 +21,7 @@
 
 #include "main.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "runtime/runtime-game.h"
 #include "runtime-cli.h"
 #include "platform-audio.h"
@@ -487,7 +488,8 @@ int main(int argc, char* argv[])
         }
 
         /* Handle pending events (most notably update) and flush input */
-        Term_flush();
+        input_byte_queue_clear();
+        platform_frame_flush_events();
 
         /* Play a game */
         PlayResult pr = play_game();   /* play and capture result */

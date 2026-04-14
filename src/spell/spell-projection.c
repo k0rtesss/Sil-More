@@ -17,6 +17,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "player/killer.h"
 #include "spell/spell-projection.h"
 #include "spell/spell-damage.h"
@@ -2485,15 +2486,15 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                     print_rel(c, a, y, x);
                     move_cursor_relative(y, x);
                     if (op_ptr->delay_factor)
-                        Term_fresh();
+                        platform_frame_present();
 
                     /* Delay */
-                    Term_xtra(TERM_XTRA_DELAY, msec);
+                    platform_frame_delay_ms((u32b)msec);
 
                     /* Erase the visual effects */
                     lite_spot(y, x);
                     if (op_ptr->delay_factor)
-                        Term_fresh();
+                        platform_frame_present();
 
                     /* Re-display the beam  XXX */
                     if (flg & (PROJECT_BEAM))
@@ -2517,7 +2518,7 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
                 else if (visual)
                 {
                     /* Delay for consistency */
-                    Term_xtra(TERM_XTRA_DELAY, msec);
+                    platform_frame_delay_ms((u32b)msec);
                 }
             }
         }
@@ -2836,12 +2837,12 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
             {
                 /* Flush each radius separately */
                 if (op_ptr->delay_factor)
-                    Term_fresh();
+                    platform_frame_present();
 
                 /* Delay (efficiently) */
                 if (visual || drawn)
                 {
-                    Term_xtra(TERM_XTRA_DELAY, msec);
+                    platform_frame_delay_ms((u32b)msec);
                 }
             }
         }
@@ -2850,8 +2851,8 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
         if ((grids > 1) && (visual || drawn))
         {
             if (!op_ptr->delay_factor)
-                Term_fresh();
-            Term_xtra(TERM_XTRA_DELAY, 50 + msec);
+                platform_frame_present();
+            platform_frame_delay_ms((u32b)(50 + msec));
         }
 
         /* Flush the erasing -- except if we specify lingering graphics */
@@ -2876,7 +2877,7 @@ bool project(int who, int rad, int y0, int x0, int y1, int x1, int dd, int ds,
 
             /* Flush the explosion */
             if (op_ptr->delay_factor)
-                Term_fresh();
+                platform_frame_present();
         }
     }
 

@@ -362,6 +362,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/fs/io_sdl.c
     src/fs/path.c
     src/init/init-paths.c
+    src/platform-frame.c
     src/platform-time.c
     src/log/bootstrap.c
     src/sdl-config.c

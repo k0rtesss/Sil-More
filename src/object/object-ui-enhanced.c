@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
@@ -141,7 +142,7 @@ static bool enhanced_item_snapshot_scene_present(
     if (!app_session_publish_dungeon_overlay_scene(session, scene))
         return false;
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 

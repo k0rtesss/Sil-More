@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "melee/melee-combat-display.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "externs.h"
 
@@ -42,7 +43,7 @@ void do_cmd_redraw(void)
         clear_active_narrative_banner();
 
     /* Hack -- React to changes */
-    Term_xtra(TERM_XTRA_REACT, 0);
+    platform_frame_react();
 
     /* Combine and Reorder the pack (later) */
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);

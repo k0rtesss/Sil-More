@@ -2,6 +2,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "ui/ui-information-scene.h"
 
 int macro_find_check(cptr pat);
@@ -87,13 +88,78 @@ static bool parse_macro = false;
  */
 static bool parse_under = false;
 
+enum {
+    INPUT_BYTE_QUEUE_SIZE = 256
+};
+
+struct input_byte_queue_state {
+    char queue[INPUT_BYTE_QUEUE_SIZE];
+    u16b head;
+    u16b tail;
+};
+
+static struct input_byte_queue_state g_input_byte_queue = { 0 };
+
+static errr input_byte_unshift(int key)
+{
+    if (!key)
+        return -1;
+
+    if (g_input_byte_queue.tail == 0)
+        g_input_byte_queue.tail = INPUT_BYTE_QUEUE_SIZE;
+
+    g_input_byte_queue.queue[--g_input_byte_queue.tail] = (char)key;
+    if (g_input_byte_queue.head != g_input_byte_queue.tail)
+        return 0;
+
+    return 1;
+}
+
+errr input_byte_enqueue(int key)
+{
+    if (!key)
+        return -1;
+
+    g_input_byte_queue.queue[g_input_byte_queue.head++] = (char)key;
+    if (g_input_byte_queue.head == INPUT_BYTE_QUEUE_SIZE)
+        g_input_byte_queue.head = 0;
+    if (g_input_byte_queue.head != g_input_byte_queue.tail)
+        return 0;
+
+    return 1;
+}
+
+void input_byte_queue_clear(void)
+{
+    g_input_byte_queue.head = 0;
+    g_input_byte_queue.tail = 0;
+}
+
+bool input_byte_queue_pending(void)
+{
+    return g_input_byte_queue.head != g_input_byte_queue.tail;
+}
+
+static errr input_byte_read(char* ch, bool take)
+{
+    if (!ch)
+        return -1;
+    if (!input_byte_queue_pending())
+        return 1;
+
+    *ch = g_input_byte_queue.queue[g_input_byte_queue.tail];
+    if (take && (++g_input_byte_queue.tail == INPUT_BYTE_QUEUE_SIZE))
+        g_input_byte_queue.tail = 0;
+    return 0;
+}
+
 static bool inkey_information_scene_candidate(const app_input* input)
 {
     return input && input->layer == APP_INPUT_LAYER_LEGACY
         && input->type == APP_INPUT_TYPE_KEY;
 }
 
-static errr inkey_information_scene(char* ch, bool wait, bool take)
+static errr inkey_information_scene(char* ch, bool take)
 {
     app_session* session = app_session_current();
     app_input input;
@@ -101,52 +167,48 @@ static errr inkey_information_scene(char* ch, bool wait, bool take)
     if (!ch || !ui_information_scene_owns_input() || !session)
         return -1;
 
-    while (true)
+    while (app_session_peek_input(session, &input))
     {
-        while (app_session_peek_input(session, &input))
+        if (!inkey_information_scene_candidate(&input))
         {
-            if (!inkey_information_scene_candidate(&input))
-            {
-                app_input discarded;
+            app_input discarded;
 
-                (void)app_session_pop_input(session, &discarded);
-                continue;
-            }
-
-            *ch = (char)(input.payload.key.logical_key & 0xFFu);
-            if (*ch == ESCAPE) {
-                log_debug("[metarun-esc-trace] inkey_information_scene esc wait=%d take=%d flags=0x%04x",
-                    wait ? 1 : 0, take ? 1 : 0, (unsigned)input.flags);
-            }
-            if (take)
-            {
-                app_input consumed;
-
-                (void)app_session_pop_input(session, &consumed);
-            }
-            return 0;
+            (void)app_session_pop_input(session, &discarded);
+            continue;
         }
 
-        if (!wait)
-            return 1;
+        *ch = (char)(input.payload.key.logical_key & 0xFFu);
+        if (*ch == ESCAPE) {
+            log_debug("[metarun-esc-trace] inkey_information_scene esc take=%d flags=0x%04x",
+                take ? 1 : 0, (unsigned)input.flags);
+        }
+        if (take)
+        {
+            app_input consumed;
 
-        Term_xtra(TERM_XTRA_EVENT, true);
+            (void)app_session_pop_input(session, &consumed);
+        }
+        return 0;
     }
+
+    return 1;
 }
 
 static errr inkey_read(char* ch, bool wait, bool take)
 {
-    errr err;
+    while (true)
+    {
+        if (input_byte_read(ch, take) == 0)
+            return 0;
 
-    err = Term_inkey(ch, false, take);
-    if (err == 0)
-        return 0;
+        if (inkey_information_scene(ch, take) == 0)
+            return 0;
 
-    err = inkey_information_scene(ch, wait, take);
-    if (err >= 0)
-        return err;
+        if (!wait)
+            return 1;
 
-    return Term_inkey(ch, wait, take);
+        platform_frame_process_events(true);
+    }
 }
 
 /*
@@ -227,7 +289,7 @@ static char inkey_aux(void)
                 break;
 
             /* Delay */
-            Term_xtra(TERM_XTRA_DELAY, w);
+            platform_frame_delay_ms((u32b)w);
         }
     }
 
@@ -241,7 +303,7 @@ static char inkey_aux(void)
         while (p > 0)
         {
             /* Push the key, notice over-flow */
-            if (Term_key_push(buf[--p]))
+            if (input_byte_unshift(buf[--p]))
                 return (0);
         }
 
@@ -262,7 +324,7 @@ static char inkey_aux(void)
     while (p > n)
     {
         /* Push the key, notice over-flow */
-        if (Term_key_push(buf[--p]))
+        if (input_byte_unshift(buf[--p]))
             return (0);
     }
 
@@ -270,7 +332,7 @@ static char inkey_aux(void)
     parse_macro = true;
 
     /* Push the "end of macro action" key */
-    if (Term_key_push(30))
+    if (input_byte_unshift(30))
         return (0);
 
     /* Get the macro action */
@@ -283,7 +345,7 @@ static char inkey_aux(void)
     while (n > 0)
     {
         /* Push the key, notice over-flow */
-        if (Term_key_push(act[--n]))
+        if (input_byte_unshift(act[--n]))
             return (0);
     }
 
@@ -306,8 +368,6 @@ bool inkey_can_consume_immediately(void)
 
     if (inkey_next && *inkey_next && !g_inkey_state.xtra)
         return true;
-    if (!Term)
-        return false;
 
     return (inkey_read(&ch, false, false) == 0);
 }
@@ -329,15 +389,11 @@ static char inkey_with_wait_reason(u16b reason)
  */
 char inkey(void)
 {
-    bool cursor_state;
-
     char kk;
 
     char ch = 0;
 
     bool done = false;
-
-    term* old = Term;
 
     /* Hack -- Use the "inkey_next" pointer */
     if (inkey_next && *inkey_next && !g_inkey_state.xtra)
@@ -365,25 +421,11 @@ char inkey(void)
         parse_under = false;
 
         /* Forget old keypresses */
-        Term_flush();
+        input_byte_queue_clear();
+        if (app_session_current())
+            app_session_clear_inputs(app_session_current());
+        platform_frame_flush_events();
     }
-
-    /* Get the cursor state */
-    (void)Term_get_cursor(&cursor_state);
-
-    /* Show the cursor if waiting, except sometimes in "command" mode */
-    if (!g_inkey_state.scan
-        && (!g_inkey_state.flag || hilite_player
-            || (hilite_target && target_sighted())
-            || character_icky)
-        && !g_inkey_state.cursor_hidden)
-    {
-        /* Show the cursor */
-        (void)Term_set_cursor(true);
-    }
-
-    /* Hack -- Activate main screen */
-    Term_activate(term_screen);
 
     /* Get a key */
     while (!ch)
@@ -398,14 +440,7 @@ char inkey(void)
         /* Hack -- Flush output once when no key ready */
         if (!done && (0 != inkey_read(&kk, false, false)))
         {
-            /* Hack -- activate proper term */
-            Term_activate(old);
-
-            /* Flush output */
-            Term_fresh();
-
-            /* Hack -- activate main screen */
-            Term_activate(term_screen);
+            platform_frame_present();
 
             /* Mega-Hack -- reset saved flag */
             character_saved = false;
@@ -457,7 +492,7 @@ char inkey(void)
                         break;
 
                     /* Delay */
-                    Term_xtra(TERM_XTRA_DELAY, w);
+                    platform_frame_delay_ms((u32b)w);
                 }
             }
 
@@ -516,12 +551,6 @@ char inkey(void)
             ch = 0;
         }
     }
-
-    /* Hack -- restore the term */
-    Term_activate(old);
-
-    /* Restore the cursor */
-    Term_set_cursor(cursor_state);
 
     /* Cancel the various "global parameters" */
     inkey_clear_transient_flags();

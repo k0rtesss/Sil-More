@@ -5,6 +5,7 @@
 
 #include "log/log.h"
 #include "app/app-ui.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "metarun.h"
@@ -437,7 +438,7 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
         (void)story_draw_wrapped_text(fade_cols[s], text, row, indent,
             wrap_width);
         (void)story_present();
-        Term_xtra(TERM_XTRA_DELAY, 125);
+        platform_frame_delay_ms(125u);
     }
 
     {
@@ -450,7 +451,7 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
         }
     }
 
-    Term_xtra(TERM_XTRA_DELAY, 1000);
+    platform_frame_delay_ms(1000u);
     return 0;
 }
 
@@ -667,7 +668,7 @@ void print_story(int last_parts, bool fade_in)
                     goto cleanup;
                 }
                 if (!fast_forward && !show_page_instantly)
-                    Term_xtra(TERM_XTRA_DELAY, 1000);
+                    platform_frame_delay_ms(1000u);
             }
 
             row += story_count_wrapped_lines(text, wrap_width, indent);

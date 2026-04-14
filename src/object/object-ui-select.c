@@ -12,6 +12,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
 #include "object/object-slot.h"
@@ -80,7 +81,7 @@ static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope
         app_session_clear_interaction(session);
         app_session_clear_dungeon_overlay_scene(session);
         app_session_pop_input_capture(session, &scope->input_capture_scope);
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        platform_frame_present();
     }
     scope->active = false;
 }
@@ -523,7 +524,7 @@ static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* sco
     if (!app_session_publish_dungeon_overlay_scene(session, scene))
         return false;
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 
