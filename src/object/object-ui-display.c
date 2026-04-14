@@ -28,6 +28,224 @@ enum
     MENU_WEIGHT_FIELD_WIDTH = 8
 };
 
+#define OBJECT_SUBWINDOW_BODY_LINE_MAX 4
+#define OBJECT_SUBWINDOW_ROW_MAX (INVEN_TOTAL + 2)
+
+typedef struct object_subwindow_row_state {
+    s16b id;
+    byte key_attr;
+    byte label_attr;
+    byte meta_attr;
+    byte icon_attr;
+    byte flags;
+    char icon_char;
+    const object_type* icon_object;
+    char key[APP_UI_KEY_MAX];
+    char label[APP_UI_LABEL_MAX];
+    char meta[APP_UI_META_MAX];
+} object_subwindow_row_state;
+
+typedef struct object_subwindow_body_line_state {
+    byte attr;
+    s16b col;
+    char text[APP_UI_TEXT_MAX];
+} object_subwindow_body_line_state;
+
+static void clear_item_row(int row, int term_wid);
+static int subwindow_weight_col(int term_wid);
+static void draw_subwindow_item_icon(int row, int icon_col,
+    const object_type* o_ptr);
+static int subwindow_desc_col(int icon_col);
+static void truncate_display_desc(char* desc, size_t desc_size, int term_wid,
+    int desc_col, bool display_weights);
+
+typedef struct object_subwindow_content {
+    bool use_story_font;
+    byte accent_attr;
+    char title[APP_UI_TITLE_MAX];
+    char subtitle[APP_UI_TEXT_MAX];
+    int row_count;
+    int body_line_count;
+    object_subwindow_row_state rows[OBJECT_SUBWINDOW_ROW_MAX];
+    object_subwindow_body_line_state body_lines[OBJECT_SUBWINDOW_BODY_LINE_MAX];
+} object_subwindow_content;
+
+static void object_subwindow_content_init(object_subwindow_content* content,
+    bool use_story_font, byte accent_attr, cptr title, cptr subtitle)
+{
+    if (!content)
+        return;
+
+    memset(content, 0, sizeof(*content));
+    content->use_story_font = use_story_font;
+    content->accent_attr = accent_attr;
+    SDL_strlcpy(content->title, title ? title : "", sizeof(content->title));
+    SDL_strlcpy(content->subtitle, subtitle ? subtitle : "",
+        sizeof(content->subtitle));
+}
+
+static bool object_subwindow_add_row(object_subwindow_content* content, s16b id,
+    byte key_attr, byte label_attr, byte meta_attr,
+    const object_type* icon_object, byte icon_attr, char icon_char, cptr key,
+    cptr label, cptr meta, bool story_label)
+{
+    object_subwindow_row_state* row;
+
+    if (!content || content->row_count >= OBJECT_SUBWINDOW_ROW_MAX)
+        return false;
+
+    row = &content->rows[content->row_count++];
+    memset(row, 0, sizeof(*row));
+    row->id = id;
+    row->key_attr = key_attr;
+    row->label_attr = label_attr;
+    row->meta_attr = meta_attr;
+    row->icon_attr = icon_attr;
+    row->icon_char = icon_char;
+    row->icon_object = icon_object;
+    if (story_label)
+        row->flags |= APP_UI_ITEM_FLAG_STORY_LABEL;
+    SDL_strlcpy(row->key, key ? key : "", sizeof(row->key));
+    SDL_strlcpy(row->label, label ? label : "", sizeof(row->label));
+    SDL_strlcpy(row->meta, meta ? meta : "", sizeof(row->meta));
+    return true;
+}
+
+static bool object_subwindow_add_body_line(object_subwindow_content* content,
+    byte attr, int col, cptr text)
+{
+    object_subwindow_body_line_state* line;
+
+    if (!content || !text || !text[0]
+        || content->body_line_count >= OBJECT_SUBWINDOW_BODY_LINE_MAX)
+    {
+        return false;
+    }
+
+    line = &content->body_lines[content->body_line_count++];
+    memset(line, 0, sizeof(*line));
+    line->attr = attr;
+    line->col = (s16b)col;
+    SDL_strlcpy(line->text, text, sizeof(line->text));
+    return true;
+}
+
+static byte object_subwindow_item_attr(const object_type* o_ptr)
+{
+    if (!o_ptr || !o_ptr->k_idx)
+        return TERM_L_DARK;
+
+    if (weapon_glows(o_ptr))
+        return object_display_color(o_ptr, TERM_L_BLUE);
+
+    return object_display_color(o_ptr,
+        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+}
+
+static void object_subwindow_format_weight(char* buf, size_t buf_size,
+    const object_type* o_ptr)
+{
+    int wgt;
+
+    if (!buf || buf_size == 0)
+        return;
+
+    buf[0] = '\0';
+    if (!o_ptr || !o_ptr->weight)
+        return;
+
+    wgt = o_ptr->weight * o_ptr->number;
+    strnfmt(buf, buf_size, "%3d.%1d lb", wgt / 10, wgt % 10);
+}
+
+static void object_subwindow_render_row(int row, int term_wid,
+    const object_subwindow_row_state* item)
+{
+    char desc[APP_UI_LABEL_MAX];
+    char icon_buf[2];
+    int desc_col;
+
+    if (!item)
+        return;
+
+    clear_item_row(row, term_wid);
+    story_print_text(row, 0, 3, item->key_attr,
+        item->key[0] ? item->key : "");
+
+    if (item->icon_object && item->icon_object->k_idx)
+    {
+        draw_subwindow_item_icon(row, 3, item->icon_object);
+    }
+    else if (item->icon_char)
+    {
+        icon_buf[0] = item->icon_char;
+        icon_buf[1] = '\0';
+        story_print_text_grid(row, 3, 1, item->icon_attr, icon_buf);
+    }
+
+    desc_col = subwindow_desc_col(3);
+    SDL_strlcpy(desc, item->label, sizeof(desc));
+    truncate_display_desc(desc, sizeof(desc), term_wid, desc_col,
+        item->meta[0] ? true : false);
+    story_print_text(row, desc_col, term_wid - desc_col, item->label_attr,
+        desc);
+
+    if (item->meta[0])
+    {
+        int weight_col = subwindow_weight_col(term_wid);
+
+        story_print_text_grid(row, weight_col, 8, item->meta_attr, item->meta);
+    }
+}
+
+static bool object_subwindow_content_build_scene(app_ui_scene* scene,
+    const object_subwindow_content* content)
+{
+    app_ui_panel* panel;
+    int i;
+
+    if (!scene || !content)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    if (content->row_count > 0)
+        panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = content->accent_attr;
+    app_ui_panel_set_widths(panel, 420, 900);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, content->title);
+    if (content->subtitle[0])
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, content->subtitle);
+
+    for (i = 0; i < content->row_count; i++)
+    {
+        const object_subwindow_row_state* row = &content->rows[i];
+
+        if (!app_ui_panel_add_row_ex(panel, row->id, row->label_attr,
+                row->meta_attr, row->icon_attr, row->icon_char, true, false,
+                row->key, row->label, row->meta))
+        {
+            return false;
+        }
+        panel->rows[panel->row_count - 1].flags |= row->flags;
+    }
+
+    for (i = 0; i < content->body_line_count; i++)
+    {
+        if (!app_ui_panel_add_body_line(panel, content->body_lines[i].attr,
+                content->body_lines[i].text))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool get_story_inventory_list_active(void)
 {
     return story_inventory_list_active;
@@ -362,241 +580,262 @@ static void truncate_display_desc(char* desc, size_t desc_size, int term_wid,
     desc[max_desc] = '\0';
 }
 
-static void display_inventory_subwindow_row(int row, int term_wid,
-    cptr label_text, byte label_attr, const object_type* o_ptr)
+static bool object_build_inventory_subwindow_content(
+    object_subwindow_content* content)
 {
-    char o_name[80];
-    char weight_text[16];
-    byte desc_attr;
-    int desc_col;
-    int weight_col = subwindow_weight_col(term_wid);
+    int i;
+    int z = 0;
 
-    if (!o_ptr || !o_ptr->k_idx)
-        return;
+    if (!content)
+        return false;
 
-    clear_item_row(row, term_wid);
-    story_print_text(row, 0, 3, label_attr, label_text ? label_text : "");
-
-    draw_subwindow_item_icon(row, 3, o_ptr);
-    desc_col = subwindow_desc_col(3);
-
-    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-    truncate_display_desc(o_name, sizeof(o_name), term_wid, desc_col,
-        show_weights);
-
-    if (weapon_glows(o_ptr))
-        desc_attr = object_display_color(o_ptr, TERM_L_BLUE);
-    else
-        desc_attr = object_display_color(o_ptr,
-            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-    story_print_text(row, desc_col, term_wid - desc_col, desc_attr, o_name);
-
-    if (o_ptr->weight)
-    {
-        int wgt = o_ptr->weight * o_ptr->number;
-        strnfmt(weight_text, sizeof(weight_text), "%3d.%1d lb", wgt / 10,
-            wgt % 10);
-        story_print_text_grid(row, weight_col, 8, desc_attr, weight_text);
-    }
-}
-
-static int display_equipment_subwindow_row(int row, int slot, int term_wid,
-    cptr label_text, byte label_attr, const object_type* o_ptr)
-{
-    char o_name[80];
-    char weight_text[16];
-    byte desc_attr;
-    int desc_col;
-    int weight_col = subwindow_weight_col(term_wid);
-    int armour_weight = 0;
-
-    clear_item_row(row, term_wid);
-    story_print_text(row, 0, 3, label_attr, label_text ? label_text : "");
-
-    draw_subwindow_item_icon(row, 3, o_ptr);
-    desc_col = subwindow_desc_col(3);
-
-    if (o_ptr && o_ptr->tval)
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-    else
-        SDL_strlcpy(o_name, describe_empty_slot(slot), sizeof(o_name));
-    truncate_display_desc(o_name, sizeof(o_name), term_wid, desc_col,
-        show_weights);
-
-    if (!o_ptr || !o_ptr->tval)
-        desc_attr = TERM_L_DARK;
-    else if (weapon_glows(o_ptr))
-        desc_attr = object_display_color(o_ptr, TERM_L_BLUE);
-    else
-        desc_attr = object_display_color(o_ptr,
-            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-    story_print_text(row, desc_col, term_wid - desc_col, desc_attr, o_name);
-
-    if (o_ptr && o_ptr->weight)
-    {
-        int wgt = o_ptr->weight * o_ptr->number;
-        byte weight_attr = desc_attr;
-
-        strnfmt(weight_text, sizeof(weight_text), "%3d.%1d lb ", wgt / 10,
-            wgt % 10);
-        if ((slot >= INVEN_BODY) && (slot <= INVEN_FEET))
-        {
-            weight_attr = TERM_SLATE;
-            armour_weight = wgt;
-        }
-        story_print_text_grid(row, weight_col, 9, weight_attr, weight_text);
-    }
-
-    return armour_weight;
-}
-
-/*
- * Legacy subwindow renderer for PW_INVEN. SDL snapshot item selection no
- * longer draws through this helper.
- */
-void display_inven(void)
-{
-    register int i, z = 0;
-    byte label_attr;
-    bool use_story_font = story_inventory_enabled();
-    story_font_term_state story_state;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    bool floor_item = false;
-
-    story_font_term_push(use_story_font, false, &story_state);
+    object_subwindow_content_init(content, story_inventory_enabled(),
+        TERM_WHITE, "Inventory", "");
 
     for (i = 0; i < INVEN_PACK; i++)
     {
-        if (!inventory[i].k_idx)
-            continue;
-        z = i + 1;
+        if (inventory[i].k_idx)
+            z = i + 1;
     }
 
     for (i = 0; i < z; i++)
     {
-        char label_text[4] = "   ";
         object_type* o_ptr = &inventory[i];
+        char key[APP_UI_KEY_MAX] = "";
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte key_attr = ((p_ptr->command_wrk == 0)
+            || (p_ptr->command_wrk & (USE_INVEN))) ? TERM_WHITE : TERM_SLATE;
 
-        if (item_tester_okay(o_ptr))
+        if (!o_ptr->k_idx)
+            continue;
+
+        if (item_tester_okay(o_ptr) && ((p_ptr->get_item_mode == 0)
+                || (p_ptr->get_item_mode & (USE_INVEN))))
         {
-            if ((p_ptr->get_item_mode == 0)
-                || (p_ptr->get_item_mode & (USE_INVEN)))
-            {
-                label_text[0] = index_to_label(i);
-                label_text[1] = ')';
-            }
+            strnfmt(key, sizeof(key), "%c)", index_to_label(i));
         }
 
-        if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_INVEN)))
-            label_attr = TERM_WHITE;
-        else
-            label_attr = TERM_SLATE;
-
-        display_inventory_subwindow_row(i, term_wid, label_text, label_attr,
-            o_ptr);
+        object_desc(label, sizeof(label), o_ptr, true, 3);
+        object_subwindow_format_weight(meta, sizeof(meta), o_ptr);
+        if (!object_subwindow_add_row(content, (s16b)i, key_attr,
+                object_subwindow_item_attr(o_ptr),
+                object_subwindow_item_attr(o_ptr), o_ptr, object_attr(o_ptr),
+                object_char(o_ptr), key, label, meta,
+                content->use_story_font))
+        {
+            return false;
+        }
     }
 
     {
-        object_type* floor_o_ptr = &o_list[cave_o_idx[p_ptr->py][p_ptr->px]];
+        int floor_o_idx = cave_o_idx[p_ptr->py][p_ptr->px];
+        object_type* floor_o_ptr = &o_list[floor_o_idx];
 
         if (floor_o_ptr->k_idx)
         {
-            char label_text[4] = "   ";
+            char key[APP_UI_KEY_MAX] = "";
+            char label[APP_UI_LABEL_MAX];
+            char meta[APP_UI_META_MAX];
+            byte key_attr = ((p_ptr->command_wrk == 0)
+                || (p_ptr->command_wrk & (USE_INVEN))) ? TERM_WHITE
+                                                       : TERM_SLATE;
 
-            floor_item = true;
-            if (item_tester_okay(floor_o_ptr)
-                && ((p_ptr->get_item_mode == 0)
+            if (item_tester_okay(floor_o_ptr) && ((p_ptr->get_item_mode == 0)
                     || (p_ptr->get_item_mode & (USE_FLOOR))))
             {
-                label_text[0] = '-';
-                label_text[1] = ')';
+                SDL_strlcpy(key, "-)", sizeof(key));
             }
 
-            if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_INVEN)))
-                label_attr = TERM_WHITE;
-            else
-                label_attr = TERM_SLATE;
+            while (content->row_count < INVEN_WIELD)
+            {
+                if (!object_subwindow_add_row(content,
+                        (s16b)content->row_count, TERM_WHITE, TERM_WHITE,
+                        TERM_WHITE, NULL, 0, '\0', "", " ", "", false))
+                {
+                    return false;
+                }
+            }
 
-            display_inventory_subwindow_row(INVEN_WIELD, term_wid, label_text,
-                label_attr, floor_o_ptr);
+            object_desc(label, sizeof(label), floor_o_ptr, true, 3);
+            object_subwindow_format_weight(meta, sizeof(meta), floor_o_ptr);
+            if (!object_subwindow_add_row(content, (s16b)(0 - floor_o_idx),
+                    key_attr, object_subwindow_item_attr(floor_o_ptr),
+                    object_subwindow_item_attr(floor_o_ptr), floor_o_ptr,
+                    object_attr(floor_o_ptr), object_char(floor_o_ptr), key,
+                    label, meta, content->use_story_font))
+            {
+                return false;
+            }
         }
     }
 
-    for (i = z; i < Term->hgt; i++)
+    return true;
+}
+
+static bool object_build_equipment_subwindow_content(
+    object_subwindow_content* content)
+{
+    int i;
+    int armour_weight = 0;
+
+    if (!content)
+        return false;
+
+    object_subwindow_content_init(content, story_equipment_enabled(),
+        TERM_WHITE, "Equipment", "");
+
+    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
-        if ((i != INVEN_WIELD) || !floor_item)
-            clear_item_row(i, term_wid);
+        object_type* o_ptr = &inventory[i];
+        bool has_object = (o_ptr->tval != 0) ? true : false;
+        char key[APP_UI_KEY_MAX] = "";
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte key_attr = ((p_ptr->command_wrk == 0)
+            || (p_ptr->command_wrk & (USE_EQUIP))) ? TERM_WHITE : TERM_SLATE;
+        byte label_attr = has_object ? object_subwindow_item_attr(o_ptr)
+                                     : TERM_L_DARK;
+        byte meta_attr = label_attr;
+        byte icon_attr = 0;
+        char icon_char = '\0';
+
+        if (item_tester_okay(o_ptr) && ((p_ptr->get_item_mode == 0)
+                || (p_ptr->get_item_mode & (USE_EQUIP))))
+        {
+            strnfmt(key, sizeof(key), "%c)", index_to_label(i));
+        }
+
+        if (has_object)
+        {
+            object_desc(label, sizeof(label), o_ptr, true, 3);
+            object_subwindow_format_weight(meta, sizeof(meta), o_ptr);
+            icon_attr = object_attr(o_ptr);
+            icon_char = object_char(o_ptr);
+            if (o_ptr->weight && i >= INVEN_BODY && i <= INVEN_FEET)
+            {
+                meta_attr = TERM_SLATE;
+                armour_weight += o_ptr->weight * o_ptr->number;
+            }
+        }
+        else
+        {
+            SDL_strlcpy(label, describe_empty_slot(i), sizeof(label));
+            meta[0] = '\0';
+        }
+
+        if (!object_subwindow_add_row(content, (s16b)i, key_attr, label_attr,
+                meta_attr, has_object ? o_ptr : NULL, icon_attr, icon_char, key,
+                label, meta, content->use_story_font))
+        {
+            return false;
+        }
     }
+
+    if (armour_weight > 0)
+    {
+        char line[APP_UI_TEXT_MAX];
+
+        if (!object_subwindow_add_body_line(content, TERM_L_DARK, -1,
+                "--------"))
+        {
+            return false;
+        }
+        strnfmt(line, sizeof(line), "armour: %3d.%1d lb", armour_weight / 10,
+            armour_weight % 10);
+        if (!object_subwindow_add_body_line(content, TERM_SLATE, -2, line))
+            return false;
+    }
+
+    return true;
+}
+
+bool build_inventory_subwindow_ui_scene(app_ui_scene* scene)
+{
+    object_subwindow_content content;
+
+    if (!object_build_inventory_subwindow_content(&content))
+        return false;
+
+    return object_subwindow_content_build_scene(scene, &content);
+}
+
+bool build_equipment_subwindow_ui_scene(app_ui_scene* scene)
+{
+    object_subwindow_content content;
+
+    if (!object_build_equipment_subwindow_content(&content))
+        return false;
+
+    return object_subwindow_content_build_scene(scene, &content);
+}
+
+/*
+ * Legacy term-grid compatibility wrapper for PW_INVEN.  The SDL pane lane now
+ * owns shared semantic row content in object_build_inventory_subwindow_content().
+ */
+void display_inven(void)
+{
+    object_subwindow_content content;
+    story_font_term_state story_state;
+    int i;
+    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+
+    if (!object_build_inventory_subwindow_content(&content))
+        return;
+
+    story_font_term_push(content.use_story_font, false, &story_state);
+
+    for (i = 0; i < content.row_count; i++)
+        object_subwindow_render_row(i, term_wid, &content.rows[i]);
+
+    for (i = content.row_count; i < term_hgt; i++)
+        clear_item_row(i, term_wid);
 
     story_font_term_pop(&story_state);
 }
 
 /*
- * Legacy subwindow renderer for PW_EQUIP. SDL snapshot item selection no
- * longer draws through this helper.
+ * Legacy term-grid compatibility wrapper for PW_EQUIP.  The SDL pane lane now
+ * owns shared semantic row content in object_build_equipment_subwindow_content().
  */
 void display_equip(void)
 {
-    register int i;
-    byte label_attr;
-    int armour_weight = 0;
+    object_subwindow_content content;
+    story_font_term_state story_state;
+    int i;
     int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
     int weight_col = subwindow_weight_col(term_wid);
 
-    bool use_story_font = story_equipment_enabled();
-    story_font_term_state story_state;
-    story_font_term_push(use_story_font, false, &story_state);
+    if (!object_build_equipment_subwindow_content(&content))
+        return;
 
-    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    story_font_term_push(content.use_story_font, false, &story_state);
+
+    for (i = 0; i < content.row_count; i++)
+        object_subwindow_render_row(i, term_wid, &content.rows[i]);
+
+    for (i = 0; i < content.body_line_count; i++)
     {
-        char label_text[4] = "   ";
-        object_type* o_ptr = &inventory[i];
+        int row = content.row_count + i;
+        int col = content.body_lines[i].col;
 
-        if (item_tester_okay(o_ptr))
+        clear_item_row(row, term_wid);
+        if (col == -1)
+            col = weight_col;
+        else if (col == -2)
         {
-            if ((p_ptr->get_item_mode == 0)
-                || (p_ptr->get_item_mode & (USE_EQUIP)))
-            {
-                label_text[0] = index_to_label(i);
-                label_text[1] = ')';
-            }
+            col = weight_col - 8;
+            if (col < 0)
+                col = 0;
         }
-
-        if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_EQUIP)))
-            label_attr = TERM_WHITE;
-        else
-            label_attr = TERM_SLATE;
-
-        armour_weight += display_equipment_subwindow_row(i - INVEN_WIELD, i,
-            term_wid, label_text, label_attr, o_ptr);
+        story_print_text_grid(row, col, term_wid - col,
+            content.body_lines[i].attr, content.body_lines[i].text);
     }
 
-    if (armour_weight)
-    {
-        int total_row = INVEN_TOTAL - INVEN_WIELD;
-        int text_row = total_row + 1;
-        char tmp_val[80];
-
-        clear_item_row(total_row, term_wid);
-        clear_item_row(text_row, term_wid);
-        story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
-            "--------");
-        strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
-            armour_weight / 10, armour_weight % 10);
-        {
-            int armour_col = weight_col - 8;
-            if (armour_col < 0)
-                armour_col = 0;
-            story_print_text_grid(text_row, armour_col, 16, TERM_SLATE,
-                tmp_val);
-        }
-    }
-
-    int erase_start = armour_weight ? (INVEN_TOTAL - INVEN_WIELD + 2)
-        : (INVEN_TOTAL - INVEN_WIELD);
-    for (i = erase_start; i < Term->hgt; i++)
+    for (i = content.row_count + content.body_line_count; i < term_hgt; i++)
         clear_item_row(i, term_wid);
 
     story_font_term_pop(&story_state);

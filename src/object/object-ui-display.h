@@ -9,9 +9,17 @@
 #ifndef INCLUDED_OBJECT_UI_DISPLAY_H
 #define INCLUDED_OBJECT_UI_DISPLAY_H
 
+#include "../app/app-ui.h"
 #include "../h-basic.h"
 
 typedef struct object_type object_type;
+
+/*
+ * Semantic inventory/equipment side-pane scenes.  Lane E will consume these
+ * when the SDL subwindow dispatcher stops calling the legacy term wrappers.
+ */
+bool build_inventory_subwindow_ui_scene(app_ui_scene* scene);
+bool build_equipment_subwindow_ui_scene(app_ui_scene* scene);
 
 /* Legacy term-grid subwindow renderers for PW_INVEN / PW_EQUIP. */
 void display_inven(void);

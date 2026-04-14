@@ -8,15 +8,6 @@
 static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
 
-typedef struct ui_monster_recall_capture {
-    app_ui_scene* scene;
-    app_ui_panel* panel;
-    byte story;
-    bool failed;
-} ui_monster_recall_capture;
-
-static ui_monster_recall_capture* g_ui_monster_recall_capture = NULL;
-
 static void ui_information_scene_term_xtra(int action, int value)
 {
     if (!g_ui_information_scene_refresh_enabled)
@@ -60,170 +51,6 @@ static bool ui_information_scene_publish_ui_scene(const app_ui_scene* scene,
     }
 
     ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
-    return true;
-}
-
-static bool ui_information_scene_append_rich_span(app_ui_scene* scene,
-    app_ui_panel* panel, byte attr, byte story, cptr text, size_t len)
-{
-    char buf[APP_UI_TEXT_MAX];
-
-    if (!scene || !panel || !text || len == 0)
-        return true;
-
-    while (len > 0)
-    {
-        size_t chunk_len = len;
-
-        if (chunk_len >= sizeof(buf))
-            chunk_len = sizeof(buf) - 1u;
-        memcpy(buf, text, chunk_len);
-        buf[chunk_len] = '\0';
-        if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, story, buf))
-            return false;
-        text += chunk_len;
-        len -= chunk_len;
-    }
-
-    return true;
-}
-
-static void ui_information_scene_capture_monster_text(byte attr, cptr text)
-{
-    ui_monster_recall_capture* capture = g_ui_monster_recall_capture;
-    cptr cursor = text ? text : "";
-
-    if (!capture || !capture->scene || !capture->panel || capture->failed)
-        return;
-
-    while (true)
-    {
-        cptr newline = strchr(cursor, '\n');
-        size_t len = newline ? (size_t)(newline - cursor) : strlen(cursor);
-
-        if (!ui_information_scene_append_rich_span(capture->scene,
-                capture->panel, attr, capture->story, cursor, len))
-        {
-            capture->failed = true;
-            return;
-        }
-
-        if (!newline)
-            break;
-
-        if (!app_ui_panel_begin_rich_paragraph(capture->scene, capture->panel))
-        {
-            capture->failed = true;
-            return;
-        }
-
-        cursor = newline + 1;
-    }
-}
-
-static void ui_information_scene_trim_empty_rich_tail(app_ui_scene* scene,
-    app_ui_panel* panel)
-{
-    if (!scene || !panel)
-        return;
-
-    while (panel->rich_paragraph_count > 0)
-    {
-        u16b paragraph_index = (u16b)(panel->rich_paragraph_first
-            + panel->rich_paragraph_count - 1);
-        app_ui_rich_paragraph* paragraph = &scene->rich_paragraphs[
-            paragraph_index];
-
-        if (paragraph->run_count > 0)
-            break;
-
-        panel->rich_paragraph_count--;
-        if (scene->rich_paragraph_count > paragraph_index)
-            scene->rich_paragraph_count = paragraph_index;
-    }
-}
-
-static bool ui_information_scene_build_monster_recall_ui(app_ui_scene* scene,
-    int r_idx, const monster_type* m_ptr, cptr prompt, bool overlay_dungeon)
-{
-    app_ui_panel* panel;
-    monster_race* r_ptr;
-    story_font_term_state story_state;
-    ui_monster_recall_capture capture;
-    void (*old_hook)(byte, cptr);
-    int old_indent;
-    int old_wrap;
-    bool use_story_font;
-    char title[APP_UI_TITLE_MAX];
-    cptr name;
-
-    if (!scene || r_idx <= 0 || !z_info || r_idx >= z_info->r_max)
-        return false;
-
-    r_ptr = &r_info[r_idx];
-    name = r_name + r_ptr->name;
-
-    app_ui_scene_init(scene);
-    if (overlay_dungeon)
-        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
-
-    panel = app_ui_scene_append_panel(scene,
-        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
-    if (!panel)
-        return false;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
-    panel->accent_attr = TERM_SLATE;
-    panel->min_width_px = overlay_dungeon ? 900 : 840;
-    panel->width_cap_px = overlay_dungeon ? 1600 : 1320;
-
-    if (r_ptr->flags1 & RF1_UNIQUE)
-        strnfmt(title, sizeof(title), "%s -", name);
-    else
-        strnfmt(title, sizeof(title), "The %s -", name);
-    app_ui_panel_set_title(panel, TERM_WHITE, title);
-    app_ui_panel_set_icon(panel, monster_attr(r_ptr), monster_char(r_ptr));
-
-    use_story_font = story_monster_desc_enabled();
-    story_font_term_push(use_story_font, false, &story_state);
-
-    old_hook = text_out_hook;
-    old_indent = text_out_indent;
-    old_wrap = text_out_wrap;
-
-    memset(&capture, 0, sizeof(capture));
-    capture.scene = scene;
-    capture.panel = panel;
-    capture.story = use_story_font ? STORY_FLAG_USE : 0;
-    g_ui_monster_recall_capture = &capture;
-
-    text_out_hook = ui_information_scene_capture_monster_text;
-    text_out_indent = 0;
-    text_out_wrap = 0;
-    describe_monster(r_idx, false, m_ptr);
-
-    text_out_hook = old_hook;
-    text_out_indent = old_indent;
-    text_out_wrap = old_wrap;
-    g_ui_monster_recall_capture = NULL;
-    story_font_term_pop(&story_state);
-
-    if (capture.failed)
-        return false;
-
-    ui_information_scene_trim_empty_rich_tail(scene, panel);
-    if (prompt && prompt[0])
-    {
-        if (!app_ui_panel_begin_rich_paragraph(scene, panel)
-            || !app_ui_panel_add_rich_text(scene, panel, TERM_SLATE, prompt))
-        {
-            return false;
-        }
-    }
-    ui_information_scene_trim_empty_rich_tail(scene, panel);
-
     return true;
 }
 
@@ -397,7 +224,7 @@ bool ui_information_scene_show_monster_recall(int r_idx,
     message_flush();
     if (!ui_information_scene_enter(&scope))
         return false;
-    if (!ui_information_scene_build_monster_recall_ui(&scene, r_idx,
+    if (!build_monster_recall_ui_scene(&scene, r_idx,
             m_ptr, prompt, overlay_dungeon)
         || !ui_information_scene_publish_ui_scene(&scene, overlay_dungeon))
     {

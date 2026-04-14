@@ -4,6 +4,8 @@
 #include "app/app-session.h"
 #include "externs.h"
 
+#include "object/object-ui-display.h"
+#include "platform-frame.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-status.h"
 
@@ -12,53 +14,112 @@
 #include "player/player-calc.h"
 #include "player/identification.h"
 
-static void ui_status_put_spaces(int row, int col, int width)
+typedef bool (*ui_status_window_scene_build_fn)(app_ui_scene* scene);
+
+static bool ui_status_build_placeholder_window_scene(app_ui_scene* scene,
+    cptr title, cptr body)
 {
-    char spaces[64];
+    app_ui_panel* panel;
 
-    if (width <= 0)
-        return;
+    if (!scene)
+        return false;
 
-    memset(spaces, ' ', sizeof(spaces) - 1);
-    spaces[sizeof(spaces) - 1] = '\0';
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
 
-    while (width > 0)
-    {
-        int chunk = MIN(width, (int)sizeof(spaces) - 1);
-        char saved = spaces[chunk];
-
-        spaces[chunk] = '\0';
-        put_str(spaces, row, col);
-        spaces[chunk] = saved;
-        col += chunk;
-        width -= chunk;
-    }
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_SLATE;
+    app_ui_panel_set_widths(panel, 420, 900);
+    app_ui_panel_set_title(panel, TERM_WHITE, title ? title : "");
+    return app_ui_panel_add_body_line(panel, TERM_SLATE,
+        body ? body : " ");
 }
 
-typedef void (*ui_status_window_render_fn)(void);
+static bool ui_status_build_inventory_window_scene(app_ui_scene* scene)
+{
+    return build_inventory_subwindow_ui_scene(scene);
+}
 
-static void ui_status_refresh_matching_windows(u32b flag,
-    ui_status_window_render_fn render)
+static bool ui_status_build_equipment_window_scene(app_ui_scene* scene)
+{
+    return build_equipment_subwindow_ui_scene(scene);
+}
+
+static bool ui_status_build_player_window_scene(app_ui_scene* scene)
+{
+    return build_player_subwindow_ui_scene(scene);
+}
+
+static bool ui_status_build_object_window_scene(app_ui_scene* scene)
+{
+    if (!p_ptr || p_ptr->object_kind_idx <= 0)
+    {
+        return ui_status_build_placeholder_window_scene(scene, "Object",
+            "No object selected.");
+    }
+
+    return build_object_kind_recall_ui_scene(scene, p_ptr->object_kind_idx,
+        NULL, false);
+}
+
+static bool ui_status_build_overhead_window_scene(app_ui_scene* scene)
+{
+    return build_overhead_subwindow_ui_scene(scene);
+}
+
+static bool ui_status_build_monster_window_scene(app_ui_scene* scene)
+{
+    if (!p_ptr || p_ptr->monster_race_idx <= 0)
+    {
+        return ui_status_build_placeholder_window_scene(scene, "Monster",
+            "No monster selected.");
+    }
+
+    return build_monster_recall_ui_scene(scene, p_ptr->monster_race_idx, NULL,
+        NULL, false);
+}
+
+static bool ui_status_build_message_window_scene(app_ui_scene* scene)
+{
+    return build_message_subwindow_ui_scene(scene);
+}
+
+static bool ui_status_build_monlist_window_scene(app_ui_scene* scene)
+{
+    return build_monlist_subwindow_ui_scene(scene);
+}
+
+static bool ui_status_refresh_matching_windows(u32b flag,
+    ui_status_window_scene_build_fn build_scene)
 {
     int j;
+    bool rendered_any = false;
 
-    if (!render)
-        return;
+    if (!build_scene)
+        return false;
 
     for (j = 0; j < ANGBAND_TERM_MAX; j++)
     {
-        term* old = Term;
+        app_ui_scene scene;
 
         if (!angband_term[j])
             continue;
         if (!(op_ptr->window_flag[j] & flag))
             continue;
+        if (!build_scene(&scene)
+            || !platform_frame_render_ui_scene_to_term(j, &scene))
+        {
+            log_warn("window refresh: semantic pane render failed for flag 0x%08X on term %d",
+                flag, j);
+            continue;
+        }
 
-        Term_activate(angband_term[j]);
-        render();
-        Term_fresh();
-        Term_activate(old);
+        rendered_any = true;
     }
+
+    return rendered_any;
 }
 
 /*
@@ -205,92 +266,6 @@ bool get_alertness_text(
     }
 
     return true;
-}
-
-/*
- * Hack -- display inventory in sub-windows
- */
-static void ui_status_render_inven_window(void)
-{
-    display_inven();
-}
-
-/*
- * Hack -- display monsters in sub-windows
- */
-static void ui_status_render_monlist_window(void)
-{
-    display_monlist();
-}
-
-/*
- * Hack -- display equipment in sub-windows
- */
-static void ui_status_render_equip_window(void)
-{
-    display_equip();
-}
-
-/*
- * Hack -- display player in sub-windows (mode 0)
- */
-static void ui_status_render_player_0_window(void)
-{
-    display_player(0);
-}
-
-/*
- * Hack -- display recent messages in sub-windows
- *
- * Adjust for width and split messages.  XXX XXX XXX
- */
-static void ui_status_render_message_window(void)
-{
-    int i;
-    int w, h;
-
-    w = Term ? Term->wid : 0;
-    h = Term ? Term->hgt : 0;
-    if (w <= 0 || h <= 0)
-        return;
-
-    for (i = 0; i < h; i++)
-    {
-        const char* message = message_str((s16b)i);
-        byte color = message_color((s16b)i);
-        int row = (h - 1) - i;
-        int used = message ? (int)strlen(message) : 0;
-
-        c_put_str(color, message ? message : "", row, 0);
-        if (used < w)
-            ui_status_put_spaces(row, used, w - used);
-    }
-}
-
-/*
- * Hack -- display object recall in sub-windows
- */
-static void ui_status_render_object_window(void)
-{
-    if (p_ptr->object_kind_idx)
-        display_koff(p_ptr->object_kind_idx);
-}
-
-/*
- * Hack -- display overhead map in sub-windows
- */
-static void ui_status_render_overhead_window(void)
-{
-    display_map(NULL, NULL);
-}
-
-/*
- * Hack -- display monster recall in sub-windows
- */
-static void ui_status_render_monster_window(void)
-{
-    if (p_ptr->monster_race_idx)
-        display_roff(p_ptr->monster_race_idx, NULL);
 }
 
 /*
@@ -476,14 +451,59 @@ void redraw_stuff(void)
     // log_trace("redraw_stuff: completed all redraws");
 }
 
+static bool ui_status_refresh_window_flag(u32b* pending_mask, u32b flag,
+    ui_status_window_scene_build_fn build_scene, bool refresh_quiver)
+{
+    bool rendered = false;
+
+    if (!pending_mask || !(*pending_mask & flag))
+        return false;
+
+    *pending_mask &= ~flag;
+    rendered = ui_status_refresh_matching_windows(flag, build_scene);
+
+    if (refresh_quiver)
+        p_ptr->redraw |= PR_QUIVER;
+
+    return rendered;
+}
+
+void ui_status_refresh_window_mask(u32b window_mask)
+{
+    bool rendered_any = false;
+
+    if (!window_mask)
+        return;
+
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_INVEN,
+        ui_status_build_inventory_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_MONLIST,
+        ui_status_build_monlist_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_EQUIP,
+        ui_status_build_equipment_window_scene, true) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_PLAYER_0,
+        ui_status_build_player_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_MESSAGE,
+        ui_status_build_message_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_OBJECT,
+        ui_status_build_object_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_OVERHEAD,
+        ui_status_build_overhead_window_scene, false) || rendered_any;
+    rendered_any = ui_status_refresh_window_flag(&window_mask, PW_MONSTER,
+        ui_status_build_monster_window_scene, false) || rendered_any;
+
+    if (rendered_any)
+        platform_frame_present();
+}
+
 /*
  * Handle "p_ptr->window"
  */
 void window_stuff(void)
 {
     int j;
-
     u32b mask = 0L;
+    u32b pending_window;
 
     /* Nothing to do */
     if (!p_ptr->window) {
@@ -511,74 +531,9 @@ void window_stuff(void)
     if (!p_ptr->window)
         return;
 
-    /* Display inventory */
-    if (p_ptr->window & (PW_INVEN))
-    {
-        p_ptr->window &= ~(PW_INVEN);
-        ui_status_refresh_matching_windows(PW_INVEN,
-            ui_status_render_inven_window);
-    }
-
-    /* Display monster list */
-    if (p_ptr->window & (PW_MONLIST))
-    {
-        p_ptr->window &= ~(PW_MONLIST);
-        ui_status_refresh_matching_windows(PW_MONLIST,
-            ui_status_render_monlist_window);
-    }
-
-    /* Display equipment */
-    if (p_ptr->window & (PW_EQUIP))
-    {
-        log_trace("window_stuff: PW_EQUIP flag set, refreshing equip windows");
-        p_ptr->window &= ~(PW_EQUIP);
-        ui_status_refresh_matching_windows(PW_EQUIP,
-            ui_status_render_equip_window);
-        log_trace("window_stuff: equip window refresh completed");
-        
-        /* Also trigger quiver redraw since quiver is part of equipment */
-        p_ptr->redraw |= (PR_QUIVER);
-    }
-
-    /* Display player (mode 0) */
-    if (p_ptr->window & (PW_PLAYER_0))
-    {
-        p_ptr->window &= ~(PW_PLAYER_0);
-        ui_status_refresh_matching_windows(PW_PLAYER_0,
-            ui_status_render_player_0_window);
-    }
-
-    /* Display message recall */
-    if (p_ptr->window & (PW_MESSAGE))
-    {
-        p_ptr->window &= ~(PW_MESSAGE);
-        ui_status_refresh_matching_windows(PW_MESSAGE,
-            ui_status_render_message_window);
-    }
-
-    /* Display object recall */
-    if (p_ptr->window & (PW_OBJECT))
-    {
-        p_ptr->window &= ~(PW_OBJECT);
-        ui_status_refresh_matching_windows(PW_OBJECT,
-            ui_status_render_object_window);
-    }
-
-    /* Display overhead view */
-    if (p_ptr->window & (PW_OVERHEAD))
-    {
-        p_ptr->window &= ~(PW_OVERHEAD);
-        ui_status_refresh_matching_windows(PW_OVERHEAD,
-            ui_status_render_overhead_window);
-    }
-
-    /* Display monster recall */
-    if (p_ptr->window & (PW_MONSTER))
-    {
-        p_ptr->window &= ~(PW_MONSTER);
-        ui_status_refresh_matching_windows(PW_MONSTER,
-            ui_status_render_monster_window);
-    }
+    pending_window = p_ptr->window;
+    p_ptr->window = 0;
+    ui_status_refresh_window_mask(pending_window);
 
     // log_trace("window_stuff: completed all window updates");
 }

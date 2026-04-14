@@ -29,6 +29,52 @@ void platform_frame_present(void)
     sdl_present_if_needed(NULL);
 }
 
+static bool platform_frame_render_ui_scene_to_view(sdl_view* view,
+    const app_ui_scene* scene)
+{
+    const sdl_view* main_view;
+    int canvas_w;
+    int canvas_h;
+
+    if (!scene || !view)
+        return false;
+    if (!view || !view->canvas || view->cols <= 0 || view->rows <= 0
+        || view->cell_w <= 0 || view->cell_h <= 0)
+    {
+        return false;
+    }
+
+    main_view = (g_views[0].term_ready && g_views[0].canvas)
+        ? &g_views[0]
+        : view;
+    canvas_w = view->cols * view->cell_w;
+    canvas_h = view->rows * view->cell_h;
+    if (!sdl_scene_ui_render(view->canvas, main_view, canvas_w, canvas_h,
+            scene))
+        return false;
+
+    g_state.need_present = true;
+    return true;
+}
+
+bool platform_frame_render_ui_scene_to_term(int term_index,
+    const app_ui_scene* scene)
+{
+    if (term_index < 0 || term_index >= MAX_TERM_DATA)
+        return false;
+
+    return platform_frame_render_ui_scene_to_view(&g_views[term_index], scene);
+}
+
+bool platform_frame_render_ui_scene_to_active_term(const app_ui_scene* scene)
+{
+    if (!scene || !Term)
+        return false;
+
+    return platform_frame_render_ui_scene_to_view(sdl_view_from_term(Term),
+        scene);
+}
+
 void platform_frame_process_events(bool wait)
 {
     SDL_Event ev;

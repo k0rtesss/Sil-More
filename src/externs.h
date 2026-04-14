@@ -363,6 +363,7 @@ extern void print_rel(char c, byte a, int y, int x);
 extern void note_spot(int y, int x);
 extern void lite_spot(int y, int x);
 extern void prt_map(void);
+extern bool build_overhead_subwindow_ui_scene(app_ui_scene* scene);
 extern void display_map(int* cy, int* cx);
 extern void do_cmd_view_map(void);
 extern errr vinfo_init(void);
@@ -639,6 +640,8 @@ extern void do_cmd_knowledge(void);
 extern void add_random_curse(object_type *o_ptr);
 
 /* cmd5.c */
+extern bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
+    cptr prompt, bool overlay_dungeon);
 extern void display_koff(int k_idx);
 
 /* cmd6.c */
@@ -693,6 +696,8 @@ extern bool load_meta(void);
 /* monster1.c */
 extern void describe_monster(
     int r_idx, bool spoilers, const monster_type* m_ptr);
+extern bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
+    const monster_type* m_ptr, cptr prompt, bool overlay_dungeon);
 extern void roff_top(int r_idx);
 extern void screen_roff(int r_idx, const monster_type* m_ptr);
 extern void display_roff(int r_idx, const monster_type* m_ptr);
@@ -707,6 +712,7 @@ extern s16b mon_pop(void);
 extern errr get_mon_num_prep(void);
 extern s16b get_mon_num(
     int level, bool special, bool allow_non_smart, bool vault);
+extern bool build_monlist_subwindow_ui_scene(app_ui_scene* scene);
 extern void display_monlist(void);
 extern void monster_desc(
     char* desc, size_t max, const monster_type* m_ptr, int mode);
@@ -974,6 +980,7 @@ extern u16b message_type(s16b age);
 extern byte message_color(s16b age);
 extern errr message_color_define(u16b type, byte color);
 extern void message_add(cptr str, u16b type);
+extern bool build_message_subwindow_ui_scene(app_ui_scene* scene);
 extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
 extern errr messages_init(void);

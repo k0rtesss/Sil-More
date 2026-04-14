@@ -11,6 +11,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "ui-look-sidebar.h"
+#include "ui-status.h"
 #include <ctype.h>
 
 static int unified_sidebar_object_group(const object_type* o_ptr)
@@ -251,14 +252,12 @@ int unified_look_find_cursor_selection(const unified_look_state* state, int curs
 
 void redraw_inven_equip_subwindows(void)
 {
-    p_ptr->window |= (PW_INVEN | PW_EQUIP);
-    window_stuff();
+    ui_status_refresh_window_mask(PW_INVEN | PW_EQUIP);
 }
 
 void redraw_monster_subwindows(void)
 {
-    p_ptr->window |= PW_MONSTER;
-    window_stuff();
+    ui_status_refresh_window_mask(PW_MONSTER);
 }
 
 static void sidebar_trim_spaces(char* s)

@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -896,10 +897,126 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
 /*
  * Display visible monsters in a window
  */
+static void monlist_clear_from_row(int row)
+{
+    int hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+
+    for (int y = row; y < hgt; y++)
+        prt("", y, 0);
+}
+
+static int monlist_write_monster_icon(int row, const monster_race* r_ptr)
+{
+    char glyph[2];
+    int col = 0;
+
+    glyph[1] = '\0';
+
+    put_str(" ", row, col++);
+    glyph[0] = r_ptr->d_char;
+    c_put_str(r_ptr->d_attr, glyph, row, col++);
+
+    if (use_graphics)
+    {
+        put_str(" / ", row, col);
+        col += 3;
+        glyph[0] = r_ptr->x_char;
+        c_put_str(r_ptr->x_attr, glyph, row, col++);
+
+        if (use_bigtile)
+        {
+            /*
+             * The SDL pict hook already draws bigtiles at pixel width, so
+             * lane-B no longer needs to emit a dummy second term cell here.
+             * Keep the logical span so following text still lines up.
+             */
+            col++;
+        }
+    }
+
+    return col;
+}
+
+bool build_monlist_subwindow_ui_scene(app_ui_scene* scene)
+{
+    app_ui_panel* panel;
+    u16b* race_counts;
+    int idx;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_SLATE;
+    app_ui_panel_set_widths(panel, 420, 900);
+    app_ui_panel_set_title(panel, TERM_WHITE, "Monsters");
+
+    if (p_ptr->image)
+        return app_ui_panel_add_body_line(panel, TERM_L_WHITE,
+            "What you see is not to be believed.");
+
+    race_counts = mem_alloc_array(z_info->r_max, u16b);
+    if (!race_counts)
+        return false;
+
+    for (idx = 1; idx < mon_max; idx++)
+    {
+        monster_type* m_ptr = &mon_list[idx];
+
+        if (!m_ptr->ml)
+            continue;
+
+        race_counts[m_ptr->r_idx]++;
+    }
+
+    for (idx = 1; idx < mon_max && panel->row_count < APP_UI_ROW_MAX; idx++)
+    {
+        monster_type* m_ptr = &mon_list[idx];
+        monster_race* r_ptr;
+        char meta[APP_UI_META_MAX];
+        cptr m_name;
+
+        if (!m_ptr->ml)
+            continue;
+        if (!race_counts[m_ptr->r_idx])
+            continue;
+
+        r_ptr = &r_info[m_ptr->r_idx];
+        strnfmt(meta, sizeof(meta), "%3d", race_counts[m_ptr->r_idx]);
+        race_counts[m_ptr->r_idx] = 0;
+        m_name = r_name + r_ptr->name;
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)panel->row_count,
+                TERM_WHITE, TERM_SLATE, monster_attr(r_ptr),
+                monster_char(r_ptr), true, false, "", m_name, meta))
+        {
+            mem_free_null(race_counts);
+            return false;
+        }
+    }
+
+    if (panel->row_count == 0
+        && !app_ui_panel_add_body_line(panel, TERM_SLATE, "No visible monsters."))
+    {
+        mem_free_null(race_counts);
+        return false;
+    }
+
+    mem_free_null(race_counts);
+    return true;
+}
+
 void display_monlist(void)
 {
-    int idx, n;
+    int idx;
     int line = 0;
+    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
 
     char* m_name;
     char buf[80];
@@ -911,15 +1028,8 @@ void display_monlist(void)
 
     if (p_ptr->image)
     {
-        /* Erase the rest of the window */
-        for (idx = 0; idx < Term->hgt; idx++)
-        {
-            /* Erase the line */
-            Term_erase(0, idx, 255);
-        }
-        Term_putstr(
-            3, 3, 35, TERM_L_WHITE, "What you see is not to be believed.");
-
+        monlist_clear_from_row(0);
+        c_put_str(TERM_L_WHITE, "What you see is not to be believed.", 3, 3);
         return;
     }
 
@@ -942,9 +1052,9 @@ void display_monlist(void)
     /* Iterate over mon_list ( again :-/ ) */
     for (idx = 1; idx < mon_max; idx++)
     {
-        m_ptr = &mon_list[idx];
+        int col;
 
-        n = 0;
+        m_ptr = &mon_list[idx];
 
         /* Only visible monsters */
         if (!m_ptr->ml)
@@ -957,37 +1067,15 @@ void display_monlist(void)
         /* Get monster race */
         r_ptr = &r_info[m_ptr->r_idx];
 
-        // Start a line
-        Term_putstr(0, line, 1, TERM_WHITE, " ");
+        if (line >= term_hgt)
+            break;
 
-        /* Append the "standard" attr/char info */
-        Term_addch(r_ptr->d_attr, r_ptr->d_char);
-
-        n += 2;
-
-        if (use_graphics)
-        {
-            /* Append the "optional" attr/char info */
-            Term_addstr(-1, TERM_WHITE, " / ");
-
-            Term_addch(r_ptr->x_attr, r_ptr->x_char);
-            n += 4;
-
-            if (use_bigtile)
-            {
-                if (r_ptr->x_attr & 0x80)
-                    Term_addch(255, -1);
-                else
-                    Term_addch(0, ' ');
-
-                n++;
-            }
-        }
+        col = monlist_write_monster_icon(line, r_ptr);
 
         /* Add race count */
-        sprintf(buf, "%3d  ", race_counts[m_ptr->r_idx]);
-        Term_addstr(strlen(buf), TERM_WHITE, buf);
-        n += 5;
+        strnfmt(buf, sizeof(buf), "%3d  ", race_counts[m_ptr->r_idx]);
+        put_str(buf, line, col);
+        col += (int)strlen(buf);
 
         /* Don't do this race again */
         race_counts[m_ptr->r_idx] = 0;
@@ -995,14 +1083,10 @@ void display_monlist(void)
         /* Get the monster name */
         m_name = r_name + r_ptr->name;
 
-        /* Obtain the length of the description */
-        n += strlen(m_name);
-
         /* Display the entry itself */
-        Term_addstr(strlen(m_name), TERM_WHITE, m_name);
-
-        /* Erase the rest of the line */
-        Term_erase(n, line, 255);
+        put_str(m_name, line, col);
+        col += (int)strlen(m_name);
+        prt("", line, col);
 
         /* Bump line counter */
         line++;
@@ -1011,12 +1095,7 @@ void display_monlist(void)
     /* Free the race counters */
     mem_free_null(race_counts);
 
-    /* Erase the rest of the window */
-    for (idx = line; idx < Term->hgt; idx++)
-    {
-        /* Erase the line */
-        Term_erase(0, idx, 255);
-    }
+    monlist_clear_from_row(line);
 }
 
 /*

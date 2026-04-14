@@ -15,6 +15,7 @@ byte health_attr(int current, int max);
 void notice_stuff(void);
 void update_stuff(void);
 void redraw_stuff(void);
+void ui_status_refresh_window_mask(u32b window_mask);
 void window_stuff(void);
 void handle_stuff(void);
 

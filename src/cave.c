@@ -2741,13 +2741,26 @@ static byte priority(byte a, char c)
  * and restricts the horizontal map size to SCREEN_WID.  Otherwise, nothing
  * is returned (obviously), and no restrictions are enforced.
  */
+typedef struct cave_map_bounds {
+    int min_x;
+    int max_x;
+    int min_y;
+    int max_y;
+    int explored_wid;
+    int explored_hgt;
+    bool use_full_map;
+} cave_map_bounds;
+
+static bool cave_map_collect_bounds(cave_map_bounds* bounds,
+    bool expand_to_viewport);
+
 void display_map(int* cy, int* cx)
 {
     int map_hgt, map_wid;
     int row, col;
 
     int x, y;
-    int min_x, max_x, min_y, max_y;
+    cave_map_bounds bounds;
     int explored_wid, explored_hgt;
 
     byte ta;
@@ -2760,41 +2773,11 @@ void display_map(int* cy, int* cx)
 
     monster_race* r_ptr = &r_info[0];
 
-    /* Find the bounding box of explored areas */
-    min_x = p_ptr->cur_map_wid;
-    max_x = 0;
-    min_y = p_ptr->cur_map_hgt;
-    max_y = 0;
+    if (!cave_map_collect_bounds(&bounds, false))
+        return;
 
-    for (y = 0; y < p_ptr->cur_map_hgt; y++)
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            /* Check if this grid has been seen */
-            if (cave_info[y][x] & (CAVE_MARK))
-            {
-                if (x < min_x) min_x = x;
-                if (x > max_x) max_x = x;
-                if (y < min_y) min_y = y;
-                if (y > max_y) max_y = y;
-            }
-        }
-    }
-
-    /* Calculate explored dimensions */
-    explored_wid = (max_x - min_x + 1);
-    explored_hgt = (max_y - min_y + 1);
-
-    /* If nothing explored, fall back to full map */
-    if (explored_wid < 1 || explored_hgt < 1)
-    {
-        min_x = 0;
-        max_x = p_ptr->cur_map_wid - 1;
-        min_y = 0;
-        max_y = p_ptr->cur_map_hgt - 1;
-        explored_wid = p_ptr->cur_map_wid;
-        explored_hgt = p_ptr->cur_map_hgt;
-    }
+    explored_wid = bounds.explored_wid;
+    explored_hgt = bounds.explored_hgt;
 
     /* Desired map height */
     map_hgt = Term->hgt - 2;
@@ -2852,13 +2835,13 @@ void display_map(int* cy, int* cx)
     }
 
     /* Analyze the actual map (only explored area) */
-    for (y = min_y; y <= max_y; y++)
+    for (y = bounds.min_y; y <= bounds.max_y; y++)
     {
-        for (x = min_x; x <= max_x; x++)
+        for (x = bounds.min_x; x <= bounds.max_x; x++)
         {
             /* Scale based on explored area */
-            row = ((y - min_y) * map_hgt / explored_hgt);
-            col = ((x - min_x) * map_wid / explored_wid);
+            row = ((y - bounds.min_y) * map_hgt / explored_hgt);
+            col = ((x - bounds.min_x) * map_wid / explored_wid);
 
             if (use_bigtile)
                 col = col & ~1;
@@ -2905,8 +2888,8 @@ void display_map(int* cy, int* cx)
     }
 
     /* Player location (scaled relative to explored area) */
-    row = ((p_ptr->py - min_y) * map_hgt / explored_hgt);
-    col = ((p_ptr->px - min_x) * map_wid / explored_wid);
+    row = ((p_ptr->py - bounds.min_y) * map_hgt / explored_hgt);
+    col = ((p_ptr->px - bounds.min_x) * map_wid / explored_wid);
 
     if (use_bigtile)
         col = col & ~1;
@@ -2989,29 +2972,17 @@ static void view_map_expand_bounds_to_viewport(int* min_y, int* max_y,
     }
 }
 
-static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
+static bool cave_map_collect_bounds(cave_map_bounds* bounds,
+    bool expand_to_viewport)
 {
-    int min_x;
-    int max_x;
-    int min_y;
-    int max_y;
-    int explored_wid;
-    int explored_hgt;
-    int player_x;
-    int player_y;
-    byte player_attr = TERM_L_BLUE;
-    app_ui_minimap_cell* cells = NULL;
-    bool use_full_map = false;
-    bool ok = true;
     int y;
 
-    if (!scene || !panel || p_ptr->cur_map_wid <= 0 || p_ptr->cur_map_hgt <= 0)
-        return true;
+    if (!bounds || p_ptr->cur_map_wid <= 0 || p_ptr->cur_map_hgt <= 0)
+        return false;
 
-    min_x = p_ptr->cur_map_wid;
-    max_x = 0;
-    min_y = p_ptr->cur_map_hgt;
-    max_y = 0;
+    memset(bounds, 0, sizeof(*bounds));
+    bounds->min_x = p_ptr->cur_map_wid;
+    bounds->min_y = p_ptr->cur_map_hgt;
 
     for (y = 0; y < p_ptr->cur_map_hgt; y++)
     {
@@ -3022,56 +2993,80 @@ static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
             if (!(cave_info[y][x] & CAVE_MARK))
                 continue;
 
-            if (x < min_x)
-                min_x = x;
-            if (x > max_x)
-                max_x = x;
-            if (y < min_y)
-                min_y = y;
-            if (y > max_y)
-                max_y = y;
+            if (x < bounds->min_x)
+                bounds->min_x = x;
+            if (x > bounds->max_x)
+                bounds->max_x = x;
+            if (y < bounds->min_y)
+                bounds->min_y = y;
+            if (y > bounds->max_y)
+                bounds->max_y = y;
         }
     }
 
-    explored_wid = max_x - min_x + 1;
-    explored_hgt = max_y - min_y + 1;
-    if (explored_wid < 1 || explored_hgt < 1)
+    bounds->explored_wid = bounds->max_x - bounds->min_x + 1;
+    bounds->explored_hgt = bounds->max_y - bounds->min_y + 1;
+    if (bounds->explored_wid < 1 || bounds->explored_hgt < 1)
     {
-        min_x = 0;
-        min_y = 0;
-        max_x = p_ptr->cur_map_wid - 1;
-        max_y = p_ptr->cur_map_hgt - 1;
-        explored_wid = p_ptr->cur_map_wid;
-        explored_hgt = p_ptr->cur_map_hgt;
-        use_full_map = true;
+        bounds->min_x = 0;
+        bounds->min_y = 0;
+        bounds->max_x = p_ptr->cur_map_wid - 1;
+        bounds->max_y = p_ptr->cur_map_hgt - 1;
+        bounds->explored_wid = p_ptr->cur_map_wid;
+        bounds->explored_hgt = p_ptr->cur_map_hgt;
+        bounds->use_full_map = true;
     }
-    else
+    else if (expand_to_viewport)
     {
-        view_map_expand_bounds_to_viewport(&min_y, &max_y, &min_x, &max_x);
-        explored_wid = max_x - min_x + 1;
-        explored_hgt = max_y - min_y + 1;
+        view_map_expand_bounds_to_viewport(&bounds->min_y, &bounds->max_y,
+            &bounds->min_x, &bounds->max_x);
+        bounds->explored_wid = bounds->max_x - bounds->min_x + 1;
+        bounds->explored_hgt = bounds->max_y - bounds->min_y + 1;
     }
 
-    if (explored_wid < 1 || explored_hgt < 1)
-        return true;
-    if (((size_t)explored_wid * (size_t)explored_hgt) > APP_UI_MINIMAP_CELL_MAX)
+    if (bounds->explored_wid < 1 || bounds->explored_hgt < 1)
         return false;
 
-    cells = mem_alloc_array((size_t)explored_wid * (size_t)explored_hgt,
+    return true;
+}
+
+static bool cave_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel,
+    bool expand_to_viewport)
+{
+    cave_map_bounds bounds;
+    int player_x;
+    int player_y;
+    byte player_attr = TERM_L_BLUE;
+    app_ui_minimap_cell* cells = NULL;
+    bool ok = true;
+    int y;
+
+    if (!scene || !panel)
+        return false;
+    if (!cave_map_collect_bounds(&bounds, expand_to_viewport))
+        return true;
+    if (((size_t)bounds.explored_wid * (size_t)bounds.explored_hgt)
+        > APP_UI_MINIMAP_CELL_MAX)
+    {
+        return false;
+    }
+
+    cells = mem_alloc_array((size_t)bounds.explored_wid
+            * (size_t)bounds.explored_hgt,
         app_ui_minimap_cell);
     if (!cells)
         return false;
 
-    for (y = min_y; y <= max_y; y++)
+    for (y = bounds.min_y; y <= bounds.max_y; y++)
     {
         int x;
 
-        for (x = min_x; x <= max_x; x++)
+        for (x = bounds.min_x; x <= bounds.max_x; x++)
         {
-            size_t index = (size_t)(y - min_y) * (size_t)explored_wid
-                + (size_t)(x - min_x);
+            size_t index = (size_t)(y - bounds.min_y)
+                * (size_t)bounds.explored_wid + (size_t)(x - bounds.min_x);
 
-            if (!use_full_map && !(cave_info[y][x] & CAVE_MARK))
+            if (!bounds.use_full_map && !(cave_info[y][x] & CAVE_MARK))
             {
                 cells[index].attr = TERM_DARK;
                 cells[index].ch = ' ';
@@ -3090,16 +3085,18 @@ static bool view_map_add_minimap(app_ui_scene* scene, app_ui_panel* panel)
     if (r_info[0].x_attr)
         player_attr = (byte)(r_info[0].x_attr & 0x0Fu);
 
-    player_x = p_ptr->px - min_x;
-    player_y = p_ptr->py - min_y;
-    ok = app_ui_panel_set_minimap(scene, panel, (u16b)explored_wid,
-        (u16b)explored_hgt, (s16b)player_x, (s16b)player_y, TERM_SLATE,
-        player_attr, cells);
+    player_x = p_ptr->px - bounds.min_x;
+    player_y = p_ptr->py - bounds.min_y;
+    ok = app_ui_panel_set_minimap(scene, panel, (u16b)bounds.explored_wid,
+        (u16b)bounds.explored_hgt, (s16b)player_x, (s16b)player_y,
+        TERM_SLATE, player_attr, cells);
     mem_free_null(cells);
     return ok;
 }
 
-static bool view_map_build_ui_scene(app_ui_scene* scene, cptr prompt)
+static bool cave_map_build_ui_scene(app_ui_scene* scene, cptr title,
+    cptr prompt, bool expand_to_viewport, u16b min_width_px,
+    u16b width_cap_px)
 {
     app_ui_panel* panel;
 
@@ -3112,9 +3109,12 @@ static bool view_map_build_ui_scene(app_ui_scene* scene, cptr prompt)
         return false;
 
     panel->style = APP_UI_PANEL_STYLE_MINIMAP;
-    app_ui_panel_set_title(panel, TERM_WHITE, "Map");
+    panel->accent_attr = TERM_SLATE;
+    if (min_width_px || width_cap_px)
+        app_ui_panel_set_widths(panel, min_width_px, width_cap_px);
+    app_ui_panel_set_title(panel, TERM_WHITE, title ? title : "");
 
-    if (!view_map_add_minimap(scene, panel))
+    if (!cave_map_add_minimap(scene, panel, expand_to_viewport))
         return false;
     if (prompt && prompt[0]
         && !app_ui_panel_add_body_line(panel, TERM_SLATE, prompt))
@@ -3123,6 +3123,16 @@ static bool view_map_build_ui_scene(app_ui_scene* scene, cptr prompt)
     }
 
     return true;
+}
+
+bool build_overhead_subwindow_ui_scene(app_ui_scene* scene)
+{
+    return cave_map_build_ui_scene(scene, "Map", NULL, false, 420, 900);
+}
+
+static bool view_map_build_ui_scene(app_ui_scene* scene, cptr prompt)
+{
+    return cave_map_build_ui_scene(scene, "Map", prompt, true, 0, 0);
 }
 
 /*

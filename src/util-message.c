@@ -848,6 +848,52 @@ bool message_topline_snapshot(char* out_text, size_t out_text_size,
     return true;
 }
 
+bool build_message_subwindow_ui_scene(app_ui_scene* scene)
+{
+    app_ui_panel* panel;
+    s16b age;
+    s16b limit;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_SLATE;
+    app_ui_panel_set_widths(panel, 420, 900);
+    app_ui_panel_set_title(panel, TERM_WHITE, "Messages");
+
+    limit = message_num();
+    if (limit > (s16b)APP_UI_ROW_MAX)
+        limit = (s16b)APP_UI_ROW_MAX;
+
+    for (age = 0; age < limit; age++)
+    {
+        cptr text = message_str(age);
+
+        if (!text || !text[0])
+            continue;
+        if (!app_ui_panel_add_row_ex(panel, age, message_color(age),
+                message_color(age), 0, '\0', true, false, "", text, ""))
+        {
+            return false;
+        }
+    }
+
+    if (panel->row_count == 0
+        && !app_ui_panel_add_body_line(panel, TERM_SLATE, "No messages."))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 /*
  * Output a message to the top line of the screen.
  */

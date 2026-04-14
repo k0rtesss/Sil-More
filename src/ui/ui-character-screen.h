@@ -13,7 +13,7 @@ enum {
     DISPLAY_PLAYER_MODE_COMPACT_HISTORY = 103,
 };
 
-void display_player(int mode);
+bool build_player_subwindow_ui_scene(app_ui_scene* scene);
 bool build_character_sheet_ui_scene(app_ui_scene* scene, cptr prompt_text);
 void display_character_tutorial(void);
 

@@ -27,6 +27,219 @@ static cptr wd_him[3] = { "it", "him", "her" };
 
 #define MANY_MANY_KILLS 10000
 
+typedef struct monster_recall_scene_capture {
+    app_ui_scene* scene;
+    app_ui_panel* panel;
+    byte story;
+    bool failed;
+} monster_recall_scene_capture;
+
+static monster_recall_scene_capture* g_monster_recall_scene_capture = NULL;
+
+static void monster_recall_format_title(int r_idx, char* title,
+    size_t title_size)
+{
+    monster_race* r_ptr = &r_info[r_idx];
+    cptr name = r_name + r_ptr->name;
+
+    if (!title || title_size == 0)
+        return;
+
+    if (r_ptr->flags1 & RF1_UNIQUE)
+        strnfmt(title, title_size, "%s -", name);
+    else
+        strnfmt(title, title_size, "The %s -", name);
+}
+
+static bool monster_recall_append_rich_span(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte story, cptr text, size_t len)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!scene || !panel || !text || len == 0)
+        return true;
+
+    while (len > 0)
+    {
+        size_t chunk_len = len;
+
+        if (chunk_len >= sizeof(buf))
+            chunk_len = sizeof(buf) - 1u;
+        memcpy(buf, text, chunk_len);
+        buf[chunk_len] = '\0';
+        if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, story, buf))
+            return false;
+        text += chunk_len;
+        len -= chunk_len;
+    }
+
+    return true;
+}
+
+static void monster_recall_capture_text(byte attr, cptr text)
+{
+    monster_recall_scene_capture* capture = g_monster_recall_scene_capture;
+    cptr cursor = text ? text : "";
+
+    if (!capture || !capture->scene || !capture->panel || capture->failed)
+        return;
+
+    while (true)
+    {
+        cptr newline = strchr(cursor, '\n');
+        size_t len = newline ? (size_t)(newline - cursor) : strlen(cursor);
+
+        if (!monster_recall_append_rich_span(capture->scene, capture->panel,
+                attr, capture->story, cursor, len))
+        {
+            capture->failed = true;
+            return;
+        }
+
+        if (!newline)
+            break;
+
+        if (!app_ui_panel_begin_rich_paragraph(capture->scene, capture->panel))
+        {
+            capture->failed = true;
+            return;
+        }
+
+        cursor = newline + 1;
+    }
+}
+
+static void monster_recall_trim_empty_rich_tail(app_ui_scene* scene,
+    app_ui_panel* panel)
+{
+    if (!scene || !panel)
+        return;
+
+    while (panel->rich_paragraph_count > 0)
+    {
+        u16b paragraph_index = (u16b)(panel->rich_paragraph_first
+            + panel->rich_paragraph_count - 1);
+        app_ui_rich_paragraph* paragraph = &scene->rich_paragraphs[
+            paragraph_index];
+
+        if (paragraph->run_count > 0)
+            break;
+
+        panel->rich_paragraph_count--;
+        if (scene->rich_paragraph_count > paragraph_index)
+            scene->rich_paragraph_count = paragraph_index;
+    }
+}
+
+static int monster_recall_term_width(void)
+{
+    return (Term && Term->wid > 0) ? Term->wid : 80;
+}
+
+static void monster_recall_begin_term_output(int row,
+    void (**old_hook)(byte, cptr), int* old_indent, int* old_wrap)
+{
+    int wid = monster_recall_term_width();
+
+    if (old_hook)
+        *old_hook = text_out_hook;
+    if (old_indent)
+        *old_indent = text_out_indent;
+    if (old_wrap)
+        *old_wrap = text_out_wrap;
+
+    text_out_indent = 0;
+    text_out_wrap = (wid > 2) ? (wid - 1) : 0;
+    text_out_hook = text_out_to_screen;
+    prt("", row, 0);
+}
+
+static void monster_recall_end_term_output(void (*old_hook)(byte, cptr),
+    int old_indent, int old_wrap)
+{
+    text_out_hook = old_hook;
+    text_out_indent = old_indent;
+    text_out_wrap = old_wrap;
+}
+
+bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
+    const monster_type* m_ptr, cptr prompt, bool overlay_dungeon)
+{
+    app_ui_panel* panel;
+    monster_race* r_ptr;
+    story_font_term_state story_state;
+    monster_recall_scene_capture capture;
+    void (*old_hook)(byte, cptr);
+    int old_indent;
+    int old_wrap;
+    bool use_story_font;
+    char title[APP_UI_TITLE_MAX];
+
+    if (!scene || r_idx <= 0 || !z_info || r_idx >= z_info->r_max)
+        return false;
+
+    r_ptr = &r_info[r_idx];
+    monster_recall_format_title(r_idx, title, sizeof(title));
+
+    app_ui_scene_init(scene);
+    if (overlay_dungeon)
+        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
+
+    panel = app_ui_scene_append_panel(scene,
+        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+    panel->accent_attr = TERM_SLATE;
+    panel->min_width_px = overlay_dungeon ? 900 : 840;
+    panel->width_cap_px = overlay_dungeon ? 1600 : 1320;
+
+    app_ui_panel_set_title(panel, TERM_WHITE, title);
+    app_ui_panel_set_icon(panel, monster_attr(r_ptr), monster_char(r_ptr));
+
+    use_story_font = story_monster_desc_enabled();
+    story_font_term_push(use_story_font, false, &story_state);
+
+    old_hook = text_out_hook;
+    old_indent = text_out_indent;
+    old_wrap = text_out_wrap;
+
+    memset(&capture, 0, sizeof(capture));
+    capture.scene = scene;
+    capture.panel = panel;
+    capture.story = use_story_font ? STORY_FLAG_USE : 0;
+    g_monster_recall_scene_capture = &capture;
+
+    text_out_hook = monster_recall_capture_text;
+    text_out_indent = 0;
+    text_out_wrap = 0;
+    describe_monster(r_idx, false, m_ptr);
+
+    text_out_hook = old_hook;
+    text_out_indent = old_indent;
+    text_out_wrap = old_wrap;
+    g_monster_recall_scene_capture = NULL;
+    story_font_term_pop(&story_state);
+
+    if (capture.failed)
+        return false;
+
+    monster_recall_trim_empty_rich_tail(scene, panel);
+    if (prompt && prompt[0])
+    {
+        if (!app_ui_panel_begin_rich_paragraph(scene, panel)
+            || !app_ui_panel_add_rich_text(scene, panel, TERM_SLATE, prompt))
+        {
+            return false;
+        }
+    }
+    monster_recall_trim_empty_rich_tail(scene, panel);
+    return true;
+}
+
 /*
  * Determine if the "armour" is known
  * One kill is needed.
@@ -1760,37 +1973,22 @@ void describe_monster(int r_idx, bool spoilers, const monster_type* m_ptr)
 void roff_top(int r_idx)
 {
     monster_race* r_ptr = &r_info[r_idx];
-
+    char title[APP_UI_TITLE_MAX];
+    char icon_buf[2];
     byte a1;
     char c1;
+    int icon_col;
 
     /* Get the chars and attrs using graphics-aware macros */
     c1 = monster_char(r_ptr);
     a1 = monster_attr(r_ptr);
+    monster_recall_format_title(r_idx, title, sizeof(title));
 
-    /* Clear the top line */
-    Term_erase(0, 0, 255);
-
-    /* Reset the cursor */
-    Term_gotoxy(0, 0);
-
-    /* A title (use "The" for non-uniques) */
-    if (!(r_ptr->flags1 & RF1_UNIQUE))
-    {
-        Term_addstr(-1, TERM_WHITE, "The ");
-    }
-
-    /* Dump the name */
-    Term_addstr(-1, TERM_WHITE, (r_name + r_ptr->name));
-
-    /* Append the "standard" attr/char info */
-    Term_addstr(-1, TERM_WHITE, " - ");
-    Term_addch(a1, c1);
-    if (use_bigtile)
-    {
-        Term_addch(255, -1);
-    }
-    Term_addstr(-1, TERM_SLATE, "");
+    c_prt(TERM_WHITE, title, 0, 0);
+    icon_col = (int)strlen(title);
+    icon_buf[0] = c1;
+    icon_buf[1] = '\0';
+    c_put_str(a1, icon_buf, 0, icon_col);
 }
 
 /*
@@ -1800,24 +1998,16 @@ void screen_roff(int r_idx, const monster_type* m_ptr)
 {
     bool use_story_font = story_monster_desc_enabled();
     story_font_term_state story_state;
+    void (*old_hook)(byte, cptr);
+    int old_indent;
+    int old_wrap;
+
     story_font_term_push(use_story_font, false, &story_state);
 
     /* Flush messages */
     message_flush();
 
-    /* Begin recall */
-    Term_erase(0, 1, 255);
-
-    /* Output to the screen */
-    void (*old_hook)(byte, cptr) = text_out_hook;
-    int old_indent = text_out_indent;
-    int old_wrap = text_out_wrap;
-
-    int wid = 0, hgt = 0;
-    Term_get_size(&wid, &hgt);
-    text_out_indent = 0;
-    text_out_wrap = (wid > 2) ? (wid - 1) : 0;
-    text_out_hook = text_out_to_screen;
+    monster_recall_begin_term_output(1, &old_hook, &old_indent, &old_wrap);
 
     /* Recall monster */
     describe_monster(r_idx, false, m_ptr);
@@ -1825,9 +2015,7 @@ void screen_roff(int r_idx, const monster_type* m_ptr)
     /* Describe monster */
     roff_top(r_idx);
 
-    text_out_hook = old_hook;
-    text_out_indent = old_indent;
-    text_out_wrap = old_wrap;
+    monster_recall_end_term_output(old_hook, old_indent, old_wrap);
 
     story_font_term_pop(&story_state);
 }
@@ -1837,32 +2025,16 @@ void screen_roff(int r_idx, const monster_type* m_ptr)
  */
 void display_roff(int r_idx, const monster_type* m_ptr)
 {
-    int y;
-
     bool use_story_font = story_monster_desc_enabled();
     story_font_term_state story_state;
+    void (*old_hook)(byte, cptr);
+    int old_indent;
+    int old_wrap;
+
     story_font_term_push(use_story_font, false, &story_state);
 
-    /* Erase the window */
-    for (y = 0; y < Term->hgt; y++)
-    {
-        /* Erase the line */
-        Term_erase(0, y, 255);
-    }
-
-    /* Begin recall */
-    Term_gotoxy(0, 1);
-
-    /* Output to the screen */
-    void (*old_hook)(byte, cptr) = text_out_hook;
-    int old_indent = text_out_indent;
-    int old_wrap = text_out_wrap;
-
-    int wid = 0, hgt = 0;
-    Term_get_size(&wid, &hgt);
-    text_out_indent = 0;
-    text_out_wrap = (wid > 2) ? (wid - 1) : 0;
-    text_out_hook = text_out_to_screen;
+    clear_from(0);
+    monster_recall_begin_term_output(1, &old_hook, &old_indent, &old_wrap);
 
     /* Recall monster */
     describe_monster(r_idx, false, m_ptr);
@@ -1870,9 +2042,7 @@ void display_roff(int r_idx, const monster_type* m_ptr)
     /* Describe monster */
     roff_top(r_idx);
 
-    text_out_hook = old_hook;
-    text_out_indent = old_indent;
-    text_out_wrap = old_wrap;
+    monster_recall_end_term_output(old_hook, old_indent, old_wrap);
 
     story_font_term_pop(&story_state);
 }
