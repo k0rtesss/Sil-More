@@ -41,6 +41,7 @@ static bool build_meta_path(char* buf, size_t len, const char* filename)
 
 #define RUN_HISTORY_MAX       256
 #define RUN_HISTORY_ROWS       15
+#define SCORE_BROWSER_SHORT_ROWS 10
 
 typedef struct run_history_entry {
     score_record_v1 record;
@@ -142,63 +143,6 @@ typedef enum
 static const char* run_history_sort_label(run_history_sort_order order)
 {
     return (order == RUN_HISTORY_SORT_RATING) ? "Rating" : "Date";
-}
-
-static void score_ui_get_term_size(int* wid, int* hgt)
-{
-    int local_wid = 80;
-    int local_hgt = 24;
-
-    if (Term)
-        Term_get_size(&local_wid, &local_hgt);
-
-    if (local_wid < 1)
-        local_wid = 80;
-    if (local_hgt < 1)
-        local_hgt = 24;
-
-    if (wid)
-        *wid = local_wid;
-    if (hgt)
-        *hgt = local_hgt;
-}
-
-static bool score_ui_compact_width(int term_wid)
-{
-    return (term_wid < 70);
-}
-
-static app_ui_panel* score_scene_begin_document(app_ui_scene* scene)
-{
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    return panel;
-}
-
-static void score_scene_put_fit(app_ui_scene* scene, app_ui_panel* panel,
-    byte attr,
-    cptr text, int row, int col, int term_wid)
-{
-    int max = term_wid - col;
-    char buf[APP_UI_TEXT_MAX];
-
-    if (!scene || !panel || !text || row < 0 || col < 0 || max <= 0)
-        return;
-
-    strnfmt(buf, sizeof(buf), "%.*s", max, text);
-    (void)app_ui_panel_add_document_text(scene, panel, (s16b)row, (s16b)col,
-        attr, buf);
 }
 
 static bool score_information_scene_pause(ui_information_scene_scope* scope)
@@ -437,85 +381,6 @@ static byte score_entry_color(const high_score* entry, bool highlight)
 
     return TERM_SLATE;
 }
-static void truncate_preserving_words(const char* src, char* dst, size_t dst_size, int max_width)
-{
-    if (!dst || dst_size == 0)
-        return;
-    if (!src)
-        src = "";
-    if (max_width <= 0)
-    {
-        dst[0] = '\0';
-        return;
-    }
-
-    size_t limit = dst_size - 1;
-    if ((size_t)max_width > limit)
-        max_width = (int)limit;
-
-    int len = (int)strlen(src);
-    if (len <= max_width)
-    {
-        strnfmt(dst, dst_size, "%s", src);
-        return;
-    }
-
-    if (max_width <= 3)
-    {
-        int fill = MIN(max_width, (int)limit);
-        for (int i = 0; i < fill; i++) dst[i] = '.';
-        dst[fill] = '\0';
-        return;
-    }
-
-    int cut = max_width - 3;
-    int candidate = cut;
-    while (candidate > 0 && !isspace((unsigned char)src[candidate - 1]))
-        candidate--;
-    if (candidate >= 3)
-        cut = candidate;
-
-    char head[64];
-    strnfmt(head, sizeof(head), "%.*s", cut, src);
-    int head_len = (int)strlen(head);
-    while (head_len > 0 && isspace((unsigned char)head[head_len - 1]))
-        head[--head_len] = '\0';
-
-    strnfmt(dst, dst_size, "%s...", head);
-}
-static void truncate_with_ellipsis(const char* src, char* dst, size_t dst_size,
-                                   int max_width)
-{
-    if (!dst || dst_size == 0)
-        return;
-    if (!src)
-        src = "";
-    if (max_width <= 0) {
-        dst[0] = '\0';
-        return;
-    }
-
-    size_t limit = dst_size - 1;
-    if ((size_t)max_width > limit)
-        max_width = (int)limit;
-
-    int len = (int)strlen(src);
-    if (len <= max_width) {
-        strnfmt(dst, dst_size, "%s", src);
-        return;
-    }
-
-    if (max_width <= 3) {
-        int fill = MIN(max_width, (int)limit);
-        for (int i = 0; i < fill; i++)
-            dst[i] = '.';
-        dst[fill] = '\0';
-        return;
-    }
-
-    strnfmt(dst, dst_size, "%.*s...", max_width - 3, src);
-}
-
 extern void display_single_score(
     byte attr, int row, int col, int place, int fake, high_score* the_score)
 {
@@ -772,200 +637,50 @@ extern void display_single_score(
     }
 }
 
-static void score_scene_display_single_score_short(app_ui_scene* scene,
-    app_ui_panel* panel, byte attr, int place, int row,
-    const high_score* entry, int line_width)
-{
-    char depth_commas[16];
-    char verdict_buf[96];
-    const char* verdict;
-    int depth_ft = atoi(entry->cur_dun) * 50;
-    int pts = score_points(entry);
-    int silmarils = parse_score_int(entry->silmarils, sizeof(entry->silmarils), 0);
-    bool morgoth = (entry->morgoth_slain[0] == 't');
-    char indicators[8] = "";
-    int ind_pos = 0;
-    const char* name_src = entry->who[0] ? entry->who : "(unknown)";
-    const int place_width = 4;
-    const int name_width = 15;
-    const int score_width = 5;
-    const int gap = 2;
-    int verdict_start = place_width + name_width + score_width + gap;
-    int verdict_width = line_width - verdict_start - 1;
-    char line[256];
-    int pos = 0;
-
-    if (!scene || !entry)
-        return;
-
-    comma_number(depth_commas, depth_ft);
-
-    for (int i = 0; i < silmarils && i < 3; i++)
-        indicators[ind_pos++] = '*';
-    if (morgoth)
-        indicators[ind_pos++] = 'V';
-    indicators[ind_pos] = '\0';
-
-    if (entry->escaped[0] == 't')
-    {
-        if (indicators[0])
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Escaped with %s",
-                indicators);
-        else
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Escaped Angband");
-        verdict = verdict_buf;
-    }
-    else if (streq(entry->how, "(alive and well)"))
-    {
-        verdict = "Alive";
-    }
-    else if (morgoth)
-    {
-        if (indicators[0])
-        {
-            strnfmt(verdict_buf, sizeof(verdict_buf),
-                "Victorious over Morgoth's illusion (%s) at %sft %s",
-                entry->how, depth_commas, indicators);
-        }
-        else
-        {
-            strnfmt(verdict_buf, sizeof(verdict_buf),
-                "Victorious over Morgoth's illusion (%s) at %sft",
-                entry->how, depth_commas);
-        }
-        verdict = verdict_buf;
-    }
-    else
-    {
-        if (indicators[0])
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Slain by %s at %sft %s",
-                entry->how, depth_commas, indicators);
-        else
-            strnfmt(verdict_buf, sizeof(verdict_buf), "Slain by %s at %sft",
-                entry->how, depth_commas);
-        verdict = verdict_buf;
-    }
-
-    if (verdict_width < 1)
-        verdict_width = 1;
-    for (size_t i = 0; i < sizeof(line); i++)
-        line[i] = ' ';
-
-    {
-        char place_buf[8];
-
-        strnfmt(place_buf, sizeof(place_buf), "%2d. ", place);
-        memcpy(line + pos, place_buf, strlen(place_buf));
-        pos = place_width;
-    }
-
-    {
-        char name_field[64];
-        int name_len;
-
-        truncate_preserving_words(name_src, name_field, sizeof(name_field),
-            name_width);
-        name_len = (int)strlen(name_field);
-        if (name_len > name_width)
-            name_len = name_width;
-        memcpy(line + pos, name_field, name_len);
-        pos = place_width + name_width;
-    }
-
-    {
-        char score_buf[16];
-        int score_len;
-
-        strnfmt(score_buf, sizeof(score_buf), "%d", pts);
-        score_len = (int)strlen(score_buf);
-        if (score_len > score_width)
-        {
-            memcpy(line + pos + score_width - score_len,
-                score_buf + (score_len - score_width), score_width);
-        }
-        else
-        {
-            memcpy(line + pos + score_width - score_len, score_buf, score_len);
-        }
-        pos = place_width + name_width + score_width + gap;
-    }
-
-    {
-        const char* verdict_str = verdict;
-        int verdict_len = (int)strlen(verdict_str);
-
-        if (verdict_len > verdict_width)
-        {
-            const char* at_pos = strstr(verdict_str, " at ");
-
-            if (at_pos)
-            {
-                int at_offset = (int)(at_pos - verdict_str);
-                int tail_len = verdict_len - at_offset;
-
-                if (tail_len < verdict_width)
-                {
-                    int prefix_len = verdict_width - tail_len;
-
-                    memcpy(line + pos, verdict_str, prefix_len);
-                    memcpy(line + pos + prefix_len, at_pos, tail_len);
-                    pos += verdict_width;
-                }
-                else
-                {
-                    memcpy(line + pos, verdict_str, verdict_width);
-                    pos += verdict_width;
-                }
-            }
-            else
-            {
-                memcpy(line + pos, verdict_str, verdict_width);
-                pos += verdict_width;
-            }
-        }
-        else
-        {
-            memcpy(line + pos, verdict_str, verdict_len);
-            pos += verdict_len;
-        }
-    }
-
-    line[pos] = '\0';
-    score_scene_put_fit(scene, panel, attr, line, 3 + row, 0, line_width);
-}
-
-static void score_scene_display_single_score(app_ui_scene* scene,
-    app_ui_panel* panel, byte attr, int row, int col, int place, int fake,
-    high_score* the_score)
+static const char* score_entry_character_suffix(const high_score* entry)
 {
     int ph;
-    int aged, depth;
-    cptr user, when;
-    char out_val[160];
-    char tmp_val[160];
-    char aged_commas[15];
-    char depth_commas[15];
-    char score_commas[16];
-    int calculated_score;
-    char curse_text[32] = "";
-    byte curse_color = TERM_WHITE;
-    size_t pre_curse_len;
 
-    if (!scene || !the_score)
+    if (!entry || !c_info || !c_name || !z_info)
+        return "";
+
+    ph = atoi(entry->p_h);
+    if (ph < 0 || ph >= z_info->c_max)
+        return "";
+
+    return c_name + c_info[ph].alt_name;
+}
+
+static const char* score_entry_race_name(const high_score* entry)
+{
+    int pr;
+
+    if (!entry || !p_info || !p_name || !z_info)
+        return "<unknown>";
+
+    pr = atoi(entry->p_r);
+    if (pr < 0 || pr >= z_info->p_max)
+        return "<unknown>";
+
+    return p_name + p_info[pr].name;
+}
+
+static void score_format_entry_day(const high_score* entry, char* out,
+    size_t out_len)
+{
+    const char* when;
+
+    if (!out || out_len == 0)
         return;
 
-    ph = atoi(the_score->p_h);
+    if (!entry)
+    {
+        out[0] = '\0';
+        return;
+    }
 
-    for (user = the_score->uid; isspace((unsigned char)*user); user++)
+    for (when = entry->day; isspace((unsigned char)*when); when++)
         ;
-    for (when = the_score->day; isspace((unsigned char)*when); when++)
-        ;
-
-    aged = atoi(the_score->turns);
-    depth = atoi(the_score->cur_dun) * 50;
-
-    comma_number(aged_commas, aged);
-    comma_number(depth_commas, depth);
 
     if ((*when == '@') && strlen(when) == 9)
     {
@@ -975,169 +690,270 @@ static void score_scene_display_single_score(app_ui_scene* scene,
         atomonth(atoi(month), month);
 
         if (*(when + 7) == '0')
-            sprintf(tmp_val, "%.1s %.3s %.4s", when + 8, month, when + 1);
+            strnfmt(out, out_len, "%.1s %.3s %.4s", when + 8, month,
+                when + 1);
         else
-            sprintf(tmp_val, "%.2s %.3s %.4s", when + 7, month, when + 1);
-
-        when = tmp_val;
+            strnfmt(out, out_len, "%.2s %.3s %.4s", when + 7, month,
+                when + 1);
+        return;
     }
 
-    calculated_score = score_points(the_score);
-    comma_number(score_commas, calculated_score);
+    SDL_strlcpy(out, when, out_len);
+}
 
-    if (scores_version_has_curses(score_file_global_ctx()))
+static void score_format_entry_points(const high_score* entry, char* out,
+    size_t out_len)
+{
+    char commas[16];
+
+    if (!out || out_len == 0)
+        return;
+
+    if (!entry)
     {
-        int curses = parse_score_int(the_score->pts, sizeof(the_score->pts), 0);
-
-        if (curses > 0)
-        {
-            strnfmt(curse_text, sizeof(curse_text), " (%d curse%s)", curses,
-                (curses == 1) ? "" : "s");
-            curse_color = TERM_L_RED;
-        }
-        else if (curses < 0)
-        {
-            strnfmt(curse_text, sizeof(curse_text), " (%d blessing%s)",
-                -curses, (curses == -1) ? "" : "s");
-            curse_color = TERM_L_GREEN;
-        }
+        out[0] = '\0';
+        return;
     }
 
-    {
-        char prefix[32];
+    comma_number(commas, score_points(entry));
+    SDL_strlcpy(out, commas, out_len);
+}
 
-        if (the_score->escaped[0] == 't')
-        {
-            if (place == 0)
-                strnfmt(prefix, sizeof(prefix), "     escaped  ");
-            else
-                strnfmt(prefix, sizeof(prefix), "%3d. escaped  ", place);
-        }
+static void score_format_entry_turns(const high_score* entry, char* out,
+    size_t out_len)
+{
+    char commas[16];
+
+    if (!out || out_len == 0)
+        return;
+
+    if (!entry)
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    comma_number(commas, atoi(entry->turns));
+    SDL_strlcpy(out, commas, out_len);
+}
+
+static int score_entry_depth_feet(const high_score* entry)
+{
+    if (!entry)
+        return 0;
+
+    return atoi(entry->cur_dun) * 50;
+}
+
+static int score_entry_silmarils(const high_score* entry)
+{
+    if (!entry)
+        return 0;
+
+    return parse_score_int(entry->silmarils, sizeof(entry->silmarils), 0);
+}
+
+static int score_entry_net_curses(const high_score* entry)
+{
+    if (!entry || !scores_version_has_curses(score_file_global_ctx()))
+        return 0;
+
+    return parse_score_int(entry->pts, sizeof(entry->pts), 0);
+}
+
+static void score_build_outcome_summary(const high_score* entry, bool compact,
+    char* out, size_t out_len)
+{
+    if (!out || out_len == 0)
+        return;
+
+    if (!entry)
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    if (entry->escaped[0] == 't')
+    {
+        if (score_entry_silmarils(entry) > 0 || entry->morgoth_slain[0] == 't')
+            strnfmt(out, out_len, "Escaped with the light of Valinor");
         else
-        {
-            if (place == 0)
-                strnfmt(prefix, sizeof(prefix), "     %5s ft  ", depth_commas);
-            else
-                strnfmt(prefix, sizeof(prefix), "%3d. %5s ft  ", place,
-                    depth_commas);
-        }
-
-        while ((int)strlen(prefix) < 15)
-            SDL_strlcat(prefix, " ", sizeof(prefix));
-        prefix[15] = '\0';
-
-        strnfmt(out_val, sizeof(out_val), "%s%s%s  [%s pts]",
-            prefix, the_score->who, c_name + c_info[ph].alt_name,
-            score_commas);
+            strnfmt(out, out_len, "Escaped Angband");
+        return;
     }
 
-    pre_curse_len = strlen(out_val);
-    if (curse_text[0] != '\0')
-        SDL_strlcat(out_val, curse_text, sizeof(out_val));
-
-    if (the_score->morgoth_slain[0] == 't')
+    if (streq(entry->how, "(alive and well)"))
     {
-        SDL_strlcat(out_val, ", hailed as the Slayer of Morgoth's shadow",
-            sizeof(out_val));
-    }
-    else
-    {
-        if (the_score->silmarils[0] == '1')
-            SDL_strlcat(out_val, ", who freed a Silmaril", sizeof(out_val));
-        if (the_score->silmarils[0] == '2')
-            SDL_strlcat(out_val, ", who freed two Silmarils", sizeof(out_val));
-        if (the_score->silmarils[0] == '3')
-        {
-            SDL_strlcat(out_val, ", who freed all three Silmarils",
-                sizeof(out_val));
-        }
-        if (the_score->silmarils[0] > '3')
-        {
-            SDL_strlcat(out_val, ", who freed suspiciously many Silmarils",
-                sizeof(out_val));
-        }
+        strnfmt(out, out_len, compact ? "Alive" :
+            "Lives still, deep within Angband's vaults");
+        return;
     }
 
-    (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 3),
-        (s16b)col, attr, out_val);
-
-    if (curse_text[0] != '\0')
+    if (entry->morgoth_slain[0] == 't')
     {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 3),
-            (s16b)(col + pre_curse_len), curse_color, curse_text);
-    }
-
-    if (the_score->escaped[0] == 't')
-    {
-        strnfmt(out_val, sizeof(out_val),
-            "               Escaped the iron hells");
-
-        if ((the_score->morgoth_slain[0] == 't')
-            || (the_score->silmarils[0] > '0'))
-        {
-            SDL_strlcat(out_val, " and brought back the light of Valinor",
-                sizeof(out_val));
-        }
+        if (compact)
+            strnfmt(out, out_len, "Slayer of Morgoth's shadow");
         else
-        {
-            SDL_strlcat(out_val, " empty-handed", sizeof(out_val));
-        }
+            strnfmt(out, out_len, "Victorious over Morgoth's illusion (%s)",
+                entry->how);
+        return;
     }
-    else if (fake || streq(the_score->how, "(alive and well)"))
+
+    strnfmt(out, out_len, "Slain by %s", entry->how);
+}
+
+static void score_build_trophy_summary(const high_score* entry, char* out,
+    size_t out_len)
+{
+    int silmarils;
+
+    if (!out || out_len == 0)
+        return;
+
+    if (!entry)
     {
-        strnfmt(out_val, sizeof(out_val),
-            "               Lives still, deep within Angband's vaults");
+        out[0] = '\0';
+        return;
     }
-    else if (the_score->morgoth_slain[0] == 't')
+
+    silmarils = score_entry_silmarils(entry);
+    if (entry->morgoth_slain[0] == 't' && silmarils > 0)
     {
-        strnfmt(out_val, sizeof(out_val),
-            "               Victorious over Morgoth's illusion (%s)",
-            the_score->how);
+        strnfmt(out, out_len, "Slew Morgoth's shadow and brought back %d Silmaril%s.",
+            silmarils, (silmarils == 1) ? "" : "s");
+        return;
     }
+    if (entry->morgoth_slain[0] == 't')
+    {
+        strnfmt(out, out_len, "Slew Morgoth's shadow.");
+        return;
+    }
+    if (silmarils == 1)
+    {
+        strnfmt(out, out_len, "Freed a Silmaril.");
+        return;
+    }
+    if (silmarils == 2)
+    {
+        strnfmt(out, out_len, "Freed two Silmarils.");
+        return;
+    }
+    if (silmarils == 3)
+    {
+        strnfmt(out, out_len, "Freed all three Silmarils.");
+        return;
+    }
+    if (silmarils > 3)
+    {
+        strnfmt(out, out_len, "Freed suspiciously many Silmarils.");
+        return;
+    }
+    if (entry->escaped[0] == 't')
+    {
+        strnfmt(out, out_len, "Escaped empty-handed.");
+        return;
+    }
+
+    out[0] = '\0';
+}
+
+static void score_build_browser_row_label(const high_score* entry, int place,
+    char* out, size_t out_len)
+{
+    const char* who = (entry && entry->who[0]) ? entry->who : "<unknown>";
+
+    if (!out || out_len == 0)
+        return;
+
+    strnfmt(out, out_len, "%2d. %s%s", place, who,
+        score_entry_character_suffix(entry));
+}
+
+static void score_build_browser_row_meta(const high_score* entry, bool detailed,
+    char* out, size_t out_len)
+{
+    char when[32];
+    char points[16];
+    char outcome[APP_UI_META_MAX];
+
+    if (!out || out_len == 0)
+        return;
+
+    if (!entry)
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    score_format_entry_day(entry, when, sizeof(when));
+    score_format_entry_points(entry, points, sizeof(points));
+    score_build_outcome_summary(entry, true, outcome, sizeof(outcome));
+
+    if (detailed)
+        strnfmt(out, out_len, "%s  |  %s pts", when, points);
     else
-    {
-        strnfmt(out_val, sizeof(out_val), "               Slain by %s",
-            the_score->how);
+        strnfmt(out, out_len, "%s pts  |  %s", points, outcome);
+}
 
-        if (the_score->silmarils[0] > '0')
-            SDL_strlcat(out_val, " during a daring escape", sizeof(out_val));
+static void score_add_browser_detail(app_ui_panel* panel,
+    const high_score* entry, int place, bool detailed)
+{
+    char title[APP_UI_TITLE_MAX];
+    char buf[APP_UI_TEXT_MAX];
+    char when[32];
+    char points[16];
+    char turns[16];
+    char outcome[APP_UI_TEXT_MAX];
+    char trophy[APP_UI_TEXT_MAX];
+    int curses;
+    byte accent_attr;
+
+    if (!panel || !entry)
+        return;
+
+    accent_attr = score_entry_color(entry, true);
+    if (accent_attr == TERM_YELLOW)
+        accent_attr = TERM_L_BLUE;
+
+    score_build_browser_row_label(entry, place, title, sizeof(title));
+    app_ui_panel_set_detail_title(panel, accent_attr, title);
+
+    score_format_entry_day(entry, when, sizeof(when));
+    score_format_entry_points(entry, points, sizeof(points));
+    score_format_entry_turns(entry, turns, sizeof(turns));
+    score_build_outcome_summary(entry, false, outcome, sizeof(outcome));
+    score_build_trophy_summary(entry, trophy, sizeof(trophy));
+    curses = score_entry_net_curses(entry);
+
+    strnfmt(buf, sizeof(buf), "Score: %s pts  |  Date: %s", points, when);
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, buf);
+    (void)app_ui_panel_add_detail_line(panel, score_entry_color(entry, false),
+        outcome);
+    strnfmt(buf, sizeof(buf), "Race: %s  |  Depth: %d ft  |  Turns: %s",
+        score_entry_race_name(entry), score_entry_depth_feet(entry), turns);
+    (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+
+    if (curses > 0)
+    {
+        strnfmt(buf, sizeof(buf), "Curse ledger: %d curse%s", curses,
+            (curses == 1) ? "" : "s");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_RED, buf);
+    }
+    else if (curses < 0)
+    {
+        strnfmt(buf, sizeof(buf), "Curse ledger: %d blessing%s", -curses,
+            (curses == -1) ? "" : "s");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN, buf);
     }
 
-    (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 4),
-        (s16b)col, attr, out_val);
+    if (trophy[0])
+        (void)app_ui_panel_add_detail_line(panel, TERM_YELLOW, trophy);
 
-    if (fake)
+    if (detailed && entry->how[0] && !streq(entry->how, "(alive and well)"))
     {
-        strnfmt(out_val, sizeof(out_val), "               after %s turns.",
-            aged_commas);
-    }
-    else
-    {
-        strnfmt(out_val, sizeof(out_val),
-            "               after %s turns.  (%s)", aged_commas, when);
-    }
-    (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 5),
-        (s16b)col, attr, out_val);
-
-    if (the_score->silmarils[0] == '1')
-    {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 5),
-            (s16b)col, attr, "         *");
-    }
-    if (the_score->silmarils[0] == '2')
-    {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 5),
-            (s16b)col, attr, "        * *");
-    }
-    if (the_score->silmarils[0] > '2')
-    {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 5),
-            (s16b)col, attr, "       * * *");
-    }
-    if (the_score->morgoth_slain[0] == 't')
-    {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(row + 4),
-            (s16b)col, TERM_L_DARK, "         V");
+        strnfmt(buf, sizeof(buf), "Fate: %s", entry->how);
+        (void)app_ui_panel_add_detail_line(panel,
+            entry->escaped[0] == 't' ? TERM_GREEN : TERM_SLATE, buf);
     }
 }
 static char display_scores_pages_information(const high_score* entries,
@@ -1150,10 +966,6 @@ static char display_scores_pages_information(const high_score* entries,
     char layout_label[16] = "";
     char exit_label[16] = "";
     char next_label[16] = "";
-    int term_wid = 80;
-    int term_hgt = 24;
-    int footer_row;
-    bool compact;
 
     if (!ui_information_scene_enter(&scope))
     {
@@ -1173,39 +985,38 @@ static char display_scores_pages_information(const high_score* entries,
             sizeof(next_label));
     }
 
-    score_ui_get_term_size(&term_wid, &term_hgt);
-    footer_row = term_hgt - 1;
-    if (footer_row < 4)
-        footer_row = 4;
-    compact = score_ui_compact_width(term_wid);
-
     if (!entries || count <= 0)
     {
         app_ui_scene scene;
-        app_ui_panel* panel = score_scene_begin_document(&scene);
+        app_ui_panel* panel;
 
+        app_ui_scene_init(&scene);
+        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
         if (!panel)
         {
             ui_information_scene_leave(&scope);
             return 0;
         }
-
-        score_scene_put_fit(&scene, panel, TERM_L_BLUE,
-            "               Halls of Mandos", 1, 0, term_wid);
-        score_scene_put_fit(&scene, panel, TERM_SLATE,
-            "No recorded heroes yet.", 3, 0, term_wid);
+        panel->style = APP_UI_PANEL_STYLE_BROWSER;
+        panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+        panel->accent_attr = TERM_L_BLUE;
+        app_ui_panel_set_widths(panel, 1180, 2200);
+        app_ui_panel_set_title(panel, TERM_L_WHITE, "Halls of Mandos");
+        app_ui_panel_set_subtitle(panel, TERM_SLATE,
+            score_view_order_label(order));
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+            "No recorded heroes yet.");
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "No recorded heroes yet.");
         if (steamdeck)
         {
-            char hint_buf[48];
-
-            strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", next_label);
-            score_scene_put_fit(&scene, panel, TERM_L_WHITE, hint_buf,
-                footer_row, 2, term_wid);
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+                next_label, "Close");
         }
         else
         {
-            score_scene_put_fit(&scene, panel, TERM_L_WHITE, "(press any key)",
-                footer_row, 2, term_wid);
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+                "Any", "Close");
         }
         (void)ui_information_scene_present_ui(&scene);
         (void)ui_information_scene_wait_key_nonrepeat();
@@ -1219,26 +1030,16 @@ static char display_scores_pages_information(const high_score* entries,
 
         while (start_index < count)
         {
-            int body_rows;
             int entries_per_page;
-            int layout_col;
+            int selected_index;
             bool has_more;
             app_ui_scene scene;
             app_ui_panel* panel;
-            char footer[80];
+            char title[APP_UI_TITLE_MAX];
+            char subtitle[APP_UI_TEXT_MAX];
             int ch;
 
-            score_ui_get_term_size(&term_wid, &term_hgt);
-            footer_row = term_hgt - 1;
-            if (footer_row < 4)
-                footer_row = 4;
-            compact = score_ui_compact_width(term_wid);
-
-            body_rows = footer_row - 3;
-            if (body_rows < 1)
-                body_rows = 1;
-
-            entries_per_page = detailed ? (body_rows / 4) : body_rows;
+            entries_per_page = detailed ? page_size : SCORE_BROWSER_SHORT_ROWS;
             if (detailed && entries_per_page > page_size)
                 entries_per_page = page_size;
             if (entries_per_page < 1)
@@ -1257,97 +1058,90 @@ static char display_scores_pages_information(const high_score* entries,
                 highlight_pending = false;
             }
 
-            panel = score_scene_begin_document(&scene);
+            selected_index = (highlight_index >= start_index
+                && highlight_index < start_index + entries_per_page)
+                ? highlight_index
+                : start_index;
+            has_more = (start_index + entries_per_page < count);
+
+            app_ui_scene_init(&scene);
+            panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
             if (!panel)
             {
-                log_warn("scores: failed to build document scene");
+                log_warn("scores: failed to build browser scene");
                 ui_information_scene_leave(&scope);
                 return 0;
             }
+            panel->style = APP_UI_PANEL_STYLE_BROWSER;
+            panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+            panel->focus_area = APP_UI_FOCUS_ROWS;
+            panel->accent_attr = TERM_L_BLUE;
+            app_ui_panel_set_widths(panel, 1180, 2200);
 
-            score_scene_put_fit(&scene, panel, TERM_L_BLUE,
-                "               Halls of Mandos", 1, 0, term_wid);
+            strnfmt(title, sizeof(title), "Halls of Mandos");
+            strnfmt(subtitle, sizeof(subtitle),
+                "%s  |  Layout: %s  |  Page %d",
+                score_view_order_label(order), detailed ? "Full" : "Short",
+                (start_index / entries_per_page) + 1);
+            app_ui_panel_set_title(panel, TERM_L_WHITE, title);
+            app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
+            for (int idx = start_index; idx < count
+                && idx < start_index + entries_per_page; idx++)
             {
-                char order_buf[64];
+                char label[APP_UI_LABEL_MAX];
+                char meta[APP_UI_META_MAX];
+                bool selected = (idx == selected_index);
+                byte attr = score_entry_color(&entries[idx], selected);
+                char icon_char = ' ';
 
-                strnfmt(order_buf, sizeof(order_buf), "%s",
-                    score_view_order_label(order));
-                score_scene_put_fit(&scene, panel, TERM_L_WHITE, order_buf, 2,
-                    0, term_wid);
+                if (entries[idx].morgoth_slain[0] == 't')
+                    icon_char = 'V';
+                else if (score_entry_silmarils(&entries[idx]) > 0)
+                    icon_char = '*';
 
+                score_build_browser_row_label(&entries[idx], idx + 1, label,
+                    sizeof(label));
+                score_build_browser_row_meta(&entries[idx], detailed, meta,
+                    sizeof(meta));
+                if (!app_ui_panel_add_row_ex(panel, (s16b)idx, attr,
+                        TERM_SLATE, attr, icon_char, true, selected, "",
+                        label, meta))
                 {
-                    char layout_buf[32];
-
-                    strnfmt(layout_buf, sizeof(layout_buf), "Layout: %s",
-                        detailed ? "Full" : "Short");
-                    layout_col = term_wid - (int)strlen(layout_buf) - 1;
-                    if (!compact && layout_col > (int)strlen(order_buf) + 2)
-                    {
-                        score_scene_put_fit(&scene, panel, TERM_SLATE,
-                            layout_buf, 2, layout_col, term_wid);
-                    }
+                    ui_information_scene_leave(&scope);
+                    return 0;
                 }
             }
 
-            for (int row = 0; row < entries_per_page
-                && (start_index + row) < count; row++)
-            {
-                int idx = start_index + row;
-                bool is_highlight = (idx == highlight_index);
-                byte attr = score_entry_color(&entries[idx], is_highlight);
-
-                if (detailed)
-                {
-                    score_scene_display_single_score(&scene, panel, attr,
-                        row * 4, 0, start_index + row + 1, false,
-                        (high_score*)&entries[idx]);
-                }
-                else
-                {
-                    score_scene_display_single_score_short(&scene, panel, attr,
-                        start_index + row + 1, row, &entries[idx], term_wid);
-                }
-            }
-
-            has_more = (start_index + entries_per_page < count);
+            score_add_browser_detail(panel, &entries[selected_index],
+                selected_index + 1, detailed);
 
             if (steamdeck)
             {
-                const char* action = has_more ? "Next" : "Close";
-
-                if (compact)
-                {
-                    strnfmt(footer, sizeof(footer),
-                        "[%s]Ord [%s]Lay [%s]Exit [%s]%s", order_label,
-                        layout_label, exit_label, next_label, action);
-                }
-                else
-                {
-                    strnfmt(footer, sizeof(footer),
-                        "[%s] Order  [%s] Layout  [%s] Exit  [%s] %s",
-                        order_label, layout_label, exit_label, next_label,
-                        action);
-                }
-            }
-            else if (compact)
-            {
-                strnfmt(footer, sizeof(footer),
-                    "[S] order [L] layout [Esc] exit [any] %s",
-                    has_more ? "next" : "close");
+                (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+                    order_label, "Order");
+                (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                    layout_label, "Layout");
+                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                    exit_label, "Exit");
+                (void)app_ui_panel_add_footer_action(panel, 4, TERM_L_BLUE, true,
+                    next_label, has_more ? "Next" : "Close");
             }
             else
             {
-                strnfmt(footer, sizeof(footer),
-                    "[S] Toggle order   [L] Layout   [ESC] Exit   (press any other key to %s)",
-                    has_more ? "continue" : "close");
+                (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+                    "S", "Order");
+                (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                    "L", "Layout");
+                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                    "Esc", "Exit");
+                (void)app_ui_panel_add_footer_action(panel, 4, TERM_L_BLUE, true,
+                    "Any", has_more ? "Next" : "Close");
             }
-            score_scene_put_fit(&scene, panel, TERM_L_WHITE, footer,
-                footer_row, 1, term_wid);
 
             if (!ui_information_scene_present_ui(&scene))
             {
-                log_warn("scores: failed to present information-scene page");
+                log_warn("scores: failed to present browser page");
                 ui_information_scene_leave(&scope);
                 return 0;
             }
@@ -1369,10 +1163,7 @@ static char display_scores_pages_information(const high_score* entries,
                 if (ch == confirm_key || ch == '\r' || ch == '\n')
                 {
                     if (!has_more)
-                    {
-                        ui_information_scene_leave(&scope);
-                        return 0;
-                    }
+                        break;
                 }
                 if (ch == alt_key)
                     ch = 'l';
@@ -1502,12 +1293,6 @@ void show_scores(bool longscore)
     int page_size = 5;
     bool detailed = !score_last_layout_short;
     score_view_order order = SCORE_VIEW_ORDER_SCORE;
-    int term_wid = 80;
-    int term_hgt = 24;
-
-    score_ui_get_term_size(&term_wid, &term_hgt);
-    if (score_ui_compact_width(term_wid) || term_hgt < 20)
-        detailed = false;
 
     high_score highlight_buffer;
     const high_score* highlight_entry = NULL;
@@ -1731,32 +1516,6 @@ static void run_history_format_timestamp(u32b utc, bool include_time,
     }
 }
 
-static void run_history_build_summary(const char* player,
-                                      const score_record_v1* rec,
-                                      char* out, size_t out_len)
-{
-    if (!out || out_len == 0) {
-        return;
-    }
-
-    if (!rec) {
-        out[0] = '\0';
-        return;
-    }
-
-    const char* name = (player && *player) ? player : NULL;
-    const char* cause = rec->cause_of_death[0] ? rec->cause_of_death : NULL;
-
-    if (name && cause) {
-        strnfmt(out, out_len, "%s: %s", name, cause);
-    } else if (name) {
-        SDL_strlcpy(out, name, out_len);
-    } else if (cause) {
-        SDL_strlcpy(out, cause, out_len);
-    } else {
-        SDL_strlcpy(out, "<unknown>", out_len);
-    }
-}
 #if 0
 static void run_history_format_flags(byte run_flags, char* out, size_t out_len)
 {
@@ -1915,32 +1674,29 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
 
     while (true)
     {
-        int term_wid = 80;
-        int term_hgt = 24;
-        int footer_row;
         int rows;
         int total_pages;
         int last_page_offset;
-        bool compact;
         int page;
         int ch;
-        int col_date = 2;
-        int col_status = 0;
-        int col_depth = 0;
-        int col_score = 0;
-        int col_sils = -1;
-        int col_player = 0;
-        int col_fate = -1;
-        int player_width = 0;
-        int fate_width = 0;
-        int summary_width = 0;
-        bool show_sils = false;
         bool steamdeck = steamdeck_controls_active();
         char confirm_label[16] = "";
         char back_label[16] = "";
         char sort_label[16] = "";
         app_ui_scene scene;
         app_ui_panel* panel;
+        const run_history_entry* selected_entry;
+        const score_record_v1* rec;
+        char title[APP_UI_TITLE_MAX];
+        char subtitle[APP_UI_TEXT_MAX];
+        char player[33];
+        char date[16];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        char created[32];
+        char completed[32];
+        char detail[APP_UI_TEXT_MAX];
+        byte row_color;
 
         if (steamdeck) {
             score_prompt_label(steamdeck_confirm_key(), "A",
@@ -1951,269 +1707,159 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
                 sort_label, sizeof(sort_label));
         }
 
-        score_ui_get_term_size(&term_wid, &term_hgt);
-        footer_row = term_hgt - 1;
-        if (footer_row < 5)
-            footer_row = 5;
-        rows = footer_row - 3;
-        if (rows < 4)
-            rows = 4;
+        rows = RUN_HISTORY_ROWS;
+        if (rows < 1)
+            rows = 1;
         total_pages = (count + rows - 1) / rows;
         last_page_offset = ((count - 1) / rows) * rows;
         if (last_page_offset < 0)
             last_page_offset = 0;
-        compact = score_ui_compact_width(term_wid);
 
         if (page_offset < 0)
             page_offset = 0;
         if (page_offset > last_page_offset)
             page_offset = last_page_offset;
+        if (highlight < 0)
+            highlight = 0;
+        if (highlight >= count)
+            highlight = count - 1;
+        if (highlight < page_offset)
+            page_offset = (highlight / rows) * rows;
+        if (highlight >= page_offset + rows)
+            page_offset = (highlight / rows) * rows;
 
         page = (rows > 0) ? (page_offset / rows) : 0;
-        panel = score_scene_begin_document(&scene);
+        selected_entry = &entries[highlight];
+        rec = &selected_entry->record;
+
+        app_ui_scene_init(&scene);
+        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
         if (!panel)
         {
             ui_information_scene_leave(&scope);
             return false;
         }
+        panel->style = APP_UI_PANEL_STYLE_BROWSER;
+        panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->accent_attr = TERM_L_BLUE;
+        app_ui_panel_set_widths(panel, 1180, 2200);
 
-        if (compact) {
-            const int date_width = 10;
-            const int status_width = 1;
-            const int depth_width = 5;
-            const int score_width = 6;
-            const int sils_width = 1;
+        strnfmt(title, sizeof(title), "Run History");
+        strnfmt(subtitle, sizeof(subtitle), "%d entries  |  Page %d/%d  |  Sort: %s",
+            count, page + 1, total_pages, run_history_sort_label(sort_order));
+        app_ui_panel_set_title(panel, TERM_L_WHITE, title);
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
-            col_status = col_date + date_width + 1;
-            col_depth = col_status + status_width + 1;
-            col_score = col_depth + depth_width + 1;
-            show_sils = (term_wid >= 48);
-            if (show_sils) {
-                col_sils = col_score + score_width + 1;
-                col_player = col_sils + sils_width + 2;
-            } else {
-                col_player = col_score + score_width + 2;
-            }
-            summary_width = term_wid - col_player;
-            if (summary_width < 0)
-                summary_width = 0;
-
-            score_scene_put_fit(&scene, panel, TERM_L_BLUE,
-                format("Run History %d/%d", page + 1, total_pages), 0, 0,
-                term_wid);
-            if (steamdeck) {
-                score_scene_put_fit(&scene, panel, TERM_SLATE,
-                    format("Sort: %s [%s]", run_history_sort_label(sort_order),
-                        sort_label),
-                    1, 2, term_wid);
-            } else {
-                score_scene_put_fit(&scene, panel, TERM_SLATE,
-                    format("Sort: %s [R]", run_history_sort_label(sort_order)),
-                    1, 2, term_wid);
-            }
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Date", 2,
-                col_date,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "S", 2, col_status,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Depth", 2,
-                col_depth,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Score", 2,
-                col_score,
-                term_wid);
-            if (show_sils)
-                score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Sil", 2,
-                    col_sils,
-                    term_wid);
-            if (summary_width > 0)
-                score_scene_put_fit(&scene, panel, TERM_L_UMBER,
-                    "Player / Fate", 2,
-                    col_player, term_wid);
-        } else {
-            const int date_width = 10;
-            const int status_width = 7;
-            const int depth_width = 6;
-            const int score_width = 7;
-            const int sils_width = 4;
-            int remaining;
-
-            col_status = col_date + date_width + 1;
-            col_depth = col_status + status_width + 1;
-            col_score = col_depth + depth_width + 1;
-            col_sils = col_score + score_width + 1;
-            col_player = col_sils + sils_width + 2;
-            remaining = term_wid - col_player;
-            if (remaining < 0)
-                remaining = 0;
-
-            if (remaining > 0) {
-                player_width = remaining / 3;
-                if (player_width < 10)
-                    player_width = 10;
-                if (player_width > 18)
-                    player_width = 18;
-                if (player_width > remaining - 8)
-                    player_width = MAX(8, remaining - 8);
-                if (player_width > remaining)
-                    player_width = remaining;
-
-                fate_width = remaining - player_width;
-                if (fate_width > 0)
-                    fate_width--;
-                if (fate_width < 6 && player_width > 8) {
-                    int give = MIN(player_width - 8, 6 - fate_width);
-                    player_width -= give;
-                    fate_width += give;
-                }
-                if (fate_width < 0)
-                    fate_width = 0;
-                if (fate_width > 0)
-                    col_fate = col_player + player_width + 1;
-            }
-
-            score_scene_put_fit(&scene, panel, TERM_L_BLUE,
-                format("=== Run History (%d entries) === Page %d of %d ===",
-                    count, page + 1, total_pages),
-                0, 0, term_wid);
-            if (steamdeck) {
-                score_scene_put_fit(&scene, panel, TERM_SLATE,
-                    format("Sort: %s (press [%s] to toggle)",
-                        run_history_sort_label(sort_order), sort_label),
-                    1, 2, term_wid);
-            } else {
-                score_scene_put_fit(&scene, panel, TERM_SLATE,
-                    format("Sort: %s (press [R] to toggle)",
-                        run_history_sort_label(sort_order)),
-                    1, 2, term_wid);
-            }
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Date", 2,
-                col_date,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Status", 2,
-                col_status,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Depth", 2,
-                col_depth,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Score", 2,
-                col_score,
-                term_wid);
-            score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Sils", 2,
-                col_sils,
-                term_wid);
-            if (player_width > 0)
-                score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Player", 2,
-                    col_player, term_wid);
-            if (fate_width > 0)
-                score_scene_put_fit(&scene, panel, TERM_L_UMBER, "Fate", 2,
-                    col_fate,
-                    term_wid);
-        }
-
-        for (int i = 0; i < rows; i++)
+        for (int i = page_offset; i < count && i < page_offset + rows; i++)
         {
-            int idx = page_offset + i;
-            const score_record_v1* rec;
-            int row_y;
-            char date[16];
-            char player[21];
-            int depth_ft;
-            bool selected;
-            byte row_color;
+            const score_record_v1* row_rec = &entries[i].record;
+            const char* row_player = row_rec->player_name[0]
+                ? row_rec->player_name
+                : (row_rec->savefile_hint[0] ? row_rec->savefile_hint
+                                             : "<unknown>");
+            int depth_ft = row_rec->exit_depth * 50;
+            char icon_char = run_history_status_short(row_rec->status);
 
-            if (idx >= count)
-                break;
-
-            rec = &entries[idx].record;
-            row_y = 3 + i;
-            run_history_format_timestamp(rec->completed_utc, false, date,
+            run_history_format_timestamp(row_rec->completed_utc, false, date,
                 sizeof(date));
+            strnfmt(label, sizeof(label), "%s  %s", date, row_player);
+            strnfmt(meta, sizeof(meta), "%s  %d pts  %d ft  %u Sil",
+                score_run_status_label(row_rec->status), entries[i].rating,
+                depth_ft, (unsigned)row_rec->silmarils);
 
-            if (rec->player_name[0])
-                SDL_strlcpy(player, rec->player_name, sizeof(player));
-            else if (rec->savefile_hint[0])
-                SDL_strlcpy(player, rec->savefile_hint, sizeof(player));
-            else
-                SDL_strlcpy(player, "<unknown>", sizeof(player));
+            row_color = (i == highlight) ? TERM_YELLOW
+                : (row_rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN
+                : (row_rec->run_flags & SCORE_RUN_FLAG_MORGOTH_SLAIN)
+                    ? TERM_L_RED
+                : (row_rec->run_flags & SCORE_RUN_FLAG_ANGBAND_ESCAPED)
+                    ? TERM_GREEN
+                : (row_rec->silmarils > 0) ? TERM_VIOLET
+                : TERM_WHITE;
 
-            depth_ft = rec->exit_depth * 50;
-            selected = (idx == highlight);
-            row_color = selected ? TERM_YELLOW
-                : (rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN
-                : (rec->silmarils > 0) ? TERM_VIOLET : TERM_WHITE;
-
-            score_scene_put_fit(&scene, panel, row_color,
-                selected ? ">" : " ", row_y, 0, term_wid);
-            score_scene_put_fit(&scene, panel, row_color, date, row_y, col_date,
-                term_wid);
-
-            if (compact) {
-                char summary[160];
-                char summary_fit[160];
-                char status_buf[2] = { run_history_status_short(rec->status),
-                    '\0' };
-
-                score_scene_put_fit(&scene, panel, row_color, status_buf, row_y,
-                    col_status, term_wid);
-                score_scene_put_fit(&scene, panel, row_color,
-                    format("%4d'", depth_ft), row_y, col_depth, term_wid);
-                score_scene_put_fit(&scene, panel, row_color,
-                    format("%6d", entries[idx].rating), row_y, col_score,
-                    term_wid);
-                if (show_sils)
-                    score_scene_put_fit(&scene, panel, row_color,
-                        format("%1u", (unsigned)rec->silmarils), row_y,
-                        col_sils, term_wid);
-                if (summary_width > 0) {
-                    run_history_build_summary(player, rec, summary,
-                        sizeof(summary));
-                    truncate_with_ellipsis(summary, summary_fit,
-                        sizeof(summary_fit), summary_width);
-                    score_scene_put_fit(&scene, panel, row_color, summary_fit,
-                        row_y,
-                        col_player, term_wid);
-                }
-            } else {
-                char cause[160];
-                char player_fit[32];
-
-                score_scene_put_fit(&scene, panel, row_color,
-                    score_run_status_label(rec->status), row_y, col_status,
-                    term_wid);
-                score_scene_put_fit(&scene, panel, row_color,
-                    format("%6d'", depth_ft), row_y, col_depth, term_wid);
-                score_scene_put_fit(&scene, panel, row_color,
-                    format("%7d", entries[idx].rating), row_y, col_score,
-                    term_wid);
-                score_scene_put_fit(&scene, panel, row_color,
-                    format("%3u", (unsigned)rec->silmarils), row_y, col_sils,
-                    term_wid);
-                if (player_width > 0) {
-                    truncate_preserving_words(player, player_fit,
-                        sizeof(player_fit), player_width);
-                    score_scene_put_fit(&scene, panel, row_color, player_fit,
-                        row_y,
-                        col_player, term_wid);
-                }
-                if (fate_width > 0) {
-                    truncate_with_ellipsis(rec->cause_of_death, cause,
-                        sizeof(cause), fate_width);
-                    score_scene_put_fit(&scene, panel, row_color, cause, row_y,
-                        col_fate, term_wid);
-                }
+            if (!app_ui_panel_add_row_ex(panel, (s16b)i, row_color, TERM_SLATE,
+                    row_color, icon_char, true, i == highlight, "",
+                    label, meta))
+            {
+                ui_information_scene_leave(&scope);
+                return false;
             }
         }
 
-        if (steamdeck) {
-            score_scene_put_fit(&scene, panel, TERM_L_DARK,
-                format("[%s] details  [%s] sort  [%s] back  [Up/Down] move  [Left/Right] page",
-                    confirm_label, sort_label, back_label),
-                footer_row, 0, term_wid);
-        } else {
-            score_scene_put_fit(&scene, panel, TERM_L_DARK,
-                "[Space/Enter/Right] details  [R] sort  [Esc] back  [Up/Down] move  [N/P/3/7] page",
-                footer_row, 0, term_wid);
+        SDL_strlcpy(player, rec->player_name[0] ? rec->player_name
+            : (rec->savefile_hint[0] ? rec->savefile_hint : "<unknown>"),
+            sizeof(player));
+        run_history_format_timestamp(rec->created_utc, true, created,
+            sizeof(created));
+        run_history_format_timestamp(rec->completed_utc, true, completed,
+            sizeof(completed));
+        strnfmt(title, sizeof(title), "%s  |  Run #%u", player,
+            (unsigned)rec->record_id);
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, title);
+        strnfmt(detail, sizeof(detail), "Status: %s  |  Rating: %d points",
+            score_run_status_label(rec->status), selected_entry->rating);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, detail);
+        strnfmt(detail, sizeof(detail), "Race: %s", run_history_race_name(
+            rec->race_id));
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+        strnfmt(detail, sizeof(detail), "Started: %s", created);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+        if (run_history_is_current(selected_entry))
+        {
+            strnfmt(detail, sizeof(detail), "Current run in progress.");
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN, detail);
+        }
+        else
+        {
+            strnfmt(detail, sizeof(detail), "Completed: %s", completed);
+            (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+        }
+        strnfmt(detail, sizeof(detail), "Depth: exit %d ft  |  max %d ft",
+            rec->exit_depth * 50, rec->max_depth * 50);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, detail);
+        strnfmt(detail, sizeof(detail), "Silmarils: %u  |  Quests: %u  |  Uniques: %u",
+            (unsigned)rec->silmarils, (unsigned)rec->quests_completed,
+            (unsigned)rec->uniques_killed);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, detail);
+        if (rec->cause_of_death[0])
+        {
+            (void)app_ui_panel_add_detail_line(panel,
+                rec->status == SCORE_RECORD_DEAD ? TERM_L_RED : TERM_SLATE,
+                rec->cause_of_death);
+        }
+        else if (rec->status == SCORE_RECORD_ALIVE)
+        {
+            (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
+                "Alive and still delving.");
+        }
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+            "Press Enter to open the full run detail view.");
+
+        if (steamdeck)
+        {
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Details");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "Up/Down", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "3/7", "Page");
+            (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                sort_label, "Sort");
+            (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                back_label, "Back");
+        }
+        else
+        {
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                "Enter", "Details");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "3/7", "Page");
+            (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                "R", "Sort");
+            (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "Esc", "Back");
         }
 
         if (!ui_information_scene_present_ui(&scene))

@@ -4380,6 +4380,62 @@ static int legacy_options_menu(int* highlight)
         (int)N_ELEMENTS(entries), highlight, 7);
 }
 
+static int macros_menu(int* highlight)
+{
+    const settings_choice_entry entries[] = {
+        { 1, '1', "1) Load a user pref file", false },
+#ifdef ALLOW_MACROS
+        { 2, '2', "2) Append macros to a file", false },
+        { 3, '3', "3) Query a macro", false },
+        { 4, '4', "4) Create a macro", false },
+        { 5, '5', "5) Remove a macro", false },
+        { 6, '6', "6) Append keymaps to a file", false },
+        { 7, '7', "7) Query a keymap", false },
+        { 8, '8', "8) Create a keymap", false },
+        { 9, '9', "9) Remove a keymap", false },
+        { 10, '0', "0) Enter a new action", false },
+#endif
+    };
+
+    return settings_choice_menu("Interact with Macros", entries,
+        (int)N_ELEMENTS(entries), highlight, 0);
+}
+
+static int visuals_menu(int* highlight)
+{
+    const settings_choice_entry entries[] = {
+        { 1, '1', "1) Load a user pref file", false },
+#ifdef ALLOW_VISUALS
+        { 2, '2', "2) Dump monster attr/chars", false },
+        { 3, '3', "3) Dump object attr/chars", false },
+        { 4, '4', "4) Dump feature attr/chars", false },
+        { 5, '5', "5) Dump flavor attr/chars", false },
+        { 6, '6', "6) Change monster attr/chars", false },
+        { 7, '7', "7) Change object attr/chars", false },
+        { 8, '8', "8) Change feature attr/chars", false },
+        { 9, '9', "9) Change flavor attr/chars", false },
+#endif
+        { 10, '0', "0) Reset visuals", false },
+    };
+
+    return settings_choice_menu("Interact with Visuals", entries,
+        (int)N_ELEMENTS(entries), highlight, 0);
+}
+
+static int colors_menu(int* highlight)
+{
+    const settings_choice_entry entries[] = {
+        { 1, '1', "1) Load a user pref file", false },
+#ifdef ALLOW_COLORS
+        { 2, '2', "2) Dump colors", false },
+        { 3, '3', "3) Modify colors", false },
+#endif
+    };
+
+    return settings_choice_menu("Interact with Colors", entries,
+        (int)N_ELEMENTS(entries), highlight, 0);
+}
+
 static void do_cmd_legacy_options(void)
 {
     int choice = 0;
@@ -4845,15 +4901,186 @@ static bool list_missing_primary_bindings(int mode, const struct keybind_entry* 
     return ok;
 }
 
+static int keybind_active_mode(void)
+{
+    if (!hjkl_movement && !angband_keyset)
+        return KEYMAP_MODE_SIL;
+    if (hjkl_movement && !angband_keyset)
+        return KEYMAP_MODE_SIL_HJKL;
+    if (!hjkl_movement && angband_keyset)
+        return KEYMAP_MODE_ANGBAND;
+
+    return KEYMAP_MODE_ANGBAND_HJKL;
+}
+
+static void keybind_adjust_view(int entry_count, int visible_rows, int* highlight,
+    int* top)
+{
+    int max_top;
+
+    if (!highlight || !top)
+        return;
+
+    if (entry_count <= 0)
+    {
+        *highlight = 0;
+        *top = 0;
+        return;
+    }
+
+    if (*highlight < 0)
+        *highlight = 0;
+    if (*highlight >= entry_count)
+        *highlight = entry_count - 1;
+
+    if (*top > *highlight)
+        *top = *highlight;
+    if ((*top + visible_rows) <= *highlight)
+        *top = *highlight - visible_rows + 1;
+    if (*top < 0)
+        *top = 0;
+
+    max_top = entry_count - visible_rows;
+    if (max_top < 0)
+        max_top = 0;
+    if (*top > max_top)
+        *top = max_top;
+}
+
+static bool keybind_present_ui_scene(bool showing_primary,
+    const struct keybind_entry* keybinds, int entry_count, int mode,
+    int highlight, int top, bool dirty, bool compact_width, cptr default_file)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    int i;
+
+    panel = settings_browser_scene_begin_ex(&scene, "Keybind Configuration",
+        compact_width ? "8/2 move  Enter bind  Tab switch  Esc return"
+                      : "Arrow to navigate, Enter to bind, Tab to switch groups, Escape to return",
+        1180, 2200);
+    if (!panel)
+        return false;
+
+    (void)app_ui_panel_add_tab(panel, 1,
+        showing_primary ? TERM_L_BLUE : TERM_SLATE, showing_primary,
+        "Primary");
+    (void)app_ui_panel_add_tab(panel, 2,
+        showing_primary ? TERM_SLATE : TERM_L_BLUE, !showing_primary,
+        "Supplementary");
+
+    if (top > 0)
+        app_ui_panel_set_row_offset(panel, (s16b)top);
+
+    for (i = 0; i < entry_count; i++)
+    {
+        char binding_buf[80];
+        byte attr = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
+
+        describe_action_bindings(mode, &keybinds[i], binding_buf,
+            sizeof(binding_buf));
+        if (!settings_browser_add_pair_row(panel, (s16b)i, attr, TERM_SLATE,
+                true, i == highlight, keybinds[i].key_name, binding_buf))
+        {
+            return false;
+        }
+    }
+
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        showing_primary ? "Primary commands: essential gameplay actions."
+                        : "Supplementary commands: secondary actions and utilities.");
+    if (dirty)
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_YELLOW,
+            "Unsaved changes.");
+    }
+    else if (compact_width)
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "Press 's' to save keybinds.");
+    }
+    else
+    {
+        char save_buf[96];
+
+        strnfmt(save_buf, sizeof(save_buf), "Press 's' to save keybinds to %s.",
+            default_file);
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE, save_buf);
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "8/2",
+        "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "Tab",
+        "Group");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "Enter",
+        "Bind");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true, "r",
+        "Reset");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true, "s",
+        "Save");
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true, "Esc",
+        "Back");
+
+    if (panel->row_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->focus_id = panel->rows[panel->selected_row].id;
+    }
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+static bool keybind_present_prompt_scene(bool showing_primary,
+    const struct keybind_entry* entry, int mode, cptr prompt)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    char binding_buf[80];
+
+    if (!entry)
+        return false;
+
+    panel = settings_browser_scene_begin_ex(&scene, "Keybind Configuration",
+        prompt ? prompt : "", 1100, 2200);
+    if (!panel)
+        return false;
+
+    (void)app_ui_panel_add_tab(panel, 1,
+        showing_primary ? TERM_L_BLUE : TERM_SLATE, showing_primary,
+        "Primary");
+    (void)app_ui_panel_add_tab(panel, 2,
+        showing_primary ? TERM_SLATE : TERM_L_BLUE, !showing_primary,
+        "Supplementary");
+
+    describe_action_bindings(mode, entry, binding_buf, sizeof(binding_buf));
+    (void)settings_browser_add_pair_row(panel, 0, TERM_L_BLUE, TERM_SLATE,
+        true, true, entry->key_name, binding_buf);
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Press the new key now. Escape cancels.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "Any key",
+        "Bind");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "Esc",
+        "Cancel");
+
+    if (panel->row_count > 0)
+    {
+        panel->focus_area = APP_UI_FOCUS_ROWS;
+        panel->focus_id = panel->rows[panel->selected_row].id;
+    }
+
+    return ui_information_scene_present_ui(&scene);
+}
+
 /*
  * Keybind configuration menu
  * Allows rebinding of movement commands for players without a numpad
  */
 void do_cmd_keybinds(void)
 {
-    int mode;
+    int mode = keybind_active_mode();
     bool done = false;
     bool dirty = false;
+    bool scene_active = ui_information_scene_is_active();
     char ch;
     bool showing_primary = true;
     int highlight_primary = 0;
@@ -4862,8 +5089,6 @@ void do_cmd_keybinds(void)
     int top_secondary = 0;
     const char* default_file = "user.prf";
     const int list_start_row = 5;
-    int term_w, term_h;
-    int visible_rows;
     static const struct keybind_entry primary_keybinds[] = {
         {'1', NULL, "Move SW (numpad 1)", ";1", true},
         {'2', NULL, "Move S (numpad 2)", ";2", true},
@@ -4923,27 +5148,9 @@ void do_cmd_keybinds(void)
         {'[', NULL, "Monster list", "[", false},
         {']', NULL, "Object list", "]", false},
     };
-    
-    Term_get_size(&term_w, &term_h);
-    visible_rows = term_h - list_start_row - 6;
-    if (visible_rows < 5)
-        visible_rows = 5;
-    
     int primary_count = (int)N_ELEMENTS(primary_keybinds);
     int secondary_count = (int)N_ELEMENTS(secondary_keybinds);
-    
-    /* Determine the keyset mode */
-    if (!hjkl_movement && !angband_keyset)
-        mode = KEYMAP_MODE_SIL;
-    else if (hjkl_movement && !angband_keyset)
-        mode = KEYMAP_MODE_SIL_HJKL;
-    else if (!hjkl_movement && angband_keyset)
-        mode = KEYMAP_MODE_ANGBAND;
-    else
-        mode = KEYMAP_MODE_ANGBAND_HJKL;
-    
-    screen_save();
-    
+
     while (!done)
     {
         const struct keybind_entry* keybinds;
@@ -4952,20 +5159,21 @@ void do_cmd_keybinds(void)
         int* top_ptr;
         int highlight;
         int display_end;
-        int row;
         int i;
+        int term_w;
+        int term_h;
+        int visible_rows;
         bool compact_width;
-        char binding_buf[80];
-        char line_buf[128];
         int row_width;
 
-        Term_get_size(&term_w, &term_h);
+        term_w = settings_ui_term_wid();
+        term_h = Term ? Term->hgt : 24;
         visible_rows = term_h - list_start_row - 6;
         if (visible_rows < 5)
             visible_rows = 5;
         compact_width = (term_w < 70);
         row_width = settings_ui_line_width(2);
-        
+
         if (showing_primary)
         {
             keybinds = primary_keybinds;
@@ -4980,110 +5188,93 @@ void do_cmd_keybinds(void)
             highlight_ptr = &highlight_secondary;
             top_ptr = &top_secondary;
         }
-        
-        if (*highlight_ptr >= num_keybinds)
-            *highlight_ptr = num_keybinds - 1;
-        if (*highlight_ptr < 0)
-            *highlight_ptr = 0;
-        
-        if (*top_ptr > *highlight_ptr)
-            *top_ptr = *highlight_ptr;
-        if (*top_ptr + visible_rows <= *highlight_ptr)
-            *top_ptr = *highlight_ptr - visible_rows + 1;
-        if (*top_ptr < 0)
-            *top_ptr = 0;
-        if (num_keybinds > visible_rows)
-        {
-            int max_top = num_keybinds - visible_rows;
-            if (*top_ptr > max_top)
-                *top_ptr = max_top;
-        }
-        else
-        {
-            *top_ptr = 0;
-        }
-        
+
+        keybind_adjust_view(num_keybinds, visible_rows, highlight_ptr, top_ptr);
         highlight = *highlight_ptr;
-        
-        /* Clear screen */
-        Term_clear();
 
-        /* Title */
-        settings_ui_put_fitted(1, 0, TERM_WHITE, "Keybind Configuration");
-        if (compact_width)
+        if (scene_active)
         {
-            settings_ui_put_fitted(2, 0, TERM_WHITE,
-                "8/2 move  Enter bind  Tab switch  Esc return");
-            settings_ui_put_fitted(3, 0, TERM_WHITE,
-                showing_primary ? "Primary commands" : "Supplementary commands");
+            if (!keybind_present_ui_scene(showing_primary, keybinds,
+                    num_keybinds, mode, highlight, *top_ptr, dirty,
+                    compact_width, default_file))
+            {
+                done = true;
+                continue;
+            }
         }
         else
         {
-            settings_ui_put_fitted(2, 0, TERM_WHITE,
-                "Arrow to navigate, Enter to bind, Tab to switch groups, Escape to return");
-            settings_ui_put_fitted(3, 0, TERM_WHITE,
-                showing_primary ? "Primary Commands: Essential for the gameplay"
-                                : "Supplementary Commands");
-        }
-        
-        /* List visible keybinds */
-        display_end = *top_ptr + visible_rows;
-        if (display_end > num_keybinds)
-            display_end = num_keybinds;
-        for (i = *top_ptr; i < display_end; i++)
-        {
-            int entry_row = list_start_row + (i - *top_ptr);
-            describe_action_bindings(mode, &keybinds[i], binding_buf, sizeof(binding_buf));
-            settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                keybinds[i].key_name, binding_buf, row_width, 12);
+            char binding_buf[80];
+            char line_buf[128];
 
-            /* Display the keybind */
-            if (i == highlight)
+            clear_from(0);
+            settings_ui_put_fitted(1, 0, TERM_WHITE, "Keybind Configuration");
+            if (compact_width)
             {
-                /* Highlighted */
-                c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
+                settings_ui_put_fitted(2, 0, TERM_WHITE,
+                    "8/2 move  Enter bind  Tab switch  Esc return");
+                settings_ui_put_fitted(3, 0, TERM_WHITE,
+                    showing_primary ? "Primary commands"
+                                    : "Supplementary commands");
             }
             else
             {
-                /* Normal */
-                prt(line_buf, entry_row, 2);
+                settings_ui_put_fitted(2, 0, TERM_WHITE,
+                    "Arrow to navigate, Enter to bind, Tab to switch groups, Escape to return");
+                settings_ui_put_fitted(3, 0, TERM_WHITE,
+                    showing_primary ? "Primary Commands: Essential for the gameplay"
+                                    : "Supplementary Commands");
             }
+
+            display_end = *top_ptr + visible_rows;
+            if (display_end > num_keybinds)
+                display_end = num_keybinds;
+
+            for (i = *top_ptr; i < display_end; i++)
+            {
+                int entry_row = list_start_row + (i - *top_ptr);
+
+                describe_action_bindings(mode, &keybinds[i], binding_buf,
+                    sizeof(binding_buf));
+                settings_ui_format_pair_line(line_buf, sizeof(line_buf),
+                    keybinds[i].key_name, binding_buf, row_width, 12);
+                if (i == highlight)
+                    c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
+                else
+                    prt(line_buf, entry_row, 2);
+            }
+
+            if (compact_width)
+            {
+                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
+                    TERM_WHITE, "s: save keybinds");
+                settings_ui_put_fitted(list_start_row + visible_rows + 2, 2,
+                    TERM_WHITE, "r: reset selected");
+            }
+            else
+            {
+                char save_buf[96];
+
+                strnfmt(save_buf, sizeof(save_buf),
+                    "Press 's' to save keybinds to %s", default_file);
+                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
+                    TERM_WHITE, save_buf);
+                settings_ui_put_fitted(list_start_row + visible_rows + 2, 2,
+                    TERM_WHITE,
+                    "Press 'r' to reset selected keybind to default");
+            }
+            if (dirty)
+            {
+                c_prt(TERM_YELLOW, "Unsaved changes",
+                    list_start_row + visible_rows + 3, 2);
+            }
+
+            settings_present();
         }
-        
-        /* Clear any leftover rows */
-        for (i = display_end; i < *top_ptr + visible_rows; i++)
-        {
-            row = list_start_row + (i - *top_ptr);
-            Term_erase(2, row, term_w > 2 ? term_w - 2 : 0);
-        }
-        
-        /* Instructions at bottom */
-        if (compact_width)
-        {
-            settings_ui_put_fitted(list_start_row + visible_rows + 1, 2, TERM_WHITE,
-                "s: save keybinds");
-            settings_ui_put_fitted(list_start_row + visible_rows + 2, 2, TERM_WHITE,
-                "r: reset selected");
-        }
-        else
-        {
-            strnfmt(line_buf, sizeof(line_buf), "Press 's' to save keybinds to %s",
-                default_file);
-            settings_ui_put_fitted(list_start_row + visible_rows + 1, 2, TERM_WHITE,
-                line_buf);
-            settings_ui_put_fitted(list_start_row + visible_rows + 2, 2, TERM_WHITE,
-                "Press 'r' to reset selected keybind to default");
-        }
-        if (dirty)
-            c_prt(TERM_YELLOW, "Unsaved changes", list_start_row + visible_rows + 3, 2);
-        else
-            Term_erase(2, list_start_row + visible_rows + 3,
-                term_w > 2 ? term_w - 2 : 0);
-        
-        /* Get input */
-        ch = settings_wait_key();
-        
-        /* Handle input */
+
+        ch = scene_active ? (char)ui_information_scene_wait_key()
+                          : settings_wait_key();
+
         if (ch == ESCAPE || ch == 'q' || ch == 'Q')
         {
             char missing[256];
@@ -5123,42 +5314,51 @@ void do_cmd_keybinds(void)
         }
         else if (ch == '\r' || ch == '\n' || ch == ' ')
         {
-            /* Rebind the selected key */
             cptr action = keybinds[highlight].action;
+            char bind_key;
             char key_label[32];
             char prompt[80];
             char prompt_long[96];
+            char prompt_medium[88];
             char prompt_short[80];
-            int entry_row = list_start_row + (highlight - *top_ptr);
 
-            /* Clear the action area */
-            Term_erase(2, entry_row, 255);
-            
-            /* Prompt for new binding */
             strnfmt(prompt_long, sizeof(prompt_long),
                 "Press key to use for %s (Escape to cancel):",
+                keybinds[highlight].key_name);
+            strnfmt(prompt_medium, sizeof(prompt_medium),
+                "Press key for %s (Escape to cancel):",
                 keybinds[highlight].key_name);
             strnfmt(prompt_short, sizeof(prompt_short),
                 "Bind %s (Esc cancels):", keybinds[highlight].key_name);
             strnfmt(prompt, sizeof(prompt), "%s",
-                settings_ui_pick_label(row_width, prompt_long, prompt_short,
+                settings_ui_pick_label(row_width, prompt_long, prompt_medium,
                     prompt_short));
-            settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-            settings_present();
-            
-            /* Get the key to bind */
+
+            if (scene_active)
+            {
+                (void)keybind_present_prompt_scene(showing_primary,
+                    &keybinds[highlight], mode, prompt);
+            }
+            else
+            {
+                int entry_row = list_start_row + (highlight - *top_ptr);
+
+                settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
+                settings_present();
+            }
+
             flush();
-            char bind_key = inkey();
-            
+            bind_key = scene_active ? (char)ui_information_scene_wait_key()
+                                    : (char)settings_wait_key();
+
             if (bind_key != ESCAPE && bind_key != 0)
             {
                 byte new_key = (byte)bind_key;
-                
-                /* Clear any existing action on the chosen key */
+
                 keymap_act[mode][new_key] = str_free(keymap_act[mode][new_key]);
                 keymap_act[mode][new_key] = str_dup(action);
                 dirty = true;
-                
+
                 describe_keycode(new_key, key_label, sizeof(key_label));
                 msg_format("Key %s now performs %s", key_label, keybinds[highlight].key_name);
                 message_flush();
@@ -5166,21 +5366,16 @@ void do_cmd_keybinds(void)
         }
         else if (ch == 'r' || ch == 'R')
         {
-            /* Reset to default */
             byte target_key = keybinds[highlight].key_code;
             char key_label[32];
             cptr action = keybinds[highlight].action;
 
-            /* Remove the action from any custom keys */
             unbind_action(mode, action);
-            
-            /* Restore default action */
             keymap_act[mode][target_key] = str_free(keymap_act[mode][target_key]);
             if (keybinds[highlight].requires_keymap)
                 keymap_act[mode][target_key] = str_dup(action);
-            
+
             dirty = true;
-            
             describe_keycode(target_key, key_label, sizeof(key_label));
             msg_format("Reset %s to default key %s", keybinds[highlight].key_name, key_label);
             message_flush();
@@ -5188,20 +5383,18 @@ void do_cmd_keybinds(void)
         else if (ch == 's' || ch == 'S')
         {
 #ifdef ALLOW_MACROS
-            /* Save keybinds to file */
             char ftmp[80];
-            
-            /* Default filename */
+
             strnfmt(ftmp, sizeof(ftmp), "%s", default_file);
-            
-            /* Clear prompt area */
-            prt("                                                              ", list_start_row + visible_rows + 1, 2);
-            prt("File: ", list_start_row + visible_rows + 1, 2);
-            
-            /* Ask for a file */
+
+            if (!scene_active)
+            {
+                prt("File: ", list_start_row + visible_rows + 1, 2);
+                settings_present();
+            }
+
             if (askfor_aux(ftmp, sizeof(ftmp)))
             {
-                /* Dump the keymaps */
                 if (keymap_dump(ftmp) == 0)
                 {
                     msg_format("Keybinds saved to %s.", ftmp);
@@ -5218,13 +5411,9 @@ void do_cmd_keybinds(void)
             message_flush();
 #endif
         }
-        
-        /* Store updated highlight for the active group */
+
         *highlight_ptr = highlight;
     }
-    
-    /* Load screen */
-    screen_load();
 
     if (dirty)
     {
@@ -5264,6 +5453,100 @@ typedef struct controller_entry {
     int id;
     const char* label;
 } controller_entry;
+
+static bool controller_toggle_value(int toggle_id)
+{
+    switch (toggle_id) {
+    case CONTROLLER_TOGGLE_ENABLED:
+        return get_sdl_gamepad_enabled();
+    case CONTROLLER_TOGGLE_AUTO_MODE:
+        return get_sdl_gamepad_auto_mode();
+    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
+        return get_sdl_steamdeck_mode();
+    case CONTROLLER_TOGGLE_DPAD:
+        return get_sdl_gamepad_use_dpad();
+    case CONTROLLER_TOGGLE_LEFT_STICK:
+        return get_sdl_gamepad_use_left_stick();
+    default:
+        return false;
+    }
+}
+
+static int controller_binding_slot_count(int type)
+{
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        return GAMEPAD_BUTTON_COUNT;
+    case GAMEPAD_CAPTURE_TRIGGER:
+        return GAMEPAD_TRIGGER_COUNT;
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        return GAMEPAD_STICK_DIR_COUNT;
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+static int controller_binding_value(int type, int id)
+{
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        return get_sdl_gamepad_button_binding(id);
+    case GAMEPAD_CAPTURE_TRIGGER:
+        return get_sdl_gamepad_trigger_binding(id);
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+        return get_sdl_gamepad_left_stick_binding(id);
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        return get_sdl_gamepad_right_stick_binding(id);
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        return get_sdl_gamepad_shoulder_combo_binding();
+    default:
+        return GAMEPAD_BIND_NONE;
+    }
+}
+
+static void controller_set_binding_value(int type, int id, int binding)
+{
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        set_sdl_gamepad_button_binding(id, binding);
+        break;
+    case GAMEPAD_CAPTURE_TRIGGER:
+        set_sdl_gamepad_trigger_binding(id, binding);
+        break;
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+        set_sdl_gamepad_left_stick_binding(id, binding);
+        break;
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        set_sdl_gamepad_right_stick_binding(id, binding);
+        break;
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        set_sdl_gamepad_shoulder_combo_binding(binding);
+        break;
+    default:
+        break;
+    }
+}
+
+static int controller_default_binding_value(int type, int id)
+{
+    switch (type) {
+    case GAMEPAD_CAPTURE_BUTTON:
+        return get_sdl_gamepad_default_button_binding(id);
+    case GAMEPAD_CAPTURE_TRIGGER:
+        return get_sdl_gamepad_default_trigger_binding(id);
+    case GAMEPAD_CAPTURE_LEFT_STICK:
+        return get_sdl_gamepad_default_left_stick_binding(id);
+    case GAMEPAD_CAPTURE_RIGHT_STICK:
+        return get_sdl_gamepad_default_right_stick_binding(id);
+    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
+        return get_sdl_gamepad_default_shoulder_combo_binding();
+    default:
+        return GAMEPAD_BIND_NONE;
+    }
+}
 
 static const char* controller_gamepad_button_label(int button)
 {
@@ -5348,54 +5631,28 @@ static void controller_binding_label(int type, int id, char* buf, size_t buflen)
 
 static int controller_action_binding_count(int binding, int* out_type, int* out_id)
 {
+    static const int binding_types[] = {
+        GAMEPAD_CAPTURE_BUTTON,
+        GAMEPAD_CAPTURE_TRIGGER,
+        GAMEPAD_CAPTURE_LEFT_STICK,
+        GAMEPAD_CAPTURE_RIGHT_STICK,
+        GAMEPAD_CAPTURE_SHOULDER_COMBO
+    };
     int count = 0;
 
-    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
-        if (get_sdl_gamepad_button_binding(i) == binding) {
+    for (int t = 0; t < (int)N_ELEMENTS(binding_types); t++) {
+        int type = binding_types[t];
+        int slot_count = controller_binding_slot_count(type);
+
+        for (int i = 0; i < slot_count; i++) {
+            if (controller_binding_value(type, i) != binding)
+                continue;
             if (count == 0 && out_type && out_id) {
-                *out_type = GAMEPAD_CAPTURE_BUTTON;
+                *out_type = type;
                 *out_id = i;
             }
             count++;
         }
-    }
-
-    for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
-        if (get_sdl_gamepad_trigger_binding(i) == binding) {
-            if (count == 0 && out_type && out_id) {
-                *out_type = GAMEPAD_CAPTURE_TRIGGER;
-                *out_id = i;
-            }
-            count++;
-        }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_left_stick_binding(i) == binding) {
-            if (count == 0 && out_type && out_id) {
-                *out_type = GAMEPAD_CAPTURE_LEFT_STICK;
-                *out_id = i;
-            }
-            count++;
-        }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_right_stick_binding(i) == binding) {
-            if (count == 0 && out_type && out_id) {
-                *out_type = GAMEPAD_CAPTURE_RIGHT_STICK;
-                *out_id = i;
-            }
-            count++;
-        }
-    }
-
-    if (get_sdl_gamepad_shoulder_combo_binding() == binding) {
-        if (count == 0 && out_type && out_id) {
-            *out_type = GAMEPAD_CAPTURE_SHOULDER_COMBO;
-            *out_id = 0;
-        }
-        count++;
     }
 
     return count;
@@ -5420,17 +5677,7 @@ static void controller_action_binding_label(int binding, char* buf, size_t bufle
 
 static bool controller_binding_matches_action(int binding, int type, int id)
 {
-    if (type == GAMEPAD_CAPTURE_BUTTON)
-        return get_sdl_gamepad_button_binding(id) == binding;
-    if (type == GAMEPAD_CAPTURE_TRIGGER)
-        return get_sdl_gamepad_trigger_binding(id) == binding;
-    if (type == GAMEPAD_CAPTURE_LEFT_STICK)
-        return get_sdl_gamepad_left_stick_binding(id) == binding;
-    if (type == GAMEPAD_CAPTURE_RIGHT_STICK)
-        return get_sdl_gamepad_right_stick_binding(id) == binding;
-    if (type == GAMEPAD_CAPTURE_SHOULDER_COMBO)
-        return get_sdl_gamepad_shoulder_combo_binding() == binding;
-    return false;
+    return controller_binding_value(type, id) == binding;
 }
 
 void controller_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
@@ -5451,25 +5698,15 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
 
     switch (entry->type) {
     case CONTROLLER_ENTRY_TOGGLE:
-        switch (entry->id) {
-        case CONTROLLER_TOGGLE_ENABLED:
-            SDL_strlcpy(buf, get_sdl_gamepad_enabled() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_AUTO_MODE:
-            SDL_strlcpy(buf, get_sdl_gamepad_auto_mode() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-            SDL_strlcpy(buf, get_sdl_steamdeck_mode() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_DPAD:
-            SDL_strlcpy(buf, get_sdl_gamepad_use_dpad() ? "On" : "Off", buflen);
-            break;
-        case CONTROLLER_TOGGLE_LEFT_STICK:
-            SDL_strlcpy(buf, get_sdl_gamepad_use_left_stick() ? "On" : "Off", buflen);
-            break;
-        default:
+        if (entry->id < CONTROLLER_TOGGLE_ENABLED
+            || entry->id > CONTROLLER_TOGGLE_LEFT_STICK)
+        {
             SDL_strlcpy(buf, "(unknown)", buflen);
-            break;
+        }
+        else
+        {
+            SDL_strlcpy(buf, controller_toggle_value(entry->id) ? "On" : "Off",
+                buflen);
         }
         break;
     case CONTROLLER_ENTRY_ACTION:
@@ -5506,112 +5743,60 @@ static void controller_set_toggle(int toggle_id, bool value)
 
 static void controller_clear_action_bindings(int binding, int skip_type, int skip_id)
 {
+    static const int binding_types[] = {
+        GAMEPAD_CAPTURE_BUTTON,
+        GAMEPAD_CAPTURE_TRIGGER,
+        GAMEPAD_CAPTURE_LEFT_STICK,
+        GAMEPAD_CAPTURE_RIGHT_STICK,
+        GAMEPAD_CAPTURE_SHOULDER_COMBO
+    };
+
     if (binding == GAMEPAD_BIND_NONE)
         return;
 
-    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
-        if (get_sdl_gamepad_button_binding(i) == binding) {
-            if (skip_type == GAMEPAD_CAPTURE_BUTTON && skip_id == i)
-                continue;
-            set_sdl_gamepad_button_binding(i, GAMEPAD_BIND_NONE);
-        }
-    }
+    for (int t = 0; t < (int)N_ELEMENTS(binding_types); t++) {
+        int type = binding_types[t];
+        int slot_count = controller_binding_slot_count(type);
 
-    for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
-        if (get_sdl_gamepad_trigger_binding(i) == binding) {
-            if (skip_type == GAMEPAD_CAPTURE_TRIGGER && skip_id == i)
+        for (int i = 0; i < slot_count; i++) {
+            if (controller_binding_value(type, i) != binding)
                 continue;
-            set_sdl_gamepad_trigger_binding(i, GAMEPAD_BIND_NONE);
-        }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_left_stick_binding(i) == binding) {
-            if (skip_type == GAMEPAD_CAPTURE_LEFT_STICK && skip_id == i)
+            if (skip_type == type && skip_id == i)
                 continue;
-            set_sdl_gamepad_left_stick_binding(i, GAMEPAD_BIND_NONE);
+            controller_set_binding_value(type, i, GAMEPAD_BIND_NONE);
         }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_right_stick_binding(i) == binding) {
-            if (skip_type == GAMEPAD_CAPTURE_RIGHT_STICK && skip_id == i)
-                continue;
-            set_sdl_gamepad_right_stick_binding(i, GAMEPAD_BIND_NONE);
-        }
-    }
-
-    if (get_sdl_gamepad_shoulder_combo_binding() == binding) {
-        if (!(skip_type == GAMEPAD_CAPTURE_SHOULDER_COMBO))
-            set_sdl_gamepad_shoulder_combo_binding(GAMEPAD_BIND_NONE);
     }
 }
 
 static void controller_assign_action_binding(int binding, int type, int id)
 {
     controller_clear_action_bindings(binding, type, id);
-
-    if (type == GAMEPAD_CAPTURE_BUTTON) {
-        set_sdl_gamepad_button_binding(id, binding);
-    } else if (type == GAMEPAD_CAPTURE_TRIGGER) {
-        set_sdl_gamepad_trigger_binding(id, binding);
-    } else if (type == GAMEPAD_CAPTURE_LEFT_STICK) {
-        set_sdl_gamepad_left_stick_binding(id, binding);
-    } else if (type == GAMEPAD_CAPTURE_RIGHT_STICK) {
-        set_sdl_gamepad_right_stick_binding(id, binding);
-    } else if (type == GAMEPAD_CAPTURE_SHOULDER_COMBO) {
-        set_sdl_gamepad_shoulder_combo_binding(binding);
-    }
+    controller_set_binding_value(type, id, binding);
 }
 
 static bool controller_action_default_binding(int binding, int* out_type, int* out_id)
 {
-    for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
-        if (get_sdl_gamepad_default_button_binding(i) == binding) {
+    static const int binding_types[] = {
+        GAMEPAD_CAPTURE_BUTTON,
+        GAMEPAD_CAPTURE_TRIGGER,
+        GAMEPAD_CAPTURE_LEFT_STICK,
+        GAMEPAD_CAPTURE_RIGHT_STICK,
+        GAMEPAD_CAPTURE_SHOULDER_COMBO
+    };
+
+    for (int t = 0; t < (int)N_ELEMENTS(binding_types); t++) {
+        int type = binding_types[t];
+        int slot_count = controller_binding_slot_count(type);
+
+        for (int i = 0; i < slot_count; i++) {
+            if (controller_default_binding_value(type, i) != binding)
+                continue;
             if (out_type)
-                *out_type = GAMEPAD_CAPTURE_BUTTON;
+                *out_type = type;
             if (out_id)
                 *out_id = i;
             return true;
         }
-    }
-
-    for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
-        if (get_sdl_gamepad_default_trigger_binding(i) == binding) {
-            if (out_type)
-                *out_type = GAMEPAD_CAPTURE_TRIGGER;
-            if (out_id)
-                *out_id = i;
-            return true;
-        }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_default_left_stick_binding(i) == binding) {
-            if (out_type)
-                *out_type = GAMEPAD_CAPTURE_LEFT_STICK;
-            if (out_id)
-                *out_id = i;
-            return true;
-        }
-    }
-
-    for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        if (get_sdl_gamepad_default_right_stick_binding(i) == binding) {
-            if (out_type)
-                *out_type = GAMEPAD_CAPTURE_RIGHT_STICK;
-            if (out_id)
-                *out_id = i;
-            return true;
-        }
-    }
-
-    if (get_sdl_gamepad_default_shoulder_combo_binding() == binding) {
-        if (out_type)
-            *out_type = GAMEPAD_CAPTURE_SHOULDER_COMBO;
-        if (out_id)
-            *out_id = 0;
-        return true;
     }
 
     return false;
@@ -6268,12 +6453,10 @@ static errr keymap_dump(cptr fname)
  */
 void do_cmd_macros(void)
 {
-    char ch;
-
+    int choice = 0;
+    int highlight = 1;
     char tmp[1024];
-
     char pat[1024];
-
     int mode;
 
     // Determine the keyset
@@ -6296,15 +6479,11 @@ void do_cmd_macros(void)
         do_cmd_redraw();
     }
 
-    /* Save screen */
-    screen_save();
-
     /* Process requests until done */
     while (1)
     {
         int term_wid = 80;
         int term_hgt = 24;
-        int title_row = 1;
         int menu_row = 3;
         int action_label_row;
         int action_row;
@@ -6317,47 +6496,17 @@ void do_cmd_macros(void)
         command_row = MAX(action_row + 1, term_hgt - 2);
         input_row = MAX(command_row + 1, term_hgt - 1);
 
-        /* Clear screen */
-        Term_clear();
-
-        /* Describe */
-        prt("Interact with Macros", title_row, 0);
-
-        /* Describe that action */
-        prt("Current action:", action_label_row, 0);
-
-        /* Analyze the current action */
-        ascii_to_text(tmp, sizeof(tmp), macro_buffer);
-
-        /* Display the current action */
-        Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
-
-        /* Selections */
-        prt("(1) Load a user pref file", menu_row, 5);
-#ifdef ALLOW_MACROS
-        prt("(2) Append macros to a file", menu_row + 1, 5);
-        prt("(3) Query a macro", menu_row + 2, 5);
-        prt("(4) Create a macro", menu_row + 3, 5);
-        prt("(5) Remove a macro", menu_row + 4, 5);
-        prt("(6) Append keymaps to a file", menu_row + 5, 5);
-        prt("(7) Query a keymap", menu_row + 6, 5);
-        prt("(8) Create a keymap", menu_row + 7, 5);
-        prt("(9) Remove a keymap", menu_row + 8, 5);
-        prt("(0) Enter a new action", menu_row + 9, 5);
-#endif /* ALLOW_MACROS */
-
-        /* Prompt */
-        prt("Command: ", command_row, 0);
-
-        /* Get a command */
-        ch = settings_wait_key();
-
-        /* Leave */
-        if (ch == ESCAPE)
+        choice = macros_menu(&highlight);
+        if (choice == 0)
             break;
 
+        clear_from(0);
+        prt("Current action:", action_label_row, 0);
+        ascii_to_text(tmp, sizeof(tmp), macro_buffer);
+        Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
+
         /* Load a user pref file */
-        if (ch == '1')
+        if (choice == 1)
         {
             /* Ask for and load a user pref file */
             do_cmd_pref_file_hack(command_row);
@@ -6366,7 +6515,7 @@ void do_cmd_macros(void)
 #ifdef ALLOW_MACROS
 
         /* Save macros */
-        else if (ch == '2')
+        else if (choice == 2)
         {
             char ftmp[80];
 
@@ -6391,7 +6540,7 @@ void do_cmd_macros(void)
         }
 
         /* Query a macro */
-        else if (ch == '3')
+        else if (choice == 3)
         {
             int k;
 
@@ -6432,7 +6581,7 @@ void do_cmd_macros(void)
         }
 
         /* Create a macro */
-        else if (ch == '4')
+        else if (choice == 4)
         {
             /* Prompt */
             prt("Command: Create a macro", command_row, 0);
@@ -6467,7 +6616,7 @@ void do_cmd_macros(void)
         }
 
         /* Remove a macro */
-        else if (ch == '5')
+        else if (choice == 5)
         {
             /* Prompt */
             prt("Command: Remove a macro", command_row, 0);
@@ -6486,7 +6635,7 @@ void do_cmd_macros(void)
         }
 
         /* Save keymaps */
-        else if (ch == '6')
+        else if (choice == 6)
         {
             char ftmp[80];
 
@@ -6511,7 +6660,7 @@ void do_cmd_macros(void)
         }
 
         /* Query a keymap */
-        else if (ch == '7')
+        else if (choice == 7)
         {
             cptr act;
 
@@ -6552,7 +6701,7 @@ void do_cmd_macros(void)
         }
 
         /* Create a keymap */
-        else if (ch == '8')
+        else if (choice == 8)
         {
             /* Prompt */
             prt("Command: Create a keymap", command_row, 0);
@@ -6590,7 +6739,7 @@ void do_cmd_macros(void)
         }
 
         /* Remove a keymap */
-        else if (ch == '9')
+        else if (choice == 9)
         {
             /* Prompt */
             prt("Command: Remove a keymap", command_row, 0);
@@ -6612,7 +6761,7 @@ void do_cmd_macros(void)
         }
 
         /* Enter a new action */
-        else if (ch == '0')
+        else if (choice == 10)
         {
             /* Prompt */
             prt("Command: Enter a new action", command_row, 0);
@@ -6643,8 +6792,6 @@ void do_cmd_macros(void)
         /* Flush messages */
         message_flush();
     }
-
-    screen_load();
 }
 
 /*
@@ -6796,55 +6943,26 @@ static void askfor_shade(byte* attr, int y)
  */
 void do_cmd_visuals(void)
 {
-    int ch;
+    int choice = 0;
     int cx;
-
+    int highlight = 1;
     int i;
-
     SDL_IOStream* fff;
-
     char buf[1024];
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
 
-    /* Save screen */
-    screen_save();
-
     /* Interact until done */
     while (1)
     {
-        /* Clear screen */
-        Term_clear();
-
-        /* Ask for a choice */
-        prt("Interact with Visuals", 2, 0);
-
-        /* Give some choices */
-        prt("(1) Load a user pref file", 4, 5);
-#ifdef ALLOW_VISUALS
-        prt("(2) Dump monster attr/chars", 5, 5);
-        prt("(3) Dump object attr/chars", 6, 5);
-        prt("(4) Dump feature attr/chars", 7, 5);
-        prt("(5) Dump flavor attr/chars", 8, 5);
-        prt("(6) Change monster attr/chars", 9, 5);
-        prt("(7) Change object attr/chars", 10, 5);
-        prt("(8) Change feature attr/chars", 11, 5);
-        prt("(9) Change flavor attr/chars", 12, 5);
-#endif
-        prt("(0) Reset visuals", 13, 5);
-
-        /* Prompt */
-        prt("Command: ", 15, 0);
-
-        /* Prompt */
-        ch = settings_wait_key();
-
-        /* Done */
-        if (ch == ESCAPE)
+        choice = visuals_menu(&highlight);
+        if (choice == 0)
             break;
 
-        if ((ch >= '6') && (ch <= '9'))
+        clear_from(0);
+
+        if (choice >= 6 && choice <= 9)
         {
             int term_wid = 80;
             int term_hgt = 24;
@@ -6859,7 +6977,7 @@ void do_cmd_visuals(void)
         }
 
         /* Load a user pref file */
-        if (ch == '1')
+        if (choice == 1)
         {
             /* Ask for and load a user pref file */
             do_cmd_pref_file_hack(15);
@@ -6868,7 +6986,7 @@ void do_cmd_visuals(void)
 #ifdef ALLOW_VISUALS
 
         /* Dump monster attr/chars */
-        else if (ch == '2')
+        else if (choice == 2)
         {
             static cptr mark = "Monster attr/chars";
             char ftmp[80];
@@ -6942,7 +7060,7 @@ void do_cmd_visuals(void)
         }
 
         /* Dump object attr/chars */
-        else if (ch == '3')
+        else if (choice == 3)
         {
             static cptr mark = "Object attr/chars";
             char ftmp[80];
@@ -7017,7 +7135,7 @@ void do_cmd_visuals(void)
         }
 
         /* Dump feature attr/chars */
-        else if (ch == '4')
+        else if (choice == 4)
         {
             static cptr mark = "Feature attr/chars";
             char ftmp[80];
@@ -7092,7 +7210,7 @@ void do_cmd_visuals(void)
         }
 
         /* Dump flavor attr/chars */
-        else if (ch == '5')
+        else if (choice == 5)
         {
             static cptr mark = "Flavor attr/chars";
             char ftmp[80];
@@ -7163,7 +7281,7 @@ void do_cmd_visuals(void)
         }
 
         /* Modify monster attr/chars */
-        else if (ch == '6')
+        else if (choice == 6)
         {
             static int r = 0;
 
@@ -7245,7 +7363,7 @@ void do_cmd_visuals(void)
         }
 
         /* Modify object attr/chars */
-        else if (ch == '7')
+        else if (choice == 7)
         {
             static int k = 0;
 
@@ -7327,7 +7445,7 @@ void do_cmd_visuals(void)
         }
 
         /* Modify feature attr/chars */
-        else if (ch == '8')
+        else if (choice == 8)
         {
             static int f = 0;
 
@@ -7409,7 +7527,7 @@ void do_cmd_visuals(void)
         }
 
         /* Modify flavor attr/chars */
-        else if (ch == '9')
+        else if (choice == 9)
         {
             static int f = 0;
 
@@ -7494,7 +7612,7 @@ void do_cmd_visuals(void)
 #endif /* ALLOW_VISUALS */
 
         /* Reset visuals */
-        else if (ch == '0')
+        else if (choice == 10)
         {
             /* Reset */
             reset_visuals(true);
@@ -7512,9 +7630,6 @@ void do_cmd_visuals(void)
         /* Flush messages */
         message_flush();
     }
-
-    /* Load screen */
-    screen_load();
 }
 
 /*
@@ -8002,12 +8117,10 @@ static void modify_colors(void)
  */
 void do_cmd_colors(void)
 {
-    int ch;
-
+    int choice = 0;
+    int highlight = 1;
     int i;
-
     SDL_IOStream* fff;
-
     char buf[1024];
 
     /* File type is "TEXT" */
@@ -8020,37 +8133,17 @@ void do_cmd_colors(void)
         do_cmd_redraw();
     }
 
-    /* Save screen */
-    screen_save();
-
     /* Interact until done */
     while (1)
     {
-        /* Clear screen */
-        Term_clear();
-
-        /* Ask for a choice */
-        prt("Interact with Colors", 2, 0);
-
-        /* Give some choices */
-        prt("(1) Load a user pref file", 4, 5);
-#ifdef ALLOW_COLORS
-        prt("(2) Dump colors", 5, 5);
-        prt("(3) Modify colors", 6, 5);
-#endif /* ALLOW_COLORS */
-
-        /* Prompt */
-        prt("Command: ", 8, 0);
-
-        /* Prompt */
-        ch = settings_wait_key();
-
-        /* Done */
-        if (ch == ESCAPE)
+        choice = colors_menu(&highlight);
+        if (choice == 0)
             break;
 
+        clear_from(0);
+
         /* Load a user pref file */
-        if (ch == '1')
+        if (choice == 1)
         {
             /* Ask for and load a user pref file */
             do_cmd_pref_file_hack(8);
@@ -8067,7 +8160,7 @@ void do_cmd_colors(void)
 #ifdef ALLOW_COLORS
 
         /* Dump colors */
-        else if (ch == '2')
+        else if (choice == 2)
         {
             static cptr mark = "Colors";
             char ftmp[80];
@@ -8151,7 +8244,7 @@ void do_cmd_colors(void)
         }
 
         /* Edit colors */
-        else if (ch == '3')
+        else if (choice == 3)
         {
             modify_colors();
         }
@@ -8167,9 +8260,6 @@ void do_cmd_colors(void)
         /* Flush messages */
         message_flush();
     }
-
-    /* Load screen */
-    screen_load();
 }
 
 

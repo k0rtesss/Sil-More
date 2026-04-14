@@ -174,6 +174,12 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
             TERM_L_WHITE, "Keypad");
 }
 
+typedef enum show_file_scene_result {
+    SHOW_FILE_SCENE_RESULT_SHOWN = 0,
+    SHOW_FILE_SCENE_RESULT_QUERY_EXIT,
+    SHOW_FILE_SCENE_RESULT_ERROR
+} show_file_scene_result;
+
 static bool show_buffer_information_scene(cptr main_buffer, int line)
 {
     ui_information_scene_scope scope;
@@ -187,12 +193,11 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
     while (true)
     {
         app_ui_scene scene;
-        int wid;
         int hgt;
         int dir;
         int ch;
 
-        show_file_document_layout_size(&wid, &hgt);
+        show_file_document_layout_size(NULL, &hgt);
         line = show_buffer_clamp_line(line, size, hgt);
         if (!show_buffer_build_ui_scene(&scene, main_buffer, line, size, hgt)
             || !ui_information_scene_present_ui(&scene))
@@ -247,7 +252,8 @@ static bool show_file_resume_information_scene(
     return ui_information_scene_enter(scope);
 }
 
-static bool show_file_information_scene(cptr name, cptr what, int line)
+static show_file_scene_result show_file_information_scene(
+    cptr name, cptr what, int line)
 {
     ui_information_scene_scope scope;
     int i, k, n;
@@ -268,10 +274,10 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
     char buf[1024];
     char lc_buf[1024];
     char hook[26][32];
-    int wid, hgt;
+    int hgt;
 
     if (!ui_information_scene_enter(&scope))
-        return false;
+        return SHOW_FILE_SCENE_RESULT_ERROR;
 
     SDL_strlcpy(finder, "", sizeof(finder));
     SDL_strlcpy(shower, "", sizeof(shower));
@@ -279,7 +285,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
     for (i = 0; i < 26; i++)
         hook[i][0] = '\0';
 
-    show_file_document_layout_size(&wid, &hgt);
+    show_file_document_layout_size(NULL, &hgt);
 
     SDL_strlcpy(filename, name, sizeof(filename));
     n = strlen(filename);
@@ -309,7 +315,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
         log_warn("Failed to open help file: %s", name);
         msg_format("Cannot open '%s'.", name);
         message_flush();
-        return true;
+        return SHOW_FILE_SCENE_RESULT_SHOWN;
     }
 
     log_debug("Successfully opened help file: %s", name);
@@ -356,9 +362,9 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
         if (!panel)
         {
             ui_information_scene_leave(&scope);
-            return false;
+            return SHOW_FILE_SCENE_RESULT_ERROR;
         }
-        show_file_document_layout_size(&wid, &hgt);
+        show_file_document_layout_size(NULL, &hgt);
 
         if (line > (size - (hgt - 5)))
             line = size - (hgt - 5);
@@ -372,7 +378,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
             if (!fff)
             {
                 ui_information_scene_leave(&scope);
-                return true;
+                return SHOW_FILE_SCENE_RESULT_SHOWN;
             }
             next = 0;
         }
@@ -394,7 +400,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                     caption))
             {
                 ui_information_scene_leave(&scope);
-                return false;
+                return SHOW_FILE_SCENE_RESULT_ERROR;
             }
         }
 
@@ -424,7 +430,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                     TERM_WHITE, buf))
             {
                 ui_information_scene_leave(&scope);
-                return false;
+                return SHOW_FILE_SCENE_RESULT_ERROR;
             }
 
             if (shower[0])
@@ -442,7 +448,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                             (s16b)(str - lc_buf), TERM_YELLOW, match))
                     {
                         ui_information_scene_leave(&scope);
-                        return false;
+                        return SHOW_FILE_SCENE_RESULT_ERROR;
                     }
                     str += len;
                 }
@@ -465,7 +471,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                     TERM_WHITE, "[Press a Number, or ESC to exit.]"))
             {
                 ui_information_scene_leave(&scope);
-                return false;
+                return SHOW_FILE_SCENE_RESULT_ERROR;
             }
         }
         else if (size <= hgt - 5)
@@ -476,7 +482,7 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                     TERM_L_WHITE, "ESC"))
             {
                 ui_information_scene_leave(&scope);
-                return false;
+                return SHOW_FILE_SCENE_RESULT_ERROR;
             }
         }
         else
@@ -494,14 +500,14 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
                     TERM_L_WHITE, "Keypad"))
             {
                 ui_information_scene_leave(&scope);
-                return false;
+                return SHOW_FILE_SCENE_RESULT_ERROR;
             }
         }
 
         if (!ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
-            return false;
+            return SHOW_FILE_SCENE_RESULT_ERROR;
         }
 
         ch = (char)ui_information_scene_wait_key();
@@ -589,7 +595,8 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
 
     sdl_fclose(fff);
     ui_information_scene_leave(&scope);
-    return (ch != '?');
+    return (ch == '?') ? SHOW_FILE_SCENE_RESULT_QUERY_EXIT
+                       : SHOW_FILE_SCENE_RESULT_SHOWN;
 }
 
 /*
@@ -598,151 +605,20 @@ static bool show_file_information_scene(cptr name, cptr what, int line)
  */
 bool show_buffer(cptr main_buffer, int line)
 {
-    if (show_buffer_information_scene(main_buffer, line))
+    if (!ui_information_scene_supported())
+    {
+        log_warn("buffer viewer: snapshot renderer required; legacy buffer renderer removed");
+        msg_print("Text viewer requires the snapshot UI renderer.");
         return true;
-
-    int i, j, k;
-    int dir;
-
-    char ch;
-
-    int next = 0;
-
-    char buf[1024];
-
-    int wid, hgt;
-
-    /* Get current terminal size */
-    Term_get_size(&wid, &hgt);
-    if (hgt <= 0)
-        hgt = 24;
-
-    /* Count lines in the buffer */
-    int size = 0;
-    for (j = 0; main_buffer[j] != '\0'; j++)
-    {
-        if (main_buffer[j] == '\n')
-            size++;
     }
 
-    /* Add one more if last line doesn't end with newline */
-    if (j > 0 && main_buffer[j - 1] != '\n')
-        size++;
-
-    /* Display the file */
-    while (true)
+    if (!show_buffer_information_scene(main_buffer, line))
     {
-        /* Clear screen */
-        Term_clear();
-
-        /* Restrict the visible range */
-        if (line > (size - (hgt - 5)))
-            line = size - (hgt - 5);
-        if (line < 0)
-            line = 0;
-
-        /* Goto the selected line */
-        next = 0;
-        for (j = 0; true; j++)
-        {
-            if (main_buffer[j] == '\n')
-                next++;
-
-            if ((next == line) || (main_buffer[j] == '\0'))
-                break;
-        }
-
-        /* Need to step forward a character when not starting with the first line */
-        if (main_buffer[j] == '\n')
-            j++;
-
-        /* Dump the next lines of the file */
-        for (i = 0; i < hgt - 5;)
-        {
-            /* Get a line of the file or stop */
-            k = 0;
-            while (true)
-            {
-                ch = main_buffer[j];
-
-                if (ch == '\0')
-                    break;
-
-                if (ch == '\n')
-                {
-                    j++;
-                    break;
-                }
-
-                buf[k] = ch;
-
-                k++;
-                j++;
-            }
-            buf[k] = '\0';
-
-            /* Dump the line */
-            Term_putstr(0, i + 2, -1, TERM_WHITE, buf);
-
-            /* Count the printed lines */
-            i++;
-        }
-
-        /* Prompt -- small files */
-        if (size <= hgt - 5)
-        {
-            Term_putstr(1, hgt - 2, -1, TERM_SLATE, "(press ESC to exit)");
-            Term_putstr(8, hgt - 2, -1, TERM_L_WHITE, "ESC");
-            Term_putstr(20, hgt - 2, -1, TERM_L_WHITE, "");
-        }
-
-        /* Prompt -- large files */
-        else
-        {
-            Term_putstr(1, hgt - 2, -1, TERM_SLATE,
-                "(press ESC to exit, Space for next page, Arrows/Keypad to "
-                "scroll)");
-            Term_putstr(8, hgt - 2, -1, TERM_L_WHITE, "ESC");
-            Term_putstr(21, hgt - 2, -1, TERM_L_WHITE, "Space");
-            Term_putstr(42, hgt - 2, -1, TERM_L_WHITE, "Arrows");
-            Term_putstr(49, hgt - 2, -1, TERM_L_WHITE, "Keypad");
-            Term_putstr(67, hgt - 2, -1, TERM_L_WHITE, "");
-        }
-
-        /* Get a keypress */
-        ch = inkey();
-
-        dir = target_dir(ch);
-        if (dir == 8 || dir == 2)
-            ch = I2D(dir);
-
-        /* Back up one line */
-        if ((ch == '8') || (ch == '='))
-        {
-            line = line - 1;
-            if (line < 0)
-                line = 0;
-        }
-
-        /* Advance one line */
-        if ((ch == '2') || (ch == '\n') || (ch == '\r'))
-        {
-            line = line + 1;
-        }
-
-        /* Advance one full page */
-        if ((ch == '3') || (ch == ' '))
-        {
-            line = line + (hgt - 5);
-        }
-
-        /* Exit on escape */
-        if (ch == ESCAPE)
-            break;
+        log_warn("buffer viewer: information-scene presentation failed on the snapshot renderer path");
+        msg_print("Text viewer unavailable.");
     }
 
-    /* Done */
-    return (true);
+    return true;
 }
 
 /*
@@ -755,434 +631,22 @@ bool show_buffer(cptr main_buffer, int line)
  */
 bool show_file(cptr name, cptr what, int line)
 {
-    if (show_file_information_scene(name, what, line))
+    show_file_scene_result result;
+
+    if (!ui_information_scene_supported())
+    {
+        log_warn("file viewer: snapshot renderer required; legacy file renderer removed");
+        msg_print("File viewer requires the snapshot UI renderer.");
         return true;
-
-    int i, k, n;
-
-    char ch;
-
-    /* Number of "real" lines passed by */
-    int next = 0;
-
-    /* Number of "real" lines in the file */
-    int size;
-
-    /* Backup value for "line" */
-    int back = 0;
-
-    /* This screen has sub-screens */
-    bool menu = false;
-
-    /* Case sensitive search */
-    bool case_sensitive = false;
-
-    /* Current help file */
-    SDL_IOStream* fff = NULL;
-
-    /* Find this string (if any) */
-    char* find = NULL;
-
-    /* Jump to this tag */
-    cptr tag = NULL;
-
-    /* Hold a string to find */
-    char finder[80];
-
-    /* Hold a string to show */
-    char shower[80];
-
-    /* Filename */
-    char filename[1024];
-
-    /* Describe this thing */
-    char caption[128];
-
-    /* Path buffer */
-    char path[1024];
-
-    /* General buffer */
-    char buf[1024];
-
-    /* Lower case version of the buffer, for searching */
-    char lc_buf[1024];
-
-    /* Sub-menu information */
-    char hook[26][32];
-
-    int wid, hgt;
-
-    /* Wipe finder */
-    SDL_strlcpy(finder, "", sizeof(finder));
-
-    /* Wipe shower */
-    SDL_strlcpy(shower, "", sizeof(shower));
-
-    /* Wipe caption */
-    SDL_strlcpy(caption, "", sizeof(caption));
-
-    /* Wipe the hooks */
-    for (i = 0; i < 26; i++)
-        hook[i][0] = '\0';
-
-    /* Get size */
-    Term_get_size(&wid, &hgt);
-
-    /* Copy the filename */
-    SDL_strlcpy(filename, name, sizeof(filename));
-
-    n = strlen(filename);
-
-    /* Extract the tag from the filename */
-    for (i = 0; i < n; i++)
-    {
-        if (filename[i] == '#')
-        {
-            filename[i] = '\0';
-            tag = filename + i + 1;
-            break;
-        }
     }
 
-    /* Redirect the name */
-    name = filename;
-
-    /* Hack XXX XXX XXX */
-    if (what)
+    result = show_file_information_scene(name, what, line);
+    if (result == SHOW_FILE_SCENE_RESULT_ERROR)
     {
-        /* Caption */
-        SDL_strlcpy(caption, what, sizeof(caption));
-
-        /* Get the filename */
-        SDL_strlcpy(path, name, sizeof(path));
-
-        log_debug("Opening help file: %s", path);
-
-        /* Open */
-        fff = sdl_fopen(path, "r");
+        log_warn("file viewer: information-scene presentation failed on the snapshot renderer path");
+        msg_print("File viewer unavailable.");
+        return true;
     }
 
-    /* Oops */
-    if (!fff)
-    {
-        log_warn("Failed to open help file: %s", name);
-
-        /* Message */
-        msg_format("Cannot open '%s'.", name);
-        message_flush();
-
-        /* Oops */
-        return (true);
-    }
-
-    log_debug("Successfully opened help file: %s", name);
-
-    /* Pre-Parse the file */
-    while (true)
-    {
-        /* Read a line or stop */
-        if (sdl_fgets(fff, buf, sizeof(buf)))
-            break;
-
-        /* XXX Parse "menu" items */
-        if (prefix(buf, "***** "))
-        {
-            char b1 = '[', b2 = ']';
-
-            /* Notice "menu" requests */
-            if ((buf[6] == b1) && isalpha((unsigned char)buf[7])
-                && (buf[8] == b2) && (buf[9] == ' '))
-            {
-                /* This is a menu file */
-                menu = true;
-
-                /* Extract the menu item */
-                k = A2I(buf[7]);
-
-                /* Store the menu item (if valid) */
-                if ((k >= 0) && (k < 26))
-                    SDL_strlcpy(hook[k], buf + 10, sizeof(hook[0]));
-            }
-            /* Notice "tag" requests */
-            else if (buf[6] == '<')
-            {
-                if (tag)
-                {
-                    /* Remove the closing '>' of the tag */
-                    buf[strlen(buf) - 1] = '\0';
-
-                    /* Compare with the requested tag */
-                    if (streq(buf + 7, tag))
-                    {
-                        /* Remember the tagged line */
-                        line = next;
-                    }
-                }
-            }
-
-            /* Skip this */
-            continue;
-        }
-
-        /* Count the "real" lines */
-        next++;
-    }
-
-    /* Save the number of "real" lines */
-    size = next;
-
-    /* Display the file */
-    while (true)
-    {
-        /* Clear screen */
-        Term_clear();
-
-        /* Restrict the visible range */
-        if (line > (size - (hgt - 5)))
-            line = size - (hgt - 5);
-        if (line < 0)
-            line = 0;
-
-        /* Re-open the file if needed */
-        if (next > line)
-        {
-            /* Close it */
-            sdl_fclose(fff);
-
-            /* Hack -- Re-Open the file */
-            fff = sdl_fopen(path, "r");
-
-            /* Oops */
-            if (!fff)
-                return (true);
-
-            /* File has been restarted */
-            next = 0;
-        }
-
-        /* Goto the selected line */
-        while (next < line)
-        {
-            /* Get a line */
-            if (sdl_fgets(fff, buf, sizeof(buf)))
-                break;
-
-            /* Skip tags/links */
-            if (prefix(buf, "***** "))
-                continue;
-
-            /* Count the lines */
-            next++;
-        }
-
-        /* Dump the next lines of the file */
-        for (i = 0; i < hgt - 5;)
-        {
-            /* Hack -- track the "first" line */
-            if (!i)
-                line = next;
-
-            /* Get a line of the file or stop */
-            if (sdl_fgets(fff, buf, sizeof(buf)))
-                break;
-
-            /* Hack -- skip "special" lines */
-            if (prefix(buf, "***** "))
-                continue;
-
-            /* Count the "real" lines */
-            next++;
-
-            /* Make a copy of the current line for searching */
-            SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
-
-            /* Make the line lower case */
-            if (!case_sensitive)
-                string_lower(lc_buf);
-
-            /* Hack -- keep searching */
-            if (find && !i && !strstr(lc_buf, find))
-                continue;
-
-            /* Hack -- stop searching */
-            find = NULL;
-
-            /* Dump the line */
-            Term_putstr(0, i + 2, -1, TERM_WHITE, buf);
-
-            /* Hilite "shower" */
-            if (shower[0])
-            {
-                cptr str = lc_buf;
-
-                /* Display matches */
-                while ((str = strstr(str, shower)) != NULL)
-                {
-                    int len = strlen(shower);
-
-                    /* Display the match */
-                    Term_putstr(str - lc_buf, i + 2, len, TERM_YELLOW,
-                        &buf[str - lc_buf]);
-
-                    /* Advance */
-                    str += len;
-                }
-            }
-
-            /* Count the printed lines */
-            i++;
-        }
-
-        /* Hack -- failed search */
-        if (find)
-        {
-            bell("Search string not found!");
-            line = back;
-            find = NULL;
-            continue;
-        }
-
-        /* Prompt -- menu screen */
-        if (menu)
-        {
-            prt("[Press a Number, or ESC to exit.]", hgt - 1, 0);
-        }
-
-        /* Prompt -- small files */
-        else if (size <= hgt - 5)
-        {
-            Term_putstr(1, hgt - 2, -1, TERM_SLATE, "(press ESC to exit)");
-            Term_putstr(8, hgt - 2, -1, TERM_L_WHITE, "ESC");
-            Term_putstr(20, hgt - 2, -1, TERM_L_WHITE, "");
-        }
-
-        /* Prompt -- large files */
-        else
-        {
-            Term_putstr(1, hgt - 2, -1, TERM_SLATE,
-                "(press ESC to exit, Space for next page, Arrows/Keypad to "
-                "scroll)");
-            Term_putstr(8, hgt - 2, -1, TERM_L_WHITE, "ESC");
-            Term_putstr(21, hgt - 2, -1, TERM_L_WHITE, "Space");
-            Term_putstr(42, hgt - 2, -1, TERM_L_WHITE, "Arrows");
-            Term_putstr(49, hgt - 2, -1, TERM_L_WHITE, "Keypad");
-            Term_putstr(67, hgt - 2, -1, TERM_L_WHITE, "");
-        }
-
-        /* Get a keypress */
-        ch = inkey();
-
-        /* Exit the help */
-        if (ch == '?')
-            break;
-
-        /* Toggle case sensitive on/off */
-        if (ch == '!')
-            case_sensitive = !case_sensitive;
-
-        /* Try showing */
-        if (ch == '&')
-        {
-            /* Get "shower" */
-            prt("Show: ", hgt - 1, 0);
-            (void)askfor_aux(shower, sizeof(shower));
-
-            /* Make the "shower" lowercase */
-            if (!case_sensitive)
-                string_lower(shower);
-        }
-
-        /* Try finding */
-        if (ch == '/')
-        {
-            /* Get "finder" */
-            prt("Find: ", hgt - 1, 0);
-            if (askfor_aux(finder, sizeof(finder)))
-            {
-                /* Find it */
-                find = finder;
-                back = line;
-                line = line + 1;
-
-                /* Make the "finder" lowercase */
-                if (!case_sensitive)
-                    string_lower(finder);
-
-                /* Show it */
-                SDL_strlcpy(shower, finder, sizeof(shower));
-            }
-        }
-
-        /* Go to a specific line */
-        if (ch == '#')
-        {
-            char tmp[80];
-            prt("Goto Line: ", hgt - 1, 0);
-            SDL_strlcpy(tmp, "0", sizeof(tmp));
-            if (askfor_aux(tmp, sizeof(tmp)))
-            {
-                line = atoi(tmp);
-            }
-        }
-
-        /* Back up one line */
-        if ((ch == '8') || (ch == '='))
-        {
-            line = line - 1;
-            if (line < 0)
-                line = 0;
-        }
-
-        /* Back up one half page */
-        if (ch == '_')
-        {
-            line = line - ((hgt - 5) / 2);
-        }
-
-        /* Back up one full page */
-        if ((ch == '9') || (ch == '-'))
-        {
-            line = line - (hgt - 5);
-        }
-
-        /* Back to the top */
-        if (ch == '7')
-        {
-            line = 0;
-        }
-
-        /* Advance one line */
-        if ((ch == '2') || (ch == '\n') || (ch == '\r'))
-        {
-            line = line + 1;
-        }
-
-        /* Advance one half page */
-        if (ch == '+')
-        {
-            line = line + ((hgt - 5) / 2);
-        }
-
-        /* Advance one full page */
-        if ((ch == '3') || (ch == ' '))
-        {
-            line = line + (hgt - 5);
-        }
-
-        /* Advance to the bottom */
-        if (ch == '1')
-        {
-            line = size;
-        }
-
-        /* Exit on escape */
-        if (ch == ESCAPE)
-            break;
-    }
-
-    /* Close the file */
-    sdl_fclose(fff);
-
-    /* Done */
-    return (ch != '?');
+    return (result != SHOW_FILE_SCENE_RESULT_QUERY_EXIT);
 }

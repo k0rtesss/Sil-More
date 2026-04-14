@@ -1,6 +1,7 @@
 /* File: quest-ui.c */
 
 #include "angband.h"
+#include "app/app-session.h"
 #include "externs.h"
 #include "metarun.h"
 #include "quest/quest.h"
@@ -244,23 +245,84 @@ static bool quest_typewriter_scene_publish(
     return ui_information_scene_present_ui(&scene);
 }
 
-static void quest_typewriter_present(quest_typewriter_scene_state* state,
-    bool* scene_active, ui_information_scene_scope* info_scope)
+static bool quest_typewriter_present(quest_typewriter_scene_state* state,
+    bool scene_active)
 {
-    if (!state || !scene_active || !*scene_active || !state->active)
+    if (!scene_active)
     {
         Term_fresh();
-        return;
+        return true;
     }
 
-    if (!quest_typewriter_scene_publish(state))
+    if (!state || !state->active)
+        return true;
+
+    if (quest_typewriter_scene_publish(state))
+        return true;
+
+    log_warn("quest typewriter: semantic scene publish failed");
+    return false;
+}
+
+static void quest_typewriter_clear_page(bool scene_active,
+    quest_typewriter_scene_state* state)
+{
+    if (!scene_active)
+        Term_clear();
+    quest_typewriter_scene_clear(state);
+}
+
+static void quest_typewriter_write_text(bool scene_active,
+    quest_typewriter_scene_state* state, int row, int col, byte attr, cptr text)
+{
+    if (!scene_active)
+        Term_putstr(col, row, -1, attr, text ? text : "");
+    quest_typewriter_scene_set_text(state, row, col, attr, text);
+}
+
+static void quest_typewriter_write_char(bool scene_active,
+    quest_typewriter_scene_state* state, int row, int col, byte attr, char ch)
+{
+    if (!scene_active)
+        Term_putch(col, row, attr, ch);
+    quest_typewriter_scene_put_char(state, row, col, attr, ch);
+}
+
+static bool quest_typewriter_poll_skip_key(bool scene_active, char* out_key)
+{
+    if (!out_key)
+        return false;
+
+    if (!scene_active)
     {
-        log_warn("quest typewriter: semantic scene publish failed; falling back to terminal refresh");
-        ui_information_scene_leave(info_scope);
-        *scene_active = false;
-        state->active = false;
-        Term_fresh();
+        if (Term_inkey(out_key, false, false) != 0)
+            return false;
+
+        (void)Term_inkey(out_key, false, true);
+        return true;
     }
+
+    {
+        app_session* session = app_session_current();
+        app_input input;
+
+        if (!session || !ui_information_scene_is_active())
+            return false;
+
+        while (app_session_pop_input(session, &input))
+        {
+            if (input.layer != APP_INPUT_LAYER_LEGACY
+                || input.type != APP_INPUT_TYPE_KEY)
+            {
+                continue;
+            }
+
+            *out_key = (char)(input.payload.key.logical_key & 0xFFu);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static bool quest_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
@@ -839,114 +901,6 @@ static bool do_cmd_quest_status_information_scene(void)
 }
 
 /*
- * Display wrapped text for quest status - simple word wrapping
- */
-static void display_wrapped_text(int col, int *row, cptr text, byte color, int max_width)
-{
-    char line_buf[256];
-    int line_pos = 0;
-    int effective_width = max_width - col - 4; /* Leave margin for indentation */
-    int text_len = strlen(text);
-    int word_start = 0;
-    int i = 0;
-    int loop_count = 0; /* Safety counter for this function call */
-    
-    if (effective_width < 20) effective_width = 20; /* Minimum width */
-    
-    line_buf[0] = '\0';
-    
-    while (i <= text_len) {
-        /* Safety check to prevent infinite loop */
-        loop_count++;
-        if (loop_count > 1000) {
-            log_warn("display_wrapped_text: safety break, possible infinite loop (text_len=%d, i=%d)", text_len, i);
-            break;
-        }
-        
-        /* End of string or found a space */
-        if (i == text_len || text[i] == ' ') {
-            /* Extract the current word */
-            int word_len = i - word_start;
-            char word[128];
-            
-            if (word_len > 0 && word_len < (int)sizeof(word)) {
-                /* Copy the word manually to avoid buffer issues */
-                int copy_len = word_len;
-                if (copy_len >= (int)sizeof(word)) copy_len = (int)sizeof(word) - 1;
-                
-                /* Manual copy to avoid strncpy issues */
-                int j;
-                for (j = 0; j < copy_len; j++) {
-                    word[j] = text[word_start + j];
-                }
-                word[copy_len] = '\0';
-                
-                /* Check if adding this word would exceed the line width */
-                int new_line_len = line_pos + (line_pos > 0 ? 1 : 0) + copy_len;
-                
-                if (new_line_len > effective_width && line_pos > 0) {
-                    /* Output current line and start new line with this word */
-                    Term_putstr(col + 2, (*row)++, -1, color, line_buf);
-                    
-                    /* Check if the word itself is too long for a line */
-                    if (copy_len > effective_width) {
-                        /* Break the word across multiple lines */
-                        int word_pos = 0;
-                        while (word_pos < copy_len) {
-                            int chunk_len = effective_width;
-                            if (word_pos + chunk_len > copy_len) {
-                                chunk_len = copy_len - word_pos;
-                            }
-                            
-                            /* Extract chunk of the word */
-                            char chunk[256];
-                            int k;
-                            for (k = 0; k < chunk_len && word_pos + k < copy_len; k++) {
-                                chunk[k] = word[word_pos + k];
-                            }
-                            chunk[k] = '\0';
-                            
-                            /* Output this chunk */
-                            Term_putstr(col + 2, (*row)++, -1, color, chunk);
-                            word_pos += chunk_len;
-                        }
-                        
-                        /* Reset line buffer */
-                        line_buf[0] = '\0';
-                        line_pos = 0;
-                    } else {
-                        /* Word fits on a new line */
-                        SDL_strlcpy(line_buf, word, sizeof(line_buf));
-                        line_pos = copy_len;
-                    }
-                } else {
-                    /* Add word to current line */
-                    if (line_pos > 0) {
-                        SDL_strlcat(line_buf, " ", sizeof(line_buf));
-                        line_pos++;
-                    }
-                    SDL_strlcat(line_buf, word, sizeof(line_buf));
-                    line_pos += copy_len;
-                }
-            }
-            
-            /* Skip spaces and move to next word */
-            while (i < text_len && text[i] == ' ') {
-                i++;
-            }
-            word_start = i;
-        } else {
-            i++;
-        }
-    }
-    
-    /* Output any remaining text in the buffer */
-    if (line_pos > 0) {
-        Term_putstr(col + 2, (*row)++, -1, color, line_buf);
-    }
-}
-
-/*
  * Simple string search function - finds needle in haystack
  * Returns pointer to first occurrence, or NULL if not found
  */
@@ -1165,20 +1119,7 @@ static cptr get_quest_reward_text(int quest_idx)
  */
 void do_cmd_quest_status(void)
 {
-    char buf[128];
-    int row = 1;
-    int col = 2;
-    bool any_quests = false;
-    int wid, hgt;
-
     log_trace("QUEST STATUS: do_cmd_quest_status() called");
-    /* The legacy quest-status renderer is no longer a live runtime path. */
-    (void)buf;
-    (void)row;
-    (void)col;
-    (void)any_quests;
-    (void)wid;
-    (void)hgt;
 
     /* Safety check: ensure we have a valid player and metarun */
     if (!p_ptr) {
@@ -1202,455 +1143,6 @@ void do_cmd_quest_status(void)
         log_warn("quest status: information-scene presentation failed on the snapshot renderer path");
         msg_print("Quest status viewer unavailable.");
     }
-    return;
-
-    /* Check Tulkas quest */
-    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr tulkas_status;
-        byte color;
-        
-        log_trace("QUEST STATUS: Getting title and challenge for Tulkas quest");
-        cptr quest_title = get_quest_title(QUEST_ID_TULKAS);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_TULKAS);
-        log_trace("QUEST STATUS: Got title='%s', challenge='%s'", quest_title ? quest_title : "NULL", quest_challenge ? quest_challenge : "NULL");
-        
-        if (!quest_title) quest_title = "Tulkas Quest";
-        if (!quest_challenge) quest_challenge = "Unknown challenge";
-        
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-        
-        switch (p_ptr->tulkas_quest) {
-            case TULKAS_QUEST_GIVER_PRESENT:
-                log_trace("QUEST STATUS: Tulkas GIVER_PRESENT case");
-                tulkas_status = "Available - Tulkas awaits";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, tulkas_status);
-                {
-                    log_trace("QUEST STATUS: About to call process_quest_placeholders");
-                    cptr processed_challenge = process_quest_placeholders(quest_challenge, QUEST_ID_TULKAS);
-                    log_trace("QUEST STATUS: process_quest_placeholders returned: '%s'", processed_challenge ? processed_challenge : "NULL");
-                    display_wrapped_text(col, &row, processed_challenge, TERM_SLATE, wid);
-                }
-                log_trace("QUEST STATUS: Calling get_quest_reward_text for TULKAS (GIVER_PRESENT)");
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS));
-                log_trace("QUEST STATUS: Reward text result: '%s'", buf);
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case TULKAS_QUEST_ACTIVE:
-                log_trace("QUEST STATUS: Tulkas ACTIVE case");
-                {
-                    /* Use processed challenge text instead of hardcoded status */
-                    log_trace("QUEST STATUS: About to call process_quest_placeholders for ACTIVE");
-                    cptr processed_challenge = process_quest_placeholders(quest_challenge, QUEST_ID_TULKAS);
-                    log_trace("QUEST STATUS: process_quest_placeholders returned: '%s'", processed_challenge ? processed_challenge : "NULL");
-                    display_wrapped_text(col, &row, processed_challenge, TERM_WHITE, wid);
-                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_TULKAS));
-                    display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                    break;
-                }
-            case TULKAS_QUEST_COMPLETE:
-                log_trace("QUEST STATUS: Tulkas COMPLETE case");
-                tulkas_status = "Complete - Return for reward";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, tulkas_status);
-                break;
-            case TULKAS_QUEST_REWARDED:
-                /* For Tulkas quest (not location-specific), completed by this character means
-                 * the character progressed through the quest states to REWARDED */
-                tulkas_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, tulkas_status);
-                log_trace("QUEST STATUS: Calling get_quest_reward_text for TULKAS (REWARDED)");
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_TULKAS));
-                log_trace("QUEST STATUS: Reward text result: '%s'", buf);
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            default:
-                tulkas_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, tulkas_status);
-        }
-        row++;
-    }
-
-    /* Check Aule quest */
-    if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr aule_status;
-        byte color;
-        
-        cptr quest_title = get_quest_title(QUEST_ID_AULE);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_AULE);
-        
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-        
-        switch (p_ptr->aule_quest) {
-            case AULE_QUEST_FORGE_PRESENT:
-                aule_status = "Available - Enter the forge";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, aule_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case AULE_QUEST_ACTIVE:
-                /* Use challenge text instead of hardcoded status */
-                display_wrapped_text(col, &row, quest_challenge, TERM_WHITE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case AULE_QUEST_SUCCESS:
-                aule_status = "Complete - Return for reward";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, aule_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_AULE));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case AULE_QUEST_REWARDED:
-                /* Universal quest attribution logic:
-                 * If quest state is REWARDED, it was completed by this character */
-                aule_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, aule_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_AULE));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            default:
-                aule_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, aule_status);
-        }
-        row++;
-    }
-
-    /* Check Mandos quest */
-    if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr mandos_status;
-        byte color;
-        
-        cptr quest_title = get_quest_title(QUEST_ID_MANDOS);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_MANDOS);
-        
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-        
-        switch (p_ptr->mandos_quest) {
-            case MANDOS_QUEST_GIVER_PRESENT:
-                mandos_status = "Available - Enter the tomb";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, mandos_status);
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
-                break;
-            case MANDOS_QUEST_ACTIVE:
-                mandos_status = "Active";
-                color = TERM_WHITE;
-                Term_putstr(col + 2, row++, -1, color, mandos_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case MANDOS_QUEST_SUCCESS:
-                mandos_status = "Complete - Return for reward";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_MANDOS));
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
-                break;
-            case MANDOS_QUEST_REWARDED:
-                /* Universal quest attribution logic:
-                 * If quest state is REWARDED, it was completed by this character */
-                mandos_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, mandos_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_MANDOS));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            default:
-                mandos_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, mandos_status);
-        }
-        row++;
-    }
-
-    /* Check Niena quest */
-    if (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr niena_status;
-        byte color;
-        
-        cptr quest_title = get_quest_title(QUEST_ID_NIENA);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_NIENA);
-        
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-        
-        switch (p_ptr->niena_quest) {
-            case NIENA_QUEST_GIVER_PRESENT:
-                niena_status = "Available - Niena offers mercy";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, niena_status);
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, quest_challenge);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
-                break;
-            case NIENA_QUEST_ACTIVE:
-                strnfmt(buf, sizeof(buf), "Active: %d seen, %d killed",
-                        p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
-                niena_status = buf;
-                color = TERM_WHITE;
-                Term_putstr(col + 2, row++, -1, color, niena_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case NIENA_QUEST_SUCCESS:
-                niena_status = "Complete - Return for reward";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, niena_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_NIENA));
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
-                break;
-            case NIENA_QUEST_REWARDED:
-                /* Universal quest attribution logic:
-                 * If quest state is REWARDED, it was completed by this character */
-                niena_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, niena_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_NIENA));
-                Term_putstr(col + 2, row++, -1, TERM_SLATE, buf);
-                break;
-            case NIENA_QUEST_FAILED:
-                strnfmt(buf, sizeof(buf), "Failed: %d seen, %d killed",
-                        p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
-                color = TERM_RED;
-                Term_putstr(col + 2, row++, -1, color, buf);
-                Term_putstr(col + 2, row++, -1, TERM_SLATE,
-                            "You took a life and lost Niena's mercy.");
-                break;
-            default:
-                niena_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, niena_status);
-        }
-        row++;
-    }
-
-    /* Check Orome quest */
-    if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr orome_status;
-        byte color;
-
-        cptr quest_title = get_quest_title(QUEST_ID_OROME);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_OROME);
-        
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-        
-        switch (p_ptr->orome_quest) {
-            case OROME_QUEST_GIVER_PRESENT:
-                orome_status = "Available - Orome awaits";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, orome_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case OROME_QUEST_ACTIVE:
-                {
-                    strnfmt(buf, sizeof(buf), "Active: Hunt the fell kindreds");
-                    orome_status = buf;
-                    color = TERM_WHITE;
-                    Term_putstr(col + 2, row++, -1, color, orome_status);
-                    
-                    /* Show current kill counts for all monster types */
-                    strnfmt(buf, sizeof(buf), "Wolves killed: %d/100", p_ptr->orome_wolves_killed);
-                    display_wrapped_text(col + 4, &row, buf, 
-                                       p_ptr->orome_wolves_killed >= 100 ? TERM_L_GREEN : TERM_SLATE, wid);
-                    strnfmt(buf, sizeof(buf), "Spiders killed: %d/80", p_ptr->orome_spiders_killed);
-                    display_wrapped_text(col + 4, &row, buf, 
-                                       p_ptr->orome_spiders_killed >= 80 ? TERM_L_GREEN : TERM_SLATE, wid);
-                    strnfmt(buf, sizeof(buf), "Serpents killed: %d/60", p_ptr->orome_serpents_killed);
-                    display_wrapped_text(col + 4, &row, buf, 
-                                       p_ptr->orome_serpents_killed >= 60 ? TERM_L_GREEN : TERM_SLATE, wid);
-                    strnfmt(buf, sizeof(buf), "Vampires killed: %d/30", p_ptr->orome_vampires_killed);
-                    display_wrapped_text(col + 4, &row, buf, 
-                                       p_ptr->orome_vampires_killed >= 30 ? TERM_L_GREEN : TERM_SLATE, wid);
-                    
-                    display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                    strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
-                    display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                }
-                break;
-            case OROME_QUEST_SUCCESS:
-                orome_status = "Complete - Return for reward";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, orome_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_OROME));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case OROME_QUEST_REWARDED:
-                /* For Orome quest (not location-specific), completed by this character means
-                 * the character progressed through the quest states to REWARDED */
-                orome_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, orome_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_OROME));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            default:
-                orome_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, orome_status);
-        }
-        row++;
-    }
-
-    /* Check Varda quest */
-    if (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED) {
-        any_quests = true;
-        cptr varda_status;
-        byte color;
-
-        cptr quest_title = get_quest_title(QUEST_ID_VARDA);
-        cptr quest_challenge = get_quest_challenge(QUEST_ID_VARDA);
-        if (!quest_title) quest_title = "Varda Quest";
-        if (!quest_challenge) quest_challenge = "Unknown challenge";
-
-        Term_putstr(col, row++, -1, TERM_YELLOW, quest_title);
-
-        switch (p_ptr->varda_quest) {
-            case VARDA_QUEST_GIVER_PRESENT:
-                varda_status = "Available - Varda waits in sunlight";
-                color = TERM_L_BLUE;
-                Term_putstr(col + 2, row++, -1, color, varda_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case VARDA_QUEST_ACTIVE:
-                varda_status = "Active - Seek Duruin's bastion";
-                color = TERM_WHITE;
-                Term_putstr(col + 2, row++, -1, color, varda_status);
-                display_wrapped_text(col, &row, quest_challenge, TERM_SLATE, wid);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case VARDA_QUEST_SUCCESS:
-                varda_status = "Complete - Claim Varda's blessing";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, varda_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s", get_quest_reward_text(QUEST_ID_VARDA));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            case VARDA_QUEST_REWARDED:
-                varda_status = "Completed by this character";
-                color = TERM_L_GREEN;
-                Term_putstr(col + 2, row++, -1, color, varda_status);
-                strnfmt(buf, sizeof(buf), "Reward: %s received", get_quest_reward_text(QUEST_ID_VARDA));
-                display_wrapped_text(col, &row, buf, TERM_SLATE, wid);
-                break;
-            default:
-                varda_status = "Unknown status";
-                color = TERM_SLATE;
-                Term_putstr(col + 2, row++, -1, color, varda_status);
-        }
-        row++;
-    }
-
-    /* Show previous metarun completions */
-    bool has_previous_completions = false;
-    int tulkas_completed = metarun_quest_completion_count(METARUN_QUEST_TULKAS);
-    if (tulkas_completed > 0 && p_ptr->tulkas_quest != TULKAS_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_TULKAS);
-        cptr oath_name = get_oath_name_from_id(quest_info[1].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, tulkas_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    int aule_completed = metarun_quest_completion_count(METARUN_QUEST_AULE);
-    if (aule_completed > 0 && p_ptr->aule_quest != AULE_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_AULE);
-        cptr oath_name = get_oath_name_from_id(quest_info[2].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, aule_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    int mandos_completed = metarun_quest_completion_count(METARUN_QUEST_MANDOS);
-    if (mandos_completed > 0 && p_ptr->mandos_quest != MANDOS_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_MANDOS);
-        cptr oath_name = get_oath_name_from_id(quest_info[3].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, mandos_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    int niena_completed = metarun_quest_completion_count(METARUN_QUEST_NIENA);
-    if (niena_completed > 0 && p_ptr->niena_quest != NIENA_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_NIENA);
-        cptr oath_name = get_oath_name_from_id(quest_info[4].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, niena_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    int orome_completed = metarun_quest_completion_count(METARUN_QUEST_OROME);
-    if (orome_completed > 0 && p_ptr->orome_quest != OROME_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_OROME);
-        cptr oath_name = get_oath_name_from_id(quest_info[5].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, orome_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    int varda_completed = metarun_quest_completion_count(METARUN_QUEST_VARDA);
-    if (varda_completed > 0 && p_ptr->varda_quest != VARDA_QUEST_REWARDED) {
-        if (!has_previous_completions) {
-            Term_putstr(col, row++, -1, TERM_L_DARK, "Previously Completed in Metarun:");
-            has_previous_completions = true;
-        }
-        cptr quest_title = get_quest_title(QUEST_ID_VARDA);
-        cptr oath_name = get_oath_name_from_id(quest_info[6].oath_id);
-        char status_text[150];
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)", quest_title, oath_name, varda_completed);
-        display_wrapped_text(col, &row, status_text, TERM_SLATE, wid);
-    }
-    
-    if (has_previous_completions) {
-        row++;
-    }
-
-    /* If no quests are active or completed */
-    if (!any_quests) {
-        Term_putstr(col, row++, -1, TERM_SLATE, "No active or completed quests this run.");
-        row++;
-        Term_putstr(col, row++, -1, TERM_L_DARK, "Quest vaults may appear as you delve deeper...");
-    }
-
-    row++;
-    Term_putstr(col, row, -1, TERM_L_WHITE, "Press any key to return.");
-    inkey();
-    
-    screen_load();
 }
 
 /*
@@ -1661,33 +1153,46 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
 {
     int wid, h;
     const int indent = 2;
+    cptr continue_prompt = "(press any key to continue)";
     bool skipped = false;
+    bool scene_failed = false;
+    bool semantic_supported = ui_information_scene_supported();
     ui_information_scene_scope info_scope;
-    bool scene_active = ui_information_scene_enter(&info_scope);
+    bool scene_active = semantic_supported && ui_information_scene_enter(&info_scope);
     quest_typewriter_scene_state scene_state;
     int title_y = 1;
     int title_col;
+    int wrap_width;
+    int row = 3;
+    int col = 0;
+
+    if (semantic_supported && !scene_active)
+    {
+        log_warn("quest typewriter: unable to enter information scene on snapshot renderer path");
+        msg_print("Quest dialog unavailable.");
+        return;
+    }
 
     quest_typewriter_scene_init(&scene_state, scene_active);
     
     /* Get terminal size */
     Term_get_size(&wid, &h);
-    int wrap_width = wid - indent * 2;
+    wrap_width = wid - indent * 2;
     
     /* Save screen and start fresh */
     if (!scene_active)
         screen_save();
-    Term_clear();
-    quest_typewriter_scene_clear(&scene_state);
+    quest_typewriter_clear_page(scene_active, &scene_state);
     
     /* Display title */
     title_col = (wid - strlen(title)) / 2;
-    Term_putstr(title_col, title_y, -1, title_color, title);
-    quest_typewriter_scene_set_text(&scene_state, title_y, title_col,
+    quest_typewriter_write_text(scene_active, &scene_state, title_y, title_col,
         title_color, title);
-    quest_typewriter_present(&scene_state, &scene_active, &info_scope);
-    
-    int row = 3, col = 0;
+    if (!quest_typewriter_present(&scene_state, scene_active))
+    {
+        scene_failed = true;
+        goto cleanup;
+    }
     
     for (int idx = 0; idx < total_texts; idx++) {
         const char *s = texts[idx];
@@ -1717,31 +1222,30 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
         
         /* Check if we have enough space for the whole paragraph */
         if (row + lines_needed >= h - 2) {
-            Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
-            quest_typewriter_scene_set_text(&scene_state, h - 1, 15,
-                TERM_L_WHITE, "(press any key to continue)");
-            quest_typewriter_present(&scene_state, &scene_active, &info_scope);
+            char k;
+
+            quest_typewriter_write_text(scene_active, &scene_state, h - 1, 15,
+                TERM_L_WHITE, continue_prompt);
+            if (!quest_typewriter_present(&scene_state, scene_active))
             {
-                char k;
-                k = scene_active ? (char)ui_information_scene_wait_key()
-                                 : inkey();
-                if (k == 'Q' || k == 'q') { /* Q/q skips remaining dialog */
-                    Term_clear();
-                    quest_typewriter_scene_clear(&scene_state);
-                    if (scene_active)
-                        ui_information_scene_leave(&info_scope);
-                    else
-                        screen_load();
-                    return;
-                }
+                scene_failed = true;
+                goto cleanup;
             }
-            Term_clear();
-            quest_typewriter_scene_clear(&scene_state);
+
+            k = scene_active ? (char)ui_information_scene_wait_key() : inkey();
+            if (k == 'Q' || k == 'q')
+                goto cleanup;
+
+            quest_typewriter_clear_page(scene_active, &scene_state);
+
             /* Redisplay title */
-            Term_putstr(title_col, title_y, -1, title_color, title);
-            quest_typewriter_scene_set_text(&scene_state, title_y, title_col,
-                title_color, title);
-            quest_typewriter_present(&scene_state, &scene_active, &info_scope);
+            quest_typewriter_write_text(scene_active, &scene_state, title_y,
+                title_col, title_color, title);
+            if (!quest_typewriter_present(&scene_state, scene_active))
+            {
+                scene_failed = true;
+                goto cleanup;
+            }
             row = 3;
         }
         
@@ -1787,8 +1291,7 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
             if (skipped) {
                 /* Skip mode: print entire word instantly */
                 for (int j = word_start; j < word_start + word_len; j++) {
-                    Term_putch(indent + col, row, text_color, s[j]);
-                    quest_typewriter_scene_put_char(&scene_state, row,
+                    quest_typewriter_write_char(scene_active, &scene_state, row,
                         indent + col, text_color, s[j]);
                     col++;
                 }
@@ -1798,16 +1301,16 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                 for (int j = word_start; j < word_start + word_len; j++) {
                     /* Check for ESC or Enter key press to skip typewriter effect */
                     char check_key;
-                    if (Term_inkey(&check_key, false, false) == 0) {
-                        /* Only respond to ESC or Enter - consume and check */
-                        Term_inkey(&check_key, false, true);
+                    if (quest_typewriter_poll_skip_key(scene_active,
+                            &check_key))
+                    {
                         if (check_key == ESCAPE || check_key == '\n' || check_key == '\r') {
                             skipped = true;
                             /* Print rest of current word instantly */
                             for (int k = j; k < word_start + word_len; k++) {
-                                Term_putch(indent + col, row, text_color, s[k]);
-                                quest_typewriter_scene_put_char(&scene_state,
-                                    row, indent + col, text_color, s[k]);
+                                quest_typewriter_write_char(scene_active,
+                                    &scene_state, row, indent + col, text_color,
+                                    s[k]);
                                 col++;
                             }
                             break; /* Exit to continue with rest of text in skip mode */
@@ -1816,11 +1319,13 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                     }
                     
                     /* Print character with typewriter effect */
-                    Term_putch(indent + col, row, text_color, s[j]);
-                    quest_typewriter_scene_put_char(&scene_state, row,
+                    quest_typewriter_write_char(scene_active, &scene_state, row,
                         indent + col, text_color, s[j]);
-                    quest_typewriter_present(&scene_state, &scene_active,
-                        &info_scope);
+                    if (!quest_typewriter_present(&scene_state, scene_active))
+                    {
+                        scene_failed = true;
+                        goto cleanup;
+                    }
                     col++;
                     
                     /* Delay 25 ms after each character for typewriter effect */
@@ -1833,12 +1338,18 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                 if (s[i] == ' ') {
                     /* Only print space if we're not at the end of a line */
                     if (col < wrap_width) {
-                        Term_putch(indent + col, row, text_color, ' ');
-                        quest_typewriter_scene_put_char(&scene_state, row,
+                        quest_typewriter_write_char(scene_active, &scene_state,
+                            row,
                             indent + col, text_color, ' ');
                         if (!skipped)
-                            quest_typewriter_present(&scene_state,
-                                &scene_active, &info_scope);
+                        {
+                            if (!quest_typewriter_present(&scene_state,
+                                    scene_active))
+                            {
+                                scene_failed = true;
+                                goto cleanup;
+                            }
+                        }
                         col++;
                         
                         /* Delay for space too (unless skipped) */
@@ -1850,12 +1361,18 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                     /* Handle tab - convert to spaces but respect wrap width */
                     int tab_spaces = 4 - (col % 4);
                     for (int t = 0; t < tab_spaces && col < wrap_width; t++) {
-                        Term_putch(indent + col, row, text_color, ' ');
-                        quest_typewriter_scene_put_char(&scene_state, row,
+                        quest_typewriter_write_char(scene_active, &scene_state,
+                            row,
                             indent + col, text_color, ' ');
                         if (!skipped)
-                            quest_typewriter_present(&scene_state,
-                                &scene_active, &info_scope);
+                        {
+                            if (!quest_typewriter_present(&scene_state,
+                                    scene_active))
+                            {
+                                scene_failed = true;
+                                goto cleanup;
+                            }
+                        }
                         col++;
                         
                         /* Delay for tab spaces (unless skipped) */
@@ -1876,25 +1393,40 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     
     /* Refresh screen to show all text if skipped */
     if (skipped)
-        quest_typewriter_present(&scene_state, &scene_active, &info_scope);
+    {
+        if (!quest_typewriter_present(&scene_state, scene_active))
+        {
+            scene_failed = true;
+            goto cleanup;
+        }
+    }
     
     /* Final prompt */
-    Term_putstr(15, h - 1, -1, TERM_L_WHITE, "(press any key to continue)");
-    quest_typewriter_scene_set_text(&scene_state, h - 1, 15, TERM_L_WHITE,
-        "(press any key to continue)");
-    quest_typewriter_present(&scene_state, &scene_active, &info_scope);
+    quest_typewriter_write_text(scene_active, &scene_state, h - 1, 15,
+        TERM_L_WHITE, continue_prompt);
+    if (!quest_typewriter_present(&scene_state, scene_active))
+    {
+        scene_failed = true;
+        goto cleanup;
+    }
     if (scene_active)
         (void)ui_information_scene_wait_key();
     else
         inkey();
     
+cleanup:
     /* Flush any queued keypresses that accumulated during the typewriter effect */
-    Term_flush();
-    
-    Term_clear();
-    quest_typewriter_scene_clear(&scene_state);
-    if (scene_active)
-        ui_information_scene_leave(&info_scope);
-    else
+    if (!scene_active)
+    {
+        Term_flush();
+        Term_clear();
         screen_load();
+        return;
+    }
+
+    quest_typewriter_scene_clear(&scene_state);
+    ui_information_scene_leave(&info_scope);
+
+    if (scene_failed)
+        msg_print("Quest dialog unavailable.");
 }

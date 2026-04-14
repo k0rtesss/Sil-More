@@ -96,6 +96,15 @@ static int display_player_compact_start_row(void)
 static int display_player_compact_scroll = 0;
 static int display_player_compact_max_scroll = 0;
 
+static void display_player_putch(int x, int y, byte attr, char ch)
+{
+    char buf[2];
+
+    buf[0] = ch;
+    buf[1] = '\0';
+    c_put_str(attr, buf, y, x);
+}
+
 static void put_label_fit(int x, int y, const char* label, int start)
 {
     int maxw = start - x;
@@ -104,7 +113,7 @@ static void put_label_fit(int x, int y, const char* label, int start)
 
     char buf[64];
     strnfmt(buf, sizeof(buf), "%-*.*s", maxw, maxw, label);
-    Term_putstr(x, y, -1, TERM_WHITE, buf);
+    put_str(buf, y, x);
 }
 
 /* Pair: numbers block ends at x + LINEW20. cur_w + 1 + rhs_w == block width. */
@@ -157,13 +166,13 @@ static void put_pair20_right(int x, int y,
         text_start = start;
 
     if (cur_len > 0)
-        Term_putstr(text_start, y, cur_len, col_cur, cur_text);
+        c_put_str(col_cur, cur_text, y, text_start);
 
     char s[2] = { sep, '\0' };
-    Term_putstr(text_start + cur_len, y, 1, TERM_WHITE, s);
+    put_str(s, y, text_start + cur_len);
 
     if (rhs_len > 0)
-        Term_putstr(text_start + cur_len + 1, y, rhs_len, col_rhs, rhs_text);
+        c_put_str(col_rhs, rhs_text, y, text_start + cur_len + 1);
 }
 
 /* Single value: value block ends at x + LINEW20. */
@@ -196,7 +205,7 @@ static void put_single20_right(int x, int y,
         int text_start = end - val_len;
         if (text_start < start)
             text_start = start;
-        Term_putstr(text_start, y, val_len, col_val, val_text);
+        c_put_str(col_val, val_text, y, text_start);
     }
 }
 
@@ -240,7 +249,7 @@ static void put_single_right(int x, int y, int line_w,
         int text_start = end - val_len + 1;
         if (text_start < start)
             text_start = start;
-        Term_putstr(text_start, y, val_len, col_val, val_text);
+        c_put_str(col_val, val_text, y, text_start);
     }
 }
 
@@ -358,7 +367,7 @@ static bool display_player_min_depth_progress_bar_line(int x, int y, int line_w)
     out_col = x + (line_w - bar_len) / 2;
     if (out_col < x)
         out_col = x;
-    Term_putstr(out_col, y, bar_len, TERM_L_BLUE, bar_buf);
+    c_put_str(TERM_L_BLUE, bar_buf, y, out_col);
     return true;
 }
 
@@ -630,13 +639,15 @@ static void display_player_xtra_info(int mode)
         }
 
         for (int i = 0; i < uniq_n; ++i)
-            Term_putstr(col_flags, row_flags++, -1, uniq_buf[i].col, uniq_buf[i].txt);
+            c_put_str(uniq_buf[i].col, uniq_buf[i].txt, row_flags++,
+                col_flags);
         for (int i = 0; i < ma_n; ++i)
-            Term_putstr(col_flags, row_flags++, -1, ma_buf[i].col, ma_buf[i].txt);
+            c_put_str(ma_buf[i].col, ma_buf[i].txt, row_flags++, col_flags);
         for (int i = 0; i < af_n; ++i)
-            Term_putstr(col_flags, row_flags++, -1, af_buf[i].col, af_buf[i].txt);
+            c_put_str(af_buf[i].col, af_buf[i].txt, row_flags++, col_flags);
         for (int i = 0; i < pen_n; ++i)
-            Term_putstr(col_flags, row_flags++, -1, pen_buf[i].col, pen_buf[i].txt);
+            c_put_str(pen_buf[i].col, pen_buf[i].txt, row_flags++,
+                col_flags);
 
         if (story_character_enabled()) {
             sdl_story_font_disable();
@@ -659,7 +670,7 @@ static void display_player_xtra_info(int mode)
             term_wid - 1);
         text_out_wrap   = term_wid - 1;
         text_out_indent = 1;
-        Term_gotoxy(text_out_indent, 15);
+        move_cursor(15, text_out_indent);
         text_out_to_screen(history_attr, p_ptr->history);
         text_out_wrap   = 0;
         text_out_indent = 0;
@@ -704,7 +715,7 @@ static void display_player_equippy(int y, int x)
         c = object_char(o_ptr);
 
         /* Dump */
-        Term_putch(x + i - INVEN_WIELD, y, a, c);
+        display_player_putch(x + i - INVEN_WIELD, y, a, c);
     }
 }
 
@@ -910,7 +921,7 @@ static void tutorial_render_text(tutorial_render_target* target, int col,
         return;
     }
 
-    Term_putstr(col, row, -1, attr, text);
+    c_put_str(attr, text, row, col);
 }
 
 static void tutorial_put_centered(tutorial_render_target* target, int row,
@@ -1327,17 +1338,20 @@ void display_character_tutorial(void)
     int page = 0;
     char ch;
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    bool use_information_scene = ui_information_scene_supported();
+
+    if (use_information_scene && !ui_information_scene_enter(&info_scope))
+    {
+        log_warn("character tutorial: semantic scene unavailable on the snapshot renderer path");
+        msg_print("Character tutorial unavailable.");
+        return;
+    }
 
     while (1)
     {
         int wid = 80;
         int hgt = 24;
-        Term_get_size(&wid, &hgt);
-        if (wid < 1)
-            wid = 80;
-        if (hgt < 1)
-            hgt = 24;
+        display_player_get_layout_size(&wid, &hgt);
 
         bool steamdeck = steamdeck_controls_active();
         bool birth_context = (playerturn == 0);
@@ -1715,21 +1729,20 @@ void display_character_tutorial(void)
         {
             app_ui_panel* panel = NULL;
 
-            if (tutorial_begin_document_ui_scene(&ui_scene, &panel))
-            {
-                target.ui_scene = &ui_scene;
-                target.ui_panel = panel;
-            }
-            else
+            if (!tutorial_begin_document_ui_scene(&ui_scene, &panel))
             {
                 ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
-                Term_clear();
+                log_warn("character tutorial: failed to build semantic tutorial scene");
+                msg_print("Character tutorial unavailable.");
+                return;
             }
+
+            target.ui_scene = &ui_scene;
+            target.ui_panel = panel;
         }
         else
         {
-            Term_clear();
+            clear_from(0);
         }
 
         {
@@ -2135,7 +2148,9 @@ void display_character_tutorial(void)
             if (!ui_information_scene_present_ui(&ui_scene))
             {
                 ui_information_scene_leave(&info_scope);
-                use_information_scene = false;
+                log_warn("character tutorial: failed to present semantic tutorial scene");
+                msg_print("Character tutorial unavailable.");
+                return;
             }
         }
         else
@@ -2143,7 +2158,8 @@ void display_character_tutorial(void)
             Term_fresh();
         }
 
-        ch = use_information_scene ? (char)ui_information_scene_wait_key()
+        ch = use_information_scene
+                                   ? (char)ui_information_scene_wait_key_nonrepeat()
                                    : inkey();
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
@@ -2173,7 +2189,7 @@ void display_character_tutorial(void)
     }
 
     if (!use_information_scene)
-        Term_clear();
+        clear_from(0);
     if (use_information_scene)
         ui_information_scene_leave(&info_scope);
 }
@@ -2600,7 +2616,7 @@ static int display_player_compact_traits_block(int row_start, int col, int row_l
         sdl_story_font_enable();
 
     for (int i = skip_lines; i < line_count && row < row_limit; ++i)
-        Term_putstr(col, row++, -1, lines[i].col, lines[i].txt);
+        c_put_str(lines[i].col, lines[i].txt, row++, col);
 
     if (story_character_enabled())
         sdl_story_font_disable();
@@ -2733,7 +2749,7 @@ static int display_player_compact_wrapped_offset(const char* text, int start_row
             if (line_pos > 0)
             {
                 if (line_idx >= skip_lines && row < row_limit)
-                    Term_putstr(col, row++, -1, attr, line_buf);
+                    c_put_str(attr, line_buf, row++, col);
                 line_idx++;
             }
             line_pos = 0;
@@ -2751,7 +2767,7 @@ static int display_player_compact_wrapped_offset(const char* text, int start_row
             {
                 line_buf[wrap_pos] = '\0';
                 if (line_idx >= skip_lines && row < row_limit)
-                    Term_putstr(col, row++, -1, attr, line_buf);
+                    c_put_str(attr, line_buf, row++, col);
 
                 int remaining = line_pos - wrap_pos - 1;
                 for (int i = 0; i < remaining; i++)
@@ -2762,7 +2778,7 @@ static int display_player_compact_wrapped_offset(const char* text, int start_row
             {
                 line_buf[line_pos] = '\0';
                 if (line_idx >= skip_lines && row < row_limit)
-                    Term_putstr(col, row++, -1, attr, line_buf);
+                    c_put_str(attr, line_buf, row++, col);
                 line_pos = 0;
             }
 
@@ -2779,7 +2795,7 @@ static int display_player_compact_wrapped_offset(const char* text, int start_row
     {
         line_buf[line_pos] = '\0';
         if (line_idx >= skip_lines && row < row_limit)
-            Term_putstr(col, row++, -1, attr, line_buf);
+            c_put_str(attr, line_buf, row++, col);
     }
 
     return row;
@@ -2848,7 +2864,7 @@ static void display_player_compact_traits_middle_column(int row_start, int col,
 
         strnfmt(line_buf, sizeof(line_buf), "%.*s", draw_w, src);
         Term_erase(col, row, max_cols);
-        Term_putstr(start_col, row, max_cols, lines[i].col, line_buf);
+        c_put_str(lines[i].col, line_buf, row, start_col);
         row++;
     }
 }
@@ -2860,7 +2876,7 @@ static void display_player_compact_heading(cptr text, int row, int col)
     if (use_story)
         sdl_story_font_enable();
 
-    Term_putstr(col, row, -1, TERM_L_BLUE, text ? text : "");
+    c_put_str(TERM_L_BLUE, text ? text : "", row, col);
 
     if (use_story)
         sdl_story_font_disable();
@@ -3078,7 +3094,7 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
     if (story_character_enabled())
         sdl_story_font_enable();
 
-    Term_putstr(col, row, -1, line_attr, label_buf);
+    c_put_str(line_attr, label_buf, row, col);
 
     if (story_character_enabled())
         sdl_story_font_disable();
@@ -3098,7 +3114,7 @@ static void display_player_compact_attribute_line(int row, int col, int max_cols
 
     byte stat_color = (p_ptr->stat_drain[stat] < 0) ? TERM_YELLOW : TERM_L_GREEN;
     byte value_attr = (stat == compact_stat_highlight) ? TERM_L_BLUE : stat_color;
-    Term_putstr(out_col, row, val_len, value_attr, val_text);
+    c_put_str(value_attr, val_text, row, out_col);
 }
 
 static void display_player_compact_attributes(int row_start, int max_cols)
@@ -3193,7 +3209,7 @@ static void display_player_compact_skill_line(int row, int col, int max_cols, in
     if (story_character_enabled())
         sdl_story_font_enable();
 
-    Term_putstr(col, row, -1, line_attr, label_buf);
+    c_put_str(line_attr, label_buf, row, col);
 
     if (story_character_enabled())
         sdl_story_font_disable();
@@ -3211,7 +3227,7 @@ static void display_player_compact_skill_line(int row, int col, int max_cols, in
     if (out_col < val_start)
         out_col = val_start;
 
-    Term_putstr(out_col, row, val_len, value_attr, val_text);
+    c_put_str(value_attr, val_text, row, out_col);
 }
 
 static void display_player_compact_attributes_and_skills(int row_start)
@@ -3491,7 +3507,7 @@ static void display_player_sust_info(void)
                     c = 's';
             }
 
-            Term_putch(col, row + stats, a, c);
+            display_player_putch(col, row + stats, a, c);
         }
 
         col++;
@@ -3508,7 +3524,7 @@ static void display_player_sust_info(void)
             c = 's';
         }
 
-        Term_putch(col, row + stats, a, c);
+        display_player_putch(col, row + stats, a, c);
     }
 
     col = 23;

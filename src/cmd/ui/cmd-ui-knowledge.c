@@ -1728,179 +1728,55 @@ static cptr knowledge_blessing_display_name(int idx)
 
     return knowledge_curse_display_name(idx);
 }
-static void knowledge_scene_add_wrapped_document_text(
-    app_ui_scene* scene, app_ui_panel* panel, int col, int* row, cptr text,
-    byte color, int term_wid)
+static bool knowledge_scene_add_rich_paragraph(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, cptr text)
 {
-    char line_buf[256];
-    int line_pos = 0;
-    int effective_width;
-    int text_len;
-    int word_start = 0;
-    int i = 0;
-    int loop_count = 0;
+    if (!scene || !panel || !text || !text[0])
+        return true;
 
-    if (!scene || !panel || !row || !text)
-        return;
-
-    effective_width = term_wid - col - 1;
-    if (effective_width < 20)
-        effective_width = 20;
-    text_len = (int)strlen(text);
-    line_buf[0] = '\0';
-
-    while (i <= text_len)
-    {
-        loop_count++;
-        if (loop_count > 1000)
-        {
-            log_warn("knowledge_scene_add_wrapped_document_text: safety break");
-            break;
-        }
-
-        if (i == text_len || text[i] == ' ')
-        {
-            int word_len = i - word_start;
-            char word[128];
-
-            if (word_len > 0 && word_len < (int)sizeof(word))
-            {
-                int copy_len = word_len;
-
-                if (copy_len >= (int)sizeof(word))
-                    copy_len = (int)sizeof(word) - 1;
-                for (int j = 0; j < copy_len; j++)
-                    word[j] = text[word_start + j];
-                word[copy_len] = '\0';
-
-                if (line_pos + (line_pos > 0 ? 1 : 0) + copy_len
-                    > effective_width && line_pos > 0)
-                {
-                    (void)app_ui_panel_add_document_text(scene, panel,
-                        (s16b)(*row), (s16b)col, color, line_buf);
-                    (*row)++;
-
-                    if (copy_len > effective_width)
-                    {
-                        int word_pos = 0;
-
-                        while (word_pos < copy_len)
-                        {
-                            int chunk_len = effective_width;
-                            char chunk[256];
-                            int k;
-
-                            if (word_pos + chunk_len > copy_len)
-                                chunk_len = copy_len - word_pos;
-
-                            for (k = 0; k < chunk_len
-                                && word_pos + k < copy_len; k++)
-                            {
-                                chunk[k] = word[word_pos + k];
-                            }
-                            chunk[k] = '\0';
-
-                            (void)app_ui_panel_add_document_text(scene, panel,
-                                (s16b)(*row), (s16b)col, color, chunk);
-                            (*row)++;
-                            word_pos += chunk_len;
-                        }
-
-                        line_buf[0] = '\0';
-                        line_pos = 0;
-                    }
-                    else
-                    {
-                        SDL_strlcpy(line_buf, word, sizeof(line_buf));
-                        line_pos = copy_len;
-                    }
-                }
-                else
-                {
-                    if (line_pos > 0)
-                    {
-                        SDL_strlcat(line_buf, " ", sizeof(line_buf));
-                        line_pos++;
-                    }
-                    SDL_strlcat(line_buf, word, sizeof(line_buf));
-                    line_pos += copy_len;
-                }
-            }
-
-            while (i < text_len && text[i] == ' ')
-                i++;
-            word_start = i;
-        }
-        else
-        {
-            i++;
-        }
-    }
-
-    if (line_pos > 0)
-    {
-        (void)app_ui_panel_add_document_text(scene, panel, (s16b)(*row),
-            (s16b)col, color, line_buf);
-        (*row)++;
-    }
-
+    return app_ui_panel_begin_rich_paragraph(scene, panel)
+        && app_ui_panel_add_rich_text(scene, panel, attr, text);
 }
 
-static bool knowledge_begin_curse_detail_document_page(app_ui_scene* scene,
-    app_ui_panel** out_panel, int* out_row, bool include_name, cptr cname)
+static app_ui_panel* knowledge_begin_curse_detail_scene(app_ui_scene* scene,
+    cptr cname, cptr subtitle)
 {
     app_ui_panel* panel;
 
-    if (!scene || !out_panel || !out_row)
-        return false;
+    if (!scene)
+        return NULL;
 
     app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    scene->flags |= APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
     if (!panel)
-        return false;
+        return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    if (!app_ui_panel_add_document_text(scene, panel, 0, 1,
-            TERM_L_WHITE + TERM_SHADE, "Known Curse:"))
-    {
-        return false;
-    }
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 720, 1180);
+    app_ui_panel_set_title(panel, TERM_L_RED, cname ? cname : "");
+    if (subtitle && subtitle[0])
+        app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
 
-    if (include_name
-        && !app_ui_panel_add_document_text(scene, panel, 2, 1, TERM_L_RED,
-            cname ? cname : ""))
-    {
-        return false;
-    }
-
-    *out_panel = panel;
-    *out_row = include_name ? 3 : 2;
-    return true;
+    return panel;
 }
 
-static bool knowledge_present_curse_detail_document_page(app_ui_scene* scene,
-    app_ui_panel* panel, int footer_row, bool steamdeck, cptr accept_label)
+static bool knowledge_present_curse_detail_scene(app_ui_scene* scene,
+    app_ui_panel* panel, bool steamdeck, cptr accept_label)
 {
     if (!scene || !panel)
         return false;
 
     if (steamdeck)
     {
-        char hint_buf[48];
-
-        strnfmt(hint_buf, sizeof(hint_buf), "(press %s)", accept_label);
-        if (!app_ui_panel_add_document_text(scene, panel, (s16b)footer_row, 1,
-                TERM_L_WHITE, hint_buf))
-        {
-            return false;
-        }
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            accept_label, "Continue");
     }
-    else if (!app_ui_panel_add_document_text(scene, panel, (s16b)footer_row, 1,
-            TERM_L_WHITE, "(press any key)"))
+    else
     {
-        return false;
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Any", "Continue");
     }
 
     if (!ui_information_scene_present_ui(scene))
@@ -1923,14 +1799,11 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
     bool has_blessing_text;
     bool has_blessing_effect;
     bool has_blessing_info;
+    bool show_blessing_name;
     char accept_label[16] = "";
     char effect_line[256];
     char blessing_line[256];
-    int term_wid;
-    int term_hgt;
-    int footer_row;
-    int page_limit;
-    int row;
+    char subtitle[APP_UI_TEXT_MAX];
     app_ui_scene scene;
     app_ui_panel* panel = NULL;
 
@@ -1948,6 +1821,8 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
     has_blessing_effect = bpower && *bpower;
     has_blessing_info = has_blessing_text || has_blessing_effect
         || (c->blessing_name != 0);
+    show_blessing_name = has_blessing_info && bname && bname[0]
+        && strcmp(bname, cname) != 0;
 
     if (steamdeck)
     {
@@ -1955,120 +1830,45 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
             sizeof(accept_label));
     }
 
-    term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
-    if (term_wid < 40)
-        term_wid = 40;
-    if (term_hgt < 8)
-        term_hgt = 8;
+    subtitle[0] = '\0';
+    if (show_blessing_name)
+        strnfmt(subtitle, sizeof(subtitle), "Blessing: %s", bname);
 
-    footer_row = term_hgt - 1;
-    page_limit = footer_row - 1;
+    panel = knowledge_begin_curse_detail_scene(&scene, cname, subtitle);
+    if (!panel)
+        return false;
 
-    if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row, true,
-            cname))
+    if (cdesc && cdesc[0]
+        && !knowledge_scene_add_rich_paragraph(&scene, panel, TERM_WHITE, cdesc))
     {
         return false;
     }
 
-    if (row + count_wrapped_lines(cdesc, term_wid - 4, 3) >= page_limit)
-    {
-        if (!knowledge_present_curse_detail_document_page(&scene, panel,
-                footer_row, steamdeck, accept_label))
-        {
-            return false;
-        }
-        if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row,
-                false, cname))
-        {
-            return false;
-        }
-    }
-    knowledge_scene_add_wrapped_document_text(&scene, panel, 3, &row, cdesc,
-        TERM_WHITE, term_wid);
-
     strnfmt(effect_line, sizeof(effect_line), "Effect: %s",
         (*cpower) ? cpower : "[no additional effect listed]");
-    if (row + count_wrapped_lines(effect_line, term_wid - 4, 3) >= page_limit)
-    {
-        if (!knowledge_present_curse_detail_document_page(&scene, panel,
-                footer_row, steamdeck, accept_label))
-        {
-            return false;
-        }
-        if (!knowledge_begin_curse_detail_document_page(&scene, &panel, &row,
-                false, cname))
-        {
-            return false;
-        }
-    }
-    knowledge_scene_add_wrapped_document_text(&scene, panel, 3, &row,
-        effect_line,
-        TERM_RED, term_wid);
+    if (!knowledge_scene_add_rich_paragraph(&scene, panel, TERM_RED, effect_line))
+        return false;
 
     if (has_blessing_info)
     {
-        row++;
-        if (row + 1 >= page_limit)
-        {
-            if (!knowledge_present_curse_detail_document_page(&scene, panel,
-                    footer_row, steamdeck, accept_label))
-            {
-                return false;
-            }
-            if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
-                    &row, false, cname))
-            {
-                return false;
-            }
-        }
-
-        if (!app_ui_panel_add_document_text(&scene, panel, (s16b)row++, 3,
-                TERM_L_GREEN, format("Blessing: %s", bname)))
+        if (has_blessing_text
+            && !knowledge_scene_add_rich_paragraph(&scene, panel, TERM_WHITE,
+                bdesc))
         {
             return false;
         }
 
-        if (has_blessing_text)
-        {
-            if (row + count_wrapped_lines(bdesc, term_wid - 6, 5) >= page_limit)
-            {
-                if (!knowledge_present_curse_detail_document_page(&scene, panel,
-                        footer_row, steamdeck, accept_label))
-                {
-                    return false;
-                }
-                if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
-                        &row, false, cname))
-                {
-                    return false;
-                }
-            }
-            knowledge_scene_add_wrapped_document_text(&scene, panel, 5, &row,
-                bdesc, TERM_WHITE, term_wid);
-        }
-
-        strnfmt(blessing_line, sizeof(blessing_line), "Effect: %s",
+        strnfmt(blessing_line, sizeof(blessing_line), "Blessing effect: %s",
             has_blessing_effect ? bpower : "[no additional effect listed]");
-        if (row + count_wrapped_lines(blessing_line, term_wid - 6, 5) >= page_limit)
+        if (!knowledge_scene_add_rich_paragraph(&scene, panel, TERM_L_GREEN,
+                blessing_line))
         {
-            if (!knowledge_present_curse_detail_document_page(&scene, panel,
-                    footer_row, steamdeck, accept_label))
-            {
-                return false;
-            }
-            if (!knowledge_begin_curse_detail_document_page(&scene, &panel,
-                    &row, false, cname))
-            {
-                return false;
-            }
+            return false;
         }
-        knowledge_scene_add_wrapped_document_text(&scene, panel, 5, &row,
-            blessing_line, TERM_L_GREEN, term_wid);
     }
 
-    return knowledge_present_curse_detail_document_page(&scene, panel,
-        footer_row, steamdeck, accept_label);
+    return knowledge_present_curse_detail_scene(&scene, panel, steamdeck,
+        accept_label);
 }
 
 static bool knowledge_handle_page_input(char ch, int* page)

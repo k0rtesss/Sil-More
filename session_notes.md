@@ -1,5 +1,24 @@
 # Session notes
 
+## 2026-04-14: UI render replacement P2-E quest and combat cleanup
+- `src/quest/quest-ui.c`
+  - deleted the dead legacy quest-status body renderer after `do_cmd_quest_status()` now routes entirely through `do_cmd_quest_status_information_scene()`
+  - reworked `quest_typewriter_menu()` so the SDL snapshot path updates title/body/prompt pages through the semantic scene state instead of live `Term_putstr()` / `Term_putch()` body ownership
+  - kept the non-snapshot compatibility fallback isolated behind the same helpers instead of widening SDL-path fallback rendering
+  - removed the remaining SDL-path fallback in `quest_typewriter_menu()`: when the snapshot renderer is supported but `ui_information_scene_enter()` fails, the code now reports the failure instead of dropping into the legacy term path
+- `src/melee/melee-combat-display.c`
+  - `do_cmd_combat_history()` now requires the snapshot renderer and no longer falls back to the old term-owned combat-history screen on the SDL path
+  - `display_combat_round_details()` now builds and presents a direct semantic document scene instead of clearing and repainting the terminal
+  - gated main-view combat-roll clears/draws behind `ui_information_scene_supported()` so the SDL snapshot path stops writing those rows directly
+  - deleted the now-unused legacy `combat_history_draw_screen()` implementation, which materially cut local `Term_*` debt
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/quest/quest-ui.c.obj CMakeFiles/sil-core.dir/src/melee/melee-combat-display.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - after deleting the dead combat-history screen helper and the quest typewriter SDL fallback, the repo-wide direct `Term_*` audit count dropped further from `722` to `695`
+  - post-change local debt snapshot:
+    - `src/quest/quest-ui.c`: `inkey=4`, `screen_save/screen_load=2`, `Term_*=102`
+    - `src/melee/melee-combat-display.c`: `inkey=0`, `screen_save/screen_load=0`, `Term_*=125`
+
 ## 2026-04-14: UI render replacement P1-F metarun narrative isolation
 - Replaced the post-escape `src/metarun.c` handoff to `print_story(3, true)` with a metarun-local semantic recap sequence:
   - added `metarun_collect_story_indices()` to gather the current run's unlocked story fragments using the same selection/order rules as the old story flow
