@@ -16,9 +16,6 @@ void runtime_cli_set_wizard(bool enabled);
 bool runtime_cli_sound(void);
 void runtime_cli_set_sound(bool enabled);
 
-bool runtime_cli_snapshot_renderer(void);
-void runtime_cli_set_snapshot_renderer(bool enabled);
-
 int runtime_cli_graphics_mode(void);
 void runtime_cli_set_graphics_mode(int mode);
 

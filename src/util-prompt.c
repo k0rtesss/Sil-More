@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "platform-input.h"
 #include "runtime-cli.h"
+#include "ui/ui-information-scene.h"
 
 static cptr g_prompt_interaction_label = NULL;
 
@@ -10,36 +11,12 @@ typedef struct prompt_menu_scene_scope {
     bool active;
     u16b previous_scene;
     app_wait_scope wait_scope;
+    app_input_capture_scope input_capture_scope;
 } prompt_menu_scene_scope;
 
 static char prompt_inkey_with_wait_reason(u16b reason)
 {
-    app_wait_scope scope;
-    app_session* session = app_session_current();
-    app_input input;
-
-    if (!session)
-        return ESCAPE;
-
-    app_session_push_wait_scope(session, &scope, reason, 0, 0);
-
-    while (true)
-    {
-        while (app_session_pop_input(session, &input))
-        {
-            if (input.layer != APP_INPUT_LAYER_LEGACY
-                || input.type != APP_INPUT_TYPE_KEY)
-            {
-                continue;
-            }
-
-            app_session_pop_wait_scope(session, &scope);
-            return (char)(input.payload.key.logical_key & 0xFFu);
-        }
-
-        (void)Term_xtra(TERM_XTRA_EVENT, 1);
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
-    }
+    return (char)ui_information_scene_wait_key_with_wait_reason(reason);
 }
 
 void prompt_snapshot_push_silent_clear(void)
@@ -80,6 +57,7 @@ static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
     scope->previous_scene = snapshot->scene;
     app_session_push_wait_scope(session, &scope->wait_scope,
         APP_WAIT_REASON_CONFIRM, 0, 0);
+    app_session_push_input_capture(session, &scope->input_capture_scope);
     app_session_clear_inputs(session);
     scope->active = true;
     return true;
@@ -114,6 +92,7 @@ static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
         return;
 
     app_session_clear_inputs(session);
+    app_session_pop_input_capture(session, &scope->input_capture_scope);
     if (scope->previous_scene == APP_SCENE_KIND_DUNGEON)
         app_session_clear_dungeon_overlay_scene(session);
     app_session_pop_wait_scope(session, &scope->wait_scope);

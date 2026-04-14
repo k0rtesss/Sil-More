@@ -126,9 +126,11 @@ static bool sdl_legacy_input_bridge_active(void)
     return app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
 }
 
-static bool sdl_information_scene_owns_input(void)
+static bool sdl_session_input_capture_active(void)
 {
-    return ui_information_scene_owns_input();
+    app_session* session = app_session_current();
+
+    return app_session_input_capture_active(session);
 }
 
 static errr sdl_term_queue_keypress(term* target, int key)
@@ -210,7 +212,7 @@ void sdl_drain_legacy_input_queue(void)
 
     if (!sdl_legacy_input_bridge_active())
         return;
-    if (sdl_information_scene_owns_input())
+    if (sdl_session_input_capture_active())
         return;
 
     session = app_session_current();

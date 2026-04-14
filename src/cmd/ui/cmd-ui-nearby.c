@@ -255,15 +255,8 @@ static bool nearby_snapshot_active(void)
 
 static char nearby_snapshot_wait_key(void)
 {
-    app_wait_scope wait_scope;
-    app_session* session = app_session_current();
-    char ch;
-
-    app_session_push_wait_scope(session, &wait_scope,
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-    ch = (char)ui_information_scene_wait_key();
-    app_session_pop_wait_scope(session, &wait_scope);
-    return ch;
+    return (char)ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE);
 }
 
 static app_ui_panel* nearby_build_panel(app_ui_scene* scene, cptr prompt,

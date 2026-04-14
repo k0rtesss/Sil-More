@@ -61,6 +61,10 @@ typedef struct app_wait_scope {
     app_wait_state wait_state;
 } app_wait_scope;
 
+typedef struct app_input_capture_scope {
+    bool active;
+} app_input_capture_scope;
+
 typedef struct app_session_config {
     u32b api_version;
     u32b flags;
@@ -126,6 +130,11 @@ void app_session_push_wait_scope(app_session* session, app_wait_scope* scope,
     u16b reason, s32b detail0, s32b detail1);
 void app_session_pop_wait_scope(app_session* session,
     const app_wait_scope* scope);
+bool app_session_input_capture_active(const app_session* session);
+void app_session_push_input_capture(app_session* session,
+    app_input_capture_scope* scope);
+void app_session_pop_input_capture(app_session* session,
+    app_input_capture_scope* scope);
 const app_snapshot* app_session_snapshot(const app_session* session);
 void app_session_set_snapshot(app_session* session,
     const app_snapshot* snapshot);

@@ -25,6 +25,7 @@ static bool story_equipment_list_active = false;
 
 enum
 {
+    MENU_DEFAULT_LAYOUT_WIDTH = 80,
     MENU_LABEL_FIELD_WIDTH = 4,
     MENU_WEIGHT_FIELD_WIDTH = 8
 };
@@ -219,6 +220,14 @@ int draw_item_tile(int x, int y, object_type* o_ptr)
     return x;
 }
 
+static int menu_layout_width(int requested_width)
+{
+    if (requested_width > 0)
+        return requested_width;
+
+    return MENU_DEFAULT_LAYOUT_WIDTH;
+}
+
 static void clear_item_row_segment(int row, int col, int width)
 {
     if (width <= 0)
@@ -244,14 +253,6 @@ static int menu_item_tile_width(const object_type* o_ptr)
     }
 
     return 0;
-}
-
-int menu_term_width(void)
-{
-    if (Term && Term->wid > 0)
-        return Term->wid;
-
-    return 80;
 }
 
 int menu_weight_col_for_width(int term_wid)
@@ -331,7 +332,7 @@ void story_render_inventory_entry(int row, int base_col, int label_col,
     byte weight_attr, cptr label_text, byte label_attr, const object_type* o_ptr,
     bool highlight, int story_term_w)
 {
-    int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
+    int term_wid = menu_layout_width(story_term_w);
     int highlight_cols = term_wid;
     int weight_col = display_weights ? MAX(0, label_col - 8) : label_col;
     const int label_width = MENU_LABEL_FIELD_WIDTH;
@@ -367,7 +368,7 @@ void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
     const object_type* o_ptr, bool highlight, int story_term_w)
 {
     int clear_col = menu_overlay_clear_col(col);
-    int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
+    int term_wid = menu_layout_width(story_term_w);
     int highlight_cols = term_wid;
     int label_col = menu_label_col_for_width(term_wid, display_weights);
     int weight_col = menu_weight_col_for_width(term_wid);
@@ -410,7 +411,7 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
     int highlight_index, bool display_weights, int story_term_w)
 {
     int clear_col = menu_overlay_clear_col(col);
-    int term_wid = (story_term_w > 0) ? story_term_w : menu_term_width();
+    int term_wid = menu_layout_width(story_term_w);
     int label_col_base = menu_label_col_for_width(term_wid, display_weights);
     int weight_col = menu_weight_col_for_width(term_wid);
     int highlight_cols = term_wid;

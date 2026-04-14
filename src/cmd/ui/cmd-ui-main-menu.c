@@ -53,11 +53,6 @@ extern struct sound_config g_sound_config;
 
 #define MAIN_MENU_MAX 16
 
-typedef struct main_menu_about_line {
-    byte attr;
-    cptr text;
-} main_menu_about_line;
-
 typedef struct main_menu_about_span {
     byte attr;
     cptr text;
@@ -65,67 +60,13 @@ typedef struct main_menu_about_span {
 
 typedef struct main_menu_scene_scope {
     bool active;
+    app_input_capture_scope input_capture_scope;
 } main_menu_scene_scope;
 
 static char main_menu_read_key(void)
 {
-    app_session* session = app_session_current();
-    app_input input;
-
-    if (!session
-        || !app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
-    {
-        return ESCAPE;
-    }
-
-    while (true)
-    {
-        while (app_session_pop_input(session, &input))
-        {
-            if (input.layer != APP_INPUT_LAYER_LEGACY
-                || input.type != APP_INPUT_TYPE_KEY)
-            {
-                continue;
-            }
-
-            return (char)(input.payload.key.logical_key & 0xFFu);
-        }
-
-        (void)Term_xtra(TERM_XTRA_EVENT, 1);
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
-    }
-}
-
-static int main_menu_calc_width(void)
-{
-    /* Keep in sync with the menu labels used by the semantic scene builders. */
-    static const char* lines[] = {
-        "Character sheet      (c)",
-        "Known lore           (a)",
-        "Quest status         (t)",
-        "Halls of Mandos      (d)",
-        "Run history          (v)",
-        "Map                  (m)",
-        "Log                  (l)",
-        "Combat history       (x)",
-        "Hint messages        (i)",
-        "The story so far     (y)",
-        "Options and misc     (o)",
-        "Help                 (h)",
-        "About                (b)",
-        "Save                 (s)",
-        "Quit with save       (q)",
-        "Return to game       (r)",
-    };
-
-    int max_w = 0;
-    for (int i = 0; i < (int)(sizeof(lines) / sizeof(lines[0])); i++)
-    {
-        int w = (int)strlen(lines[i]);
-        if (w > max_w)
-            max_w = w;
-    }
-    return max_w;
+    return (char)ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_LIST_SELECTION);
 }
 
 static bool main_menu_choice_is_disabled(int choice)
@@ -145,427 +86,143 @@ static void main_menu_prompt_label(int binding, const char* fallback,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-static int main_menu_about_count_rows(int indent, int wrap_right,
-    const main_menu_about_line* lines, const bool* blank_visible)
-{
-    int total = 0;
-
-    for (int i = 0; lines[i].text; i++)
-    {
-        if (!lines[i].text[0])
-        {
-            if (!blank_visible || blank_visible[i])
-                total++;
-        }
-        else
-            total += count_wrapped_lines(lines[i].text, wrap_right, indent);
-    }
-
-    return total;
-}
-
-static bool main_menu_about_drop_bottom_blank(bool* blank_visible,
-    const main_menu_about_line* lines, int line_count)
-{
-    for (int i = line_count - 1; i >= 0; i--)
-    {
-        if (!lines[i].text[0] && blank_visible[i])
-        {
-            blank_visible[i] = false;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static bool main_menu_about_scene_add_text_run(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int col, byte attr, const char* text, int len)
+static bool main_menu_about_scene_add_rich_span(app_ui_scene* scene,
+    app_ui_panel* panel, const main_menu_about_span* span, byte fallback_attr)
 {
     char buf[APP_UI_TEXT_MAX];
-    const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
+    const char* text;
+    byte attr;
+    size_t len;
 
-    if (!scene || !panel || !text || len <= 0)
-        return true;
+    if (!scene || !panel || !span)
+        return false;
 
+    text = span->text ? span->text : "";
+    attr = span->attr ? span->attr : fallback_attr;
+    len = strlen(text);
     while (len > 0)
     {
-        int chunk = MIN(len, max_chunk);
+        size_t chunk_len = len;
 
-        memcpy(buf, text, (size_t)chunk);
-        buf[chunk] = '\0';
-        if (!app_ui_panel_add_document_text(
-                scene, panel, (s16b)row, (s16b)col, attr, buf))
-        {
+        if (chunk_len >= sizeof(buf))
+            chunk_len = sizeof(buf) - 1u;
+        memcpy(buf, text, chunk_len);
+        buf[chunk_len] = '\0';
+        if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))
             return false;
-        }
-        col += chunk;
-        text += chunk;
-        len -= chunk;
+
+        text += chunk_len;
+        len -= chunk_len;
     }
 
     return true;
 }
 
-static bool main_menu_about_scene_add_attr_runs(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int col, const char* text,
-    const byte* attrs, int len)
+static bool main_menu_about_scene_add_paragraph(app_ui_scene* scene,
+    app_ui_panel* panel, const main_menu_about_span* spans, int span_count,
+    byte fallback_attr)
 {
-    int start = 0;
-
-    if (!scene || !panel || !text || !attrs || len <= 0)
-        return true;
-
-    while (start < len)
-    {
-        byte attr = attrs[start];
-        int end = start + 1;
-
-        while (end < len && attrs[end] == attr)
-            end++;
-        if (!main_menu_about_scene_add_text_run(
-                scene, panel, row, col, attr, text + start, end - start))
-        {
-            return false;
-        }
-        col += end - start;
-        start = end;
-    }
-
-    return true;
-}
-
-static int main_menu_about_flatten_spans(const main_menu_about_span* spans,
-    int span_count, byte fallback_attr, char* out_text, byte* out_attrs,
-    size_t cap)
-{
-    int len = 0;
-
-    if (!out_text || !out_attrs || cap < 2 || !spans || span_count <= 0)
-        return 0;
+    if (!scene || !panel || !spans || span_count <= 0)
+        return false;
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
 
     for (int i = 0; i < span_count; i++)
     {
-        cptr text = spans[i].text ? spans[i].text : "";
-        byte attr = spans[i].attr ? spans[i].attr : fallback_attr;
-
-        while (*text && (size_t)(len + 1) < cap)
-        {
-            out_text[len] = *text++;
-            out_attrs[len] = attr;
-            len++;
-        }
-    }
-
-    out_text[len] = '\0';
-    return len;
-}
-
-static bool main_menu_about_scene_add_wrapped_spans(
-    app_ui_scene* scene, app_ui_panel* panel, int* row, int indent,
-    int wrap_right,
-    const main_menu_about_span* spans, int span_count, byte fallback_attr)
-{
-    char flat_text[256];
-    byte flat_attrs[256];
-    int width = wrap_right - indent;
-    int total;
-    int start = 0;
-
-    if (!scene || !panel || !row || !spans || span_count <= 0)
-        return false;
-
-    if (width < 1)
-        width = 1;
-
-    total = main_menu_about_flatten_spans(
-        spans, span_count, fallback_attr, flat_text, flat_attrs, sizeof(flat_text));
-    if (total <= 0)
-        return true;
-
-    while (start < total)
-    {
-        int remaining = total - start;
-        int len = MIN(remaining, width);
-
-        if (start + len < total)
-        {
-            int break_at = -1;
-
-            for (int i = start; i < start + len; i++)
-            {
-                if (flat_text[i] == ' ')
-                    break_at = i;
-            }
-
-            if (break_at > start)
-                len = break_at - start;
-        }
-
-        if (len <= 0)
-            len = MIN(remaining, width);
-        if (!main_menu_about_scene_add_attr_runs(
-                scene, panel, *row, indent, flat_text + start,
-                flat_attrs + start, len))
+        if (!main_menu_about_scene_add_rich_span(scene, panel, &spans[i],
+                fallback_attr))
         {
             return false;
         }
-
-        (*row)++;
-        start += len;
-        while (start < total && flat_text[start] == ' ')
-            start++;
     }
 
     return true;
-}
-
-static bool main_menu_about_scene_add_wrapped_line(app_ui_scene* scene,
-    app_ui_panel* panel, int* row, int indent, int wrap_right, byte attr,
-    cptr text)
-{
-    const main_menu_about_span span = { attr, text ? text : "" };
-
-    return main_menu_about_scene_add_wrapped_spans(
-        scene, panel, row, indent, wrap_right, &span, 1, attr);
 }
 
 static bool main_menu_about_build_ui_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
-    int wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    int hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
-    int menu_w;
-    int box_w;
-    int box_left;
-    int text_indent;
-    int wrap_right;
-    int body_rows;
-    int row_top;
-    int row;
-    int prompt_row;
-    static const main_menu_about_line about_lines[] = {
-        { TERM_WHITE, "Sil-More is an evolution of SilQ, a famous roguelike" },
-        { TERM_WHITE, "taking place in the First Age of Beleriand." },
-        { TERM_WHITE, "" },
-        { TERM_WHITE, "Developers: k0rtess and sinefabula." },
-        { TERM_WHITE, "Gamedesigner: k0rtess." },
-        { TERM_WHITE, "Tileset: MicroChasm." },
-        { TERM_WHITE, "Main music theme: sinefabula." },
-        { TERM_WHITE, "Ambient music theme: West Wind." },
-        { TERM_WHITE, "Logo: sinefabula." },
-        { TERM_WHITE, "" },
-        { TERM_WHITE, "Our love to Maedhros aka Carcharos for playing so much," },
-        { TERM_WHITE, "finding those pescy bugs and giving cool ideas." },
-        { TERM_L_BLUE, "Special thanks to original Sil and SilQ" },
-        { TERM_L_BLUE, "developers: half, Scatha and Quirk." },
-        { TERM_WHITE, "" },
-        { TERM_WHITE, "Honorable mentions:" },
-        { TERM_WHITE, "Sound: Kenney, qubodup, TomMusic, LeoHPaz." },
+    char close_key[16];
+    static const main_menu_about_span intro_spans[] = {
+        { TERM_VIOLET, "Sil-More" },
+        { TERM_WHITE, " is an evolution of " },
+        { TERM_L_BLUE, "SilQ" },
+        { TERM_WHITE,
+            ", a famous roguelike taking place in the First Age of Beleriand." },
+    };
+    static const main_menu_about_span credits_spans[] = {
+        { TERM_YELLOW, "Developers:" },
+        { TERM_WHITE, " k0rtess and sinefabula.\n" },
+        { TERM_YELLOW, "Gamedesigner:" },
+        { TERM_WHITE, " k0rtess.\n" },
+        { TERM_YELLOW, "Tileset:" },
+        { TERM_WHITE, " MicroChasm.\n" },
+        { TERM_YELLOW, "Main music theme:" },
+        { TERM_WHITE, " sinefabula.\n" },
+        { TERM_YELLOW, "Ambient music theme:" },
+        { TERM_WHITE, " West Wind.\n" },
+        { TERM_YELLOW, "Logo:" },
+        { TERM_WHITE, " sinefabula." },
+    };
+    static const main_menu_about_span thanks_spans[] = {
+        { TERM_WHITE,
+            "Our love to Maedhros aka Carcharos for playing so much, finding "
+            "those pescy bugs and giving cool ideas.\n" },
+        { TERM_L_BLUE, "Special thanks to original Sil and SilQ developers:" },
+        { TERM_WHITE, " half, Scatha and Quirk." },
+    };
+    static const main_menu_about_span mentions_spans[] = {
+        { TERM_YELLOW, "Honorable mentions:\n" },
+        { TERM_WHITE, "Sound: Kenney, qubodup, TomMusic, LeoHPaz.\n" },
         { TERM_WHITE, "Walls: Wolffius, Pine Druid, Backterria, Ninjikin." },
-        { TERM_WHITE, "" },
-        { TERM_L_RED, "And our deep love to Tolkien and his timeless creations." },
-        { TERM_WHITE, "" },
-        { 0, NULL }
+    };
+    static const main_menu_about_span finale_spans[] = {
+        { TERM_L_RED,
+            "And our deep love to Tolkien and his timeless creations." },
     };
 
     if (!scene)
         return false;
 
-    menu_w = main_menu_calc_width();
-    box_w = MIN(MAX(menu_w + 24, 68), 76);
-    if (box_w > (wid > 2 ? wid - 2 : wid))
-        box_w = (wid > 2) ? (wid - 2) : wid;
-    if (box_w < 1)
-        box_w = 1;
-
-    box_left = (wid - box_w) / 2;
-    if (box_left < 0)
-        box_left = 0;
-
-    text_indent = box_left + 2;
-    wrap_right = box_left + box_w - 1;
     app_ui_scene_init(scene);
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
         return false;
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 920, 1360);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "About Sil-More");
 
+    if (!main_menu_about_scene_add_paragraph(scene, panel, intro_spans,
+            (int)N_ELEMENTS(intro_spans), TERM_WHITE)
+        || !main_menu_about_scene_add_paragraph(scene, panel, credits_spans,
+            (int)N_ELEMENTS(credits_spans), TERM_WHITE)
+        || !main_menu_about_scene_add_paragraph(scene, panel, thanks_spans,
+            (int)N_ELEMENTS(thanks_spans), TERM_WHITE)
+        || !main_menu_about_scene_add_paragraph(scene, panel, mentions_spans,
+            (int)N_ELEMENTS(mentions_spans), TERM_WHITE)
+        || !main_menu_about_scene_add_paragraph(scene, panel, finale_spans,
+            (int)N_ELEMENTS(finale_spans), TERM_WHITE))
     {
-        int line_count = 0;
-        bool blank_visible[sizeof(about_lines) / sizeof(about_lines[0])] = { false };
-        int max_body_rows;
-
-        while (about_lines[line_count].text)
-            line_count++;
-
-        for (int i = 0; i < line_count; i++)
-            blank_visible[i] = true;
-
-        body_rows = main_menu_about_count_rows(text_indent, wrap_right,
-            about_lines, blank_visible);
-
-        max_body_rows = (hgt > 2) ? (hgt - 2) : 0;
-        while ((body_rows > max_body_rows)
-            && main_menu_about_drop_bottom_blank(blank_visible, about_lines,
-                line_count))
-        {
-            body_rows -= 1;
-        }
-
-        row_top = (hgt > body_rows + 2) ? 1 : 0;
-
-        {
-            cptr title = "About Sil-More";
-            int title_x = box_left + MAX((box_w - (int)strlen(title)) / 2 - 2, 0);
-
-            if (!app_ui_panel_add_document_text(
-                    scene, panel, (s16b)row_top, (s16b)title_x, TERM_YELLOW,
-                    title))
-            {
-                return false;
-            }
-        }
-
-        row = row_top + 1;
-        for (int i = 0; i < line_count; i++)
-        {
-            cptr text = about_lines[i].text;
-
-            if (!text[0])
-            {
-                if (blank_visible[i])
-                    row++;
-                continue;
-            }
-
-            if (i == 0)
-            {
-                static const main_menu_about_span intro_label_spans[] = {
-                    { TERM_VIOLET, "Sil-More" },
-                    { TERM_WHITE, " is an evolution of " },
-                    { TERM_L_BLUE, "SilQ" },
-                    { TERM_WHITE, ", a famous roguelike" },
-                };
-
-                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
-                        &row, text_indent, wrap_right, intro_label_spans,
-                        (int)(sizeof(intro_label_spans)
-                            / sizeof(intro_label_spans[0])),
-                        about_lines[i].attr))
-                {
-                    return false;
-                }
-            }
-            else if ((i >= 3) && (i <= 8))
-            {
-                static const main_menu_about_span label_spans[][2] = {
-                    {
-                        { TERM_YELLOW, "Developers:" },
-                        { TERM_WHITE, " k0rtess and sinefabula." },
-                    },
-                    {
-                        { TERM_YELLOW, "Gamedesigner:" },
-                        { TERM_WHITE, " k0rtess." },
-                    },
-                    {
-                        { TERM_YELLOW, "Tileset:" },
-                        { TERM_WHITE, " MicroChasm." },
-                    },
-                    {
-                        { TERM_YELLOW, "Main music theme:" },
-                        { TERM_WHITE, " sinefabula." },
-                    },
-                    {
-                        { TERM_YELLOW, "Ambient music theme:" },
-                        { TERM_WHITE, " West Wind." },
-                    },
-                    {
-                        { TERM_YELLOW, "Logo:" },
-                        { TERM_WHITE, " sinefabula." },
-                    },
-                };
-                int label_index = i - 3;
-
-                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
-                        &row, text_indent, wrap_right,
-                        label_spans[label_index], 2,
-                        about_lines[i].attr))
-                {
-                    return false;
-                }
-            }
-            else if (i == 15)
-            {
-                static const main_menu_about_span mentions_spans[] = {
-                    { TERM_YELLOW, "Honorable mentions:" },
-                };
-
-                if (!main_menu_about_scene_add_wrapped_spans(scene, panel,
-                        &row, text_indent, wrap_right, mentions_spans, 1,
-                        about_lines[i].attr))
-                {
-                    return false;
-                }
-            }
-            else if (!main_menu_about_scene_add_wrapped_line(scene, panel,
-                         &row, text_indent, wrap_right, about_lines[i].attr,
-                         text))
-            {
-                return false;
-            }
-        }
+        return false;
     }
-
-    prompt_row = row;
-    if (prompt_row >= hgt)
-        prompt_row = hgt - 1;
 
     if (steamdeck_controls_active())
     {
-        char back_label[16];
-        char prompt_buf[48];
-
-        main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] return", back_label);
-        return app_ui_panel_add_document_text(
-            scene, panel, (s16b)prompt_row, (s16b)text_indent, TERM_L_WHITE,
-            prompt_buf);
+        main_menu_prompt_label(steamdeck_back_key(), "Any", close_key,
+            sizeof(close_key));
+    }
+    else
+    {
+        SDL_strlcpy(close_key, "Any", sizeof(close_key));
     }
 
-    return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
-        (s16b)text_indent, TERM_L_WHITE, "[Press any key to return]");
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        close_key, "Close");
 }
 
 static void main_menu_about(void)
 {
-    static const char about_text[] =
-        "About Sil-More\n"
-        "\n"
-        "Sil-More is an evolution of SilQ, a famous roguelike\n"
-        "taking place in the First Age of Beleriand.\n"
-        "\n"
-        "Developers: k0rtess and sinefabula.\n"
-        "Gamedesigner: k0rtess.\n"
-        "Tileset: MicroChasm.\n"
-        "Main music theme: sinefabula.\n"
-        "Ambient music theme: West Wind.\n"
-        "Logo: sinefabula.\n"
-        "\n"
-        "Our love to Maedhros aka Carcharos for playing so much,\n"
-        "finding those pescy bugs and giving cool ideas.\n"
-        "Special thanks to original Sil and SilQ developers:\n"
-        "half, Scatha and Quirk.\n"
-        "\n"
-        "Honorable mentions:\n"
-        "Sound: Kenney, qubodup, TomMusic, LeoHPaz.\n"
-        "Walls: Wolffius, Pine Druid, Backterria, Ninjikin.\n"
-        "\n"
-        "And our deep love to Tolkien and his timeless creations.\n";
-
     ui_information_scene_scope scope;
 
     if (p_ptr && p_ptr->playing)
@@ -584,12 +241,14 @@ static void main_menu_about(void)
         else
         {
             ui_information_scene_leave(&scope);
-            show_buffer(about_text, 0);
+            log_warn("about screen: semantic scene presentation failed");
+            msg_print("About screen unavailable.");
         }
     }
     else
     {
-        show_buffer(about_text, 0);
+        log_warn("about screen: semantic scene entry required");
+        msg_print("About screen unavailable.");
     }
 
     if (p_ptr && p_ptr->playing)
@@ -614,6 +273,8 @@ static bool main_menu_scene_enter(main_menu_scene_scope* scope)
 
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
+    app_session_push_input_capture(session, &scope->input_capture_scope);
+    app_session_clear_inputs(session);
     scope->active = true;
     return true;
 }
@@ -726,8 +387,10 @@ static void main_menu_scene_leave(main_menu_scene_scope* scope, bool refresh)
 
     if (session)
     {
+        app_session_clear_inputs(session);
         app_session_clear_interaction(session);
         app_session_clear_dungeon_overlay_scene(session);
+        app_session_pop_input_capture(session, &scope->input_capture_scope);
     }
     if (refresh)
         (void)Term_xtra(TERM_XTRA_FRESH, 0);
@@ -763,15 +426,15 @@ static int main_menu_aux(int* highlight, main_menu_scene_scope* menu_scene_scope
 
     if (!menu_scene_scope || !menu_scene_scope->active)
     {
-        log_warn("main menu: snapshot overlay required; legacy branch removed");
-        msg_print("Main menu requires active snapshot UI rendering.");
+        log_warn("main menu: semantic overlay scene unavailable");
+        msg_print("Main menu unavailable.");
         return (-1);
     }
 
     if (!main_menu_scene_present(menu_scene_scope, *highlight, death_view))
     {
-        log_warn("main menu: failed to republish snapshot overlay");
-        msg_print("Main menu requires active snapshot UI rendering.");
+        log_warn("main menu: failed to republish semantic overlay");
+        msg_print("Main menu unavailable.");
         return (-1);
     }
 
@@ -917,8 +580,8 @@ void do_cmd_main_menu(void)
     {
         if (app_session_interactions_enabled(session))
             app_session_clear_interaction(session);
-        log_warn("main menu: snapshot overlay required; legacy branch removed");
-        msg_print("Main menu requires active snapshot UI rendering.");
+        log_warn("main menu: semantic overlay scene unavailable");
+        msg_print("Main menu unavailable.");
         return;
     }
 
@@ -1563,15 +1226,15 @@ void show_hint_message_screen(int index)
 
     if (!ui_information_scene_supported())
     {
-        log_warn("hint message detail: snapshot renderer required; legacy detail renderer removed");
-        msg_print("Hint message viewer requires the snapshot UI renderer.");
+        log_warn("hint message detail: semantic scene unavailable");
+        msg_print("Hint message viewer unavailable.");
         return;
     }
 
     if (!hint_message_show_ui_scene(index, &look_y, &look_x,
             &request_look))
     {
-        log_warn("hint message detail: semantic scene presentation failed on the snapshot renderer path");
+        log_warn("hint message detail: semantic scene presentation failed");
         msg_print("Hint message viewer unavailable.");
         return;
     }
@@ -1712,15 +1375,15 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
 
     if (!ui_information_scene_supported())
     {
-        log_warn("hint messages: snapshot renderer required; legacy hint-message renderer removed");
-        msg_print("Hint message browser requires the snapshot UI renderer.");
+        log_warn("hint messages: semantic scene unavailable");
+        msg_print("Hint message browser unavailable.");
         return;
     }
 
     if (!do_cmd_hint_messages_information_scene(out_pending_look,
             out_look_y, out_look_x))
     {
-        log_warn("hint messages: semantic scene presentation failed on the snapshot renderer path");
+        log_warn("hint messages: semantic scene presentation failed");
         msg_print("Hint message browser unavailable.");
     }
 }
@@ -1963,14 +1626,14 @@ void do_cmd_messages(void)
 
     if (!ui_information_scene_supported())
     {
-        log_warn("message recall: snapshot renderer required; legacy message-recall renderer removed");
-        msg_print("Message recall requires the snapshot UI renderer.");
+        log_warn("message recall: semantic scene unavailable");
+        msg_print("Message recall unavailable.");
         return;
     }
 
     if (!do_cmd_messages_information_scene())
     {
-        log_warn("message recall: semantic scene presentation failed on the snapshot renderer path");
+        log_warn("message recall: semantic scene presentation failed");
         msg_print("Message recall unavailable.");
     }
     return;

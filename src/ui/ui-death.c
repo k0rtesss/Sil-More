@@ -15,80 +15,6 @@
 #include "ui/ui-character-screen.h"
 #include "ui/ui-death.h"
 #include "ui/ui-information-scene.h"
-#include "ui/story_font.h"
-
-static void death_get_term_size(int* wid, int* hgt)
-{
-    int term_wid = 80;
-    int term_hgt = 24;
-
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
-
-    if (wid)
-        *wid = term_wid;
-    if (hgt)
-        *hgt = term_hgt;
-}
-
-static app_ui_panel* death_begin_document_scene(app_ui_scene* scene,
-    bool use_backdrop, bool dim_backdrop)
-{
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    if (use_backdrop)
-        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
-    if (dim_backdrop)
-        scene->flags |= APP_UI_SCENE_FLAG_DIM_BACKDROP;
-
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    return panel;
-}
-
-static bool death_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, byte story, cptr text)
-{
-    if (!text || !text[0])
-        return true;
-
-    return app_ui_panel_add_document_text_ex(scene, panel, row, col, attr,
-        story, text);
-}
-
-static int death_item_tile_width(const object_type* o_ptr)
-{
-    if (!o_ptr || !o_ptr->k_idx)
-        return 0;
-    if (use_graphics == GRAPHICS_NONE || use_graphics == GRAPHICS_PSEUDO)
-        return 0;
-
-    return use_bigtile ? 2 : 1;
-}
-
-static bool death_scene_add_item_cell(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, const object_type* o_ptr)
-{
-    int width = death_item_tile_width(o_ptr);
-
-    if (width <= 0)
-        return true;
-
-    return app_ui_panel_add_document_cell_ex(scene, panel, row, col,
-        object_attr(o_ptr), object_char(o_ptr), 0, 0, 0, (byte)width);
-}
 
 static bool death_present_ui_page(const app_ui_scene* scene, bool* out_escape)
 {
@@ -113,6 +39,116 @@ static bool death_add_body_line(app_ui_panel* panel, byte attr, cptr text)
         return true;
 
     return app_ui_panel_add_body_line(panel, attr, text);
+}
+
+static app_ui_panel* death_begin_item_list_scene(app_ui_scene* scene,
+    cptr title)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return NULL;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return NULL;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 920, 1380);
+    if (title && title[0])
+        app_ui_panel_set_title(panel, TERM_WHITE, title);
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "Any key", "Continue");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Esc", "Exit");
+
+    return panel;
+}
+
+static byte death_item_row_attr(const object_type* o_ptr, bool empty_slot)
+{
+    if (!o_ptr || empty_slot || !o_ptr->k_idx)
+        return TERM_L_DARK;
+
+    if (weapon_glows(o_ptr))
+        return object_display_color(o_ptr, TERM_L_BLUE);
+
+    return object_display_color(o_ptr,
+        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+}
+
+static void death_format_weight(char* buf, size_t buf_size,
+    const object_type* o_ptr)
+{
+    int weight = 0;
+
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (!show_weights || !o_ptr || !o_ptr->k_idx)
+        return;
+
+    weight = o_ptr->weight * o_ptr->number;
+    strnfmt(buf, buf_size, "%2d.%1d lb", weight / 10, weight % 10);
+}
+
+static void death_format_total_weight(char* buf, size_t buf_size,
+    int total_weight)
+{
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (!show_weights)
+        return;
+
+    strnfmt(buf, buf_size, "%2d.%1d lb", total_weight / 10,
+        total_weight % 10);
+}
+
+static void death_format_meta_with_tag(char* buf, size_t buf_size,
+    cptr weight_text, cptr tag_text)
+{
+    if (!buf || !buf_size)
+        return;
+
+    buf[0] = '\0';
+    if (weight_text && weight_text[0] && tag_text && tag_text[0])
+    {
+        strnfmt(buf, buf_size, "%s  %s", weight_text, tag_text);
+    }
+    else if (weight_text && weight_text[0])
+    {
+        SDL_strlcpy(buf, weight_text, buf_size);
+    }
+    else if (tag_text && tag_text[0])
+    {
+        SDL_strlcpy(buf, tag_text, buf_size);
+    }
+}
+
+static bool death_append_armour_total_rows(app_ui_panel* panel,
+    int armour_weight)
+{
+    char buf[APP_UI_LABEL_MAX];
+
+    if (!panel || armour_weight <= 0)
+        return true;
+
+    if (!app_ui_panel_add_row(panel, (s16b)-4001, TERM_L_DARK, true, false, "",
+            "--------", ""))
+    {
+        return false;
+    }
+
+    strnfmt(buf, sizeof(buf), "armour: %3d.%1d lb",
+        armour_weight / 10, armour_weight % 10);
+    return app_ui_panel_add_row(panel, (s16b)-4002, TERM_SLATE, true, false,
+        "", buf, "");
 }
 
 static byte death_status_title_attr(void)
@@ -337,50 +373,13 @@ static bool death_build_trophy_line(const high_score* score, char* out,
 static bool death_build_inventory_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
-    int term_wid;
-    int term_hgt;
-    int menu_wid;
     int i;
-    int j;
-    int k;
-    int l;
     int z = 0;
-    int col;
-    int len;
-    int lim;
-    int max_rows;
-    int effective_max_items;
-    int weight_col;
-    int label_col;
-    int prompt_row;
-    int out_index[24];
-    byte out_color[24];
-    char out_desc[24][80];
-    char o_name[80];
-    char tmp_val[80];
     bool include_supplies;
-    bool use_story_font = story_inventory_enabled();
-    byte story = use_story_font ? STORY_FLAG_USE : 0;
-    byte grid_story = use_story_font ? (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN)
-                                     : 0;
 
-    panel = death_begin_document_scene(scene, false, false);
+    panel = death_begin_item_list_scene(scene, "You are carrying");
     if (!panel)
         return false;
-
-    death_get_term_size(&term_wid, &term_hgt);
-    menu_wid = menu_term_width();
-    weight_col = menu_weight_col_for_width(menu_wid);
-    label_col = menu_label_col_for_width(menu_wid, show_weights);
-
-    len = 29;
-    lim = menu_wid - 3;
-    if (lim < 0)
-        lim = 0;
-    if (show_weights && lim > (weight_col - 1))
-        lim = weight_col - 1;
-    if (lim < 0)
-        lim = 0;
 
     include_supplies = !inventory_menu_get_include_equip()
         && supplies_visible_for_current_filter();
@@ -391,320 +390,144 @@ static bool death_build_inventory_scene(app_ui_scene* scene)
             z = i + 1;
     }
 
-    max_rows = term_hgt - 1;
-    if (max_rows < 1)
-        max_rows = INVEN_PACK;
-
-    effective_max_items = include_supplies ? (max_rows - 1) : max_rows;
-    if (z > effective_max_items)
-        z = effective_max_items;
-
-    k = 0;
-    if (include_supplies && k < (int)N_ELEMENTS(out_index))
+    if (include_supplies)
     {
-        format_supply_summary(out_desc[k], sizeof(out_desc[0]));
-        out_index[k] = SUPPLIES_INDEX;
-        out_color[k] = TERM_L_WHITE;
-        l = menu_inventory_row_width(out_desc[k], NULL, show_weights);
-        if (l > len)
-            len = l;
-        k++;
+        char label_buf[APP_UI_LABEL_MAX];
+        char meta_buf[APP_UI_META_MAX];
+        char weight_buf[16];
+        char tag_buf[8];
+        char label = supplies_label_char();
+        int slot = supplies_virtual_slot();
+
+        format_supply_summary(label_buf, sizeof(label_buf));
+        if (!label && slot >= 0)
+            label = index_to_label(slot);
+        if (label)
+            strnfmt(tag_buf, sizeof(tag_buf), "(%c)", label);
+        else
+            tag_buf[0] = '\0';
+
+        death_format_total_weight(weight_buf, sizeof(weight_buf),
+            supplies_total_weight());
+        death_format_meta_with_tag(meta_buf, sizeof(meta_buf), weight_buf,
+            tag_buf);
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)SUPPLIES_INDEX, TERM_L_WHITE,
+                TERM_L_WHITE, 0, '\0', true, false, "", label_buf, meta_buf))
+        {
+            return false;
+        }
     }
 
-    for (i = 0; i < z && k < (int)N_ELEMENTS(out_index); i++)
+    for (i = 0; i < z; i++)
     {
         object_type* o_ptr = &inventory[i];
+        char label_buf[APP_UI_LABEL_MAX];
+        char meta_buf[APP_UI_META_MAX];
+        char weight_buf[16];
+        char tag_buf[8];
+        byte attr;
 
         if (!item_tester_okay(o_ptr))
             continue;
 
-        object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
-        o_name[lim] = '\0';
+        object_desc(label_buf, sizeof(label_buf), o_ptr, true, 3);
+        death_format_weight(weight_buf, sizeof(weight_buf), o_ptr);
+        strnfmt(tag_buf, sizeof(tag_buf), "(%c)", index_to_label(i));
+        death_format_meta_with_tag(meta_buf, sizeof(meta_buf), weight_buf,
+            tag_buf);
+        attr = death_item_row_attr(o_ptr, false);
 
-        out_index[k] = i;
-        out_color[k] = weapon_glows(o_ptr)
-            ? object_display_color(o_ptr, TERM_L_BLUE)
-            : object_display_color(o_ptr,
-                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-        SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
-
-        l = menu_inventory_row_width(out_desc[k], o_ptr, show_weights);
-        if (l > len)
-            len = l;
-        k++;
-    }
-
-    col = menu_center_col_for_len(menu_wid, len);
-
-    if (!death_scene_add_text(scene, panel, 0, 0, TERM_WHITE, 0,
-            "You are carrying:"))
-    {
-        return false;
-    }
-
-    for (j = 0; j < k; j++)
-    {
-        int row = j + 1;
-        int idx = out_index[j];
-        bool is_supply = (idx == SUPPLIES_INDEX);
-        object_type* o_ptr = is_supply ? NULL : &inventory[idx];
-        int text_col = col;
-
-        if (!is_supply && o_ptr && o_ptr->k_idx)
-        {
-            if (!death_scene_add_item_cell(scene, panel, (s16b)row,
-                    (s16b)text_col, o_ptr))
-            {
-                return false;
-            }
-            text_col += death_item_tile_width(o_ptr);
-        }
-
-        if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)text_col,
-                out_color[j], story, out_desc[j]))
-        {
-            return false;
-        }
-
-        if (show_weights)
-        {
-            int wgt;
-
-            if (is_supply)
-                wgt = supplies_total_weight();
-            else
-                wgt = o_ptr->weight * o_ptr->number;
-
-            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb", wgt / 10,
-                wgt % 10);
-            if (!death_scene_add_text(scene, panel, (s16b)row,
-                    (s16b)weight_col, out_color[j], grid_story, tmp_val))
-            {
-                return false;
-            }
-        }
-
-        if (is_supply)
-        {
-            char label = supplies_label_char();
-            int slot = supplies_virtual_slot();
-
-            if (!label && slot >= 0)
-                label = index_to_label(slot);
-            if (!label)
-                label = 'a';
-            strnfmt(tmp_val, sizeof(tmp_val), " (%c)", label);
-        }
-        else
-        {
-            strnfmt(tmp_val, sizeof(tmp_val), " (%c)", index_to_label(idx));
-        }
-
-        if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)label_col,
-                TERM_WHITE, story, tmp_val))
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, attr, attr,
+                object_attr(o_ptr), object_char(o_ptr), true, false, "",
+                label_buf, meta_buf))
         {
             return false;
         }
     }
 
-    prompt_row = MIN(p_ptr->inven_cnt + 2, term_hgt - 2);
-    if (prompt_row < 0)
-        prompt_row = 0;
+    if (panel->row_count == 0)
+    {
+        return app_ui_panel_add_row(panel, (s16b)-1, TERM_SLATE, true, false,
+            "", "Nothing carried.", "");
+    }
 
-    return death_scene_add_text(scene, panel, (s16b)prompt_row,
-        (s16b)MAX(0, term_wid - 18), TERM_L_WHITE, 0, "(press any key)");
+    return true;
 }
 
 static bool death_build_equipment_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
-    int term_wid;
-    int term_hgt;
-    int menu_wid;
     int i;
-    int j;
-    int k;
-    int l;
-    int col;
-    int len;
-    int lim;
-    int weight_col;
-    int label_col;
     int armour_weight = 0;
-    int out_index[24];
-    byte out_color[24];
-    char out_desc[24][80];
-    char o_name[80];
-    char tmp_val[80];
-    bool use_story_font = story_equipment_enabled();
-    byte story = use_story_font ? STORY_FLAG_USE : 0;
-    byte grid_story = use_story_font ? (STORY_FLAG_USE | STORY_FLAG_CELL_ALIGN)
-                                     : 0;
 
-    panel = death_begin_document_scene(scene, false, false);
+    panel = death_begin_item_list_scene(scene, "You are using");
     if (!panel)
         return false;
 
-    death_get_term_size(&term_wid, &term_hgt);
-    menu_wid = menu_term_width();
-    weight_col = menu_weight_col_for_width(menu_wid);
-    label_col = menu_label_col_for_width(menu_wid, show_weights);
-
-    len = 29;
-    lim = menu_wid - 3;
-    if (lim < 0)
-        lim = 0;
-    lim -= (14 + 2);
-    if (show_weights)
-        lim -= 9;
-    if (lim < 0)
-        lim = 0;
-
-    for (k = 0, i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
         object_type* o_ptr = &inventory[i];
-        bool is_empty = !o_ptr->k_idx;
+        bool empty_slot = !o_ptr->k_idx;
+        char desc_buf[96];
+        char label_buf[APP_UI_LABEL_MAX];
+        char meta_buf[APP_UI_META_MAX];
+        char weight_buf[16];
+        char tag_buf[8];
+        byte attr;
+        byte meta_attr;
+        byte icon_attr = 0;
+        char icon_char = '\0';
 
         if (!item_tester_okay(o_ptr))
             continue;
 
-        if (is_empty)
+        if (empty_slot)
         {
-            SDL_strlcpy(o_name, describe_empty_slot(i), sizeof(o_name));
-            out_color[k] = TERM_L_DARK;
+            SDL_strlcpy(desc_buf, describe_empty_slot(i), sizeof(desc_buf));
+            if (i == INVEN_QUIVER2)
+            {
+                SDL_strlcat(desc_buf, " (keeps passive bonuses)",
+                    sizeof(desc_buf));
+            }
         }
         else
         {
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-            out_color[k] = object_display_color(o_ptr,
-                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            object_desc(desc_buf, sizeof(desc_buf), o_ptr, true, 3);
+            icon_attr = object_attr(o_ptr);
+            icon_char = object_char(o_ptr);
         }
 
-        o_name[lim] = '\0';
-        out_index[k] = i;
-        SDL_strlcpy(out_desc[k], o_name, sizeof(out_desc[0]));
+        strnfmt(label_buf, sizeof(label_buf), "%s: %s", mention_use(i),
+            desc_buf);
+        strnfmt(tag_buf, sizeof(tag_buf), "(%c)", index_to_label(i));
+        death_format_weight(weight_buf, sizeof(weight_buf), o_ptr);
+        death_format_meta_with_tag(meta_buf, sizeof(meta_buf),
+            empty_slot ? "" : weight_buf, tag_buf);
 
-        l = menu_equipment_row_width(out_desc[k], is_empty ? NULL : o_ptr,
-            show_weights);
-        if (l > len)
-            len = l;
-        k++;
+        attr = death_item_row_attr(o_ptr, empty_slot);
+        meta_attr = attr;
+        if (!empty_slot && show_weights && o_ptr->weight
+            && i >= INVEN_BODY && i <= INVEN_FEET)
+        {
+            meta_attr = TERM_SLATE;
+            armour_weight += o_ptr->weight * o_ptr->number;
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, attr, meta_attr,
+                icon_attr, icon_char, true, false, "", label_buf, meta_buf))
+        {
+            return false;
+        }
     }
 
-    col = menu_center_col_for_len(menu_wid, len);
-
-    if (!death_scene_add_text(scene, panel, 0, 0, TERM_WHITE, 0,
-            "You are using:"))
+    if (panel->row_count == 0)
     {
-        return false;
+        return app_ui_panel_add_row(panel, (s16b)-1, TERM_SLATE, true, false,
+            "", "Nothing equipped.", "");
     }
 
-    for (j = 0; j < k; j++)
-    {
-        int row = j + 1;
-        int slot = out_index[j];
-        object_type* o_ptr = &inventory[slot];
-        bool has_object = o_ptr->k_idx != 0;
-        int text_col = col + 12 + 2;
-        const char* desc_ptr = out_desc[j];
-        char prefix_buf[32];
-        char label_buf[8];
-        char weight_buf[16];
-        char combined_desc[160];
-        byte weight_attr = out_color[j];
-
-        strnfmt(prefix_buf, sizeof(prefix_buf), "%-12s: ", mention_use(slot));
-        strnfmt(label_buf, sizeof(label_buf), " (%c)", index_to_label(slot));
-
-        if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)col,
-                TERM_WHITE, story, prefix_buf))
-        {
-            return false;
-        }
-
-        if (has_object)
-        {
-            if (!death_scene_add_item_cell(scene, panel, (s16b)row,
-                    (s16b)text_col, o_ptr))
-            {
-                return false;
-            }
-            text_col += death_item_tile_width(o_ptr);
-        }
-
-        if (use_story_font)
-        {
-            story_prepare_equipment_desc(combined_desc, sizeof(combined_desc),
-                desc_ptr, slot, has_object,
-                menu_desc_limit(text_col, label_col, weight_col, show_weights));
-            desc_ptr = combined_desc;
-        }
-
-        if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)text_col,
-                out_color[j], story, desc_ptr))
-        {
-            return false;
-        }
-
-        if (show_weights && o_ptr->weight)
-        {
-            int wgt = o_ptr->weight * o_ptr->number;
-
-            strnfmt(weight_buf, sizeof(weight_buf), "%2d.%1d lb", wgt / 10,
-                wgt % 10);
-            if ((slot >= INVEN_BODY) && (slot <= INVEN_FEET))
-            {
-                weight_attr = TERM_SLATE;
-                armour_weight += wgt;
-            }
-
-            if (!death_scene_add_text(scene, panel, (s16b)row,
-                    (s16b)weight_col, weight_attr, grid_story, weight_buf))
-            {
-                return false;
-            }
-        }
-
-        if (!use_story_font && slot == INVEN_QUIVER2)
-        {
-            int note_col = col + 12 + 2 + (int)strlen(out_desc[j]);
-
-            if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)note_col,
-                    TERM_L_DARK, 0, " (keeps passive bonuses)"))
-            {
-                return false;
-            }
-        }
-
-        if (!death_scene_add_text(scene, panel, (s16b)row, (s16b)label_col,
-                TERM_WHITE, story, label_buf))
-        {
-            return false;
-        }
-    }
-
-    if (armour_weight)
-    {
-        int total_row = INVEN_TOTAL - INVEN_WIELD + 1;
-        int text_row = total_row + 1;
-
-        if (!death_scene_add_text(scene, panel, (s16b)total_row,
-                (s16b)weight_col, TERM_L_DARK, grid_story, "--------"))
-        {
-            return false;
-        }
-
-        strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
-            armour_weight / 10, armour_weight % 10);
-        if (!death_scene_add_text(scene, panel, (s16b)text_row,
-                (s16b)MAX(0, weight_col - 8), TERM_SLATE, grid_story, tmp_val))
-        {
-            return false;
-        }
-    }
-
-    return death_scene_add_text(scene, panel, (s16b)MAX(0, term_hgt - 2),
-        (s16b)MAX(0, term_wid - 18), TERM_L_WHITE, 0, "(press any key)");
+    return death_append_armour_total_rows(panel, armour_weight);
 }
 
 static bool death_build_final_menu_scene(app_ui_scene* scene,

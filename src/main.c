@@ -346,12 +346,6 @@ int main(int argc, char* argv[])
             break;
         }
 
-        case 'X':
-        {
-            /* Snapshot renderer fallback mode has been removed. */
-            break;
-        }
-
         case 'G':
         case 'g':
         {
@@ -431,7 +425,6 @@ int main(int argc, char* argv[])
             puts("  -f       Request fiddle (verbose) mode");
             puts("  -w       Request wizard mode");
             puts("  -v       Request sound mode");
-            puts("  -X       Disable snapshot-driven SDL renderer");
             puts("  -g       Request graphics mode");
             puts("  -o       Request original keyset (default)");
             puts("  -r       Request rogue-like keyset");

@@ -43,6 +43,12 @@ void identify_revealed_items(bool identify[]);
 #define UNQ 10
 #define MAX_FLAG_SETS 11
 
+enum
+{
+    SELF_KNOWLEDGE_PAGE_ENTRY_MAX = 8,
+    RECHARGE_TARGET_PAGE_SIZE = 10
+};
+
 // Flags with descriptions
 flag_name info_flags_desc[] = { 
 {"Will Affinity is at 3, and never affected by curses", UNQ, UNQ_EARENDIL}, 
@@ -474,25 +480,6 @@ static byte resist_color(const char* name)
     return TERM_WHITE;
 }
 
-static void self_knowledge_layout_size(int* wid, int* hgt)
-{
-    int term_wid = 80;
-    int term_hgt = 24;
-
-    if (Term)
-        Term_get_size(&term_wid, &term_hgt);
-
-    if (term_wid < 40)
-        term_wid = 40;
-    if (term_hgt < 8)
-        term_hgt = 8;
-
-    if (wid)
-        *wid = term_wid;
-    if (hgt)
-        *hgt = term_hgt;
-}
-
 static bool self_knowledge_append_rich_span(app_ui_scene* scene,
     app_ui_panel* panel, byte attr, cptr text)
 {
@@ -600,46 +587,18 @@ static bool self_knowledge_scene_add_entry(app_ui_scene* scene,
         good ? TERM_GREEN : TERM_L_RED, detail_text);
 }
 
-static int self_knowledge_entry_line_count(cptr main_text, cptr detail_text,
-    int wrap_width)
-{
-    char combined[512];
-
-    if (!main_text || !main_text[0])
-        return 0;
-
-    if (detail_text && detail_text[0])
-        strnfmt(combined, sizeof(combined), "%s %s", main_text, detail_text);
-    else
-        SDL_strlcpy(combined, main_text, sizeof(combined));
-
-    return count_wrapped_lines(combined, wrap_width, 1);
-}
-
 static bool self_knowledge_build_ui_scene(app_ui_scene* scene, char s[][200],
     char t[][200], bool good[], int count, int start, int* out_next)
 {
     app_ui_panel* panel;
-    int term_wid;
-    int term_hgt;
-    int wrap_width;
-    int max_lines;
-    int used_lines = 0;
     int next = start;
+    int page_entries = 0;
     char subtitle[APP_UI_TEXT_MAX];
 
     if (out_next)
         *out_next = start;
     if (!scene)
         return false;
-
-    self_knowledge_layout_size(&term_wid, &term_hgt);
-    wrap_width = term_wid - 6;
-    if (wrap_width < 20)
-        wrap_width = 20;
-    max_lines = term_hgt - 6;
-    if (max_lines < 4)
-        max_lines = 4;
 
     app_ui_scene_init(scene);
     scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
@@ -666,23 +625,16 @@ static bool self_knowledge_build_ui_scene(app_ui_scene* scene, char s[][200],
     }
     else
     {
-        while (next < count)
+        while (next < count && page_entries < SELF_KNOWLEDGE_PAGE_ENTRY_MAX)
         {
-            int entry_lines = self_knowledge_entry_line_count(s[next], t[next],
-                wrap_width);
-
-            if (entry_lines < 1)
-                entry_lines = 1;
-            if (used_lines > 0 && used_lines + entry_lines > max_lines)
-                break;
             if (!self_knowledge_scene_add_entry(scene, panel, s[next], t[next],
                     good[next]))
             {
                 return false;
             }
 
-            used_lines += entry_lines;
             next++;
+            page_entries++;
         }
 
         if (next == start)
@@ -1607,25 +1559,6 @@ static int recharge_collect_targets(recharge_target_entry entries[],
     return count;
 }
 
-static void recharge_choose_target_layout_size(int* wid, int* hgt)
-{
-    int term_wid = 80;
-    int term_hgt = 24;
-
-    if (Term)
-        Term_get_size(&term_wid, &term_hgt);
-
-    if (term_wid < 40)
-        term_wid = 40;
-    if (term_hgt < 8)
-        term_hgt = 8;
-
-    if (wid)
-        *wid = term_wid;
-    if (hgt)
-        *hgt = term_hgt;
-}
-
 static bool recharge_build_target_ui_scene(app_ui_scene* scene,
     const recharge_target_entry entries[], int count, int current, int top,
     int page_size)
@@ -1761,22 +1694,12 @@ static bool recharge_choose_target_ui(const recharge_target_entry entries[],
     ui_information_scene_scope scope;
     int current = 0;
     int top = 0;
-    int term_wid;
-    int term_hgt;
-    int page_size;
+    const int page_size = RECHARGE_TARGET_PAGE_SIZE;
 
     if (!entries || count <= 0 || !out_item)
         return false;
     if (!ui_information_scene_enter(&scope))
         return false;
-
-    recharge_choose_target_layout_size(&term_wid, &term_hgt);
-    (void)term_wid;
-    page_size = term_hgt - 10;
-    if (page_size < 1)
-        page_size = 1;
-    if (page_size > 26)
-        page_size = 26;
 
     while (true)
     {

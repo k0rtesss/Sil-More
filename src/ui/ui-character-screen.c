@@ -13,6 +13,11 @@
 
 #include <ctype.h>
 
+/*
+ * Legacy term-grid player sheet sizing for subwindows and other compatibility
+ * surfaces. The active SDL character sheet goes through
+ * build_character_sheet_ui_scene() instead.
+ */
 static void display_player_get_layout_size(int* wid, int* hgt)
 {
     int current_wid = (Term && Term->wid > 0) ? Term->wid : 80;

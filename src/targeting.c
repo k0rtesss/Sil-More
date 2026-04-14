@@ -38,15 +38,8 @@ static void targeting_snapshot_prompt(cptr text)
 
 static char targeting_inkey_with_wait_reason(void)
 {
-    app_wait_scope scope;
-    app_session* session = app_session_current();
-    char ch;
-
-    app_session_push_wait_scope(session, &scope,
-        APP_WAIT_REASON_TARGETING, 0, 0);
-    ch = (char)ui_information_scene_wait_key();
-    app_session_pop_wait_scope(session, &scope);
-    return ch;
+    return (char)ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_TARGETING);
 }
 
 /*

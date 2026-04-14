@@ -197,8 +197,6 @@ void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte*
 
 void sdl_scene_stack_init(void);
 void sdl_scene_stack_shutdown(void);
-void sdl_scene_stack_set_enabled(bool enabled);
-bool sdl_scene_stack_is_enabled(void);
 void sdl_scene_stack_on_layout_changed(void);
 void sdl_scene_stack_on_renderer_reset(void);
 void sdl_scene_stack_prepare_frame(Uint64 now_ns);

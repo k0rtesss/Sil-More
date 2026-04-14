@@ -15,6 +15,7 @@ typedef struct ui_information_scene_scope {
     app_snapshot previous_snapshot;
     app_menu_snapshot* previous_menu_snapshot;
     app_wait_scope wait_scope;
+    app_input_capture_scope input_capture_scope;
 } ui_information_scene_scope;
 
 bool ui_information_scene_supported(void);
@@ -28,6 +29,7 @@ bool ui_information_scene_show_monster_recall(int r_idx,
     int* out_key);
 int ui_information_scene_wait_key(void);
 int ui_information_scene_wait_key_nonrepeat(void);
+int ui_information_scene_wait_key_with_wait_reason(u16b reason);
 bool ui_information_scene_is_active(void);
 bool ui_information_scene_owns_input(void);
 void ui_information_scene_leave(ui_information_scene_scope* scope);

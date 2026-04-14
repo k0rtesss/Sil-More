@@ -2,7 +2,8 @@
 
 /*
  * Shared object UI display helpers.
- * Used by both the classic inventory/equipment lists and the enhanced menus.
+ * Semantic item scenes use the row/layout helpers here; the legacy
+ * subwindow path still uses display_inven() / display_equip().
  */
 
 #ifndef INCLUDED_OBJECT_UI_DISPLAY_H
@@ -12,6 +13,7 @@
 
 typedef struct object_type object_type;
 
+/* Legacy term-grid subwindow renderers for PW_INVEN / PW_EQUIP. */
 void display_inven(void);
 void display_equip(void);
 
@@ -28,7 +30,6 @@ bool get_story_equipment_list_active(void);
 void set_story_equipment_list_active(bool active);
 
 int draw_item_tile(int x, int y, object_type* o_ptr);
-int menu_term_width(void);
 int menu_weight_col_for_width(int term_wid);
 int menu_label_col_for_width(int term_wid, bool display_weights);
 int menu_center_col_for_len(int term_wid, int len);

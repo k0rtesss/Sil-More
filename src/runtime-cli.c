@@ -56,16 +56,6 @@ void runtime_cli_set_sound(bool enabled)
     g_runtime_cli.sound = enabled;
 }
 
-bool runtime_cli_snapshot_renderer(void)
-{
-    return true;
-}
-
-void runtime_cli_set_snapshot_renderer(bool enabled)
-{
-    (void)enabled;
-}
-
 int runtime_cli_graphics_mode(void)
 {
     return g_runtime_cli.graphics_mode;

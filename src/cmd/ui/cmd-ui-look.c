@@ -178,15 +178,8 @@ static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
 
 static char unified_look_inkey_with_wait_reason(void)
 {
-    app_wait_scope scope;
-    app_session* session = app_session_current();
-    char ch;
-
-    app_session_push_wait_scope(session, &scope,
-        APP_WAIT_REASON_TARGETING, 0, 0);
-    ch = (char)ui_information_scene_wait_key();
-    app_session_pop_wait_scope(session, &scope);
-    return ch;
+    return (char)ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_TARGETING);
 }
 
 static void unified_look_show_monster_recall(const monster_type* m_ptr)

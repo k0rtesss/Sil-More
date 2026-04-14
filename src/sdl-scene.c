@@ -424,7 +424,7 @@ static void sdl_scene_stack_render_texture_full_view(SDL_Texture* texture,
 void sdl_scene_stack_init(void)
 {
     memset(&g_scene_stack, 0, sizeof(g_scene_stack));
-    g_scene_stack.enabled = runtime_cli_snapshot_renderer();
+    g_scene_stack.enabled = true;
     g_scene_stack.frame_dirty = true;
 }
 
@@ -433,24 +433,6 @@ void sdl_scene_stack_shutdown(void)
     sdl_ui_font_cache_clear();
     sdl_scene_stack_destroy_canvas();
     memset(&g_scene_stack, 0, sizeof(g_scene_stack));
-}
-
-void sdl_scene_stack_set_enabled(bool enabled)
-{
-    if (g_scene_stack.enabled == enabled)
-        return;
-
-    g_scene_stack.enabled = enabled;
-    sdl_scene_stack_clear();
-    sdl_scene_stack_update_layers(app_session_current());
-    if (!enabled)
-        sdl_scene_stack_destroy_canvas();
-    g_state.need_present = true;
-}
-
-bool sdl_scene_stack_is_enabled(void)
-{
-    return g_scene_stack.enabled;
 }
 
 void sdl_scene_stack_on_layout_changed(void)

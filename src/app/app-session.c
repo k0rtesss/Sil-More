@@ -23,6 +23,7 @@ struct app_session {
     const app_host* host;
     u32b flags;
     u16b state;
+    u16b input_capture_depth;
     app_wait_state wait_state;
     app_interaction_state interaction;
     app_snapshot snapshot;
@@ -608,6 +609,37 @@ void app_session_pop_wait_scope(app_session* session,
 
     app_session_set_wait_state(session, &scope->wait_state);
     app_session_set_state(session, scope->state);
+}
+
+bool app_session_input_capture_active(const app_session* session)
+{
+    return session && session->input_capture_depth > 0;
+}
+
+void app_session_push_input_capture(app_session* session,
+    app_input_capture_scope* scope)
+{
+    if (!scope)
+        return;
+
+    memset(scope, 0, sizeof(*scope));
+    if (!session)
+        return;
+
+    scope->active = true;
+    if (session->input_capture_depth < UINT16_MAX)
+        session->input_capture_depth++;
+}
+
+void app_session_pop_input_capture(app_session* session,
+    app_input_capture_scope* scope)
+{
+    if (!session || !scope || !scope->active)
+        return;
+
+    if (session->input_capture_depth > 0)
+        session->input_capture_depth--;
+    scope->active = false;
 }
 
 u16b app_session_advance_until_waiting(app_session* session)

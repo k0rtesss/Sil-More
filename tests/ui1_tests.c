@@ -8,7 +8,6 @@
 #include "app/app-scene-menu.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
-#include "runtime-cli.h"
 #include "ui/ui-information-scene.h"
 
 static int g_failures = 0;
@@ -396,6 +395,8 @@ static void test_session_scaffolding(void)
     app_session* session;
     app_wait_state wait_state;
     app_wait_scope wait_scope;
+    app_input_capture_scope input_capture_scope;
+    app_input_capture_scope nested_input_capture_scope;
     app_input input;
     app_input popped_input;
     app_intent intent;
@@ -465,6 +466,16 @@ static void test_session_scaffolding(void)
     CHECK(app_session_wait_state(session)->reason
         == APP_WAIT_REASON_COMMAND_INPUT);
     CHECK(app_session_wait_state(session)->detail0 == 17);
+
+    CHECK(!app_session_input_capture_active(session));
+    app_session_push_input_capture(session, &input_capture_scope);
+    CHECK(app_session_input_capture_active(session));
+    app_session_push_input_capture(session, &nested_input_capture_scope);
+    CHECK(app_session_input_capture_active(session));
+    app_session_pop_input_capture(session, &nested_input_capture_scope);
+    CHECK(app_session_input_capture_active(session));
+    app_session_pop_input_capture(session, &input_capture_scope);
+    CHECK(!app_session_input_capture_active(session));
 
     app_session_resume_running(session);
     CHECK(app_session_state_id(session) == APP_SESSION_STATE_RUNNING);
@@ -704,14 +715,11 @@ static void test_information_scene_nested_restore(void)
     ui_information_scene_scope outer_scope;
     ui_information_scene_scope inner_scope;
     const app_menu_snapshot* menu_snapshot;
-    bool snapshot_renderer_enabled;
     bool refresh_enabled;
     static const byte snapshot_bytes[] = { 5, 4, 3, 2 };
     bool outer_entered = false;
     bool inner_entered = false;
 
-    snapshot_renderer_enabled = runtime_cli_snapshot_renderer();
-    runtime_cli_set_snapshot_renderer(true);
     refresh_enabled = ui_information_scene_set_refresh_enabled(false);
 
     memset(&config, 0, sizeof(config));
@@ -726,7 +734,6 @@ static void test_information_scene_nested_restore(void)
     if (!session)
     {
         ui_information_scene_set_refresh_enabled(refresh_enabled);
-        runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
         return;
     }
 
@@ -754,6 +761,7 @@ static void test_information_scene_nested_restore(void)
     CHECK(outer_entered);
     if (!outer_entered)
         goto cleanup;
+    CHECK(app_session_input_capture_active(session));
 
     CHECK(ui_information_scene_present_ui(&outer_scene));
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
@@ -773,6 +781,7 @@ static void test_information_scene_nested_restore(void)
     CHECK(inner_entered);
     if (!inner_entered)
         goto cleanup;
+    CHECK(app_session_input_capture_active(session));
 
     CHECK(ui_information_scene_present_ui(&inner_scene));
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
@@ -790,6 +799,7 @@ static void test_information_scene_nested_restore(void)
 
     ui_information_scene_leave(&inner_scope);
     inner_entered = false;
+    CHECK(app_session_input_capture_active(session));
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_MENU);
     menu_snapshot = app_session_menu_snapshot(session);
     CHECK(menu_snapshot != NULL);
@@ -805,6 +815,7 @@ static void test_information_scene_nested_restore(void)
 
     ui_information_scene_leave(&outer_scope);
     outer_entered = false;
+    CHECK(!app_session_input_capture_active(session));
     CHECK(app_session_snapshot(session)->scene == APP_SCENE_KIND_DUNGEON);
 
 cleanup:
@@ -815,7 +826,6 @@ cleanup:
     app_session_destroy(session);
     CHECK(app_session_current() == NULL);
     ui_information_scene_set_refresh_enabled(refresh_enabled);
-    runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
 }
 
 static void test_information_scene_wait_key_nonrepeat(void)
@@ -825,11 +835,8 @@ static void test_information_scene_wait_key_nonrepeat(void)
     ui_information_scene_scope scope;
     app_input input;
     bool entered = false;
-    bool snapshot_renderer_enabled;
     bool refresh_enabled;
 
-    snapshot_renderer_enabled = runtime_cli_snapshot_renderer();
-    runtime_cli_set_snapshot_renderer(true);
     refresh_enabled = ui_information_scene_set_refresh_enabled(false);
 
     memset(&config, 0, sizeof(config));
@@ -844,7 +851,6 @@ static void test_information_scene_wait_key_nonrepeat(void)
     if (!session)
     {
         ui_information_scene_set_refresh_enabled(refresh_enabled);
-        runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
         return;
     }
 
@@ -853,6 +859,7 @@ static void test_information_scene_wait_key_nonrepeat(void)
     CHECK(entered);
     if (!entered)
         goto cleanup;
+    CHECK(app_session_input_capture_active(session));
 
     memset(&input, 0, sizeof(input));
     input.layer = APP_INPUT_LAYER_LEGACY;
@@ -871,10 +878,56 @@ static void test_information_scene_wait_key_nonrepeat(void)
 cleanup:
     if (entered)
         ui_information_scene_leave(&scope);
+    CHECK(!app_session_input_capture_active(session));
     app_session_destroy(session);
     CHECK(app_session_current() == NULL);
     ui_information_scene_set_refresh_enabled(refresh_enabled);
-    runtime_cli_set_snapshot_renderer(snapshot_renderer_enabled);
+}
+
+static void test_information_scene_wait_key_with_wait_reason(void)
+{
+    app_session_config config;
+    app_session* session;
+    app_input input;
+    bool refresh_enabled;
+
+    refresh_enabled = ui_information_scene_set_refresh_enabled(false);
+
+    memset(&config, 0, sizeof(config));
+    config.api_version = APP_SESSION_API_VERSION;
+    config.initial_event_capacity = 1;
+    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+        | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
+
+    session = app_session_create(&config);
+    CHECK(session != NULL);
+    if (!session)
+    {
+        ui_information_scene_set_refresh_enabled(refresh_enabled);
+        return;
+    }
+
+    app_session_make_current(session);
+    app_session_set_state(session, APP_SESSION_STATE_RUNNING);
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 'k';
+    CHECK(app_session_submit_input(session, &input));
+
+    CHECK(ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_LIST_SELECTION) == 'k');
+    CHECK(app_session_wait_state(session)->reason == APP_WAIT_REASON_NONE);
+    CHECK(app_session_state_id(session) == APP_SESSION_STATE_RUNNING);
+    CHECK(app_session_pending_input_count(session) == 0);
+
+    app_session_destroy(session);
+    CHECK(app_session_current() == NULL);
+    ui_information_scene_set_refresh_enabled(refresh_enabled);
 }
 
 static void test_ui_scene_direct_panel_payload(void)
@@ -964,6 +1017,7 @@ int main(void)
     test_public_boundary_wrappers();
     test_information_scene_nested_restore();
     test_information_scene_wait_key_nonrepeat();
+    test_information_scene_wait_key_with_wait_reason();
     test_ui_scene_direct_panel_payload();
 
     if (g_failures != 0)

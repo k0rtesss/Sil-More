@@ -19,6 +19,7 @@
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "runtime-cli.h"
+#include "ui/ui-information-scene.h"
 
 #include <ctype.h>
 
@@ -31,6 +32,7 @@ bool (*item_tester_hook)(const object_type*) = NULL;
 
 typedef struct item_selector_menu_scene_scope {
     bool active;
+    app_input_capture_scope input_capture_scope;
 } item_selector_menu_scene_scope;
 
 static bool verify_item(cptr prompt, int item);
@@ -73,6 +75,8 @@ static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope
 
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
+    app_session_push_input_capture(session, &scope->input_capture_scope);
+    app_session_clear_inputs(session);
     scope->active = true;
     return true;
 }
@@ -86,8 +90,10 @@ static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope
 
     if (scope->active && session)
     {
+        app_session_clear_inputs(session);
         app_session_clear_interaction(session);
         app_session_clear_dungeon_overlay_scene(session);
+        app_session_pop_input_capture(session, &scope->input_capture_scope);
         (void)Term_xtra(TERM_XTRA_FRESH, 0);
     }
     scope->active = false;
@@ -826,7 +832,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
         }
 
-        which = inkey();
+        which = (char)ui_information_scene_wait_key();
 
         switch (which)
         {

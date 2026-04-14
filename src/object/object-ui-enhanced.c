@@ -19,6 +19,7 @@
 #include "object/object-ui-enhanced.h"
 #include "player/identification.h"
 #include "supplies.h"
+#include "ui/ui-information-scene.h"
 
 #define ENHANCED_MAX_LIST 80
 #define MAX_COMPARE_LINES 2
@@ -54,6 +55,7 @@ static void append_compare_slot(int* slots, int* count, int slot);
 
 typedef struct enhanced_item_snapshot_scope {
     bool active;
+    app_input_capture_scope input_capture_scope;
 } enhanced_item_snapshot_scope;
 
 typedef struct enhanced_item_snapshot_entry {
@@ -99,6 +101,8 @@ static bool enhanced_item_snapshot_scene_enter(
 
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
+    app_session_push_input_capture(session, &scope->input_capture_scope);
+    app_session_clear_inputs(session);
     scope->active = true;
     return true;
 }
@@ -111,8 +115,10 @@ static void enhanced_item_snapshot_scene_suspend(
     if (!scope || !scope->active || !session)
         return;
 
+    app_session_clear_inputs(session);
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
+    app_session_pop_input_capture(session, &scope->input_capture_scope);
 }
 
 static void enhanced_item_snapshot_scene_close(
@@ -766,7 +772,7 @@ static bool enhanced_item_run_snapshot_menu(int mode)
         if (enhanced_item_build_snapshot_scene(&scene, &state, highlight_row))
             (void)enhanced_item_snapshot_scene_present(&scene_scope, &scene);
 
-        which = inkey();
+        which = ui_information_scene_wait_key();
         switch (which)
         {
         case ESCAPE:

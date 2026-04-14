@@ -29,16 +29,12 @@ static int smith_ui_reforge_prefix_snapshot_menu(const object_type* source);
 
 static char smith_ui_inkey_with_wait_reason(void)
 {
-    app_wait_scope scope;
-    app_session* session = app_session_current();
     char ch;
 
-    app_session_push_wait_scope(session, &scope,
-        APP_WAIT_REASON_LIST_SELECTION, 0, 0);
     inkey_set_cursor_hidden(true);
-    ch = (char)ui_information_scene_wait_key();
+    ch = (char)ui_information_scene_wait_key_with_wait_reason(
+        APP_WAIT_REASON_LIST_SELECTION);
     inkey_set_cursor_hidden(false);
-    app_session_pop_wait_scope(session, &scope);
     return ch;
 }
 

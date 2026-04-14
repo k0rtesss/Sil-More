@@ -323,6 +323,7 @@ static bool ui_information_scene_enter_internal(
     scope->previous_active = g_ui_information_scene_active;
     app_session_push_wait_scope(session, &scope->wait_scope,
         reason, 0, 0);
+    app_session_push_input_capture(session, &scope->input_capture_scope);
     app_session_clear_inputs(session);
     g_ui_information_scene_active = true;
     scope->active = true;
@@ -413,6 +414,37 @@ int ui_information_scene_wait_key_nonrepeat(void)
     return ui_information_scene_wait_key_internal(APP_INPUT_FLAG_REPEAT);
 }
 
+int ui_information_scene_wait_key_with_wait_reason(u16b reason)
+{
+    app_session* session = app_session_current();
+    app_wait_scope scope;
+    app_input_capture_scope input_capture_scope;
+    int key;
+
+    if (!ui_information_scene_supported() || !session)
+        return ESCAPE;
+
+    if (!app_session_input_capture_active(session))
+    {
+        app_session_push_input_capture(session, &input_capture_scope);
+        if (reason != APP_WAIT_REASON_NONE)
+            app_session_push_wait_scope(session, &scope, reason, 0, 0);
+        key = ui_information_scene_wait_key();
+        if (reason != APP_WAIT_REASON_NONE)
+            app_session_pop_wait_scope(session, &scope);
+        app_session_pop_input_capture(session, &input_capture_scope);
+        return key;
+    }
+
+    if (reason == APP_WAIT_REASON_NONE)
+        return ui_information_scene_wait_key();
+
+    app_session_push_wait_scope(session, &scope, reason, 0, 0);
+    key = ui_information_scene_wait_key();
+    app_session_pop_wait_scope(session, &scope);
+    return key;
+}
+
 void ui_information_scene_leave(ui_information_scene_scope* scope)
 {
     app_session* session = app_session_current();
@@ -427,6 +459,7 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
             (unsigned)scope->previous_snapshot.scene,
             scope->published_overlay ? 1 : 0, scope->previous_active ? 1 : 0);
         app_session_clear_inputs(session);
+        app_session_pop_input_capture(session, &scope->input_capture_scope);
         if (scope->restore_snapshot)
         {
             restored_snapshot = ui_information_scene_restore_snapshot(session,
