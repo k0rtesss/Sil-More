@@ -44,10 +44,21 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   `src/monster1.c`, `src/monster2.c`, `src/cave.c` overhead-map window code,
   `src/ui/ui-character-screen.c`, and `src/ui/ui-look-sidebar.c` has been
   drained off the normal SDL pane-refresh path.
+- Workstream 7 is complete in the working tree on April 15, 2026:
+  `src/cmd/item/cmd-item-core.c`, `src/cmd/movement/cmd-movement.c`,
+  `src/cmd/ui/cmd-ui-knowledge.c`, `src/load.c`, `src/score/score_entry.c`,
+  and `src/signals.c` no longer dominate the live debt count, so the refresh,
+  clear, and panic-control tail is no longer the next blocker.
 - Workstream 8 is complete in the working tree on April 15, 2026:
   `src/squelch.c`, `src/wizard1.c`, and `src/wizard2.c` no longer own the
   last repo-visible `inkey()` call sites or direct `Term_*` control paths in
   the debug/admin slice, so the audit floor for that family is now zero.
+- Workstream 9 is complete in the working tree on April 15, 2026:
+  `src/util-prompt.c` no longer exports `term_get_string()`, the remaining
+  file-name, note, password, inscription, and show/find prompts now call
+  `prompt_text_input()` directly, and the last user-facing
+  `Term_xtra(TERM_XTRA_FRESH, ...)` fences on the SDL path have been replaced
+  by narrower scene or platform-frame presentation calls.
 - Dead snapshot-renderer fallback branches have now been deleted from the
   semantic UI entry surfaces. The remaining repo-wide audit hits are now
   treated as first-class removal work, not as acceptable residual debt.
@@ -61,9 +72,12 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   `src/z-term.h` directly.
 - The current audit understates the full removal scope because it does not
   count `Term_xtra()` or wrapper debt such as `move_cursor_relative()`,
-  `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`,
-  `display_map()`, or `term_get_string()`. Those wrappers are now in scope.
-- The remaining term-legacy work now clusters into four families:
+  `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`, or
+  `display_map()`. Those wrappers are still in scope.
+- Targeted search on April 15, 2026 now finds:
+  - `term_get_string()`: 0 matches in `src/`
+  - `Term_xtra(TERM_XTRA_FRESH, ...)`: confined to `src/z-term.c`
+- The remaining term-legacy work now clusters into three families:
   - main-map and cursor mirroring in `src/cave.c` plus callers such as
     `src/ui/ui-status.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
     `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`,
@@ -71,9 +85,6 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   - shared terminal text, story-font, and editing helpers in
     `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
     `src/ui/ui-story.c`, and `src/obj-info.c`
-  - refresh, clear, and panic-control tails in `src/cmd/item/cmd-item-core.c`,
-    `src/cmd/movement/cmd-movement.c`, `src/cmd/ui/cmd-ui-knowledge.c`,
-    `src/load.c`, `src/score/score_entry.c`, and `src/signals.c`
   - the final build-graph and backend tail in `src/z-term.c`,
     `src/sdl-layout.c`, `src/sdl-render.c`, `src/main-sdl.c`, and related
     SDL term-host files
@@ -238,6 +249,9 @@ Not in this slice:
 - `src/ui/story_font.c`
 
 ### 7. Drain refresh, clear, and panic-control tails
+Status:
+- completed in the working tree on April 15, 2026
+
 Goal:
 - remove the remaining file-local `Term_fresh()`, `Term_clear()`,
   `Term_putstr()`, and similar control calls that still paper over SDL state
@@ -274,7 +288,40 @@ Exit when:
 - the UI debt audit reports zero `inkey()` call sites
 - wizard and squelch flows no longer use direct `Term_*` control or rendering
 
-### 9. Remove `z-term` and the SDL term backend from the build graph
+### 9. Drain terminal input/control wrapper debt
+Status:
+- completed in the working tree on April 15, 2026
+
+Goal:
+- remove the remaining user-facing terminal input and refresh wrappers that
+  survive outside the audit counts, especially `term_get_string()` and
+  `Term_xtra(TERM_XTRA_FRESH, ...)`
+
+Primary targets:
+- `src/util-prompt.c`
+- `src/cmd4.c`
+- `src/cmd/ui/cmd-ui-character.c`
+- `src/cmd/ui/cmd-ui-main-menu.c`
+- `src/melee/melee-combat-display.c`
+- `src/cmd/item/cmd-item-utility.c`
+- `src/cmd/ui/cmd-ui-nearby.c`
+- `src/cmd/ui/cmd-ui-look.c`
+- `src/cmd/item/cmd-pickup.c`
+- `src/dungeon.c`
+- `src/randart.c`
+- `src/runtime/runtime-game.c`
+- `src/ui/smithing/ui-smithing-screen.c`
+
+Exit when:
+- targeted search for `term_get_string(` is empty outside declarations or
+  archived code
+- targeted search for `Term_xtra(TERM_XTRA_FRESH` is empty outside
+  `src/z-term.c`
+- file-name, note, password, inscription, show/find, and similar text-entry
+  flows use the shared semantic input/session path or a narrower non-term host
+  API
+
+### 10. Remove `z-term` and the SDL term backend from the build graph
 Goal:
 - remove `src/z-term.c` from `CMakeLists.txt`, stop treating the `z-term`
   compatibility layer as part of the active runtime build, and delete the SDL
@@ -316,12 +363,13 @@ Exit when:
   `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
   `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`,
   `src/spell/spell-projection.c`, and `src/util-message.c`.
-- Lane C: Workstream 7. Write set: `src/cmd/item/cmd-item-core.c`,
-  `src/cmd/movement/cmd-movement.c`, `src/cmd/ui/cmd-ui-knowledge.c`,
-  `src/load.c`, `src/score/score_entry.c`, and `src/signals.c`.
-- Lane D: Workstream 8. Write set: `src/squelch.c`, `src/wizard1.c`, and
-  `src/wizard2.c`.
-- Lane E: Workstream 9. Write set: build graph, `z-term`, SDL term backend,
+- Lane C: Workstream 9. Write set: `src/util-prompt.c`, `src/cmd4.c`,
+  `src/cmd/ui/cmd-ui-character.c`, `src/cmd/ui/cmd-ui-main-menu.c`,
+  `src/melee/melee-combat-display.c`, `src/cmd/item/cmd-item-utility.c`,
+  `src/cmd/ui/cmd-ui-nearby.c`, `src/cmd/item/cmd-pickup.c`,
+  `src/dungeon.c`, `src/randart.c`, `src/runtime/runtime-game.c`, and
+  `src/ui/smithing/ui-smithing-screen.c`.
+- Lane D: Workstream 10. Write set: build graph, `z-term`, SDL term backend,
   and direct
   compile-time dependency files.
 

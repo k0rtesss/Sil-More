@@ -1006,7 +1006,6 @@ extern bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
     bool allow_randomize);
 extern bool askfor_aux(char* buf, size_t len);
 extern bool askfor_name(char* buf, size_t len);
-extern bool term_get_string(cptr prompt, char* buf, size_t len);
 extern s16b get_quantity(cptr prompt, int max);
 extern int get_check_other(cptr prompt, char other);
 extern bool get_check(cptr prompt);

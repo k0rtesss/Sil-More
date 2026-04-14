@@ -91,8 +91,12 @@ void do_cmd_note(char* note, int what_depth)
     /* If a note is passed, use that, otherwise accept user input. */
     if (streq(note, ""))
     {
-        if (!term_get_string("Note: ", buf, 57))
+        if (!prompt_text_input("Note:",
+                "Enter accepts, Esc cancels, Backspace erases.", buf, 57,
+                false))
+        {
             return;
+        }
     }
     else
     {

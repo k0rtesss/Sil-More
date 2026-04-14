@@ -12,6 +12,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "metarun.h"
@@ -172,7 +173,7 @@ static bool unified_look_snapshot_publish_menu_scene(unified_look_state* state)
     if (!app_session_publish_dungeon_overlay_scene(session, &scene))
         return false;
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 

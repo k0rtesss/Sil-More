@@ -11,6 +11,7 @@
 #include "app/app-session.h"
 #include "platform-story-font.h"
 #include "platform-input.h"
+#include "platform-frame.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"
@@ -374,7 +375,7 @@ static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
     if (!app_session_publish_dungeon_overlay_scene(session, &scene))
         return false;
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 
@@ -393,7 +394,7 @@ static void main_menu_scene_leave(main_menu_scene_scope* scope, bool refresh)
         app_session_pop_input_capture(session, &scope->input_capture_scope);
     }
     if (refresh)
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        platform_frame_present();
 
     scope->active = false;
 }
@@ -1537,8 +1538,12 @@ static bool do_cmd_messages_information_scene(void)
 
         if (ch == '=')
         {
-            if (!term_get_string("Show: ", shower, sizeof(shower)))
+            if (!prompt_text_input("Show:",
+                    "Enter accepts, Esc cancels, Backspace erases.", shower,
+                    sizeof(shower), false))
+            {
                 continue;
+            }
 
             continue;
         }
@@ -1547,7 +1552,9 @@ static bool do_cmd_messages_information_scene(void)
         {
             s16b z;
 
-            if (term_get_string("Find: ", finder, sizeof(finder)))
+            if (prompt_text_input("Find:",
+                    "Enter accepts, Esc cancels, Backspace erases.", finder,
+                    sizeof(finder), false))
             {
                 SDL_strlcpy(shower, finder, sizeof(shower));
 

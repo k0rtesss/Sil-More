@@ -350,7 +350,9 @@ static void close_game_aux(void)
 
             strnfmt(ftmp, sizeof(ftmp), "%s.txt", op_ptr->base_name);
 
-            if (term_get_string("File name: ", ftmp, sizeof(ftmp)))
+            if (prompt_text_input("File name:",
+                    "Enter accepts, Esc cancels, Backspace erases.", ftmp,
+                    sizeof(ftmp), false))
             {
                 if (ftmp[0] && (ftmp[0] != ' '))
                 {

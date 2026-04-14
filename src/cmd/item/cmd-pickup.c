@@ -12,6 +12,7 @@
 #include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
+#include "platform-frame.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
@@ -332,7 +333,7 @@ static bool pickup_pile_scene_present(pickup_pile_scene_scope* scope,
     if (!app_session_publish_menu_scene(session, scene))
         return false;
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 
@@ -346,7 +347,7 @@ static void pickup_pile_scene_restore(pickup_pile_scene_scope* scope,
 
     app_session_set_snapshot(session, &scope->previous_snapshot);
     if (refresh)
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        platform_frame_present();
 }
 
 static void pickup_pile_scene_capture(pickup_pile_scene_scope* scope)

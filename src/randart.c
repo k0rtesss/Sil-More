@@ -3123,8 +3123,9 @@ bool make_one_randart(object_type* o_ptr, int art_power, bool tailored)
             /*start with a blank name*/
             buf[0] = '\0';
 
-            if (term_get_string(
-                    "Enter a name for your artefact: ", buf, sizeof(buf)))
+            if (prompt_text_input("Enter a name for your artefact:",
+                    "Enter accepts, Esc cancels, Backspace erases.", buf,
+                    sizeof(buf), false))
             {
                 /*The additional check is because players sometimes hit return
                  * accidentally*/

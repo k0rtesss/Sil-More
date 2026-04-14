@@ -1715,7 +1715,9 @@ static bool verify_debug_mode(void)
         // ask for password in deployment versions
         if (DEPLOYMENT)
         {
-            if (term_get_string("Password: ", buf, sizeof(buf)))
+            if (prompt_text_input("Password:",
+                    "Enter accepts, Esc cancels, Backspace erases.", buf,
+                    sizeof(buf), false))
             {
                 if (strcmp(buf, "Gondolin") == 0)
                 {

@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "object/object-ui-select.h"
+#include "platform-frame.h"
 #include "ui/ui-information-scene.h"
 #include "ui/smithing/ui-smithing-internal.h"
 #include "externs.h"
@@ -6420,7 +6421,7 @@ void do_cmd_smithing_screen(void)
     app_session_clear_dungeon_overlay_scene(app_session_current());
     app_session_clear_interaction(app_session_current());
     smith_ui_snapshot_reset_nested_transitions();
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 

@@ -945,15 +945,21 @@ static bool do_cmd_combat_history_information_scene(void)
 
         if (ch == '=')
         {
-            if (!term_get_string("Show: ", shower, sizeof(shower)))
+            if (!prompt_text_input("Show:",
+                    "Enter accepts, Esc cancels, Backspace erases.", shower,
+                    sizeof(shower), false))
+            {
                 continue;
+            }
             continue;
         }
         if (ch == '/')
         {
             s16b z;
 
-            if (term_get_string("Find: ", finder, sizeof(finder)))
+            if (prompt_text_input("Find:",
+                    "Enter accepts, Esc cancels, Backspace erases.", finder,
+                    sizeof(finder), false))
             {
                 SDL_strlcpy(shower, finder, sizeof(shower));
 

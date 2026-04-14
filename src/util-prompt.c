@@ -818,17 +818,6 @@ bool askfor_name(char* buf, size_t len)
 }
 
 /*
- * Prompt for a string from the user.
- *
- * The "prompt" should take the form "Prompt: ".
- */
-bool term_get_string(cptr prompt, char* buf, size_t len)
-{
-    return prompt_text_input(prompt,
-        "Enter accepts, Esc cancels, Backspace erases.", buf, len, false);
-}
-
-/*
  * Request a "quantity" from the user
  *
  * Allow "p_ptr->command_arg" to specify a quantity

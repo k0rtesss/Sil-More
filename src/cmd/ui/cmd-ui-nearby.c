@@ -9,6 +9,7 @@
  */
 #include "angband.h"
 #include "app/app-session.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
@@ -414,7 +415,7 @@ static bool nearby_information_scene(nearby_scene_build_fn build_fn,
             app_session_clear_dungeon_overlay_scene(session);
             return false;
         }
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        platform_frame_present();
 
         inkey_set_cursor_hidden(true);
         ch = nearby_snapshot_wait_key();
@@ -425,7 +426,7 @@ static bool nearby_information_scene(nearby_scene_build_fn build_fn,
     }
 
     app_session_clear_dungeon_overlay_scene(session);
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    platform_frame_present();
     return true;
 }
 

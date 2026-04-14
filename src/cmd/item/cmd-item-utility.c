@@ -268,7 +268,9 @@ void do_cmd_inscribe(void)
     }
 
     /* Get a new inscription (possibly empty) */
-    if (term_get_string("Inscription: ", tmp, sizeof(tmp)))
+    if (prompt_text_input("Inscription:",
+            "Enter accepts, Esc cancels, Backspace erases.", tmp,
+            sizeof(tmp), false))
     {
         char tmp_val[160];
         char o_name2[80];
