@@ -20,23 +20,6 @@
 #include "platform-story-font.h"
 #include "ui/ui-information-scene.h"
 
-static void look_prt(bool use_story_font, cptr text, int row, int col)
-{
-    /* When story font is enabled, use story_print_text which handles proportional rendering */
-    if (use_story_font) {
-        log_debug("look_prt: Using story_print_text for: '%.50s'", text);
-        story_print_text(row, col, 0, TERM_WHITE, text);
-    } else {
-        log_debug("look_prt: Using prt (mono) for: '%.50s'", text);
-        prt(text, row, col);
-    }
-}
-
-static bool targeting_snapshot_active(void)
-{
-    return app_session_interactions_enabled(app_session_current());
-}
-
 static void targeting_snapshot_prompt(cptr text)
 {
     app_session* session = app_session_current();
@@ -61,7 +44,7 @@ static char targeting_inkey_with_wait_reason(void)
 
     app_session_push_wait_scope(session, &scope,
         APP_WAIT_REASON_TARGETING, 0, 0);
-    ch = inkey();
+    ch = (char)ui_information_scene_wait_key();
     app_session_pop_wait_scope(session, &scope);
     return ch;
 }
@@ -1089,6 +1072,8 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
     char out_val[256];
 
+    (void)use_story_font;
+
     /* Repeat forever */
     while (1)
     {
@@ -1124,10 +1109,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
             strnfmt(out_val, sizeof(out_val),
                 "What you see is not to be believed.  [%s]", info);
 
-            if (targeting_snapshot_active())
-                targeting_snapshot_prompt(out_val);
-            else
-                look_prt(use_story_font, out_val, 0, 0);
+            targeting_snapshot_prompt(out_val);
             move_cursor_relative(y, x);
             query = targeting_inkey_with_wait_reason();
 
@@ -1182,46 +1164,25 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     /* Recall, but not when raging */
                     if ((recall) && !p_ptr->rage)
                     {
-                        if (targeting_snapshot_active())
-                        {
-                            int recall_key = ESCAPE;
-                            char recall_prompt[160];
+                        int recall_key = ESCAPE;
+                        char recall_prompt[160];
 
-                            app_session_clear_interaction(
-                                app_session_current());
-                            strnfmt(recall_prompt, sizeof(recall_prompt),
-                                "  [(r)ecall, %s]", info);
-                            if (!ui_information_scene_show_monster_recall(
-                                    m_ptr->r_idx, m_ptr, recall_prompt, true,
-                                    &recall_key))
-                            {
-                                log_error("targeting: snapshot recall "
-                                    "scene unavailable");
-                                bell("Monster recall screen unavailable.");
-                                query = '\r';
-                            }
-                            else
-                            {
-                                query = (char)recall_key;
-                            }
+                        app_session_clear_interaction(
+                            app_session_current());
+                        strnfmt(recall_prompt, sizeof(recall_prompt),
+                            "  [(r)ecall, %s]", info);
+                        if (!ui_information_scene_show_monster_recall(
+                                m_ptr->r_idx, m_ptr, recall_prompt, true,
+                                &recall_key))
+                        {
+                            log_error("targeting: semantic recall "
+                                "scene unavailable");
+                            bell("Monster recall screen unavailable.");
+                            query = '\r';
                         }
                         else
                         {
-                            /* Save screen */
-                            screen_save();
-
-                            /* Recall on screen */
-                            screen_roff(m_ptr->r_idx, m_ptr);
-
-                            /* Hack -- Complete the prompt (again) */
-                            Term_addstr(-1, TERM_WHITE,
-                                format("  [(r)ecall, %s]", info));
-
-                            /* Command */
-                            query = targeting_inkey_with_wait_reason();
-
-                            /* Load screen */
-                            screen_load();
+                            query = (char)recall_key;
                         }
                     }
 
@@ -1280,10 +1241,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                                 m_name, buf, more, info);
                         }
 
-                        if (targeting_snapshot_active())
-                            targeting_snapshot_prompt(out_val);
-                        else
-                            look_prt(use_story_font, out_val, 0, 0);
+                        targeting_snapshot_prompt(out_val);
 
                         /* Place cursor */
                         move_cursor_relative(y, x);
@@ -1360,10 +1318,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             s1, s2, s3, o_name, more, info);
                     }
 
-                    if (targeting_snapshot_active())
-                        targeting_snapshot_prompt(out_val);
-                    else
-                        look_prt(use_story_font, out_val, 0, 0);
+                    targeting_snapshot_prompt(out_val);
                     move_cursor_relative(y, x);
                     query = targeting_inkey_with_wait_reason();
 
@@ -1442,10 +1397,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                             s1, s2, s3, o_name, more, info);
                     }
 
-                    if (targeting_snapshot_active())
-                        targeting_snapshot_prompt(out_val);
-                    else
-                        look_prt(use_story_font, out_val, 0, 0);
+                    targeting_snapshot_prompt(out_val);
                     move_cursor_relative(y, x);
                     query = targeting_inkey_with_wait_reason();
 
@@ -1526,10 +1478,7 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
                     s3, name, more, info);
             }
 
-            if (targeting_snapshot_active())
-                targeting_snapshot_prompt(out_val);
-            else
-                look_prt(use_story_font, out_val, 0, 0);
+            targeting_snapshot_prompt(out_val);
             move_cursor_relative(y, x);
             query = targeting_inkey_with_wait_reason();
 
@@ -1555,127 +1504,6 @@ static int target_set_interactive_aux(int y, int x, int mode, cptr info, bool us
 
     /* Keep going */
     return (query);
-}
-
-/*
- * Draw a visible path over the squares between (x1,y1) and (x2,y2).
- * The path consists of "*", which are white except where there is a
- * monster, object or feature in the grid.
- *
- * This routine has (at least) three weaknesses:
- * - remembered objects/walls which are no longer present are not shown,
- * - squares which (e.g.) the player has walked through in the dark are
- *   treated as unknown space.
- * - walls which appear strange due to hallucination aren't treated correctly.
- *
- * The first two result from information being lost from the dungeon arrays,
- * which requires changes elsewhere
- */
-static int draw_path(
-    u16b* path, int range, char* c, byte* a, int y1, int x1, int y2, int x2)
-{
-    int i;
-    int max;
-    bool on_screen;
-
-    /* Find the path. */
-    max = project_path(
-        path, range, y1, x1, &y2, &x2, (PROJECT_THRU | PROJECT_INVISIPASS));
-
-    /* No path, so do nothing. */
-    if (max < 1)
-        return 0;
-
-    /* The starting square is never drawn, but notice if it is being
-     * displayed. In theory, it could be the last such square.
-     */
-    on_screen = panel_contains(y1, x1);
-
-    /* Draw the path. */
-    for (i = 0; i < max; i++)
-    {
-        byte colour;
-
-        /* Find the co-ordinates on the level. */
-        int y = GRID_Y(path[i]);
-        int x = GRID_X(path[i]);
-        /*
-         * As path[] is a straight line and the screen is oblong,
-         * there is only section of path[] on-screen.
-         * If the square being drawn is visible, this is part of it.
-         * If none of it has been drawn, continue until some of it
-         * is found or the last square is reached.
-         * If some of it has been drawn, finish now as there are no
-         * more visible squares to draw.
-         */
-
-        if (panel_contains(y, x))
-            on_screen = true;
-        else if (on_screen)
-            break;
-        else
-            continue;
-
-        /* Find the position on-screen */
-        move_cursor_relative(y, x);
-
-        /* This square is being overwritten, so save the original. */
-        Term_what(Term->scr->cx, Term->scr->cy, a + i, c + i);
-
-        /* Choose a colour. */
-        /* Visible monsters are red. */
-        if ((cave_m_idx[y][x] > 0) && mon_list[cave_m_idx[y][x]].ml)
-        {
-            colour = TERM_L_RED;
-        }
-
-        /* Known objects are yellow. */
-        else if (cave_o_idx[y][x] && o_list[cave_o_idx[y][x]].marked)
-        {
-            colour = TERM_YELLOW;
-        }
-
-        /* Known walls are blue. */
-        else if (!cave_floor_bold(y, x)
-            && (cave_info[y][x] & (CAVE_MARK) || player_can_see_bold(y, x)))
-        {
-            colour = TERM_BLUE;
-        }
-        /* Unknown squares are grey. */
-        else if (!(cave_info[y][x] & (CAVE_MARK)) && !player_can_see_bold(y, x))
-        {
-            colour = TERM_L_DARK;
-        }
-        /* Unoccupied squares are white. */
-        else
-        {
-            colour = TERM_WHITE;
-        }
-
-        /* Draw the path segment */
-        (void)Term_addch(colour, '*');
-    }
-    return i;
-}
-
-/*
- * Load the attr/char at each point along "path" which is on screen from
- * "a" and "c". This was saved in draw_path().
- */
-static void load_path(int max, u16b* path, char* c, byte* a)
-{
-    int i;
-    for (i = 0; i < max; i++)
-    {
-        if (!panel_contains(GRID_Y(path[i]), GRID_X(path[i])))
-            continue;
-
-        move_cursor_relative(GRID_Y(path[i]), GRID_X(path[i]));
-
-        (void)Term_addch(a[i], c[i]);
-    }
-
-    Term_fresh();
 }
 
 /*
@@ -1751,10 +1579,7 @@ bool target_set_interactive(int mode, int range)
 
     bool use_story_look = story_look_enabled() && (mode & TARGET_LOOK);
 
-    /* These are used for displaying the path to the target */
     u16b path[MAX_RANGE];
-    char path_char[MAX_RANGE];
-    byte path_attr[MAX_RANGE];
     int max;
 
     bool wiz = mode & (TARGET_WIZ);
@@ -1798,11 +1623,6 @@ bool target_set_interactive(int mode, int range)
             max = project_path(path, adjusted_range, py, px, &y2, &x2,
                 (PROJECT_THRU | PROJECT_INVISIPASS));
 
-            /* Draw the path in "target" mode. If there is one */
-            if (mode & (TARGET_KILL))
-                (void)draw_path(
-                    path, adjusted_range, path_char, path_attr, py, px, y, x);
-
             // Check whether the target location is valid (ie within the path)
             if ((max == 0)
                 || ((((GRID_Y(path[max - 1]) <= y) && (y <= py))
@@ -1833,10 +1653,6 @@ bool target_set_interactive(int mode, int range)
             query = target_set_interactive_aux(y, x, mode, info, use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
-
-            /* Remove the path */
-            if (mode & (TARGET_KILL))
-                load_path(max, path, path_char, path_attr);
 
             /* Assume no "direction" */
             d = 0;
@@ -1990,11 +1806,6 @@ bool target_set_interactive(int mode, int range)
             max = project_path(path, adjusted_range, py, px, &y2, &x2,
                 (PROJECT_THRU | PROJECT_INVISIPASS));
 
-            /* Draw the path in "target" mode. If there is one */
-            if (mode & (TARGET_KILL))
-                (void)draw_path(
-                    path, adjusted_range, path_char, path_attr, py, px, y, x);
-
             // Check whether the target location is valid (ie within the path)
             if ((max == 0)
                 || ((((GRID_Y(path[max - 1]) <= y) && (y <= py))
@@ -2025,10 +1836,6 @@ bool target_set_interactive(int mode, int range)
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
             if (use_story_look)
                 sdl_story_font_disable();
-
-            /* Remove the path */
-            if (mode & (TARGET_KILL))
-                load_path(max, path, path_char, path_attr);
 
             /* Assume no direction */
             d = 0;
@@ -2169,10 +1976,6 @@ bool target_set_interactive(int mode, int range)
 
             /* Describe and Prompt (enable "TARGET_LOOK") */
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
-
-            /* Remove the path */
-            if (mode & (TARGET_KILL))
-                load_path(max, path, path_char, path_attr);
 
             /* Assume no direction */
             d = 0;

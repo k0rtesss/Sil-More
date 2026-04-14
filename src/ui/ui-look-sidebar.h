@@ -12,7 +12,6 @@
 
 typedef struct unified_look_state unified_look_state;
 
-int show_unified_sidebar(unified_look_state* state, int* out_cols);
 bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     app_ui_scene* scene);
 int unified_look_find_cursor_selection(const unified_look_state* state,

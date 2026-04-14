@@ -28,6 +28,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-information-scene.h"
 /*
  * Determines the direction from the player and writes it as text into a buffer
  * of at least size 10.
@@ -120,15 +121,6 @@ static void append_look_smithing_debug(char* buf, size_t buf_size,
         strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
         SDL_strlcat(buf, smith_buf, buf_size);
     }
-}
-
-static int nearby_distance_color(int distance)
-{
-    if (distance < 5)
-        return TERM_WHITE;
-    if (distance < 10)
-        return TERM_L_WHITE;
-    return TERM_L_DARK;
 }
 
 static void nearby_collect_monster_lines(bool line_of_sight_only,
@@ -253,156 +245,6 @@ static void nearby_collect_object_lines(bool line_of_sight_only,
     *out_longest_direction_length = longest_direction_length;
 }
 
-void show_nearby_monsters(bool line_of_sight_only)
-{
-    view_monster_data_line lines[MAX_VIEW_LINES];
-    int i, j = 0;
-    int col;
-    int longest_name_length = 0;
-    int longest_direction_length = 0;
-    int longest_stance_length = 0;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-
-    /* Get terminal height and calculate available space */
-    int term_hgt = Term->hgt;
-    int max_lines = MIN(MAX_VIEW_LINES, term_hgt - 3); /* Leave space for header and footer */
-
-    nearby_collect_monster_lines(line_of_sight_only, lines, max_lines, &j,
-        &longest_name_length, &longest_direction_length,
-        &longest_stance_length);
-
-    if (!j)
-    {
-        int empty_col = MAX(0, (term_wid - 20) / 2);
-        Term_erase(0, 1, 255);
-        Term_erase(0, 2, 255);
-        Term_erase(0, 3, 255);
-        Term_putstr(empty_col, 1, term_wid - empty_col, TERM_WHITE,
-            "No visible monsters.");
-        return;
-    }
-
-    col = term_wid - longest_name_length - longest_direction_length
-        - longest_stance_length - 9;
-    col = MAX(0, col);
-
-    for (i = 0; i < j; ++i)
-    {
-        int distance_color;
-        char monster_char[2];
-        int direction_col = col + 6;
-        int name_col = direction_col + MAX(longest_direction_length, 1) + 1;
-        int stance_col = term_wid - MAX(longest_stance_length, 1) - 1;
-        int name_width = stance_col - name_col - 1;
-        bool show_stance = true;
-
-        monster_char[0] = lines[i].monster_character;
-        monster_char[1] = '\0';
-
-        distance_color = nearby_distance_color(lines[i].distance);
-
-        /* Clear the line */
-        Term_erase(col, i + 1, term_wid - col);
-
-        if (name_width < 8)
-        {
-            show_stance = false;
-            name_width = term_wid - name_col - 1;
-        }
-        if (name_width < 1)
-            name_width = 1;
-
-        c_put_str(lines[i].monster_color, monster_char, i + 1, col + 2);
-        if (use_bigtile)
-        {
-            Term_putch(col + 3, i + 1, 255, -1);
-        }
-        Term_putstr(direction_col, i + 1, MAX(longest_direction_length, 1),
-            distance_color, lines[i].direction);
-        Term_putstr(name_col, i + 1, name_width, TERM_WHITE, lines[i].name);
-        if (show_stance)
-        {
-            Term_putstr(stance_col, i + 1, term_wid - stance_col,
-                lines[i].alert_color, lines[i].stance);
-        }
-    }
-
-    if (j)
-    {
-        Term_erase(col, j + 1, term_wid - col);
-    }
-}
-
-void show_nearby_objects(bool line_of_sight_only)
-{
-    view_object_data_line lines[MAX_VIEW_LINES];
-    int i, j = 0;
-    int col;
-    int longest_name_length = 0;
-    int longest_direction_length = 0;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-
-    /* Get terminal height and calculate available space */
-    int term_hgt = Term->hgt;
-    int max_lines = MIN(MAX_VIEW_LINES, term_hgt - 3); /* Leave space for header and footer */
-
-    nearby_collect_object_lines(line_of_sight_only, lines, max_lines, &j,
-        &longest_name_length, &longest_direction_length);
-
-    if (!j)
-    {
-        int empty_col = MAX(0, (term_wid - 19) / 2);
-        Term_erase(0, 1, 255);
-        Term_erase(0, 2, 255);
-        Term_erase(0, 3, 255);
-        Term_putstr(empty_col, 1, term_wid - empty_col, TERM_WHITE,
-            "No visible objects.");
-        return;
-    }
-
-    col = term_wid - longest_name_length - longest_direction_length - 9;
-    col = MAX(0, col);
-
-    Term_erase(col, 1, term_wid - col);
-
-    for (i = 0; i < j; ++i)
-    {
-        int distance_color;
-        int direction_col = col + 6;
-        int name_col = direction_col + MAX(longest_direction_length, 1) + 1;
-        int name_width = term_wid - name_col - 1;
-
-        char o_char[2];
-
-        o_char[0] = lines[i].object_character;
-        o_char[1] = '\0';
-
-        distance_color = nearby_distance_color(lines[i].distance);
-
-        /* Clear the line */
-        Term_erase(col, i + 1, term_wid - col);
-
-        if (name_width < 1)
-            name_width = 1;
-
-        c_put_str(lines[i].object_color, o_char, i + 1, col + 2);
-        if (use_bigtile)
-        {
-            Term_putch(col + 3, i + 1, 255, -1);
-        }
-        Term_putstr(direction_col, i + 1, MAX(longest_direction_length, 1),
-            distance_color, lines[i].direction);
-        Term_putstr(name_col, i + 1, name_width, lines[i].name_color,
-            lines[i].name);
-    }
-
-    if (j)
-    {
-        Term_erase(col, j + 1, term_wid - col);
-    }
-}
-
-typedef void (*nearby_scene_draw_fn)(bool line_of_sight_only);
 typedef bool (*nearby_scene_build_fn)(bool line_of_sight_only, cptr prompt,
     app_ui_scene* scene);
 
@@ -419,7 +261,7 @@ static char nearby_snapshot_wait_key(void)
 
     app_session_push_wait_scope(session, &wait_scope,
         APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-    ch = inkey();
+    ch = (char)ui_information_scene_wait_key();
     app_session_pop_wait_scope(session, &wait_scope);
     return ch;
 }
@@ -450,6 +292,18 @@ static app_ui_panel* nearby_build_panel(app_ui_scene* scene, cptr prompt,
     return panel;
 }
 
+static void nearby_format_row_label(cptr direction, cptr name, char* label,
+    size_t label_size)
+{
+    if (!label || label_size == 0)
+        return;
+
+    if (direction && direction[0])
+        strnfmt(label, label_size, "%s %s", direction, name ? name : "");
+    else
+        SDL_strlcpy(label, name ? name : "", label_size);
+}
+
 static bool nearby_monsters_build_scene(bool line_of_sight_only, cptr prompt,
     app_ui_scene* scene)
 {
@@ -478,11 +332,14 @@ static bool nearby_monsters_build_scene(bool line_of_sight_only, cptr prompt,
 
     for (i = 0; i < count; i++)
     {
+        char label[APP_UI_LABEL_MAX];
+
+        nearby_format_row_label(lines[i].direction, lines[i].name, label,
+            sizeof(label));
         if (!app_ui_panel_add_row_ex(panel, (s16b)i, TERM_WHITE,
                 (byte)lines[i].alert_color,
                 (byte)lines[i].monster_color, lines[i].monster_character,
-                true, false, lines[i].direction, lines[i].name,
-                lines[i].stance))
+                true, false, "", label, lines[i].stance))
         {
             return false;
         }
@@ -520,10 +377,14 @@ static bool nearby_objects_build_scene(bool line_of_sight_only, cptr prompt,
 
     for (i = 0; i < count; i++)
     {
+        char label[APP_UI_LABEL_MAX];
+
+        nearby_format_row_label(lines[i].direction, lines[i].name, label,
+            sizeof(label));
         if (!app_ui_panel_add_row_ex(panel, (s16b)i,
                 (byte)lines[i].name_color, (byte)lines[i].name_color,
                 (byte)lines[i].object_color, lines[i].object_character,
-                true, false, lines[i].direction, lines[i].name, ""))
+                true, false, "", label, ""))
         {
             return false;
         }
@@ -536,22 +397,17 @@ static bool nearby_objects_build_scene(bool line_of_sight_only, cptr prompt,
     return true;
 }
 
-static bool nearby_information_scene(nearby_scene_draw_fn draw_fn,
+static bool nearby_information_scene(nearby_scene_build_fn build_fn,
     cptr los_prompt, cptr screen_prompt, char toggle_key)
 {
     app_session* session = app_session_current();
-    nearby_scene_build_fn build_fn;
     char ch = toggle_key;
     bool show_los = true;
 
-    if (!draw_fn || !los_prompt || !screen_prompt)
+    if (!build_fn || !los_prompt || !screen_prompt)
         return false;
     if (!nearby_snapshot_active() || !session)
         return false;
-
-    build_fn = (draw_fn == show_nearby_monsters)
-        ? nearby_monsters_build_scene
-        : nearby_objects_build_scene;
 
     while (ch == toggle_key)
     {
@@ -582,9 +438,6 @@ static bool nearby_information_scene(nearby_scene_draw_fn draw_fn,
 
 void do_cmd_view_monsters()
 {
-    char get_char = '[';
-    bool show_los = true;
-
     /* Clear entry level banner when using [ command */
     if (g_banner_force_redraw_remaining > 0)
     {
@@ -592,33 +445,19 @@ void do_cmd_view_monsters()
         do_cmd_redraw();
     }
 
-    if (nearby_information_scene(show_nearby_monsters,
+    if (nearby_information_scene(nearby_monsters_build_scene,
             "Monsters you can see (press [ to toggle):",
             "Monsters on screen (press [ to toggle):", '['))
     {
         return;
     }
 
-    while (get_char == '[')
-    {
-        screen_save();
-        show_nearby_monsters(show_los);
-        /* Show the prompt */
-        if (show_los)
-            prt("Monsters you can see (press [ to toggle):", 0, 0);
-        else
-            prt("Monsters on screen (press [ to toggle):", 0, 0);
-        get_char = nearby_snapshot_wait_key();
-        show_los = !show_los;
-        screen_load();
-    }
+    log_warn("nearby monsters: semantic overlay unavailable");
+    bell("Nearby monsters overlay unavailable.");
 }
 
 void do_cmd_view_objects()
 {
-    char get_char = ']';
-    bool show_los = true;
-
     /* Clear entry level banner when using ] command */
     if (g_banner_force_redraw_remaining > 0)
     {
@@ -626,24 +465,13 @@ void do_cmd_view_objects()
         do_cmd_redraw();
     }
 
-    if (nearby_information_scene(show_nearby_objects,
+    if (nearby_information_scene(nearby_objects_build_scene,
             "Objects you can see (press ] to toggle):",
             "Objects on screen (press ] to toggle):", ']'))
     {
         return;
     }
 
-    while (get_char == ']')
-    {
-        screen_save();
-        show_nearby_objects(show_los);
-        /* Show the prompt */
-        if (show_los)
-            prt("Objects you can see (press ] to toggle):", 0, 0);
-        else
-            prt("Objects on screen (press ] to toggle):", 0, 0);
-        get_char = nearby_snapshot_wait_key();
-        show_los = !show_los;
-        screen_load();
-    }
+    log_warn("nearby objects: semantic overlay unavailable");
+    bell("Nearby objects overlay unavailable.");
 }

@@ -251,58 +251,14 @@ int unified_look_find_cursor_selection(const unified_look_state* state, int curs
 
 void redraw_inven_equip_subwindows(void)
 {
-    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        if (!angband_term[j])
-            continue;
-
-        /* Don't overwrite the current options/menu term. */
-        if (angband_term[j] == old)
-            continue;
-
-        u32b flags = op_ptr->window_flag[j];
-        if (!(flags & (PW_INVEN | PW_EQUIP)))
-            continue;
-
-        Term_activate(angband_term[j]);
-
-        if (flags & PW_INVEN)
-            display_inven();
-        if (flags & PW_EQUIP)
-            display_equip();
-
-        Term_fresh();
-        Term_activate(old);
-    }
+    p_ptr->window |= (PW_INVEN | PW_EQUIP);
+    window_stuff();
 }
 
 void redraw_monster_subwindows(void)
 {
-    for (int j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        if (!angband_term[j])
-            continue;
-
-        /* Don't overwrite the current options/menu term. */
-        if (angband_term[j] == old)
-            continue;
-
-        u32b flags = op_ptr->window_flag[j];
-        if (!(flags & (PW_MONSTER)))
-            continue;
-
-        Term_activate(angband_term[j]);
-
-        if (p_ptr->monster_race_idx)
-            display_roff(p_ptr->monster_race_idx, NULL);
-
-        Term_fresh();
-        Term_activate(old);
-    }
+    p_ptr->window |= PW_MONSTER;
+    window_stuff();
 }
 
 static void sidebar_trim_spaces(char* s)
@@ -589,35 +545,10 @@ static cptr unified_look_object_filter_tag(const unified_look_state* state)
     }
 }
 
-typedef struct unified_sidebar_snapshot_layout {
-    int line;
-    int max_display_line;
-    int term_wid;
-    int pictogram_col;
-    int name_col;
-} unified_sidebar_snapshot_layout;
-
-static void unified_sidebar_snapshot_layout_init(
-    unified_sidebar_snapshot_layout* layout)
-{
-    int term_wid = 80;
-    int term_hgt = 24;
-
-    if (!layout)
-        return;
-
-    if (Term)
-    {
-        term_wid = Term->wid;
-        term_hgt = Term->hgt;
-    }
-
-    layout->line = 1;
-    layout->max_display_line = term_hgt - 2;
-    layout->term_wid = term_wid;
-    layout->pictogram_col = 0;
-    layout->name_col = 2;
-}
+#define UNIFIED_LOOK_MONSTER_NAME_CHARS 30
+#define UNIFIED_LOOK_OBJECT_NAME_CHARS 44
+#define UNIFIED_LOOK_OVERLAY_MIN_WIDTH_PX 360
+#define UNIFIED_LOOK_OVERLAY_WIDTH_CAP_PX 820
 
 static void unified_sidebar_pad_bigtile_pair(char* primary,
     size_t primary_size, char* secondary, size_t secondary_size)
@@ -699,7 +630,7 @@ static void unified_sidebar_pad_bigtile_single(char* text, size_t text_size)
 }
 
 static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
-    const monster_race* r_ptr, int term_wid, int name_col, char* display_name,
+    const monster_race* r_ptr, int max_name_chars, char* display_name,
     size_t display_name_size, char* morale_display,
     size_t morale_display_size, byte* morale_attr, int* display_name_len)
 {
@@ -755,12 +686,11 @@ static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
 
     strnfmt(morale_display, morale_display_size, " %d", morale_num);
 
-    available_width = term_wid - name_col - 2;
-    if (available_width < 10)
-        available_width = 10;
+    available_width = max_name_chars;
+    if (available_width < 8)
+        available_width = 8;
 
-    max_name_len = available_width - (int)strlen(hp_display)
-        - (int)strlen(morale_display);
+    max_name_len = available_width - (int)strlen(hp_display);
     if (max_name_len < 4)
         max_name_len = 4;
     if (max_name_len > (int)sizeof(truncated_name) - 1)
@@ -783,7 +713,7 @@ static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
 }
 
 static void unified_sidebar_format_object_row(
-    const unified_sidebar_sorted_object* entry, int term_wid, int name_col,
+    const unified_sidebar_sorted_object* entry, int max_name_chars,
     char* display_name, size_t display_name_size, byte* base_color,
     int* display_name_len)
 {
@@ -840,7 +770,7 @@ static void unified_sidebar_format_object_row(
         strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
     }
 
-    available_name_width = term_wid - name_col - 2;
+    available_name_width = max_name_chars;
     if (available_name_width < 10)
         available_name_width = 10;
 
@@ -910,7 +840,6 @@ static void unified_look_select_highlight(unified_look_state* state, int y,
 bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
     app_ui_scene* scene)
 {
-    unified_sidebar_snapshot_layout layout;
     app_ui_panel* panel;
     bool has_sidebar_selection;
     bool selected_row_found = false;
@@ -931,13 +860,13 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
         | APP_UI_PANEL_FLAG_LEFT_ANCHORED
         | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 0, 0);
+    app_ui_panel_set_widths(panel, UNIFIED_LOOK_OVERLAY_MIN_WIDTH_PX,
+        UNIFIED_LOOK_OVERLAY_WIDTH_CAP_PX);
     (void)title;
 
     has_sidebar_selection = (state->selected_entity >= 0)
         && (state->in_sidebar_mode || (state->look_mode == 0));
     unified_look_clear_highlight_state(state);
-    unified_sidebar_snapshot_layout_init(&layout);
 
     if (state->show_monsters && panel->row_count < APP_UI_ROW_MAX)
     {
@@ -969,8 +898,9 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
 
             selected = has_sidebar_selection
                 && (state->selected_entity == monster_count);
-            unified_sidebar_format_monster_row(m_ptr, r_ptr, layout.term_wid,
-                layout.name_col, label, sizeof(label), meta, sizeof(meta),
+            unified_sidebar_format_monster_row(m_ptr, r_ptr,
+                UNIFIED_LOOK_MONSTER_NAME_CHARS, label, sizeof(label), meta,
+                sizeof(meta),
                 &meta_attr, NULL);
             label_attr = selected ? TERM_L_BLUE : TERM_WHITE;
             if (!app_ui_panel_add_row_ex(panel, monster_count, label_attr,
@@ -1026,8 +956,9 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
             group_display_counts[entry->group]++;
             selected = has_sidebar_selection
                 && (state->selected_entity == (object_start + object_count));
-            unified_sidebar_format_object_row(entry, layout.term_wid,
-                layout.name_col, label, sizeof(label), &row_attr, NULL);
+            unified_sidebar_format_object_row(entry,
+                UNIFIED_LOOK_OBJECT_NAME_CHARS, label, sizeof(label),
+                &row_attr, NULL);
             if (!app_ui_panel_add_row_ex(panel,
                     object_start + object_count,
                     selected ? TERM_L_BLUE : row_attr,
@@ -1052,541 +983,4 @@ bool unified_look_build_menu_scene(unified_look_state* state, cptr title,
         unified_look_clear_highlight_state(state);
 
     return panel->row_count > 0;
-}
-
-/*
- * Show unified sidebar with monsters and objects
- */
-int show_unified_sidebar(unified_look_state* state, int* out_cols)
-{
-    int sidebar_col = 0; /* Left side of screen - column 0 */
-    int line = 1;
-    int i;
-    int monster_count = 0;
-    int object_count = 0;
-    char clear_line[256];
-    int clear_width;
-    char entity_char[2];
-    entity_char[1] = '\0';
-    static int previous_line_count = 0; /* Track previous display size */
-    static int prev_name_len[256];
-    const int prev_array_capacity = (int)(sizeof(prev_name_len) / sizeof(prev_name_len[0]));
-    bool has_sidebar_selection;
-    int max_rendered_col = 0;
-
-    
-    /* Get terminal height and calculate available space */
-    int term_hgt = Term->hgt;
-    int max_display_line = term_hgt - 2; /* Leave space for bottom line */
-    
-    /* Calculate layout positions once for both monsters and objects */
-    int term_wid = Term->wid;
-    int available_width = term_wid - sidebar_col - 3;
-    int name_width = available_width - 8 - 3 - 2; /* -2 for spaces */
-    
-    /* Adjust for bigtile mode - pictogram takes extra space */
-    if (use_bigtile) {
-        name_width = name_width - 1;  /* Reduce name width by 1 for bigtile */
-    }
-    
-    if (name_width < 4) name_width = 4; /* minimum name width */
-    
-    /* Calculate exact positions */
-    int pictogram_col = sidebar_col;
-    int name_col = sidebar_col + 2;  /* Name starts right after pictogram (at column 2) */
-    
-    /* Prepare clearing string */
-    clear_width = Term->wid - (sidebar_col - 1);
-    if (clear_width > 255) clear_width = 255;
-    memset(clear_line, ' ', clear_width);
-    clear_line[clear_width] = '\0';
-    
-    log_trace("show_unified_sidebar: previous_line_count=%d, term_hgt=%d, max_display_line=%d", 
-              previous_line_count, term_hgt, max_display_line);
-    log_trace("show_unified_sidebar: sidebar_col=%d, Term->wid=%d, clear_start=%d, clear_width=%d", 
-              sidebar_col, Term->wid, sidebar_col - 1, clear_width);
-    log_trace("show_unified_sidebar: show_monsters=%d, show_objects=%d", 
-              state->show_monsters ? 1 : 0, state->show_objects ? 1 : 0);
-
-    if ((state->look_mode == 0) && !state->in_sidebar_mode
-        && (state->selected_entity < 0)
-        && ((state->cursor_y != p_ptr->py) || (state->cursor_x != p_ptr->px)))
-    {
-        if (state->highlighted_y >= 0 && state->highlighted_x >= 0)
-        {
-            highlight_entity_on_map(state->highlighted_y, state->highlighted_x, false);
-        }
-
-        state->highlighted_y = -1;
-        state->highlighted_x = -1;
-        state->highlighted_entity_type = 0;
-        previous_line_count = 0;
-        memset(prev_name_len, 0, sizeof(prev_name_len));
-        if (out_cols)
-            *out_cols = 0;
-        return 0;
-    }
-
-    has_sidebar_selection = (state->selected_entity >= 0)
-        && (state->in_sidebar_mode || (state->look_mode == 0));
-    
-    /* Don't clear anything - let screen_save/screen_load handle restoration */
-    log_trace("show_unified_sidebar: skipping clear - letting screen management handle it");
-    
-    /* Show monsters section */
-    if (state->show_monsters)
-    {
-        int header_len = (int)strlen("MONSTERS:    ");
-
-        log_trace("show_unified_sidebar: displaying MONSTERS header at line %d", line);
-        c_put_str(TERM_WHITE, "MONSTERS:    ", line++, sidebar_col);
-        if (sidebar_col + header_len > max_rendered_col)
-            max_rendered_col = sidebar_col + header_len;
-        
-        /* Get monster list */
-        get_sorted_target_list(TARGET_LIST_MONSTER, 0);
-        
-        for (i = 0; i < temp_n && line < max_display_line; i++)
-        {
-            int m_idx = cave_m_idx[temp_y[i]][temp_x[i]];
-            monster_type* m_ptr = &mon_list[m_idx];
-            monster_race* r_ptr = &r_info[m_ptr->r_idx];
-            char m_name[40];
-            char morale_text[8];
-            
-            /* Show only visible monsters on screen (like the [ monsters menu) */
-            /* Skip empty monster slots */
-            if (!m_idx) continue;
-
-            if (!grid_info_is_available(temp_y[i], temp_x[i])) continue;
-
-            /* Skip monsters that are not visible to the player */
-            if (!m_ptr->ml) continue;
-            if (!unified_look_sidebar_in_radius(state, temp_y[i], temp_x[i])) continue;
-            
-            /* Generate monster name without articles using race name function */
-            monster_desc_race(m_name, sizeof(m_name), m_ptr->r_idx);
-            
-            /* Create HP bar with asterisks */
-            int hp_len = 0;
-            if (m_ptr->maxhp > 0) {
-                hp_len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
-            }
-            char hp_bar[10];
-            
-            /* Build health bar with status indicators */
-            if (m_ptr->confused && m_ptr->stunned)
-            {
-                strncpy(hp_bar, "cscscscs", hp_len);
-            }
-            else if (m_ptr->confused)
-            {
-                strncpy(hp_bar, "cccccccc", hp_len);
-            }
-            else if (m_ptr->stunned)
-            {
-                strncpy(hp_bar, "ssssssss", hp_len);
-            }
-            else
-            {
-                strncpy(hp_bar, "********", hp_len);
-            }
-            hp_bar[hp_len] = '\0';
-            
-            /* Create morale number with proper color */
-            int morale_color = TERM_WHITE;
-            int morale_num = 0;
-            
-            if (m_ptr->alertness < ALERTNESS_UNWARY)
-            {
-                morale_color = TERM_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else if (m_ptr->alertness < ALERTNESS_ALERT)
-            {
-                morale_color = TERM_L_BLUE;
-                morale_num = m_ptr->alertness;
-            }
-            else
-            {
-                /* Get proper morale display using alertness function */
-                char dummy_text[20];
-                if (!get_alertness_text(m_ptr, sizeof(dummy_text), dummy_text, &morale_color))
-                {
-                    /* Fallback if stance not initialized - use white and calculate from morale */
-                    morale_color = TERM_WHITE;
-                }
-                
-                /* Calculate morale number */
-                if (m_ptr->morale >= 0)
-                    morale_num = (m_ptr->morale + 9) / 10;
-                else
-                    morale_num = m_ptr->morale / 10;
-            }
-            
-            strnfmt(morale_text, sizeof(morale_text), "%d", morale_num);
-            
-            /* Use pictogram (tile) appropriate for graphics mode */
-            entity_char[0] = monster_char(r_ptr);
-            
-            /* Build the complete display string: name + health + morale */
-            char display_name[128];
-            char hp_display[12];
-            char morale_display[12];
-            
-            /* Format health and morale as compact strings */
-            strnfmt(hp_display, sizeof(hp_display), " %s", hp_bar);
-            strnfmt(morale_display, sizeof(morale_display), " %s", morale_text);
-            
-            /* Calculate available width for the whole line */
-            int available_width = term_wid - name_col - 2;
-            if (available_width < 10) available_width = 10;
-            
-            int hp_display_len = (int)strlen(hp_display);
-            int morale_display_len = (int)strlen(morale_display);
-            int max_name_len = available_width - hp_display_len - morale_display_len;
-            if (max_name_len < 4) max_name_len = 4;
-            if (max_name_len > (int)sizeof(display_name) - hp_display_len - morale_display_len - 1)
-                max_name_len = (int)sizeof(display_name) - hp_display_len - morale_display_len - 1;
-            
-            /* Truncate monster name if needed */
-            char truncated_name[80];
-            memset(truncated_name, 0, sizeof(truncated_name));
-            SDL_strlcpy(truncated_name, m_name, sizeof(truncated_name));
-            if (strlen(truncated_name) > (size_t)max_name_len) {
-                truncated_name[max_name_len] = '\0';
-            }
-            
-            /* Build complete display string: name + health (without morale) */
-            SDL_strlcpy(display_name, truncated_name, sizeof(display_name));
-            SDL_strlcat(display_name, hp_display, sizeof(display_name));
-            
-            int name_hp_len = (int)strlen(display_name);
-            int total_span = name_hp_len + morale_display_len;
-            if (use_bigtile)
-            {
-                const int min_sidebar_span = 13;
-                if (total_span < min_sidebar_span)
-                {
-                    int pad_needed = min_sidebar_span - total_span;
-
-                    while (pad_needed > 0 && name_hp_len + 1 < (int)sizeof(display_name))
-                    {
-                        display_name[name_hp_len++] = ' ';
-                        pad_needed--;
-                    }
-                    display_name[name_hp_len] = '\0';
-                    total_span = name_hp_len + morale_display_len;
-
-                    while (pad_needed > 0 && morale_display_len + 1 < (int)sizeof(morale_display))
-                    {
-                        morale_display[morale_display_len++] = ' ';
-                        pad_needed--;
-                    }
-                    morale_display[morale_display_len] = '\0';
-                    total_span = name_hp_len + morale_display_len;
-                }
-
-                if ((total_span % 2) == 0)
-                {
-                    if (morale_display_len + 1 < (int)sizeof(morale_display))
-                    {
-                        morale_display[morale_display_len++] = ' ';
-                        morale_display[morale_display_len] = '\0';
-                    }
-                    else if (name_hp_len + 1 < (int)sizeof(display_name))
-                    {
-                        display_name[name_hp_len++] = ' ';
-                        display_name[name_hp_len] = '\0';
-                    }
-                    total_span = name_hp_len + morale_display_len;
-                }
-            }
-            
-            /* Calculate column for morale display */
-            int morale_col = name_col + name_hp_len;
-            int row_end = MAX(pictogram_col + 2, morale_col + morale_display_len);
-            if (row_end > max_rendered_col)
-                max_rendered_col = row_end;
-            
-            /* Highlight if selected with cursor-style highlighting only */
-            bool highlight_this_monster = (has_sidebar_selection
-                && (state->selected_entity == monster_count));
-            
-            if (highlight_this_monster)
-            {
-                log_trace("Highlighting monster %d at (%d,%d)", monster_count, temp_y[i], temp_x[i]);
-                
-                /* Clear only the exact area where text will be displayed */
-                Term_erase(pictogram_col, line, 2);  /* Clear pictogram area (1-2 chars) */
-                
-                /* Show pictogram in natural color */
-                c_put_str(monster_attr(r_ptr), entity_char, line, pictogram_col);
-                if (use_bigtile)
-                {
-                    Term_putch(pictogram_col + 1, line, 255, -1);
-                }
-                
-                /* Display name+health in highlighted color */
-                Term_putstr(name_col, line, name_hp_len, TERM_L_BLUE, display_name);
-                
-                /* Display morale in highlighted color (overrides morale_color when highlighted) */
-                Term_putstr(morale_col, line, morale_display_len, TERM_L_BLUE, morale_display);
-                
-                /* Update highlighted position and cursor */
-                state->highlighted_y = temp_y[i];
-                state->highlighted_x = temp_x[i];
-                state->highlighted_entity_type = 1; /* Monster */
-                state->cursor_y = temp_y[i];
-                state->cursor_x = temp_x[i];
-                highlight_entity_on_map_type(temp_y[i], temp_x[i], true, 1); /* Prefer monster display */
-            }
-            else
-            {
-                /* Clear only the exact area where text will be displayed */
-                Term_erase(pictogram_col, line, 2);  /* Clear pictogram area (1-2 chars) */
-                
-                /* Normal display - show pictogram and name with proper colors */
-                c_put_str(monster_attr(r_ptr), entity_char, line, pictogram_col);
-                if (use_bigtile)
-                {
-                    Term_putch(pictogram_col + 1, line, 255, -1);
-                }
-                
-                /* Display name+health in white */
-                Term_putstr(name_col, line, name_hp_len, TERM_WHITE, display_name);
-                
-                /* Display morale in its proper color */
-                Term_putstr(morale_col, line, morale_display_len, morale_color, morale_display);
-            }
-            
-            line++;
-            monster_count++;
-        }
-    }
-    
-    /* Show objects section */
-    if (state->show_objects)
-    {
-        const char* filter_tag = "ALL";
-        switch (state->object_group_filter)
-        {
-        case LOOK_GROUP_ARTIFACT:   filter_tag = "ART"; break;
-        case LOOK_GROUP_WEAPON:     filter_tag = "WEAP"; break;
-        case LOOK_GROUP_ARMOUR:     filter_tag = "ARM"; break;
-        case LOOK_GROUP_JEWELRY:    filter_tag = "JEWL"; break;
-        case LOOK_GROUP_HERBS:      filter_tag = "HERB"; break;
-        case LOOK_GROUP_POTIONS:    filter_tag = "POT"; break;
-        case LOOK_GROUP_GEMS:       filter_tag = "GEM"; break;
-        case LOOK_GROUP_CONSUMABLE: filter_tag = "CONS"; break;
-        case LOOK_GROUP_OTHER:      filter_tag = "OTHER"; break;
-        default:                    filter_tag = "ALL"; break;
-        }
-
-        char header_buf[32];
-        strnfmt(header_buf, sizeof(header_buf), "OBJECTS: %s", filter_tag);
-        c_put_str(TERM_WHITE, header_buf, line++, sidebar_col);
-        if (sidebar_col + (int)strlen(header_buf) > max_rendered_col)
-            max_rendered_col = sidebar_col + (int)strlen(header_buf);
-        
-        get_sorted_target_list(TARGET_LIST_OBJECT, 0);
-        int object_capacity = (temp_n > 0) ? temp_n : 1;
-        unified_sidebar_sorted_object objects[object_capacity];
-        int valid_objects = unified_sidebar_collect_sorted_objects(state, objects,
-            object_capacity);
-
-        int group_display_counts[LOOK_GROUP_COUNT] = {0};
-        int object_start = (state->show_monsters) ? monster_count : 0;
-        for (i = 0; i < valid_objects && line < max_display_line; i++)
-        {
-            unified_sidebar_sorted_object* entry = &objects[i];
-            object_type* o_ptr = entry->o_ptr;
-            char o_name[60];
-            char name_source[80];
-            byte base_color = TERM_WHITE;
-
-            if (state->limit_objects_top_five && group_display_counts[entry->group] >= 5)
-                continue;
-
-            group_display_counts[entry->group]++;
-
-            /* Generate object name with stats but without articles (mode 4) 
-             * Mode 4 applies shortening logic that sidebar_compact_name expects.
-             * Fixed mode 4 to never produce stats-only output.
-             */
-            object_desc_floor(o_name, sizeof(o_name), o_ptr, false, 4);
-
-            SDL_strlcpy(name_source, o_name, sizeof(name_source));
-            /* Only show asterisk for artifacts that are identified */
-            if (entry->is_artifact && object_known_p(o_ptr))
-            {
-                size_t len = strlen(name_source);
-                if (len + 1 < sizeof(name_source))
-                {
-                    memmove(name_source + 1, name_source, len + 1);
-                    name_source[0] = '*';
-                }
-            }
-
-            base_color = weapon_glows(o_ptr) 
-                ? object_display_color(o_ptr, TERM_L_BLUE) 
-                : object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-            entity_char[0] = object_char(o_ptr);
-
-            int weight_total = o_ptr->weight * o_ptr->number;
-            char weight_buf[16];
-            strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d", weight_total / 10, weight_total % 10);
-
-            char smith_buf[16];
-            smith_buf[0] = '\0';
-            if (op_ptr->opt[OPT_show_smithing_difficulty_look]
-                && object_known_p(o_ptr)
-                && object_uses_smithing_difficulty(o_ptr))
-            {
-                int depth = (p_ptr && p_ptr->depth > 0) ? p_ptr->depth : 1;
-                int sd = object_smithing_difficulty(o_ptr);
-                int wr = object_weight_rarity(o_ptr, depth);
-                strnfmt(smith_buf, sizeof(smith_buf), " {%d,%d}", sd, wr);
-            }
-
-            /* Calculate available width for name + weight (+ optional smithing debug) */
-            int available_name_width = term_wid - name_col - 2; /* Leave some margin */
-            if (available_name_width < 10) available_name_width = 10;
-            
-            int weight_len = (int)strlen(weight_buf);
-            int smith_len = (int)strlen(smith_buf);
-            int max_name_len = available_name_width - weight_len - smith_len - 1; /* Reserve space for suffixes */
-            if (max_name_len < 4) max_name_len = 4;
-
-            char display_name[128];
-            if (max_name_len > (int)sizeof(display_name) - weight_len - 1) 
-                max_name_len = (int)sizeof(display_name) - weight_len - 1;
-
-            sidebar_compact_name(name_source, max_name_len, display_name, sizeof(display_name));
-            
-            /* Append weight right after name */
-            SDL_strlcat(display_name, weight_buf, sizeof(display_name));
-
-            /* Append optional smithing debug right after weight */
-            if (smith_buf[0])
-                SDL_strlcat(display_name, smith_buf, sizeof(display_name));
-            int final_name_len = (int)strlen(display_name);
-            int original_name_len = (int)strlen(name_source);
-            bool shortened = (original_name_len != final_name_len) || (original_name_len > max_name_len);
-            log_trace("sidebar object: idx=%d name='%s' compact='%s' color=%d orig_len=%d compact_len=%d max_len=%d name_col=%d weight_len=%d shortened=%d",
-                entry->o_idx, name_source, display_name, base_color, original_name_len, final_name_len, max_name_len, name_col, weight_len, shortened ? 1 : 0);
-
-            if (use_bigtile)
-            {
-                const int min_sidebar_span = 13;
-                if (final_name_len < min_sidebar_span)
-                {
-                    int pad_needed = min_sidebar_span - final_name_len;
-                    while (pad_needed > 0 && final_name_len + 1 < (int)sizeof(display_name))
-                    {
-                        display_name[final_name_len++] = ' ';
-                        pad_needed--;
-                    }
-                    display_name[final_name_len] = '\0';
-                }
-
-                if ((final_name_len % 2) == 0 && (final_name_len + 1 < (int)sizeof(display_name)))
-                {
-                    display_name[final_name_len++] = ' ';
-                    display_name[final_name_len] = '\0';
-                }
-            }
-
-            int row_index = line;
-            if (row_index < 0) row_index = 0;
-            if (row_index >= prev_array_capacity) row_index = prev_array_capacity - 1;
-
-            int old_name_len = prev_name_len[row_index];
-            int row_end = MAX(pictogram_col + 2,
-                name_col + MAX(final_name_len, old_name_len));
-            if (row_end > max_rendered_col)
-                max_rendered_col = row_end;
-            if (old_name_len > final_name_len)
-            {
-                int diff = old_name_len - final_name_len;
-                if (diff > 0)
-                {
-                    char blank[128];
-                    if (diff >= (int)sizeof(blank)) diff = (int)sizeof(blank) - 1;
-                    memset(blank, ' ', diff);
-                    blank[diff] = '\0';
-                    Term_putstr(name_col + final_name_len, line, diff, TERM_WHITE, blank);
-                }
-            }
-
-            bool highlight_this_object = (has_sidebar_selection
-                && (state->selected_entity == (object_start + object_count)));
-
-            byte name_attr = highlight_this_object ? TERM_L_BLUE : base_color;
-
-            if (highlight_this_object)
-            {
-                log_trace("Highlighting object %d at (%d,%d)", object_start + object_count, entry->y, entry->x);
-
-                Term_erase(pictogram_col, line, 2);
-                
-                c_put_str(object_attr(o_ptr), entity_char, line, pictogram_col);
-                if (use_bigtile)
-                {
-                    Term_putch(pictogram_col + 1, line, 255, -1);
-                }
-                
-                Term_putstr(name_col, line, final_name_len, name_attr, display_name);
-
-                state->highlighted_y = entry->y;
-                state->highlighted_x = entry->x;
-                state->highlighted_entity_type = 2; /* Object */
-                state->cursor_y = entry->y;
-                state->cursor_x = entry->x;
-                highlight_entity_on_map_type(entry->y, entry->x, true, 2); /* Prefer object display */
-            }
-            else
-            {
-                Term_erase(pictogram_col, line, 2);
-                
-                c_put_str(object_attr(o_ptr), entity_char, line, pictogram_col);
-                if (use_bigtile)
-                {
-                    Term_putch(pictogram_col + 1, line, 255, -1);
-                }
-                
-                Term_putstr(name_col, line, final_name_len, name_attr, display_name);
-            }
-
-            prev_name_len[row_index] = final_name_len;
-
-            line++;
-            object_count++;
-        for (int idx = line; idx < prev_array_capacity && idx <= previous_line_count; ++idx)
-        {
-            prev_name_len[idx] = 0;
-        }
-
-        }
-    }
-
-    /* Save current line count for next clearing operation */
-    int current_line_count = line - 1;
-    
-    log_trace("show_unified_sidebar: current_line_count=%d, previous_line_count=%d", 
-              current_line_count, previous_line_count);
-    
-    /* If the new display is shorter than the previous one, don't clear - let screen_load handle it */
-    if (previous_line_count > current_line_count)
-    {
-        log_trace("show_unified_sidebar: display got shorter (%d->%d) but not clearing - screen_load will restore", 
-                  previous_line_count, current_line_count);
-    }
-    
-    previous_line_count = current_line_count;
-    if (out_cols)
-        *out_cols = max_rendered_col;
-    log_trace("show_unified_sidebar: function complete, set previous_line_count=%d", previous_line_count);
-    return current_line_count;
 }

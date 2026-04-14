@@ -1,6 +1,7 @@
 /* File: ui/ui-status.c */
 
 #include "angband.h"
+#include "app/app-scene-dungeon.h"
 #include "app/app-session.h"
 #include "externs.h"
 
@@ -22,7 +23,7 @@ static bool ui_compact_width(void)
 
 static bool ui_hide_left_panel(void)
 {
-    return get_sdl_hide_left_panel();
+    return g_hide_left_panel;
 }
 
 static bool ui_compact_height(void)
@@ -40,20 +41,12 @@ static bool ui_compact_status_line_handles_wounds(void)
     return ui_compact_width() && (ROW_CUT >= ROW_STATE);
 }
 
-typedef struct hidden_overlay_line {
-    char text[32];
-    byte attr;
-} hidden_overlay_line;
-
 static void prt_status_line_compact(void);
 static void prt_cut_poisoned_compact(void);
-static void prt_hidden_top_vitals(void);
+static bool ui_semantic_dungeon_snapshot_active(void);
 static bool status_state_text(char* out_long, size_t out_long_sz,
                               char* out_short, size_t out_short_sz,
                               byte* out_attr);
-static void hidden_left_panel_add_line(hidden_overlay_line* lines, int* count,
-                                       int max_lines, byte attr, cptr text);
-static int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines);
 
 /*
  * Converts stat num into a two-char (right justified) string
@@ -617,137 +610,16 @@ static void prt_sp(void)
     c_put_str(color, tmp, ROW_SP, COL_SP + 12 - len);
 }
 
-static void hidden_left_panel_add_line(hidden_overlay_line* lines, int* count,
-                                       int max_lines, byte attr, cptr text)
+static bool ui_semantic_dungeon_snapshot_active(void)
 {
-    if (!lines || !count || !text || !text[0])
-        return;
-    if (*count >= max_lines)
-        return;
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
 
-    SDL_strlcpy(lines[*count].text, text, sizeof(lines[*count].text));
-    lines[*count].attr = attr;
-    (*count)++;
-}
+    if (!session)
+        return false;
 
-static int hidden_left_panel_build_lines(hidden_overlay_line* lines, int max_lines)
-{
-    int count = 0;
-    char buf[32];
-    byte hp_color;
-    byte voice_color;
-
-    if (!lines || !Term || !p_ptr || max_lines <= 0)
-        return 0;
-
-    hp_color = health_attr(p_ptr->chp, p_ptr->mhp);
-    if (p_ptr->csp >= p_ptr->msp)
-        voice_color = TERM_L_GREEN;
-    else if (p_ptr->csp > (p_ptr->msp * op_ptr->hitpoint_warn) / 10)
-        voice_color = TERM_YELLOW;
-    else
-        voice_color = TERM_RED;
-
-    strnfmt(buf, sizeof(buf), "HP %3d", MIN(p_ptr->chp, 999));
-    hidden_left_panel_add_line(lines, &count, max_lines, hp_color, buf);
-
-    strnfmt(buf, sizeof(buf), "VC %3d", MIN(p_ptr->csp, 999));
-    hidden_left_panel_add_line(lines, &count, max_lines, voice_color, buf);
-
-    if (p_ptr->cut > 100)
-    {
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_RED,
-            "MW !!!");
-    }
-    else if (p_ptr->cut > 20)
-    {
-        strnfmt(buf, sizeof(buf), "BL %3d", MIN(p_ptr->cut, 999));
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_RED, buf);
-    }
-    else if (p_ptr->cut > 0)
-    {
-        strnfmt(buf, sizeof(buf), "BL %3d", MIN(p_ptr->cut, 999));
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_L_RED, buf);
-    }
-
-    if (p_ptr->poisoned > 20)
-    {
-        strnfmt(buf, sizeof(buf), "PS %3d", MIN(p_ptr->poisoned, 999));
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_L_GREEN, buf);
-    }
-    else if (p_ptr->poisoned > 0)
-    {
-        strnfmt(buf, sizeof(buf), "PS %3d", MIN(p_ptr->poisoned, 999));
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_GREEN, buf);
-    }
-
-    if (p_ptr->song1 != SNG_NOTHING || p_ptr->song2 != SNG_NOTHING)
-    {
-        char* song1_name
-            = b_name + (&b_info[ability_index(S_SNG, p_ptr->song1)])->name;
-        char* song2_name
-            = b_name + (&b_info[ability_index(S_SNG, p_ptr->song2)])->name;
-        buf[0] = '\0';
-
-        if (p_ptr->song1 != SNG_NOTHING && p_ptr->song2 != SNG_NOTHING)
-            strnfmt(buf, sizeof(buf), "%s+%s", song1_name + 8, song2_name + 8);
-        else if (p_ptr->song1 != SNG_NOTHING)
-            SDL_strlcpy(buf, song1_name + 8, sizeof(buf));
-        else if (p_ptr->song2 != SNG_NOTHING)
-            SDL_strlcpy(buf, song2_name + 8, sizeof(buf));
-
-        hidden_left_panel_add_line(lines, &count, max_lines, TERM_L_BLUE, buf);
-    }
-
-    if (p_ptr->health_who
-        && mon_list[p_ptr->health_who].ml
-        && !p_ptr->image
-        && (mon_list[p_ptr->health_who].hp > 0))
-    {
-        monster_type* m_ptr = &mon_list[p_ptr->health_who];
-        int len;
-        byte attr;
-
-        attr = health_attr(m_ptr->hp, m_ptr->maxhp);
-        len = (8 * m_ptr->hp + m_ptr->maxhp - 1) / m_ptr->maxhp;
-        if (len < 0)
-            len = 0;
-        if (len > 8)
-            len = 8;
-
-        for (int i = 0; i < len; i++)
-            buf[i] = '*';
-        buf[len] = '\0';
-
-        hidden_left_panel_add_line(lines, &count, max_lines, attr, buf);
-    }
-
-    return count;
-}
-
-static void prt_hidden_top_vitals(void)
-{
-    hidden_overlay_line lines[16];
-    int line_count;
-
-    if (!Term || !p_ptr)
-        return;
-
-    line_count = hidden_left_panel_build_lines(lines, 16);
-
-    for (int i = 0; i < line_count && (ROW_NAME + i) < Term->hgt - 1; i++)
-    {
-        int row = ROW_NAME + i;
-        int width = (int)strlen(lines[i].text);
-
-        if (width <= 0)
-            continue;
-        if (width > Term->wid)
-            width = Term->wid;
-
-        Term_erase(0, row, width);
-        Term_putstr(0, row, width, lines[i].attr, lines[i].text);
-    }
+    snapshot = app_session_snapshot(session);
+    return snapshot && (snapshot->scene == APP_SCENE_KIND_DUNGEON);
 }
 
 /*
@@ -1474,122 +1346,15 @@ static int status_line_len(const status_seg* segs, int count, bool use_long,
 
 static byte status_depth_attr(void)
 {
-    s16b attr = TERM_WHITE;
-
-    if ((p_ptr->depth) && (do_feeling))
-    {
-        if (feeling == 1)
-            attr = TERM_VIOLET;
-        else if (feeling == 2)
-            attr = TERM_RED;
-        else if (feeling == 3)
-            attr = TERM_L_RED;
-        else if (feeling == 4)
-            attr = TERM_ORANGE;
-        else if (feeling == 5)
-            attr = TERM_ORANGE;
-        else if (feeling == 6)
-            attr = TERM_YELLOW;
-        else if (feeling == 7)
-            attr = TERM_YELLOW;
-        else if (feeling == 8)
-            attr = TERM_WHITE;
-        else if (feeling == 9)
-            attr = TERM_WHITE;
-        else if (feeling == 10)
-            attr = TERM_L_WHITE;
-        else if (feeling >= LEV_THEME_HEAD)
-            attr = TERM_BLUE;
-    }
-
-    return (byte)attr;
+    return app_status_depth_attr_live();
 }
 
 static bool status_state_text(char* out_long, size_t out_long_sz,
                               char* out_short, size_t out_short_sz,
                               byte* out_attr)
 {
-    if (!p_ptr)
-        return false;
-
-    out_long[0] = '\0';
-    out_short[0] = '\0';
-    if (out_attr)
-        *out_attr = TERM_WHITE;
-
-    if (p_ptr->entranced)
-    {
-        if (out_attr)
-            *out_attr = TERM_RED;
-        SDL_strlcpy(out_long, "Entranced", out_long_sz);
-        SDL_strlcpy(out_short, "En", out_short_sz);
-        return true;
-    }
-
-    if (p_ptr->smithing)
-    {
-        SDL_strlcpy(out_long, "Smithing", out_long_sz);
-        SDL_strlcpy(out_short, "Sm", out_short_sz);
-        return true;
-    }
-
-    if (p_ptr->fletching)
-    {
-        SDL_strlcpy(out_long, "Fletching", out_long_sz);
-        SDL_strlcpy(out_short, "Fl", out_short_sz);
-        return true;
-    }
-
-    if (p_ptr->rage)
-    {
-        if (out_attr)
-            *out_attr = TERM_RED;
-        SDL_strlcpy(out_long, "Rage", out_long_sz);
-        SDL_strlcpy(out_short, "Rg", out_short_sz);
-        return true;
-    }
-
-    if (p_ptr->resting)
-    {
-        int n = p_ptr->resting;
-        if (n == -1)
-        {
-            SDL_strlcpy(out_long, "Rest*", out_long_sz);
-            SDL_strlcpy(out_short, "R*", out_short_sz);
-        }
-        else if (n == -2)
-        {
-            SDL_strlcpy(out_long, "Rest&", out_long_sz);
-            SDL_strlcpy(out_short, "R&", out_short_sz);
-        }
-        else if (n >= 1000)
-        {
-            strnfmt(out_long, out_long_sz, "Rest %d", n);
-            strnfmt(out_short, out_short_sz, "R%dk", n / 1000);
-        }
-        else
-        {
-            strnfmt(out_long, out_long_sz, "Rest %d", n);
-            strnfmt(out_short, out_short_sz, "R%d", n);
-        }
-        return true;
-    }
-
-    if (p_ptr->command_rep)
-    {
-        strnfmt(out_long, out_long_sz, "Repeat %d", p_ptr->command_rep);
-        strnfmt(out_short, out_short_sz, "Rp%d", p_ptr->command_rep);
-        return true;
-    }
-
-    if (p_ptr->stealth_mode)
-    {
-        SDL_strlcpy(out_long, "Stealth", out_long_sz);
-        SDL_strlcpy(out_short, "St", out_short_sz);
-        return true;
-    }
-
-    return false;
+    return app_status_state_text_live(out_long, out_long_sz, out_short,
+        out_short_sz, out_attr);
 }
 
 static const char* status_partition_short(const char* long_label)
@@ -2584,7 +2349,7 @@ void update_stuff(void)
  */
 void redraw_stuff(void)
 {
-    bool hidden_overlay_needs_refresh = false;
+    bool render_main_term_chrome;
 
     /* Redraw stuff */
     if (!p_ptr->redraw) {
@@ -2607,13 +2372,13 @@ void redraw_stuff(void)
         return;
     }
 
+    render_main_term_chrome = !ui_semantic_dungeon_snapshot_active();
+
     if (p_ptr->redraw & (PR_MAP))
     {
         p_ptr->redraw &= ~(PR_MAP);
         log_trace("redraw_stuff: redrawing map");
         prt_map();
-        if (ui_hide_left_panel())
-            hidden_overlay_needs_refresh = true;
     }
 
     if (p_ptr->redraw & (PR_BASIC))
@@ -2624,16 +2389,15 @@ void redraw_stuff(void)
         p_ptr->redraw &= ~(PR_ARMOR | PR_HP | PR_VOICE | PR_SONG | PR_LIGHT);
         p_ptr->redraw &= ~(PR_DEPTH | PR_HEALTHBAR);
         p_ptr->redraw &= ~(PR_RESIST);
-        prt_frame_basic();
-        if (ui_hide_left_panel())
-            hidden_overlay_needs_refresh = true;
+        if (render_main_term_chrome)
+            prt_frame_basic();
     }
 
     if (p_ptr->redraw & (PR_MISC))
     {
         p_ptr->redraw &= ~(PR_MISC);
 
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
         {
             /* Name */
             c_put_str(TERM_WHITE, "            ", ROW_NAME, COL_NAME);
@@ -2647,14 +2411,14 @@ void redraw_stuff(void)
     if (p_ptr->redraw & (PR_EXP))
     {
         p_ptr->redraw &= ~(PR_EXP);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_exp();
     }
 
     if (p_ptr->redraw & (PR_STATS))
     {
         p_ptr->redraw &= ~(PR_STATS);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
         {
             prt_stat(A_STR);
             prt_stat(A_DEX);
@@ -2666,37 +2430,35 @@ void redraw_stuff(void)
     if (p_ptr->redraw & (PR_MEL))
     {
         p_ptr->redraw &= ~(PR_MEL);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_mel();
     }
 
     if (p_ptr->redraw & (PR_ARC))
     {
         p_ptr->redraw &= ~(PR_ARC);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_arc();
     }
 
     if (p_ptr->redraw & (PR_QUIVER))
     {
         p_ptr->redraw &= ~(PR_QUIVER);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_quiver();
     }
 
     if (p_ptr->redraw & (PR_ARMOR))
     {
         p_ptr->redraw &= ~(PR_ARMOR);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_evn();
     }
 
     if (p_ptr->redraw & (PR_HP))
     {
         p_ptr->redraw &= ~(PR_HP);
-        if (ui_hide_left_panel())
-            hidden_overlay_needs_refresh = true;
-        else
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_hp();
 
         /*
@@ -2708,7 +2470,7 @@ void redraw_stuff(void)
             lite_spot(p_ptr->py, p_ptr->px);
         }
 
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
         {
             /* Also update the monospace character health graphic */
             prt_char_health_graphic();
@@ -2718,16 +2480,14 @@ void redraw_stuff(void)
     if (p_ptr->redraw & (PR_VOICE))
     {
         p_ptr->redraw &= ~(PR_VOICE);
-        if (ui_hide_left_panel())
-            hidden_overlay_needs_refresh = true;
-        else
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_sp();
     }
 
     if (p_ptr->redraw & (PR_LIGHT))
     {
         p_ptr->redraw &= ~(PR_LIGHT);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_light();
     }
 
@@ -2736,25 +2496,22 @@ void redraw_stuff(void)
     if (p_ptr->redraw & (PR_SONG))
     {
         p_ptr->redraw &= ~(PR_SONG);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_song();
-        else
-            hidden_overlay_needs_refresh = true;
     }
 
     if (p_ptr->redraw & (PR_DEPTH))
     {
         p_ptr->redraw &= ~(PR_DEPTH);
-        prt_depth();
+        if (render_main_term_chrome)
+            prt_depth();
     }
 
     if (p_ptr->redraw & (PR_HEALTHBAR))
     {
         p_ptr->redraw &= ~(PR_HEALTHBAR);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             health_redraw();
-        else
-            hidden_overlay_needs_refresh = true;
     }
 
     if (p_ptr->redraw & (PR_EXTRA))
@@ -2765,79 +2522,79 @@ void redraw_stuff(void)
         p_ptr->redraw &= ~(PR_BLIND | PR_CONFUSED);
         p_ptr->redraw &= ~(PR_AFRAID | PR_POISONED);
         p_ptr->redraw &= ~(PR_STATE | PR_SPEED);
-        prt_frame_extra();
-        if (ui_hide_left_panel())
-            hidden_overlay_needs_refresh = true;
+        if (render_main_term_chrome)
+            prt_frame_extra();
     }
 
     if (p_ptr->redraw & (PR_CUT))
     {
         p_ptr->redraw &= ~(PR_CUT);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_cut();
-        else
-            hidden_overlay_needs_refresh = true;
     }
 
     if (p_ptr->redraw & (PR_STUN))
     {
         p_ptr->redraw &= ~(PR_STUN);
-        prt_stun();
+        if (render_main_term_chrome)
+            prt_stun();
     }
 
     if (p_ptr->redraw & (PR_HUNGER))
     {
         p_ptr->redraw &= ~(PR_HUNGER);
-        prt_hunger();
+        if (render_main_term_chrome)
+            prt_hunger();
     }
 
     if (p_ptr->redraw & (PR_BLIND))
     {
         p_ptr->redraw &= ~(PR_BLIND);
-        prt_blind();
+        if (render_main_term_chrome)
+            prt_blind();
     }
 
     if (p_ptr->redraw & (PR_CONFUSED))
     {
         p_ptr->redraw &= ~(PR_CONFUSED);
-        prt_confused();
+        if (render_main_term_chrome)
+            prt_confused();
     }
 
     if (p_ptr->redraw & (PR_AFRAID))
     {
         p_ptr->redraw &= ~(PR_AFRAID);
-        prt_afraid();
+        if (render_main_term_chrome)
+            prt_afraid();
     }
 
     if (p_ptr->redraw & (PR_POISONED))
     {
         p_ptr->redraw &= ~(PR_POISONED);
-        if (!ui_hide_left_panel())
+        if (render_main_term_chrome && !ui_hide_left_panel())
             prt_poisoned();
-        else
-            hidden_overlay_needs_refresh = true;
     }
 
     if (p_ptr->redraw & (PR_STATE))
     {
         p_ptr->redraw &= ~(PR_STATE);
-        prt_state();
+        if (render_main_term_chrome)
+            prt_state();
     }
 
     if (p_ptr->redraw & (PR_SPEED))
     {
         p_ptr->redraw &= ~(PR_SPEED);
-        prt_speed();
+        if (render_main_term_chrome)
+            prt_speed();
     }
 
     if (p_ptr->redraw & (PR_TERRAIN))
     {
         p_ptr->redraw &= ~(PR_TERRAIN);
-        prt_terrain();
+        if (render_main_term_chrome)
+            prt_terrain();
     }
-
-    if (ui_hide_left_panel() && hidden_overlay_needs_refresh)
-        prt_hidden_top_vitals();
 
     // log_trace("redraw_stuff: completed all redraws");
 }

@@ -3,6 +3,7 @@
 #include "externs.h"
 #include "platform-input.h"
 #include "runtime-cli.h"
+#include "ui/ui-information-scene.h"
 
 static cptr g_prompt_interaction_label = NULL;
 static int g_prompt_snapshot_silent_clear_depth = 0;
@@ -147,7 +148,7 @@ static bool prompt_menu_scene_supported(void)
 {
     app_session* session = app_session_current();
 
-    return runtime_cli_snapshot_renderer() && session
+    return session
         && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
 }
 
@@ -214,6 +215,7 @@ static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
 static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
+    bool redraw_dungeon = false;
 
     if (!scope || !scope->active || !session)
         return;
@@ -235,12 +237,18 @@ static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
         {
             app_session_set_snapshot(session, &scope->previous_snapshot);
         }
+
+        redraw_dungeon = (scope->previous_snapshot.scene
+            == APP_SCENE_KIND_DUNGEON);
     }
 
     app_session_pop_wait_scope(session, &scope->wait_scope);
     scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    if (redraw_dungeon && Term)
+        do_cmd_redraw();
+    else
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
 static void prompt_menu_scene_add_wrapped_text(app_ui_panel* panel,
@@ -476,6 +484,33 @@ static bool prompt_menu_scene_build_confirm_scene(app_ui_scene* scene,
             other_buf, "Other");
     }
 
+    return true;
+}
+
+static bool prompt_menu_scene_build_oath_confirm_scene(app_ui_scene* scene,
+    cptr prompt)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, TERM_L_RED, "Breaking a Sacred Oath");
+    prompt_menu_scene_add_wrapped_text(panel, TERM_WHITE, prompt ? prompt : "",
+        62);
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+        "Y", "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "N/Esc", "Cancel");
     return true;
 }
 
@@ -1291,39 +1326,141 @@ bool get_check(cptr prompt)
 bool get_check_oath_multiline(cptr prompt)
 {
     char ch;
-    int wid, h;
-    prompt_menu_scene_scope menu_scope;
-    bool snapshot_menu = false;
 
     /* Paranoia */
     message_flush();
 
-    snapshot_menu = prompt_menu_scene_enter(&menu_scope);
-    if (snapshot_menu)
+    if (ui_information_scene_supported())
     {
+        ui_information_scene_scope scope;
         app_ui_scene scene;
-        app_ui_panel* panel;
+        bool scene_active = false;
 
-        app_ui_scene_init(&scene);
-        scene.flags = APP_UI_SCENE_FLAG_USE_BACKDROP
-            | APP_UI_SCENE_FLAG_DIM_BACKDROP;
-        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
-        if (!panel)
-            return false;
+        if (prompt_menu_scene_build_oath_confirm_scene(&scene, prompt)
+            && ui_information_scene_enter(&scope))
+        {
+            if (ui_information_scene_present_ui(&scene))
+                scene_active = true;
+            else
+                ui_information_scene_leave(&scope);
+        }
 
-        app_ui_panel_set_widths(panel, 420, 760);
-        app_ui_panel_set_title(panel, TERM_L_RED, "Breaking a Sacred Oath");
-        prompt_menu_scene_add_wrapped_text(panel, TERM_WHITE, prompt, 62);
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
-            "Y", "Accept");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "N/Esc", "Cancel");
+        if (scene_active)
+        {
+            while (true)
+            {
+                ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+                if (quick_messages)
+                    break;
+                if (ch == ESCAPE)
+                    break;
+                if (strchr("YyNn", ch))
+                    break;
+                bell("Illegal response to a 'yes/no' question!");
+            }
 
-        snapshot_menu = prompt_menu_scene_present(&menu_scope, &scene);
+            ui_information_scene_leave(&scope);
+            if ((ch != 'Y') && (ch != 'y'))
+                return false;
+            return true;
+        }
+
+        return get_check(prompt);
     }
 
-    if (snapshot_menu)
     {
+        int wid, h;
+
+    /* Get terminal size */
+        Term_get_size(&wid, &h);
+
+    /* Save screen */
+        screen_save();
+        Term_clear();
+
+    /* Title */
+        Term_putstr((wid - 24) / 2, 2, -1, TERM_L_RED,
+            "Breaking a Sacred Oath");
+
+    /* Display the oath confirmation prompt with word wrapping */
+        if (prompt && prompt[0])
+        {
+            char* desc_ptr = (char*)prompt;
+            char line_buffer[80];
+            int row = 5;
+            int max_width = 70; /* Leave margins */
+
+            while (*desc_ptr && row < h - 4)
+            {
+                int line_len = 0;
+                char* line_start = desc_ptr;
+
+                /* Find the longest line that fits */
+                while (*desc_ptr && line_len < max_width)
+                {
+                    if (*desc_ptr == ' ')
+                    {
+                        /* Potential break point */
+                        if (line_len > 0 && line_len + 1 < max_width)
+                        {
+                            memcpy(line_buffer, line_start, (size_t)line_len);
+                            line_buffer[line_len] = '\0';
+                        }
+                    }
+                    line_len++;
+                    desc_ptr++;
+                }
+
+                /* Back up to last space if we exceeded width */
+                if (line_len >= max_width && *desc_ptr)
+                {
+                    while (desc_ptr > line_start && *desc_ptr != ' ')
+                    {
+                        desc_ptr--;
+                        line_len--;
+                    }
+                    if (*desc_ptr == ' ')
+                        desc_ptr++; /* Skip the space */
+                }
+
+                /* Copy the line */
+                int actual_len = (int)(desc_ptr - line_start);
+                if (actual_len > 79)
+                    actual_len = 79;
+                memcpy(line_buffer, line_start, (size_t)actual_len);
+                line_buffer[actual_len] = '\0';
+
+                /* Remove trailing space */
+                while (actual_len > 0 && line_buffer[actual_len - 1] == ' ')
+                {
+                    actual_len--;
+                    line_buffer[actual_len] = '\0';
+                }
+
+                /* Display centered line */
+                if (actual_len > 0)
+                {
+                    int start_col = (wid - actual_len) / 2;
+                    if (start_col < 1)
+                        start_col = 1;
+                    Term_putstr(start_col, row, -1, TERM_WHITE, line_buffer);
+                    row++;
+                }
+
+                /* Skip whitespace for next line */
+                while (*desc_ptr && *desc_ptr == ' ')
+                    desc_ptr++;
+
+                if (!*desc_ptr)
+                    break;
+            }
+        }
+
+    /* Prompt at bottom */
+        Term_putstr((wid - 20) / 2, h - 3, -1, TERM_YELLOW,
+            "Are you certain? [y/n]");
+
+    /* Get an acceptable answer */
         while (true)
         {
             ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
@@ -1336,114 +1473,9 @@ bool get_check_oath_multiline(cptr prompt)
             bell("Illegal response to a 'yes/no' question!");
         }
 
-        prompt_menu_scene_leave(&menu_scope);
-        if ((ch != 'Y') && (ch != 'y'))
-            return false;
-        return true;
-    }
-
-    /* Get terminal size */
-    Term_get_size(&wid, &h);
-
-    /* Save screen */
-    screen_save();
-    Term_clear();
-
-    /* Title */
-    Term_putstr((wid - 24) / 2, 2, -1, TERM_L_RED, "Breaking a Sacred Oath");
-
-    /* Display the oath confirmation prompt with word wrapping */
-    if (prompt && prompt[0])
-    {
-        char* desc_ptr = (char*)prompt;
-        char line_buffer[80];
-        int row = 5;
-        int max_width = 70; /* Leave margins */
-
-        while (*desc_ptr && row < h - 4)
-        {
-            int line_len = 0;
-            char* line_start = desc_ptr;
-
-            /* Find the longest line that fits */
-            while (*desc_ptr && line_len < max_width)
-            {
-                if (*desc_ptr == ' ')
-                {
-                    /* Potential break point */
-                    if (line_len > 0 && line_len + 1 < max_width)
-                    {
-                        memcpy(line_buffer, line_start, (size_t)line_len);
-                        line_buffer[line_len] = '\0';
-                    }
-                }
-                line_len++;
-                desc_ptr++;
-            }
-
-            /* Back up to last space if we exceeded width */
-            if (line_len >= max_width && *desc_ptr)
-            {
-                while (desc_ptr > line_start && *desc_ptr != ' ')
-                {
-                    desc_ptr--;
-                    line_len--;
-                }
-                if (*desc_ptr == ' ')
-                    desc_ptr++; /* Skip the space */
-            }
-
-            /* Copy the line */
-            int actual_len = (int)(desc_ptr - line_start);
-            if (actual_len > 79)
-                actual_len = 79;
-            memcpy(line_buffer, line_start, (size_t)actual_len);
-            line_buffer[actual_len] = '\0';
-
-            /* Remove trailing space */
-            while (actual_len > 0 && line_buffer[actual_len - 1] == ' ')
-            {
-                actual_len--;
-                line_buffer[actual_len] = '\0';
-            }
-
-            /* Display centered line */
-            if (actual_len > 0)
-            {
-                int start_col = (wid - actual_len) / 2;
-                if (start_col < 1)
-                    start_col = 1;
-                Term_putstr(start_col, row, -1, TERM_WHITE, line_buffer);
-                row++;
-            }
-
-            /* Skip whitespace for next line */
-            while (*desc_ptr && *desc_ptr == ' ')
-                desc_ptr++;
-
-            if (!*desc_ptr)
-                break;
-        }
-    }
-
-    /* Prompt at bottom */
-    Term_putstr((wid - 20) / 2, h - 3, -1, TERM_YELLOW, "Are you certain? [y/n]");
-
-    /* Get an acceptable answer */
-    while (true)
-    {
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-        if (quick_messages)
-            break;
-        if (ch == ESCAPE)
-            break;
-        if (strchr("YyNn", ch))
-            break;
-        bell("Illegal response to a 'yes/no' question!");
-    }
-
     /* Restore screen */
-    screen_load();
+        screen_load();
+    }
 
     /* Normal negation */
     if ((ch != 'Y') && (ch != 'y'))

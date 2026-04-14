@@ -737,8 +737,6 @@ static bool welcome_screen_present_ui(cptr status_line, bool show_footer)
 {
     app_ui_scene scene;
 
-    if (!runtime_cli_snapshot_renderer())
-        return false;
     if (!welcome_screen_build_ui_scene(&scene, status_line, show_footer))
         return false;
 

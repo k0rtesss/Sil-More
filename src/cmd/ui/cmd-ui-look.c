@@ -128,7 +128,8 @@ static bool g_unified_look_has_start = false;
 static int g_unified_look_start_y = 0;
 static int g_unified_look_start_x = 0;
 static char g_unified_look_snapshot_prompt[APP_INTERACTION_TEXT_MAX];
-static int g_unified_look_snapshot_prompt_cols = 0;
+
+#define UNIFIED_LOOK_SNAPSHOT_PROMPT_MAX 112
 
 static bool unified_look_snapshot_active(void)
 {
@@ -140,7 +141,6 @@ static void unified_look_snapshot_clear(void)
     app_session* session = app_session_current();
 
     g_unified_look_snapshot_prompt[0] = '\0';
-    g_unified_look_snapshot_prompt_cols = 0;
 
     if (!unified_look_snapshot_active() || !session)
         return;
@@ -184,19 +184,9 @@ static char unified_look_inkey_with_wait_reason(void)
 
     app_session_push_wait_scope(session, &scope,
         APP_WAIT_REASON_TARGETING, 0, 0);
-    ch = inkey();
+    ch = (char)ui_information_scene_wait_key();
     app_session_pop_wait_scope(session, &scope);
     return ch;
-}
-
-static void unified_look_wait_for_information(void)
-{
-    app_wait_scope wait_scope;
-
-    app_session_push_wait_scope(app_session_current(), &wait_scope,
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-    (void)inkey();
-    app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 
 static void unified_look_show_monster_recall(const monster_type* m_ptr)
@@ -204,23 +194,14 @@ static void unified_look_show_monster_recall(const monster_type* m_ptr)
     if (!m_ptr)
         return;
 
-    if (unified_look_snapshot_active())
+    unified_look_snapshot_clear();
+    if (!ui_information_scene_show_monster_recall(m_ptr->r_idx, m_ptr,
+            NULL, true, NULL))
     {
-        unified_look_snapshot_clear();
-        if (!ui_information_scene_show_monster_recall(m_ptr->r_idx, m_ptr,
-                NULL, true, NULL))
-        {
-            log_error("unified-look: snapshot recall scene unavailable");
-            bell("Monster recall screen unavailable.");
-            return;
-        }
+        log_error("unified-look: semantic recall scene unavailable");
+        bell("Monster recall screen unavailable.");
         return;
     }
-
-    screen_save();
-    screen_roff(m_ptr->r_idx, m_ptr);
-    unified_look_wait_for_information();
-    screen_load();
 }
 
 static void unified_look_show_object_info(object_type* o_ptr)
@@ -515,18 +496,21 @@ static void unified_look_prompt_label(int binding, const char* fallback, char* b
 
 static void unified_look_print_prompt(cptr full_text, cptr compact_text)
 {
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
     char buf[192];
     cptr selected = full_text;
+    int max_chars = UNIFIED_LOOK_SNAPSHOT_PROMPT_MAX;
 
-    if (compact_text && term_wid < (int)strlen(full_text) + 1)
+    if (compact_text && (int)strlen(full_text) > max_chars)
         selected = compact_text;
+
+    if (max_chars < 4)
+        max_chars = 4;
 
     SDL_strlcpy(buf, selected, sizeof(buf));
 
-    if ((int)strlen(buf) >= term_wid && term_wid > 4)
+    if ((int)strlen(buf) >= max_chars && max_chars > 4)
     {
-        int cut = term_wid - 4;
+        int cut = max_chars - 4;
         if (cut < 0)
             cut = 0;
         buf[cut] = '\0';
@@ -535,9 +519,6 @@ static void unified_look_print_prompt(cptr full_text, cptr compact_text)
 
     SDL_strlcpy(g_unified_look_snapshot_prompt, buf,
         sizeof(g_unified_look_snapshot_prompt));
-    g_unified_look_snapshot_prompt_cols = (int)strlen(buf);
-    if (!unified_look_snapshot_active())
-        prt(buf, 0, 0);
 }
 
 static void unified_look_pan_player_for_sidebar(bool center_vertical)
@@ -671,23 +652,10 @@ void do_cmd_unified_look(void)
     /* Main interaction loop */
     while (!done)
     {
-        bool screen_saved = false;
-        
         if (need_redraw)
         {
             unified_look_sync_cursor_selection(&state);
             g_unified_look_snapshot_prompt[0] = '\0';
-            g_unified_look_snapshot_prompt_cols = 0;
-
-            if (!unified_look_snapshot_active())
-            {
-                /* Save screen to preserve underlying display. */
-                screen_save();
-                screen_saved = true;
-
-                /* Show unified sidebar. */
-                (void)show_unified_sidebar(&state, NULL);
-            }
             
             /* Track monster health at current cursor position for left sidebar display */
             /* This handles Tab cycling and any other cursor position updates */
@@ -907,8 +875,13 @@ void do_cmd_unified_look(void)
             /* Move cursor to position */
             move_cursor_relative(state.cursor_y, state.cursor_x);
 
-            if (unified_look_snapshot_active())
-                (void)unified_look_snapshot_publish_menu_scene(&state);
+            if (unified_look_snapshot_active()
+                && !unified_look_snapshot_publish_menu_scene(&state))
+            {
+                log_error("unified-look: failed to publish overlay rail scene");
+                bell("Look overlay unavailable.");
+                done = true;
+            }
             
             need_redraw = false;
         }
@@ -918,14 +891,7 @@ void do_cmd_unified_look(void)
         log_trace("Unified look key input: '%c' (%d) [char: %c, isupper: %d]", 
                  query, (int)query, (query >= 32 && query <= 126) ? query : '?', 
                  (query >= 'A' && query <= 'Z') ? 1 : 0);
-        
-        /* Restore screen after input if we saved it */
-        if (screen_saved)
-        {
-            screen_load();
-        }
-        
-        /* Update health bar display after screen restore */
+
         handle_stuff();
         
         /* Analyze input */
@@ -1139,7 +1105,7 @@ command_key:
                 }
                 done = true;
                 /* Don't consume the key - let it be processed by the main game loop */
-                Term_keypress(query);
+                Term_key_push(query);
                 break;
                 
             case '2':

@@ -11,6 +11,7 @@
 #include "platform-audio.h"
 #include "platform-config.h"
 #include "platform-input.h"
+#include "platform-time.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"
@@ -35,196 +36,29 @@ extern struct sound_config g_sound_config;
 
 #define COLOR_SAMPLE "###"
 
-static bool settings_scene_cell_is_raw(byte attr, char ch, byte terrain_attr,
-    char terrain_char)
+static char settings_read_inkey(bool base, bool scan)
 {
-    unsigned char raw = (unsigned char)ch;
-    unsigned char terrain_raw = (unsigned char)terrain_char;
+    if (base)
+        inkey_set_base(true);
+    if (scan)
+        inkey_set_scan(true);
 
-    if (((attr & 0x80) && (raw & 0x80)) || (attr == 255 && raw == 0xFF))
-        return true;
-    if (terrain_attr || terrain_raw)
-        return true;
-
-    return false;
-}
-
-static byte settings_scene_cell_width(const term* source, int y, int x,
-    int term_wid)
-{
-    if (!source || !source->scr || y < 0 || y >= source->hgt || x < 0
-        || x >= term_wid)
-    {
-        return 1;
-    }
-
-    if ((x + 1) < term_wid
-        && (source->scr->a[y][x] & 0x80)
-        && (((unsigned char)source->scr->c[y][x]) & 0x80)
-        && source->scr->a[y][x + 1] == 255
-        && (unsigned char)source->scr->c[y][x + 1] == 0xFF)
-    {
-        return 2;
-    }
-
-    return 1;
-}
-
-/*
- * Settings scene bridge: when an information scene scope is active, capture
- * the current Term contents directly into an app_ui_scene document panel and
- * present that through the information scene channel.  Falls back to inkey()
- * in legacy mode.
- */
-static bool settings_present_ui_scene(void)
-{
-    app_ui_scene scene;
-    app_ui_panel* panel;
-    int term_wid = 0;
-    int term_hgt = 0;
-    bool cursor_visible = false;
-    int cursor_x = 0;
-    int cursor_y = 0;
-
-    if (!Term || !Term->scr)
-        return false;
-
-    app_ui_scene_init(&scene);
-    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return false;
-
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-
-    term_wid = Term->wid;
-    term_hgt = Term->hgt;
-
-    for (int y = 0; y < term_hgt; y++)
-    {
-        int last_nonblank = -1;
-
-        for (int x = 0; x < term_wid; x++)
-        {
-            unsigned char ch = (unsigned char)Term->scr->c[y][x];
-            byte attr = Term->scr->a[y][x];
-            byte terrain_attr = Term->scr->ta[y][x];
-            char terrain_char = Term->scr->tc[y][x];
-
-            if (settings_scene_cell_is_raw(attr, Term->scr->c[y][x],
-                    terrain_attr, terrain_char))
-            {
-                last_nonblank = x;
-                continue;
-            }
-
-            if (ch != 0 && ch != ' ')
-                last_nonblank = x;
-        }
-
-        if (last_nonblank < 0)
-            continue;
-
-        for (int x = 0; x <= last_nonblank;)
-        {
-            byte attr = Term->scr->a[y][x];
-            byte story = Term->scr->story[y][x];
-            byte terrain_attr = Term->scr->ta[y][x];
-            char terrain_char = Term->scr->tc[y][x];
-            unsigned char raw = (unsigned char)Term->scr->c[y][x];
-
-            if (settings_scene_cell_is_raw(attr, Term->scr->c[y][x],
-                    terrain_attr, terrain_char))
-            {
-                byte width = settings_scene_cell_width(Term, y, x, term_wid);
-
-                if (!app_ui_panel_add_document_cell_ex(&scene, panel, (s16b)y,
-                        (s16b)x, attr, (char)raw, terrain_attr, terrain_char,
-                        story, width))
-                {
-                    return false;
-                }
-                x += width;
-                continue;
-            }
-
-            {
-                char buf[APP_UI_TEXT_MAX];
-                int len = 0;
-                int start = x;
-
-                while (x <= last_nonblank && Term->scr->a[y][x] == attr
-                    && Term->scr->story[y][x] == story
-                    && !settings_scene_cell_is_raw(Term->scr->a[y][x],
-                        Term->scr->c[y][x], Term->scr->ta[y][x],
-                        Term->scr->tc[y][x])
-                    && len < (int)sizeof(buf) - 1)
-                {
-                    raw = (unsigned char)Term->scr->c[y][x];
-                    buf[len++] = raw ? (char)raw : ' ';
-                    x++;
-                }
-
-                buf[len] = '\0';
-                if (len > 0
-                    && !app_ui_panel_add_document_text_ex(&scene, panel,
-                        (s16b)y, (s16b)start, attr, story, buf))
-                {
-                    return false;
-                }
-            }
-        }
-    }
-
-    cursor_visible = Term->scr->cv && !Term->scr->cu;
-    if (cursor_visible)
-    {
-        cursor_x = Term->scr->cx;
-        cursor_y = Term->scr->cy;
-        if (cursor_x >= 0 && cursor_x < term_wid
-            && cursor_y >= 0 && cursor_y < term_hgt)
-        {
-            if (!app_ui_panel_add_document_cursor(&scene, panel,
-                    (s16b)cursor_y, (s16b)cursor_x, TERM_L_BLUE,
-                    settings_scene_cell_width(Term, cursor_y, cursor_x,
-                        term_wid)))
-            {
-                return false;
-            }
-        }
-    }
-
-    return panel->document_op_count > 0
-        && ui_information_scene_present_ui(&scene);
-}
-
-/*
- * Settings scene bridge: when an information scene scope is active, mirror
- * the current Term contents into the scene and wait for input through the
- * information scene channel.  Falls back to inkey() in legacy mode.
- */
-static int settings_wait_key(void)
-{
-    if (ui_information_scene_is_active())
-    {
-        (void)settings_present_ui_scene();
-        return ui_information_scene_wait_key();
-    }
     return inkey();
 }
 
 /*
- * Scene-aware Term_fresh: present through the information scene as an
- * app_ui_scene when a scope is active so prompts are visible on the SDL
- * scene renderer path.  Falls back to Term_fresh() in legacy mode.
+ * Settings input helper: inkey() already routes through the information-scene
+ * input path when that scope owns input, so settings code only needs a narrow
+ * local wrapper for flagging special reads such as macro capture.
  */
-static void settings_present(void)
+static bool settings_sdl_hide_left_panel(void)
 {
-    if (ui_information_scene_is_active())
-        (void)settings_present_ui_scene();
-    else
-        Term_fresh();
+    return get_sdl_hide_left_panel();
+}
+
+static void settings_sdl_set_hide_left_panel(bool hidden)
+{
+    set_sdl_hide_left_panel(hidden);
 }
 
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
@@ -429,17 +263,13 @@ static void do_cmd_pref_file_hack(int row)
 {
     char ftmp[80];
 
-    /* Prompt */
-    Term_putstr(2, row + 2, -1, TERM_SLATE, "(Escape to cancel)");
-
-    /* Prompt */
-    prt("File: ", row, 2);
+    (void)row;
 
     /* Default filename */
     strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
     /* Ask for a file (or cancel) */
-    if (!askfor_aux(ftmp, sizeof(ftmp)))
+    if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
         return;
 
     /* Process the given filename */
@@ -671,55 +501,6 @@ static cptr settings_ui_pick_label(int max_chars, cptr long_label,
     return "";
 }
 
-static void settings_ui_format_pair_line(char* buf, size_t buflen, cptr label,
-    cptr value, int max_chars, int min_value_chars)
-{
-    char label_buf[128];
-    char value_buf[96];
-    int desired_value;
-    int value_budget;
-    int label_budget;
-
-    if (!buflen)
-        return;
-
-    if (!label)
-        label = "";
-    if (!value)
-        value = "";
-
-    if (max_chars <= 0)
-    {
-        buf[0] = '\0';
-        return;
-    }
-
-    if (!value[0])
-    {
-        settings_ui_fit_text(buf, buflen, label, max_chars);
-        return;
-    }
-
-    desired_value = (int)strlen(value);
-    value_budget = MIN(max_chars - 4,
-        MAX(min_value_chars, MIN(desired_value, (max_chars * 3) / 5)));
-
-    if (value_budget < 1)
-        value_budget = MIN(max_chars, MAX(1, max_chars / 2));
-
-    settings_ui_fit_text(value_buf, sizeof(value_buf), value, value_budget);
-    label_budget = max_chars - (int)strlen(value_buf) - 2;
-
-    if (label_budget < 4)
-    {
-        settings_ui_fit_text(buf, buflen, value, max_chars);
-        return;
-    }
-
-    settings_ui_fit_text(label_buf, sizeof(label_buf), label, label_budget);
-    strnfmt(buf, buflen, "%s: %s", label_buf, value_buf);
-}
-
 static void settings_ui_put_fitted(int row, int col, byte attr, cptr text)
 {
     char buf[160];
@@ -941,7 +722,6 @@ static int settings_choice_menu(cptr title,
 {
     int selected;
     int hotkey_index;
-    bool scene_active = ui_information_scene_is_active();
     int ch;
 
     if (!entries || entry_count <= 0 || !highlight)
@@ -960,45 +740,14 @@ static int settings_choice_menu(cptr title,
 
     *highlight = entries[selected].id;
 
-    if (scene_active)
+    if (!settings_choice_present_ui_scene(title, entries, entry_count,
+            selected))
     {
-        if (!settings_choice_present_ui_scene(title, entries, entry_count,
-                selected))
-        {
-            return cancel_id;
-        }
-    }
-    else
-    {
-        int title_row;
-        int row;
-        int term_hgt = Term ? Term->hgt : 24;
-        char verbuf[128];
-
-        clear_from(0);
-
-        title_row = (Term && Term->hgt < 20) ? 0 : 1;
-        row = title_row + 2;
-        settings_ui_put_fitted(title_row, 2, TERM_WHITE, title ? title : "");
-
-        for (int i = 0; i < entry_count; i++)
-        {
-            byte attr = entries[i].disabled ? TERM_L_DARK
-                : ((i == selected) ? TERM_L_BLUE : TERM_WHITE);
-
-            settings_ui_put_fitted(row + i, 2, attr, entries[i].label);
-        }
-
-        strnfmt(verbuf, sizeof(verbuf), "%s %s", VERSION_NAME,
-            VERSION_STRING);
-        if (row + entry_count < term_hgt)
-            settings_ui_put_fitted(row + entry_count, 2, TERM_SLATE, verbuf);
-
-        settings_present();
+        return cancel_id;
     }
 
     inkey_set_cursor_hidden(true);
-    ch = scene_active ? ui_information_scene_wait_key() : settings_wait_key();
+    ch = ui_information_scene_wait_key();
     inkey_set_cursor_hidden(false);
 
     hotkey_index = settings_choice_find_index_by_hotkey(entries, entry_count,
@@ -1399,7 +1148,7 @@ static void option_menu_describe_line(bool is_sound_page, const int opt[],
     else if (opt[index] == OPT_hide_left_panel)
     {
         option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            get_sdl_hide_left_panel() ? "yes" : "no ");
+            settings_sdl_hide_left_panel() ? "yes" : "no ");
     }
     else if (opt[index] == OPT_main_combat_rolls)
     {
@@ -1615,8 +1364,6 @@ extern void do_cmd_options_aux(int page, cptr info)
 
     int opt[OPT_PAGE_PER];
 
-    char buf[160];
-
     int dir;
     
     bool is_sound_page = (page == SOUND_PAGE);
@@ -1625,7 +1372,6 @@ extern void do_cmd_options_aux(int page, cptr info)
     bool app_settings_dirty = false;
     bool metarun_settings_dirty = false;
     bool sound_settings_dirty = false;
-    bool scene_active = ui_information_scene_is_active();
     const struct option_group_marker* groups = get_option_groups_for_page(page);
     struct sound_config* sound_cfg = sdl_sound_get_config();
 
@@ -1653,8 +1399,6 @@ extern void do_cmd_options_aux(int page, cptr info)
         int visible_rows = Term->hgt - footer_rows - first_row;
         int total_rows = n + option_group_total_rows(groups);
         int selected_display_row = k + option_group_count_before(groups, k);
-        int group_index = 0;
-        int display_row = 0;
         int max_scroll;
 
         if (visible_rows < 1)
@@ -1671,103 +1415,15 @@ extern void do_cmd_options_aux(int page, cptr info)
         if (scroll > max_scroll)
             scroll = max_scroll;
 
-        if (scene_active)
+        if (!option_menu_present_ui_scene(page, info, n, opt, k, scroll,
+                groups, sound_cfg))
         {
-            if (!option_menu_present_ui_scene(page, info, n, opt, k, scroll,
-                    groups, sound_cfg))
-            {
-                return;
-            }
-        }
-        else
-        {
-            clear_from(0);
-
-            /* Prompt XXX XXX XXX */
-            strnfmt(buf, sizeof(buf), "%s", info);
-            settings_ui_put_fitted(1, 2, TERM_WHITE, buf);
-
-            /* Display the options */
-            for (i = 0; i < n; i++)
-            {
-                byte a = TERM_WHITE;
-                int row;
-
-                while (groups && groups[group_index].before_index == i)
-                {
-                    row = first_row + display_row - scroll;
-                    if (row >= first_row && row < first_row + visible_rows)
-                        c_prt(TERM_SLATE, groups[group_index].label, row, 2);
-                    display_row++;
-                    group_index++;
-                }
-
-                if (i == k)
-                    a = TERM_L_BLUE;
-
-                option_menu_describe_line(is_sound_page, opt, i, sound_cfg,
-                    buf, sizeof(buf));
-                row = first_row + display_row - scroll;
-                if (row >= first_row && row < first_row + visible_rows)
-                    c_prt(a, buf, row, 4);
-                display_row++;
-            }
-
-            if (total_rows > visible_rows)
-            {
-                strnfmt(buf, sizeof(buf), "(scroll: rows %d-%d of %d)",
-                    scroll + 1, MIN(scroll + visible_rows, total_rows),
-                    total_rows);
-                settings_ui_put_fitted(Term->hgt - 2, 2, TERM_SLATE, buf);
-            }
-
-            if (page == CHALLENGE_PAGE)
-            {
-                settings_ui_put_fitted(Term->hgt - 4, 2, TERM_L_WHITE,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "Challenge options can only be changed during character creation",
-                        "Challenge options only change during character creation",
-                        "Challenge options only change at birth"));
-                settings_ui_put_fitted(Term->hgt - 3, 2, TERM_L_WHITE,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "or on the very first turn",
-                        "or on the first turn",
-                        "or on turn 1"));
-
-                if (playerturn == 0)
-                {
-                    settings_ui_put_fitted(Term->hgt - 1, 2, TERM_SLATE,
-                        settings_ui_pick_label(settings_ui_line_width(2),
-                            "(direction keys to set, Return/Escape to accept)",
-                            "(direction keys to set, Enter/Esc to accept)",
-                            "(arrows set, Enter/Esc accept)"));
-                }
-                else
-                {
-                    settings_ui_put_fitted(Term->hgt - 1, 2, TERM_SLATE,
-                        settings_ui_pick_label(settings_ui_line_width(2),
-                            "(press Return to go back)",
-                            "(press Enter to go back)",
-                            "(Enter goes back)"));
-                }
-            }
-            else
-            {
-                settings_ui_put_fitted(Term->hgt - 1, 2, TERM_SLATE,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "(direction keys to set, Return/Escape to accept)",
-                        "(direction keys to set, Enter/Esc to accept)",
-                        "(arrows set, Enter/Esc accept)"));
-            }
-
-            /* Hilite current option */
-            move_cursor(first_row + selected_display_row - scroll,
-                MIN(54, Term->wid - 1));
+            return;
         }
 
         /* Get a key */
         inkey_set_cursor_hidden(true);
-        ch = scene_active ? ui_information_scene_wait_key() : settings_wait_key();
+        ch = ui_information_scene_wait_key();
         inkey_set_cursor_hidden(false);
 
         /*
@@ -1860,7 +1516,8 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    set_sdl_hide_left_panel(!get_sdl_hide_left_panel());
+                    settings_sdl_set_hide_left_panel(
+                        !settings_sdl_hide_left_panel());
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -1977,7 +1634,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    set_sdl_hide_left_panel(true);
+                    settings_sdl_set_hide_left_panel(true);
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -2094,7 +1751,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    set_sdl_hide_left_panel(false);
+                    settings_sdl_set_hide_left_panel(false);
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -2321,12 +1978,145 @@ static int settings_sdl_pane_effective_font_size(int idx);
 static void settings_sdl_set_pane_rows(int idx, int rows);
 static void settings_sdl_set_pane_cols(int idx, int cols);
 static void settings_sdl_set_pane_font_size(int idx, int size);
+static int settings_sdl_main_view_scale(void);
+static int settings_sdl_max_scale(void);
+static void settings_sdl_set_main_view_scale(int value);
+static int settings_sdl_min_terminal_mode(void);
+static void settings_sdl_set_min_terminal_mode(int value);
+static int settings_sdl_aux_view_font_size(void);
+static int settings_sdl_effective_aux_view_font_size(void);
+static void settings_sdl_set_aux_view_font_size(int value);
+static int settings_sdl_menu_panel_font_size(void);
+static int settings_sdl_effective_menu_panel_font_size(void);
+static void settings_sdl_set_menu_panel_font_size(int value);
+static int settings_sdl_margin(void);
+static void settings_sdl_set_margin(int value);
+static bool settings_sdl_fullscreen(void);
+static void settings_sdl_set_fullscreen(bool enabled);
+static bool settings_sdl_tiles(void);
+static void settings_sdl_set_tiles(bool enabled);
+static bool settings_sdl_right_panes_enabled(void);
+static void settings_sdl_set_right_panes_enabled(bool enabled);
+static bool settings_sdl_bottom_panes_enabled(void);
+static void settings_sdl_set_bottom_panes_enabled(bool enabled);
+static const char* settings_sdl_config_path(void);
 static const char* settings_sdl_touch_slot_name(int idx);
 static void settings_sdl_touch_panel_name(int panel, char* buf, size_t buflen);
 static void settings_sdl_touch_button_label(int panel, int slot, char* buf,
     size_t buflen);
 static int settings_sdl_touch_binding(int panel, int slot);
 static void settings_sdl_set_touch_binding(int panel, int slot, int binding);
+
+static int settings_sdl_main_view_scale(void)
+{
+    return get_sdl_main_view_scale();
+}
+
+static int settings_sdl_max_scale(void)
+{
+    return get_sdl_max_scale();
+}
+
+static void settings_sdl_set_main_view_scale(int value)
+{
+    set_sdl_main_view_scale(value);
+}
+
+static int settings_sdl_min_terminal_mode(void)
+{
+    return get_sdl_min_terminal_mode();
+}
+
+static void settings_sdl_set_min_terminal_mode(int value)
+{
+    set_sdl_min_terminal_mode(value);
+}
+
+static int settings_sdl_aux_view_font_size(void)
+{
+    return get_sdl_aux_view_font_size();
+}
+
+static int settings_sdl_effective_aux_view_font_size(void)
+{
+    return get_sdl_effective_aux_view_font_size();
+}
+
+static void settings_sdl_set_aux_view_font_size(int value)
+{
+    set_sdl_aux_view_font_size(value);
+}
+
+static int settings_sdl_menu_panel_font_size(void)
+{
+    return get_sdl_menu_panel_font_size();
+}
+
+static int settings_sdl_effective_menu_panel_font_size(void)
+{
+    return get_sdl_effective_menu_panel_font_size();
+}
+
+static void settings_sdl_set_menu_panel_font_size(int value)
+{
+    set_sdl_menu_panel_font_size(value);
+}
+
+static int settings_sdl_margin(void)
+{
+    return get_sdl_margin();
+}
+
+static void settings_sdl_set_margin(int value)
+{
+    set_sdl_margin(value);
+}
+
+static bool settings_sdl_fullscreen(void)
+{
+    return get_sdl_fullscreen();
+}
+
+static void settings_sdl_set_fullscreen(bool enabled)
+{
+    set_sdl_fullscreen(enabled);
+}
+
+static bool settings_sdl_tiles(void)
+{
+    return get_sdl_tiles();
+}
+
+static void settings_sdl_set_tiles(bool enabled)
+{
+    set_sdl_tiles(enabled);
+}
+
+static bool settings_sdl_right_panes_enabled(void)
+{
+    return get_sdl_enable_right_panes();
+}
+
+static void settings_sdl_set_right_panes_enabled(bool enabled)
+{
+    set_sdl_enable_right_panes(enabled);
+}
+
+static bool settings_sdl_bottom_panes_enabled(void)
+{
+    return get_sdl_enable_bottom_panes();
+}
+
+static void settings_sdl_set_bottom_panes_enabled(bool enabled)
+{
+    set_sdl_enable_bottom_panes(enabled);
+}
+
+static const char* settings_sdl_config_path(void)
+{
+    return get_sdl_config_path();
+}
+
 static void format_font_size_value(char* buf, size_t buflen, int raw, int effective,
     int max_chars)
 {
@@ -2375,7 +2165,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     if (k > 4)
         app_ui_panel_set_row_offset(panel, (s16b)(k - 4));
 
-    strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_main_view_scale());
+    strnfmt(value_buf, sizeof(value_buf), "%d", settings_sdl_main_view_scale());
     if (!settings_browser_add_pair_row(panel, 0, (k == 0) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 0,
             settings_ui_pick_label(label_hint,
@@ -2392,13 +2182,14 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
                 "Minimum Terminal Size",
                 "Min Terminal Size",
                 "Min Terminal"),
-            sdl_min_terminal_mode_label(get_sdl_min_terminal_mode())))
+            sdl_min_terminal_mode_label(settings_sdl_min_terminal_mode())))
     {
         return false;
     }
 
     format_font_size_value(font_value, sizeof(font_value),
-        get_sdl_aux_view_font_size(), get_sdl_effective_aux_view_font_size(),
+        settings_sdl_aux_view_font_size(),
+        settings_sdl_effective_aux_view_font_size(),
         MAX(6, MIN(14, row_width / 2)));
     if (!settings_browser_add_pair_row(panel, 2, (k == 2) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 2,
@@ -2411,8 +2202,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     }
 
     format_font_size_value(font_value, sizeof(font_value),
-        get_sdl_menu_panel_font_size(),
-        get_sdl_effective_menu_panel_font_size(),
+        settings_sdl_menu_panel_font_size(),
+        settings_sdl_effective_menu_panel_font_size(),
         MAX(6, MIN(14, row_width / 2)));
     if (!settings_browser_add_pair_row(panel, 3, (k == 3) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 3,
@@ -2424,7 +2215,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_margin());
+    strnfmt(value_buf, sizeof(value_buf), "%d", settings_sdl_margin());
     if (!settings_browser_add_pair_row(panel, 4, (k == 4) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 4,
             settings_ui_pick_label(label_hint,
@@ -2437,14 +2228,14 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
 
     if (!settings_browser_add_pair_row(panel, 5, (k == 5) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 5, "Fullscreen",
-            get_sdl_fullscreen() ? "yes" : "no"))
+            settings_sdl_fullscreen() ? "yes" : "no"))
     {
         return false;
     }
 
     if (!settings_browser_add_pair_row(panel, 6, (k == 6) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 6, "Tiles",
-            get_sdl_tiles() ? "yes" : "no"))
+            settings_sdl_tiles() ? "yes" : "no"))
     {
         return false;
     }
@@ -2455,7 +2246,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
                 "Enable Side Panes [Alt+I]",
                 "Side Panes [Alt+I]",
                 "Side Panes"),
-            get_sdl_enable_right_panes() ? "yes" : "no"))
+            settings_sdl_right_panes_enabled() ? "yes" : "no"))
     {
         return false;
     }
@@ -2466,7 +2257,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
                 "Enable Bottom Panes [Alt+L]",
                 "Bottom Panes [Alt+L]",
                 "Bottom Panes"),
-            get_sdl_enable_bottom_panes() ? "yes" : "no"))
+            settings_sdl_bottom_panes_enabled() ? "yes" : "no"))
     {
         return false;
     }
@@ -2528,199 +2319,22 @@ void do_cmd_pane_settings(void)
     int n = 12; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
-    bool scene_active = ui_information_scene_is_active();
     int dir;
-    const char* config_path = get_sdl_config_path();
+    const char* config_path = settings_sdl_config_path();
     const char* config_label = (config_path && config_path[0]) ? config_path : "sil_sdl.json";
 
     while (!done)
     {
-        int row_width;
-        int label_hint;
-
-        if (scene_active)
+        if (!pane_settings_present_ui_scene(k, settings_changed,
+                config_label))
         {
-            if (!pane_settings_present_ui_scene(k, settings_changed,
-                    config_label))
-            {
-                done = true;
-                continue;
-            }
-        }
-        else
-        {
-            clear_from(0);
-
-            /* Display title */
-            settings_ui_put_fitted(1, 2, TERM_WHITE, "SDL Pane Settings");
-
-            /* Display current settings */
-            char buf[96];
-            char value_buf[32];
-            int y0 = 3;
-            byte a;
-            char font_value[24];
-            row_width = settings_ui_line_width(2);
-            label_hint = MAX(10, row_width - 12);
-
-            /* Option 0: Main View Scale */
-            a = (k == 0) ? TERM_L_BLUE : TERM_WHITE;
-            strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_main_view_scale());
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Main View Scale (1-max) [Alt++/-]",
-                    "Main View Scale [Alt++/-]",
-                    "View Scale"),
-                value_buf, row_width, 3);
-            c_prt(a, buf, y0 + 0, 2);
-
-            /* Option 1: Minimum Terminal Size */
-            a = (k == 1) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Minimum Terminal Size",
-                    "Min Terminal Size",
-                    "Min Terminal"),
-                sdl_min_terminal_mode_label(get_sdl_min_terminal_mode()),
-                row_width, 10);
-            c_prt(a, buf, y0 + 1, 2);
-
-            /* Option 2: Aux View Font Size */
-            a = (k == 2) ? TERM_L_BLUE : TERM_WHITE;
-            format_font_size_value(font_value, sizeof(font_value),
-                get_sdl_aux_view_font_size(),
-                get_sdl_effective_aux_view_font_size(),
-                MAX(6, MIN(14, row_width / 2)));
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Default Aux Font Size (0=auto, 8-48)",
-                    "Default Aux Font (0=auto)",
-                    "Aux Font"),
-                font_value, row_width, 6);
-            c_prt(a, buf, y0 + 2, 2);
-
-            /* Option 3: Menu + Left Panel Font Size */
-            a = (k == 3) ? TERM_L_BLUE : TERM_WHITE;
-            format_font_size_value(font_value, sizeof(font_value),
-                get_sdl_menu_panel_font_size(),
-                get_sdl_effective_menu_panel_font_size(),
-                MAX(6, MIN(14, row_width / 2)));
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Menu + Left Panel Font (0=auto, 8-64)",
-                    "Menu + Left Panel Font",
-                    "Menu Font"),
-                font_value, row_width, 6);
-            c_prt(a, buf, y0 + 3, 2);
-
-            /* Option 4: Margin */
-            a = (k == 4) ? TERM_L_BLUE : TERM_WHITE;
-            strnfmt(value_buf, sizeof(value_buf), "%d", get_sdl_margin());
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Margin (0-20)",
-                    "Margin",
-                    "Margin"),
-                value_buf, row_width, 3);
-            c_prt(a, buf, y0 + 4, 2);
-
-            /* Option 5: Fullscreen */
-            a = (k == 5) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_format_pair_line(buf, sizeof(buf), "Fullscreen",
-                get_sdl_fullscreen() ? "yes" : "no", row_width, 3);
-            c_prt(a, buf, y0 + 5, 2);
-
-            /* Option 6: Tiles */
-            a = (k == 6) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_format_pair_line(buf, sizeof(buf), "Tiles",
-                get_sdl_tiles() ? "yes" : "no", row_width, 3);
-            c_prt(a, buf, y0 + 6, 2);
-
-            /* Option 7: Enable Side Panes */
-            a = (k == 7) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Enable Side Panes [Alt+I]",
-                    "Side Panes [Alt+I]",
-                    "Side Panes"),
-                get_sdl_enable_right_panes() ? "yes" : "no",
-                row_width, 3);
-            c_prt(a, buf, y0 + 7, 2);
-
-            /* Option 8: Enable Bottom Panes */
-            a = (k == 8) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_format_pair_line(buf, sizeof(buf),
-                settings_ui_pick_label(label_hint,
-                    "Enable Bottom Panes [Alt+L]",
-                    "Bottom Panes [Alt+L]",
-                    "Bottom Panes"),
-                get_sdl_enable_bottom_panes() ? "yes" : "no",
-                row_width, 3);
-            c_prt(a, buf, y0 + 8, 2);
-
-            /* Option 9: View Pane Configuration (supporting panes only) */
-            a = (k == 9) ? TERM_L_BLUE : TERM_WHITE;
-            strnfmt(buf, sizeof(buf), "%s (%d)",
-                settings_ui_pick_label(row_width,
-                    "View Pane Configuration",
-                    "Pane Configuration",
-                    "Pane Layout"),
-                get_supporting_pane_config_count());
-            {
-                char fitted_buf[96];
-                settings_ui_fit_text(fitted_buf, sizeof(fitted_buf), buf,
-                    row_width);
-                SDL_strlcpy(buf, fitted_buf, sizeof(buf));
-            }
-            c_prt(a, buf, y0 + 9, 2);
-
-            /* Option 10: Pane Font Sizes */
-            a = (k == 10) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_fit_text(buf, sizeof(buf),
-                settings_ui_pick_label(row_width,
-                    "Pane Font Sizes",
-                    "Pane Fonts",
-                    "Pane Fonts"),
-                row_width);
-            c_prt(a, buf, y0 + 10, 2);
-
-            /* Option 11: Save/Return */
-            a = (k == 11) ? TERM_L_BLUE : TERM_WHITE;
-            settings_ui_fit_text(buf, sizeof(buf),
-                settings_changed ? "Save Changes and Return"
-                                 : "Return to Options Menu",
-                row_width);
-            c_prt(a, buf, y0 + 11, 2);
-
-            /* Display help */
-            {
-                int y = Term->hgt - 3;
-
-                if (settings_changed)
-                {
-                    settings_ui_put_fitted(y++, 2, TERM_YELLOW,
-                        settings_ui_pick_label(settings_ui_line_width(2),
-                            "Settings changed - changes take effect immediately.",
-                            "Settings changed - active immediately.",
-                            "Changes apply immediately."));
-                    settings_ui_put_fitted(y++, 2, TERM_YELLOW,
-                        settings_ui_pick_label(settings_ui_line_width(2),
-                            "Will be saved to your SDL config file on exit.",
-                            "Saved to your SDL config on exit.",
-                            "Saved on exit."));
-                }
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(settings_ui_line_width(2),
-                        "(direction keys to set, 0 = auto font, Return/Escape to accept)",
-                        "(arrows move, 4/6 or y/n set, 0 auto, Enter/Esc exit)",
-                        "(arrows move, 4/6 set, 0 auto, Enter/Esc)"));
-            }
+            done = true;
+            continue;
         }
 
         /* Get key */
         inkey_set_cursor_hidden(true);
-        char ch = scene_active ? (char)ui_information_scene_wait_key()
-                               : settings_wait_key();
+        char ch = (char)ui_information_scene_wait_key();
         inkey_set_cursor_hidden(false);
         
         /* Try to translate the key into a direction */
@@ -2791,18 +2405,18 @@ void do_cmd_pane_settings(void)
         {
             if (k == 2)
             {
-                if (get_sdl_aux_view_font_size() != 0)
+                if (settings_sdl_aux_view_font_size() != 0)
                 {
-                    set_sdl_aux_view_font_size(0);
+                    settings_sdl_set_aux_view_font_size(0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 3)
             {
-                if (get_sdl_menu_panel_font_size() != 0)
+                if (settings_sdl_menu_panel_font_size() != 0)
                 {
-                    set_sdl_menu_panel_font_size(0);
+                    settings_sdl_set_menu_panel_font_size(0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2821,29 +2435,32 @@ void do_cmd_pane_settings(void)
             /* Toggle or activate current option */
             if (k == 1) /* Minimum Terminal Size */
             {
-                set_sdl_min_terminal_mode(get_sdl_min_terminal_mode() == 0 ? 1 : 0);
+                settings_sdl_set_min_terminal_mode(
+                    settings_sdl_min_terminal_mode() == 0 ? 1 : 0);
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 5) /* Fullscreen */
             {
-                set_sdl_fullscreen(!get_sdl_fullscreen());
+                settings_sdl_set_fullscreen(!settings_sdl_fullscreen());
                 settings_changed = true;
             }
             else if (k == 6) /* Tiles */
             {
-                set_sdl_tiles(!get_sdl_tiles());
+                settings_sdl_set_tiles(!settings_sdl_tiles());
                 settings_changed = true;
             }
             else if (k == 7) /* Enable Side Panes */
             {
-                set_sdl_enable_right_panes(!get_sdl_enable_right_panes());
+                settings_sdl_set_right_panes_enabled(
+                    !settings_sdl_right_panes_enabled());
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 8) /* Enable Bottom Panes */
             {
-                set_sdl_enable_bottom_panes(!get_sdl_enable_bottom_panes());
+                settings_sdl_set_bottom_panes_enabled(
+                    !settings_sdl_bottom_panes_enabled());
                 settings_changed = true;
                 sdl_apply_config();
             }
@@ -2877,86 +2494,87 @@ void do_cmd_pane_settings(void)
             
             if (k == 0) /* Main View Scale */
             {
-                val = get_sdl_main_view_scale();
-                int max_scale = get_sdl_max_scale();
+                val = settings_sdl_main_view_scale();
+                int max_scale = settings_sdl_max_scale();
                 if (val < max_scale)
                 {
-                    set_sdl_main_view_scale(val + 1);
+                    settings_sdl_set_main_view_scale(val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 1) /* Minimum Terminal Size */
             {
-                if (get_sdl_min_terminal_mode() != 0)
+                if (settings_sdl_min_terminal_mode() != 0)
                 {
-                    set_sdl_min_terminal_mode(0);
+                    settings_sdl_set_min_terminal_mode(0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 2) /* Aux View Font Size */
             {
-                val = get_sdl_aux_view_font_size();
+                val = settings_sdl_aux_view_font_size();
                 if (val == 0)
                 {
-                    set_sdl_aux_view_font_size(get_sdl_effective_aux_view_font_size());
+                    settings_sdl_set_aux_view_font_size(
+                        settings_sdl_effective_aux_view_font_size());
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val < 48)
                 {
-                    set_sdl_aux_view_font_size(val + 1);
+                    settings_sdl_set_aux_view_font_size(val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 3) /* Menu + Left Panel Font Size */
             {
-                val = get_sdl_menu_panel_font_size();
+                val = settings_sdl_menu_panel_font_size();
                 if (val == 0)
                 {
-                    set_sdl_menu_panel_font_size(
-                        get_sdl_effective_menu_panel_font_size());
+                    settings_sdl_set_menu_panel_font_size(
+                        settings_sdl_effective_menu_panel_font_size());
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val < 64)
                 {
-                    set_sdl_menu_panel_font_size(val + 1);
+                    settings_sdl_set_menu_panel_font_size(val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 4) /* Margin */
             {
-                val = get_sdl_margin();
+                val = settings_sdl_margin();
                 if (val < 20)
                 {
-                    set_sdl_margin(val + 1);
+                    settings_sdl_set_margin(val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 5) /* Fullscreen */
             {
-                set_sdl_fullscreen(true);
+                settings_sdl_set_fullscreen(true);
                 settings_changed = true;
             }
             else if (k == 6) /* Tiles */
             {
-                set_sdl_tiles(true);
+                settings_sdl_set_tiles(true);
                 settings_changed = true;
             }
             else if (k == 7) /* Enable Side Panes */
             {
-                set_sdl_enable_right_panes(true);
+                settings_sdl_set_right_panes_enabled(true);
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 8) /* Enable Bottom Panes */
             {
-                set_sdl_enable_bottom_panes(true);
+                settings_sdl_set_bottom_panes_enabled(true);
                 settings_changed = true;
                 sdl_apply_config();
             }
@@ -2971,85 +2589,86 @@ void do_cmd_pane_settings(void)
             
             if (k == 0) /* Main View Scale */
             {
-                val = get_sdl_main_view_scale();
+                val = settings_sdl_main_view_scale();
                 if (val > 1)
                 {
-                    set_sdl_main_view_scale(val - 1);
+                    settings_sdl_set_main_view_scale(val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 1) /* Minimum Terminal Size */
             {
-                if (get_sdl_min_terminal_mode() != 1)
+                if (settings_sdl_min_terminal_mode() != 1)
                 {
-                    set_sdl_min_terminal_mode(1);
+                    settings_sdl_set_min_terminal_mode(1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 2) /* Aux View Font Size */
             {
-                val = get_sdl_aux_view_font_size();
+                val = settings_sdl_aux_view_font_size();
                 if (val == 0)
                 {
-                    set_sdl_aux_view_font_size(get_sdl_effective_aux_view_font_size());
+                    settings_sdl_set_aux_view_font_size(
+                        settings_sdl_effective_aux_view_font_size());
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val > 8)
                 {
-                    set_sdl_aux_view_font_size(val - 1);
+                    settings_sdl_set_aux_view_font_size(val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 3) /* Menu + Left Panel Font Size */
             {
-                val = get_sdl_menu_panel_font_size();
+                val = settings_sdl_menu_panel_font_size();
                 if (val == 0)
                 {
-                    set_sdl_menu_panel_font_size(
-                        get_sdl_effective_menu_panel_font_size());
+                    settings_sdl_set_menu_panel_font_size(
+                        settings_sdl_effective_menu_panel_font_size());
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val > 8)
                 {
-                    set_sdl_menu_panel_font_size(val - 1);
+                    settings_sdl_set_menu_panel_font_size(val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 4) /* Margin */
             {
-                val = get_sdl_margin();
+                val = settings_sdl_margin();
                 if (val > 0)
                 {
-                    set_sdl_margin(val - 1);
+                    settings_sdl_set_margin(val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
             }
             else if (k == 5) /* Fullscreen */
             {
-                set_sdl_fullscreen(false);
+                settings_sdl_set_fullscreen(false);
                 settings_changed = true;
             }
             else if (k == 6) /* Tiles */
             {
-                set_sdl_tiles(false);
+                settings_sdl_set_tiles(false);
                 settings_changed = true;
             }
             else if (k == 7) /* Enable Side Panes */
             {
-                set_sdl_enable_right_panes(false);
+                settings_sdl_set_right_panes_enabled(false);
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 8) /* Enable Bottom Panes */
             {
-                set_sdl_enable_bottom_panes(false);
+                settings_sdl_set_bottom_panes_enabled(false);
                 settings_changed = true;
                 sdl_apply_config();
             }
@@ -3089,7 +2708,6 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
     int pane_indices[MAX_PANES_LOCAL];
     int pane_count = 0;
     int total = get_pane_config_count();
-    bool scene_active = ui_information_scene_is_active();
 
     for (int i = 0; i < total && pane_count < MAX_PANES_LOCAL; i++)
     {
@@ -3101,31 +2719,18 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
     if (pane_count <= 0)
     {
-        if (scene_active)
-        {
-            app_ui_scene scene;
-            app_ui_panel* panel = settings_browser_scene_begin(&scene,
-                "Supporting Pane Fonts", "");
+        app_ui_scene scene;
+        app_ui_panel* panel = settings_browser_scene_begin(&scene,
+            "Supporting Pane Fonts", "");
 
-            if (panel)
-            {
-                (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                    "No supporting panes are configured.");
-                (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
-                    true, "Esc", "Back");
-                (void)ui_information_scene_present_ui(&scene);
-                (void)ui_information_scene_wait_key();
-            }
-        }
-        else
+        if (panel)
         {
-            clear_from(0);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Supporting Pane Fonts");
-            settings_ui_put_fitted(3, 2, TERM_WHITE,
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
                 "No supporting panes are configured.");
-            settings_ui_put_fitted(Term->hgt - 1, 2, TERM_L_BLUE,
-                "Press any key to return...");
-            (void)settings_wait_key();
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
+                true, "Esc", "Back");
+            (void)ui_information_scene_present_ui(&scene);
+            (void)ui_information_scene_wait_key();
         }
         return;
     }
@@ -3138,90 +2743,33 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
         while (!done)
         {
-            int y0 = 4;
             int row_width;
-            int term_wid;
-
-            term_wid = settings_ui_term_wid();
             row_width = settings_ui_line_width(2);
-            if (scene_active)
+            app_ui_scene scene;
+            app_ui_panel* panel = settings_browser_scene_begin(&scene,
+                "Supporting Pane Fonts", "");
+
+            if (!panel)
             {
-                app_ui_scene scene;
-                app_ui_panel* panel = settings_browser_scene_begin(&scene,
-                    "Supporting Pane Fonts", "");
-
-                if (!panel)
-                    done = true;
-                else
-                {
-                    if (sel > 4)
-                        app_ui_panel_set_row_offset(panel, (s16b)(sel - 4));
-                    for (int i = 0; i < pane_count; i++)
-                    {
-                        int idx = pane_indices[i];
-                        enum pane_type type
-                            = (enum pane_type)settings_sdl_pane_type(idx);
-                        bool enabled = settings_sdl_pane_enabled(idx);
-                        int raw_font = settings_sdl_pane_font_size(idx);
-                        int effective_font
-                            = settings_sdl_pane_effective_font_size(idx);
-                        byte a = (i == sel) ? TERM_L_BLUE
-                            : (enabled ? TERM_WHITE : TERM_SLATE);
-                        char label_buf[48];
-                        char font_value[24];
-                        const char* type_label = settings_ui_pick_label(
-                            MAX(8, row_width / 2), pane_type_name(type),
-                            pane_type_name(type), pane_type_short_name(type));
-
-                        format_font_size_value(font_value, sizeof(font_value),
-                            raw_font, effective_font,
-                            MAX(6, MIN(14, row_width / 2)));
-                        strnfmt(label_buf, sizeof(label_buf), "%s %s",
-                            type_label, enabled ? "on" : "off");
-                        if (!settings_browser_add_pair_row(panel, (s16b)i, a,
-                                TERM_SLATE, true, i == sel, label_buf,
-                                font_value))
-                        {
-                            done = true;
-                            break;
-                        }
-                    }
-
-                    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
-                        "Changes apply immediately.");
-                    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
-                        true, "8/2", "Move");
-                    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
-                        true, "4/6", "Set");
-                    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
-                        true, "0", "Auto");
-                    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE,
-                        true, "Esc", "Back");
-                    if (!done && !ui_information_scene_present_ui(&scene))
-                        done = true;
-                }
+                done = true;
             }
             else
             {
-                clear_from(0);
-                settings_ui_put_fitted(1, 2, TERM_L_BLUE,
-                    "Supporting Pane Fonts");
-                settings_ui_put_fitted(2, 2, TERM_WHITE,
-                    "=====================");
-
-                for (int i = 0; i < pane_count && (y0 + i) < Term->hgt - 5; i++)
+                if (sel > 4)
+                    app_ui_panel_set_row_offset(panel, (s16b)(sel - 4));
+                for (int i = 0; i < pane_count; i++)
                 {
                     int idx = pane_indices[i];
-                    enum pane_type type = (enum pane_type)settings_sdl_pane_type(idx);
+                    enum pane_type type
+                        = (enum pane_type)settings_sdl_pane_type(idx);
                     bool enabled = settings_sdl_pane_enabled(idx);
                     int raw_font = settings_sdl_pane_font_size(idx);
-                    int effective_font = settings_sdl_pane_effective_font_size(idx);
+                    int effective_font
+                        = settings_sdl_pane_effective_font_size(idx);
                     byte a = (i == sel) ? TERM_L_BLUE
                         : (enabled ? TERM_WHITE : TERM_SLATE);
-                    char line_buf[96];
                     char label_buf[48];
                     char font_value[24];
-                    char font_field[28];
                     const char* type_label = settings_ui_pick_label(
                         MAX(8, row_width / 2), pane_type_name(type),
                         pane_type_name(type), pane_type_short_name(type));
@@ -3229,39 +2777,33 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     format_font_size_value(font_value, sizeof(font_value),
                         raw_font, effective_font,
                         MAX(6, MIN(14, row_width / 2)));
-                    settings_ui_format_field(font_field, sizeof(font_field),
-                        font_value, i == sel);
-                    strnfmt(label_buf, sizeof(label_buf), "%s %s", type_label,
-                        enabled ? "on" : "off");
-                    settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                        label_buf, font_field, row_width, 6);
-                    c_prt(a, line_buf, y0 + i, 2);
+                    strnfmt(label_buf, sizeof(label_buf), "%s %s",
+                        type_label, enabled ? "on" : "off");
+                    if (!settings_browser_add_pair_row(panel, (s16b)i, a,
+                            TERM_SLATE, true, i == sel, label_buf,
+                            font_value))
+                    {
+                        done = true;
+                        break;
+                    }
                 }
 
-                {
-                    int y = Term->hgt - 4;
-
-                    settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                        settings_ui_pick_label(term_wid - 2,
-                            "Up/Down: select pane   4/6 (or n/y): change font size",
-                            "Up/Down select pane   4/6 set font size",
-                            "Up/Down select   4/6 set"));
-                    settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                        settings_ui_pick_label(term_wid - 2,
-                            "0: auto (uses default aux font / auto main-based size)",
-                            "0: auto font size",
-                            "0 auto font"));
-                    settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                        settings_ui_pick_label(term_wid - 2,
-                            "Changes apply immediately",
-                            "Changes apply immediately",
-                            "Changes apply now"));
-                }
+                (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+                    "Changes apply immediately.");
+                (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
+                    true, "8/2", "Move");
+                (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
+                    true, "4/6", "Set");
+                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                    true, "0", "Auto");
+                (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE,
+                    true, "Esc", "Back");
+                if (!done && !ui_information_scene_present_ui(&scene))
+                    done = true;
             }
 
             inkey_set_cursor_hidden(true);
-            char ch = scene_active ? (char)ui_information_scene_wait_key()
-                                   : settings_wait_key();
+            char ch = (char)ui_information_scene_wait_key();
             inkey_set_cursor_hidden(false);
 
             dir = target_dir(ch);
@@ -3407,6 +2949,26 @@ static void settings_sdl_set_pane_font_size(int idx, int size)
     set_sdl_pane_font_size(idx, size);
 }
 
+static void settings_sdl_set_pane_enabled(int idx, bool enabled)
+{
+    set_sdl_pane_enabled(idx, enabled);
+}
+
+static void settings_sdl_set_pane_where(int idx, enum pane_placement where)
+{
+    set_sdl_pane_where(idx, where);
+}
+
+static int settings_sdl_pane_current_rows(int idx)
+{
+    return get_sdl_pane_current_rows(idx);
+}
+
+static int settings_sdl_pane_current_cols(int idx)
+{
+    return get_sdl_pane_current_cols(idx);
+}
+
 static int get_supporting_pane_config_count(void)
 {
     int count = 0;
@@ -3503,7 +3065,6 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     int pane_indices[MAX_PANES_LOCAL];
     int pane_count = 0;
     int total = get_pane_config_count();
-    bool scene_active = ui_information_scene_is_active();
 
     for (int i = 0; i < total && pane_count < MAX_PANES_LOCAL; i++)
     {
@@ -3521,32 +3082,18 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
     if (pane_count <= 0)
     {
-        if (scene_active)
-        {
-            app_ui_scene scene;
-            app_ui_panel* panel = settings_browser_scene_begin(&scene,
-                "Supporting Pane Layout", "");
+        app_ui_scene scene;
+        app_ui_panel* panel = settings_browser_scene_begin(&scene,
+            "Supporting Pane Layout", "");
 
-            if (panel)
-            {
-                (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                    "No supporting panes are configured.");
-                (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
-                    true, "Esc", "Back");
-                (void)ui_information_scene_present_ui(&scene);
-                (void)ui_information_scene_wait_key();
-            }
-        }
-        else
+        if (panel)
         {
-            clear_from(0);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE,
-                "Supporting Pane Layout");
-            settings_ui_put_fitted(3, 2, TERM_WHITE,
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
                 "No supporting panes are configured.");
-            settings_ui_put_fitted(Term->hgt - 1, 2, TERM_L_BLUE,
-                "Press any key to return...");
-            (void)settings_wait_key();
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
+                true, "Esc", "Back");
+            (void)ui_information_scene_present_ui(&scene);
+            (void)ui_information_scene_wait_key();
         }
         return;
     }
@@ -3558,24 +3105,20 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     }
     supporting_pane_ensure_editable_field(&field, pane_indices, pane_count, sel);
 
-    while (!done)
-    {
-        int y0 = 4;
-        int term_wid = settings_ui_term_wid();
-        int row_width = settings_ui_line_width(2);
-
-        if (scene_active)
+        while (!done)
         {
-            app_ui_scene scene;
-            app_ui_panel* panel = settings_browser_scene_begin_ex(&scene,
-                "Supporting Pane Layout", "", 1180, 2200);
+            int row_width = settings_ui_line_width(2);
 
-            if (!panel)
-            {
-                done = true;
-            }
-            else
-            {
+        app_ui_scene scene;
+        app_ui_panel* panel = settings_browser_scene_begin_ex(&scene,
+            "Supporting Pane Layout", "", 1180, 2200);
+
+        if (!panel)
+        {
+            done = true;
+        }
+        else
+        {
                 if (sel > 4)
                     app_ui_panel_set_row_offset(panel, (s16b)(sel - 4));
                 for (int i = 0; i < pane_count; i++)
@@ -3677,122 +3220,10 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     true, "Esc", "Back");
                 if (!done && !ui_information_scene_present_ui(&scene))
                     done = true;
-            }
-        }
-        else
-        {
-            clear_from(0);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE,
-                "Supporting Pane Layout");
-            settings_ui_put_fitted(2, 2, TERM_WHITE,
-                "======================");
-
-            for (int i = 0; i < pane_count && (y0 + i) < Term->hgt - 5; i++)
-            {
-                int idx = pane_indices[i];
-                enum pane_type type = (enum pane_type)settings_sdl_pane_type(idx);
-                enum pane_placement where
-                    = (enum pane_placement)settings_sdl_pane_where(idx);
-                int master_idx = supporting_pane_master_idx(pane_indices,
-                    pane_count, where);
-                bool enabled = settings_sdl_pane_enabled(idx);
-                bool rows_locked = supporting_pane_rows_locked(pane_indices,
-                    pane_count, idx);
-                bool cols_locked = supporting_pane_cols_locked(pane_indices,
-                    pane_count, idx);
-                int rows = settings_sdl_pane_rows(idx);
-                int cols = settings_sdl_pane_cols(idx);
-                byte a = (i == sel) ? TERM_L_BLUE
-                    : (enabled ? TERM_WHITE : TERM_SLATE);
-                char type_buf[24];
-                char enabled_field[12];
-                char where_field[24];
-                char rows_value[16];
-                char rows_field[20];
-                char cols_value[16];
-                char cols_field[20];
-                char line_buf[128];
-                const char* type_label = settings_ui_pick_label(
-                    MAX(8, row_width / 3), pane_type_name(type),
-                    pane_type_name(type), pane_type_short_name(type));
-                const char* where_label = settings_ui_pick_label(
-                    MAX(4, row_width / 4), pane_placement_name(where),
-                    pane_placement_name(where), pane_where_short_name(where));
-
-                settings_ui_fit_text(type_buf, sizeof(type_buf), type_label,
-                    MAX(4, row_width / 3));
-                settings_ui_format_field(enabled_field, sizeof(enabled_field),
-                    enabled ? "on" : "off", i == sel && field == 0);
-                settings_ui_format_field(where_field, sizeof(where_field),
-                    where_label, i == sel && field == 1);
-
-                if (rows_locked)
-                {
-                    int shared_rows = (master_idx >= 0)
-                        ? settings_sdl_pane_rows(master_idx)
-                        : rows;
-                    settings_ui_format_auto_value(rows_value,
-                        sizeof(rows_value), shared_rows, 4);
-                }
-                else
-                {
-                    settings_ui_format_auto_value(rows_value,
-                        sizeof(rows_value), rows, 4);
-                }
-                settings_ui_format_field(rows_field, sizeof(rows_field),
-                    rows_value, !rows_locked && i == sel && field == 2);
-
-                if (cols_locked)
-                {
-                    int shared_cols = (master_idx >= 0)
-                        ? settings_sdl_pane_cols(master_idx)
-                        : cols;
-                    settings_ui_format_auto_value(cols_value,
-                        sizeof(cols_value), shared_cols, 4);
-                }
-                else
-                {
-                    settings_ui_format_auto_value(cols_value,
-                        sizeof(cols_value), cols, 4);
-                }
-                settings_ui_format_field(cols_field, sizeof(cols_field),
-                    cols_value, !cols_locked && i == sel && field == 3);
-
-                strnfmt(line_buf, sizeof(line_buf), "%s %s %s r%s c%s",
-                    type_buf, where_field, enabled_field, rows_field,
-                    cols_field);
-                settings_ui_put_fitted(y0 + i, 2, a, line_buf);
-            }
-
-            {
-                int y = Term->hgt - 4;
-
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "Up/Down: select pane   Space: choose on/off, where, rows, cols",
-                        "Up/Down select pane   Space switch field",
-                        "Up/Down select   Space field"));
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "4/6 (or n/y): toggle, cycle, or +/- value   0: set rows/cols to auto",
-                        "4/6 or y/n: toggle, cycle, or +/- value   0: auto",
-                        "4/6 cycle/set   0 auto"));
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "Each side slot shares cols with its first pane; bottom panes share rows",
-                        "Side slots share cols; bottom panes share rows",
-                        "Side slots share cols; bottom shares rows"));
-                settings_ui_put_fitted(y++, 2, TERM_SLATE,
-                    settings_ui_pick_label(term_wid - 2,
-                        "ESC/Enter: return (changes apply immediately)",
-                        "ESC/Enter: return",
-                        "Esc/Enter return"));
-            }
         }
 
         inkey_set_cursor_hidden(true);
-        char ch = scene_active ? (char)ui_information_scene_wait_key()
-                               : settings_wait_key();
+        char ch = (char)ui_information_scene_wait_key();
         inkey_set_cursor_hidden(false);
 
         dir = target_dir(ch);
@@ -3869,11 +3300,12 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
             if (field == 0)
             {
-                set_sdl_pane_enabled(idx, (delta > 0));
+                settings_sdl_set_pane_enabled(idx, (delta > 0));
             }
             else if (field == 1)
             {
-                set_sdl_pane_where(idx, pane_next_allowed_placement(type, where, delta));
+                settings_sdl_set_pane_where(idx,
+                    pane_next_allowed_placement(type, where, delta));
             }
             else if (field == 2)
             {
@@ -3885,7 +3317,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     break;
                 }
                 if (rows == 0)
-                    settings_sdl_set_pane_rows(idx, get_sdl_pane_current_rows(idx));
+                    settings_sdl_set_pane_rows(idx,
+                        settings_sdl_pane_current_rows(idx));
                 else
                     settings_sdl_set_pane_rows(idx, rows + delta);
             }
@@ -3899,7 +3332,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     break;
                 }
                 if (cols == 0)
-                    settings_sdl_set_pane_cols(idx, get_sdl_pane_current_cols(idx));
+                    settings_sdl_set_pane_cols(idx,
+                        settings_sdl_pane_current_cols(idx));
                 else
                     settings_sdl_set_pane_cols(idx, cols + delta);
             }
@@ -4032,6 +3466,22 @@ static void settings_sdl_set_touch_binding(int panel, int slot, int binding)
     set_sdl_touch_pane_binding_for_panel(panel, slot, binding);
 }
 
+static void settings_sdl_set_touch_button_label(int panel, int slot,
+    cptr label)
+{
+    set_sdl_touch_pane_button_label_for_panel(panel, slot, label);
+}
+
+static void settings_sdl_set_touch_panel_name(int panel, cptr name)
+{
+    set_sdl_touch_pane_panel_name(panel, name);
+}
+
+static int settings_sdl_touch_default_binding(int panel, int slot)
+{
+    return get_sdl_touch_pane_default_binding_for_panel(panel, slot);
+}
+
 static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 {
     int highlight = 0;
@@ -4039,13 +3489,11 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
     int panel = SDL_TOUCH_PANE_PANEL_MAIN;
     bool done = false;
     bool changed = false;
-    bool scene_active = ui_information_scene_is_active();
     const int list_start_row = 5;
 
     while (!done)
     {
         int term_h = Term ? Term->hgt : 24;
-        int row_width = settings_ui_line_width(2);
         int visible_rows;
 
         visible_rows = term_h - list_start_row - 6;
@@ -4064,152 +3512,83 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
         if (top < 0)
             top = 0;
 
-        if (scene_active)
+        app_ui_scene scene;
+        app_ui_panel* ui_panel = settings_browser_scene_begin_ex(&scene,
+            "Touch Settings", "", 1100, 2200);
+
+        if (!ui_panel)
         {
-            app_ui_scene scene;
-            app_ui_panel* ui_panel = settings_browser_scene_begin_ex(&scene,
-                "Touch Settings", "", 1100, 2200);
-
-            if (!ui_panel)
-            {
-                done = true;
-            }
-            else
-            {
-                char panel_name[SDL_TOUCH_PANE_LABEL_LEN];
-                char info_buf[96];
-
-                settings_sdl_touch_panel_name(panel, panel_name,
-                    sizeof(panel_name));
-                strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
-                    panel_name,
-                    (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-                        ? " (empty = main panel)"
-                        : "");
-                app_ui_panel_set_subtitle(ui_panel, TERM_SLATE, info_buf);
-                if (top > 0)
-                    app_ui_panel_set_row_offset(ui_panel, (s16b)top);
-
-                for (int i = 0; i < SDL_TOUCH_PANE_BUTTON_COUNT; i++)
-                {
-                    char action_buf[80];
-                    char label_buf[SDL_TOUCH_PANE_LABEL_LEN];
-                    char left_buf[64];
-                    byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
-
-                    settings_sdl_touch_button_label(panel, i,
-                        label_buf, sizeof(label_buf));
-                    touch_pane_action_label_for_panel(panel,
-                        settings_sdl_touch_binding(panel, i),
-                        action_buf, sizeof(action_buf));
-
-                    if (label_buf[0])
-                    {
-                        strnfmt(left_buf, sizeof(left_buf), "%s %s",
-                            settings_sdl_touch_slot_name(i), label_buf);
-                    }
-                    else
-                    {
-                        strnfmt(left_buf, sizeof(left_buf), "%s",
-                            settings_sdl_touch_slot_name(i));
-                    }
-
-                    if (!settings_browser_add_pair_row(ui_panel, (s16b)i, a,
-                            TERM_SLATE, true, i == highlight, left_buf,
-                            action_buf))
-                    {
-                        done = true;
-                        break;
-                    }
-                }
-
-                (void)app_ui_panel_add_footer_action(ui_panel, 1, TERM_WHITE,
-                    true, "8/2", "Move");
-                (void)app_ui_panel_add_footer_action(ui_panel, 2, TERM_WHITE,
-                    true, "4/6", "Action");
-                (void)app_ui_panel_add_footer_action(ui_panel, 3, TERM_WHITE,
-                    true, "Tab", "Panel");
-                (void)app_ui_panel_add_footer_action(ui_panel, 4, TERM_WHITE,
-                    true, "l/p", "Rename");
-                (void)app_ui_panel_add_footer_action(ui_panel, 5, TERM_WHITE,
-                    true, "r", "Reset");
-                (void)app_ui_panel_add_footer_action(ui_panel, 6, TERM_WHITE,
-                    true, "R", "Reset all");
-                (void)app_ui_panel_add_footer_action(ui_panel, 7, TERM_WHITE,
-                    true, "Esc", "Back");
-                if (!done && !ui_information_scene_present_ui(&scene))
-                    done = true;
-            }
+            done = true;
         }
         else
         {
-            int row = list_start_row;
+            char panel_name[SDL_TOUCH_PANE_LABEL_LEN];
+            char info_buf[96];
 
-            clear_from(0);
-            settings_ui_put_fitted(1, 2, TERM_L_BLUE, "Touch Settings");
-            settings_ui_put_fitted(2, 2, TERM_WHITE, "==============");
+            settings_sdl_touch_panel_name(panel, panel_name,
+                sizeof(panel_name));
+            strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
+                panel_name,
+                (panel == SDL_TOUCH_PANE_PANEL_SECOND)
+                    ? " (empty = main panel)"
+                    : "");
+            app_ui_panel_set_subtitle(ui_panel, TERM_SLATE, info_buf);
+            if (top > 0)
+                app_ui_panel_set_row_offset(ui_panel, (s16b)top);
 
-            for (int i = top; i < SDL_TOUCH_PANE_BUTTON_COUNT
-                && i < top + visible_rows; i++)
+            for (int i = 0; i < SDL_TOUCH_PANE_BUTTON_COUNT; i++)
             {
                 char action_buf[80];
                 char label_buf[SDL_TOUCH_PANE_LABEL_LEN];
                 char left_buf[64];
-                char line_buf[128];
                 byte a = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
 
-                settings_sdl_touch_button_label(panel, i, label_buf,
-                    sizeof(label_buf));
+                settings_sdl_touch_button_label(panel, i,
+                    label_buf, sizeof(label_buf));
                 touch_pane_action_label_for_panel(panel,
-                    settings_sdl_touch_binding(panel, i), action_buf,
-                    sizeof(action_buf));
+                    settings_sdl_touch_binding(panel, i),
+                    action_buf, sizeof(action_buf));
 
                 if (label_buf[0])
+                {
                     strnfmt(left_buf, sizeof(left_buf), "%s %s",
                         settings_sdl_touch_slot_name(i), label_buf);
+                }
                 else
+                {
                     strnfmt(left_buf, sizeof(left_buf), "%s",
                         settings_sdl_touch_slot_name(i));
+                }
 
-                settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                    left_buf, action_buf, row_width, 14);
-                c_prt(a, line_buf, row++, 2);
+                if (!settings_browser_add_pair_row(ui_panel, (s16b)i, a,
+                        TERM_SLATE, true, i == highlight, left_buf,
+                        action_buf))
+                {
+                    done = true;
+                    break;
+                }
             }
 
-            row = list_start_row + visible_rows + 1;
-            {
-                char panel_name[SDL_TOUCH_PANE_LABEL_LEN];
-                char info_buf[96];
-
-                settings_sdl_touch_panel_name(panel, panel_name,
-                    sizeof(panel_name));
-                strnfmt(info_buf, sizeof(info_buf), "Editing %s panel%s",
-                    panel_name,
-                    (panel == SDL_TOUCH_PANE_PANEL_SECOND)
-                        ? " (empty = main panel)"
-                        : "");
-                settings_ui_put_fitted(3, 2, TERM_SLATE, info_buf);
-            }
-            settings_ui_put_fitted(row++, 2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Up/Down: select button   4/6: previous/next action   l: rename slot",
-                    "Up/Down select   4/6 action   l rename slot",
-                    "Up/Down select   4/6 action"));
-            settings_ui_put_fitted(row++, 2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "Tab: switch panel   p: rename panel   r: reset selected   R: reset all",
-                    "Tab switch panel   p rename panel   r/R reset",
-                    "Tab switch   p rename   r/R reset"));
-            settings_ui_put_fitted(row++, 2, TERM_SLATE,
-                settings_ui_pick_label(row_width,
-                    "ESC/Enter: return",
-                    "Esc/Enter: return",
-                    "Esc/Enter return"));
+            (void)app_ui_panel_add_footer_action(ui_panel, 1, TERM_WHITE,
+                true, "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(ui_panel, 2, TERM_WHITE,
+                true, "4/6", "Action");
+            (void)app_ui_panel_add_footer_action(ui_panel, 3, TERM_WHITE,
+                true, "Tab", "Panel");
+            (void)app_ui_panel_add_footer_action(ui_panel, 4, TERM_WHITE,
+                true, "l/p", "Rename");
+            (void)app_ui_panel_add_footer_action(ui_panel, 5, TERM_WHITE,
+                true, "r", "Reset");
+            (void)app_ui_panel_add_footer_action(ui_panel, 6, TERM_WHITE,
+                true, "R", "Reset all");
+            (void)app_ui_panel_add_footer_action(ui_panel, 7, TERM_WHITE,
+                true, "Esc", "Back");
+            if (!done && !ui_information_scene_present_ui(&scene))
+                done = true;
         }
 
         inkey_set_cursor_hidden(true);
-        char ch = scene_active ? (char)ui_information_scene_wait_key()
-                               : settings_wait_key();
+        char ch = (char)ui_information_scene_wait_key();
         inkey_set_cursor_hidden(false);
 
         {
@@ -4290,7 +3669,8 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             new_label[0] = '\0';
             if (term_get_string(prompt, new_label, sizeof(new_label)))
             {
-                set_sdl_touch_pane_button_label_for_panel(panel, highlight, new_label);
+                settings_sdl_set_touch_button_label(panel, highlight,
+                    new_label);
                 changed = true;
             }
             break;
@@ -4321,7 +3701,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             new_name[0] = '\0';
             if (term_get_string(prompt, new_name, sizeof(new_name)))
             {
-                set_sdl_touch_pane_panel_name(panel, new_name);
+                settings_sdl_set_touch_panel_name(panel, new_name);
                 changed = true;
             }
             break;
@@ -4329,7 +3709,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
         case 'r':
             settings_sdl_set_touch_binding(panel, highlight,
-                get_sdl_touch_pane_default_binding_for_panel(panel, highlight));
+                settings_sdl_touch_default_binding(panel, highlight));
             clear_sdl_touch_pane_button_label_for_panel(panel, highlight);
             changed = true;
             break;
@@ -4459,12 +3839,9 @@ static void do_cmd_legacy_options(void)
         }
         case 2:
         {
-            settings_ui_put_fitted(14, 2, TERM_SLATE, "(Escape to cancel)");
-            prt("File: ", 12, 2);
-
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
             {
                 clear_from(0);
                 continue;
@@ -4568,7 +3945,6 @@ void do_cmd_options(void)
     int highlight = 1;
     bool return_to_game = false;
     ui_information_scene_scope settings_scope;
-    bool settings_scene = ui_information_scene_enter(&settings_scope);
 
     /* Clear any active banner before opening options */
     extern int g_banner_force_redraw_remaining;
@@ -4577,13 +3953,12 @@ void do_cmd_options(void)
         do_cmd_redraw();
     }
 
-    /* Save screen */
+    if (!ui_information_scene_enter(&settings_scope))
+        return;
+
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
-    if (!settings_scene)
-        screen_save();
 
-    /* Clear screen */
     clear_from(0);
 
     /* Process Events until "Return to Game" is selected */
@@ -4681,11 +4056,7 @@ void do_cmd_options(void)
     /* Flush messages */
     message_flush();
 
-    /* Clean up */
-    if (settings_scene)
-        ui_information_scene_leave(&settings_scope);
-    else
-        screen_load();
+    ui_information_scene_leave(&settings_scope);
     if (p_ptr && p_ptr->playing)
         sdl_music_stop_main();
 }
@@ -5080,7 +4451,6 @@ void do_cmd_keybinds(void)
     int mode = keybind_active_mode();
     bool done = false;
     bool dirty = false;
-    bool scene_active = ui_information_scene_is_active();
     char ch;
     bool showing_primary = true;
     int highlight_primary = 0;
@@ -5158,8 +4528,6 @@ void do_cmd_keybinds(void)
         int* highlight_ptr;
         int* top_ptr;
         int highlight;
-        int display_end;
-        int i;
         int term_w;
         int term_h;
         int visible_rows;
@@ -5192,88 +4560,15 @@ void do_cmd_keybinds(void)
         keybind_adjust_view(num_keybinds, visible_rows, highlight_ptr, top_ptr);
         highlight = *highlight_ptr;
 
-        if (scene_active)
+        if (!keybind_present_ui_scene(showing_primary, keybinds,
+                num_keybinds, mode, highlight, *top_ptr, dirty,
+                compact_width, default_file))
         {
-            if (!keybind_present_ui_scene(showing_primary, keybinds,
-                    num_keybinds, mode, highlight, *top_ptr, dirty,
-                    compact_width, default_file))
-            {
-                done = true;
-                continue;
-            }
-        }
-        else
-        {
-            char binding_buf[80];
-            char line_buf[128];
-
-            clear_from(0);
-            settings_ui_put_fitted(1, 0, TERM_WHITE, "Keybind Configuration");
-            if (compact_width)
-            {
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    "8/2 move  Enter bind  Tab switch  Esc return");
-                settings_ui_put_fitted(3, 0, TERM_WHITE,
-                    showing_primary ? "Primary commands"
-                                    : "Supplementary commands");
-            }
-            else
-            {
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    "Arrow to navigate, Enter to bind, Tab to switch groups, Escape to return");
-                settings_ui_put_fitted(3, 0, TERM_WHITE,
-                    showing_primary ? "Primary Commands: Essential for the gameplay"
-                                    : "Supplementary Commands");
-            }
-
-            display_end = *top_ptr + visible_rows;
-            if (display_end > num_keybinds)
-                display_end = num_keybinds;
-
-            for (i = *top_ptr; i < display_end; i++)
-            {
-                int entry_row = list_start_row + (i - *top_ptr);
-
-                describe_action_bindings(mode, &keybinds[i], binding_buf,
-                    sizeof(binding_buf));
-                settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                    keybinds[i].key_name, binding_buf, row_width, 12);
-                if (i == highlight)
-                    c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
-                else
-                    prt(line_buf, entry_row, 2);
-            }
-
-            if (compact_width)
-            {
-                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
-                    TERM_WHITE, "s: save keybinds");
-                settings_ui_put_fitted(list_start_row + visible_rows + 2, 2,
-                    TERM_WHITE, "r: reset selected");
-            }
-            else
-            {
-                char save_buf[96];
-
-                strnfmt(save_buf, sizeof(save_buf),
-                    "Press 's' to save keybinds to %s", default_file);
-                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
-                    TERM_WHITE, save_buf);
-                settings_ui_put_fitted(list_start_row + visible_rows + 2, 2,
-                    TERM_WHITE,
-                    "Press 'r' to reset selected keybind to default");
-            }
-            if (dirty)
-            {
-                c_prt(TERM_YELLOW, "Unsaved changes",
-                    list_start_row + visible_rows + 3, 2);
-            }
-
-            settings_present();
+            done = true;
+            continue;
         }
 
-        ch = scene_active ? (char)ui_information_scene_wait_key()
-                          : settings_wait_key();
+        ch = (char)ui_information_scene_wait_key();
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q')
         {
@@ -5334,22 +4629,11 @@ void do_cmd_keybinds(void)
                 settings_ui_pick_label(row_width, prompt_long, prompt_medium,
                     prompt_short));
 
-            if (scene_active)
-            {
-                (void)keybind_present_prompt_scene(showing_primary,
-                    &keybinds[highlight], mode, prompt);
-            }
-            else
-            {
-                int entry_row = list_start_row + (highlight - *top_ptr);
-
-                settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
-                settings_present();
-            }
+            (void)keybind_present_prompt_scene(showing_primary,
+                &keybinds[highlight], mode, prompt);
 
             flush();
-            bind_key = scene_active ? (char)ui_information_scene_wait_key()
-                                    : (char)settings_wait_key();
+            bind_key = (char)ui_information_scene_wait_key();
 
             if (bind_key != ESCAPE && bind_key != 0)
             {
@@ -5387,13 +4671,7 @@ void do_cmd_keybinds(void)
 
             strnfmt(ftmp, sizeof(ftmp), "%s", default_file);
 
-            if (!scene_active)
-            {
-                prt("File: ", list_start_row + visible_rows + 1, 2);
-                settings_present();
-            }
-
-            if (askfor_aux(ftmp, sizeof(ftmp)))
+            if (term_get_string("File: ", ftmp, sizeof(ftmp)))
             {
                 if (keymap_dump(ftmp) == 0)
                 {
@@ -5807,7 +5085,6 @@ void do_cmd_controller_settings(void)
     bool done = false;
     int highlight = 0;
     int top = 0;
-    bool scene_active = ui_information_scene_is_active();
     const int list_start_row = 5;
 
     static const controller_entry entries[] = {
@@ -5904,159 +5181,92 @@ void do_cmd_controller_settings(void)
             top = 0;
         }
 
-        if (scene_active) {
-            app_ui_scene scene;
-            app_ui_panel* panel = settings_browser_scene_begin_ex(&scene,
-                "Controller Settings", "", 1180, 2200);
+        app_ui_scene scene;
+        app_ui_panel* panel = settings_browser_scene_begin_ex(&scene,
+            "Controller Settings", "", 1180, 2200);
 
-            if (!panel) {
-                done = true;
-                continue;
-            }
-
-            if (steamdeck) {
-                char confirm_label[16];
-                char back_label[16];
-                char prompt_buf[80];
-
-                controller_prompt_label(steamdeck_confirm_key(), "A",
-                    confirm_label, sizeof(confirm_label));
-                controller_prompt_label(steamdeck_back_key(), "B",
-                    back_label, sizeof(back_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    compact_width ? "D-pad %s bind  %s back"
-                                  : "D-pad navigate  %s bind  %s back",
-                    confirm_label, back_label);
-                app_ui_panel_set_subtitle(panel, TERM_SLATE, prompt_buf);
-            } else {
-                app_ui_panel_set_subtitle(panel, TERM_SLATE,
-                    compact_width ? "8/2 move  Enter bind  Esc return"
-                                  : "Arrow to navigate, Enter to bind, Escape to return");
-            }
-
-            if (top > 0)
-                app_ui_panel_set_row_offset(panel, (s16b)top);
-
-            for (int i = 0; i < entry_count; i++) {
-                char value_buf[64];
-                byte attr = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
-
-                controller_entry_value(&entries[i], value_buf,
-                    sizeof(value_buf));
-                if (!settings_browser_add_pair_row(panel, (s16b)i, attr,
-                        TERM_SLATE, true, i == highlight, entries[i].label,
-                        value_buf))
-                {
-                    done = true;
-                    break;
-                }
-            }
-
-            if (steamdeck) {
-                char reset_label[16];
-                char reset_all_label[16];
-                char prompt_buf[80];
-
-                controller_prompt_label(steamdeck_alt_action_key(), "X",
-                    reset_label, sizeof(reset_label));
-                controller_prompt_label(steamdeck_secondary_key(), "Y",
-                    reset_all_label, sizeof(reset_all_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    compact_width ? "[%s] reset  [%s] reset all"
-                                  : "Reset: [%s] selected, [%s] all",
-                    reset_label, reset_all_label);
-                (void)app_ui_panel_add_body_line(panel, TERM_WHITE, prompt_buf);
-            } else {
-                (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                    compact_width ? "r: reset selected  R: reset all"
-                                  : "Press 'r' to reset selected binding, 'R' to reset all bindings");
-            }
-            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
-                compact_width ? "Saves on exit."
-                              : "Changes are saved on exit.");
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "Enter", "Bind");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                "r", "Reset");
-            (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-                "R", "Reset all");
-            (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-                "Esc", "Back");
-
-            if (!done && !ui_information_scene_present_ui(&scene)) {
-                done = true;
-                continue;
-            }
-        } else {
-            char value_buf[64];
-            char line_buf[128];
-
-            clear_from(0);
-            settings_ui_put_fitted(1, 0, TERM_WHITE, "Controller Settings");
-            if (steamdeck) {
-                char confirm_label[16];
-                char back_label[16];
-                char prompt_buf[80];
-
-                controller_prompt_label(steamdeck_confirm_key(), "A",
-                    confirm_label, sizeof(confirm_label));
-                controller_prompt_label(steamdeck_back_key(), "B", back_label,
-                    sizeof(back_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    compact_width ? "D-pad %s bind  %s back"
-                                  : "D-pad navigate  %s bind  %s back",
-                    confirm_label, back_label);
-                settings_ui_put_fitted(2, 0, TERM_WHITE, prompt_buf);
-            } else {
-                settings_ui_put_fitted(2, 0, TERM_WHITE,
-                    compact_width ? "8/2 move  Enter bind  Esc return"
-                                  : "Arrow to navigate, Enter to bind, Escape to return");
-            }
-
-            for (int i = top; i < entry_count && i < top + visible_rows; i++) {
-                int entry_row = list_start_row + (i - top);
-
-                controller_entry_value(&entries[i], value_buf,
-                    sizeof(value_buf));
-                settings_ui_format_pair_line(line_buf, sizeof(line_buf),
-                    entries[i].label, value_buf, row_width, 12);
-
-                if (i == highlight)
-                    c_prt(TERM_L_BLUE, line_buf, entry_row, 2);
-                else
-                    prt(line_buf, entry_row, 2);
-            }
-
-            if (steamdeck) {
-                char reset_label[16];
-                char reset_all_label[16];
-                char prompt_buf[80];
-
-                controller_prompt_label(steamdeck_alt_action_key(), "X",
-                    reset_label, sizeof(reset_label));
-                controller_prompt_label(steamdeck_secondary_key(), "Y",
-                    reset_all_label, sizeof(reset_all_label));
-                strnfmt(prompt_buf, sizeof(prompt_buf),
-                    compact_width ? "[%s] reset  [%s] reset all"
-                                  : "Reset: [%s] selected, [%s] all",
-                    reset_label, reset_all_label);
-                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
-                    TERM_WHITE, prompt_buf);
-            } else {
-                settings_ui_put_fitted(list_start_row + visible_rows + 1, 2,
-                    TERM_WHITE,
-                    compact_width ? "r: reset selected  R: reset all"
-                                  : "Press 'r' to reset selected binding, 'R' to reset all bindings");
-            }
-            settings_ui_put_fitted(list_start_row + visible_rows + 2, 2,
-                TERM_WHITE, compact_width ? "Saves on exit."
-                                          : "Changes are saved on exit.");
+        if (!panel) {
+            done = true;
+            continue;
         }
 
-        char ch = scene_active ? (char)ui_information_scene_wait_key()
-                               : settings_wait_key();
+        if (steamdeck) {
+            char confirm_label[16];
+            char back_label[16];
+            char prompt_buf[80];
+
+            controller_prompt_label(steamdeck_confirm_key(), "A",
+                confirm_label, sizeof(confirm_label));
+            controller_prompt_label(steamdeck_back_key(), "B",
+                back_label, sizeof(back_label));
+            strnfmt(prompt_buf, sizeof(prompt_buf),
+                compact_width ? "D-pad %s bind  %s back"
+                              : "D-pad navigate  %s bind  %s back",
+                confirm_label, back_label);
+            app_ui_panel_set_subtitle(panel, TERM_SLATE, prompt_buf);
+        } else {
+            app_ui_panel_set_subtitle(panel, TERM_SLATE,
+                compact_width ? "8/2 move  Enter bind  Esc return"
+                              : "Arrow to navigate, Enter to bind, Escape to return");
+        }
+
+        if (top > 0)
+            app_ui_panel_set_row_offset(panel, (s16b)top);
+
+        for (int i = 0; i < entry_count; i++) {
+            char value_buf[64];
+            byte attr = (i == highlight) ? TERM_L_BLUE : TERM_WHITE;
+
+            controller_entry_value(&entries[i], value_buf,
+                sizeof(value_buf));
+            if (!settings_browser_add_pair_row(panel, (s16b)i, attr,
+                    TERM_SLATE, true, i == highlight, entries[i].label,
+                    value_buf))
+            {
+                done = true;
+                break;
+            }
+        }
+
+        if (steamdeck) {
+            char reset_label[16];
+            char reset_all_label[16];
+            char prompt_buf[80];
+
+            controller_prompt_label(steamdeck_alt_action_key(), "X",
+                reset_label, sizeof(reset_label));
+            controller_prompt_label(steamdeck_secondary_key(), "Y",
+                reset_all_label, sizeof(reset_all_label));
+            strnfmt(prompt_buf, sizeof(prompt_buf),
+                compact_width ? "[%s] reset  [%s] reset all"
+                              : "Reset: [%s] selected, [%s] all",
+                reset_label, reset_all_label);
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE, prompt_buf);
+        } else {
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+                compact_width ? "r: reset selected  R: reset all"
+                              : "Press 'r' to reset selected binding, 'R' to reset all bindings");
+        }
+        (void)app_ui_panel_add_body_line(panel, TERM_WHITE,
+            compact_width ? "Saves on exit."
+                          : "Changes are saved on exit.");
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "8/2", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Enter", "Bind");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "r", "Reset");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "R", "Reset all");
+        (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "Esc", "Back");
+
+        if (!done && !ui_information_scene_present_ui(&scene)) {
+            done = true;
+            continue;
+        }
+
+        char ch = (char)ui_information_scene_wait_key();
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q' || (steamdeck && ch == steamdeck_back_key())) {
             done = true;
@@ -6118,7 +5328,7 @@ void do_cmd_controller_settings(void)
                 strnfmt(prompt, sizeof(prompt), "%s",
                     settings_ui_pick_label(row_width, prompt_long, prompt_medium,
                         prompt_short));
-                if (scene_active) {
+                {
                     app_ui_scene prompt_scene;
                     app_ui_panel* prompt_panel = settings_browser_scene_begin_ex(
                         &prompt_scene, "Controller Settings", prompt, 1100,
@@ -6138,10 +5348,6 @@ void do_cmd_controller_settings(void)
                                 : "Esc cancels. Backspace clears.");
                         (void)ui_information_scene_present_ui(&prompt_scene);
                     }
-                } else {
-                    int entry_row = list_start_row + (highlight - top);
-
-                    settings_ui_put_fitted(entry_row, 2, TERM_YELLOW, prompt);
                 }
 
                 flush();
@@ -6165,7 +5371,7 @@ void do_cmd_controller_settings(void)
                     }
 
                     inkey_set_scan(true);
-                    char choice = inkey();
+                    char choice = settings_read_inkey(false, true);
                     if (choice == ESCAPE) {
                         sdl_gamepad_capture_cancel();
                         waiting = false;
@@ -6174,7 +5380,7 @@ void do_cmd_controller_settings(void)
                         controller_clear_action_bindings(entry->id, -1, -1);
                         waiting = false;
                     } else if (choice == 0) {
-                        Term_xtra(TERM_XTRA_DELAY, 10);
+                        platform_delay_ms(10);
                     }
                 }
             }
@@ -6275,8 +5481,6 @@ static void do_cmd_macro_aux(char* buf)
 
     int n = 0;
 
-    char tmp[1024];
-
     /* Flush */
     flush();
 
@@ -6284,7 +5488,7 @@ static void do_cmd_macro_aux(char* buf)
     inkey_set_base(true);
 
     /* First key */
-    ch = inkey();
+    ch = settings_read_inkey(true, false);
 
     /* Read the pattern */
     while (ch != '\0')
@@ -6299,7 +5503,7 @@ static void do_cmd_macro_aux(char* buf)
         inkey_set_scan(true);
 
         /* Attempt to read a key */
-        ch = inkey();
+        ch = settings_read_inkey(true, true);
     }
 
     /* Terminate */
@@ -6307,12 +5511,6 @@ static void do_cmd_macro_aux(char* buf)
 
     /* Flush */
     flush();
-
-    /* Convert the trigger */
-    ascii_to_text(tmp, sizeof(tmp), buf);
-
-    /* Hack -- display the trigger */
-    Term_addstr(-1, TERM_WHITE, tmp);
 }
 
 /*
@@ -6323,20 +5521,12 @@ static void do_cmd_macro_aux(char* buf)
  */
 static void do_cmd_macro_aux_keymap(char* buf)
 {
-    char tmp[1024];
-
     /* Flush */
     flush();
 
     /* Get a key */
-    buf[0] = inkey();
+    buf[0] = settings_read_inkey(false, false);
     buf[1] = '\0';
-
-    /* Convert to ascii */
-    ascii_to_text(tmp, sizeof(tmp), buf);
-
-    /* Hack -- display the trigger */
-    Term_addstr(-1, TERM_WHITE, tmp);
 
     /* Flush */
     flush();
@@ -6457,6 +5647,7 @@ void do_cmd_macros(void)
     int highlight = 1;
     char tmp[1024];
     char pat[1024];
+    char key_desc[128];
     int mode;
 
     // Determine the keyset
@@ -6482,15 +5673,13 @@ void do_cmd_macros(void)
     /* Process requests until done */
     while (1)
     {
-        int term_wid = 80;
-        int term_hgt = 24;
+        int term_hgt = Term ? Term->hgt : 24;
         int menu_row = 3;
         int action_label_row;
         int action_row;
         int command_row;
         int input_row;
 
-        Term_get_size(&term_wid, &term_hgt);
         action_label_row = MAX(menu_row + 11, term_hgt - 4);
         action_row = MIN(term_hgt - 2, action_label_row + 1);
         command_row = MAX(action_row + 1, term_hgt - 2);
@@ -6503,7 +5692,7 @@ void do_cmd_macros(void)
         clear_from(0);
         prt("Current action:", action_label_row, 0);
         ascii_to_text(tmp, sizeof(tmp), macro_buffer);
-        Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
+        settings_ui_put_fitted(action_row, 0, TERM_WHITE, tmp);
 
         /* Load a user pref file */
         if (choice == 1)
@@ -6529,7 +5718,7 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -6552,6 +5741,8 @@ void do_cmd_macros(void)
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 9, TERM_L_BLUE, key_desc);
 
             /* Get the action */
             k = macro_find_exact(pat);
@@ -6573,7 +5764,7 @@ void do_cmd_macros(void)
                 ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
                 /* Display the current action */
-                Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
+                settings_ui_put_fitted(action_row, 0, TERM_WHITE, tmp);
 
                 /* Prompt */
                 msg_print("Found a macro.");
@@ -6591,6 +5782,8 @@ void do_cmd_macros(void)
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 9, TERM_L_BLUE, key_desc);
 
             /* Clear */
             clear_from(action_label_row);
@@ -6602,7 +5795,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (term_get_string("Action: ", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -6626,6 +5819,8 @@ void do_cmd_macros(void)
 
             /* Get a macro trigger */
             do_cmd_macro_aux(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 9, TERM_L_BLUE, key_desc);
 
             /* Link the macro */
             macro_add(pat, pat);
@@ -6649,7 +5844,7 @@ void do_cmd_macros(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Ask for a file */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Dump the macros */
@@ -6672,6 +5867,8 @@ void do_cmd_macros(void)
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 10, TERM_L_BLUE, key_desc);
 
             /* Look up the keymap */
             act = keymap_act[mode][(byte)(pat[0])];
@@ -6693,7 +5890,7 @@ void do_cmd_macros(void)
                 ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
                 /* Display the current action */
-                Term_putstr(0, action_row, term_wid, TERM_WHITE, tmp);
+                settings_ui_put_fitted(action_row, 0, TERM_WHITE, tmp);
 
                 /* Prompt */
                 msg_print("Found a keymap.");
@@ -6711,6 +5908,8 @@ void do_cmd_macros(void)
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 10, TERM_L_BLUE, key_desc);
 
             /* Clear */
             clear_from(action_label_row);
@@ -6722,7 +5921,7 @@ void do_cmd_macros(void)
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (term_get_string("Action: ", tmp, 80))
             {
                 /* Convert to ascii */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -6749,6 +5948,8 @@ void do_cmd_macros(void)
 
             /* Get a keymap trigger */
             do_cmd_macro_aux_keymap(pat);
+            ascii_to_text(key_desc, sizeof(key_desc), pat);
+            settings_ui_put_fitted(input_row, 10, TERM_L_BLUE, key_desc);
 
             /* Free old keymap */
             str_free(keymap_act[mode][(byte)(pat[0])]);
@@ -6766,14 +5967,14 @@ void do_cmd_macros(void)
             /* Prompt */
             prt("Command: Enter a new action", command_row, 0);
 
-            /* Go to the correct location */
-            Term_gotoxy(0, action_row);
+            /* Prompt */
+            prt("Action: ", action_row, 0);
 
             /* Analyze the current action */
             ascii_to_text(tmp, sizeof(tmp), macro_buffer);
 
             /* Get an encoded action */
-            if (askfor_aux(tmp, 80))
+            if (term_get_string("Action: ", tmp, 80))
             {
                 /* Extract an action */
                 text_to_ascii(macro_buffer, sizeof(macro_buffer), tmp);
@@ -6795,18 +5996,232 @@ void do_cmd_macros(void)
 }
 
 /*
+ * Settings editor helper: add a browser row with a sample icon.
+ */
+static bool settings_browser_add_icon_pair_row(app_ui_panel* panel, s16b id,
+    byte attr, byte meta_attr, byte icon_attr, char icon_char, bool enabled,
+    bool selected, cptr label, cptr meta)
+{
+    return app_ui_panel_add_row_ex(panel, id, attr, meta_attr, icon_attr,
+        icon_char, enabled, selected, "", label ? label : "",
+        meta ? meta : "");
+}
+
+static void settings_format_attr_char_pair(char* buf, size_t buflen, byte attr,
+    byte ch)
+{
+    strnfmt(buf, buflen, "%3u / %3u", attr, ch);
+}
+
+static bool settings_visual_present_ui_scene(cptr title, cptr kind_label,
+    int index, cptr name, byte default_attr, byte default_char,
+    byte current_attr, byte current_char)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    char label_buf[APP_UI_LABEL_MAX];
+    char meta_buf[APP_UI_META_MAX];
+
+    panel = settings_browser_scene_begin_ex(&scene, title,
+        "n/N move  a/A attr  c/C char  s shade  Esc back", 980, 2048);
+    if (!panel)
+        return false;
+
+    strnfmt(label_buf, sizeof(label_buf), "%s %d", kind_label, index);
+    strnfmt(meta_buf, sizeof(meta_buf), "%s", name ? name : "(unnamed)");
+    if (!settings_browser_add_icon_pair_row(panel, 0, TERM_L_BLUE, TERM_SLATE,
+            current_attr, (char)current_char, true, true, label_buf, meta_buf))
+    {
+        return false;
+    }
+
+    settings_format_attr_char_pair(meta_buf, sizeof(meta_buf), default_attr,
+        default_char);
+    if (!settings_browser_add_icon_pair_row(panel, 1, TERM_WHITE, TERM_SLATE,
+            default_attr, (char)default_char, true, false,
+            "Default attr/char", meta_buf))
+    {
+        return false;
+    }
+
+    settings_format_attr_char_pair(meta_buf, sizeof(meta_buf), current_attr,
+        current_char);
+    if (!settings_browser_add_icon_pair_row(panel, 2, TERM_WHITE, TERM_SLATE,
+            current_attr, (char)current_char, true, false,
+            "Current attr/char", meta_buf))
+    {
+        return false;
+    }
+
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "The sample icon previews the current glyph.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "n/N",
+        "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "a/A",
+        "Attr");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "c/C",
+        "Char");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true, "s",
+        "Shade");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true, "Esc",
+        "Back");
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->focus_id = 0;
+    return ui_information_scene_present_ui(&scene);
+}
+
+static bool settings_color_is_black(byte attr)
+{
+    return ((int)angband_color_table[attr][1]
+            + (int)angband_color_table[attr][2]
+            + (int)angband_color_table[attr][3])
+        == 0;
+}
+
+static byte settings_color_sample_attr(byte attr)
+{
+    return settings_color_is_black(attr) ? TERM_WHITE : attr;
+}
+
+static char settings_color_sample_char(byte attr)
+{
+    return settings_color_is_black(attr) ? '.' : '#';
+}
+
+static bool settings_color_picker_present_ui_scene(cptr title, cptr subtitle,
+    byte attr, cptr label)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    char meta_buf[APP_UI_META_MAX];
+
+    panel = settings_browser_scene_begin_ex(&scene, title, subtitle, 960, 1800);
+    if (!panel)
+        return false;
+
+    strnfmt(meta_buf, sizeof(meta_buf), "attr %d", attr);
+    if (!settings_browser_add_icon_pair_row(panel, 0, TERM_L_BLUE, TERM_SLATE,
+            settings_color_sample_attr(attr), settings_color_sample_char(attr),
+            true, true, label ? label : "", meta_buf))
+    {
+        return false;
+    }
+
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "4/6 changes the value. Enter accepts. Escape cancels.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "4/6",
+        "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "Enter",
+        "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "Esc",
+        "Cancel");
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->focus_id = 0;
+    return ui_information_scene_present_ui(&scene);
+}
+
+static void settings_color_editor_adjust_view(int total_rows, int visible_rows,
+    int current, int* scroll)
+{
+    int max_scroll;
+
+    if (!scroll)
+        return;
+
+    if (visible_rows < 1)
+        visible_rows = 1;
+
+    if (current < *scroll)
+        *scroll = current;
+    else if (current >= *scroll + visible_rows)
+        *scroll = current - visible_rows + 1;
+
+    max_scroll = total_rows - visible_rows;
+    if (max_scroll < 0)
+        max_scroll = 0;
+    if (*scroll > max_scroll)
+        *scroll = max_scroll;
+    if (*scroll < 0)
+        *scroll = 0;
+}
+
+static void settings_color_format_label(char* buf, size_t buflen, int idx)
+{
+    strnfmt(buf, buflen, "%2d  %s", idx, get_ext_color_name(idx));
+}
+
+static void settings_color_format_meta(char* buf, size_t buflen, int idx)
+{
+    strnfmt(buf, buflen, "K %3d  RGB %3d,%3d,%3d",
+        angband_color_table[idx][0], angband_color_table[idx][1],
+        angband_color_table[idx][2], angband_color_table[idx][3]);
+}
+
+static bool settings_color_editor_present_ui_scene(int idx, int scroll)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+
+    panel = settings_browser_scene_begin_ex(&scene, "Modify Colors",
+        "8/2 move  4/6 jump  k/r/g/b adjust  c copy  v exact  Esc back",
+        1100, 2200);
+    if (!panel)
+        return false;
+
+    if (scroll > 0)
+        app_ui_panel_set_row_offset(panel, (s16b)scroll);
+
+    for (int i = 0; i < MAX_COLORS; i++)
+    {
+        char label_buf[APP_UI_LABEL_MAX];
+        char meta_buf[APP_UI_META_MAX];
+        byte row_attr = (i == idx) ? TERM_L_BLUE : TERM_WHITE;
+
+        settings_color_format_label(label_buf, sizeof(label_buf), i);
+        settings_color_format_meta(meta_buf, sizeof(meta_buf), i);
+        if (!settings_browser_add_icon_pair_row(panel, (s16b)i, row_attr,
+                TERM_SLATE, settings_color_sample_attr((byte)i),
+                settings_color_sample_char((byte)i), true, i == idx,
+                label_buf, meta_buf))
+        {
+            return false;
+        }
+    }
+
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Use k/K, r/R, g/G, and b/B to adjust values.");
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Use c to copy from another color or v to enter exact values.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "8/2",
+        "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "4/6",
+        "Jump");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "k/r/g/b",
+        "Adjust");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true, "c",
+        "Copy");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true, "v",
+        "Exact");
+    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true, "Esc",
+        "Back");
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->focus_id = (s16b)idx;
+    return ui_information_scene_present_ui(&scene);
+}
+
+/*
  * Asks to the player for an extended color. It is done in two steps:
  * 1. Asks for the base color.
  * 2. Asks for a specific shade.
- * It erases the given line.
  * If the user press ESCAPE no changes are made to attr.
  */
 static void askfor_shade(byte* attr, int y)
 {
     byte base, shade, temp;
     bool changed = false;
-    char *msg, *pos;
     int ch;
+
+    (void)y;
 
     /* Start with the given base color */
     base = GET_BASE_COLOR(*attr);
@@ -6814,34 +6229,16 @@ static void askfor_shade(byte* attr, int y)
     /* 1. Query for base color */
     while (1)
     {
-        /* Clear the line */
-        Term_erase(0, y, 255);
-
-        /* Format the query */
-        msg = format("1. Choose base color (use arrows) " COLOR_SAMPLE
-                     " %s (attr = %d) ",
-            color_names[base], base);
-
-        /* Display it */
-        c_put_str(TERM_WHITE, msg, y, 0);
-
-        /* Find the sample */
-        pos = strstr(msg, COLOR_SAMPLE);
-
-        /* Show it using the proper color */
-        c_put_str(base, COLOR_SAMPLE, y, pos - msg);
-
-        /* Place the cursor at the end of the message */
-        Term_gotoxy(strlen(msg), y);
-
-        /* Get a command */
-        ch = settings_wait_key();
+        if (!settings_color_picker_present_ui_scene("Shade Picker",
+                "1/2 Choose base color", base, color_names[base]))
+        {
+            return;
+        }
+        ch = ui_information_scene_wait_key();
 
         /* Cancel */
         if (ch == ESCAPE)
         {
-            /* Clear the line */
-            Term_erase(0, y, 255);
             return;
         }
 
@@ -6878,39 +6275,18 @@ static void askfor_shade(byte* attr, int y)
     /* 2. Query for specific shade */
     while (1)
     {
-        /* Clear the line */
-        Term_erase(0, y, 255);
-
         /* Create the real color */
         temp = MAKE_EXTENDED_COLOR(base, shade);
-
-        /* Format the message */
-        msg = format("2. Choose shade (use arrows) " COLOR_SAMPLE
-                     " %s (attr = %d) ",
-            get_ext_color_name(temp), temp);
-
-        /* Display it */
-        c_put_str(TERM_WHITE, msg, y, 0);
-
-        /* Find the sample */
-        pos = strstr(msg, COLOR_SAMPLE);
-
-        /* Show it using the proper color */
-        c_put_str(temp, COLOR_SAMPLE, y, pos - msg);
-
-        /* Place the cursor at the end of the message */
-        Term_gotoxy(strlen(msg), y);
-
-        /* Get a command */
-        ch = settings_wait_key();
+        if (!settings_color_picker_present_ui_scene("Shade Picker",
+                "2/2 Choose shade", temp, get_ext_color_name(temp)))
+        {
+            return;
+        }
+        ch = ui_information_scene_wait_key();
 
         /* Cancel */
         if (ch == ESCAPE)
-        {
-            /* Clear the line */
-            Term_erase(0, y, 255);
             return;
-        }
 
         /* Accept the current shade */
         if ((ch == '\r') || (ch == '\n'))
@@ -6933,9 +6309,6 @@ static void askfor_shade(byte* attr, int y)
 
     /* Assign the selected shade */
     *attr = temp;
-
-    /* Clear the line. It is needed to fit in the current UI */
-    Term_erase(0, y, 255);
 }
 
 /*
@@ -6944,7 +6317,6 @@ static void askfor_shade(byte* attr, int y)
 void do_cmd_visuals(void)
 {
     int choice = 0;
-    int cx;
     int highlight = 1;
     int i;
     SDL_IOStream* fff;
@@ -6961,20 +6333,6 @@ void do_cmd_visuals(void)
             break;
 
         clear_from(0);
-
-        if (choice >= 6 && choice <= 9)
-        {
-            int term_wid = 80;
-            int term_hgt = 24;
-
-            Term_get_size(&term_wid, &term_hgt);
-            if ((term_wid < 60) || (term_hgt < 21))
-            {
-                msg_print("The attr/char editor requires a larger window than compact mode.");
-                message_flush();
-                continue;
-            }
-        }
 
         /* Load a user pref file */
         if (choice == 1)
@@ -7001,7 +6359,7 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -7075,7 +6433,7 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -7150,7 +6508,7 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -7225,7 +6583,7 @@ void do_cmd_visuals(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Build the filename */
@@ -7285,58 +6643,22 @@ void do_cmd_visuals(void)
         {
             static int r = 0;
 
-            /* Prompt */
-            prt("Command: Change monster attr/chars", 15, 0);
-
-            /* Hack -- query until done */
             while (1)
             {
                 monster_race* r_ptr = &r_info[r];
+                byte da = (byte)r_ptr->d_attr;
+                byte dc = (byte)r_ptr->d_char;
+                byte ca = (byte)r_ptr->x_attr;
+                byte cc = (byte)r_ptr->x_char;
+                int cx;
 
-                byte da = (byte)(r_ptr->d_attr);
-                byte dc = (byte)(r_ptr->d_char);
-                byte ca = (byte)(r_ptr->x_attr);
-                byte cc = (byte)(r_ptr->x_char);
-
-                /* Label the object */
-                Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Monster = %d, Name = %-40.40s", r,
-                        (r_name + r_ptr->name)));
-
-                /* Label the Default values */
-                Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3u / %3u", da, dc));
-                Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 19, da, dc);
-
-                if (use_bigtile)
+                if (!settings_visual_present_ui_scene(
+                        "Monster Attr/Char", "Monster", r,
+                        r_name + r_ptr->name, da, dc, ca, cc))
                 {
-                    if (da & 0x80)
-                        Term_putch(44, 19, 255, -1);
-                    else
-                        Term_putch(44, 19, 0, ' ');
+                    break;
                 }
-
-                /* Label the Current values */
-                Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3u / %3u", ca, cc));
-                Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 20, ca, cc);
-
-                if (use_bigtile)
-                {
-                    if (ca & 0x80)
-                        Term_putch(44, 20, 255, -1);
-                    else
-                        Term_putch(44, 20, 0, ' ');
-                }
-
-                /* Prompt */
-                Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
-
-                /* Get a command */
-                cx = settings_wait_key();
+                cx = ui_information_scene_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7367,58 +6689,22 @@ void do_cmd_visuals(void)
         {
             static int k = 0;
 
-            /* Prompt */
-            prt("Command: Change object attr/chars", 15, 0);
-
-            /* Hack -- query until done */
             while (1)
             {
                 object_kind* k_ptr = &k_info[k];
+                byte da = (byte)k_ptr->d_attr;
+                byte dc = (byte)k_ptr->d_char;
+                byte ca = (byte)k_ptr->x_attr;
+                byte cc = (byte)k_ptr->x_char;
+                int cx;
 
-                byte da = (byte)(k_ptr->d_attr);
-                byte dc = (byte)(k_ptr->d_char);
-                byte ca = (byte)(k_ptr->x_attr);
-                byte cc = (byte)(k_ptr->x_char);
-
-                /* Label the object */
-                Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Object = %d, Name = %-40.40s", k,
-                        (k_name + k_ptr->name)));
-
-                /* Label the Default values */
-                Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
-                Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 19, da, dc);
-
-                if (use_bigtile)
+                if (!settings_visual_present_ui_scene(
+                        "Object Attr/Char", "Object", k,
+                        k_name + k_ptr->name, da, dc, ca, cc))
                 {
-                    if (da & 0x80)
-                        Term_putch(44, 19, 255, -1);
-                    else
-                        Term_putch(44, 19, 0, ' ');
+                    break;
                 }
-
-                /* Label the Current values */
-                Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
-                Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 20, ca, cc);
-
-                if (use_bigtile)
-                {
-                    if (ca & 0x80)
-                        Term_putch(44, 20, 255, -1);
-                    else
-                        Term_putch(44, 20, 0, ' ');
-                }
-
-                /* Prompt */
-                Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
-
-                /* Get a command */
-                cx = settings_wait_key();
+                cx = ui_information_scene_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7449,58 +6735,22 @@ void do_cmd_visuals(void)
         {
             static int f = 0;
 
-            /* Prompt */
-            prt("Command: Change feature attr/chars", 15, 0);
-
-            /* Hack -- query until done */
             while (1)
             {
                 feature_type* f_ptr = &f_info[f];
+                byte da = (byte)f_ptr->d_attr;
+                byte dc = (byte)f_ptr->d_char;
+                byte ca = (byte)f_ptr->x_attr;
+                byte cc = (byte)f_ptr->x_char;
+                int cx;
 
-                byte da = (byte)(f_ptr->d_attr);
-                byte dc = (byte)(f_ptr->d_char);
-                byte ca = (byte)(f_ptr->x_attr);
-                byte cc = (byte)(f_ptr->x_char);
-
-                /* Label the object */
-                Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Terrain = %d, Name = %-40.40s", f,
-                        (f_name + f_ptr->name)));
-
-                /* Label the Default values */
-                Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
-                Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 19, da, dc);
-
-                if (use_bigtile)
+                if (!settings_visual_present_ui_scene(
+                        "Feature Attr/Char", "Terrain", f,
+                        f_name + f_ptr->name, da, dc, ca, cc))
                 {
-                    if (da & 0x80)
-                        Term_putch(44, 19, 255, -1);
-                    else
-                        Term_putch(44, 19, 0, ' ');
+                    break;
                 }
-
-                /* Label the Current values */
-                Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
-                Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 20, ca, cc);
-
-                if (use_bigtile)
-                {
-                    if (ca & 0x80)
-                        Term_putch(44, 20, 255, -1);
-                    else
-                        Term_putch(44, 20, 0, ' ');
-                }
-
-                /* Prompt */
-                Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
-
-                /* Get a command */
-                cx = settings_wait_key();
+                cx = ui_information_scene_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7531,59 +6781,22 @@ void do_cmd_visuals(void)
         {
             static int f = 0;
 
-            /* Prompt */
-            prt("Command: Change flavor attr/chars", 15, 0);
-
-            /* Hack -- query until done */
             while (1)
             {
                 flavor_type* flavor_ptr = &flavor_info[f];
+                byte da = (byte)flavor_ptr->d_attr;
+                byte dc = (byte)flavor_ptr->d_char;
+                byte ca = (byte)flavor_ptr->x_attr;
+                byte cc = (byte)flavor_ptr->x_char;
+                int cx;
 
-                byte da = (byte)(flavor_ptr->d_attr);
-                byte dc = (byte)(flavor_ptr->d_char);
-                byte ca = (byte)(flavor_ptr->x_attr);
-                byte cc = (byte)(flavor_ptr->x_char);
-
-                /* Label the object */
-                Term_putstr(5, 17, -1, TERM_WHITE,
-                    format("Flavor = %d, Text = %-40.40s", f,
-                        (flavor_text + flavor_ptr->text)));
-
-                /* Label the Default values */
-                Term_putstr(10, 19, -1, TERM_WHITE,
-                    format("Default attr/char = %3d / %3d", da, dc));
-                Term_putstr(40, 19, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 19, da, dc);
-                Term_putch(43, 19, da, dc);
-
-                if (use_bigtile)
+                if (!settings_visual_present_ui_scene(
+                        "Flavor Attr/Char", "Flavor", f,
+                        flavor_text + flavor_ptr->text, da, dc, ca, cc))
                 {
-                    if (da & 0x80)
-                        Term_putch(44, 19, 255, -1);
-                    else
-                        Term_putch(44, 19, 0, ' ');
+                    break;
                 }
-
-                /* Label the Current values */
-                Term_putstr(10, 20, -1, TERM_WHITE,
-                    format("Current attr/char = %3d / %3d", ca, cc));
-                Term_putstr(40, 20, -1, TERM_WHITE, "<< ? >>");
-                Term_putch(43, 20, ca, cc);
-
-                if (use_bigtile)
-                {
-                    if (ca & 0x80)
-                        Term_putch(44, 20, 255, -1);
-                    else
-                        Term_putch(44, 20, 0, ' ');
-                }
-
-                /* Prompt */
-                Term_putstr(
-                    0, 22, -1, TERM_WHITE, "Command (n/N/a/A/c/C/'s'hade): ");
-
-                /* Get a command */
-                cx = settings_wait_key();
+                cx = ui_information_scene_wait_key();
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7741,144 +6954,34 @@ static bool askfor_color_values(int idx)
  */
 static void modify_colors(void)
 {
-    int x, y, idx, old_idx;
+    int idx = 0;
+    int scroll = 0;
     char ch;
-    char msg[100];
-
-    /* Flags */
-    bool do_move, do_update;
-
-    /* Clear the screen */
-    Term_clear();
-
-    /* Draw the color table */
-    for (idx = 0; idx < MAX_COLORS; idx++)
-    {
-        /* Get coordinates, the x value is adjusted to show a fake cursor */
-        x = COLOR_X(idx) + 1;
-        y = COLOR_Y(idx);
-
-        /* Show a sample of the color */
-        if (IS_BLACK(idx))
-            c_put_str(TERM_WHITE, BLACK_SAMPLE, y, x);
-        else
-            c_put_str(idx, COLOR_SAMPLE, y, x);
-    }
-
-    /* Show screen commands and help */
-    y = 2;
-    x = 42;
-    c_put_str(TERM_WHITE, "Commands:", y, x);
-    c_put_str(TERM_WHITE, "ESC: Return", y + 2, x);
-    c_put_str(TERM_WHITE, "Arrows: Move to color", y + 3, x);
-    c_put_str(TERM_WHITE, "k,K: Incr,Decr extra value", y + 4, x);
-    c_put_str(TERM_WHITE, "r,R: Incr,Decr red value", y + 5, x);
-    c_put_str(TERM_WHITE, "g,G: Incr,Decr green value", y + 6, x);
-    c_put_str(TERM_WHITE, "b,B: Incr,Decr blue value", y + 7, x);
-    c_put_str(TERM_WHITE, "c: Copy from color", y + 8, x);
-    c_put_str(TERM_WHITE, "v: Set specific values", y + 9, x);
-    c_put_str(TERM_WHITE, "First column: base colors", y + 11, x);
-    c_put_str(TERM_WHITE, "Second column: first shade, etc.", y + 12, x);
-
-    c_put_str(
-        TERM_WHITE, "Shades look like base colors in 16 color ports.", 23, 0);
-
-    /* Hack - We want to show the fake cursor */
-    do_move = true;
-    do_update = true;
-
-    /* Start with the first color */
-    idx = 0;
-
-    /* Used to erase the old position of the fake cursor */
-    old_idx = -1;
 
     while (1)
     {
-        /* Movement request */
-        if (do_move)
+        int term_hgt = Term ? Term->hgt : 24;
+        int visible_rows = term_hgt - 8;
+        int dir;
+
+        settings_color_editor_adjust_view(MAX_COLORS, visible_rows, idx,
+            &scroll);
+
+        if (!settings_color_editor_present_ui_scene(idx, scroll))
         {
-            /* Erase the old fake cursor */
-            if (old_idx >= 0)
-            {
-                /* Get coordinates */
-                x = COLOR_X(old_idx);
-                y = COLOR_Y(old_idx);
-
-                /* Draw spaces */
-                c_put_str(TERM_WHITE, " ", y, x);
-                c_put_str(TERM_WHITE, " ", y, x + 4);
-            }
-
-            /* Show the current fake cursor */
-            /* Get coordinates */
-            x = COLOR_X(idx);
-            y = COLOR_Y(idx);
-
-            /* Draw the cursor */
-            c_put_str(TERM_WHITE, ">", y, x);
-            c_put_str(TERM_WHITE, "<", y, x + 4);
-
-            /* Format the name of the color */
-            SDL_strlcpy(msg,
-                format("Color = %d (0x%02X), Name = %s", idx, idx,
-                    get_ext_color_name(idx)),
-                sizeof(msg));
-
-            /* Show the name and some whitespace */
-            c_put_str(TERM_WHITE, format("%-40s", msg), 2, 0);
+            return;
         }
+        ch = (char)ui_information_scene_wait_key();
 
-        /* Color update request */
-        if (do_update)
-        {
-            /* Get coordinates, adjust x */
-            x = COLOR_X(idx) + 1;
-            y = COLOR_Y(idx);
-
-            /* Hack - Redraw the sample if needed */
-            if (IS_BLACK(idx))
-                c_put_str(TERM_WHITE, BLACK_SAMPLE, y, x);
-            else
-                c_put_str(idx, COLOR_SAMPLE, y, x);
-
-            /* Notify the changes in the color table to the terminal */
-            Term_xtra(TERM_XTRA_REACT, 0);
-
-            /* The user is playing with white, redraw all */
-            if (idx == TERM_WHITE)
-                Term_redraw();
-
-            /* Or reduce flickering by redrawing the changes only */
-            else
-                Term_redraw_section(x, y, x + 2, y);
-        }
-
-        /* Common code, show the values in the color table */
-        if (do_move || do_update)
-        {
-            /* Format the view of the color values */
-            SDL_strlcpy(msg,
-                format("K = %d / R,G,B = %d, %d, %d",
-                    angband_color_table[idx][0], angband_color_table[idx][1],
-                    angband_color_table[idx][2], angband_color_table[idx][3]),
-                sizeof(msg));
-
-            /* Show color values and some whitespace */
-            c_put_str(TERM_WHITE, format("%-40s", msg), 4, 0);
-        }
-
-        /* Reset flags */
-        do_move = false;
-        do_update = false;
-        old_idx = -1;
-
-        /* Get a command */
-        if (!get_com("Command: Modify colors ", &ch))
-            break;
+        dir = target_dir(ch);
+        if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+            ch = I2D(dir);
 
         switch (ch)
         {
+        case ESCAPE:
+            return;
+
         /* Down */
         case '2':
         {
@@ -7886,14 +6989,8 @@ static void modify_colors(void)
             if (idx + 1 >= MAX_COLORS)
                 break;
 
-            /* Erase the old cursor */
-            old_idx = idx;
-
             /* Get the new position */
             ++idx;
-
-            /* Request movement */
-            do_move = true;
             break;
         }
 
@@ -7904,14 +7001,8 @@ static void modify_colors(void)
             if (idx - 1 < 0)
                 break;
 
-            /* Erase the old cursor */
-            old_idx = idx;
-
             /* Get the new position */
             --idx;
-
-            /* Request movement */
-            do_move = true;
             break;
         }
 
@@ -7922,14 +7013,8 @@ static void modify_colors(void)
             if (idx - 16 < 0)
                 break;
 
-            /* Erase the old cursor */
-            old_idx = idx;
-
             /* Get the new position */
-            idx -= 16;
-
-            /* Request movement */
-            do_move = true;
+            idx -= MAX_BASE_COLORS;
             break;
         }
 
@@ -7937,17 +7022,11 @@ static void modify_colors(void)
         case '6':
         {
             /* Check bounds */
-            if (idx + 16 >= MAX_COLORS)
+            if (idx + MAX_BASE_COLORS >= MAX_COLORS)
                 break;
 
-            /* Erase the old cursor */
-            old_idx = idx;
-
             /* Get the new position */
-            idx += 16;
-
-            /* Request movement */
-            do_move = true;
+            idx += MAX_BASE_COLORS;
             break;
         }
 
@@ -7984,9 +7063,6 @@ static void modify_colors(void)
             angband_color_table[idx][1] = angband_color_table[src][1];
             angband_color_table[idx][2] = angband_color_table[src][2];
             angband_color_table[idx][3] = angband_color_table[src][3];
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -7998,9 +7074,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *k_ptr = (byte)(*k_ptr + 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8012,9 +7085,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *k_ptr = (byte)(*k_ptr - 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8026,9 +7096,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *r_ptr = (byte)(*r_ptr + 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8040,9 +7107,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *r_ptr = (byte)(*r_ptr - 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8054,9 +7118,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *g_ptr = (byte)(*g_ptr + 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8068,9 +7129,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *g_ptr = (byte)(*g_ptr - 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8082,9 +7140,6 @@ static void modify_colors(void)
 
             /* Modify the value */
             *b_ptr = (byte)(*b_ptr + 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
@@ -8096,18 +7151,13 @@ static void modify_colors(void)
 
             /* Modify the value */
             *b_ptr = (byte)(*b_ptr - 1);
-
-            /* Request update */
-            do_update = true;
             break;
         }
 
-            /* Ask for specific values */
+        /* Ask for specific values */
         case 'v':
-        {
-            do_update = askfor_color_values(idx);
+            (void)askfor_color_values(idx);
             break;
-        }
         }
     }
 }
@@ -8147,14 +7197,7 @@ void do_cmd_colors(void)
         {
             /* Ask for and load a user pref file */
             do_cmd_pref_file_hack(8);
-
-            /* Could skip the following if loading cancelled XXX XXX XXX */
-
-            /* Mega-Hack -- React to color changes */
-            Term_xtra(TERM_XTRA_REACT, 0);
-
-            /* Mega-Hack -- Redraw physical windows */
-            Term_redraw();
+            do_cmd_redraw();
         }
 
 #ifdef ALLOW_COLORS
@@ -8175,7 +7218,7 @@ void do_cmd_colors(void)
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
             /* Get a filename */
-            if (!askfor_aux(ftmp, sizeof(ftmp)))
+            if (!term_get_string("File: ", ftmp, sizeof(ftmp)))
                 continue;
 
             /* Build the filename */

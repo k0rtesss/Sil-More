@@ -949,8 +949,7 @@ void app_session_set_cursor_visible(app_session* session, bool visible)
 
 bool app_session_interactions_enabled(const app_session* session)
 {
-    return session && runtime_cli_snapshot_renderer()
-        && (session->snapshot.scene == APP_SCENE_KIND_DUNGEON);
+    return session && (session->snapshot.scene == APP_SCENE_KIND_DUNGEON);
 }
 
 const app_interaction_state* app_session_interaction(

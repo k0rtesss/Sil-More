@@ -309,7 +309,7 @@ static bool pickup_pile_scene_enter(pickup_pile_scene_scope* scope)
         return false;
 
     memset(scope, 0, sizeof(*scope));
-    if (!runtime_cli_snapshot_renderer() || !session)
+    if (!session)
         return false;
 
     snapshot = app_session_snapshot(session);

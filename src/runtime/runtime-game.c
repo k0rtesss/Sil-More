@@ -18,6 +18,7 @@
 #include "score/score_runs.h"
 #include "score/score_ui.h"
 #include "ui/ui-death.h"
+#include "ui/ui-information-scene.h"
 
 #include <limits.h>
 #include <stdint.h>
@@ -47,6 +48,11 @@ static bool death_processing = false;
 static bool runtime_snapshot_prompt_active(void)
 {
     return app_session_interactions_enabled(app_session_current());
+}
+
+static bool runtime_footer_uses_semantic_ui(void)
+{
+    return ui_information_scene_supported();
 }
 
 static void runtime_snapshot_prompt_begin(u16b reason, u16b flags,
@@ -179,6 +185,7 @@ void do_cmd_save_game(void)
 static void close_game_aux(void)
 {
     bool wants_to_quit = false;
+    bool semantic_footer = runtime_footer_uses_semantic_ui();
     high_score the_score;
     int choice = 0, highlight = 1;
 
@@ -243,14 +250,13 @@ static void close_game_aux(void)
     char curr_time[30], sheet[90];
     time_t ct = time((time_t*)0);
     (void)strftime(curr_time, 30, "%Y%m%d-%H%M%S.txt", localtime(&ct));
-    sprintf(sheet, "%s-%s", op_ptr->full_name, curr_time);
+    strnfmt(sheet, sizeof(sheet), "%s-%s", op_ptr->full_name, curr_time);
     errr err;
-    screen_save();
     err = file_character(sheet, false);
-    screen_load();
     if (err)
     {
-        Term_clear();
+        if (!semantic_footer)
+            Term_clear();
         msg_print("Automatic character dump failed!");
         message_flush();
     }
@@ -291,9 +297,11 @@ static void close_game_aux(void)
     }
 
     death_spectator_view();
-    Term_clear();
-
-    ui_death_print_tomb(&the_score);
+    if (!semantic_footer)
+    {
+        Term_clear();
+        ui_death_print_tomb(&the_score);
+    }
 
     flush();
     message_flush();
@@ -362,8 +370,11 @@ static void close_game_aux(void)
 
         if (!wants_to_quit && choice >= 1 && choice <= 6)
         {
-            Term_clear();
-            ui_death_print_tomb(&the_score);
+            if (!semantic_footer)
+            {
+                Term_clear();
+                ui_death_print_tomb(&the_score);
+            }
             flush();
             message_flush();
         }
@@ -638,6 +649,7 @@ void metarun_finalize_scores_and_saves(void)
 void backup_and_clear_saves(void)
 {
     char save_dir[1024];
+    bool semantic_footer = runtime_footer_uses_semantic_ui();
 
     strnfmt(save_dir, sizeof(save_dir), "%s", ANGBAND_DIR_SAVE);
     log_info("Checking for save files to backup in: %s", save_dir);
@@ -695,8 +707,11 @@ void backup_and_clear_saves(void)
     time_t now;
     struct tm* timeinfo;
 
-    prt("[Creating save file backup folder...]", 0, 0);
-    Term_fresh();
+    if (!semantic_footer)
+    {
+        prt("[Creating save file backup folder...]", 0, 0);
+        Term_fresh();
+    }
 
     log_info("Found save files to backup and clear");
     log_trace("Starting folder-based backup process for save files");
@@ -794,7 +809,8 @@ void backup_and_clear_saves(void)
     }
 #endif
 
-    Term_erase(0, 0, 255);
+    if (!semantic_footer)
+        Term_erase(0, 0, 255);
     if (files_moved > 0) {
         msg_format("Backed up %d save file%s to %s",
             files_moved, (files_moved == 1) ? "" : "s", backup_folder);

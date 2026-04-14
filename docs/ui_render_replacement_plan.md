@@ -139,7 +139,10 @@ forward UI work.
 - The biggest concentrated remaining cluster is now persistent chrome and
   shared display ownership:
   - `src/ui/ui-status.c`
+  - `src/app/app-scene-dungeon.c`
   - `src/util-prompt.c`
+  - `src/util-message.c`
+  - `src/runtime/runtime-game.c`
   - `src/melee/melee-combat-display.c`
   - `src/quest/quest-ui.c`
   - `src/ui/ui-character-screen.c`
@@ -147,6 +150,16 @@ forward UI work.
   - `src/object/object-ui-display.c`
   - these still carry substantial term-era layout or rendering debt even where
     their top-level SDL entry path is already semantic
+- The remaining blocker is not only "legacy API debt"; it is still active
+  grid-based render ownership on the normal SDL path:
+  - left rail and bottom bar still render through fixed row/column contracts in
+    `src/ui/ui-status.c`
+  - prompt and confirm flows still render through terminal cursor and erase
+    operations in `src/util-prompt.c`
+  - compact layout decisions for dungeon chrome still consult `Term->wid` in
+    `src/app/app-scene-dungeon.c`
+  - nearby/look/object-display families still build SDL-visible UI from term
+    width, height, and row math
 - Menu-transition flash debt still exists:
   - stale previous screens can still flash briefly when opening or switching
     menus
@@ -196,29 +209,35 @@ forward UI work.
 - The current blocker is no longer "migrate the document producers first".
 - The bridge-deletion story is no longer the pacing item.
 - The current blocker is now:
-  - migrating persistent chrome and shared display owners off term-era layout
-    and rendering contracts
+  - removing grid-based render ownership from persistent chrome and shared SDL
+    overlays
   - finishing the `cmd-ui-settings.c` residual tail
   - removing stale restore or snapshot flashes when opening menus
   - finishing the remaining item/display helper side loops and isolated
     fallback paths
   - finishing the residual bespoke workflow families such as birth, smithing,
     and remaining metarun side flows
-- After `p1`, the highest-leverage next slice is now persistent chrome and
-  shared display, with a small parallel carry-over for the remaining settings
-  tail.
+- After `p2`, the highest-leverage next slice is still persistent chrome and
+  shared display, specifically because it is the main normal-SDL grid-render
+  holdout, with a small parallel carry-over for the remaining settings tail.
 
 ## Next Slices
 ### Slice: Persistent Chrome And Shared Display (`OVER1-B`)
 Goal:
 - migrate the remaining persistent chrome and shared display owners off term
   rows and term render helpers on the normal SDL path
+- remove grid-based render ownership for always-visible SDL chrome instead of
+  merely wrapping the existing grid logic
 
 Why this is next:
 - `p1` already removed most of the browser-heavy family from the audit
+- `p2` removed much of the browser/detail grid rendering from file viewer,
+  score, quest, combat display, and character helper surfaces
 - `src/ui/ui-status.c` is now the single largest remaining hotspot
 - prompt/chrome ownership still leaks across multiple SDL surfaces and is now
   the main cross-cutting blocker
+- this is now the main place where normal SDL still behaves like a terminal
+  renderer with fixed rows, columns, and compact-width checks
 
 Primary targets:
 - `src/ui/ui-status.c`
@@ -235,6 +254,8 @@ Approach:
 - remove normal SDL-path dependencies on `Term_putstr()`, `Term_erase()`,
   `Term_get_size()`, `screen_save()`, and `screen_load()` for the left rail,
   message strip, and bottom bar
+- remove normal SDL-path layout decisions that still depend on `Term->wid`,
+  `Term->hgt`, or fixed row/column placement for chrome
 - keep true legacy or compatibility rendering only where it is intentionally
   outside the normal SDL path
 
@@ -243,6 +264,8 @@ Exit when:
   normal SDL path
 - normal SDL play no longer derives chrome layout from `Term->wid`,
   `Term->hgt`, or saved-screen restore ownership
+- normal SDL chrome is no longer fundamentally a grid renderer with semantic
+  data pasted into term rows
 
 ### Slice: Settings Residual Tail
 Goal:
@@ -331,6 +354,31 @@ Debt-removal rule for every slice in this section:
 - The bridge-deletion slice is complete in the working tree.
 - The main selector and several document or browser families are already
   semantic on the SDL path.
+- `p2` materially reduced the audit again:
+  - `inkey()`: 50 -> 43
+  - `screen_save()` / `screen_load()`: 72 -> 60
+  - direct `Term_*`: 860 -> 695
+  - `get_sdl_*` / `set_sdl_*` outside platform code: 166 -> 151
+- Effective `p2` wins:
+  - `ui-file-viewer.c` is effectively out of the audit
+  - `score_ui.c` is effectively out of the audit
+  - `quest-ui.c` is mostly off grid-era body rendering now
+  - `melee-combat-display.c` moved substantially off term/grid ownership
+  - `ui-character-screen.c` and `cmd-ui-query.c` both moved materially
+  - `cmd-ui-settings.c` improved again, especially on `screen_save()` /
+    `screen_load()`
+- `p2` was primarily a browser/detail and document-body cleanup batch.
+- `p2` did not land the persistent chrome/status slice:
+  - `ui-status.c` is still the top `Term_*` hotspot
+  - `util-prompt.c` still owns prompt grid rendering
+  - `util-message.c`, `runtime-game.c`, and `app-scene-dungeon.c` still carry
+    normal-SDL chrome/grid assumptions
+- Effective `p2` landing status by planned slices:
+  - `P2-B` settings tail: partial but meaningful progress
+  - `P2-C` query/character helpers: largely landed
+  - `P2-D` file-viewer/score detail: largely landed
+  - `P2-E` quest/combat display: largely landed
+  - `P2-A` persistent chrome/status: not yet landed
 - `p1` materially reduced the audit:
   - `inkey()`: 67 -> 50
   - `screen_save()` / `screen_load()`: 107 -> 72
@@ -348,23 +396,32 @@ Debt-removal rule for every slice in this section:
   - `object-ui-display.c` still owns shared term-era item display helpers
 - The current whole-plan debt is concentrated in:
   - persistent chrome and shared display owners
+  - the remaining normal-SDL grid-render owners
   - the remaining `cmd-ui-settings.c` tail
   - menu or prompt transition ownership
   - late item or bespoke workflows
 
 ### Recommended Order
-- First: Persistent chrome and shared display (`OVER1-B`)
+- First: split persistent chrome and shared display (`OVER1-B`) into parallel
+  owners
 - In parallel: settings residual tail
-- Then: Menu and prompt transition cleanup
+- In parallel: main-menu/object-selector transition cleanup
+- Then: look/nearby/object-display families that still derive SDL layout from
+  terminal grid rules
 - Last: item-family remainder plus birth or smithing or remaining metarun side
   flows
 
 ### Parallelization Guidance
+- Split `OVER1-B` into three disjoint owners:
+  - status rail + chrome data contract
+  - prompt/message/runtime footer
+  - SDL dungeon chrome renderer
 - Keep one owner on the remaining settings tail.
-- Persistent chrome/shared display can now run in parallel with the settings
-  tail because the write sets are disjoint.
-- Menu/prompt transition cleanup can run after or alongside those slices only
-  if `util-prompt.c` ownership is clearly assigned.
+- Main-menu/object-selector transition cleanup can run in parallel as long as
+  `util-prompt.c` stays owned by the prompt/message slice.
+- Treat look/nearby/object-display as the next follow-up family after chrome,
+  not as a substitute for it; they are still grid-based, but they are not the
+  always-visible SDL chrome.
 - Leave birth, smithing, and the remaining metarun side flows for after the
   common browser, prompt, and chrome patterns are settled.
 
@@ -599,10 +656,16 @@ Validation:
 - summarize what part of smithing remains term-owned after your change
 ```
 
-### Launch Batch 2: Launch Now After `p1`
-These are the next top-level slices after the landed `p1` batch.
+### Launch Batch 2: Remaining After `p2`
+These are the remaining top-level slices from the old post-`p1` batch.
+- Current status after `p2`:
+  - old `P2-C`, `P2-D`, and `P2-E` are largely landed
+  - old `P2-B` is partial and still active
+  - the old monolithic `P2-A` should now be treated as three parallel agents
+  - if you launch this batch, do not separately launch the older `P1-D`
+    prompt cleanup slice at the same time
 
-#### Agent P2-A: Persistent Chrome And Status
+#### Agent P2-A1: Status Rail And Chrome Data Contract
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -615,19 +678,73 @@ You are not alone in the codebase. Do not revert edits by other agents.
 
 Write set:
 - src/ui/ui-status.c
-- src/util-message.c
-- src/runtime/runtime-game.c
 - src/app/app-scene-dungeon.c
 - src/app/app-scene-dungeon.h
-- src/sdl-scene-dungeon.c
 
 Goal:
-- migrate left rail, message strip, and bottom-bar ownership further off term
-  rows/render helpers on the normal SDL path
+- remove left-rail and always-visible chrome data ownership from term-grid
+  rendering in `ui-status.c`
+- expose semantic chrome data through the dungeon-scene contract instead of
+  assuming fixed term rows/columns
+- remove normal-SDL chrome layout decisions that still depend on `Term->wid` or
+  `Term->hgt` in the scene contract
 
 Validation:
 - run py -3 tools/ui_debt_audit.py --check
-- summarize what chrome/prompt/message debt still remains after your change
+- summarize what status/chrome grid-render debt still remains after your change
+```
+
+#### Agent P2-A2: Prompt, Message, And Runtime Footer
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/util-prompt.c
+- src/util-message.c
+- src/runtime/runtime-game.c
+
+Goal:
+- remove normal-SDL prompt/message/footer ownership from terminal cursor, erase,
+  and saved-screen operations
+- preserve gameplay prompts, confirmations, recalls, and startup/footer flows
+- delete grid-based prompt rendering on the SDL path instead of wrapping it
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what prompt/message/runtime grid-render debt still remains after
+  your change
+```
+
+#### Agent P2-A3: SDL Dungeon Chrome Renderer
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/sdl-scene-dungeon.c
+
+Goal:
+- consume semantic chrome data in the SDL dungeon renderer without reintroducing
+  terminal row/column assumptions
+- keep dungeon scale and overlay/chrome scale independent
+- preserve the shipped Sil presentation while deleting grid-era placement logic
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what SDL-side chrome/grid rendering still remains after your change
 ```
 
 #### Agent P2-B: Settings Tail Cleanup
@@ -655,7 +772,7 @@ Validation:
 - summarize which settings subflows remain term-owned after your change
 ```
 
-#### Agent P2-C: Query And Character Helpers
+#### Agent P2-F: Main Menu And Object Selector Transition Cleanup
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -667,64 +784,17 @@ Subagent support:
 You are not alone in the codebase. Do not revert edits by other agents.
 
 Write set:
-- src/cmd/ui/cmd-ui-query.c
-- src/ui/ui-character-screen.c
+- src/cmd/ui/cmd-ui-main-menu.c
+- src/object/object-ui-select.c
 
 Goal:
-- clean up the remaining query/character helper debt after the main browser
-  family settles
+- remove stale transition flashes and saved-screen bridging that still remain in
+  main-menu/object-selector flows
+- preserve prompts and behavior, but do not touch `util-prompt.c` in this slice
 
 Validation:
 - run py -3 tools/ui_debt_audit.py --check
-- summarize which query/character helper flows remain term-owned
-```
-
-#### Agent P2-D: File Viewer And Score Detail Screens
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-Subagent support:
-- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
-  xhigh reasoning
-- if you delegate code edits, keep them fully inside your write set
-
-You are not alone in the codebase. Do not revert edits by other agents.
-
-Write set:
-- src/ui/ui-file-viewer.c
-- src/score/score_ui.c
-
-Goal:
-- remove remaining term-owned body/layout debt from file-viewer and score
-  detail surfaces on the SDL path
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which file-viewer/score flows remain term-owned
-```
-
-#### Agent P2-E: Quest And Combat Display Cleanup
-```text
-Use model gpt-5.4 with xhigh reasoning.
-
-Subagent support:
-- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
-  xhigh reasoning
-- if you delegate code edits, keep them fully inside your write set
-
-You are not alone in the codebase. Do not revert edits by other agents.
-
-Write set:
-- src/quest/quest-ui.c
-- src/melee/melee-combat-display.c
-
-Goal:
-- remove remaining term-era body rendering/layout ownership from quest UI and
-  combat display surfaces on the SDL path
-
-Validation:
-- run py -3 tools/ui_debt_audit.py --check
-- summarize which quest/combat flows remain term-owned
+- summarize which stale-screen transitions remain after your change
 ```
 
 ### Launch Batch 3: Tail Cleanup

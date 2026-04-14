@@ -24,6 +24,18 @@ static int message_topline_wrap_width(bool render_legacy_topline)
     return w;
 }
 
+static bool message_use_semantic_dungeon_cursor(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!session || !sdl_scene_stack_handles_main_view())
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    return snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON;
+}
+
 /*
  * Flush the screen, make a noise
  */
@@ -577,6 +589,9 @@ static void message_topline_append(cptr text, u16b type, byte color);
 
 void move_cursor(int row, int col)
 {
+    if (message_use_semantic_dungeon_cursor())
+        return;
+
     Term_gotoxy(col, row);
     app_session_note_cursor_absolute(app_session_current(), row, col,
         !inkey_cursor_hidden());
@@ -591,6 +606,7 @@ static void msg_flush(int x)
     app_wait_scope scope;
     app_session* session = app_session_current();
     bool render_legacy_topline = message_use_legacy_topline_rendering();
+    bool semantic_cursor = message_use_semantic_dungeon_cursor();
 
     /* Pause for response */
     if (render_legacy_topline)
@@ -598,9 +614,24 @@ static void msg_flush(int x)
 
     /* Place the cursor on the player or target */
     if (hilite_player)
-        move_cursor_relative(p_ptr->py, p_ptr->px);
+    {
+        if (semantic_cursor)
+            app_session_note_cursor_relative(session, p_ptr->py, p_ptr->px);
+        else
+            move_cursor_relative(p_ptr->py, p_ptr->px);
+    }
     if (hilite_target && target_sighted())
-        move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+    {
+        if (semantic_cursor)
+        {
+            app_session_note_cursor_relative(session, p_ptr->target_row,
+                p_ptr->target_col);
+        }
+        else
+        {
+            move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
+        }
+    }
 
     if (!auto_more)
     {

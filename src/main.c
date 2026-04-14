@@ -348,7 +348,7 @@ int main(int argc, char* argv[])
 
         case 'X':
         {
-            runtime_cli_set_snapshot_renderer(false);
+            /* Snapshot renderer fallback mode has been removed. */
             break;
         }
 

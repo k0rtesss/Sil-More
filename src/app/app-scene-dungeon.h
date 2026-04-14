@@ -14,7 +14,7 @@ struct app_session;
 struct app_wait_state;
 
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
-#define APP_DUNGEON_STATUS_FORMAT_VERSION 1u
+#define APP_DUNGEON_STATUS_FORMAT_VERSION 2u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 4u
 #define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
@@ -29,6 +29,7 @@ struct app_wait_state;
 #define APP_DUNGEON_COMBAT_ENTRY_MAX 100u
 #define APP_DUNGEON_MESSAGE_LIMIT 256u
 #define APP_DUNGEON_LEFT_PANEL_ROWS_MAX 64u
+#define APP_DUNGEON_FOOTER_ITEM_MAX 12u
 
 #define APP_PACK_COORD(y, x) \
     ((((u32b)((u16b)(y))) << 16) | ((u32b)((u16b)(x))))
@@ -68,10 +69,9 @@ typedef enum app_map_cell_flag {
 } app_map_cell_flag;
 
 typedef enum app_dungeon_snapshot_flag {
-    APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_WIDTH = 0x0001u,
-    APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT = 0x0002u,
-    APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL = 0x0004u,
-    APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0008u
+    APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT = 0x0001u,
+    APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL = 0x0002u,
+    APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0004u
 } app_dungeon_snapshot_flag;
 
 typedef enum app_dungeon_overlay_snapshot_flag {
@@ -79,11 +79,11 @@ typedef enum app_dungeon_overlay_snapshot_flag {
     APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU = 0x0001u
 } app_dungeon_overlay_snapshot_flag;
 
-typedef struct app_text_snapshot {
+typedef struct app_footer_item_snapshot {
     byte attr;
     byte active;
     char text[APP_DUNGEON_STATUS_TEXT_MAX];
-} app_text_snapshot;
+} app_footer_item_snapshot;
 
 typedef struct app_cursor_snapshot {
     byte visible;
@@ -135,47 +135,12 @@ typedef struct app_map_snapshot {
 typedef struct app_status_snapshot {
     u16b format_version;
     u16b flags;
-    s32b exp;
-    s16b depth;
-    s16b hp_cur;
-    s16b hp_max;
-    s16b voice_cur;
-    s16b voice_max;
-    s16b str_use;
-    s16b dex_use;
-    s16b con_use;
-    s16b gra_use;
-    s16b melee_skill;
-    s16b archery_skill;
-    s16b evasion_skill;
-    s16b tracked_m_idx;
-    s16b tracked_hp_cur;
-    s16b tracked_hp_max;
-    byte hp_attr;
-    byte voice_attr;
-    byte tracked_hp_attr;
-    byte tracked_visible;
-    char player_name[APP_DUNGEON_NAME_TEXT_MAX];
-    app_text_snapshot melee_text;
-    app_text_snapshot archery_text;
-    app_text_snapshot evasion_text;
-    app_text_snapshot quiver_text;
-    app_text_snapshot light_text;
-    app_text_snapshot depth_text;
-    app_text_snapshot terrain_text;
-    app_text_snapshot hunger_text;
-    app_text_snapshot blind_text;
-    app_text_snapshot confused_text;
-    app_text_snapshot afraid_text;
-    app_text_snapshot cut_text;
-    app_text_snapshot poisoned_text;
-    app_text_snapshot stun_text;
-    app_text_snapshot state_text;
-    app_text_snapshot speed_text;
-    app_text_snapshot song_text;
-    app_text_snapshot tracked_name_text;
-    app_text_snapshot tracked_health_text;
-    app_text_snapshot tracked_alertness_text;
+    u16b left_panel_row_count;
+    u16b footer_item_count;
+    u16b left_panel_min_width_px;
+    u16b left_panel_width_cap_px;
+    app_ui_row left_panel_rows[APP_DUNGEON_LEFT_PANEL_ROWS_MAX];
+    app_footer_item_snapshot footer_items[APP_DUNGEON_FOOTER_ITEM_MAX];
 } app_status_snapshot;
 
 typedef struct app_message_line_snapshot {
@@ -266,6 +231,11 @@ typedef struct app_dungeon_snapshot {
 
 void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
+bool app_status_snapshot_build_live(app_status_snapshot* status,
+    const struct app_wait_state* wait_state);
+byte app_status_depth_attr_live(void);
+bool app_status_state_text_live(char* out_long, size_t out_long_sz,
+    char* out_short, size_t out_short_sz, byte* out_attr);
 bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
     u64b revision, const struct app_wait_state* wait_state,
     const app_interaction_state* interaction,

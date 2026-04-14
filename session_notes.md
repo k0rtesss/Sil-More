@@ -1,5 +1,25 @@
 # Session notes
 
+## 2026-04-14: UI render replacement P2-F main-menu and selector transition cleanup
+- `src/cmd/ui/cmd-ui-main-menu.c`
+  - removed the SDL-path snapshot replacement and restore choreography for the main menu; the menu now requires a dungeon snapshot and owns only a dungeon overlay scene on the snapshot renderer path
+  - deleted the dead menu-snapshot clone or restore branch from this file and stopped falling back to the legacy saved-screen bridge when snapshot-overlay publication fails on the SDL path
+  - tightened the per-frame republish path so a failed overlay publish exits cleanly instead of dropping back into the legacy term-draw menu body mid-session
+  - removed the remaining non-snapshot main-menu body renderer and saved-screen wrapper entirely; the main-menu loop now requires the semantic overlay scene, publishes interaction state directly, and carries its prompt through footer actions instead of term-row writes
+- `src/object/object-ui-select.c`
+  - switched the snapshot selector from publishing a full `APP_SCENE_KIND_MENU` snapshot to publishing a dungeon overlay scene, matching the overlay ownership model used by the direct inventory or equipment semantic menus
+  - removed the selector-local previous-snapshot restore path; closing the selector now clears the dungeon overlay instead of swapping the whole snapshot back and forth
+  - tightened selector presentation so a failed snapshot overlay publish aborts the SDL selector path cleanly instead of waiting on a stale frame
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/cmd/ui/cmd-ui-main-menu.c.obj CMakeFiles/sil-core.dir/src/object/object-ui-select.c.obj --parallel`
+  - fixed one integration issue in `src/object/object-ui-select.c` by adding the missing `#include "runtime-cli.h"` for the new `runtime_cli_snapshot_renderer()` call
+  - `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - after removing the last main-menu legacy branch, the full incremental build still succeeds and the current repo-wide debt snapshot on this tree is `inkey=39`, `screen_save/screen_load=50`, `Term_*=573`
+  - post-change local debt snapshot:
+    - `src/cmd/ui/cmd-ui-main-menu.c`: `inkey=1`, `screen_save/screen_load=0`, `Term_*=108`
+    - `src/object/object-ui-select.c`: `inkey=1`, `screen_save/screen_load=0`, `Term_*=29`
+
 ## 2026-04-14: UI render replacement P2-E quest and combat cleanup
 - `src/quest/quest-ui.c`
   - deleted the dead legacy quest-status body renderer after `do_cmd_quest_status()` now routes entirely through `do_cmd_quest_status_information_scene()`

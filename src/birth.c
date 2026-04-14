@@ -2453,7 +2453,7 @@ static bool birth_menu_scene_supported(void)
 {
     app_session* session = app_session_current();
 
-    return runtime_cli_snapshot_renderer() && session
+    return session
         && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
 }
 

@@ -18,6 +18,7 @@
 #include "object/object-ui-display.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
+#include "runtime-cli.h"
 
 #include <ctype.h>
 
@@ -30,7 +31,6 @@ bool (*item_tester_hook)(const object_type*) = NULL;
 
 typedef struct item_selector_menu_scene_scope {
     bool active;
-    app_snapshot previous_snapshot;
 } item_selector_menu_scene_scope;
 
 static bool verify_item(cptr prompt, int item);
@@ -72,30 +72,24 @@ static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope
         return false;
 
     app_session_clear_interaction(session);
-    scope->previous_snapshot = *snapshot;
+    app_session_clear_dungeon_overlay_scene(session);
     scope->active = true;
     return true;
 }
 
-static void item_selector_menu_scene_restore(
-    item_selector_menu_scene_scope* scope, bool refresh)
+static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
 
-    if (!scope || !scope->active || !session)
-        return;
-
-    app_session_set_snapshot(session, &scope->previous_snapshot);
-    if (refresh)
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
-}
-
-static void item_selector_menu_scene_close(item_selector_menu_scene_scope* scope)
-{
     if (!scope)
         return;
 
-    item_selector_menu_scene_restore(scope, true);
+    if (scope->active && session)
+    {
+        app_session_clear_interaction(session);
+        app_session_clear_dungeon_overlay_scene(session);
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    }
     scope->active = false;
 }
 
@@ -534,7 +528,7 @@ static bool item_selector_menu_scene_present(item_selector_menu_scene_scope* sco
 
     if (!scope || !scope->active || !session || !scene)
         return false;
-    if (!app_session_publish_menu_scene(session, scene))
+    if (!app_session_publish_dungeon_overlay_scene(session, scene))
         return false;
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
@@ -812,7 +806,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
         {
             app_ui_scene scene;
 
-            if (item_selector_build_ui_scene(&scene, out_val,
+            if (!item_selector_build_ui_scene(&scene, out_val,
                     p_ptr->command_wrk, use_inven, use_equip, use_floor,
                     floor_list, visible_state.vis_inven_cnt,
                     visible_state.vis_inven, visible_state.vis_equip_cnt,
@@ -820,9 +814,15 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
                     visible_state.vis_floor,
                     visible_state.highlight_active
                         ? visible_state.highlight_row
-                        : -1))
+                        : -1)
+                || !item_selector_menu_scene_present(&menu_scene_scope, &scene))
             {
-                (void)item_selector_menu_scene_present(&menu_scene_scope, &scene);
+                log_warn("item selector: failed to present snapshot overlay");
+                item_selector_menu_scene_close(&menu_scene_scope);
+                p_ptr->command_see = false;
+                if (out_item)
+                    *out_item = false;
+                return false;
             }
         }
 
