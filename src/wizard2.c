@@ -974,9 +974,6 @@ static void do_cmd_wiz_play(void)
         o_ptr = &o_list[0 - item];
     }
 
-    /* Save screen */
-    screen_save();
-
     /* Get local object */
     i_ptr = &object_type_body;
 
@@ -1021,8 +1018,7 @@ static void do_cmd_wiz_play(void)
         }
     }
 
-    /* Load screen */
-    screen_load();
+    do_cmd_redraw();
 
     /* Accept change */
     if (changed)
@@ -1094,14 +1090,9 @@ static void wiz_create_item(int num)
 
     int i;
 
-    /* Save screen */
-    screen_save();
-
     /* Get object base type */
     k_idx = wiz_create_itemtype();
-
-    /* Load screen */
-    screen_load();
+    do_cmd_redraw();
 
     /* Return if failed */
     if (!k_idx)
@@ -2256,9 +2247,7 @@ void do_cmd_debug(void)
     /* Debug Options */
     case 'O':
     {
-        screen_save();
         do_cmd_options_aux(6, "Debug Options");
-        screen_load();
         break;
     }
 

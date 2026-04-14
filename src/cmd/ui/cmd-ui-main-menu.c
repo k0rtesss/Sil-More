@@ -612,37 +612,6 @@ static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
         highlight == id, "", label, meta ? meta : "");
 }
 
-static void main_menu_scene_add_footer_actions(app_ui_panel* panel)
-{
-    if (!panel)
-        return;
-
-    if (steamdeck_controls_active())
-    {
-        char confirm_label[16];
-        char back_label[16];
-
-        main_menu_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
-            sizeof(confirm_label));
-        main_menu_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "D-pad", "Select");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
-            confirm_label, "Open");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            back_label, "Back");
-        return;
-    }
-
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-        "8/2", "Move");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
-        "Enter", "Open");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "Esc", "Back");
-}
-
 static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
     bool death_view)
 {
@@ -664,7 +633,6 @@ static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
 
     panel->style = APP_UI_PANEL_STYLE_PLAIN;
     app_ui_panel_set_widths(panel, 300, 460);
-    main_menu_scene_add_footer_actions(panel);
 
     return main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
                death_view, "Character sheet      (c)", "")
@@ -738,98 +706,6 @@ static void main_menu_scene_leave(main_menu_scene_scope* scope, bool refresh)
     scope->active = false;
 }
 
-static void main_menu_publish_interaction(int highlight, bool death_view)
-{
-    app_session* session;
-
-    session = app_session_current();
-    if (!app_session_interactions_enabled(session))
-        return;
-
-    if (highlight < 1 || highlight > MAIN_MENU_MAX)
-        highlight = 1;
-    if (death_view && main_menu_choice_is_disabled(highlight))
-        highlight = MAIN_MENU_RETURN_GAME;
-
-    app_session_begin_interaction(session, APP_INTERACTION_KIND_LIST,
-        APP_WAIT_REASON_COMMAND_INPUT,
-        APP_INTERACTION_FLAG_CAN_CONFIRM
-            | APP_INTERACTION_FLAG_CAN_CANCEL
-            | APP_INTERACTION_FLAG_SHOW_OPTIONS
-            | APP_INTERACTION_FLAG_PLAIN_LIST);
-
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_CHARACTER) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_CHARACTER,
-        "Character sheet      (c)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_KNOWLEDGE) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_KNOWLEDGE,
-        "Known lore           (a)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_QUEST_STATUS) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_QUEST_STATUS,
-        "Quest status         (t)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_HALLS_OF_MANDOS) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_HALLS_OF_MANDOS,
-        "Halls of Mandos      (d)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_RUN_HISTORY) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_RUN_HISTORY,
-        "Run history          (v)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_MAP) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_MAP,
-        "Map                  (m)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_LOG) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_LOG,
-        "Log                  (l)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_COMBAT_HISTORY) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_COMBAT_HISTORY,
-        "Combat history       (x)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_HINT_MESSAGES) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_HINT_MESSAGES,
-        "Hint messages        (i)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_STORY) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_STORY,
-        "The story so far     (y)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_OPTIONS) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_OPTIONS,
-        "Options and misc     (o)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_HELP) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_HELP,
-        "Help                 (h)", "");
-    (void)app_session_add_interaction_option(session,
-        death_view ? TERM_L_DARK
-                   : ((highlight == MAIN_MENU_ABOUT) ? TERM_L_BLUE : TERM_WHITE),
-        0, true, highlight == MAIN_MENU_ABOUT,
-        "About                (b)", "");
-    (void)app_session_add_interaction_option(session,
-        death_view ? TERM_L_DARK
-                   : ((highlight == MAIN_MENU_SAVE) ? TERM_L_BLUE : TERM_WHITE),
-        0, !death_view, highlight == MAIN_MENU_SAVE,
-        "Save                 (s)", "");
-    (void)app_session_add_interaction_option(session,
-        death_view ? TERM_L_DARK
-                   : ((highlight == MAIN_MENU_SAVE_QUIT) ? TERM_L_BLUE : TERM_WHITE),
-        0, !death_view, highlight == MAIN_MENU_SAVE_QUIT,
-        "Quit with save       (q)", "");
-    (void)app_session_add_interaction_option(session,
-        (highlight == MAIN_MENU_RETURN_GAME) ? TERM_L_BLUE : TERM_WHITE,
-        0, true, highlight == MAIN_MENU_RETURN_GAME,
-        "Return to game       (r)", "");
-
-    app_session_set_interaction_selected(session,
-        (s16b)(highlight - 1));
-}
-
 static bool main_menu_action_opens_scene(int actiontype)
 {
     return actiontype == MAIN_MENU_CHARACTER
@@ -872,7 +748,6 @@ static int main_menu_aux(int* highlight, main_menu_scene_scope* menu_scene_scope
 
     if (death_view && main_menu_choice_is_disabled(*highlight))
         *highlight = MAIN_MENU_RETURN_GAME;
-    main_menu_publish_interaction(*highlight, death_view);
 
     /* Get key (while allowing menu commands) */
     inkey_set_cursor_hidden(true);

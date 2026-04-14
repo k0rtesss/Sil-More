@@ -982,8 +982,6 @@ extern void msg_debug(cptr fmt, ...);
 extern void message(u16b message_type, s16b extra, cptr message);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
 extern void message_flush(void);
-extern void screen_save(void);
-extern void screen_load(void);
 extern void c_put_str(byte attr, cptr str, int row, int col);
 extern void put_str(cptr str, int row, int col);
 extern void c_prt(byte attr, cptr str, int row, int col);

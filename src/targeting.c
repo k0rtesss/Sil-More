@@ -2571,8 +2571,6 @@ bool get_rep_dir(int* dp)
 
     char ch;
 
-    cptr p;
-
     app_session_push_wait_scope(app_session_current(), &wait_scope,
         APP_WAIT_REASON_TARGETING, 0, 0);
 
@@ -2592,14 +2590,17 @@ bool get_rep_dir(int* dp)
     /* Global direction */
     dir = p_ptr->command_dir;
 
+    message_flush();
+
     /* Get a direction */
     while (!dir)
     {
-        /* Choose a prompt */
-        p = "Direction (Escape to cancel)? ";
-
-        /* Get a command (or Cancel) */
-        if (!get_com(p, &ch))
+        /*
+         * Direction prompts are already represented by the active command
+         * flow. Avoid opening an extra modal prompt scene on the SDL path.
+         */
+        ch = targeting_inkey_with_wait_reason();
+        if (ch == ESCAPE)
             break;
 
         /* Convert keypress into a direction */

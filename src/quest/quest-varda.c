@@ -6,6 +6,7 @@
 #include "quest/quest.h"
 #include "quest/quest-internal.h"
 #include "log/log.h"
+#include "ui/ui-information-scene.h"
 
 void ensure_varda_ungoliant_active(void)
 {
@@ -241,96 +242,209 @@ static void describe_varda_choice(int a_idx, char* buf, size_t buf_len)
     }
 }
 
+static void varda_reward_scene_add_wrapped_text(app_ui_panel* panel, byte attr,
+    cptr text, size_t wrap_chars)
+{
+    const char* cursor = text;
+
+    if (!panel || !text || !text[0])
+        return;
+    if (wrap_chars < 8)
+        wrap_chars = 8;
+
+    while (*cursor && panel->body_line_count < APP_UI_BODY_LINE_MAX)
+    {
+        const char* line_start;
+        const char* line_end;
+        const char* last_space = NULL;
+        char line[APP_UI_TEXT_MAX];
+        size_t line_len;
+
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n')
+            cursor++;
+        if (!*cursor)
+            break;
+
+        line_start = cursor;
+        while (*cursor && *cursor != '\n'
+            && (size_t)(cursor - line_start) < wrap_chars)
+        {
+            if (*cursor == ' ' || *cursor == '\t')
+                last_space = cursor;
+            cursor++;
+        }
+
+        if (*cursor == '\n')
+        {
+            line_end = cursor;
+            cursor++;
+        }
+        else if (*cursor && last_space && last_space > line_start)
+        {
+            line_end = last_space;
+            cursor = last_space + 1;
+        }
+        else
+        {
+            line_end = cursor;
+        }
+
+        while (line_end > line_start
+            && (line_end[-1] == ' ' || line_end[-1] == '\t'))
+        {
+            line_end--;
+        }
+
+        line_len = (size_t)(line_end - line_start);
+        if (line_len == 0)
+            continue;
+        if (line_len >= sizeof(line))
+            line_len = sizeof(line) - 1;
+
+        memcpy(line, line_start, line_len);
+        line[line_len] = '\0';
+        (void)app_ui_panel_add_body_line(panel, attr, line);
+    }
+}
+
+static bool varda_reward_choice_scene_build(app_ui_scene* scene,
+    const int* choices, int choice_count, cptr* completion_texts, int text_count,
+    int selection)
+{
+    app_ui_panel* panel;
+    int i;
+
+    if (!scene || !choices || choice_count <= 0)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->accent_attr = TERM_L_GREEN;
+    app_ui_panel_set_widths(panel, 980, 1700);
+    app_ui_panel_set_title(panel, TERM_L_GREEN, "Starlight Triumph");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Choose your radiant gift.");
+
+    for (i = 0; i < text_count; i++)
+    {
+        if (!completion_texts[i] || !completion_texts[i][0])
+        {
+            (void)app_ui_panel_add_body_line(panel, TERM_WHITE, "");
+            continue;
+        }
+
+        varda_reward_scene_add_wrapped_text(panel, TERM_WHITE,
+            completion_texts[i], 80);
+    }
+
+    (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE,
+        "Choose your radiant gift:");
+
+    for (i = 0; i < choice_count; i++)
+    {
+        char key[APP_UI_KEY_MAX];
+        char label[APP_UI_LABEL_MAX];
+        char desc[120];
+        bool highlighted = (i == selection);
+
+        describe_varda_choice(choices[i], desc, sizeof(desc));
+        strnfmt(key, sizeof(key), "%c", 'a' + i);
+        strnfmt(label, sizeof(label), "%s", desc);
+        if (!app_ui_panel_add_row(panel, (s16b)i,
+                highlighted ? TERM_YELLOW : TERM_L_WHITE, true, highlighted,
+                key, label, NULL))
+        {
+            return false;
+        }
+    }
+
+    {
+        char desc[120];
+
+        describe_varda_choice(choices[selection], desc, sizeof(desc));
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected");
+        (void)app_ui_panel_add_detail_line(panel, TERM_L_WHITE, desc);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Press x to inspect the highlighted reward.");
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Enter", "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "x", "Inspect");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "Esc", "Cancel");
+    return true;
+}
+
 /*
  * Display Varda's reward selection in a scrollable menu integrated with quest completion text.
  * Returns the selected artefact index, or 0 if cancelled.
  */
 static int prompt_varda_reward_choice_menu(const int* choices, int choice_count, cptr* completion_texts, int text_count)
 {
-    int wid, hgt;
-    Term_get_size(&wid, &hgt);
-    
+    ui_information_scene_scope scope;
     int selection = 0;
-    bool done = false;
     int selected_artifact = 0;
-    
-    /* Save screen once */
-    screen_save();
 
-    while (!done) {
-        /* Clear screen */
-        Term_clear();
-        
-        /* Display title */
-        int row = 1;
-        cptr title = "Starlight Triumph";
-        Term_putstr((wid - strlen(title)) / 2, row, -1, TERM_L_GREEN, title);
-        row += 2;
-        
-        /* Display completion text */
-        for (int i = 0; i < text_count && row < hgt - 10; i++) {
-            if (completion_texts[i] && completion_texts[i][0] != '\0') {
-                display_wrapped_text(2, &row, completion_texts[i], TERM_WHITE, wid);
-            } else {
-                row++; /* Empty line for paragraph break */
-            }
+    if (!ui_information_scene_enter(&scope))
+        return 0;
+
+    while (true) {
+        app_ui_scene scene;
+        int key;
+        int dir;
+
+        if (!varda_reward_choice_scene_build(&scene, choices, choice_count,
+                completion_texts, text_count, selection)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return 0;
         }
-        
-        row++;
-        Term_putstr(2, row++, -1, TERM_L_BLUE, "Choose your radiant gift:");
-        row++;
-        
-        /* Display reward choices with highlighting */
-        char desc[120];
-        for (int i = 0; i < choice_count && row < hgt - 3; i++) {
-            describe_varda_choice(choices[i], desc, sizeof(desc));
-            
-            byte attr = (i == selection) ? TERM_YELLOW : TERM_L_WHITE;
-            char marker = (i == selection) ? '>' : ' ';
-            
-            char line_buf[140];
-            strnfmt(line_buf, sizeof(line_buf), "%c %c) %s", marker, 'a' + i, desc);
-            Term_putstr(2, row++, -1, attr, line_buf);
-        }
-        
-        /* Display controls */
-        row = hgt - 2;
-        Term_putstr(2, row, -1, TERM_L_DARK, "Arrows navigate   'x' Inspect   Space/Enter accept   Letter select");
-        
-        /* Position cursor at selection */
-        Term_gotoxy(2, 6 + text_count + 2 + selection);
-        Term_fresh();
-        
-        /* Get input */
-        char key = inkey();
-        
-        /* Handle input */
-        if (key == '\r' || key == '\n' || key == ' ' || key == '6') {
-            /* Accept current selection */
-            selected_artifact = choices[selection];
-            done = true;
-        } else if (key == 'x' || key == 'X' || key == '?') {
-            /* Inspect selection */
-            Term_clear();
-            desc_art_fake(choices[selection]);
-        } else if (key == '8' || key == 'k' || key == '-') {
-            /* Move up */
+
+        key = ui_information_scene_wait_key();
+        dir = target_dir((char)key);
+        if (dir == 8) {
             selection = (selection + choice_count - 1) % choice_count;
-        } else if (key == '2' || key == 'j' || key == '+') {
-            /* Move down */
+            continue;
+        }
+        if (dir == 2) {
             selection = (selection + 1) % choice_count;
-        } else if (key >= 'a' && key < 'a' + choice_count) {
-            /* Letter selection */
+            continue;
+        }
+        if (key == '\r' || key == '\n' || key == ' ' || key == '6') {
+            selected_artifact = choices[selection];
+            break;
+        }
+        if (key == 'x' || key == 'X' || key == '?') {
+            ui_information_scene_leave(&scope);
+            desc_art_fake(choices[selection]);
+            if (!ui_information_scene_enter(&scope))
+                return 0;
+            continue;
+        }
+        if (key >= 'a' && key < 'a' + choice_count) {
             selected_artifact = choices[key - 'a'];
-            done = true;
-        } else if (key >= 'A' && key < 'A' + choice_count) {
-            /* Capital letter selection */
+            break;
+        }
+        if (key >= 'A' && key < 'A' + choice_count) {
             selected_artifact = choices[key - 'A'];
-            done = true;
+            break;
+        }
+        if (key == ESCAPE) {
+            selected_artifact = 0;
+            break;
         }
     }
-    
-    screen_load();
+
+    ui_information_scene_leave(&scope);
     return selected_artifact;
 }
 

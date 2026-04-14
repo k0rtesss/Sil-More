@@ -994,9 +994,6 @@ void do_cmd_spoilers(void)
 {
     char ch;
 
-    /* Save screen */
-    screen_save();
-
     /* Interact */
     while (1)
     {
@@ -1070,9 +1067,7 @@ void do_cmd_spoilers(void)
         /* Flush messages */
         message_flush();
     }
-
-    /* Load screen */
-    screen_load();
+    do_cmd_redraw();
 }
 
 #else
