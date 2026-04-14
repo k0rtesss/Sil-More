@@ -32,6 +32,12 @@ void give_player_item(object_type * o_ptr)
     if (slot == SUPPLIES_INDEX)
     {
         object_desc(o_name, sizeof(o_name), &copy, true, 3);
+        if ((copy.tval == TV_LIGHT) && (copy.sval == SV_LIGHT_LANTERN))
+        {
+            char* fuel_suffix = strstr(o_name, " (");
+            if (fuel_suffix && strstr(fuel_suffix, " turns)"))
+                *fuel_suffix = '\0';
+        }
         char label = supplies_label_char();
         if (!label)
             label = 'a';
@@ -116,6 +122,8 @@ bool smith_oath_confirm_break(void)
  */
 static const object_type* replacement_filter_incoming = NULL;
 static bool item_tester_limit_group(const object_type* o_ptr);
+static bool pickup_oil_flask(int o_idx, object_type* o_ptr);
+static bool pickup_brass_lamp(int o_idx, object_type* o_ptr);
 
 static bool pack_item_matches_replacement_type(const object_type* incoming,
                                                const object_type* candidate)
@@ -665,6 +673,12 @@ void py_pickup_aux(int o_idx)
                 return;
         }
 
+        if (pickup_oil_flask(o_idx, o_ptr))
+            return;
+
+        if (pickup_brass_lamp(o_idx, o_ptr))
+            return;
+
         /* Check for supply items with partial pickup option */
         if (supplies_is_supply_object(o_ptr) && o_ptr->number > 1)
         {
@@ -846,22 +860,161 @@ static bool pickup_try_channel_floor_staff(object_type* o_ptr, int floor_o_idx)
     return false;
 }
 
+static bool object_is_brass_lamp(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && (o_ptr->tval == TV_LIGHT)
+        && (o_ptr->sval == SV_LIGHT_LANTERN);
+}
+
+static bool object_is_oil_flask(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && (o_ptr->tval == TV_FLASK);
+}
+
+static bool confirm_oil_pickup_overflow(const object_type* o_ptr, int oil_amount)
+{
+    char o_name[80];
+    char prompt[160];
+
+    if (!o_ptr || oil_amount <= 0 || !player_lamp_oil_would_overflow(oil_amount))
+        return true;
+
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    strnfmt(prompt, sizeof(prompt),
+        "Adding the oil from %s will waste some oil. Proceed? ", o_name);
+    return get_check(prompt);
+}
+
+static int find_exchangeable_brass_lamp_supply(void)
+{
+    return supplies_first_entry_for_kind(lookup_kind(TV_LIGHT, SV_LIGHT_LANTERN));
+}
+
+static int find_exchangeable_brass_lamp_pack_slot(void)
+{
+    for (int i = 0; i < INVEN_PACK; i++)
+    {
+        if (object_is_brass_lamp(&inventory[i]))
+            return i;
+    }
+
+    return -1;
+}
+
+static bool pickup_oil_flask(int o_idx, object_type* o_ptr)
+{
+    int oil_amount;
+
+    if (!object_is_oil_flask(o_ptr) || (player_lamp_oil_capacity() <= 0))
+        return false;
+
+    oil_amount = o_ptr->pval * MAX(o_ptr->number, 1);
+    if (!confirm_oil_pickup_overflow(o_ptr, oil_amount))
+    {
+        msg_print("You leave it on the ground.");
+        return true;
+    }
+
+    player_gain_lamp_oil(oil_amount, true);
+    msg_print("You pour the oil into your lamp stores.");
+    delete_object_idx(o_idx);
+    return true;
+}
+
+static bool pickup_brass_lamp(int o_idx, object_type* o_ptr)
+{
+    int spare_supply_idx;
+    int spare_pack_idx;
+    int oil_amount;
+
+    if (!object_is_brass_lamp(o_ptr) || (o_ptr->number != 1))
+        return false;
+
+    oil_amount = o_ptr->timeout;
+
+    if (player_light_available_capacity(o_ptr) <= 0)
+    {
+        spare_supply_idx = find_exchangeable_brass_lamp_supply();
+        spare_pack_idx = find_exchangeable_brass_lamp_pack_slot();
+
+        if ((spare_supply_idx >= 0 || spare_pack_idx >= 0)
+            && get_check("Exchange it with another brass lamp? "))
+        {
+            if (!confirm_oil_pickup_overflow(o_ptr, oil_amount))
+            {
+                msg_print("You leave it on the ground.");
+                return true;
+            }
+
+            if (spare_supply_idx >= 0)
+                (void)supplies_drop_amount(spare_supply_idx, 1);
+            else if (spare_pack_idx >= 0)
+                inven_drop(spare_pack_idx, 1);
+        }
+        else if ((oil_amount > 0) && get_check("Take only the oil? "))
+        {
+            if (!confirm_oil_pickup_overflow(o_ptr, oil_amount))
+            {
+                msg_print("You leave it on the ground.");
+                return true;
+            }
+
+            player_gain_lamp_oil(oil_amount, true);
+            o_ptr->timeout = 0;
+            msg_print("You siphon the oil and leave the lamp behind.");
+            return true;
+        }
+        else
+        {
+            msg_print("You leave it on the ground.");
+            return true;
+        }
+    }
+
+    if (!confirm_oil_pickup_overflow(o_ptr, oil_amount))
+    {
+        msg_print("You leave it on the ground.");
+        return true;
+    }
+
+    player_gain_lamp_oil(oil_amount, true);
+    o_ptr->timeout = 0;
+
+    if (!inven_carry_okay(o_ptr))
+    {
+        msg_print("You siphon the oil and leave the lamp behind.");
+        return true;
+    }
+
+    give_player_item(o_ptr);
+
+    if (!o_ptr->k_idx || (o_ptr->number <= 0))
+        delete_object_idx(o_idx);
+
+    return true;
+}
+
 static bool pickup_handle_floor_object(int floor_o_idx,
                                        bool consume_pickup_turn)
 {
     object_type* o_ptr = &o_list[floor_o_idx];
     char o_name[80];
     bool attempted_replacement = false;
+    bool special_oil_pickup;
+    bool special_lamp_pickup;
 
     if (!o_ptr->k_idx)
         return false;
 
     object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    special_oil_pickup = object_is_oil_flask(o_ptr)
+        && (player_lamp_oil_capacity() > 0);
+    special_lamp_pickup = object_is_brass_lamp(o_ptr);
 
     if (pickup_try_channel_floor_staff(o_ptr, floor_o_idx))
         return true;
 
-    while (!inven_carry_okay(o_ptr))
+    while (!special_oil_pickup && !special_lamp_pickup && !inven_carry_okay(o_ptr))
     {
         pickup_failure_result failure = resolve_pickup_failure(
             o_ptr, floor_o_idx, o_name, attempted_replacement);
@@ -875,7 +1028,8 @@ static bool pickup_handle_floor_object(int floor_o_idx,
         return (failure == PICKUP_FAILURE_EQUIPPED);
     }
 
-    if (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2)
+    if (!special_oil_pickup
+        && (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2))
     {
         msg_format("You cannot lift %s.", o_name);
         return false;

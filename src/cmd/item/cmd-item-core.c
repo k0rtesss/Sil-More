@@ -997,6 +997,14 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         return;
     }
 
+    if ((o_ptr->tval == TV_LIGHT) && (o_ptr->sval == SV_LIGHT_LANTERN)
+        && player_lamp_oil_would_overflow_with_bonus(o_ptr->timeout,
+            (item < 0) ? 1 : 0)
+        && !get_check("Taking this lamp will waste some oil. Proceed? "))
+    {
+        return;
+    }
+
     /* Ask for ring to replace */
     if ((o_ptr->tval == TV_RING) && inventory[INVEN_LEFT].k_idx
         && inventory[INVEN_RIGHT].k_idx)

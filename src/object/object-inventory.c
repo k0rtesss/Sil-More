@@ -1798,6 +1798,7 @@ void inven_drop(int item, int amt)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
+    int lantern_oil_to_drop = 0;
 
     object_type* o_ptr;
 
@@ -1839,8 +1840,28 @@ void inven_drop(int item, int amt)
     /* Modify quantity */
     i_ptr->number = amt;
 
+    if ((i_ptr->tval == TV_LIGHT) && (i_ptr->sval == SV_LIGHT_LANTERN))
+    {
+        if (!player_prepare_lantern_drop(amt, &lantern_oil_to_drop, NULL))
+            return;
+    }
+
     /* Describe local object */
     object_desc(o_name, sizeof(o_name), i_ptr, true, 3);
+
+    if (player_light_destroyed_on_drop(i_ptr))
+    {
+        msg_format("You discard %s; %s too spent to keep.",
+            o_name, (i_ptr->number > 1) ? "they are" : "it is");
+
+        inven_item_increase(item, -amt);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+        p_ptr->redraw |= (PR_MAP | PR_LIGHT);
+        p_ptr->window |= (PW_MESSAGE);
+        handle_stuff();
+        return;
+    }
 
     /* Message */
     msg_format("You drop %s (%c).", o_name, index_to_label(item));
@@ -1850,7 +1871,26 @@ void inven_drop(int item, int amt)
         APP_SNAPSHOT_INVALIDATE_MAP | APP_SNAPSHOT_INVALIDATE_STATUS);
 
     /* Drop it near the player */
-    drop_near(i_ptr, 0, py, px);
+    if ((i_ptr->tval == TV_LIGHT) && (i_ptr->sval == SV_LIGHT_LANTERN)
+        && (lantern_oil_to_drop > 0))
+    {
+        int oil_remaining = lantern_oil_to_drop;
+
+        for (int n = 0; n < amt; n++)
+        {
+            object_type single_drop;
+            object_wipe(&single_drop);
+            object_copy(&single_drop, i_ptr);
+            single_drop.number = 1;
+            single_drop.timeout = MIN(oil_remaining, FUEL_LAMP);
+            oil_remaining -= single_drop.timeout;
+            drop_near(&single_drop, 0, py, px);
+        }
+    }
+    else
+    {
+        drop_near(i_ptr, 0, py, px);
+    }
 
     /* Modify, Describe, Optimize */
     inven_item_increase(item, -amt);

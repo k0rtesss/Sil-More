@@ -31,7 +31,7 @@
 
 # Version stamp (required)
 
-V:0.9.5
+V:0.9.6
 
 # Melee ---------------------------------------------
 
@@ -641,7 +641,7 @@ T:39:0:99  # Light Source
 N:141:Song of Challenge
 I:7:1:1
 D:Echoing the bold verses of Fingolfin's challenge to Morgoth at the gates of Angband, as preserved in ancient lays. You intone a defiant melody that goads and enrages lesser foes, compelling them to abandon caution and throw themselves recklessly into battle like wolves driven mad by the sound of the hunter's horn.
-E:Reduces enemy Will and Stealth by Song/4 each. Enrages foes into reckless attacks.
+E:Reduces enemy Will and Stealth by Song/5 each. Enrages foes into reckless attacks.
 T:32:0:99  # Helm
 T:21:0:99  # Hafted
 T:22:0:99  # Polearms
@@ -838,21 +838,5 @@ N:169:Oath of Light
 I:8:9:0
 D:Swearing the Oath of Light, dedicating yourself to the memory of the Two Trees as those faithful Noldor who kept Varda's stars burning even in the deepest darkness of Angband. You refuse any gear that would dim your radiance, and while the oath endures, your inner fire burns brighter against the encroaching shadow.
 E:+1 inner light intensity. Breaks if you equip gear that reduces your light.
-
-N:170:Wraith of Orome
-I:8:10:0
-D:Taking on the Wraith of Orome, the wild fey aspect of the Huntsman, your battle-rage sharpens every gift. When raging, each of your stats rises by one instead of gaining strength and constitution while losing grace and dexterity.
-
-N:171:Huntsman's Rhythm
-I:8:11:0
-D:When two arrows strike true in succession, your next successful spear hit will deal double damage. Granted by Orome's great hunt and may be purchased for 5000 experience once unlocked.
-
-N:172:Wrath of Tulkas
-I:8:12:0
-D:Tulkas' own fury courses through your smiting blows: they behave as Smite but count your effective strength twice when they land. Awarded for scarring Morgoth; once unlocked it may be purchased for 5000 experience.
-
-N:173:Queen of the Stars
-I:8:13:0
-D:Bearing the Queen of the Stars' favor, your light reaches a step further into the dark. Granted by Varda's quests; after completing her torchlight challenge it may be purchased for 5000 experience on future delvings.
 
 

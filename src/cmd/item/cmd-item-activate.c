@@ -295,7 +295,9 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     {
         if (!activate_select_item_or_open_supplies(&item, &o_ptr, TV_FOOD,
                 "Eat which item? ", "You have nothing to eat.",
-                SUPPLY_GROUP_HERBS))
+                supplies_has_group(SUPPLY_GROUP_HERBS)
+                    ? SUPPLY_GROUP_HERBS
+                    : SUPPLY_GROUP_FOOD))
         {
             return;
         }

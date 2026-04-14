@@ -271,7 +271,8 @@ extern void ident_on_wield(object_type* o_ptr)
             msg_print("It glows with a wondrous light.");
         }
         else if ((o_ptr->sval == SV_LIGHT_FEANORIAN)
-            || (o_ptr->sval == SV_LIGHT_LESSER_JEWEL) || (o_ptr->timeout > 0))
+            || (o_ptr->sval == SV_LIGHT_LESSER_JEWEL)
+            || player_light_has_fuel(o_ptr))
         {
             notice = true;
             msg_print("It glows very brightly.");

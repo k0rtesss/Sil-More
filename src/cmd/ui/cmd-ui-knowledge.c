@@ -142,8 +142,10 @@ static bool knowledge_present_ui_scene_or_abort(
 
 static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
     "Herbs",
+    "Food",
     "Potions",
     "Gems",
+    "Lights",
     NULL
 };
 
@@ -560,11 +562,17 @@ static bool supply_kind_matches(int group, int tval, int sval)
     switch (group)
     {
     case SUPPLY_GROUP_HERBS:
-        return (tval == TV_FOOD) && (sval <= SV_FOOD_SICKNESS);
+        return (tval == TV_FOOD) && (sval < SV_FOOD_MIN_FOOD);
+    case SUPPLY_GROUP_FOOD:
+        return (tval == TV_FOOD) && (sval >= SV_FOOD_MIN_FOOD);
     case SUPPLY_GROUP_POTIONS:
         return (tval == TV_POTION);
     case SUPPLY_GROUP_GEMS:
         return (tval == TV_GEM);
+    case SUPPLY_GROUP_LIGHTS:
+        return (tval == TV_LIGHT)
+            && (sval == SV_LIGHT_TORCH || sval == SV_LIGHT_MALLORN
+                || sval == SV_LIGHT_LANTERN);
     default:
         return false;
     }
@@ -576,6 +584,84 @@ static bool supply_item_matches(int group, const object_type* o_ptr)
         return false;
 
     return supply_kind_matches(group, o_ptr->tval, o_ptr->sval);
+}
+
+static void append_supply_item_weight(char* buf, size_t len,
+    const object_type* o_ptr, bool each)
+{
+    char weight_buf[32];
+
+    if (!buf || len == 0 || !o_ptr || o_ptr->weight <= 0)
+        return;
+
+    strnfmt(weight_buf, sizeof(weight_buf), " [%d.%1d lb%s]",
+        o_ptr->weight / 10, o_ptr->weight % 10, each ? " each" : "");
+    SDL_strlcat(buf, weight_buf, len);
+}
+
+static int supply_group_uniform_weight(int group_idx)
+{
+    int weight = -1;
+
+    for (int i = 0; i < z_info->k_max; i++)
+    {
+        object_kind* k_ptr = &k_info[i];
+
+        if (!k_ptr->name)
+            continue;
+        if (!supply_kind_matches(group_idx, k_ptr->tval, k_ptr->sval))
+            continue;
+
+        if (weight < 0)
+            weight = k_ptr->weight;
+        else if (weight != k_ptr->weight)
+            return -1;
+    }
+
+    return weight;
+}
+
+static void describe_supply_group_status(int group_idx, char* buf, size_t len)
+{
+    int weight;
+
+    if (!buf || len == 0)
+        return;
+
+    buf[0] = '\0';
+
+    switch (group_idx)
+    {
+    case SUPPLY_GROUP_HERBS:
+        weight = supply_group_uniform_weight(group_idx);
+        if (weight >= 0)
+            strnfmt(buf, len, "All herbs weigh %d.%1d lb each.",
+                weight / 10, weight % 10);
+        break;
+    case SUPPLY_GROUP_FOOD:
+        SDL_strlcpy(buf, "Food weight varies; each row shows per-item weight.",
+            len);
+        break;
+    case SUPPLY_GROUP_POTIONS:
+        weight = supply_group_uniform_weight(group_idx);
+        if (weight >= 0)
+            strnfmt(buf, len, "All potions weigh %d.%1d lb each.",
+                weight / 10, weight % 10);
+        break;
+    case SUPPLY_GROUP_GEMS:
+        weight = supply_group_uniform_weight(group_idx);
+        if (weight >= 0)
+            strnfmt(buf, len, "All gems weigh %d.%1d lb each.",
+                weight / 10, weight % 10);
+        break;
+    case SUPPLY_GROUP_LIGHTS:
+        SDL_strlcpy(buf,
+            "Each light row shows item weight; light total above includes oil.",
+            len);
+        break;
+    default:
+        break;
+    }
 }
 
 static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
@@ -592,8 +678,10 @@ static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
         if (!o_ptr->k_idx)
             continue;
 
-        if ((o_ptr->tval == TV_FOOD) && (o_ptr->sval <= SV_FOOD_SICKNESS))
+        if (supply_kind_matches(SUPPLY_GROUP_HERBS, o_ptr->tval, o_ptr->sval))
             totals[SUPPLY_GROUP_HERBS] += o_ptr->number;
+        else if (supply_kind_matches(SUPPLY_GROUP_FOOD, o_ptr->tval, o_ptr->sval))
+            totals[SUPPLY_GROUP_FOOD] += o_ptr->number;
         else if (o_ptr->tval == TV_POTION)
             totals[SUPPLY_GROUP_POTIONS] += o_ptr->number;
         else if (o_ptr->tval == TV_GEM)
@@ -606,12 +694,22 @@ static void compute_supply_group_totals(int totals[SUPPLY_GROUP_MAX])
         if (!s_ptr || !s_ptr->k_idx)
             continue;
 
-        if ((s_ptr->tval == TV_FOOD) && (s_ptr->sval <= SV_FOOD_SICKNESS))
+        if (supply_kind_matches(SUPPLY_GROUP_HERBS, s_ptr->tval, s_ptr->sval))
             totals[SUPPLY_GROUP_HERBS] += s_ptr->number;
+        else if (supply_kind_matches(SUPPLY_GROUP_FOOD, s_ptr->tval, s_ptr->sval))
+            totals[SUPPLY_GROUP_FOOD] += s_ptr->number;
         else if (s_ptr->tval == TV_POTION)
             totals[SUPPLY_GROUP_POTIONS] += s_ptr->number;
         else if (s_ptr->tval == TV_GEM)
             totals[SUPPLY_GROUP_GEMS] += s_ptr->number;
+        else if (supplies_is_light_object(s_ptr))
+            totals[SUPPLY_GROUP_LIGHTS] += s_ptr->number;
+    }
+
+    {
+        object_type* light_ptr = &inventory[INVEN_LITE];
+        if (supplies_is_light_object(light_ptr))
+            totals[SUPPLY_GROUP_LIGHTS] += MAX(light_ptr->number, 1);
     }
 }
 
@@ -672,6 +770,37 @@ static int collect_supply_entries(int group_idx, supply_list_entry entries[])
             entries[count].total = value;
             entries[count].supply_idx = -1;
             count++;
+        }
+    }
+
+    if (group_idx == SUPPLY_GROUP_LIGHTS)
+    {
+        object_type* light_ptr = &inventory[INVEN_LITE];
+        int j;
+
+        if (light_ptr->k_idx && supply_item_matches(group_idx, light_ptr))
+        {
+            int value = MAX(light_ptr->number, 1);
+
+            for (j = 0; j < count; j++)
+            {
+                if (entries[j].k_idx == light_ptr->k_idx)
+                {
+                    entries[j].total += value;
+                    if (entries[j].item_idx < 0)
+                        entries[j].item_idx = INVEN_LITE;
+                    break;
+                }
+            }
+
+            if ((j == count) && (count < capacity))
+            {
+                entries[count].k_idx = light_ptr->k_idx;
+                entries[count].item_idx = INVEN_LITE;
+                entries[count].total = value;
+                entries[count].supply_idx = -1;
+                count++;
+            }
         }
     }
 
@@ -1714,6 +1843,7 @@ static void knowledge_scene_add_wrapped_document_text(
             (s16b)col, color, line_buf);
         (*row)++;
     }
+
 }
 
 static bool knowledge_begin_curse_detail_document_page(app_ui_scene* scene,
@@ -2667,11 +2797,17 @@ static void knowledge_scene_add_supply_group_detail_lines(app_ui_panel* panel,
         case SUPPLY_GROUP_HERBS:
             attr = TERM_GREEN;
             break;
+        case SUPPLY_GROUP_FOOD:
+            attr = TERM_L_GREEN;
+            break;
         case SUPPLY_GROUP_POTIONS:
             attr = TERM_VIOLET;
             break;
         case SUPPLY_GROUP_GEMS:
             attr = TERM_BLUE;
+            break;
+        case SUPPLY_GROUP_LIGHTS:
+            attr = TERM_YELLOW;
             break;
         default:
             attr = TERM_WHITE;
@@ -2690,7 +2826,8 @@ static void knowledge_scene_add_supply_group_detail_lines(app_ui_panel* panel,
 }
 
 static void knowledge_scene_append_supply_rows(app_ui_panel* panel,
-    supply_list_entry entries[], int entry_cnt, int entry_cur, bool focus_rows)
+    supply_list_entry entries[], int entry_cnt, int entry_cur, bool focus_rows,
+    int current_group)
 {
     int i;
 
@@ -2729,9 +2866,13 @@ static void knowledge_scene_append_supply_rows(app_ui_panel* panel,
 
         attr = (focus_rows && i == entry_cur) ? cursor_attr : base_attr;
 
-        if (entry->item_idx >= 0 && entry->item_idx < INVEN_PACK)
+        if ((entry->item_idx >= 0) && (entry->item_idx < INVEN_PACK))
         {
             o_ptr = &inventory[entry->item_idx];
+        }
+        else if (entry->item_idx == INVEN_LITE)
+        {
+            o_ptr = &inventory[INVEN_LITE];
         }
         else
         {
@@ -2744,6 +2885,13 @@ static void knowledge_scene_append_supply_rows(app_ui_panel* panel,
         }
 
         object_desc(name, sizeof(name), o_ptr, true, 3);
+        if (current_group == SUPPLY_GROUP_FOOD)
+            append_supply_item_weight(name, sizeof(name), o_ptr,
+                entry->total > 1);
+        else if (current_group == SUPPLY_GROUP_LIGHTS)
+            append_supply_item_weight(name, sizeof(name), o_ptr, false);
+        if ((current_group == SUPPLY_GROUP_LIGHTS) && (entry->item_idx == INVEN_LITE))
+            SDL_strlcat(name, " [equipped]", sizeof(name));
         strnfmt(meta, sizeof(meta), "x%-3d", entry->total);
 
         if (!app_ui_panel_add_row_ex(panel, (s16b)i, attr, attr,
@@ -2776,15 +2924,23 @@ static bool knowledge_build_supplies_browser_scene(app_ui_scene* scene,
         | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_WHITE;
     app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_WHITE, "Supplies - Herbs, Potions, Gems");
+    app_ui_panel_set_title(panel, TERM_L_WHITE,
+        "Supplies - Herbs, Food, Potions, Gems, Lights");
     app_ui_panel_set_subtitle(panel, TERM_SLATE, "Name / Qty / Sym");
     if (weight_text && weight_text[0])
         (void)app_ui_panel_add_body_line(panel, TERM_SLATE, weight_text);
+    {
+        char status_buf[96];
+        describe_supply_group_status(grp_idx[grp_cur], status_buf,
+            sizeof(status_buf));
+        if (status_buf[0])
+            (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, status_buf);
+    }
 
     knowledge_scene_add_supply_group_detail_lines(panel, grp_idx, grp_cnt,
         grp_cur, grp_top, group_totals);
     knowledge_scene_append_supply_rows(panel, entries, entry_cnt, entry_cur,
-        column == 1);
+        column == 1, grp_idx[grp_cur]);
     app_ui_panel_set_row_offset(panel, (s16b)entry_top);
     knowledge_scene_add_supply_footer_actions(panel);
 
@@ -3303,17 +3459,29 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
     {
         int entry_cnt;
         int used_weight;
+        int light_item_weight;
+        int light_oil_weight;
+        int light_weight;
+        int lamp_oil;
         int max_weight;
-        char weight_buf[80];
+        char weight_buf[128];
         char ch;
 
         compute_supply_group_totals(group_totals);
-        used_weight = supplies_total_weight();
+        used_weight = supplies_limit_weight();
+        light_item_weight = supplies_carried_light_item_weight();
+        light_oil_weight = player_lamp_oil_weight();
+        light_weight = light_item_weight + light_oil_weight;
+        lamp_oil = player_lamp_oil();
         max_weight = supplies_current_weight_cap();
         strnfmt(weight_buf, sizeof(weight_buf),
-            "Supply weight: %d.%1d/%d.%1d lb used",
+            "Supply: %d.%1d/%d.%1d lb  Light: %d.%1d lb (%d.%1d items + %d.%1d oil)  Oil: %d/%d",
             used_weight / 10, used_weight % 10,
-            max_weight / 10, max_weight % 10);
+            max_weight / 10, max_weight % 10,
+            light_weight / 10, light_weight % 10,
+            light_item_weight / 10, light_item_weight % 10,
+            light_oil_weight / 10, light_oil_weight % 10,
+            lamp_oil, PLAYER_LAMP_OIL_MAX);
 
         if (grp_cur >= grp_cnt)
             grp_cur = grp_cnt - 1;

@@ -52,15 +52,15 @@
 // #define STEAMDECK_SUPPORT
 
 /* Formalized new fork versioning (canonical source for all modules) */
-#define VERSION_STRING "0.9.5.8"
+#define VERSION_STRING "0.9.6"
 /*
- * Version components (0.9.5.0).  All on-disk formats (saves, scores, metaruns)
+ * Version components (0.9.6.0).  All on-disk formats (saves, scores, metaruns)
  * MUST match these values; never bump individual subsystems independently.
  */
 #define VERSION_MAJOR 0
 #define VERSION_MINOR 9
-#define VERSION_PATCH 5
-#define VERSION_EXTRA 8   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
+#define VERSION_PATCH 6
+#define VERSION_EXTRA 0   /* Increment when compatibility changes without MAJOR/MINOR/PATCH bump */
 /* Update MIN_VERSION_EXTRA whenever the savefile format changes. */
 #define MIN_VERSION_EXTRA 0  /* Accept earlier 0.9.x saves */
 
@@ -200,6 +200,9 @@
 #define MAX_DEPTH 128
 #define MORGOTH_DEPTH 20
 
+/* Magic marker for the versioned supplies block in savefiles. */
+#define SAVEFILE_SUPPLY_BLOCK_MAGIC 0x53F6
+
 /*
  * Ego item indices for special handling
  */
@@ -211,6 +214,7 @@
 #define EGO_GAURWAITH 149 /* Suffix ego: of the Gaurwaith (Throwing) */
 #define EGO_OSSIRIAND 150 /* Suffix ego: of Ossiriand (Subtlety) */
 #define EGO_TIRION 151 /* Suffix ego: of Tirion (Channeling) */
+#define EGO_BROKEN_BRASS_LANTERN 181 /* Prefix ego: (broken) - damaged brass lantern */
 
 /*
  * Depth-based wall graphics configuration

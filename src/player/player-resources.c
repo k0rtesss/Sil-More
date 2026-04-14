@@ -327,19 +327,29 @@ void calc_torch(void)
                 p_ptr->cur_light += RADIUS_SILMARIL;
 
             /* Torches (with fuel) provide some light */
-            else if ((o_ptr->sval == SV_LIGHT_TORCH) && (o_ptr->timeout > 0))
+            else if ((o_ptr->sval == SV_LIGHT_TORCH)
+                && player_light_has_fuel(o_ptr))
             {
                 p_ptr->cur_light += light_up_to(RADIUS_TORCH, o_ptr);
             }
 
+            /* Broken lanterns can still hold pooled oil, but give no light. */
+            else if ((o_ptr->sval == SV_LIGHT_LANTERN)
+                && (object_ego_prefix(o_ptr) == EGO_BROKEN_BRASS_LANTERN))
+            {
+                extinguished = true;
+            }
+
             /* Lanterns (with fuel) provide more light */
-            else if ((o_ptr->sval == SV_LIGHT_LANTERN) && (o_ptr->timeout > 0))
+            else if ((o_ptr->sval == SV_LIGHT_LANTERN)
+                && player_light_has_fuel(o_ptr))
             {
                 p_ptr->cur_light += light_up_to(RADIUS_LANTERN, o_ptr);
             }
 
             /* Mallorn torches (with fuel) provide even more light */
-            else if ((o_ptr->sval == SV_LIGHT_MALLORN) && (o_ptr->timeout > 0))
+            else if ((o_ptr->sval == SV_LIGHT_MALLORN)
+                && player_light_has_fuel(o_ptr))
             {
                 p_ptr->cur_light += light_up_to(RADIUS_MALLORN, o_ptr);
             }

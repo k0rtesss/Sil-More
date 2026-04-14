@@ -397,6 +397,7 @@ void calc_bonuses(void)
             p_ptr->danger += 1;
     }
     p_ptr->total_weight += supplies_total_weight();
+    p_ptr->total_weight += player_lamp_oil_weight();
 
     /*** Analyze equipment ***/
 

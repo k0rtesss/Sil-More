@@ -113,11 +113,11 @@ forward UI work.
   longer call `ui_information_scene_present_term()` on the SDL path.
 - `py -3 tools/ui_debt_audit.py --check` passes on this branch.
 - Current audit counts on April 14, 2026:
-  - `inkey()` call sites: 35 files / 67 matches
-  - `screen_save()` + `screen_load()` call sites: 22 files / 107 matches
-  - direct `Term_*` render/control calls: 59 files / 1,095 matches
+  - `inkey()` call sites: 33 files / 50 matches
+  - `screen_save()` + `screen_load()` call sites: 20 files / 72 matches
+  - direct `Term_*` render/control calls: 57 files / 860 matches
   - `#include "platform-ui.h"`: 0 files / 0 matches
-  - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 200 matches
+  - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 166 matches
 
 ### Still Real Debt
 - `py -3 tools/ui_debt_audit.py --check` passing only means the current tree is
@@ -128,22 +128,23 @@ forward UI work.
   to the visible totals.
 - The dead information-scene bridge is no longer the dominant plan-level
   blocker.
-- The biggest concentrated remaining cluster is now the browser-heavy family:
-  - `src/cmd/ui/cmd-ui-settings.c`
-  - `src/cmd/ui/cmd-ui-knowledge.c`
-  - `src/cmd/ui/cmd-ui-abilities.c`
-  - together these files currently account for:
-    - 20 of 67 `inkey()` matches
-    - 43 of 107 `screen_save()` / `screen_load()` matches
-    - 274 of 1,095 direct `Term_*` render/control matches
-    - 170 of 200 `get_sdl_*` / `set_sdl_*` matches outside platform code
-- A second broad cluster remains in persistent chrome and shared display
-  owners:
+- The old browser-heavy family is no longer the dominant multi-file blocker:
+  - `src/cmd/ui/cmd-ui-knowledge.c` is effectively out of the audit
+  - `src/cmd/ui/cmd-ui-abilities.c` is effectively out of the audit
+  - `src/cmd/ui/cmd-ui-settings.c` is still a large residual tail:
+    - 6 `inkey()` matches
+    - 10 `screen_save()` / `screen_load()` matches
+    - 79 direct `Term_*` render/control matches
+    - 141 `get_sdl_*` / `set_sdl_*` matches outside platform code
+- The biggest concentrated remaining cluster is now persistent chrome and
+  shared display ownership:
   - `src/ui/ui-status.c`
+  - `src/util-prompt.c`
   - `src/melee/melee-combat-display.c`
   - `src/quest/quest-ui.c`
   - `src/ui/ui-character-screen.c`
   - `src/ui/ui-file-viewer.c`
+  - `src/object/object-ui-display.c`
   - these still carry substantial term-era layout or rendering debt even where
     their top-level SDL entry path is already semantic
 - Menu-transition flash debt still exists:
@@ -168,13 +169,10 @@ forward UI work.
     - bespoke side flows in `src/cmd/item/cmd-item-activate.c`
     - pickup-from-pile flow in `src/cmd/item/cmd-pickup.c`
 - Remaining late bespoke workflow debt is concentrated in:
-  - `src/metarun.c` side or narrative flows outside the semantic
+  - residual `src/metarun.c` side or narrative flows outside the semantic
     story-statistics or history surfaces
-  - `src/birth.c`, including the remaining blitz setup and effect-pick flows:
-    - `blitz_setup_menu()`
-    - `blitz_select_effect_from_list()`
-    - `blitz_show_effect_summary()`
-  - `src/ui/smithing/ui-smithing-screen.c`
+  - residual `src/birth.c` blitz setup and effect-pick flows
+  - residual `src/ui/smithing/ui-smithing-screen.c` control-loop debt
 - Some UI families still derive behavior or layout from `Term->wid`,
   `Term->hgt`, `screen_save()`, `screen_load()`, or blocking `inkey()` loops.
 
@@ -198,100 +196,29 @@ forward UI work.
 - The current blocker is no longer "migrate the document producers first".
 - The bridge-deletion story is no longer the pacing item.
 - The current blocker is now:
-  - finishing the browser-heavy screen bodies that still render or lay out like
-    terminal code
+  - migrating persistent chrome and shared display owners off term-era layout
+    and rendering contracts
+  - finishing the `cmd-ui-settings.c` residual tail
   - removing stale restore or snapshot flashes when opening menus
-  - removing persistent chrome and shared display debt in the status or
-    message or prompt family
-  - finishing the remaining item side loops and isolated fallback paths
-  - finishing the late bespoke workflow families such as birth, smithing, and
-    remaining metarun side flows
-- If the goal is to move the whole-plan audit materially, the browser-heavy
-  family is now the highest-leverage next slice.
+  - finishing the remaining item/display helper side loops and isolated
+    fallback paths
+  - finishing the residual bespoke workflow families such as birth, smithing,
+    and remaining metarun side flows
+- After `p1`, the highest-leverage next slice is now persistent chrome and
+  shared display, with a small parallel carry-over for the remaining settings
+  tail.
 
 ## Next Slices
-### Slice: Browser-Heavy Families (`OVER4-A`)
-Goal:
-- migrate the browser-heavy SDL families off term-owned screen bodies and
-  captured-term layout into direct semantic browser or document scenes
-
-Why this is next:
-- this is the biggest concentrated remaining audit cluster in the whole plan
-- the shared widgets needed for this family already exist:
-  - tabs
-  - list/detail rails
-  - footer actions
-  - document panels
-- these files still contain term-era body rendering and layout ownership even
-  where the top-level SDL entry path is already semantic
-
-Primary targets:
-- `src/cmd/ui/cmd-ui-settings.c`
-- `src/cmd/ui/cmd-ui-knowledge.c`
-- `src/cmd/ui/cmd-ui-abilities.c`
-- optional shared-helper cleanup in:
-  - `src/cmd/ui/cmd-ui-query.c`
-  - `src/ui/ui-character-screen.c`
-
-Approach:
-- replace SDL-path captured-term bodies and term-layout math with direct
-  `app_ui_scene` producers
-- remove SDL-path `screen_save()` / `screen_load()` ownership and blocking
-  `inkey()` loops where safe
-- move settings-specific SDL state access behind a narrower handoff so
-  `src/cmd/ui/cmd-ui-settings.c` stops owning most `get_sdl_*` /
-  `set_sdl_*` calls
-
-Exit when:
-- the normal SDL path for settings, knowledge, and abilities no longer depends
-  on captured term output or term-layout ownership
-- the combined audit footprint for this family materially drops
-- `src/cmd/ui/cmd-ui-settings.c` no longer dominates named SDL calls outside
-  platform code
-
-### Slice: Menu And Prompt Transition Cleanup
-Goal:
-- remove stale previous-screen flashes when opening or switching menus on the
-  SDL path
-- stop restoring old snapshots or saved screens as a transitional fallback
-  between semantic menu surfaces
-
-Why this is next:
-- the flash is a visible user-facing regression
-- it is consistent with the remaining `screen_save()` / `screen_load()` and
-  previous-snapshot restore ownership in menu transition code
-- the browser-heavy slice does not fix this by itself, so it should be tracked
-  explicitly instead of hoping it disappears as a side effect
-
-Primary targets:
-- `src/cmd/ui/cmd-ui-main-menu.c`
-- `src/util-prompt.c`
-- `src/object/object-ui-select.c`
-- any shared restore owner still required after browser-family cleanup
-
-Approach:
-- remove menu-transition restore flashes on the SDL path
-- do not preserve or add fallback branches to keep old restore behavior alive
-- if a restore path is only there to hide debt, delete it
-
-Exit when:
-- opening or switching semantic menus does not briefly show stale welcome,
-  background, dungeon, or previous menu content
-- no SDL-path menu transition depends on `screen_save()` / `screen_load()` or
-  previous-snapshot restore as a bridge between semantic surfaces
-
-### Slice: Persistent Chrome And Status (`OVER1-B`)
+### Slice: Persistent Chrome And Shared Display (`OVER1-B`)
 Goal:
 - migrate the remaining persistent chrome and shared display owners off term
   rows and term render helpers on the normal SDL path
 
-Why this follows:
-- `src/ui/ui-status.c` is still the single largest non-browser `Term_*`
-  hotspot
-- message or prompt or chrome debt leaks across normal play and still keeps the
-  audit visibly high even when modal browsers improve
-- this work is more cross-cutting than the browser family and is easier to land
-  once prompt and menu transition ownership is cleaner
+Why this is next:
+- `p1` already removed most of the browser-heavy family from the audit
+- `src/ui/ui-status.c` is now the single largest remaining hotspot
+- prompt/chrome ownership still leaks across multiple SDL surfaces and is now
+  the main cross-cutting blocker
 
 Primary targets:
 - `src/ui/ui-status.c`
@@ -316,6 +243,65 @@ Exit when:
   normal SDL path
 - normal SDL play no longer derives chrome layout from `Term->wid`,
   `Term->hgt`, or saved-screen restore ownership
+
+### Slice: Settings Residual Tail
+Goal:
+- finish the post-`p1` settings-family tail that still dominates named SDL
+  calls outside platform code
+
+Why this is next:
+- `cmd-ui-settings.c` is now the only major browser-family file still carrying
+  substantial audit debt
+- this write set is disjoint from the persistent chrome slice and can run in
+  parallel
+
+Primary targets:
+- `src/cmd/ui/cmd-ui-settings.c`
+
+Approach:
+- finish converting remaining settings subfamilies and editors to semantic SDL
+  bodies where safe
+- reduce `get_sdl_*` / `set_sdl_*` ownership further behind narrower helpers
+- isolate any true legacy-only editor paths clearly instead of leaving them on
+  the normal SDL route
+
+Exit when:
+- `cmd-ui-settings.c` is no longer the dominant named-SDL hotspot outside
+  platform code
+- normal SDL settings flows no longer depend on captured-term bodies or
+  term-layout ownership
+
+### Slice: Menu And Prompt Transition Cleanup
+Goal:
+- remove stale previous-screen flashes when opening or switching menus on the
+  SDL path
+- stop restoring old snapshots or saved screens as a transitional fallback
+  between semantic menu surfaces
+
+Why this stays near the top:
+- the flash is a visible user-facing regression
+- it is consistent with the remaining `screen_save()` / `screen_load()` and
+  previous-snapshot restore ownership in menu transition code
+- `p1` reduced the main-menu side of this, but `util-prompt.c` and
+  `object-ui-select.c` still own transitional debt
+
+Primary targets:
+- `src/cmd/ui/cmd-ui-main-menu.c`
+- `src/util-prompt.c`
+- `src/object/object-ui-select.c`
+- any shared restore owner still required after the settings tail and chrome
+  work
+
+Approach:
+- remove menu-transition restore flashes on the SDL path
+- do not preserve or add fallback branches to keep old restore behavior alive
+- if a restore path is only there to hide debt, delete it
+
+Exit when:
+- opening or switching semantic menus does not briefly show stale welcome,
+  background, dungeon, or previous menu content
+- no SDL-path menu transition depends on `screen_save()` / `screen_load()` or
+  previous-snapshot restore as a bridge between semantic surfaces
 
 ## After That
 ### Slice: Finish Item And Bespoke Families
@@ -345,26 +331,40 @@ Debt-removal rule for every slice in this section:
 - The bridge-deletion slice is complete in the working tree.
 - The main selector and several document or browser families are already
   semantic on the SDL path.
+- `p1` materially reduced the audit:
+  - `inkey()`: 67 -> 50
+  - `screen_save()` / `screen_load()`: 107 -> 72
+  - direct `Term_*`: 1,095 -> 860
+  - `get_sdl_*` / `set_sdl_*` outside platform code: 200 -> 166
+- Effective `p1` wins:
+  - `cmd-ui-knowledge.c` is effectively out of the audit
+  - `cmd-ui-abilities.c` is effectively out of the audit
+  - `ui-smithing-screen.c` is effectively out of the `Term_*` audit
+  - `birth.c`, `ui-death.c`, `metarun.c`, `cmd-ui-main-menu.c`, and
+    `cmd-pickup.c` all moved in the right direction
+- Partial `p1` carry-over:
+  - `cmd-ui-settings.c` still has a large residual tail
+  - `util-prompt.c` still owns prompt/menu transition debt
+  - `object-ui-display.c` still owns shared term-era item display helpers
 - The current whole-plan debt is concentrated in:
-  - the browser-heavy family (`settings`, `knowledge`, `abilities`)
-  - menu or prompt transition ownership
   - persistent chrome and shared display owners
+  - the remaining `cmd-ui-settings.c` tail
+  - menu or prompt transition ownership
   - late item or bespoke workflows
 
 ### Recommended Order
-- First: Browser-heavy family (`OVER4-A`)
+- First: Persistent chrome and shared display (`OVER1-B`)
+- In parallel: settings residual tail
 - Then: Menu and prompt transition cleanup
-- Then: Persistent chrome and status (`OVER1-B`)
 - Last: item-family remainder plus birth or smithing or remaining metarun side
   flows
 
 ### Parallelization Guidance
-- Keep one owner on the browser-heavy family if shared browser widgets or
-  helper contracts are still moving.
-- Menu/prompt transition cleanup can run in parallel with item-family cleanup if
-  the write sets stay disjoint.
-- Delay the persistent chrome/status slice until prompt/footer ownership is
-  stable enough that it will not be reworked immediately afterward.
+- Keep one owner on the remaining settings tail.
+- Persistent chrome/shared display can now run in parallel with the settings
+  tail because the write sets are disjoint.
+- Menu/prompt transition cleanup can run after or alongside those slices only
+  if `util-prompt.c` ownership is clearly assigned.
 - Leave birth, smithing, and the remaining metarun side flows for after the
   common browser, prompt, and chrome patterns are settled.
 
@@ -599,8 +599,8 @@ Validation:
 - summarize what part of smithing remains term-owned after your change
 ```
 
-### Launch Batch 2: After Batch 1 Integration
-Launch these only after the Batch 1 browser/prompt patterns are stable.
+### Launch Batch 2: Launch Now After `p1`
+These are the next top-level slices after the landed `p1` batch.
 
 #### Agent P2-A: Persistent Chrome And Status
 ```text
@@ -630,7 +630,32 @@ Validation:
 - summarize what chrome/prompt/message debt still remains after your change
 ```
 
-#### Agent P2-B: Query And Character Helpers
+#### Agent P2-B: Settings Tail Cleanup
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/cmd/ui/cmd-ui-settings.c
+
+Goal:
+- finish the post-p1 settings tail
+- reduce remaining inkey()/screen_save()/screen_load()/Term_* debt in the SDL
+  settings route
+- reduce get_sdl_*/set_sdl_* ownership further behind narrower helpers
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which settings subflows remain term-owned after your change
+```
+
+#### Agent P2-C: Query And Character Helpers
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -654,7 +679,7 @@ Validation:
 - summarize which query/character helper flows remain term-owned
 ```
 
-#### Agent P2-C: File Viewer And Score Detail Screens
+#### Agent P2-D: File Viewer And Score Detail Screens
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 
@@ -678,7 +703,7 @@ Validation:
 - summarize which file-viewer/score flows remain term-owned
 ```
 
-#### Agent P2-D: Quest And Combat Display Cleanup
+#### Agent P2-E: Quest And Combat Display Cleanup
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 

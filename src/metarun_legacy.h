@@ -7,7 +7,7 @@
 #include "metarun.h"
 
 /* Version structures for backward compatibility
- * Current (0.9.1.2) uses struct metarun in metarun.h
+ * Current (0.9.6.0) uses struct metarun in metarun.h
  *  - quest completion counts per quest (capped) stored explicitly
  * Legacy layouts:
  *  v10 = 0.9.0.1 (expanded curse capacity, 64-bit known mask)

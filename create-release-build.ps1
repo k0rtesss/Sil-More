@@ -3,7 +3,7 @@
 
 param(
     [string]$OutputFolder = "sil-more-release",
-    [string]$Version = "0.9.1",
+    [string]$Version = "0.9.6",
     [switch]$IncludeCoverArt = $false
 )
 

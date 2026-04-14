@@ -334,7 +334,7 @@ static bool item_tester_refuel_lantern(const object_type* o_ptr)
 
     /* Non-empty lanterns are okay */
     if ((o_ptr->tval == TV_LIGHT) && (o_ptr->sval == SV_LIGHT_LANTERN)
-        && (o_ptr->timeout > 0))
+        && player_light_has_fuel(o_ptr))
     {
         return (true);
     }
@@ -398,21 +398,21 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
     /* Refuel from a latern */
     if (o_ptr->sval == SV_LIGHT_LANTERN)
     {
-        j_ptr->timeout += o_ptr->timeout;
+        player_light_add_fuel(j_ptr, o_ptr->timeout);
     }
     /* Refuel from a flask */
     else
     {
-        j_ptr->timeout += o_ptr->pval;
+        player_light_add_fuel(j_ptr, o_ptr->pval);
     }
 
     /* Message */
     msg_print("You fuel your lamp.");
 
     /* Comment */
-    if (j_ptr->timeout >= FUEL_LAMP)
+    if (player_light_fuel(j_ptr) >= player_light_max_fuel(j_ptr))
     {
-        j_ptr->timeout = FUEL_LAMP;
+        player_light_set_fuel(j_ptr, player_light_max_fuel(j_ptr));
         msg_print("Your lamp is full.");
     }
 
@@ -444,8 +444,6 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item)
             if (item >= 0)
             {
                 item = inven_carry(i_ptr, false);
-                if (item == SUPPLIES_INDEX)
-                    item = -1;
                 if (item < 0)
                     drop_near(i_ptr, 0, p_ptr->py, p_ptr->px);
             }

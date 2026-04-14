@@ -1605,13 +1605,16 @@ static errr rd_extra(void)
         byte morgoth_hall_entered = 0;
         byte morgoth_second_wind = 0;
         byte discovery_lore_flags = 0;
+        s16b lamp_oil = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
+        rd_s16b(&lamp_oil);
         p_ptr->morgoth_hall_entered = morgoth_hall_entered ? 1 : 0;
         p_ptr->morgoth_second_wind = morgoth_second_wind ? 1 : 0;
         p_ptr->discovery_lore_flags = discovery_lore_flags;
-        strip_bytes(12);
+        p_ptr->lamp_oil = lamp_oil;
+        strip_bytes(10);
     }
 
     /* Read item-quality squelch sub-menu */
@@ -2431,12 +2434,27 @@ static errr rd_inventory(void)
     supplies_reset_store();
 
     u16b supply_count = 0;
-    rd_u16b(&supply_count);
+    u16b supply_marker = 0;
+    rd_u16b(&supply_marker);
     if (load_read_failed)
     {
         supplies_set_allow_overflow(false);
         note("Error reading supply count");
         return (-1);
+    }
+    if (supply_marker == SAVEFILE_SUPPLY_BLOCK_MAGIC)
+    {
+        rd_u16b(&supply_count);
+        if (load_read_failed)
+        {
+            supplies_set_allow_overflow(false);
+            note("Error reading supply count");
+            return (-1);
+        }
+    }
+    else
+    {
+        supply_count = supply_marker;
     }
     log_debug("Loading %u supply entries", (unsigned)supply_count);
     supplies_set_allow_overflow(true);

@@ -1405,7 +1405,7 @@ static void process_world(void)
     if (o_ptr->tval == TV_LIGHT)
     {
         /* Hack -- Use some fuel */
-        if (o_ptr->timeout > 0)
+        if (player_light_has_fuel(o_ptr))
         {
             /* Decrease life-span */
             int fuel = 1;
@@ -1425,7 +1425,7 @@ static void process_world(void)
                 }
             }
 
-            o_ptr->timeout -= fuel;
+            player_light_add_fuel(o_ptr, -fuel);
             if (o_ptr->timeout < 0)
                 o_ptr->timeout = 0;
             p_ptr->redraw |= (PR_LIGHT);
