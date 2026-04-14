@@ -101,7 +101,7 @@ extern sdl_view g_views[MAX_TERM_DATA];
 extern SDL_Rect g_pane_rects[PANE_MAX];
 
 void sdl_copy_default_pane_config(void);
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(SIL_IOS)
 void sdl_ensure_default_pane_configs_present(bool enable_new_panes);
 #endif
 void sdl_ensure_touch_pane_config_present(void);

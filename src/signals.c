@@ -247,8 +247,8 @@ void signals_init(void)
     (void)(*signal_aux)(SIGQUIT, handle_signal_simple);
 #endif
 
-#ifdef __ANDROID__
-    log_warn("signals_init: Android fatal signal panic interception disabled");
+#if defined(__ANDROID__) || defined(SIL_IOS)
+    log_warn("signals_init: mobile fatal signal panic interception disabled");
     return;
 #endif
 

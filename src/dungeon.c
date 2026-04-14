@@ -4460,8 +4460,8 @@ PlayResult play_game(void)
 
         if ((main_hgt < min_hgt) || (main_wid < min_wid))
         {
-#ifdef __ANDROID__
-            log_error("main window too small on Android: %dx%d (need at least %dx%d)",
+#if defined(__ANDROID__) || defined(SIL_IOS)
+            log_error("main window too small on mobile: %dx%d (need at least %dx%d)",
                 main_wid, main_hgt, min_wid, min_hgt);
 #else
             log_error("main window too small: %dx%d (need at least %dx%d)",

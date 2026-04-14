@@ -218,7 +218,7 @@ const char* sdl_min_terminal_mode_name(int mode)
     return (mode == SDL_MIN_TERMINAL_COMPACT) ? "compact" : "normal";
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(SIL_IOS)
 void sdl_ensure_default_pane_configs_present(bool enable_new_panes)
 {
     for (int i = 0; i < default_pane_config_count; i++) {

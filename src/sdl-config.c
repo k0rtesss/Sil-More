@@ -1052,7 +1052,7 @@ static void sdl_config_apply_app_option_defaults(void)
     op_ptr->hitpoint_warn = 3;
     op_ptr->main_combat_rolls = get_sdl_steamdeck_mode() ? 2 : 0;
     op_ptr->narrative_banner_seconds = NARRATIVE_BANNER_SECONDS_DEFAULT;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(SIL_IOS)
     op_ptr->ability_desc_mode = 1;
 #else
     op_ptr->ability_desc_mode = 0;
@@ -2145,7 +2145,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->enable_right_panes = true;
     config->enable_bottom_panes = true;
     config->hide_left_panel = false;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(SIL_IOS)
     config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
 #else
     config->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
