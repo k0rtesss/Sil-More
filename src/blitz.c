@@ -69,13 +69,6 @@ static bool blitz_show_end_summary_ui(byte sil_count)
     app_ui_scene scene;
     app_session* session = app_session_current();
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("blitz summary: snapshot renderer required; legacy renderer removed");
-        msg_print("Blitz result summary requires the snapshot UI renderer.");
-        return false;
-    }
-
     if (!session || !ui_information_scene_enter(&scope))
         return false;
 

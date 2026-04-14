@@ -3136,13 +3136,6 @@ void do_cmd_view_map(void)
     app_ui_scene scene;
     cptr prompt = "Hit any key to continue";
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("map view: snapshot renderer required; legacy renderer removed");
-        msg_print("Map view requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!ui_information_scene_enter(&scope))
         return;
 

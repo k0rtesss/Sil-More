@@ -1710,13 +1710,6 @@ void do_cmd_help(void)
         do_cmd_redraw();
     }
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("help: snapshot renderer unavailable");
-        msg_print("Help viewer requires the snapshot UI renderer.");
-        return;
-    }
-
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
 

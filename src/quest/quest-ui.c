@@ -1427,13 +1427,6 @@ void do_cmd_quest_status(void)
     log_trace("QUEST STATUS: Player exists, quest states - Tulkas: %d, Aule: %d, Mandos: %d",
               p_ptr->tulkas_quest, p_ptr->aule_quest, p_ptr->mandos_quest);
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("quest status: snapshot renderer required; legacy quest-status renderer removed");
-        msg_print("Quest status viewer requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!do_cmd_quest_status_information_scene())
     {
         log_warn("quest status: information-scene presentation failed on the snapshot renderer path");
@@ -1459,7 +1452,7 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     int row = 0;
     int col = 0;
 
-    if (!ui_information_scene_supported() || !ui_information_scene_enter(&info_scope))
+    if (!ui_information_scene_enter(&info_scope))
     {
         log_warn("quest typewriter: semantic scene required");
         msg_print("Quest dialog unavailable.");

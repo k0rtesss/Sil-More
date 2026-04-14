@@ -2277,13 +2277,6 @@ void note_info_screen(const object_type* o_ptr)
 {
     object_info_screen_capture capture = {0};
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("note info: snapshot renderer required; legacy note renderer removed");
-        msg_print("Note view requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!note_info_screen_capture_build(o_ptr, &capture)
         || !object_info_screen_capture_view_document(
             &capture, TERM_L_WHITE + TERM_SHADE, "(press any key)"))
@@ -2817,13 +2810,6 @@ void object_info_screen_multi(const object_type** objects, const char** headings
 
     if (count <= 0 || objects == NULL)
         return;
-
-    if (!ui_information_scene_supported())
-    {
-        log_warn("object info: snapshot renderer required; legacy object-info renderer removed");
-        msg_print("Object info requires the snapshot UI renderer.");
-        return;
-    }
 
     if (!object_info_screen_capture_build(objects, headings, count, &capture)
         || !object_info_screen_capture_view_document(

@@ -156,13 +156,6 @@ void do_cmd_character_sheet(void)
         do_cmd_redraw();
     }
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("character sheet: snapshot renderer required; legacy renderer removed");
-        msg_print("Character sheet requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!ui_information_scene_enter(&info_scope))
         return;
 

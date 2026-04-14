@@ -522,14 +522,6 @@ void do_cmd_query_symbol(void)
         return;
     }
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("query symbol: snapshot renderer required; legacy query recall renderer removed");
-        msg_print("Monster recall requires the snapshot UI renderer.");
-        who = mem_free(who);
-        return;
-    }
-
     if (!query_symbol_snapshot_choose_mode(buf, n, &query))
     {
         log_warn("query symbol: semantic recall mode chooser unavailable");

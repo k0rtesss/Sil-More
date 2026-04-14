@@ -18,13 +18,9 @@
 #include "object/object-ui-display.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
-#include "runtime-cli.h"
 #include "ui/ui-information-scene.h"
 
 #include <ctype.h>
-
-void prompt_snapshot_push_silent_clear(void);
-void prompt_snapshot_pop_silent_clear(void);
 
 bool item_tester_full = false;
 byte item_tester_tval = 0;
@@ -42,22 +38,12 @@ static int get_tag(int* cp, char tag);
 
 static bool item_selector_verify_item_no_flash(cptr prompt, int item)
 {
-    bool verified;
-
-    prompt_snapshot_push_silent_clear();
-    verified = verify_item(prompt, item);
-    prompt_snapshot_pop_silent_clear();
-    return verified;
+    return verify_item(prompt, item);
 }
 
 static bool item_selector_get_item_allow_no_flash(int item)
 {
-    bool allowed;
-
-    prompt_snapshot_push_silent_clear();
-    allowed = get_item_allow(item);
-    prompt_snapshot_pop_silent_clear();
-    return allowed;
+    return get_item_allow(item);
 }
 
 static bool item_selector_menu_scene_enter(item_selector_menu_scene_scope* scope)

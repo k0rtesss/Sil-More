@@ -34,10 +34,19 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   `src/ui/smithing/ui-smithing-screen.c`, `src/birth.c`, and
   `src/metarun.c` now reuse the shared semantic scene or wait-input helpers
   instead of bespoke workflow-scoped snapshot ownership.
-- The remaining work is not architecture substrate and not settings cleanup.
-  It is finish-line cleanup of a small set of SDL-path interaction loops,
-  term-sized layout budgeting, item-display helpers, and stale fallback
-  wording.
+- Dead snapshot-renderer fallback branches have now been deleted from the
+  semantic UI entry surfaces. Remaining repo-wide audit hits are no longer
+  interpreted as active SDL runtime debt by default.
+- The remaining finish-line build blocker is now explicit: `src/z-term.c`
+  still appears in `CMakeLists.txt` under `SIL_MORE_SOURCES_LEGACY_COMPAT`,
+  and `sil-legacy-compat` is still linked into `sil-more`,
+  `sil-ui1-tests`, `sil-ui8-tests`, and `sil-ui8-demo-packets`.
+- Remaining non-zero audit counts are acceptable only in documented
+  legacy/platform/debug families such as:
+  - `src/main-sdl.c`, `src/sdl-*.c`, `src/platform-*.h`
+  - legacy subwindow renderers in `src/ui/ui-status.c`,
+    `src/object/object-ui-display.c`, and `src/ui/ui-character-screen.c`
+  - debug or utility paths such as `src/wizard*.c` and `src/squelch.c`
 
 ## Active Workstreams
 ### 1. Replace legacy blocking loops in semantic SDL scenes
@@ -132,6 +141,30 @@ Exit when:
   toggle
 - docs describe current finish-line work only, not rollout history
 
+### 6. Remove `z-term` From The Build Graph
+Goal:
+- remove `src/z-term.c` from `CMakeLists.txt` and stop treating the
+  `z-term` compatibility layer as part of the active runtime build
+
+Primary targets:
+- `CMakeLists.txt`
+- `src/z-term.c`
+- `src/z-term.h`
+- direct compile-time dependencies that still force `z-term` into the build,
+  especially `src/angband.h`, `src/dungeon.c`, `src/files.c`, and
+  `src/sdl-main-internal.h`
+- the `sil-legacy-compat` target and every target that links it today:
+  `sil-more`, `sil-ui1-tests`, `sil-ui8-tests`, and `sil-ui8-demo-packets`
+
+Exit when:
+- `src/z-term.c` no longer appears in active source lists in `CMakeLists.txt`
+- `sil-more` no longer links `sil-legacy-compat` just to pull `z-term` in
+- the remaining runtime and test targets build through narrower headers and
+  interfaces that do not require `z-term.h` transitively through `angband.h`
+- any intentionally retained legacy frontend code is either unbuilt,
+  separately archived, or isolated behind a target that is not part of the
+  normal SDL runtime finish line
+
 ## Parallel Execution
 - Lane A: Workstream 1. Write set: prompt and selector or main-menu
   interaction files.
@@ -139,6 +172,8 @@ Exit when:
   helpers.
 - Lane C: Workstreams 4 and 5. Write set: bespoke workflow files plus CLI and
   doc cleanup.
+- Lane D: Workstream 6. Write set: build graph, `z-term`, and direct
+  compile-time dependency files.
 
 Rules:
 - Do not add or widen fallback renderers.
@@ -160,8 +195,10 @@ Rules:
 ## Done When
 - Normal SDL play uses semantic scenes for visible UI and no longer depends on
   terminal-grid input or layout ownership.
-- Remaining `Term_*` code is either platform, legacy subwindow, debug, or
-  intentionally retained compatibility code, not part of the active SDL
+- Remaining audit hits are confined to documented platform, legacy subwindow,
+  debug, or intentionally retained compatibility code, not the active SDL
   runtime UI path.
+- `src/z-term.c` is no longer in `CMakeLists.txt` for the normal runtime and
+  test build graph.
 - This plan can stay short because the remaining work is a finite cleanup
   list, not another staged migration.

@@ -1026,13 +1026,6 @@ static bool do_cmd_combat_history_information_scene(void)
  */
 void do_cmd_combat_history(void)
 {
-    if (!ui_information_scene_supported())
-    {
-        log_warn("combat history: snapshot renderer required; legacy renderer removed");
-        msg_print("Combat history viewer requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!do_cmd_combat_history_information_scene())
     {
         log_warn("combat history: information-scene presentation failed on the snapshot renderer path");

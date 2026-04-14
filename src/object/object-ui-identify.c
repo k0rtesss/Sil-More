@@ -445,13 +445,6 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
     int highlight = 0;
     ident_scene_result scene_result;
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("identify menu: snapshot renderer required; legacy identify renderer removed");
-        msg_print("Identify menu requires the snapshot UI renderer.");
-        return false;
-    }
-
     scene_result = display_unified_identify_menu_scene(entries, entry_count,
         &highlight);
     if (scene_result == IDENT_SCENE_CANCEL)

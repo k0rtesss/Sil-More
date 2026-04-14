@@ -32,24 +32,11 @@ void set_story_equipment_list_active(bool active);
 int draw_item_tile(int x, int y, object_type* o_ptr);
 int menu_weight_col_for_width(int term_wid);
 int menu_label_col_for_width(int term_wid, bool display_weights);
-int menu_center_col_for_len(int term_wid, int len);
 int menu_overlay_clear_col(int col);
 int menu_desc_limit(int text_col, int label_col, int weight_col, bool display_weights);
 int menu_inventory_row_width(cptr desc, const object_type* o_ptr,
     bool display_weights);
 int menu_equipment_row_width(cptr desc, const object_type* o_ptr,
     bool display_weights);
-
-void story_render_inventory_entry(int row, int base_col, int label_col,
-    cptr desc, byte desc_attr, bool display_weights, cptr weight_text,
-    byte weight_attr, cptr label_text, byte label_attr, const object_type* o_ptr,
-    bool highlight, int story_term_w);
-void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
-    byte prefix_attr, cptr desc, byte desc_attr, bool display_weights,
-    cptr weight_text, byte weight_attr, cptr label_text, byte label_attr,
-    const object_type* o_ptr, bool highlight, int story_term_w);
-void draw_equipment_story_rows(int col, int entry_count, int* out_index,
-    byte* out_color, char out_desc[][80], bool highlight_active,
-    int highlight_index, bool display_weights, int story_term_w);
 
 #endif /* INCLUDED_OBJECT_UI_DISPLAY_H */

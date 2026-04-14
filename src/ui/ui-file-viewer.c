@@ -605,13 +605,6 @@ static show_file_scene_result show_file_information_scene(
  */
 bool show_buffer(cptr main_buffer, int line)
 {
-    if (!ui_information_scene_supported())
-    {
-        log_warn("buffer viewer: semantic information scene unavailable");
-        msg_print("Text viewer unavailable.");
-        return true;
-    }
-
     if (!show_buffer_information_scene(main_buffer, line))
     {
         log_warn("buffer viewer: information-scene presentation failed");
@@ -632,13 +625,6 @@ bool show_buffer(cptr main_buffer, int line)
 bool show_file(cptr name, cptr what, int line)
 {
     show_file_scene_result result;
-
-    if (!ui_information_scene_supported())
-    {
-        log_warn("file viewer: semantic information scene unavailable");
-        msg_print("File viewer unavailable.");
-        return true;
-    }
 
     result = show_file_information_scene(name, what, line);
     if (result == SHOW_FILE_SCENE_RESULT_ERROR)

@@ -427,13 +427,6 @@ void do_cmd_change_song(void)
         return;
     }
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("song selection: snapshot renderer required; legacy renderer removed");
-        msg_print("Song selection requires the snapshot UI renderer.");
-        return;
-    }
-
     if (!ui_information_scene_enter(&scope))
         return;
 
@@ -2583,12 +2576,5 @@ static void do_cmd_ability_screen_semantic(void)
 
 void do_cmd_ability_screen(void)
 {
-    if (!ui_information_scene_supported())
-    {
-        log_warn("ability screen: snapshot renderer required; legacy renderer removed");
-        msg_print("Ability screen requires the snapshot UI renderer.");
-        return;
-    }
-
     do_cmd_ability_screen_semantic();
 }

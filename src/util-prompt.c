@@ -2,7 +2,6 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "platform-input.h"
-#include "runtime-cli.h"
 #include "ui/ui-information-scene.h"
 
 static cptr g_prompt_interaction_label = NULL;
@@ -17,16 +16,6 @@ typedef struct prompt_menu_scene_scope {
 static char prompt_inkey_with_wait_reason(u16b reason)
 {
     return (char)ui_information_scene_wait_key_with_wait_reason(reason);
-}
-
-void prompt_snapshot_push_silent_clear(void)
-{
-    return;
-}
-
-void prompt_snapshot_pop_silent_clear(void)
-{
-    return;
 }
 
 static bool prompt_menu_scene_supported(void)

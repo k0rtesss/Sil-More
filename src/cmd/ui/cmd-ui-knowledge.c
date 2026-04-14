@@ -101,18 +101,8 @@ static bool knowledge_resume_information_scene(
 }
 
 static bool knowledge_enter_information_scene_or_report(
-    ui_information_scene_scope* scope, cptr log_name, cptr required_message,
-    cptr unavailable_message)
+    ui_information_scene_scope* scope, cptr log_name, cptr unavailable_message)
 {
-    if (!ui_information_scene_supported())
-    {
-        log_warn("%s: snapshot renderer required; legacy renderer removed",
-            log_name ? log_name : "knowledge");
-        if (required_message && required_message[0])
-            msg_print(required_message);
-        return false;
-    }
-
     if (ui_information_scene_enter(scope))
         return true;
 
@@ -2793,7 +2783,6 @@ void do_cmd_knowledge_browser_page(int page)
 
     if (!knowledge_enter_information_scene_or_report(&info_scope,
             "knowledge browser",
-            "Known lore browser requires the snapshot UI renderer.",
             "Known lore browser unavailable."))
     {
         return;
@@ -3247,7 +3236,6 @@ bool do_cmd_knowledge_supplies(const supply_menu_request* request)
 
     if (!knowledge_enter_information_scene_or_report(&info_scope,
             "knowledge supplies",
-            "Supplies browser requires the snapshot UI renderer.",
             "Supplies screen unavailable."))
     {
         return false;
@@ -3629,7 +3617,6 @@ void do_cmd_knowledge(void)
 
     if (!knowledge_enter_information_scene_or_report(&info_scope,
             "knowledge menu",
-            "Knowledge menu requires the snapshot UI renderer.",
             "Knowledge menu unavailable."))
     {
         return;

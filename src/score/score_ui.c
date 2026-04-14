@@ -1306,44 +1306,36 @@ void show_scores(bool longscore)
             ensure_entry_visible(ordered_by_time, &count_time, capacity, highlight_entry, false, &highlight_time);
     }
 
-    if (ui_information_scene_supported())
+    while (true)
     {
-        while (true)
+        const high_score* list = (order == SCORE_VIEW_ORDER_SCORE)
+            ? ordered_by_score : ordered_by_time;
+        int count = (order == SCORE_VIEW_ORDER_SCORE) ? count_score
+            : count_time;
+        int highlight = (order == SCORE_VIEW_ORDER_SCORE)
+            ? highlight_score : highlight_time;
+        char response;
+
+        log_debug("show_scores: rendering page (order=%s count=%d highlight=%d)",
+            (order == SCORE_VIEW_ORDER_SCORE) ? "score" : "time",
+            count, highlight);
+
+        response = display_scores_pages_information(list, count, highlight,
+            order, detailed, page_size);
+        if (response == 's' || response == 'S' || response == 'o'
+            || response == 'O')
         {
-            const high_score* list = (order == SCORE_VIEW_ORDER_SCORE)
-                ? ordered_by_score : ordered_by_time;
-            int count = (order == SCORE_VIEW_ORDER_SCORE) ? count_score
-                : count_time;
-            int highlight = (order == SCORE_VIEW_ORDER_SCORE)
-                ? highlight_score : highlight_time;
-            char response;
-
-            log_debug("show_scores: rendering page (order=%s count=%d highlight=%d)",
-                (order == SCORE_VIEW_ORDER_SCORE) ? "score" : "time",
-                count, highlight);
-
-            response = display_scores_pages_information(list, count, highlight,
-                order, detailed, page_size);
-            if (response == 's' || response == 'S' || response == 'o'
-                || response == 'O')
-            {
-                order = (order == SCORE_VIEW_ORDER_SCORE)
-                    ? SCORE_VIEW_ORDER_CHRONOLOGY : SCORE_VIEW_ORDER_SCORE;
-                continue;
-            }
-            if (response == 'l' || response == 'L')
-            {
-                detailed = !detailed;
-                score_last_layout_short = !detailed;
-                continue;
-            }
-            break;
+            order = (order == SCORE_VIEW_ORDER_SCORE)
+                ? SCORE_VIEW_ORDER_CHRONOLOGY : SCORE_VIEW_ORDER_SCORE;
+            continue;
         }
-    }
-    else
-    {
-        log_warn("show_scores: snapshot renderer unavailable");
-        msg_print("Halls of Mandos requires the snapshot UI renderer.");
+        if (response == 'l' || response == 'L')
+        {
+            detailed = !detailed;
+            score_last_layout_short = !detailed;
+            continue;
+        }
+        break;
     }
 
     forced_highlight_active = false;
@@ -1978,13 +1970,6 @@ void do_cmd_run_history(void)
         if (count <= 0)
         {
             msg_print("No run history is available.");
-            return;
-        }
-
-        if (!ui_information_scene_supported())
-        {
-            log_warn("run history: snapshot renderer unavailable");
-            msg_print("Run history viewer requires the snapshot UI renderer.");
             return;
         }
 

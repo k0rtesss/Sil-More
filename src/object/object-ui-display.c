@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "log/log.h"
 #include "platform-story-font.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
@@ -25,7 +24,6 @@ static bool story_equipment_list_active = false;
 
 enum
 {
-    MENU_DEFAULT_LAYOUT_WIDTH = 80,
     MENU_LABEL_FIELD_WIDTH = 4,
     MENU_WEIGHT_FIELD_WIDTH = 8
 };
@@ -220,14 +218,6 @@ int draw_item_tile(int x, int y, object_type* o_ptr)
     return x;
 }
 
-static int menu_layout_width(int requested_width)
-{
-    if (requested_width > 0)
-        return requested_width;
-
-    return MENU_DEFAULT_LAYOUT_WIDTH;
-}
-
 static void clear_item_row_segment(int row, int col, int width)
 {
     if (width <= 0)
@@ -277,14 +267,6 @@ int menu_label_col_for_width(int term_wid, bool display_weights)
     return col;
 }
 
-int menu_center_col_for_len(int term_wid, int len)
-{
-    if (len >= term_wid)
-        return 0;
-
-    return (term_wid - len) / 2;
-}
-
 int menu_overlay_clear_col(int col)
 {
     /* Keep a one-cell gutter so centered overlays stay visually separate. */
@@ -325,171 +307,6 @@ int menu_equipment_row_width(cptr desc, const object_type* o_ptr,
 
     return prefix_width + menu_inventory_row_width(desc, o_ptr,
         display_weights);
-}
-
-void story_render_inventory_entry(int row, int base_col, int label_col,
-    cptr desc, byte desc_attr, bool display_weights, cptr weight_text,
-    byte weight_attr, cptr label_text, byte label_attr, const object_type* o_ptr,
-    bool highlight, int story_term_w)
-{
-    int term_wid = menu_layout_width(story_term_w);
-    int highlight_cols = term_wid;
-    int weight_col = display_weights ? MAX(0, label_col - 8) : label_col;
-    const int label_width = MENU_LABEL_FIELD_WIDTH;
-
-    clear_item_row_segment(row, base_col, term_wid - base_col);
-    if (highlight)
-        story_fill_rect(row, base_col, highlight_cols - base_col, TERM_L_BLUE);
-
-    int text_col = base_col;
-    if (o_ptr && o_ptr->k_idx)
-        text_col = draw_item_tile(base_col, row, (object_type*)o_ptr);
-
-    int desc_limit = menu_desc_limit(text_col, label_col, weight_col,
-        display_weights);
-    story_print_text(row, text_col, desc_limit, desc_attr, desc);
-
-    if (display_weights && weight_text && weight_text[0])
-    {
-        int weight_width = label_col - weight_col;
-        if (weight_width < 1)
-            weight_width = 1;
-        story_print_text_grid(row, weight_col, weight_width, weight_attr,
-            weight_text);
-    }
-
-    if (label_text && label_text[0])
-        story_print_text(row, label_col, label_width, label_attr, label_text);
-}
-
-void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
-    byte prefix_attr, cptr desc, byte desc_attr, bool display_weights,
-    cptr weight_text, byte weight_attr, cptr label_text, byte label_attr,
-    const object_type* o_ptr, bool highlight, int story_term_w)
-{
-    int clear_col = menu_overlay_clear_col(col);
-    int term_wid = menu_layout_width(story_term_w);
-    int highlight_cols = term_wid;
-    int label_col = menu_label_col_for_width(term_wid, display_weights);
-    int weight_col = menu_weight_col_for_width(term_wid);
-    const int label_width = MENU_LABEL_FIELD_WIDTH;
-    bool has_object = (o_ptr && o_ptr->k_idx);
-
-    clear_item_row_segment(row, clear_col, term_wid - clear_col);
-    if (highlight)
-        story_fill_rect(row, col, highlight_cols - col, TERM_L_BLUE);
-
-    story_print_equipment_prefix(row, col, prefix_attr, prefix);
-
-    int text_col = col + 12 + 2;
-    if (has_object)
-        text_col = draw_item_tile(col + 12 + 2, row, (object_type*)o_ptr);
-
-    int desc_limit = menu_desc_limit(text_col, label_col, weight_col,
-        display_weights);
-
-    char combined_desc[160];
-    story_prepare_equipment_desc(combined_desc, sizeof(combined_desc), desc,
-        slot, has_object, desc_limit);
-    story_print_text(row, text_col, desc_limit, desc_attr, combined_desc);
-
-    if (display_weights && weight_text && weight_text[0])
-    {
-        int weight_width = label_col - weight_col;
-        if (weight_width < 1)
-            weight_width = 1;
-        story_print_text_grid(row, weight_col, weight_width, weight_attr,
-            weight_text);
-    }
-
-    if (label_text && label_text[0])
-        story_print_text(row, label_col, label_width, label_attr, label_text);
-}
-
-void draw_equipment_story_rows(int col, int entry_count, int* out_index,
-    byte* out_color, char out_desc[][80], bool highlight_active,
-    int highlight_index, bool display_weights, int story_term_w)
-{
-    int clear_col = menu_overlay_clear_col(col);
-    int term_wid = menu_layout_width(story_term_w);
-    int label_col_base = menu_label_col_for_width(term_wid, display_weights);
-    int weight_col = menu_weight_col_for_width(term_wid);
-    int highlight_cols = term_wid;
-    const int label_width = MENU_LABEL_FIELD_WIDTH;
-
-    log_trace("draw_equipment_story_rows: entry_count=%d, highlight_active=%d, highlight_index=%d",
-        entry_count, highlight_active, highlight_index);
-
-    for (int idx = 0; idx < entry_count; idx++)
-    {
-        int row = idx + 1;
-        bool is_highlight = highlight_active && idx == highlight_index;
-        byte line_attr = is_highlight ? TERM_L_BLUE : out_color[idx];
-        int slot = out_index[idx];
-        object_type* o_ptr = &inventory[slot];
-        bool has_object = o_ptr->k_idx != 0;
-
-        if (is_highlight)
-        {
-            log_trace("draw_equipment_story_rows: Drawing HIGHLIGHTED row %d, slot=%d, has_object=%d, desc='%s'",
-                row, slot, has_object, out_desc[idx]);
-        }
-
-        clear_item_row_segment(row, clear_col, term_wid - clear_col);
-        if (is_highlight)
-        {
-            log_trace("draw_equipment_story_rows: Filling highlight rect at row %d", row);
-            story_fill_rect(row, col, highlight_cols - col, TERM_L_BLUE);
-        }
-
-        char prefix[32];
-        strnfmt(prefix, sizeof(prefix), "%-12s: ", mention_use(slot));
-        byte prefix_attr = is_highlight ? TERM_L_BLUE : TERM_WHITE;
-        log_trace("draw_equipment_story_rows: Row %d - printing prefix '%s' at col=%d", row, prefix, col);
-        story_print_equipment_prefix(row, col, prefix_attr, prefix);
-
-        int text_col = col + 12 + 2;
-        log_trace("draw_equipment_story_rows: Row %d - text_col calculated as %d (col=%d + 12 + 2)", row, text_col, col);
-        if (has_object)
-        {
-            int tile_end_col = draw_item_tile(text_col, row, o_ptr);
-            log_trace("draw_equipment_story_rows: Row %d - drew tile, text_col updated from %d to %d", row, text_col, tile_end_col);
-            text_col = tile_end_col;
-        }
-
-        int label_col = label_col_base;
-        int desc_limit = menu_desc_limit(text_col, label_col, weight_col,
-            display_weights);
-
-        char combined_desc[160];
-        story_prepare_equipment_desc(combined_desc, sizeof(combined_desc),
-            out_desc[idx], slot, has_object, desc_limit);
-
-        log_trace("draw_equipment_story_rows: Row %d - printing desc '%s' at col=%d limit=%d",
-            row, combined_desc, text_col, desc_limit);
-        story_print_text(row, text_col, desc_limit, line_attr, combined_desc);
-
-        if (display_weights && has_object && o_ptr->weight)
-        {
-            int wgt = o_ptr->weight * o_ptr->number;
-            char weight_buf[16];
-            strnfmt(weight_buf, sizeof(weight_buf), "%2d.%1d lb", wgt / 10, wgt % 10);
-            int weight_width = label_col - weight_col;
-            if (weight_width < 1)
-                weight_width = 1;
-            log_trace("draw_equipment_story_rows: Row %d - printing weight '%s' at col=%d width=%d", row, weight_buf, weight_col, weight_width);
-            story_print_text_grid(row, weight_col, weight_width, line_attr,
-                weight_buf);
-        }
-
-        char label_buf[8];
-        strnfmt(label_buf, sizeof(label_buf), "(%c)", index_to_label(slot));
-        byte label_attr = is_highlight ? TERM_L_BLUE : TERM_WHITE;
-        log_trace("draw_equipment_story_rows: Row %d - printing label '%s' at col=%d width=%d (label_col_base=%d)", row, label_buf, label_col, label_width, label_col_base);
-        story_print_text(row, label_col, label_width, label_attr, label_buf);
-    }
-
-    log_trace("draw_equipment_story_rows: Finished drawing all rows");
 }
 
 static int subwindow_weight_col(int term_wid)

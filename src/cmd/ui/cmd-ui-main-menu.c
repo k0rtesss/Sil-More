@@ -1224,13 +1224,6 @@ void show_hint_message_screen(int index)
     int look_x = -1;
     bool request_look = false;
 
-    if (!ui_information_scene_supported())
-    {
-        log_warn("hint message detail: semantic scene unavailable");
-        msg_print("Hint message viewer unavailable.");
-        return;
-    }
-
     if (!hint_message_show_ui_scene(index, &look_y, &look_x,
             &request_look))
     {
@@ -1370,13 +1363,6 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     if (n <= 0)
     {
         msg_print("You recall no hint messages on this level.");
-        return;
-    }
-
-    if (!ui_information_scene_supported())
-    {
-        log_warn("hint messages: semantic scene unavailable");
-        msg_print("Hint message browser unavailable.");
         return;
     }
 
@@ -1622,13 +1608,6 @@ void do_cmd_messages(void)
     if (g_banner_force_redraw_remaining > 0) {
         g_banner_force_redraw_remaining = 0;
         do_cmd_redraw();
-    }
-
-    if (!ui_information_scene_supported())
-    {
-        log_warn("message recall: semantic scene unavailable");
-        msg_print("Message recall unavailable.");
-        return;
     }
 
     if (!do_cmd_messages_information_scene())
