@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "object/object-ui-select.h"
+#include "ui/ui-information-scene.h"
 #include "ui/smithing/ui-smithing-internal.h"
 #include "externs.h"
 #include "log/log.h"
@@ -35,7 +36,7 @@ static char smith_ui_inkey_with_wait_reason(void)
     app_session_push_wait_scope(session, &scope,
         APP_WAIT_REASON_LIST_SELECTION, 0, 0);
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    ch = (char)ui_information_scene_wait_key();
     inkey_set_cursor_hidden(false);
     app_session_pop_wait_scope(session, &scope);
     return ch;

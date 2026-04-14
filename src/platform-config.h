@@ -23,6 +23,8 @@ int get_sdl_effective_menu_panel_font_size(void);
 void set_sdl_menu_panel_font_size(int value);
 int get_sdl_margin(void);
 void set_sdl_margin(int value);
+int sdl_current_min_terminal_cols(void);
+int sdl_current_min_terminal_rows(void);
 bool get_sdl_fullscreen(void);
 void set_sdl_fullscreen(bool value);
 bool get_sdl_tiles(void);

@@ -1802,7 +1802,7 @@
 #define PW_EQUIP 0x00000002L /* Display equip/inven */
 #define PW_PLAYER_0 0x00000004L /* Display player (basic) */
 /* xxx */
-#define PW_COMBAT_ROLLS 0x00000010L /* Display combat rolls */
+#define PW_COMBAT_ROLLS 0x00000010L /* Reserved legacy combat-roll bit */
 #define PW_MONSTER 0x00000020L /* Display monster recall */
 #define PW_OBJECT 0x00000040L /* Display object recall */
 #define PW_MESSAGE 0x00000080L /* Display messages */
@@ -1817,7 +1817,7 @@
 #define WINDOW_MAIN 0
 #define WINDOW_INVEN 1
 #define WINDOW_EQUIP 2
-#define WINDOW_COMBAT_ROLLS 3
+#define WINDOW_COMBAT_ROLLS 3 /* Reserved legacy combat-roll slot */
 #define WINDOW_MONSTER 4
 #define WINDOW_PLAYER_0 5
 #define WINDOW_MESSAGE 6

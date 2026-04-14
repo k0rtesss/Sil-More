@@ -134,7 +134,6 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
         return false;
     }
 
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
     while (1)
     {
         char ch = inkey();
@@ -158,9 +157,6 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
  */
 void bell(cptr reason)
 {
-    /* Mega-Hack -- Flush the output */
-    Term_fresh();
-
     if (character_generated && reason)
     {
         message_add(reason, MSG_BELL);
@@ -174,7 +170,7 @@ void bell(cptr reason)
 
     /* Make a bell noise (if allowed) */
     if (system_beep)
-        Term_xtra(TERM_XTRA_NOISE, 0);
+        sdl_sound_handle(MSG_BELL);
 
     /* Flush the input (later!) */
     flush();
@@ -721,6 +717,7 @@ void move_cursor(int row, int col)
  */
 static void msg_flush(int x)
 {
+    (void)x;
     byte a = TERM_L_BLUE;
     app_wait_scope scope;
     app_session* session = app_session_current();

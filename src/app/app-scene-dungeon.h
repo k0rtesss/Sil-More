@@ -14,8 +14,6 @@ struct app_session;
 struct app_wait_state;
 
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
-#define APP_DUNGEON_STATUS_FORMAT_VERSION 3u
-#define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 4u
 #define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
 
@@ -29,10 +27,6 @@ struct app_wait_state;
 #define APP_DUNGEON_COMBAT_ENTRY_MAX 100u
 #define APP_DUNGEON_COMPACT_SEGMENT_MAX 16u
 #define APP_DUNGEON_COMPACT_SHORT_TEXT_MAX 12u
-#define APP_DUNGEON_MESSAGE_LIMIT 256u
-#define APP_DUNGEON_LEFT_PANEL_ROWS_MAX 64u
-#define APP_DUNGEON_FOOTER_ITEM_MAX 12u
-
 #define APP_PACK_COORD(y, x) \
     ((((u32b)((u16b)(y))) << 16) | ((u32b)((u16b)(x))))
 #define APP_UNPACK_COORD_Y(packed) ((s16b)(((packed) >> 16) & 0xFFFFu))
@@ -97,12 +91,6 @@ typedef enum app_status_text_kind {
     APP_STATUS_TEXT_LIGHT = 13,
     APP_STATUS_TEXT_EVASION = 14
 } app_status_text_kind;
-
-typedef struct app_footer_item_snapshot {
-    byte attr;
-    byte active;
-    char text[APP_DUNGEON_STATUS_TEXT_MAX];
-} app_footer_item_snapshot;
 
 typedef struct app_status_compact_segment {
     byte attr;
@@ -191,38 +179,6 @@ typedef struct app_map_snapshot {
     app_map_cell_snapshot cells[];
 } app_map_snapshot;
 
-typedef struct app_status_snapshot {
-    u16b format_version;
-    u16b flags;
-    u16b left_panel_row_count;
-    u16b footer_item_count;
-    u16b left_panel_min_width_px;
-    u16b left_panel_width_cap_px;
-    app_ui_row left_panel_rows[APP_DUNGEON_LEFT_PANEL_ROWS_MAX];
-    app_footer_item_snapshot footer_items[APP_DUNGEON_FOOTER_ITEM_MAX];
-} app_status_snapshot;
-
-typedef struct app_message_line_snapshot {
-    u16b type;
-    byte color;
-    byte reserved;
-    s16b age;
-    char text[APP_DUNGEON_MESSAGE_TEXT_MAX];
-} app_message_line_snapshot;
-
-typedef struct app_messages_snapshot {
-    u16b format_version;
-    u16b flags;
-    u16b line_count;
-    u16b top_line_type;
-    byte top_line_color;
-    byte top_line_active;
-    byte more_pending;
-    byte reserved;
-    char top_line[APP_DUNGEON_MESSAGE_TEXT_MAX];
-    app_message_line_snapshot lines[];
-} app_messages_snapshot;
-
 typedef app_raw_cell_snapshot app_panel_cell_snapshot;
 
 typedef struct app_combat_roll_snapshot {
@@ -269,16 +225,10 @@ typedef struct app_dungeon_overlay_snapshot {
 
 typedef struct app_dungeon_snapshot {
     app_snapshot snapshot;
-    app_snapshot_blob blobs[5];
+    app_snapshot_blob blobs[3];
     byte* map_data;
     size_t map_size;
     size_t map_capacity;
-    byte* status_data;
-    size_t status_size;
-    size_t status_capacity;
-    byte* messages_data;
-    size_t messages_size;
-    size_t messages_capacity;
     byte* panes_data;
     size_t panes_size;
     size_t panes_capacity;
@@ -290,8 +240,6 @@ typedef struct app_dungeon_snapshot {
 
 void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
-bool app_status_snapshot_build_live(app_status_snapshot* status,
-    const struct app_wait_state* wait_state);
 bool app_status_text_live(app_status_text_kind kind, char* out_text,
     size_t out_text_sz, byte* out_attr);
 bool app_status_song_lines_live(char* out_primary, size_t out_primary_sz,

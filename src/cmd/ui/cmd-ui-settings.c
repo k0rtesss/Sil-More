@@ -36,9 +36,6 @@ extern struct sound_config g_sound_config;
 
 #define COLOR_SAMPLE "###"
 
-static int settings_sdl_min_terminal_mode(void);
-static int settings_ui_named_sdl_cols(void);
-static int settings_ui_named_sdl_rows(void);
 static void do_cmd_macro_aux(char* buf);
 static void do_cmd_macro_aux_keymap(char* buf);
 static bool settings_ui_prompt_string(cptr title, cptr prompt, cptr note,
@@ -49,7 +46,7 @@ static bool settings_browser_add_pair_row(app_ui_panel* panel, s16b id,
     byte attr, byte meta_attr, bool enabled, bool selected, cptr label,
     cptr meta);
 
-static char settings_ui_read_legacy_key(bool scan)
+static char settings_ui_read_key(bool scan)
 {
     app_session* session = app_session_current();
     app_input input;
@@ -78,14 +75,237 @@ static char settings_ui_read_legacy_key(bool scan)
     }
 }
 
-static bool settings_sdl_hide_left_panel(void)
+typedef bool (*settings_bool_getter_fn)(void);
+typedef void (*settings_bool_setter_fn)(bool value);
+typedef int (*settings_int_getter_fn)(void);
+typedef void (*settings_int_setter_fn)(int value);
+typedef int (*settings_indexed_int_getter_fn)(int index);
+typedef void (*settings_indexed_int_setter_fn)(int index, int value);
+
+typedef struct settings_bool_binding {
+    settings_bool_getter_fn get;
+    settings_bool_setter_fn set;
+} settings_bool_binding;
+
+typedef struct settings_int_binding {
+    settings_int_getter_fn get;
+    settings_int_setter_fn set;
+} settings_int_binding;
+
+typedef struct settings_indexed_int_binding {
+    settings_indexed_int_getter_fn get;
+    settings_indexed_int_setter_fn set;
+} settings_indexed_int_binding;
+
+typedef enum settings_sdl_int_config {
+    SETTINGS_SDL_INT_MAIN_VIEW_SCALE = 0,
+    SETTINGS_SDL_INT_MAX_SCALE,
+    SETTINGS_SDL_INT_MIN_TERMINAL_MODE,
+    SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE,
+    SETTINGS_SDL_INT_EFFECTIVE_AUX_VIEW_FONT_SIZE,
+    SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
+    SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE,
+    SETTINGS_SDL_INT_MARGIN,
+    SETTINGS_SDL_INT_CONFIG_MAX,
+} settings_sdl_int_config;
+
+typedef enum settings_sdl_bool_config {
+    SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL = 0,
+    SETTINGS_SDL_BOOL_FULLSCREEN,
+    SETTINGS_SDL_BOOL_TILES,
+    SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED,
+    SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED,
+    SETTINGS_SDL_BOOL_CONFIG_MAX,
+} settings_sdl_bool_config;
+
+typedef enum settings_sdl_pane_metric {
+    SETTINGS_SDL_PANE_TYPE = 0,
+    SETTINGS_SDL_PANE_WHERE,
+    SETTINGS_SDL_PANE_ENABLED,
+    SETTINGS_SDL_PANE_ROWS,
+    SETTINGS_SDL_PANE_COLS,
+    SETTINGS_SDL_PANE_FONT_SIZE,
+    SETTINGS_SDL_PANE_EFFECTIVE_FONT_SIZE,
+    SETTINGS_SDL_PANE_CURRENT_ROWS,
+    SETTINGS_SDL_PANE_CURRENT_COLS,
+    SETTINGS_SDL_PANE_METRIC_MAX,
+} settings_sdl_pane_metric;
+
+typedef struct settings_ui_layout {
+    bool compact;
+    bool narrow;
+    int list_row_budget;
+    int option_line_chars;
+    int prompt_line_chars;
+    int inset_prompt_line_chars;
+    int pane_overview_label_chars;
+    int pane_overview_value_chars;
+    int supporting_font_label_chars;
+    int supporting_layout_type_chars;
+    int supporting_layout_where_chars;
+} settings_ui_layout;
+
+static int settings_sdl_get_pane_enabled_int(int index)
 {
-    return get_sdl_hide_left_panel();
+    return get_sdl_pane_enabled(index) ? 1 : 0;
 }
 
-static void settings_sdl_set_hide_left_panel(bool hidden)
+static void settings_sdl_set_pane_enabled_int(int index, int value)
 {
-    set_sdl_hide_left_panel(hidden);
+    set_sdl_pane_enabled(index, value != 0);
+}
+
+static const settings_int_binding settings_sdl_int_bindings
+    [SETTINGS_SDL_INT_CONFIG_MAX] = {
+        [SETTINGS_SDL_INT_MAIN_VIEW_SCALE]
+            = { get_sdl_main_view_scale, set_sdl_main_view_scale },
+        [SETTINGS_SDL_INT_MAX_SCALE] = { get_sdl_max_scale, NULL },
+        [SETTINGS_SDL_INT_MIN_TERMINAL_MODE]
+            = { get_sdl_min_terminal_mode, set_sdl_min_terminal_mode },
+        [SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE]
+            = { get_sdl_aux_view_font_size, set_sdl_aux_view_font_size },
+        [SETTINGS_SDL_INT_EFFECTIVE_AUX_VIEW_FONT_SIZE]
+            = { get_sdl_effective_aux_view_font_size, NULL },
+        [SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE]
+            = { get_sdl_menu_panel_font_size, set_sdl_menu_panel_font_size },
+        [SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE]
+            = { get_sdl_effective_menu_panel_font_size, NULL },
+        [SETTINGS_SDL_INT_MARGIN] = { get_sdl_margin, set_sdl_margin },
+    };
+
+static const settings_bool_binding settings_sdl_bool_bindings
+    [SETTINGS_SDL_BOOL_CONFIG_MAX] = {
+        [SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL]
+            = { get_sdl_hide_left_panel, set_sdl_hide_left_panel },
+        [SETTINGS_SDL_BOOL_FULLSCREEN]
+            = { get_sdl_fullscreen, set_sdl_fullscreen },
+        [SETTINGS_SDL_BOOL_TILES] = { get_sdl_tiles, set_sdl_tiles },
+        [SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED]
+            = { get_sdl_enable_right_panes, set_sdl_enable_right_panes },
+        [SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED]
+            = { get_sdl_enable_bottom_panes, set_sdl_enable_bottom_panes },
+    };
+
+static const settings_indexed_int_binding settings_sdl_pane_bindings
+    [SETTINGS_SDL_PANE_METRIC_MAX] = {
+        [SETTINGS_SDL_PANE_TYPE] = { get_sdl_pane_type, NULL },
+        [SETTINGS_SDL_PANE_WHERE] = { get_sdl_pane_where, set_sdl_pane_where },
+        [SETTINGS_SDL_PANE_ENABLED]
+            = { settings_sdl_get_pane_enabled_int,
+                settings_sdl_set_pane_enabled_int },
+        [SETTINGS_SDL_PANE_ROWS] = { get_sdl_pane_rows, set_sdl_pane_rows },
+        [SETTINGS_SDL_PANE_COLS] = { get_sdl_pane_cols, set_sdl_pane_cols },
+        [SETTINGS_SDL_PANE_FONT_SIZE]
+            = { get_sdl_pane_font_size, set_sdl_pane_font_size },
+        [SETTINGS_SDL_PANE_EFFECTIVE_FONT_SIZE]
+            = { get_sdl_pane_effective_font_size, NULL },
+        [SETTINGS_SDL_PANE_CURRENT_ROWS] = { get_sdl_pane_current_rows, NULL },
+        [SETTINGS_SDL_PANE_CURRENT_COLS] = { get_sdl_pane_current_cols, NULL },
+    };
+
+static int settings_sdl_get_int_config(settings_sdl_int_config id)
+{
+    if (id < 0 || id >= SETTINGS_SDL_INT_CONFIG_MAX
+        || !settings_sdl_int_bindings[id].get)
+    {
+        return 0;
+    }
+
+    return settings_sdl_int_bindings[id].get();
+}
+
+static void settings_sdl_set_int_config(settings_sdl_int_config id, int value)
+{
+    if (id < 0 || id >= SETTINGS_SDL_INT_CONFIG_MAX
+        || !settings_sdl_int_bindings[id].set)
+    {
+        return;
+    }
+
+    settings_sdl_int_bindings[id].set(value);
+}
+
+static bool settings_sdl_get_bool_config(settings_sdl_bool_config id)
+{
+    if (id < 0 || id >= SETTINGS_SDL_BOOL_CONFIG_MAX
+        || !settings_sdl_bool_bindings[id].get)
+    {
+        return false;
+    }
+
+    return settings_sdl_bool_bindings[id].get();
+}
+
+static void settings_sdl_set_bool_config(settings_sdl_bool_config id,
+    bool value)
+{
+    if (id < 0 || id >= SETTINGS_SDL_BOOL_CONFIG_MAX
+        || !settings_sdl_bool_bindings[id].set)
+    {
+        return;
+    }
+
+    settings_sdl_bool_bindings[id].set(value);
+}
+
+static int settings_sdl_get_pane_metric(settings_sdl_pane_metric metric,
+    int index)
+{
+    if (metric < 0 || metric >= SETTINGS_SDL_PANE_METRIC_MAX
+        || !settings_sdl_pane_bindings[metric].get)
+    {
+        return 0;
+    }
+
+    return settings_sdl_pane_bindings[metric].get(index);
+}
+
+static void settings_sdl_set_pane_metric(settings_sdl_pane_metric metric,
+    int index, int value)
+{
+    if (metric < 0 || metric >= SETTINGS_SDL_PANE_METRIC_MAX
+        || !settings_sdl_pane_bindings[metric].set)
+    {
+        return;
+    }
+
+    settings_sdl_pane_bindings[metric].set(index, value);
+}
+
+static settings_ui_layout settings_ui_read_layout(void)
+{
+    settings_ui_layout layout;
+    bool compact = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_MIN_TERMINAL_MODE) == 1;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.compact = compact;
+    layout.narrow = compact;
+    layout.list_row_budget = compact ? 18 : 24;
+    layout.option_line_chars = compact ? 45 : 75;
+    layout.prompt_line_chars = compact ? 50 : 80;
+    layout.inset_prompt_line_chars = compact ? 48 : 78;
+    layout.pane_overview_label_chars = compact ? 22 : 52;
+    layout.pane_overview_value_chars = compact ? 6 : 14;
+    layout.supporting_font_label_chars = compact ? 24 : 39;
+    layout.supporting_layout_type_chars = compact ? 16 : 26;
+    layout.supporting_layout_where_chars = compact ? 12 : 19;
+
+    return layout;
+}
+
+static int settings_ui_list_visible_rows(const settings_ui_layout* layout,
+    int first_row, int footer_rows, int min_rows)
+{
+    int row_budget = layout ? layout->list_row_budget : 24;
+    int visible_rows = row_budget - footer_rows - first_row;
+
+    if (min_rows < 1)
+        min_rows = 1;
+    if (visible_rows < min_rows)
+        visible_rows = min_rows;
+
+    return visible_rows;
 }
 
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
@@ -458,48 +678,6 @@ static bool option_page_uses_app_config(int page)
 {
     return (page == INTERFACE_PAGE) || (page == TEXT_PAGE)
         || (page == EFFICIENCY_PAGE) || (page == VISUAL_PAGE);
-}
-
-/*
- * Semantic SDL settings scenes should follow the named compact/normal SDL
- * configuration instead of branching off the live term dimensions.
- */
-static bool settings_ui_named_sdl_compact_mode(void)
-{
-    return settings_sdl_min_terminal_mode() == 1;
-}
-
-static int settings_ui_named_sdl_cols(void)
-{
-    return settings_ui_named_sdl_compact_mode() ? 50 : 80;
-}
-
-static int settings_ui_named_sdl_rows(void)
-{
-    return settings_ui_named_sdl_compact_mode() ? 18 : 24;
-}
-
-static int settings_ui_named_sdl_line_width(int col)
-{
-    int width = settings_ui_named_sdl_cols() - col;
-
-    if (width < 1)
-        width = 1;
-
-    return width;
-}
-
-static int settings_ui_named_sdl_visible_rows(int first_row, int footer_rows,
-    int min_rows)
-{
-    int visible_rows = settings_ui_named_sdl_rows() - footer_rows - first_row;
-
-    if (min_rows < 1)
-        min_rows = 1;
-    if (visible_rows < min_rows)
-        visible_rows = min_rows;
-
-    return visible_rows;
 }
 
 static void settings_ui_fit_text(char* buf, size_t buflen, cptr text,
@@ -996,7 +1174,7 @@ static int settings_choice_menu(cptr title,
     }
 
     inkey_set_cursor_hidden(true);
-    ch = settings_ui_read_legacy_key(false);
+    ch = settings_ui_read_key(false);
     inkey_set_cursor_hidden(false);
 
     hotkey_index = settings_choice_find_index_by_hotkey(entries, entry_count,
@@ -1049,39 +1227,10 @@ static int settings_choice_menu(cptr title,
     return 0;
 }
 
-static bool option_menu_use_compact_layout(void)
+static cptr sound_option_label(const settings_ui_layout* layout, int index)
 {
-    return settings_ui_named_sdl_cols() <= 60;
-}
-
-static bool option_menu_use_narrow_layout(void)
-{
-    return settings_ui_named_sdl_cols() <= 50;
-}
-
-static int option_menu_max_line_chars(void)
-{
-    int wid = settings_ui_named_sdl_cols();
-
-    /* Options start at column 4; keep one cell free for the cursor. */
-    wid -= 5;
-
-    if (wid < 8)
-        wid = 8;
-
-    return wid;
-}
-
-static void option_menu_fit_text(char* buf, size_t buflen, cptr text,
-    int max_chars)
-{
-    settings_ui_fit_text(buf, buflen, text, max_chars);
-}
-
-static cptr sound_option_label(int index)
-{
-    bool compact = option_menu_use_compact_layout();
-    bool narrow = option_menu_use_narrow_layout();
+    bool compact = layout && layout->compact;
+    bool narrow = layout && layout->narrow;
 
     if (compact)
     {
@@ -1125,10 +1274,10 @@ static cptr sound_option_label(int index)
     }
 }
 
-static cptr option_menu_label(int opt)
+static cptr option_menu_label(const settings_ui_layout* layout, int opt)
 {
-    bool compact = option_menu_use_compact_layout();
-    bool narrow = option_menu_use_narrow_layout();
+    bool compact = layout && layout->compact;
+    bool narrow = layout && layout->narrow;
 
     switch (opt)
     {
@@ -1249,166 +1398,120 @@ static cptr option_menu_label(int opt)
     return "(unknown option)";
 }
 
-static void option_menu_format_line(char* buf, size_t buflen, cptr label,
-    cptr value)
+static cptr option_menu_describe_value(const settings_ui_layout* layout,
+    bool is_sound_page, const int opt[], int index,
+    const struct sound_config* sound_cfg, char* value_buf, size_t buflen)
 {
-    if (!option_menu_use_compact_layout())
-    {
-        strnfmt(buf, buflen, "%-48s: %s", label, value);
-    }
-    else
-    {
-        char label_buf[96];
-        char value_buf[48];
-        int max_chars = option_menu_max_line_chars();
-        int value_len;
-        int label_budget;
+    bool compact = layout && layout->compact;
+    cptr label;
 
-        option_menu_fit_text(value_buf, sizeof(value_buf), value, max_chars);
-        value_len = (int)strlen(value_buf);
+    if (!value_buf || !buflen)
+        return "";
 
-        if (value_len <= 0)
-        {
-            option_menu_fit_text(buf, buflen, label, max_chars);
-            return;
-        }
-
-        label_budget = max_chars - value_len - 2;
-        if (label_budget <= 0)
-        {
-            option_menu_fit_text(buf, buflen, value_buf, max_chars);
-            return;
-        }
-
-        option_menu_fit_text(label_buf, sizeof(label_buf), label, label_budget);
-        strnfmt(buf, buflen, "%s: %s", label_buf, value_buf);
-    }
-}
-
-static void option_menu_describe_line(bool is_sound_page, const int opt[],
-    int index, const struct sound_config* sound_cfg, char* buf, size_t buflen)
-{
-    if (!buf || !buflen)
-        return;
-
-    buf[0] = '\0';
+    value_buf[0] = '\0';
 
     if (is_sound_page)
     {
-        char value_str[32];
-
-        value_str[0] = '\0';
+        label = sound_option_label(layout, index);
         if (index == 0)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->enabled ? "yes" : "no ");
         }
         else if (index == 1)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->enable_combat ? "yes" : "no ");
         }
         else if (index == 2)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->enable_inventory ? "yes" : "no ");
         }
         else if (index == 3)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->enable_walk ? "yes" : "no ");
         }
         else if (index == 4)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->enable_doors ? "yes" : "no ");
         }
         else if (index == 5)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->volume_combat * 100.0f);
         }
         else if (index == 6)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->volume_inventory * 100.0f);
         }
         else if (index == 7)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->volume_walk * 100.0f);
         }
         else if (index == 8)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->volume_doors * 100.0f);
         }
         else if (index == 9)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->volume_other * 100.0f);
         }
         else if (index == 10)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->music_main_enabled ? "yes" : "no ");
         }
         else if (index == 11)
         {
-            strnfmt(value_str, sizeof(value_str), "%s",
+            strnfmt(value_buf, buflen, "%s",
                 sound_cfg->music_ambient_enabled ? "yes" : "no ");
         }
         else if (index == 12)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->music_main_volume * 100.0f);
         }
         else if (index == 13)
         {
-            strnfmt(value_str, sizeof(value_str), "%.0f%%",
+            strnfmt(value_buf, buflen, "%.0f%%",
                 sound_cfg->music_ambient_volume * 100.0f);
         }
 
-        option_menu_format_line(buf, buflen, sound_option_label(index),
-            value_str);
-        return;
+        return label;
     }
 
+    label = option_menu_label(layout, opt[index]);
     if (opt[index] == OPT_delay_factor)
     {
-        char value_str[32];
-
-        strnfmt(value_str, sizeof(value_str), "%d", op_ptr->delay_factor);
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            value_str);
+        strnfmt(value_buf, buflen, "%d", op_ptr->delay_factor);
     }
     else if (opt[index] == OPT_hitpoint_warning)
     {
-        char value_str[32];
-
-        strnfmt(value_str, sizeof(value_str), "%d%%",
+        strnfmt(value_buf, buflen, "%d%%",
             op_ptr->hitpoint_warn * 10);
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            value_str);
     }
     else if (opt[index] == OPT_hide_left_panel)
     {
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            settings_sdl_hide_left_panel() ? "yes" : "no ");
+        strnfmt(value_buf, buflen, "%s",
+            settings_sdl_get_bool_config(SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL)
+                ? "yes"
+                : "no ");
     }
     else if (opt[index] == OPT_main_combat_rolls)
     {
-        char value_str[32];
-
-        strnfmt(value_str, sizeof(value_str), "%d",
+        strnfmt(value_buf, buflen, "%d",
             op_ptr->main_combat_rolls);
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            value_str);
     }
     else if (opt[index] == OPT_show_level_entry_banner)
     {
         const char* mode_str;
-        bool compact = option_menu_use_compact_layout();
 
         switch (op_ptr->level_entry_narrative_mode)
         {
@@ -1421,13 +1524,11 @@ static void option_menu_describe_line(bool is_sound_page, const int opt[],
             mode_str = compact ? "Banner delay" : "Banner with delay";
             break;
         }
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            mode_str);
+        strnfmt(value_buf, buflen, "%s", mode_str);
     }
     else if (opt[index] == OPT_show_partition_narrative)
     {
         const char* mode_str;
-        bool compact = option_menu_use_compact_layout();
 
         switch (op_ptr->partition_narrative_mode)
         {
@@ -1437,13 +1538,11 @@ static void option_menu_describe_line(bool is_sound_page, const int opt[],
         case PARTITION_NARRATIVE_OFF: mode_str = "Off"; break;
         default: mode_str = "Message"; break;
         }
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            mode_str);
+        strnfmt(value_buf, buflen, "%s", mode_str);
     }
     else if (opt[index] == OPT_ability_desc_mode)
     {
         const char* mode_str;
-        bool compact = option_menu_use_compact_layout();
 
         switch (op_ptr->ability_desc_mode)
         {
@@ -1457,38 +1556,33 @@ static void option_menu_describe_line(bool is_sound_page, const int opt[],
             mode_str = compact ? "0 lore+effect" : "0 (lore+effect)";
             break;
         }
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            mode_str);
+        strnfmt(value_buf, buflen, "%s", mode_str);
     }
     else if (opt[index] == OPT_vault_drop_frequency)
     {
         const char* vdf_names[] = {
             "Normal", "Modest", "Scarce", "Meager", "Plentiful"
         };
-        char value_str[32];
         byte mode = op_ptr->vault_drop_frequency;
 
         if (mode > VDF_PLENTIFUL)
             mode = VDF_NORMAL;
-        strnfmt(value_str, sizeof(value_str), "%s (%d)", vdf_names[mode],
+        strnfmt(value_buf, buflen, "%s (%d)", vdf_names[mode],
             mode);
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            value_str);
     }
     else if (opt[index] == OPT_noble_item_spawn_mode)
     {
         const char* mode_str
             = (op_ptr->noble_item_spawn_mode
                 == NOBLE_ITEM_SPAWN_INCLUDE_VAULTS)
-            ? (option_menu_use_compact_layout()
+            ? (compact
                 ? "1 with vaults"
                 : "1 (also &/! vault drops)")
-            : (option_menu_use_compact_layout()
+            : (compact
                 ? "0 restricted"
                 : "0 (good+/chests/human+elf skeletons)");
 
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            mode_str);
+        strnfmt(value_buf, buflen, "%s", mode_str);
     }
     else if (opt[index] == OPT_intro_style)
     {
@@ -1502,19 +1596,20 @@ static void option_menu_describe_line(bool is_sound_page, const int opt[],
 
         if (mode > INTRO_STYLE_RANDOM)
             mode = INTRO_STYLE_FLAME;
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
-            is_names[mode]);
+        strnfmt(value_buf, buflen, "%s", is_names[mode]);
     }
     else if (opt[index] == OPT_banner_message_stairs)
     {
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
+        strnfmt(value_buf, buflen, "%s",
             op_ptr->opt[opt[index]] ? "Stair" : "Straight");
     }
     else
     {
-        option_menu_format_line(buf, buflen, option_menu_label(opt[index]),
+        strnfmt(value_buf, buflen, "%s",
             op_ptr->opt[opt[index]] ? "yes" : "no ");
     }
+
+    return label;
 }
 
 static bool option_menu_present_ui_scene(int page, cptr info, int n,
@@ -1522,6 +1617,7 @@ static bool option_menu_present_ui_scene(int page, cptr info, int n,
     const struct option_group_marker* groups,
     const struct sound_config* sound_cfg)
 {
+    settings_ui_layout layout = settings_ui_read_layout();
     app_ui_scene scene;
     app_ui_panel* panel;
     char subtitle[64];
@@ -1540,7 +1636,8 @@ static bool option_menu_present_ui_scene(int page, cptr info, int n,
 
     for (int i = 0; i < n; i++)
     {
-        char buf[160];
+        char value_buf[64];
+        cptr label;
         byte attr = (i == k) ? TERM_L_BLUE : TERM_WHITE;
 
         while (groups && groups[group_index].before_index == i)
@@ -1553,10 +1650,10 @@ static bool option_menu_present_ui_scene(int page, cptr info, int n,
             group_index++;
         }
 
-        option_menu_describe_line(is_sound_page, opt, i, sound_cfg, buf,
-            sizeof(buf));
-        if (!settings_browser_add_label_row(panel, (s16b)i, attr, !locked,
-                i == k, buf))
+        label = option_menu_describe_value(&layout, is_sound_page, opt, i,
+            sound_cfg, value_buf, sizeof(value_buf));
+        if (!settings_browser_add_pair_row(panel, (s16b)i, attr, TERM_SLATE,
+                !locked, i == k, label, value_buf))
         {
             return false;
         }
@@ -1640,9 +1737,10 @@ extern void do_cmd_options_aux(int page, cptr info)
     /* Interact with the player */
     while (true)
     {
+        settings_ui_layout layout = settings_ui_read_layout();
         int first_row = 3;
         int footer_rows = (page == CHALLENGE_PAGE) ? 4 : 2;
-        int visible_rows = settings_ui_named_sdl_visible_rows(first_row,
+        int visible_rows = settings_ui_list_visible_rows(&layout, first_row,
             footer_rows, 1);
         int total_rows = n + option_group_total_rows(groups);
         int selected_display_row = k + option_group_count_before(groups, k);
@@ -1667,7 +1765,7 @@ extern void do_cmd_options_aux(int page, cptr info)
 
         /* Get a key */
         inkey_set_cursor_hidden(true);
-        ch = settings_ui_read_legacy_key(false);
+        ch = settings_ui_read_key(false);
         inkey_set_cursor_hidden(false);
 
         /*
@@ -1760,8 +1858,10 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    settings_sdl_set_hide_left_panel(
-                        !settings_sdl_hide_left_panel());
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL,
+                        !settings_sdl_get_bool_config(
+                            SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL));
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -1878,7 +1978,8 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    settings_sdl_set_hide_left_panel(true);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL, true);
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -1995,7 +2096,8 @@ extern void do_cmd_options_aux(int page, cptr info)
                 }
                 else if (opt[k] == OPT_hide_left_panel)
                 {
-                    settings_sdl_set_hide_left_panel(false);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL, false);
                     sdl_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
@@ -2212,37 +2314,6 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed);
 static void do_cmd_supporting_pane_font_editor(bool* settings_changed);
 static void do_cmd_touch_pane_button_editor(bool* settings_changed);
 static const char* pane_type_short_name(enum pane_type type);
-static enum pane_type settings_sdl_pane_type(int idx);
-static enum pane_placement settings_sdl_pane_where(int idx);
-static bool settings_sdl_pane_enabled(int idx);
-static int settings_sdl_pane_rows(int idx);
-static int settings_sdl_pane_cols(int idx);
-static int settings_sdl_pane_font_size(int idx);
-static int settings_sdl_pane_effective_font_size(int idx);
-static void settings_sdl_set_pane_rows(int idx, int rows);
-static void settings_sdl_set_pane_cols(int idx, int cols);
-static void settings_sdl_set_pane_font_size(int idx, int size);
-static int settings_sdl_main_view_scale(void);
-static int settings_sdl_max_scale(void);
-static void settings_sdl_set_main_view_scale(int value);
-static int settings_sdl_min_terminal_mode(void);
-static void settings_sdl_set_min_terminal_mode(int value);
-static int settings_sdl_aux_view_font_size(void);
-static int settings_sdl_effective_aux_view_font_size(void);
-static void settings_sdl_set_aux_view_font_size(int value);
-static int settings_sdl_menu_panel_font_size(void);
-static int settings_sdl_effective_menu_panel_font_size(void);
-static void settings_sdl_set_menu_panel_font_size(int value);
-static int settings_sdl_margin(void);
-static void settings_sdl_set_margin(int value);
-static bool settings_sdl_fullscreen(void);
-static void settings_sdl_set_fullscreen(bool enabled);
-static bool settings_sdl_tiles(void);
-static void settings_sdl_set_tiles(bool enabled);
-static bool settings_sdl_right_panes_enabled(void);
-static void settings_sdl_set_right_panes_enabled(bool enabled);
-static bool settings_sdl_bottom_panes_enabled(void);
-static void settings_sdl_set_bottom_panes_enabled(bool enabled);
 static const char* settings_sdl_config_path(void);
 static const char* settings_sdl_touch_slot_name(int idx);
 static void settings_sdl_touch_panel_name(int panel, char* buf, size_t buflen);
@@ -2250,111 +2321,6 @@ static void settings_sdl_touch_button_label(int panel, int slot, char* buf,
     size_t buflen);
 static int settings_sdl_touch_binding(int panel, int slot);
 static void settings_sdl_set_touch_binding(int panel, int slot, int binding);
-
-static int settings_sdl_main_view_scale(void)
-{
-    return get_sdl_main_view_scale();
-}
-
-static int settings_sdl_max_scale(void)
-{
-    return get_sdl_max_scale();
-}
-
-static void settings_sdl_set_main_view_scale(int value)
-{
-    set_sdl_main_view_scale(value);
-}
-
-static int settings_sdl_min_terminal_mode(void)
-{
-    return get_sdl_min_terminal_mode();
-}
-
-static void settings_sdl_set_min_terminal_mode(int value)
-{
-    set_sdl_min_terminal_mode(value);
-}
-
-static int settings_sdl_aux_view_font_size(void)
-{
-    return get_sdl_aux_view_font_size();
-}
-
-static int settings_sdl_effective_aux_view_font_size(void)
-{
-    return get_sdl_effective_aux_view_font_size();
-}
-
-static void settings_sdl_set_aux_view_font_size(int value)
-{
-    set_sdl_aux_view_font_size(value);
-}
-
-static int settings_sdl_menu_panel_font_size(void)
-{
-    return get_sdl_menu_panel_font_size();
-}
-
-static int settings_sdl_effective_menu_panel_font_size(void)
-{
-    return get_sdl_effective_menu_panel_font_size();
-}
-
-static void settings_sdl_set_menu_panel_font_size(int value)
-{
-    set_sdl_menu_panel_font_size(value);
-}
-
-static int settings_sdl_margin(void)
-{
-    return get_sdl_margin();
-}
-
-static void settings_sdl_set_margin(int value)
-{
-    set_sdl_margin(value);
-}
-
-static bool settings_sdl_fullscreen(void)
-{
-    return get_sdl_fullscreen();
-}
-
-static void settings_sdl_set_fullscreen(bool enabled)
-{
-    set_sdl_fullscreen(enabled);
-}
-
-static bool settings_sdl_tiles(void)
-{
-    return get_sdl_tiles();
-}
-
-static void settings_sdl_set_tiles(bool enabled)
-{
-    set_sdl_tiles(enabled);
-}
-
-static bool settings_sdl_right_panes_enabled(void)
-{
-    return get_sdl_enable_right_panes();
-}
-
-static void settings_sdl_set_right_panes_enabled(bool enabled)
-{
-    set_sdl_enable_right_panes(enabled);
-}
-
-static bool settings_sdl_bottom_panes_enabled(void)
-{
-    return get_sdl_enable_bottom_panes();
-}
-
-static void settings_sdl_set_bottom_panes_enabled(bool enabled)
-{
-    set_sdl_enable_bottom_panes(enabled);
-}
 
 static const char* settings_sdl_config_path(void)
 {
@@ -2384,20 +2350,27 @@ static void settings_sdl_read_pane_overview(
         return;
 
     memset(overview, 0, sizeof(*overview));
-    overview->main_view_scale = settings_sdl_main_view_scale();
-    overview->max_scale = settings_sdl_max_scale();
-    overview->min_terminal_mode = settings_sdl_min_terminal_mode();
-    overview->aux_view_font_size = settings_sdl_aux_view_font_size();
+    overview->main_view_scale = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_MAIN_VIEW_SCALE);
+    overview->max_scale = settings_sdl_get_int_config(SETTINGS_SDL_INT_MAX_SCALE);
+    overview->min_terminal_mode = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_MIN_TERMINAL_MODE);
+    overview->aux_view_font_size = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE);
     overview->effective_aux_view_font_size
-        = settings_sdl_effective_aux_view_font_size();
-    overview->menu_panel_font_size = settings_sdl_menu_panel_font_size();
+        = settings_sdl_get_int_config(SETTINGS_SDL_INT_EFFECTIVE_AUX_VIEW_FONT_SIZE);
+    overview->menu_panel_font_size = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE);
     overview->effective_menu_panel_font_size
-        = settings_sdl_effective_menu_panel_font_size();
-    overview->margin = settings_sdl_margin();
-    overview->fullscreen = settings_sdl_fullscreen();
-    overview->tiles = settings_sdl_tiles();
-    overview->right_panes_enabled = settings_sdl_right_panes_enabled();
-    overview->bottom_panes_enabled = settings_sdl_bottom_panes_enabled();
+        = settings_sdl_get_int_config(SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE);
+    overview->margin = settings_sdl_get_int_config(SETTINGS_SDL_INT_MARGIN);
+    overview->fullscreen = settings_sdl_get_bool_config(
+        SETTINGS_SDL_BOOL_FULLSCREEN);
+    overview->tiles = settings_sdl_get_bool_config(SETTINGS_SDL_BOOL_TILES);
+    overview->right_panes_enabled = settings_sdl_get_bool_config(
+        SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED);
+    overview->bottom_panes_enabled = settings_sdl_get_bool_config(
+        SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED);
     overview->config_path = settings_sdl_config_path();
 }
 
@@ -2434,12 +2407,12 @@ static const char* sdl_min_terminal_mode_label(int mode)
 static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     const settings_sdl_pane_overview* overview)
 {
+    settings_ui_layout layout = settings_ui_read_layout();
     app_ui_scene scene;
     app_ui_panel* panel;
     char value_buf[32];
     char font_value[24];
     cptr config_label;
-    int row_width;
     int label_hint;
 
     if (!overview)
@@ -2448,8 +2421,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     config_label = (overview->config_path && overview->config_path[0])
         ? overview->config_path
         : "sil_sdl.json";
-    row_width = settings_ui_named_sdl_line_width(0);
-    label_hint = MAX(22, MIN(52, row_width - 28));
+    label_hint = layout.pane_overview_label_chars;
 
     panel = settings_browser_scene_begin_ex(&scene, "SDL Pane Settings",
         config_label, 1120, 2200);
@@ -2484,7 +2456,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     format_font_size_value(font_value, sizeof(font_value),
         overview->aux_view_font_size,
         overview->effective_aux_view_font_size,
-        MAX(6, MIN(14, row_width / 2)));
+        layout.pane_overview_value_chars);
     if (!settings_browser_add_pair_row(panel, 2, (k == 2) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 2,
             settings_ui_pick_label(label_hint,
@@ -2498,7 +2470,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     format_font_size_value(font_value, sizeof(font_value),
         overview->menu_panel_font_size,
         overview->effective_menu_panel_font_size,
-        MAX(6, MIN(14, row_width / 2)));
+        layout.pane_overview_value_chars);
     if (!settings_browser_add_pair_row(panel, 3, (k == 3) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 3,
             settings_ui_pick_label(label_hint,
@@ -2633,7 +2605,7 @@ void do_cmd_pane_settings(void)
 
         /* Get key */
         inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_legacy_key(false);
+        char ch = settings_ui_read_key(false);
         inkey_set_cursor_hidden(false);
         
         /* Try to translate the key into a direction */
@@ -2706,7 +2678,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.aux_view_font_size != 0)
                 {
-                    settings_sdl_set_aux_view_font_size(0);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, 0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2715,7 +2688,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.menu_panel_font_size != 0)
                 {
-                    settings_sdl_set_menu_panel_font_size(0);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, 0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2734,31 +2708,35 @@ void do_cmd_pane_settings(void)
             /* Toggle or activate current option */
             if (k == 1) /* Minimum Terminal Size */
             {
-                settings_sdl_set_min_terminal_mode(overview.min_terminal_mode
-                    == 0 ? 1 : 0);
+                settings_sdl_set_int_config(SETTINGS_SDL_INT_MIN_TERMINAL_MODE,
+                    overview.min_terminal_mode == 0 ? 1 : 0);
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 5) /* Fullscreen */
             {
-                settings_sdl_set_fullscreen(!overview.fullscreen);
+                settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_FULLSCREEN,
+                    !overview.fullscreen);
                 settings_changed = true;
             }
             else if (k == 6) /* Tiles */
             {
-                settings_sdl_set_tiles(!overview.tiles);
+                settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
+                    !overview.tiles);
                 settings_changed = true;
             }
             else if (k == 7) /* Enable Side Panes */
             {
-                settings_sdl_set_right_panes_enabled(
+                settings_sdl_set_bool_config(
+                    SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED,
                     !overview.right_panes_enabled);
                 settings_changed = true;
                 sdl_apply_config();
             }
             else if (k == 8) /* Enable Bottom Panes */
             {
-                settings_sdl_set_bottom_panes_enabled(
+                settings_sdl_set_bool_config(
+                    SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED,
                     !overview.bottom_panes_enabled);
                 settings_changed = true;
                 sdl_apply_config();
@@ -2796,7 +2774,8 @@ void do_cmd_pane_settings(void)
                 val = overview.main_view_scale;
                 if (val < overview.max_scale)
                 {
-                    settings_sdl_set_main_view_scale(val + 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MAIN_VIEW_SCALE, val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2805,7 +2784,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.min_terminal_mode != 0)
                 {
-                    settings_sdl_set_min_terminal_mode(0);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MIN_TERMINAL_MODE, 0);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2815,14 +2795,16 @@ void do_cmd_pane_settings(void)
                 val = overview.aux_view_font_size;
                 if (val == 0)
                 {
-                    settings_sdl_set_aux_view_font_size(
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE,
                         overview.effective_aux_view_font_size);
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val < 48)
                 {
-                    settings_sdl_set_aux_view_font_size(val + 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2832,14 +2814,16 @@ void do_cmd_pane_settings(void)
                 val = overview.menu_panel_font_size;
                 if (val == 0)
                 {
-                    settings_sdl_set_menu_panel_font_size(
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
                         overview.effective_menu_panel_font_size);
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val < 64)
                 {
-                    settings_sdl_set_menu_panel_font_size(val + 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2849,7 +2833,8 @@ void do_cmd_pane_settings(void)
                 val = overview.margin;
                 if (val < 20)
                 {
-                    settings_sdl_set_margin(val + 1);
+                    settings_sdl_set_int_config(SETTINGS_SDL_INT_MARGIN,
+                        val + 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2858,7 +2843,8 @@ void do_cmd_pane_settings(void)
             {
                 if (!overview.fullscreen)
                 {
-                    settings_sdl_set_fullscreen(true);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_FULLSCREEN, true);
                     settings_changed = true;
                 }
             }
@@ -2866,7 +2852,7 @@ void do_cmd_pane_settings(void)
             {
                 if (!overview.tiles)
                 {
-                    settings_sdl_set_tiles(true);
+                    settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES, true);
                     settings_changed = true;
                 }
             }
@@ -2874,7 +2860,8 @@ void do_cmd_pane_settings(void)
             {
                 if (!overview.right_panes_enabled)
                 {
-                    settings_sdl_set_right_panes_enabled(true);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED, true);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2883,7 +2870,8 @@ void do_cmd_pane_settings(void)
             {
                 if (!overview.bottom_panes_enabled)
                 {
-                    settings_sdl_set_bottom_panes_enabled(true);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED, true);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2902,7 +2890,8 @@ void do_cmd_pane_settings(void)
                 val = overview.main_view_scale;
                 if (val > 1)
                 {
-                    settings_sdl_set_main_view_scale(val - 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MAIN_VIEW_SCALE, val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2911,7 +2900,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.min_terminal_mode != 1)
                 {
-                    settings_sdl_set_min_terminal_mode(1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MIN_TERMINAL_MODE, 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2921,14 +2911,16 @@ void do_cmd_pane_settings(void)
                 val = overview.aux_view_font_size;
                 if (val == 0)
                 {
-                    settings_sdl_set_aux_view_font_size(
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE,
                         overview.effective_aux_view_font_size);
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val > 8)
                 {
-                    settings_sdl_set_aux_view_font_size(val - 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2938,14 +2930,16 @@ void do_cmd_pane_settings(void)
                 val = overview.menu_panel_font_size;
                 if (val == 0)
                 {
-                    settings_sdl_set_menu_panel_font_size(
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
                         overview.effective_menu_panel_font_size);
                     settings_changed = true;
                     sdl_apply_config();
                 }
                 else if (val > 8)
                 {
-                    settings_sdl_set_menu_panel_font_size(val - 1);
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2955,7 +2949,8 @@ void do_cmd_pane_settings(void)
                 val = overview.margin;
                 if (val > 0)
                 {
-                    settings_sdl_set_margin(val - 1);
+                    settings_sdl_set_int_config(SETTINGS_SDL_INT_MARGIN,
+                        val - 1);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2964,7 +2959,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.fullscreen)
                 {
-                    settings_sdl_set_fullscreen(false);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_FULLSCREEN, false);
                     settings_changed = true;
                 }
             }
@@ -2972,7 +2968,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.tiles)
                 {
-                    settings_sdl_set_tiles(false);
+                    settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
+                        false);
                     settings_changed = true;
                 }
             }
@@ -2980,7 +2977,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.right_panes_enabled)
                 {
-                    settings_sdl_set_right_panes_enabled(false);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED, false);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -2989,7 +2987,8 @@ void do_cmd_pane_settings(void)
             {
                 if (overview.bottom_panes_enabled)
                 {
-                    settings_sdl_set_bottom_panes_enabled(false);
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED, false);
                     settings_changed = true;
                     sdl_apply_config();
                 }
@@ -3048,7 +3047,8 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
     for (int i = 0; i < total && pane_count < MAX_PANES_LOCAL; i++)
     {
-        enum pane_type type = (enum pane_type)settings_sdl_pane_type(i);
+        enum pane_type type = (enum pane_type)settings_sdl_get_pane_metric(
+            SETTINGS_SDL_PANE_TYPE, i);
         if (type == PANE_MAIN)
             continue;
         pane_indices[pane_count++] = i;
@@ -3067,7 +3067,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
                 true, "Esc", "Back");
             (void)ui_information_scene_present_ui(&scene);
-            (void)settings_ui_read_legacy_key(false);
+            (void)settings_ui_read_key(false);
         }
         return;
     }
@@ -3080,8 +3080,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
 
         while (!done)
         {
-            int row_width;
-            row_width = settings_ui_named_sdl_line_width(2);
+            settings_ui_layout layout = settings_ui_read_layout();
             app_ui_scene scene;
             app_ui_panel* panel = settings_browser_scene_begin(&scene,
                 "Supporting Pane Fonts", "");
@@ -3114,13 +3113,14 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     effective_font = pane_state.effective_font_size;
                     a = (i == sel) ? TERM_L_BLUE
                         : (enabled ? TERM_WHITE : TERM_SLATE);
-                    type_label = settings_ui_pick_label(MAX(8, row_width / 2),
+                    type_label = settings_ui_pick_label(
+                        layout.supporting_font_label_chars,
                         pane_type_name(type), pane_type_name(type),
                         pane_type_short_name(type));
 
                     format_font_size_value(font_value, sizeof(font_value),
                         raw_font, effective_font,
-                        MAX(6, MIN(14, row_width / 2)));
+                        layout.pane_overview_value_chars);
                     strnfmt(label_buf, sizeof(label_buf), "%s %s",
                         type_label, enabled ? "on" : "off");
                     if (!settings_browser_add_pair_row(panel, (s16b)i, a,
@@ -3147,7 +3147,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             }
 
             inkey_set_cursor_hidden(true);
-            char ch = settings_ui_read_legacy_key(false);
+            char ch = settings_ui_read_key(false);
             inkey_set_cursor_hidden(false);
 
             dir = target_dir(ch);
@@ -3174,9 +3174,11 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             case '0':
             {
                 int idx = pane_indices[sel];
-                if (settings_sdl_pane_font_size(idx) != 0)
+                if (settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_FONT_SIZE,
+                        idx) != 0)
                 {
-                    settings_sdl_set_pane_font_size(idx, 0);
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_FONT_SIZE,
+                        idx, 0);
                     changed = true;
                     sdl_apply_config();
                 }
@@ -3190,12 +3192,16 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
             {
                 int idx = pane_indices[sel];
                 int delta = ((ch == 'n') || (ch == '4')) ? -1 : 1;
-                int value = settings_sdl_pane_font_size(idx);
+                int value = settings_sdl_get_pane_metric(
+                    SETTINGS_SDL_PANE_FONT_SIZE, idx);
 
                 if (value == 0)
-                    settings_sdl_set_pane_font_size(idx, settings_sdl_pane_effective_font_size(idx));
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_FONT_SIZE,
+                        idx, settings_sdl_get_pane_metric(
+                                 SETTINGS_SDL_PANE_EFFECTIVE_FONT_SIZE, idx));
                 else
-                    settings_sdl_set_pane_font_size(idx, value + delta);
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_FONT_SIZE,
+                        idx, value + delta);
 
                 changed = true;
                 sdl_apply_config();
@@ -3243,76 +3249,6 @@ static const char* pane_where_short_name(enum pane_placement where)
     }
 }
 
-static enum pane_type settings_sdl_pane_type(int idx)
-{
-    return (enum pane_type)get_sdl_pane_type(idx);
-}
-
-static enum pane_placement settings_sdl_pane_where(int idx)
-{
-    return (enum pane_placement)get_sdl_pane_where(idx);
-}
-
-static bool settings_sdl_pane_enabled(int idx)
-{
-    return get_sdl_pane_enabled(idx);
-}
-
-static int settings_sdl_pane_rows(int idx)
-{
-    return get_sdl_pane_rows(idx);
-}
-
-static int settings_sdl_pane_cols(int idx)
-{
-    return get_sdl_pane_cols(idx);
-}
-
-static int settings_sdl_pane_font_size(int idx)
-{
-    return get_sdl_pane_font_size(idx);
-}
-
-static int settings_sdl_pane_effective_font_size(int idx)
-{
-    return get_sdl_pane_effective_font_size(idx);
-}
-
-static void settings_sdl_set_pane_rows(int idx, int rows)
-{
-    set_sdl_pane_rows(idx, rows);
-}
-
-static void settings_sdl_set_pane_cols(int idx, int cols)
-{
-    set_sdl_pane_cols(idx, cols);
-}
-
-static void settings_sdl_set_pane_font_size(int idx, int size)
-{
-    set_sdl_pane_font_size(idx, size);
-}
-
-static void settings_sdl_set_pane_enabled(int idx, bool enabled)
-{
-    set_sdl_pane_enabled(idx, enabled);
-}
-
-static void settings_sdl_set_pane_where(int idx, enum pane_placement where)
-{
-    set_sdl_pane_where(idx, where);
-}
-
-static int settings_sdl_pane_current_rows(int idx)
-{
-    return get_sdl_pane_current_rows(idx);
-}
-
-static int settings_sdl_pane_current_cols(int idx)
-{
-    return get_sdl_pane_current_cols(idx);
-}
-
 static void settings_sdl_read_pane_state(int idx,
     settings_sdl_pane_state* pane_state)
 {
@@ -3320,16 +3256,24 @@ static void settings_sdl_read_pane_state(int idx,
         return;
 
     memset(pane_state, 0, sizeof(*pane_state));
-    pane_state->type = settings_sdl_pane_type(idx);
-    pane_state->where = settings_sdl_pane_where(idx);
-    pane_state->enabled = settings_sdl_pane_enabled(idx);
-    pane_state->rows = settings_sdl_pane_rows(idx);
-    pane_state->cols = settings_sdl_pane_cols(idx);
-    pane_state->font_size = settings_sdl_pane_font_size(idx);
-    pane_state->effective_font_size = settings_sdl_pane_effective_font_size(
+    pane_state->type = (enum pane_type)settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_TYPE, idx);
+    pane_state->where = (enum pane_placement)settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_WHERE, idx);
+    pane_state->enabled = settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_ENABLED, idx) != 0;
+    pane_state->rows = settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_ROWS,
         idx);
-    pane_state->current_rows = settings_sdl_pane_current_rows(idx);
-    pane_state->current_cols = settings_sdl_pane_current_cols(idx);
+    pane_state->cols = settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_COLS,
+        idx);
+    pane_state->font_size = settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_FONT_SIZE, idx);
+    pane_state->effective_font_size = settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_EFFECTIVE_FONT_SIZE, idx);
+    pane_state->current_rows = settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_CURRENT_ROWS, idx);
+    pane_state->current_cols = settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_CURRENT_COLS, idx);
 }
 
 static int get_supporting_pane_config_count(void)
@@ -3338,7 +3282,8 @@ static int get_supporting_pane_config_count(void)
     int total = get_pane_config_count();
     for (int i = 0; i < total; i++)
     {
-        enum pane_type type = (enum pane_type)settings_sdl_pane_type(i);
+        enum pane_type type = (enum pane_type)settings_sdl_get_pane_metric(
+            SETTINGS_SDL_PANE_TYPE, i);
         if (type != PANE_MAIN)
             count++;
     }
@@ -3348,25 +3293,28 @@ static int get_supporting_pane_config_count(void)
 static int supporting_pane_master_idx(const int* pane_indices, int pane_count,
     enum pane_placement where)
 {
-    int fallback = -1;
+    int first_idx = -1;
 
     for (int i = 0; i < pane_count; i++)
     {
         int idx = pane_indices[i];
-        if ((enum pane_placement)settings_sdl_pane_where(idx) != where)
+        if ((enum pane_placement)settings_sdl_get_pane_metric(
+                SETTINGS_SDL_PANE_WHERE, idx)
+            != where)
             continue;
-        if (fallback < 0)
-            fallback = idx;
-        if (settings_sdl_pane_enabled(idx))
+        if (first_idx < 0)
+            first_idx = idx;
+        if (settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_ENABLED, idx) != 0)
             return idx;
     }
 
-    return fallback;
+    return first_idx;
 }
 
 static bool supporting_pane_rows_locked(const int* pane_indices, int pane_count, int idx)
 {
-    enum pane_placement where = (enum pane_placement)settings_sdl_pane_where(idx);
+    enum pane_placement where = (enum pane_placement)settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_WHERE, idx);
     int master_idx = supporting_pane_master_idx(pane_indices, pane_count, where);
 
     return (where == PLACE_BOTTOM && idx != master_idx);
@@ -3374,7 +3322,8 @@ static bool supporting_pane_rows_locked(const int* pane_indices, int pane_count,
 
 static bool supporting_pane_cols_locked(const int* pane_indices, int pane_count, int idx)
 {
-    enum pane_placement where = (enum pane_placement)settings_sdl_pane_where(idx);
+    enum pane_placement where = (enum pane_placement)settings_sdl_get_pane_metric(
+        SETTINGS_SDL_PANE_WHERE, idx);
     int master_idx = supporting_pane_master_idx(pane_indices, pane_count, where);
 
     return (pane_placement_is_side(where) && idx != master_idx);
@@ -3403,18 +3352,20 @@ static bool supporting_pane_normalize_shared_sizes(const int* pane_indices, int 
     for (int i = 0; i < pane_count; i++)
     {
         int idx = pane_indices[i];
-        enum pane_placement where = (enum pane_placement)settings_sdl_pane_where(idx);
+        enum pane_placement where = (enum pane_placement)settings_sdl_get_pane_metric(
+            SETTINGS_SDL_PANE_WHERE, idx);
         int master_idx = supporting_pane_master_idx(pane_indices, pane_count, where);
 
-        if (where == PLACE_BOTTOM && idx != master_idx && settings_sdl_pane_rows(idx) != 0)
+        if (where == PLACE_BOTTOM && idx != master_idx
+            && settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_ROWS, idx) != 0)
         {
-            settings_sdl_set_pane_rows(idx, 0);
+            settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_ROWS, idx, 0);
             changed = true;
         }
         else if (pane_placement_is_side(where) && idx != master_idx
-            && settings_sdl_pane_cols(idx) != 0)
+            && settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_COLS, idx) != 0)
         {
-            settings_sdl_set_pane_cols(idx, 0);
+            settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_COLS, idx, 0);
             changed = true;
         }
     }
@@ -3431,7 +3382,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
 
     for (int i = 0; i < total && pane_count < MAX_PANES_LOCAL; i++)
     {
-        enum pane_type type = (enum pane_type)settings_sdl_pane_type(i);
+        enum pane_type type = (enum pane_type)settings_sdl_get_pane_metric(
+            SETTINGS_SDL_PANE_TYPE, i);
         if (type == PANE_MAIN)
             continue;
         pane_indices[pane_count++] = i;
@@ -3456,7 +3408,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
             (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
                 true, "Esc", "Back");
             (void)ui_information_scene_present_ui(&scene);
-            (void)settings_ui_read_legacy_key(false);
+            (void)settings_ui_read_key(false);
         }
         return;
     }
@@ -3468,10 +3420,9 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     }
     supporting_pane_ensure_editable_field(&field, pane_indices, pane_count, sel);
 
-        while (!done)
-        {
-            int row_width = settings_ui_named_sdl_line_width(2);
-
+    while (!done)
+    {
+        settings_ui_layout layout = settings_ui_read_layout();
         app_ui_scene scene;
         app_ui_panel* panel = settings_browser_scene_begin_ex(&scene,
             "Supporting Pane Layout", "", 1180, 2200);
@@ -3520,15 +3471,17 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                         pane_count, where);
                     a = (i == sel) ? TERM_L_BLUE
                         : (enabled ? TERM_WHITE : TERM_SLATE);
-                    type_label = settings_ui_pick_label(MAX(8, row_width / 3),
+                    type_label = settings_ui_pick_label(
+                        layout.supporting_layout_type_chars,
                         pane_type_name(type), pane_type_name(type),
                         pane_type_short_name(type));
-                    where_label = settings_ui_pick_label(MAX(4, row_width / 4),
+                    where_label = settings_ui_pick_label(
+                        layout.supporting_layout_where_chars,
                         pane_placement_name(where), pane_placement_name(where),
                         pane_where_short_name(where));
 
                     settings_ui_fit_text(type_buf, sizeof(type_buf), type_label,
-                        MAX(4, row_width / 3));
+                        layout.supporting_layout_type_chars);
                     settings_ui_format_field(enabled_field,
                         sizeof(enabled_field), enabled ? "on" : "off",
                         i == sel && field == 0);
@@ -3538,7 +3491,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     if (rows_locked)
                     {
                         int shared_rows = (master_idx >= 0)
-                            ? settings_sdl_pane_rows(master_idx)
+                            ? settings_sdl_get_pane_metric(
+                                  SETTINGS_SDL_PANE_ROWS, master_idx)
                             : rows;
                         settings_ui_format_auto_value(rows_value,
                             sizeof(rows_value), shared_rows, 4);
@@ -3554,7 +3508,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     if (cols_locked)
                     {
                         int shared_cols = (master_idx >= 0)
-                            ? settings_sdl_pane_cols(master_idx)
+                            ? settings_sdl_get_pane_metric(
+                                  SETTINGS_SDL_PANE_COLS, master_idx)
                             : cols;
                         settings_ui_format_auto_value(cols_value,
                             sizeof(cols_value), shared_cols, 4);
@@ -3595,9 +3550,8 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                 if (!done && !ui_information_scene_present_ui(&scene))
                     done = true;
         }
-
         inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_legacy_key(false);
+        char ch = settings_ui_read_key(false);
         inkey_set_cursor_hidden(false);
 
         dir = target_dir(ch);
@@ -3650,9 +3604,9 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
             }
 
             if (field == 2)
-                settings_sdl_set_pane_rows(idx, 0);
+                settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_ROWS, idx, 0);
             else
-                settings_sdl_set_pane_cols(idx, 0);
+                settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_COLS, idx, 0);
 
             if (supporting_pane_normalize_shared_sizes(pane_indices, pane_count))
                 changed = true;
@@ -3669,21 +3623,25 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
         {
             int idx = pane_indices[sel];
             int delta = ((ch == 'n') || (ch == '4')) ? -1 : 1;
-            enum pane_type type = (enum pane_type)settings_sdl_pane_type(idx);
-            enum pane_placement where = (enum pane_placement)settings_sdl_pane_where(idx);
+            enum pane_type type = (enum pane_type)settings_sdl_get_pane_metric(
+                SETTINGS_SDL_PANE_TYPE, idx);
+            enum pane_placement where = (enum pane_placement)settings_sdl_get_pane_metric(
+                SETTINGS_SDL_PANE_WHERE, idx);
 
             if (field == 0)
             {
-                settings_sdl_set_pane_enabled(idx, (delta > 0));
+                settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_ENABLED, idx,
+                    delta > 0 ? 1 : 0);
             }
             else if (field == 1)
             {
-                settings_sdl_set_pane_where(idx,
+                settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_WHERE, idx,
                     pane_next_allowed_placement(type, where, delta));
             }
             else if (field == 2)
             {
-                int rows = settings_sdl_pane_rows(idx);
+                int rows = settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_ROWS,
+                    idx);
 
                 if (supporting_pane_rows_locked(pane_indices, pane_count, idx))
                 {
@@ -3691,14 +3649,17 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     break;
                 }
                 if (rows == 0)
-                    settings_sdl_set_pane_rows(idx,
-                        settings_sdl_pane_current_rows(idx));
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_ROWS, idx,
+                        settings_sdl_get_pane_metric(
+                            SETTINGS_SDL_PANE_CURRENT_ROWS, idx));
                 else
-                    settings_sdl_set_pane_rows(idx, rows + delta);
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_ROWS, idx,
+                        rows + delta);
             }
             else
             {
-                int cols = settings_sdl_pane_cols(idx);
+                int cols = settings_sdl_get_pane_metric(SETTINGS_SDL_PANE_COLS,
+                    idx);
 
                 if (supporting_pane_cols_locked(pane_indices, pane_count, idx))
                 {
@@ -3706,10 +3667,12 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                     break;
                 }
                 if (cols == 0)
-                    settings_sdl_set_pane_cols(idx,
-                        settings_sdl_pane_current_cols(idx));
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_COLS, idx,
+                        settings_sdl_get_pane_metric(
+                            SETTINGS_SDL_PANE_CURRENT_COLS, idx));
                 else
-                    settings_sdl_set_pane_cols(idx, cols + delta);
+                    settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_COLS, idx,
+                        cols + delta);
             }
 
             if (supporting_pane_normalize_shared_sizes(pane_indices, pane_count))
@@ -3867,8 +3830,9 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
     while (!done)
     {
-        int visible_rows = settings_ui_named_sdl_visible_rows(list_start_row,
-            6, 5);
+        settings_ui_layout layout = settings_ui_read_layout();
+        int visible_rows = settings_ui_list_visible_rows(&layout,
+            list_start_row, 6, 5);
 
         if (highlight < 0)
             highlight = 0;
@@ -3958,7 +3922,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
         }
 
         inkey_set_cursor_hidden(true);
-        char ch = settings_ui_read_legacy_key(false);
+        char ch = settings_ui_read_key(false);
         inkey_set_cursor_hidden(false);
 
         {
@@ -4032,7 +3996,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
             strnfmt(prompt_short, sizeof(prompt_short), "Label for %s: ",
                 settings_sdl_touch_slot_name(highlight));
             strnfmt(prompt, sizeof(prompt), "%s",
-                settings_ui_pick_label(settings_ui_named_sdl_line_width(0),
+                settings_ui_pick_label(layout.prompt_line_chars,
                     prompt_long, prompt_medium, prompt_short));
             strnfmt(current_buf, sizeof(current_buf), "Current label: %s", current_label);
             new_label[0] = '\0';
@@ -4062,7 +4026,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
 
             settings_sdl_touch_panel_name(panel, current_name, sizeof(current_name));
             strnfmt(prompt, sizeof(prompt), "%s",
-                settings_ui_pick_label(settings_ui_named_sdl_line_width(0),
+                settings_ui_pick_label(layout.prompt_line_chars,
                     "Name for current panel (blank = default): ",
                     "Panel name (blank = default): ",
                     "Panel name: "));
@@ -4102,33 +4066,7 @@ static void do_cmd_touch_pane_button_editor(bool* settings_changed)
     }
 }
 
-
 void do_cmd_controller_settings(void);
-
-static bool legacy_options_choice_is_disabled(int choice)
-{
-    return (choice == 6);
-}
-
-static int legacy_options_menu(int* highlight)
-{
-    bool death_view = death_spectator_active();
-    const settings_choice_entry entries[] = {
-        { 1, 'j', "j) Load a 'Pref' File", false },
-        { 2, 'k', "k) Append Options to a 'Pref' File", false },
-        { 3, 'l', "l) Set Macros", false },
-        { 4, 'm', "m) Set Colours", false },
-        { 5, 'n', "n) Write a note", false },
-        { 6, 's', "s) Suicide", death_view },
-        { 7, 'o', "o) Return to Options", false },
-    };
-
-    if (death_view && legacy_options_choice_is_disabled(*highlight))
-        *highlight = 7;
-
-    return settings_choice_menu("Legacy Options", entries,
-        (int)N_ELEMENTS(entries), highlight, 7);
-}
 
 static int macros_menu(int* highlight)
 {
@@ -4186,7 +4124,27 @@ static int colors_menu(int* highlight)
         (int)N_ELEMENTS(entries), highlight, 0);
 }
 
-static void do_cmd_legacy_options(void)
+static int other_options_menu(int* highlight)
+{
+    bool death_view = death_spectator_active();
+    const settings_choice_entry entries[] = {
+        { 1, 'j', "j) Load a 'Pref' File", false },
+        { 2, 'k', "k) Append Options to a 'Pref' File", false },
+        { 3, 'l', "l) Set Macros", false },
+        { 4, 'm', "m) Set Colours", false },
+        { 5, 'n', "n) Write a note", false },
+        { 6, 's', "s) Suicide", death_view },
+        { 7, 'o', "o) Return to Options", false },
+    };
+
+    if (death_view && *highlight == 6)
+        *highlight = 7;
+
+    return settings_choice_menu("Other Options", entries,
+        (int)N_ELEMENTS(entries), highlight, 7);
+}
+
+static void do_cmd_other_options(void)
 {
     int choice = 0;
     int highlight = 1;
@@ -4195,57 +4153,50 @@ static void do_cmd_legacy_options(void)
 
     while (!return_to_options)
     {
-        choice = legacy_options_menu(&highlight);
+        choice = other_options_menu(&highlight);
 
         switch (choice)
         {
         case 1:
-        {
             do_cmd_pref_file_hack(12);
             break;
-        }
+
         case 2:
-        {
             strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
 
-            if (!settings_ui_prompt_string("Legacy Options",
+            if (!settings_ui_prompt_string("Other Options",
                     "Enter the file name to save options.", "", ftmp,
                     sizeof(ftmp)))
-                continue;
+            {
+                break;
+            }
 
             if (option_dump(ftmp))
                 msg_print("Failed!");
             else
                 msg_print("Done.");
-
             break;
-        }
+
         case 3:
-        {
             do_cmd_macros();
             break;
-        }
+
         case 4:
-        {
             do_cmd_colors();
             break;
-        }
+
         case 5:
-        {
             do_cmd_note("", p_ptr->depth);
             break;
-        }
+
         case 6:
-        {
             do_cmd_suicide();
             return_to_options = true;
             break;
-        }
+
         case 7:
-        {
             return_to_options = true;
             break;
-        }
         }
     }
 }
@@ -4279,7 +4230,7 @@ int options_menu(int* highlight)
     entries[entry_count++] = (settings_choice_entry){ 10, 'i',
         "i) Sound Options", false };
     entries[entry_count++] = (settings_choice_entry){ 11, 'j',
-        "j) Legacy Options", false };
+        "j) Other Options", false };
     entries[entry_count++] = (settings_choice_entry){ 12, 'o',
         "o) Return to Game", false };
 
@@ -4378,7 +4329,7 @@ void do_cmd_options(void)
         }
         case 11:
         {
-            do_cmd_legacy_options();
+            do_cmd_other_options();
             if (p_ptr && (p_ptr->leaving || !p_ptr->playing))
                 return_to_game = true;
             break;
@@ -4868,6 +4819,7 @@ void do_cmd_keybinds(void)
 
     while (!done)
     {
+        settings_ui_layout layout = settings_ui_read_layout();
         const struct keybind_entry* keybinds;
         int num_keybinds;
         int* highlight_ptr;
@@ -4877,10 +4829,10 @@ void do_cmd_keybinds(void)
         bool compact_width;
         int row_width;
 
-        visible_rows = settings_ui_named_sdl_visible_rows(list_start_row, 6,
-            5);
-        compact_width = settings_ui_named_sdl_cols() < 70;
-        row_width = settings_ui_named_sdl_line_width(2);
+        visible_rows = settings_ui_list_visible_rows(&layout, list_start_row,
+            6, 5);
+        compact_width = layout.compact;
+        row_width = layout.inset_prompt_line_chars;
 
         if (showing_primary)
         {
@@ -4908,7 +4860,7 @@ void do_cmd_keybinds(void)
             continue;
         }
 
-        ch = settings_ui_read_legacy_key(false);
+        ch = settings_ui_read_key(false);
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q')
         {
@@ -4973,7 +4925,7 @@ void do_cmd_keybinds(void)
                 &keybinds[highlight], mode, prompt);
 
             flush();
-            bind_key = settings_ui_read_legacy_key(false);
+            bind_key = settings_ui_read_key(false);
 
             if (bind_key != ESCAPE && bind_key != 0)
             {
@@ -5074,98 +5026,118 @@ typedef struct controller_entry {
     const char* label;
 } controller_entry;
 
+typedef struct controller_binding_spec {
+    int slot_count;
+    settings_indexed_int_getter_fn get;
+    settings_indexed_int_setter_fn set;
+    settings_indexed_int_getter_fn get_default;
+} controller_binding_spec;
+
+static int controller_get_shoulder_combo_binding(int id)
+{
+    (void)id;
+    return get_sdl_gamepad_shoulder_combo_binding();
+}
+
+static void controller_set_shoulder_combo_binding(int id, int binding)
+{
+    (void)id;
+    set_sdl_gamepad_shoulder_combo_binding(binding);
+}
+
+static int controller_get_default_shoulder_combo_binding(int id)
+{
+    (void)id;
+    return get_sdl_gamepad_default_shoulder_combo_binding();
+}
+
+static const settings_bool_binding controller_toggle_bindings[] = {
+    [CONTROLLER_TOGGLE_ENABLED]
+        = { get_sdl_gamepad_enabled, set_sdl_gamepad_enabled },
+    [CONTROLLER_TOGGLE_AUTO_MODE]
+        = { get_sdl_gamepad_auto_mode, set_sdl_gamepad_auto_mode },
+    [CONTROLLER_TOGGLE_STEAMDECK_MODE]
+        = { get_sdl_steamdeck_mode, set_sdl_steamdeck_mode },
+    [CONTROLLER_TOGGLE_DPAD]
+        = { get_sdl_gamepad_use_dpad, set_sdl_gamepad_use_dpad },
+    [CONTROLLER_TOGGLE_LEFT_STICK]
+        = { get_sdl_gamepad_use_left_stick, set_sdl_gamepad_use_left_stick },
+};
+
+static const controller_binding_spec controller_binding_specs[] = {
+    [GAMEPAD_CAPTURE_BUTTON]
+        = { GAMEPAD_BUTTON_COUNT, get_sdl_gamepad_button_binding,
+            set_sdl_gamepad_button_binding,
+            get_sdl_gamepad_default_button_binding },
+    [GAMEPAD_CAPTURE_TRIGGER]
+        = { GAMEPAD_TRIGGER_COUNT, get_sdl_gamepad_trigger_binding,
+            set_sdl_gamepad_trigger_binding,
+            get_sdl_gamepad_default_trigger_binding },
+    [GAMEPAD_CAPTURE_LEFT_STICK]
+        = { GAMEPAD_STICK_DIR_COUNT, get_sdl_gamepad_left_stick_binding,
+            set_sdl_gamepad_left_stick_binding,
+            get_sdl_gamepad_default_left_stick_binding },
+    [GAMEPAD_CAPTURE_RIGHT_STICK]
+        = { GAMEPAD_STICK_DIR_COUNT, get_sdl_gamepad_right_stick_binding,
+            set_sdl_gamepad_right_stick_binding,
+            get_sdl_gamepad_default_right_stick_binding },
+    [GAMEPAD_CAPTURE_SHOULDER_COMBO]
+        = { 1, controller_get_shoulder_combo_binding,
+            controller_set_shoulder_combo_binding,
+            controller_get_default_shoulder_combo_binding },
+};
+
 static bool controller_toggle_value(int toggle_id)
 {
-    switch (toggle_id) {
-    case CONTROLLER_TOGGLE_ENABLED:
-        return get_sdl_gamepad_enabled();
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        return get_sdl_gamepad_auto_mode();
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        return get_sdl_steamdeck_mode();
-    case CONTROLLER_TOGGLE_DPAD:
-        return get_sdl_gamepad_use_dpad();
-    case CONTROLLER_TOGGLE_LEFT_STICK:
-        return get_sdl_gamepad_use_left_stick();
-    default:
+    if (toggle_id < 0
+        || toggle_id >= (int)N_ELEMENTS(controller_toggle_bindings)
+        || !controller_toggle_bindings[toggle_id].get)
+    {
         return false;
     }
+
+    return controller_toggle_bindings[toggle_id].get();
 }
 
 static int controller_binding_slot_count(int type)
 {
-    switch (type) {
-    case GAMEPAD_CAPTURE_BUTTON:
-        return GAMEPAD_BUTTON_COUNT;
-    case GAMEPAD_CAPTURE_TRIGGER:
-        return GAMEPAD_TRIGGER_COUNT;
-    case GAMEPAD_CAPTURE_LEFT_STICK:
-    case GAMEPAD_CAPTURE_RIGHT_STICK:
-        return GAMEPAD_STICK_DIR_COUNT;
-    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
-        return 1;
-    default:
+    if (type < 0 || type >= (int)N_ELEMENTS(controller_binding_specs))
         return 0;
-    }
+
+    return controller_binding_specs[type].slot_count;
 }
 
 static int controller_binding_value(int type, int id)
 {
-    switch (type) {
-    case GAMEPAD_CAPTURE_BUTTON:
-        return get_sdl_gamepad_button_binding(id);
-    case GAMEPAD_CAPTURE_TRIGGER:
-        return get_sdl_gamepad_trigger_binding(id);
-    case GAMEPAD_CAPTURE_LEFT_STICK:
-        return get_sdl_gamepad_left_stick_binding(id);
-    case GAMEPAD_CAPTURE_RIGHT_STICK:
-        return get_sdl_gamepad_right_stick_binding(id);
-    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
-        return get_sdl_gamepad_shoulder_combo_binding();
-    default:
+    if (type < 0 || type >= (int)N_ELEMENTS(controller_binding_specs)
+        || !controller_binding_specs[type].get)
+    {
         return GAMEPAD_BIND_NONE;
     }
+
+    return controller_binding_specs[type].get(id);
 }
 
 static void controller_set_binding_value(int type, int id, int binding)
 {
-    switch (type) {
-    case GAMEPAD_CAPTURE_BUTTON:
-        set_sdl_gamepad_button_binding(id, binding);
-        break;
-    case GAMEPAD_CAPTURE_TRIGGER:
-        set_sdl_gamepad_trigger_binding(id, binding);
-        break;
-    case GAMEPAD_CAPTURE_LEFT_STICK:
-        set_sdl_gamepad_left_stick_binding(id, binding);
-        break;
-    case GAMEPAD_CAPTURE_RIGHT_STICK:
-        set_sdl_gamepad_right_stick_binding(id, binding);
-        break;
-    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
-        set_sdl_gamepad_shoulder_combo_binding(binding);
-        break;
-    default:
-        break;
+    if (type < 0 || type >= (int)N_ELEMENTS(controller_binding_specs)
+        || !controller_binding_specs[type].set)
+    {
+        return;
     }
+
+    controller_binding_specs[type].set(id, binding);
 }
 
 static int controller_default_binding_value(int type, int id)
 {
-    switch (type) {
-    case GAMEPAD_CAPTURE_BUTTON:
-        return get_sdl_gamepad_default_button_binding(id);
-    case GAMEPAD_CAPTURE_TRIGGER:
-        return get_sdl_gamepad_default_trigger_binding(id);
-    case GAMEPAD_CAPTURE_LEFT_STICK:
-        return get_sdl_gamepad_default_left_stick_binding(id);
-    case GAMEPAD_CAPTURE_RIGHT_STICK:
-        return get_sdl_gamepad_default_right_stick_binding(id);
-    case GAMEPAD_CAPTURE_SHOULDER_COMBO:
-        return get_sdl_gamepad_default_shoulder_combo_binding();
-    default:
+    if (type < 0 || type >= (int)N_ELEMENTS(controller_binding_specs)
+        || !controller_binding_specs[type].get_default)
+    {
         return GAMEPAD_BIND_NONE;
     }
+
+    return controller_binding_specs[type].get_default(id);
 }
 
 static const char* controller_gamepad_button_label(int button)
@@ -5300,14 +5272,14 @@ static bool controller_binding_matches_action(int binding, int type, int id)
     return controller_binding_value(type, id) == binding;
 }
 
-void controller_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
+void controller_prompt_label(int binding, const char* default_label, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
         return;
 
     sdl_gamepad_action_binding_short_label(binding, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple")) {
-        SDL_strlcpy(buf, fallback, buflen);
+        SDL_strlcpy(buf, default_label, buflen);
     }
 }
 
@@ -5340,25 +5312,14 @@ static void controller_entry_value(const controller_entry* entry, char* buf, siz
 
 static void controller_set_toggle(int toggle_id, bool value)
 {
-    switch (toggle_id) {
-    case CONTROLLER_TOGGLE_ENABLED:
-        set_sdl_gamepad_enabled(value);
-        break;
-    case CONTROLLER_TOGGLE_AUTO_MODE:
-        set_sdl_gamepad_auto_mode(value);
-        break;
-    case CONTROLLER_TOGGLE_STEAMDECK_MODE:
-        set_sdl_steamdeck_mode(value);
-        break;
-    case CONTROLLER_TOGGLE_DPAD:
-        set_sdl_gamepad_use_dpad(value);
-        break;
-    case CONTROLLER_TOGGLE_LEFT_STICK:
-        set_sdl_gamepad_use_left_stick(value);
-        break;
-    default:
-        break;
+    if (toggle_id < 0
+        || toggle_id >= (int)N_ELEMENTS(controller_toggle_bindings)
+        || !controller_toggle_bindings[toggle_id].set)
+    {
+        return;
     }
+
+    controller_toggle_bindings[toggle_id].set(value);
 }
 
 static void controller_clear_action_bindings(int binding, int skip_type, int skip_id)
@@ -5492,14 +5453,15 @@ void do_cmd_controller_settings(void)
     int entry_count = (int)N_ELEMENTS(entries);
 
     while (!done) {
+        settings_ui_layout layout = settings_ui_read_layout();
         bool steamdeck = steamdeck_controls_active();
         bool compact_width;
         int row_width;
 
-        row_width = settings_ui_named_sdl_line_width(2);
-        int visible_rows = settings_ui_named_sdl_visible_rows(list_start_row,
-            6, 5);
-        compact_width = settings_ui_named_sdl_cols() < 70;
+        row_width = layout.inset_prompt_line_chars;
+        int visible_rows = settings_ui_list_visible_rows(&layout,
+            list_start_row, 6, 5);
+        compact_width = layout.compact;
 
         if (highlight < 0)
             highlight = 0;
@@ -5605,7 +5567,7 @@ void do_cmd_controller_settings(void)
             continue;
         }
 
-        char ch = settings_ui_read_legacy_key(false);
+        char ch = settings_ui_read_key(false);
 
         if (ch == ESCAPE || ch == 'q' || ch == 'Q' || (steamdeck && ch == steamdeck_back_key())) {
             done = true;
@@ -5709,7 +5671,7 @@ void do_cmd_controller_settings(void)
                         break;
                     }
 
-                    char choice = settings_ui_read_legacy_key(true);
+                    char choice = settings_ui_read_key(true);
                     if (choice == ESCAPE) {
                         sdl_gamepad_capture_cancel();
                         waiting = false;
@@ -5821,7 +5783,7 @@ static void do_cmd_macro_aux(char* buf)
     flush();
 
     /* First key */
-    ch = settings_ui_read_legacy_key(false);
+    ch = settings_ui_read_key(false);
 
     /* Read the pattern */
     while (ch != '\0')
@@ -5830,7 +5792,7 @@ static void do_cmd_macro_aux(char* buf)
         buf[n++] = ch;
 
         /* Attempt to read a key */
-        ch = settings_ui_read_legacy_key(true);
+        ch = settings_ui_read_key(true);
     }
 
     /* Terminate */
@@ -5852,7 +5814,7 @@ static void do_cmd_macro_aux_keymap(char* buf)
     flush();
 
     /* Get a key */
-    buf[0] = settings_ui_read_legacy_key(false);
+    buf[0] = settings_ui_read_key(false);
     buf[1] = '\0';
 
     /* Flush */
@@ -6497,7 +6459,7 @@ static void askfor_shade(byte* attr, int y)
         {
             return;
         }
-        ch = settings_ui_read_legacy_key(false);
+        ch = settings_ui_read_key(false);
 
         /* Cancel */
         if (ch == ESCAPE)
@@ -6545,7 +6507,7 @@ static void askfor_shade(byte* attr, int y)
         {
             return;
         }
-        ch = settings_ui_read_legacy_key(false);
+        ch = settings_ui_read_key(false);
 
         /* Cancel */
         if (ch == ESCAPE)
@@ -6903,7 +6865,7 @@ void do_cmd_visuals(void)
                 {
                     break;
                 }
-                cx = settings_ui_read_legacy_key(false);
+                cx = settings_ui_read_key(false);
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6949,7 +6911,7 @@ void do_cmd_visuals(void)
                 {
                     break;
                 }
-                cx = settings_ui_read_legacy_key(false);
+                cx = settings_ui_read_key(false);
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -6995,7 +6957,7 @@ void do_cmd_visuals(void)
                 {
                     break;
                 }
-                cx = settings_ui_read_legacy_key(false);
+                cx = settings_ui_read_key(false);
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7041,7 +7003,7 @@ void do_cmd_visuals(void)
                 {
                     break;
                 }
-                cx = settings_ui_read_legacy_key(false);
+                cx = settings_ui_read_key(false);
 
                 /* All done */
                 if (cx == ESCAPE)
@@ -7213,7 +7175,8 @@ static void modify_colors(void)
 
     while (1)
     {
-        int visible_rows = settings_ui_named_sdl_visible_rows(0, 8, 1);
+        settings_ui_layout layout = settings_ui_read_layout();
+        int visible_rows = settings_ui_list_visible_rows(&layout, 0, 8, 1);
         int dir;
 
         settings_color_editor_adjust_view(MAX_COLORS, visible_rows, idx,
@@ -7223,7 +7186,7 @@ static void modify_colors(void)
         {
             return;
         }
-        ch = settings_ui_read_legacy_key(false);
+        ch = settings_ui_read_key(false);
 
         dir = target_dir(ch);
         if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))

@@ -1,5 +1,43 @@
 # Session notes
 
+## 2026-04-14: UI render replacement P5-C settings tail cleanup
+- `src/cmd/ui/cmd-ui-settings.c`
+  - replaced the file-local scatter of SDL config and pane getters/setters with local adapter tables for general SDL config, pane metrics, and controller bindings/toggles, then deleted the now-redundant pass-through wrapper layer
+  - replaced the remaining named `50x18` / `80x24` faux-terminal layout helpers with a semantic `settings_ui_layout` budget struct and `settings_ui_list_visible_rows()` so settings subflows no longer branch on pseudo terminal cols/rows
+  - converted the options browser from preformatted `"label: value"` strings to real semantic label/value rows, removing one of the last obvious pseudo-grid render patterns in the settings family
+  - retuned the pane-settings, supporting-pane, touch, keybind, controller, and color-editor flows to use the shared layout budget instead of named SDL line-width math
+  - renamed the former top-level legacy/misc cluster to an `Other Options` submenu and grouped the pref-file, macro, color, note, and suicide actions back under that submenu instead of keeping the old `Legacy Options` label
+  - removed the remaining legacy/fallback naming inside this file; the only real legacy mechanism still left here is the input pump that drains `APP_INPUT_LAYER_LEGACY` and waits via `Term_xtra`
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/cmd/ui/cmd-ui-settings.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - current repo-wide debt snapshot on this tree: `inkey=14`, `screen_save/screen_load=0`, `Term_*=239`, `get_sdl/set_sdl=35`
+  - a previous attempt to build `sil-more` was blocked by an unrelated compile failure in `src/ui/ui-status.c` (`display_combat_rolls` implicit declaration) outside the `P5-C` write set; the touched settings object still compiles and the debt audit still passes
+  - the broader `build-incremental.ps1` pipeline had already been blocked earlier by the pre-existing `tools/ui8_emit_demo_packets.c` compile failure around missing `app_messages_snapshot` / `APP_DUNGEON_MESSAGES_FORMAT_VERSION` symbols; this slice did not touch that tool
+
+## 2026-04-14: UI render replacement P5-A status rail and chrome contract finish
+- `src/app/app-scene-dungeon.[ch]`
+  - removed the separate dungeon `STATUS` and `MESSAGES` snapshot blobs from the public dungeon snapshot contract; persistent chrome now builds directly into `overlay->chrome_scene`
+  - deleted the dead blob storage and builder plumbing for serialized left-rail/footer/message payloads, keeping only map, panes, and overlay blobs in the dungeon snapshot
+  - rewired chrome construction so the left rail and bottom strip are populated directly from live status data, with the top strip reading live message-topline state instead of copying through an intermediate message blob
+  - reduced common dungeon invalidation so status redraws now dirty the overlay blob instead of pretending there are still standalone status/message blobs or subwindow-driven pane updates
+- `src/sdl-scene-dungeon.c`
+  - stopped the SDL dungeon renderer from depending on the removed status blob; layout now reads hide-left-panel state from `panes->flags` while consuming the semantic chrome scene for actual chrome content
+- `src/ui/ui-status.c`
+  - tightened main-term chrome suppression so it only activates when the snapshot renderer itself is enabled and the current scene is the semantic dungeon snapshot
+  - removed two stale direct `Term_*` bookkeeping calls from legacy status redraw helpers (`prt_stat()` cursor logging and `fix_message()` line-clear bookkeeping)
+  - replaced most remaining fixed-width field clears and truncated text writes with local `put_str()` / `c_put_str()` helpers, and collapsed repeated bigtile icon writes behind one icon-pair helper
+  - collapsed the repeated subwindow refresh scaffolding behind one compatibility-window helper, leaving direct `Term_*` use in `ui-status.c` concentrated to that shared helper plus the one bigtile icon primitive
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/app/app-scene-dungeon.c.obj CMakeFiles/sil-platform-sdl.dir/src/sdl-scene-dungeon.c.obj CMakeFiles/sil-core.dir/src/ui/ui-status.c.obj --parallel`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - current local debt snapshot after the slice:
+    - `src/ui/ui-status.c`: `Term_*=6`
+    - `src/app/app-scene-dungeon.c`: no direct `Term_*` debt
+    - `src/sdl-scene-dungeon.c`: no direct `Term_*` debt
+  - current repo-wide debt snapshot after the compatibility-helper cleanup: `inkey=14`, `screen_save/screen_load=0`, `Term_*=223`, `get_sdl/set_sdl=35`
+
 ## 2026-04-14: UI render replacement P2-F main-menu and selector transition cleanup
 - `src/cmd/ui/cmd-ui-main-menu.c`
   - removed the SDL-path snapshot replacement and restore choreography for the main menu; the menu now requires a dungeon snapshot and owns only a dungeon overlay scene on the snapshot renderer path

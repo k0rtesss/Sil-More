@@ -165,106 +165,179 @@ static byte* build_map_blob(size_t* out_size)
     return (byte*)map;
 }
 
-static byte* build_messages_blob(const char* topline, const char** lines,
-    size_t line_count, size_t* out_size)
+static byte* build_panes_blob(bool resolved, size_t* out_size)
 {
-    const size_t size = sizeof(app_messages_snapshot)
-        + (line_count * sizeof(app_message_line_snapshot));
-    app_messages_snapshot* messages = calloc(1, size);
-    size_t i;
+    app_panes_snapshot* panes = calloc(1, sizeof(*panes));
 
-    if (!messages)
+    if (!panes)
         return NULL;
 
-    messages->format_version = APP_DUNGEON_MESSAGES_FORMAT_VERSION;
-    messages->line_count = (u16b)line_count;
-    messages->top_line_type = MSG_GENERIC;
-    messages->top_line_color = TERM_YELLOW;
-    messages->top_line_active = 1;
-    SDL_strlcpy(messages->top_line, topline ? topline : "",
-        sizeof(messages->top_line));
-
-    for (i = 0; i < line_count; i++)
-    {
-        app_message_line_snapshot* line = &messages->lines[i];
-
-        line->type = MSG_GENERIC;
-        line->color = (i == 0) ? TERM_WHITE : TERM_SLATE;
-        line->age = (s16b)i;
-        SDL_strlcpy(line->text, lines[i], sizeof(line->text));
-    }
-
-    *out_size = size;
-    return (byte*)messages;
-}
-
-static byte* build_overlay_blob(bool resolved, size_t* out_size)
-{
-    app_interaction_state* interaction = calloc(1, sizeof(*interaction));
-
-    if (!interaction)
-        return NULL;
-
-    interaction->format_version = APP_INTERACTION_FORMAT_VERSION;
-    interaction->selected_index = -1;
+    panes->format_version = APP_DUNGEON_PANES_FORMAT_VERSION;
+    panes->main_combat_roll_lines = resolved ? 0 : 1;
 
     if (!resolved)
     {
-        interaction->kind = APP_INTERACTION_KIND_LIST;
-        interaction->reason = APP_WAIT_REASON_LIST_SELECTION;
-        interaction->flags = APP_INTERACTION_FLAG_CAN_CONFIRM
-            | APP_INTERACTION_FLAG_CAN_CANCEL
-            | APP_INTERACTION_FLAG_SHOW_OPTIONS
-            | APP_INTERACTION_FLAG_SHOW_VALUE;
-        interaction->prompt_attr = TERM_WHITE;
-        interaction->detail_attr = TERM_SLATE;
-        interaction->value_attr = TERM_YELLOW;
-        interaction->selected_index = 1;
-        interaction->cursor_index = 1;
-        interaction->option_count = 3;
-        SDL_strlcpy(interaction->prompt, "Choose ammunition",
-            sizeof(interaction->prompt));
-        SDL_strlcpy(interaction->detail,
-            "Enter confirms. Esc cancels. Press a, b, or c.",
-            sizeof(interaction->detail));
-        SDL_strlcpy(interaction->value, "2/7",
-            sizeof(interaction->value));
+        app_combat_roll_snapshot* entry = &panes->combat_entries[0];
 
-        interaction->options[0].attr = TERM_WHITE;
-        interaction->options[0].tag = 'a';
-        interaction->options[0].enabled = 1;
-        SDL_strlcpy(interaction->options[0].key, "a",
-            sizeof(interaction->options[0].key));
-        SDL_strlcpy(interaction->options[0].label, "Ashen Arrow",
-            sizeof(interaction->options[0].label));
-        SDL_strlcpy(interaction->options[0].meta, "1.0 lb",
-            sizeof(interaction->options[0].meta));
-
-        interaction->options[1].attr = TERM_L_BLUE;
-        interaction->options[1].tag = 'b';
-        interaction->options[1].enabled = 1;
-        interaction->options[1].selected = 1;
-        interaction->options[1].flags = APP_INTERACTION_ENTRY_FLAG_SELECTED;
-        SDL_strlcpy(interaction->options[1].key, "b",
-            sizeof(interaction->options[1].key));
-        SDL_strlcpy(interaction->options[1].label, "Broadhead Arrow",
-            sizeof(interaction->options[1].label));
-        SDL_strlcpy(interaction->options[1].meta, "1.3 lb",
-            sizeof(interaction->options[1].meta));
-
-        interaction->options[2].attr = TERM_SLATE;
-        interaction->options[2].tag = 'c';
-        interaction->options[2].enabled = 1;
-        SDL_strlcpy(interaction->options[2].key, "c",
-            sizeof(interaction->options[2].key));
-        SDL_strlcpy(interaction->options[2].label, "Cancel",
-            sizeof(interaction->options[2].label));
-        SDL_strlcpy(interaction->options[2].meta, "",
-            sizeof(interaction->options[2].meta));
+        panes->combat_entry_count = 1;
+        entry->round = 1;
+        entry->index = 0;
+        entry->att_type = 12;
+        entry->dam_type = 4;
+        entry->attacker_char = '@';
+        entry->attacker_attr = TERM_WHITE;
+        entry->defender_char = 'o';
+        entry->defender_attr = TERM_L_RED;
+        entry->is_attacker_player = 1;
+        entry->att = 12;
+        entry->att_roll = 9;
+        entry->evn = 8;
+        entry->evn_roll = 4;
+        entry->dd = 1;
+        entry->ds = 8;
+        entry->dam = 5;
+        entry->pd = 1;
+        entry->ps = 4;
+        entry->prot = 1;
+        entry->prt_percent = 10;
+        entry->melee = 1;
     }
 
-    *out_size = sizeof(*interaction);
-    return (byte*)interaction;
+    *out_size = sizeof(*panes);
+    return (byte*)panes;
+}
+
+static void build_demo_interaction(app_interaction_state* interaction,
+    bool resolved)
+{
+    if (!interaction)
+        return;
+
+    memset(interaction, 0, sizeof(*interaction));
+    interaction->format_version = APP_INTERACTION_FORMAT_VERSION;
+    interaction->selected_index = -1;
+
+    if (resolved)
+        return;
+
+    interaction->kind = APP_INTERACTION_KIND_LIST;
+    interaction->reason = APP_WAIT_REASON_LIST_SELECTION;
+    interaction->flags = APP_INTERACTION_FLAG_CAN_CONFIRM
+        | APP_INTERACTION_FLAG_CAN_CANCEL
+        | APP_INTERACTION_FLAG_SHOW_OPTIONS
+        | APP_INTERACTION_FLAG_SHOW_VALUE;
+    interaction->prompt_attr = TERM_WHITE;
+    interaction->detail_attr = TERM_SLATE;
+    interaction->value_attr = TERM_YELLOW;
+    interaction->selected_index = 1;
+    interaction->cursor_index = 1;
+    interaction->option_count = 3;
+    SDL_strlcpy(interaction->prompt, "Choose ammunition",
+        sizeof(interaction->prompt));
+    SDL_strlcpy(interaction->detail,
+        "Enter confirms. Esc cancels. Press a, b, or c.",
+        sizeof(interaction->detail));
+    SDL_strlcpy(interaction->value, "2/7",
+        sizeof(interaction->value));
+
+    interaction->options[0].attr = TERM_WHITE;
+    interaction->options[0].tag = 'a';
+    interaction->options[0].enabled = 1;
+    SDL_strlcpy(interaction->options[0].key, "a",
+        sizeof(interaction->options[0].key));
+    SDL_strlcpy(interaction->options[0].label, "Ashen Arrow",
+        sizeof(interaction->options[0].label));
+    SDL_strlcpy(interaction->options[0].meta, "1.0 lb",
+        sizeof(interaction->options[0].meta));
+
+    interaction->options[1].attr = TERM_L_BLUE;
+    interaction->options[1].tag = 'b';
+    interaction->options[1].enabled = 1;
+    interaction->options[1].selected = 1;
+    interaction->options[1].flags = APP_INTERACTION_ENTRY_FLAG_SELECTED;
+    SDL_strlcpy(interaction->options[1].key, "b",
+        sizeof(interaction->options[1].key));
+    SDL_strlcpy(interaction->options[1].label, "Broadhead Arrow",
+        sizeof(interaction->options[1].label));
+    SDL_strlcpy(interaction->options[1].meta, "1.3 lb",
+        sizeof(interaction->options[1].meta));
+
+    interaction->options[2].attr = TERM_SLATE;
+    interaction->options[2].tag = 'c';
+    interaction->options[2].enabled = 1;
+    SDL_strlcpy(interaction->options[2].key, "c",
+        sizeof(interaction->options[2].key));
+    SDL_strlcpy(interaction->options[2].label, "Cancel",
+        sizeof(interaction->options[2].label));
+    SDL_strlcpy(interaction->options[2].meta, "",
+        sizeof(interaction->options[2].meta));
+}
+
+static bool build_demo_chrome_scene(app_ui_scene* scene, const char* topline,
+    const char** lines, size_t line_count)
+{
+    app_ui_panel* panel;
+    size_t i;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_CHROME);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_STRIP;
+    panel->flags = APP_UI_PANEL_FLAG_ACTIVE | APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+    if (topline && topline[0]
+        && !app_ui_panel_add_body_line(panel, TERM_YELLOW, topline))
+    {
+        return false;
+    }
+
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_CHROME);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->flags = APP_UI_PANEL_FLAG_ACTIVE | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+
+    for (i = 0; i < line_count; i++)
+    {
+        if (!lines[i] || !lines[i][0])
+            continue;
+        if (!app_ui_panel_add_body_line(panel,
+                (i == 0) ? TERM_WHITE : TERM_SLATE, lines[i]))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static byte* build_overlay_blob(bool resolved, const char* topline,
+    const char** lines, size_t line_count, size_t* out_size)
+{
+    app_dungeon_overlay_snapshot* overlay = calloc(1, sizeof(*overlay));
+
+    if (!overlay)
+        return NULL;
+
+    overlay->format_version = APP_DUNGEON_OVERLAY_FORMAT_VERSION;
+    build_demo_interaction(&overlay->interaction, resolved);
+    app_ui_scene_init(&overlay->transient_scene);
+    if (!build_demo_chrome_scene(&overlay->chrome_scene, topline, lines,
+            line_count))
+    {
+        free(overlay);
+        return NULL;
+    }
+
+    *out_size = sizeof(*overlay);
+    return (byte*)overlay;
 }
 
 static byte* build_events_blob(bool resolved, size_t* out_size)
@@ -363,37 +436,37 @@ static byte* build_snapshot_blob(bool resolved, size_t* out_size)
     app_snapshot snapshot;
     app_snapshot_blob blobs[3];
     byte* map_data = NULL;
-    byte* messages_data = NULL;
+    byte* panes_data = NULL;
     byte* overlay_data = NULL;
     size_t map_size = 0;
-    size_t messages_size = 0;
+    size_t panes_size = 0;
     size_t overlay_size = 0;
     size_t packet_size;
     byte* packet = NULL;
+    const char* topline = resolved ? "You ready a broadhead arrow."
+        : "Choose an arrow to fire.";
+    const char** lines = resolved ? resolved_lines : open_lines;
 
     memset(&snapshot, 0, sizeof(snapshot));
     memset(blobs, 0, sizeof(blobs));
 
     map_data = build_map_blob(&map_size);
-    messages_data = build_messages_blob(
-        resolved ? "You ready a broadhead arrow."
-                 : "Choose an arrow to fire.",
-        resolved ? resolved_lines : open_lines,
-        3, &messages_size);
-    overlay_data = build_overlay_blob(resolved, &overlay_size);
-    if (!map_data || !messages_data || !overlay_data)
+    panes_data = build_panes_blob(resolved, &panes_size);
+    overlay_data = build_overlay_blob(resolved, topline, lines, 3,
+        &overlay_size);
+    if (!map_data || !panes_data || !overlay_data)
         goto cleanup;
 
     blobs[0].kind = APP_SNAPSHOT_BLOB_MAP;
     blobs[0].format_version = APP_DUNGEON_MAP_FORMAT_VERSION;
     blobs[0].data = map_data;
     blobs[0].size = map_size;
-    blobs[1].kind = APP_SNAPSHOT_BLOB_MESSAGES;
-    blobs[1].format_version = APP_DUNGEON_MESSAGES_FORMAT_VERSION;
-    blobs[1].data = messages_data;
-    blobs[1].size = messages_size;
+    blobs[1].kind = APP_SNAPSHOT_BLOB_PANES;
+    blobs[1].format_version = APP_DUNGEON_PANES_FORMAT_VERSION;
+    blobs[1].data = panes_data;
+    blobs[1].size = panes_size;
     blobs[2].kind = APP_SNAPSHOT_BLOB_OVERLAY;
-    blobs[2].format_version = APP_INTERACTION_FORMAT_VERSION;
+    blobs[2].format_version = APP_DUNGEON_OVERLAY_FORMAT_VERSION;
     blobs[2].data = overlay_data;
     blobs[2].size = overlay_size;
 
@@ -419,7 +492,7 @@ static byte* build_snapshot_blob(bool resolved, size_t* out_size)
 
 cleanup:
     free(map_data);
-    free(messages_data);
+    free(panes_data);
     free(overlay_data);
     return packet;
 }
@@ -431,17 +504,17 @@ static bool emit_layout_json(const char* path)
     if (!file)
         return false;
 
+    fprintf(file, "{\n");
     fprintf(file,
-        "{\n"
         "  \"map\": {\n"
         "    \"size\": %u,\n"
         "    \"cellsOffset\": %u,\n"
         "    \"width\": %u,\n"
         "    \"height\": %u,\n"
         "    \"cursor\": {\n"
-          "      \"visible\": %u,\n"
-          "      \"relative\": %u,\n"
-          "      \"mapY\": %u,\n"
+        "      \"visible\": %u,\n"
+        "      \"relative\": %u,\n"
+        "      \"mapY\": %u,\n"
         "      \"mapX\": %u\n"
         "    },\n"
         "    \"target\": {\n"
@@ -449,68 +522,7 @@ static bool emit_layout_json(const char* path)
         "      \"mapY\": %u,\n"
         "      \"mapX\": %u\n"
         "    }\n"
-        "  },\n"
-        "  \"mapCell\": {\n"
-        "    \"size\": %u,\n"
-        "    \"mapY\": %u,\n"
-        "    \"mapX\": %u,\n"
-        "    \"flags\": %u,\n"
-        "    \"attr\": %u,\n"
-        "    \"ch\": %u\n"
-        "  },\n"
-        "  \"messages\": {\n"
-        "    \"size\": %u,\n"
-        "    \"linesOffset\": %u,\n"
-        "    \"topLineColor\": %u,\n"
-        "    \"topLineActive\": %u,\n"
-        "    \"topLineText\": %u,\n"
-        "    \"lineCount\": %u\n"
-        "  },\n"
-        "  \"messageLine\": {\n"
-        "    \"size\": %u,\n"
-        "    \"color\": %u,\n"
-        "    \"age\": %u,\n"
-        "    \"text\": %u\n"
-        "  },\n"
-        "  \"interaction\": {\n"
-        "    \"size\": %u,\n"
-        "    \"kind\": %u,\n"
-        "    \"reason\": %u,\n"
-        "    \"flags\": %u,\n"
-        "    \"selectedIndex\": %u,\n"
-        "    \"cursorIndex\": %u,\n"
-        "    \"optionCount\": %u,\n"
-        "    \"prompt\": %u,\n"
-        "    \"detail\": %u,\n"
-        "    \"value\": %u,\n"
-        "    \"options\": %u\n"
-        "  },\n"
-        "  \"interactionOption\": {\n"
-        "    \"size\": %u,\n"
-        "    \"attr\": %u,\n"
-        "    \"tag\": %u,\n"
-        "    \"enabled\": %u,\n"
-        "    \"selected\": %u,\n"
-        "    \"flags\": %u,\n"
-        "    \"key\": %u,\n"
-        "    \"label\": %u,\n"
-        "    \"meta\": %u\n"
-        "  },\n"
-        "  \"constants\": {\n"
-        "    \"blobKinds\": {\n"
-        "      \"map\": %u,\n"
-        "      \"messages\": %u,\n"
-        "      \"overlay\": %u\n"
-        "    },\n"
-        "    \"mapFlags\": {\n"
-        "      \"player\": %u,\n"
-        "      \"monster\": %u,\n"
-        "      \"object\": %u,\n"
-        "      \"target\": %u,\n"
-        "      \"cursor\": %u\n"
-        "    }\n"
-        "  }\n"
-        "}\n",
+        "  },\n",
         (unsigned)sizeof(app_map_snapshot),
         (unsigned)offsetof(app_map_snapshot, cells),
         (unsigned)offsetof(app_map_snapshot, width),
@@ -528,23 +540,58 @@ static bool emit_layout_json(const char* path)
         (unsigned)(offsetof(app_map_snapshot, target)
             + offsetof(app_target_snapshot, map_y)),
         (unsigned)(offsetof(app_map_snapshot, target)
-            + offsetof(app_target_snapshot, map_x)),
+            + offsetof(app_target_snapshot, map_x)));
+    fprintf(file,
+        "  \"mapCell\": {\n"
+        "    \"size\": %u,\n"
+        "    \"mapY\": %u,\n"
+        "    \"mapX\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"attr\": %u,\n"
+        "    \"ch\": %u\n"
+        "  },\n",
         (unsigned)sizeof(app_map_cell_snapshot),
         (unsigned)offsetof(app_map_cell_snapshot, map_y),
         (unsigned)offsetof(app_map_cell_snapshot, map_x),
         (unsigned)offsetof(app_map_cell_snapshot, flags),
         (unsigned)offsetof(app_map_cell_snapshot, attr),
-        (unsigned)offsetof(app_map_cell_snapshot, ch),
-        (unsigned)sizeof(app_messages_snapshot),
-        (unsigned)offsetof(app_messages_snapshot, lines),
-        (unsigned)offsetof(app_messages_snapshot, top_line_color),
-        (unsigned)offsetof(app_messages_snapshot, top_line_active),
-        (unsigned)offsetof(app_messages_snapshot, top_line),
-        (unsigned)offsetof(app_messages_snapshot, line_count),
-        (unsigned)sizeof(app_message_line_snapshot),
-        (unsigned)offsetof(app_message_line_snapshot, color),
-        (unsigned)offsetof(app_message_line_snapshot, age),
-        (unsigned)offsetof(app_message_line_snapshot, text),
+        (unsigned)offsetof(app_map_cell_snapshot, ch));
+    fprintf(file,
+        "  \"panes\": {\n"
+        "    \"size\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"combatEntryCount\": %u,\n"
+        "    \"mainCombatRollLines\": %u\n"
+        "  },\n",
+        (unsigned)sizeof(app_panes_snapshot),
+        (unsigned)offsetof(app_panes_snapshot, flags),
+        (unsigned)offsetof(app_panes_snapshot, combat_entry_count),
+        (unsigned)offsetof(app_panes_snapshot, main_combat_roll_lines));
+    fprintf(file,
+        "  \"overlay\": {\n"
+        "    \"size\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"interactionOffset\": %u,\n"
+        "    \"chromeSceneOffset\": %u\n"
+        "  },\n",
+        (unsigned)sizeof(app_dungeon_overlay_snapshot),
+        (unsigned)offsetof(app_dungeon_overlay_snapshot, flags),
+        (unsigned)offsetof(app_dungeon_overlay_snapshot, interaction),
+        (unsigned)offsetof(app_dungeon_overlay_snapshot, chrome_scene));
+    fprintf(file,
+        "  \"interaction\": {\n"
+        "    \"size\": %u,\n"
+        "    \"kind\": %u,\n"
+        "    \"reason\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"selectedIndex\": %u,\n"
+        "    \"cursorIndex\": %u,\n"
+        "    \"optionCount\": %u,\n"
+        "    \"prompt\": %u,\n"
+        "    \"detail\": %u,\n"
+        "    \"value\": %u,\n"
+        "    \"options\": %u\n"
+        "  },\n",
         (unsigned)sizeof(app_interaction_state),
         (unsigned)offsetof(app_interaction_state, kind),
         (unsigned)offsetof(app_interaction_state, reason),
@@ -555,7 +602,19 @@ static bool emit_layout_json(const char* path)
         (unsigned)offsetof(app_interaction_state, prompt),
         (unsigned)offsetof(app_interaction_state, detail),
         (unsigned)offsetof(app_interaction_state, value),
-        (unsigned)offsetof(app_interaction_state, options),
+        (unsigned)offsetof(app_interaction_state, options));
+    fprintf(file,
+        "  \"interactionOption\": {\n"
+        "    \"size\": %u,\n"
+        "    \"attr\": %u,\n"
+        "    \"tag\": %u,\n"
+        "    \"enabled\": %u,\n"
+        "    \"selected\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"key\": %u,\n"
+        "    \"label\": %u,\n"
+        "    \"meta\": %u\n"
+        "  },\n",
         (unsigned)sizeof(app_interaction_option),
         (unsigned)offsetof(app_interaction_option, attr),
         (unsigned)offsetof(app_interaction_option, tag),
@@ -564,9 +623,56 @@ static bool emit_layout_json(const char* path)
         (unsigned)offsetof(app_interaction_option, flags),
         (unsigned)offsetof(app_interaction_option, key),
         (unsigned)offsetof(app_interaction_option, label),
-        (unsigned)offsetof(app_interaction_option, meta),
+        (unsigned)offsetof(app_interaction_option, meta));
+    fprintf(file,
+        "  \"uiScene\": {\n"
+        "    \"size\": %u,\n"
+        "    \"panelCount\": %u,\n"
+        "    \"panels\": %u\n"
+        "  },\n",
+        (unsigned)sizeof(app_ui_scene),
+        (unsigned)offsetof(app_ui_scene, panel_count),
+        (unsigned)offsetof(app_ui_scene, panels));
+    fprintf(file,
+        "  \"uiPanel\": {\n"
+        "    \"size\": %u,\n"
+        "    \"style\": %u,\n"
+        "    \"flags\": %u,\n"
+        "    \"bodyLineCount\": %u,\n"
+        "    \"bodyLines\": %u\n"
+        "  },\n",
+        (unsigned)sizeof(app_ui_panel),
+        (unsigned)offsetof(app_ui_panel, style),
+        (unsigned)offsetof(app_ui_panel, flags),
+        (unsigned)offsetof(app_ui_panel, body_line_count),
+        (unsigned)offsetof(app_ui_panel, body_lines));
+    fprintf(file,
+        "  \"uiTextLine\": {\n"
+        "    \"size\": %u,\n"
+        "    \"attr\": %u,\n"
+        "    \"text\": %u\n"
+        "  },\n",
+        (unsigned)sizeof(app_ui_text_line),
+        (unsigned)offsetof(app_ui_text_line, attr),
+        (unsigned)offsetof(app_ui_text_line, text));
+    fprintf(file,
+        "  \"constants\": {\n"
+        "    \"blobKinds\": {\n"
+        "      \"map\": %u,\n"
+        "      \"panes\": %u,\n"
+        "      \"overlay\": %u\n"
+        "    },\n"
+        "    \"mapFlags\": {\n"
+        "      \"player\": %u,\n"
+        "      \"monster\": %u,\n"
+        "      \"object\": %u,\n"
+        "      \"target\": %u,\n"
+        "      \"cursor\": %u\n"
+        "    }\n"
+        "  }\n"
+        "}\n",
         (unsigned)APP_SNAPSHOT_BLOB_MAP,
-        (unsigned)APP_SNAPSHOT_BLOB_MESSAGES,
+        (unsigned)APP_SNAPSHOT_BLOB_PANES,
         (unsigned)APP_SNAPSHOT_BLOB_OVERLAY,
         (unsigned)APP_MAP_CELL_FLAG_PLAYER,
         (unsigned)APP_MAP_CELL_FLAG_MONSTER,

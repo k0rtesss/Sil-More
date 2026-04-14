@@ -137,7 +137,7 @@ cptr skill_names_full[S_MAX] = { "Melee", "Archery", "Evasion", "Stealth",
  * Character screen, Small scale map, Previous Messages, Store screen, etc.
  */
 cptr window_flag_desc[32] = { "Display inven/equip", "Display equip/inven",
-    "Display player (basic)", "Display player (extra)", "Display combat rolls",
+    "Display player (basic)", "Display player (extra)", NULL,
     "Display monster recall", "Display object recall", "Display messages",
     "Display overhead view", "Display monster list", NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,

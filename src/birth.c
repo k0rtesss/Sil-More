@@ -28,8 +28,6 @@
 #include "z-term.h"
 
 static bool skill_gain_in_progress = false;
-static bool birth_semantic_assignment_active = false;
-static bool birth_semantic_creation_menu_active = false;
 
 typedef struct birth_compact_flag_line {
     cptr txt;
@@ -949,7 +947,7 @@ static char birth_inkey_with_wait_reason(u16b reason)
 
     app_session_push_wait_scope(session, &scope, reason, 0, 0);
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    ch = (char)ui_information_scene_wait_key();
     inkey_set_cursor_hidden(false);
     app_session_pop_wait_scope(session, &scope);
     return ch;
@@ -1108,8 +1106,6 @@ static bool birth_present_stats_allocation_ui_scene(const int stats[A_MAX],
 {
     app_ui_scene scene;
 
-    if (!birth_semantic_assignment_active)
-        return false;
     if (!birth_build_stats_allocation_ui_scene(&scene, stats, selected_stat,
             points_left, steamdeck)
         || !ui_information_scene_present_ui(&scene))
@@ -1182,8 +1178,6 @@ static bool birth_present_skills_allocation_ui_scene(int selected_skill,
 {
     app_ui_scene scene;
 
-    if (!birth_semantic_assignment_active)
-        return false;
     if (!birth_build_skills_allocation_ui_scene(&scene, selected_skill,
             old_base, skill_gain, exp_left, steamdeck)
         || !ui_information_scene_present_ui(&scene))
@@ -1233,8 +1227,6 @@ static bool birth_show_semantic_assignment_review(bool steamdeck)
     {
         app_ui_scene scene;
 
-        if (!birth_semantic_assignment_active)
-            return false;
         if (!birth_build_assignment_review_ui_scene(&scene, steamdeck)
             || !ui_information_scene_present_ui(&scene))
         {
@@ -2419,69 +2411,21 @@ static cptr blitz_effect_mode_name(byte mode)
 
 typedef struct birth_menu_scene_scope {
     bool active;
-    bool restore_previous_snapshot;
-    app_snapshot previous_snapshot;
-    app_menu_snapshot* previous_menu_snapshot;
     app_wait_scope wait_scope;
 } birth_menu_scene_scope;
-
-static app_menu_snapshot* birth_menu_scene_clone_snapshot(
-    const app_menu_snapshot* snapshot)
-{
-    app_menu_snapshot* copy;
-
-    if (!snapshot)
-        return NULL;
-
-    copy = mem_alloc(app_menu_snapshot);
-    if (!copy)
-        return NULL;
-
-    app_menu_snapshot_init(copy);
-    copy->snapshot = snapshot->snapshot;
-    copy->snapshot.blobs = copy->blobs;
-    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
-    copy->blobs[0].kind = snapshot->blobs[0].kind;
-    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
-    copy->blobs[0].data = (const byte*)&copy->scene;
-    copy->blobs[0].size = sizeof(copy->scene);
-    copy->scene = snapshot->scene;
-    return copy;
-}
-
-static bool birth_menu_scene_supported(void)
-{
-    app_session* session = app_session_current();
-
-    return session
-        && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
-}
 
 static bool birth_menu_scene_enter(birth_menu_scene_scope* scope, u16b reason)
 {
     app_session* session;
-    const app_snapshot* snapshot;
 
     if (!scope)
         return false;
 
     memset(scope, 0, sizeof(*scope));
-    if (!birth_menu_scene_supported())
-        return false;
-
     session = app_session_current();
-    snapshot = app_session_snapshot(session);
-    if (snapshot)
-        scope->previous_snapshot = *snapshot;
-    scope->restore_previous_snapshot = true;
-
-    if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
-    {
-        scope->previous_menu_snapshot = birth_menu_scene_clone_snapshot(
-            app_session_menu_snapshot(session));
-        if (!scope->previous_menu_snapshot)
-            return false;
-    }
+    if (!session
+        || !app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
+        return false;
 
     app_session_push_wait_scope(session, &scope->wait_scope, reason, 0, 0);
     app_session_clear_inputs(session);
@@ -2510,31 +2454,9 @@ static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
         return;
 
     app_session_clear_inputs(session);
-    if (scope->restore_previous_snapshot)
-    {
-        if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
-            && scope->previous_menu_snapshot)
-        {
-            (void)app_session_publish_menu_scene(session,
-                &scope->previous_menu_snapshot->scene);
-        }
-        else if (scope->previous_snapshot.scene == APP_SCENE_KIND_NONE)
-        {
-            app_session_set_snapshot(session, NULL);
-        }
-        else
-        {
-            app_session_set_snapshot(session, &scope->previous_snapshot);
-        }
-    }
-    else
-    {
-        app_session_clear_menu_snapshot(session);
-        app_session_set_snapshot(session, NULL);
-    }
-
+    app_session_clear_menu_snapshot(session);
+    app_session_set_snapshot(session, NULL);
     app_session_pop_wait_scope(session, &scope->wait_scope);
-    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
 }
 
@@ -2752,7 +2674,6 @@ static NavResult blitz_setup_menu(void)
         if (key == '\n' || key == '\r' || key == ' '
             || (steamdeck && key == steamdeck_confirm_key()))
         {
-            scene_scope.restore_previous_snapshot = false;
             birth_menu_scene_leave(&scene_scope);
             return NAV_OK;
         }
@@ -2886,8 +2807,6 @@ static void finalize_character_creation_selection(void)
         e_info[i].squelch = false;
     }
 
-    Term_clear();
-
     log_debug("Character creation step completed: %s %s",
         p_name + p_info[p_ptr->prace].name,
         c_name + c_info[p_ptr->pcharacter].name);
@@ -2925,8 +2844,6 @@ NavResult character_creation(void)
         log_warn("character creation: semantic menu scene unavailable");
         return NAV_TO_MAIN;
     }
-    birth_semantic_creation_menu_active = true;
-
     while (phase <= 2)
     {
         if (phase == 1)
@@ -2935,7 +2852,6 @@ NavResult character_creation(void)
             if (!get_player_race())
             {
                 birth_menu_scene_leave(&scene_scope);
-                birth_semantic_creation_menu_active = false;
                 return NAV_TO_MAIN; /* Esc at first screen → back to main menu */
             }
 
@@ -2956,10 +2872,7 @@ NavResult character_creation(void)
     }
     (void)i;
 
-    scene_scope.restore_previous_snapshot = false;
     birth_menu_scene_leave(&scene_scope);
-    birth_semantic_creation_menu_active = false;
-
     finalize_character_creation_selection();
 
     /* Done */
@@ -3647,11 +3560,6 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects,
 
     if (count <= 0)
         return -1;
-    if (!birth_semantic_assignment_active)
-    {
-        log_warn("blitz effect picker: semantic assignment scene unavailable");
-        return -1;
-    }
 
     while (1)
     {
@@ -3756,12 +3664,6 @@ static bool blitz_effect_summary_build_ui_scene(app_ui_scene* scene)
 static void blitz_show_effect_summary(void)
 {
     app_ui_scene scene;
-
-    if (!birth_semantic_assignment_active)
-    {
-        log_warn("blitz effect summary: semantic assignment scene unavailable");
-        return;
-    }
 
     if (!blitz_effect_summary_build_ui_scene(&scene)
         || !ui_information_scene_present_ui(&scene))
@@ -4319,7 +4221,6 @@ static NavResult player_birth_aux(void)
 {
     NavResult result = NAV_OK;
     ui_information_scene_scope semantic_scope;
-    bool want_semantic_ui = true;
 
 
     log_debug("Initializing character data and history");
@@ -4336,9 +4237,11 @@ static NavResult player_birth_aux(void)
     p_ptr->ht = 0;
     p_ptr->age = 0;
 
-    if (want_semantic_ui)
-        birth_semantic_assignment_active
-            = ui_information_scene_enter(&semantic_scope);
+    if (!ui_information_scene_enter(&semantic_scope))
+    {
+        log_error("player_birth_aux: semantic assignment scene unavailable");
+        return NAV_TO_MAIN;
+    }
 
     /* Oath selection (after character creation, before tutorial/stats) */
     if (run_mode_is_blitz() && !blitz_oaths_enabled())
@@ -4381,9 +4284,6 @@ static NavResult player_birth_aux(void)
     {
         for (;;)
         {
-            if (!birth_semantic_assignment_active)
-                display_player(0);
-
             /* Stats allocation screen */
             log_debug("Entering stats allocation");
             NavResult s = player_birth_aux_2();
@@ -4416,9 +4316,6 @@ static NavResult player_birth_aux(void)
             }
             /* any other value: loop again */
         }
-
-        if (birth_semantic_assignment_active)
-            goto cleanup_semantic_birth_ui;
     }
 
     // Reset the number of artefacts
@@ -4429,11 +4326,7 @@ static NavResult player_birth_aux(void)
               p_ptr->stat_base[A_CON], p_ptr->stat_base[A_GRA]);
 
 cleanup_semantic_birth_ui:
-    if (birth_semantic_assignment_active)
-    {
-        ui_information_scene_leave(&semantic_scope);
-        birth_semantic_assignment_active = false;
-    }
+    ui_information_scene_leave(&semantic_scope);
 
     if (result != NAV_OK)
         return result;

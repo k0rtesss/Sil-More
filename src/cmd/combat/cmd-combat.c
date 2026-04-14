@@ -1220,11 +1220,7 @@ void apply_oath_breaking_curse(int oath_id)
         add_curse_stack(chosen_curse);
         log_trace("Applied chosen curse %d for breaking oath", chosen_curse);
     } else {
-        /* Fallback to random curse if UI failed */
-        int selected_curse = 0;
-        if (z_info && z_info->cu_max > 0) selected_curse = rand_int(z_info->cu_max);
-        add_curse_stack(selected_curse);
-        log_trace("Applied fallback random curse %d for breaking oath", selected_curse);
+        log_error("Failed to choose an oath-breaking curse; no curse applied");
     }
     
     /* Ban this oath for the rest of the metarun */

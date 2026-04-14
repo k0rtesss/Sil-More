@@ -75,19 +75,6 @@ void re_init_some_things(void)
     min_depth_counter = 0;
     op_ptr->full_name[0] = '\0';
 
-    for (i = 0; i < ANGBAND_TERM_MAX; i++)
-    {
-        term* old = Term;
-
-        if (!angband_term[i])
-            continue;
-
-        Term_activate(angband_term[i]);
-        Term_clear();
-        Term_fresh();
-        Term_activate(old);
-    }
-
     autoinscribe_clean();
     autoinscribe_init();
 
@@ -150,7 +137,6 @@ void re_init_some_things(void)
 
     op_ptr->window_flag[WINDOW_INVEN] |= (PW_INVEN);
     op_ptr->window_flag[WINDOW_EQUIP] |= (PW_EQUIP);
-    op_ptr->window_flag[WINDOW_COMBAT_ROLLS] |= (PW_COMBAT_ROLLS);
     op_ptr->window_flag[WINDOW_MONSTER] |= (PW_MONSTER);
     op_ptr->window_flag[WINDOW_PLAYER_0] |= (PW_PLAYER_0);
     op_ptr->window_flag[WINDOW_MESSAGE] |= (PW_MESSAGE);
@@ -213,7 +199,6 @@ static errr init_other(void)
 
     op_ptr->window_flag[WINDOW_INVEN] |= (PW_INVEN);
     op_ptr->window_flag[WINDOW_EQUIP] |= (PW_EQUIP);
-    op_ptr->window_flag[WINDOW_COMBAT_ROLLS] |= (PW_COMBAT_ROLLS);
     op_ptr->window_flag[WINDOW_MONSTER] |= (PW_MONSTER);
     op_ptr->window_flag[WINDOW_PLAYER_0] |= (PW_PLAYER_0);
     op_ptr->window_flag[WINDOW_MESSAGE] |= (PW_MESSAGE);

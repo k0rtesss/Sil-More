@@ -176,37 +176,13 @@ export function decodeMapBlob(bytes, layout) {
   };
 }
 
-export function decodeMessagesBlob(bytes, layout) {
+function decodeInteraction(bytes, baseOffset, layout) {
   const view = dataView(bytes);
-  const lineCount = view.getUint16(layout.messages.lineCount, true);
-  const lines = [];
-
-  for (let index = 0; index < lineCount; index += 1) {
-    const base = layout.messages.linesOffset + (index * layout.messageLine.size);
-    lines.push({
-      color: bytes[base + layout.messageLine.color],
-      age: view.getInt16(base + layout.messageLine.age, true),
-      text: readString(bytes, base + layout.messageLine.text,
-        layout.messageLine.size - layout.messageLine.text),
-    });
-  }
-
-  return {
-    topLineActive: bytes[layout.messages.topLineActive] !== 0,
-    topLineColor: bytes[layout.messages.topLineColor],
-    topLine: readString(bytes, layout.messages.topLineText,
-      layout.messages.linesOffset - layout.messages.topLineText),
-    lines,
-  };
-}
-
-export function decodeInteractionBlob(bytes, layout) {
-  const view = dataView(bytes);
-  const optionCount = view.getUint16(layout.interaction.optionCount, true);
+  const optionCount = view.getUint16(baseOffset + layout.interaction.optionCount, true);
   const options = [];
 
   for (let index = 0; index < optionCount; index += 1) {
-    const base = layout.interaction.options + (index * layout.interactionOption.size);
+    const base = baseOffset + layout.interaction.options + (index * layout.interactionOption.size);
     options.push({
       attr: bytes[base + layout.interactionOption.attr],
       tag: String.fromCharCode(bytes[base + layout.interactionOption.tag] || 0),
@@ -223,19 +199,83 @@ export function decodeInteractionBlob(bytes, layout) {
   }
 
   return {
-    kind: view.getUint16(layout.interaction.kind, true),
-    reason: view.getUint16(layout.interaction.reason, true),
-    flags: view.getUint16(layout.interaction.flags, true),
-    selectedIndex: view.getInt16(layout.interaction.selectedIndex, true),
-    cursorIndex: view.getInt16(layout.interaction.cursorIndex, true),
+    kind: view.getUint16(baseOffset + layout.interaction.kind, true),
+    reason: view.getUint16(baseOffset + layout.interaction.reason, true),
+    flags: view.getUint16(baseOffset + layout.interaction.flags, true),
+    selectedIndex: view.getInt16(baseOffset + layout.interaction.selectedIndex, true),
+    cursorIndex: view.getInt16(baseOffset + layout.interaction.cursorIndex, true),
     optionCount,
-    prompt: readString(bytes, layout.interaction.prompt,
+    prompt: readString(bytes, baseOffset + layout.interaction.prompt,
       layout.interaction.detail - layout.interaction.prompt),
-    detail: readString(bytes, layout.interaction.detail,
+    detail: readString(bytes, baseOffset + layout.interaction.detail,
       layout.interaction.value - layout.interaction.detail),
-    value: readString(bytes, layout.interaction.value,
+    value: readString(bytes, baseOffset + layout.interaction.value,
       layout.interaction.options - layout.interaction.value),
     options,
+  };
+}
+
+function decodeUiScene(bytes, baseOffset, layout) {
+  const view = dataView(bytes);
+  const panelCount = view.getUint16(baseOffset + layout.uiScene.panelCount, true);
+  const panels = [];
+
+  for (let index = 0; index < panelCount; index += 1) {
+    const panelBase = baseOffset + layout.uiScene.panels + (index * layout.uiPanel.size);
+    const bodyLineCount = view.getUint16(panelBase + layout.uiPanel.bodyLineCount, true);
+    const bodyLines = [];
+
+    for (let lineIndex = 0; lineIndex < bodyLineCount; lineIndex += 1) {
+      const lineBase = panelBase + layout.uiPanel.bodyLines + (lineIndex * layout.uiTextLine.size);
+      bodyLines.push({
+        attr: bytes[lineBase + layout.uiTextLine.attr],
+        text: readString(bytes, lineBase + layout.uiTextLine.text,
+          layout.uiTextLine.size - layout.uiTextLine.text),
+      });
+    }
+
+    panels.push({
+      style: view.getUint16(panelBase + layout.uiPanel.style, true),
+      flags: view.getUint16(panelBase + layout.uiPanel.flags, true),
+      bodyLines,
+    });
+  }
+
+  return { panelCount, panels };
+}
+
+function decodeChromeMessages(scene) {
+  const allLines = [];
+
+  for (const panel of scene.panels) {
+    for (const line of panel.bodyLines) {
+      if (line.text) {
+        allLines.push(line);
+      }
+    }
+  }
+
+  return {
+    topLineActive: allLines.length > 0,
+    topLineColor: allLines.length > 0 ? allLines[0].attr : 0,
+    topLine: allLines.length > 0 ? allLines[0].text : "",
+    lines: allLines.slice(1).map((line) => ({
+      color: line.attr,
+      text: line.text,
+    })),
+  };
+}
+
+export function decodeOverlayBlob(bytes, layout) {
+  const view = dataView(bytes);
+  const interaction = decodeInteraction(bytes, layout.overlay.interactionOffset, layout);
+  const chromeScene = decodeUiScene(bytes, layout.overlay.chromeSceneOffset, layout);
+
+  return {
+    flags: view.getUint16(layout.overlay.flags, true),
+    interaction,
+    chromeScene,
+    messages: decodeChromeMessages(chromeScene),
   };
 }
 

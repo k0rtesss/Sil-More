@@ -58,9 +58,10 @@ static int last_narrated_style_idx = -1;
 static bool is_big_partition_kind(level_partition_kind kind);
 static bool is_small_cave_partition_kind(level_partition_kind kind);
 
-#define DUNGEON_FULLSCREEN_DOC_COLS 80
-#define DUNGEON_FULLSCREEN_DOC_ROWS 24
-
+#define DUNGEON_PARTITION_BANNER_WRAP_CHARS 80
+#define DUNGEON_PARTITION_BANNER_LINE_LIMIT 23
+#define DUNGEON_PARTITION_BANNER_BASE_INDENT 14
+#define DUNGEON_PARTITION_BANNER_STAIR_STEP 2
 /* Track greater-vault encounter XP so repeated warning prompts can't be farmed. */
 static char greater_vault_xp_name[80] = "";
 static bool greater_vault_xp_awarded = false;
@@ -107,6 +108,29 @@ static bool banner_messages_use_stairs(void)
     return op_ptr->opt[OPT_banner_message_stairs];
 }
 
+static bool dungeon_poll_pending_legacy_key(void)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    if (session
+        && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
+    {
+        while (app_session_pop_input(session, &input))
+        {
+            if (input.layer != APP_INPUT_LAYER_LEGACY
+                || input.type != APP_INPUT_TYPE_KEY)
+            {
+                continue;
+            }
+
+            return true;
+        }
+    }
+
+    return inkey_can_consume_immediately();
+}
+
 static void dungeon_refresh_partition_banner_snapshot(void);
 
 bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene)
@@ -126,22 +150,27 @@ bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene)
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_TRANSIENT);
     if (!panel)
         return false;
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->style = APP_UI_PANEL_STYLE_OVERLAY_RAIL;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+    panel->accent_attr = TERM_ORANGE;
 
     while (*p && printed_lines < MAX_LINES
-        && (1 + printed_lines) < DUNGEON_FULLSCREEN_DOC_ROWS)
+        && printed_lines < DUNGEON_PARTITION_BANNER_LINE_LIMIT)
     {
-        int indent = 14 + (stair_layout ? (2 * printed_lines) : 0);
+        int indent = DUNGEON_PARTITION_BANNER_BASE_INDENT
+            + (stair_layout ? (DUNGEON_PARTITION_BANNER_STAIR_STEP
+                * printed_lines)
+                            : 0);
         int avail;
         char buf[MAX_LEN + 1];
+        char line_buf[APP_UI_LABEL_MAX];
         int linelen = 0;
 
-        if (use_bigtile && (((indent - COL_MAP) & 1) != 0))
-            indent++;
-        if (indent >= DUNGEON_FULLSCREEN_DOC_COLS - 1)
+        if (indent >= DUNGEON_PARTITION_BANNER_WRAP_CHARS - 1)
             break;
 
-        avail = DUNGEON_FULLSCREEN_DOC_COLS - indent - 1;
+        avail = DUNGEON_PARTITION_BANNER_WRAP_CHARS - indent - 1;
         if (avail < 8)
             avail = 8;
 
@@ -217,12 +246,18 @@ bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene)
         if (linelen == 0)
             break;
 
-        if (!app_ui_panel_add_document_text_ex(scene, panel,
-                (s16b)(1 + printed_lines), (s16b)indent, TERM_ORANGE,
-                STORY_FLAG_USE, buf))
+        if (indent >= (int)sizeof(line_buf))
+            indent = (int)sizeof(line_buf) - 1;
+        memset(line_buf, ' ', (size_t)indent);
+        line_buf[indent] = '\0';
+        SDL_strlcat(line_buf, buf, sizeof(line_buf));
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)printed_lines, TERM_ORANGE,
+                TERM_ORANGE, 0, '\0', true, false, "", line_buf, ""))
         {
             return false;
         }
+        panel->rows[panel->row_count - 1].flags |= APP_UI_ITEM_FLAG_STORY_LABEL;
 
         printed_lines++;
     }
@@ -423,24 +458,9 @@ static bool dungeon_fullscreen_scene_enter(ui_information_scene_scope* scope,
     return true;
 }
 
-static bool dungeon_fullscreen_scene_present(ui_information_scene_scope* scope,
-    const app_ui_scene* scene, bool overlay_dungeon)
+static bool dungeon_fullscreen_scene_present(const app_ui_scene* scene)
 {
-    app_session* session = app_session_current();
-
-    if (!scope || !scene || !session)
-        return false;
-
-    if (overlay_dungeon)
-    {
-        if (!app_session_publish_dungeon_overlay_scene(session, scene))
-            return false;
-        scope->published_overlay = true;
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
-        return true;
-    }
-
-    return ui_information_scene_present_ui(scene);
+    return scene ? ui_information_scene_present_ui(scene) : false;
 }
 
 static app_ui_panel* dungeon_fullscreen_scene_begin(app_ui_scene* scene,
@@ -452,194 +472,68 @@ static app_ui_panel* dungeon_fullscreen_scene_begin(app_ui_scene* scene,
         return NULL;
 
     app_ui_scene_init(scene);
+    if (overlay_dungeon)
+        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
     panel = app_ui_scene_append_panel(scene,
         overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_SLATE;
+    app_ui_panel_set_widths(panel,
+        overlay_dungeon ? 980 : 900,
+        overlay_dungeon ? 1700 : 1500);
     return panel;
 }
 
-static void dungeon_fullscreen_fit_text(char* buf, size_t buflen, cptr text,
-    int max_chars)
+static bool dungeon_fullscreen_add_paragraph(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte story, cptr text)
 {
-    if (!buf || !buflen)
-        return;
-
-    if (!text)
-        text = "";
-
-    if (max_chars <= 0)
-        buf[0] = '\0';
-    else if ((int)strlen(text) <= max_chars)
-        SDL_strlcpy(buf, text, buflen);
-    else if (max_chars <= 3)
-        strnfmt(buf, buflen, "%.*s", max_chars, text);
-    else
-        strnfmt(buf, buflen, "%.*s...", max_chars - 3, text);
-}
-
-static bool dungeon_fullscreen_add_centered_ex(app_ui_scene* scene,
-    app_ui_panel* panel, int row, byte attr, byte story, cptr text)
-{
-    char buf[256];
-    int col;
-
-    if (!scene || !panel || row < 0 || row >= DUNGEON_FULLSCREEN_DOC_ROWS)
+    if (!scene || !panel)
+        return false;
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
         return false;
 
-    dungeon_fullscreen_fit_text(buf, sizeof(buf), text,
-        DUNGEON_FULLSCREEN_DOC_COLS - 2);
-    if (!buf[0])
-        return true;
-
-    col = (DUNGEON_FULLSCREEN_DOC_COLS - (int)strlen(buf)) / 2;
-    if (col < 0)
-        col = 0;
-
-    return app_ui_panel_add_document_text_ex(scene, panel, (s16b)row,
-        (s16b)col, attr, story, buf);
+    return app_ui_panel_add_rich_text_ex(scene, panel, attr, story,
+        (text && text[0]) ? text : " ");
 }
 
-static bool dungeon_fullscreen_add_centered(app_ui_scene* scene,
-    app_ui_panel* panel, int row, byte attr, cptr text)
-{
-    return dungeon_fullscreen_add_centered_ex(scene, panel, row, attr, 0, text);
-}
-
-static int dungeon_fullscreen_add_wrapped_ex(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int col, int width, int max_lines, byte attr,
-    byte story, cptr text)
-{
-    const char* p = text ? text : "";
-    int lines = 0;
-
-    if (!scene || !panel || width <= 0 || max_lines <= 0)
-        return 0;
-
-    while (*p && lines < max_lines)
-    {
-        char buf[256];
-        const char* start;
-        int len = 0;
-        int last_space = -1;
-        bool forced_newline = false;
-
-        while (*p == ' ')
-            p++;
-
-        if (!*p)
-            break;
-
-        start = p;
-
-        while (*p && *p != '\n')
-        {
-            char ch = isprint((unsigned char)*p) ? *p : ' ';
-
-            if (len < MIN(width, (int)sizeof(buf) - 1))
-            {
-                if (ch == ' ')
-                    last_space = len;
-                buf[len++] = ch;
-                p++;
-                continue;
-            }
-
-            break;
-        }
-
-        if (*p == '\n')
-        {
-            forced_newline = true;
-            p++;
-        }
-        else if (*p && len >= width && last_space >= 0)
-        {
-            p = start + last_space + 1;
-            len = last_space;
-        }
-
-        while (len > 0 && buf[len - 1] == ' ')
-            len--;
-
-        if ((lines == max_lines - 1) && *p)
-        {
-            if (width > 3)
-            {
-                if (len > width - 3)
-                    len = width - 3;
-                memcpy(buf + len, "...", 3);
-                len += 3;
-            }
-        }
-
-        buf[len] = '\0';
-        if (buf[0]
-            && !app_ui_panel_add_document_text_ex(scene, panel,
-                (s16b)(row + lines), (s16b)col, attr, story, buf))
-        {
-            return 0;
-        }
-
-        lines++;
-
-        if (forced_newline)
-            continue;
-    }
-
-    return lines;
-}
-
-static int dungeon_fullscreen_add_wrapped(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int col, int width, int max_lines, byte attr,
+static bool dungeon_fullscreen_add_body_hint(app_ui_panel* panel, byte attr,
     cptr text)
 {
-    return dungeon_fullscreen_add_wrapped_ex(scene, panel, row, col, width,
-        max_lines, attr, 0, text);
+    if (!panel)
+        return false;
+
+    return app_ui_panel_add_body_line(panel, attr,
+        (text && text[0]) ? text : " ");
 }
 
 static bool confirm_enter_morgoth_hall_build_ui_scene(app_ui_scene* scene,
     bool overlay_dungeon, bool steamdeck)
 {
     app_ui_panel* panel;
-    static const char* text[] = {
-        "Beyond this passage lies the black hall of Morgoth Bauglir,",
-        "the Dark Enemy, and the last of the Iron Hells.",
-        "",
-        "If you pass within, you may not return until you bear a Silmaril.",
-        "Steel yourself: to enter is to choose doom or glory.",
-        NULL,
-    };
 
     panel = dungeon_fullscreen_scene_begin(scene, overlay_dungeon);
     if (!panel)
         return false;
 
-    if (!dungeon_fullscreen_add_centered(scene, panel, 2, TERM_L_RED,
-            "The Iron Gates of Angband"))
+    app_ui_panel_set_title(panel, TERM_L_RED, "The Iron Gates of Angband");
+
+    if (!dungeon_fullscreen_add_paragraph(scene, panel, TERM_WHITE, 0,
+            "Beyond this passage lies the black hall of Morgoth Bauglir, "
+            "the Dark Enemy, and the last of the Iron Hells."))
+    {
+        return false;
+    }
+    if (!dungeon_fullscreen_add_paragraph(scene, panel, TERM_L_RED, 0,
+            "If you pass within, you may not return until you bear a "
+            "Silmaril. Steel yourself: to enter is to choose doom or glory."))
     {
         return false;
     }
 
-    for (int i = 0, row = 6; text[i] && row < DUNGEON_FULLSCREEN_DOC_ROWS - 5; ++i)
-    {
-        if (!text[i][0])
-        {
-            row++;
-            continue;
-        }
-
-        if (!dungeon_fullscreen_add_centered(scene, panel, row++,
-                (i == 3) ? TERM_L_RED : TERM_WHITE, text[i]))
-        {
-            return false;
-        }
-    }
-
-    return dungeon_fullscreen_add_centered(scene, panel,
-        DUNGEON_FULLSCREEN_DOC_ROWS - 3, TERM_YELLOW,
+    return dungeon_fullscreen_add_body_hint(panel, TERM_YELLOW,
         steamdeck ? "Enter Morgoth's hall? [y/n/space]"
                   : "Enter Morgoth's hall? [y/n]");
 }
@@ -654,33 +548,25 @@ static bool blitz_unlock_build_ui_scene(app_ui_scene* scene, bool overlay_dungeo
         NULL,
     };
     app_ui_panel* panel;
-    int row = 2;
 
     panel = dungeon_fullscreen_scene_begin(scene, overlay_dungeon);
     if (!panel)
         return false;
 
-    if (!dungeon_fullscreen_add_centered(scene, panel, row++, TERM_YELLOW,
-            "Congratulations, you have unlocked Blitz Mode!"))
-    {
-        return false;
-    }
-    row += 2;
+    app_ui_panel_set_title(panel, TERM_YELLOW,
+        "Congratulations, you have unlocked Blitz Mode!");
 
     for (int i = 0; paragraphs[i]; i++)
     {
-        int used = dungeon_fullscreen_add_wrapped(scene, panel, row, 2,
-            DUNGEON_FULLSCREEN_DOC_COLS - 4, 3,
-            (i == 0) ? TERM_L_WHITE : (i == 3) ? TERM_SLATE : TERM_WHITE,
-            paragraphs[i]);
-
-        if (!used)
+        if (!dungeon_fullscreen_add_paragraph(scene, panel,
+                (i == 0) ? TERM_L_WHITE : (i == 3) ? TERM_SLATE : TERM_WHITE,
+                0, paragraphs[i]))
+        {
             return false;
-        row += used + 1;
+        }
     }
 
-    return dungeon_fullscreen_add_centered(scene, panel,
-        DUNGEON_FULLSCREEN_DOC_ROWS - 2, TERM_L_BLUE,
+    return dungeon_fullscreen_add_body_hint(panel, TERM_L_BLUE,
         "Press any key to continue.");
 }
 
@@ -703,7 +589,7 @@ static bool confirm_enter_morgoth_hall(void)
 
     if (!confirm_enter_morgoth_hall_build_ui_scene(&scene, overlay_dungeon,
             steamdeck)
-        || !dungeon_fullscreen_scene_present(&scope, &scene, overlay_dungeon))
+        || !dungeon_fullscreen_scene_present(&scene))
     {
         ui_information_scene_leave(&scope);
         log_warn("morgoth hall confirm: semantic scene presentation failed");
@@ -712,7 +598,7 @@ static bool confirm_enter_morgoth_hall(void)
 
     while (true)
     {
-        ch = inkey();
+        ch = (char)ui_information_scene_wait_key_nonrepeat();
         if (quick_messages)
             break;
         if (ch == ESCAPE)
@@ -2503,7 +2389,7 @@ static void death_spectator_prepare_display(void)
     /* Force a comprehensive redraw across all panes. */
     p_ptr->redraw |= 0x0FFFFFFFL;
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0 | PW_MONSTER
-        | PW_MONLIST | PW_COMBAT_ROLLS | PW_OVERHEAD);
+        | PW_MONLIST | PW_OVERHEAD);
 
     handle_stuff();
 
@@ -2876,14 +2762,15 @@ static void process_player(void)
         if (p_ptr->running || p_ptr->fletching || p_ptr->smithing
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
-            /* Do not wait */
-            inkey_set_scan(true);
-
             /* Check for a key */
-            if (inkey())
+            if (dungeon_poll_pending_legacy_key())
             {
+                app_session* session = app_session_current();
+
                 /* Flush input */
                 flush();
+                if (session)
+                    app_session_clear_inputs(session);
 
                 /* Disturb */
                 disturb(0, 0);
@@ -3899,12 +3786,7 @@ static void process_player(void)
     p_ptr->window |= (PW_INVEN | PW_EQUIP);
     
     /*
-     * Do NOT set PW_COMBAT_ROLLS unconditionally here - it should only be
-     * set when combat data actually changes (via update_combat_rolls functions).
-     * Setting it every turn causes the combat roll subwindow to refresh with
-     * stale data before new combat happens, creating a one-turn delay.
-     * 
-     * Also, do NOT refresh the main-terminal combat rolls here.
+     * Do NOT refresh the main-terminal combat rolls here.
      * We refresh them after monster processing in the main loop so that
      * both sides of the current round (player and monsters) are included.
      */
@@ -4080,7 +3962,7 @@ static void dungeon(void)
     p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
 
     /* Window stuff */
-    p_ptr->window |= (PW_MONSTER | PW_MONLIST | PW_COMBAT_ROLLS);
+    p_ptr->window |= (PW_MONSTER | PW_MONLIST);
 
     /* Update main terminal combat rolls if enabled */
     if (op_ptr->main_combat_rolls > 0)
@@ -4275,10 +4157,6 @@ static void dungeon(void)
                 /* Scan for artifacts near player and mark as seen */
                 scan_artifacts_near_player();
                 
-                /* Set combat rolls window flag after player actions complete */
-                if (combat_number > 0) {
-                    p_ptr->window |= (PW_COMBAT_ROLLS);
-                }
             }
         }
 
@@ -4308,10 +4186,6 @@ static void dungeon(void)
         if (hilite_target && target_sighted())
             move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
 
-        /* Optional fresh */
-        if (fresh_after)
-            Term_fresh();
-
         /* Handle "leaving" */
     if (p_ptr->leaving) {
             log_info("Player leaving dungeon level %d", p_ptr->depth);
@@ -4323,11 +4197,6 @@ static void dungeon(void)
     process_monsters(100);
     log_trace("[LOOP] after process_monsters post-player: combat_number=%d old=%d", combat_number, combat_number_old);
     
-        /* Set combat rolls window flag after all monster actions complete */
-        if (combat_number > 0) {
-            p_ptr->window |= (PW_COMBAT_ROLLS);
-        }
-
         /* Update main terminal combat rolls after monster processing */
         if (op_ptr->main_combat_rolls > 0)
         {
@@ -4357,10 +4226,6 @@ static void dungeon(void)
         if (hilite_target && target_sighted())
             move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
 
-        /* Optional fresh */
-        if (fresh_after)
-            Term_fresh();
-
         /* Handle "leaving" */
     if (p_ptr->leaving)
             break;
@@ -4389,10 +4254,6 @@ static void dungeon(void)
             move_cursor_relative(p_ptr->py, p_ptr->px);
         if (hilite_target && target_sighted())
             move_cursor_relative(p_ptr->target_row, p_ptr->target_col);
-
-        /* Optional fresh */
-        if (fresh_after)
-            Term_fresh();
 
         /* Handle "leaving" */
     if (p_ptr->leaving)
@@ -4488,86 +4349,11 @@ static void death_knowledge(void)
     handle_stuff();
 }
 
-static int story_intro_count_paragraph_rows(cptr text, int wrap_width)
-{
-    int rows = 0;
-    int col = 0;
-    bool line_has_content = false;
-    bool pending_space = false;
-    cptr s = text ? text : "";
-
-    if (wrap_width < 1)
-        wrap_width = 1;
-
-    while (*s)
-    {
-        int word_len = 0;
-
-        if (*s == '\n')
-        {
-            col = 0;
-            line_has_content = false;
-            pending_space = false;
-            s++;
-            continue;
-        }
-
-        if (*s == ' ' || *s == '\t')
-        {
-            pending_space = line_has_content;
-            s++;
-            continue;
-        }
-
-        while (s[word_len] && s[word_len] != ' ' && s[word_len] != '\t' && s[word_len] != '\n')
-            word_len++;
-
-        if (pending_space && line_has_content)
-        {
-            if (col + 1 + word_len > wrap_width)
-            {
-                col = 0;
-                line_has_content = false;
-            }
-            else
-            {
-                col++;
-            }
-            pending_space = false;
-        }
-
-        for (int i = 0; i < word_len; ++i)
-        {
-            if (col >= wrap_width)
-            {
-                col = 0;
-                line_has_content = false;
-            }
-
-            if (!line_has_content)
-            {
-                rows++;
-                line_has_content = true;
-            }
-
-            col++;
-        }
-
-        s += word_len;
-    }
-
-    return (rows > 0) ? rows : 1;
-}
-
 static bool story_intro_build_ui_scene(app_ui_scene* scene,
     bool overlay_dungeon, cptr* intro_texts, int total, int start_index,
     int* out_next_index)
 {
-    const int indent = 2;
-    const int wrap_width = DUNGEON_FULLSCREEN_DOC_COLS - indent;
-    const int body_limit = DUNGEON_FULLSCREEN_DOC_ROWS - 2;
     app_ui_panel* panel;
-    int row = 1;
     int index = start_index;
 
     if (out_next_index)
@@ -4579,47 +4365,21 @@ static bool story_intro_build_ui_scene(app_ui_scene* scene,
     if (!panel)
         return false;
 
-    while (index < total)
+    if (!dungeon_fullscreen_add_paragraph(scene, panel, TERM_WHITE,
+            STORY_FLAG_USE, intro_texts[index]))
     {
-        int lines_needed = story_intro_count_paragraph_rows(intro_texts[index],
-            wrap_width) + 1;
-        int used;
-
-        if (row + lines_needed >= body_limit)
-            break;
-
-        used = dungeon_fullscreen_add_wrapped_ex(scene, panel, row, indent,
-            wrap_width, body_limit - row, TERM_WHITE, STORY_FLAG_USE,
-            intro_texts[index]);
-        if (!used)
-            return false;
-
-        row += used + 1;
-        index++;
+        return false;
     }
-
-    if (index == start_index)
-    {
-        int used = dungeon_fullscreen_add_wrapped_ex(scene, panel, row, indent,
-            wrap_width, body_limit - row, TERM_WHITE, STORY_FLAG_USE,
-            intro_texts[index]);
-
-        if (!used)
-            return false;
-        row += used + 1;
-        index++;
-    }
+    index++;
 
     if (index >= total)
     {
-        if (!dungeon_fullscreen_add_centered(scene, panel,
-                DUNGEON_FULLSCREEN_DOC_ROWS - 2, TERM_L_WHITE,
+        if (!dungeon_fullscreen_add_body_hint(panel, TERM_L_WHITE,
                 "[c] Change difficulty (experienced players)"))
         {
             return false;
         }
-        if (!dungeon_fullscreen_add_centered(scene, panel,
-                DUNGEON_FULLSCREEN_DOC_ROWS - 1, TERM_L_WHITE,
+        if (!dungeon_fullscreen_add_body_hint(panel, TERM_L_WHITE,
                 "(press any key to finish, S skips)"))
         {
             return false;
@@ -4627,8 +4387,7 @@ static bool story_intro_build_ui_scene(app_ui_scene* scene,
     }
     else
     {
-        if (!dungeon_fullscreen_add_centered(scene, panel,
-                DUNGEON_FULLSCREEN_DOC_ROWS - 1, TERM_L_WHITE,
+        if (!dungeon_fullscreen_add_body_hint(panel, TERM_L_WHITE,
                 "(press any key, S skips)"))
         {
             return false;
@@ -4717,7 +4476,7 @@ static void print_story_intro(void)
 
         if (!story_intro_build_ui_scene(&scene, overlay_dungeon, intro_texts,
                 total, index, &next_index)
-            || !dungeon_fullscreen_scene_present(&scope, &scene, overlay_dungeon))
+            || !dungeon_fullscreen_scene_present(&scene))
         {
             ui_information_scene_leave(&scope);
             log_warn("story intro: semantic scene presentation failed");
@@ -4769,7 +4528,7 @@ static void maybe_show_blitz_unlock_screen(void)
     }
 
     if (!blitz_unlock_build_ui_scene(&scene, overlay_dungeon)
-        || !dungeon_fullscreen_scene_present(&scope, &scene, overlay_dungeon))
+        || !dungeon_fullscreen_scene_present(&scene))
     {
         ui_information_scene_leave(&scope);
         log_warn("blitz unlock: semantic scene presentation failed");
@@ -4841,10 +4600,8 @@ PlayResult play_game(void)
 
     /* Verify minimum size */
     {
-        /* get_sdl_min_terminal_mode() returns 0=normal, 1=compact. */
-        const bool compact_mode = (get_sdl_min_terminal_mode() != 0);
-        const int min_hgt = compact_mode ? 18 : 24;
-        const int min_wid = compact_mode ? 50 : 80;
+        const int min_hgt = sdl_current_min_terminal_rows();
+        const int min_wid = sdl_current_min_terminal_cols();
         if ((Term->hgt < min_hgt) || (Term->wid < min_wid))
         {
 #ifdef __ANDROID__

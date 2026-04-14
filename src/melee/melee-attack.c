@@ -1814,9 +1814,6 @@ bool make_attack_normal(monster_type* m_ptr)
             {
                 l_ptr->deaths++;
 
-                p_ptr->window |= (PW_COMBAT_ROLLS);
-                window_stuff();
-
                 /* Leave immediately */
                 return (true);
             }
@@ -2083,8 +2080,6 @@ bool make_attack_normal(monster_type* m_ptr)
         msg_print("There is a puff of smoke!");
         teleport_away(m_idx, MAX_SIGHT * 2 + 5);
     }
-
-    p_ptr->window |= (PW_COMBAT_ROLLS);
 
     /* Assume we attacked */
     return (true);

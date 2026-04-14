@@ -5,9 +5,8 @@ import { renderMessages } from "./render-messages.js";
 import { renderOverlay } from "./render-overlay.js";
 import {
   decodeEventPacket,
-  decodeInteractionBlob,
   decodeMapBlob,
-  decodeMessagesBlob,
+  decodeOverlayBlob,
   decodeSessionPacket,
   decodeSnapshotPacket,
   findBlob,
@@ -100,11 +99,7 @@ async function loadSampleState(name) {
   const eventPacket = decodeEventPacket(eventBytes);
   const sessionPacket = decodeSessionPacket(sessionBytes);
   const mapPacketBlob = requireBlob(snapshotPacket, layout.constants.blobKinds.map, "map");
-  const messagesPacketBlob = requireBlob(
-    snapshotPacket,
-    layout.constants.blobKinds.messages,
-    "messages"
-  );
+  requireBlob(snapshotPacket, layout.constants.blobKinds.panes, "panes");
   const overlayPacketBlob = requireBlob(
     snapshotPacket,
     layout.constants.blobKinds.overlay,
@@ -114,19 +109,15 @@ async function loadSampleState(name) {
     mapPacketBlob.bytes,
     layout
   );
-  const messagesBlob = decodeMessagesBlob(
-    messagesPacketBlob.bytes,
-    layout
-  );
-  const overlayBlob = decodeInteractionBlob(
+  const overlayBlob = decodeOverlayBlob(
     overlayPacketBlob.bytes,
     layout
   );
 
   renderSessionSummary(sessionPacket);
   renderDungeon(dungeonGrid, mapBlob, layout);
-  renderMessages(messagesPanel, messagesBlob);
-  renderOverlay(overlayPanel, overlayBlob);
+  renderMessages(messagesPanel, overlayBlob.messages);
+  renderOverlay(overlayPanel, overlayBlob.interaction);
   renderEvents(eventPacket);
   currentState = name;
 }

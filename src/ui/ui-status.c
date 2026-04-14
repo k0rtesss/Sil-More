@@ -45,6 +45,80 @@ static void prt_status_line_compact(void);
 static void prt_cut_poisoned_compact(void);
 static bool ui_semantic_dungeon_snapshot_active(void);
 
+static void ui_status_put_spaces(int row, int col, int width)
+{
+    char spaces[64];
+
+    if (width <= 0)
+        return;
+
+    memset(spaces, ' ', sizeof(spaces) - 1);
+    spaces[sizeof(spaces) - 1] = '\0';
+
+    while (width > 0)
+    {
+        int chunk = MIN(width, (int)sizeof(spaces) - 1);
+        char saved = spaces[chunk];
+
+        spaces[chunk] = '\0';
+        put_str(spaces, row, col);
+        spaces[chunk] = saved;
+        col += chunk;
+        width -= chunk;
+    }
+}
+
+static void ui_status_put_limited_text(byte attr, cptr text, int row, int col,
+    int max_chars)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (max_chars <= 0 || !text || !text[0])
+        return;
+
+    if (max_chars >= (int)sizeof(buf))
+        max_chars = (int)sizeof(buf) - 1;
+
+    SDL_strlcpy(buf, text, (size_t)max_chars + 1);
+    c_put_str(attr, buf, row, col);
+}
+
+static int ui_status_draw_icon_pair(int row, int col, byte attr, char icon)
+{
+    Term_putch(col, row, attr, icon);
+    if (use_bigtile)
+        Term_putch(col + 1, row, 255, -1);
+    else
+        Term_putch(col + 1, row, attr, icon);
+    return col + 2;
+}
+
+typedef void (*ui_status_window_render_fn)(void);
+
+static void ui_status_refresh_matching_windows(u32b flag,
+    ui_status_window_render_fn render)
+{
+    int j;
+
+    if (!render)
+        return;
+
+    for (j = 0; j < ANGBAND_TERM_MAX; j++)
+    {
+        term* old = Term;
+
+        if (!angband_term[j])
+            continue;
+        if (!(op_ptr->window_flag[j] & flag))
+            continue;
+
+        Term_activate(angband_term[j]);
+        render();
+        Term_fresh();
+        Term_activate(old);
+    }
+}
+
 /*
  * Converts stat num into a two-char (right justified) string
  * Sil: rather pointless since stats no longer have and 18/XYZ format
@@ -104,10 +178,6 @@ static void prt_stat(int stat)
 
     log_trace("prt_stat: Calling put_str('%s', %d, %d)", trimmed_label, ROW_STAT + stat, 0);
     put_str(trimmed_label, ROW_STAT + stat, 0);
-
-    int cursor_x, cursor_y;
-    Term_locate(&cursor_x, &cursor_y);
-    log_trace("prt_stat: After put_str, cursor at (%d, %d)", cursor_x, cursor_y);
     log_trace("prt_stat: Disabling story font");
     sdl_story_font_disable();
 
@@ -147,7 +217,7 @@ static void prt_exp(void)
     attr = TERM_L_GREEN;
 
     /* Clear the whole field so shorter values don't leave stale characters */
-    Term_erase(COL_EXP, ROW_EXP, 12);
+    ui_status_put_spaces(ROW_EXP, COL_EXP, 12);
 
     sdl_story_font_enable();
 
@@ -175,8 +245,8 @@ static void prt_mel(void)
         mod = -1;
 
     /* Clear both rows since melee can shift up/down and shrink in width */
-    Term_erase(COL_MEL, ROW_MEL - 1, 12);
-    Term_erase(COL_MEL, ROW_MEL, 12);
+    ui_status_put_spaces(ROW_MEL - 1, COL_MEL, 12);
+    ui_status_put_spaces(ROW_MEL, COL_MEL, 12);
 
     /* Melee attacks */
     int meleeColour
@@ -207,7 +277,7 @@ static void prt_arc(void)
     char buf[32];
 
     /* Clear the line so shorter values don't leave stale characters */
-    Term_erase(COL_ARC, ROW_ARC, 12);
+    ui_status_put_spaces(ROW_ARC, COL_ARC, 12);
 
     /* Range attacks */
     if ((&inventory[INVEN_BOW])->k_idx)
@@ -250,7 +320,7 @@ static void prt_quiver(void)
     int start_col;
 
     /* Clear the entire line (12 characters) */
-    Term_erase(COL_QUIVER, ROW_QUIVER, 12);
+    ui_status_put_spaces(ROW_QUIVER, COL_QUIVER, 12);
     if (!app_status_quiver_live_build(&quiver))
         return;
 
@@ -287,25 +357,12 @@ static void prt_quiver(void)
         char icon = quiver.q1_char;
         
         /* Q1 count */
-        Term_putstr(col, ROW_QUIVER, -1, TERM_L_WHITE, buf1);
+        c_put_str(TERM_L_WHITE, buf1, ROW_QUIVER, col);
         col += strlen(buf1);
-        
-        /* Icon in middle */
-        Term_putch(col, ROW_QUIVER, attr, icon);
-        col++;
-        if (use_bigtile)
-        {
-            Term_putch(col, ROW_QUIVER, 255, -1);
-            col++;
-        }
-        else
-        {
-            Term_putch(col, ROW_QUIVER, attr, icon);
-            col++;
-        }
+        col = ui_status_draw_icon_pair(ROW_QUIVER, col, attr, icon);
         
         /* Q2 count */
-        Term_putstr(col, ROW_QUIVER, -1, TERM_L_WHITE, buf2);
+        c_put_str(TERM_L_WHITE, buf2, ROW_QUIVER, col);
     }
     else
     {
@@ -315,20 +372,9 @@ static void prt_quiver(void)
             /* Q1: "[icon][icon]cur/max" */
             byte attr = quiver.q1_attr;
             char icon = quiver.q1_char;
-            Term_putch(col, ROW_QUIVER, attr, icon);
-            col++;
-            if (use_bigtile)
-            {
-                Term_putch(col, ROW_QUIVER, 255, -1);
-                col++;
-            }
-            else
-            {
-                Term_putch(col, ROW_QUIVER, attr, icon);
-                col++;
-            }
+            col = ui_status_draw_icon_pair(ROW_QUIVER, col, attr, icon);
             
-            Term_putstr(col, ROW_QUIVER, -1, TERM_L_WHITE, buf1);
+            c_put_str(TERM_L_WHITE, buf1, ROW_QUIVER, col);
             col += strlen(buf1);
         }
         
@@ -337,20 +383,9 @@ static void prt_quiver(void)
             /* Q2: "[icon][icon]cur/max" */
             byte attr = quiver.q2_attr;
             char icon = quiver.q2_char;
-            Term_putch(col, ROW_QUIVER, attr, icon);
-            col++;
-            if (use_bigtile)
-            {
-                Term_putch(col, ROW_QUIVER, 255, -1);
-                col++;
-            }
-            else
-            {
-                Term_putch(col, ROW_QUIVER, attr, icon);
-                col++;
-            }
+            col = ui_status_draw_icon_pair(ROW_QUIVER, col, attr, icon);
             
-            Term_putstr(col, ROW_QUIVER, -1, TERM_L_WHITE, buf2);
+            c_put_str(TERM_L_WHITE, buf2, ROW_QUIVER, col);
         }
     }
 }
@@ -364,7 +399,7 @@ static void prt_evn(void)
     byte attr = TERM_WHITE;
 
     /* Clear the line so shorter values don't leave stale characters */
-    Term_erase(COL_EVN, ROW_EVN, 12);
+    ui_status_put_spaces(ROW_EVN, COL_EVN, 12);
     if (!app_status_text_live(APP_STATUS_TEXT_EVASION, text, sizeof(text), &attr))
         return;
 
@@ -463,7 +498,7 @@ static void prt_light(void)
     byte attr = TERM_L_WHITE;
 
     /* Clear the line */
-    Term_erase(icon_col, ROW_LIGHT, 13);
+    ui_status_put_spaces(ROW_LIGHT, icon_col, 13);
 
     /* Nothing equipped */
     if (!o_ptr->k_idx)
@@ -473,17 +508,8 @@ static void prt_light(void)
     char icon = object_char(o_ptr);
 
     /* Draw the icon (supporting bigtile visuals) */
-    Term_putch(icon_col, ROW_LIGHT, icon_attr, icon);
-    if (use_bigtile)
-    {
-        Term_putch(icon_col + 1, ROW_LIGHT, 255, -1);
-    }
-    else
-    {
-        Term_putch(icon_col + 1, ROW_LIGHT, icon_attr, icon);
-    }
-
-    Term_putch(icon_col + 2, ROW_LIGHT, TERM_WHITE, ' ');
+    (void)ui_status_draw_icon_pair(ROW_LIGHT, icon_col, icon_attr, icon);
+    put_str(" ", ROW_LIGHT, icon_col + 2);
     if (!app_status_text_live(APP_STATUS_TEXT_LIGHT, text, sizeof(text), &attr))
         return;
 
@@ -539,7 +565,7 @@ static bool ui_semantic_dungeon_snapshot_active(void)
     app_session* session = app_session_current();
     const app_snapshot* snapshot;
 
-    if (!session)
+    if (!runtime_cli_snapshot_renderer() || !session)
         return false;
 
     snapshot = app_session_snapshot(session);
@@ -687,7 +713,7 @@ static void prt_confused(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_CONFUSED, ROW_CONFUSED, 8);
+    ui_status_put_spaces(ROW_CONFUSED, COL_CONFUSED, 8);
 
     if (app_status_text_live(APP_STATUS_TEXT_CONFUSED, text, sizeof(text),
             &attr))
@@ -713,7 +739,7 @@ static void prt_afraid(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_AFRAID, ROW_AFRAID, 6);
+    ui_status_put_spaces(ROW_AFRAID, COL_AFRAID, 6);
 
     if (app_status_text_live(APP_STATUS_TEXT_AFRAID, text, sizeof(text),
             &attr))
@@ -755,9 +781,9 @@ static void prt_cut(void)
         r--;
 
     /* Clear both possible rows (story font has variable widths) */
-    Term_erase(COL_CUT, ROW_CUT - 1, 12);
+    ui_status_put_spaces(ROW_CUT - 1, COL_CUT, 12);
     if (!p_ptr->poisoned)
-        Term_erase(COL_CUT, ROW_CUT, 12);
+        ui_status_put_spaces(ROW_CUT, COL_CUT, 12);
 
     if (app_status_text_live(APP_STATUS_TEXT_CUT, text, sizeof(text), &attr))
     {
@@ -790,7 +816,7 @@ static void prt_poisoned(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_POISONED, ROW_POISONED, 12);
+    ui_status_put_spaces(ROW_POISONED, COL_POISONED, 12);
 
     if (app_status_text_live(APP_STATUS_TEXT_POISONED, text, sizeof(text),
             &attr))
@@ -820,7 +846,7 @@ static void prt_state(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_STATE, ROW_STATE, 10);
+    ui_status_put_spaces(ROW_STATE, COL_STATE, 10);
 
     /* Display the info if any */
     if (app_status_text_live(APP_STATUS_TEXT_STATE, text, sizeof(text), &attr))
@@ -846,7 +872,7 @@ static void prt_speed(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_SPEED, ROW_SPEED, 4);
+    ui_status_put_spaces(ROW_SPEED, COL_SPEED, 4);
 
     /* Display the speed if not normal */
     if (app_status_text_live(APP_STATUS_TEXT_SPEED, text, sizeof(text), &attr))
@@ -872,7 +898,7 @@ static void prt_partition(void)
         return;
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_PARTITION, ROW_PARTITION, 5);
+    ui_status_put_spaces(ROW_PARTITION, COL_PARTITION, 5);
 
     if (!app_status_text_live(APP_STATUS_TEXT_PARTITION, text, sizeof(text),
             &attr))
@@ -900,7 +926,7 @@ static void prt_terrain(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_TERRAIN, ROW_TERRAIN, 5);
+    ui_status_put_spaces(ROW_TERRAIN, COL_TERRAIN, 5);
 
     if (app_status_text_live(APP_STATUS_TEXT_TERRAIN, text, sizeof(text),
             &attr))
@@ -924,7 +950,7 @@ static void prt_cut_poisoned_compact(void)
     const int col = COL_CUT;
     const int width = 12;
 
-    Term_erase(col, row, width);
+    ui_status_put_spaces(row, col, width);
 
     int x = col;
 
@@ -945,7 +971,7 @@ static void prt_cut_poisoned_compact(void)
         if (x + len > col + width)
             len = (col + width) - x;
         if (len > 0)
-            Term_putstr(x, row, len, attr, cut_buf);
+            ui_status_put_limited_text(attr, cut_buf, row, x, len);
         x += len;
     }
 
@@ -955,7 +981,7 @@ static void prt_cut_poisoned_compact(void)
     {
         if (x > col && x < col + width)
         {
-            Term_putstr(x, row, 1, TERM_WHITE, " ");
+            put_str(" ", row, x);
             x++;
         }
 
@@ -965,7 +991,7 @@ static void prt_cut_poisoned_compact(void)
         if (x + len > col + width)
             len = (col + width) - x;
         if (len > 0)
-            Term_putstr(x, row, len, attr, pois_buf);
+            ui_status_put_limited_text(attr, pois_buf, row, x, len);
     }
 }
 
@@ -981,7 +1007,7 @@ static void prt_stun(void)
     }
 
     /* Clear the area first (story font has variable widths) */
-    Term_erase(COL_STUN, ROW_STUN, 12);
+    ui_status_put_spaces(ROW_STUN, COL_STUN, 12);
 
     if (app_status_text_live(APP_STATUS_TEXT_STUN, text, sizeof(text), &attr))
     {
@@ -1032,7 +1058,7 @@ static void prt_status_line_compact(void)
     if (row < 0)
         return;
 
-    Term_erase(0, row, Term->wid);
+    ui_status_put_spaces(row, 0, Term->wid);
 
     fold_song = ui_compact_status_line_handles_song();
     fold_wounds = ui_compact_status_line_handles_wounds();
@@ -1083,7 +1109,7 @@ static void prt_status_line_compact(void)
         if (!first)
         {
             if (x < max_w)
-                Term_putstr(x, row, 1, TERM_WHITE, " ");
+                put_str(" ", row, x);
             x++;
         }
 
@@ -1094,7 +1120,7 @@ static void prt_status_line_compact(void)
         if (n > remaining)
             n = remaining;
         if (n > 0)
-            Term_putstr(x, row, n, segment->attr, t);
+            ui_status_put_limited_text(segment->attr, t, row, x, n);
         x += n;
         first = false;
     }
@@ -1259,9 +1285,9 @@ static void health_redraw(void)
     if (!app_status_tracked_monster_live_build(&tracked))
     {
         /* Erase the health bar */
-        Term_erase(COL_INFO, ROW_INFO, 12);
+        ui_status_put_spaces(ROW_INFO, COL_INFO, 12);
         /* Erase the morale bar */
-        Term_erase(COL_INFO, ROW_INFO + 1, 12);
+        ui_status_put_spaces(ROW_INFO + 1, COL_INFO, 12);
     }
 
     /* Tracking a visible monster */
@@ -1277,27 +1303,31 @@ static void health_redraw(void)
         len = (8 * tracked.hp_cur + tracked.hp_max - 1) / tracked.hp_max;
 
         /* Default to "unknown" */
-        Term_putstr(COL_INFO, ROW_INFO, 12, TERM_L_DARK, "  --------  ");
+        c_put_str(TERM_L_DARK, "  --------  ", ROW_INFO, COL_INFO);
 
         /* Dump the current "health" (handle monster stunning, confusion) */
 
         if (tracked.confused && tracked.stunned)
-            Term_putstr(COL_INFO + 2, ROW_INFO, len, attr, "cscscscs");
+            ui_status_put_limited_text(attr, "cscscscs", ROW_INFO,
+                COL_INFO + 2, len);
         else if (tracked.confused)
-            Term_putstr(COL_INFO + 2, ROW_INFO, len, attr, "cccccccc");
+            ui_status_put_limited_text(attr, "cccccccc", ROW_INFO,
+                COL_INFO + 2, len);
         else if (tracked.stunned)
-            Term_putstr(COL_INFO + 2, ROW_INFO, len, attr, "ssssssss");
+            ui_status_put_limited_text(attr, "ssssssss", ROW_INFO,
+                COL_INFO + 2, len);
         else
-            Term_putstr(COL_INFO + 2, ROW_INFO, len, attr, "********");
+            ui_status_put_limited_text(attr, "********", ROW_INFO,
+                COL_INFO + 2, len);
 
-        Term_erase(COL_INFO, ROW_INFO + 1, 12);
+        ui_status_put_spaces(ROW_INFO + 1, COL_INFO, 12);
 
         if (!tracked.alertness[0])
             return;
 
-        Term_putstr(COL_INFO + (13 - strlen(tracked.alertness)) / 2,
-            ROW_INFO + 1, MIN(strlen(tracked.alertness), 12),
-            tracked.alertness_attr, tracked.alertness);
+        ui_status_put_limited_text(tracked.alertness_attr, tracked.alertness,
+            ROW_INFO + 1, COL_INFO + (13 - strlen(tracked.alertness)) / 2,
+            MIN((int)strlen(tracked.alertness), 12));
     }
 }
 
@@ -1402,171 +1432,57 @@ static void prt_frame_extra(void)
 /*
  * Hack -- display inventory in sub-windows
  */
+static void ui_status_render_inven_window(void)
+{
+    display_inven();
+}
+
 static void fix_inven(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_INVEN)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display inventory */
-        display_inven();
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_INVEN,
+        ui_status_render_inven_window);
 }
 
 /*
  * Hack -- display monsters in sub-windows
  */
-static void fix_monlist(void)
+static void ui_status_render_monlist_window(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_MONLIST)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display visible monsters */
-        display_monlist();
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    display_monlist();
 }
 
-/*
- * Hack -- display combat rolls in sub-windows
- */
-static void fix_combat_rolls(void)
+static void fix_monlist(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_COMBAT_ROLLS)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display visible monsters */
-        display_combat_rolls();
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_MONLIST,
+        ui_status_render_monlist_window);
 }
 
 /*
  * Hack -- display equipment in sub-windows
  */
+static void ui_status_render_equip_window(void)
+{
+    display_equip();
+}
+
 static void fix_equip(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_EQUIP)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display equipment */
-        display_equip();
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_EQUIP,
+        ui_status_render_equip_window);
 }
 
 /*
  * Hack -- display player in sub-windows (mode 0)
  */
+static void ui_status_render_player_0_window(void)
+{
+    display_player(0);
+}
+
 static void fix_player_0(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_PLAYER_0)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display player */
-        display_player(0);
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_PLAYER_0,
+        ui_status_render_player_0_window);
 }
 
 /*
@@ -1574,87 +1490,48 @@ static void fix_player_0(void)
  *
  * Adjust for width and split messages.  XXX XXX XXX
  */
+static void ui_status_render_message_window(void)
+{
+    int i;
+    int w, h;
+
+    w = Term ? Term->wid : 0;
+    h = Term ? Term->hgt : 0;
+    if (w <= 0 || h <= 0)
+        return;
+
+    for (i = 0; i < h; i++)
+    {
+        const char* message = message_str((s16b)i);
+        byte color = message_color((s16b)i);
+        int row = (h - 1) - i;
+        int used = message ? (int)strlen(message) : 0;
+
+        c_put_str(color, message ? message : "", row, 0);
+        if (used < w)
+            ui_status_put_spaces(row, used, w - used);
+    }
+}
+
 static void fix_message(void)
 {
-    int j, i;
-    int w, h;
-    int x, y;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_MESSAGE)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Get size */
-        Term_get_size(&w, &h);
-
-        /* Dump messages */
-        for (i = 0; i < h; i++)
-        {
-            byte color = message_color((s16b)i);
-
-            /* Dump the message on the appropriate line */
-            Term_putstr(0, (h - 1) - i, -1, color, message_str((s16b)i));
-
-            /* Cursor */
-            Term_locate(&x, &y);
-
-            /* Clear to end of line */
-            Term_erase(x, y, 255);
-        }
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_MESSAGE,
+        ui_status_render_message_window);
 }
 
 /*
  * Hack -- display monster recall in sub-windows
  */
+static void ui_status_render_monster_window(void)
+{
+    if (p_ptr->monster_race_idx)
+        display_roff(p_ptr->monster_race_idx, NULL);
+}
+
 static void fix_monster(void)
 {
-    int j;
-
-    /* Scan windows */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        term* old = Term;
-
-        /* No window */
-        if (!angband_term[j])
-            continue;
-
-        /* No relevant flags */
-        if (!(op_ptr->window_flag[j] & (PW_MONSTER)))
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Display monster race info */
-        if (p_ptr->monster_race_idx)
-            display_roff(p_ptr->monster_race_idx, NULL);
-
-        /* Fresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    ui_status_refresh_matching_windows(PW_MONSTER,
+        ui_status_render_monster_window);
 }
 
 /*
@@ -2110,13 +1987,6 @@ void window_stuff(void)
     {
         p_ptr->window &= ~(PW_PLAYER_0);
         fix_player_0();
-    }
-
-    /* Display combat rolls */
-    if (p_ptr->window & (PW_COMBAT_ROLLS))
-    {
-        p_ptr->window &= ~(PW_COMBAT_ROLLS);
-        fix_combat_rolls();
     }
 
     /* Display message recall */

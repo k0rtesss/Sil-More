@@ -288,7 +288,6 @@ set(SIL_MORE_SOURCES_SMITHING
 set(SIL_MORE_SOURCES_SAVE_AND_META
     src/load.c
     src/metarun.c
-    src/metarun_legacy.c
     src/save.c
 )
 

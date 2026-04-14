@@ -705,7 +705,7 @@ static void sdl_scene_draw_mono_text_px(const sdl_view* view, float x_px,
 }
 
 static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
-    const app_map_snapshot* map, u16b status_flags,
+    const app_map_snapshot* map, u16b pane_flags,
     const app_ui_scene* chrome_scene)
 {
     sdl_scene_layout layout;
@@ -719,7 +719,7 @@ static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
 
     memset(&layout, 0, sizeof(layout));
     layout.hide_left_panel =
-        (status_flags & APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL) ? true : false;
+        (pane_flags & APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL) ? true : false;
     if (!view)
         return layout;
 
@@ -1125,17 +1125,6 @@ static const app_map_snapshot* sdl_scene_map_snapshot(
     if (!blob || blob->size < sizeof(app_map_snapshot))
         return NULL;
     return (const app_map_snapshot*)blob->data;
-}
-
-static const app_status_snapshot* sdl_scene_status_snapshot(
-    const app_dungeon_snapshot* snapshot)
-{
-    const app_snapshot_blob* blob = sdl_scene_find_blob(snapshot,
-        APP_SNAPSHOT_BLOB_STATUS);
-
-    if (!blob || blob->size < sizeof(app_status_snapshot))
-        return NULL;
-    return (const app_status_snapshot*)blob->data;
 }
 
 static const app_panes_snapshot* sdl_scene_panes_snapshot(
@@ -1917,7 +1906,6 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     Uint64 now_ns)
 {
     const app_map_snapshot* map;
-    const app_status_snapshot* status;
     const app_panes_snapshot* panes;
     const app_dungeon_overlay_snapshot* overlay;
     const app_interaction_state* interaction;
@@ -1932,16 +1920,15 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         return false;
 
     map = sdl_scene_map_snapshot(snapshot);
-    status = sdl_scene_status_snapshot(snapshot);
     panes = sdl_scene_panes_snapshot(snapshot);
     overlay = sdl_scene_overlay_snapshot(snapshot);
     interaction = sdl_scene_overlay_interaction(overlay);
     transient_scene = sdl_scene_overlay_transient_scene(overlay);
     chrome_scene = sdl_scene_overlay_chrome_scene(overlay);
-    if (!map || !status || !panes || !overlay)
+    if (!map || !panes || !overlay)
         return false;
 
-    layout = sdl_scene_make_layout(main_view, map, status->flags, chrome_scene);
+    layout = sdl_scene_make_layout(main_view, map, panes->flags, chrome_scene);
     have_map_clip = sdl_scene_layout_map_clip_rect(&layout, &map_clip_rect);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);

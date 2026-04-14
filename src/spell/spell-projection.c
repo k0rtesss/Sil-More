@@ -2082,8 +2082,6 @@ static bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     if (do_disturb)
         disturb(1, 0);
 
-    p_ptr->window |= (PW_COMBAT_ROLLS);
-
     /* Return "Anything seen?" */
     return (obvious);
 }

@@ -26,7 +26,6 @@
 #include "reliability-checks.h"
 #include "app/app-ui.h"
 #include "metarun.h"
-#include "metarun_legacy.h"
 #include "runtime/runtime-game.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
@@ -1377,21 +1376,6 @@ errr load_metaruns(bool create_if_missing)
     recover_staged_metarun_file(fn);
     fd = sdl_fopen(fn, "rb");
 
-    if (!fd && ANGBAND_DIR_METARUN && ANGBAND_DIR_METARUN[0]) {
-        char legacy[1024];
-        if (path_build(legacy, sizeof legacy, ANGBAND_DIR_METARUN, META_RAW)) {
-            fd = sdl_fopen(legacy, "rb");
-            if (fd) {
-                log_info("Loading legacy metarun file: %s", legacy);
-                found_existing_data = true;
-            }
-        }
-        else
-        {
-            log_error("load_metarun_data: failed to build legacy path");
-        }
-    }
-
     if (fd) {
         found_existing_data = true;
     }
@@ -1465,8 +1449,7 @@ errr load_metaruns(bool create_if_missing)
     if (metarun_max > 0) {
         layout = reliability_detect_metarun_layout(meta_file_size,
             sizeof(meta_file_header), meta_hdr.entry_count, sizeof(metarun),
-            METARUN_V10_SIZE, METARUN_V9_SIZE, METARUN_V8_SIZE, &payload,
-            &entry_size);
+            (size_t)-1, (size_t)-2, (size_t)-3, &payload, &entry_size);
     }
 
     if (metarun_max > 0 && layout != RELIABILITY_METARUN_LAYOUT_INVALID) {
@@ -1502,39 +1485,10 @@ errr load_metaruns(bool create_if_missing)
                     metarun_sanitize_major_blessing_bits(&metaruns[i]);
                 }
             }
-        } else if (layout == RELIABILITY_METARUN_LAYOUT_V10) {
-            metarun_v10 *legacy = mem_alloc_array(metarun_max, metarun_v10);
-            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v10)) != 0) {
-                recovery_reason = "legacy v10 meta.raw payload was truncated";
-            } else {
-                for (s16b i = 0; i < metarun_max; i++) {
-                    metarun_from_v10(&metaruns[i], &legacy[i]);
-                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
-                }
-            }
-            legacy = mem_free(legacy);
-        } else if (layout == RELIABILITY_METARUN_LAYOUT_V9) {
-            metarun_v9 *legacy = mem_alloc_array(metarun_max, metarun_v9);
-            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v9)) != 0) {
-                recovery_reason = "legacy v9 meta.raw payload was truncated";
-            } else {
-                for (s16b i = 0; i < metarun_max; i++) {
-                    metarun_from_v9(&metaruns[i], &legacy[i]);
-                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
-                }
-            }
-            legacy = mem_free(legacy);
-        } else if (layout == RELIABILITY_METARUN_LAYOUT_V8) {
-            metarun_v8 *legacy = mem_alloc_array(metarun_max, metarun_v8);
-            if (!legacy || sdl_read(fd, (char*)legacy, metarun_max * sizeof(metarun_v8)) != 0) {
-                recovery_reason = "legacy v8 meta.raw payload was truncated";
-            } else {
-                for (s16b i = 0; i < metarun_max; i++) {
-                    metarun_from_v8(&metaruns[i], &legacy[i]);
-                    metarun_sanitize_major_blessing_bits(&metaruns[i]);
-                }
-            }
-            legacy = mem_free(legacy);
+        } else {
+            recovery_reason = "versioned meta.raw used unsupported legacy layout";
+            log_warn("Unsupported legacy metarun layout size %zu; migration support has been removed",
+                entry_size);
         }
 
         if (recovery_reason) {
@@ -2200,8 +2154,8 @@ int menu_choose_one_curse(int n)
     if (!ui_information_scene_is_active())
         owns_info_scene = ui_information_scene_enter(&info_scope);
     if (!ui_information_scene_is_active()) {
-        log_error("menu_choose_one_curse: semantic scene unavailable; defaulting to first option");
-        return pick[0];
+        log_error("menu_choose_one_curse: semantic scene unavailable");
+        return -1;
     }
 
     {
@@ -2214,8 +2168,8 @@ int menu_choose_one_curse(int n)
             return semantic_choice;
     }
 
-    log_error("menu_choose_one_curse: semantic scene failed; defaulting to first option");
-    return pick[0];
+    log_error("menu_choose_one_curse: semantic scene failed");
+    return -1;
 }
 
 
@@ -2313,6 +2267,12 @@ int choose_escape_curses_ui(int n, int out[4])
     for (int i = 0; i < n; i++)
     {
         int idx = menu_choose_one_curse(i);   /* weighted picker, UI */
+        if (idx < 0)
+        {
+            log_error("choose_escape_curses_ui: curse selection failed after %d of %d picks",
+                taken, n);
+            return taken ? taken : -1;
+        }
         log_debug("Player selected curse %d: %s", idx, cu_name + cu_info[idx].name);
         add_curse_stack(idx);                /* gameplay sideâ€‘effect */
         if (taken < 4) out[taken++] = idx;
@@ -2352,6 +2312,8 @@ int choose_oath_breaking_curse_ui(int oath_id)
 
     /* Let the player choose 1 curse from 3 options */
     int idx = menu_choose_one_curse(0);
+    if (idx < 0)
+        log_error("choose_oath_breaking_curse_ui: curse selection failed");
     log_debug("Player selected curse %d for oath breaking", idx);
     
     return idx;
@@ -2874,35 +2836,39 @@ static void announce_blessing_gain(int previous_points)
     message_flush();
 }
 
-static bool metarun_ui_show_story_modal_best_effort(const char* title,
+static bool metarun_ui_show_story_modal_auto(const char* title,
     byte title_attr, const char* const* paragraphs, const byte* attrs,
     int paragraph_count, bool steamdeck, const char* accept_label,
     const char* action_label)
 {
-    bool semantic_available = ui_information_scene_is_active()
-        || ui_information_scene_supported();
     ui_information_scene_scope info_scope;
     bool owns_info_scene = false;
-    bool presented = false;
 
-    if (!ui_information_scene_is_active() && ui_information_scene_supported())
-        owns_info_scene = ui_information_scene_enter(&info_scope);
-
-    if (ui_information_scene_is_active()) {
-        presented = metarun_ui_show_story_modal(title, title_attr, paragraphs,
-            attrs, paragraph_count, steamdeck, accept_label, action_label);
-        if (!presented) {
-            log_error("metarun: failed to present story modal '%s'",
+    if (!ui_information_scene_is_active())
+    {
+        if (!ui_information_scene_supported()
+            || !ui_information_scene_enter(&info_scope))
+        {
+            log_error("metarun: semantic story modal unavailable for '%s'",
                 title ? title : "(untitled)");
+            return false;
         }
+        owns_info_scene = true;
+    }
+
+    if (!metarun_ui_show_story_modal(title, title_attr, paragraphs, attrs,
+            paragraph_count, steamdeck, accept_label, action_label))
+    {
+        log_error("metarun: failed to present story modal '%s'",
+            title ? title : "(untitled)");
+        if (owns_info_scene)
+            ui_information_scene_leave(&info_scope);
+        return false;
     }
 
     if (owns_info_scene)
         ui_information_scene_leave(&info_scope);
-    if (!presented && !semantic_available)
-        log_error("metarun: semantic story modal unavailable for '%s'",
-            title ? title : "(untitled)");
-    return presented;
+    return true;
 }
 
 static int metarun_collect_story_indices(int* indices, int capacity)
@@ -3008,7 +2974,7 @@ static void metarun_show_recent_story_parts_semantic(int last_parts)
         paragraphs[paragraph_count] = story_text;
         attrs[paragraph_count++] = TERM_WHITE;
 
-        if (!metarun_ui_show_story_modal_best_effort(title, TERM_YELLOW,
+        if (!metarun_ui_show_story_modal_auto(title, TERM_YELLOW,
                 paragraphs, attrs, paragraph_count, steamdeck, accept_label,
                 metarun_prompt_action_label(PROMPT_CONTINUE_TALE)))
         {
@@ -3041,6 +3007,11 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
     if (sil_count == 3)
         curse_count = 4;
     chosen_cnt = choose_escape_curses_ui(curse_count, chosen);
+    if (chosen_cnt < 0)
+    {
+        log_error("metarun: escape curse selection failed");
+        chosen_cnt = 0;
+    }
 
     if (chosen_cnt > 0)
     {
@@ -3057,7 +3028,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             attrs[i] = TERM_RED;
         }
 
-        metarun_ui_show_story_modal_best_effort("The Binding of Fate",
+        metarun_ui_show_story_modal_auto("The Binding of Fate",
             TERM_L_RED, paragraphs, attrs, chosen_cnt, steamdeck,
             accept_label, metarun_prompt_action_label(PROMPT_CONTINUE_TALE));
     }
@@ -3084,7 +3055,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
         }
 
         paragraphs[0] = victory_text;
-        metarun_ui_show_story_modal_best_effort("Victory Amid Shadow",
+        metarun_ui_show_story_modal_auto("Victory Amid Shadow",
             TERM_YELLOW, paragraphs, attrs, 1, steamdeck, accept_label,
             metarun_prompt_action_label(allow_treachery
                 ? PROMPT_FACE_TEMPTATION
@@ -3127,7 +3098,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             attrs[paragraph_count++] = TERM_L_DARK;
         }
 
-        metarun_ui_show_story_modal_best_effort("Temptation of Treachery",
+        metarun_ui_show_story_modal_auto("Temptation of Treachery",
             TERM_L_UMBER, paragraphs, attrs, paragraph_count, steamdeck,
             accept_label, metarun_prompt_action_label(PROMPT_CONTINUE_GENERIC));
     }
@@ -3153,7 +3124,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             ? tainted_frag[sil_count - 1]
             : pure_frag[final_sils - 1];
         attrs[0] = treachery_occurred ? TERM_RED : TERM_L_WHITE;
-        metarun_ui_show_story_modal_best_effort("The Weight of Victory",
+        metarun_ui_show_story_modal_auto("The Weight of Victory",
             TERM_L_BLUE, paragraphs, attrs, 1, steamdeck, accept_label,
             metarun_prompt_action_label(allow_kinslay
                 ? PROMPT_FACE_ECHOES
@@ -3210,7 +3181,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             attrs[paragraph_count++] = TERM_L_DARK;
         }
 
-        metarun_ui_show_story_modal_best_effort("Echoes of Kinslaying",
+        metarun_ui_show_story_modal_auto("Echoes of Kinslaying",
             TERM_L_RED, paragraphs, attrs, paragraph_count, steamdeck,
             accept_label, metarun_prompt_action_label(PROMPT_CONCLUDE_TALE));
     }
@@ -3227,7 +3198,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             (kinslaying_victims > 0) ? "stained by kinslaying"
                                      : "with honour intact");
         paragraphs[0] = summary;
-        metarun_ui_show_story_modal_best_effort("The Tale Concludes",
+        metarun_ui_show_story_modal_auto("The Tale Concludes",
             TERM_YELLOW, paragraphs, attrs, 1, steamdeck, accept_label,
             metarun_prompt_action_label((allow_kinslay && kinslaying_victims > 0)
                 ? PROMPT_CONTINUE_GENERIC
@@ -3244,7 +3215,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
             "Your kinslaying echoes through time. %d innocent%s will fall by your hand...",
             kinslaying_victims, (kinslaying_victims == 1) ? "" : "s");
         paragraphs[0] = kill_msg;
-        metarun_ui_show_story_modal_best_effort("The Price of Blood",
+        metarun_ui_show_story_modal_auto("The Price of Blood",
             TERM_RED, paragraphs, attrs, 1, steamdeck, accept_label,
             metarun_prompt_action_label(PROMPT_WITNESS_CONSEQUENCES));
 
@@ -3277,7 +3248,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
 
             if (kill_count > 0)
             {
-                metarun_ui_show_story_modal_best_effort("Blood Is Demanded",
+                metarun_ui_show_story_modal_auto("Blood Is Demanded",
                     TERM_RED, kill_paragraphs, kill_attrs, kill_count,
                     steamdeck, accept_label,
                     metarun_prompt_action_label(PROMPT_RETURN_MIDDLE_EARTH));
@@ -3358,7 +3329,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
             metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
                 sizeof(accept_label));
         }
-        (void)metarun_ui_show_story_modal_best_effort("Beyond Fate",
+        (void)metarun_ui_show_story_modal_auto("Beyond Fate",
             TERM_YELLOW, paragraphs, attrs, (int)N_ELEMENTS(paragraphs),
             steamdeck, accept_label, "Continue");
 
@@ -3477,7 +3448,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
                 const char* paragraphs[] = { text, transition_text };
                 const byte attrs[] = { TERM_WHITE, TERM_L_BLUE };
 
-                (void)metarun_ui_show_story_modal_best_effort(title, TERM_RED,
+                (void)metarun_ui_show_story_modal_auto(title, TERM_RED,
                     paragraphs, attrs, 2, steamdeck, accept_label, "Return");
             }
         }
@@ -3626,7 +3597,7 @@ void check_run_end(void)
             const char* paragraphs[] = { defeat_text };
             const byte attrs[] = { TERM_WHITE };
 
-            (void)metarun_ui_show_story_modal_best_effort("The Trial's End",
+            (void)metarun_ui_show_story_modal_auto("The Trial's End",
                 TERM_RED, paragraphs, attrs, 1, steamdeck, accept_label,
                 "Begin Anew");
         }
@@ -3656,7 +3627,7 @@ void check_run_end(void)
             const char* paragraphs[] = { victory_text, implementation_note };
             const byte attrs[] = { TERM_L_GREEN, TERM_L_DARK };
 
-            (void)metarun_ui_show_story_modal_best_effort("The Trial's End",
+            (void)metarun_ui_show_story_modal_auto("The Trial's End",
                 TERM_YELLOW, paragraphs, attrs, 2, steamdeck, accept_label,
                 "Begin Anew");
         }
@@ -5107,11 +5078,6 @@ static void metarun_stats_prepare_view_model(metarun_stats_view_model* view)
         int back_key = steamdeck_back_key();
         int alt_key = steamdeck_alt_action_key();
         int secondary_key = steamdeck_secondary_key();
-        int l1_key = get_sdl_gamepad_button_binding(
-            GAMEPAD_BUTTON_LEFT_SHOULDER);
-        int r1_key = get_sdl_gamepad_button_binding(
-            GAMEPAD_BUTTON_RIGHT_SHOULDER);
-        int start_key = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
 
         metarun_prompt_label(confirm_key, "A", view->continue_label,
             sizeof(view->continue_label));
@@ -5121,11 +5087,11 @@ static void metarun_stats_prepare_view_model(metarun_stats_view_model* view)
             sizeof(view->spend_label));
         metarun_prompt_label(secondary_key, "Y", view->history_label,
             sizeof(view->history_label));
-        metarun_prompt_label(l1_key, "L1", view->diff_label,
+        metarun_prompt_label('c', "L1", view->diff_label,
             sizeof(view->diff_label));
-        metarun_prompt_label(r1_key, "R1", view->threshold_label,
+        metarun_prompt_label('f', "R1", view->threshold_label,
             sizeof(view->threshold_label));
-        metarun_prompt_label(start_key, "Start", view->full_label,
+        metarun_prompt_label('u', "Start", view->full_label,
             sizeof(view->full_label));
         metarun_prompt_label('x', "RS Right", view->blitz_label,
             sizeof(view->blitz_label));

@@ -231,11 +231,202 @@ void do_cmd_suicide(void)
     killer_commit(p_ptr->died_from);
 }
 
+static const app_ui_panel* file_character_sheet_panel(const app_ui_scene* scene)
+{
+    size_t i;
+
+    if (!scene)
+        return NULL;
+
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        if (scene->panels[i].style == APP_UI_PANEL_STYLE_CHARACTER_SHEET)
+            return &scene->panels[i];
+    }
+
+    if (scene->panel_count > 0)
+        return &scene->panels[0];
+
+    return NULL;
+}
+
+static void file_character_append_field(char* buf, size_t buf_size, cptr text)
+{
+    if (!buf || buf_size == 0 || !text || !text[0])
+        return;
+
+    if (buf[0])
+        SDL_strlcat(buf, " ", buf_size);
+    SDL_strlcat(buf, text, buf_size);
+}
+
+static void file_character_write_metric(SDL_IOStream* fff,
+    const app_ui_character_metric* metric)
+{
+    char line[256];
+
+    if (!fff || !metric)
+        return;
+
+    if (!metric->label[0] && !metric->value[0] && !metric->secondary[0])
+    {
+        SDL_IOprintf(fff, "\n");
+        return;
+    }
+
+    line[0] = '\0';
+    if (metric->label[0])
+        strnfmt(line, sizeof(line), "%-12s %s", metric->label, metric->value);
+    else
+        SDL_strlcpy(line, metric->value, sizeof(line));
+
+    if (metric->separator && metric->secondary[0])
+    {
+        char suffix[96];
+
+        strnfmt(suffix, sizeof(suffix), " %c %s", metric->separator,
+            metric->secondary);
+        SDL_strlcat(line, suffix, sizeof(line));
+    }
+    else if (metric->secondary[0])
+    {
+        file_character_append_field(line, sizeof(line), metric->secondary);
+    }
+
+    SDL_IOprintf(fff, "%s\n", line);
+}
+
+static void file_character_write_stat(SDL_IOStream* fff,
+    const app_ui_character_stat* stat)
+{
+    char line[256];
+
+    if (!fff || !stat)
+        return;
+
+    if (!stat->label[0] && !stat->value[0] && !stat->base[0] && !stat->mod1[0]
+        && !stat->mod2[0] && !stat->mod3[0])
+    {
+        SDL_IOprintf(fff, "\n");
+        return;
+    }
+
+    line[0] = '\0';
+    if (stat->label[0])
+        strnfmt(line, sizeof(line), "%-12s %s", stat->label, stat->value);
+    else
+        SDL_strlcpy(line, stat->value, sizeof(line));
+
+    if (stat->separator && stat->base[0])
+    {
+        char suffix[64];
+
+        strnfmt(suffix, sizeof(suffix), " %c %s", stat->separator, stat->base);
+        SDL_strlcat(line, suffix, sizeof(line));
+    }
+
+    file_character_append_field(line, sizeof(line), stat->mod1);
+    file_character_append_field(line, sizeof(line), stat->mod2);
+    file_character_append_field(line, sizeof(line), stat->mod3);
+
+    SDL_IOprintf(fff, "%s\n", line);
+}
+
+static void file_character_write_history(SDL_IOStream* fff,
+    const app_ui_scene* scene, const app_ui_panel* panel)
+{
+    void (*old_hook)(byte, cptr) = text_out_hook;
+    ang_file* old_file = text_out_file;
+    int old_wrap = text_out_wrap;
+    int old_indent = text_out_indent;
+    size_t i;
+
+    if (!fff || !scene || !panel || panel->rich_paragraph_count == 0)
+        return;
+
+    text_out_hook = text_out_to_file;
+    text_out_file = fff;
+    text_out_wrap = 75;
+    text_out_indent = 2;
+
+    for (i = 0; i < panel->rich_paragraph_count; i++)
+    {
+        u16b paragraph_index = (u16b)(panel->rich_paragraph_first + i);
+        const app_ui_rich_paragraph* paragraph;
+        size_t j;
+
+        if (paragraph_index >= scene->rich_paragraph_count)
+            break;
+
+        paragraph = &scene->rich_paragraphs[paragraph_index];
+        for (j = 0; j < paragraph->run_count; j++)
+        {
+            u16b run_index = (u16b)(paragraph->run_first + j);
+
+            if (run_index >= scene->rich_run_count)
+                break;
+
+            text_out_c(scene->rich_runs[run_index].attr,
+                scene->rich_runs[run_index].text);
+        }
+
+        text_out("\n\n");
+    }
+
+    text_out_hook = old_hook;
+    text_out_file = old_file;
+    text_out_wrap = old_wrap;
+    text_out_indent = old_indent;
+}
+
+static bool file_character_write_semantic_sheet(SDL_IOStream* fff)
+{
+    app_ui_scene scene;
+    const app_ui_panel* panel;
+    size_t i;
+
+    if (!fff)
+        return false;
+    if (!build_character_sheet_ui_scene(&scene, NULL))
+        return false;
+
+    panel = file_character_sheet_panel(&scene);
+    if (!panel)
+        return false;
+
+    if (panel->title[0])
+        SDL_IOprintf(fff, "  %s\n\n", panel->title);
+
+    for (i = 0; i < panel->character_metric_count; i++)
+        file_character_write_metric(fff, &panel->character_metrics[i]);
+
+    if (panel->detail_line_count > 0)
+    {
+        SDL_IOprintf(fff, "\n");
+        for (i = 0; i < panel->detail_line_count; i++)
+            SDL_IOprintf(fff, "%s\n",
+                panel->detail_lines[i].text[0] ? panel->detail_lines[i].text : "");
+    }
+
+    if (panel->character_stat_count > 0)
+    {
+        SDL_IOprintf(fff, "\n");
+        for (i = 0; i < panel->character_stat_count; i++)
+            file_character_write_stat(fff, &panel->character_stats[i]);
+    }
+
+    if (panel->rich_paragraph_count > 0)
+    {
+        SDL_IOprintf(fff, "\n");
+        file_character_write_history(fff, &scene, panel);
+    }
+
+    return true;
+}
+
 errr file_character(cptr name, bool full)
 {
     int i, x, y;
-    byte a;
-    char c;
     SDL_IOStream* fd;
     SDL_IOStream* fff = NULL;
     char o_name[80];
@@ -265,26 +456,12 @@ errr file_character(cptr name, bool full)
     if (!fff)
         return -1;
 
-    text_out_hook = text_out_to_file;
-    text_out_file = fff;
-
     SDL_IOprintf(fff, "  [%s %s Character Dump]\n\n", VERSION_NAME, VERSION_STRING);
 
-    display_player(0);
-
-    for (y = 2; y < 23; y++)
+    if (!file_character_write_semantic_sheet(fff))
     {
-        for (x = 0; x < 79; x++)
-        {
-            (void)(Term_what(x, y, &a, &c));
-            buf[x] = c;
-        }
-
-        while ((x > 0) && (buf[x - 1] == ' '))
-            --x;
-
-        buf[x] = '\0';
-        SDL_IOprintf(fff, "%s\n", buf);
+        sdl_fclose(fff);
+        return -1;
     }
 
     if (p_ptr->is_dead)
@@ -482,137 +659,75 @@ errr file_character(cptr name, bool full)
     return 0;
 }
 
-static void get_tile(int row, int col, byte* a_def, char* c_def)
+static void mini_screenshot_clear_buffers(void)
 {
-    byte a;
-    char c;
+    int x, y;
 
-    a = Term->scr->a[row][col];
-    c = Term->scr->c[row][col];
+    for (y = 0; y <= 6; y++)
+    {
+        for (x = 0; x <= 6; x++)
+        {
+            mini_screenshot_char[y][x] = ' ';
+            mini_screenshot_attr[y][x] = TERM_DARK;
+        }
+    }
+}
 
-    *a_def = a;
-    *c_def = c;
+static bool mini_screenshot_from_snapshot(const app_dungeon_snapshot* snapshot)
+{
+    const app_map_snapshot* map;
+    int player_y;
+    int player_x;
+    int sample_y;
+    int sample_x;
+    int x, y;
+
+    if (!snapshot || !snapshot->map_data)
+        return false;
+
+    map = (const app_map_snapshot*)snapshot->map_data;
+    if (!map->width || !map->height)
+        return false;
+
+    player_y = map->player_y - map->panel_y;
+    player_x = map->player_x - map->panel_x;
+    if (player_y < 0 || player_y >= map->height || player_x < 0
+        || player_x >= map->width)
+    {
+        return false;
+    }
+
+    mini_screenshot_clear_buffers();
+
+    for (y = 0; y <= 6; y++)
+    {
+        for (x = 0; x <= 6; x++)
+        {
+            if (reliability_sample_square_point(player_y, player_x, 3, y, x,
+                    map->height, map->width, &sample_y, &sample_x))
+            {
+                size_t index = ((size_t)sample_y * map->width) + (size_t)sample_x;
+                const app_map_cell_snapshot* cell = &map->cells[index];
+
+                mini_screenshot_char[y][x] = cell->ch ? cell->ch : ' ';
+                mini_screenshot_attr[y][x] = cell->attr;
+            }
+        }
+    }
+
+    return true;
 }
 
 void mini_screenshot(void)
 {
-    int x, y, wid, hgt;
-    byte a;
-    char c;
-    int player_y = -1, player_x = -1;
-    int sample_y, sample_x;
-    int max_hgt, max_wid;
-    char screen_char[100][200];
-    byte screen_attr[100][200];
+    app_session* session = app_session_current();
+    const app_dungeon_snapshot* snapshot = NULL;
 
-    Term_get_size(&wid, &hgt);
+    mini_screenshot_clear_buffers();
 
-    for (y = 0; y < 100; y++)
-    {
-        for (x = 0; x < 200; x++)
-        {
-            screen_char[y][x] = ' ';
-            screen_attr[y][x] = TERM_DARK;
-        }
-    }
+    if (session && app_session_build_dungeon_snapshot(session, 0, 0, 0))
+        snapshot = app_session_dungeon_snapshot(session);
 
-    max_hgt = MIN(hgt, (int)N_ELEMENTS(screen_char));
-    max_wid = MIN(wid, (int)N_ELEMENTS(screen_char[0]));
-
-    for (y = 0; y < max_hgt; y++)
-    {
-        for (x = 0; x < max_wid; x++)
-        {
-            get_tile(y, x, &a, &c);
-
-            if ((c == '@')
-                && ((a == TERM_WHITE) || (a == TERM_YELLOW)
-                    || (a == TERM_ORANGE) || (a == TERM_L_RED)
-                    || (a == TERM_RED)))
-            {
-                player_x = x;
-                player_y = y;
-            }
-
-            screen_char[y][x] = c;
-            screen_attr[y][x] = a;
-        }
-    }
-
-    if (player_y >= 0 && player_x >= 0)
-    {
-        for (y = 0; y <= 6; y++)
-        {
-            for (x = 0; x <= 6; x++)
-            {
-                if (reliability_sample_square_point(player_y, player_x, 3, y,
-                        x, max_hgt, max_wid, &sample_y, &sample_x))
-                {
-                    mini_screenshot_char[y][x] = screen_char[sample_y][sample_x];
-                    mini_screenshot_attr[y][x] = screen_attr[sample_y][sample_x];
-                }
-                else
-                {
-                    mini_screenshot_char[y][x] = ' ';
-                    mini_screenshot_attr[y][x] = TERM_DARK;
-                }
-            }
-        }
-    }
-    else
-    {
-        for (y = 0; y <= 6; y++)
-        {
-            for (x = 0; x <= 6; x++)
-            {
-                mini_screenshot_char[y][x] = ' ';
-                mini_screenshot_attr[y][x] = TERM_DARK;
-            }
-        }
-    }
-}
-
-void prt_mini_screenshot(int col, int row)
-{
-    int x, y;
-
-    if (!p_ptr->escaped)
-    {
-        for (y = 0; y <= 6; y++)
-        {
-            for (x = 0; x <= 6; x++)
-            {
-                if ((x == 3) && (y == 3))
-                    Term_putch(col + x, row + y, TERM_RED, mini_screenshot_char[y][x]);
-                else
-                    Term_putch(col + x, row + y, mini_screenshot_attr[y][x],
-                        mini_screenshot_char[y][x]);
-            }
-        }
-    }
-    else
-    {
-        Term_putstr(col, row, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 1, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 2, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 3, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 4, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 5, -1, TERM_L_GREEN, ".......");
-        Term_putstr(col, row + 6, -1, TERM_L_GREEN, ".......");
-
-        Term_putch(col, row + 1, TERM_BLUE, '~');
-        Term_putch(col, row + 2, TERM_BLUE, '~');
-        Term_putch(col + 1, row + 2, TERM_L_BLUE, '~');
-        Term_putch(col + 1, row + 3, TERM_BLUE, '~');
-        Term_putch(col + 1, row + 4, TERM_L_BLUE, '~');
-        Term_putch(col + 2, row + 4, TERM_BLUE, '~');
-        Term_putch(col + 2, row + 5, TERM_BLUE, '~');
-        Term_putch(col + 3, row + 5, TERM_L_BLUE, '~');
-        Term_putch(col + 3, row + 6, TERM_BLUE, '~');
-
-        Term_putch(col + 4, row + 1, TERM_GREEN, '#');
-        Term_putch(col + 6, row + 4, TERM_GREEN, '#');
-
-        Term_putch(col + 3, row + 3, TERM_WHITE, '@');
-    }
+    if (!mini_screenshot_from_snapshot(snapshot))
+        log_warn("mini_screenshot: dungeon snapshot unavailable");
 }
