@@ -1257,6 +1257,21 @@ static bool verify_item(cptr prompt, int item)
         o_ptr = &o_list[0 - item];
     }
 
+    if (!o_ptr)
+        return false;
+
+    if ((item >= 0) && !o_ptr->k_idx)
+    {
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL && item_tester_okay(o_ptr))
+        {
+            strnfmt(out_val, sizeof(out_val), "%s %s? ", prompt,
+                describe_empty_slot(item));
+            return get_check(out_val);
+        }
+
+        return false;
+    }
+
     /* Describe */
     if (item < 0)
         object_desc_floor(o_name, sizeof(o_name), o_ptr, true, 3);
@@ -1293,6 +1308,17 @@ static bool get_item_allow(int item)
     else
     {
         o_ptr = &o_list[0 - item];
+    }
+
+    if (!o_ptr)
+        return false;
+
+    if ((item >= 0) && !o_ptr->k_idx)
+    {
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL && item_tester_okay(o_ptr))
+            return true;
+
+        return false;
     }
 
     /* No inscription */
@@ -1343,6 +1369,17 @@ static bool get_item_okay(int item)
     else
     {
         o_ptr = &o_list[0 - item];
+    }
+
+    if (!o_ptr)
+        return false;
+
+    if ((item >= 0) && !o_ptr->k_idx)
+    {
+        if (item >= INVEN_WIELD && item < INVEN_TOTAL)
+            return item_tester_okay(o_ptr);
+
+        return false;
     }
 
     /* Verify the item */

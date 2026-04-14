@@ -42,6 +42,37 @@
                                                                                \
     } while (0)
 
+static void object_desc_prepend_prefix(char* dst, size_t dst_size,
+    const char* base, const char* prefix)
+{
+    if (!dst || dst_size == 0)
+        return;
+
+    dst[0] = '\0';
+
+    if (!base)
+        base = "";
+    if (!prefix || !prefix[0])
+    {
+        SDL_strlcpy(dst, base, dst_size);
+        return;
+    }
+
+    if (base[0] == '&' && base[1] == ' ')
+    {
+        SDL_strlcpy(dst, "& ", dst_size);
+        SDL_strlcat(dst, prefix, dst_size);
+        SDL_strlcat(dst, " ", dst_size);
+        SDL_strlcat(dst, base + 2, dst_size);
+    }
+    else
+    {
+        SDL_strlcpy(dst, prefix, dst_size);
+        SDL_strlcat(dst, " ", dst_size);
+        SDL_strlcat(dst, base, dst_size);
+    }
+}
+
 /*
  * Efficient version of '(T) += sprintf((T), "%u", (N))'
  */
@@ -835,6 +866,15 @@ void object_desc(
 
     t = b = tmp_buf;
 
+    char basenm_with_runtime[128];
+    basenm_with_runtime[0] = '\0';
+    if (object_is_fire_broken(o_ptr))
+    {
+        object_desc_prepend_prefix(
+            basenm_with_runtime, sizeof(basenm_with_runtime), basenm, "(broken)");
+        basenm = basenm_with_runtime;
+    }
+
     char basenm_with_prefix[128];
     basenm_with_prefix[0] = '\0';
     if (known && object_ego_prefix(o_ptr))
@@ -866,20 +906,8 @@ void object_desc(
 
         if (prefix_buf[0])
         {
-            if (basenm[0] == '&' && basenm[1] == ' ')
-            {
-                SDL_strlcpy(basenm_with_prefix, "& ", sizeof(basenm_with_prefix));
-                SDL_strlcat(basenm_with_prefix, prefix_buf, sizeof(basenm_with_prefix));
-                SDL_strlcat(basenm_with_prefix, " ", sizeof(basenm_with_prefix));
-                SDL_strlcat(basenm_with_prefix, basenm + 2, sizeof(basenm_with_prefix));
-            }
-            else
-            {
-                SDL_strlcpy(basenm_with_prefix, prefix_buf, sizeof(basenm_with_prefix));
-                SDL_strlcat(basenm_with_prefix, " ", sizeof(basenm_with_prefix));
-                SDL_strlcat(basenm_with_prefix, basenm, sizeof(basenm_with_prefix));
-            }
-
+            object_desc_prepend_prefix(
+                basenm_with_prefix, sizeof(basenm_with_prefix), basenm, prefix_buf);
             basenm = basenm_with_prefix;
         }
     }

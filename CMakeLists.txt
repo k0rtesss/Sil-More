@@ -11,10 +11,15 @@ include(CTest)
 include(CheckCSourceCompiles)
 find_package(Python3 QUIET COMPONENTS Interpreter)
 
+set(SIL_BUILD_WITH_SDL_SOURCES_DEFAULT OFF)
+if(WIN32 OR ANDROID)
+  set(SIL_BUILD_WITH_SDL_SOURCES_DEFAULT ON)
+endif()
+
 option(LOG_MODE_TIMESTAMP "Create new log with timestamp each time" OFF)
 option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
 option(SIL_USE_LOCAL_DATA "Store generated data inside the game directory (debug builds)" OFF)
-option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from source under external/ (useful for Android)" OFF)
+option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from pinned sources under external/ (recommended for Windows and Android)" ${SIL_BUILD_WITH_SDL_SOURCES_DEFAULT})
 option(SIL_STRICT_WARNINGS "Enable stricter warning settings for development builds" OFF)
 option(SIL_ENABLE_ASAN "Enable AddressSanitizer on supported compilers" OFF)
 option(SIL_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer on supported compilers" OFF)
@@ -49,6 +54,32 @@ if (SIL_BUILD_WITH_SDL_SOURCES)
     message(FATAL_ERROR "SIL_BUILD_WITH_SDL_SOURCES=ON but external/SDL_ttf is missing. Run 'git submodule update --init --recursive' from the repo root or disable SIL_BUILD_WITH_SDL_SOURCES.")
   endif()
 
+  if (EXISTS "${SIL_EXTERNAL_DIR}/SDL_mixer/CMakeLists.txt")
+    set(SDLMIXER_INSTALL OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_STRICT OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_VENDORED ON CACHE BOOL "" FORCE)
+    set(SDLMIXER_AIFF OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_VOC OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_AU OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_FLAC OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_GME OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_MOD OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_MP3 OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_MIDI OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_OPUS OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_WAVPACK OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_WAVE ON CACHE BOOL "" FORCE)
+    set(SDLMIXER_VORBIS_STB ON CACHE BOOL "" FORCE)
+    set(SDLMIXER_VORBIS_VORBISFILE OFF CACHE BOOL "" FORCE)
+    set(SDLMIXER_VORBIS_TREMOR OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${SIL_EXTERNAL_DIR}/SDL_mixer" "${CMAKE_BINARY_DIR}/_deps/SDL_mixer")
+  else()
+    message(FATAL_ERROR "SIL_BUILD_WITH_SDL_SOURCES=ON but external/SDL_mixer is missing. Run 'git submodule update --init --recursive' from the repo root or disable SIL_BUILD_WITH_SDL_SOURCES.")
+  endif()
+
   if (ANDROID AND TARGET SDL3-shared)
     # Needed for __android_log_print / __android_log_write in SDL Android backend.
     target_link_libraries(SDL3-shared PRIVATE log)
@@ -57,6 +88,7 @@ else()
   find_package(SDL3 REQUIRED)
   find_package(SDL3_ttf REQUIRED)
   find_package(SDL3_image REQUIRED)
+  find_package(SDL3_mixer REQUIRED)
 endif()
 
 add_subdirectory(src/log)
@@ -472,6 +504,7 @@ target_link_libraries(sil-platform-sdl PUBLIC
   SDL3::SDL3
   SDL3_ttf::SDL3_ttf
   SDL3_image::SDL3_image
+  SDL3_mixer::SDL3_mixer
   log
 )
 
@@ -566,14 +599,24 @@ if(BUILD_TESTING)
       ${CMAKE_CURRENT_BINARY_DIR}/ui8-demo-samples
   )
   if(WIN32)
+    set(SIL_TEST_PATH_ENTRIES
+      "${CMAKE_CURRENT_BINARY_DIR}/_deps/SDL"
+      "${CMAKE_CURRENT_BINARY_DIR}/_deps/SDL_image"
+      "${CMAKE_CURRENT_BINARY_DIR}/_deps/SDL_ttf"
+      "${CMAKE_CURRENT_BINARY_DIR}/_deps/SDL_mixer"
+      "C:/msys64/mingw64/bin"
+      "$ENV{PATH}"
+    )
+    list(JOIN SIL_TEST_PATH_ENTRIES ";" SIL_TEST_RUNTIME_PATH_RAW)
+    string(REPLACE ";" "\\;" SIL_TEST_RUNTIME_PATH "${SIL_TEST_RUNTIME_PATH_RAW}")
     set_tests_properties(sil_ui1_scaffolding PROPERTIES
-      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+      ENVIRONMENT "PATH=${SIL_TEST_RUNTIME_PATH}"
     )
     set_tests_properties(sil_ui8_wire PROPERTIES
-      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+      ENVIRONMENT "PATH=${SIL_TEST_RUNTIME_PATH}"
     )
     set_tests_properties(sil_ui8_demo_packets PROPERTIES
-      ENVIRONMENT "PATH=C:/msys64/mingw64/bin;$ENV{PATH}"
+      ENVIRONMENT "PATH=${SIL_TEST_RUNTIME_PATH}"
     )
   endif()
 

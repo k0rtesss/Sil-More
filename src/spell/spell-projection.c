@@ -630,6 +630,12 @@ static bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
                     msg_format("The %s%s", o_name, note_kill);
                 }
 
+                if ((o_ptr->tval == TV_CHEST) && (typ != GF_SOUND)
+                    && (typ != GF_EARTHQUAKE))
+                {
+                    chest_release_contents(o_ptr, y, x, typ);
+                }
+
                 /* Delete the object */
                 delete_object_idx(this_o_idx);
 
@@ -1758,7 +1764,7 @@ static bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by acid!");
-        acid_dam(dam, killer);
+        acid_dam(dam, dd, dd * ds, dam, killer);
         break;
     }
 
@@ -1767,7 +1773,7 @@ static bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
     {
         if (blind)
             msg_print("You are hit by lightning!");
-        elec_dam(dam, killer);
+        elec_dam(dam, dd, dd * ds, dam, killer);
         break;
     }
 
@@ -2050,6 +2056,7 @@ static bool project_p(int who, int y, int x, int dd, int ds, int dif, int typ)
         {
             msg_print("You are unfazed.");
         }
+        sound_dam(dam, dd, dd * ds, dam);
         break;
     }
 

@@ -557,6 +557,9 @@ bool object_similar(const object_type* o_ptr, const object_type* j_ptr)
     /* Missiles & most things from above */
     case TV_ARROW:
     {
+        if (object_runtime_state(o_ptr) || object_runtime_state(j_ptr))
+            return false;
+
         /* Require identical knowledge of both items */
         if (object_known_p(o_ptr) != object_known_p(j_ptr))
             return (false);

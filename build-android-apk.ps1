@@ -18,44 +18,6 @@ function Resolve-JavaHome {
     return $null
 }
 
-function Test-WritableDirectory {
-    param([string]$Path)
-
-    if (-not $Path) {
-        return $false
-    }
-
-    try {
-        New-Item -ItemType Directory -Force -Path $Path | Out-Null
-        $probe = Join-Path $Path '.gradle-write-test'
-        Set-Content -LiteralPath $probe -Value 'ok' -NoNewline
-        Remove-Item -LiteralPath $probe -Force
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-function Resolve-GradleUserHome {
-    if ($env:GRADLE_USER_HOME -and (Test-WritableDirectory -Path $env:GRADLE_USER_HOME)) {
-        return $env:GRADLE_USER_HOME
-    }
-
-    $defaultHome = $null
-    if ($env:USERPROFILE) {
-        $defaultHome = Join-Path $env:USERPROFILE '.gradle'
-    } elseif ($env:HOMEDRIVE -and $env:HOMEPATH) {
-        $defaultHome = Join-Path ($env:HOMEDRIVE + $env:HOMEPATH) '.gradle'
-    }
-
-    if ($defaultHome -and (Test-WritableDirectory -Path $defaultHome)) {
-        return $defaultHome
-    }
-
-    return (Join-Path $PSScriptRoot '.gradle-android')
-}
-
 $androidDir = Join-Path $PSScriptRoot 'android'
 if (-not (Test-Path $androidDir)) {
     throw "Android project folder not found: $androidDir"
@@ -70,9 +32,6 @@ try {
         $env:JAVA_HOME = $javaHome
         $env:Path = "$javaHome\bin;$env:Path"
     }
-
-    $env:GRADLE_USER_HOME = Resolve-GradleUserHome
-    Write-Host "Using GRADLE_USER_HOME: $env:GRADLE_USER_HOME" -ForegroundColor Cyan
 
     if (Test-Path '.\\gradlew.bat') {
         & .\\gradlew.bat $task

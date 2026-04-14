@@ -14,22 +14,41 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Get-LatestVersionedDirectory {
-    param([string[]]$Roots)
+function Get-LatestAndroidSdkPackagePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PackageName,
 
-    foreach ($root in ($Roots | Where-Object { $_ } | Select-Object -Unique)) {
+        [Parameter(Mandatory = $true)]
+        [string]$RelativeExecutablePath
+    )
+
+    $roots = @()
+
+    if ($env:LOCALAPPDATA) {
+        $roots += (Join-Path $env:LOCALAPPDATA "Android\Sdk\$PackageName")
+    }
+
+    if ($env:ANDROID_HOME) {
+        $roots += (Join-Path $env:ANDROID_HOME $PackageName)
+    }
+
+    if ($env:ANDROID_SDK_ROOT) {
+        $roots += (Join-Path $env:ANDROID_SDK_ROOT $PackageName)
+    }
+
+    foreach ($root in ($roots | Select-Object -Unique)) {
         if (-not (Test-Path $root)) { continue }
 
         $latest = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
-            Sort-Object @{
-                Expression = {
-                    try { [version]$_.Name } catch { [version]'0.0.0.0' }
-                }
-            } -Descending |
+            Sort-Object Name -Descending |
             Select-Object -First 1
 
-        if ($latest) {
-            return $latest.FullName
+        if (-not $latest) { continue }
+
+        $candidate = Join-Path $latest.FullName $RelativeExecutablePath
+        if (Test-Path $candidate) {
+            return $candidate
         }
     }
 
@@ -54,67 +73,55 @@ function Get-LatestNdkPath {
         $roots += (Join-Path $env:ANDROID_SDK_ROOT 'ndk')
     }
 
-    return Get-LatestVersionedDirectory -Roots $roots
-}
+    foreach ($root in ($roots | Select-Object -Unique)) {
+        if (-not (Test-Path $root)) { continue }
 
-function Get-LatestAndroidSdkCMakePath {
-    $roots = @()
+        $latest = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
 
-    if ($env:LOCALAPPDATA) {
-        $roots += (Join-Path $env:LOCALAPPDATA 'Android\Sdk\cmake')
-    }
-
-    if ($env:ANDROID_HOME) {
-        $roots += (Join-Path $env:ANDROID_HOME 'cmake')
-    }
-
-    if ($env:ANDROID_SDK_ROOT) {
-        $roots += (Join-Path $env:ANDROID_SDK_ROOT 'cmake')
-    }
-
-    $latest = Get-LatestVersionedDirectory -Roots $roots
-    if (-not $latest) {
-        return $null
-    }
-
-    $cmake = Join-Path $latest 'bin\cmake.exe'
-    if (Test-Path $cmake) {
-        return $cmake
+        if ($latest) {
+            return $latest.FullName
+        }
     }
 
     return $null
 }
 
 function Resolve-CMakePath {
-    $cmd = Get-Command cmake -ErrorAction SilentlyContinue
-    if ($cmd) {
-        return $cmd.Source
+    $command = Get-Command cmake -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
     }
 
-    $sdkCMake = Get-LatestAndroidSdkCMakePath
+    $msys2CMake = 'C:\msys64\mingw64\bin\cmake.exe'
+    if (Test-Path $msys2CMake) {
+        return $msys2CMake
+    }
+
+    $sdkCMake = Get-LatestAndroidSdkPackagePath -PackageName 'cmake' -RelativeExecutablePath 'bin\cmake.exe'
     if ($sdkCMake) {
         return $sdkCMake
     }
 
-    throw 'CMake not found. Install Android SDK CMake from SDK Manager or add cmake to PATH.'
+    return $null
 }
 
-function Resolve-NinjaPath {
-    param([string]$CMakePath)
+$cmakePath = Resolve-CMakePath
+if (-not $cmakePath) {
+    throw 'CMake not found. Install CMake or the Android SDK CMake package, or add cmake.exe to PATH.'
+}
 
-    $cmd = Get-Command ninja -ErrorAction SilentlyContinue
-    if ($cmd) {
-        return $cmd.Source
-    }
-
-    if ($CMakePath) {
-        $bundled = Join-Path ([System.IO.Path]::GetDirectoryName($CMakePath)) 'ninja.exe'
-        if (Test-Path $bundled) {
-            return $bundled
+$cmakeBinDir = Split-Path $cmakePath -Parent
+if ($cmakePath -like 'C:\msys64\mingw64\bin\*') {
+    $msysPaths = @('C:\msys64\mingw64\bin', 'C:\msys64\usr\bin')
+    foreach ($pathEntry in $msysPaths) {
+        if ($env:Path -notlike "*$pathEntry*") {
+            $env:Path = "$pathEntry;$env:Path"
         }
     }
-
-    return $null
+} elseif ($env:Path -notlike "*$cmakeBinDir*") {
+    $env:Path = "$cmakeBinDir;$env:Path"
 }
 
 if (-not $NdkPath) {
@@ -131,12 +138,10 @@ if (-not (Test-Path $toolchain)) {
 }
 
 $buildDir = Join-Path $PSScriptRoot "build-android/$Abi"
-$cmake = Resolve-CMakePath
-$ninja = Resolve-NinjaPath -CMakePath $cmake
 
+Write-Host "Using CMake: $cmakePath" -ForegroundColor Cyan
 Write-Host "Using NDK: $NdkPath" -ForegroundColor Cyan
 Write-Host "Using toolchain: $toolchain" -ForegroundColor Cyan
-Write-Host "Using CMake: $cmake" -ForegroundColor Cyan
 
 $configureArgs = @(
     '-S', $PSScriptRoot,
@@ -148,9 +153,8 @@ $configureArgs = @(
     '-DSIL_BUILD_WITH_SDL_SOURCES=ON'
 )
 
-if ($ninja) {
+if (Get-Command ninja -ErrorAction SilentlyContinue) {
     $configureArgs += @('-G', 'Ninja')
-    $configureArgs += "-DCMAKE_MAKE_PROGRAM=$ninja"
     Write-Host 'Generator: Ninja' -ForegroundColor Cyan
 } elseif (Get-Command mingw32-make -ErrorAction SilentlyContinue) {
     $configureArgs += @('-G', 'MinGW Makefiles')
@@ -159,12 +163,12 @@ if ($ninja) {
     Write-Warning 'No explicit generator selected (ninja/mingw32-make not found). CMake default generator will be used.'
 }
 
-& $cmake @configureArgs
+& $cmakePath @configureArgs
 if ($LASTEXITCODE -ne 0) {
     throw "CMake configure failed with exit code $LASTEXITCODE"
 }
 
-& $cmake --build $buildDir --parallel
+& $cmakePath --build $buildDir --parallel
 if ($LASTEXITCODE -ne 0) {
     throw "CMake build failed with exit code $LASTEXITCODE"
 }

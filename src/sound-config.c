@@ -1,5 +1,6 @@
-#define ANGBAND_NO_IO_COMPAT
 #include "sound-config.h"
+
+#include <SDL3/SDL.h>
 
 #include "angband.h"
 #include "externs.h"
@@ -9,10 +10,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <SDL3/SDL.h>
 
+static const char* const legacy_music_main_path = "music/main.wav";
+static const char* const default_music_main_path = "music/main.ogg";
+static const char* const legacy_music_main_full_path = "music/main_full.wav";
+static const char* const default_music_main_full_path = "music/main_full.ogg";
+static const char* const legacy_music_ambient_path = "music/ambient.wav";
+static const char* const default_music_ambient_path = "music/ambient.ogg";
 static const char* const legacy_music_death_path = "sound/death.wav";
-static const char* const default_music_death_path = "music/death.wav";
+static const char* const default_music_death_path = "music/death.ogg";
 
 void sound_config_set_defaults(struct sound_config* config)
 {
@@ -31,9 +37,9 @@ void sound_config_set_defaults(struct sound_config* config)
     config->music_ambient_enabled = true;
     config->music_main_volume = 1.0f;
     config->music_ambient_volume = 1.0f;
-    SDL_strlcpy(config->music_main_path, "music/main.wav", sizeof(config->music_main_path));
-    SDL_strlcpy(config->music_main_full_path, "music/main_full.wav", sizeof(config->music_main_full_path));
-    SDL_strlcpy(config->music_ambient_path, "music/ambient.wav", sizeof(config->music_ambient_path));
+    SDL_strlcpy(config->music_main_path, default_music_main_path, sizeof(config->music_main_path));
+    SDL_strlcpy(config->music_main_full_path, default_music_main_full_path, sizeof(config->music_main_full_path));
+    SDL_strlcpy(config->music_ambient_path, default_music_ambient_path, sizeof(config->music_ambient_path));
     SDL_strlcpy(config->music_death_path, default_music_death_path,
         sizeof(config->music_death_path));
     config->sample_rate = 22050;
@@ -57,7 +63,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
     }
     
     // Read file
-    ang_file* f = sdl_fopen(filename, "rb");
+    SDL_IOStream* f = sdl_fopen(filename, "rb");
     if (!f) {
         log_info("Sound config file not found: %s (creating with defaults)", filename);
         // Auto-create sound.json with defaults
@@ -65,7 +71,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
         return;
     }
 
-    ang_file_off_t file_size = ang_file_size_compat(f);
+    Sint64 file_size = SDL_GetIOSize(f);
     if (file_size < 0) {
         log_error("Failed to get sound config size: %s", filename);
         sdl_fclose(f);
@@ -86,7 +92,7 @@ void sound_config_load(const char* filename, struct sound_config* config)
         return;
     }
 
-    size_t read = ang_file_read_compat(f, buffer, length);
+    size_t read = SDL_ReadIO(f, buffer, length);
     if (read != length) {
         log_warn("Sound config read truncated: %s (expected %zu, got %zu)", filename, length, read);
     }
@@ -198,15 +204,27 @@ void sound_config_load(const char* filename, struct sound_config* config)
     if (cJSON_IsString(music_main_path) && music_main_path->valuestring) {
         SDL_strlcpy(config->music_main_path, music_main_path->valuestring, sizeof(config->music_main_path));
     }
+    if (streq(config->music_main_path, legacy_music_main_path)) {
+        SDL_strlcpy(config->music_main_path, default_music_main_path,
+            sizeof(config->music_main_path));
+    }
 
     cJSON* music_main_full_path = cJSON_GetObjectItemCaseSensitive(root, "music_main_full_path");
     if (cJSON_IsString(music_main_full_path) && music_main_full_path->valuestring) {
         SDL_strlcpy(config->music_main_full_path, music_main_full_path->valuestring, sizeof(config->music_main_full_path));
     }
+    if (streq(config->music_main_full_path, legacy_music_main_full_path)) {
+        SDL_strlcpy(config->music_main_full_path, default_music_main_full_path,
+            sizeof(config->music_main_full_path));
+    }
 
     cJSON* music_ambient_path = cJSON_GetObjectItemCaseSensitive(root, "music_ambient_path");
     if (cJSON_IsString(music_ambient_path) && music_ambient_path->valuestring) {
         SDL_strlcpy(config->music_ambient_path, music_ambient_path->valuestring, sizeof(config->music_ambient_path));
+    }
+    if (streq(config->music_ambient_path, legacy_music_ambient_path)) {
+        SDL_strlcpy(config->music_ambient_path, default_music_ambient_path,
+            sizeof(config->music_ambient_path));
     }
 
     cJSON* music_death_path = cJSON_GetObjectItemCaseSensitive(root, "music_death_path");
@@ -320,7 +338,7 @@ void sound_config_save(const char* filename, const struct sound_config* config)
         return;
     }
     
-    ang_file* f = sdl_fopen(filename, "wb");
+    SDL_IOStream* f = sdl_fopen(filename, "wb");
     if (!f) {
         log_error("Could not write sound config JSON file: %s", filename);
         cJSON_free(json_string);
@@ -329,7 +347,7 @@ void sound_config_save(const char* filename, const struct sound_config* config)
     }
 
     size_t json_len = strlen(json_string);
-    size_t written = ang_file_write_compat(f, json_string, json_len);
+    size_t written = SDL_WriteIO(f, json_string, json_len);
     if (written != json_len) {
         log_error("Failed writing sound config JSON file: %s", filename);
         sdl_fclose(f);

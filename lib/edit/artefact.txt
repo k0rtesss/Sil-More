@@ -729,7 +729,7 @@ I:37:6:0
 W:11:20:500:25000
 P:-2:0d0:-4:2d8
 F:SUST_GRA | SUST_STR | NOBLE_ITEM
-B:2/7
+B:2:7
 D:When Turgon departed Vinyamar in Nevrast, he left this armour, and
 D: strange destiny has led it far from those halls. It is crafted with a
 D: double layer of mail, which makes it too heavy for many, but turns

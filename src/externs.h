@@ -490,6 +490,8 @@ extern void search(void);
 extern void do_cmd_pickup_from_pile(void);
 extern void py_pickup_aux(int o_idx);
 extern void py_pickup(void);
+extern void chest_release_contents(object_type* o_ptr, int y, int x,
+    int destroy_typ);
 extern bool smith_oath_forbids_object(const object_type* o_ptr);
 extern bool smith_oath_confirm_break(void);
 extern void hit_trap(int y, int x);
@@ -815,6 +817,10 @@ extern u32b ego_item_pval_flags1(const ego_item_type* e_ptr);
 extern u32b object_pval_flags1(const object_type* o_ptr);
 extern void object_apply_pval_delta_with_mask(object_type* o_ptr, u32b mask, int delta);
 extern bool object_apply_ego_affix(object_type* o_ptr, int e_idx, bool smithing);
+extern bool object_break_brass_lantern(object_type* o_ptr);
+extern bool object_is_fire_broken(const object_type* o_ptr);
+extern bool object_break_shafted_weapon_by_fire(object_type* o_ptr);
+extern bool object_repair_fire_broken_weapon(object_type* o_ptr);
 extern void object_into_special(object_type* o_ptr, int lev, bool smithing);
 extern void check_artifact_visibility(void);
 extern void apply_magic(object_type* o_ptr, int lev, bool okay, bool good,
@@ -832,6 +838,9 @@ extern bool repair_damaged_item(int slot);
 extern bool is_smithed_by_player(const object_type* o_ptr);
 extern bool upgrade_broken_item(int slot);
 extern bool reveal_random_artifact(void);
+extern bool elemental_attack_destroys_object(int attack_type,
+    const object_type* o_ptr);
+extern void sound_dam(int raw_dam, int min_raw, int max_raw, int hp_dam);
 
 extern bool make_object(
     object_type* j_ptr, drop_quality quality, int objecttype);

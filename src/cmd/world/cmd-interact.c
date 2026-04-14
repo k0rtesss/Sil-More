@@ -110,22 +110,23 @@ static chest_alignment_type chest_item_alignment(const object_type* o_ptr)
  * Disperse treasures from the given chest, centered at (x,y).
  *
  */
-static void chest_death(int y, int x, s16b o_idx)
+void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ)
 {
     int number;
     bool generated_an_item = false;
+    bool dropped_an_item = false;
     chest_alignment_type chest_alignment = CHEST_ALIGNMENT_STANDARD;
+    int destroyed_contents = 0;
+    int old_generation_mode = object_generation_mode;
     bool old_allow_noble = drop_allow_noble;
     bool old_allow_evil = drop_allow_evil;
-
-    object_type* o_ptr;
 
     object_type* i_ptr;
 
     object_type object_type_body;
 
-    /* Get the chest */
-    o_ptr = &o_list[o_idx];
+    if (!o_ptr || o_ptr->tval != TV_CHEST)
+        return;
 
     /* Determine how much to drop (see above) */
     number = (o_ptr->sval >= SV_CHEST_MIN_LARGE) ? 4 : rand_range(2, 3);
@@ -214,13 +215,23 @@ static void chest_death(int y, int x, s16b o_idx)
             }
 
             generated_an_item = true;
+
+            if ((destroy_typ >= 0)
+                && elemental_attack_destroys_object(destroy_typ, i_ptr))
+            {
+                destroyed_contents++;
+                accepted = true;
+                continue;
+            }
+
             drop_near(i_ptr, -1, y, x);
+            dropped_an_item = true;
             accepted = true;
         }
     }
 
     /* No longer opening a chest */
-    object_generation_mode = OB_GEN_MODE_NORMAL;
+    object_generation_mode = old_generation_mode;
     drop_allow_noble = old_allow_noble;
     drop_allow_evil = old_allow_evil;
 
@@ -237,6 +248,19 @@ static void chest_death(int y, int x, s16b o_idx)
     {
         msg_print("The chest is empty.");
     }
+    else if (!dropped_an_item && destroyed_contents > 0)
+    {
+        msg_print("The chest's contents are ruined.");
+    }
+    else if (destroyed_contents > 0)
+    {
+        msg_print("Some of the chest's contents are ruined.");
+    }
+}
+
+static void chest_death(int y, int x, s16b o_idx)
+{
+    chest_release_contents(&o_list[o_idx], y, x, -1);
 }
 
 /*
@@ -3108,6 +3132,23 @@ static const char* skeleton_note_stair_site(int feat)
     }
 }
 
+static const char* skeleton_note_stair_title(int feat)
+{
+    switch (feat)
+    {
+    case FEAT_MORE:
+        return "Hint: Down Stairs";
+    case FEAT_MORE_SHAFT:
+        return "Hint: Down Shaft";
+    case FEAT_LESS:
+        return "Hint: Up Stairs";
+    case FEAT_LESS_SHAFT:
+        return "Hint: Up Shaft";
+    default:
+        return "Hint: Stairs";
+    }
+}
+
 static void skeleton_note_partition_meta_for_hint(
     skeleton_hint_kind hint, level_partition_kind* out_kind, big_cave_type_t* out_type)
 {
@@ -3208,7 +3249,7 @@ static void hint_message_meta_add_cue(hint_message_meta* meta, const char* dist,
     strnfmt(meta->cue_dirs[slot], HINT_MESSAGE_CUE_TEXT_MAX, "%s", dir ? dir : "");
 }
 
-static const char* skeleton_hint_title(skeleton_hint_kind hint)
+static const char* skeleton_hint_title(skeleton_hint_kind hint, int stairs_feat)
 {
     switch (hint)
     {
@@ -3217,7 +3258,7 @@ static const char* skeleton_hint_title(skeleton_hint_kind hint)
     case SKEL_HINT_VAULT_ARTIFACT:
         return "Hint: Dragon's Hoard";
     case SKEL_HINT_STAIRS:
-        return "Hint: Stairs";
+        return skeleton_note_stair_title(stairs_feat);
     case SKEL_HINT_PARTITION_PRESENCE:
         return "Hint: Layout";
     case SKEL_HINT_FORGE:
@@ -3365,6 +3406,7 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
     skeleton_partition_focus focus_part;
     focus_part.kind = LEVEL_PART_NONE;
     focus_part.big_cave_type = BIG_CAVE_NONE;
+    int stairs_feat = -1;
     if (hint1 == SKEL_HINT_PARTITION_PRESENCE
         || hint2 == SKEL_HINT_PARTITION_PRESENCE)
     {
@@ -3504,6 +3546,7 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
             if (skeleton_note_find_nearest_stairs(
                     sval, skel_y, skel_x, &ty, &tx, &feat, &dist))
             {
+                stairs_feat = feat;
                 body_lines[body_count].dir
                     = skeleton_note_direction_phrase(skel_y, skel_x, ty, tx);
                 body_lines[body_count].dist = skeleton_note_distance_phrase(dist, &layout);
@@ -3632,13 +3675,19 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
     char title_buf[100];
     if (hint2 != SKEL_HINT_NONE)
     {
+        const char* title1 = skeleton_hint_title(hint1,
+            (hint1 == SKEL_HINT_STAIRS) ? stairs_feat : -1);
+        const char* title2 = skeleton_hint_title(hint2,
+            (hint2 == SKEL_HINT_STAIRS) ? stairs_feat : -1);
         strnfmt(title_buf, sizeof(title_buf), "Hint: %s & %s",
-            skeleton_hint_title(hint1) + 6,
-            skeleton_hint_title(hint2) + 6);
+            title1 + 6,
+            title2 + 6);
     }
     else
     {
-        strnfmt(title_buf, sizeof(title_buf), "%s", skeleton_hint_title(hint1));
+        strnfmt(title_buf, sizeof(title_buf), "%s",
+            skeleton_hint_title(hint1,
+                (hint1 == SKEL_HINT_STAIRS) ? stairs_feat : -1));
     }
 
     for (int i = 14; i >= 0; --i)
