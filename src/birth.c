@@ -937,20 +937,6 @@ static void birth_prompt_label(int binding, const char* fallback, char* buf, siz
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-static char birth_inkey_with_wait_reason(u16b reason)
-{
-    app_wait_scope scope;
-    app_session* session = app_session_current();
-    char ch;
-
-    app_session_push_wait_scope(session, &scope, reason, 0, 0);
-    inkey_set_cursor_hidden(true);
-    ch = (char)ui_information_scene_wait_key();
-    inkey_set_cursor_hidden(false);
-    app_session_pop_wait_scope(session, &scope);
-    return ch;
-}
-
 static bool birth_pending_compact_description_confirm = false;
 
 static bool birth_confirm_input(int ch, bool steamdeck)
@@ -1232,7 +1218,8 @@ static bool birth_show_semantic_assignment_review(bool steamdeck)
             return false;
         }
 
-        ch = birth_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_CONFIRM);
 
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
@@ -1900,7 +1887,8 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
         if (done)
             return (cur);
 
-        c = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        c = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         /* Exit the game */
         if ((c == 'Q') || (c == 'q'))
@@ -2648,7 +2636,8 @@ static NavResult blitz_setup_menu(void)
             birth_menu_scene_leave(&scene_scope);
             return NAV_TO_MAIN;
         }
-        key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
         {
@@ -3159,7 +3148,8 @@ static NavResult select_oath(void)
             log_warn("oath selection: semantic scene presentation failed");
             return NAV_BACK;
         }
-        key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         if (steamdeck && key == steamdeck_back_key())
             return NAV_BACK; /* Go back to character creation */
@@ -3560,7 +3550,8 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects,
             return -1;
         }
 
-        key = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
             return -1;
@@ -3657,7 +3648,8 @@ static void blitz_show_effect_summary(void)
         return;
     }
 
-    (void)birth_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
+    (void)ui_information_scene_wait_key_hidden_with_wait_reason(
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE);
 }
 
 static NavResult blitz_configure_effects(void)
@@ -3965,7 +3957,8 @@ static NavResult player_birth_aux_2(void)
         }
 
         /* Get key */
-        ch = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         /* Quit -> return to main menu before the game starts */
         if ((ch == 'Q') || (ch == 'q')) {
@@ -4105,7 +4098,8 @@ extern NavResult gain_skills(void)
         }
 
         /* Get key */
-        ch = birth_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
 
         /* Quit -> back to main menu before the game starts */
         if (((ch == 'Q') || (ch == 'q')) && (turn == 0)) {

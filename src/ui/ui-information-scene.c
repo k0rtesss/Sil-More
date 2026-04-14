@@ -266,6 +266,18 @@ bool ui_information_scene_present_ui(const app_ui_scene* scene)
     return true;
 }
 
+bool ui_information_scene_present_overlay(ui_information_scene_scope* scope,
+    const app_ui_scene* scene)
+{
+    if (!scope || !scope->active)
+        return false;
+    if (!ui_information_scene_publish_ui_scene(scene, true))
+        return false;
+
+    scope->published_overlay = true;
+    return true;
+}
+
 bool ui_information_scene_supported(void)
 {
     app_session* session = app_session_current();
@@ -290,6 +302,18 @@ bool ui_information_scene_is_active(void)
 bool ui_information_scene_owns_input(void)
 {
     return g_ui_information_scene_active;
+}
+
+bool ui_information_scene_acquire(ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    memset(scope, 0, sizeof(*scope));
+    if (ui_information_scene_is_active())
+        return true;
+
+    return ui_information_scene_enter(scope);
 }
 
 static bool ui_information_scene_enter_internal(
@@ -445,6 +469,17 @@ int ui_information_scene_wait_key_with_wait_reason(u16b reason)
     return key;
 }
 
+int ui_information_scene_wait_key_hidden_with_wait_reason(u16b reason)
+{
+    bool saved_hide_cursor = inkey_cursor_hidden();
+    int key;
+
+    inkey_set_cursor_hidden(true);
+    key = ui_information_scene_wait_key_with_wait_reason(reason);
+    inkey_set_cursor_hidden(saved_hide_cursor);
+    return key;
+}
+
 void ui_information_scene_leave(ui_information_scene_scope* scope)
 {
     app_session* session = app_session_current();
@@ -466,9 +501,9 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
                 scope);
             if (!restored_snapshot)
                 app_session_set_snapshot(session, &scope->previous_snapshot);
-            if (scope->published_overlay)
-                app_session_clear_dungeon_overlay_scene(session);
         }
+        if (scope->published_overlay)
+            app_session_clear_dungeon_overlay_scene(session);
         app_session_pop_wait_scope(session, &scope->wait_scope);
     }
 

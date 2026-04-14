@@ -29,13 +29,8 @@ static int smith_ui_reforge_prefix_snapshot_menu(const object_type* source);
 
 static char smith_ui_inkey_with_wait_reason(void)
 {
-    char ch;
-
-    inkey_set_cursor_hidden(true);
-    ch = (char)ui_information_scene_wait_key_with_wait_reason(
+    return (char)ui_information_scene_wait_key_hidden_with_wait_reason(
         APP_WAIT_REASON_LIST_SELECTION);
-    inkey_set_cursor_hidden(false);
-    return ch;
 }
 
 /*
@@ -2359,10 +2354,7 @@ static bool smith_reforge_item(void)
     return true;
 }
 
-typedef struct smith_ui_snapshot_scope
-{
-    bool active;
-} smith_ui_snapshot_scope;
+typedef ui_information_scene_scope smith_ui_snapshot_scope;
 
 static int smith_ui_nested_transition_depth = 0;
 
@@ -2389,11 +2381,6 @@ static bool smith_ui_snapshot_active(void)
     return snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON;
 }
 
-static void smith_ui_snapshot_refresh(void)
-{
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
-}
-
 static void smith_ui_snapshot_begin_nested_transition(void)
 {
     smith_ui_nested_transition_depth++;
@@ -2412,39 +2399,31 @@ static bool smith_ui_snapshot_scene_enter(smith_ui_snapshot_scope* scope)
     if (!scope || !session || !smith_ui_snapshot_active())
         return false;
 
-    memset(scope, 0, sizeof(*scope));
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
-    scope->active = true;
-    return true;
+    return ui_information_scene_claim_input(scope, APP_WAIT_REASON_NONE);
 }
 
 static void smith_ui_snapshot_scene_close(smith_ui_snapshot_scope* scope)
 {
     app_session* session = app_session_current();
+    bool refresh_enabled = true;
 
     if (!scope || !scope->active || !session)
         return;
 
     app_session_clear_interaction(session);
-    app_session_clear_dungeon_overlay_scene(session);
-    scope->active = false;
-    if (smith_ui_nested_transition_depth == 0)
-        smith_ui_snapshot_refresh();
+    if (smith_ui_nested_transition_depth > 0)
+        refresh_enabled = ui_information_scene_set_refresh_enabled(false);
+    ui_information_scene_leave(scope);
+    if (smith_ui_nested_transition_depth > 0)
+        (void)ui_information_scene_set_refresh_enabled(refresh_enabled);
 }
 
 static bool smith_ui_snapshot_scene_present(smith_ui_snapshot_scope* scope,
     const app_ui_scene* scene)
 {
-    app_session* session = app_session_current();
-
-    if (!scope || !scope->active || !scene || !session)
-        return false;
-    if (!app_session_publish_dungeon_overlay_scene(session, scene))
-        return false;
-
-    smith_ui_snapshot_refresh();
-    return true;
+    return ui_information_scene_present_overlay(scope, scene);
 }
 
 static bool smith_ui_panel_try_add_detail_line(app_ui_panel* panel, byte attr,
@@ -6441,7 +6420,7 @@ void do_cmd_smithing_screen(void)
     app_session_clear_dungeon_overlay_scene(app_session_current());
     app_session_clear_interaction(app_session_current());
     smith_ui_snapshot_reset_nested_transitions();
-    smith_ui_snapshot_refresh();
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }
 

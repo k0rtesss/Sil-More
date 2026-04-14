@@ -2,8 +2,6 @@
 #include "sdl-main-internal.h"
 #include "ui/ui-information-scene.h"
 
-const char help_sdl[] = "SDL3";
-
 struct sound_config g_sound_config;
 char config_file_path[1024];
 

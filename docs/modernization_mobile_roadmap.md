@@ -60,8 +60,8 @@ Status date: March 26, 2026.
   - script/engine drift for smithing difficulty
   - remaining SDL leakage into core-facing code
   - mobile safe-area, device-class, and resource-path assumptions
-- Detailed follow-on planning for the UI architecture rewrite now lives in
-  [`ui_architecture_migration_plan.md`](./ui_architecture_migration_plan.md).
+- Detailed finish-line planning for the current UI replacement work now lives
+  in [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md).
 
 ## Guiding Rules
 - Do not reopen completed unstable-port work packages unless a later phase

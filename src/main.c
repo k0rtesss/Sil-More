@@ -31,13 +31,6 @@
 bool game_in_progress = false;
 
 /*
- * List of the available modules in the order they are tried.
- */
-static const struct module modules[] = {
-    { "sdl", help_sdl, init_sdl },
-};
-
-/*
  * A hook for "quit()".
  *
  * Close down, then fall back into "quit()".
@@ -228,19 +221,15 @@ static void change_path(cptr info)
  * Simple "main" function for multiple platforms.
  *
  * Note the special "--" option which terminates the processing of
- * standard options.  All non-standard options (if any) are passed
- * directly to the "init_xxx()" function.
+ * standard options. Any remaining options are passed directly to the
+ * SDL runtime config parser.
  */
 int main(int argc, char* argv[])
 {
     int i;
     app_session* session = NULL;
 
-    bool done = false;
-
     int show_score = 0;
-
-    cptr mstr = NULL;
 
     bool args = true;
     // Initialise logger in 'quiet' mode (don't write to stdout) on desktop.
@@ -391,15 +380,6 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        case 'm':
-        case 'M':
-        {
-            if (!*arg)
-                goto usage;
-            mstr = arg;
-            continue;
-        }
-
         case 'd':
         case 'D':
         {
@@ -420,24 +400,7 @@ int main(int argc, char* argv[])
         usage:
         {
             /* Dump usage information */
-            puts("Usage: sil [options] [-- subopts]");
-            puts("  -n       Start a new character");
-            puts("  -f       Request fiddle (verbose) mode");
-            puts("  -w       Request wizard mode");
-            puts("  -v       Request sound mode");
-            puts("  -g       Request graphics mode");
-            puts("  -o       Request original keyset (default)");
-            puts("  -r       Request rogue-like keyset");
-            puts("  -s<num>  Show <num> high scores (default: 10)");
-            puts("  -u<who>  Use your <who> savefile");
-            puts("  -d<def>  Define a 'lib' dir sub-path");
-            puts("  -m<sys>  use Module <sys>, where <sys> can be:");
-
-            /* Print the name and help for each available module */
-            for (i = 0; i < (int)N_ELEMENTS(modules); i++)
-            {
-                printf("     %s   %s\n", modules[i].name, modules[i].help);
-            }
+            runtime_cli_print_usage(argv[0]);
 
             /* Actually abort the process */
             quit(NULL);
@@ -464,24 +427,9 @@ int main(int argc, char* argv[])
     /* Install "quit" hook */
     log_register_quit_hook(quit_hook);
 
-    /* Try the modules in the order specified by modules[] */
-    for (i = 0; i < (int)N_ELEMENTS(modules); i++)
-    {
-        /* User requested a specific module? */
-        if (!mstr || (streq(mstr, modules[i].name)))
-        {
-            if (0 == modules[i].init(argc, argv))
-            {
-                ANGBAND_SYS = modules[i].name;
-                done = true;
-                break;
-            }
-        }
-    }
-
-    /* Make sure we have a display! */
-    if (!done)
-        quit("Unable to prepare the SDL display module!");
+    if (0 != init_sdl(argc, argv))
+        quit("Unable to initialize the SDL runtime.");
+    ANGBAND_SYS = "sdl";
 
     /* Catch nasty signals */
     signals_init();

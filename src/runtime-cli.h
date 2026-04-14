@@ -1,4 +1,4 @@
-/* runtime-cli.h - localized runtime command-line state */
+/* runtime-cli.h - runtime command-line state and usage */
 
 #ifndef INCLUDED_RUNTIME_CLI_H
 #define INCLUDED_RUNTIME_CLI_H
@@ -6,6 +6,7 @@
 #include "h-basic.h"
 
 void runtime_cli_reset(void);
+void runtime_cli_print_usage(cptr program_name);
 
 bool runtime_cli_fiddle(void);
 void runtime_cli_set_fiddle(bool enabled);

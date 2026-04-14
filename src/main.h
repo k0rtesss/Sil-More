@@ -15,13 +15,4 @@
 
 extern errr init_sdl(int argc, char** argv);
 
-extern const char help_sdl[];
-
-struct module
-{
-    cptr name;
-    cptr help;
-    errr (*init)(int argc, char** argv);
-};
-
 #endif /* INCLUDED_MAIN_H */

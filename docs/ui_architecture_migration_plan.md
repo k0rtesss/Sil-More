@@ -5,6 +5,8 @@ Deprecated on April 3, 2026.
 This document is kept only as the historical record of the UI0-UI8 substrate
 work and the first overlay-track plan. The active execution document is
 [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md).
+Do not treat the staged status labels, lane assignments, or rollout wording
+below as current execution guidance.
 
 Why it was deprecated:
 - UI0-UI4, the `src/app/*` boundary, the build split, and the first SDL scene
@@ -85,8 +87,8 @@ Status date: April 2, 2026.
   removal.
 - Recreate existing menus visually through the new multilayer renderers.
   Preserve the current Sil look, wording, spacing, and hierarchy, but do not
-  preserve the old runtime renderers as permanent fallbacks.
-- On the snapshot renderer path, a scene-backed screen must not silently drop
+  preserve legacy term rendering as a permanent normal-path fallback.
+- On the scene-backed SDL path, a scene-backed screen must not silently drop
   back to legacy term rendering as an emergency fallback. If that path fails,
   treat it as a bug and report it explicitly.
 - `ui_information_scene` and mirrored `Term` capture remain temporary bridge
@@ -183,7 +185,7 @@ Key rule:
 | UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
 | UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
 | UI5 | closed as a boundary stage | interaction kinds, wait scopes, and snapshot overlays are in place; the remaining look/target/item cleanup is renderer migration work in `OVER2`-`OVER5`, not missing session primitives. |
-| UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the snapshot path; remaining hybrids are tracked in `OVER3`-`OVER5`. |
+| UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the scene-backed SDL path; remaining hybrids are tracked in `OVER3`-`OVER5`. |
 | UI7 | closed for planning purposes | the build split is live; the remaining semantic cleanup is now best understood as legacy-render removal inside migrated consumers, so it is carried by the overlay track rather than by another UI-stage. |
 | UI8 | prototype complete | `app-wire`, `app-host-bridge`, `tests/ui8_tests.c`, and `web/ui8-demo/` exercise the packet ABI; further web hardening should wait on overlay-track reduction of runtime legacy-render debt. |
 
@@ -838,7 +840,7 @@ Standing rules for this track:
   `ui_information_scene_present_term()` as a temporary bridge for raw-cell
   viewers, not as the final API
 - once a family has a semantic SDL path, remove its normal-path legacy render
-  fallback instead of keeping two runtime renderers
+  fallback instead of keeping duplicate runtime render paths
 - do not add new SDL-side sizing or reinterpretation heuristics to term-mirror
   paths; that route is compatibility-only now
 

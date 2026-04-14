@@ -2134,7 +2134,6 @@ int menu_choose_one_curse(int n)
     bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     ui_information_scene_scope info_scope;
-    bool owns_info_scene = false;
 
     for (int i = 0; i < CURSE_MENU_LINES; i++) {
         bool dup;
@@ -2154,9 +2153,7 @@ int menu_choose_one_curse(int n)
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
             sizeof(accept_label));
     }
-    if (!ui_information_scene_is_active())
-        owns_info_scene = ui_information_scene_enter(&info_scope);
-    if (!ui_information_scene_is_active()) {
+    if (!ui_information_scene_acquire(&info_scope)) {
         log_error("menu_choose_one_curse: semantic scene unavailable");
         return -1;
     }
@@ -2165,8 +2162,7 @@ int menu_choose_one_curse(int n)
         int semantic_choice = metarun_ui_choose_curse_scene(n, pick, steamdeck,
             accept_label);
 
-        if (owns_info_scene)
-            ui_information_scene_leave(&info_scope);
+        ui_information_scene_leave(&info_scope);
         if (semantic_choice >= 0)
             return semantic_choice;
     }
@@ -2565,28 +2561,27 @@ static void metarun_present_story_texts(const char* title,
     bool steamdeck = steamdeck_controls_active();
     char accept_label[16] = "";
     ui_information_scene_scope info_scope;
-    bool owns_info_scene = false;
     bool presented = false;
 
     if (steamdeck) {
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
             sizeof(accept_label));
     }
-    if (!ui_information_scene_is_active() && ui_information_scene_supported())
-        owns_info_scene = ui_information_scene_enter(&info_scope);
-
-    if (ui_information_scene_is_active()) {
-        presented = metarun_ui_show_story_texts(title, title_attr, texts,
-            total_texts, text_attr, steamdeck, accept_label,
-            action_label ? action_label : "Continue");
-        if (!presented) {
-            log_error("metarun: failed to present story texts '%s'",
-                title ? title : "(untitled)");
-        }
+    if (!ui_information_scene_acquire(&info_scope)) {
+        log_error("metarun: semantic story scene unavailable for '%s'",
+            title ? title : "(untitled)");
+        return;
     }
 
-    if (owns_info_scene)
-        ui_information_scene_leave(&info_scope);
+    presented = metarun_ui_show_story_texts(title, title_attr, texts,
+        total_texts, text_attr, steamdeck, accept_label,
+        action_label ? action_label : "Continue");
+    if (!presented) {
+        log_error("metarun: failed to present story texts '%s'",
+            title ? title : "(untitled)");
+    }
+
+    ui_information_scene_leave(&info_scope);
 }
 
 static void show_mandos_third_unlock_message(void)
@@ -2824,18 +2819,12 @@ static bool metarun_ui_show_story_modal_auto(const char* title,
     const char* action_label)
 {
     ui_information_scene_scope info_scope;
-    bool owns_info_scene = false;
 
-    if (!ui_information_scene_is_active())
+    if (!ui_information_scene_acquire(&info_scope))
     {
-        if (!ui_information_scene_supported()
-            || !ui_information_scene_enter(&info_scope))
-        {
-            log_error("metarun: semantic story modal unavailable for '%s'",
-                title ? title : "(untitled)");
-            return false;
-        }
-        owns_info_scene = true;
+        log_error("metarun: semantic story modal unavailable for '%s'",
+            title ? title : "(untitled)");
+        return false;
     }
 
     if (!metarun_ui_show_story_modal(title, title_attr, paragraphs, attrs,
@@ -2843,13 +2832,11 @@ static bool metarun_ui_show_story_modal_auto(const char* title,
     {
         log_error("metarun: failed to present story modal '%s'",
             title ? title : "(untitled)");
-        if (owns_info_scene)
-            ui_information_scene_leave(&info_scope);
+        ui_information_scene_leave(&info_scope);
         return false;
     }
 
-    if (owns_info_scene)
-        ui_information_scene_leave(&info_scope);
+    ui_information_scene_leave(&info_scope);
     return true;
 }
 

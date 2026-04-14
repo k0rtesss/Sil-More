@@ -23,17 +23,21 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
   (`py -3 tools/ui_debt_audit.py --check`):
   - `inkey()`: 3 files / 3 matches
   - `screen_save()/screen_load()`: 0 files / 0 matches
-  - direct `Term_*` render or control calls: 29 files / 159 matches
+  - direct `Term_*` render or control calls: 27 files / 156 matches
   - `get_sdl_*` / `set_sdl_*` outside platform code: 0 files / 0 matches
 - Slice 1 is complete in the working tree on April 14, 2026:
   `src/util-prompt.c`, `src/object/object-ui-select.c`,
   `src/object/object-ui-enhanced.c`, and `src/cmd/ui/cmd-ui-main-menu.c`
   now wait through the shared semantic scene or session input path instead of
   owning file-local `inkey()` or `Term_xtra(TERM_XTRA_EVENT/FRESH)` loops.
+- Workstream 4 is complete in the working tree on April 14, 2026:
+  `src/ui/smithing/ui-smithing-screen.c`, `src/birth.c`, and
+  `src/metarun.c` now reuse the shared semantic scene or wait-input helpers
+  instead of bespoke workflow-scoped snapshot ownership.
 - The remaining work is not architecture substrate and not settings cleanup.
   It is finish-line cleanup of a small set of SDL-path interaction loops,
-  term-sized layout budgeting, item-display helpers, bespoke workflow tails,
-  and stale fallback wording.
+  term-sized layout budgeting, item-display helpers, and stale fallback
+  wording.
 
 ## Active Workstreams
 ### 1. Replace legacy blocking loops in semantic SDL scenes
@@ -91,6 +95,9 @@ Exit when:
   subwindows or debug-only paths
 
 ### 4. Close bespoke workflow tails
+Status:
+- completed in the working tree on April 14, 2026
+
 Goal:
 - finish the remaining file-local snapshot loops in late custom workflows
 
@@ -106,6 +113,9 @@ Exit when:
   documented as legacy-only
 
 ### 5. Remove stale fallback surface area
+Status:
+- completed in the working tree on April 14, 2026
+
 Goal:
 - delete stale switches, usage text, and doc wording that still imply the
   removed fallback renderer exists
