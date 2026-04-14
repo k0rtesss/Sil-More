@@ -113,11 +113,11 @@ forward UI work.
   longer call `ui_information_scene_present_term()` on the SDL path.
 - `py -3 tools/ui_debt_audit.py --check` passes on this branch.
 - Current audit counts on April 14, 2026:
-  - `inkey()` call sites: 33 files / 50 matches
-  - `screen_save()` + `screen_load()` call sites: 20 files / 72 matches
-  - direct `Term_*` render/control calls: 57 files / 860 matches
+  - `inkey()` call sites: 28 files / 35 matches
+  - `screen_save()` + `screen_load()` call sites: 13 files / 44 matches
+  - direct `Term_*` render/control calls: 49 files / 557 matches
   - `#include "platform-ui.h"`: 0 files / 0 matches
-  - `get_sdl_*` / `set_sdl_*` outside platform code: 6 files / 166 matches
+  - `get_sdl_*` / `set_sdl_*` outside platform code: 5 files / 95 matches
 
 ### Still Real Debt
 - `py -3 tools/ui_debt_audit.py --check` passing only means the current tree is
@@ -158,8 +158,8 @@ forward UI work.
     operations in `src/util-prompt.c`
   - compact layout decisions for dungeon chrome still consult `Term->wid` in
     `src/app/app-scene-dungeon.c`
-  - nearby/look/object-display families still build SDL-visible UI from term
-    width, height, and row math
+  - object-display and object-info families still build SDL-visible UI from
+    term width, height, and row math
 - Menu-transition flash debt still exists:
   - stale previous screens can still flash briefly when opening or switching
     menus
@@ -211,15 +211,20 @@ forward UI work.
 - The current blocker is now:
   - removing grid-based render ownership from persistent chrome and shared SDL
     overlays
-  - finishing the `cmd-ui-settings.c` residual tail
-  - removing stale restore or snapshot flashes when opening menus
+  - finishing the `cmd-ui-settings.c` named-SDL/config tail
+  - removing the remaining prompt/transition restore debt
+  - removing term-grid ownership from object-display and object-info helper
+    families
+  - removing dungeon/system overlay and prompt debt outside the browser
+    families
   - finishing the remaining item/display helper side loops and isolated
     fallback paths
   - finishing the residual bespoke workflow families such as birth, smithing,
     and remaining metarun side flows
-- After `p2`, the highest-leverage next slice is still persistent chrome and
-  shared display, specifically because it is the main normal-SDL grid-render
-  holdout, with a small parallel carry-over for the remaining settings tail.
+- After `p2` and `p3a`, the highest-leverage next slice is still persistent
+  chrome and shared display, but it should now run as one lane in a broader
+  parallel batch because several other remaining families have disjoint write
+  sets.
 
 ## Next Slices
 ### Slice: Persistent Chrome And Shared Display (`OVER1-B`)
@@ -354,6 +359,18 @@ Debt-removal rule for every slice in this section:
 - The bridge-deletion slice is complete in the working tree.
 - The main selector and several document or browser families are already
   semantic on the SDL path.
+- `p3a` materially reduced the audit:
+  - `inkey()`: 43 -> 35
+  - `screen_save()` / `screen_load()`: 60 -> 44
+  - direct `Term_*`: 695 -> 557
+  - `get_sdl_*` / `set_sdl_*` outside platform code: 151 -> 95
+- Effective `p3a` wins:
+  - `cmd-ui-look.c` is effectively out of the audit
+  - `cmd-ui-nearby.c` is effectively out of the audit
+  - `targeting.c` is effectively out of the audit
+  - `ui-look-sidebar.c` is effectively out of the audit
+  - `cmd-ui-main-menu.c` is effectively out of the grid/render audit
+  - `object-ui-select.c` moved down to an isolated input/fallback tail
 - `p2` materially reduced the audit again:
   - `inkey()`: 50 -> 43
   - `screen_save()` / `screen_load()`: 72 -> 60
@@ -378,7 +395,8 @@ Debt-removal rule for every slice in this section:
   - `P2-C` query/character helpers: largely landed
   - `P2-D` file-viewer/score detail: largely landed
   - `P2-E` quest/combat display: largely landed
-  - `P2-A` persistent chrome/status: not yet landed
+  - `P2-A` persistent chrome/status: partially landed structurally, but still
+    the main remaining chrome/grid block
 - `p1` materially reduced the audit:
   - `inkey()`: 67 -> 50
   - `screen_save()` / `screen_load()`: 107 -> 72
@@ -397,17 +415,18 @@ Debt-removal rule for every slice in this section:
 - The current whole-plan debt is concentrated in:
   - persistent chrome and shared display owners
   - the remaining normal-SDL grid-render owners
-  - the remaining `cmd-ui-settings.c` tail
-  - menu or prompt transition ownership
+  - the remaining `cmd-ui-settings.c` named-SDL/config tail
+  - object-display and object-info helper families
+  - dungeon/system overlay and prompt ownership
   - late item or bespoke workflows
 
 ### Recommended Order
 - First: split persistent chrome and shared display (`OVER1-B`) into parallel
   owners
 - In parallel: settings residual tail
-- In parallel: main-menu/object-selector transition cleanup
-- Then: look/nearby/object-display families that still derive SDL layout from
-  terminal grid rules
+- In parallel: object-display/object-info helper cleanup
+- In parallel: dungeon/system overlay cleanup
+- Then: any remaining prompt/transition restore cleanup
 - Last: item-family remainder plus birth or smithing or remaining metarun side
   flows
 
@@ -417,11 +436,11 @@ Debt-removal rule for every slice in this section:
   - prompt/message/runtime footer
   - SDL dungeon chrome renderer
 - Keep one owner on the remaining settings tail.
-- Main-menu/object-selector transition cleanup can run in parallel as long as
-  `util-prompt.c` stays owned by the prompt/message slice.
-- Treat look/nearby/object-display as the next follow-up family after chrome,
-  not as a substitute for it; they are still grid-based, but they are not the
-  always-visible SDL chrome.
+- Treat object-display/object-info as a distinct family from always-visible
+  chrome; it is still grid-based, but it does not need to block chrome
+  de-grid work.
+- Treat dungeon/system overlay cleanup as a distinct family from browser/detail
+  work; it is mostly prompt/overlay control-flow debt now.
 - Leave birth, smithing, and the remaining metarun side flows for after the
   common browser, prompt, and chrome patterns are settled.
 
@@ -658,12 +677,12 @@ Validation:
 
 ### Launch Batch 2: Remaining After `p2`
 These are the remaining top-level slices from the old post-`p1` batch.
-- Current status after `p2`:
-  - old `P2-C`, `P2-D`, and `P2-E` are largely landed
-  - old `P2-B` is partial and still active
-  - the old monolithic `P2-A` should now be treated as three parallel agents
-  - if you launch this batch, do not separately launch the older `P1-D`
-    prompt cleanup slice at the same time
+- Current status after `p2` and `p3a`:
+  - old `P2-B` is still active, but substantially smaller
+  - old `P2-F` is largely landed
+  - old `P2-A1` / `P2-A2` / `P2-A3` are partially landed but still active
+  - do not separately launch the older `P1-D` prompt cleanup slice at the same
+    time as the prompt/message batch
 
 #### Agent P2-A1: Status Rail And Chrome Data Contract
 ```text
@@ -799,6 +818,9 @@ Validation:
 
 ### Launch Batch 3: Tail Cleanup
 These are lower-volume but still meaningful cleanup slices after Batch 2.
+- Current status after `p2` and `p3a`:
+  - `P3-A` is largely landed
+  - `P3-B`, `P3-C`, and `P3-D` still look valid as separate tails
 
 #### Agent P3-A: Look / Nearby / Targeting
 ```text
@@ -894,6 +916,221 @@ Write set:
 Goal:
 - remove remaining SDL-path term-owned prompt/document loops in spell utility,
   death, and story-adjacent surfaces
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which spell/death/story flows remain term-owned
+```
+
+### Launch Batch 4: Launch Now In Parallel
+These are the next recommended top-level agents after the landed `p2` work and
+the largely-landed `p3a` look/nearby/targeting slice. The write sets are
+disjoint.
+
+#### Agent P4-A: Status Rail And Chrome Contract
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/ui/ui-status.c
+- src/app/app-scene-dungeon.c
+- src/app/app-scene-dungeon.h
+
+Goal:
+- remove left-rail and always-visible chrome data ownership from term-grid
+  rendering
+- replace fixed row/column chrome assumptions with semantic chrome payloads
+- remove normal-SDL compact-layout decisions that still depend on `Term->wid`
+  or `Term->hgt` in the scene contract
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what status/chrome grid-render debt still remains after your change
+```
+
+#### Agent P4-B: Prompt, Message, And Runtime Footer
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/util-prompt.c
+- src/util-message.c
+- src/runtime/runtime-game.c
+
+Goal:
+- remove normal-SDL prompt/message/footer ownership from terminal cursor, erase,
+  and saved-screen operations
+- preserve gameplay prompts, confirmations, recalls, and startup/footer flows
+- delete grid-based prompt rendering on the SDL path instead of wrapping it
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what prompt/message/runtime grid-render debt still remains after
+  your change
+```
+
+#### Agent P4-C: SDL Dungeon Chrome Renderer
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/sdl-scene-dungeon.c
+
+Goal:
+- consume semantic chrome data in the SDL dungeon renderer without
+  reintroducing terminal row/column assumptions
+- keep dungeon scale and overlay/chrome scale independent
+- preserve the shipped Sil presentation while deleting grid-era placement logic
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what SDL-side chrome/grid rendering still remains after your change
+```
+
+#### Agent P4-D: Settings Named-SDL Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/cmd/ui/cmd-ui-settings.c
+
+Goal:
+- finish the remaining settings/config tail
+- reduce named SDL getters/setters further behind narrower helpers
+- remove remaining SDL-path term-width/height branching where possible
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which settings subflows still depend on grid-era assumptions after
+  your change
+```
+
+#### Agent P4-E: Object Info And Query Recall Family
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/obj-info.c
+- src/object/object-ui-identify.c
+- src/cmd/ui/cmd-ui-query.c
+
+Goal:
+- remove remaining SDL-path screen_save()/screen_load(), scratch-term, and
+  term-layout debt in object info, identify, and query recall flows
+- preserve detailed object prose and recall behavior
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which object-info/query flows remain term-owned
+```
+
+#### Agent P4-F: Item Display Helper Grid Removal
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/object/object-ui-display.c
+- src/cmd/item/cmd-item-activate.c
+- src/cmd/item/cmd-pickup.c
+
+Goal:
+- remove the remaining shared term-grid item display helpers from normal SDL
+  play
+- preserve activation behavior, pickup behavior, and item descriptions
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which item-display helpers remain truly legacy after your change
+```
+
+#### Agent P4-G: Dungeon/System Overlay Cleanup
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/dungeon.c
+- src/game-event.c
+- src/level-generation/level-generation-screen.c
+
+Goal:
+- remove remaining SDL-path screen-save/prompt/overlay debt in normal dungeon
+  and level-generation flows
+- isolate any true non-SDL fallback paths clearly
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which dungeon/system overlay debt still remains after your change
+```
+
+#### Agent P4-H: Spell/Story/Death Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+
+Write set:
+- src/spell/spell-utility.c
+- src/ui/ui-death.c
+- src/ui/ui-story.c
+
+Goal:
+- remove remaining SDL-path term-owned prompt/document loops in spell utility,
+  death, and story-adjacent surfaces
+- preserve current behavior and prose presentation
 
 Validation:
 - run py -3 tools/ui_debt_audit.py --check

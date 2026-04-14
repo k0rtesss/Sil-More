@@ -197,15 +197,19 @@ void format_supply_summary(char* buf, size_t len)
 
 int draw_item_tile(int x, int y, object_type* o_ptr)
 {
+    char glyph_buf[2];
+    byte glyph_attr;
+
     if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO && o_ptr && o_ptr->k_idx)
     {
-        byte attr = object_attr(o_ptr);
-
-        Term_putch(x, y, attr, object_char(o_ptr));
+        glyph_buf[0] = object_char_default(o_ptr);
+        glyph_buf[1] = '\0';
+        glyph_attr = object_display_color(o_ptr, object_attr_default(o_ptr));
+        story_print_text_grid(y, x, 1, glyph_attr, glyph_buf);
 
         if (use_bigtile)
         {
-            Term_putch(x + 1, y, 255, -1);
+            story_print_text_grid(y, x + 1, 1, TERM_WHITE, " ");
             return x + 2;
         }
 
@@ -213,6 +217,22 @@ int draw_item_tile(int x, int y, object_type* o_ptr)
     }
 
     return x;
+}
+
+static void clear_item_row_segment(int row, int col, int width)
+{
+    if (width <= 0)
+        return;
+
+    story_print_text(row, col, width, TERM_WHITE, "");
+}
+
+static void clear_item_row(int row, int term_wid)
+{
+    if (term_wid <= 0)
+        return;
+
+    clear_item_row_segment(row, 0, term_wid);
 }
 
 static int menu_item_tile_width(const object_type* o_ptr)
@@ -316,7 +336,7 @@ void story_render_inventory_entry(int row, int base_col, int label_col,
     int weight_col = display_weights ? MAX(0, label_col - 8) : label_col;
     const int label_width = MENU_LABEL_FIELD_WIDTH;
 
-    Term_erase(base_col, row, 255);
+    clear_item_row_segment(row, base_col, term_wid - base_col);
     if (highlight)
         story_fill_rect(row, base_col, highlight_cols - base_col, TERM_L_BLUE);
 
@@ -354,7 +374,7 @@ void story_render_equipment_entry(int row, int col, int slot, cptr prefix,
     const int label_width = MENU_LABEL_FIELD_WIDTH;
     bool has_object = (o_ptr && o_ptr->k_idx);
 
-    Term_erase(clear_col, row, 255);
+    clear_item_row_segment(row, clear_col, term_wid - clear_col);
     if (highlight)
         story_fill_rect(row, col, highlight_cols - col, TERM_L_BLUE);
 
@@ -414,7 +434,7 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
                 row, slot, has_object, out_desc[idx]);
         }
 
-        Term_erase(clear_col, row, 255);
+        clear_item_row_segment(row, clear_col, term_wid - clear_col);
         if (is_highlight)
         {
             log_trace("draw_equipment_story_rows: Filling highlight rect at row %d", row);
@@ -471,137 +491,225 @@ void draw_equipment_story_rows(int col, int entry_count, int* out_index,
     log_trace("draw_equipment_story_rows: Finished drawing all rows");
 }
 
+static int subwindow_weight_col(int term_wid)
+{
+    int col = term_wid - 11;
+
+    if (col < 0)
+        col = 0;
+
+    return col;
+}
+
+static void draw_subwindow_item_icon(int row, int icon_col,
+    const object_type* o_ptr)
+{
+    char icon_buf[2];
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO)
+    {
+        (void)draw_item_tile(icon_col, row, (object_type*)o_ptr);
+        return;
+    }
+
+    icon_buf[0] = object_char(o_ptr);
+    icon_buf[1] = '\0';
+    story_print_text_grid(row, icon_col, 1, object_attr(o_ptr), icon_buf);
+}
+
+static int subwindow_desc_col(int icon_col)
+{
+    return icon_col + (use_bigtile ? 3 : 2);
+}
+
+static void truncate_display_desc(char* desc, size_t desc_size, int term_wid,
+    int desc_col, bool display_weights)
+{
+    int max_desc;
+    int weight_col = subwindow_weight_col(term_wid);
+
+    if (!desc || !desc_size)
+        return;
+
+    max_desc = term_wid - desc_col - 1;
+    if (display_weights && weight_col > desc_col)
+        max_desc = weight_col - desc_col - 1;
+    if (max_desc < 1)
+        max_desc = 1;
+    if (max_desc >= (int)desc_size)
+        max_desc = (int)desc_size - 1;
+    desc[max_desc] = '\0';
+}
+
+static void display_inventory_subwindow_row(int row, int term_wid,
+    cptr label_text, byte label_attr, const object_type* o_ptr)
+{
+    char o_name[80];
+    char weight_text[16];
+    byte desc_attr;
+    int desc_col;
+    int weight_col = subwindow_weight_col(term_wid);
+
+    if (!o_ptr || !o_ptr->k_idx)
+        return;
+
+    clear_item_row(row, term_wid);
+    story_print_text(row, 0, 3, label_attr, label_text ? label_text : "");
+
+    draw_subwindow_item_icon(row, 3, o_ptr);
+    desc_col = subwindow_desc_col(3);
+
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    truncate_display_desc(o_name, sizeof(o_name), term_wid, desc_col,
+        show_weights);
+
+    if (weapon_glows(o_ptr))
+        desc_attr = object_display_color(o_ptr, TERM_L_BLUE);
+    else
+        desc_attr = object_display_color(o_ptr,
+            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+
+    story_print_text(row, desc_col, term_wid - desc_col, desc_attr, o_name);
+
+    if (o_ptr->weight)
+    {
+        int wgt = o_ptr->weight * o_ptr->number;
+        strnfmt(weight_text, sizeof(weight_text), "%3d.%1d lb", wgt / 10,
+            wgt % 10);
+        story_print_text_grid(row, weight_col, 8, desc_attr, weight_text);
+    }
+}
+
+static int display_equipment_subwindow_row(int row, int slot, int term_wid,
+    cptr label_text, byte label_attr, const object_type* o_ptr)
+{
+    char o_name[80];
+    char weight_text[16];
+    byte desc_attr;
+    int desc_col;
+    int weight_col = subwindow_weight_col(term_wid);
+    int armour_weight = 0;
+
+    clear_item_row(row, term_wid);
+    story_print_text(row, 0, 3, label_attr, label_text ? label_text : "");
+
+    draw_subwindow_item_icon(row, 3, o_ptr);
+    desc_col = subwindow_desc_col(3);
+
+    if (o_ptr && o_ptr->tval)
+        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    else
+        SDL_strlcpy(o_name, describe_empty_slot(slot), sizeof(o_name));
+    truncate_display_desc(o_name, sizeof(o_name), term_wid, desc_col,
+        show_weights);
+
+    if (!o_ptr || !o_ptr->tval)
+        desc_attr = TERM_L_DARK;
+    else if (weapon_glows(o_ptr))
+        desc_attr = object_display_color(o_ptr, TERM_L_BLUE);
+    else
+        desc_attr = object_display_color(o_ptr,
+            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+
+    story_print_text(row, desc_col, term_wid - desc_col, desc_attr, o_name);
+
+    if (o_ptr && o_ptr->weight)
+    {
+        int wgt = o_ptr->weight * o_ptr->number;
+        byte weight_attr = desc_attr;
+
+        strnfmt(weight_text, sizeof(weight_text), "%3d.%1d lb ", wgt / 10,
+            wgt % 10);
+        if ((slot >= INVEN_BODY) && (slot <= INVEN_FEET))
+        {
+            weight_attr = TERM_SLATE;
+            armour_weight = wgt;
+        }
+        story_print_text_grid(row, weight_col, 9, weight_attr, weight_text);
+    }
+
+    return armour_weight;
+}
+
 /*
  * Legacy subwindow renderer for PW_INVEN. SDL snapshot item selection no
  * longer draws through this helper.
  */
 void display_inven(void)
 {
-    register int i, n, z = 0;
-
-    object_type* o_ptr;
-
-    byte attr;
+    register int i, z = 0;
+    byte label_attr;
     bool use_story_font = story_inventory_enabled();
     story_font_term_state story_state;
-
-    char tmp_val[80];
-    char o_name[80];
+    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
     bool floor_item = false;
-
-    int w = Term->wid;
-    int col = w - 11;
-    if (col < 0) col = 0;
-    int offset = use_bigtile ? 6 : 5;
 
     story_font_term_push(use_story_font, false, &story_state);
 
     for (i = 0; i < INVEN_PACK; i++)
     {
-        o_ptr = &inventory[i];
-        if (!o_ptr->k_idx)
+        if (!inventory[i].k_idx)
             continue;
         z = i + 1;
     }
 
-    for (i = 0; i <= z; i++)
+    for (i = 0; i < z; i++)
     {
-        if (i == z)
-        {
-            o_ptr = &o_list[cave_o_idx[p_ptr->py][p_ptr->px]];
-            i = INVEN_WIELD;
-            if (!o_ptr->k_idx)
-                continue;
-            floor_item = true;
-        }
-        else
-        {
-            o_ptr = &inventory[i];
-        }
-
-        tmp_val[0] = tmp_val[1] = tmp_val[2] = ' ';
-        tmp_val[3] = '\0';
+        char label_text[4] = "   ";
+        object_type* o_ptr = &inventory[i];
 
         if (item_tester_okay(o_ptr))
         {
-            if (!floor_item)
+            if ((p_ptr->get_item_mode == 0)
+                || (p_ptr->get_item_mode & (USE_INVEN)))
             {
-                if ((p_ptr->get_item_mode == 0)
-                    || (p_ptr->get_item_mode & (USE_INVEN)))
-                {
-                    tmp_val[0] = index_to_label(i);
-                    tmp_val[1] = ')';
-                }
-            }
-            else
-            {
-                if ((p_ptr->get_item_mode == 0)
-                    || (p_ptr->get_item_mode & (USE_FLOOR)))
-                {
-                    tmp_val[0] = '-';
-                    tmp_val[1] = ')';
-                }
+                label_text[0] = index_to_label(i);
+                label_text[1] = ')';
             }
         }
 
         if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_INVEN)))
-            attr = TERM_WHITE;
+            label_attr = TERM_WHITE;
         else
-            attr = TERM_SLATE;
+            label_attr = TERM_SLATE;
 
-        Term_erase(0, i, 255);
+        display_inventory_subwindow_row(i, term_wid, label_text, label_attr,
+            o_ptr);
+    }
 
-        if (use_story_font)
-            story_print_text(i, 0, 3, attr, tmp_val);
-        else
-            Term_putstr(0, i, 3, attr, tmp_val);
+    {
+        object_type* floor_o_ptr = &o_list[cave_o_idx[p_ptr->py][p_ptr->px]];
 
-        Term_putch(3, i, object_attr(o_ptr), object_char(o_ptr));
-        if (use_bigtile)
+        if (floor_o_ptr->k_idx)
         {
-            Term_putch(4, i, 255, -1);
-        }
+            char label_text[4] = "   ";
 
-        object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+            floor_item = true;
+            if (item_tester_okay(floor_o_ptr)
+                && ((p_ptr->get_item_mode == 0)
+                    || (p_ptr->get_item_mode & (USE_FLOOR))))
+            {
+                label_text[0] = '-';
+                label_text[1] = ')';
+            }
 
-        int max_desc = w - offset - 1;
-        if (show_weights && col > offset)
-            max_desc = col - offset - 1;
-        if (max_desc < 1) max_desc = 1;
-        if (max_desc >= (int)sizeof(o_name)) max_desc = (int)sizeof(o_name) - 1;
-        o_name[max_desc] = '\0';
-
-        n = (int)strlen(o_name);
-
-        if (weapon_glows(o_ptr))
-            attr = object_display_color(o_ptr, TERM_L_BLUE);
-        else
-            attr = object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-        Term_putch(offset - 1, i, attr, ' ');
-        if (use_story_font)
-            story_print_text(i, offset, max_desc, attr, o_name);
-        else
-            Term_putstr(offset, i, n, attr, o_name);
-
-        if (o_ptr->weight)
-        {
-            int wgt = o_ptr->weight * o_ptr->number;
-            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb", wgt / 10,
-                wgt % 10);
-            if (use_story_font)
-                story_print_text_grid(i, col, 8, attr, tmp_val);
+            if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_INVEN)))
+                label_attr = TERM_WHITE;
             else
-                Term_putstr(col, i, -1, attr, tmp_val);
+                label_attr = TERM_SLATE;
+
+            display_inventory_subwindow_row(INVEN_WIELD, term_wid, label_text,
+                label_attr, floor_o_ptr);
         }
     }
 
     for (i = z; i < Term->hgt; i++)
     {
         if ((i != INVEN_WIELD) || !floor_item)
-        {
-            Term_erase(0, i, 255);
-        }
+            clear_item_row(i, term_wid);
     }
 
     story_font_term_pop(&story_state);
@@ -613,18 +721,11 @@ void display_inven(void)
  */
 void display_equip(void)
 {
-    register int i, n;
-    object_type* o_ptr;
-    byte attr;
+    register int i;
+    byte label_attr;
     int armour_weight = 0;
-
-    char tmp_val[80];
-    char o_name[80];
-
-    int w = Term->wid;
-    int col = w - 11;
-    if (col < 0) col = 0;
-    int offset = use_bigtile ? 6 : 5;
+    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
+    int weight_col = subwindow_weight_col(term_wid);
 
     bool use_story_font = story_equipment_enabled();
     story_font_term_state story_state;
@@ -632,140 +733,53 @@ void display_equip(void)
 
     for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
     {
-        o_ptr = &inventory[i];
-
-        tmp_val[0] = tmp_val[1] = tmp_val[2] = ' ';
-        tmp_val[3] = '\0';
+        char label_text[4] = "   ";
+        object_type* o_ptr = &inventory[i];
 
         if (item_tester_okay(o_ptr))
         {
             if ((p_ptr->get_item_mode == 0)
                 || (p_ptr->get_item_mode & (USE_EQUIP)))
             {
-                tmp_val[0] = index_to_label(i);
-                tmp_val[1] = ')';
+                label_text[0] = index_to_label(i);
+                label_text[1] = ')';
             }
         }
 
         if ((p_ptr->command_wrk == 0) || (p_ptr->command_wrk & (USE_EQUIP)))
-            attr = TERM_WHITE;
+            label_attr = TERM_WHITE;
         else
-            attr = TERM_SLATE;
+            label_attr = TERM_SLATE;
 
-        Term_erase(0, i - INVEN_WIELD, 255);
-
-        if (use_story_font)
-            story_print_text(i - INVEN_WIELD, 0, 3, attr, tmp_val);
-        else
-            Term_putstr(0, i - INVEN_WIELD, 3, attr, tmp_val);
-
-        if (!o_ptr->tval)
-        {
-            Term_putch(3, i - INVEN_WIELD, attr, ' ');
-            if (use_bigtile)
-            {
-                Term_putch(4, i - INVEN_WIELD, attr, ' ');
-            }
-        }
-        else
-        {
-            Term_putch(3, i - INVEN_WIELD, object_attr(o_ptr), object_char(o_ptr));
-            if (use_bigtile)
-            {
-                Term_putch(4, i - INVEN_WIELD, 255, -1);
-            }
-        }
-
-        if (o_ptr->tval)
-        {
-            object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
-        }
-        else
-        {
-            SDL_strlcpy(o_name, describe_empty_slot(i), sizeof(o_name));
-        }
-
-        int max_desc = w - offset - 1;
-        if (show_weights && col > offset)
-            max_desc = col - offset - 1;
-        if (max_desc < 1) max_desc = 1;
-        if (max_desc >= (int)sizeof(o_name)) max_desc = (int)sizeof(o_name) - 1;
-        o_name[max_desc] = '\0';
-        n = (int)strlen(o_name);
-
-        if (!o_ptr->tval)
-            attr = TERM_L_DARK;
-        else if (weapon_glows(o_ptr))
-            attr = object_display_color(o_ptr, TERM_L_BLUE);
-        else
-            attr = object_display_color(o_ptr, tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-        Term_putch(offset - 1, i - INVEN_WIELD, attr, ' ');
-        if (use_story_font)
-            story_print_text(i - INVEN_WIELD, offset, max_desc, attr, o_name);
-        else
-            Term_putstr(offset, i - INVEN_WIELD, n, attr, o_name);
-
-        if (o_ptr->weight)
-        {
-            int wgt = o_ptr->weight * o_ptr->number;
-            strnfmt(tmp_val, sizeof(tmp_val), "%3d.%1d lb ", wgt / 10,
-                wgt % 10);
-            if ((i >= INVEN_BODY) && (i <= INVEN_FEET))
-            {
-                if (use_story_font)
-                    story_print_text_grid(i - INVEN_WIELD, col, 8, TERM_SLATE, tmp_val);
-                else
-                    Term_putstr(col, i - INVEN_WIELD, -1, TERM_SLATE, tmp_val);
-                armour_weight += wgt;
-            }
-            else
-            {
-                if (use_story_font)
-                    story_print_text_grid(i - INVEN_WIELD, col, 8, attr, tmp_val);
-                else
-                    Term_putstr(col, i - INVEN_WIELD, -1, attr, tmp_val);
-            }
-        }
+        armour_weight += display_equipment_subwindow_row(i - INVEN_WIELD, i,
+            term_wid, label_text, label_attr, o_ptr);
     }
 
     if (armour_weight)
     {
         int total_row = INVEN_TOTAL - INVEN_WIELD;
         int text_row = total_row + 1;
+        char tmp_val[80];
 
-        if (use_story_font)
+        clear_item_row(total_row, term_wid);
+        clear_item_row(text_row, term_wid);
+        story_print_text_grid(total_row, weight_col, 8, TERM_L_DARK,
+            "--------");
+        strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
+            armour_weight / 10, armour_weight % 10);
         {
-            Term_erase(col, total_row, 255);
-            Term_erase(col, text_row, 255);
-
-            story_print_text_grid(total_row, col, 8, TERM_L_DARK, "--------");
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
-                armour_weight / 10, armour_weight % 10);
-            {
-                int armour_col = col - 8;
-                if (armour_col < 0) armour_col = 0;
-                story_print_text_grid(text_row, armour_col, 16, TERM_SLATE, tmp_val);
-            }
-        }
-        else
-        {
-            Term_putstr(col, total_row, -1, TERM_L_DARK, "--------");
-            strnfmt(tmp_val, sizeof(tmp_val), "armour: %3d.%1d lb",
-                armour_weight / 10, armour_weight % 10);
-            {
-                int armour_col = col - 8;
-                if (armour_col < 0) armour_col = 0;
-                Term_putstr(armour_col, text_row, -1, TERM_SLATE, tmp_val);
-            }
+            int armour_col = weight_col - 8;
+            if (armour_col < 0)
+                armour_col = 0;
+            story_print_text_grid(text_row, armour_col, 16, TERM_SLATE,
+                tmp_val);
         }
     }
 
-    int erase_start = armour_weight ? (INVEN_TOTAL - INVEN_WIELD + 2) : (INVEN_TOTAL - INVEN_WIELD);
+    int erase_start = armour_weight ? (INVEN_TOTAL - INVEN_WIELD + 2)
+        : (INVEN_TOTAL - INVEN_WIELD);
     for (i = erase_start; i < Term->hgt; i++)
-    {
-        Term_erase(0, i, 255);
-    }
+        clear_item_row(i, term_wid);
 
     story_font_term_pop(&story_state);
 }

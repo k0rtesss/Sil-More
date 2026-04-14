@@ -6,12 +6,34 @@ typedef struct sdl_scene_layout {
     bool hide_left_panel;
     int canvas_w;
     int canvas_h;
+    int top_strip_h_px;
+    int bottom_strip_h_px;
+    int left_panel_w_px;
     int map_origin_x_px;
     int map_origin_y_px;
     int map_width_px;
     int map_height_px;
     int content_bottom_px;
 } sdl_scene_layout;
+
+typedef struct sdl_scene_strip_metrics {
+    TTF_Font* font;
+    int line_h;
+    int row_count;
+    int strip_h;
+    int left_inset_px;
+} sdl_scene_strip_metrics;
+
+typedef struct sdl_scene_status_rail_metrics {
+    TTF_Font* mono_font;
+    TTF_Font* story_font;
+    int line_h;
+    int icon_slot_w;
+    int gap_px;
+    int left_inset_px;
+    int panel_w_px;
+    int row_visible;
+} sdl_scene_status_rail_metrics;
 
 static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
     const SDL_FRect* dst);
@@ -106,6 +128,50 @@ static void sdl_scene_render_ui_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text)
 {
     sdl_ui_render_text(font, x_px, y_px, color, text);
+}
+
+static void sdl_scene_render_ui_text_line(TTF_Font* font, float x_px,
+    float y_px, int line_h, SDL_Color color, cptr text)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    float render_w;
+    float render_h;
+    float scale = 1.0f;
+
+    if (!font || !text || !text[0] || line_h <= 0)
+        return;
+
+    surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface)
+        return;
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (!texture)
+    {
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    render_w = (float)surface->w;
+    render_h = (float)surface->h;
+    if (render_h > (float)line_h && render_h > 0.0f)
+    {
+        scale = (float)line_h / render_h;
+        render_w *= scale;
+        render_h *= scale;
+    }
+
+    dst.x = x_px;
+    dst.y = y_px;
+    dst.w = render_w;
+    dst.h = render_h;
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+    SDL_DestroySurface(surface);
 }
 
 static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
@@ -323,52 +389,61 @@ static int sdl_scene_ui_status_row_width_px(TTF_Font* mono_font,
     return width;
 }
 
+static bool sdl_scene_ui_measure_strip(const sdl_view* view,
+    const app_ui_panel* panel, int canvas_h, sdl_scene_strip_metrics* out_metrics)
+{
+    int pixel_height;
+
+    if (out_metrics)
+        memset(out_metrics, 0, sizeof(*out_metrics));
+    if (!view || !panel || !out_metrics || canvas_h <= 0)
+        return false;
+
+    pixel_height = sdl_scene_ui_scale_px(
+        (float)sdl_scene_interaction_font_size_logical(view));
+    out_metrics->font = sdl_ui_font_for_height(pixel_height);
+    if (!out_metrics->font)
+        return false;
+
+    out_metrics->line_h = MAX(pixel_height, TTF_GetFontHeight(out_metrics->font));
+    out_metrics->row_count = panel->body_line_count ? (int)panel->body_line_count
+        : 1;
+    out_metrics->strip_h = out_metrics->row_count * out_metrics->line_h;
+    if (out_metrics->strip_h < view->cell_h)
+        out_metrics->strip_h = view->cell_h;
+    if (out_metrics->strip_h > canvas_h)
+        out_metrics->strip_h = canvas_h;
+    out_metrics->left_inset_px = MAX(sdl_scene_ui_scale_px(4.0f),
+        sdl_ui_text_left_padding(out_metrics->font, out_metrics->line_h));
+    return true;
+}
+
 static int sdl_scene_ui_strip_height_px(const sdl_view* view,
     const app_ui_panel* panel, int canvas_h)
 {
-    int pixel_height;
-    int line_h;
-    int rows;
-    int strip_h;
-    TTF_Font* font;
+    sdl_scene_strip_metrics metrics;
 
-    if (!view || !panel || canvas_h <= 0)
-        return 0;
-    pixel_height = sdl_scene_ui_scale_px(
-        (float)sdl_scene_interaction_font_size_logical(view));
-    font = sdl_ui_font_for_height(pixel_height);
-    if (!font)
+    if (!sdl_scene_ui_measure_strip(view, panel, canvas_h, &metrics))
         return 0;
 
-    line_h = MAX(pixel_height, TTF_GetFontHeight(font));
-    rows = panel->body_line_count ? (int)panel->body_line_count : 1;
-    strip_h = rows * line_h;
-    if (strip_h < view->cell_h)
-        strip_h = view->cell_h;
-    if (strip_h > canvas_h)
-        strip_h = canvas_h;
-    return strip_h;
+    return metrics.strip_h;
 }
 
-static int sdl_scene_ui_left_reserved_px(const sdl_view* view,
-    const app_ui_scene* scene, int canvas_w, int canvas_h)
+static bool sdl_scene_ui_measure_status_rail(const sdl_view* view,
+    const app_ui_panel* panel, int canvas_w, int available_h_px,
+    sdl_scene_status_rail_metrics* out_metrics)
 {
-    const app_ui_panel* panel;
-    TTF_Font* mono_font = NULL;
-    TTF_Font* story_font = NULL;
     int desired_px;
     int min_px;
-    int panel_w_px = 0;
-    int row_top = 1;
-    int screen_rows = 0;
     int pixel_height;
 
-    if (!view || !scene || canvas_w <= 0 || canvas_h <= 0)
-        return 0;
-
-    panel = sdl_scene_find_status_rail_panel(scene);
-    if (!panel || panel->row_count == 0)
-        return 0;
+    if (out_metrics)
+        memset(out_metrics, 0, sizeof(*out_metrics));
+    if (!view || !panel || !out_metrics || panel->row_count == 0
+        || canvas_w <= 0 || available_h_px <= 0)
+    {
+        return false;
+    }
 
     desired_px = sdl_scene_ui_scale_px(
         (float)sdl_scene_interaction_font_size_logical(view));
@@ -382,11 +457,14 @@ static int sdl_scene_ui_left_reserved_px(const sdl_view* view,
     {
         int mono_h;
         int story_h = 0;
-        int line_h;
         int candidate_w_px = 0;
         int max_w_px;
+        int line_h;
+        int row_visible;
         int left_inset_px;
         u16b row_index;
+        TTF_Font* mono_font;
+        TTF_Font* story_font;
 
         mono_font = sdl_ui_font_for_height(pixel_height);
         story_font = sdl_story_font_for_height(pixel_height);
@@ -421,21 +499,41 @@ static int sdl_scene_ui_left_reserved_px(const sdl_view* view,
         if (max_w_px > 0 && candidate_w_px > max_w_px)
             candidate_w_px = max_w_px;
 
-        screen_rows = canvas_h / line_h;
-        if (candidate_w_px <= 0 || candidate_w_px > canvas_w
-            || screen_rows <= row_top)
+        row_visible = available_h_px / line_h;
+        if (candidate_w_px > canvas_w - view->cell_w)
+            candidate_w_px = MAX(0, canvas_w - view->cell_w);
+        if (candidate_w_px <= 0 || candidate_w_px > canvas_w || row_visible < 1)
         {
             continue;
         }
 
-        panel_w_px = candidate_w_px;
-        break;
+        out_metrics->mono_font = mono_font;
+        out_metrics->story_font = story_font;
+        out_metrics->line_h = line_h;
+        out_metrics->icon_slot_w = sdl_scene_ui_status_icon_slot_px(mono_font,
+            line_h);
+        out_metrics->gap_px = sdl_scene_ui_status_gap_px(mono_font);
+        out_metrics->left_inset_px = left_inset_px;
+        out_metrics->panel_w_px = candidate_w_px;
+        out_metrics->row_visible = MIN((int)panel->row_count, row_visible);
+        return out_metrics->row_visible > 0;
     }
 
-    if (panel_w_px > canvas_w - view->cell_w)
-        panel_w_px = MAX(0, canvas_w - view->cell_w);
+    return false;
+}
 
-    return panel_w_px;
+static int sdl_scene_ui_left_reserved_px(const sdl_view* view,
+    const app_ui_panel* panel, int canvas_w, int available_h_px)
+{
+    sdl_scene_status_rail_metrics metrics;
+
+    if (!sdl_scene_ui_measure_status_rail(view, panel, canvas_w, available_h_px,
+            &metrics))
+    {
+        return 0;
+    }
+
+    return metrics.panel_w_px;
 }
 
 static void sdl_scene_interaction_format_line(char* line, size_t line_size,
@@ -613,8 +711,8 @@ static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
     sdl_scene_layout layout;
     const app_ui_panel* top_strip;
     const app_ui_panel* bottom_strip;
-    int top_strip_h_px = 0;
-    int bottom_strip_h_px = 0;
+    const app_ui_panel* status_rail;
+    int chrome_content_h;
     int max_map_x_px;
     int max_map_y_px;
     int map_cell_w_px;
@@ -640,21 +738,27 @@ static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
             APP_UI_PANEL_FLAG_TOP_ANCHORED);
         bottom_strip = sdl_scene_find_strip_panel(chrome_scene,
             APP_UI_PANEL_FLAG_BOTTOM_ANCHORED);
-        top_strip_h_px = sdl_scene_ui_strip_height_px(view, top_strip,
+        status_rail = sdl_scene_find_status_rail_panel(chrome_scene);
+        layout.top_strip_h_px = sdl_scene_ui_strip_height_px(view, top_strip,
             layout.canvas_h);
-        bottom_strip_h_px = sdl_scene_ui_strip_height_px(view, bottom_strip,
+        layout.bottom_strip_h_px = sdl_scene_ui_strip_height_px(view, bottom_strip,
             layout.canvas_h);
+        chrome_content_h = layout.canvas_h - layout.top_strip_h_px
+            - layout.bottom_strip_h_px;
+        if (chrome_content_h < 0)
+            chrome_content_h = 0;
+        layout.left_panel_w_px = sdl_scene_ui_left_reserved_px(view, status_rail,
+            layout.canvas_w, chrome_content_h);
         if (!layout.hide_left_panel)
         {
-            layout.map_origin_x_px = sdl_scene_ui_left_reserved_px(view,
-                chrome_scene, layout.canvas_w, layout.canvas_h);
+            layout.map_origin_x_px = layout.left_panel_w_px;
         }
     }
 
-    layout.content_bottom_px = layout.canvas_h - bottom_strip_h_px;
+    layout.content_bottom_px = layout.canvas_h - layout.bottom_strip_h_px;
     if (layout.content_bottom_px < 0)
         layout.content_bottom_px = 0;
-    layout.map_origin_y_px = top_strip_h_px;
+    layout.map_origin_y_px = layout.top_strip_h_px;
 
     max_map_x_px = layout.canvas_w - layout.map_width_px;
     max_map_y_px = layout.content_bottom_px - layout.map_height_px;
@@ -668,6 +772,329 @@ static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
         layout.map_origin_y_px = max_map_y_px;
 
     return layout;
+}
+
+static void sdl_scene_render_icon(TTF_Font* font, float x_px, float y_px,
+    int icon_slot_w, int line_h, byte icon_attr, char icon_char)
+{
+    SDL_FRect tile_dst;
+    byte ch = (byte)icon_char;
+
+    if (!font || !icon_char || icon_char == ' ')
+        return;
+
+    if (g_state.use_tiles && g_state.tileset
+        && (icon_attr & TILE_FLAG) && (ch & TILE_FLAG))
+    {
+        float tile_size = (float)MIN(line_h, icon_slot_w);
+
+        tile_dst.x = x_px + ((float)icon_slot_w - tile_size) * 0.5f;
+        tile_dst.y = y_px + ((float)line_h - tile_size) * 0.5f;
+        tile_dst.w = tile_size;
+        tile_dst.h = tile_size;
+        sdl_scene_draw_tile(g_state.tileset, icon_attr, ch, &tile_dst);
+        return;
+    }
+
+    {
+        char glyph[2] = { icon_char, '\0' };
+        int glyph_w = sdl_scene_measure_ui_text(font, glyph);
+        float text_x = x_px;
+
+        if (glyph_w < icon_slot_w)
+            text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
+        sdl_scene_render_ui_text_line(font, text_x, y_px, line_h,
+            sdl_scene_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
+    }
+}
+
+static void sdl_scene_render_status_rail_label(TTF_Font* mono_font,
+    TTF_Font* story_font, float x_px, float y_px, int line_h, byte attr,
+    byte flags, cptr text)
+{
+    if (!text || !text[0])
+        return;
+
+    if ((flags & APP_UI_ITEM_FLAG_STORY_LABEL) && story_font)
+    {
+        sdl_scene_render_ui_text_line(story_font, x_px, y_px, line_h,
+            sdl_scene_color(attr), text);
+        return;
+    }
+
+    sdl_scene_render_ui_text_line(mono_font, x_px, y_px, line_h,
+        sdl_scene_color(attr), text);
+}
+
+static bool sdl_scene_render_chrome_strip_panel(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_ui_panel* panel)
+{
+    sdl_scene_strip_metrics metrics;
+    SDL_Rect clip_rect;
+    float y_px;
+    int strip_h;
+    int current_y;
+    u16b i;
+
+    if (!view || !layout || !panel)
+        return false;
+    if (!sdl_scene_ui_measure_strip(view, panel, layout->canvas_h, &metrics))
+        return false;
+
+    strip_h = (panel->flags & APP_UI_PANEL_FLAG_BOTTOM_ANCHORED)
+        ? layout->bottom_strip_h_px
+        : layout->top_strip_h_px;
+    if (strip_h <= 0)
+        strip_h = metrics.strip_h;
+    if (strip_h <= 0 || layout->canvas_w <= 0)
+        return false;
+
+    y_px = (panel->flags & APP_UI_PANEL_FLAG_BOTTOM_ANCHORED)
+        ? (float)(layout->canvas_h - strip_h)
+        : 0.0f;
+    sdl_scene_fill_rect(&(SDL_FRect){
+        .x = 0.0f,
+        .y = y_px,
+        .w = (float)layout->canvas_w,
+        .h = (float)strip_h
+    }, (SDL_Color){ 0, 0, 0, 255 });
+
+    clip_rect.x = 0;
+    clip_rect.y = (int)y_px;
+    clip_rect.w = layout->canvas_w;
+    clip_rect.h = strip_h;
+    if (clip_rect.w <= 0 || clip_rect.h <= 0)
+        return false;
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    current_y = (int)y_px + ((strip_h - metrics.row_count * metrics.line_h) / 2);
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+
+        if (line->text[0] && line->text[0] != ' ')
+        {
+            sdl_scene_render_ui_text_line(metrics.font,
+                (float)metrics.left_inset_px, (float)current_y, metrics.line_h,
+                sdl_scene_color(line->attr), line->text);
+        }
+        current_y += metrics.line_h;
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    return true;
+}
+
+static bool sdl_scene_render_chrome_status_rail_panel(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_ui_panel* panel)
+{
+    sdl_scene_status_rail_metrics metrics;
+    SDL_FRect clear_rect;
+    SDL_Rect clip_rect;
+    int available_h_px;
+    u16b i;
+
+    if (!view || !layout || !panel || panel->row_count == 0
+        || layout->left_panel_w_px <= 0)
+    {
+        return false;
+    }
+
+    available_h_px = layout->content_bottom_px - layout->top_strip_h_px;
+    if (!sdl_scene_ui_measure_status_rail(view, panel, layout->canvas_w,
+            available_h_px, &metrics))
+    {
+        return false;
+    }
+    metrics.panel_w_px = layout->left_panel_w_px;
+
+    clear_rect.x = 0.0f;
+    clear_rect.y = (float)layout->top_strip_h_px;
+    clear_rect.w = (float)metrics.panel_w_px;
+    clear_rect.h = (float)(metrics.row_visible * metrics.line_h);
+    if (clear_rect.w <= 0.0f || clear_rect.h <= 0.0f)
+        return false;
+    sdl_scene_fill_rect(&clear_rect, (SDL_Color){ 0, 0, 0, 255 });
+
+    clip_rect.x = 0;
+    clip_rect.y = (int)clear_rect.y;
+    clip_rect.w = metrics.panel_w_px;
+    clip_rect.h = (int)clear_rect.h;
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+
+    for (i = 0; i < (u16b)metrics.row_visible; i++)
+    {
+        const app_ui_row* row = &panel->rows[i];
+        float y_px = clear_rect.y + (float)((int)i * metrics.line_h);
+        const char* label_text = sdl_scene_ui_status_label_text(row);
+        byte label_attr = row->attr ? row->attr : TERM_WHITE;
+        byte meta_attr = row->meta_attr ? row->meta_attr : label_attr;
+        int label_w = sdl_scene_ui_status_label_width_px(metrics.mono_font,
+            metrics.story_font, row, label_text);
+        int meta_w = sdl_scene_measure_ui_text(metrics.mono_font, row->meta);
+        float content_x = (float)metrics.left_inset_px;
+
+        if (row->flags & APP_UI_ITEM_FLAG_SECTION)
+        {
+            sdl_scene_render_status_rail_label(metrics.mono_font,
+                metrics.story_font, content_x, y_px, metrics.line_h, label_attr,
+                row->flags, row->label[0] ? row->label : row->key);
+            continue;
+        }
+
+        if (row->extra_icon_char)
+        {
+            int group_w = label_w + metrics.icon_slot_w + meta_w;
+            float x_px;
+
+            if (row->icon_char)
+            {
+                group_w += metrics.icon_slot_w;
+                if (label_w > 0 && meta_w > 0)
+                    group_w += metrics.gap_px;
+                x_px = (float)metrics.panel_w_px - (float)group_w;
+                if (x_px < content_x)
+                    x_px = content_x;
+                sdl_scene_render_icon(metrics.mono_font, x_px, y_px,
+                    metrics.icon_slot_w, metrics.line_h, row->icon_attr,
+                    row->icon_char);
+                x_px += (float)metrics.icon_slot_w;
+                if (row->label[0])
+                {
+                    sdl_scene_render_ui_text_line(metrics.mono_font, x_px, y_px,
+                        metrics.line_h, sdl_scene_color(label_attr), row->label);
+                }
+                x_px += (float)label_w;
+                if (label_w > 0 && meta_w > 0)
+                    x_px += (float)metrics.gap_px;
+                sdl_scene_render_icon(metrics.mono_font, x_px, y_px,
+                    metrics.icon_slot_w, metrics.line_h,
+                    row->extra_icon_attr, row->extra_icon_char);
+                if (row->meta[0])
+                {
+                    sdl_scene_render_ui_text_line(metrics.mono_font,
+                        x_px + (float)metrics.icon_slot_w, y_px,
+                        metrics.line_h, sdl_scene_color(meta_attr), row->meta);
+                }
+            }
+            else
+            {
+                if (label_w > 0 && meta_w > 0)
+                    group_w += metrics.gap_px;
+                x_px = (float)metrics.panel_w_px - (float)group_w;
+                if (x_px < content_x)
+                    x_px = content_x;
+                if (row->label[0])
+                {
+                    sdl_scene_render_ui_text_line(metrics.mono_font, x_px, y_px,
+                        metrics.line_h, sdl_scene_color(label_attr), row->label);
+                }
+                x_px += (float)label_w;
+                if (label_w > 0 && meta_w > 0)
+                    x_px += (float)metrics.gap_px;
+                sdl_scene_render_icon(metrics.mono_font, x_px, y_px,
+                    metrics.icon_slot_w, metrics.line_h,
+                    row->extra_icon_attr, row->extra_icon_char);
+                if (row->meta[0])
+                {
+                    sdl_scene_render_ui_text_line(metrics.mono_font,
+                        x_px + (float)metrics.icon_slot_w, y_px,
+                        metrics.line_h, sdl_scene_color(meta_attr), row->meta);
+                }
+            }
+            continue;
+        }
+
+        if (row->icon_char)
+        {
+            sdl_scene_render_icon(metrics.mono_font, content_x, y_px,
+                metrics.icon_slot_w, metrics.line_h, row->icon_attr,
+                row->icon_char);
+            if (row->label[0])
+            {
+                sdl_scene_render_status_rail_label(metrics.mono_font,
+                    metrics.story_font,
+                    content_x + (float)(metrics.icon_slot_w + metrics.gap_px),
+                    y_px, metrics.line_h, label_attr, row->flags, row->label);
+            }
+            if (row->meta[0])
+            {
+                float meta_x = (float)metrics.panel_w_px - (float)meta_w;
+                float min_meta_x = (row->label[0]
+                    ? content_x + (float)(metrics.icon_slot_w + metrics.gap_px
+                        + label_w + metrics.gap_px)
+                    : content_x + (float)metrics.icon_slot_w);
+
+                if (meta_x < min_meta_x)
+                    meta_x = min_meta_x;
+                sdl_scene_render_ui_text_line(metrics.mono_font, meta_x, y_px,
+                    metrics.line_h, sdl_scene_color(meta_attr), row->meta);
+            }
+            continue;
+        }
+
+        if (label_text[0])
+        {
+            sdl_scene_render_status_rail_label(metrics.mono_font,
+                metrics.story_font, content_x, y_px, metrics.line_h, label_attr,
+                row->flags, label_text);
+        }
+        if (row->meta[0])
+        {
+            float meta_x = (float)metrics.panel_w_px - (float)meta_w;
+
+            if (label_text[0]
+                && meta_x < content_x + (float)(label_w + metrics.gap_px))
+            {
+                meta_x = content_x + (float)(label_w + metrics.gap_px);
+            }
+            if (meta_x < content_x)
+                meta_x = content_x;
+            sdl_scene_render_ui_text_line(metrics.mono_font, meta_x, y_px,
+                metrics.line_h, sdl_scene_color(meta_attr), row->meta);
+        }
+    }
+
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
+    return true;
+}
+
+static bool sdl_scene_render_chrome_scene(const sdl_view* view,
+    const sdl_scene_layout* layout, const app_ui_scene* scene)
+{
+    u16b i;
+
+    if (!view || !layout || !scene)
+        return false;
+
+    /* Keep dungeon chrome geometry and rendering coupled in this renderer. */
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        const app_ui_panel* panel = &scene->panels[i];
+
+        if (!(panel->flags & APP_UI_PANEL_FLAG_ACTIVE))
+            continue;
+
+        if (panel->style == APP_UI_PANEL_STYLE_STRIP)
+        {
+            if (!sdl_scene_render_chrome_strip_panel(view, layout, panel))
+                return false;
+            continue;
+        }
+
+        if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
+        {
+            if (!sdl_scene_render_chrome_status_rail_panel(view, layout, panel))
+                return false;
+            continue;
+        }
+
+        log_warn("dungeon chrome render: unsupported panel style %u",
+            (unsigned)panel->style);
+        return false;
+    }
+
+    return true;
 }
 
 static const app_snapshot_blob* sdl_scene_find_blob(
@@ -1531,9 +1958,12 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         SDL_SetRenderClipRect(g_state.renderer, NULL);
 
     sdl_scene_render_combat_overlay(main_view, &layout, map, panes);
-    if (chrome_scene)
-        (void)sdl_scene_ui_render_overlay(main_view, layout.canvas_w,
-            layout.canvas_h, chrome_scene);
+    if (chrome_scene && !sdl_scene_render_chrome_scene(main_view, &layout,
+            chrome_scene))
+    {
+        SDL_SetRenderTarget(g_state.renderer, NULL);
+        return false;
+    }
     if (transient_scene)
         (void)sdl_scene_ui_render_overlay(main_view,
             layout.canvas_w, layout.canvas_h, transient_scene);

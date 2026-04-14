@@ -3,6 +3,7 @@
 #include "app-scene-dungeon.h"
 #include "app-session.h"
 #include "externs.h"
+#include "log/log.h"
 #include "melee/melee-combat-display.h"
 #include "ui/ui-status.h"
 
@@ -164,10 +165,55 @@ static void app_text_snapshot_set(app_text_snapshot* text, byte attr,
     SDL_strlcpy(text->text, value, sizeof(text->text));
 }
 
-static bool app_dungeon_compact_height(void)
+static void app_status_compact_line_clear(app_status_compact_line* compact)
 {
-    return SIL_UI_COMPACT_HEIGHT ? true : false;
+    if (!compact)
+        return;
+
+    memset(compact, 0, sizeof(*compact));
 }
+
+static bool app_status_compact_line_append(app_status_compact_line* compact,
+    byte attr, bool required, cptr long_text, cptr short_text)
+{
+    app_status_compact_segment* segment;
+
+    if (!compact || !long_text || !long_text[0]
+        || compact->segment_count >= APP_DUNGEON_COMPACT_SEGMENT_MAX)
+    {
+        return false;
+    }
+
+    segment = &compact->segments[compact->segment_count++];
+    memset(segment, 0, sizeof(*segment));
+    segment->attr = attr;
+    segment->required = required ? 1 : 0;
+    SDL_strlcpy(segment->long_text, long_text, sizeof(segment->long_text));
+    SDL_strlcpy(segment->short_text,
+        (short_text && short_text[0]) ? short_text : long_text,
+        sizeof(segment->short_text));
+    return true;
+}
+
+static bool app_status_text_snapshot_copy(const app_text_snapshot* text,
+    char* out_text, size_t out_text_sz, byte* out_attr)
+{
+    if (out_text && out_text_sz)
+        out_text[0] = '\0';
+    if (out_attr)
+        *out_attr = TERM_WHITE;
+    if (!text || !text->active || !text->text[0])
+        return false;
+
+    if (out_text && out_text_sz)
+        SDL_strlcpy(out_text, text->text, out_text_sz);
+    if (out_attr)
+        *out_attr = text->attr;
+    return true;
+}
+
+static void app_build_light_text(app_text_snapshot* out_text);
+static void app_build_armor_text(app_text_snapshot* out_text);
 
 byte app_status_depth_attr_live(void)
 {
@@ -302,6 +348,25 @@ static cptr app_partition_abbrev_for_point(int y, int x)
     default:
         return "";
     }
+}
+
+static cptr app_partition_short_label(cptr long_label)
+{
+    if (!long_label || !long_label[0])
+        return "";
+    if (!strcmp(long_label, "Room"))
+        return "Rm";
+    if (!strcmp(long_label, "Ruin"))
+        return "Ru";
+    if (!strcmp(long_label, "Cave"))
+        return "Cv";
+    if (!strcmp(long_label, "BigCa"))
+        return "BC";
+    if (!strcmp(long_label, "Labir"))
+        return "Lb";
+    if (!strcmp(long_label, "Chasm"))
+        return "Ch";
+    return long_label;
 }
 
 static void app_status_row_clear(app_ui_row* row)
@@ -632,6 +697,8 @@ static void app_build_hunger_text(app_text_snapshot* out_text)
         app_text_snapshot_set(out_text, TERM_ORANGE, "Weak");
     else if (p_ptr->food < PY_FOOD_ALERT)
         app_text_snapshot_set(out_text, TERM_YELLOW, "Hungry");
+    else if (p_ptr->food >= PY_FOOD_MAX)
+        app_text_snapshot_set(out_text, TERM_GREEN, "Full");
     else if (p_ptr->food >= PY_FOOD_FULL)
         app_text_snapshot_set(out_text, TERM_L_GREEN, "Full");
 }
@@ -729,44 +796,360 @@ static void app_build_depth_text(app_text_snapshot* out_text)
     app_text_snapshot_set(out_text, app_status_depth_attr_live(), buf);
 }
 
+static bool app_status_song_name_live(int song, char* out_text,
+    size_t out_text_sz)
+{
+    cptr song_name;
+
+    if (!out_text || !out_text_sz || !p_ptr || song == SNG_NOTHING)
+        return false;
+
+    song_name = b_name + (&b_info[ability_index(S_SNG, song)])->name;
+    SDL_strlcpy(out_text, song_name + 8, out_text_sz);
+    return out_text[0] != '\0';
+}
+
+bool app_status_song_lines_live(char* out_primary, size_t out_primary_sz,
+    byte* out_primary_attr, char* out_secondary, size_t out_secondary_sz,
+    byte* out_secondary_attr)
+{
+    bool primary_active = false;
+    bool secondary_active = false;
+
+    if (out_primary && out_primary_sz)
+        out_primary[0] = '\0';
+    if (out_secondary && out_secondary_sz)
+        out_secondary[0] = '\0';
+    if (out_primary_attr)
+        *out_primary_attr = TERM_L_BLUE;
+    if (out_secondary_attr)
+        *out_secondary_attr = TERM_BLUE;
+    if (!p_ptr)
+        return false;
+
+    primary_active = app_status_song_name_live(p_ptr->song1, out_primary,
+        out_primary_sz);
+    secondary_active = app_status_song_name_live(p_ptr->song2, out_secondary,
+        out_secondary_sz);
+    return primary_active || secondary_active;
+}
+
 static void app_build_song_text(app_text_snapshot* out_text)
 {
-    cptr song1_name = (p_ptr->song1 != SNG_NOTHING)
-        ? (b_name + (&b_info[ability_index(S_SNG, p_ptr->song1)])->name)
-        : NULL;
-    cptr song2_name = (p_ptr->song2 != SNG_NOTHING)
-        ? (b_name + (&b_info[ability_index(S_SNG, p_ptr->song2)])->name)
-        : NULL;
-    char buf[APP_DUNGEON_STATUS_TEXT_MAX];
+    char primary[APP_DUNGEON_STATUS_TEXT_MAX];
+    char secondary[APP_DUNGEON_STATUS_TEXT_MAX];
 
-    buf[0] = '\0';
-    if (song1_name && song2_name)
-        strnfmt(buf, sizeof(buf), "%s + %s", song1_name + 8, song2_name + 8);
-    else if (song1_name)
-        SDL_strlcpy(buf, song1_name + 8, sizeof(buf));
-    else if (song2_name)
-        SDL_strlcpy(buf, song2_name + 8, sizeof(buf));
+    primary[0] = '\0';
+    secondary[0] = '\0';
+    if (!app_status_song_lines_live(primary, sizeof(primary), NULL, secondary,
+            sizeof(secondary), NULL))
+    {
+        app_text_snapshot_clear(out_text);
+        return;
+    }
 
-    app_text_snapshot_set(out_text, TERM_L_BLUE, buf);
+    if (primary[0] && secondary[0])
+    {
+        char buf[APP_DUNGEON_STATUS_TEXT_MAX];
+
+        strnfmt(buf, sizeof(buf), "%s + %s", primary, secondary);
+        app_text_snapshot_set(out_text, TERM_L_BLUE, buf);
+    }
+    else if (primary[0])
+    {
+        app_text_snapshot_set(out_text, TERM_L_BLUE, primary);
+    }
+    else
+    {
+        app_text_snapshot_set(out_text, TERM_BLUE, secondary);
+    }
+}
+
+bool app_status_text_live(app_status_text_kind kind, char* out_text,
+    size_t out_text_sz, byte* out_attr)
+{
+    app_text_snapshot text;
+    cptr partition_label = "";
+
+    app_text_snapshot_clear(&text);
+    if (!p_ptr)
+        return app_status_text_snapshot_copy(&text, out_text, out_text_sz,
+            out_attr);
+
+    switch (kind)
+    {
+    case APP_STATUS_TEXT_HUNGER:
+        app_build_hunger_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_BLIND:
+        app_build_condition_text(&text, p_ptr->blind, TERM_ORANGE, "Blind");
+        break;
+
+    case APP_STATUS_TEXT_CONFUSED:
+        app_build_condition_text(&text, p_ptr->confused, TERM_ORANGE,
+            "Confused");
+        break;
+
+    case APP_STATUS_TEXT_AFRAID:
+        app_build_condition_text(&text, p_ptr->afraid, TERM_ORANGE, "Afraid");
+        break;
+
+    case APP_STATUS_TEXT_CUT:
+        app_build_cut_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_POISONED:
+        app_build_poison_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_STUN:
+        app_build_stun_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_SPEED:
+        app_build_speed_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_TERRAIN:
+        app_build_terrain_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_DEPTH:
+        app_build_depth_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_PARTITION:
+        partition_label = app_partition_abbrev_for_point(p_ptr->py, p_ptr->px);
+        if (partition_label[0])
+            app_text_snapshot_set(&text, TERM_WHITE, partition_label);
+        break;
+
+    case APP_STATUS_TEXT_STATE:
+    {
+        char short_text[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+        byte attr = TERM_WHITE;
+
+        short_text[0] = '\0';
+        if (app_status_state_text_live(out_text, out_text_sz, short_text,
+                sizeof(short_text), &attr))
+        {
+            if (out_attr)
+                *out_attr = attr;
+            return true;
+        }
+        return false;
+    }
+
+    case APP_STATUS_TEXT_SONG:
+        app_build_song_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_LIGHT:
+        app_build_light_text(&text);
+        break;
+
+    case APP_STATUS_TEXT_EVASION:
+        app_build_armor_text(&text);
+        break;
+
+    default:
+        return false;
+    }
+
+    return app_status_text_snapshot_copy(&text, out_text, out_text_sz, out_attr);
+}
+
+bool app_status_compact_line_build_live(app_status_compact_line* compact,
+    bool include_song, bool include_wounds)
+{
+    char long_text[APP_DUNGEON_STATUS_TEXT_MAX];
+    char state_long[APP_DUNGEON_STATUS_TEXT_MAX];
+    char state_short[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+    byte state_attr = TERM_WHITE;
+    byte attr = TERM_WHITE;
+
+    if (!compact || !p_ptr)
+        return false;
+
+    app_status_compact_line_clear(compact);
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_HUNGER, long_text,
+            sizeof(long_text), &attr))
+    {
+        cptr hunger_short = "Hu";
+
+        if (!strcmp(long_text, "Starving"))
+            hunger_short = "St";
+        else if (!strcmp(long_text, "Weak"))
+            hunger_short = "Wk";
+        else if (!strcmp(long_text, "Full"))
+            hunger_short = "Fu";
+
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            hunger_short);
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_BLIND, long_text,
+            sizeof(long_text), &attr))
+    {
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            "Bl");
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_CONFUSED, long_text,
+            sizeof(long_text), &attr))
+    {
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            "Cn");
+    }
+
+    if (include_wounds)
+    {
+        char cut_short[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+
+        cut_short[0] = '\0';
+        long_text[0] = '\0';
+        if (app_status_text_live(APP_STATUS_TEXT_CUT, long_text,
+                sizeof(long_text), &attr))
+        {
+            if (!strcmp(long_text, "Mortal wound"))
+                SDL_strlcpy(cut_short, "MW", sizeof(cut_short));
+            else
+                strnfmt(cut_short, sizeof(cut_short), "B%d", p_ptr->cut);
+            (void)app_status_compact_line_append(compact, attr, true, long_text,
+                cut_short);
+        }
+
+        cut_short[0] = '\0';
+        long_text[0] = '\0';
+        if (app_status_text_live(APP_STATUS_TEXT_POISONED, long_text,
+                sizeof(long_text), &attr))
+        {
+            strnfmt(cut_short, sizeof(cut_short), "P%d", p_ptr->poisoned);
+            (void)app_status_compact_line_append(compact, attr, true, long_text,
+                cut_short);
+        }
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_STUN, long_text,
+            sizeof(long_text), &attr))
+    {
+        cptr stun_short = "St";
+
+        if (!strcmp(long_text, "Knocked out"))
+            stun_short = "KO";
+        else if (!strcmp(long_text, "Heavy stun"))
+            stun_short = "HS";
+
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            stun_short);
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_AFRAID, long_text,
+            sizeof(long_text), &attr))
+    {
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            "Af");
+    }
+
+    if (include_song && app_status_text_live(APP_STATUS_TEXT_SONG, long_text,
+            sizeof(long_text), &attr))
+    {
+        char song_short[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+
+        song_short[0] = '\0';
+        strnfmt(song_short, sizeof(song_short), "S:%.*s", 6, long_text);
+        (void)app_status_compact_line_append(compact, attr, false, long_text,
+            song_short);
+    }
+
+    state_long[0] = '\0';
+    state_short[0] = '\0';
+    if (app_status_state_text_live(state_long, sizeof(state_long), state_short,
+            sizeof(state_short), &state_attr))
+    {
+        (void)app_status_compact_line_append(compact, state_attr, false,
+            state_long, state_short);
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_SPEED, long_text,
+            sizeof(long_text), &attr))
+    {
+        cptr speed_short = !strcmp(long_text, "Fast") ? "Fa" : "Sl";
+
+        (void)app_status_compact_line_append(compact, attr, false, long_text,
+            speed_short);
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_TERRAIN, long_text,
+            sizeof(long_text), &attr))
+    {
+        cptr terrain_short = "Sn";
+
+        if (!strcmp(long_text, "Pit"))
+            terrain_short = "Pt";
+        else if (!strcmp(long_text, "Web"))
+            terrain_short = "Wb";
+
+        (void)app_status_compact_line_append(compact, attr, false, long_text,
+            terrain_short);
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_PARTITION, long_text,
+            sizeof(long_text), &attr))
+    {
+        (void)app_status_compact_line_append(compact, attr, false, long_text,
+            app_partition_short_label(long_text));
+    }
+
+    long_text[0] = '\0';
+    if (app_status_text_live(APP_STATUS_TEXT_DEPTH, long_text, sizeof(long_text),
+            &attr))
+    {
+        char depth_short[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+
+        if (!p_ptr->depth)
+            SDL_strlcpy(depth_short, "0'", sizeof(depth_short));
+        else
+            strnfmt(depth_short, sizeof(depth_short), "%d'", p_ptr->depth * 50);
+        (void)app_status_compact_line_append(compact, attr, true, long_text,
+            depth_short);
+    }
+
+    return true;
 }
 
 static void app_build_quiver_text(app_text_snapshot* out_text)
 {
-    object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-    object_type* q2_ptr = &inventory[INVEN_QUIVER2];
+    app_status_quiver_live quiver;
     char buf[APP_DUNGEON_STATUS_TEXT_MAX];
 
     buf[0] = '\0';
-    if (q1_ptr->k_idx)
+    if (!app_status_quiver_live_build(&quiver))
     {
-        strnfmt(buf, sizeof(buf), "Q1 %d/%d", q1_ptr->number,
-            object_stack_limit(q1_ptr));
+        app_text_snapshot_clear(out_text);
+        return;
     }
-    if (q2_ptr->k_idx)
+
+    if (quiver.q1_active)
+    {
+        strnfmt(buf, sizeof(buf), "Q1 %d/%d", quiver.q1_current,
+            quiver.q1_max);
+    }
+    if (quiver.q2_active)
     {
         size_t len = strlen(buf);
         strnfmt(buf + len, sizeof(buf) - len, "%sQ2 %d/%d",
-            len ? " " : "", q2_ptr->number, object_stack_limit(q2_ptr));
+            len ? " " : "", quiver.q2_current, quiver.q2_max);
     }
 
     app_text_snapshot_set(out_text, TERM_L_WHITE, buf);
@@ -854,12 +1237,89 @@ static void app_build_armor_text(app_text_snapshot* out_text)
     app_text_snapshot_set(out_text, TERM_SLATE, buf);
 }
 
-static void app_build_tracked_monster_texts(app_status_build_local* live)
+bool app_status_tracked_monster_live_build(
+    app_status_tracked_monster_live* tracked)
 {
     monster_type* m_ptr;
-    char name[APP_DUNGEON_STATUS_TEXT_MAX];
-    char text[APP_DUNGEON_STATUS_TEXT_MAX];
     int alertness_attr = TERM_WHITE;
+
+    if (!tracked)
+        return false;
+
+    memset(tracked, 0, sizeof(*tracked));
+    tracked->hp_attr = TERM_WHITE;
+    tracked->alertness_attr = TERM_WHITE;
+
+    if (!p_ptr->health_who || p_ptr->image)
+        return false;
+
+    m_ptr = &mon_list[p_ptr->health_who];
+    if (!m_ptr->r_idx || !m_ptr->ml || (m_ptr->hp <= 0))
+        return false;
+
+    tracked->visible = 1;
+    tracked->hp_cur = m_ptr->hp;
+    tracked->hp_max = m_ptr->maxhp;
+    tracked->hp_attr = health_attr(m_ptr->hp, m_ptr->maxhp);
+    tracked->confused = m_ptr->confused ? 1 : 0;
+    tracked->stunned = m_ptr->stunned ? 1 : 0;
+
+    monster_desc(tracked->name, sizeof(tracked->name), m_ptr, 0);
+    strnfmt(tracked->health, sizeof(tracked->health), "%d/%d", m_ptr->hp,
+        m_ptr->maxhp);
+
+    if (get_alertness_text(m_ptr, sizeof(tracked->alertness),
+            tracked->alertness, &alertness_attr))
+    {
+        tracked->alertness_attr = (byte)alertness_attr;
+    }
+
+    return true;
+}
+
+bool app_status_quiver_live_build(app_status_quiver_live* quiver)
+{
+    object_type* q1_ptr;
+    object_type* q2_ptr;
+
+    if (!quiver)
+        return false;
+
+    memset(quiver, 0, sizeof(*quiver));
+    q1_ptr = &inventory[INVEN_QUIVER1];
+    q2_ptr = &inventory[INVEN_QUIVER2];
+
+    if (q1_ptr->k_idx)
+    {
+        quiver->q1_active = 1;
+        quiver->q1_attr = object_attr(q1_ptr);
+        quiver->q1_char = object_char(q1_ptr);
+        quiver->q1_current = q1_ptr->number;
+        quiver->q1_max = object_stack_limit(q1_ptr);
+    }
+
+    if (q2_ptr->k_idx)
+    {
+        quiver->q2_active = 1;
+        quiver->q2_attr = object_attr(q2_ptr);
+        quiver->q2_char = object_char(q2_ptr);
+        quiver->q2_current = q2_ptr->number;
+        quiver->q2_max = object_stack_limit(q2_ptr);
+    }
+
+    if (quiver->q1_active && quiver->q2_active
+        && q1_ptr->tval == q2_ptr->tval
+        && q1_ptr->sval == q2_ptr->sval)
+    {
+        quiver->same_type = 1;
+    }
+
+    return quiver->q1_active || quiver->q2_active;
+}
+
+static void app_build_tracked_monster_texts(app_status_build_local* live)
+{
+    app_status_tracked_monster_live tracked;
 
     app_text_snapshot_clear(&live->tracked_name_text);
     app_text_snapshot_clear(&live->tracked_health_text);
@@ -869,28 +1329,22 @@ static void app_build_tracked_monster_texts(app_status_build_local* live)
     live->tracked_hp_max = 0;
     live->tracked_hp_attr = TERM_WHITE;
 
-    if (!p_ptr->health_who || p_ptr->image)
+    if (!app_status_tracked_monster_live_build(&tracked))
         return;
 
-    m_ptr = &mon_list[p_ptr->health_who];
-    if (!m_ptr->r_idx || !m_ptr->ml || (m_ptr->hp <= 0))
-        return;
+    live->tracked_visible = tracked.visible;
+    live->tracked_hp_cur = tracked.hp_cur;
+    live->tracked_hp_max = tracked.hp_max;
+    live->tracked_hp_attr = tracked.hp_attr;
+    app_text_snapshot_set(&live->tracked_name_text, TERM_L_BLUE, tracked.name);
+    app_text_snapshot_set(&live->tracked_health_text, tracked.hp_attr,
+        tracked.health);
 
-    live->tracked_visible = 1;
-    live->tracked_hp_cur = m_ptr->hp;
-    live->tracked_hp_max = m_ptr->maxhp;
-    live->tracked_hp_attr = health_attr(m_ptr->hp, m_ptr->maxhp);
-
-    monster_desc(name, sizeof(name), m_ptr, 0);
-    app_text_snapshot_set(&live->tracked_name_text, TERM_L_BLUE, name);
-
-    strnfmt(text, sizeof(text), "%d/%d", m_ptr->hp, m_ptr->maxhp);
-    app_text_snapshot_set(&live->tracked_health_text,
-        live->tracked_hp_attr, text);
-
-    if (get_alertness_text(m_ptr, sizeof(text), text, &alertness_attr))
+    if (tracked.alertness[0])
+    {
         app_text_snapshot_set(&live->tracked_alertness_text,
-            (byte)alertness_attr, text);
+            tracked.alertness_attr, tracked.alertness);
+    }
 }
 
 static void app_status_snapshot_build_hidden_left_rows(
@@ -967,7 +1421,6 @@ static void app_status_snapshot_build_left_panel_rows(
     app_ui_row row;
     char value_buf[APP_UI_META_MAX];
     char bar[13];
-    bool compact_height;
     bool need_gap;
     int filled;
     int i;
@@ -984,8 +1437,6 @@ static void app_status_snapshot_build_left_panel_rows(
         return;
     }
 
-    compact_height = (status->flags & APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT)
-        ? true : false;
     status->left_panel_min_width_px = 120;
     status->left_panel_width_cap_px = 260;
 
@@ -1032,8 +1483,7 @@ static void app_status_snapshot_build_left_panel_rows(
         value_buf, true);
     (void)app_status_snapshot_append_row(status, &row);
 
-    if (!compact_height)
-        (void)app_status_snapshot_append_blank_row(status);
+    (void)app_status_snapshot_append_blank_row(status);
 
     comma_number(value_buf, live->exp);
     app_status_row_set_key_meta(&row, TERM_WHITE, "Exp", TERM_L_GREEN,
@@ -1088,40 +1538,37 @@ static void app_status_snapshot_build_left_panel_rows(
         }
         if (live->quiver_text.active)
         {
-            object_type* q1_ptr = &inventory[INVEN_QUIVER1];
-            object_type* q2_ptr = &inventory[INVEN_QUIVER2];
-            bool same_type = q1_ptr->k_idx && q2_ptr->k_idx
-                && q1_ptr->tval == q2_ptr->tval
-                && q1_ptr->sval == q2_ptr->sval;
+            app_status_quiver_live quiver;
 
             app_status_row_clear(&row);
             row.attr = live->quiver_text.attr;
             row.meta_attr = live->quiver_text.attr;
+            (void)app_status_quiver_live_build(&quiver);
 
-            if (same_type)
+            if (quiver.same_type)
             {
                 strnfmt(row.label, sizeof(row.label), "%d/%d",
-                    q1_ptr->number, object_stack_limit(q1_ptr));
+                    quiver.q1_current, quiver.q1_max);
                 strnfmt(row.meta, sizeof(row.meta), "%d/%d",
-                    q2_ptr->number, object_stack_limit(q2_ptr));
-                row.extra_icon_attr = object_attr(q1_ptr);
-                row.extra_icon_char = object_char(q1_ptr);
+                    quiver.q2_current, quiver.q2_max);
+                row.extra_icon_attr = quiver.q1_attr;
+                row.extra_icon_char = quiver.q1_char;
             }
             else
             {
-                if (q1_ptr->k_idx)
+                if (quiver.q1_active)
                 {
-                    row.icon_attr = object_attr(q1_ptr);
-                    row.icon_char = object_char(q1_ptr);
+                    row.icon_attr = quiver.q1_attr;
+                    row.icon_char = quiver.q1_char;
                     strnfmt(row.label, sizeof(row.label), "%d/%d",
-                        q1_ptr->number, object_stack_limit(q1_ptr));
+                        quiver.q1_current, quiver.q1_max);
                 }
-                if (q2_ptr->k_idx)
+                if (quiver.q2_active)
                 {
-                    row.extra_icon_attr = object_attr(q2_ptr);
-                    row.extra_icon_char = object_char(q2_ptr);
+                    row.extra_icon_attr = quiver.q2_attr;
+                    row.extra_icon_char = quiver.q2_char;
                     strnfmt(row.meta, sizeof(row.meta), "%d/%d",
-                        q2_ptr->number, object_stack_limit(q2_ptr));
+                        quiver.q2_current, quiver.q2_max);
                 }
             }
 
@@ -1224,8 +1671,6 @@ bool app_status_snapshot_build_live(app_status_snapshot* status,
     memset(status, 0, sizeof(*status));
     memset(&live, 0, sizeof(live));
     status->format_version = APP_DUNGEON_STATUS_FORMAT_VERSION;
-    if (app_dungeon_compact_height())
-        status->flags |= APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT;
     if (g_hide_left_panel)
         status->flags |= APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL;
     if (wait_state && (wait_state->reason != APP_WAIT_REASON_NONE))
@@ -1530,10 +1975,16 @@ static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
         app_interaction_snapshot_clear(&overlay->interaction);
 
     if (transient_scene)
-    {
-        overlay->flags |= APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU;
         overlay->transient_scene = *transient_scene;
+
+    if (!dungeon_append_active_partition_banner_ui_scene(
+            &overlay->transient_scene))
+    {
+        log_warn("dungeon overlay: failed to append active partition banner");
     }
+
+    if (overlay->transient_scene.panel_count > 0)
+        overlay->flags |= APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU;
 
     snapshot->overlay_size = sizeof(*overlay);
     return true;

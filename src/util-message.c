@@ -5,23 +5,9 @@
 #include "platform-audio.h"
 #include "sdl-main-internal.h"
 
-static bool message_use_legacy_topline_rendering(void)
+static int message_topline_wrap_width(void)
 {
-    return !sdl_scene_stack_handles_main_view();
-}
-
-static int message_topline_wrap_width(bool render_legacy_topline)
-{
-    int w = 80;
-    int h = 24;
-
-    if (!render_legacy_topline)
-        return (int)APP_DUNGEON_MESSAGE_TEXT_MAX - 8;
-
-    (void)Term_get_size(&w, &h);
-    if (w < 20)
-        w = 20;
-    return w;
+    return (int)APP_DUNGEON_MESSAGE_TEXT_MAX - 8;
 }
 
 static bool message_use_semantic_dungeon_cursor(void)
@@ -34,6 +20,137 @@ static bool message_use_semantic_dungeon_cursor(void)
 
     snapshot = app_session_snapshot(session);
     return snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON;
+}
+
+static bool message_use_semantic_menu_prompt(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!session || !sdl_scene_stack_handles_main_view())
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    return snapshot && snapshot->scene == APP_SCENE_KIND_MENU;
+}
+
+static void message_menu_prompt_add_wrapped_text(app_ui_panel* panel,
+    byte attr, cptr text, size_t wrap_chars)
+{
+    const char* cursor = text;
+
+    if (!panel || !text || !text[0])
+        return;
+    if (wrap_chars < 8)
+        wrap_chars = 8;
+
+    while (*cursor && panel->body_line_count < APP_UI_BODY_LINE_MAX)
+    {
+        const char* line_start;
+        const char* line_end;
+        const char* last_space = NULL;
+        char line[APP_UI_TEXT_MAX];
+        size_t line_len;
+
+        while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n')
+            cursor++;
+        if (!*cursor)
+            break;
+
+        line_start = cursor;
+        while (*cursor && *cursor != '\n'
+            && (size_t)(cursor - line_start) < wrap_chars)
+        {
+            if (*cursor == ' ' || *cursor == '\t')
+                last_space = cursor;
+            cursor++;
+        }
+
+        if (*cursor == '\n')
+        {
+            line_end = cursor;
+            cursor++;
+        }
+        else if (*cursor && last_space && last_space > line_start)
+        {
+            line_end = last_space;
+            cursor = last_space + 1;
+        }
+        else
+        {
+            line_end = cursor;
+        }
+
+        while (line_end > line_start
+            && (line_end[-1] == ' ' || line_end[-1] == '\t'))
+        {
+            line_end--;
+        }
+
+        line_len = (size_t)(line_end - line_start);
+        if (line_len == 0)
+            continue;
+        if (line_len >= sizeof(line))
+            line_len = sizeof(line) - 1;
+
+        memcpy(line, line_start, line_len);
+        line[line_len] = '\0';
+        (void)app_ui_panel_add_body_line(panel, attr, line);
+    }
+}
+
+static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
+{
+    app_session* session = app_session_current();
+    app_wait_scope scope;
+    app_ui_scene scene;
+    app_ui_panel* panel;
+
+    if (!message_use_semantic_menu_prompt() || !session)
+        return false;
+
+    app_ui_scene_init(&scene);
+    scene.flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, attr, "Message");
+    message_menu_prompt_add_wrapped_text(panel, attr, text ? text : "", 60);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Press Space, Enter, or Esc to continue.");
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+        "Space/Enter/Esc", "Continue");
+
+    app_session_push_wait_scope(session, &scope,
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+    app_session_clear_inputs(session);
+    if (!app_session_publish_menu_scene(session, &scene))
+    {
+        app_session_pop_wait_scope(session, &scope);
+        return false;
+    }
+
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    while (1)
+    {
+        char ch = inkey();
+
+        if (quick_messages)
+            break;
+        if ((ch == ESCAPE) || (ch == ' '))
+            break;
+        if ((ch == '\n') || (ch == '\r'))
+            break;
+        bell("Illegal response to a 'more' prompt!");
+    }
+
+    app_session_clear_inputs(session);
+    app_session_pop_wait_scope(session, &scope);
+    return true;
 }
 
 /*
@@ -584,15 +701,17 @@ void messages_free(void)
 /*
  * Move the cursor
  */
+static int message_column = 0;
+static char message_topline[1024];
+static u16b message_topline_type = MSG_GENERIC;
+static byte message_topline_color = TERM_WHITE;
+static bool message_topline_active = false;
+
 static void message_topline_reset(void);
 static void message_topline_append(cptr text, u16b type, byte color);
 
 void move_cursor(int row, int col)
 {
-    if (message_use_semantic_dungeon_cursor())
-        return;
-
-    Term_gotoxy(col, row);
     app_session_note_cursor_absolute(app_session_current(), row, col,
         !inkey_cursor_hidden());
 }
@@ -605,12 +724,8 @@ static void msg_flush(int x)
     byte a = TERM_L_BLUE;
     app_wait_scope scope;
     app_session* session = app_session_current();
-    bool render_legacy_topline = message_use_legacy_topline_rendering();
+    bool semantic_menu_prompt = message_use_semantic_menu_prompt();
     bool semantic_cursor = message_use_semantic_dungeon_cursor();
-
-    /* Pause for response */
-    if (render_legacy_topline)
-        Term_putstr(x, 0, -1, a, "-more-");
 
     /* Place the cursor on the player or target */
     if (hilite_player)
@@ -635,50 +750,51 @@ static void msg_flush(int x)
 
     if (!auto_more)
     {
-        if (app_session_interactions_enabled(session))
+        if (semantic_menu_prompt)
         {
-            app_session_begin_interaction(session, APP_INTERACTION_KIND_PROMPT,
-                APP_WAIT_REASON_INFORMATIONAL_PAUSE,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL);
-            app_session_set_interaction_prompt(session, a, "-more-");
-            app_session_set_interaction_detail(session, TERM_SLATE,
-                "Press Space, Enter, or Esc to continue.");
+            (void)message_present_semantic_menu_more_prompt(
+                message_topline_color, message_topline);
         }
-
-        app_session_push_wait_scope(session, &scope,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-
-        /* Get an acceptable keypress */
-        while (1)
+        else
         {
-            char ch;
-            ch = inkey();
-            if (quick_messages)
-                break;
-            if ((ch == ESCAPE) || (ch == ' '))
-                break;
-            if ((ch == '\n') || (ch == '\r'))
-                break;
-            bell("Illegal response to a 'more' prompt!");
-        }
+            if (app_session_interactions_enabled(session))
+            {
+                app_session_begin_interaction(session,
+                    APP_INTERACTION_KIND_PROMPT,
+                    APP_WAIT_REASON_INFORMATIONAL_PAUSE,
+                    APP_INTERACTION_FLAG_CAN_CONFIRM
+                        | APP_INTERACTION_FLAG_CAN_CANCEL);
+                app_session_set_interaction_prompt(session, a, "-more-");
+                app_session_set_interaction_detail(session, TERM_SLATE,
+                    "Press Space, Enter, or Esc to continue.");
+            }
 
-        app_session_pop_wait_scope(session, &scope);
-        if (app_session_interactions_enabled(session))
-            app_session_clear_interaction(session);
+            app_session_push_wait_scope(session, &scope,
+                APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+
+            /* Get an acceptable keypress */
+            while (1)
+            {
+                char ch;
+                ch = inkey();
+                if (quick_messages)
+                    break;
+                if ((ch == ESCAPE) || (ch == ' '))
+                    break;
+                if ((ch == '\n') || (ch == '\r'))
+                    break;
+                bell("Illegal response to a 'more' prompt!");
+            }
+
+            app_session_pop_wait_scope(session, &scope);
+            if (app_session_interactions_enabled(session))
+                app_session_clear_interaction(session);
+        }
     }
 
     /* Clear the line */
-    if (render_legacy_topline)
-        Term_erase(0, 0, 255);
     message_topline_reset();
 }
-
-static int message_column = 0;
-static char message_topline[1024];
-static u16b message_topline_type = MSG_GENERIC;
-static byte message_topline_color = TERM_WHITE;
-static bool message_topline_active = false;
 
 static void message_topline_reset(void)
 {
@@ -732,11 +848,10 @@ static void msg_print_aux(u16b type, cptr msg)
     char* t;
     char buf[1024];
     byte color;
-    bool render_legacy_topline = message_use_legacy_topline_rendering();
     int w;
 
     /* Obtain the active wrap width */
-    w = message_topline_wrap_width(render_legacy_topline);
+    w = message_topline_wrap_width();
 
     /* Hack -- Reset */
     if (!msg_flag)
@@ -809,10 +924,6 @@ static void msg_print_aux(u16b type, cptr msg)
         /* Split the message */
         t[split] = '\0';
 
-        /* Display part of the message */
-        if (render_legacy_topline)
-            Term_putstr(0, 0, split, color, t);
-
         /* Flush it */
         msg_flush(split + 1);
 
@@ -828,8 +939,6 @@ static void msg_print_aux(u16b type, cptr msg)
     }
 
     /* Display the tail of the message */
-    if (render_legacy_topline)
-        Term_putstr(message_column, 0, n, color, t);
     message_topline_append(t, type, color);
 
     /* Remember the message */
@@ -837,10 +946,6 @@ static void msg_print_aux(u16b type, cptr msg)
 
     /* Remember the position */
     message_column += n + 1;
-
-    /* Optional refresh */
-    if (render_legacy_topline && fresh_after)
-        Term_fresh();
 
     app_session_mark_snapshot_dirty(app_session_current(),
         APP_SNAPSHOT_INVALIDATE_MESSAGES);

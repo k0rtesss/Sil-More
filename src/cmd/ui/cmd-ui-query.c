@@ -433,15 +433,13 @@ static bool query_symbol_run_snapshot_recall_loop(u16b* who, int n,
  */
 void do_cmd_query_symbol(void)
 {
-    int i, n, r_idx;
+    int i, n;
     char sym, query;
     char buf[128];
 
     bool all = false;
     bool uniq = false;
     bool norm = false;
-
-    bool recall = false;
 
     u16b why = 0;
     u16b* who;
@@ -524,155 +522,45 @@ void do_cmd_query_symbol(void)
         return;
     }
 
-    if (ui_information_scene_supported()
-        && query_symbol_snapshot_choose_mode(buf, n, &query))
+    if (!ui_information_scene_supported())
     {
-        if (query == 'k')
-            why = 4;
-        else if (query == 'p')
-            why = 2;
-
-        if (query == 'y' || query == 'k' || query == 'p')
-        {
-            if (why)
-            {
-                ang_sort_comp = ang_sort_comp_hook;
-                ang_sort_swap = ang_sort_swap_hook;
-                ang_sort(who, &why, n);
-            }
-
-            (void)query_symbol_run_snapshot_recall_loop(who, n, buf);
-        }
-
+        log_warn("query symbol: snapshot renderer required; legacy query recall renderer removed");
+        msg_print("Monster recall requires the snapshot UI renderer.");
         who = mem_free(who);
         return;
     }
 
-    /* Display the result */
-    prt(buf, 0, 0);
-
-    /* Prompt */
-    if (!get_com("Recall details? (k/p/y/n): ", &query))
+    if (!query_symbol_snapshot_choose_mode(buf, n, &query))
     {
+        log_warn("query symbol: semantic recall mode chooser unavailable");
+        msg_print("Monster recall unavailable.");
         who = mem_free(who);
         return;
     }
 
-    /* Sort by kills (and level) */
     if (query == 'k')
-    {
         why = 4;
-        query = 'y';
-    }
-
-    /* Sort by level */
-    if (query == 'p')
-    {
+    else if (query == 'p')
         why = 2;
-        query = 'y';
-    }
 
-    /* Catch "escape" */
-    if (query != 'y')
+    if (query != 'y' && query != 'k' && query != 'p')
     {
-        /* XXX XXX Free the "who" array */
         who = mem_free(who);
-
         return;
     }
 
-    /* Sort if needed */
     if (why)
     {
-        /* Select the sort method */
         ang_sort_comp = ang_sort_comp_hook;
         ang_sort_swap = ang_sort_swap_hook;
-
-        /* Sort the array */
         ang_sort(who, &why, n);
     }
 
-    /* Start at the end */
-    i = n - 1;
-
-    /* Scan the monster memory */
-    while (1)
+    if (!query_symbol_run_snapshot_recall_loop(who, n, buf))
     {
-        /* Extract a race */
-        r_idx = who[i];
-
-        /* Hack -- Auto-recall */
-        monster_race_track(r_idx);
-
-        /* Hack -- Handle stuff */
-        handle_stuff();
-
-        /* Hack -- Begin the prompt */
-        roff_top(r_idx);
-
-        /* Hack -- Complete the prompt */
-        Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
-
-        /* Interact */
-        while (1)
-        {
-            /* Recall (raging players don't get recall) */
-            if (recall)
-            {
-                /* Save screen */
-                screen_save();
-
-                /* Recall on screen */
-                screen_roff(who[i], NULL);
-
-                /* Hack -- Complete the prompt (again) */
-                Term_addstr(-1, TERM_WHITE, " [(r)ecall, ESC]");
-            }
-
-            /* Command */
-            query = inkey();
-
-            /* Unrecall */
-            if (recall)
-            {
-                /* Load screen */
-                screen_load();
-            }
-
-            /* Normal commands */
-            if (query != 'r')
-                break;
-
-            /* Toggle recall */
-            recall = !recall;
-        }
-
-        /* Stop scanning */
-        if (query == ESCAPE)
-            break;
-
-        /* Move to "prev" monster */
-        if (query == '-')
-        {
-            if (++i == n)
-            {
-                i = 0;
-            }
-        }
-
-        /* Move to "next" monster */
-        else
-        {
-            if (i-- == 0)
-            {
-                i = n - 1;
-            }
-        }
+        log_warn("query symbol: semantic recall loop unavailable");
+        msg_print("Monster recall unavailable.");
     }
 
-    /* Re-display the identity */
-    prt(buf, 0, 0);
-
-    /* Free the "who" array */
     who = mem_free(who);
 }

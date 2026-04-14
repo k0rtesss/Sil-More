@@ -9,12 +9,14 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "externs.h"
 #include "level-generation/level-generation-internal.h"
 #include "log/log.h"
 #include "gen-log.h"
 #include "metarun.h"
 #include "platform-time.h"
+#include "ui/ui-information-scene.h"
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>
 #include <string.h>
@@ -24,6 +26,10 @@
 #define LEVEL_GEN_STAGE_DONE LEVEL_GEN_STAGE_COUNT
 #define LEVEL_GEN_SCREEN_DEBUG_LINES 32
 #define LEVEL_GEN_SCREEN_ISSUES 12
+#define LEVEL_GEN_SCREEN_USER_COLS 80
+#define LEVEL_GEN_SCREEN_USER_ROWS 24
+#define LEVEL_GEN_SCREEN_DEBUG_COLS 96
+#define LEVEL_GEN_SCREEN_DEBUG_ROWS 28
 
 typedef struct level_gen_issue_count {
     char key[64];
@@ -33,7 +39,8 @@ typedef struct level_gen_issue_count {
 typedef struct level_gen_screen_state {
     bool active;
     bool debug;
-    bool screen_saved;
+    bool semantic_active;
+    bool overlay_dungeon;
     int attempt;
     int total_failures;
     int stage;
@@ -49,7 +56,17 @@ typedef struct level_gen_screen_state {
     int debug_count;
     level_gen_issue_count issues[LEVEL_GEN_SCREEN_ISSUES];
     int issue_count;
+    ui_information_scene_scope scene_scope;
 } level_gen_screen_state;
+
+typedef struct level_gen_draw_target {
+    bool semantic;
+    bool failed;
+    int cols;
+    int rows;
+    app_ui_scene* scene;
+    app_ui_panel* panel;
+} level_gen_draw_target;
 
 static level_gen_screen_state level_gen_screen = {0};
 char level_gen_debug_last_greater_vault_name[80] = "";
@@ -109,6 +126,35 @@ static void level_gen_screen_build_generated_summary(char* quest_buf,
     size_t quest_buflen, char* roulette_buf, size_t roulette_buflen,
     char* giver_buf, size_t giver_buflen, char* gv_buf, size_t gv_buflen);
 
+static bool level_gen_screen_semantic_publish(const app_ui_scene* scene)
+{
+    app_session* session = app_session_current();
+
+    if (!scene || !session)
+        return false;
+
+    if (level_gen_screen.overlay_dungeon)
+    {
+        if (!app_session_publish_dungeon_overlay_scene(session, scene))
+            return false;
+        level_gen_screen.scene_scope.published_overlay = true;
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        return true;
+    }
+
+    return ui_information_scene_present_ui(scene);
+}
+
+static void level_gen_screen_leave_semantic(void)
+{
+    if (!level_gen_screen.semantic_active)
+        return;
+
+    ui_information_scene_leave(&level_gen_screen.scene_scope);
+    level_gen_screen.semantic_active = false;
+    level_gen_screen.overlay_dungeon = false;
+}
+
 static void level_gen_screen_fit_text(char* buf, size_t buflen, cptr text,
     int max_chars)
 {
@@ -136,44 +182,58 @@ static void level_gen_screen_fit_text(char* buf, size_t buflen, cptr text,
     }
 }
 
-static void level_gen_screen_put_centered(int row, byte attr, cptr text)
+static void level_gen_screen_target_put_text(level_gen_draw_target* target,
+    int row, int col, byte attr, cptr text)
 {
-    int wid = 80;
-    int hgt = 24;
+    if (!target || target->failed || !text || !text[0])
+        return;
+    if (row < 0 || row >= target->rows || col < 0 || col >= target->cols)
+        return;
+
+    if (!target->semantic || !target->scene || !target->panel
+        || !app_ui_panel_add_document_text(target->scene, target->panel,
+            (s16b)row, (s16b)col, attr, text))
+    {
+        target->failed = true;
+    }
+}
+
+static void level_gen_screen_put_centered(level_gen_draw_target* target, int row,
+    byte attr, cptr text)
+{
     char buf[256];
     int col;
 
-    Term_get_size(&wid, &hgt);
-    if (row < 0 || row >= hgt)
+    if (!target || row < 0 || row >= target->rows)
         return;
 
-    level_gen_screen_fit_text(buf, sizeof(buf), text, MAX(1, wid - 2));
-    col = (wid - (int)strlen(buf)) / 2;
+    level_gen_screen_fit_text(buf, sizeof(buf), text, MAX(1, target->cols - 2));
+    col = (target->cols - (int)strlen(buf)) / 2;
     if (col < 0)
         col = 0;
 
-    Term_putstr(col, row, -1, attr, buf);
+    level_gen_screen_target_put_text(target, row, col, attr, buf);
 }
 
-static void level_gen_screen_put_fitted(int col, int row, int width, byte attr,
-    cptr text)
+static void level_gen_screen_put_fitted(level_gen_draw_target* target, int col,
+    int row, int width, byte attr, cptr text)
 {
     char buf[256];
 
-    if (width <= 0)
+    if (!target || width <= 0)
         return;
 
     level_gen_screen_fit_text(buf, sizeof(buf), text, width);
-    Term_putstr(col, row, -1, attr, buf);
+    level_gen_screen_target_put_text(target, row, col, attr, buf);
 }
 
-static int level_gen_screen_print_wrapped(int row, int col, int width,
-    int max_lines, byte attr, cptr text)
+static int level_gen_screen_print_wrapped(level_gen_draw_target* target, int row,
+    int col, int width, int max_lines, byte attr, cptr text)
 {
     const char* p = text ? text : "";
     int lines = 0;
 
-    if (width <= 0 || max_lines <= 0)
+    if (!target || width <= 0 || max_lines <= 0)
         return 0;
 
     while (*p && lines < max_lines)
@@ -234,7 +294,7 @@ static int level_gen_screen_print_wrapped(int row, int col, int width,
         }
 
         buf[len] = '\0';
-        Term_putstr(col, row + lines, -1, attr, buf);
+        level_gen_screen_target_put_text(target, row + lines, col, attr, buf);
         lines++;
 
         if (forced_newline)
@@ -593,8 +653,8 @@ static void level_gen_screen_build_generated_summary(char* quest_buf,
         SDL_strlcpy(gv_buf, "Greater vaults: 0", gv_buflen);
 }
 
-static void level_gen_screen_draw_recent_events(int row, int col, int width,
-    int max_rows)
+static void level_gen_screen_draw_recent_events(level_gen_draw_target* target,
+    int row, int col, int width, int max_rows)
 {
     int start = level_gen_screen.debug_count;
     int used_rows = 0;
@@ -624,15 +684,15 @@ static void level_gen_screen_draw_recent_events(int row, int col, int width,
 
     for (int i = start; i < level_gen_screen.debug_count && max_rows > 0; ++i)
     {
-        int drawn = level_gen_screen_print_wrapped(row, col, width, max_rows,
-            TERM_SLATE, level_gen_screen.debug_lines[i]);
+        int drawn = level_gen_screen_print_wrapped(target, row, col, width,
+            max_rows, TERM_SLATE, level_gen_screen.debug_lines[i]);
 
         row += drawn;
         max_rows -= drawn;
     }
 }
 
-static void level_gen_screen_draw_user(int wid, int hgt)
+static void level_gen_screen_draw_user(level_gen_draw_target* target)
 {
     static const char spinner_frames[] = "|/-\\";
     int top;
@@ -643,6 +703,14 @@ static void level_gen_screen_draw_user(int wid, int hgt)
     int progress_units = 0;
     char buf[256];
     char bar[80];
+    int wid;
+    int hgt;
+
+    if (!target)
+        return;
+
+    wid = target->cols;
+    hgt = target->rows;
 
     level_gen_screen.spinner =
         (level_gen_screen.spinner + 1) % ((int)sizeof(spinner_frames) - 1);
@@ -650,13 +718,15 @@ static void level_gen_screen_draw_user(int wid, int hgt)
     top = MAX(0, (hgt - (LEVEL_GEN_STAGE_COUNT + 8)) / 2);
     row = top;
 
-    level_gen_screen_put_centered(row++, TERM_L_BLUE, "Preparing the Level");
-    level_gen_screen_put_centered(row++, TERM_L_WHITE, level_gen_screen.depth_label);
+    level_gen_screen_put_centered(target, row++, TERM_L_BLUE,
+        "Preparing the Level");
+    level_gen_screen_put_centered(target, row++, TERM_L_WHITE,
+        level_gen_screen.depth_label);
     row++;
 
     if (level_gen_screen.stage == LEVEL_GEN_STAGE_DONE)
     {
-        level_gen_screen_put_centered(
+        level_gen_screen_put_centered(target,
             row++, TERM_L_GREEN,
             level_gen_screen.final_text[0] ? level_gen_screen.final_text
                                            : "The level is ready.");
@@ -667,7 +737,7 @@ static void level_gen_screen_draw_user(int wid, int hgt)
             spinner_frames[level_gen_screen.spinner],
             level_gen_screen.status_text[0] ? level_gen_screen.status_text
                                             : "Preparing the level.");
-        level_gen_screen_put_centered(row++, TERM_YELLOW, buf);
+        level_gen_screen_put_centered(target, row++, TERM_YELLOW, buf);
     }
 
     bar_width = MIN(34, MAX(18, wid - 10));
@@ -693,7 +763,7 @@ static void level_gen_screen_draw_user(int wid, int hgt)
         bar[i + 1] = (i < filled) ? '#' : '.';
     bar[bar_width + 1] = ']';
     bar[bar_width + 2] = '\0';
-    level_gen_screen_put_centered(row++, TERM_L_GREEN, bar);
+    level_gen_screen_put_centered(target, row++, TERM_L_GREEN, bar);
 
     row++;
     stage_row = row;
@@ -717,14 +787,14 @@ static void level_gen_screen_draw_user(int wid, int hgt)
 
         strnfmt(buf, sizeof(buf), "[%c] %s", marker,
             level_gen_stage_user_labels[i]);
-        level_gen_screen_put_centered(stage_row++, attr, buf);
+        level_gen_screen_put_centered(target, stage_row++, attr, buf);
     }
 
-    level_gen_screen_put_centered(
+    level_gen_screen_put_centered(target,
         hgt - 1, TERM_SLATE, "Large levels can take a moment.");
 }
 
-static void level_gen_screen_draw_debug(int wid, int hgt)
+static void level_gen_screen_draw_debug(level_gen_draw_target* target)
 {
     char buf[256];
     char qv_status_buf[256];
@@ -734,18 +804,30 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
     char roulette_buf[256];
     char giver_buf[256];
     char gv_buf[256];
-    int width = MAX(1, wid - 2);
-    int footer_row = MAX(0, hgt - 1);
-    bool split = (wid >= 90);
+    int wid;
+    int hgt;
+    int width;
+    int footer_row;
+    bool split;
 
-    level_gen_screen_put_centered(0, TERM_L_BLUE, "Level Generation Debug");
+    if (!target)
+        return;
+
+    wid = target->cols;
+    hgt = target->rows;
+    width = MAX(1, wid - 2);
+    footer_row = MAX(0, hgt - 1);
+    split = (wid >= 90);
+
+    level_gen_screen_put_centered(target, 0, TERM_L_BLUE,
+        "Level Generation Debug");
 
     strnfmt(buf, sizeof(buf), "%s | attempts %d | retries %d | %s",
         level_gen_screen.depth_label,
         MAX(level_gen_screen.attempt, 1),
         level_gen_screen.total_failures,
         (level_gen_screen.stage == LEVEL_GEN_STAGE_DONE) ? "ready" : "running");
-    level_gen_screen_put_fitted(1, 1, width, TERM_L_WHITE, buf);
+    level_gen_screen_put_fitted(target, 1, 1, width, TERM_L_WHITE, buf);
 
     if (level_gen_debug_active_quest_vault_name[0])
     {
@@ -786,73 +868,76 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
         right_col = left_col + left_w + gap;
         right_w = MAX(10, wid - right_col - 1);
 
-        level_gen_screen_put_fitted(left_col, 2, left_w, TERM_L_BLUE, "Summary:");
-        level_gen_screen_put_fitted(right_col, 2, right_w, TERM_L_BLUE,
+        level_gen_screen_put_fitted(target, left_col, 2, left_w, TERM_L_BLUE,
+            "Summary:");
+        level_gen_screen_put_fitted(target, right_col, 2, right_w, TERM_L_BLUE,
             "Recent generation events:");
 
         strnfmt(buf, sizeof(buf), "Stage: %s",
             (level_gen_screen.stage == LEVEL_GEN_STAGE_DONE)
                 ? "Complete"
                 : level_gen_stage_debug_labels[level_gen_screen.stage]);
-        level_gen_screen_put_fitted(left_col, left_row++, left_w, TERM_YELLOW, buf);
+        level_gen_screen_put_fitted(target, left_col, left_row++, left_w,
+            TERM_YELLOW, buf);
 
         strnfmt(buf, sizeof(buf), "Current: %s",
             level_gen_screen.detail_text[0] ? level_gen_screen.detail_text
                                             : "(waiting)");
-        left_row += level_gen_screen_print_wrapped(
+        left_row += level_gen_screen_print_wrapped(target,
             left_row, left_col, left_w, 2, TERM_SLATE, buf);
 
         strnfmt(buf, sizeof(buf), "Last retry: %s",
             level_gen_screen.last_failure[0] ? level_gen_screen.last_failure
                                              : "(none)");
-        left_row += level_gen_screen_print_wrapped(
+        left_row += level_gen_screen_print_wrapped(target,
             left_row, left_col, left_w, 3, TERM_ORANGE, buf);
 
         if (left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_SLATE, partition_buf);
         }
         if (type_buf[0] && left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_SLATE, type_buf);
         }
         if (left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_YELLOW, quest_buf);
         }
         if (left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_YELLOW, roulette_buf);
         }
         if (left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_YELLOW, giver_buf);
         }
         if (left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_L_GREEN, gv_buf);
         }
         if (qv_status_buf[0] && left_row < footer_row)
         {
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, footer_row - left_row,
                 TERM_ORANGE, qv_status_buf);
         }
 
         if (left_row < footer_row)
-            level_gen_screen_put_fitted(left_col, left_row++, left_w, TERM_L_BLUE,
+            level_gen_screen_put_fitted(target, left_col, left_row++, left_w,
+                TERM_L_BLUE,
                 "Main issues:");
 
         issue_lines = MAX(1, MIN(6,
@@ -875,7 +960,8 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
 
             if (best < 0)
             {
-                level_gen_screen_put_fitted(left_col, left_row++, left_w, TERM_SLATE,
+                level_gen_screen_put_fitted(target, left_col, left_row++,
+                    left_w, TERM_SLATE,
                     "(no retries yet)");
                 break;
             }
@@ -883,13 +969,13 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
             strnfmt(buf, sizeof(buf), "%dx %s",
                 level_gen_screen.issues[best].count,
                 level_gen_screen.issues[best].key);
-            left_row += level_gen_screen_print_wrapped(
+            left_row += level_gen_screen_print_wrapped(target,
                 left_row, left_col, left_w, 2, TERM_SLATE, buf);
             level_gen_screen.issues[best].count *= -1;
         }
 
         recent_lines = MAX(1, footer_row - right_row);
-        level_gen_screen_draw_recent_events(right_row, right_col, right_w,
+        level_gen_screen_draw_recent_events(target, right_row, right_col, right_w,
             recent_lines);
     }
     else
@@ -903,51 +989,53 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
             (level_gen_screen.stage == LEVEL_GEN_STAGE_DONE)
                 ? "Complete"
                 : level_gen_stage_debug_labels[level_gen_screen.stage]);
-        level_gen_screen_put_fitted(1, row++, width, TERM_YELLOW, buf);
+        level_gen_screen_put_fitted(target, 1, row++, width, TERM_YELLOW, buf);
 
         strnfmt(buf, sizeof(buf), "Current: %s",
             level_gen_screen.detail_text[0] ? level_gen_screen.detail_text
                                             : "(waiting)");
-        row += level_gen_screen_print_wrapped(row, 1, width, 2, TERM_SLATE, buf);
+        row += level_gen_screen_print_wrapped(target, row, 1, width, 2,
+            TERM_SLATE, buf);
 
         strnfmt(buf, sizeof(buf), "Last retry: %s",
             level_gen_screen.last_failure[0] ? level_gen_screen.last_failure
                                              : "(none)");
-        row += level_gen_screen_print_wrapped(row, 1, width, 2, TERM_ORANGE, buf);
+        row += level_gen_screen_print_wrapped(target, row, 1, width, 2,
+            TERM_ORANGE, buf);
 
         if (row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_SLATE, partition_buf);
         }
         if (type_buf[0] && row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_SLATE, type_buf);
         }
         if (row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_YELLOW, quest_buf);
         }
         if (row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_YELLOW, roulette_buf);
         }
         if (row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_YELLOW, giver_buf);
         }
         if (row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_L_GREEN, gv_buf);
         }
         if (qv_status_buf[0] && row < footer_row)
         {
-            row += level_gen_screen_print_wrapped(
+            row += level_gen_screen_print_wrapped(target,
                 row, 1, width, footer_row - row, TERM_ORANGE, qv_status_buf);
         }
 
@@ -958,7 +1046,8 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
         recent_lines = MAX(1, remaining - issue_lines - 1);
 
         if (row < footer_row)
-            level_gen_screen_put_fitted(1, row++, width, TERM_L_BLUE, "Main issues:");
+            level_gen_screen_put_fitted(target, 1, row++, width, TERM_L_BLUE,
+                "Main issues:");
 
         for (int shown = 0; shown < issue_lines && row < footer_row; shown++)
         {
@@ -978,7 +1067,8 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
 
             if (best < 0)
             {
-                level_gen_screen_put_fitted(1, row++, width, TERM_SLATE,
+                level_gen_screen_put_fitted(target, 1, row++, width,
+                    TERM_SLATE,
                     "(no retries yet)");
                 break;
             }
@@ -986,15 +1076,16 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
             strnfmt(buf, sizeof(buf), "%dx %s",
                 level_gen_screen.issues[best].count,
                 level_gen_screen.issues[best].key);
-            level_gen_screen_put_fitted(1, row++, width, TERM_SLATE, buf);
+            level_gen_screen_put_fitted(target, 1, row++, width, TERM_SLATE,
+                buf);
             level_gen_screen.issues[best].count *= -1;
         }
 
         if (row < footer_row)
-            level_gen_screen_put_fitted(1, row++, width, TERM_L_BLUE,
+            level_gen_screen_put_fitted(target, 1, row++, width, TERM_L_BLUE,
                 "Recent generation events:");
 
-        level_gen_screen_draw_recent_events(row, 1, width, recent_lines);
+        level_gen_screen_draw_recent_events(target, row, 1, width, recent_lines);
     }
 
     for (int i = 0; i < level_gen_screen.issue_count; i++)
@@ -1002,39 +1093,58 @@ static void level_gen_screen_draw_debug(int wid, int hgt)
 
     if (level_gen_screen.stage == LEVEL_GEN_STAGE_DONE)
     {
-        level_gen_screen_put_centered(
+        level_gen_screen_put_centered(target,
             footer_row, TERM_L_WHITE, "Press any key to continue.");
     }
     else
     {
-        level_gen_screen_put_fitted(1, footer_row, width, TERM_SLATE,
+        level_gen_screen_put_fitted(target, 1, footer_row, width, TERM_SLATE,
             "Watching generation live...");
     }
 }
 
 static void level_gen_screen_draw_now(void)
 {
-    int wid = 80;
-    int hgt = 24;
+    level_gen_draw_target target;
+    app_ui_scene scene;
+    app_ui_panel* panel;
 
     if (!level_gen_screen.active || !Term)
         return;
+    if (!level_gen_screen.semantic_active)
+        return;
 
-    Term_get_size(&wid, &hgt);
-    if (wid < 1)
-        wid = 80;
-    if (hgt < 1)
-        hgt = 24;
-
-    Term_clear();
+    memset(&target, 0, sizeof(target));
+    app_ui_scene_init(&scene);
+    panel = app_ui_scene_append_panel(&scene,
+        level_gen_screen.overlay_dungeon ? APP_UI_LAYER_TRANSIENT
+                                         : APP_UI_LAYER_MODAL);
+    if (panel)
+    {
+        panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+        target.semantic = true;
+        target.cols = level_gen_screen.debug ? LEVEL_GEN_SCREEN_DEBUG_COLS
+                                             : LEVEL_GEN_SCREEN_USER_COLS;
+        target.rows = level_gen_screen.debug ? LEVEL_GEN_SCREEN_DEBUG_ROWS
+                                             : LEVEL_GEN_SCREEN_USER_ROWS;
+        target.scene = &scene;
+        target.panel = panel;
+    }
+    else
+    {
+        target.failed = true;
+    }
 
     if (level_gen_screen.debug)
-        level_gen_screen_draw_debug(wid, hgt);
+        level_gen_screen_draw_debug(&target);
     else
-        level_gen_screen_draw_user(wid, hgt);
+        level_gen_screen_draw_user(&target);
 
-    Term_fresh();
-    Term_xtra(TERM_XTRA_BORED, 0);
+    if (target.failed || !level_gen_screen_semantic_publish(&scene))
+    {
+        log_warn("level generation screen: semantic scene presentation failed");
+        level_gen_screen_leave_semantic();
+    }
 }
 
 static void level_gen_screen_maybe_draw(bool force)
@@ -1089,6 +1199,9 @@ static void level_gen_screen_observer(cptr category, cptr message)
 
 void level_gen_screen_begin(void)
 {
+    app_session* session;
+    const app_snapshot* snapshot;
+
     memset(&level_gen_screen, 0, sizeof(level_gen_screen));
 
     if (!Term)
@@ -1102,8 +1215,19 @@ void level_gen_screen_begin(void)
     SDL_strlcpy(level_gen_screen.status_text, "Preparing the level.",
         sizeof(level_gen_screen.status_text));
 
-    screen_save();
-    level_gen_screen.screen_saved = true;
+    session = app_session_current();
+    if (session && ui_information_scene_enter(&level_gen_screen.scene_scope))
+    {
+        snapshot = app_session_snapshot(session);
+        level_gen_screen.semantic_active = true;
+        level_gen_screen.overlay_dungeon = snapshot
+            && snapshot->scene == APP_SCENE_KIND_DUNGEON;
+    }
+    else
+    {
+        log_warn("level generation screen: semantic scene unavailable");
+    }
+
     gen_log_set_observer(level_gen_screen_observer);
     level_gen_screen_maybe_draw(true);
 }
@@ -1189,14 +1313,18 @@ void level_gen_screen_finish(bool success)
 
     if (success && level_gen_screen.debug)
     {
-        flush();
-        inkey_set_cursor_hidden(true);
-        (void)inkey();
-        inkey_set_cursor_hidden(false);
+        if (level_gen_screen.semantic_active)
+        {
+            app_session* session = app_session_current();
+
+            (void)ui_information_scene_wait_key_nonrepeat();
+            if (session)
+                app_session_clear_inputs(session);
+        }
     }
 
-    if (level_gen_screen.screen_saved)
-        screen_load();
+    if (level_gen_screen.semantic_active)
+        level_gen_screen_leave_semantic();
 
     memset(&level_gen_screen, 0, sizeof(level_gen_screen));
 }

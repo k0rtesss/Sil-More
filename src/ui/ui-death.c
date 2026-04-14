@@ -107,6 +107,233 @@ static bool death_present_ui_page(const app_ui_scene* scene, bool* out_escape)
     return true;
 }
 
+static bool death_add_body_line(app_ui_panel* panel, byte attr, cptr text)
+{
+    if (!panel || !text || !text[0])
+        return true;
+
+    return app_ui_panel_add_body_line(panel, attr, text);
+}
+
+static byte death_status_title_attr(void)
+{
+    if (p_ptr->morgoth_slain && !p_ptr->escaped)
+        return TERM_YELLOW;
+
+    return TERM_L_BLUE;
+}
+
+static cptr death_status_title_text(void)
+{
+    if (p_ptr->escaped)
+    {
+        if (p_ptr->oath_type > 0 && !oath_invalid(p_ptr->oath_type))
+            return "You have escaped and kept your oath";
+
+        return "You have escaped";
+    }
+    if (p_ptr->morgoth_slain)
+        return "You are acclaimed as the Slayer of Morgoth";
+
+    return "You have been slain";
+}
+
+static void death_format_score_day(const high_score* score, char* out,
+    size_t out_size)
+{
+    const char* when;
+
+    if (!out || !out_size)
+        return;
+
+    out[0] = '\0';
+    if (!score)
+        return;
+
+    when = score->day;
+    while (*when && isspace((unsigned char)*when))
+        when++;
+
+    if ((*when == '@') && strlen(when) == 9)
+    {
+        char month_num[3];
+        char month[4];
+
+        SDL_strlcpy(month_num, when + 5, sizeof(month_num));
+        atomonth(atoi(month_num), month);
+        if (*(when + 7) == '0')
+            strnfmt(out, out_size, "%.1s %.3s %.4s", when + 8, month,
+                when + 1);
+        else
+            strnfmt(out, out_size, "%.2s %.3s %.4s", when + 7, month,
+                when + 1);
+        return;
+    }
+
+    SDL_strlcpy(out, when, out_size);
+}
+
+static void death_build_name_line(const high_score* score, char* out,
+    size_t out_size)
+{
+    int ph;
+    char score_commas[16];
+    const char* suffix = "";
+
+    if (!out || !out_size)
+        return;
+
+    out[0] = '\0';
+    if (!score)
+        return;
+
+    ph = atoi(score->p_h);
+    if (ph >= 0 && ph < z_info->c_max)
+        suffix = c_name + c_info[ph].alt_name;
+
+    comma_number(score_commas, score_points(score));
+    strnfmt(out, out_size, "%s%s  [%s pts]", score->who, suffix, score_commas);
+}
+
+static bool death_build_curse_line(const high_score* score, char* out,
+    size_t out_size, byte* out_attr)
+{
+    int curses;
+
+    if (out_attr)
+        *out_attr = TERM_WHITE;
+    if (!out || !out_size)
+        return false;
+
+    out[0] = '\0';
+    if (!score || !scores_version_has_curses(score_file_global_ctx()))
+        return false;
+
+    curses = parse_score_int(score->pts, sizeof(score->pts), 0);
+    if (curses > 0)
+    {
+        strnfmt(out, out_size, "%d curse%s endured", curses,
+            (curses == 1) ? "" : "s");
+        if (out_attr)
+            *out_attr = TERM_L_RED;
+        return true;
+    }
+    if (curses < 0)
+    {
+        strnfmt(out, out_size, "%d blessing%s claimed", -curses,
+            (curses == -1) ? "" : "s");
+        if (out_attr)
+            *out_attr = TERM_L_GREEN;
+        return true;
+    }
+
+    return false;
+}
+
+static void death_build_outcome_line(const high_score* score, char* out,
+    size_t out_size)
+{
+    int silmarils;
+
+    if (!out || !out_size)
+        return;
+
+    out[0] = '\0';
+    if (!score)
+        return;
+
+    silmarils = atoi(score->silmarils);
+    if (score->escaped[0] == 't')
+    {
+        SDL_strlcpy(out, "Escaped the iron hells", out_size);
+        if ((score->morgoth_slain[0] == 't') || (silmarils > 0))
+            SDL_strlcat(out, " and brought back the light of Valinor",
+                out_size);
+        else
+            SDL_strlcat(out, " empty-handed", out_size);
+        return;
+    }
+
+    if (score->morgoth_slain[0] == 't')
+    {
+        strnfmt(out, out_size, "Victorious over Morgoth's illusion (%s)",
+            score->how);
+        return;
+    }
+
+    strnfmt(out, out_size, "Slain by %s", score->how);
+    if (silmarils > 0)
+        SDL_strlcat(out, " during a daring escape", out_size);
+}
+
+static void death_build_run_line(const high_score* score, char* out,
+    size_t out_size)
+{
+    char turns_commas[16];
+    char depth_commas[16];
+    char day[32];
+    int turns;
+    int depth;
+
+    if (!out || !out_size)
+        return;
+
+    out[0] = '\0';
+    if (!score)
+        return;
+
+    turns = atoi(score->turns);
+    depth = atoi(score->cur_dun) * 50;
+    comma_number(turns_commas, turns);
+    comma_number(depth_commas, depth);
+    death_format_score_day(score, day, sizeof(day));
+
+    if (day[0])
+    {
+        strnfmt(out, out_size, "Depth %s ft, after %s turns. (%s)",
+            depth_commas, turns_commas, day);
+    }
+    else
+    {
+        strnfmt(out, out_size, "Depth %s ft, after %s turns.",
+            depth_commas, turns_commas);
+    }
+}
+
+static bool death_build_trophy_line(const high_score* score, char* out,
+    size_t out_size)
+{
+    int silmarils;
+
+    if (!out || !out_size)
+        return false;
+
+    out[0] = '\0';
+    if (!score)
+        return false;
+
+    silmarils = atoi(score->silmarils);
+    if (score->morgoth_slain[0] == 't')
+        SDL_strlcat(out, "V", out_size);
+    if (silmarils >= 1)
+        SDL_strlcat(out, out[0] ? "  *" : "*", out_size);
+    if (silmarils >= 2)
+        SDL_strlcat(out, " *", out_size);
+    if (silmarils >= 3)
+        SDL_strlcat(out, " *", out_size);
+
+    if (!out[0])
+        return false;
+
+    {
+        char decorated[APP_UI_TEXT_MAX];
+
+        strnfmt(decorated, sizeof(decorated), "Trophies: %s", out);
+        SDL_strlcpy(out, decorated, out_size);
+    }
+    return true;
+}
+
 static bool death_build_inventory_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
@@ -480,15 +707,16 @@ static bool death_build_equipment_scene(app_ui_scene* scene)
         (s16b)MAX(0, term_wid - 18), TERM_L_WHITE, 0, "(press any key)");
 }
 
-static bool death_build_final_menu_scene(app_ui_scene* scene, int highlight,
-    bool morgoth_victory)
+static bool death_build_final_menu_scene(app_ui_scene* scene,
+    const high_score* score, int highlight, bool morgoth_victory)
 {
     app_ui_panel* panel;
-    int term_wid;
-    int term_hgt;
-    int separator_row;
-    int option_row;
-    char separator[96];
+    char summary[APP_UI_TEXT_MAX];
+    char outcome[APP_UI_TEXT_MAX];
+    char run_line[APP_UI_TEXT_MAX];
+    char trophy_line[APP_UI_TEXT_MAX];
+    char curse_line[APP_UI_TEXT_MAX];
+    byte curse_attr = TERM_WHITE;
     const char* option_a = morgoth_victory ? "a) Review the Valar's record"
                                            : "a) View scores";
     const char* option_b = morgoth_victory ? "b) Survey Angband one last time"
@@ -503,85 +731,76 @@ static bool death_build_final_menu_scene(app_ui_scene* scene, int highlight,
                                            : "f) Save character sheet";
     const char* option_g = "g) Exit";
 
-    panel = death_begin_document_scene(scene, true, true);
+    if (!scene || !score)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
     if (!panel)
         return false;
 
-    death_get_term_size(&term_wid, &term_hgt);
-    separator_row = (term_hgt < 20) ? 9 : 10;
-    option_row = separator_row + 2;
-    memset(separator, '_', sizeof(separator) - 1);
-    separator[MIN((int)sizeof(separator) - 1, MAX(1, term_wid - 6))] = '\0';
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 900, 1360);
+    app_ui_panel_set_title(panel, death_status_title_attr(),
+        death_status_title_text());
 
-    return death_scene_add_text(scene, panel, (s16b)separator_row, 3,
-               TERM_L_DARK, 0, separator)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 1) ? TERM_L_BLUE : TERM_WHITE, 0, option_a)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 2) ? TERM_L_BLUE : TERM_WHITE, 0, option_b)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 3) ? TERM_L_BLUE : TERM_WHITE, 0, option_c)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 4) ? TERM_L_BLUE : TERM_WHITE, 0, option_d)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 5) ? TERM_L_BLUE : TERM_WHITE, 0, option_e)
-        && death_scene_add_text(scene, panel, (s16b)option_row++, 15,
-            (highlight == 6) ? TERM_L_BLUE : TERM_WHITE, 0, option_f)
-        && death_scene_add_text(scene, panel, (s16b)option_row, 15,
-            (highlight == 7) ? TERM_L_BLUE : TERM_WHITE, 0, option_g);
-}
+    death_build_name_line(score, summary, sizeof(summary));
+    if (summary[0])
+        app_ui_panel_set_subtitle(panel, TERM_WHITE, summary);
 
-static char death_wait_final_menu_key_legacy(int highlight,
-    bool morgoth_victory)
-{
-    char ch;
-    int term_wid;
-    int term_hgt;
-    int separator_row;
-    int option_row;
-    char separator[96];
-    const char* option_a = morgoth_victory ? "a) Review the Valar's record"
-                                           : "a) View scores";
-    const char* option_b = morgoth_victory ? "b) Survey Angband one last time"
-                                           : "b) Final look";
-    const char* option_c = morgoth_victory ? "c) Rehear the proclamations"
-                                           : "c) View final messages";
-    const char* option_d = morgoth_victory ? "d) Review your legend"
-                                           : "d) View character sheet";
-    const char* option_e = morgoth_victory ? "e) Append to the annals"
-                                           : "e) Add comment to notes";
-    const char* option_f = morgoth_victory ? "f) Archive your legend"
-                                           : "f) Save character sheet";
-    const char* option_exit = "g) Exit";
+    if (death_build_curse_line(score, curse_line, sizeof(curse_line),
+            &curse_attr))
+    {
+        if (!death_add_body_line(panel, curse_attr, curse_line))
+            return false;
+    }
 
-    death_get_term_size(&term_wid, &term_hgt);
-    separator_row = (term_hgt < 20) ? 9 : 10;
-    option_row = separator_row + 2;
-    memset(separator, '_', sizeof(separator) - 1);
-    separator[MIN((int)sizeof(separator) - 1, MAX(1, term_wid - 6))] = '\0';
+    death_build_outcome_line(score, outcome, sizeof(outcome));
+    death_build_run_line(score, run_line, sizeof(run_line));
 
-    Term_putstr(3, separator_row, term_wid - 6, TERM_L_DARK, separator);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 1) ? TERM_L_BLUE : TERM_WHITE, option_a);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 2) ? TERM_L_BLUE : TERM_WHITE, option_b);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 3) ? TERM_L_BLUE : TERM_WHITE, option_c);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 4) ? TERM_L_BLUE : TERM_WHITE, option_d);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 5) ? TERM_L_BLUE : TERM_WHITE, option_e);
-    Term_putstr(15, option_row++, term_wid - 15,
-        (highlight == 6) ? TERM_L_BLUE : TERM_WHITE, option_f);
-    Term_putstr(15, option_row, term_wid - 15,
-        (highlight == 7) ? TERM_L_BLUE : TERM_WHITE, option_exit);
-    Term_fresh();
-    Term_gotoxy(10, separator_row + 1 + highlight);
+    if (!death_add_body_line(panel, TERM_WHITE, outcome)
+        || !death_add_body_line(panel, TERM_SLATE, run_line)
+        || !death_add_body_line(panel, TERM_L_DARK,
+            "________________________________________"))
+        return false;
 
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
-    return ch;
+    if (death_build_trophy_line(score, trophy_line, sizeof(trophy_line))
+        && !death_add_body_line(panel, TERM_YELLOW, trophy_line))
+    {
+        return false;
+    }
+
+    if (!death_add_body_line(panel,
+            (highlight == 1) ? TERM_L_BLUE : TERM_WHITE, option_a)
+        || !death_add_body_line(panel,
+            (highlight == 2) ? TERM_L_BLUE : TERM_WHITE, option_b)
+        || !death_add_body_line(panel,
+            (highlight == 3) ? TERM_L_BLUE : TERM_WHITE, option_c)
+        || !death_add_body_line(panel,
+            (highlight == 4) ? TERM_L_BLUE : TERM_WHITE, option_d)
+        || !death_add_body_line(panel,
+            (highlight == 5) ? TERM_L_BLUE : TERM_WHITE, option_e)
+        || !death_add_body_line(panel,
+            (highlight == 6) ? TERM_L_BLUE : TERM_WHITE, option_f)
+        || !death_add_body_line(panel,
+            (highlight == 7) ? TERM_L_BLUE : TERM_WHITE, option_g))
+    {
+        return false;
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Choose");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "a-g", "Jump");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "Esc", "Exit");
+
+    return true;
 }
 
 void do_cmd_morgoth_victory(void)
@@ -622,29 +841,6 @@ void do_cmd_morgoth_victory(void)
         blitz_show_end_summary(3);
 }
 
-void ui_death_print_tomb(struct high_score* the_score)
-{
-    if (p_ptr->escaped)
-    {
-        if (p_ptr->oath_type > 0 && !oath_invalid(p_ptr->oath_type))
-            Term_putstr(
-                15, 2, -1, TERM_L_BLUE, "You have escaped and kept your oath");
-        else
-            Term_putstr(15, 2, -1, TERM_L_BLUE, "You have escaped");
-    }
-    else if (p_ptr->morgoth_slain)
-    {
-        Term_putstr(15, 2, -1, TERM_YELLOW,
-            "You are acclaimed as the Slayer of Morgoth");
-    }
-    else
-    {
-        Term_putstr(15, 2, -1, TERM_L_BLUE, "You have been slain");
-    }
-
-    display_single_score(TERM_WHITE, 1, 0, 0, false, the_score);
-}
-
 void ui_death_show_character_info(void)
 {
     app_ui_scene character_scene;
@@ -681,25 +877,22 @@ void ui_death_show_character_info(void)
 
     if (!have_character_scene || !have_equipment_scene || !have_inventory_scene)
     {
-        log_warn("death character info: semantic scene build failed; legacy fallback removed");
-        do_cmd_knowledge_notes();
+        log_warn("death character info: semantic scenes required");
         return;
     }
 
     if (!ui_information_scene_enter(&scope))
     {
-        log_warn("death character info: semantic scene entry required; legacy fallback removed");
-        do_cmd_knowledge_notes();
+        log_warn("death character info: semantic scene entry required");
         return;
     }
 
-    if (!death_present_ui_page(&character_scene, &escaped))
-    {
-        ui_information_scene_leave(&scope);
-        log_warn("death character info: failed to present character sheet scene");
-        do_cmd_knowledge_notes();
-        return;
-    }
+        if (!death_present_ui_page(&character_scene, &escaped))
+        {
+            ui_information_scene_leave(&scope);
+            log_warn("death character info: failed to present character sheet scene");
+            return;
+        }
 
     if (escaped)
     {
@@ -713,7 +906,6 @@ void ui_death_show_character_info(void)
         {
             ui_information_scene_leave(&scope);
             log_warn("death character info: failed to present equipment scene");
-            do_cmd_knowledge_notes();
             return;
         }
         if (escaped)
@@ -729,7 +921,6 @@ void ui_death_show_character_info(void)
         {
             ui_information_scene_leave(&scope);
             log_warn("death character info: failed to present inventory scene");
-            do_cmd_knowledge_notes();
             return;
         }
         if (escaped)
@@ -746,38 +937,28 @@ void ui_death_show_character_info(void)
     do_cmd_knowledge_notes();
 }
 
-int ui_death_final_menu(int* highlight)
+int ui_death_final_menu(const high_score* score, int* highlight)
 {
     char ch;
     bool morgoth_victory = (p_ptr->morgoth_slain && !p_ptr->escaped);
     app_ui_scene scene;
-    ui_information_scene_scope scope;
-    bool scene_active = false;
+    ui_information_scene_scope scope = { 0 };
 
-    if (death_build_final_menu_scene(&scene, *highlight, morgoth_victory)
-        && ui_information_scene_enter(&scope))
+    if (!death_build_final_menu_scene(&scene, score, *highlight,
+            morgoth_victory)
+        || !ui_information_scene_enter(&scope)
+        || !ui_information_scene_present_ui(&scene))
     {
-        if (ui_information_scene_present_ui(&scene))
-        {
-            scene_active = true;
-        }
-        else
-        {
+        if (scope.active)
             ui_information_scene_leave(&scope);
-        }
+        log_warn("death final menu: semantic presentation required");
+        return 7;
     }
 
-    if (scene_active)
-    {
-        inkey_set_cursor_hidden(true);
-        ch = (char)ui_information_scene_wait_key();
-        inkey_set_cursor_hidden(false);
-        ui_information_scene_leave(&scope);
-    }
-    else
-    {
-        ch = death_wait_final_menu_key_legacy(*highlight, morgoth_victory);
-    }
+    inkey_set_cursor_hidden(true);
+    ch = (char)ui_information_scene_wait_key();
+    inkey_set_cursor_hidden(false);
+    ui_information_scene_leave(&scope);
 
     if (ch == 'a')
     {

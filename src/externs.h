@@ -38,6 +38,8 @@
 #include "player/player-song-duels.h"
 #include "player/player-song-effects.h"
 #include "player/player-songs.h"
+
+typedef struct app_ui_scene app_ui_scene;
 #include "player/weapon_stats.h"
 #include "quest/quest.h"
 #include "runtime/runtime-game.h"
@@ -414,6 +416,7 @@ extern const char* styles_get_style_m2(int sidx);
  * and force a full screen redraw when it reaches zero. */
 extern int g_banner_force_redraw_remaining;
 extern void clear_active_narrative_banner(void);
+extern bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene);
 extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);

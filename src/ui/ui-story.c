@@ -137,6 +137,14 @@ static int story_space_width(bool use_story, int cell_width)
     return width;
 }
 
+static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
+{
+    if (sdl_is_story_font_enabled())
+        return count_wrapped_lines_story(text, wrap_width, indent);
+
+    return count_wrapped_lines(text, wrap_width, indent);
+}
+
 static bool story_semantic_mirror_wrapped_text(cptr text, int row, int indent,
     int wrap_width, byte attr, byte story)
 {
@@ -318,23 +326,18 @@ static bool story_semantic_present(void)
 
 static void story_clear_screen(void)
 {
-    Term_clear();
     story_semantic_clear();
 }
 
 static void story_erase_row(int col, int row, int width)
 {
-    Term_erase(col, row, width);
-    if (col <= 0)
-        story_semantic_clear_row(row);
+    (void)col;
+    (void)width;
+    story_semantic_clear_row(row);
 }
 
 static void story_putstr(int col, int row, byte attr, cptr text)
 {
-    Term_putstr(col, row, -1, attr, text ? text : "");
-    if (!g_story_semantic_scene.active)
-        return;
-
     if (!text || !text[0])
     {
         story_semantic_clear_row(row);
@@ -347,65 +350,18 @@ static void story_putstr(int col, int row, byte attr, cptr text)
 static int story_draw_wrapped_text(byte attr, cptr text, int row, int indent,
     int wrap_width)
 {
-    int cursor_x;
-    int cursor_y;
+    int lines = story_count_wrapped_lines(text, wrap_width, indent);
 
-    text_out_indent = indent;
-    text_out_wrap = wrap_width;
-    Term_gotoxy(indent, row);
-    text_out_to_screen(attr, text);
-    text_out_wrap = 0;
-    text_out_indent = 0;
-    Term_locate(&cursor_x, &cursor_y);
-    (void)cursor_x;
-
-    if (g_story_semantic_scene.active)
-    {
-        (void)story_semantic_mirror_wrapped_text(text, row, indent,
-            wrap_width, attr, story_current_flags());
-    }
-
-    return cursor_y;
-}
-
-static void story_disable_information_scene(ui_information_scene_scope* scope,
-    bool* use_information_scene)
-{
-    if (!scope || !use_information_scene || !*use_information_scene)
-        return;
-
-    ui_information_scene_leave(scope);
-    *use_information_scene = false;
-    story_semantic_end();
-}
-
-static bool story_information_scene_active(void)
-{
-    return ui_information_scene_supported() && ui_information_scene_is_active()
-        && app_session_current() != NULL;
-}
-
-static errr story_term_inkey(char* out_key, bool wait, bool take)
-{
-    return Term_inkey(out_key, wait, take);
+    if (lines < 1)
+        lines = 1;
+    (void)story_semantic_mirror_wrapped_text(text, row, indent, wrap_width,
+        attr, story_current_flags());
+    return row + lines - 1;
 }
 
 static bool story_present(void)
 {
-    if (story_information_scene_active())
-    {
-        if (!story_semantic_present())
-        {
-            Term_fresh();
-            return false;
-        }
-    }
-    else
-    {
-        Term_fresh();
-    }
-
-    return true;
+    return story_semantic_present();
 }
 
 static bool story_peek_key(char* out_key)
@@ -415,9 +371,6 @@ static bool story_peek_key(char* out_key)
 
     if (!out_key)
         return false;
-
-    if (!story_information_scene_active() || !session)
-        return (story_term_inkey(out_key, false, false) == 0);
 
     while (app_session_peek_input(session, &input))
     {
@@ -442,12 +395,6 @@ static void story_consume_peeked_key(char* out_key)
     if (!out_key)
         return;
 
-    if (!story_information_scene_active() || !session)
-    {
-        (void)story_term_inkey(out_key, false, true);
-        return;
-    }
-
     while (app_session_pop_input(session, &input))
     {
         if (input.layer == APP_INPUT_LAYER_LEGACY
@@ -461,10 +408,7 @@ static void story_consume_peeked_key(char* out_key)
 
 static char story_wait_key(void)
 {
-    if (story_information_scene_active())
-        return (char)ui_information_scene_wait_key();
-
-    return inkey();
+    return (char)ui_information_scene_wait_key();
 }
 
 /*
@@ -510,20 +454,6 @@ static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
     return 0;
 }
 
-static bool banner_messages_use_stairs(void)
-{
-#ifdef __ANDROID__
-    const bool default_value = false;
-#else
-    const bool default_value = true;
-#endif
-
-    if (!op_ptr)
-        return default_value;
-
-    return op_ptr->opt[OPT_banner_message_stairs];
-}
-
 static void story_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
@@ -554,258 +484,14 @@ static void story_print_hint(int indent, int h)
     }
 }
 
-void print_fade_centered(cptr text)
-{
-    enum { MAX_LINES = 32, MAX_LEN = 255 };
-    char lines[MAX_LINES][MAX_LEN + 1];
-    const char* p = text;
-    int wid, h;
-    int nlines = 0;
-    int start_row;
-
-    if (!text || !*text)
-        return;
-
-    Term_get_size(&wid, &h);
-
-    {
-        int max_width = wid - 15;
-
-        if (max_width < 10)
-            max_width = (wid > 2 ? wid - 2 : wid);
-        if (max_width < 1)
-            max_width = 1;
-
-        while (*p && nlines < MAX_LINES)
-        {
-            int linelen = 0;
-
-            lines[nlines][0] = '\0';
-
-            while (*p && isspace((unsigned char)*p))
-                p++;
-
-            while (*p)
-            {
-                const char* w = p;
-                int wlen, need;
-
-                while (*p && !isspace((unsigned char)*p))
-                    p++;
-                wlen = (int)(p - w);
-
-                if (wlen > max_width && linelen == 0)
-                {
-                    int take = (wlen > max_width) ? max_width : wlen;
-
-                    if (take > MAX_LEN)
-                        take = MAX_LEN;
-                    memcpy(lines[nlines], w, (size_t)take);
-                    linelen = take;
-                    lines[nlines][linelen] = '\0';
-                    w += take;
-                    p = w;
-                    break;
-                }
-
-                need = (linelen ? 1 : 0) + wlen;
-                if (linelen + need <= max_width && linelen + need <= MAX_LEN)
-                {
-                    if (linelen)
-                        lines[nlines][linelen++] = ' ';
-                    memcpy(lines[nlines] + linelen, w, (size_t)wlen);
-                    linelen += wlen;
-                    lines[nlines][linelen] = '\0';
-                }
-                else
-                {
-                    p = w;
-                    break;
-                }
-
-                while (*p && isspace((unsigned char)*p))
-                {
-                    if (*p == '\n')
-                        break;
-                    p++;
-                }
-                if (*p == '\n')
-                {
-                    p++;
-                    break;
-                }
-            }
-
-            nlines++;
-            while (*p == '\n')
-                p++;
-        }
-    }
-
-    if (nlines == 0)
-        return;
-
-    start_row = (h - nlines) / 2;
-    if (start_row < 0)
-        start_row = 0;
-
-    for (int i = 0; i < nlines; i++)
-    {
-        int len = (int)strlen(lines[i]);
-        int indent, wrap_width;
-
-        if (len > wid)
-            len = wid;
-        indent = (wid - len) / 2;
-        if (indent < 0)
-            indent = 0;
-        wrap_width = wid - indent - 1;
-        if (wrap_width < len)
-            wrap_width = len;
-        (void)print_paragraph_fade(lines[i], start_row + i, indent, wrap_width);
-    }
-}
-
-void print_fade_centered_at_row(cptr text, int row_start, bool fade_in,
-    bool line_delay)
-{
-    const char* p = text;
-    int wid, h;
-    int printed_lines = 0;
-    bool stair_layout;
-    enum { MAX_LINES2 = 32, MAX_LEN2 = 255 };
-
-    if (!text || !*text)
-        return;
-
-    stair_layout = banner_messages_use_stairs();
-    Term_get_size(&wid, &h);
-
-    if (row_start < 1)
-        row_start = 1;
-    if (row_start >= h)
-        return;
-
-    sdl_story_font_enable();
-    log_debug("Depth banner: story font enabled");
-
-    while (*p && printed_lines < MAX_LINES2 && (row_start + printed_lines) < h)
-    {
-        int indent = 14 + (stair_layout ? (2 * printed_lines) : 0);
-        int avail;
-        char buf[MAX_LEN2 + 1];
-        int linelen = 0;
-
-        if (use_bigtile && (((indent - COL_MAP) & 1) != 0))
-            indent++;
-        if (indent >= wid - 1)
-            break;
-
-        avail = wid - indent - 1;
-        if (avail < 8)
-            avail = 8;
-
-        buf[0] = '\0';
-
-        while (*p && (unsigned char)*p <= ' ')
-        {
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-            p++;
-        }
-
-        while (*p)
-        {
-            const char* w;
-            int wlen, need;
-
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-
-            w = p;
-            while (*p && *p != '\n' && !isspace((unsigned char)*p))
-                p++;
-            wlen = (int)(p - w);
-
-            if (wlen > avail && linelen == 0)
-            {
-                int take = (wlen > avail) ? avail : wlen;
-
-                if (take > MAX_LEN2)
-                    take = MAX_LEN2;
-                memcpy(buf, w, (size_t)take);
-                linelen = take;
-                buf[linelen] = '\0';
-                w += take;
-                p = w;
-                break;
-            }
-
-            need = (linelen ? 1 : 0) + wlen;
-            if (linelen + need <= avail && linelen + need <= MAX_LEN2)
-            {
-                if (linelen)
-                    buf[linelen++] = ' ';
-                memcpy(buf + linelen, w, (size_t)wlen);
-                linelen += wlen;
-                buf[linelen] = '\0';
-            }
-            else
-            {
-                p = w;
-                break;
-            }
-
-            while (*p && isspace((unsigned char)*p))
-            {
-                if (*p == '\n')
-                    break;
-                p++;
-            }
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-        }
-
-        if (linelen == 0)
-            break;
-
-        if (fade_in)
-            (void)print_paragraph_fade(buf, row_start + printed_lines, indent, avail);
-        else
-        {
-            story_putstr(indent, row_start + printed_lines, TERM_ORANGE, buf);
-            (void)story_present();
-        }
-
-        printed_lines++;
-
-        if (!fade_in && line_delay && *p && (row_start + printed_lines) < h)
-            Term_xtra(TERM_XTRA_DELAY, 800);
-    }
-
-    log_debug("Depth banner: story font disabled");
-    sdl_story_font_disable();
-}
-
 void print_story(int last_parts, bool fade_in)
 {
     int wid, h;
     const int indent = 2;
     ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool saved_screen = !use_information_scene;
     bool fast_forward = false;
+    bool scene_failed = false;
     bool show_page_instantly = false;
-    bool saved_cursor_state = false;
     bool saved_hide_cursor = false;
     int sils = metar.silmarils;
     byte rt = metar.type;
@@ -869,16 +555,17 @@ void print_story(int last_parts, bool fade_in)
     start = (last_parts > 0 && last_parts < total) ? total - last_parts : 0;
     log_debug("Story range: start=%d, total=%d", start, total);
 
+    if (!ui_information_scene_enter(&info_scope))
+    {
+        log_warn("story display: semantic scene entry required");
+        return;
+    }
+
     Term_get_size(&wid, &h);
-    if (use_information_scene)
-        story_semantic_begin(wid, h);
-    if (saved_screen)
-        screen_save();
+    story_semantic_begin(wid, h);
     story_clear_screen();
-    (void)Term_get_cursor(&saved_cursor_state);
     saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
-    (void)Term_set_cursor(false);
 
     sdl_story_font_enable();
 
@@ -903,7 +590,7 @@ void print_story(int last_parts, bool fade_in)
             if (wrap_width < 20)
                 wrap_width = 20;
 
-            text_lines = count_wrapped_lines_story(text, wrap_width, indent);
+            text_lines = story_count_wrapped_lines(text, wrap_width, indent);
             estimated_space_needed = 1 + text_lines + 1;
 
             if (row + estimated_space_needed >= h - 2)
@@ -914,9 +601,12 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    if (use_information_scene && !story_present())
-                        story_disable_information_scene(&info_scope,
-                            &use_information_scene);
+                    if (!story_present())
+                    {
+                        log_warn("story display: semantic page presentation failed");
+                        scene_failed = true;
+                        goto cleanup;
+                    }
                     ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
@@ -952,9 +642,12 @@ void print_story(int last_parts, bool fade_in)
                 int fade_result =
                     print_paragraph_fade(text, row, indent, wrap_width);
 
-                if (use_information_scene && g_story_semantic_scene.failed)
-                    story_disable_information_scene(&info_scope,
-                        &use_information_scene);
+                if (g_story_semantic_scene.failed)
+                {
+                    log_warn("story display: semantic fade presentation failed");
+                    scene_failed = true;
+                    goto cleanup;
+                }
                 if (fade_result == 2)
                 {
                     fast_forward = true;
@@ -967,19 +660,17 @@ void print_story(int last_parts, bool fade_in)
             {
                 (void)story_draw_wrapped_text(TERM_WHITE, text, row, indent,
                     wrap_width);
-                if (use_information_scene && !story_present())
-                    story_disable_information_scene(&info_scope,
-                        &use_information_scene);
+                if (!story_present())
+                {
+                    log_warn("story display: semantic paragraph presentation failed");
+                    scene_failed = true;
+                    goto cleanup;
+                }
                 if (!fast_forward && !show_page_instantly)
                     Term_xtra(TERM_XTRA_DELAY, 1000);
             }
 
-            {
-                int cursor_x, cursor_y;
-
-                Term_locate(&cursor_x, &cursor_y);
-                row = cursor_y + 1;
-            }
+            row += story_count_wrapped_lines(text, wrap_width, indent);
 
             will_add_blank_line = (idx < total - 1);
             space_needed = will_add_blank_line ? 1 : 0;
@@ -993,9 +684,12 @@ void print_story(int last_parts, bool fade_in)
 
                     show_page_instantly = false;
                     REDRAW_HINT();
-                    if (use_information_scene && !story_present())
-                        story_disable_information_scene(&info_scope,
-                            &use_information_scene);
+                    if (!story_present())
+                    {
+                        log_warn("story display: semantic pagination prompt failed");
+                        scene_failed = true;
+                        goto cleanup;
+                    }
                     ch = story_wait_key();
                     if (ch == ESCAPE)
                     {
@@ -1046,21 +740,22 @@ void print_story(int last_parts, bool fade_in)
         story_putstr(indent, h - 1, TERM_L_WHITE,
             "[Press any key to continue]");
     }
-    if (use_information_scene && !story_present())
-        story_disable_information_scene(&info_scope, &use_information_scene);
+    if (!story_present())
+    {
+        log_warn("story display: semantic final prompt failed");
+        scene_failed = true;
+        goto cleanup;
+    }
     (void)story_wait_key();
 
-    Term_flush();
-
+cleanup:
     sdl_story_font_disable();
-    if (use_information_scene)
-        ui_information_scene_leave(&info_scope);
-    else if (saved_screen)
-        screen_load();
+    ui_information_scene_leave(&info_scope);
     story_semantic_end();
-    (void)Term_set_cursor(saved_cursor_state);
     inkey_set_cursor_hidden(saved_hide_cursor);
 
+    if (scene_failed)
+        log_warn("story display exited early because semantic rendering failed");
     log_debug("Story display completed");
 
 #undef REDRAW_HINT

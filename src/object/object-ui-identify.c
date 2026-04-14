@@ -16,7 +16,9 @@
 #include "object/object-slot.h"
 #include "object/object-ui-display.h"
 #include "object/object-ui-identify.h"
+#include "platform-input.h"
 #include "supplies.h"
+#include "ui/ui-information-scene.h"
 
 typedef enum
 {
@@ -50,40 +52,263 @@ static void build_ident_entry_label(int order, char out[6])
     out[2] = '\0';
 }
 
-static void draw_ident_line(const ident_entry* entry, int row, int col,
-    int weight_col, bool highlight)
+static void ident_entry_build_row_label(const ident_entry* entry, char* buf,
+    size_t buf_size)
 {
-    byte attr = highlight ? TERM_L_BLUE : entry->color;
-    byte label_attr = highlight ? TERM_L_BLUE : TERM_WHITE;
-    int offset = col + 3;
-    char weight_buf[16];
+    if (!buf || buf_size == 0)
+        return;
 
-    prt("", row, col);
-
-    if (highlight)
-        c_put_str(label_attr, entry->label, row, col);
-    else
-        put_str(entry->label, row, col);
-
-    if (entry->prefix[0] != '\0')
+    if (!entry)
     {
-        if (highlight)
-            c_put_str(attr, entry->prefix, row, offset);
-        else
-            put_str(entry->prefix, row, offset);
-        offset += (int)strlen(entry->prefix);
+        buf[0] = '\0';
+        return;
     }
 
-    c_put_str(attr, entry->desc, row, offset);
+    if (entry->prefix[0] != '\0')
+        strnfmt(buf, buf_size, "%s%s", entry->prefix, entry->desc);
+    else
+        strnfmt(buf, buf_size, "%s", entry->desc);
+}
 
-    if (show_weights)
+static void ident_entry_build_row_key(const ident_entry* entry, char* buf,
+    size_t buf_size)
+{
+    if (!buf || buf_size == 0)
+        return;
+
+    buf[0] = '\0';
+    if (!entry || !entry->label[0])
+        return;
+
+    strnfmt(buf, buf_size, "%c", entry->label[0]);
+}
+
+static void ident_entry_build_row_meta(const ident_entry* entry, char* buf,
+    size_t buf_size)
+{
+    if (!buf || buf_size == 0)
+        return;
+
+    buf[0] = '\0';
+    if (!entry || !show_weights || !entry->o_ptr)
+        return;
+
+    if (entry->o_ptr->weight || entry->type != IDENT_ENTRY_EQUIP)
     {
         int wgt = entry->o_ptr->weight * entry->o_ptr->number;
-        if (entry->o_ptr->weight || entry->type != IDENT_ENTRY_EQUIP)
+
+        strnfmt(buf, buf_size, "%2d.%1d lb", wgt / 10, wgt % 10);
+    }
+}
+
+static void ident_entry_append_detail(app_ui_panel* panel,
+    const ident_entry* entry)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || !entry || !entry->o_ptr)
+        return;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected");
+    ident_entry_build_row_label(entry, buf, sizeof(buf));
+    (void)app_ui_panel_add_detail_line(panel, entry->color, buf);
+
+    if (entry->type == IDENT_ENTRY_FLOOR)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Location: floor");
+    }
+    else if (entry->type == IDENT_ENTRY_SUPPLY)
+    {
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Location: shared supplies");
+    }
+    else if (entry->type == IDENT_ENTRY_EQUIP)
+    {
+        strnfmt(buf, sizeof(buf), "Slot: %s", mention_use(entry->index));
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+    else
+    {
+        strnfmt(buf, sizeof(buf), "Slot: %c", entry->label[0]);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+    }
+
+    ident_entry_build_row_meta(entry, buf, sizeof(buf));
+    if (buf[0])
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, buf);
+
+    (void)app_ui_panel_add_detail_line(panel, TERM_WHITE,
+        "Inspect before identifying.");
+}
+
+static bool display_unified_identify_menu_scene_build(app_ui_scene* scene,
+    const ident_entry* entries, int entry_count, int highlight)
+{
+    app_ui_panel* panel;
+    bool steamdeck = steamdeck_controls_active();
+    int i;
+
+    if (!scene || !entries || entry_count <= 0)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 860, 1320);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Identify");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Unidentified items");
+    (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+        "Select an item to identify or inspect.");
+
+    for (i = 0; i < entry_count; i++)
+    {
+        char key[APP_UI_KEY_MAX];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        byte row_attr = (i == highlight) ? TERM_L_BLUE : entries[i].color;
+        byte meta_attr = (i == highlight) ? TERM_L_BLUE : TERM_SLATE;
+        byte icon_attr = 0;
+        char icon_char = '\0';
+
+        ident_entry_build_row_key(&entries[i], key, sizeof(key));
+        ident_entry_build_row_label(&entries[i], label, sizeof(label));
+        ident_entry_build_row_meta(&entries[i], meta, sizeof(meta));
+        if (entries[i].o_ptr && entries[i].o_ptr->k_idx)
         {
-            strnfmt(weight_buf, sizeof(weight_buf), "%2d.%1d lb", wgt / 10,
-                wgt % 10);
-            c_put_str(attr, weight_buf, row, weight_col);
+            icon_attr = object_attr(entries[i].o_ptr);
+            icon_char = object_char(entries[i].o_ptr);
+        }
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, row_attr, meta_attr,
+                icon_attr, icon_char, true, i == highlight, key, label, meta))
+        {
+            return false;
+        }
+    }
+
+    ident_entry_append_detail(panel, &entries[highlight]);
+
+    if (steamdeck)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "D-pad", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "A", "Identify");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "RS", "Inspect");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "B", "Cancel");
+    }
+    else
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "8/2", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Enter", "Identify");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "4/x", "Inspect");
+        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "Esc", "Cancel");
+    }
+
+    return true;
+}
+
+typedef enum ident_scene_result {
+    IDENT_SCENE_ERROR = -1,
+    IDENT_SCENE_CANCEL = 0,
+    IDENT_SCENE_SELECT = 1
+} ident_scene_result;
+
+static ident_scene_result display_unified_identify_menu_scene(
+    const ident_entry* entries, int entry_count, int* highlight_io)
+{
+    ui_information_scene_scope scope;
+    bool steamdeck = steamdeck_controls_active();
+    int highlight = 0;
+
+    if (!entries || entry_count <= 0 || !highlight_io)
+        return IDENT_SCENE_ERROR;
+
+    if (*highlight_io >= 0 && *highlight_io < entry_count)
+        highlight = *highlight_io;
+    if (!ui_information_scene_enter(&scope))
+        return IDENT_SCENE_ERROR;
+
+    while (true)
+    {
+        app_ui_scene scene;
+        int ch;
+        int dir;
+
+        if (!display_unified_identify_menu_scene_build(&scene, entries,
+                entry_count, highlight)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return IDENT_SCENE_ERROR;
+        }
+
+        ch = ui_information_scene_wait_key();
+        if (steamdeck && ch == steamdeck_back_key())
+            ch = ESCAPE;
+        else if (steamdeck && ch == steamdeck_confirm_key())
+            ch = '\r';
+        else if (steamdeck && ch == steamdeck_info_key())
+            ch = 'x';
+
+        if (ch == ESCAPE)
+        {
+            *highlight_io = highlight;
+            ui_information_scene_leave(&scope);
+            return IDENT_SCENE_CANCEL;
+        }
+
+        if (ch == ' ' || ch == '\r' || ch == '\n')
+        {
+            *highlight_io = highlight;
+            ui_information_scene_leave(&scope);
+            return IDENT_SCENE_SELECT;
+        }
+
+        if (ch == '4' || ch == 'h' || ch == 'H' || ch == 'x' || ch == 'X')
+        {
+            *highlight_io = highlight;
+            ui_information_scene_leave(&scope);
+            (void)player_try_identify_smithing_object_on_examine(
+                entries[highlight].o_ptr,
+                (entries[highlight].type == IDENT_ENTRY_EQUIP));
+            object_info_screen(entries[highlight].o_ptr);
+            if (!ui_information_scene_enter(&scope))
+                return IDENT_SCENE_ERROR;
+            continue;
+        }
+
+        dir = target_dir((char)ch);
+        if (dir == 8)
+        {
+            highlight = (highlight + entry_count - 1) % entry_count;
+        }
+        else if (dir == 2)
+        {
+            highlight = (highlight + 1) % entry_count;
+        }
+        else if (dir == 4)
+        {
+            *highlight_io = highlight;
+            ui_information_scene_leave(&scope);
+            (void)player_try_identify_smithing_object_on_examine(
+                entries[highlight].o_ptr,
+                (entries[highlight].type == IDENT_ENTRY_EQUIP));
+            object_info_screen(entries[highlight].o_ptr);
+            if (!ui_information_scene_enter(&scope))
+                return IDENT_SCENE_ERROR;
         }
     }
 }
@@ -93,12 +318,6 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 {
     ident_entry entries[MAX_IDENT_ENTRIES];
     int entry_count = 0;
-    int term_wid = menu_term_width();
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
-    int weight_col = menu_weight_col_for_width(term_wid);
-    int len = 29;
-    const int base_lim = term_wid - 3;
-    const int lim_no_weight = base_lim - (show_weights ? 9 : 0);
     int floor_list[MAX_FLOOR_STACK];
     int floor_num = 0;
     int supply_count = supplies_entry_count();
@@ -124,21 +343,12 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
             entry->o_ptr = o_ptr;
             strnfmt(entry->label, sizeof(entry->label), "-)");
             entry->prefix[0] = '\0';
-
             object_desc(entry->desc, sizeof(entry->desc), o_ptr, true, 3);
-            if (lim_no_weight >= 0)
-                entry->desc[lim_no_weight] = '\0';
 
             entry->color = weapon_glows(o_ptr)
                 ? object_display_color(o_ptr, TERM_L_BLUE)
                 : object_display_color(o_ptr,
                     tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-            int row_len = (int)strlen(entry->desc) + 5;
-            if (show_weights)
-                row_len += 9;
-            if (row_len > len)
-                len = row_len;
 
             entry_count++;
         }
@@ -168,24 +378,12 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
         strnfmt(entry->prefix, sizeof(entry->prefix), "%s", supply_prefix);
 
-        int prefix_len = (int)strlen(entry->prefix);
-        int desc_lim = lim_no_weight - prefix_len;
-        if (desc_lim < 0)
-            desc_lim = 0;
-
         object_desc(entry->desc, sizeof(entry->desc), o_ptr, true, 3);
-        entry->desc[desc_lim] = '\0';
 
         entry->color = weapon_glows(o_ptr)
             ? object_display_color(o_ptr, TERM_L_BLUE)
             : object_display_color(o_ptr,
                 tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-        int row_len = prefix_len + (int)strlen(entry->desc) + 5;
-        if (show_weights && o_ptr->weight)
-            row_len += 9;
-        if (row_len > len)
-            len = row_len;
 
         entry_count++;
     }
@@ -206,18 +404,10 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         entry->prefix[0] = '\0';
 
         object_desc(entry->desc, sizeof(entry->desc), o_ptr, true, 3);
-        if (lim_no_weight >= 0)
-            entry->desc[lim_no_weight] = '\0';
 
         entry->color = weapon_glows(o_ptr)
             ? TERM_L_BLUE
             : tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)];
-
-        int row_len = (int)strlen(entry->desc) + 5;
-        if (show_weights)
-            row_len += 9;
-        if (row_len > len)
-            len = row_len;
 
         entry_count++;
     }
@@ -239,21 +429,9 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         strnfmt(entry->prefix, sizeof(entry->prefix), "%-12s: ",
             mention_use(i));
 
-        int prefix_len = (int)strlen(entry->prefix);
-        int desc_lim = lim_no_weight - prefix_len;
-        if (desc_lim < 0)
-            desc_lim = 0;
-
         object_desc(entry->desc, sizeof(entry->desc), o_ptr, true, 3);
-        entry->desc[desc_lim] = '\0';
 
         entry->color = tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)];
-
-        int row_len = prefix_len + (int)strlen(entry->desc) + 5;
-        if (show_weights && o_ptr->weight)
-            row_len += 9;
-        if (row_len > len)
-            len = row_len;
 
         entry_count++;
     }
@@ -264,96 +442,26 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
         return false;
     }
 
-    int col = menu_center_col_for_len(term_wid, len);
     int highlight = 0;
-    bool done = false;
-    bool success = false;
+    ident_scene_result scene_result;
 
-    screen_save();
-
-    int clear_start = (col > 1) ? (col - 2) : col;
-    int clear_width = term_wid - clear_start;
-    if (clear_width < 0)
-        clear_width = 0;
-    int base_rows = MIN(term_hgt - 1, entry_count + 1);
-    int rows_to_clear = base_rows;
-
-    log_trace(
-        "display_unified_identify_menu: init clear entry_count=%d, start_col=%d, width=%d, rows=%d",
-        entry_count, clear_start, clear_width, rows_to_clear);
-
-    while (!done)
+    if (!ui_information_scene_supported())
     {
-        Term_erase(0, 0, 255);
-
-        for (int row = 1; row <= rows_to_clear && row < term_hgt; row++)
-            Term_erase(clear_start, row, clear_width);
-
-        log_trace(
-            "display_unified_identify_menu: redraw cleared rows 1-%d from col %d width %d",
-            MIN(rows_to_clear, term_hgt - 1), clear_start, clear_width);
-
-        char prompt[80];
-        strnfmt(prompt, sizeof(prompt),
-            "Identify: Space, <- Inspect, ESC to cancel");
-        prt(prompt, 0, 0);
-
-        for (int i = 0; i < entry_count; i++)
-            draw_ident_line(&entries[i], i + 1, col, weight_col,
-                (i == highlight));
-
-        if (entry_count && entry_count < term_hgt - 1)
-            prt("", entry_count + 1, col);
-
-        rows_to_clear = base_rows;
-
-        int key = inkey();
-
-        switch (key)
-        {
-        case ESCAPE:
-            done = true;
-            success = false;
-            break;
-
-        case '8':
-        case 'k':
-        case 'K':
-            highlight = (highlight + entry_count - 1) % entry_count;
-            break;
-
-        case '2':
-        case 'j':
-        case 'J':
-            highlight = (highlight + 1) % entry_count;
-            break;
-
-        case '4':
-        case 'h':
-        case 'H':
-            (void)player_try_identify_smithing_object_on_examine(
-                entries[highlight].o_ptr,
-                (entries[highlight].type == IDENT_ENTRY_EQUIP));
-            object_info_screen(entries[highlight].o_ptr);
-            break;
-
-        case ' ':
-        case 13:
-        case 10:
-            success = true;
-            done = true;
-            break;
-
-        default:
-            bell("Invalid command!");
-            break;
-        }
+        log_warn("identify menu: snapshot renderer required; legacy identify renderer removed");
+        msg_print("Identify menu requires the snapshot UI renderer.");
+        return false;
     }
 
-    screen_load();
-
-    if (!success)
+    scene_result = display_unified_identify_menu_scene(entries, entry_count,
+        &highlight);
+    if (scene_result == IDENT_SCENE_CANCEL)
         return false;
+    if (scene_result != IDENT_SCENE_SELECT)
+    {
+        log_warn("identify menu: semantic identify scene unavailable");
+        msg_print("Identify menu unavailable.");
+        return false;
+    }
 
     ident_entry* chosen = &entries[highlight];
 

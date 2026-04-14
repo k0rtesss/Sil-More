@@ -3,64 +3,14 @@
 #include "externs.h"
 #include "platform-input.h"
 #include "runtime-cli.h"
-#include "ui/ui-information-scene.h"
 
 static cptr g_prompt_interaction_label = NULL;
-static int g_prompt_snapshot_silent_clear_depth = 0;
 
 typedef struct prompt_menu_scene_scope {
     bool active;
-    bool restore_previous_snapshot;
-    app_snapshot previous_snapshot;
-    app_menu_snapshot* previous_menu_snapshot;
+    u16b previous_scene;
     app_wait_scope wait_scope;
 } prompt_menu_scene_scope;
-
-static bool prompt_snapshot_interaction_active(void);
-
-static app_menu_snapshot* prompt_menu_scene_clone_snapshot(
-    const app_menu_snapshot* snapshot)
-{
-    app_menu_snapshot* copy;
-
-    if (!snapshot)
-        return NULL;
-
-    copy = mem_alloc(app_menu_snapshot);
-    if (!copy)
-        return NULL;
-
-    app_menu_snapshot_init(copy);
-    copy->snapshot = snapshot->snapshot;
-    copy->snapshot.blobs = copy->blobs;
-    copy->snapshot.blob_count = N_ELEMENTS(copy->blobs);
-    copy->blobs[0].kind = snapshot->blobs[0].kind;
-    copy->blobs[0].format_version = snapshot->blobs[0].format_version;
-    copy->blobs[0].data = (const byte*)&copy->scene;
-    copy->blobs[0].size = sizeof(copy->scene);
-    copy->scene = snapshot->scene;
-    return copy;
-}
-
-/*
- * Get some input at the cursor location.
- */
-static int active_term_width(void)
-{
-    int wid = 80;
-    int hgt = 24;
-
-    if (prompt_snapshot_interaction_active())
-        return (int)APP_INTERACTION_TEXT_MAX - 1;
-
-    if (Term)
-        Term_get_size(&wid, &hgt);
-
-    if (wid < 1)
-        wid = 80;
-
-    return wid;
-}
 
 static char prompt_inkey_with_wait_reason(u16b reason)
 {
@@ -74,74 +24,14 @@ static char prompt_inkey_with_wait_reason(u16b reason)
     return ch;
 }
 
-static bool prompt_snapshot_interaction_active(void)
-{
-    return app_session_interactions_enabled(app_session_current());
-}
-
-static void prompt_snapshot_begin(u16b kind, u16b reason, u16b flags,
-    byte prompt_attr, cptr prompt, byte detail_attr, cptr detail)
-{
-    app_session* session = app_session_current();
-
-    if (!app_session_interactions_enabled(session))
-        return;
-
-    app_session_begin_interaction(session, kind, reason, flags);
-    app_session_set_interaction_prompt(session, prompt_attr, prompt);
-    if (detail && detail[0])
-        app_session_set_interaction_detail(session, detail_attr, detail);
-}
-
-static void prompt_snapshot_set_value(byte value_attr, cptr value,
-    s16b cursor_index)
-{
-    app_session* session = app_session_current();
-
-    if (!app_session_interactions_enabled(session))
-        return;
-
-    app_session_set_interaction_value(session, value_attr, value,
-        cursor_index);
-}
-
-static void prompt_snapshot_clear(void)
-{
-    app_session_clear_interaction(app_session_current());
-}
-
 void prompt_snapshot_push_silent_clear(void)
 {
-    g_prompt_snapshot_silent_clear_depth++;
+    return;
 }
 
 void prompt_snapshot_pop_silent_clear(void)
 {
-    if (g_prompt_snapshot_silent_clear_depth > 0)
-        g_prompt_snapshot_silent_clear_depth--;
-}
-
-static void prompt_snapshot_present(void)
-{
-    if (!prompt_snapshot_interaction_active())
-        return;
-
-    Term_fresh();
-}
-
-static void prompt_snapshot_finish_interaction(void)
-{
-    prompt_snapshot_clear();
-    if (g_prompt_snapshot_silent_clear_depth <= 0)
-        prompt_snapshot_present();
-}
-
-static bool prompt_snapshot_should_present(void)
-{
-    if (!prompt_snapshot_interaction_active())
-        return false;
-
-    return !inkey_can_consume_immediately();
+    return;
 }
 
 static bool prompt_menu_scene_supported(void)
@@ -150,18 +40,6 @@ static bool prompt_menu_scene_supported(void)
 
     return session
         && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT);
-}
-
-static bool prompt_menu_scene_menu_snapshot_active(void)
-{
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot;
-
-    if (!prompt_menu_scene_supported() || !session)
-        return false;
-
-    snapshot = app_session_snapshot(session);
-    return snapshot && snapshot->scene == APP_SCENE_KIND_MENU;
 }
 
 static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
@@ -181,16 +59,7 @@ static bool prompt_menu_scene_enter(prompt_menu_scene_scope* scope)
             && snapshot->scene != APP_SCENE_KIND_MENU))
         return false;
 
-    scope->restore_previous_snapshot = true;
-    scope->previous_snapshot = *snapshot;
-    if (snapshot->scene == APP_SCENE_KIND_MENU)
-    {
-        scope->previous_menu_snapshot = prompt_menu_scene_clone_snapshot(
-            app_session_menu_snapshot(session));
-        if (!scope->previous_menu_snapshot)
-            return false;
-    }
-
+    scope->previous_scene = snapshot->scene;
     app_session_push_wait_scope(session, &scope->wait_scope,
         APP_WAIT_REASON_CONFIRM, 0, 0);
     app_session_clear_inputs(session);
@@ -205,8 +74,15 @@ static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
 
     if (!scope || !scope->active || !scene || !session)
         return false;
-    if (!app_session_publish_menu_scene(session, scene))
+    if (scope->previous_scene == APP_SCENE_KIND_DUNGEON)
+    {
+        if (!app_session_publish_dungeon_overlay_scene(session, scene))
+            return false;
+    }
+    else if (!app_session_publish_menu_scene(session, scene))
+    {
         return false;
+    }
 
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
     return true;
@@ -215,40 +91,16 @@ static bool prompt_menu_scene_present(prompt_menu_scene_scope* scope,
 static void prompt_menu_scene_leave(prompt_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
-    bool redraw_dungeon = false;
 
     if (!scope || !scope->active || !session)
         return;
 
     app_session_clear_inputs(session);
-    if (scope->restore_previous_snapshot)
-    {
-        if (scope->previous_snapshot.scene == APP_SCENE_KIND_MENU
-            && scope->previous_menu_snapshot)
-        {
-            (void)app_session_publish_menu_scene(session,
-                &scope->previous_menu_snapshot->scene);
-        }
-        else if (scope->previous_snapshot.scene == APP_SCENE_KIND_NONE)
-        {
-            app_session_set_snapshot(session, NULL);
-        }
-        else
-        {
-            app_session_set_snapshot(session, &scope->previous_snapshot);
-        }
-
-        redraw_dungeon = (scope->previous_snapshot.scene
-            == APP_SCENE_KIND_DUNGEON);
-    }
-
+    if (scope->previous_scene == APP_SCENE_KIND_DUNGEON)
+        app_session_clear_dungeon_overlay_scene(session);
     app_session_pop_wait_scope(session, &scope->wait_scope);
-    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
     scope->active = false;
-    if (redraw_dungeon && Term)
-        do_cmd_redraw();
-    else
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
 static void prompt_menu_scene_add_wrapped_text(app_ui_panel* panel,
@@ -385,7 +237,7 @@ static bool prompt_menu_scene_build_text_input_scene(app_ui_scene* scene,
     return true;
 }
 
-static bool prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
+static int prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
     cptr detail, bool allow_randomize)
 {
     prompt_menu_scene_scope menu_scope;
@@ -393,9 +245,9 @@ static bool prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
     size_t k = 0;
 
     if (!buf || len < 1)
-        return false;
+        return -1;
     if (!prompt_menu_scene_enter(&menu_scope))
-        return false;
+        return -1;
 
     buf[len - 1] = '\0';
     k = strlen(buf);
@@ -410,7 +262,8 @@ static bool prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
                 buf, k, allow_randomize)
             || !prompt_menu_scene_present(&menu_scope, &scene))
         {
-            break;
+            prompt_menu_scene_leave(&menu_scope);
+            return -1;
         }
 
         ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
@@ -446,7 +299,7 @@ static bool prompt_menu_scene_run_text_input(cptr prompt, char* buf, size_t len,
     }
 
     prompt_menu_scene_leave(&menu_scope);
-    return (ch != ESCAPE);
+    return (ch != ESCAPE) ? 1 : 0;
 }
 
 static bool prompt_menu_scene_build_confirm_scene(app_ui_scene* scene,
@@ -514,6 +367,383 @@ static bool prompt_menu_scene_build_oath_confirm_scene(app_ui_scene* scene,
     return true;
 }
 
+static bool prompt_menu_scene_build_prompt_scene(app_ui_scene* scene,
+    cptr title, cptr prompt, cptr detail, cptr primary_key,
+    cptr primary_label, cptr secondary_key, cptr secondary_label)
+{
+    app_ui_panel* panel;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, title ? title : "Prompt");
+    prompt_menu_scene_add_wrapped_text(panel, TERM_WHITE,
+        prompt ? prompt : "", 60);
+    if (detail && detail[0])
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, detail);
+    if (primary_key && primary_key[0] && primary_label && primary_label[0])
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+            primary_key, primary_label);
+    }
+    if (secondary_key && secondary_key[0] && secondary_label
+        && secondary_label[0])
+    {
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            secondary_key, secondary_label);
+    }
+
+    return true;
+}
+
+static bool prompt_menu_scene_build_quantity_scene(app_ui_scene* scene,
+    cptr prompt, int current, int max)
+{
+    app_ui_panel* panel;
+    char prompt_header[120];
+    char value_buf[16];
+
+    if (!scene)
+        return false;
+
+    strnfmt(prompt_header, sizeof(prompt_header), "%s%d/%d", prompt, current,
+        max);
+    strnfmt(value_buf, sizeof(value_buf), "%d", current);
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, TERM_L_BLUE, prompt_header);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "8/+ increase, 2/- decrease, digits type, Enter accepts.");
+    if (!app_ui_panel_add_body_line(panel, TERM_YELLOW, value_buf))
+        return false;
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
+        "Enter", "Accept");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Esc", "Cancel");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "8/+", "Increase");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "2/-", "Decrease");
+    return true;
+}
+
+static int prompt_menu_scene_run_oath_confirm(cptr prompt)
+{
+    prompt_menu_scene_scope menu_scope;
+    char ch;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -1;
+
+    while (true)
+    {
+        app_ui_scene scene;
+
+        if (!prompt_menu_scene_build_oath_confirm_scene(&scene, prompt)
+            || !prompt_menu_scene_present(&menu_scope, &scene))
+        {
+            prompt_menu_scene_leave(&menu_scope);
+            return -1;
+        }
+
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
+        if (quick_messages || ch == ESCAPE || strchr("Nn", ch))
+        {
+            prompt_menu_scene_leave(&menu_scope);
+            return 0;
+        }
+        if (strchr("Yy", ch))
+        {
+            prompt_menu_scene_leave(&menu_scope);
+            return 1;
+        }
+
+        bell("Illegal response to a 'yes/no' question!");
+    }
+}
+
+static int prompt_menu_scene_run_menu_choice(s16b max, cptr prompt)
+{
+    prompt_menu_scene_scope menu_scope;
+    int choice = -1;
+    char ch;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -2;
+
+    while (true)
+    {
+        app_ui_scene scene;
+
+        if (!prompt_menu_scene_build_prompt_scene(&scene, "Choose", prompt,
+                "Press a menu letter or Esc to cancel.", "A-Z", "Select",
+                "Esc", "Cancel")
+            || !prompt_menu_scene_present(&menu_scope, &scene))
+        {
+            choice = -2;
+            break;
+        }
+
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        if (isalpha((unsigned char)ch))
+        {
+            if (islower((unsigned char)ch))
+                choice = A2I(ch);
+            else
+                choice = ch - 'A' + 26;
+
+            if ((choice > -1) && (choice < max))
+                break;
+
+            bell("Illegal response to question!");
+            choice = -1;
+            continue;
+        }
+
+        if (ch == ESCAPE)
+        {
+            choice = -1;
+            break;
+        }
+
+        bell("Illegal response to question!");
+    }
+
+    prompt_menu_scene_leave(&menu_scope);
+    return choice;
+}
+
+static int prompt_menu_scene_run_command_prompt(cptr prompt)
+{
+    prompt_menu_scene_scope menu_scope;
+    app_ui_scene scene;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -2;
+
+    if (!prompt_menu_scene_build_prompt_scene(&scene, "Command", prompt,
+            "Press a key or Esc to cancel.", "Key", "Input", "Esc", "Cancel")
+        || !prompt_menu_scene_present(&menu_scope, &scene))
+    {
+        prompt_menu_scene_leave(&menu_scope);
+        return -2;
+    }
+
+    {
+        int ch = (unsigned char)prompt_inkey_with_wait_reason(
+            APP_WAIT_REASON_CONFIRM);
+        prompt_menu_scene_leave(&menu_scope);
+        return ch;
+    }
+}
+
+static int prompt_menu_scene_run_pause(cptr prompt)
+{
+    prompt_menu_scene_scope menu_scope;
+    app_ui_scene scene;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -2;
+
+    if (!prompt_menu_scene_build_prompt_scene(&scene, "Pause",
+            prompt ? prompt : "(press any key)",
+            "Press any key to continue.", "Any", "Continue", NULL, NULL)
+        || !prompt_menu_scene_present(&menu_scope, &scene))
+    {
+        prompt_menu_scene_leave(&menu_scope);
+        return -2;
+    }
+
+    {
+        int ch = (unsigned char)prompt_inkey_with_wait_reason(
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE);
+        prompt_menu_scene_leave(&menu_scope);
+        return ch;
+    }
+}
+
+static int prompt_menu_scene_run_quantity(cptr prompt, int max, int initial)
+{
+    prompt_menu_scene_scope menu_scope;
+    char entry_buf[16] = "";
+    int entry_len = 0;
+    int current = initial;
+    bool done = false;
+    bool canceled = false;
+
+    if (!prompt_menu_scene_enter(&menu_scope))
+        return -1;
+
+    while (!done)
+    {
+        app_ui_scene scene;
+        int ch;
+
+        if (!prompt_menu_scene_build_quantity_scene(&scene, prompt, current,
+                max)
+            || !prompt_menu_scene_present(&menu_scope, &scene))
+        {
+            prompt_menu_scene_leave(&menu_scope);
+            return -1;
+        }
+
+        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        switch (ch)
+        {
+        case ESCAPE:
+            canceled = true;
+            done = true;
+            break;
+
+        case '\r':
+        case '\n':
+        case ' ':
+#ifdef KC_ENTER
+        case KC_ENTER:
+#endif
+            done = true;
+            break;
+
+        case '+':
+        case '=':
+        case '8':
+        case 'k':
+        case 'K':
+#ifdef ARROW_UP
+        case ARROW_UP:
+#endif
+            if (max > 0)
+            {
+                if (current >= max)
+                    current = 0;
+                else
+                    current++;
+            }
+            else
+            {
+                current = 0;
+            }
+            entry_len = 0;
+            entry_buf[0] = '\0';
+            break;
+
+        case '-':
+        case '_':
+        case '2':
+        case 'j':
+        case 'J':
+#ifdef ARROW_DOWN
+        case ARROW_DOWN:
+#endif
+            if (max > 0)
+            {
+                if (current > 0)
+                    current--;
+                else
+                    current = max;
+            }
+            else
+            {
+                current = 0;
+            }
+            entry_len = 0;
+            entry_buf[0] = '\0';
+            break;
+
+#ifdef KC_PGUP
+        case KC_PGUP:
+            if (max > 0)
+            {
+                current += 10;
+                if (current > max)
+                    current = 0;
+            }
+            else
+            {
+                current = 0;
+            }
+            entry_len = 0;
+            entry_buf[0] = '\0';
+            break;
+#endif
+
+#ifdef KC_PGDOWN
+        case KC_PGDOWN:
+            if (max > 0)
+            {
+                current -= 10;
+                if (current < 0)
+                    current = max;
+            }
+            else
+            {
+                current = 0;
+            }
+            entry_len = 0;
+            entry_buf[0] = '\0';
+            break;
+#endif
+
+        case '\b':
+        case 0x7F:
+            if (entry_len > 0)
+            {
+                entry_buf[--entry_len] = '\0';
+                current = entry_len ? MAX(0, MIN(atoi(entry_buf), max)) : 0;
+            }
+            else
+            {
+                bell("Nothing to erase.");
+            }
+            break;
+
+        default:
+            if (isdigit((unsigned char)ch))
+            {
+                if (entry_len < (int)sizeof(entry_buf) - 1)
+                {
+                    entry_buf[entry_len++] = (char)ch;
+                    entry_buf[entry_len] = '\0';
+                    current = MAX(0, MIN(atoi(entry_buf), max));
+                }
+                else
+                {
+                    bell("Quantity too large.");
+                }
+            }
+            else
+            {
+                bell("Illegal response to quantity prompt!");
+            }
+            break;
+        }
+    }
+
+    prompt_menu_scene_leave(&menu_scope);
+    if (canceled)
+        return 0;
+
+    return current;
+}
+
 static int prompt_menu_scene_run_confirm(cptr prompt, cptr detail,
     bool allow_space, char other)
 {
@@ -561,139 +791,19 @@ static int prompt_menu_scene_run_confirm(cptr prompt, cptr detail,
 
 bool askfor_aux(char* buf, size_t len)
 {
-    int y, x;
-    int term_wid = active_term_width();
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
-    size_t k = 0;
-
-    char ch = '\0';
-
-    bool done = false;
-
-    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    if (prompt_scene_supported)
     {
-        return prompt_menu_scene_run_text_input(
+        int scene_result = prompt_menu_scene_run_text_input(
             g_prompt_interaction_label ? g_prompt_interaction_label : "Input:",
             buf, len, "Enter accepts, Esc cancels, Backspace erases.", false);
+
+        if (scene_result >= 0)
+            return scene_result == 1;
     }
 
-    /* Locate the cursor */
-    if (snapshot_interaction)
-    {
-        x = 0;
-        y = 0;
-    }
-    else
-    {
-        Term_locate(&x, &y);
-    }
-
-    /* Paranoia */
-    if ((x < 0) || (x >= term_wid))
-        x = 0;
-
-    /* Restrict the length */
-    if (!snapshot_interaction && (size_t)x + len > (size_t)term_wid)
-        len = (size_t)(term_wid - x);
-    if (len < 1)
-        len = 1;
-
-    /* Truncate the default entry */
-    buf[len - 1] = '\0';
-
-    /* Display the default answer */
-    if (!snapshot_interaction)
-    {
-        Term_erase(x, y, (int)len);
-        Term_putstr(x, y, -1, TERM_YELLOW, buf);
-    }
-
-    /* Process input */
-    while (!done)
-    {
-        if (snapshot_interaction)
-        {
-            prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
-                APP_WAIT_REASON_CONFIRM,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL
-                    | APP_INTERACTION_FLAG_SHOW_VALUE
-                    | APP_INTERACTION_FLAG_SHOW_CURSOR,
-                TERM_WHITE,
-                g_prompt_interaction_label ? g_prompt_interaction_label
-                    : "Input:",
-                TERM_SLATE, "Enter accepts, Esc cancels.");
-            prompt_snapshot_set_value(TERM_YELLOW, buf, (s16b)k);
-            prompt_snapshot_present();
-        }
-        else
-        {
-            /* Place cursor */
-            Term_gotoxy(x + k, y);
-        }
-
-        /* Get a key */
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-
-        /* Analyze the key */
-        switch (ch)
-        {
-        case ESCAPE:
-        {
-            k = 0;
-            done = true;
-            break;
-        }
-
-        case '\n':
-        case '\r':
-        {
-            k = strlen(buf);
-            done = true;
-            break;
-        }
-
-        case 0x7F:
-        case '\010':
-        {
-            if (k > 0)
-                k--;
-            break;
-        }
-
-        default:
-        {
-            if ((k < len - 1) && (isprint((unsigned char)ch)))
-            {
-                buf[k++] = ch;
-            }
-            else
-            {
-                bell("Illegal edit key!");
-            }
-            break;
-        }
-        }
-
-        /* Terminate */
-        buf[k] = '\0';
-
-        /* Update the entry */
-        if (!snapshot_interaction)
-        {
-            Term_erase(x, y, (int)len);
-            Term_putstr(x, y, -1, TERM_WHITE, buf);
-        }
-    }
-
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-
-    /* Done */
-    return (ch != ESCAPE);
+    return false;
 }
 
 /*
@@ -703,164 +813,18 @@ bool askfor_aux(char* buf, size_t len)
  */
 bool askfor_name(char* buf, size_t len)
 {
-    int y, x;
-    int term_wid = active_term_width();
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
-    size_t k = 0;
-
-    char ch = '\0';
-
-    bool done = false;
-    bool new_default_name = false;
-
-    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    if (prompt_scene_supported)
     {
-        return prompt_menu_scene_run_text_input("Name:", buf, len,
+        int scene_result = prompt_menu_scene_run_text_input("Name:", buf, len,
             "Enter accepts, Esc cancels, Tab randomizes.", true);
+
+        if (scene_result >= 0)
+            return scene_result == 1;
     }
 
-    /* Locate the cursor */
-    if (snapshot_interaction)
-    {
-        x = 0;
-        y = 0;
-    }
-    else
-    {
-        Term_locate(&x, &y);
-    }
-
-    /* Paranoia */
-    if ((x < 0) || (x >= term_wid))
-        x = 0;
-
-    /* Restrict the length */
-    if (!snapshot_interaction && (size_t)x + len > (size_t)term_wid)
-        len = (size_t)(term_wid - x);
-    if (len < 1)
-        len = 1;
-
-    /* Truncate the default entry */
-    buf[len - 1] = '\0';
-
-    /* Display the default answer */
-    if (!snapshot_interaction)
-    {
-        Term_erase(x, y, (int)len);
-        Term_putstr(x, y, -1, TERM_YELLOW, buf);
-    }
-
-    /* Process input */
-    while (!done)
-    {
-        if (snapshot_interaction)
-        {
-            prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
-                APP_WAIT_REASON_CONFIRM,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL
-                    | APP_INTERACTION_FLAG_SHOW_VALUE
-                    | APP_INTERACTION_FLAG_SHOW_CURSOR,
-                TERM_WHITE,
-                g_prompt_interaction_label ? g_prompt_interaction_label
-                    : "Name:",
-                TERM_SLATE,
-                "Enter accepts, Esc cancels, Tab randomizes.");
-            prompt_snapshot_set_value(TERM_YELLOW, buf, (s16b)k);
-            prompt_snapshot_present();
-        }
-        else
-        {
-            /* Place cursor */
-            Term_gotoxy(x + k, y);
-        }
-
-        /* Get a key */
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-
-        /* Analyze the key */
-        switch (ch)
-        {
-        case ESCAPE:
-        {
-            k = 0;
-            done = true;
-            break;
-        }
-
-        case '\n':
-        case '\r':
-        {
-            k = strlen(buf);
-            done = true;
-            break;
-        }
-
-        case 0x7F:
-        case '\010':
-        {
-            if (k > 0)
-                k--;
-            break;
-        }
-
-        case '\t':
-        {
-            /*get the random name, display for approval. */
-            make_random_name(buf, len);
-
-            new_default_name = true;
-            k = 0;
-            break;
-        }
-
-        default:
-        {
-            if ((k < len - 1) && (isprint((unsigned char)ch)))
-            {
-                buf[k++] = ch;
-            }
-            else
-            {
-                bell("Illegal edit key!");
-            }
-            break;
-        }
-        }
-
-        if (new_default_name)
-        {
-            /* Display the random name */
-            if (!snapshot_interaction)
-            {
-                Term_erase(x, y, (int)len);
-                Term_putstr(x, y, -1, TERM_YELLOW, buf);
-            }
-
-            new_default_name = false;
-        }
-        else
-        {
-            /* Terminate */
-            buf[k] = '\0';
-
-            /* Update the entry */
-            if (!snapshot_interaction)
-            {
-                Term_erase(x, y, (int)len);
-                Term_putstr(x, y, -1, TERM_WHITE, buf);
-            }
-        }
-    }
-
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-
-    /* Done */
-    return (ch != ESCAPE);
+    return false;
 }
 
 /*
@@ -871,32 +835,20 @@ bool askfor_name(char* buf, size_t len)
 bool term_get_string(cptr prompt, char* buf, size_t len)
 {
     bool res;
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
-    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    if (prompt_scene_supported)
     {
-        return prompt_menu_scene_run_text_input(prompt, buf, len,
-            "Enter accepts, Esc cancels, Backspace erases.", false);
+        g_prompt_interaction_label = prompt;
+        res = askfor_aux(buf, len);
+        g_prompt_interaction_label = NULL;
+        return res;
     }
 
-    /* Display prompt */
-    if (!snapshot_interaction)
-        prt(prompt, 0, 0);
-
-    /* Ask the user for a string */
-    g_prompt_interaction_label = prompt;
-    res = askfor_aux(buf, len);
-    g_prompt_interaction_label = NULL;
-
-    /* Clear prompt */
-    if (!snapshot_interaction)
-        prt("", 0, 0);
-
-    /* Result */
-    return (res);
+    return false;
 }
 
 /*
@@ -927,13 +879,8 @@ s16b get_quantity(cptr prompt, int max)
     else if (max != 1)
     {
         char prompt_buf[80];
-        char entry_buf[16] = "";
-        int entry_len = 0;
         int current = amt;
-        bool done = false;
-        bool canceled = false;
-        int ch;
-        bool snapshot_interaction = prompt_snapshot_interaction_active();
+        bool prompt_scene_supported = prompt_menu_scene_supported();
 
         if (!prompt)
         {
@@ -945,183 +892,20 @@ s16b get_quantity(cptr prompt, int max)
             max = 0;
 
         current = MAX(0, MIN(current, max));
-
-        while (!done)
+        if (prompt_scene_supported)
         {
-            char prompt_header[120];
-            strnfmt(prompt_header, sizeof(prompt_header), "%s%d/%d", prompt,
-                current, max);
-            if (snapshot_interaction)
-            {
-                char value_buf[16];
+            int scene_value = prompt_menu_scene_run_quantity(prompt, max,
+                current);
 
-                prompt_snapshot_begin(APP_INTERACTION_KIND_TEXT_INPUT,
-                    APP_WAIT_REASON_LIST_SELECTION,
-                    APP_INTERACTION_FLAG_CAN_CONFIRM
-                        | APP_INTERACTION_FLAG_CAN_CANCEL
-                        | APP_INTERACTION_FLAG_SHOW_VALUE
-                        | APP_INTERACTION_FLAG_SHOW_CURSOR,
-                    TERM_WHITE, prompt_header, TERM_SLATE,
-                    "8/+ increase, 2/- decrease, digits type, Enter accepts.");
-                strnfmt(value_buf, sizeof(value_buf), "%d", current);
-                prompt_snapshot_set_value(TERM_YELLOW, value_buf,
-                    (s16b)strlen(value_buf));
-                prompt_snapshot_present();
-            }
-            else
-            {
-                prt(prompt_header, 0, 0);
-                prt("Use arrows or +/- to adjust, digits type exact value, Enter=OK, Esc=cancel.",
-                    1, 0);
-            }
-
-            ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
-            switch (ch)
-            {
-            case ESCAPE:
-                canceled = true;
-                done = true;
-                break;
-
-            case '\r':
-            case '\n':
-            case ' ':
-#ifdef KC_ENTER
-            case KC_ENTER:
-#endif
-                done = true;
-                break;
-
-            case '+':
-            case '=':
-            case '8':
-            case 'k':
-            case 'K':
-#ifdef ARROW_UP
-            case ARROW_UP:
-#endif
-                if (max > 0)
-                {
-                    if (current >= max)
-                        current = 0;
-                    else
-                        current++;
-                }
-                else
-                {
-                    current = 0;
-                }
-                entry_len = 0;
-                entry_buf[0] = '\0';
-                break;
-
-            case '-':
-            case '_':
-            case '2':
-            case 'j':
-            case 'J':
-#ifdef ARROW_DOWN
-            case ARROW_DOWN:
-#endif
-                if (max > 0)
-                {
-                    if (current > 0)
-                        current--;
-                    else
-                        current = max;
-                }
-                else
-                {
-                    current = 0;
-                }
-                entry_len = 0;
-                entry_buf[0] = '\0';
-                break;
-
-#ifdef KC_PGUP
-            case KC_PGUP:
-                if (max > 0)
-                {
-                    current += 10;
-                    if (current > max)
-                        current = 0;
-                }
-                else
-                {
-                    current = 0;
-                }
-                entry_len = 0;
-                entry_buf[0] = '\0';
-                break;
-#endif
-
-#ifdef KC_PGDOWN
-            case KC_PGDOWN:
-                if (max > 0)
-                {
-                    current -= 10;
-                    if (current < 0)
-                        current = max;
-                }
-                else
-                {
-                    current = 0;
-                }
-                entry_len = 0;
-                entry_buf[0] = '\0';
-                break;
-#endif
-
-            case '\b':
-            case 0x7F:
-                if (entry_len > 0)
-                {
-                    entry_buf[--entry_len] = '\0';
-                    current = entry_len ? MAX(0, MIN(atoi(entry_buf), max)) : 0;
-                }
-                else
-                {
-                    bell("Nothing to erase.");
-                }
-                break;
-
-            default:
-                if (isdigit((unsigned char)ch))
-                {
-                    if (entry_len < (int)sizeof(entry_buf) - 1)
-                    {
-                        entry_buf[entry_len++] = (char)ch;
-                        entry_buf[entry_len] = '\0';
-                        current = MAX(0, MIN(atoi(entry_buf), max));
-                    }
-                    else
-                    {
-                        bell("Quantity too large.");
-                    }
-                }
-                else
-                {
-                    bell("Illegal response to quantity prompt!");
-                }
-                break;
-            }
+            if (scene_value >= 0)
+                amt = scene_value;
+            if (scene_value >= 0)
+                goto quantity_done;
         }
-
-        if (snapshot_interaction)
-        {
-            prompt_snapshot_finish_interaction();
-        }
-        else
-        {
-            prt("", 0, 0);
-            prt("", 1, 0);
-        }
-
-        if (canceled)
-            return (0);
-
-        amt = current;
+        return 0;
     }
+
+quantity_done:
 
     if (amt > max)
         amt = max;
@@ -1145,20 +929,12 @@ s16b get_quantity(cptr prompt, int max)
  */
 int get_check_other(cptr prompt, char other)
 {
-    char ch;
-    char buf[160];
-    int term_wid = active_term_width();
-    int suffix_wid = 9;
-    int prompt_wid = term_wid - suffix_wid;
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
-
-    /*default set to no*/
-    int result = 0;
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
-    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    if (prompt_scene_supported)
     {
         int scene_result = prompt_menu_scene_run_confirm(prompt,
             "Y confirms, N declines.", false, other);
@@ -1167,68 +943,7 @@ int get_check_other(cptr prompt, char other)
             return scene_result;
     }
 
-    /* Hack -- Build a "useful" prompt */
-    if (snapshot_interaction)
-    {
-        strnfmt(buf, sizeof(buf), "%s[y/n/%c] ", prompt, other);
-    }
-    else
-    {
-        if (prompt_wid < 8)
-            prompt_wid = 8;
-        strnfmt(buf, sizeof(buf), "%.*s[y/n/%c] ", prompt_wid, prompt,
-            other);
-    }
-
-    /* Prompt for it */
-    if (!snapshot_interaction)
-        prt(buf, 0, 0);
-
-    /* Get an acceptable answer */
-    while (true)
-    {
-        if (snapshot_interaction && prompt_snapshot_should_present())
-        {
-            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
-                APP_WAIT_REASON_CONFIRM,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL,
-                TERM_WHITE, buf, TERM_SLATE,
-                "Y confirms, N declines.");
-            prompt_snapshot_present();
-        }
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-        if (quick_messages)
-            break;
-        if (ch == ESCAPE)
-            break;
-        if (strchr("YyNn", ch))
-            break;
-        if (ch == toupper(other))
-            break;
-        if (ch == tolower(other))
-            break;
-        bell("Illegal response to question!");
-    }
-
-    /* Erase the prompt */
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-    else
-        prt("", 0, 0);
-
-    /* Normal negation */
-    if ((ch == 'Y') || (ch == 'y'))
-        result = 1;
-    /*other option*/
-    else if ((ch == toupper(other)) || (ch == tolower(other)))
-        result = 2;
-    /*all else default to no*/
-
-    /* Success */
-    return (result);
+    return 0;
 }
 
 /*
@@ -1236,19 +951,13 @@ int get_check_other(cptr prompt, char other)
  */
 bool get_check(cptr prompt)
 {
-    char ch;
-
-    char buf[160];
     bool portable = portable_controls_active();
-    int term_wid = active_term_width();
-    int suffix_wid = portable ? 13 : 7;
-    int prompt_wid = term_wid - suffix_wid;
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
-    if (!snapshot_interaction && prompt_menu_scene_menu_snapshot_active())
+    if (prompt_scene_supported)
     {
         int scene_result = prompt_menu_scene_run_confirm(prompt,
             portable ? "Y, Enter, or Space confirms, N declines."
@@ -1259,64 +968,7 @@ bool get_check(cptr prompt)
             return scene_result == 1;
     }
 
-    /* Hack -- Build a "useful" prompt */
-    if (snapshot_interaction)
-    {
-        strnfmt(buf, sizeof(buf), "%s[y/n%s] ", prompt,
-            portable ? "/space" : "");
-    }
-    else
-    {
-        if (prompt_wid < 8)
-            prompt_wid = 8;
-        strnfmt(buf, sizeof(buf), "%.*s[y/n%s] ", prompt_wid, prompt,
-            portable ? "/space" : "");
-    }
-
-    /* Prompt for it */
-    if (!snapshot_interaction)
-        prt(buf, 0, 0);
-
-    /* Get an acceptable answer */
-    while (true)
-    {
-        if (snapshot_interaction && prompt_snapshot_should_present())
-        {
-            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
-                APP_WAIT_REASON_CONFIRM,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL,
-                TERM_WHITE, buf, TERM_SLATE,
-                portable ? "Y, Enter, or Space confirms, N declines."
-                    : "Y confirms, N declines.");
-            prompt_snapshot_present();
-        }
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-        if (quick_messages)
-            break;
-        if (ch == ESCAPE)
-            break;
-        if (strchr("YyNn", ch)
-            || (portable && (ch == ' ' || ch == '\r' || ch == '\n')))
-            break;
-        bell("Illegal response to a 'yes/no' question!");
-    }
-
-    /* Erase the prompt */
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-    else
-        prt("", 0, 0);
-
-    /* Normal negation */
-    if ((ch != 'Y') && (ch != 'y')
-        && !(portable && (ch == ' ' || ch == '\r' || ch == '\n')))
-        return (false);
-
-    /* Success */
-    return (true);
+    return false;
 }
 
 /*
@@ -1325,164 +977,16 @@ bool get_check(cptr prompt)
  */
 bool get_check_oath_multiline(cptr prompt)
 {
-    char ch;
-
     /* Paranoia */
     message_flush();
-
-    if (ui_information_scene_supported())
+    if (prompt_menu_scene_supported())
     {
-        ui_information_scene_scope scope;
-        app_ui_scene scene;
-        bool scene_active = false;
+        int scene_result = prompt_menu_scene_run_oath_confirm(prompt);
 
-        if (prompt_menu_scene_build_oath_confirm_scene(&scene, prompt)
-            && ui_information_scene_enter(&scope))
-        {
-            if (ui_information_scene_present_ui(&scene))
-                scene_active = true;
-            else
-                ui_information_scene_leave(&scope);
-        }
-
-        if (scene_active)
-        {
-            while (true)
-            {
-                ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-                if (quick_messages)
-                    break;
-                if (ch == ESCAPE)
-                    break;
-                if (strchr("YyNn", ch))
-                    break;
-                bell("Illegal response to a 'yes/no' question!");
-            }
-
-            ui_information_scene_leave(&scope);
-            if ((ch != 'Y') && (ch != 'y'))
-                return false;
-            return true;
-        }
-
-        return get_check(prompt);
+        if (scene_result >= 0)
+            return scene_result == 1;
     }
-
-    {
-        int wid, h;
-
-    /* Get terminal size */
-        Term_get_size(&wid, &h);
-
-    /* Save screen */
-        screen_save();
-        Term_clear();
-
-    /* Title */
-        Term_putstr((wid - 24) / 2, 2, -1, TERM_L_RED,
-            "Breaking a Sacred Oath");
-
-    /* Display the oath confirmation prompt with word wrapping */
-        if (prompt && prompt[0])
-        {
-            char* desc_ptr = (char*)prompt;
-            char line_buffer[80];
-            int row = 5;
-            int max_width = 70; /* Leave margins */
-
-            while (*desc_ptr && row < h - 4)
-            {
-                int line_len = 0;
-                char* line_start = desc_ptr;
-
-                /* Find the longest line that fits */
-                while (*desc_ptr && line_len < max_width)
-                {
-                    if (*desc_ptr == ' ')
-                    {
-                        /* Potential break point */
-                        if (line_len > 0 && line_len + 1 < max_width)
-                        {
-                            memcpy(line_buffer, line_start, (size_t)line_len);
-                            line_buffer[line_len] = '\0';
-                        }
-                    }
-                    line_len++;
-                    desc_ptr++;
-                }
-
-                /* Back up to last space if we exceeded width */
-                if (line_len >= max_width && *desc_ptr)
-                {
-                    while (desc_ptr > line_start && *desc_ptr != ' ')
-                    {
-                        desc_ptr--;
-                        line_len--;
-                    }
-                    if (*desc_ptr == ' ')
-                        desc_ptr++; /* Skip the space */
-                }
-
-                /* Copy the line */
-                int actual_len = (int)(desc_ptr - line_start);
-                if (actual_len > 79)
-                    actual_len = 79;
-                memcpy(line_buffer, line_start, (size_t)actual_len);
-                line_buffer[actual_len] = '\0';
-
-                /* Remove trailing space */
-                while (actual_len > 0 && line_buffer[actual_len - 1] == ' ')
-                {
-                    actual_len--;
-                    line_buffer[actual_len] = '\0';
-                }
-
-                /* Display centered line */
-                if (actual_len > 0)
-                {
-                    int start_col = (wid - actual_len) / 2;
-                    if (start_col < 1)
-                        start_col = 1;
-                    Term_putstr(start_col, row, -1, TERM_WHITE, line_buffer);
-                    row++;
-                }
-
-                /* Skip whitespace for next line */
-                while (*desc_ptr && *desc_ptr == ' ')
-                    desc_ptr++;
-
-                if (!*desc_ptr)
-                    break;
-            }
-        }
-
-    /* Prompt at bottom */
-        Term_putstr((wid - 20) / 2, h - 3, -1, TERM_YELLOW,
-            "Are you certain? [y/n]");
-
-    /* Get an acceptable answer */
-        while (true)
-        {
-            ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-            if (quick_messages)
-                break;
-            if (ch == ESCAPE)
-                break;
-            if (strchr("YyNn", ch))
-                break;
-            bell("Illegal response to a 'yes/no' question!");
-        }
-
-    /* Restore screen */
-        screen_load();
-    }
-
-    /* Normal negation */
-    if ((ch != 'Y') && (ch != 'y'))
-        return (false);
-
-    /* Success */
-    return (true);
+    return false;
 }
 
 /*
@@ -1490,78 +994,16 @@ bool get_check_oath_multiline(cptr prompt)
  */
 int get_menu_choice(s16b max, char* prompt)
 {
-    int choice = -1;
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
-    char ch;
-
-    bool done = false;
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
-
-    if (!snapshot_interaction)
-        prt(prompt, 0, 0);
-
-    while (!done)
+    if (prompt_scene_supported)
     {
-        if (snapshot_interaction && prompt_snapshot_should_present())
-        {
-            prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
-                APP_WAIT_REASON_LIST_SELECTION,
-                APP_INTERACTION_FLAG_CAN_CONFIRM
-                    | APP_INTERACTION_FLAG_CAN_CANCEL,
-                TERM_WHITE, prompt, TERM_SLATE,
-                "Press a menu letter or Esc to cancel.");
-            prompt_snapshot_present();
-        }
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
+        int scene_choice = prompt_menu_scene_run_menu_choice(max, prompt);
 
-        /* Letters are used for selection */
-        if (isalpha((unsigned char)ch))
-        {
-            if (islower((unsigned char)ch))
-            {
-                choice = A2I(ch);
-            }
-            else
-            {
-                choice = ch - 'A' + 26;
-            }
-
-            /* Validate input */
-            if ((choice > -1) && (choice < max))
-            {
-                done = true;
-            }
-
-            else
-            {
-                bell("Illegal response to question!");
-            }
-        }
-
-        /* Allow user to exit the fuction */
-        else if (ch == ESCAPE)
-        {
-            /* Mark as no choice made */
-            choice = -1;
-
-            done = true;
-        }
-
-        /* Invalid input */
-        else
-            bell("Illegal response to question!");
+        if (scene_choice != -2)
+            return scene_choice;
     }
-
-    /* Clear the prompt */
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-    else
-        prt("", 0, 0);
-
-    /* Return */
-    return (choice);
+    return -1;
 }
 
 /*
@@ -1573,43 +1015,23 @@ int get_menu_choice(s16b max, char* prompt)
  */
 bool get_com(cptr prompt, char* command)
 {
-    char ch;
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
     /* Paranoia XXX XXX XXX */
     message_flush();
 
-    /* Display a prompt */
-    if (!snapshot_interaction)
-        prt(prompt, 0, 0);
-
-    if (snapshot_interaction && prompt_snapshot_should_present())
+    if (prompt_scene_supported)
     {
-        prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
-            APP_WAIT_REASON_CONFIRM,
-            APP_INTERACTION_FLAG_CAN_CONFIRM
-                | APP_INTERACTION_FLAG_CAN_CANCEL,
-            TERM_WHITE, prompt, TERM_SLATE,
-            "Press a key or Esc to cancel.");
-        prompt_snapshot_present();
+        int scene_ch = prompt_menu_scene_run_command_prompt(prompt);
+
+        if (scene_ch != -2)
+        {
+            *command = (char)scene_ch;
+            return (scene_ch != ESCAPE);
+        }
     }
-
-    /* Get a key */
-    ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_CONFIRM);
-
-    /* Clear the prompt */
-    if (snapshot_interaction)
-    {
-        prompt_snapshot_finish_interaction();
-    }
-    else
-        prt("", 0, 0);
-
-    /* Save the command */
-    *command = ch;
-
-    /* Done */
-    return (ch != ESCAPE);
+    *command = ESCAPE;
+    return false;
 }
 
 /*
@@ -1619,27 +1041,13 @@ bool get_com(cptr prompt, char* command)
  */
 void pause_line(int row)
 {
-    bool snapshot_interaction = prompt_snapshot_interaction_active();
+    bool prompt_scene_supported = prompt_menu_scene_supported();
 
-    if (!snapshot_interaction)
-    {
-        prt("", row, 0);
-        put_str("(press any key)", row, 23);
-    }
-    else
-    {
-        prompt_snapshot_begin(APP_INTERACTION_KIND_PROMPT,
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE,
-            APP_INTERACTION_FLAG_CAN_CONFIRM,
-            TERM_WHITE, "(press any key)", TERM_SLATE, "");
-        prompt_snapshot_present();
-    }
+    (void)row;
 
-    (void)prompt_inkey_with_wait_reason(APP_WAIT_REASON_INFORMATIONAL_PAUSE);
-    if (snapshot_interaction)
+    if (prompt_scene_supported)
     {
-        prompt_snapshot_finish_interaction();
+        if (prompt_menu_scene_run_pause("(press any key)") != -2)
+            return;
     }
-    else
-        prt("", row, 0);
 }

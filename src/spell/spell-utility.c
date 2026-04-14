@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -22,11 +23,11 @@
 #include "object/object-ui-identify.h"
 #include "supplies.h"
 #include "spell/spell-utility.h"
+#include "ui/ui-information-scene.h"
 
 // Function declarations
 void analyze_weapon_properties(int* count, char s[][200], char t[][200], bool good[], 
                                bool identify[], int slot, const char* weapon_name);
-void display_attributes(char s[][200], char t[][200], bool good[], int count);
 void identify_revealed_items(bool identify[]);
 
 #define TR1 0
@@ -473,12 +474,64 @@ static byte resist_color(const char* name)
     return TERM_WHITE;
 }
 
-static bool render_resistance_summary(const char* text)
+static void self_knowledge_layout_size(int* wid, int* hgt)
+{
+    int term_wid = 80;
+    int term_hgt = 24;
+
+    if (Term)
+        Term_get_size(&term_wid, &term_hgt);
+
+    if (term_wid < 40)
+        term_wid = 40;
+    if (term_hgt < 8)
+        term_hgt = 8;
+
+    if (wid)
+        *wid = term_wid;
+    if (hgt)
+        *hgt = term_hgt;
+}
+
+static bool self_knowledge_append_rich_span(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, cptr text)
+{
+    char buf[APP_UI_TEXT_MAX];
+    size_t len;
+
+    if (!scene || !panel || !text || !text[0])
+        return true;
+
+    len = strlen(text);
+    while (len > 0)
+    {
+        size_t chunk_len = len;
+
+        if (chunk_len >= sizeof(buf))
+            chunk_len = sizeof(buf) - 1u;
+        memcpy(buf, text, chunk_len);
+        buf[chunk_len] = '\0';
+        if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))
+            return false;
+        text += chunk_len;
+        len -= chunk_len;
+    }
+
+    return true;
+}
+
+static bool self_knowledge_scene_add_resist_paragraph(app_ui_scene* scene,
+    app_ui_panel* panel, cptr text)
 {
     const char* prefix_resist = "You resist ";
     const char* prefix_vuln = "You are vulnerable to ";
     const char* prefix_none = "You do not resist ";
     const char* prefix = NULL;
+    const char* list;
+    const char* p;
+
+    if (!scene || !panel || !text || !text[0])
+        return true;
 
     if (strncmp(text, prefix_resist, strlen(prefix_resist)) == 0)
         prefix = prefix_resist;
@@ -487,41 +540,214 @@ static bool render_resistance_summary(const char* text)
     else if (strncmp(text, prefix_none, strlen(prefix_none)) == 0)
         prefix = prefix_none;
 
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
     if (!prefix)
+        return self_knowledge_append_rich_span(scene, panel, TERM_WHITE, text);
+
+    if (!self_knowledge_append_rich_span(scene, panel, TERM_WHITE, prefix))
         return false;
 
-    const char* list = text + strlen(prefix);
-    if (!list[0])
-        return false;
-
-    text_out_hook = text_out_to_screen;
-    text_out_indent = 1;
-    text_out_wrap = Term->wid - 4;
-
-    text_out_c(TERM_WHITE, prefix);
-
-    const char* p = list;
+    list = text + strlen(prefix);
+    p = list;
     while (*p)
     {
         const char* comma = strstr(p, ", ");
         size_t len = comma ? (size_t)(comma - p) : strlen(p);
+
         if (len > 0)
         {
-            char token[32];
-            size_t cap = sizeof(token) - 1;
-            if (len > cap)
-                len = cap;
-            SDL_strlcpy(token, p, len + 1);
-            text_out_c(resist_color(token), token);
+            char token[64];
+
+            if (len >= sizeof(token))
+                len = sizeof(token) - 1u;
+            memcpy(token, p, len);
+            token[len] = '\0';
+            if (!self_knowledge_append_rich_span(scene, panel,
+                    resist_color(token), token))
+            {
+                return false;
+            }
         }
 
         if (!comma)
             break;
-
-        text_out(", ");
+        if (!self_knowledge_append_rich_span(scene, panel, TERM_WHITE, ", "))
+            return false;
         p = comma + 2;
     }
 
+    return true;
+}
+
+static bool self_knowledge_scene_add_entry(app_ui_scene* scene,
+    app_ui_panel* panel, cptr main_text, cptr detail_text, bool good)
+{
+    if (!scene || !panel || !main_text || !main_text[0])
+        return true;
+
+    if (!detail_text || !detail_text[0])
+        return self_knowledge_scene_add_resist_paragraph(scene, panel,
+            main_text);
+
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+    if (!self_knowledge_append_rich_span(scene, panel, TERM_WHITE, main_text))
+        return false;
+    if (!self_knowledge_append_rich_span(scene, panel, TERM_WHITE, " "))
+        return false;
+    return self_knowledge_append_rich_span(scene, panel,
+        good ? TERM_GREEN : TERM_L_RED, detail_text);
+}
+
+static int self_knowledge_entry_line_count(cptr main_text, cptr detail_text,
+    int wrap_width)
+{
+    char combined[512];
+
+    if (!main_text || !main_text[0])
+        return 0;
+
+    if (detail_text && detail_text[0])
+        strnfmt(combined, sizeof(combined), "%s %s", main_text, detail_text);
+    else
+        SDL_strlcpy(combined, main_text, sizeof(combined));
+
+    return count_wrapped_lines(combined, wrap_width, 1);
+}
+
+static bool self_knowledge_build_ui_scene(app_ui_scene* scene, char s[][200],
+    char t[][200], bool good[], int count, int start, int* out_next)
+{
+    app_ui_panel* panel;
+    int term_wid;
+    int term_hgt;
+    int wrap_width;
+    int max_lines;
+    int used_lines = 0;
+    int next = start;
+    char subtitle[APP_UI_TEXT_MAX];
+
+    if (out_next)
+        *out_next = start;
+    if (!scene)
+        return false;
+
+    self_knowledge_layout_size(&term_wid, &term_hgt);
+    wrap_width = term_wid - 6;
+    if (wrap_width < 20)
+        wrap_width = 20;
+    max_lines = term_hgt - 6;
+    if (max_lines < 4)
+        max_lines = 4;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 900, 1440);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Your Attributes");
+
+    if (count <= 0 || start >= count)
+    {
+        if (!app_ui_panel_begin_rich_paragraph(scene, panel)
+            || !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE,
+                "You discern nothing unusual about yourself."))
+        {
+            return false;
+        }
+        if (out_next)
+            *out_next = count;
+    }
+    else
+    {
+        while (next < count)
+        {
+            int entry_lines = self_knowledge_entry_line_count(s[next], t[next],
+                wrap_width);
+
+            if (entry_lines < 1)
+                entry_lines = 1;
+            if (used_lines > 0 && used_lines + entry_lines > max_lines)
+                break;
+            if (!self_knowledge_scene_add_entry(scene, panel, s[next], t[next],
+                    good[next]))
+            {
+                return false;
+            }
+
+            used_lines += entry_lines;
+            next++;
+        }
+
+        if (next == start)
+        {
+            if (!self_knowledge_scene_add_entry(scene, panel, s[next], t[next],
+                    good[next]))
+            {
+                return false;
+            }
+            next++;
+        }
+
+        strnfmt(subtitle, sizeof(subtitle), "Entries %d-%d of %d", start + 1,
+            next, count);
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+        if (out_next)
+            *out_next = next;
+    }
+
+    if (next < count)
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Any", "Next");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Close");
+    }
+    else
+    {
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Any", "Close");
+    }
+
+    return true;
+}
+
+static bool display_attributes_ui(char s[][200], char t[][200], bool good[],
+    int count)
+{
+    ui_information_scene_scope scope;
+    int start = 0;
+
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    while (true)
+    {
+        app_ui_scene scene;
+        int next = start;
+        int key;
+
+        if (!self_knowledge_build_ui_scene(&scene, s, t, good, count, start,
+                &next)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == ESCAPE || next <= start || next >= count)
+            break;
+        start = next;
+    }
+
+    ui_information_scene_leave(&scope);
     return true;
 }
 
@@ -958,7 +1184,8 @@ void self_knowledge(void)
     }
 
     // Display the information
-    display_attributes(s, t, good, i);
+    if (!display_attributes_ui(s, t, good, i))
+        log_warn("self knowledge: semantic presentation required");
     
     // Identify items that revealed information
     identify_revealed_items(identify);
@@ -1070,65 +1297,6 @@ void analyze_weapon_properties(int* count, char s[][200], char t[][200], bool go
     }
     
     *count = i;
-}
-
-// Helper function to display attributes with proper text wrapping and pagination
-void display_attributes(char s[][200], char t[][200], bool good[], int count)
-{
-    screen_save();
-    Term_clear();
-    
-    int line = 2;
-    Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, "Your Attributes:");
-    
-    for (int j = 0; j < count; j++) {
-        // Check if we need to paginate before displaying this entry
-        // Reserve space for potential wrapping (assume up to 3 lines per entry)
-        if (line >= 18 && j + 1 < count) {
-            Term_putstr(1, line + 1, -1, TERM_L_WHITE, "(press any key)");
-            inkey();
-            Term_clear();
-            Term_putstr(1, 0, -1, TERM_L_WHITE + TERM_SHADE, "Your Attributes:");
-            line = 2;
-        }
-        
-        // Set up text wrapping with more conservative wrap width
-        text_out_hook = text_out_to_screen;
-        text_out_indent = 1;
-        text_out_wrap = Term->wid - 4;  // More conservative margin
-        
-        // Position cursor at start of line
-        Term_gotoxy(1, line);
-        
-        if (t[j][0] == '\0' && render_resistance_summary(s[j])) {
-            /* handled by helper */
-        } else {
-            // Output main text in white
-            text_out_c(TERM_WHITE, s[j]);
-
-            // Add detail text if it exists
-            if (t[j][0] != '\0') {
-                text_out(" ");  // Add space separator
-                text_out_c(good[j] ? TERM_GREEN : TERM_L_RED, t[j]);
-            }
-        }
-        
-        // Get current cursor position after wrapping
-        int cx, cy;
-        Term_locate(&cx, &cy);
-        line = cy + 1;  // Next available line
-        
-        // Add a small buffer to prevent edge cases
-        if (line >= Term->hgt - 3) {
-            line = Term->hgt - 3;
-        }
-    }
-    
-    // Final pause - make sure we don't go off screen
-    int final_line = (line < Term->hgt - 2) ? line + 1 : Term->hgt - 2;
-    Term_putstr(1, final_line, -1, TERM_L_WHITE, "(press any key)");
-    inkey();
-    screen_load();
 }
 
 // Helper function to identify revealed items
@@ -1439,20 +1607,10 @@ static int recharge_collect_targets(recharge_target_entry entries[],
     return count;
 }
 
-static bool recharge_choose_target(const recharge_target_entry entries[],
-    int count, int* out_item)
+static void recharge_choose_target_layout_size(int* wid, int* hgt)
 {
-    int current = 0;
-    int top = 0;
     int term_wid = 80;
     int term_hgt = 24;
-    int list_row = 2;
-    int help_row;
-    int prompt_row;
-    int page_size;
-
-    if (!entries || count <= 0 || !out_item)
-        return false;
 
     if (Term)
         Term_get_size(&term_wid, &term_hgt);
@@ -1462,19 +1620,169 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
     if (term_hgt < 8)
         term_hgt = 8;
 
-    help_row = term_hgt - 2;
-    prompt_row = term_hgt - 1;
-    page_size = help_row - list_row;
+    if (wid)
+        *wid = term_wid;
+    if (hgt)
+        *hgt = term_hgt;
+}
+
+static bool recharge_build_target_ui_scene(app_ui_scene* scene,
+    const recharge_target_entry entries[], int count, int current, int top,
+    int page_size)
+{
+    app_ui_panel* panel;
+    char subtitle[APP_UI_TEXT_MAX];
+    char prompt[APP_UI_TEXT_MAX];
+    int visible_count;
+
+    if (!scene || !entries || count <= 0 || current < 0 || current >= count)
+        return false;
+
+    visible_count = count - top;
+    if (visible_count > page_size)
+        visible_count = page_size;
+    if (visible_count < 1)
+        visible_count = 1;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 760, 1220);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Recharge which staff?");
+    strnfmt(subtitle, sizeof(subtitle), "%d rechargeable target%s",
+        count, (count == 1) ? "" : "s");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    if (count > page_size)
+    {
+        strnfmt(prompt, sizeof(prompt), "Showing %d-%d of %d", top + 1,
+            top + visible_count, count);
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE, prompt);
+    }
+    else
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "Choose a target to receive the recharge.");
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Space", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "a-z", "Pick");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "Esc", "Cancel");
+
+    for (int i = 0; i < visible_count; i++)
+    {
+        const recharge_target_entry* entry = &entries[top + i];
+        object_type* o_ptr = entry->o_ptr;
+        char key[APP_UI_KEY_MAX];
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        char desc[80];
+        bool highlighted = (top + i == current);
+        byte attr;
+
+        if (i < 26)
+            strnfmt(key, sizeof(key), "%c", I2A(i));
+        else
+            key[0] = '\0';
+
+        if (entry->item >= 0)
+        {
+            object_desc(desc, sizeof(desc), o_ptr, true, 3);
+            strnfmt(label, sizeof(label), "%s: %s", mention_use(entry->item),
+                desc);
+            strnfmt(meta, sizeof(meta), "%c", index_to_label(entry->item));
+        }
+        else
+        {
+            object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
+            strnfmt(label, sizeof(label), "On floor: %s", desc);
+            SDL_strlcpy(meta, "-)", sizeof(meta));
+        }
+
+        attr = highlighted ? TERM_L_BLUE : object_display_color(o_ptr,
+            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+
+        if (!app_ui_panel_add_row_ex(panel, (s16b)entry->item, attr, attr,
+                object_attr(o_ptr), object_char(o_ptr), true, highlighted, key,
+                label, meta))
+        {
+            return false;
+        }
+    }
+
+    {
+        const recharge_target_entry* selected = &entries[current];
+        char detail[APP_UI_TEXT_MAX];
+        char desc[80];
+        object_type* o_ptr = selected->o_ptr;
+        int charges = MAX(o_ptr->pval, 0);
+
+        if (selected->item >= 0)
+            object_desc(desc, sizeof(desc), o_ptr, true, 3);
+        else
+            object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, desc);
+        if (selected->item >= 0)
+        {
+            strnfmt(detail, sizeof(detail), "Location: %s",
+                mention_use(selected->item));
+        }
+        else
+        {
+            SDL_strlcpy(detail, "Location: floor", sizeof(detail));
+        }
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
+
+        strnfmt(detail, sizeof(detail), "Stored charges: %d", charges);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, detail);
+    }
+
+    return true;
+}
+
+static bool recharge_choose_target_ui(const recharge_target_entry entries[],
+    int count, int* out_item)
+{
+    ui_information_scene_scope scope;
+    int current = 0;
+    int top = 0;
+    int term_wid;
+    int term_hgt;
+    int page_size;
+
+    if (!entries || count <= 0 || !out_item)
+        return false;
+    if (!ui_information_scene_enter(&scope))
+        return false;
+
+    recharge_choose_target_layout_size(&term_wid, &term_hgt);
+    (void)term_wid;
+    page_size = term_hgt - 10;
     if (page_size < 1)
         page_size = 1;
-
-    screen_save();
+    if (page_size > 26)
+        page_size = 26;
 
     while (true)
     {
+        app_ui_scene scene;
         int visible_count;
-        char buf[160];
-        char key;
+        int key;
 
         if (current < top)
             top = current;
@@ -1485,87 +1793,19 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
         if (visible_count > page_size)
             visible_count = page_size;
 
-        Term_clear();
-
-        prt("Recharge which staff?", 0, 0);
-        strnfmt(buf, sizeof(buf),
-            "%d rechargeable target%s",
-            count, (count == 1) ? "" : "s");
-        prt(buf, 1, 0);
-
-        for (int i = 0; i < visible_count; i++)
+        if (!recharge_build_target_ui_scene(&scene, entries, count, current,
+                top, page_size)
+            || !ui_information_scene_present_ui(&scene))
         {
-            int row = list_row + i;
-            int item = entries[top + i].item;
-            object_type* o_ptr = entries[top + i].o_ptr;
-            char prefix[32];
-            char desc[80];
-            char label[4];
-            int desc_col = 20;
-            int max_desc = term_wid - desc_col - 1;
-            bool highlighted = (top + i == current);
-            byte label_attr = highlighted ? TERM_L_BLUE : TERM_WHITE;
-            byte desc_attr;
-
-            if (max_desc < 0)
-                max_desc = 0;
-            if (max_desc >= (int)sizeof(desc))
-                max_desc = (int)sizeof(desc) - 1;
-
-            if (item >= 0)
-            {
-                strnfmt(prefix, sizeof(prefix), "%-12s:", mention_use(item));
-                object_desc(desc, sizeof(desc), o_ptr, true, 3);
-            }
-            else
-            {
-                strnfmt(prefix, sizeof(prefix), "%-12s:", "On floor");
-                object_desc_floor(desc, sizeof(desc), o_ptr, true, 3);
-            }
-            desc[max_desc] = '\0';
-
-            desc_attr = highlighted
-                ? TERM_L_BLUE
-                : object_display_color(o_ptr,
-                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
-
-            if (i < 26)
-                strnfmt(label, sizeof(label), "%c)", I2A(i));
-            else
-                SDL_strlcpy(label, "  ", sizeof(label));
-
-            Term_erase(0, row, 255);
-            Term_putstr(0, row, 2, label_attr, highlighted ? "> " : "  ");
-            Term_putstr(2, row, -1, label_attr, label);
-            Term_putstr(5, row, -1, label_attr, prefix);
-            Term_putstr(desc_col, row, -1, desc_attr, desc);
+            ui_information_scene_leave(&scope);
+            return false;
         }
 
-        for (int i = list_row + visible_count; i < help_row; i++)
-            Term_erase(0, i, 255);
-
-        if (count > page_size)
-        {
-            strnfmt(buf, sizeof(buf),
-                "Showing %d-%d of %d",
-                top + 1, top + visible_count, count);
-            prt(buf, help_row, 0);
-        }
-        else
-        {
-            prt("", help_row, 0);
-        }
-
-        prt("Letters/8/2/arrows choose, Enter select, ESC cancel",
-            prompt_row, 0);
-        Term_fresh();
-
-        key = inkey();
-
+        key = ui_information_scene_wait_key();
         switch (key)
         {
         case ESCAPE:
-            screen_load();
+            ui_information_scene_leave(&scope);
             return false;
 
         case '\r':
@@ -1575,7 +1815,7 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
         case KC_ENTER:
 #endif
             *out_item = entries[current].item;
-            screen_load();
+            ui_information_scene_leave(&scope);
             return true;
 
         case '8':
@@ -1607,7 +1847,7 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
             if (pick >= 0 && pick < visible_count)
             {
                 *out_item = entries[top + pick].item;
-                screen_load();
+                ui_information_scene_leave(&scope);
                 return true;
             }
 
@@ -1615,6 +1855,15 @@ static bool recharge_choose_target(const recharge_target_entry entries[],
         }
         }
     }
+}
+
+static bool recharge_choose_target(const recharge_target_entry entries[],
+    int count, int* out_item)
+{
+    if (!entries || count <= 0 || !out_item)
+        return false;
+
+    return recharge_choose_target_ui(entries, count, out_item);
 }
 
 /*

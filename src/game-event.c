@@ -1,10 +1,15 @@
 /* File: game-event.c */
 
 #include "angband.h"
+#include "app/app-ui.h"
 #include "externs.h"
 #include "game-event.h"
 #include "log/log.h"
 #include "platform-story-font.h"
+#include "ui/ui-information-scene.h"
+
+#define PAUSE_WITH_TEXT_DOC_COLS 80
+#define PAUSE_WITH_TEXT_DOC_ROWS 24
 
 bool random_stair_location(int* sy, int* sx)
 {
@@ -253,128 +258,313 @@ const char ultimate_bug_text[][100]
 
           { "" } };
 
-static int pause_with_text_print_wrapped_segment(int row, int col, byte attr,
-                                                 cptr text, int delay_msec)
+static int pause_with_text_measure_width(cptr text, int len, bool use_story,
+    int cell_width)
 {
-    int term_wid = 80;
-    int term_hgt = 24;
-    int max_cols;
-    int wrap_col;
-    int rows_used = 1;
+    int width;
 
-    if (!text)
-        text = "";
+    if (!text || len <= 0)
+        return 0;
+    if (!use_story)
+        return len * cell_width;
 
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
+    width = sdl_story_font_text_width(text, len);
+    if (width <= 0)
+        width = len * cell_width;
+    return width;
+}
 
-    if (row < 0 || row >= term_hgt)
+static int pause_with_text_space_width(bool use_story, int cell_width)
+{
+    int width;
+
+    if (!use_story)
+        return cell_width;
+
+    width = sdl_story_font_text_width(" ", 1);
+    if (width <= 0)
+        width = cell_width;
+    return width;
+}
+
+static int pause_with_text_scene_add_wrapped_segment(app_ui_scene* scene,
+    app_ui_panel* panel, int row, int col, byte attr, cptr text)
+{
+    const char* s = text ? text : "";
+    int wrap_col = PAUSE_WITH_TEXT_DOC_COLS - 2;
+    int cell_width = sdl_get_cell_width();
+    int wrap_pixels;
+    int indent_pixels;
+    int current_pixels;
+    int space_pixels;
+    int current_row = row;
+    int rows_used = 0;
+    char line[APP_UI_TEXT_MAX];
+    int line_len = 0;
+    bool use_story = true;
+
+    if (!scene || !panel)
         return 0;
 
-    if (col < 0)
-        col = 0;
-    if (col >= term_wid)
-        col = term_wid - 1;
+    if (cell_width <= 0)
+        cell_width = 1;
+    if (wrap_col <= col)
+        wrap_col = col + 1;
 
-    max_cols = term_wid - col - 2;
-    if (max_cols < 1)
-        max_cols = 1;
+    wrap_pixels = wrap_col * cell_width;
+    indent_pixels = col * cell_width;
+    current_pixels = indent_pixels;
+    space_pixels = pause_with_text_space_width(use_story, cell_width);
+    if (space_pixels <= 0)
+        space_pixels = cell_width;
 
-    wrap_col = col + max_cols;
+    if (!*s)
+        return 1;
 
-    if (*text)
+    while (*s)
     {
-        if (sdl_is_story_font_enabled())
-            rows_used = count_wrapped_lines_story(text, wrap_col, col);
-        else
-            rows_used = count_wrapped_lines(text, wrap_col, col);
+        if (*s == '\n')
+        {
+            line[line_len] = '\0';
+            if (line_len > 0
+                && !app_ui_panel_add_document_text_ex(scene, panel,
+                    (s16b)current_row, (s16b)col, attr, STORY_FLAG_USE, line))
+            {
+                return 0;
+            }
 
-        if (rows_used < 1)
-            rows_used = 1;
+            rows_used++;
+            current_row++;
+            line_len = 0;
+            current_pixels = indent_pixels;
+            s++;
+            continue;
+        }
+
+        while (*s == ' ')
+        {
+            if (line_len < (int)sizeof(line) - 1)
+                line[line_len++] = ' ';
+            current_pixels += space_pixels;
+            s++;
+
+            if (current_pixels >= wrap_pixels)
+            {
+                line[line_len] = '\0';
+                if (line_len > 0
+                    && !app_ui_panel_add_document_text_ex(scene, panel,
+                        (s16b)current_row, (s16b)col, attr, STORY_FLAG_USE,
+                        line))
+                {
+                    return 0;
+                }
+
+                rows_used++;
+                current_row++;
+                line_len = 0;
+                current_pixels = indent_pixels;
+            }
+        }
+
+        if (!*s)
+            break;
+        if (*s == '\n')
+            continue;
+
+        {
+            const char* word_start = s;
+            int word_chars = 0;
+            int word_pixels;
+
+            while (s[word_chars] && s[word_chars] != ' ' && s[word_chars] != '\n')
+                word_chars++;
+            if (word_chars == 0)
+                continue;
+
+            word_pixels = pause_with_text_measure_width(word_start, word_chars,
+                use_story, cell_width);
+            if (current_pixels > indent_pixels
+                && (current_pixels + word_pixels) > wrap_pixels)
+            {
+                line[line_len] = '\0';
+                if (line_len > 0
+                    && !app_ui_panel_add_document_text_ex(scene, panel,
+                        (s16b)current_row, (s16b)col, attr, STORY_FLAG_USE,
+                        line))
+                {
+                    return 0;
+                }
+
+                rows_used++;
+                current_row++;
+                line_len = 0;
+                current_pixels = indent_pixels;
+            }
+
+            for (int i = 0; i < word_chars; i++)
+            {
+                if (line_len < (int)sizeof(line) - 1)
+                    line[line_len++] = word_start[i];
+            }
+
+            current_pixels += word_pixels;
+            s += word_chars;
+        }
     }
 
-    story_print_text(row, col, max_cols, attr, text);
-    Term_fresh();
+    line[line_len] = '\0';
+    if (line_len > 0)
+    {
+        if (!app_ui_panel_add_document_text_ex(scene, panel, (s16b)current_row,
+                (s16b)col, attr, STORY_FLAG_USE, line))
+        {
+            return 0;
+        }
+        rows_used++;
+    }
 
-    if (delay_msec > 0)
-        Term_xtra(TERM_XTRA_DELAY, delay_msec);
+    return rows_used ? rows_used : 1;
+}
 
-    return rows_used;
+static bool pause_with_text_build_ui_scene(app_ui_scene* scene, int row, int col,
+    const char desc[][100], const char extra[][100], byte extra_attr,
+    bool overlay_dungeon)
+{
+    app_ui_panel* panel;
+    int banner_lines = 0;
+    int i_main = 0;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene,
+        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+
+    if (extra)
+    {
+        int n_extra = 0;
+
+        banner_lines += pause_with_text_scene_add_wrapped_segment(scene, panel,
+            row + banner_lines, col - 5, extra_attr, extra[0]);
+        if (!banner_lines)
+            return false;
+
+        banner_lines += pause_with_text_scene_add_wrapped_segment(scene, panel,
+            row + banner_lines, col - 5, extra_attr, "");
+        if (banner_lines <= 0)
+            return false;
+
+        while (extra[n_extra][0])
+            n_extra++;
+
+        for (int i = 1; i < n_extra; ++i)
+        {
+            int shift = col - 5;
+            int used;
+
+            if (i == n_extra - 1)
+                shift += 4;
+
+            used = pause_with_text_scene_add_wrapped_segment(scene, panel,
+                row + banner_lines, shift, extra_attr, extra[i]);
+            if (!used)
+                return false;
+            banner_lines += used;
+        }
+
+        banner_lines++;
+    }
+
+    while (desc && desc[i_main][0])
+    {
+        int used = pause_with_text_scene_add_wrapped_segment(scene, panel,
+            row + banner_lines, col, TERM_WHITE, desc[i_main]);
+
+        if (!used)
+            return false;
+        banner_lines += used;
+        i_main++;
+    }
+
+    if (panel->document_op_count == 0)
+        return app_ui_panel_add_document_text(scene, panel, 0, 0, TERM_WHITE, " ");
+
+    return true;
+}
+
+static bool pause_with_text_scene_enter(ui_information_scene_scope* scope,
+    bool* overlay_dungeon)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (overlay_dungeon)
+        *overlay_dungeon = false;
+    if (!scope || !session)
+        return false;
+    if (!ui_information_scene_enter(scope))
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (overlay_dungeon && snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON)
+        *overlay_dungeon = true;
+    return true;
+}
+
+static bool pause_with_text_scene_present(ui_information_scene_scope* scope,
+    const app_ui_scene* scene, bool overlay_dungeon)
+{
+    app_session* session = app_session_current();
+
+    if (!scope || !scene || !session)
+        return false;
+
+    if (overlay_dungeon)
+    {
+        if (!app_session_publish_dungeon_overlay_scene(session, scene))
+            return false;
+        scope->published_overlay = true;
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        return true;
+    }
+
+    return ui_information_scene_present_ui(scene);
 }
 
 /* pause_with_text: prints name+alt, explicit blank line, then wrapped start splits */
 void pause_with_text(const char desc[][100], int row, int col,
                      const char extra[][100], byte extra_attr)
 {
-    int i_main = 0, msec = 50;
-    int banner_lines = 0;
-    int main_rows = 0;
-    int term_wid = 80;
-    int term_hgt = 24;
+    ui_information_scene_scope scope;
+    app_ui_scene scene;
+    bool overlay_dungeon = false;
 
-    /* 0. save & clear screen */
-    screen_save();
-    Term_clear();
-    Term_get_size(&term_wid, &term_hgt);
-    if (term_wid < 1)
-        term_wid = 80;
-    if (term_hgt < 1)
-        term_hgt = 24;
-    (void)term_wid;
-
-    sdl_story_font_enable();
-    log_debug("Banner: story font enabled");
-
-    /* 1. optional banner */
-    if (extra) {
-        /* Line 1: name+alt */
-        banner_lines += pause_with_text_print_wrapped_segment(
-            row + banner_lines, col - 5, extra_attr, extra[0], msec);
-
-        /* Line 2: blank line */
-        banner_lines += pause_with_text_print_wrapped_segment(
-            row + banner_lines, col - 5, extra_attr, "", msec);
-
-        /* Determine how many extra entries */
-        int n_extra = 0;
-        while (extra[n_extra][0]) n_extra++;
-
-        /* Lines 3+: start splits, last one shifted further right */
-        for (int i = 1; i < n_extra; ++i) {
-            int shift = col - 5;
-            if (i == n_extra - 1) shift += 4;
-            banner_lines += pause_with_text_print_wrapped_segment(
-                row + banner_lines, shift, extra_attr, extra[i], msec);
-        }
-
-        /* separator before stanza */
-        banner_lines++;
+    if (!pause_with_text_scene_enter(&scope, &overlay_dungeon))
+    {
+        log_warn("pause_with_text: semantic scene unavailable");
+        return;
     }
 
-    /* 2. main stanza */
-    while (desc && desc[i_main][0]) {
-        main_rows += pause_with_text_print_wrapped_segment(
-            row + banner_lines + main_rows, col, TERM_WHITE, desc[i_main], msec);
-        ++i_main;
+    if (!pause_with_text_build_ui_scene(&scene, row, col, desc, extra,
+            extra_attr, overlay_dungeon)
+        || !pause_with_text_scene_present(&scope, &scene, overlay_dungeon))
+    {
+        ui_information_scene_leave(&scope);
+        log_warn("pause_with_text: semantic scene presentation failed");
+        return;
     }
 
-    log_debug("Banner: story font disabled");
-    sdl_story_font_disable();
+    {
+        app_session* session = app_session_current();
 
-    /* 3. wait for key */
-    inkey_set_cursor_hidden(true);
-    (void)inkey();
-    inkey_set_cursor_hidden(false);
-
-    /* 4. wipe the area used */
-    int total = banner_lines + main_rows;
-    int max_row = MIN(row + total, term_hgt);
-    for (int j = row; j < max_row; ++j) {
-        Term_erase(0, j, 255);
+        (void)ui_information_scene_wait_key_nonrepeat();
+        if (session)
+            app_session_clear_inputs(session);
     }
-
-    screen_load();
+    ui_information_scene_leave(&scope);
 }

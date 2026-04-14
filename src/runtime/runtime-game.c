@@ -45,71 +45,91 @@
 bool save_game_quietly = false;
 static bool death_processing = false;
 
-static bool runtime_snapshot_prompt_active(void)
-{
-    return app_session_interactions_enabled(app_session_current());
-}
-
 static bool runtime_footer_uses_semantic_ui(void)
 {
     return ui_information_scene_supported();
 }
 
-static void runtime_snapshot_prompt_begin(u16b reason, u16b flags,
-    byte prompt_attr, cptr prompt, byte detail_attr, cptr detail)
+static bool runtime_semantic_scene_active(u16b* out_scene)
 {
     app_session* session = app_session_current();
+    const app_snapshot* snapshot;
 
-    if (!app_session_interactions_enabled(session))
-        return;
+    if (!runtime_footer_uses_semantic_ui() || !session)
+        return false;
 
-    app_session_begin_interaction(session, APP_INTERACTION_KIND_PROMPT,
-        reason, flags);
-    app_session_set_interaction_prompt(session, prompt_attr,
-        prompt ? prompt : "");
-    if (detail && detail[0])
-        app_session_set_interaction_detail(session, detail_attr, detail);
+    snapshot = app_session_snapshot(session);
+    if (!snapshot)
+        return false;
+    if (snapshot->scene != APP_SCENE_KIND_MENU
+        && snapshot->scene != APP_SCENE_KIND_DUNGEON)
+    {
+        return false;
+    }
+
+    if (out_scene)
+        *out_scene = snapshot->scene;
+    return true;
 }
 
-static void runtime_snapshot_prompt_clear(void)
+static bool runtime_present_status_scene(byte title_attr, cptr title,
+    byte body_attr, cptr body, bool* out_overlay)
+{
+    app_session* session = app_session_current();
+    u16b scene_kind = APP_SCENE_KIND_NONE;
+    app_ui_scene scene;
+    app_ui_panel* panel;
+
+    if (out_overlay)
+        *out_overlay = false;
+    if (!runtime_semantic_scene_active(&scene_kind) || !session)
+        return false;
+
+    app_ui_scene_init(&scene);
+    scene.flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 420, 760);
+    app_ui_panel_set_title(panel, title_attr, title ? title : "Status");
+    if (body && body[0])
+        (void)app_ui_panel_add_body_line(panel, body_attr, body);
+
+    if (scene_kind == APP_SCENE_KIND_DUNGEON)
+    {
+        if (!app_session_publish_dungeon_overlay_scene(session, &scene))
+            return false;
+        if (out_overlay)
+            *out_overlay = true;
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        return true;
+    }
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+static void runtime_clear_status_scene(bool overlay_active)
 {
     app_session* session = app_session_current();
 
-    if (!app_session_interactions_enabled(session))
+    if (!overlay_active || !session)
         return;
 
-    app_session_clear_interaction(session);
+    app_session_clear_dungeon_overlay_scene(session);
+    (void)Term_xtra(TERM_XTRA_FRESH, 0);
 }
 
 static char runtime_close_game_prompt_key(void)
 {
-    app_session* session = app_session_current();
-    app_wait_scope scope;
-    bool snapshot_prompt = app_session_interactions_enabled(session);
-    char prompt_key;
+    char menu_prompt_key = ESCAPE;
 
-    if (snapshot_prompt)
-    {
-        runtime_snapshot_prompt_begin(APP_WAIT_REASON_CONFIRM,
-            APP_INTERACTION_FLAG_CAN_CONFIRM | APP_INTERACTION_FLAG_CAN_CANCEL,
-            TERM_L_BLUE, "View high scores? (ESC to skip)", TERM_WHITE, NULL);
-        app_session_push_wait_scope(session, &scope, APP_WAIT_REASON_CONFIRM,
-            0, 0);
-    }
-    else
-        Term_putstr(6, 0, -1, TERM_L_BLUE, "View high scores? (ESC to skip)");
+    if (!get_com("View high scores? (ESC to skip)", &menu_prompt_key))
+        return ESCAPE;
 
-    prompt_key = inkey();
-
-    if (snapshot_prompt)
-    {
-        app_session_pop_wait_scope(session, &scope);
-        runtime_snapshot_prompt_clear();
-    }
-    else
-        Term_erase(0, 0, 255);
-
-    return prompt_key;
+    return menu_prompt_key;
 }
 
 bool death_processing_in_progress(void)
@@ -119,7 +139,7 @@ bool death_processing_in_progress(void)
 
 void do_cmd_save_game(void)
 {
-    bool snapshot_prompt = false;
+    bool semantic_status_overlay = false;
 
     disturb(1, 0);
 
@@ -133,14 +153,11 @@ void do_cmd_save_game(void)
     message_flush();
     handle_stuff();
 
-    snapshot_prompt = !save_game_quietly && runtime_snapshot_prompt_active();
-    if (snapshot_prompt)
-        runtime_snapshot_prompt_begin(APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0,
-            TERM_WHITE, "Saving game...", TERM_WHITE, NULL);
-    else if (!save_game_quietly)
-        prt("Saving game...", 0, 0);
-
-    Term_fresh();
+    if (!save_game_quietly)
+    {
+        (void)runtime_present_status_scene(TERM_WHITE, "Saving game...",
+            TERM_SLATE, "", &semantic_status_overlay);
+    }
     SDL_strlcpy(p_ptr->died_from, "(saved)", sizeof(p_ptr->died_from));
 
     signals_ignore_tstp();
@@ -152,8 +169,6 @@ void do_cmd_save_game(void)
     if (save_player())
     {
         log_debug("Game saved successfully");
-        if (!save_game_quietly && !snapshot_prompt)
-            prt("Saving game... done.", 0, 0);
 
         time_t now = time(NULL);
         if (now == (time_t)-1)
@@ -166,17 +181,16 @@ void do_cmd_save_game(void)
     else
     {
         log_error("Game save failed");
-        if (snapshot_prompt)
-            runtime_snapshot_prompt_begin(APP_WAIT_REASON_INFORMATIONAL_PAUSE,
-                0, TERM_WHITE, "Saving game... failed!", TERM_WHITE, NULL);
-        else
-            prt("Saving game... failed!", 0, 0);
+        if (!save_game_quietly)
+        {
+            (void)runtime_present_status_scene(TERM_L_RED,
+                "Saving game... failed!", TERM_SLATE, "",
+                &semantic_status_overlay);
+        }
     }
 
     signals_handle_tstp();
-    if (snapshot_prompt)
-        runtime_snapshot_prompt_clear();
-    Term_fresh();
+    runtime_clear_status_scene(semantic_status_overlay);
 
     SDL_strlcpy(p_ptr->died_from, "(alive and well)", sizeof(p_ptr->died_from));
     save_game_quietly = false;
@@ -185,7 +199,6 @@ void do_cmd_save_game(void)
 static void close_game_aux(void)
 {
     bool wants_to_quit = false;
-    bool semantic_footer = runtime_footer_uses_semantic_ui();
     high_score the_score;
     int choice = 0, highlight = 1;
 
@@ -210,8 +223,6 @@ static void close_game_aux(void)
     }
 
     time_t death_time = time(NULL);
-
-    Term_clear();
 
     log_info("entering score");
     create_score(&the_score);
@@ -255,8 +266,6 @@ static void close_game_aux(void)
     err = file_character(sheet, false);
     if (err)
     {
-        if (!semantic_footer)
-            Term_clear();
         msg_print("Automatic character dump failed!");
         message_flush();
     }
@@ -297,18 +306,13 @@ static void close_game_aux(void)
     }
 
     death_spectator_view();
-    if (!semantic_footer)
-    {
-        Term_clear();
-        ui_death_print_tomb(&the_score);
-    }
 
     flush();
     message_flush();
 
     while (!wants_to_quit)
     {
-        choice = ui_death_final_menu(&highlight);
+        choice = ui_death_final_menu(&the_score, &highlight);
 
         switch (choice)
         {
@@ -370,11 +374,6 @@ static void close_game_aux(void)
 
         if (!wants_to_quit && choice >= 1 && choice <= 6)
         {
-            if (!semantic_footer)
-            {
-                Term_clear();
-                ui_death_print_tomb(&the_score);
-            }
             flush();
             message_flush();
         }
@@ -453,7 +452,6 @@ void exit_game_panic(void)
         quit("panic");
 
     msg_flag = false;
-    prt("", 0, 0);
     disturb(1, 0);
 
     if (p_ptr->chp <= 0)
@@ -649,7 +647,6 @@ void metarun_finalize_scores_and_saves(void)
 void backup_and_clear_saves(void)
 {
     char save_dir[1024];
-    bool semantic_footer = runtime_footer_uses_semantic_ui();
 
     strnfmt(save_dir, sizeof(save_dir), "%s", ANGBAND_DIR_SAVE);
     log_info("Checking for save files to backup in: %s", save_dir);
@@ -707,10 +704,13 @@ void backup_and_clear_saves(void)
     time_t now;
     struct tm* timeinfo;
 
-    if (!semantic_footer)
     {
-        prt("[Creating save file backup folder...]", 0, 0);
-        Term_fresh();
+        bool overlay_active = false;
+
+        (void)runtime_present_status_scene(TERM_WHITE,
+            "Creating save file backup folder...", TERM_SLATE, "",
+            &overlay_active);
+        runtime_clear_status_scene(overlay_active);
     }
 
     log_info("Found save files to backup and clear");
@@ -809,8 +809,6 @@ void backup_and_clear_saves(void)
     }
 #endif
 
-    if (!semantic_footer)
-        Term_erase(0, 0, 255);
     if (files_moved > 0) {
         msg_format("Backed up %d save file%s to %s",
             files_moved, (files_moved == 1) ? "" : "s", backup_folder);

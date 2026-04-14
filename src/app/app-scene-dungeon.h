@@ -14,7 +14,7 @@ struct app_session;
 struct app_wait_state;
 
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
-#define APP_DUNGEON_STATUS_FORMAT_VERSION 2u
+#define APP_DUNGEON_STATUS_FORMAT_VERSION 3u
 #define APP_DUNGEON_MESSAGES_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 4u
 #define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
@@ -27,6 +27,8 @@ struct app_wait_state;
 #define APP_DUNGEON_PANE_TEXT_MAX 32u
 #define APP_DUNGEON_HIDDEN_OVERLAY_MAX 16u
 #define APP_DUNGEON_COMBAT_ENTRY_MAX 100u
+#define APP_DUNGEON_COMPACT_SEGMENT_MAX 16u
+#define APP_DUNGEON_COMPACT_SHORT_TEXT_MAX 12u
 #define APP_DUNGEON_MESSAGE_LIMIT 256u
 #define APP_DUNGEON_LEFT_PANEL_ROWS_MAX 64u
 #define APP_DUNGEON_FOOTER_ITEM_MAX 12u
@@ -69,7 +71,6 @@ typedef enum app_map_cell_flag {
 } app_map_cell_flag;
 
 typedef enum app_dungeon_snapshot_flag {
-    APP_DUNGEON_SNAPSHOT_FLAG_COMPACT_HEIGHT = 0x0001u,
     APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL = 0x0002u,
     APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0004u
 } app_dungeon_snapshot_flag;
@@ -79,11 +80,69 @@ typedef enum app_dungeon_overlay_snapshot_flag {
     APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU = 0x0001u
 } app_dungeon_overlay_snapshot_flag;
 
+typedef enum app_status_text_kind {
+    APP_STATUS_TEXT_HUNGER = 0,
+    APP_STATUS_TEXT_BLIND = 1,
+    APP_STATUS_TEXT_CONFUSED = 2,
+    APP_STATUS_TEXT_AFRAID = 3,
+    APP_STATUS_TEXT_CUT = 4,
+    APP_STATUS_TEXT_POISONED = 5,
+    APP_STATUS_TEXT_STUN = 6,
+    APP_STATUS_TEXT_SPEED = 7,
+    APP_STATUS_TEXT_TERRAIN = 8,
+    APP_STATUS_TEXT_DEPTH = 9,
+    APP_STATUS_TEXT_PARTITION = 10,
+    APP_STATUS_TEXT_STATE = 11,
+    APP_STATUS_TEXT_SONG = 12,
+    APP_STATUS_TEXT_LIGHT = 13,
+    APP_STATUS_TEXT_EVASION = 14
+} app_status_text_kind;
+
 typedef struct app_footer_item_snapshot {
     byte attr;
     byte active;
     char text[APP_DUNGEON_STATUS_TEXT_MAX];
 } app_footer_item_snapshot;
+
+typedef struct app_status_compact_segment {
+    byte attr;
+    byte required;
+    char long_text[APP_DUNGEON_STATUS_TEXT_MAX];
+    char short_text[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
+} app_status_compact_segment;
+
+typedef struct app_status_compact_line {
+    u16b segment_count;
+    u16b reserved;
+    app_status_compact_segment segments[APP_DUNGEON_COMPACT_SEGMENT_MAX];
+} app_status_compact_line;
+
+typedef struct app_status_tracked_monster_live {
+    byte visible;
+    byte hp_attr;
+    byte alertness_attr;
+    byte confused;
+    byte stunned;
+    s16b hp_cur;
+    s16b hp_max;
+    char name[APP_DUNGEON_STATUS_TEXT_MAX];
+    char health[APP_DUNGEON_STATUS_TEXT_MAX];
+    char alertness[APP_DUNGEON_STATUS_TEXT_MAX];
+} app_status_tracked_monster_live;
+
+typedef struct app_status_quiver_live {
+    byte q1_active;
+    byte q2_active;
+    byte same_type;
+    byte q1_attr;
+    byte q2_attr;
+    char q1_char;
+    char q2_char;
+    s16b q1_current;
+    s16b q1_max;
+    s16b q2_current;
+    s16b q2_max;
+} app_status_quiver_live;
 
 typedef struct app_cursor_snapshot {
     byte visible;
@@ -233,6 +292,16 @@ void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
 bool app_status_snapshot_build_live(app_status_snapshot* status,
     const struct app_wait_state* wait_state);
+bool app_status_text_live(app_status_text_kind kind, char* out_text,
+    size_t out_text_sz, byte* out_attr);
+bool app_status_song_lines_live(char* out_primary, size_t out_primary_sz,
+    byte* out_primary_attr, char* out_secondary, size_t out_secondary_sz,
+    byte* out_secondary_attr);
+bool app_status_tracked_monster_live_build(
+    app_status_tracked_monster_live* tracked);
+bool app_status_quiver_live_build(app_status_quiver_live* quiver);
+bool app_status_compact_line_build_live(app_status_compact_line* compact,
+    bool include_song, bool include_wounds);
 byte app_status_depth_attr_live(void);
 bool app_status_state_text_live(char* out_long, size_t out_long_sz,
     char* out_short, size_t out_short_sz, byte* out_attr);

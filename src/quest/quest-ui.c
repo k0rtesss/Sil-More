@@ -1166,9 +1166,9 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     int row = 3;
     int col = 0;
 
-    if (semantic_supported && !scene_active)
+    if (!semantic_supported || !scene_active)
     {
-        log_warn("quest typewriter: unable to enter information scene on snapshot renderer path");
+        log_warn("quest typewriter: semantic scene required");
         msg_print("Quest dialog unavailable.");
         return;
     }
@@ -1179,9 +1179,6 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
     Term_get_size(&wid, &h);
     wrap_width = wid - indent * 2;
     
-    /* Save screen and start fresh */
-    if (!scene_active)
-        screen_save();
     quest_typewriter_clear_page(scene_active, &scene_state);
     
     /* Display title */
@@ -1232,7 +1229,7 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
                 goto cleanup;
             }
 
-            k = scene_active ? (char)ui_information_scene_wait_key() : inkey();
+            k = (char)ui_information_scene_wait_key();
             if (k == 'Q' || k == 'q')
                 goto cleanup;
 
@@ -1409,21 +1406,9 @@ void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title
         scene_failed = true;
         goto cleanup;
     }
-    if (scene_active)
-        (void)ui_information_scene_wait_key();
-    else
-        inkey();
+    (void)ui_information_scene_wait_key();
     
 cleanup:
-    /* Flush any queued keypresses that accumulated during the typewriter effect */
-    if (!scene_active)
-    {
-        Term_flush();
-        Term_clear();
-        screen_load();
-        return;
-    }
-
     quest_typewriter_scene_clear(&scene_state);
     ui_information_scene_leave(&info_scope);
 
