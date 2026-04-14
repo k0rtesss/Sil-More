@@ -392,7 +392,8 @@ void pause_with_text(const char desc[][100], int row, int col,
 
     if (!pause_with_text_scene_enter(&scope, &overlay_dungeon))
     {
-        log_warn("pause_with_text: semantic scene unavailable");
+        log_error("pause_with_text: semantic scene unavailable");
+        quit("Narrative pause requires the snapshot UI renderer.");
         return;
     }
 
@@ -401,7 +402,8 @@ void pause_with_text(const char desc[][100], int row, int col,
         || !pause_with_text_scene_present(&scene))
     {
         ui_information_scene_leave(&scope);
-        log_warn("pause_with_text: semantic scene presentation failed");
+        log_error("pause_with_text: semantic scene presentation failed");
+        quit("Narrative pause could not be displayed.");
         return;
     }
 

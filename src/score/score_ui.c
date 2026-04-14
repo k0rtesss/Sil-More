@@ -123,11 +123,6 @@ static void score_prompt_label(int binding, const char* fallback, char* buf, siz
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-static bool score_ui_steamdeck_mode(void)
-{
-    return get_sdl_steamdeck_mode();
-}
-
 typedef enum
 {
     SCORE_VIEW_ORDER_SCORE = 0,
@@ -143,23 +138,6 @@ typedef enum
 static const char* run_history_sort_label(run_history_sort_order order)
 {
     return (order == RUN_HISTORY_SORT_RATING) ? "Rating" : "Date";
-}
-
-static bool score_information_scene_pause(ui_information_scene_scope* scope)
-{
-    if (!scope)
-        return false;
-
-    ui_information_scene_leave(scope);
-    return true;
-}
-
-static bool score_information_scene_resume(ui_information_scene_scope* scope)
-{
-    if (!scope)
-        return false;
-
-    return ui_information_scene_enter(scope);
 }
 
 static char run_history_status_short(score_record_status status)
@@ -961,7 +939,7 @@ static char display_scores_pages_information(const high_score* entries,
     int page_size)
 {
     ui_information_scene_scope scope;
-    bool steamdeck = score_ui_steamdeck_mode();
+    bool steamdeck = steamdeck_controls_active();
     char order_label[16] = "";
     char layout_label[16] = "";
     char exit_label[16] = "";
@@ -1364,7 +1342,7 @@ void show_scores(bool longscore)
     }
     else
     {
-        log_warn("show_scores: snapshot renderer required; legacy score renderer removed");
+        log_warn("show_scores: snapshot renderer unavailable");
         msg_print("Halls of Mandos requires the snapshot UI renderer.");
     }
 
@@ -1903,13 +1881,9 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
 #ifdef ARROW_RIGHT
         case ARROW_RIGHT:
 #endif
-            if (!score_information_scene_pause(&scope))
-            {
-                ui_information_scene_leave(&scope);
-                return false;
-            }
+            ui_information_scene_leave(&scope);
             run_history_show_detail(&entries[highlight]);
-            if (!score_information_scene_resume(&scope))
+            if (!ui_information_scene_enter(&scope))
             {
                 /* Detail view ran fine, but we can no longer resume the
                  * information scene; treat as completed successfully. */
@@ -2009,7 +1983,7 @@ void do_cmd_run_history(void)
 
         if (!ui_information_scene_supported())
         {
-            log_warn("run history: snapshot renderer required; legacy run-history renderer removed");
+            log_warn("run history: snapshot renderer unavailable");
             msg_print("Run history viewer requires the snapshot UI renderer.");
             return;
         }

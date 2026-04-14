@@ -25,7 +25,6 @@
 #include "score/score_entry.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-information-scene.h"
-#include "z-term.h"
 
 static bool skill_gain_in_progress = false;
 
@@ -70,7 +69,6 @@ static int skill_cost(int base, int points);
 static int collect_character_trait_lines(int race, int character,
     bool short_labels, birth_compact_flag_line out[], int out_max,
     int* max_line_len);
-static bool birth_menu_scene_present(const app_ui_scene* scene);
 
 #define BLITZ_MAX_EFFECT_COUNT 9
 
@@ -1893,7 +1891,7 @@ static int get_player_choice(birth_menu* choices, int num, int def, int col,
 
         if (!birth_selection_build_ui_scene(&scene, choices, num, 0, cur,
                 allow_full_description_screen)
-            || !birth_menu_scene_present(&scene))
+            || !ui_information_scene_present_ui(&scene))
         {
             log_warn("birth selection: semantic scene presentation failed");
             return INVALID_CHOICE;
@@ -2433,19 +2431,6 @@ static bool birth_menu_scene_enter(birth_menu_scene_scope* scope, u16b reason)
     return true;
 }
 
-static bool birth_menu_scene_present(const app_ui_scene* scene)
-{
-    app_session* session = app_session_current();
-
-    if (!scene || !session)
-        return false;
-    if (!app_session_publish_menu_scene(session, scene))
-        return false;
-
-    (void)Term_xtra(TERM_XTRA_FRESH, 0);
-    return true;
-}
-
 static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
 {
     app_session* session = app_session_current();
@@ -2657,7 +2642,7 @@ static NavResult blitz_setup_menu(void)
         char key;
 
         if (!blitz_setup_build_ui_scene(&scene, setup, selected)
-            || !birth_menu_scene_present(&scene))
+            || !ui_information_scene_present_ui(&scene))
         {
             log_warn("blitz setup: semantic scene presentation failed");
             birth_menu_scene_leave(&scene_scope);

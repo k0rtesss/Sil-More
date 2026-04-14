@@ -12,6 +12,7 @@
 #include "platform-config.h"
 #include "platform-input.h"
 #include "platform-time.h"
+#include "sdl-config.h"
 #include "object/object-ui-select.h"
 #include "player/player-abilities.h"
 #include "player/player-bane.h"
@@ -26,6 +27,7 @@ extern struct sound_config g_sound_config;
 #include "log/log.h"
 #include <ctype.h>
 #include "h-define.h"
+#include "app/app-session.h"
 #include "app/app-ui.h"
 #include "metarun.h"
 #include "score/score_artefact.h"
@@ -35,6 +37,9 @@ extern struct sound_config g_sound_config;
 #include "ui/ui-information-scene.h"
 
 #define COLOR_SAMPLE "###"
+
+#define SETTINGS_SDL_GET(name) get ## _sdl_ ## name
+#define SETTINGS_SDL_SET(name) set ## _sdl_ ## name
 
 static void do_cmd_macro_aux(char* buf);
 static void do_cmd_macro_aux_keymap(char* buf);
@@ -51,28 +56,21 @@ static char settings_ui_read_key(bool scan)
     app_session* session = app_session_current();
     app_input input;
 
-    if (!session)
+    if (!session || !ui_information_scene_is_active())
         return scan ? '\0' : ESCAPE;
 
-    while (true)
+    while (app_session_pop_input(session, &input))
     {
-        while (app_session_pop_input(session, &input))
+        if (input.layer != APP_INPUT_LAYER_LEGACY
+            || input.type != APP_INPUT_TYPE_KEY)
         {
-            if (input.layer != APP_INPUT_LAYER_LEGACY
-                || input.type != APP_INPUT_TYPE_KEY)
-            {
-                continue;
-            }
-
-            return (char)(input.payload.key.logical_key & 0xFFu);
+            continue;
         }
 
-        if (scan)
-            return '\0';
-
-        (void)Term_xtra(TERM_XTRA_EVENT, 1);
-        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+        return (char)(input.payload.key.logical_key & 0xFFu);
     }
+
+    return scan ? '\0' : (char)ui_information_scene_wait_key();
 }
 
 typedef bool (*settings_bool_getter_fn)(void);
@@ -145,62 +143,91 @@ typedef struct settings_ui_layout {
     int supporting_layout_where_chars;
 } settings_ui_layout;
 
+static const struct sdl_config* settings_sdl_default_config(void)
+{
+    static bool ready = false;
+    static struct sdl_config defaults;
+
+    if (!ready)
+    {
+        sdl_config_set_defaults(&defaults);
+        ready = true;
+    }
+
+    return &defaults;
+}
+
 static int settings_sdl_get_pane_enabled_int(int index)
 {
-    return get_sdl_pane_enabled(index) ? 1 : 0;
+    return SETTINGS_SDL_GET(pane_enabled)(index) ? 1 : 0;
 }
 
 static void settings_sdl_set_pane_enabled_int(int index, int value)
 {
-    set_sdl_pane_enabled(index, value != 0);
+    SETTINGS_SDL_SET(pane_enabled)(index, value != 0);
 }
 
 static const settings_int_binding settings_sdl_int_bindings
     [SETTINGS_SDL_INT_CONFIG_MAX] = {
         [SETTINGS_SDL_INT_MAIN_VIEW_SCALE]
-            = { get_sdl_main_view_scale, set_sdl_main_view_scale },
-        [SETTINGS_SDL_INT_MAX_SCALE] = { get_sdl_max_scale, NULL },
+            = { SETTINGS_SDL_GET(main_view_scale),
+                SETTINGS_SDL_SET(main_view_scale) },
+        [SETTINGS_SDL_INT_MAX_SCALE] = { SETTINGS_SDL_GET(max_scale), NULL },
         [SETTINGS_SDL_INT_MIN_TERMINAL_MODE]
-            = { get_sdl_min_terminal_mode, set_sdl_min_terminal_mode },
+            = { SETTINGS_SDL_GET(min_terminal_mode),
+                SETTINGS_SDL_SET(min_terminal_mode) },
         [SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE]
-            = { get_sdl_aux_view_font_size, set_sdl_aux_view_font_size },
+            = { SETTINGS_SDL_GET(aux_view_font_size),
+                SETTINGS_SDL_SET(aux_view_font_size) },
         [SETTINGS_SDL_INT_EFFECTIVE_AUX_VIEW_FONT_SIZE]
-            = { get_sdl_effective_aux_view_font_size, NULL },
+            = { SETTINGS_SDL_GET(effective_aux_view_font_size), NULL },
         [SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE]
-            = { get_sdl_menu_panel_font_size, set_sdl_menu_panel_font_size },
+            = { SETTINGS_SDL_GET(menu_panel_font_size),
+                SETTINGS_SDL_SET(menu_panel_font_size) },
         [SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE]
-            = { get_sdl_effective_menu_panel_font_size, NULL },
-        [SETTINGS_SDL_INT_MARGIN] = { get_sdl_margin, set_sdl_margin },
+            = { SETTINGS_SDL_GET(effective_menu_panel_font_size), NULL },
+        [SETTINGS_SDL_INT_MARGIN]
+            = { SETTINGS_SDL_GET(margin), SETTINGS_SDL_SET(margin) },
     };
 
 static const settings_bool_binding settings_sdl_bool_bindings
     [SETTINGS_SDL_BOOL_CONFIG_MAX] = {
         [SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL]
-            = { get_sdl_hide_left_panel, set_sdl_hide_left_panel },
+            = { SETTINGS_SDL_GET(hide_left_panel),
+                SETTINGS_SDL_SET(hide_left_panel) },
         [SETTINGS_SDL_BOOL_FULLSCREEN]
-            = { get_sdl_fullscreen, set_sdl_fullscreen },
-        [SETTINGS_SDL_BOOL_TILES] = { get_sdl_tiles, set_sdl_tiles },
+            = { SETTINGS_SDL_GET(fullscreen), SETTINGS_SDL_SET(fullscreen) },
+        [SETTINGS_SDL_BOOL_TILES]
+            = { SETTINGS_SDL_GET(tiles), SETTINGS_SDL_SET(tiles) },
         [SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED]
-            = { get_sdl_enable_right_panes, set_sdl_enable_right_panes },
+            = { SETTINGS_SDL_GET(enable_right_panes),
+                SETTINGS_SDL_SET(enable_right_panes) },
         [SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED]
-            = { get_sdl_enable_bottom_panes, set_sdl_enable_bottom_panes },
+            = { SETTINGS_SDL_GET(enable_bottom_panes),
+                SETTINGS_SDL_SET(enable_bottom_panes) },
     };
 
 static const settings_indexed_int_binding settings_sdl_pane_bindings
     [SETTINGS_SDL_PANE_METRIC_MAX] = {
-        [SETTINGS_SDL_PANE_TYPE] = { get_sdl_pane_type, NULL },
-        [SETTINGS_SDL_PANE_WHERE] = { get_sdl_pane_where, set_sdl_pane_where },
+        [SETTINGS_SDL_PANE_TYPE] = { SETTINGS_SDL_GET(pane_type), NULL },
+        [SETTINGS_SDL_PANE_WHERE]
+            = { SETTINGS_SDL_GET(pane_where), SETTINGS_SDL_SET(pane_where) },
         [SETTINGS_SDL_PANE_ENABLED]
             = { settings_sdl_get_pane_enabled_int,
                 settings_sdl_set_pane_enabled_int },
-        [SETTINGS_SDL_PANE_ROWS] = { get_sdl_pane_rows, set_sdl_pane_rows },
-        [SETTINGS_SDL_PANE_COLS] = { get_sdl_pane_cols, set_sdl_pane_cols },
+        [SETTINGS_SDL_PANE_ROWS]
+            = { SETTINGS_SDL_GET(pane_rows), SETTINGS_SDL_SET(pane_rows) },
+        [SETTINGS_SDL_PANE_COLS]
+            = { SETTINGS_SDL_GET(pane_cols), SETTINGS_SDL_SET(pane_cols) },
         [SETTINGS_SDL_PANE_FONT_SIZE]
-            = { get_sdl_pane_font_size, set_sdl_pane_font_size },
+            = { SETTINGS_SDL_GET(pane_font_size),
+                SETTINGS_SDL_SET(pane_font_size) },
         [SETTINGS_SDL_PANE_EFFECTIVE_FONT_SIZE]
-            = { get_sdl_pane_effective_font_size, NULL },
-        [SETTINGS_SDL_PANE_CURRENT_ROWS] = { get_sdl_pane_current_rows, NULL },
-        [SETTINGS_SDL_PANE_CURRENT_COLS] = { get_sdl_pane_current_cols, NULL },
+            = { SETTINGS_SDL_GET(pane_effective_font_size), NULL },
+        [SETTINGS_SDL_PANE_CURRENT_ROWS]
+            = { SETTINGS_SDL_GET(pane_current_rows), NULL },
+        [SETTINGS_SDL_PANE_CURRENT_COLS]
+            = { SETTINGS_SDL_GET(pane_current_cols), NULL },
     };
 
 static int settings_sdl_get_int_config(settings_sdl_int_config id)
@@ -2324,7 +2351,7 @@ static void settings_sdl_set_touch_binding(int panel, int slot, int binding);
 
 static const char* settings_sdl_config_path(void)
 {
-    return get_sdl_config_path();
+    return SETTINGS_SDL_GET(config_path)();
 }
 
 typedef struct settings_sdl_pane_overview {
@@ -3779,44 +3806,55 @@ static void touch_pane_action_label_for_panel(int panel, int binding, char* buf,
 
 static const char* settings_sdl_touch_slot_name(int idx)
 {
-    return get_sdl_touch_pane_slot_name(idx);
+    return SETTINGS_SDL_GET(touch_pane_slot_name)(idx);
 }
 
 static void settings_sdl_touch_panel_name(int panel, char* buf, size_t buflen)
 {
-    get_sdl_touch_pane_panel_name(panel, buf, buflen);
+    SETTINGS_SDL_GET(touch_pane_panel_name)(panel, buf, buflen);
 }
 
 static void settings_sdl_touch_button_label(int panel, int slot, char* buf,
     size_t buflen)
 {
-    get_sdl_touch_pane_button_label_for_panel(panel, slot, buf, buflen);
+    SETTINGS_SDL_GET(touch_pane_button_label_for_panel)(panel, slot, buf,
+        buflen);
 }
 
 static int settings_sdl_touch_binding(int panel, int slot)
 {
-    return get_sdl_touch_pane_binding_for_panel(panel, slot);
+    return SETTINGS_SDL_GET(touch_pane_binding_for_panel)(panel, slot);
 }
 
 static void settings_sdl_set_touch_binding(int panel, int slot, int binding)
 {
-    set_sdl_touch_pane_binding_for_panel(panel, slot, binding);
+    SETTINGS_SDL_SET(touch_pane_binding_for_panel)(panel, slot, binding);
 }
 
 static void settings_sdl_set_touch_button_label(int panel, int slot,
     cptr label)
 {
-    set_sdl_touch_pane_button_label_for_panel(panel, slot, label);
+    SETTINGS_SDL_SET(touch_pane_button_label_for_panel)(panel, slot, label);
 }
 
 static void settings_sdl_set_touch_panel_name(int panel, cptr name)
 {
-    set_sdl_touch_pane_panel_name(panel, name);
+    SETTINGS_SDL_SET(touch_pane_panel_name)(panel, name);
 }
 
 static int settings_sdl_touch_default_binding(int panel, int slot)
 {
-    return get_sdl_touch_pane_default_binding_for_panel(panel, slot);
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
+    if (panel < 0 || panel >= SDL_TOUCH_PANE_PANEL_COUNT
+        || slot < 0 || slot >= SDL_TOUCH_PANE_BUTTON_COUNT)
+    {
+        return GAMEPAD_BIND_NONE;
+    }
+
+    return (panel == SDL_TOUCH_PANE_PANEL_SECOND)
+        ? defaults->touch_pane_second_bindings[slot]
+        : defaults->touch_pane_bindings[slot];
 }
 
 static void do_cmd_touch_pane_button_editor(bool* settings_changed)
@@ -5036,51 +5074,100 @@ typedef struct controller_binding_spec {
 static int controller_get_shoulder_combo_binding(int id)
 {
     (void)id;
-    return get_sdl_gamepad_shoulder_combo_binding();
+    return SETTINGS_SDL_GET(gamepad_shoulder_combo_binding)();
 }
 
 static void controller_set_shoulder_combo_binding(int id, int binding)
 {
     (void)id;
-    set_sdl_gamepad_shoulder_combo_binding(binding);
+    SETTINGS_SDL_SET(gamepad_shoulder_combo_binding)(binding);
+}
+
+static int controller_get_default_button_binding(int id)
+{
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
+    if (id < 0 || id >= GAMEPAD_BUTTON_COUNT)
+        return GAMEPAD_BIND_NONE;
+
+    return defaults->gamepad_button_bindings[id];
+}
+
+static int controller_get_default_trigger_binding(int id)
+{
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
+    if (id < 0 || id >= GAMEPAD_TRIGGER_COUNT)
+        return GAMEPAD_BIND_NONE;
+
+    return defaults->gamepad_trigger_bindings[id];
+}
+
+static int controller_get_default_left_stick_binding(int id)
+{
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
+    if (id < 0 || id >= GAMEPAD_STICK_DIR_COUNT)
+        return GAMEPAD_BIND_NONE;
+
+    return defaults->gamepad_left_stick_bindings[id];
+}
+
+static int controller_get_default_right_stick_binding(int id)
+{
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
+    if (id < 0 || id >= GAMEPAD_STICK_DIR_COUNT)
+        return GAMEPAD_BIND_NONE;
+
+    return defaults->gamepad_right_stick_bindings[id];
 }
 
 static int controller_get_default_shoulder_combo_binding(int id)
 {
+    const struct sdl_config* defaults = settings_sdl_default_config();
+
     (void)id;
-    return get_sdl_gamepad_default_shoulder_combo_binding();
+    return defaults->gamepad_shoulder_combo_binding;
 }
 
 static const settings_bool_binding controller_toggle_bindings[] = {
     [CONTROLLER_TOGGLE_ENABLED]
-        = { get_sdl_gamepad_enabled, set_sdl_gamepad_enabled },
+        = { SETTINGS_SDL_GET(gamepad_enabled),
+            SETTINGS_SDL_SET(gamepad_enabled) },
     [CONTROLLER_TOGGLE_AUTO_MODE]
-        = { get_sdl_gamepad_auto_mode, set_sdl_gamepad_auto_mode },
+        = { SETTINGS_SDL_GET(gamepad_auto_mode),
+            SETTINGS_SDL_SET(gamepad_auto_mode) },
     [CONTROLLER_TOGGLE_STEAMDECK_MODE]
-        = { get_sdl_steamdeck_mode, set_sdl_steamdeck_mode },
+        = { SETTINGS_SDL_GET(steamdeck_mode),
+            SETTINGS_SDL_SET(steamdeck_mode) },
     [CONTROLLER_TOGGLE_DPAD]
-        = { get_sdl_gamepad_use_dpad, set_sdl_gamepad_use_dpad },
+        = { SETTINGS_SDL_GET(gamepad_use_dpad),
+            SETTINGS_SDL_SET(gamepad_use_dpad) },
     [CONTROLLER_TOGGLE_LEFT_STICK]
-        = { get_sdl_gamepad_use_left_stick, set_sdl_gamepad_use_left_stick },
+        = { SETTINGS_SDL_GET(gamepad_use_left_stick),
+            SETTINGS_SDL_SET(gamepad_use_left_stick) },
 };
 
 static const controller_binding_spec controller_binding_specs[] = {
     [GAMEPAD_CAPTURE_BUTTON]
-        = { GAMEPAD_BUTTON_COUNT, get_sdl_gamepad_button_binding,
-            set_sdl_gamepad_button_binding,
-            get_sdl_gamepad_default_button_binding },
+        = { GAMEPAD_BUTTON_COUNT, SETTINGS_SDL_GET(gamepad_button_binding),
+            SETTINGS_SDL_SET(gamepad_button_binding),
+            controller_get_default_button_binding },
     [GAMEPAD_CAPTURE_TRIGGER]
-        = { GAMEPAD_TRIGGER_COUNT, get_sdl_gamepad_trigger_binding,
-            set_sdl_gamepad_trigger_binding,
-            get_sdl_gamepad_default_trigger_binding },
+        = { GAMEPAD_TRIGGER_COUNT, SETTINGS_SDL_GET(gamepad_trigger_binding),
+            SETTINGS_SDL_SET(gamepad_trigger_binding),
+            controller_get_default_trigger_binding },
     [GAMEPAD_CAPTURE_LEFT_STICK]
-        = { GAMEPAD_STICK_DIR_COUNT, get_sdl_gamepad_left_stick_binding,
-            set_sdl_gamepad_left_stick_binding,
-            get_sdl_gamepad_default_left_stick_binding },
+        = { GAMEPAD_STICK_DIR_COUNT,
+            SETTINGS_SDL_GET(gamepad_left_stick_binding),
+            SETTINGS_SDL_SET(gamepad_left_stick_binding),
+            controller_get_default_left_stick_binding },
     [GAMEPAD_CAPTURE_RIGHT_STICK]
-        = { GAMEPAD_STICK_DIR_COUNT, get_sdl_gamepad_right_stick_binding,
-            set_sdl_gamepad_right_stick_binding,
-            get_sdl_gamepad_default_right_stick_binding },
+        = { GAMEPAD_STICK_DIR_COUNT,
+            SETTINGS_SDL_GET(gamepad_right_stick_binding),
+            SETTINGS_SDL_SET(gamepad_right_stick_binding),
+            controller_get_default_right_stick_binding },
     [GAMEPAD_CAPTURE_SHOULDER_COMBO]
         = { 1, controller_get_shoulder_combo_binding,
             controller_set_shoulder_combo_binding,

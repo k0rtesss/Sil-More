@@ -3,7 +3,6 @@
 #include "ui-information-scene.h"
 #include "externs.h"
 #include "log/log.h"
-#include "runtime-cli.h"
 
 static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
@@ -293,7 +292,9 @@ bool ui_information_scene_owns_input(void)
     return g_ui_information_scene_active;
 }
 
-bool ui_information_scene_enter(ui_information_scene_scope* scope)
+static bool ui_information_scene_enter_internal(
+    ui_information_scene_scope* scope, bool clone_menu_snapshot,
+    bool restore_snapshot, u16b reason)
 {
     app_session* session;
     const app_snapshot* snapshot;
@@ -307,8 +308,11 @@ bool ui_information_scene_enter(ui_information_scene_scope* scope)
 
     session = app_session_current();
     snapshot = app_session_snapshot(session);
-    scope->previous_snapshot = *app_session_snapshot(session);
-    if (snapshot && snapshot->scene == APP_SCENE_KIND_MENU)
+    scope->restore_snapshot = restore_snapshot;
+    if (restore_snapshot)
+        scope->previous_snapshot = *snapshot;
+    if (restore_snapshot && clone_menu_snapshot
+        && snapshot->scene == APP_SCENE_KIND_MENU)
     {
         scope->previous_menu_snapshot = ui_information_scene_clone_menu_snapshot(
             app_session_menu_snapshot(session));
@@ -318,11 +322,23 @@ bool ui_information_scene_enter(ui_information_scene_scope* scope)
 
     scope->previous_active = g_ui_information_scene_active;
     app_session_push_wait_scope(session, &scope->wait_scope,
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        reason, 0, 0);
     app_session_clear_inputs(session);
     g_ui_information_scene_active = true;
     scope->active = true;
     return true;
+}
+
+bool ui_information_scene_claim_input(ui_information_scene_scope* scope,
+    u16b reason)
+{
+    return ui_information_scene_enter_internal(scope, false, false, reason);
+}
+
+bool ui_information_scene_enter(ui_information_scene_scope* scope)
+{
+    return ui_information_scene_enter_internal(scope, true, true,
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE);
 }
 
 bool ui_information_scene_show_monster_recall(int r_idx,
@@ -389,7 +405,7 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
 
 int ui_information_scene_wait_key(void)
 {
-    return (int)(unsigned char)inkey();
+    return ui_information_scene_wait_key_internal(0);
 }
 
 int ui_information_scene_wait_key_nonrepeat(void)
@@ -411,12 +427,15 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
             (unsigned)scope->previous_snapshot.scene,
             scope->published_overlay ? 1 : 0, scope->previous_active ? 1 : 0);
         app_session_clear_inputs(session);
-        restored_snapshot = ui_information_scene_restore_snapshot(session,
-            scope);
-        if (!restored_snapshot)
-            app_session_set_snapshot(session, &scope->previous_snapshot);
-        if (scope->published_overlay)
-            app_session_clear_dungeon_overlay_scene(session);
+        if (scope->restore_snapshot)
+        {
+            restored_snapshot = ui_information_scene_restore_snapshot(session,
+                scope);
+            if (!restored_snapshot)
+                app_session_set_snapshot(session, &scope->previous_snapshot);
+            if (scope->published_overlay)
+                app_session_clear_dungeon_overlay_scene(session);
+        }
         app_session_pop_wait_scope(session, &scope->wait_scope);
     }
 
@@ -426,12 +445,15 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
     log_debug("[metarun-esc-trace] ui_information_scene_leave end restored_snapshot=%d current_scene=%u",
         restored_snapshot ? 1 : 0,
         (unsigned)(session ? app_session_snapshot(session)->scene : 0));
-    if (!restored_snapshot
+    if (scope->restore_snapshot
+        && !restored_snapshot
         && scope->previous_snapshot.scene == APP_SCENE_KIND_DUNGEON
-        && Term
-        && !scope->previous_active)
+        && !scope->previous_active
+        && session)
     {
-        do_cmd_redraw();
+        app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_ALL);
+        (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+        ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
     }
     else
     {

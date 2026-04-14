@@ -9,6 +9,8 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
+#include "melee/melee-combat-display.h"
 #include "platform-input.h"
 #include "externs.h"
 
@@ -28,12 +30,10 @@
  */
 void do_cmd_redraw(void)
 {
-    int j;
+    app_session* session = app_session_current();
 
-    term* old = Term;
-
-    /* Low level flush */
-    Term_flush();
+    if (session)
+        app_session_clear_inputs(session);
 
     /* Reset "inkey()" */
     flush();
@@ -63,31 +63,11 @@ void do_cmd_redraw(void)
     p_ptr->window
         |= (PW_MESSAGE | PW_OVERHEAD | PW_MONSTER | PW_OBJECT | PW_MONLIST);
 
-    /* Clear screen */
-    Term_clear();
-
     /* Hack -- update */
     handle_stuff();
 
-    /* Redraw every window */
-    for (j = 0; j < ANGBAND_TERM_MAX; j++)
-    {
-        /* Dead window */
-        if (!angband_term[j])
-            continue;
-
-        /* Activate */
-        Term_activate(angband_term[j]);
-
-        /* Redraw */
-        Term_redraw();
-
-        /* Refresh */
-        Term_fresh();
-
-        /* Restore */
-        Term_activate(old);
-    }
+    /* Rebuild the semantic combat overlay/panes after a full redraw. */
+    refresh_main_combat_overlay();
 }
 
 /*

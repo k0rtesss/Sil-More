@@ -973,19 +973,25 @@ NavResult initial_menu(bool* start_new)
     int ch;
     NavResult result = NAV_BACK;
     bool steamdeck = steamdeck_controls_active();
-    app_session* session = app_session_current();
-    app_wait_scope bootstrap_wait_scope;
+    ui_information_scene_scope welcome_scope;
 
-    memset(&bootstrap_wait_scope, 0, sizeof(bootstrap_wait_scope));
-    if (session)
-        app_session_push_wait_scope(session, &bootstrap_wait_scope,
-            APP_WAIT_REASON_BOOTSTRAP, 0, 0);
-    (void)welcome_screen_present_ui(NULL, true);
+    if (!welcome_screen_present_ui(NULL, true))
+    {
+        log_error("initial_menu: failed to present semantic welcome screen");
+        return NAV_QUIT;
+    }
+    if (!ui_information_scene_claim_input(&welcome_scope,
+            APP_WAIT_REASON_BOOTSTRAP))
+    {
+        log_error("initial_menu: failed to claim semantic welcome input");
+        return NAV_QUIT;
+    }
 
     bool saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
-    ch = inkey();
+    ch = ui_information_scene_wait_key_nonrepeat();
     inkey_set_cursor_hidden(saved_hide_cursor);
+    ui_information_scene_leave(&welcome_scope);
 
     if (ch == '\n' || ch == '\r' || ch == ' '
         || (steamdeck && ch == steamdeck_confirm_key()))
@@ -1006,8 +1012,6 @@ NavResult initial_menu(bool* start_new)
 
 menu_done:
     log_info("initial_menu: EXITING with result=%d", result);
-    if (bootstrap_wait_scope.active)
-        app_session_pop_wait_scope(session, &bootstrap_wait_scope);
     if (sdl_config_should_force_intro_flame())
     {
         sdl_config_mark_intro_seen();

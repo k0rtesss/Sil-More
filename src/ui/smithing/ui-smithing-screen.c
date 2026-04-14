@@ -2368,6 +2368,13 @@ typedef struct smith_ui_snapshot_scope
     bool active;
 } smith_ui_snapshot_scope;
 
+static int smith_ui_nested_transition_depth = 0;
+
+static void smith_ui_snapshot_reset_nested_transitions(void)
+{
+    smith_ui_nested_transition_depth = 0;
+}
+
 typedef struct smith_ui_main_menu_state
 {
     bool valid[SMT_MENU_MAX];
@@ -2389,6 +2396,17 @@ static bool smith_ui_snapshot_active(void)
 static void smith_ui_snapshot_refresh(void)
 {
     (void)Term_xtra(TERM_XTRA_FRESH, 0);
+}
+
+static void smith_ui_snapshot_begin_nested_transition(void)
+{
+    smith_ui_nested_transition_depth++;
+}
+
+static void smith_ui_snapshot_end_nested_transition(void)
+{
+    if (smith_ui_nested_transition_depth > 0)
+        smith_ui_nested_transition_depth--;
 }
 
 static bool smith_ui_snapshot_scene_enter(smith_ui_snapshot_scope* scope)
@@ -2415,7 +2433,8 @@ static void smith_ui_snapshot_scene_close(smith_ui_snapshot_scope* scope)
     app_session_clear_interaction(session);
     app_session_clear_dungeon_overlay_scene(session);
     scope->active = false;
-    smith_ui_snapshot_refresh();
+    if (smith_ui_nested_transition_depth == 0)
+        smith_ui_snapshot_refresh();
 }
 
 static bool smith_ui_snapshot_scene_present(smith_ui_snapshot_scope* scope,
@@ -3874,8 +3893,10 @@ static void smith_ui_numbers_snapshot_menu(void)
             {
                 if (highlight == SMT_NUM_MENU_EDIT_BONUSES)
                 {
+                    smith_ui_snapshot_begin_nested_transition();
                     smith_ui_snapshot_scene_close(&scope);
                     smith_bonus_menu();
+                    smith_ui_snapshot_end_nested_transition();
                     if (!smith_ui_snapshot_scene_enter(&scope))
                         return;
                 }
@@ -3901,8 +3922,10 @@ static void smith_ui_numbers_snapshot_menu(void)
             {
                 if (highlight == SMT_NUM_MENU_EDIT_BONUSES)
                 {
+                    smith_ui_snapshot_begin_nested_transition();
                     smith_ui_snapshot_scene_close(&scope);
                     smith_bonus_menu();
+                    smith_ui_snapshot_end_nested_transition();
                     if (!smith_ui_snapshot_scene_enter(&scope))
                         return;
                 }
@@ -5968,8 +5991,10 @@ static void smith_ui_artefact_snapshot_menu(void)
         }
         else if (highlight <= MAX_CATS)
         {
+            smith_ui_snapshot_begin_nested_transition();
             smith_ui_snapshot_scene_close(&scope);
             smith_ui_artefact_flag_snapshot_menu(highlight);
+            smith_ui_snapshot_end_nested_transition();
             if (!smith_ui_snapshot_scene_enter(&scope))
                 return;
         }
@@ -5979,8 +6004,10 @@ static void smith_ui_artefact_snapshot_menu(void)
 
             if (skill >= 0)
             {
+                smith_ui_snapshot_begin_nested_transition();
                 smith_ui_snapshot_scene_close(&scope);
                 smith_ui_artefact_ability_snapshot_menu(skill);
+                smith_ui_snapshot_end_nested_transition();
                 if (!smith_ui_snapshot_scene_enter(&scope))
                     return;
             }
@@ -6116,6 +6143,7 @@ static int smithing_menu_snapshot(int* highlight)
             *highlight = choice;
             if (state.valid[*highlight - 1])
             {
+                smith_ui_snapshot_begin_nested_transition();
                 smith_ui_snapshot_scene_close(&scope);
                 return *highlight;
             }
@@ -6131,6 +6159,7 @@ static int smithing_menu_snapshot(int* highlight)
         {
             if (state.valid[*highlight - 1])
             {
+                smith_ui_snapshot_begin_nested_transition();
                 smith_ui_snapshot_scene_close(&scope);
                 return *highlight;
             }
@@ -6188,6 +6217,7 @@ void do_cmd_smithing_screen(void)
     bool leave_menu = false;
     bool create = false;
 
+    smith_ui_snapshot_reset_nested_transitions();
     app_session_push_wait_scope(app_session_current(), &wait_scope,
         APP_WAIT_REASON_LIST_SELECTION, 0, 0);
 
@@ -6349,6 +6379,9 @@ void do_cmd_smithing_screen(void)
             break;
         }
         }
+
+        if (actiontype > 0)
+            smith_ui_snapshot_end_nested_transition();
     }
 
     if (create)
@@ -6411,6 +6444,7 @@ void do_cmd_smithing_screen(void)
 
     app_session_clear_dungeon_overlay_scene(app_session_current());
     app_session_clear_interaction(app_session_current());
+    smith_ui_snapshot_reset_nested_transitions();
     smith_ui_snapshot_refresh();
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
 }

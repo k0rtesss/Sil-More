@@ -32,36 +32,13 @@ combat_history_round combat_history[MAX_COMBAT_HISTORY];
 int combat_history_head = 0;
 int combat_history_count = 0;
 
-static int  original_main_combat_rolls = -1;
-static bool main_combat_rolls_deferral_active = false;
-static bool main_combat_rolls_restored = false;
+#define COMBAT_HISTORY_UI_WINDOW 48
 
-static void maybe_restore_main_combat_rolls(void)
-{
-    if (main_combat_rolls_deferral_active && !main_combat_rolls_restored) {
-        if (op_ptr->main_combat_rolls == 0 && original_main_combat_rolls > 0) {
-            op_ptr->main_combat_rolls = original_main_combat_rolls;
-            main_combat_rolls_restored = true;
-            main_combat_rolls_deferral_active = false;
-            p_ptr->redraw |= (PR_MAP); /* recompute SCREEN_HGT */
-            log_trace("maybe_restore_main_combat_rolls: restored to %d", op_ptr->main_combat_rolls);
-        }
-    }
-}
-
-static void combat_display_get_term_size(int* wid, int* hgt)
-{
-    int term_wid = 0;
-    int term_hgt = 0;
-
-    (void)Term_get_size(&term_wid, &term_hgt);
-    if (wid)
-        *wid = term_wid;
-    if (hgt)
-        *hgt = term_hgt;
-}
-
-static void combat_snapshot_refresh_main_view(void)
+/*
+ * Refresh the semantic dungeon snapshot after combat overlay state changes.
+ * The map is included because main_combat_rolls still affects SCREEN_HGT.
+ */
+void refresh_main_combat_overlay(void)
 {
     app_session* session = app_session_current();
     const app_snapshot* snapshot;
@@ -146,8 +123,6 @@ void update_combat_rolls1(const monster_type* m_ptr1,
     const monster_type* m_ptr2, bool vis, int att, int att_roll, int evn,
     int evn_roll)
 {
-    /* Ensure we restore deferred main_combat_rolls before recording first roll */
-    maybe_restore_main_combat_rolls();
     monster_race* r_ptr1;
     monster_race* r_ptr2;
 
@@ -317,8 +292,6 @@ void update_combat_rolls1(const monster_type* m_ptr1,
 void update_combat_rolls1b(
     const monster_type* m_ptr1, const monster_type* m_ptr2, bool vis)
 {
-    /* Ensure we restore deferred main_combat_rolls before recording first roll */
-    maybe_restore_main_combat_rolls();
     monster_race* r_ptr1;
     monster_race* r_ptr2;
 
@@ -466,8 +439,6 @@ void update_combat_rolls1b(
 void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
     int prt_percent, int dam_type, bool melee)
 {
-    /* Ensure we restore deferred main_combat_rolls before completing roll */
-    maybe_restore_main_combat_rolls();
     log_trace("[ROLL2] enter: combat_number=%d old=%d last_index=%d", combat_number, combat_number_old, combat_number - 1);
     if (combat_number - 1 < MAX_COMBAT_ROLLS)
     {
@@ -518,11 +489,12 @@ void update_combat_rolls2(int dd, int ds, int dam, int pd, int ps, int prot,
 }
 
 /*
- * Clear all 4 combat rolls lines in main terminal (used when settings change)
+ * Clear the live combat-roll presentation after settings changes.
+ * SDL snapshot mode handles this by rebuilding the main dungeon snapshot.
  */
 void clear_main_combat_rolls_area(void)
 {
-    combat_snapshot_refresh_main_view();
+    refresh_main_combat_overlay();
 }
 
 /*
@@ -593,566 +565,350 @@ static bool combat_history_locate_roll(int absolute_index, int* history_idx,
     return false;
 }
 
-static bool combat_history_information_scene_pause(
-    ui_information_scene_scope* scope)
+static bool combat_history_try_add_detail_line(app_ui_panel* panel, byte attr,
+    cptr text)
 {
-    if (!scope)
+    if (!panel || !text || !text[0])
+        return true;
+    if (panel->detail_line_count >= APP_UI_DETAIL_LINE_MAX)
+        return true;
+
+    return app_ui_panel_add_detail_line(panel, attr, text);
+}
+
+static void combat_history_format_row_label(char* buf, size_t buf_size,
+    const combat_roll* roll)
+{
+    int att_total;
+    int evn_total;
+    int hit_margin;
+    int net_dam;
+
+    if (!buf || buf_size == 0)
+        return;
+
+    SDL_strlcpy(buf, "", buf_size);
+    if (!roll)
+        return;
+
+    net_dam = roll->dam - roll->prot;
+    if (net_dam < 0)
+        net_dam = 0;
+
+    if (roll->att_type == COMBAT_ROLL_ROLL)
+    {
+        att_total = roll->att + roll->att_roll;
+        evn_total = roll->evn + roll->evn_roll;
+        hit_margin = att_total - evn_total;
+
+        if (hit_margin > 0)
+        {
+            strnfmt(buf, buf_size, "Atk %d vs %d, hit %d, net %d",
+                att_total, evn_total, hit_margin, net_dam);
+        }
+        else
+        {
+            strnfmt(buf, buf_size, "Atk %d vs %d, miss",
+                att_total, evn_total);
+        }
+    }
+    else if (roll->att_type == COMBAT_ROLL_AUTO)
+    {
+        strnfmt(buf, buf_size, "Automatic effect, net %d", net_dam);
+    }
+}
+
+static void combat_history_format_row_meta(char* buf, size_t buf_size,
+    const combat_history_round* round, const combat_roll* roll)
+{
+    if (!buf || buf_size == 0)
+        return;
+
+    SDL_strlcpy(buf, "", buf_size);
+    if (!round || !roll)
+        return;
+
+    if (roll->dd > 0 && roll->ds > 0)
+    {
+        strnfmt(buf, buf_size, "Turn %d  %dd%d raw %d prot %d",
+            round->turn_count, roll->dd, roll->ds, roll->dam, roll->prot);
+    }
+    else
+    {
+        strnfmt(buf, buf_size, "Turn %d", round->turn_count);
+    }
+}
+
+static void combat_history_build_search_text(char* buf, size_t buf_size,
+    const combat_history_round* round, const combat_roll* roll)
+{
+    if (!buf || buf_size == 0)
+        return;
+
+    SDL_strlcpy(buf, "", buf_size);
+    if (!round || !roll)
+        return;
+
+    strnfmt(buf, buf_size, "Turn %d %c %c (%+d) (%dd%d)",
+        round->turn_count,
+        roll->attacker_char ? roll->attacker_char : '?',
+        roll->defender_char ? roll->defender_char : '?', roll->att, roll->dd,
+        roll->ds);
+}
+
+static bool combat_history_roll_matches(const combat_history_round* round,
+    const combat_roll* roll, cptr shower)
+{
+    char search_buf[120];
+
+    if (!shower || !shower[0] || !round || !roll)
         return false;
 
-    ui_information_scene_leave(scope);
+    combat_history_build_search_text(search_buf, sizeof(search_buf), round,
+        roll);
+    return strstr(search_buf, shower) != NULL;
+}
+
+static bool combat_history_add_selected_roll_detail(app_ui_panel* panel,
+    const combat_history_round* round, const combat_roll* roll)
+{
+    char buf[APP_UI_TEXT_MAX];
+    int net_dam;
+
+    if (!panel || !round || !roll)
+        return false;
+
+    strnfmt(buf, sizeof(buf), "Turn %d", round->turn_count);
+    app_ui_panel_set_detail_title(panel,
+        combat_roll_is_player_attack(roll) ? TERM_L_BLUE : TERM_WHITE, buf);
+
+    if (!combat_history_try_add_detail_line(panel, TERM_SLATE,
+            "Attacker and defender are shown as the row icons."))
+    {
+        return false;
+    }
+
+    if (roll->att_type == COMBAT_ROLL_ROLL)
+    {
+        int att_total = roll->att + roll->att_roll;
+        int evn_total = roll->evn + roll->evn_roll;
+        int hit_margin = att_total - evn_total;
+
+        strnfmt(buf, sizeof(buf), "Attack total: %d (base %+d, roll %d)",
+            att_total, roll->att, roll->att_roll);
+        if (!combat_history_try_add_detail_line(panel,
+                combat_roll_is_player_attack(roll) ? TERM_L_BLUE : TERM_WHITE,
+                buf))
+        {
+            return false;
+        }
+
+        strnfmt(buf, sizeof(buf), "Evasion total: %d (base %+d, roll %d)",
+            evn_total, roll->evn, roll->evn_roll);
+        if (!combat_history_try_add_detail_line(panel, TERM_WHITE, buf))
+            return false;
+
+        if (hit_margin > 0)
+            strnfmt(buf, sizeof(buf), "Hit margin: %d", hit_margin);
+        else
+            SDL_strlcpy(buf, "Hit margin: none", sizeof(buf));
+        if (!combat_history_try_add_detail_line(panel,
+                (hit_margin > 0) ? TERM_L_RED : TERM_SLATE, buf))
+        {
+            return false;
+        }
+    }
+    else if (roll->att_type == COMBAT_ROLL_AUTO)
+    {
+        if (!combat_history_try_add_detail_line(panel, TERM_SLATE,
+                "Automatic effect; no attack roll was made."))
+        {
+            return false;
+        }
+    }
+
+    net_dam = roll->dam - roll->prot;
+    if (net_dam < 0)
+        net_dam = 0;
+
+    if (roll->dd > 0 && roll->ds > 0)
+    {
+        strnfmt(buf, sizeof(buf), "Damage: %dd%d -> %d raw",
+            roll->dd, roll->ds, roll->dam);
+        if (!combat_history_try_add_detail_line(panel,
+                combat_roll_is_player_attack(roll) ? TERM_L_BLUE : TERM_WHITE,
+                buf))
+        {
+            return false;
+        }
+    }
+
+    strnfmt(buf, sizeof(buf), "Protection: %d (%d%%)",
+        roll->prot, roll->prt_percent);
+    if (!combat_history_try_add_detail_line(panel, TERM_SLATE, buf))
+        return false;
+
+    strnfmt(buf, sizeof(buf), "Net damage: %d", net_dam);
+    if (!combat_history_try_add_detail_line(panel,
+            (net_dam > 0) ? TERM_L_RED : TERM_SLATE, buf))
+    {
+        return false;
+    }
+
+    if (!combat_history_try_add_detail_line(panel, TERM_SLATE,
+            roll->melee ? "Context: melee." : "Context: ranged/effect."))
+    {
+        return false;
+    }
+
     return true;
 }
 
-static bool combat_history_information_scene_resume(
-    ui_information_scene_scope* scope)
-{
-    if (!scope)
-        return false;
-
-    return ui_information_scene_enter(scope);
-}
-
-static app_ui_panel* combat_history_begin_document_scene(app_ui_scene* scene)
+static bool combat_history_build_browser_scene(app_ui_scene* scene,
+    int selected_index, int total_rolls, cptr shower)
 {
     app_ui_panel* panel;
+    char subtitle[APP_UI_TEXT_MAX];
+    int window_start = 0;
+    int window_end = 0;
 
     if (!scene)
-        return NULL;
+        return false;
+
+    if (selected_index < 0)
+        selected_index = 0;
+    if (total_rolls > 0 && selected_index >= total_rolls)
+        selected_index = total_rolls - 1;
 
     app_ui_scene_init(scene);
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    return panel;
-}
-
-static bool combat_history_scene_add_clipped_text(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int view_col, int view_width, int col,
-    byte attr, cptr text)
-{
-    char clipped[APP_UI_TEXT_MAX];
-    size_t len;
-    int left;
-    int right;
-    int copy_len;
-
-    if (!scene || !panel)
         return false;
-    if (!text || !text[0] || view_width <= 0)
-        return true;
 
-    len = strlen(text);
-    if (len == 0)
-        return true;
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1100, 2400);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Combat History");
 
-    left = MAX(col, view_col);
-    right = MIN(col + (int)len, view_col + view_width);
-    if (right <= left)
-        return true;
-
-    copy_len = right - left;
-    if (copy_len >= (int)sizeof(clipped))
-        copy_len = (int)sizeof(clipped) - 1;
-    memcpy(clipped, text + (left - col), (size_t)copy_len);
-    clipped[copy_len] = '\0';
-
-    return app_ui_panel_add_document_text_ex(scene, panel, (s16b)row,
-        (s16b)(left - view_col), attr, STORY_FLAG_CELL_ALIGN, clipped);
-}
-
-static int combat_history_scene_glyph_display_width(void)
-{
-    return (use_bigtile && !graphics_are_ascii()) ? 2 : 1;
-}
-
-static byte combat_history_scene_glyph_render_width(byte attr, char ch)
-{
-    if (use_bigtile && !graphics_are_ascii() && (attr & TILE_FLAG)
-        && (((byte)ch) & TILE_FLAG))
+    if (total_rolls > 0)
     {
-        return 2;
+        strnfmt(subtitle, sizeof(subtitle), "Selected %d of %d rolls",
+            selected_index + 1, total_rolls);
+    }
+    else
+    {
+        SDL_strlcpy(subtitle, "No recorded combat rolls", sizeof(subtitle));
+    }
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    if (shower && shower[0])
+    {
+        char filter_buf[APP_UI_TEXT_MAX];
+
+        strnfmt(filter_buf, sizeof(filter_buf), "Highlight: %s", shower);
+        if (!app_ui_panel_add_body_line(panel, TERM_L_BLUE, filter_buf))
+            return false;
     }
 
-    return 1;
-}
-
-static bool combat_history_scene_add_glyph(app_ui_scene* scene,
-    app_ui_panel* panel, int row, int view_col, int view_width, int col,
-    byte attr, char ch)
-{
-    int dst_col;
-    byte render_width;
-
-    if (!scene || !panel)
-        return false;
-    if (view_width <= 0 || col < view_col || col >= view_col + view_width)
-        return true;
-
-    dst_col = col - view_col;
-    render_width = combat_history_scene_glyph_render_width(attr, ch);
-    if (render_width > (byte)(view_width - dst_col))
+    if (total_rolls <= 0)
     {
-        if (render_width > 1)
-            return true;
-        render_width = 1;
+        if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+                "No combat rolls recorded."))
+        {
+            return false;
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "Esc", "Back");
+        return true;
     }
 
-    return app_ui_panel_add_document_cell_ex(scene, panel, (s16b)row,
-        (s16b)dst_col, attr, ch, 0, 0, 0, render_width);
-}
+    window_start = selected_index - (COMBAT_HISTORY_UI_WINDOW / 2);
+    if (window_start < 0)
+        window_start = 0;
+    if (window_start > total_rolls - COMBAT_HISTORY_UI_WINDOW)
+        window_start = MAX(0, total_rolls - COMBAT_HISTORY_UI_WINDOW);
+    window_end = MIN(total_rolls, window_start + COMBAT_HISTORY_UI_WINDOW);
 
-static bool combat_history_build_ui_scene(app_ui_scene* scene, int start_index,
-    int offset, int wid, int hgt, int total_rolls, cptr shower, int* out_shown)
-{
-    app_ui_panel* panel;
-    int j;
-    char buf[120];
-
-    (void)shower;
-
-    if (!scene)
-        return false;
-
-    panel = combat_history_begin_document_scene(scene);
-    if (!panel)
-        return false;
-
-    for (j = 0; (j < hgt - 4) && (start_index + j < total_rolls); j++)
+    for (int absolute_index = window_start; absolute_index < window_end;
+         absolute_index++)
     {
         int history_idx = -1;
         int roll_idx = -1;
         combat_history_round* round;
         combat_roll* roll;
-        int a_att;
-        int a_evn;
-        int a_hit;
-        int a_dam_roll;
-        int a_prot_roll;
-        int a_net_dam;
-        bool is_player_attack;
-        int line_y = hgt - 3 - j;
-        int col = 0;
+        char label[APP_UI_LABEL_MAX];
+        char meta[APP_UI_META_MAX];
+        bool selected;
+        bool matches;
+        byte row_attr;
+        byte meta_attr;
+        u16b row_index;
 
-        if (!combat_history_locate_roll(start_index + j, &history_idx,
-                &roll_idx))
-        {
+        if (!combat_history_locate_roll(absolute_index, &history_idx, &roll_idx))
             continue;
-        }
 
         round = &combat_history[history_idx];
         roll = &round->rolls[roll_idx];
         if (roll->att_type == COMBAT_ROLL_NONE)
             continue;
 
-        is_player_attack = combat_roll_is_player_attack(roll);
+        combat_history_format_row_label(label, sizeof(label), roll);
+        combat_history_format_row_meta(meta, sizeof(meta), round, roll);
+        selected = absolute_index == selected_index;
+        matches = combat_history_roll_matches(round, roll, shower);
+        row_attr = combat_roll_is_player_attack(roll) ? TERM_L_BLUE : TERM_WHITE;
+        meta_attr = matches ? TERM_YELLOW : TERM_SLATE;
+        row_index = panel->row_count;
 
-        if (is_player_attack)
-        {
-            a_att = TERM_L_BLUE;
-            a_evn = TERM_WHITE;
-            a_hit = TERM_L_RED;
-            a_dam_roll = TERM_L_BLUE;
-            a_net_dam = TERM_L_RED;
-            if (roll->prt_percent >= 100)
-                a_prot_roll = TERM_WHITE;
-            else if (roll->prt_percent >= 1)
-                a_prot_roll = TERM_SLATE;
-            else
-                a_prot_roll = TERM_DARK;
-        }
-        else
-        {
-            a_att = TERM_WHITE;
-            a_evn = TERM_L_BLUE;
-            a_hit = TERM_L_RED;
-            a_dam_roll = TERM_WHITE;
-            a_net_dam = TERM_L_RED;
-            if (roll->prt_percent >= 100)
-                a_prot_roll = TERM_L_BLUE;
-            else if (roll->prt_percent >= 1)
-                a_prot_roll = TERM_BLUE;
-            else
-                a_prot_roll = TERM_DARK;
-        }
-
-        if (roll_idx == 0)
-        {
-            strnfmt(buf, sizeof(buf), "Turn %d:", round->turn_count);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, TERM_L_DARK, buf))
-            {
-                return false;
-            }
-            col += 9;
-        }
-        else
-        {
-            col += 9;
-        }
-
-        col += 1;
-        if (!combat_history_scene_add_glyph(scene, panel, line_y, offset, wid,
-                col, roll->attacker_attr, roll->attacker_char))
+        if (!app_ui_panel_add_row_ex(panel, (s16b)absolute_index, row_attr,
+                meta_attr, roll->attacker_attr, roll->attacker_char, true,
+                selected, "", label, meta))
         {
             return false;
         }
-        col += combat_history_scene_glyph_display_width();
 
-        if (roll->att_type == COMBAT_ROLL_ROLL)
+        panel->rows[row_index].extra_icon_attr = roll->defender_attr;
+        panel->rows[row_index].extra_icon_char = roll->defender_char;
+    }
+
+    {
+        int history_idx = -1;
+        int roll_idx = -1;
+
+        if (combat_history_locate_roll(selected_index, &history_idx, &roll_idx))
         {
-            int net_att;
+            combat_history_round* round = &combat_history[history_idx];
+            combat_roll* roll = &round->rolls[roll_idx];
 
-            if (roll->att < 10)
-                strnfmt(buf, sizeof(buf), "  (%+d)", roll->att);
-            else
-                strnfmt(buf, sizeof(buf), " (%+d)", roll->att);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_att, buf))
-            {
+            if (!combat_history_add_selected_roll_detail(panel, round, roll))
                 return false;
-            }
-            col += strlen(buf);
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->att + roll->att_roll);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_att, buf))
-            {
-                return false;
-            }
-            col += 4;
-
-            net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
-            if (net_att > 0)
-                strnfmt(buf, sizeof(buf), "%4d", net_att);
-            else
-                SDL_strlcpy(buf, "   -", sizeof(buf));
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col,
-                    (net_att > 0) ? a_hit : TERM_SLATE, buf))
-            {
-                return false;
-            }
-            col += 4;
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->evn + roll->evn_roll);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_evn, buf))
-            {
-                return false;
-            }
-            col += 4;
-
-            if (roll->evn < 10)
-                strnfmt(buf, sizeof(buf), "   [%+d]", roll->evn);
-            else
-                strnfmt(buf, sizeof(buf), "  [%+d]", roll->evn);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_evn, buf))
-            {
-                return false;
-            }
-            col += strlen(buf);
-
-            col += 1;
-            if (!combat_history_scene_add_glyph(scene, panel, line_y, offset,
-                    wid, col, roll->defender_attr, roll->defender_char))
-            {
-                return false;
-            }
-            col += combat_history_scene_glyph_display_width();
-
-            if (net_att > 0)
-            {
-                int net_dam;
-
-                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                        offset, wid, col, TERM_L_DARK, "  ->"))
-                {
-                    return false;
-                }
-                col += 4;
-
-                if (roll->ds < 10)
-                    strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd,
-                        roll->ds);
-                else
-                    strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd,
-                        roll->ds);
-                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                        offset, wid, col, a_dam_roll, buf))
-                {
-                    return false;
-                }
-                col += strlen(buf);
-
-                strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                        offset, wid, col, a_dam_roll, buf))
-                {
-                    return false;
-                }
-                col += 4;
-
-                net_dam = roll->dam - roll->prot;
-                if (net_dam < 0)
-                    net_dam = 0;
-
-                if (net_dam > 0)
-                    strnfmt(buf, sizeof(buf), "%4d", net_dam);
-                else
-                    SDL_strlcpy(buf, "   -", sizeof(buf));
-                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                        offset, wid, col,
-                        (net_dam > 0) ? a_net_dam : TERM_SLATE, buf))
-                {
-                    return false;
-                }
-                col += 4;
-
-                strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-                if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                        offset, wid, col, a_prot_roll, buf))
-                {
-                    return false;
-                }
-                col += 4;
-            }
-        }
-        else if (roll->att_type == COMBAT_ROLL_AUTO)
-        {
-            int net_dam;
-
-            col += 25;
-            col += 1;
-            if (!combat_history_scene_add_glyph(scene, panel, line_y, offset,
-                    wid, col, roll->defender_attr, roll->defender_char))
-            {
-                return false;
-            }
-            col += combat_history_scene_glyph_display_width();
-
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, TERM_L_DARK, "  ->"))
-            {
-                return false;
-            }
-            col += 4;
-
-            if (roll->ds < 10)
-                strnfmt(buf, sizeof(buf), "   (%dd%d)", roll->dd, roll->ds);
-            else
-                strnfmt(buf, sizeof(buf), "  (%dd%d)", roll->dd, roll->ds);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_dam_roll, buf))
-            {
-                return false;
-            }
-            col += strlen(buf);
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->dam);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_dam_roll, buf))
-            {
-                return false;
-            }
-            col += 4;
-
-            net_dam = roll->dam - roll->prot;
-            if (net_dam < 0)
-                net_dam = 0;
-
-            if (net_dam > 0)
-                strnfmt(buf, sizeof(buf), "%4d", net_dam);
-            else
-                SDL_strlcpy(buf, "   -", sizeof(buf));
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col,
-                    (net_dam > 0) ? a_net_dam : TERM_SLATE, buf))
-            {
-                return false;
-            }
-            col += 4;
-
-            strnfmt(buf, sizeof(buf), "%4d", roll->prot);
-            if (!combat_history_scene_add_clipped_text(scene, panel, line_y,
-                    offset, wid, col, a_prot_roll, buf))
-            {
-                return false;
-            }
-            col += 4;
         }
     }
 
-    if (out_shown)
-        *out_shown = j;
-
-    strnfmt(buf, sizeof(buf), "Combat History (%d-%d of %d rolls), Offset %d",
-        start_index, start_index + j - 1, total_rolls, offset);
-    if (!combat_history_scene_add_clipped_text(scene, panel, 0, 0, wid, 0,
-            TERM_WHITE, buf))
-    {
-        return false;
-    }
-
-    if (!combat_history_scene_add_clipped_text(scene, panel, hgt - 1, 0, wid,
-            0,
-            TERM_WHITE,
-            "[Press 'p' for older, 'n' for newer, '=' to highlight, '/' to search, or ESCAPE]"))
-    {
-        return false;
-    }
-
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "p/n", "Page");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "=", "Show");
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+        "/", "Find");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+        "Esc", "Back");
     return true;
-}
-
-static bool combat_history_present_ui_scene(int start_index, int offset, int wid,
-    int hgt, int total_rolls, cptr shower)
-{
-    app_ui_scene scene;
-
-    if (!combat_history_build_ui_scene(&scene, start_index, offset, wid, hgt,
-            total_rolls, shower, NULL))
-    {
-        return false;
-    }
-
-    return ui_information_scene_present_ui(&scene);
-}
-
-static void combat_round_details_format_line(char* buf, size_t buf_size,
-    const combat_roll* roll)
-{
-    int net_att;
-
-    if (!buf || buf_size == 0)
-        return;
-
-    buf[0] = '\0';
-    if (!roll)
-        return;
-
-    strnfmt(buf, buf_size, " %c", roll->attacker_char ? roll->attacker_char : '?');
-
-    if (roll->att_type == COMBAT_ROLL_ROLL)
-    {
-        net_att = roll->att_roll + roll->att - roll->evn_roll - roll->evn;
-        strnfmt(buf + strlen(buf), buf_size - strlen(buf),
-            " (%+d)%4d %4d %4d [%+d] %c", roll->att,
-            roll->att + roll->att_roll, (net_att > 0) ? net_att : 0,
-            roll->evn + roll->evn_roll, roll->evn,
-            roll->defender_char ? roll->defender_char : '?');
-
-        if (net_att > 0)
-        {
-            int net_dam = roll->dam - roll->prot;
-
-            if (net_dam < 0)
-                net_dam = 0;
-            strnfmt(buf + strlen(buf), buf_size - strlen(buf),
-                " -> (%dd%d) %4d %4d %4d", roll->dd, roll->ds, roll->dam,
-                net_dam, roll->prot);
-        }
-    }
-    else if (roll->att_type == COMBAT_ROLL_AUTO)
-    {
-        int net_dam = roll->dam - roll->prot;
-
-        if (net_dam < 0)
-            net_dam = 0;
-
-        strnfmt(buf + strlen(buf), buf_size - strlen(buf),
-            "                         %c -> (%dd%d) %4d %4d %4d",
-            roll->defender_char ? roll->defender_char : '?', roll->dd,
-            roll->ds, roll->dam, net_dam, roll->prot);
-    }
-}
-
-static bool combat_round_details_build_ui_scene(app_ui_scene* scene,
-    const combat_history_round* round, int wid, int hgt)
-{
-    app_ui_panel* panel;
-    char buf[120];
-    int row = 2;
-    int footer_row = (hgt > 0) ? (hgt - 1) : 0;
-    bool wrote_any = false;
-
-    if (!scene || !round)
-        return false;
-
-    panel = combat_history_begin_document_scene(scene);
-    if (!panel)
-        return false;
-
-    strnfmt(buf, sizeof(buf), "Combat Details - Turn %d (%d roll%s)",
-        round->turn_count, round->num_rolls, (round->num_rolls == 1) ? "" : "s");
-    if (!combat_history_scene_add_clipped_text(scene, panel, 0, 0, wid, 0,
-            TERM_WHITE, buf))
-    {
-        return false;
-    }
-
-    for (int pass = 0; pass < 2; pass++)
-    {
-        for (int i = 0; i < round->num_rolls; i++)
-        {
-            const combat_roll* roll = &round->rolls[i];
-            bool player_attack;
-
-            if (roll->att_type == COMBAT_ROLL_NONE)
-                continue;
-
-            player_attack = combat_roll_is_player_attack(roll);
-            if (player_attack != (pass == 0))
-                continue;
-
-            if (row >= footer_row)
-            {
-                if (!combat_history_scene_add_clipped_text(scene, panel,
-                        footer_row - 1, 0, wid, 0, TERM_SLATE,
-                        "... more rolls omitted ..."))
-                {
-                    return false;
-                }
-                goto footer;
-            }
-
-            combat_round_details_format_line(buf, sizeof(buf), roll);
-            if (!combat_history_scene_add_clipped_text(scene, panel, row, 0,
-                    wid, 0, player_attack ? TERM_L_BLUE : TERM_WHITE, buf))
-            {
-                return false;
-            }
-
-            row++;
-            wrote_any = true;
-        }
-    }
-
-    if (!wrote_any)
-    {
-        if (!combat_history_scene_add_clipped_text(scene, panel, row, 0, wid,
-                0, TERM_SLATE, "No combat rolls recorded for this round."))
-        {
-            return false;
-        }
-    }
-
-footer:
-    return combat_history_scene_add_clipped_text(scene, panel, footer_row, 0,
-        wid, 0, TERM_WHITE, "[Press any key to return]");
 }
 
 static bool do_cmd_combat_history_information_scene(void)
 {
     ui_information_scene_scope scope;
+    app_ui_scene scene;
     char shower[80];
     char finder[80];
-    int i = 0;
-    int q = 0;
+    int selected_index = 0;
     int n;
 
     if (!ui_information_scene_enter(&scope))
@@ -1164,13 +920,12 @@ static bool do_cmd_combat_history_information_scene(void)
 
     while (true)
     {
-        int wid;
-        int hgt;
-        int old_i;
+        int old_selected_index;
         char ch;
 
-        combat_display_get_term_size(&wid, &hgt);
-        if (!combat_history_present_ui_scene(i, q, wid, hgt, n, shower))
+        if (!combat_history_build_browser_scene(&scene, selected_index, n,
+                shower)
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1180,46 +935,29 @@ static bool do_cmd_combat_history_information_scene(void)
         if (ch == ESCAPE)
             break;
 
-        old_i = i;
+        old_selected_index = selected_index;
 
-        if (ch == '4')
+        if (n <= 0)
         {
-            q = (q >= wid / 2) ? (q - wid / 2) : 0;
+            bell(NULL);
             continue;
         }
-        if (ch == '6')
-        {
-            q += wid / 2;
-            continue;
-        }
+
         if (ch == '=')
         {
-            if (!combat_history_information_scene_pause(&scope))
-                break;
-
             if (!term_get_string("Show: ", shower, sizeof(shower)))
-            {
-                if (!combat_history_information_scene_resume(&scope))
-                    return false;
                 continue;
-            }
-
-            if (!combat_history_information_scene_resume(&scope))
-                return false;
             continue;
         }
         if (ch == '/')
         {
             s16b z;
 
-            if (!combat_history_information_scene_pause(&scope))
-                break;
-
             if (term_get_string("Find: ", finder, sizeof(finder)))
             {
                 SDL_strlcpy(shower, finder, sizeof(shower));
 
-                for (z = i + 1; z < n; z++)
+                for (z = selected_index + 1; z < n; z++)
                 {
                     int history_idx = -1;
                     int roll_idx = -1;
@@ -1238,40 +976,44 @@ static bool do_cmd_combat_history_information_scene(void)
 
                     if (strstr(search_buf, finder))
                     {
-                        i = z;
+                        selected_index = z;
                         break;
                     }
                 }
             }
-
-            if (!combat_history_information_scene_resume(&scope))
-                return false;
             continue;
         }
 
         if ((ch == 'p') || (ch == KTRL('P')) || (ch == ' '))
         {
-            if (i + 20 < n)
-                i += 20;
+            if (selected_index + 20 < n)
+                selected_index += 20;
         }
         if (ch == '+')
         {
-            if (i + 10 < n)
-                i += 10;
+            if (selected_index + 10 < n)
+                selected_index += 10;
         }
-        if ((ch == '8') || (ch == '\n') || (ch == '\r'))
+        if (ch == '8')
         {
-            if (i + 1 < n)
-                i += 1;
+            if (selected_index >= 1)
+                selected_index -= 1;
         }
         if ((ch == 'n') || (ch == KTRL('N')))
-            i = (i >= 20) ? (i - 20) : 0;
+            selected_index = (selected_index >= 20)
+                ? (selected_index - 20)
+                : 0;
         if (ch == '-')
-            i = (i >= 10) ? (i - 10) : 0;
-        if (ch == '2')
-            i = (i >= 1) ? (i - 1) : 0;
+            selected_index = (selected_index >= 10)
+                ? (selected_index - 10)
+                : 0;
+        if ((ch == '2') || (ch == '\n') || (ch == '\r'))
+        {
+            if (selected_index + 1 < n)
+                selected_index += 1;
+        }
 
-        if (i == old_i)
+        if (selected_index == old_selected_index)
             bell(NULL);
     }
 
@@ -1299,66 +1041,14 @@ void do_cmd_combat_history(void)
 }
 
 /*
- * Display detailed combat rolls for a specific round
- */
-void display_combat_round_details(combat_history_round* round)
-{
-    ui_information_scene_scope scope;
-    app_ui_scene scene;
-    int wid;
-    int hgt;
-
-    if (!round)
-        return;
-
-    if (!ui_information_scene_supported())
-    {
-        log_warn("combat detail: snapshot renderer required; legacy renderer removed");
-        msg_print("Combat detail viewer requires the snapshot UI renderer.");
-        return;
-    }
-
-    if (!ui_information_scene_enter(&scope))
-    {
-        log_warn("combat detail: unable to enter information scene");
-        msg_print("Combat detail viewer unavailable.");
-        return;
-    }
-
-    combat_display_get_term_size(&wid, &hgt);
-    if (!combat_round_details_build_ui_scene(&scene, round, wid, hgt)
-        || !ui_information_scene_present_ui(&scene))
-    {
-        ui_information_scene_leave(&scope);
-        log_warn("combat detail: information-scene presentation failed on the snapshot renderer path");
-        msg_print("Combat detail viewer unavailable.");
-        return;
-    }
-
-    (void)ui_information_scene_wait_key_nonrepeat();
-    ui_information_scene_leave(&scope);
-}
-
-/*
- * Display recent combat rolls in the main terminal's bottom rows
+ * Refresh the live combat-roll presentation after state changes.
+ * SDL snapshot mode renders this semantically instead of drawing term rows.
  */
 void display_main_combat_rolls(void)
 {
-    int num_lines = op_ptr->main_combat_rolls;
-
-    if (original_main_combat_rolls == -1) {
-        original_main_combat_rolls = num_lines;
-        if (original_main_combat_rolls > 0) {
-            op_ptr->main_combat_rolls = 0;
-            num_lines = 0;
-            main_combat_rolls_deferral_active = true;
-            log_trace("display_main_combat_rolls: deferring initial lines (saved %d)", original_main_combat_rolls);
-        }
-    }
-
     log_trace("display_main_combat_rolls: Starting - combat_number=%d, combat_number_old=%d, num_lines=%d",
-        combat_number, combat_number_old, num_lines);
-    combat_snapshot_refresh_main_view();
+        combat_number, combat_number_old, op_ptr->main_combat_rolls);
+    refresh_main_combat_overlay();
 }
 
 

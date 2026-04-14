@@ -67,6 +67,35 @@ typedef struct main_menu_scene_scope {
     bool active;
 } main_menu_scene_scope;
 
+static char main_menu_read_key(void)
+{
+    app_session* session = app_session_current();
+    app_input input;
+
+    if (!session
+        || !app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
+    {
+        return ESCAPE;
+    }
+
+    while (true)
+    {
+        while (app_session_pop_input(session, &input))
+        {
+            if (input.layer != APP_INPUT_LAYER_LEGACY
+                || input.type != APP_INPUT_TYPE_KEY)
+            {
+                continue;
+            }
+
+            return (char)(input.payload.key.logical_key & 0xFFu);
+        }
+
+        (void)Term_xtra(TERM_XTRA_EVENT, 1);
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    }
+}
+
 static int main_menu_calc_width(void)
 {
     /* Keep in sync with the menu labels used by the semantic scene builders. */
@@ -749,10 +778,8 @@ static int main_menu_aux(int* highlight, main_menu_scene_scope* menu_scene_scope
     if (death_view && main_menu_choice_is_disabled(*highlight))
         *highlight = MAIN_MENU_RETURN_GAME;
 
-    /* Get key (while allowing menu commands) */
-    inkey_set_cursor_hidden(true);
-    ch = inkey();
-    inkey_set_cursor_hidden(false);
+    /* Get key (while allowing menu commands). */
+    ch = main_menu_read_key();
 
     // choose an option by letter - alphabetical mapping (updated for new order)
     switch (ch)

@@ -1731,9 +1731,6 @@ static bool app_build_panes_blob(app_dungeon_snapshot* snapshot)
     panes->format_version = APP_DUNGEON_PANES_FORMAT_VERSION;
     panes->main_combat_roll_lines = op_ptr->main_combat_rolls;
 
-    if (g_hide_left_panel)
-        panes->flags |= APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL;
-
     combat_count = app_collect_combat_entries(panes->combat_entries,
         APP_DUNGEON_COMBAT_ENTRY_MAX);
     panes->combat_entry_count = (u16b)combat_count;
@@ -1780,13 +1777,17 @@ static void app_build_left_rail_ui_panel(app_ui_scene* scene,
     const app_status_build_local* live, bool hide_left_panel)
 {
     app_ui_panel* panel;
+    u16b style;
 
     if (!scene || !live)
         return;
 
-    panel = app_dungeon_ui_append_chrome_panel(scene,
-        APP_UI_PANEL_STYLE_STATUS_RAIL, APP_UI_PANEL_FLAG_TOP_ANCHORED
-            | APP_UI_PANEL_FLAG_LEFT_ANCHORED);
+    /* Hidden-left-panel mode is an overlay rail rather than reserved chrome. */
+    style = hide_left_panel
+        ? APP_UI_PANEL_STYLE_OVERLAY_RAIL
+        : APP_UI_PANEL_STYLE_STATUS_RAIL;
+    panel = app_dungeon_ui_append_chrome_panel(scene, style,
+        APP_UI_PANEL_FLAG_TOP_ANCHORED | APP_UI_PANEL_FLAG_LEFT_ANCHORED);
     if (!panel)
         return;
 

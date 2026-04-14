@@ -21,6 +21,7 @@
 #include <string.h>
 
 #define HELP_TOTAL_PAGES 8
+#define HELP_SDL_GET(name) get ## _sdl_ ## name
 
 /* Drop-in replacement for show_help_screen(int i)
  * Adds a tiny role-based colour shim for consistent, accessible styling.
@@ -512,15 +513,35 @@ static void help_prompt_label(int binding, const char* fallback, char* buf, size
         SDL_strlcpy(buf, fallback, buflen);
 }
 
+static int help_gamepad_button_binding(int button)
+{
+    return HELP_SDL_GET(gamepad_button_binding)(button);
+}
+
+static int help_gamepad_trigger_binding(int index)
+{
+    return HELP_SDL_GET(gamepad_trigger_binding)(index);
+}
+
+static int help_gamepad_right_stick_binding(int dir)
+{
+    return HELP_SDL_GET(gamepad_right_stick_binding)(dir);
+}
+
+static int help_gamepad_shoulder_combo_binding(void)
+{
+    return HELP_SDL_GET(gamepad_shoulder_combo_binding)();
+}
+
 /* ------------------------------------------------------------------------
  * Dynamic help pagination
  *
  * Requirement: keep the *existing* help text and colouring exactly the same.
  * Only formatting (which strings appear on which page) should change.
  *
- * Approach: record the handcrafted legacy help rendering into a list of draw
- * operations, stack all 8 pages into one document, then paginate that document
- * by current terminal height.
+ * Approach: build the handcrafted help pages directly into a list of semantic
+ * draw operations, stack all 8 pages into one document, then paginate that
+ * document by the current help viewport height.
  */
 
 typedef struct {
@@ -544,13 +565,12 @@ static int g_help_doc_ops_n = 0;
 static char g_help_doc_string_pool[HELP_DOC_STRING_POOL_SIZE];
 static size_t g_help_doc_string_pool_used = 0;
 
-static bool g_help_record_ops = false;
-static int g_help_record_base_y = 0;
-static int g_help_record_page_min_y = 0;
-static int g_help_record_page_max_y = 0;
+static int g_help_doc_page_base_y = 0;
+static int g_help_doc_page_min_y = 0;
+static int g_help_doc_page_max_y = 0;
 
-/* Forward declaration: used for recording. */
-static void show_help_screen_legacy(int i, bool include_header);
+/* Forward declaration for the direct document-op page builder. */
+static void help_record_page_document_ops(int i, bool include_header);
 
 static const char* help_doc_intern_string(const char* s)
 {
@@ -573,68 +593,40 @@ static const char* help_doc_intern_string(const char* s)
     return dst;
 }
 
-static void help_doc_record_role(color_role_t role, const char* s, bool is_heading, int row, int col)
+static void help_doc_append_op(bool use_role, bool is_heading,
+    color_role_t role, byte attr, const char* s, int row, int col)
 {
     if (g_help_doc_ops_n >= HELP_DOC_MAX_OPS)
         return;
 
-    g_help_doc_ops[g_help_doc_ops_n].use_role = true;
+    g_help_doc_ops[g_help_doc_ops_n].use_role = use_role;
     g_help_doc_ops[g_help_doc_ops_n].is_heading = is_heading;
     g_help_doc_ops[g_help_doc_ops_n].role = role;
-    g_help_doc_ops[g_help_doc_ops_n].attr = 0;
-    g_help_doc_ops[g_help_doc_ops_n].text = help_doc_intern_string(s);
-    g_help_doc_ops[g_help_doc_ops_n].y = g_help_record_base_y + row;
-    g_help_doc_ops[g_help_doc_ops_n].x = col;
-    g_help_doc_ops_n++;
-
-    if (g_help_record_page_min_y > g_help_record_base_y + row)
-        g_help_record_page_min_y = g_help_record_base_y + row;
-    if (g_help_record_page_max_y < g_help_record_base_y + row)
-        g_help_record_page_max_y = g_help_record_base_y + row;
-}
-
-static void help_doc_record_attr(byte attr, const char* s, int row, int col)
-{
-    if (g_help_doc_ops_n >= HELP_DOC_MAX_OPS)
-        return;
-
-    g_help_doc_ops[g_help_doc_ops_n].use_role = false;
-    g_help_doc_ops[g_help_doc_ops_n].is_heading = false;
-    g_help_doc_ops[g_help_doc_ops_n].role = ROLE_BODY;
     g_help_doc_ops[g_help_doc_ops_n].attr = attr;
     g_help_doc_ops[g_help_doc_ops_n].text = help_doc_intern_string(s);
-    g_help_doc_ops[g_help_doc_ops_n].y = g_help_record_base_y + row;
+    g_help_doc_ops[g_help_doc_ops_n].y = g_help_doc_page_base_y + row;
     g_help_doc_ops[g_help_doc_ops_n].x = col;
     g_help_doc_ops_n++;
 
-    if (g_help_record_page_min_y > g_help_record_base_y + row)
-        g_help_record_page_min_y = g_help_record_base_y + row;
-    if (g_help_record_page_max_y < g_help_record_base_y + row)
-        g_help_record_page_max_y = g_help_record_base_y + row;
+    if (g_help_doc_page_min_y > g_help_doc_page_base_y + row)
+        g_help_doc_page_min_y = g_help_doc_page_base_y + row;
+    if (g_help_doc_page_max_y < g_help_doc_page_base_y + row)
+        g_help_doc_page_max_y = g_help_doc_page_base_y + row;
 }
 
-static void help_emit_role(color_role_t role, const char* s, int row, int col)
+static void help_record_role(color_role_t role, const char* s, int row, int col)
 {
-    if (g_help_record_ops)
-        help_doc_record_role(role, s, false, row, col);
-    else
-        put_role(role, s, row, col);
+    help_doc_append_op(true, false, role, 0, s, row, col);
 }
 
-static void help_emit_heading(const char* s, int row, int col)
+static void help_record_heading(const char* s, int row, int col)
 {
-    if (g_help_record_ops)
-        help_doc_record_role(ROLE_SECTION, s, true, row, col);
-    else
-        put_role(ROLE_SECTION, s, row, col);
+    help_doc_append_op(true, true, ROLE_SECTION, 0, s, row, col);
 }
 
-static void help_emit_attr(byte attr, const char* s, int row, int col)
+static void help_record_attr(byte attr, const char* s, int row, int col)
 {
-    if (g_help_record_ops)
-        help_doc_record_attr(attr, s, row, col);
-    else
-        c_put_str(attr, s, row, col);
+    help_doc_append_op(false, false, ROLE_BODY, attr, s, row, col);
 }
 
 static int help_build_document_ops(int* out_doc_hgt, bool row_has_content[HELP_DOC_MAX_ROWS], bool row_has_heading[HELP_DOC_MAX_ROWS])
@@ -654,33 +646,30 @@ static int help_build_document_ops(int* out_doc_hgt, bool row_has_content[HELP_D
         int op_idx;
         int page_height;
 
-        g_help_record_ops = true;
-        g_help_record_base_y = base_y;
-        g_help_record_page_min_y = INT_MAX;
-        g_help_record_page_max_y = INT_MIN;
+        g_help_doc_page_base_y = base_y;
+        g_help_doc_page_min_y = INT_MAX;
+        g_help_doc_page_max_y = INT_MIN;
 
         start_op = g_help_doc_ops_n;
-        show_help_screen_legacy(page, false);
+        help_record_page_document_ops(page, false);
         end_op = g_help_doc_ops_n;
 
         if (end_op <= start_op)
             continue;
 
-        /* Normalize each recorded legacy page so it starts at y=base_y */
-        shift = g_help_record_page_min_y - base_y;
+        /* Normalize each recorded help page so it starts at y=base_y. */
+        shift = g_help_doc_page_min_y - base_y;
         if (shift < 0)
             shift = 0;
         for (op_idx = start_op; op_idx < end_op; op_idx++)
             g_help_doc_ops[op_idx].y -= shift;
 
-        page_height = (g_help_record_page_max_y - g_help_record_page_min_y + 1);
+        page_height = (g_help_doc_page_max_y - g_help_doc_page_min_y + 1);
         if (page_height < 1)
             page_height = 1;
 
         base_y += page_height + 1;
     }
-
-    g_help_record_ops = false;
 
     /* Build per-row markers */
     for (int r = 0; r < HELP_DOC_MAX_ROWS; r++)
@@ -864,8 +853,10 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
         char next_label[16];
         char back_label[16];
 
-        help_prompt_label(' ', "A", next_label, sizeof(next_label));
-        help_prompt_label('b', "b", back_label, sizeof(back_label));
+        help_prompt_label(steamdeck_confirm_key(), "A", next_label,
+            sizeof(next_label));
+        help_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
         strnfmt(nav, sizeof(nav),
             "Navigation: D-pad left/right Prev/Next  [%s] Next  [%s] Back",
             next_label, back_label);
@@ -890,15 +881,12 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
 /* -------- Help pages ----------------------------------------------------- */
 
 /*
- * NOTE: This function is used in two modes:
- *  - Normal draw mode: g_help_record_ops=false (calls put_role/c_put_str)
- *  - Record mode:      g_help_record_ops=true  (records ops, no drawing)
- *
- * We redirect put_role/c_put_str to record-aware emitters via macros.
+ * Build the fixed-layout help document directly into semantic draw ops.
  */
-#define put_role help_emit_role
-#define c_put_str help_emit_attr
-static void show_help_screen_legacy(int i, bool include_header)
+#define put_role help_record_role
+#define c_put_str help_record_attr
+#define help_emit_heading help_record_heading
+static void help_record_page_document_ops(int i, bool include_header)
 {
     int row, col, col2;
     char page_header[96];
@@ -1454,22 +1442,22 @@ static void show_help_screen_legacy(int i, bool include_header)
         char action_buf[96];
         int binding = 0;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_SOUTH);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_SOUTH);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "A", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_WEST);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_WEST);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "X", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_NORTH);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_NORTH);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "Y", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_EAST);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_EAST);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         put_role(ROLE_KEY, "B", row, col); put_role(ROLE_BODY, " - ", row, col + 2);
         put_role(ROLE_BODY, action_buf, row, col + 5); row++;
@@ -1480,10 +1468,14 @@ static void show_help_screen_legacy(int i, bool include_header)
             char rs_left[24];
             char rs_right[24];
             char rs_line[120];
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_UP), rs_up, sizeof(rs_up));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_DOWN), rs_down, sizeof(rs_down));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_LEFT), rs_left, sizeof(rs_left));
-            binding_action_short(get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT), rs_right, sizeof(rs_right));
+            binding_action_short(help_gamepad_right_stick_binding(
+                    GAMEPAD_STICK_DIR_UP), rs_up, sizeof(rs_up));
+            binding_action_short(help_gamepad_right_stick_binding(
+                    GAMEPAD_STICK_DIR_DOWN), rs_down, sizeof(rs_down));
+            binding_action_short(help_gamepad_right_stick_binding(
+                    GAMEPAD_STICK_DIR_LEFT), rs_left, sizeof(rs_left));
+            binding_action_short(help_gamepad_right_stick_binding(
+                    GAMEPAD_STICK_DIR_RIGHT), rs_right, sizeof(rs_right));
             strnfmt(rs_line, sizeof(rs_line), "Up:%s  Down:%s  Left:%s  Right:%s",
                     rs_up, rs_down, rs_left, rs_right);
             put_role(ROLE_KEY, "Right Stick", row, col);
@@ -1503,7 +1495,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         const char* input = NULL;
         int text_col = 0;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_SHOULDER);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
@@ -1511,7 +1503,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_trigger_binding(0);
+        binding = help_gamepad_trigger_binding(0);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L2 (Trigger)";
         put_role(ROLE_KEY, input, row, col);
@@ -1519,7 +1511,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE1);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L4 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1527,7 +1519,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE2);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_LEFT_PADDLE2);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L5 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1535,7 +1527,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_shoulder_combo_binding();
+        binding = help_gamepad_shoulder_combo_binding();
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "L1+R1 Combo";
         put_role(ROLE_KEY, input, row, col);
@@ -1550,7 +1542,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         help_emit_heading("RIGHT SIDE CONTROLS", row, col);
         row = left_start_row;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_SHOULDER);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R1 (Bumper)";
         put_role(ROLE_KEY, input, row, col);
@@ -1558,7 +1550,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_trigger_binding(1);
+        binding = help_gamepad_trigger_binding(1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R2 (Trigger)";
         put_role(ROLE_KEY, input, row, col);
@@ -1566,7 +1558,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE1);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE1);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R4 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1574,7 +1566,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE2);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_RIGHT_PADDLE2);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "R5 (Back)";
         put_role(ROLE_KEY, input, row, col);
@@ -1582,7 +1574,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_START);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_START);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "Start (Menu)";
         put_role(ROLE_KEY, input, row, col);
@@ -1590,7 +1582,7 @@ static void show_help_screen_legacy(int i, bool include_header)
         put_role(ROLE_BODY, " - ", row, text_col);
         put_role(ROLE_BODY, action_buf, row, text_col + 3); row++;
 
-        binding = get_sdl_gamepad_button_binding(GAMEPAD_BUTTON_BACK);
+        binding = help_gamepad_button_binding(GAMEPAD_BUTTON_BACK);
         binding_action_label(binding, action_buf, sizeof(action_buf));
         input = "Back (View)";
         put_role(ROLE_KEY, input, row, col);
@@ -1624,8 +1616,9 @@ static void show_help_screen_legacy(int i, bool include_header)
     }
 }
 
-#undef put_role
+#undef help_emit_heading
 #undef c_put_str
+#undef put_role
 
 
 
@@ -1645,16 +1638,12 @@ static bool do_cmd_help_information_scene(void)
     while (true)
     {
         app_ui_scene scene;
-        int wid;
-        int hgt;
         int total_pages;
         int ch;
+        const int page_rows = 24;
 
-        Term_get_size(&wid, &hgt);
-        wid = 80;
-        hgt = 24;
         help_build_document_ops(&doc_hgt, row_has_content, row_has_heading);
-        total_pages = help_dynamic_build_document_pages(hgt, doc_hgt,
+        total_pages = help_dynamic_build_document_pages(page_rows, doc_hgt,
             row_has_content, row_has_heading, page_starts, page_ends);
         if (total_pages < 1)
             total_pages = 1;
@@ -1672,8 +1661,13 @@ static bool do_cmd_help_information_scene(void)
         }
 
         ch = ui_information_scene_wait_key();
-        if (steamdeck_controls_active() && ch == 'b')
-            ch = ESCAPE;
+        if (steamdeck_controls_active())
+        {
+            if (ch == steamdeck_back_key())
+                ch = ESCAPE;
+            else if (ch == steamdeck_confirm_key())
+                ch = ' ';
+        }
 
         if (ch == 'q' || ch == 'Q' || ch == ESCAPE)
             break;
@@ -1718,7 +1712,7 @@ void do_cmd_help(void)
 
     if (!ui_information_scene_supported())
     {
-        log_warn("help: snapshot renderer required; legacy help renderer removed");
+        log_warn("help: snapshot renderer unavailable");
         msg_print("Help viewer requires the snapshot UI renderer.");
         return;
     }

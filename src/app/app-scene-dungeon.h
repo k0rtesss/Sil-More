@@ -14,7 +14,7 @@ struct app_session;
 struct app_wait_state;
 
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
-#define APP_DUNGEON_PANES_FORMAT_VERSION 4u
+#define APP_DUNGEON_PANES_FORMAT_VERSION 5u
 #define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
 
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
@@ -65,7 +65,6 @@ typedef enum app_map_cell_flag {
 } app_map_cell_flag;
 
 typedef enum app_dungeon_snapshot_flag {
-    APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL = 0x0002u,
     APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0004u
 } app_dungeon_snapshot_flag;
 

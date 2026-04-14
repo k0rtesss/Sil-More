@@ -209,16 +209,8 @@ void do_cmd_suicide(void)
         return;
 
     /* Special Verification for suicide */
-    prt("Please verify ABORTING by typing the '~' sign: ", 0, 0);
-    flush();
-    {
-        app_wait_scope scope;
-        app_session_push_wait_scope(app_session_current(), &scope,
-            APP_WAIT_REASON_CONFIRM, 0, 0);
-        ch = inkey();
-        app_session_pop_wait_scope(app_session_current(), &scope);
-    }
-    prt("", 0, 0);
+    if (!get_com("Please verify ABORTING by typing the '~' sign: ", &ch))
+        return;
     if (ch != '~')
         return;
 

@@ -4,34 +4,26 @@
 #include "log/log.h"
 #include "platform-audio.h"
 #include "sdl-main-internal.h"
+#include "ui/ui-information-scene.h"
 
 static int message_topline_wrap_width(void)
 {
     return (int)APP_DUNGEON_MESSAGE_TEXT_MAX - 8;
 }
 
-static bool message_use_semantic_dungeon_cursor(void)
+static bool message_semantic_scene_kind(u16b* out_scene_kind)
 {
     app_session* session = app_session_current();
     const app_snapshot* snapshot;
 
-    if (!session || !sdl_scene_stack_handles_main_view())
+    if (!session || !sdl_scene_stack_handles_main_view()
+        || !ui_information_scene_supported())
         return false;
 
     snapshot = app_session_snapshot(session);
-    return snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON;
-}
-
-static bool message_use_semantic_menu_prompt(void)
-{
-    app_session* session = app_session_current();
-    const app_snapshot* snapshot;
-
-    if (!session || !sdl_scene_stack_handles_main_view())
-        return false;
-
-    snapshot = app_session_snapshot(session);
-    return snapshot && snapshot->scene == APP_SCENE_KIND_MENU;
+    if (out_scene_kind)
+        *out_scene_kind = snapshot ? snapshot->scene : APP_SCENE_KIND_NONE;
+    return true;
 }
 
 static void message_menu_prompt_add_wrapped_text(app_ui_panel* panel,
@@ -101,12 +93,11 @@ static void message_menu_prompt_add_wrapped_text(app_ui_panel* panel,
 
 static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
 {
-    app_session* session = app_session_current();
-    app_wait_scope scope;
+    ui_information_scene_scope scope;
     app_ui_scene scene;
     app_ui_panel* panel;
 
-    if (!message_use_semantic_menu_prompt() || !session)
+    if (!ui_information_scene_enter(&scope))
         return false;
 
     app_ui_scene_init(&scene);
@@ -114,7 +105,10 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
         | APP_UI_SCENE_FLAG_DIM_BACKDROP;
     panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
     if (!panel)
+    {
+        ui_information_scene_leave(&scope);
         return false;
+    }
 
     panel->style = APP_UI_PANEL_STYLE_PLAIN;
     app_ui_panel_set_widths(panel, 420, 760);
@@ -125,18 +119,15 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true,
         "Space/Enter/Esc", "Continue");
 
-    app_session_push_wait_scope(session, &scope,
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
-    app_session_clear_inputs(session);
-    if (!app_session_publish_menu_scene(session, &scene))
+    if (!ui_information_scene_present_ui(&scene))
     {
-        app_session_pop_wait_scope(session, &scope);
+        ui_information_scene_leave(&scope);
         return false;
     }
 
     while (1)
     {
-        char ch = inkey();
+        int ch = ui_information_scene_wait_key_nonrepeat();
 
         if (quick_messages)
             break;
@@ -147,8 +138,7 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
         bell("Illegal response to a 'more' prompt!");
     }
 
-    app_session_clear_inputs(session);
-    app_session_pop_wait_scope(session, &scope);
+    ui_information_scene_leave(&scope);
     return true;
 }
 
@@ -719,10 +709,11 @@ static void msg_flush(int x)
 {
     (void)x;
     byte a = TERM_L_BLUE;
-    app_wait_scope scope;
+    ui_information_scene_scope input_scope;
     app_session* session = app_session_current();
-    bool semantic_menu_prompt = message_use_semantic_menu_prompt();
-    bool semantic_cursor = message_use_semantic_dungeon_cursor();
+    u16b semantic_scene_kind = APP_SCENE_KIND_NONE;
+    bool semantic_scene = message_semantic_scene_kind(&semantic_scene_kind);
+    bool semantic_cursor = (semantic_scene_kind == APP_SCENE_KIND_DUNGEON);
 
     /* Place the cursor on the player or target */
     if (hilite_player)
@@ -747,33 +738,39 @@ static void msg_flush(int x)
 
     if (!auto_more)
     {
-        if (semantic_menu_prompt)
+        if (semantic_scene_kind == APP_SCENE_KIND_MENU)
         {
-            (void)message_present_semantic_menu_more_prompt(
-                message_topline_color, message_topline);
-        }
-        else
-        {
-            if (app_session_interactions_enabled(session))
+            if (!message_present_semantic_menu_more_prompt(
+                    message_topline_color, message_topline))
             {
-                app_session_begin_interaction(session,
-                    APP_INTERACTION_KIND_PROMPT,
-                    APP_WAIT_REASON_INFORMATIONAL_PAUSE,
-                    APP_INTERACTION_FLAG_CAN_CONFIRM
-                        | APP_INTERACTION_FLAG_CAN_CANCEL);
-                app_session_set_interaction_prompt(session, a, "-more-");
-                app_session_set_interaction_detail(session, TERM_SLATE,
-                    "Press Space, Enter, or Esc to continue.");
+                log_error("msg_flush: unable to present semantic menu more prompt");
+                message_topline_reset();
+                return;
+            }
+        }
+        else if (semantic_scene_kind == APP_SCENE_KIND_DUNGEON)
+        {
+            if (!ui_information_scene_claim_input(&input_scope,
+                    APP_WAIT_REASON_INFORMATIONAL_PAUSE))
+            {
+                log_error("msg_flush: unable to claim semantic input for dungeon more prompt");
+                message_topline_reset();
+                return;
             }
 
-            app_session_push_wait_scope(session, &scope,
-                APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+            app_session_begin_interaction(session,
+                APP_INTERACTION_KIND_PROMPT,
+                APP_WAIT_REASON_INFORMATIONAL_PAUSE,
+                APP_INTERACTION_FLAG_CAN_CONFIRM
+                    | APP_INTERACTION_FLAG_CAN_CANCEL);
+            app_session_set_interaction_prompt(session, a, "-more-");
+            app_session_set_interaction_detail(session, TERM_SLATE,
+                "Press Space, Enter, or Esc to continue.");
 
             /* Get an acceptable keypress */
             while (1)
             {
-                char ch;
-                ch = inkey();
+                int ch = ui_information_scene_wait_key_nonrepeat();
                 if (quick_messages)
                     break;
                 if ((ch == ESCAPE) || (ch == ' '))
@@ -783,9 +780,24 @@ static void msg_flush(int x)
                 bell("Illegal response to a 'more' prompt!");
             }
 
-            app_session_pop_wait_scope(session, &scope);
-            if (app_session_interactions_enabled(session))
-                app_session_clear_interaction(session);
+            app_session_clear_interaction(session);
+            ui_information_scene_leave(&input_scope);
+        }
+        else if (semantic_scene)
+        {
+            if (!message_present_semantic_menu_more_prompt(
+                    message_topline_color, message_topline))
+            {
+                log_error("msg_flush: unable to present semantic utility more prompt");
+                message_topline_reset();
+                return;
+            }
+        }
+        else
+        {
+            log_error("msg_flush: semantic more prompt unavailable");
+            message_topline_reset();
+            return;
         }
     }
 

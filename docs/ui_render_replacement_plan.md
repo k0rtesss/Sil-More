@@ -440,6 +440,21 @@ Debt-removal rule for every slice in this section:
   - `P5-D` runtime/file tail: partial; utility-style legacy render still exists
   - `P5-E` dungeon/world prompt-overlay tail: partial
   - `P5-F` bespoke workflow tail: partial
+- Effective `p6` landing status by planned slices on this tree:
+  - `P6-B` settings/help config tail: still active, but the settings file no
+    longer owns direct `inkey()` reads on this tree
+  - `P6-C` character/quest presentation tail: largely landed
+    - the `P6-C` write set is now off the audit metrics on this tree
+    - `ui-character-screen.c` no longer owns direct `Term_*` calls, while the
+      remaining tail there is legacy layout budgeting and compatibility-sheet
+      ownership rather than live SDL term rendering
+  - `P6-G` bespoke workflow tail: largely landed
+    - `birth.c` birth/blitz semantic menus publish through the shared
+      information-scene UI presenter instead of a file-local menu shim
+    - `metarun.c` story-stats side menus reuse in-scope semantic
+      information-scene helpers instead of reopening wrapper flows
+    - `ui-smithing-screen.c` nested snapshot submenu hops now guard against
+      stale transition-state leakage across smithing sessions
 - `p1` materially reduced the audit:
   - `inkey()`: 67 -> 50
   - `screen_save()` / `screen_load()`: 107 -> 72
@@ -457,10 +472,11 @@ Debt-removal rule for every slice in this section:
   - `object-ui-display.c` still owns shared term-era item display helpers
 - The current whole-plan debt is concentrated in:
   - the remaining status/chrome tail in `ui-status.c`
-  - the remaining normal-SDL grid-render owners in `dungeon.c` and utility/UI
-    support files such as `files.c`
+  - the remaining normal-SDL grid-render owners in `dungeon.c` and support
+    files such as `files.c`
   - the remaining `cmd-ui-settings.c` and `ui-help.c` named-SDL/config tail
   - the remaining character/quest presentation tail
+  - a small combat/status-adjacent cleanup tail
   - late item or bespoke workflows
 
 ### Recommended Order
@@ -468,6 +484,7 @@ Debt-removal rule for every slice in this section:
   family
 - In parallel: settings/help named-SDL/config tail
 - In parallel: character/quest presentation tail
+- In parallel: combat/status-adjacent cleanup tail
 - In parallel: runtime/file utility tail
 - Then: dungeon/world prompt and overlay cleanup
 - Last: item-family remainder plus birth or smithing or remaining metarun side
@@ -477,6 +494,7 @@ Debt-removal rule for every slice in this section:
 - Keep one owner on the remaining status/chrome tail.
 - Keep one owner on the remaining settings/help config tail.
 - Treat character/quest presentation as distinct from always-visible chrome.
+- Treat combat/status-adjacent cleanup as distinct from always-visible chrome.
 - Treat runtime/files cleanup as distinct from dungeon-scene chrome work.
 - For every slice below, delete dead legacy helpers, adapters, and fallback
   branches inside the owned write set once they are no longer used. Do not
@@ -1324,6 +1342,215 @@ Validation:
 ```
 
 #### Agent P5-F: Bespoke Workflow Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: remove dead legacy helpers/fallbacks in your write set when
+their semantic path lands.
+
+Write set:
+- src/birth.c
+- src/ui/smithing/ui-smithing-screen.c
+- src/metarun.c
+
+Goal:
+- continue shrinking the remaining bespoke workflow tails now that the common
+  SDL chrome/document/browser families are much further along
+- preserve behavior and prompts while removing remaining term-owned blocking UI
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what part of birth/smithing/metarun remains term-owned after your
+  change
+```
+
+### Launch Batch 6: Launch Now After `p5`
+These are the next recommended top-level agents after the landed `p5` batch.
+The write sets are disjoint.
+
+#### Agent P6-A: Status Rail And Chrome Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: delete dead legacy helpers and fallback branches inside your
+write set once the live SDL path no longer uses them.
+
+Write set:
+- src/ui/ui-status.c
+- src/app/app-scene-dungeon.c
+- src/app/app-scene-dungeon.h
+- src/sdl-scene-dungeon.c
+
+Goal:
+- finish the remaining status/chrome tail
+- remove the last fixed row/column assumptions and dead helper paths in the
+  status/chrome family
+- keep dungeon scale and overlay/chrome scale independent
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize what status/chrome grid-render debt still remains after your change
+```
+
+#### Agent P6-B: Settings And Help Config Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: delete dead wrappers/helpers you make obsolete. Do not leave
+parallel config access layers behind in your write set.
+
+Write set:
+- src/cmd/ui/cmd-ui-settings.c
+- src/ui/ui-help.c
+- src/score/score_ui.c
+
+Goal:
+- finish the remaining named-SDL/config tail
+- reduce named SDL getters/setters further behind narrower helpers
+- remove remaining SDL-path term-width/height branching and dead adapter code
+  where possible
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which settings/help/score subflows still depend on config/grid-era
+  assumptions after your change
+```
+
+#### Agent P6-C: Character And Quest Presentation Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: delete dead term-era layout helpers in your write set once
+their SDL path is semantic.
+
+Write set:
+- src/ui/ui-character-screen.c
+- src/ui/ui-character-name.c
+- src/quest/quest-ui.c
+- src/quest/quest-varda.c
+
+Goal:
+- remove the remaining term/grid presentation tail from character and quest UI
+- preserve current prose, stats, and quest presentation while moving layout
+  ownership off the terminal grid
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which character/quest paths remain term-owned after your change
+```
+
+#### Agent P6-D: Combat And Status-Adjacent Overlay Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: remove dead display helpers in your write set once the live
+SDL path no longer uses them.
+
+Write set:
+- src/melee/melee-combat-display.c
+- src/melee/melee-combat-display.h
+- src/cmd4.c
+
+Goal:
+- finish the remaining combat-roll/status-adjacent overlay cleanup
+- remove residual term-grid placement and dead helper code in this family
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which combat/status-adjacent overlay paths remain term-owned
+```
+
+#### Agent P6-E: Runtime And File Utility Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: remove dead runtime/file presentation helpers in your write
+set when they are no longer needed.
+
+Write set:
+- src/files.c
+- src/util-message.c
+- src/init2.c
+- src/ui/ui-information-scene.c
+
+Goal:
+- remove remaining runtime/file utility UI ownership from live terminal
+  rendering where those surfaces still affect shipped SDL behavior
+- preserve character dump, screenshot capture, startup, and remaining UI
+  presentation entry behavior
+- isolate any true non-SDL/utility-only code clearly
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which runtime/file presentation paths remain term-owned
+```
+
+#### Agent P6-F: Dungeon And World Prompt/Overlay Tail
+```text
+Use model gpt-5.4 with xhigh reasoning.
+
+Subagent support:
+- you may spawn read-only grep/code-reading subagents using gpt-5.4-mini with
+  xhigh reasoning
+- if you delegate code edits, keep them fully inside your write set
+
+You are not alone in the codebase. Do not revert edits by other agents.
+Debt-removal rule: remove dead overlay/prompt branches in your write set after
+the SDL path is cleaned up.
+
+Write set:
+- src/dungeon.c
+- src/game-event.c
+- src/level-generation/level-generation-screen.c
+- src/init/init-flags.c
+
+Goal:
+- remove remaining SDL-path prompt/overlay debt in normal dungeon/world flows
+- reduce inkey()/Term_* ownership where it still leaks into shipped SDL play
+- delete dead fallback code inside the owned files
+
+Validation:
+- run py -3 tools/ui_debt_audit.py --check
+- summarize which dungeon/world overlay debt still remains after your change
+```
+
+#### Agent P6-G: Bespoke Workflow Tail
 ```text
 Use model gpt-5.4 with xhigh reasoning.
 

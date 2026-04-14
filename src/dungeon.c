@@ -19,6 +19,7 @@
 #include "platform-config.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
+#include "platform-time.h"
 #include "runtime-cli.h"
 #include "runtime/runtime-game.h"
 #include "player/killer.h"
@@ -108,27 +109,26 @@ static bool banner_messages_use_stairs(void)
     return op_ptr->opt[OPT_banner_message_stairs];
 }
 
-static bool dungeon_poll_pending_legacy_key(void)
+static bool dungeon_poll_pending_key(void)
+{
+    return inkey_can_consume_immediately();
+}
+
+static void dungeon_publish_runtime_snapshot(u32b update_mask, u32b redraw_mask,
+    u32b window_mask)
 {
     app_session* session = app_session_current();
-    app_input input;
+    const app_snapshot* snapshot;
 
-    if (session
-        && app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
-    {
-        while (app_session_pop_input(session, &input))
-        {
-            if (input.layer != APP_INPUT_LAYER_LEGACY
-                || input.type != APP_INPUT_TYPE_KEY)
-            {
-                continue;
-            }
+    if (!session)
+        return;
 
-            return true;
-        }
-    }
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return;
 
-    return inkey_can_consume_immediately();
+    (void)app_session_build_dungeon_snapshot(session, update_mask, redraw_mask,
+        window_mask);
 }
 
 static void dungeon_refresh_partition_banner_snapshot(void);
@@ -418,7 +418,7 @@ static void display_narrative_text(cptr text, int narrative_mode,
     g_banner_force_redraw_remaining = 3;
     dungeon_refresh_partition_banner_snapshot();
     if (line_delay)
-        Term_xtra(TERM_XTRA_DELAY, 800);
+        platform_delay_ms(800u);
 }
 
 static void display_partition_narrative(int old_sidx, int new_sidx,
@@ -583,7 +583,8 @@ static bool confirm_enter_morgoth_hall(void)
 
     if (!dungeon_fullscreen_scene_enter(&scope, &overlay_dungeon))
     {
-        log_warn("morgoth hall confirm: semantic scene unavailable");
+        log_error("morgoth hall confirm: semantic scene unavailable");
+        quit("Morgoth hall confirmation requires the snapshot UI renderer.");
         return false;
     }
 
@@ -592,7 +593,8 @@ static bool confirm_enter_morgoth_hall(void)
         || !dungeon_fullscreen_scene_present(&scene))
     {
         ui_information_scene_leave(&scope);
-        log_warn("morgoth hall confirm: semantic scene presentation failed");
+        log_error("morgoth hall confirm: semantic scene presentation failed");
+        quit("Morgoth hall confirmation could not be displayed.");
         return false;
     }
 
@@ -2382,7 +2384,6 @@ static void death_spectator_prepare_display(void)
     }
 
     /* Fully light the level and reveal monsters. */
-    Term_clear();
     wiz_light();
     do_cmd_wiz_unhide(255);
 
@@ -2763,7 +2764,7 @@ static void process_player(void)
             || p_ptr->command_rep || (p_ptr->resting && !(turn & 0x7F)))
         {
             /* Check for a key */
-            if (dungeon_poll_pending_legacy_key())
+            if (dungeon_poll_pending_key())
             {
                 app_session* session = app_session_current();
 
@@ -2888,6 +2889,10 @@ static void process_player(void)
     /* Repeat until energy is reduced */
     do
     {
+        u32b update_mask = p_ptr->update;
+        u32b redraw_mask = p_ptr->redraw;
+        u32b window_mask = p_ptr->window;
+
         /* Notice stuff (if needed) */
         if (p_ptr->notice)
             notice_stuff();
@@ -2917,8 +2922,7 @@ static void process_player(void)
         else if (cheat_light)
             display_light_map();
 
-        /* Refresh */
-        Term_fresh();
+        dungeon_publish_runtime_snapshot(update_mask, redraw_mask, window_mask);
 
         /* Hack -- Pack Overflow if needed */
         check_pack_overflow();
@@ -3084,7 +3088,7 @@ static void process_player(void)
             p_ptr->previous_action[0] = ACTION_MISC;
 
             // Pause to show enemies moving.
-            Term_xtra(TERM_XTRA_DELAY, 500);
+            platform_delay_ms(500u);
         }
 
         /* Running */
@@ -3096,7 +3100,7 @@ static void process_player(void)
             // Pause for 17 miliseconds (minimum needed for mac OS X to pause)
             if (!instant_run)
             {
-                Term_xtra(TERM_XTRA_DELAY, 17);
+                platform_delay_ms(17u);
             }
         }
 
@@ -3937,10 +3941,6 @@ static void dungeon(void)
     log_debug("Increasing character_xtra depth for display setup");
     character_xtra++;
 
-    /* Clear */
-    log_debug("Clearing terminal");
-    Term_clear();
-
     /* Update stuff */
     log_info("Starting initial dungeon display setup");
     p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
@@ -4013,9 +4013,10 @@ static void dungeon(void)
     log_debug("Running final window_stuff");
     window_stuff();
 
-    /* Refresh */
-    log_debug("Final terminal refresh");
-    Term_fresh();
+    log_debug("Publishing initial dungeon snapshot");
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_ALL);
+    dungeon_publish_runtime_snapshot(0, 0, 0);
 
     /* Show partition entry messages/XP after the initial draw so they can't be cleared by the setup flush. */
     {
@@ -4464,7 +4465,8 @@ static void print_story_intro(void)
 
     if (!dungeon_fullscreen_scene_enter(&scope, &overlay_dungeon))
     {
-        log_warn("story intro: semantic scene unavailable");
+        log_error("story intro: semantic scene unavailable");
+        quit("Story intro requires the snapshot UI renderer.");
         return;
     }
 
@@ -4479,7 +4481,8 @@ static void print_story_intro(void)
             || !dungeon_fullscreen_scene_present(&scene))
         {
             ui_information_scene_leave(&scope);
-            log_warn("story intro: semantic scene presentation failed");
+            log_error("story intro: semantic scene presentation failed");
+            quit("Story intro could not be displayed.");
             return;
         }
 
@@ -4521,9 +4524,8 @@ static void maybe_show_blitz_unlock_screen(void)
 
     if (!dungeon_fullscreen_scene_enter(&scope, &overlay_dungeon))
     {
-        log_warn("blitz unlock: semantic scene unavailable");
-        op_ptr->opt[OPT_unlock_blitz_mode] = true;
-        save_pane_config_to_json();
+        log_error("blitz unlock: semantic scene unavailable");
+        quit("Blitz unlock notice requires the snapshot UI renderer.");
         return;
     }
 
@@ -4531,9 +4533,8 @@ static void maybe_show_blitz_unlock_screen(void)
         || !dungeon_fullscreen_scene_present(&scene))
     {
         ui_information_scene_leave(&scope);
-        log_warn("blitz unlock: semantic scene presentation failed");
-        op_ptr->opt[OPT_unlock_blitz_mode] = true;
-        save_pane_config_to_json();
+        log_error("blitz unlock: semantic scene presentation failed");
+        quit("Blitz unlock notice could not be displayed.");
         return;
     }
 
@@ -4595,28 +4596,26 @@ PlayResult play_game(void)
         quit("main window does not exist");
     }
 
-    /* Make sure main term is active */
-    Term_activate(term_screen);
-
     /* Verify minimum size */
     {
         const int min_hgt = sdl_current_min_terminal_rows();
         const int min_wid = sdl_current_min_terminal_cols();
-        if ((Term->hgt < min_hgt) || (Term->wid < min_wid))
+        if ((term_screen->hgt < min_hgt) || (term_screen->wid < min_wid))
         {
 #ifdef __ANDROID__
             log_error("main window too small on Android: %dx%d (need at least %dx%d)",
-                Term->wid, Term->hgt, min_wid, min_hgt);
+                term_screen->wid, term_screen->hgt, min_wid, min_hgt);
 #else
             log_error("main window too small: %dx%d (need at least %dx%d)",
-                Term->wid, Term->hgt, min_wid, min_hgt);
+                term_screen->wid, term_screen->hgt, min_wid, min_hgt);
 #endif
             quit("main window is too small");
         }
     }
 
-    /* Hack -- Turn off the cursor */
-    (void)Term_set_cursor(false);
+    /* Start gameplay with the semantic cursor hidden until a command flow
+     * explicitly restores the steady-state map cursor. */
+    app_session_set_cursor_visible(app_session_current(), false);
 
     /* Hack -- Default base_name */
     if (!op_ptr->base_name[0])
@@ -4813,12 +4812,6 @@ PlayResult play_game(void)
     /* Validate quest states after load (auto-complete if targets are dead) */
     validate_tulkas_quest_on_load();
 
-    /* Flash a message */
-    prt("Please wait...", 0, 0);
-
-    /* Flush the message */
-    Term_fresh();
-
     /* Hack -- Enter wizard mode */
     if (runtime_cli_wizard() && enter_wizard_mode())
     {
@@ -4853,8 +4846,8 @@ PlayResult play_game(void)
     if (runtime_cli_force_roguelike())
         hjkl_movement = true;
 
-    /* React to changes */
-    Term_xtra(TERM_XTRA_REACT, 0);
+    /* Pref files may have changed visuals, so rebuild them after loading. */
+    reset_visuals(true);
 
     /* Generate a dungeon level if needed */
     if (!character_dungeon)

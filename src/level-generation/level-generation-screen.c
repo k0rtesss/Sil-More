@@ -987,8 +987,8 @@ static void level_gen_screen_draw_now(void)
         if (!level_gen_screen_build_debug_scene(&scene)
             || !level_gen_screen_semantic_publish(&scene))
         {
-            log_warn("level generation screen: semantic scene presentation failed");
-            level_gen_screen_leave_semantic();
+            log_error("level generation screen: semantic scene presentation failed");
+            quit("Level generation screen could not be displayed.");
         }
         return;
     }
@@ -996,8 +996,8 @@ static void level_gen_screen_draw_now(void)
     if (!level_gen_screen_build_user_scene(&scene)
         || !level_gen_screen_semantic_publish(&scene))
     {
-        log_warn("level generation screen: semantic scene presentation failed");
-        level_gen_screen_leave_semantic();
+        log_error("level generation screen: semantic scene presentation failed");
+        quit("Level generation screen could not be displayed.");
     }
 }
 
@@ -1070,17 +1070,17 @@ void level_gen_screen_begin(void)
         sizeof(level_gen_screen.status_text));
 
     session = app_session_current();
-    if (session && ui_information_scene_enter(&level_gen_screen.scene_scope))
+    if (!session || !ui_information_scene_enter(&level_gen_screen.scene_scope))
     {
-        snapshot = app_session_snapshot(session);
-        level_gen_screen.semantic_active = true;
-        level_gen_screen.overlay_dungeon = snapshot
-            && snapshot->scene == APP_SCENE_KIND_DUNGEON;
+        log_error("level generation screen: semantic scene unavailable");
+        quit("Level generation screen requires the snapshot UI renderer.");
+        return;
     }
-    else
-    {
-        log_warn("level generation screen: semantic scene unavailable");
-    }
+
+    snapshot = app_session_snapshot(session);
+    level_gen_screen.semantic_active = true;
+    level_gen_screen.overlay_dungeon = snapshot
+        && snapshot->scene == APP_SCENE_KIND_DUNGEON;
 
     gen_log_set_observer(level_gen_screen_observer);
     level_gen_screen_maybe_draw(true);

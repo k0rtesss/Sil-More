@@ -4,6 +4,7 @@
 #include "app/app-session.h"
 #include "externs.h"
 #include "metarun.h"
+#include "platform-time.h"
 #include "quest/quest.h"
 #include "ui/ui-information-scene.h"
 #include "log/log.h"
@@ -91,122 +92,165 @@ static cptr get_oath_name_from_id(byte oath_id)
 static cptr process_quest_placeholders(cptr text, int quest_idx);
 static cptr get_quest_reward_text(int quest_idx);
 
-static app_ui_panel* quest_scene_begin_document(app_ui_scene* scene)
-{
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    return panel;
-}
-
 enum {
-    QUEST_TYPEWRITER_SCENE_LINE_MAX = APP_UI_DOCUMENT_OP_MAX
+    QUEST_STATUS_WRAP_WIDTH = 68,
+    QUEST_TYPEWRITER_WRAP_WIDTH = 70,
+    QUEST_TYPEWRITER_PAGE_LINE_MAX = 15
 };
 
+typedef struct quest_status_entry {
+    int quest_id;
+    int current_state;
+    int rewarded_state;
+    int metarun_quest_id;
+    byte title_attr;
+    byte meta_attr;
+    char title[APP_UI_LABEL_MAX];
+    char meta[APP_UI_META_MAX];
+} quest_status_entry;
+
 typedef struct quest_typewriter_scene_line {
-    bool used;
-    int col;
     byte attr;
     char text[APP_UI_TEXT_MAX];
 } quest_typewriter_scene_line;
 
 typedef struct quest_typewriter_scene_state {
-    bool active;
-    quest_typewriter_scene_line lines[QUEST_TYPEWRITER_SCENE_LINE_MAX];
+    byte title_attr;
+    byte subtitle_attr;
+    int line_count;
+    char title[APP_UI_TITLE_MAX];
+    char subtitle[APP_UI_TEXT_MAX];
+    quest_typewriter_scene_line lines[QUEST_TYPEWRITER_PAGE_LINE_MAX];
 } quest_typewriter_scene_state;
 
-static void quest_typewriter_scene_init(quest_typewriter_scene_state* state,
-    bool active)
+static bool quest_ui_panel_add_line(app_ui_panel* panel, byte attr, cptr text,
+    bool detail_lines)
 {
-    if (!state)
-        return;
+    cptr line = text;
 
-    memset(state, 0, sizeof(*state));
-    state->active = active;
+    if (!panel)
+        return false;
+
+    if (!line || !line[0])
+        line = " ";
+
+    if (detail_lines)
+        return app_ui_panel_add_detail_line(panel, attr, line);
+
+    return app_ui_panel_add_body_line(panel, attr, line);
 }
 
-static void quest_typewriter_scene_clear(quest_typewriter_scene_state* state)
+static bool quest_ui_panel_add_wrapped_lines(app_ui_panel* panel, byte attr,
+    cptr text, bool detail_lines, size_t wrap_chars)
 {
-    if (!state || !state->active)
-        return;
+    const char* cursor = text;
 
-    memset(state->lines, 0, sizeof(state->lines));
+    if (!panel || !text || !text[0])
+        return true;
+    if (wrap_chars < 8)
+        wrap_chars = 8;
+
+    while (*cursor)
+    {
+        const char* start;
+        const char* split = NULL;
+        size_t len = 0;
+        char line[APP_UI_TEXT_MAX];
+
+        while (*cursor == ' ' || *cursor == '\t')
+            cursor++;
+
+        if (*cursor == '\n')
+        {
+            cursor++;
+            if (!quest_ui_panel_add_line(panel, attr, " ", detail_lines))
+                return false;
+            continue;
+        }
+
+        start = cursor;
+        while (cursor[len] && cursor[len] != '\n')
+        {
+            if (len < wrap_chars)
+            {
+                if (cursor[len] == ' ' || cursor[len] == '\t')
+                    split = cursor + len;
+            }
+            else if (split)
+            {
+                break;
+            }
+            else if (len >= sizeof(line) - 1u)
+            {
+                break;
+            }
+            len++;
+        }
+
+        if (cursor[len] && cursor[len] != '\n' && split && split > start)
+            len = (size_t)(split - start);
+        else if (len == 0 && cursor[len] && cursor[len] != '\n')
+            len = 1;
+
+        if (len >= sizeof(line))
+            len = sizeof(line) - 1u;
+
+        memcpy(line, start, len);
+        line[len] = '\0';
+        while (len > 0 && (line[len - 1] == ' ' || line[len - 1] == '\t'))
+            line[--len] = '\0';
+
+        if (line[0] && !quest_ui_panel_add_line(panel, attr, line,
+                detail_lines))
+        {
+            return false;
+        }
+
+        cursor = start + len;
+        while (*cursor == ' ' || *cursor == '\t')
+            cursor++;
+        if (*cursor == '\n')
+            cursor++;
+    }
+
+    return true;
 }
 
 static void quest_typewriter_scene_set_text(quest_typewriter_scene_state* state,
-    int row, int col, byte attr, cptr text)
+    int row, byte attr, cptr text)
 {
-    quest_typewriter_scene_line* line;
-
-    if (!state || !state->active || row < 0
-        || row >= QUEST_TYPEWRITER_SCENE_LINE_MAX)
+    if (!state || row < 0 || row >= QUEST_TYPEWRITER_PAGE_LINE_MAX)
     {
         return;
     }
 
-    line = &state->lines[row];
-    memset(line, 0, sizeof(*line));
-
-    if (!text || !text[0])
-        return;
-
-    line->used = true;
-    line->col = col;
-    line->attr = attr;
-    SDL_strlcpy(line->text, text, sizeof(line->text));
+    state->lines[row].attr = attr;
+    SDL_strlcpy(state->lines[row].text, text ? text : "",
+        sizeof(state->lines[row].text));
+    if (row + 1 > state->line_count)
+        state->line_count = row + 1;
 }
 
 static void quest_typewriter_scene_put_char(quest_typewriter_scene_state* state,
-    int row, int col, byte attr, char ch)
+    int row, byte attr, char ch)
 {
-    quest_typewriter_scene_line* line;
     size_t len;
-    int gap;
 
-    if (!state || !state->active || row < 0
-        || row >= QUEST_TYPEWRITER_SCENE_LINE_MAX || ch == '\0')
+    if (!state || row < 0 || row >= QUEST_TYPEWRITER_PAGE_LINE_MAX || ch == '\0')
     {
         return;
     }
 
-    line = &state->lines[row];
-    if (!line->used)
-    {
-        memset(line, 0, sizeof(*line));
-        line->used = true;
-        line->col = col;
-        line->attr = attr;
-    }
-
-    if (line->attr != attr)
+    if (state->lines[row].attr == 0)
+        state->lines[row].attr = attr;
+    len = strlen(state->lines[row].text);
+    if (len + 1 >= sizeof(state->lines[row].text))
         return;
 
-    len = strlen(line->text);
-    gap = col - (line->col + (int)len);
-    if (gap < 0)
-        return;
-
-    while (gap > 0 && len < sizeof(line->text) - 1u)
-    {
-        line->text[len++] = ' ';
-        gap--;
-    }
-
-    if (len < sizeof(line->text) - 1u)
-    {
-        line->text[len++] = ch;
-        line->text[len] = '\0';
-    }
+    state->lines[row].text[len] = ch;
+    state->lines[row].text[len + 1] = '\0';
+    if (row + 1 > state->line_count)
+        state->line_count = row + 1;
 }
 
 static bool quest_typewriter_scene_publish(
@@ -214,48 +258,41 @@ static bool quest_typewriter_scene_publish(
 {
     app_ui_scene scene;
     app_ui_panel* panel;
-    bool has_text = false;
+    int i;
 
-    if (!state || !state->active)
-        return true;
+    if (!state)
+        return false;
 
-    panel = quest_scene_begin_document(&scene);
+    app_ui_scene_init(&scene);
+    scene.flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_MODAL);
     if (!panel)
         return false;
 
-    for (int row = 0; row < QUEST_TYPEWRITER_SCENE_LINE_MAX; row++)
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = state->title_attr;
+    app_ui_panel_set_widths(panel, 760, 1180);
+    app_ui_panel_set_title(panel, state->title_attr, state->title);
+    if (state->subtitle[0])
+        app_ui_panel_set_subtitle(panel, state->subtitle_attr,
+            state->subtitle);
+
+    for (i = 0; i < state->line_count; i++)
     {
-        const quest_typewriter_scene_line* line = &state->lines[row];
-
-        if (!line->used || !line->text[0])
-            continue;
-
-        if (!app_ui_panel_add_document_text(&scene, panel, (s16b)row,
-                (s16b)line->col, line->attr, line->text))
+        if (!quest_ui_panel_add_line(panel, state->lines[i].attr,
+                state->lines[i].text[0] ? state->lines[i].text : " ", false))
         {
             return false;
         }
-
-        has_text = true;
     }
-
-    if (!has_text)
-        return false;
 
     return ui_information_scene_present_ui(&scene);
 }
 
-static bool quest_typewriter_present(quest_typewriter_scene_state* state,
-    bool scene_active)
+static bool quest_typewriter_present(quest_typewriter_scene_state* state)
 {
-    if (!scene_active)
-    {
-        Term_fresh();
-        return true;
-    }
-
-    if (!state || !state->active)
-        return true;
+    if (!state)
+        return false;
 
     if (quest_typewriter_scene_publish(state))
         return true;
@@ -264,638 +301,897 @@ static bool quest_typewriter_present(quest_typewriter_scene_state* state,
     return false;
 }
 
-static void quest_typewriter_clear_page(bool scene_active,
+static void quest_typewriter_scene_init(quest_typewriter_scene_state* state,
+    cptr title, byte title_attr)
+{
+    if (!state)
+        return;
+
+    memset(state, 0, sizeof(*state));
+    state->title_attr = title_attr;
+    state->subtitle_attr = TERM_SLATE;
+    SDL_strlcpy(state->title, title ? title : "", sizeof(state->title));
+}
+
+static void quest_typewriter_scene_clear(
     quest_typewriter_scene_state* state)
 {
-    if (!scene_active)
-        Term_clear();
-    quest_typewriter_scene_clear(state);
+    if (!state)
+        return;
+
+    memset(state->lines, 0, sizeof(state->lines));
+    state->line_count = 0;
 }
 
-static void quest_typewriter_write_text(bool scene_active,
-    quest_typewriter_scene_state* state, int row, int col, byte attr, cptr text)
+static void quest_typewriter_scene_set_subtitle(
+    quest_typewriter_scene_state* state, byte attr, cptr text)
 {
-    if (!scene_active)
-        Term_putstr(col, row, -1, attr, text ? text : "");
-    quest_typewriter_scene_set_text(state, row, col, attr, text);
+    if (!state)
+        return;
+
+    state->subtitle_attr = attr;
+    SDL_strlcpy(state->subtitle, text ? text : "", sizeof(state->subtitle));
 }
 
-static void quest_typewriter_write_char(bool scene_active,
-    quest_typewriter_scene_state* state, int row, int col, byte attr, char ch)
+static bool quest_typewriter_poll_skip_key(char* out_key)
 {
-    if (!scene_active)
-        Term_putch(col, row, attr, ch);
-    quest_typewriter_scene_put_char(state, row, col, attr, ch);
-}
+    app_session* session = app_session_current();
+    app_input input;
 
-static bool quest_typewriter_poll_skip_key(bool scene_active, char* out_key)
-{
-    if (!out_key)
+    if (!out_key || !session || !ui_information_scene_is_active())
         return false;
 
-    if (!scene_active)
+    while (app_session_pop_input(session, &input))
     {
-        if (Term_inkey(out_key, false, false) != 0)
-            return false;
-
-        (void)Term_inkey(out_key, false, true);
-        return true;
-    }
-
-    {
-        app_session* session = app_session_current();
-        app_input input;
-
-        if (!session || !ui_information_scene_is_active())
-            return false;
-
-        while (app_session_pop_input(session, &input))
+        if (input.layer != APP_INPUT_LAYER_LEGACY
+            || input.type != APP_INPUT_TYPE_KEY)
         {
-            if (input.layer != APP_INPUT_LAYER_LEGACY
-                || input.type != APP_INPUT_TYPE_KEY)
-            {
-                continue;
-            }
-
-            *out_key = (char)(input.payload.key.logical_key & 0xFFu);
-            return true;
+            continue;
         }
+
+        *out_key = (char)(input.payload.key.logical_key & 0xFFu);
+        return true;
     }
 
     return false;
 }
 
-static bool quest_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte color, cptr text)
+static int quest_typewriter_estimate_lines(cptr text, int wrap_width)
 {
+    int lines = 1;
+    int col = 0;
+    int i;
+
     if (!text || !text[0])
-        return true;
+        return 1;
+    if (wrap_width < 1)
+        wrap_width = 1;
 
-    return app_ui_panel_add_document_text(scene, panel, row, col, color, text);
-}
-
-static void quest_scene_add_line(app_ui_scene* scene, app_ui_panel* panel,
-    int col, int* row, cptr text, byte color)
-{
-    if (!scene || !panel || !row || !text || !text[0])
-        return;
-
-    (void)quest_scene_add_text(scene, panel, (s16b)(*row), (s16b)col, color,
-        text);
-    (*row)++;
-}
-
-static void quest_scene_display_wrapped_text(app_ui_scene* scene,
-    app_ui_panel* panel, int col, int* row, cptr text, byte color,
-    int max_width)
-{
-    char line_buf[256];
-    int line_pos = 0;
-    int effective_width = max_width - col - 4;
-    int text_len;
-    int word_start = 0;
-    int i = 0;
-    int loop_count = 0;
-
-    if (!scene || !panel || !row || !text)
-        return;
-
-    text_len = strlen(text);
-    if (effective_width < 20)
-        effective_width = 20;
-
-    line_buf[0] = '\0';
-
-    while (i <= text_len)
+    for (i = 0; text[i]; i++)
     {
-        loop_count++;
-        if (loop_count > 1000)
+        if (text[i] == '\n')
         {
-            log_warn("quest_scene_display_wrapped_text: safety break");
+            lines++;
+            col = 0;
+            continue;
+        }
+
+        if (col >= wrap_width)
+        {
+            lines++;
+            col = 0;
+        }
+        col++;
+    }
+
+    return lines;
+}
+
+static bool quest_typewriter_wait_for_continue(
+    quest_typewriter_scene_state* state, cptr prompt)
+{
+    int key;
+
+    if (!state)
+        return false;
+
+    quest_typewriter_scene_set_subtitle(state, TERM_L_WHITE,
+        prompt ? prompt : "Press any key to continue.");
+    if (!quest_typewriter_present(state))
+        return false;
+
+    key = ui_information_scene_wait_key_nonrepeat();
+    if (key == ESCAPE || key == 'q' || key == 'Q')
+        return false;
+
+    return true;
+}
+
+static bool quest_typewriter_render_char(quest_typewriter_scene_state* state,
+    int row, byte attr, char ch, bool skipped)
+{
+    quest_typewriter_scene_put_char(state, row, attr, ch);
+
+    if (skipped)
+        return true;
+    if (!quest_typewriter_present(state))
+        return false;
+
+    platform_delay_ms(25u);
+    return true;
+}
+
+static void quest_typewriter_begin_page(quest_typewriter_scene_state* state,
+    bool skipped, cptr skip_prompt)
+{
+    quest_typewriter_scene_clear(state);
+    quest_typewriter_scene_set_subtitle(state, TERM_SLATE,
+        skipped ? "" : (skip_prompt ? skip_prompt : ""));
+}
+
+static cptr quest_status_oath_name(int quest_id)
+{
+    if (!z_info || !quest_info || quest_id <= 0 || quest_id >= z_info->quest_max)
+        return "Unknown oath";
+
+    return get_oath_name_from_id(quest_info[quest_id].oath_id);
+}
+
+static bool quest_status_append_entry(quest_status_entry* entries, int* count,
+    int max_count, int quest_id, int current_state, int rewarded_state,
+    int metarun_quest_id, cptr meta, byte meta_attr)
+{
+    quest_status_entry* entry;
+
+    if (!entries || !count || *count < 0 || *count >= max_count)
+        return false;
+
+    entry = &entries[*count];
+    memset(entry, 0, sizeof(*entry));
+    entry->quest_id = quest_id;
+    entry->current_state = current_state;
+    entry->rewarded_state = rewarded_state;
+    entry->metarun_quest_id = metarun_quest_id;
+    entry->title_attr = TERM_YELLOW;
+    entry->meta_attr = meta_attr;
+    SDL_strlcpy(entry->title, get_quest_title(quest_id), sizeof(entry->title));
+    SDL_strlcpy(entry->meta, meta ? meta : "", sizeof(entry->meta));
+    (*count)++;
+    return true;
+}
+
+static int quest_status_collect_entries(quest_status_entry* entries,
+    int max_count)
+{
+    int count = 0;
+
+    if (!entries || max_count <= 0)
+        return 0;
+
+    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED)
+    {
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->tulkas_quest)
+        {
+        case TULKAS_QUEST_GIVER_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case TULKAS_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case TULKAS_QUEST_COMPLETE:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case TULKAS_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
             break;
         }
 
-        if (i == text_len || text[i] == ' ')
-        {
-            int word_len = i - word_start;
-            char word[128];
-
-            if (word_len > 0 && word_len < (int)sizeof(word))
-            {
-                int copy_len = word_len;
-
-                if (copy_len >= (int)sizeof(word))
-                    copy_len = (int)sizeof(word) - 1;
-                for (int j = 0; j < copy_len; j++)
-                    word[j] = text[word_start + j];
-                word[copy_len] = '\0';
-
-                if (line_pos + (line_pos > 0 ? 1 : 0) + copy_len
-                    > effective_width && line_pos > 0)
-                {
-                    (void)quest_scene_add_text(scene, panel, (s16b)(*row),
-                        (s16b)(col + 2), color, line_buf);
-                    (*row)++;
-
-                    if (copy_len > effective_width)
-                    {
-                        int word_pos = 0;
-
-                        while (word_pos < copy_len)
-                        {
-                            int chunk_len = effective_width;
-                            char chunk[256];
-                            int k;
-
-                            if (word_pos + chunk_len > copy_len)
-                                chunk_len = copy_len - word_pos;
-
-                            for (k = 0; k < chunk_len
-                                && word_pos + k < copy_len; k++)
-                            {
-                                chunk[k] = word[word_pos + k];
-                            }
-                            chunk[k] = '\0';
-
-                            (void)quest_scene_add_text(scene, panel,
-                                (s16b)(*row), (s16b)(col + 2), color, chunk);
-                            (*row)++;
-                            word_pos += chunk_len;
-                        }
-
-                        line_buf[0] = '\0';
-                        line_pos = 0;
-                    }
-                    else
-                    {
-                        SDL_strlcpy(line_buf, word, sizeof(line_buf));
-                        line_pos = copy_len;
-                    }
-                }
-                else
-                {
-                    if (line_pos > 0)
-                    {
-                        SDL_strlcat(line_buf, " ", sizeof(line_buf));
-                        line_pos++;
-                    }
-                    SDL_strlcat(line_buf, word, sizeof(line_buf));
-                    line_pos += copy_len;
-                }
-            }
-
-            while (i < text_len && text[i] == ' ')
-                i++;
-            word_start = i;
-        }
-        else
-        {
-            i++;
-        }
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_TULKAS, p_ptr->tulkas_quest, TULKAS_QUEST_REWARDED,
+            METARUN_QUEST_TULKAS, meta, meta_attr);
     }
 
-    if (line_pos > 0)
+    if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED)
     {
-        (void)quest_scene_add_text(scene, panel, (s16b)(*row),
-            (s16b)(col + 2), color, line_buf);
-        (*row)++;
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->aule_quest)
+        {
+        case AULE_QUEST_FORGE_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case AULE_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case AULE_QUEST_SUCCESS:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case AULE_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
+            break;
+        }
+
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_AULE, p_ptr->aule_quest, AULE_QUEST_REWARDED,
+            METARUN_QUEST_AULE, meta, meta_attr);
     }
+
+    if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED)
+    {
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->mandos_quest)
+        {
+        case MANDOS_QUEST_GIVER_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case MANDOS_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case MANDOS_QUEST_SUCCESS:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case MANDOS_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
+            break;
+        }
+
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_MANDOS, p_ptr->mandos_quest, MANDOS_QUEST_REWARDED,
+            METARUN_QUEST_MANDOS, meta, meta_attr);
+    }
+
+    if (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED)
+    {
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->niena_quest)
+        {
+        case NIENA_QUEST_GIVER_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case NIENA_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case NIENA_QUEST_SUCCESS:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case NIENA_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case NIENA_QUEST_FAILED:
+            meta = "Failed";
+            meta_attr = TERM_RED;
+            break;
+        }
+
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_NIENA, p_ptr->niena_quest, NIENA_QUEST_REWARDED,
+            METARUN_QUEST_NIENA, meta, meta_attr);
+    }
+
+    if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED)
+    {
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->orome_quest)
+        {
+        case OROME_QUEST_GIVER_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case OROME_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case OROME_QUEST_SUCCESS:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case OROME_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
+            break;
+        }
+
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_OROME, p_ptr->orome_quest, OROME_QUEST_REWARDED,
+            METARUN_QUEST_OROME, meta, meta_attr);
+    }
+
+    if (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED)
+    {
+        cptr meta = "Unknown";
+        byte meta_attr = TERM_SLATE;
+
+        switch (p_ptr->varda_quest)
+        {
+        case VARDA_QUEST_GIVER_PRESENT:
+            meta = "Available";
+            meta_attr = TERM_L_BLUE;
+            break;
+        case VARDA_QUEST_ACTIVE:
+            meta = "Active";
+            meta_attr = TERM_WHITE;
+            break;
+        case VARDA_QUEST_SUCCESS:
+            meta = "Complete";
+            meta_attr = TERM_L_GREEN;
+            break;
+        case VARDA_QUEST_REWARDED:
+            meta = "Rewarded";
+            meta_attr = TERM_L_GREEN;
+            break;
+        }
+
+        (void)quest_status_append_entry(entries, &count, max_count,
+            QUEST_ID_VARDA, p_ptr->varda_quest, VARDA_QUEST_REWARDED,
+            METARUN_QUEST_VARDA, meta, meta_attr);
+    }
+
+    return count;
 }
 
-static void quest_scene_add_previous_completion(app_ui_scene* scene,
-    app_ui_panel* panel, int col, int* row, int quest_id,
-    int metarun_quest_id, int current_state, int rewarded_state,
-    int quest_info_index, int wid,
-    bool* has_previous_completions)
+static bool quest_status_add_reward_detail(app_ui_panel* panel, int quest_id,
+    bool received)
 {
-    int completed = metarun_quest_completion_count(metarun_quest_id);
+    char buf[APP_UI_TEXT_MAX];
 
+    strnfmt(buf, sizeof(buf), received ? "Reward: %s received" : "Reward: %s",
+        get_quest_reward_text(quest_id));
+    return quest_ui_panel_add_wrapped_lines(panel, TERM_SLATE, buf, true,
+        QUEST_STATUS_WRAP_WIDTH);
+}
+
+static bool quest_status_add_challenge_detail(app_ui_panel* panel, int quest_id,
+    byte attr)
+{
+    cptr challenge = get_quest_challenge(quest_id);
+
+    if (quest_id == QUEST_ID_TULKAS)
+        challenge = process_quest_placeholders(challenge, quest_id);
+
+    return quest_ui_panel_add_wrapped_lines(panel, attr, challenge, true,
+        QUEST_STATUS_WRAP_WIDTH);
+}
+
+static bool quest_status_add_previous_completion_detail(app_ui_panel* panel,
+    const quest_status_entry* entry)
+{
+    int completed;
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || !entry)
+        return false;
+
+    completed = metarun_quest_completion_count(entry->metarun_quest_id);
+    if (completed <= 0 || entry->current_state == entry->rewarded_state)
+        return true;
+
+    if (!quest_ui_panel_add_line(panel, TERM_L_DARK,
+            "Previously completed in metarun:", true))
+    {
+        return false;
+    }
+
+    strnfmt(buf, sizeof(buf), "%s (metarun x%d)",
+        quest_status_oath_name(entry->quest_id), completed);
+    return quest_ui_panel_add_wrapped_lines(panel, TERM_SLATE, buf, true,
+        QUEST_STATUS_WRAP_WIDTH);
+}
+
+static bool quest_status_build_entry_detail(app_ui_panel* panel,
+    const quest_status_entry* entry)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel || !entry)
+        return false;
+
+    switch (entry->quest_id)
+    {
+    case QUEST_ID_TULKAS:
+        switch (entry->current_state)
+        {
+        case TULKAS_QUEST_GIVER_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Tulkas awaits", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case TULKAS_QUEST_ACTIVE:
+            return quest_status_add_challenge_detail(panel, entry->quest_id,
+                       TERM_WHITE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case TULKAS_QUEST_COMPLETE:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Return for reward", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case TULKAS_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        }
+        break;
+
+    case QUEST_ID_AULE:
+        switch (entry->current_state)
+        {
+        case AULE_QUEST_FORGE_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Aule awaits", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case AULE_QUEST_ACTIVE:
+            return quest_ui_panel_add_line(panel, TERM_WHITE,
+                       "Active - Seek the forge-halls", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case AULE_QUEST_SUCCESS:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Return for reward", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case AULE_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        }
+        break;
+
+    case QUEST_ID_MANDOS:
+        switch (entry->current_state)
+        {
+        case MANDOS_QUEST_GIVER_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Mandos waits beyond death", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case MANDOS_QUEST_ACTIVE:
+            return quest_ui_panel_add_line(panel, TERM_WHITE,
+                       "Active - Escape the houses of waiting", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case MANDOS_QUEST_SUCCESS:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Claim Mandos's favour", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case MANDOS_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        }
+        break;
+
+    case QUEST_ID_NIENA:
+        switch (entry->current_state)
+        {
+        case NIENA_QUEST_GIVER_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Niena offers mercy", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case NIENA_QUEST_ACTIVE:
+            strnfmt(buf, sizeof(buf), "Monsters seen: %d  killed: %d",
+                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
+            return quest_ui_panel_add_line(panel, TERM_WHITE,
+                       "Active - Walk the path of mercy", true)
+                && quest_ui_panel_add_line(panel, TERM_SLATE, buf, true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case NIENA_QUEST_SUCCESS:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Claim Niena's grace", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case NIENA_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        case NIENA_QUEST_FAILED:
+            strnfmt(buf, sizeof(buf), "Failed: %d seen, %d killed",
+                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
+            return quest_ui_panel_add_line(panel, TERM_RED, buf, true)
+                && quest_ui_panel_add_wrapped_lines(panel, TERM_SLATE,
+                    "You took a life and lost Niena's mercy.", true,
+                    QUEST_STATUS_WRAP_WIDTH)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        }
+        break;
+
+    case QUEST_ID_OROME:
+        switch (entry->current_state)
+        {
+        case OROME_QUEST_GIVER_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Orome awaits", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case OROME_QUEST_ACTIVE:
+            strnfmt(buf, sizeof(buf), "Wolves killed: %d/100",
+                p_ptr->orome_wolves_killed);
+            if (!quest_ui_panel_add_line(panel, TERM_WHITE,
+                    "Active - Hunt the fell kindreds", true)
+                || !quest_ui_panel_add_line(panel,
+                    p_ptr->orome_wolves_killed >= 100 ? TERM_L_GREEN
+                                                      : TERM_SLATE,
+                    buf, true))
+            {
+                return false;
+            }
+            strnfmt(buf, sizeof(buf), "Spiders killed: %d/80",
+                p_ptr->orome_spiders_killed);
+            if (!quest_ui_panel_add_line(panel,
+                    p_ptr->orome_spiders_killed >= 80 ? TERM_L_GREEN
+                                                      : TERM_SLATE,
+                    buf, true))
+            {
+                return false;
+            }
+            strnfmt(buf, sizeof(buf), "Serpents killed: %d/60",
+                p_ptr->orome_serpents_killed);
+            if (!quest_ui_panel_add_line(panel,
+                    p_ptr->orome_serpents_killed >= 60 ? TERM_L_GREEN
+                                                       : TERM_SLATE,
+                    buf, true))
+            {
+                return false;
+            }
+            strnfmt(buf, sizeof(buf), "Vampires killed: %d/30",
+                p_ptr->orome_vampires_killed);
+            return quest_ui_panel_add_line(panel,
+                       p_ptr->orome_vampires_killed >= 30 ? TERM_L_GREEN
+                                                          : TERM_SLATE,
+                       buf, true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case OROME_QUEST_SUCCESS:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Return for reward", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case OROME_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        }
+        break;
+
+    case QUEST_ID_VARDA:
+        switch (entry->current_state)
+        {
+        case VARDA_QUEST_GIVER_PRESENT:
+            return quest_ui_panel_add_line(panel, TERM_L_BLUE,
+                       "Available - Varda waits in sunlight", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case VARDA_QUEST_ACTIVE:
+            return quest_ui_panel_add_line(panel, TERM_WHITE,
+                       "Active - Seek Duruin's bastion", true)
+                && quest_status_add_challenge_detail(panel, entry->quest_id,
+                    TERM_SLATE)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case VARDA_QUEST_SUCCESS:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Complete - Claim Varda's blessing", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    false)
+                && quest_ui_panel_add_line(panel, TERM_WHITE, " ", true)
+                && quest_status_add_previous_completion_detail(panel, entry);
+        case VARDA_QUEST_REWARDED:
+            return quest_ui_panel_add_line(panel, TERM_L_GREEN,
+                       "Completed by this character", true)
+                && quest_status_add_reward_detail(panel, entry->quest_id,
+                    true);
+        }
+        break;
+    }
+
+    return quest_ui_panel_add_line(panel, TERM_SLATE, "No quest detail.",
+        true);
+}
+
+static bool quest_status_build_browser_scene(app_ui_scene* scene,
+    const quest_status_entry* entries, int entry_count, int selected)
+{
+    app_ui_panel* panel;
+    int i;
+
+    if (!scene || !entries || entry_count <= 0)
+        return false;
+
+    if (selected < 0)
+        selected = 0;
+    if (selected >= entry_count)
+        selected = entry_count - 1;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 980, 1700);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Quest Status");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Current run progress and metarun echoes");
+
+    for (i = 0; i < entry_count; i++)
+    {
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i, entries[i].title_attr,
+                entries[i].meta_attr, 0, '\0', true, i == selected, "",
+                entries[i].title, entries[i].meta))
+        {
+            return false;
+        }
+    }
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, entries[selected].title);
+    if (!quest_status_build_entry_detail(panel, &entries[selected]))
+        return false;
+
+    if (entry_count > 1)
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "8/2", "Move");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "Enter", "Back");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "Esc",
+        "Back");
+    return true;
+}
+
+static bool quest_status_add_previous_completion_body_line(app_ui_panel* panel,
+    int quest_id, int metarun_quest_id, int current_state, int rewarded_state)
+{
+    int completed;
+    char buf[APP_UI_TEXT_MAX];
+
+    completed = metarun_quest_completion_count(metarun_quest_id);
     if (completed <= 0 || current_state == rewarded_state)
-        return;
+        return true;
 
-    if (!*has_previous_completions)
+    strnfmt(buf, sizeof(buf), "%s - %s (metarun x%d)", get_quest_title(quest_id),
+        quest_status_oath_name(quest_id), completed);
+    return quest_ui_panel_add_wrapped_lines(panel, TERM_SLATE, buf, false,
+        QUEST_STATUS_WRAP_WIDTH);
+}
+
+static bool quest_status_build_empty_scene(app_ui_scene* scene)
+{
+    app_ui_panel* panel;
+    bool added_previous = false;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    app_ui_panel_set_widths(panel, 640, 980);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Quest Status");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "No active or completed quests this run");
+
+    if (!quest_ui_panel_add_wrapped_lines(panel, TERM_SLATE,
+            "Quest vaults may appear as you delve deeper...", false,
+            QUEST_STATUS_WRAP_WIDTH))
     {
-        quest_scene_add_line(scene, panel, col, row,
-            "Previously Completed in Metarun:", TERM_L_DARK);
-        *has_previous_completions = true;
+        return false;
     }
 
+    if (metarun_quest_completion_count(METARUN_QUEST_TULKAS) > 0
+        && p_ptr->tulkas_quest != TULKAS_QUEST_REWARDED)
     {
-        cptr quest_title = get_quest_title(quest_id);
-        cptr oath_name = get_oath_name_from_id(quest_info[quest_info_index].oath_id);
-        char status_text[150];
-
-        strnfmt(status_text, sizeof(status_text), "%s - %s (metarun x%d)",
-            quest_title, oath_name, completed);
-        quest_scene_display_wrapped_text(scene, panel, col, row, status_text,
-            TERM_SLATE, wid);
+        added_previous = true;
     }
+    if (metarun_quest_completion_count(METARUN_QUEST_AULE) > 0
+        && p_ptr->aule_quest != AULE_QUEST_REWARDED)
+    {
+        added_previous = true;
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_MANDOS) > 0
+        && p_ptr->mandos_quest != MANDOS_QUEST_REWARDED)
+    {
+        added_previous = true;
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_NIENA) > 0
+        && p_ptr->niena_quest != NIENA_QUEST_REWARDED)
+    {
+        added_previous = true;
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_OROME) > 0
+        && p_ptr->orome_quest != OROME_QUEST_REWARDED)
+    {
+        added_previous = true;
+    }
+    if (metarun_quest_completion_count(METARUN_QUEST_VARDA) > 0
+        && p_ptr->varda_quest != VARDA_QUEST_REWARDED)
+    {
+        added_previous = true;
+    }
+
+    if (added_previous)
+    {
+        if (!quest_ui_panel_add_line(panel, TERM_WHITE, " ", false)
+            || !quest_ui_panel_add_line(panel, TERM_L_DARK,
+                "Previously completed in metarun:", false)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_TULKAS, METARUN_QUEST_TULKAS, p_ptr->tulkas_quest,
+                TULKAS_QUEST_REWARDED)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_AULE, METARUN_QUEST_AULE, p_ptr->aule_quest,
+                AULE_QUEST_REWARDED)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_MANDOS, METARUN_QUEST_MANDOS, p_ptr->mandos_quest,
+                MANDOS_QUEST_REWARDED)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_NIENA, METARUN_QUEST_NIENA, p_ptr->niena_quest,
+                NIENA_QUEST_REWARDED)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_OROME, METARUN_QUEST_OROME, p_ptr->orome_quest,
+                OROME_QUEST_REWARDED)
+            || !quest_status_add_previous_completion_body_line(panel,
+                QUEST_ID_VARDA, METARUN_QUEST_VARDA, p_ptr->varda_quest,
+                VARDA_QUEST_REWARDED))
+        {
+            return false;
+        }
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "Enter",
+        "Back");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "Esc",
+        "Back");
+    return true;
 }
 
 static bool do_cmd_quest_status_information_scene(void)
 {
     ui_information_scene_scope scope;
-    app_ui_scene scene;
-    app_ui_panel* panel;
-    char buf[128];
-    int row = 1;
-    int col = 2;
-    bool any_quests = false;
-    bool has_previous_completions = false;
-    int wid;
-    int hgt;
+    quest_status_entry entries[8];
+    int entry_count;
+    int selected = 0;
 
     if (!ui_information_scene_enter(&scope))
         return false;
 
-    Term_get_size(&wid, &hgt);
-    panel = quest_scene_begin_document(&scene);
-    if (!panel)
+    entry_count = quest_status_collect_entries(entries, (int)N_ELEMENTS(entries));
+    if (entry_count <= 0)
     {
+        app_ui_scene scene;
+
+        if (!quest_status_build_empty_scene(&scene)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            return false;
+        }
+
+        (void)ui_information_scene_wait_key_nonrepeat();
         ui_information_scene_leave(&scope);
-        return false;
+        return true;
     }
 
-    quest_scene_add_line(&scene, panel, col, &row, "=== Quest Status ===",
-        TERM_YELLOW);
-    row++;
-
-    if (p_ptr->tulkas_quest > TULKAS_QUEST_NOT_STARTED)
+    while (true)
     {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_TULKAS), TERM_YELLOW);
+        app_ui_scene scene;
+        int ch;
+        int dir;
 
-        switch (p_ptr->tulkas_quest)
+        if (!quest_status_build_browser_scene(&scene, entries, entry_count,
+                selected)
+            || !ui_information_scene_present_ui(&scene))
         {
-        case TULKAS_QUEST_GIVER_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Tulkas awaits", TERM_L_BLUE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                process_quest_placeholders(get_quest_challenge(QUEST_ID_TULKAS),
-                    QUEST_ID_TULKAS), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_TULKAS));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
+            ui_information_scene_leave(&scope);
+            return false;
+        }
 
-        case TULKAS_QUEST_ACTIVE:
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                process_quest_placeholders(get_quest_challenge(QUEST_ID_TULKAS),
-                    QUEST_ID_TULKAS), TERM_WHITE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_TULKAS));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case TULKAS_QUEST_COMPLETE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Return for reward", TERM_L_GREEN);
-            break;
-
-        case TULKAS_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_TULKAS));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
+        ch = ui_information_scene_wait_key_nonrepeat();
+        dir = target_dir((char)ch);
+        if (dir == 8)
+        {
+            selected = (selected + entry_count - 1) % entry_count;
+            continue;
+        }
+        if (dir == 2)
+        {
+            selected = (selected + 1) % entry_count;
+            continue;
+        }
+        if (ch == ESCAPE || ch == '\r' || ch == '\n' || ch == ' '
+            || ch == 'q' || ch == 'Q')
+        {
             break;
         }
-        row++;
     }
 
-    if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED)
-    {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_AULE), TERM_YELLOW);
-
-        switch (p_ptr->aule_quest)
-        {
-        case AULE_QUEST_FORGE_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Aule awaits", TERM_L_BLUE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_AULE), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_AULE));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case AULE_QUEST_ACTIVE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Active - Seek the forge-halls", TERM_WHITE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_AULE), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_AULE));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case AULE_QUEST_SUCCESS:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Return for reward", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_AULE));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case AULE_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_AULE));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-        }
-        row++;
-    }
-
-    if (p_ptr->mandos_quest > MANDOS_QUEST_NOT_STARTED)
-    {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_MANDOS), TERM_YELLOW);
-
-        switch (p_ptr->mandos_quest)
-        {
-        case MANDOS_QUEST_GIVER_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Mandos waits beyond death", TERM_L_BLUE);
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                get_quest_challenge(QUEST_ID_MANDOS), TERM_SLATE);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_MANDOS));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-
-        case MANDOS_QUEST_ACTIVE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Active - Escape the houses of waiting", TERM_WHITE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_MANDOS), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_MANDOS));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case MANDOS_QUEST_SUCCESS:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Claim Mandos's favour", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_MANDOS));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-
-        case MANDOS_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_MANDOS));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-        }
-        row++;
-    }
-
-    if (p_ptr->niena_quest > NIENA_QUEST_NOT_STARTED)
-    {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_NIENA), TERM_YELLOW);
-
-        switch (p_ptr->niena_quest)
-        {
-        case NIENA_QUEST_GIVER_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Niena offers mercy", TERM_L_BLUE);
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                get_quest_challenge(QUEST_ID_NIENA), TERM_SLATE);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_NIENA));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-
-        case NIENA_QUEST_ACTIVE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Active - Walk the path of mercy", TERM_WHITE);
-            strnfmt(buf, sizeof(buf), "Monsters seen: %d  killed: %d",
-                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
-            quest_scene_add_line(&scene, panel, col + 4, &row, buf,
-                TERM_SLATE);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_NIENA));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case NIENA_QUEST_SUCCESS:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Claim Niena's grace", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_NIENA));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-
-        case NIENA_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_NIENA));
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf,
-                TERM_SLATE);
-            break;
-
-        case NIENA_QUEST_FAILED:
-            strnfmt(buf, sizeof(buf), "Failed: %d seen, %d killed",
-                p_ptr->niena_monsters_seen, p_ptr->niena_monsters_killed);
-            quest_scene_add_line(&scene, panel, col + 2, &row, buf, TERM_RED);
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "You took a life and lost Niena's mercy.", TERM_SLATE);
-            break;
-        }
-        row++;
-    }
-
-    if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED)
-    {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_OROME), TERM_YELLOW);
-
-        switch (p_ptr->orome_quest)
-        {
-        case OROME_QUEST_GIVER_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Orome awaits", TERM_L_BLUE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_OROME), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_OROME));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case OROME_QUEST_ACTIVE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Active: Hunt the fell kindreds", TERM_WHITE);
-            strnfmt(buf, sizeof(buf), "Wolves killed: %d/100",
-                p_ptr->orome_wolves_killed);
-            quest_scene_display_wrapped_text(&scene, panel, col + 2, &row, buf,
-                p_ptr->orome_wolves_killed >= 100 ? TERM_L_GREEN : TERM_SLATE,
-                wid);
-            strnfmt(buf, sizeof(buf), "Spiders killed: %d/80",
-                p_ptr->orome_spiders_killed);
-            quest_scene_display_wrapped_text(&scene, panel, col + 2, &row, buf,
-                p_ptr->orome_spiders_killed >= 80 ? TERM_L_GREEN : TERM_SLATE,
-                wid);
-            strnfmt(buf, sizeof(buf), "Serpents killed: %d/60",
-                p_ptr->orome_serpents_killed);
-            quest_scene_display_wrapped_text(&scene, panel, col + 2, &row, buf,
-                p_ptr->orome_serpents_killed >= 60 ? TERM_L_GREEN : TERM_SLATE,
-                wid);
-            strnfmt(buf, sizeof(buf), "Vampires killed: %d/30",
-                p_ptr->orome_vampires_killed);
-            quest_scene_display_wrapped_text(&scene, panel, col + 2, &row, buf,
-                p_ptr->orome_vampires_killed >= 30 ? TERM_L_GREEN : TERM_SLATE,
-                wid);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_OROME), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_OROME));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case OROME_QUEST_SUCCESS:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Return for reward", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_OROME));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case OROME_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_OROME));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-        }
-        row++;
-    }
-
-    if (p_ptr->varda_quest > VARDA_QUEST_NOT_STARTED)
-    {
-        any_quests = true;
-        quest_scene_add_line(&scene, panel, col, &row,
-            get_quest_title(QUEST_ID_VARDA), TERM_YELLOW);
-
-        switch (p_ptr->varda_quest)
-        {
-        case VARDA_QUEST_GIVER_PRESENT:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Available - Varda waits in sunlight", TERM_L_BLUE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_VARDA), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_VARDA));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case VARDA_QUEST_ACTIVE:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Active - Seek Duruin's bastion", TERM_WHITE);
-            quest_scene_display_wrapped_text(&scene, panel, col, &row,
-                get_quest_challenge(QUEST_ID_VARDA), TERM_SLATE, wid);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_VARDA));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case VARDA_QUEST_SUCCESS:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Complete - Claim Varda's blessing", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s",
-                get_quest_reward_text(QUEST_ID_VARDA));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-
-        case VARDA_QUEST_REWARDED:
-            quest_scene_add_line(&scene, panel, col + 2, &row,
-                "Completed by this character", TERM_L_GREEN);
-            strnfmt(buf, sizeof(buf), "Reward: %s received",
-                get_quest_reward_text(QUEST_ID_VARDA));
-            quest_scene_display_wrapped_text(&scene, panel, col, &row, buf,
-                TERM_SLATE, wid);
-            break;
-        }
-        row++;
-    }
-
-    quest_scene_add_previous_completion(&scene, panel, col, &row,
-        QUEST_ID_TULKAS,
-        METARUN_QUEST_TULKAS, p_ptr->tulkas_quest, TULKAS_QUEST_REWARDED, 1,
-        wid, &has_previous_completions);
-    quest_scene_add_previous_completion(&scene, panel, col, &row, QUEST_ID_AULE,
-        METARUN_QUEST_AULE, p_ptr->aule_quest, AULE_QUEST_REWARDED, 2, wid,
-        &has_previous_completions);
-    quest_scene_add_previous_completion(&scene, panel, col, &row,
-        QUEST_ID_MANDOS,
-        METARUN_QUEST_MANDOS, p_ptr->mandos_quest, MANDOS_QUEST_REWARDED, 3,
-        wid, &has_previous_completions);
-    quest_scene_add_previous_completion(&scene, panel, col, &row, QUEST_ID_NIENA,
-        METARUN_QUEST_NIENA, p_ptr->niena_quest, NIENA_QUEST_REWARDED, 4, wid,
-        &has_previous_completions);
-    quest_scene_add_previous_completion(&scene, panel, col, &row, QUEST_ID_OROME,
-        METARUN_QUEST_OROME, p_ptr->orome_quest, OROME_QUEST_REWARDED, 5, wid,
-        &has_previous_completions);
-    quest_scene_add_previous_completion(&scene, panel, col, &row, QUEST_ID_VARDA,
-        METARUN_QUEST_VARDA, p_ptr->varda_quest, VARDA_QUEST_REWARDED, 6, wid,
-        &has_previous_completions);
-
-    if (has_previous_completions)
-        row++;
-
-    if (!any_quests)
-    {
-        quest_scene_add_line(&scene, panel, col, &row,
-            "No active or completed quests this run.", TERM_SLATE);
-        row++;
-        quest_scene_add_line(&scene, panel, col, &row,
-            "Quest vaults may appear as you delve deeper...", TERM_L_DARK);
-    }
-
-    row++;
-    quest_scene_add_line(&scene, panel, col, &row, "Press any key to return.",
-        TERM_L_WHITE);
-
-    if (!ui_information_scene_present_ui(&scene))
-    {
-        ui_information_scene_leave(&scope);
-        return false;
-    }
-
-    (void)ui_information_scene_wait_key_nonrepeat();
     ui_information_scene_leave(&scope);
     return true;
 }
@@ -1151,267 +1447,236 @@ void do_cmd_quest_status(void)
  */
 void quest_typewriter_menu(cptr title, cptr texts[], int total_texts, byte title_color, byte text_color)
 {
-    int wid, h;
-    const int indent = 2;
-    cptr continue_prompt = "(press any key to continue)";
+    const char* skip_prompt = "Enter/Esc skip typing";
+    const char* continue_prompt = "Press any key to continue. Q/Esc closes.";
+    const char* final_prompt = "Press any key to return.";
     bool skipped = false;
     bool scene_failed = false;
-    bool semantic_supported = ui_information_scene_supported();
+    bool aborted = false;
     ui_information_scene_scope info_scope;
-    bool scene_active = semantic_supported && ui_information_scene_enter(&info_scope);
     quest_typewriter_scene_state scene_state;
-    int title_y = 1;
-    int title_col;
-    int wrap_width;
-    int row = 3;
+    int wrap_width = QUEST_TYPEWRITER_WRAP_WIDTH;
+    int row = 0;
     int col = 0;
 
-    if (!semantic_supported || !scene_active)
+    if (!ui_information_scene_supported() || !ui_information_scene_enter(&info_scope))
     {
         log_warn("quest typewriter: semantic scene required");
         msg_print("Quest dialog unavailable.");
         return;
     }
 
-    quest_typewriter_scene_init(&scene_state, scene_active);
-    
-    /* Get terminal size */
-    Term_get_size(&wid, &h);
-    wrap_width = wid - indent * 2;
-    
-    quest_typewriter_clear_page(scene_active, &scene_state);
-    
-    /* Display title */
-    title_col = (wid - strlen(title)) / 2;
-    quest_typewriter_write_text(scene_active, &scene_state, title_y, title_col,
-        title_color, title);
-    if (!quest_typewriter_present(&scene_state, scene_active))
+    quest_typewriter_scene_init(&scene_state, title, title_color);
+    quest_typewriter_begin_page(&scene_state, skipped, skip_prompt);
+    if (!quest_typewriter_present(&scene_state))
     {
         scene_failed = true;
         goto cleanup;
     }
-    
-    for (int idx = 0; idx < total_texts; idx++) {
+
+    for (int idx = 0; idx < total_texts; idx++)
+    {
         const char *s = texts[idx];
-        
-        /* Handle empty lines as paragraph breaks */
-        if (!s || strlen(s) == 0) {
-            /* Empty line - just advance row for paragraph break */
+
+        if (!s || !s[0])
+        {
+            if (row >= QUEST_TYPEWRITER_PAGE_LINE_MAX)
+            {
+                if (!quest_typewriter_wait_for_continue(&scene_state,
+                        continue_prompt))
+                {
+                    aborted = true;
+                    goto cleanup;
+                }
+
+                quest_typewriter_begin_page(&scene_state, skipped, skip_prompt);
+                row = 0;
+            }
+
+            quest_typewriter_scene_set_text(&scene_state, row, text_color, " ");
             row++;
             col = 0;
-            /* Short pause for empty line */
-            Term_xtra(TERM_XTRA_DELAY, 200);
+
+            if (!skipped)
+                platform_delay_ms(200u);
             continue;
         }
-        
-        /* Count lines needed for this paragraph */
-        int lines_needed = 0;
-        int temp_col = col;
-        for (int i = 0; s[i]; i++) {
-            if (s[i] == '\n' || temp_col >= wrap_width) {
-                lines_needed++;
-                temp_col = 0;
-                if (s[i] == '\n') continue;
-            }
-            temp_col++;
-        }
-        lines_needed++; /* Add one for the text itself */
-        
-        /* Check if we have enough space for the whole paragraph */
-        if (row + lines_needed >= h - 2) {
-            char k;
 
-            quest_typewriter_write_text(scene_active, &scene_state, h - 1, 15,
-                TERM_L_WHITE, continue_prompt);
-            if (!quest_typewriter_present(&scene_state, scene_active))
+        if (row > 0
+            && row + quest_typewriter_estimate_lines(s, wrap_width)
+                > QUEST_TYPEWRITER_PAGE_LINE_MAX)
+        {
+            if (!quest_typewriter_wait_for_continue(&scene_state,
+                    continue_prompt))
             {
-                scene_failed = true;
+                aborted = true;
                 goto cleanup;
             }
 
-            k = (char)ui_information_scene_wait_key();
-            if (k == 'Q' || k == 'q')
-                goto cleanup;
-
-            quest_typewriter_clear_page(scene_active, &scene_state);
-
-            /* Redisplay title */
-            quest_typewriter_write_text(scene_active, &scene_state, title_y,
-                title_col, title_color, title);
-            if (!quest_typewriter_present(&scene_state, scene_active))
-            {
-                scene_failed = true;
-                goto cleanup;
-            }
-            row = 3;
+            quest_typewriter_begin_page(&scene_state, skipped, skip_prompt);
+            row = 0;
+            col = 0;
         }
-        
+
         col = 0;
-        
-        /* Print this string with proper word wrapping and typewriter effect */
-        int i = 0;
-        while (s[i]) {
-            /* Handle explicit newlines */
-            if (s[i] == '\n') {
+
+        for (int i = 0; s[i]; )
+        {
+            if (s[i] == '\n')
+            {
                 row++;
+                if (row >= QUEST_TYPEWRITER_PAGE_LINE_MAX)
+                {
+                    if (!quest_typewriter_wait_for_continue(&scene_state,
+                            continue_prompt))
+                    {
+                        aborted = true;
+                        goto cleanup;
+                    }
+
+                    quest_typewriter_begin_page(&scene_state, skipped,
+                        skip_prompt);
+                    row = 0;
+                }
                 col = 0;
                 i++;
                 continue;
             }
-            
-            /* Find the end of the current word (or until we hit wrap width) */
-            int word_start = i;
-            int word_len = 0;
-            bool has_space_after = false;
-            
-            /* Build the current word/phrase until we hit whitespace, newline, or exceed reasonable length */
-            while (s[i] && s[i] != '\n' && word_len < wrap_width) {
-                if (s[i] == ' ' || s[i] == '\t') {
-                    has_space_after = true;
-                    break;
+
+            while (s[i] == ' ' || s[i] == '\t')
+            {
+                int spaces = (s[i] == '\t') ? (4 - (col % 4)) : 1;
+
+                if (col == 0)
+                {
+                    i++;
+                    continue;
                 }
-                word_len++;
-                i++;
-            }
-            
-            log_trace("WRAP DEBUG: word='%.*s', word_len=%d, col=%d, wrap_width=%d", word_len, &s[word_start], word_len, col, wrap_width);
-            
-            /* Check if this word fits on the current line */
-            if (col + word_len > wrap_width && col > 0) {
-                /* Word doesn't fit, wrap to next line */
-                log_trace("WRAP DEBUG: Wrapping word to next line (col=%d + word_len=%d > wrap_width=%d)", col, word_len, wrap_width);
-                row++;
-                col = 0;
-            }
-            
-            /* Print the word character by character with typewriter effect */
-            if (skipped) {
-                /* Skip mode: print entire word instantly */
-                for (int j = word_start; j < word_start + word_len; j++) {
-                    quest_typewriter_write_char(scene_active, &scene_state, row,
-                        indent + col, text_color, s[j]);
-                    col++;
-                }
-            }
-            else {
-                /* Normal mode: typewriter effect with character-by-character */
-                for (int j = word_start; j < word_start + word_len; j++) {
-                    /* Check for ESC or Enter key press to skip typewriter effect */
-                    char check_key;
-                    if (quest_typewriter_poll_skip_key(scene_active,
-                            &check_key))
-                    {
-                        if (check_key == ESCAPE || check_key == '\n' || check_key == '\r') {
-                            skipped = true;
-                            /* Print rest of current word instantly */
-                            for (int k = j; k < word_start + word_len; k++) {
-                                quest_typewriter_write_char(scene_active,
-                                    &scene_state, row, indent + col, text_color,
-                                    s[k]);
-                                col++;
-                            }
-                            break; /* Exit to continue with rest of text in skip mode */
-                        }
-                        /* Other keys are ignored (already consumed) */
-                    }
-                    
-                    /* Print character with typewriter effect */
-                    quest_typewriter_write_char(scene_active, &scene_state, row,
-                        indent + col, text_color, s[j]);
-                    if (!quest_typewriter_present(&scene_state, scene_active))
+
+                while (spaces-- > 0 && col < wrap_width)
+                {
+                    if (!quest_typewriter_render_char(&scene_state, row,
+                            text_color, ' ', skipped))
                     {
                         scene_failed = true;
                         goto cleanup;
                     }
                     col++;
-                    
-                    /* Delay 25 ms after each character for typewriter effect */
-                    Term_xtra(TERM_XTRA_DELAY, 25);
                 }
+                i++;
             }
-            
-            /* Handle the space/whitespace after the word */
-            if (has_space_after) {
-                if (s[i] == ' ') {
-                    /* Only print space if we're not at the end of a line */
-                    if (col < wrap_width) {
-                        quest_typewriter_write_char(scene_active, &scene_state,
-                            row,
-                            indent + col, text_color, ' ');
-                        if (!skipped)
+
+            if (!s[i] || s[i] == '\n')
+                continue;
+
+            {
+                int word_start = i;
+                int word_len = 0;
+
+                while (s[i + word_len] && s[i + word_len] != ' '
+                    && s[i + word_len] != '\t' && s[i + word_len] != '\n')
+                {
+                    word_len++;
+                }
+
+                if (col > 0 && col + word_len > wrap_width)
+                {
+                    row++;
+                    if (row >= QUEST_TYPEWRITER_PAGE_LINE_MAX)
+                    {
+                        if (!quest_typewriter_wait_for_continue(&scene_state,
+                                continue_prompt))
                         {
-                            if (!quest_typewriter_present(&scene_state,
-                                    scene_active))
+                            aborted = true;
+                            goto cleanup;
+                        }
+
+                        quest_typewriter_begin_page(&scene_state, skipped,
+                            skip_prompt);
+                        row = 0;
+                    }
+                    col = 0;
+                }
+
+                for (int j = 0; j < word_len; j++)
+                {
+                    char check_key;
+
+                    if (!skipped && quest_typewriter_poll_skip_key(&check_key)
+                        && (check_key == ESCAPE || check_key == '\n'
+                            || check_key == '\r'))
+                    {
+                        skipped = true;
+                        quest_typewriter_scene_set_subtitle(&scene_state,
+                            TERM_SLATE, "");
+                    }
+
+                    if (!quest_typewriter_render_char(&scene_state, row,
+                            text_color, s[word_start + j], skipped))
+                    {
+                        scene_failed = true;
+                        goto cleanup;
+                    }
+                    col++;
+                    if (col >= wrap_width && j + 1 < word_len)
+                    {
+                        row++;
+                        if (row >= QUEST_TYPEWRITER_PAGE_LINE_MAX)
+                        {
+                            if (!quest_typewriter_wait_for_continue(
+                                    &scene_state, continue_prompt))
                             {
-                                scene_failed = true;
+                                aborted = true;
                                 goto cleanup;
                             }
+
+                            quest_typewriter_begin_page(&scene_state, skipped,
+                                skip_prompt);
+                            row = 0;
                         }
-                        col++;
-                        
-                        /* Delay for space too (unless skipped) */
-                        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 25);
+                        col = 0;
                     }
-                    i++; /* Skip the space */
                 }
-                else if (s[i] == '\t') {
-                    /* Handle tab - convert to spaces but respect wrap width */
-                    int tab_spaces = 4 - (col % 4);
-                    for (int t = 0; t < tab_spaces && col < wrap_width; t++) {
-                        quest_typewriter_write_char(scene_active, &scene_state,
-                            row,
-                            indent + col, text_color, ' ');
-                        if (!skipped)
-                        {
-                            if (!quest_typewriter_present(&scene_state,
-                                    scene_active))
-                            {
-                                scene_failed = true;
-                                goto cleanup;
-                            }
-                        }
-                        col++;
-                        
-                        /* Delay for tab spaces (unless skipped) */
-                        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 25);
-                    }
-                    i++; /* Skip the tab */
-                }
+
+                i += word_len;
             }
         }
-        
-        /* Move to next line after text */
+
         row++;
-        col = 0;
-        
-        /* 400ms pause after each line of text (unless skipped) */
-        if (!skipped) Term_xtra(TERM_XTRA_DELAY, 400);
-    }
-    
-    /* Refresh screen to show all text if skipped */
-    if (skipped)
-    {
-        if (!quest_typewriter_present(&scene_state, scene_active))
+        if (row >= QUEST_TYPEWRITER_PAGE_LINE_MAX && idx + 1 < total_texts)
         {
-            scene_failed = true;
-            goto cleanup;
+            if (!quest_typewriter_wait_for_continue(&scene_state,
+                    continue_prompt))
+            {
+                aborted = true;
+                goto cleanup;
+            }
+
+            quest_typewriter_begin_page(&scene_state, skipped, skip_prompt);
+            row = 0;
         }
+        col = 0;
+
+        if (!skipped)
+            platform_delay_ms(400u);
     }
-    
-    /* Final prompt */
-    quest_typewriter_write_text(scene_active, &scene_state, h - 1, 15,
-        TERM_L_WHITE, continue_prompt);
-    if (!quest_typewriter_present(&scene_state, scene_active))
+
+    if (skipped && !quest_typewriter_present(&scene_state))
     {
         scene_failed = true;
         goto cleanup;
     }
-    (void)ui_information_scene_wait_key();
-    
+
+    if (!quest_typewriter_wait_for_continue(&scene_state, final_prompt))
+    {
+        aborted = true;
+        goto cleanup;
+    }
+
 cleanup:
     quest_typewriter_scene_clear(&scene_state);
     ui_information_scene_leave(&info_scope);
 
-    if (scene_failed)
+    if (scene_failed && !aborted)
         msg_print("Quest dialog unavailable.");
 }

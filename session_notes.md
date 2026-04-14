@@ -1,5 +1,98 @@
 # Session notes
 
+## 2026-04-14: UI render replacement settings, prompt, and main-menu input fallback removal
+- `src/cmd/ui/cmd-ui-settings.c`
+  - removed the file-local `inkey()` wrapper from the settings family and switched its blocking/non-blocking key reads to the app-session legacy input queue while the semantic settings scene owns input
+  - kept the existing macro/keymap capture behavior by preserving the non-blocking “scan” read semantics against the queued SDL legacy input stream instead of calling back into `inkey()`
+- `src/util-prompt.c`
+  - removed the direct `inkey()` prompt bridge and changed prompt/confirm waits to consume keys from the app-session queue under the existing wait-scope wrapper
+  - kept prompt presentation ownership unchanged; the remaining direct term usage here is now just the explicit event/fresh pump and scene refresh, not legacy input capture
+- `src/cmd/ui/cmd-ui-main-menu.c`
+  - removed the main-menu `inkey()` read and switched menu selection input to the app-session legacy input queue while the snapshot overlay scene is active
+  - kept the existing semantic menu overlay contract and explicit refresh behavior, so this change deletes only the legacy input ownership from the live SDL menu loop
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/cmd/ui/cmd-ui-main-menu.c.obj CMakeFiles/sil-core.dir/src/cmd/ui/cmd-ui-settings.c.obj CMakeFiles/sil-core.dir/src/util-prompt.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - current repo-wide debt snapshot on this tree: `inkey=5`, `screen_save/screen_load=0`, `Term_*=159`, `get_sdl/set_sdl=0`
+- Residual debt after this pass:
+  - `src/cmd/ui/cmd-ui-settings.c` is now off the `inkey()` audit and remains a semantic settings/config tail rather than a legacy-input owner
+  - `src/util-prompt.c` no longer owns direct `inkey()` calls, but still keeps explicit `Term_xtra()` event/fresh pumping until prompt waits are fully abstracted behind a shared semantic input helper
+  - `src/cmd/ui/cmd-ui-main-menu.c` no longer owns direct `inkey()` calls; the remaining live SDL `inkey()` owners are now concentrated in `object-ui-enhanced.c`, `object-ui-select.c`, and non-shipping utility/debug flows (`squelch.c`, `wizard1.c`, `wizard2.c`)
+
+## 2026-04-14: UI render replacement P6-C character and quest presentation tail
+- `src/ui/ui-character-screen.c`
+  - removed the remaining direct `Term_*` calls from the live character-sheet renderer by replacing local clear operations with a file-local cell-clearing helper built on existing text wrappers
+  - removed the extra `Term_fresh()` flush from the standard character-sheet history draw path so this file no longer owns direct terminal refresh on the SDL path
+  - kept the existing semantic character-sheet scene and tutorial path intact while shrinking the residual legacy sheet helper debt inside `display_player()`
+- `src/ui/ui-character-name.c`, `src/quest/quest-ui.c`, `src/quest/quest-varda.c`
+  - current working-tree state in this slice is already off the audit metrics: no local `inkey()`, `screen_save()` / `screen_load()`, direct `Term_*`, or named SDL config usage remain in these files
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-legacy-compat.dir/src/ui/ui-character-screen.c.obj CMakeFiles/sil-core.dir/src/ui/ui-character-name.c.obj CMakeFiles/sil-core.dir/src/quest/quest-ui.c.obj CMakeFiles/sil-core.dir/src/quest/quest-varda.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - current repo-wide debt snapshot on this tree: `inkey=8`, `screen_save/screen_load=0`, `Term_*=166`, `get_sdl/set_sdl=0`
+- Residual character/quest debt after this slice:
+  - audit-visible debt in the `P6-C` write set is now zero
+  - the remaining non-audit tail is concentrated in `src/ui/ui-character-screen.c`, where the legacy `display_player()` family still derives some layout budgeting from the active term size and still exists for compatibility/subwindow ownership outside the semantic character-sheet scene
+
+## 2026-04-14: UI render replacement P6-G bespoke workflow tail
+- `src/birth.c`
+  - removed the file-local menu-scene presenter shim so the birth and blitz semantic menus now publish through `ui_information_scene_present_ui()` like the rest of the information-scene path
+  - the owned birth/blitz menus in this slice no longer carry local `app_session_publish_menu_scene()` or direct `Term_xtra()` presentation glue
+- `src/metarun.c`
+  - split the story-stats side screens into reusable `*_information_scene()` helpers so the main metarun stats screen can reopen completed quests, active effects, blessing threshold, blessing exchange, and history inside the existing semantic information-scene scope instead of bouncing through wrapper entry points
+  - kept the public wrappers only where external callers still need them, while the in-scope stats flow now stays entirely on the semantic browser/detail path
+- `src/ui/smithing/ui-smithing-screen.c`
+  - kept the nested snapshot-transition suppression added for smithing submenu hops and hardened it with an explicit reset at smithing screen entry/exit so stale nested-transition state cannot leak across sessions
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/birth.c.obj CMakeFiles/sil-core.dir/src/metarun.c.obj CMakeFiles/sil-core.dir/src/ui/smithing/ui-smithing-screen.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - full `build-incremental.ps1` is still blocked by unrelated compile errors in `src/ui/ui-status.c` outside the `P6-G` write set
+  - current repo-wide debt snapshot on this tree: `inkey=9`, `screen_save/screen_load=0`, `Term_*=181`, `get_sdl/set_sdl=0`
+- Residual bespoke-workflow debt after this slice:
+  - `src/birth.c` and `src/metarun.c` no longer have local `inkey()`, saved-screen, or direct `Term_*` debt in the `P6-G` write set
+  - the remaining direct term debt in this write set is the explicit smithing snapshot refresh/event pump in `src/ui/smithing/ui-smithing-screen.c`
+
+## 2026-04-14: UI render replacement P6-A status rail compact-overlay contract cleanup
+- `src/app/app-scene-dungeon.[ch]`
+  - moved hidden-left-panel chrome ownership fully into the semantic chrome scene by publishing that rail as `APP_UI_PANEL_STYLE_OVERLAY_RAIL` instead of reusing the reserved `STATUS_RAIL` style
+  - removed the dead `APP_DUNGEON_SNAPSHOT_FLAG_HIDE_LEFT_PANEL` panes contract bit and stopped writing left-panel visibility state through `app_panes_snapshot`
+  - bumped `APP_DUNGEON_PANES_FORMAT_VERSION` because the panes blob no longer carries chrome-layout meaning for the live SDL path
+- `src/sdl-scene-dungeon.c`
+  - removed the dungeon layout dependency on `panes->flags` for left-panel reservation; map reservation now keys only off semantic `STATUS_RAIL` panels, while compact hidden-left-panel chrome renders as an `OVERLAY_RAIL`
+  - added native dungeon rendering for semantic `OVERLAY_RAIL` chrome so the compact left-panel overlay draws directly from the scene contract with translucent per-row backplates instead of pretending to be reserved map chrome
+- `src/ui/ui-status.c`
+  - deleted the remaining main-pane status or chrome legacy renderer on the SDL snapshot build: `redraw_stuff()` now clears status-chrome redraw bits without drawing fixed-row or fixed-column term UI, leaving snapshot invalidation to `handle_stuff()`'s preserved redraw mask
+  - removed the dead main-pane chrome helper family from this file, including the compact bottom-line renderer, left-panel stat blocks, light/quiver icon pair term writes, tracked-monster chrome, and the old `ui_semantic_dungeon_snapshot_active()` fallback gate
+  - folded the terrain and partition term redraw into one helper before deleting that whole main-pane chrome block, and deleted the one-line `fix_inven()` / `fix_monlist()` / `fix_equip()` / `fix_player_0()` / `fix_message()` / `fix_monster()` wrapper layer so `window_stuff()` now calls the shared compatibility-window refresher directly
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/app/app-scene-dungeon.c.obj CMakeFiles/sil-platform-sdl.dir/src/sdl-scene-dungeon.c.obj CMakeFiles/sil-core.dir/src/ui/ui-status.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1` is now blocked by unrelated concurrent compile errors in `tests/ui1_tests.c` (`ui_information_scene_set_refresh_enabled` declaration drift) outside this slice
+  - current repo-wide audit snapshot on this tree after deleting the main-pane fallback renderer: `inkey=9`, `screen_save/screen_load=0`, `Term_*=181`, `get_sdl/set_sdl=0`
+- Residual status/chrome debt after this slice:
+  - `src/app/app-scene-dungeon.c` and `src/sdl-scene-dungeon.c` no longer depend on term size or pane flags for hidden-left-panel chrome on the normal SDL path
+  - the remaining direct term usage in this write set is now only the live aux-pane compatibility path in `src/ui/ui-status.c`: `ui_status_refresh_matching_windows()` plus the message-pane width or height loop still drive right or bottom SDL panes through linked aux `term`s
+
+## 2026-04-14: UI render replacement P6-E runtime and file utility tail
+- `src/ui/ui-information-scene.[ch]`
+  - split the information-scene scope entry into a reusable internal helper and added `ui_information_scene_claim_input()` so already-published semantic scenes can temporarily own SDL legacy input without publishing or restoring a different scene
+  - changed `ui_information_scene_wait_key()` to read directly from the app-session legacy input queue, removing the remaining information-scene dependency on `inkey()` for semantic scene waits
+  - changed dungeon-scene restore to invalidate and rebuild the semantic dungeon snapshot instead of calling `do_cmd_redraw()` on the shipped SDL path
+  - deleted the dead refresh-enable toggle from this module; the remaining `Term_xtra` path is now an explicit always-on event pump rather than a conditional legacy branch
+- `src/init2.c`
+  - changed the startup welcome menu to require the semantic welcome panel and claim information-scene input ownership before waiting, so the initial menu no longer has an SDL-path fallback to terminal input or silent presentation failure
+- `src/util-message.c`
+  - changed semantic menu `-more-` prompts to run inside an information-scene scope, so they publish and restore menu state through the shared semantic presentation path rather than ad hoc menu publication plus direct `inkey()` waiting
+  - changed dungeon `-more-` prompts to claim semantic input ownership while the interaction overlay is active, so shipped SDL play no longer waits on `inkey()` for those pauses
+  - removed the remaining silent SDL-path prompt fallbacks in `msg_flush()`: semantic menu prompts now fail loudly instead of quietly dropping through, bootstrap/utility semantic waits now use the same information-scene modal path, and there is no `inkey()` wait left in this file
+- `src/files.c`
+  - replaced the suicide `prt()` + `inkey()` verification prompt with `get_com()`, keeping the `~` verification behavior while routing SDL through the semantic prompt system
+- Validation:
+  - `cmake --build build-standard --target CMakeFiles/sil-core.dir/src/files.c.obj CMakeFiles/sil-core.dir/src/init2.c.obj CMakeFiles/sil-core.dir/src/util-message.c.obj CMakeFiles/sil-core.dir/src/ui/ui-information-scene.c.obj --parallel`
+  - `py -3 tools/ui_debt_audit.py --check`
+  - current repo-wide debt snapshot on this tree: `inkey=9`, `screen_save/screen_load=0`, `Term_*=193`, `get_sdl/set_sdl=0`
+  - local residual debt in the P6-E write set is now limited to the intentional event pump in `src/ui/ui-information-scene.c` (`Term_xtra`)
+
 ## 2026-04-14: UI render replacement P5-C settings tail cleanup
 - `src/cmd/ui/cmd-ui-settings.c`
   - replaced the file-local scatter of SDL config and pane getters/setters with local adapter tables for general SDL config, pane metrics, and controller bindings/toggles, then deleted the now-redundant pass-through wrapper layer

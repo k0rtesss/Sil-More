@@ -1114,7 +1114,10 @@ static bool sync_current_metarun_slot(bool stamp_time)
 /* forward declarations */
 static void start_new_metarun(void);
 static void choose_difficulty_menu(bool reopen_stats_on_exit);
-static void adjust_blessing_threshold_menu(void);
+static bool metarun_adjust_blessing_threshold_information_scene(
+    bool steamdeck, const char* accept_label, const char* back_label);
+static bool metarun_list_history_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label);
 static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
     bool selected);
 static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
@@ -2359,198 +2362,177 @@ static const char* challenge_display_name(int challenge_id)
     }
 }
 
-static void show_completed_quests_summary(void)
+static bool metarun_show_completed_quests_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
 {
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    char back_label[16] = "";
+    struct quest_summary_entry {
+        bool challenge_entry;
+        int id;
+        int count;
+        int unlock_count;
+    } entries[96];
+    int entry_count = 0;
+    int completed_quests = 0;
+    int selected = 0;
+    const int challenge_ids[] = {
+        CHALLENGE_DISCONNECTED,
+        CHALLENGE_SINGLE_STAIR,
+        CHALLENGE_FIXED_50K_XP,
+        CHALLENGE_TULKAS_BLUNT,
+        CHALLENGE_TORCHLIGHT
+    };
 
-    if (!use_information_scene) {
-        log_error("show_completed_quests_summary: semantic scene unavailable");
-        return;
-    }
-
-    if (steamdeck) {
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-    }
-
-    {
-        struct quest_summary_entry {
-            bool challenge_entry;
-            int id;
-            int count;
-            int unlock_count;
-        } entries[96];
-        int entry_count = 0;
-        int completed_quests = 0;
-        int selected = 0;
-        const int challenge_ids[] = {
-            CHALLENGE_DISCONNECTED,
-            CHALLENGE_SINGLE_STAIR,
-            CHALLENGE_FIXED_50K_XP,
-            CHALLENGE_TULKAS_BLUNT,
-            CHALLENGE_TORCHLIGHT
-        };
-
-        if (z_info && quest_info) {
-            for (int i = 1; i < z_info->quest_max
-                && entry_count < (int)N_ELEMENTS(entries); i++)
-            {
-                quest_type *q_ptr = &quest_info[i];
-                u32b flag;
-                int count;
-
-                if (!q_ptr->name) continue;
-                flag = quest_metarun_flag(i);
-                if (!flag) continue;
-                count = metarun_quest_completion_count(flag);
-                if (count <= 0) continue;
-
-                entries[entry_count].challenge_entry = false;
-                entries[entry_count].id = i;
-                entries[entry_count].count = count;
-                entries[entry_count].unlock_count = q_ptr->challenge_unlock
-                    ? metarun_challenge_completion_count(q_ptr->challenge_unlock)
-                    : 0;
-                entry_count++;
-                completed_quests++;
-            }
-        }
-
-        for (int i = 0; i < (int)N_ELEMENTS(challenge_ids)
+    if (z_info && quest_info) {
+        for (int i = 1; i < z_info->quest_max
             && entry_count < (int)N_ELEMENTS(entries); i++)
         {
-            entries[entry_count].challenge_entry = true;
-            entries[entry_count].id = challenge_ids[i];
-            entries[entry_count].count =
-                metarun_challenge_completion_count(challenge_ids[i]);
-            entries[entry_count].unlock_count = 0;
+            quest_type *q_ptr = &quest_info[i];
+            u32b flag;
+            int count;
+
+            if (!q_ptr->name) continue;
+            flag = quest_metarun_flag(i);
+            if (!flag) continue;
+            count = metarun_quest_completion_count(flag);
+            if (count <= 0) continue;
+
+            entries[entry_count].challenge_entry = false;
+            entries[entry_count].id = i;
+            entries[entry_count].count = count;
+            entries[entry_count].unlock_count = q_ptr->challenge_unlock
+                ? metarun_challenge_completion_count(q_ptr->challenge_unlock)
+                : 0;
             entry_count++;
-        }
-
-        while (true) {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            char subtitle[APP_UI_TEXT_MAX];
-            int key;
-
-            if (selected < 0) selected = 0;
-            if (selected >= entry_count) selected = entry_count - 1;
-
-            strnfmt(subtitle, sizeof(subtitle), "%d completed quest%s",
-                completed_quests, (completed_quests == 1) ? "" : "s");
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Completed Quests", TERM_SLATE, subtitle);
-            if (!panel)
-                break;
-
-            if (completed_quests == 0) {
-                (void)app_ui_panel_add_body_line(panel, TERM_L_DARK,
-                    "No quests completed yet in this metarun.");
-            }
-
-            for (int i = 0; i < entry_count; i++) {
-                char meta[APP_UI_META_MAX];
-                byte attr;
-
-                if (entries[i].challenge_entry) {
-                    strnfmt(meta, sizeof(meta), "completed %d",
-                        entries[i].count);
-                    attr = TERM_WHITE;
-                    if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
-                            i == selected, "", challenge_display_name(
-                                entries[i].id), meta))
-                    {
-                        break;
-                    }
-                } else {
-                    strnfmt(meta, sizeof(meta), "x%d", entries[i].count);
-                    attr = TERM_WHITE;
-                    if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
-                            i == selected, "",
-                            quest_display_title(entries[i].id), meta))
-                    {
-                        break;
-                    }
-                }
-            }
-
-            if (selected >= 0 && selected < entry_count) {
-                char line[APP_UI_TEXT_MAX];
-
-                if (entries[selected].challenge_entry) {
-                    app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                        "Challenge");
-                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
-                            challenge_display_name(entries[selected].id)))
-                    {
-                        break;
-                    }
-                    strnfmt(line, sizeof(line), "Completed %d time%s.",
-                        entries[selected].count,
-                        (entries[selected].count == 1) ? "" : "s");
-                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
-                        break;
-                } else {
-                    quest_type *q_ptr = &quest_info[entries[selected].id];
-                    app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                        "Quest");
-                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
-                            quest_display_title(entries[selected].id)))
-                    {
-                        break;
-                    }
-                    strnfmt(line, sizeof(line), "Completed %d time%s.",
-                        entries[selected].count,
-                        (entries[selected].count == 1) ? "" : "s");
-                    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
-                        break;
-                    if (q_ptr->challenge_unlock) {
-                        strnfmt(line, sizeof(line), "Unlocks %s (completed %d)",
-                            challenge_display_name(q_ptr->challenge_unlock),
-                            entries[selected].unlock_count);
-                        if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
-                                line))
-                        {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Any", "Close");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            if (steamdeck) {
-                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
-                    true, back_label, "Back");
-            }
-
-            if (!ui_information_scene_present_ui(&scene))
-                break;
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == '8' || key == 'k' || key == '-') {
-                selected = (selected + entry_count - 1) % entry_count;
-                continue;
-            }
-            if (key == '2' || key == 'j' || key == '+') {
-                selected = (selected + 1) % entry_count;
-                continue;
-            }
-
-            metarun_ui_clear_pending_input();
-            break;
+            completed_quests++;
         }
     }
 
-    ui_information_scene_leave(&info_scope);
+    for (int i = 0; i < (int)N_ELEMENTS(challenge_ids)
+        && entry_count < (int)N_ELEMENTS(entries); i++)
+    {
+        entries[entry_count].challenge_entry = true;
+        entries[entry_count].id = challenge_ids[i];
+        entries[entry_count].count =
+            metarun_challenge_completion_count(challenge_ids[i]);
+        entries[entry_count].unlock_count = 0;
+        entry_count++;
+    }
+
+    while (true) {
+        app_ui_scene scene;
+        app_ui_panel *panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
+
+        if (selected < 0) selected = 0;
+        if (selected >= entry_count) selected = entry_count - 1;
+
+        strnfmt(subtitle, sizeof(subtitle), "%d completed quest%s",
+            completed_quests, (completed_quests == 1) ? "" : "s");
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "Completed Quests", TERM_SLATE, subtitle);
+        if (!panel)
+            return false;
+
+        if (completed_quests == 0) {
+            (void)app_ui_panel_add_body_line(panel, TERM_L_DARK,
+                "No quests completed yet in this metarun.");
+        }
+
+        for (int i = 0; i < entry_count; i++) {
+            char meta[APP_UI_META_MAX];
+            byte attr;
+
+            if (entries[i].challenge_entry) {
+                strnfmt(meta, sizeof(meta), "completed %d",
+                    entries[i].count);
+                attr = TERM_WHITE;
+                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                        i == selected, "", challenge_display_name(
+                            entries[i].id), meta))
+                {
+                    return false;
+                }
+            } else {
+                strnfmt(meta, sizeof(meta), "x%d", entries[i].count);
+                attr = TERM_WHITE;
+                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                        i == selected, "",
+                        quest_display_title(entries[i].id), meta))
+                {
+                    return false;
+                }
+            }
+        }
+
+        if (selected >= 0 && selected < entry_count) {
+            char line[APP_UI_TEXT_MAX];
+
+            if (entries[selected].challenge_entry) {
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Challenge");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                        challenge_display_name(entries[selected].id)))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Completed %d time%s.",
+                    entries[selected].count,
+                    (entries[selected].count == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                    return false;
+            } else {
+                quest_type *q_ptr = &quest_info[entries[selected].id];
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Quest");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                        quest_display_title(entries[selected].id)))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Completed %d time%s.",
+                    entries[selected].count,
+                    (entries[selected].count == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                    return false;
+                if (q_ptr->challenge_unlock) {
+                    strnfmt(line, sizeof(line), "Unlocks %s (completed %d)",
+                        challenge_display_name(q_ptr->challenge_unlock),
+                        entries[selected].unlock_count);
+                    if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                            line))
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Any", "Close");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        if (steamdeck) {
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                true, back_label, "Back");
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+            return false;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == '8' || key == 'k' || key == '-') {
+            selected = (selected + entry_count - 1) % entry_count;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+') {
+            selected = (selected + 1) % entry_count;
+            continue;
+        }
+
+        metarun_ui_clear_pending_input();
+        return true;
+    }
 }
 
 static bool metarun_ui_show_story_texts(const char* title, byte title_attr,
@@ -3821,34 +3803,6 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
     }
 }
 
-/* Show all active curses in a dedicated screen with pagination */
-static void show_all_active_curses(void)
-{
-    ui_information_scene_scope info_scope;
-    bool use_information_scene;
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck)
-    {
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
-            sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
-            sizeof(back_label));
-    }
-
-    use_information_scene = ui_information_scene_enter(&info_scope);
-    if (!use_information_scene) {
-        log_error("show_all_active_curses: semantic scene unavailable");
-        return;
-    }
-
-    (void)metarun_show_active_effects_information_scene(steamdeck,
-        accept_label, back_label);
-    ui_information_scene_leave(&info_scope);
-}
-
 static bool metarun_show_known_curses_information_scene(bool steamdeck,
     const char* accept_label, const char* back_label)
 {
@@ -4958,37 +4912,6 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
     }
 }
 
-static void open_blessing_exchange(void)
-{
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=back */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
-    if (!use_information_scene) {
-        log_error("adjust_blessing_threshold_menu: semantic scene unavailable");
-        return;
-    }
-
-    log_debug("[metarun-esc-trace] open_blessing_exchange enter info_scene=%d",
-        use_information_scene ? 1 : 0);
-
-    if (!use_information_scene) {
-        log_error("open_blessing_exchange: semantic scene unavailable");
-        return;
-    }
-
-    (void)open_blessing_exchange_information_scene(steamdeck,
-        accept_label, back_label);
-    ui_information_scene_leave(&info_scope);
-}
-
 typedef struct metarun_stats_view_model {
     const char* diff_name;
     const char* threshold_mode;
@@ -6018,7 +5941,8 @@ static bool metarun_build_stats_browser_scene(app_ui_scene* scene,
     return true;
 }
 
-static void adjust_blessing_threshold_menu(void)
+static bool metarun_adjust_blessing_threshold_information_scene(
+    bool steamdeck, const char* accept_label, const char* back_label)
 {
     const metarun_blessing_threshold_mode order[] = {
         METARUN_BLESSING_THRESHOLD_EASIER,
@@ -6033,22 +5957,7 @@ static void adjust_blessing_threshold_menu(void)
     };
     const int option_count = (int)N_ELEMENTS(order);
 
-    if (current_run < 0 || current_run >= metarun_max)
-        return;
-
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-
     metarun_blessing_threshold_mode current_mode = metarun_get_threshold_mode(&metar);
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-
-    if (steamdeck) {
-        /* Steam Deck UI: A=accept, B=back */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
     int selection = 0;
     for (int i = 0; i < option_count; i++) {
         if (order[i] == current_mode) {
@@ -6059,168 +5968,166 @@ static void adjust_blessing_threshold_menu(void)
 
     bool accepted = false;
     metarun_blessing_threshold_mode chosen_mode = current_mode;
+    bool semantic_ok = true;
 
-    if (use_information_scene) {
-        bool semantic_ok = true;
+    while (true) {
+        app_ui_scene scene;
+        app_ui_panel *panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
 
-        while (true) {
-            app_ui_scene scene;
-            app_ui_panel *panel;
-            char subtitle[APP_UI_TEXT_MAX];
-            int key;
+        strnfmt(subtitle, sizeof(subtitle), "Current: %s",
+            threshold_mode_name(current_mode));
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "Blessing Threshold", TERM_SLATE, subtitle);
+        if (!panel) {
+            semantic_ok = false;
+            break;
+        }
 
-            strnfmt(subtitle, sizeof(subtitle), "Current: %s",
-                threshold_mode_name(current_mode));
-            panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
-                "Blessing Threshold", TERM_SLATE, subtitle);
-            if (!panel) {
+        for (int i = 0; i < option_count; i++) {
+            metarun_blessing_threshold_mode mode = order[i];
+            u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
+            byte attr = (mode == METARUN_BLESSING_THRESHOLD_EASIER)
+                ? TERM_L_GREEN
+                : (mode == METARUN_BLESSING_THRESHOLD_HARDER)
+                    ? TERM_ORANGE : TERM_WHITE;
+            char key_buf[APP_UI_KEY_MAX];
+            char meta[APP_UI_META_MAX];
+
+            strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
+            strnfmt(meta, sizeof(meta), "%lu pts",
+                (unsigned long)mode_threshold);
+            if (!app_ui_panel_add_row(panel, i, attr, true,
+                    i == selection, key_buf, labels[i], meta))
+            {
                 semantic_ok = false;
                 break;
             }
-
-            for (int i = 0; i < option_count; i++) {
-                metarun_blessing_threshold_mode mode = order[i];
-                u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
-                byte attr = (mode == METARUN_BLESSING_THRESHOLD_EASIER)
-                    ? TERM_L_GREEN
-                    : (mode == METARUN_BLESSING_THRESHOLD_HARDER)
-                        ? TERM_ORANGE : TERM_WHITE;
-                char key_buf[APP_UI_KEY_MAX];
-                char meta[APP_UI_META_MAX];
-
-                strnfmt(key_buf, sizeof(key_buf), "%c", (char)('a' + i));
-                strnfmt(meta, sizeof(meta), "%lu pts",
-                    (unsigned long)mode_threshold);
-                if (!app_ui_panel_add_row(panel, i, attr, true,
-                        i == selection, key_buf, labels[i], meta))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-            }
-            if (!semantic_ok)
-                break;
-
-            {
-                metarun_blessing_threshold_mode mode = order[selection];
-                u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
-                char buf[APP_UI_TEXT_MAX];
-
-                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
-                    "Selected Mode");
-                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
-                        labels[selection]))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                strnfmt(buf, sizeof(buf), "Requires %lu points per blessing.",
-                    (unsigned long)mode_threshold);
-                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, buf))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                if (mode == current_mode
-                    && !app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
-                        "Current setting."))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-                if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_SLATE,
-                        descs[selection]))
-                {
-                    semantic_ok = false;
-                    break;
-                }
-            }
-
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Apply");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Cancel");
-
-            if (!ui_information_scene_present_ui(&scene)) {
-                semantic_ok = false;
-                break;
-            }
-
-            key = ui_information_scene_wait_key_nonrepeat();
-            if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
-                || (!steamdeck && (key == 'h' || key == 'H')))
-            {
-                metarun_ui_clear_pending_input();
-                break;
-            }
-            if (key == '\r' || key == '\n'
-                || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
-            {
-                accepted = true;
-                chosen_mode = order[selection];
-                metarun_ui_clear_pending_input();
-                break;
-            }
-            if (key == '8' || key == 'k' || key == '-') {
-                selection = (selection + option_count - 1) % option_count;
-                continue;
-            }
-            if (key == '2' || key == 'j' || key == '+') {
-                selection = (selection + 1) % option_count;
-                continue;
-            }
-            if (key >= 'a' && key < 'a' + option_count) {
-                selection = key - 'a';
-                continue;
-            }
-            if (key >= 'A' && key < 'A' + option_count) {
-                selection = key - 'A';
-                continue;
-            }
         }
-
-        if (accepted && chosen_mode != current_mode) {
-            metarun_set_threshold_mode(&metar, chosen_mode);
-            update_blessing_ledger(&metar);
-            if (!sync_current_metarun_slot(false)) {
-                log_warn("Threshold change: unable to sync metarun slot (idx=%d, max=%d)", current_run, metarun_max);
-            }
-            save_metaruns();
-        }
-
-        if (accepted) {
-            char line1[APP_UI_TEXT_MAX];
-            char line2[APP_UI_TEXT_MAX];
-            const char *lines[2];
-            byte attrs[2];
-            int line_count = 0;
-
-            if (chosen_mode != current_mode) {
-                u32b new_threshold = metarun_threshold_value(&metar);
-                strnfmt(line1, sizeof(line1), "Blessing threshold set to %s.",
-                    threshold_mode_name(chosen_mode));
-                strnfmt(line2, sizeof(line2),
-                    "New requirement: %lu points per blessing.",
-                    (unsigned long)new_threshold);
-                lines[line_count] = line1;
-                attrs[line_count++] = TERM_L_GREEN;
-                lines[line_count] = line2;
-                attrs[line_count++] = TERM_WHITE;
-            } else {
-                lines[line_count] = "Blessing threshold remains unchanged.";
-                attrs[line_count++] = TERM_L_DARK;
-            }
-            (void)metarun_ui_show_notice_modal("Blessing Threshold",
-                TERM_YELLOW, lines, attrs, line_count, steamdeck, accept_label);
-        }
-
-        ui_information_scene_leave(&info_scope);
         if (!semantic_ok)
-            log_error("adjust_blessing_threshold_menu: failed to publish semantic scene");
-        return;
+            break;
+
+        {
+            metarun_blessing_threshold_mode mode = order[selection];
+            u32b mode_threshold = runtype_threshold_for_mode(metar.type, mode);
+            char buf[APP_UI_TEXT_MAX];
+
+            app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                "Selected Mode");
+            if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                    labels[selection]))
+            {
+                semantic_ok = false;
+                break;
+            }
+            strnfmt(buf, sizeof(buf), "Requires %lu points per blessing.",
+                (unsigned long)mode_threshold);
+            if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, buf))
+            {
+                semantic_ok = false;
+                break;
+            }
+            if (mode == current_mode
+                && !app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                    "Current setting."))
+            {
+                semantic_ok = false;
+                break;
+            }
+            if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_SLATE,
+                    descs[selection]))
+            {
+                semantic_ok = false;
+                break;
+            }
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Enter", "Apply");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            steamdeck ? back_label : "Esc", "Cancel");
+
+        if (!ui_information_scene_present_ui(&scene)) {
+            semantic_ok = false;
+            break;
+        }
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
+            || (!steamdeck && (key == 'h' || key == 'H')))
+        {
+            metarun_ui_clear_pending_input();
+            break;
+        }
+        if (key == '\r' || key == '\n'
+            || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
+        {
+            accepted = true;
+            chosen_mode = order[selection];
+            metarun_ui_clear_pending_input();
+            break;
+        }
+        if (key == '8' || key == 'k' || key == '-') {
+            selection = (selection + option_count - 1) % option_count;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+') {
+            selection = (selection + 1) % option_count;
+            continue;
+        }
+        if (key >= 'a' && key < 'a' + option_count) {
+            selection = key - 'a';
+            continue;
+        }
+        if (key >= 'A' && key < 'A' + option_count) {
+            selection = key - 'A';
+            continue;
+        }
     }
+
+    if (accepted && chosen_mode != current_mode) {
+        metarun_set_threshold_mode(&metar, chosen_mode);
+        update_blessing_ledger(&metar);
+        if (!sync_current_metarun_slot(false)) {
+            log_warn("Threshold change: unable to sync metarun slot (idx=%d, max=%d)", current_run, metarun_max);
+        }
+        save_metaruns();
+    }
+
+    if (accepted) {
+        char line1[APP_UI_TEXT_MAX];
+        char line2[APP_UI_TEXT_MAX];
+        const char *lines[2];
+        byte attrs[2];
+        int line_count = 0;
+
+        if (chosen_mode != current_mode) {
+            u32b new_threshold = metarun_threshold_value(&metar);
+            strnfmt(line1, sizeof(line1), "Blessing threshold set to %s.",
+                threshold_mode_name(chosen_mode));
+            strnfmt(line2, sizeof(line2),
+                "New requirement: %lu points per blessing.",
+                (unsigned long)new_threshold);
+            lines[line_count] = line1;
+            attrs[line_count++] = TERM_L_GREEN;
+            lines[line_count] = line2;
+            attrs[line_count++] = TERM_WHITE;
+        } else {
+            lines[line_count] = "Blessing threshold remains unchanged.";
+            attrs[line_count++] = TERM_L_DARK;
+        }
+        if (!metarun_ui_show_notice_modal("Blessing Threshold",
+                TERM_YELLOW, lines, attrs, line_count, steamdeck,
+                accept_label))
+        {
+            semantic_ok = false;
+        }
+    }
+
+    return semantic_ok;
 }
 
 void print_metarun_stats(void)
@@ -6287,22 +6194,42 @@ metarun_redraw:
         }
 
         if (key == 'b' || key == 'B') {
-            open_blessing_exchange();
+            if (!open_blessing_exchange_information_scene(view.steamdeck,
+                    view.continue_label, view.back_label))
+            {
+                log_error("print_metarun_stats: blessing exchange scene failed");
+            }
             goto metarun_redraw;
         } else if (key == 'c' || key == 'C') {
             choose_difficulty_menu(false);
             goto metarun_redraw;
         } else if (key == 'f' || key == 'F') {
-            adjust_blessing_threshold_menu();
+            if (!metarun_adjust_blessing_threshold_information_scene(
+                    view.steamdeck, view.continue_label, view.back_label))
+            {
+                log_error("print_metarun_stats: threshold scene failed");
+            }
             goto metarun_redraw;
         } else if (key == 'u' || key == 'U') {
-            show_all_active_curses();
+            if (!metarun_show_active_effects_information_scene(
+                    view.steamdeck, view.continue_label, view.back_label))
+            {
+                log_error("print_metarun_stats: active effects scene failed");
+            }
             goto metarun_redraw;
         } else if (key == 's' || key == 'S') {
-            list_metaruns();
+            if (!metarun_list_history_information_scene(view.steamdeck,
+                    view.continue_label, view.back_label))
+            {
+                log_error("print_metarun_stats: history scene failed");
+            }
             goto metarun_redraw;
         } else if (key == 't' || key == 'T') {
-            show_completed_quests_summary();
+            if (!metarun_show_completed_quests_information_scene(
+                    view.steamdeck, view.continue_label, view.back_label))
+            {
+                log_error("print_metarun_stats: completed quests scene failed");
+            }
             goto metarun_redraw;
         } else if ((key == 'x' || key == 'X') && view.blitz_enabled) {
             ui_information_scene_leave(&info_scope);
@@ -6644,23 +6571,9 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
 }
 
 /* compact table of all meta-runs */
-void list_metaruns(void)
+static bool metarun_list_history_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
 {
-    ui_information_scene_scope info_scope;
-    bool use_information_scene = ui_information_scene_enter(&info_scope);
-    bool steamdeck = steamdeck_controls_active();
-    char accept_label[16] = "";
-    char back_label[16] = "";
-    if (steamdeck) {
-        /* Steam Deck UI: A=ok */
-        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label, sizeof(accept_label));
-        metarun_prompt_label(steamdeck_back_key(), "B", back_label, sizeof(back_label));
-    }
-    if (!use_information_scene) {
-        log_error("list_metaruns: semantic scene unavailable");
-        return;
-    }
-
     refresh_current_metar_score();
 
     if (metarun_max > 0 && metaruns) {
@@ -6691,12 +6604,11 @@ void list_metaruns(void)
         if (metarun_max <= 0 || !metaruns) {
             const char *lines[] = { "No metaruns have been recorded yet." };
             const byte attrs[] = { TERM_L_DARK };
-            (void)metarun_ui_show_notice_modal("Meta-run History",
+            semantic_ok = metarun_ui_show_notice_modal("Meta-run History",
                 TERM_L_GREEN, lines, attrs, (int)N_ELEMENTS(lines), steamdeck,
                 accept_label);
-            ui_information_scene_leave(&info_scope);
             order = mem_free(order);
-            return;
+            return semantic_ok;
         }
 
         while (true) {
@@ -6868,11 +6780,38 @@ void list_metaruns(void)
             break;
         }
 
-        ui_information_scene_leave(&info_scope);
-        if (!semantic_ok)
-            log_error("list_metaruns: failed to publish semantic scene");
         order = mem_free(order);
+        return semantic_ok;
     }
+}
+
+void list_metaruns(void)
+{
+    ui_information_scene_scope info_scope;
+    bool use_information_scene = ui_information_scene_enter(&info_scope);
+    bool steamdeck = steamdeck_controls_active();
+    char accept_label[16] = "";
+    char back_label[16] = "";
+
+    if (steamdeck) {
+        /* Steam Deck UI: A=ok */
+        metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
+            sizeof(accept_label));
+        metarun_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+    }
+    if (!use_information_scene) {
+        log_error("list_metaruns: semantic scene unavailable");
+        return;
+    }
+
+    if (!metarun_list_history_information_scene(steamdeck, accept_label,
+            back_label))
+    {
+        log_error("list_metaruns: failed to publish semantic scene");
+    }
+
+    ui_information_scene_leave(&info_scope);
 }
 
 void show_known_curses_menu(void)

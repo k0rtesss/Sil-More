@@ -5,12 +5,16 @@
  */
 
 #include "angband.h"
+#include "app/app-session.h"
+#include "app/app-ui.h"
 #include "externs.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "platform-input.h"
 #include "score/score_io.h"
+#include "ui/ui-information-scene.h"
 
 #ifdef ALLOW_TEMPLATES
 
@@ -422,20 +426,6 @@ static int combined_level(int skill)
     return v;
 }
 
-static byte rank_colour(int lvl)
-{
-    if (lvl == 2)
-        return TERM_L_GREEN;
-    if (lvl == 1)
-        return TERM_GREEN;
-    if (lvl == -1)
-        return TERM_RED;
-    if (lvl == -2)
-        return TERM_L_RED;
-
-    return TERM_WHITE;
-}
-
 static const char* skill_tag(int s)
 {
     static const char* tags[] = {
@@ -445,251 +435,459 @@ static const char* skill_tag(int s)
     return tags[s];
 }
 
-/*
- * Show only the flags that are active for the current character.
- */
-void dbg_show_active_flags(void)
+static void dbg_show_active_flags_append_name(char* buf, size_t buflen,
+    cptr name)
+{
+    if (!buf || buflen == 0 || !name || !name[0])
+        return;
+
+    if (buf[0])
+        SDL_strlcat(buf, ", ", buflen);
+    SDL_strlcat(buf, name, buflen);
+}
+
+static void dbg_show_active_flags_collect_group_text(int set, u32b bits,
+    char* buf, size_t buflen)
+{
+    if (!buf || buflen == 0)
+        return;
+
+    buf[0] = '\0';
+
+    for (size_t i = 0; i < N_ELEMENTS(info_flags); i++)
+    {
+        flag_name* f = info_flags + i;
+        bool present = false;
+
+        if (f->set != set)
+            continue;
+
+        if (f->set == CUR)
+            present = (curse_flag_count_cur(f->flag) > 0);
+        else
+            present = (bits & f->flag) != 0;
+
+        if (!present)
+            continue;
+
+        dbg_show_active_flags_append_name(buf, buflen, f->name);
+    }
+
+    if (!buf[0])
+        SDL_strlcpy(buf, "(none)", buflen);
+}
+
+static void dbg_show_active_flags_collect_curse_rhf_text(char* buf,
+    size_t buflen)
+{
+    if (!buf || buflen == 0)
+        return;
+
+    buf[0] = '\0';
+
+    for (size_t i = 0; i < N_ELEMENTS(info_flags); i++)
+    {
+        flag_name* f = info_flags + i;
+
+        if (f->set != RHF)
+            continue;
+        if (curse_flag_count_rhf(f->flag) <= 0)
+            continue;
+
+        dbg_show_active_flags_append_name(buf, buflen, f->name);
+    }
+
+    if (!buf[0])
+        SDL_strlcpy(buf, "(none)", buflen);
+}
+
+static void dbg_show_active_flags_collect_skill_text(char* buf, size_t buflen)
+{
+    if (!buf || buflen == 0)
+        return;
+
+    buf[0] = '\0';
+
+    for (int s = 0; s < S_MAX; s++)
+    {
+        int lvl = combined_level(s);
+        char tok[20];
+
+        if (!lvl)
+            continue;
+
+        strnfmt(tok, sizeof(tok), "%s:%s", skill_tag(s), rank_name(lvl));
+        dbg_show_active_flags_append_name(buf, buflen, tok);
+    }
+
+    if (!buf[0])
+        SDL_strlcpy(buf, "(none)", buflen);
+}
+
+static bool dbg_show_active_flags_add_panel_line(app_ui_panel* panel,
+    bool detail, byte attr, cptr text)
+{
+    cptr line = (text && text[0]) ? text : " ";
+
+    if (!panel)
+        return false;
+
+    return detail ? app_ui_panel_add_detail_line(panel, attr, line)
+                  : app_ui_panel_add_body_line(panel, attr, line);
+}
+
+static bool dbg_show_active_flags_append_wrapped_text(app_ui_panel* panel,
+    bool detail, byte attr, cptr text, int width)
+{
+    const char* p = text ? text : "";
+    bool wrote_any = false;
+
+    if (!panel || width <= 0)
+        return false;
+
+    while (*p)
+    {
+        char line[256];
+        const char* start;
+        int len = 0;
+        int last_space = -1;
+
+        while (*p == ' ')
+            p++;
+
+        if (!*p)
+            break;
+
+        start = p;
+        while (*p && *p != '\n')
+        {
+            char ch = isprint((unsigned char)*p) ? *p : ' ';
+
+            if (len < MIN(width, (int)sizeof(line) - 1))
+            {
+                if (ch == ' ')
+                    last_space = len;
+                line[len++] = ch;
+                p++;
+                continue;
+            }
+
+            break;
+        }
+
+        if (*p == '\n')
+        {
+            p++;
+        }
+        else if (*p && len >= width && last_space >= 0)
+        {
+            p = start + last_space + 1;
+            len = last_space;
+        }
+
+        while (len > 0 && line[len - 1] == ' ')
+            len--;
+
+        line[len] = '\0';
+        if (!dbg_show_active_flags_add_panel_line(panel, detail, attr, line))
+            return false;
+        wrote_any = true;
+    }
+
+    return wrote_any
+        ? true
+        : dbg_show_active_flags_add_panel_line(panel, detail, attr, " ");
+}
+
+static bool dbg_show_active_flags_scene_enter(ui_information_scene_scope* scope,
+    bool* overlay_dungeon)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (overlay_dungeon)
+        *overlay_dungeon = false;
+    if (!scope || !session)
+        return false;
+    if (!ui_information_scene_enter(scope))
+        return false;
+
+    snapshot = app_session_snapshot(session);
+    if (overlay_dungeon && snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON)
+        *overlay_dungeon = true;
+    return true;
+}
+
+static bool dbg_show_active_flags_build_ui_scene(app_ui_scene* scene,
+    bool overlay_dungeon)
 {
     player_race* rp_ptr = &p_info[p_ptr->prace];
     character_profile* current_character_profile = &c_info[p_ptr->pcharacter];
     u32b rhf_bits = rp_ptr->flags | current_character_profile->flags;
     u32b unq_bits = current_character_profile->flags_u;
-    struct
-    {
-        int set;
-        u32b bits;
-        cptr tag;
-        byte clr;
-    } grp[] = {
-        { RHF, rhf_bits, "RHF (Race/Character flags)", TERM_L_GREEN },
-        { UNQ, unq_bits, "UNQ (Unique-character flags)", TERM_L_BLUE },
-        { CUR, 0, "CUR (Curse flags)", TERM_L_RED },
-    };
-    const int BUF_LEN = 79;
-    char buf[BUF_LEN + 1];
-    int row = 2;
+    char subtitle[160];
+    char rhf_buf[2048];
+    char unq_buf[1024];
+    char cur_buf[2048];
+    char curse_rhf_buf[1024];
+    char skill_buf[512];
+    app_ui_panel* panel;
+    int active_curse_lines = 0;
 
-    Term_clear();
+    if (!scene)
+        return false;
+
+    dbg_show_active_flags_collect_group_text(RHF, rhf_bits, rhf_buf,
+        sizeof(rhf_buf));
+    dbg_show_active_flags_collect_group_text(UNQ, unq_bits, unq_buf,
+        sizeof(unq_buf));
+    dbg_show_active_flags_collect_group_text(CUR, 0, cur_buf,
+        sizeof(cur_buf));
+    dbg_show_active_flags_collect_curse_rhf_text(curse_rhf_buf,
+        sizeof(curse_rhf_buf));
+    dbg_show_active_flags_collect_skill_text(skill_buf, sizeof(skill_buf));
+
+    app_ui_scene_init(scene);
+    if (overlay_dungeon)
+        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
+    panel = app_ui_scene_append_panel(scene,
+        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->accent_attr = TERM_ORANGE;
+    app_ui_panel_set_widths(panel,
+        overlay_dungeon ? 1180 : 1080,
+        overlay_dungeon ? 1900 : 1700);
+    app_ui_panel_set_title(panel, TERM_ORANGE, "Active Flags");
+    strnfmt(subtitle, sizeof(subtitle), "%s of the %s",
+        c_name + current_character_profile->name, p_name + rp_ptr->name);
+    app_ui_panel_set_subtitle(panel, TERM_L_WHITE, subtitle);
+    app_ui_panel_set_detail_title(panel, TERM_L_RED,
+        "Active curses and blessings");
+
 #ifdef DEBUG_CURSES
-    Term_putstr(0, row++, -1, TERM_YELLOW,
-        "*** DEBUG: meta-run DEBUG - a:add-curse  c:clear-all  e:+death  1-3:+sils  any:key:exit ***");
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_YELLOW,
+            "Debug playground: add curses, clear stacks, force death, or trigger an escape."))
+    {
+        return false;
+    }
 #endif
 
-    for (size_t g = 0; g < N_ELEMENTS(grp); g++)
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_L_GREEN,
+            "Race/Character flags"))
     {
-        Term_putstr(0, row++, -1, grp[g].clr, grp[g].tag);
-
-        buf[0] = '\0';
-        size_t pos = 0;
-
-        for (size_t i = 0; i < N_ELEMENTS(info_flags); i++)
-        {
-            flag_name* f = info_flags + i;
-            bool present = false;
-
-            if (f->set != grp[g].set)
-                continue;
-
-            if (f->set == CUR)
-                present = (curse_flag_count_cur(f->flag) > 0);
-            else
-                present = (grp[g].bits & f->flag) != 0;
-
-            if (!present)
-                continue;
-
-            size_t need = (pos ? 2 : 0) + strlen(f->name);
-            if (pos + need > (size_t)BUF_LEN)
-            {
-                Term_putstr(0, row++, -1, TERM_WHITE, buf);
-                pos = 0;
-                buf[0] = '\0';
-            }
-
-            if (pos)
-            {
-                buf[pos++] = ',';
-                buf[pos++] = ' ';
-            }
-
-            memcpy(buf + pos, f->name, strlen(f->name));
-            pos += strlen(f->name);
-            buf[pos] = '\0';
-        }
-
-        if (pos)
-            Term_putstr(0, row++, -1, TERM_WHITE, buf);
-
-        row++;
+        return false;
+    }
+    if (!dbg_show_active_flags_append_wrapped_text(panel, false, TERM_WHITE,
+            rhf_buf, 44))
+    {
+        return false;
     }
 
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_L_BLUE,
+            "Unique-character flags"))
     {
-        Term_putstr(0, row++, -1, TERM_ORANGE,
-            "CUR  RHF (RHF flags coming from active curses)");
-
-        const int buf_len = 79;
-        char rhf_buf[buf_len + 1];
-        size_t pos = 0;
-        rhf_buf[0] = '\0';
-
-        for (size_t i = 0; i < N_ELEMENTS(info_flags); i++)
-        {
-            flag_name* f = info_flags + i;
-            size_t need;
-
-            if (f->set != RHF)
-                continue;
-            if (curse_flag_count_rhf(f->flag) <= 0)
-                continue;
-
-            need = (pos ? 2 : 0) + strlen(f->name);
-            if (pos + need > (size_t)buf_len)
-            {
-                Term_putstr(0, row++, -1, TERM_WHITE, rhf_buf);
-                pos = 0;
-                rhf_buf[0] = '\0';
-            }
-
-            if (pos)
-            {
-                rhf_buf[pos++] = ',';
-                rhf_buf[pos++] = ' ';
-            }
-
-            memcpy(rhf_buf + pos, f->name, strlen(f->name));
-            pos += strlen(f->name);
-            rhf_buf[pos] = '\0';
-        }
-
-        if (pos)
-            Term_putstr(0, row++, -1, TERM_WHITE, rhf_buf);
-
-        row++;
+        return false;
+    }
+    if (!dbg_show_active_flags_append_wrapped_text(panel, false, TERM_WHITE,
+            unq_buf, 44))
+    {
+        return false;
     }
 
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_L_RED,
+            "Curse flags"))
     {
-        Term_putstr(0, row++, -1, TERM_SLATE, "Combined skill ranks:");
-
-        int col = 2;
-        for (int s = 0; s < S_MAX; s++)
-        {
-            int lvl = combined_level(s);
-            char tok[20];
-
-            if (!lvl)
-                continue;
-
-            strnfmt(tok, sizeof(tok), "%s:%s", skill_tag(s), rank_name(lvl));
-
-            if (col + (int)strlen(tok) > 78)
-            {
-                row++;
-                col = 2;
-            }
-
-            Term_putstr(col, row, -1, rank_colour(lvl), tok);
-            col += strlen(tok);
-
-            if (s < S_MAX - 1)
-            {
-                Term_putch(col++, row, TERM_WHITE, ',');
-                Term_putch(col++, row, TERM_WHITE, ' ');
-            }
-        }
-
-        row += 2;
+        return false;
+    }
+    if (!dbg_show_active_flags_append_wrapped_text(panel, false, TERM_WHITE,
+            cur_buf, 44))
+    {
+        return false;
     }
 
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_ORANGE,
+            "RHF from active curses"))
     {
-        Term_putstr(0, row++, -1, TERM_L_RED,
-            "Active curses & blessings (id : name [stacks])");
+        return false;
+    }
+    if (!dbg_show_active_flags_append_wrapped_text(panel, false, TERM_WHITE,
+            curse_rhf_buf, 44))
+    {
+        return false;
+    }
 
-        for (int id = 0; id < z_info->cu_max; id++)
-        {
-            int cnt = CURSE_GET(id);
-            bool is_curse;
-            int magnitude;
-            cptr display_name;
+    if (!dbg_show_active_flags_add_panel_line(panel, false, TERM_SLATE,
+            "Combined skill ranks"))
+    {
+        return false;
+    }
+    if (!dbg_show_active_flags_append_wrapped_text(panel, false, TERM_WHITE,
+            skill_buf, 44))
+    {
+        return false;
+    }
 
-            if (!cnt)
-                continue;
+    for (int id = 0; id < z_info->cu_max; id++)
+    {
+        int cnt = CURSE_GET(id);
+        bool is_curse;
+        int magnitude;
+        cptr display_name;
+        byte attr;
+        char line[160];
 
-            is_curse = (cnt > 0);
-            magnitude = is_curse ? cnt : -cnt;
-            display_name = cu_name + (is_curse ? cu_info[id].name
-                                               : (cu_info[id].blessing_name
-                                                     ? cu_info[id].blessing_name
-                                                     : cu_info[id].name));
+        if (!cnt)
+            continue;
+
+        is_curse = (cnt > 0);
+        magnitude = is_curse ? cnt : -cnt;
+        display_name = cu_name + (is_curse ? cu_info[id].name
+                                           : (cu_info[id].blessing_name
+                                                 ? cu_info[id].blessing_name
+                                                 : cu_info[id].name));
+        attr = is_curse ? TERM_WHITE : TERM_L_GREEN;
 #ifdef DEBUG_CURSES
-            {
-                const char* pow = is_curse ? (cu_text + cu_info[id].power)
-                                           : (cu_info[id].blessing_power
-                                                 ? (cu_text + cu_info[id].blessing_power)
-                                                 : NULL);
-                c_put_str(is_curse ? TERM_WHITE : TERM_L_GREEN,
-                    format("  %2d : %-26s [%d]  - %s", id, display_name,
-                        magnitude, pow ? pow : ""),
-                    row++, 2);
-            }
+        {
+            cptr power = is_curse ? (cu_text + cu_info[id].power)
+                                  : (cu_info[id].blessing_power
+                                        ? (cu_text + cu_info[id].blessing_power)
+                                        : NULL);
+            strnfmt(line, sizeof(line), "%2d: %s [%d]%s%s",
+                id, display_name, magnitude,
+                power ? " - " : "", power ? power : "");
+        }
 #else
-            c_put_str(is_curse ? TERM_WHITE : TERM_L_GREEN,
-                format("  %2d : %-30s [%d]", id, display_name, magnitude),
-                row++, 2);
+        strnfmt(line, sizeof(line), "%2d: %s [%d]", id, display_name,
+            magnitude);
 #endif
+        if (!dbg_show_active_flags_append_wrapped_text(panel, true, attr, line,
+                48))
+        {
+            return false;
         }
-
-        row++;
-
-#ifdef DEBUG_CURSES
-        Term_putstr(0, row++, -1, TERM_L_DARK,
-            "[a] add random curse   [x] clear all   [e] +death   [1-3] escape   [any other] quit");
-#else
-        Term_putstr(0, row++, -1, TERM_L_DARK,
-            "[a] add random curse   [any key] quit");
-#endif
+        active_curse_lines++;
     }
+
+    if (!active_curse_lines
+        && !dbg_show_active_flags_add_panel_line(panel, true, TERM_SLATE,
+            "(none)"))
+    {
+        return false;
+    }
+
+    if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "a", "Add curse"))
+    {
+        return false;
+    }
+#ifdef DEBUG_CURSES
+    if (!app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "x", "Clear all"))
+    {
+        return false;
+    }
+    if (!app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "e", "+death"))
+    {
+        return false;
+    }
+    if (!app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "r", "Reset scores"))
+    {
+        return false;
+    }
+    if (!app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "1-3", "Escape"))
+    {
+        return false;
+    }
+    if (!app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
+            "d", "Debug"))
+    {
+        return false;
+    }
+    if (!app_ui_panel_add_footer_action(panel, 7, TERM_WHITE, true,
+            "Esc", "Back"))
+    {
+        return false;
+    }
+#else
+    if (!app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back"))
+    {
+        return false;
+    }
+#endif
+
+    return true;
+}
+
+static bool dbg_show_active_flags_semantic(void)
+{
+    bool steamdeck = steamdeck_controls_active();
 
     while (true)
     {
-        int ch = inkey();
+        ui_information_scene_scope scope;
+        app_ui_scene scene;
+        bool overlay_dungeon = false;
+        int ch;
+
+        if (!dbg_show_active_flags_scene_enter(&scope, &overlay_dungeon))
+        {
+            log_error("active flags: semantic scene unavailable");
+            quit("Active flags require the snapshot UI renderer.");
+            return false;
+        }
+        if (!dbg_show_active_flags_build_ui_scene(&scene, overlay_dungeon)
+            || !ui_information_scene_present_ui(&scene))
+        {
+            ui_information_scene_leave(&scope);
+            log_error("active flags: semantic scene presentation failed");
+            quit("Active flags could not be displayed.");
+            return false;
+        }
+
+        ch = ui_information_scene_wait_key_nonrepeat();
+        ui_information_scene_leave(&scope);
+
+        if (steamdeck && ch == steamdeck_back_key())
+            ch = ESCAPE;
 
         if (ch == 'a')
         {
             int id = menu_choose_one_curse(0);
-            add_curse_stack(id);
-            dbg_show_active_flags();
-            break;
-        }
-#ifdef DEBUG_CURSES
-        else if (ch == 'x')
-        {
-            if (get_check("Erase ALL curses for this meta-run? "))
-            {
-                metarun_clear_all_curses();
-                dbg_show_active_flags();
-                break;
-            }
+
+            if (id >= 0)
+                add_curse_stack(id);
             continue;
         }
-        else if (ch == 'e')
+#ifdef DEBUG_CURSES
+        if (ch == 'x')
+        {
+            if (get_check("Erase ALL curses for this meta-run? "))
+                metarun_clear_all_curses();
+            continue;
+        }
+        if (ch == 'e')
         {
             metarun_update_on_exit(true, false, 0, 0);
-            dbg_show_active_flags();
-            break;
+            continue;
         }
-        else if (ch == 'r')
+        if (ch == 'r')
         {
             clear_scorefile();
-            dbg_show_active_flags();
-            break;
+            continue;
         }
-        else if (ch >= '1' && ch <= '3')
+        if (ch >= '1' && ch <= '3')
         {
             do_cmd_escape((byte)(ch - '0'));
-            dbg_show_active_flags();
-            break;
+            continue;
         }
-        else if (ch == 'd')
+        if (ch == 'd')
         {
             if (!(p_ptr->noscore & 0x0008))
             {
@@ -698,12 +896,23 @@ void dbg_show_active_flags(void)
                     (unsigned)p_ptr->noscore, savefile);
             }
             do_cmd_debug();
-            dbg_show_active_flags();
-            break;
+            continue;
         }
 #endif
+
         break;
     }
+
+    return true;
+}
+
+/*
+ * Show only the flags that are active for the current character.
+ */
+void dbg_show_active_flags(void)
+{
+    if (dbg_show_active_flags_semantic())
+        return;
 }
 
 #endif /* ALLOW_TEMPLATES */

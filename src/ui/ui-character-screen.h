@@ -14,8 +14,6 @@ enum {
 };
 
 void display_player(int mode);
-void display_player_compact_stats_skills_highlighted(int selected_skill);
-void display_player_compact_stats_skills_highlighted_stat(int selected_stat);
 bool build_character_sheet_ui_scene(app_ui_scene* scene, cptr prompt_text);
 void display_character_tutorial(void);
 

@@ -11,6 +11,7 @@ typedef struct ui_information_scene_scope {
     bool active;
     bool previous_active;
     bool published_overlay;
+    bool restore_snapshot;
     app_snapshot previous_snapshot;
     app_menu_snapshot* previous_menu_snapshot;
     app_wait_scope wait_scope;
@@ -18,6 +19,8 @@ typedef struct ui_information_scene_scope {
 
 bool ui_information_scene_supported(void);
 bool ui_information_scene_set_refresh_enabled(bool enabled);
+bool ui_information_scene_claim_input(ui_information_scene_scope* scope,
+    u16b reason);
 bool ui_information_scene_enter(ui_information_scene_scope* scope);
 bool ui_information_scene_present_ui(const app_ui_scene* scene);
 bool ui_information_scene_show_monster_recall(int r_idx,

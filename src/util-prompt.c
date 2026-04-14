@@ -16,12 +16,30 @@ static char prompt_inkey_with_wait_reason(u16b reason)
 {
     app_wait_scope scope;
     app_session* session = app_session_current();
-    char ch;
+    app_input input;
+
+    if (!session)
+        return ESCAPE;
 
     app_session_push_wait_scope(session, &scope, reason, 0, 0);
-    ch = inkey();
-    app_session_pop_wait_scope(session, &scope);
-    return ch;
+
+    while (true)
+    {
+        while (app_session_pop_input(session, &input))
+        {
+            if (input.layer != APP_INPUT_LAYER_LEGACY
+                || input.type != APP_INPUT_TYPE_KEY)
+            {
+                continue;
+            }
+
+            app_session_pop_wait_scope(session, &scope);
+            return (char)(input.payload.key.logical_key & 0xFFu);
+        }
+
+        (void)Term_xtra(TERM_XTRA_EVENT, 1);
+        (void)Term_xtra(TERM_XTRA_FRESH, 0);
+    }
 }
 
 void prompt_snapshot_push_silent_clear(void)
