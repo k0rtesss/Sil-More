@@ -10,30 +10,6 @@ static void app_ui_copy_text(char* dst, size_t dst_size, cptr text)
     SDL_strlcpy(dst, text ? text : "", dst_size);
 }
 
-static app_ui_document_op* app_ui_panel_append_document_op(app_ui_scene* scene,
-    app_ui_panel* panel)
-{
-    app_ui_document_op* op;
-
-    if (!scene || !panel)
-        return NULL;
-    if (scene->document_op_count >= APP_UI_DOCUMENT_OP_MAX)
-        return NULL;
-
-    if (panel->document_op_count == 0)
-        panel->document_op_first = scene->document_op_count;
-    else if ((u16b)(panel->document_op_first + panel->document_op_count)
-        != scene->document_op_count)
-    {
-        return NULL;
-    }
-
-    op = &scene->document_ops[scene->document_op_count++];
-    memset(op, 0, sizeof(*op));
-    panel->document_op_count++;
-    return op;
-}
-
 static app_ui_rich_paragraph* app_ui_panel_append_rich_paragraph(
     app_ui_scene* scene, app_ui_panel* panel)
 {
@@ -97,22 +73,6 @@ static app_ui_rich_run* app_ui_panel_append_rich_run(app_ui_scene* scene,
     memset(run, 0, sizeof(*run));
     paragraph->run_count++;
     return run;
-}
-
-static void app_ui_panel_note_document_extent(app_ui_panel* panel, s16b row,
-    s16b col, u16b width)
-{
-    int cols;
-
-    if (!panel)
-        return;
-
-    if (row >= 0 && (u16b)(row + 1) > panel->document_rows)
-        panel->document_rows = (u16b)(row + 1);
-
-    cols = (col >= 0) ? (int)col + (int)width : (int)width;
-    if (cols > 0 && (u16b)cols > panel->document_cols)
-        panel->document_cols = (u16b)cols;
 }
 
 void app_ui_panel_init(app_ui_panel* panel, u16b layer)
@@ -353,92 +313,6 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
         panel->focus_area = APP_UI_FOCUS_TABS;
         panel->focus_id = id;
     }
-    return true;
-}
-
-bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
-    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story, cptr text)
-{
-    app_ui_document_op* op;
-    size_t len;
-
-    if (!scene || !panel || !text || !text[0])
-        return false;
-
-    len = strlen(text);
-    if (len >= APP_UI_TEXT_MAX)
-        len = APP_UI_TEXT_MAX - 1u;
-    if (len == 0)
-        return false;
-
-    op = app_ui_panel_append_document_op(scene, panel);
-    if (!op)
-        return false;
-
-    op->kind = APP_UI_DOCUMENT_OP_TEXT;
-    op->attr = attr;
-    op->story = story;
-    op->width = 1;
-    op->row = row;
-    op->col = col;
-    memcpy(op->text, text, len);
-    op->text[len] = '\0';
-    app_ui_panel_note_document_extent(panel, row, col, (u16b)len);
-
-    return true;
-}
-
-bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, cptr text)
-{
-    return app_ui_panel_add_document_text_ex(scene, panel, row, col, attr, 0,
-        text);
-}
-
-bool app_ui_panel_add_document_cell_ex(app_ui_scene* scene,
-    app_ui_panel* panel, s16b row, s16b col, byte attr, char ch,
-    byte terrain_attr, char terrain_char, byte story, byte width)
-{
-    app_ui_document_op* op;
-
-    if (!scene || !panel)
-        return false;
-
-    op = app_ui_panel_append_document_op(scene, panel);
-    if (!op)
-        return false;
-
-    op->kind = APP_UI_DOCUMENT_OP_CELL;
-    op->attr = attr;
-    op->story = story;
-    op->width = width ? width : 1;
-    op->row = row;
-    op->col = col;
-    op->terrain_attr = terrain_attr;
-    op->ch = ch;
-    op->terrain_char = terrain_char;
-    app_ui_panel_note_document_extent(panel, row, col, op->width);
-    return true;
-}
-
-bool app_ui_panel_add_document_cursor(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, byte width)
-{
-    app_ui_document_op* op;
-
-    if (!scene || !panel)
-        return false;
-
-    op = app_ui_panel_append_document_op(scene, panel);
-    if (!op)
-        return false;
-
-    op->kind = APP_UI_DOCUMENT_OP_CURSOR;
-    op->attr = attr;
-    op->width = width ? width : 1;
-    op->row = row;
-    op->col = col;
-    app_ui_panel_note_document_extent(panel, row, col, op->width);
     return true;
 }
 

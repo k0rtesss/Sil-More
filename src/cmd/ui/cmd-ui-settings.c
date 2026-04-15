@@ -8,6 +8,7 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
+#include "app/app-command.h"
 #include "platform-audio.h"
 #include "platform-config.h"
 #include "platform-input.h"
@@ -4583,7 +4584,7 @@ static movement_capture_result movement_capture_binding(
 {
     SDL_Event event;
 
-    input_clear_movement_commands();
+    app_command_clear_pending();
     platform_frame_flush_events();
 
     while (true)
@@ -4655,7 +4656,7 @@ static int other_options_menu(int* highlight)
     const settings_choice_entry entries[] = {
         { 1, 'j', "j) Load a 'Pref' File", false },
         { 2, 'k', "k) Append Options to a 'Pref' File", false },
-        { 3, 'l', "l) Set Macros", false },
+        { 3, 'l', "l) Macro Support Removed", false },
         { 4, 'm', "m) Set Colours", false },
         { 5, 'n', "n) Write a note", false },
         { 6, 's', "s) Suicide", death_view },
@@ -4703,7 +4704,7 @@ static void do_cmd_other_options(void)
             break;
 
         case 3:
-            do_cmd_macros();
+            msg_print("Macros and keymaps have been removed.");
             break;
 
         case 4:

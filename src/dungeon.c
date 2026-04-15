@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-command.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
 #include "object/object-ui-select.h"
@@ -1751,8 +1752,6 @@ static bool verify_debug_mode(void)
  */
 static void process_command(void)
 {
-    app_movement_command movement_command;
-
     log_trace("process_command: character_icky=%d, command='%c' (%d)",
               character_icky, p_ptr->command_cmd, (int)p_ptr->command_cmd);
 
@@ -1772,53 +1771,12 @@ static void process_command(void)
     if (death_spectator_mode
         && !death_spectator_command_allowed(p_ptr->command_cmd))
     {
-        (void)input_take_active_movement_command(NULL);
         if (p_ptr->command_cmd)
         {
             msg_print("You can no longer take that action.");
         }
         p_ptr->command_cmd = 0;
         return;
-    }
-
-    if (input_take_active_movement_command(&movement_command))
-    {
-        int dir = app_movement_direction_to_legacy_keypad(
-            movement_command.direction.direction);
-
-        p_ptr->command_cmd = 0;
-
-        switch (movement_command.action)
-        {
-        case APP_MOVEMENT_ACTION_MOVE_DIR:
-            if (dir)
-                p_ptr->command_dir = dir;
-            do_cmd_walk();
-            return;
-
-        case APP_MOVEMENT_ACTION_RUN_DIR:
-            if (dir)
-                p_ptr->command_dir = dir;
-            do_cmd_run();
-            return;
-
-        case APP_MOVEMENT_ACTION_INTERACT_DIR:
-            if (dir)
-                p_ptr->command_dir = dir;
-            do_cmd_alter();
-            return;
-
-        case APP_MOVEMENT_ACTION_WAIT:
-            do_cmd_hold();
-            return;
-
-        case APP_MOVEMENT_ACTION_REST:
-            do_cmd_rest();
-            return;
-
-        default:
-            break;
-        }
     }
 
     /* Parse the command */
@@ -2459,14 +2417,14 @@ void death_spectator_view(void)
     p_ptr->command_dir = 0;
 
     /* Prevent lingering keypresses from auto-triggering commands. */
-    input_clear_movement_commands();
+    app_command_clear_pending();
     platform_frame_flush_events();
 
     death_spectator_prepare_display();
 
     while (true)
     {
-        request_player_command();
+        app_request_player_command();
 
         if ((p_ptr->command_cmd == ESCAPE)
             || death_spectator_continue_input(p_ptr->command_cmd))
@@ -2814,7 +2772,7 @@ static void process_player(void)
                 app_session* session = app_session_current();
 
                 /* Flush input */
-                input_clear_movement_commands();
+                app_command_clear_pending();
                 platform_frame_flush_events();
                 if (session)
                     app_session_clear_inputs(session);
@@ -3223,7 +3181,7 @@ static void process_player(void)
                 p_ptr->restoring = false;
 
                 /* Get a command (normal) */
-                request_player_command();
+                app_request_player_command();
 
                 /* Process the command */
                 process_command();

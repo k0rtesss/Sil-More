@@ -132,24 +132,6 @@ void story_font_term_pop(story_font_term_state* prev)
     sdl_story_font_set_grid(prev->grid);
 }
 
-void text_out_to_screen_story(byte a, cptr str)
-{
-    bool was_enabled = sdl_is_story_font_enabled();
-    bool was_grid = sdl_is_story_font_grid();
-
-    if (was_enabled)
-        sdl_story_font_disable();
-    if (was_grid)
-        sdl_story_font_set_grid(false);
-
-    text_out_to_screen(a, str);
-
-    if (was_enabled)
-        sdl_story_font_enable();
-    if (was_grid)
-        sdl_story_font_set_grid(true);
-}
-
 static void story_print_text_internal(int row, int col, int max_cols, byte attr, cptr text, bool force_grid)
 {
     story_font_term_state prev;

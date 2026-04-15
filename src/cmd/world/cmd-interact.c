@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-command.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -3871,7 +3872,7 @@ static bool do_cmd_open_chest(int y, int x, s16b o_idx)
         {
             /* We may continue repeating */
             more = true;
-            input_clear_movement_commands();
+            app_command_clear_pending();
             platform_frame_flush_events();
             message(MSG_LOCKPICK_FAIL, 0, "You failed to pick the lock.");
         }
@@ -3961,7 +3962,7 @@ static bool do_cmd_disarm_chest(int y, int x, s16b o_idx)
     {
         /* We may keep trying */
         more = true;
-        input_clear_movement_commands();
+        app_command_clear_pending();
         platform_frame_flush_events();
         msg_print("You failed to disarm the chest.");
     }
@@ -4196,7 +4197,7 @@ bool do_cmd_open_aux(int y, int x)
         else
         {
             /* Failure */
-            input_clear_movement_commands();
+            app_command_clear_pending();
             platform_frame_flush_events();
 
             /* Message */
@@ -5456,7 +5457,7 @@ static bool do_cmd_disarm_aux(int y, int x)
     else if (result > -3)
     {
         /* Failure */
-        input_clear_movement_commands();
+        app_command_clear_pending();
         platform_frame_flush_events();
 
         /* Message */

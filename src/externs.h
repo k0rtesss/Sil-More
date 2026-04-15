@@ -638,7 +638,6 @@ extern void add_random_curse(object_type *o_ptr);
 /* cmd5.c */
 extern bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
     cptr prompt, bool overlay_dungeon);
-extern void display_koff(int k_idx);
 
 /* cmd6.c */
 extern void do_cmd_eat_food(object_type* default_o_ptr, int default_item);
@@ -694,9 +693,6 @@ extern void describe_monster(
     int r_idx, bool spoilers, const monster_type* m_ptr);
 extern bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
     const monster_type* m_ptr, cptr prompt, bool overlay_dungeon);
-extern void roff_top(int r_idx);
-extern void screen_roff(int r_idx, const monster_type* m_ptr);
-extern void display_roff(int r_idx, const monster_type* m_ptr);
 
 /* monster2.c */
 extern s16b poly_r_idx(const monster_type* m_ptr);
@@ -709,7 +705,6 @@ extern errr get_mon_num_prep(void);
 extern s16b get_mon_num(
     int level, bool special, bool allow_non_smart, bool vault);
 extern bool build_monlist_subwindow_ui_scene(app_ui_scene* scene);
-extern void display_monlist(void);
 extern void monster_desc(
     char* desc, size_t max, const monster_type* m_ptr, int mode);
 extern void monster_desc_race(char* desc, size_t max, int r_idx);
@@ -958,8 +953,6 @@ extern errr input_byte_unshift(int key);
 extern errr input_byte_enqueue(int key);
 extern void input_byte_queue_clear(void);
 extern bool input_byte_queue_pending(void);
-extern void inkey_set_base(bool enabled);
-extern void inkey_set_scan(bool enabled);
 extern bool inkey_cursor_hidden(void);
 extern void inkey_set_cursor_hidden(bool hidden);
 extern bool inkey_can_consume_immediately(void);
@@ -968,11 +961,6 @@ extern bool input_submit_movement_command(
 extern void input_clear_movement_commands(void);
 extern bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
     app_movement_command* out_command, char* out_ch);
-extern void input_set_active_movement_command(
-    const app_movement_command* command);
-extern bool input_take_active_movement_command(
-    app_movement_command* out_command);
-extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);
 extern s16b quark_add(cptr str);
@@ -1022,7 +1010,6 @@ extern int get_menu_choice(s16b max, char* prompt);
 extern bool get_com(cptr prompt, char* command);
 extern bool preconfirm_enter_morgoth_hall(void);
 extern void pause_line(int row);
-extern void request_player_command(void);
 extern int int_exp(int base, int power);
 extern int damroll(int num, int sides);
 extern bool is_a_vowel(int ch);
@@ -1042,8 +1029,6 @@ extern void editing_buffer_init(
 extern void editing_buffer_destroy(editing_buffer* eb_ptr);
 extern int editing_buffer_put_chr(editing_buffer* eb_ptr, char ch);
 extern int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos);
-extern void editing_buffer_display(
-    editing_buffer* eb_ptr, int x, int y, byte col);
 extern int editing_buffer_delete(editing_buffer* eb_ptr);
 extern void editing_buffer_clear(editing_buffer* eb_ptr);
 extern void editing_buffer_get_all(

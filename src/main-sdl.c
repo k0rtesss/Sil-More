@@ -88,7 +88,6 @@ static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone);
 static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
-void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
 static bool sdl_build_movement_command_from_input(u16b context, u16b action,
     u16b direction, const app_input* input,
@@ -260,23 +259,6 @@ void sdl_gamepad_apply_modifier(int binding, bool down)
     }
 }
 
-void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt)
-{
-    sdl_submit_legacy_input_byte(31);
-    if (ctrl)
-        sdl_submit_legacy_input_byte('C');
-    if (shift)
-        sdl_submit_legacy_input_byte('S');
-    if (alt)
-        sdl_submit_legacy_input_byte('A');
-    sdl_submit_legacy_input_byte('x');
-    sdl_submit_legacy_input_byte(hexsym[(key / 16) & 0x0F]);
-    sdl_submit_legacy_input_byte(hexsym[key % 16]);
-    sdl_submit_legacy_input_byte(13);
-    log_debug("send macro key=%d ^_%s%s%sx%x%x\r",
-        key, ctrl ? "C" : "", shift ? "S" : "", alt ? "A" : "", key / 16, key % 16);
-}
-
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod)
 {
     u16b modifiers = 0;
@@ -373,6 +355,20 @@ static u16b sdl_current_movement_input_context(void)
     return APP_MOVEMENT_CONTEXT_DUNGEON;
 }
 
+u16b sdl_movement_input_modifiers_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event)
+{
+    SDL_Keymod mod = SDL_KMOD_NONE;
+
+    if (key_event)
+        mod = key_event->mod;
+
+    mod |= SDL_GetModState() & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL
+        | SDL_KMOD_ALT | SDL_KMOD_GUI);
+
+    return sdl_input_modifiers_from_keymod(mod);
+}
+
 static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
     app_input* out_input)
 {
@@ -386,7 +382,8 @@ static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
     out_input->layer = APP_INPUT_LAYER_INTENT;
     out_input->type = APP_INPUT_TYPE_KEY;
     out_input->device = APP_INPUT_DEVICE_KEYBOARD;
-    out_input->modifiers = sdl_input_modifiers_from_keymod(key_event->mod);
+    out_input->modifiers
+        = sdl_movement_input_modifiers_from_keyboard_event(key_event);
     out_input->flags = APP_INPUT_FLAG_PRESS;
     if (key_event->repeat)
         out_input->flags |= APP_INPUT_FLAG_REPEAT;
@@ -533,20 +530,8 @@ static int sdl_key_to_legacy_keypad_dir(int key)
     }
 }
 
-static char sdl_direction_char_for_key(int key)
-{
-    int dir = sdl_key_to_legacy_keypad_dir(key);
-
-    if (dir)
-        return (char)('0' + dir);
-    if (SDL_isprint(key) && key > 0 && key < 256)
-        return (char)key;
-
-    return 0;
-}
-
-static char sdl_legacy_key_char_from_keyboard_event(
-    const SDL_KeyboardEvent* key_event)
+static bool sdl_translate_legacy_input_key(int key, bool shift, bool ctrl,
+    bool alt, bool gui, bool apply_modifiers, int* out_key)
 {
     static const char shifted[256] = {
         ['1'] = '!', ['2'] = '@', ['3'] = '#', ['4'] = '$', ['5'] = '%',
@@ -557,12 +542,55 @@ static char sdl_legacy_key_char_from_keyboard_event(
         [';'] = ':', ['\''] = '"', ['\\'] = '|',
         ['`'] = '~',
     };
+    int dir = sdl_key_to_legacy_keypad_dir(key);
+    int translated = dir ? ('0' + dir) : key;
+
+    if (!translated)
+        return false;
+
+    if (!apply_modifiers)
+    {
+        if (out_key)
+            *out_key = translated;
+        return true;
+    }
+
+    if (dir && (shift || ctrl || alt || gui))
+        return false;
+
+    if (ctrl && !alt && !gui && SDL_isalpha(translated))
+    {
+        translated = KTRL(translated);
+    }
+    else if (ctrl || alt || gui)
+    {
+        return false;
+    }
+    else if (shift)
+    {
+        if (SDL_isalpha(translated))
+        {
+            translated = SDL_toupper(translated);
+        }
+        else if (translated > 0 && translated < 256 && shifted[translated])
+        {
+            translated = shifted[translated];
+        }
+    }
+
+    if (out_key)
+        *out_key = translated;
+    return true;
+}
+
+static char sdl_legacy_key_char_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event)
+{
     bool shift;
     bool ctrl;
     bool alt;
     bool gui;
-    char dir_ch;
-    int key;
+    int translated = 0;
 
     if (!key_event)
         return 0;
@@ -571,29 +599,16 @@ static char sdl_legacy_key_char_from_keyboard_event(
     ctrl = (key_event->mod & SDL_KMOD_CTRL) != 0;
     alt = (key_event->mod & SDL_KMOD_ALT) != 0;
     gui = (key_event->mod & SDL_KMOD_GUI) != 0;
-    key = key_event->key;
-    dir_ch = sdl_direction_char_for_key(key);
-
-    if (dir_ch)
-        return (shift || ctrl || alt || gui) ? 0 : dir_ch;
-
-    if (!SDL_isprint(key) || key <= 0 || key >= 256)
+    if (!sdl_translate_legacy_input_key(key_event->key, shift, ctrl, alt, gui,
+            true, &translated))
+    {
         return 0;
-
-    if (ctrl && !alt && !gui && SDL_isalpha(key))
-        return (char)KTRL(key);
-    if (ctrl || alt || gui)
-        return 0;
-
-    if (shift) {
-        if (SDL_isalpha(key)) {
-            key = SDL_toupper(key);
-        } else if (shifted[key]) {
-            key = shifted[key];
-        }
     }
 
-    return (char)key;
+    if (translated <= 0 || translated >= 256)
+        return 0;
+
+    return (char)translated;
 }
 
 static bool sdl_keyboard_event_reserved_for_movement(
@@ -715,45 +730,15 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
     bool shift = sdl_gamepad_shift_active();
     bool ctrl = sdl_gamepad_ctrl_active();
     bool alt = sdl_gamepad_alt_active();
+    int translated = 0;
 
-    if (use_macro_mods && (shift || ctrl || alt)) {
-        sdl_send_macro_key(key, shift, ctrl, alt);
+    if (!sdl_translate_legacy_input_key(key, shift, ctrl, alt, false,
+            use_macro_mods, &translated))
+    {
         return;
     }
 
-    if (SDL_isprint(key)) {
-        if (ctrl && !alt && SDL_isalpha(key)) {
-            sdl_submit_legacy_input_byte(KTRL(key));
-            return;
-        }
-
-        if (shift) {
-            if (SDL_isalpha(key)) {
-                key = SDL_toupper(key);
-            } else {
-                const char shifted[256] = {
-                    ['1'] = '!', ['2'] = '@', ['3'] = '#', ['4'] = '$', ['5'] = '%',
-                    ['6'] = '^', ['7'] = '&', ['8'] = '*', ['9'] = '(', ['0'] = ')',
-                    ['-'] = '_', ['='] = '+',
-                    [','] = '<', ['.'] = '>', ['/'] = '?',
-                    ['['] = '{', [']'] = '}',
-                    [';'] = ':', ['\''] = '"', ['\\'] = '|',
-                    ['`'] = '~',
-                };
-                if (shifted[key])
-                    key = shifted[key];
-            }
-        }
-
-        sdl_submit_legacy_input_byte(key);
-        return;
-    }
-
-    if (shift || ctrl || alt) {
-        sdl_send_macro_key(key, shift, ctrl, alt);
-    } else {
-        sdl_submit_legacy_input_byte(key);
-    }
+    sdl_submit_legacy_input_byte(translated);
 }
 
 static void sdl_gamepad_send_shoulder_combo(void)
@@ -822,18 +807,9 @@ static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone)
 static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type)
 {
-    if (sdl_submit_directional_movement(dir, shift, ctrl, alt,
-            APP_INPUT_DEVICE_GAMEPAD, input_type, 0, APP_INPUT_FLAG_PRESS,
-            (u32b)dir, 0))
-    {
-        return;
-    }
-
-    if (shift || ctrl || alt) {
-        sdl_send_macro_key('0' + dir, shift, ctrl, alt);
-    } else {
-        sdl_submit_legacy_input_byte('0' + dir);
-    }
+    (void)sdl_submit_directional_movement(dir, shift, ctrl, alt,
+        APP_INPUT_DEVICE_GAMEPAD, input_type, 0, APP_INPUT_FLAG_PRESS,
+        (u32b)dir, 0);
 }
 
 static void sdl_gamepad_clear_pending_dpad(void)
@@ -1729,6 +1705,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
 
     if (ev->type == SDL_EVENT_KEY_DOWN) {
         int key = ev->key.key;
+        int translated = 0;
 
         if (key == SDLK_LSHIFT || key == SDLK_RSHIFT ||
             key == SDLK_LALT || key == SDLK_RALT ||
@@ -1747,86 +1724,19 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
         if (sdl_try_submit_keyboard_movement_event(&ev->key))
             return;
 
-        if (SDL_isprint(ev->key.key)) {
-            bool shift = ev->key.mod & SDL_KMOD_SHIFT;
-            bool ctrl = ev->key.mod & SDL_KMOD_CTRL;
-            bool gui = ev->key.mod & SDL_KMOD_GUI;
-            if (ctrl && !alt && !gui && SDL_isalpha(key)) {
-                sdl_submit_legacy_input_byte(KTRL(key));
-            } else if (ctrl || alt || gui) {
-                sdl_send_macro_key(key, shift, ctrl || gui, alt);
-            } else {
-                if (shift) {
-                    if (SDL_isalpha(key)) {
-                        key = SDL_toupper(key);
-                    } else {
-                        const char shifted[256] = {
-                            ['1'] = '!', ['2'] = '@', ['3'] = '#', ['4'] = '$', ['5'] = '%',
-                            ['6'] = '^', ['7'] = '&', ['8'] = '*', ['9'] = '(', ['0'] = ')',
-                            ['-'] = '_', ['='] = '+',
-                            [','] = '<', ['.'] = '>', ['/'] = '?',
-                            ['['] = '{', [']'] = '}',
-                            [';'] = ':', ['\''] = '"', ['\\'] = '|',
-                            ['`'] = '~',
-                        };
-                        if (shifted[key])
-                            key = shifted[key];
-                    }
-                }
-                if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
-                    return;
-                (void)input_byte_enqueue(key);
-            }
-        } else {
-            bool shift = ev->key.mod & SDL_KMOD_SHIFT;
-            bool ctrl = ev->key.mod & SDL_KMOD_CTRL;
-            bool gui = ev->key.mod & SDL_KMOD_GUI;
-            bool mod = shift || alt || ctrl || gui;
-            switch (key) {
-            case SDLK_UP:
-            case SDLK_KP_8:
-                key = '8';
-                break;
-            case SDLK_DOWN:
-            case SDLK_KP_2:
-                key = '2';
-                break;
-            case SDLK_LEFT:
-            case SDLK_KP_4:
-                key = '4';
-                break;
-            case SDLK_RIGHT:
-            case SDLK_KP_6:
-                key = '6';
-                break;
-            case SDLK_KP_1:
-            case SDLK_END:
-                key = '1';
-                break;
-            case SDLK_KP_3:
-            case SDLK_PAGEDOWN:
-                key = '3';
-                break;
-            case SDLK_KP_7:
-            case SDLK_HOME:
-                key = '7';
-                break;
-            case SDLK_KP_9:
-            case SDLK_PAGEUP:
-                key = '9';
-                break;
-            case SDLK_KP_5:
-                key = '5';
-                break;
-            }
-            if (mod) {
-                sdl_send_macro_key(key, shift, ctrl || gui, alt);
-            } else {
-                if (sdl_queue_legacy_input_byte_ex(key, ev->key.repeat))
-                    return;
-                (void)input_byte_enqueue(key);
-            }
+        if (!sdl_translate_legacy_input_key(key,
+                (ev->key.mod & SDL_KMOD_SHIFT) != 0,
+                (ev->key.mod & SDL_KMOD_CTRL) != 0,
+                alt,
+                (ev->key.mod & SDL_KMOD_GUI) != 0,
+                true, &translated))
+        {
+            return;
         }
+
+        if (sdl_queue_legacy_input_byte_ex(translated, ev->key.repeat))
+            return;
+        (void)input_byte_enqueue(translated);
         return;
     }
 

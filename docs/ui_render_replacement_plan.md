@@ -19,27 +19,16 @@ render-replacement plan.
   - `ui0`: `inkey()`, `screen_save()/screen_load()`, direct `Term_*`, and
     `get_sdl_*`/`set_sdl_*` outside platform code all remain at 0 files /
     0 matches
-  - `movement_input`: `inkey()` waits 3 files / 13 matches,
-    `request_command()` ownership 3 files / 4 matches, movement-related
-    `flush()` usage 5 files / 17 matches, SDL directional macro bridge
-    symbols 2 files / 17 matches, movement defaults in `pref.prf`
-    1 file / 84 matches, and movement macro defaults in `pref-sdl.prf`
-    1 file / 36 matches
-- That audit is still incomplete for the broader extermination mission. A
-  targeted search in `src/` on April 15, 2026 still finds:
-  - `inkey()`: 9 matches / 3 files
-  - `request_command()`: 4 matches / 3 files
-  - `flush()`: 37 matches / 17 files
-  - SDL term-host symbols (`term_ready`, `term_init`, `term_nuke`,
-    `sdl_view_link_term`, `sdl_term_host_redraw`,
-    `sdl_redraw_all_term_hosts`): 49 matches / 6 files
-  - document-op symbols (`APP_UI_DOCUMENT_OP_*`,
-    `app_ui_panel_add_document_text*`, `app_ui_panel_add_document_cell_ex`,
-    `app_ui_panel_add_document_cursor`): 49 matches / 8 files
-  - compat text-surface symbols (`prt`, `c_prt`, `put_str`, `c_put_str`,
-    `clear_from`, `text_out_to_screen`): 316 matches / 30 files
-  - terminal-size queries (`platform_frame_main_view_cols/rows`,
-    `platform_frame_active_view_cols/rows`): 42 matches / 12 files
+  - `movement_input`: all tracked metrics are now at 0 files / 0 matches; the
+    movement slice is complete and the baseline now preserves that state
+  - `terminal_model`: `inkey()` 0 files / 0 matches, `request_command()` 0
+    files / 0 matches, `flush()` 14 files / 24 matches, compat text wrappers
+    12 files / 142 matches, terminal-size queries 7 files / 34 matches,
+    document-op cell grid 0 files / 0 matches, SDL term-host symbols 6 files
+    / 49 matches, and term-host story-font state 6 files / 48 matches
+- `tests/ui_debt_audit_baseline.json` now carries `terminal_model` alongside
+  `ui0` and `movement_input`, so `ctest -R sil_ui0_audit --output-on-failure`
+  can fail on regressions in the real remaining debt families.
 
 ## Live Remnant Families
 ### 1. Legacy input and command loop
@@ -47,14 +36,16 @@ Primary files:
 - `src/util-input.c`
 - `src/dungeon.c`
 - `src/externs.h`
-- `src/cmd4.c`
+- `src/targeting.c`
 
 What remains:
-- `inkey()` still owns the byte queue, macro expansion, wait loop, and delayed
-  `flush()` handling.
-- `request_command()` still owns repeat-count prompting, keymap expansion, and
-  command-byte assembly.
-- The dungeon loop still explicitly calls `request_command()`.
+- movement now enters through `request_player_command()` and the semantic
+  movement service, but the legacy byte queue still lives in `inkey()`
+- repeat-count prompting, keymap expansion, and fallback non-movement command
+  acquisition still live in `request_legacy_command()` inside
+  `src/util-input.c`
+- targeting and other prompt flows still own direct `inkey()` waits or delayed
+  `flush()` behavior
 
 Exit when:
 - input waits come from `src/app/*` interaction primitives instead of
@@ -87,33 +78,29 @@ Exit when:
 
 ### 3. Document-op cell grid
 Primary files:
-- `src/app/app-ui.h`
-- `src/app/app-ui.c`
-- `src/sdl-scene-menu.c`
-- `src/ui/ui-story.c`
 - `src/obj-info.c`
-- `src/ui/ui-file-viewer.c`
+- `src/ui/ui-story.c`
 - `src/ui/ui-character-screen.c`
-- `src/thrall_quest.c`
+- `src/ui/ui-file-viewer.c`
 - `src/ui/ui-help.c`
 - `src/object/object-ui-display.c`
 
 What remains:
-- `APP_UI_PANEL_STYLE_DOCUMENT` still accepts explicit row, column, cell, and
-  cursor operations.
-- multiple converted scenes still build row or column documents from captured
-  screen cells or terminal-sized layout.
-- `src/obj-info.c` builds `attrs`, `chars`, and `story` capture buffers before
-  presenting them.
-- `src/ui/ui-story.c` mirrors rows through `story_semantic_row`.
-- `src/ui/ui-file-viewer.c`, `src/thrall_quest.c`,
-  `src/ui/ui-character-screen.c`, and `src/ui/ui-help.c` still paginate or lay
-  out by terminal height and width.
+- the shared `APP_UI_PANEL_STYLE_DOCUMENT` and `APP_UI_DOCUMENT_OP_*` runtime
+  surface has been deleted; remaining debt is now local to individual flows
+- `src/obj-info.c` now captures semantic lines and runs directly, but still
+  stages local line data before browser presentation
+- `src/ui/ui-story.c` and the character tutorial in
+  `src/ui/ui-character-screen.c` still mirror row-oriented content before
+  browser presentation
+- `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c`, and related browser flows
+  still paginate or size content against terminal-era widths and heights
 
 Exit when:
 - document and browser screens use paragraph, list, table, glyph-row, and
   scroll widgets with renderer-owned layout
-- row or column document ops are deleted from active runtime code
+- local row or column document mirrors are deleted from the remaining runtime
+  UI flows
 - terminal-sized document pagination is replaced by explicit widget layout
 
 ### 4. SDL term host layer that survived the renderer migration
@@ -159,8 +146,8 @@ Primary files:
 - legacy roadmap docs that still talk about `z-term` as live debt
 
 What remains:
-- the current audit now covers `ui0` plus the movement slice, but large
-  terminal-model debt families still remain untracked
+- the audit now covers `ui0`, the completed `movement_input` slice, and the
+  broader `terminal_model` family
 - several docs still describe the old render-replacement finish line instead of
   the current cleanup target
 
@@ -171,6 +158,11 @@ Exit when:
 
 ## Execution Order
 ### A. Expand the audit first
+Status:
+- completed on April 15, 2026 via the `terminal_model` audit family in
+  `tools/ui_debt_audit.py` and the refreshed
+  `tests/ui_debt_audit_baseline.json`
+
 Goal:
 - make the remaining work measurable before touching code
 
@@ -195,8 +187,8 @@ Tasks:
 - introduce a semantic command-input service behind `src/app/*`
 - move macro or keymap expansion into that service or into a narrow reusable
   translator
-- convert `src/dungeon.c` and repeat-count prompting off
-  `inkey()` / `request_command()` / `flush()`
+- convert the remaining repeat-count prompting and non-movement fallback path
+  off `inkey()` / `request_legacy_command()` / `flush()`
 
 Exit when:
 - `src/util-input.c` is gone or reduced to platform-only translation with no
@@ -218,6 +210,12 @@ Exit when:
 - user-facing UI flows no longer depend on the compat writer family
 
 ### D. Replace document row or column ops with real widgets
+Status:
+- the shared `APP_UI_DOCUMENT_OP_*` runtime surface and SDL document-panel
+  renderer were removed on April 15, 2026; remaining work is local row/capture
+  builders and terminal-sized pagination in the surviving tutorial/browser
+  flows
+
 Goal:
 - stop calling semantic documents "semantic" when they are still cell-addressed
 
@@ -227,8 +225,8 @@ Tasks:
 - migrate `src/obj-info.c`, `src/ui/ui-story.c`, `src/ui/ui-file-viewer.c`,
   `src/ui/ui-help.c`, `src/thrall_quest.c`, and remaining tutorial or browser
   flows
-- remove `APP_UI_DOCUMENT_OP_CELL` and `APP_UI_DOCUMENT_OP_CURSOR` first, then
-  the row or column text op path
+- remove the remaining local row or column text mirrors and terminal-sized
+  pagination helpers after the shared document-op path is gone
 
 Exit when:
 - document screens are no longer built from row or column operations

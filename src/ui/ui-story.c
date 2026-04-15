@@ -21,12 +21,14 @@ typedef struct story_semantic_row {
     char text[APP_UI_TEXT_MAX];
 } story_semantic_row;
 
+#define STORY_SEMANTIC_ROW_MAX 64
+
 typedef struct story_semantic_scene {
     bool active;
     bool failed;
     int wid;
     int hgt;
-    story_semantic_row rows[APP_UI_DOCUMENT_OP_MAX];
+    story_semantic_row rows[STORY_SEMANTIC_ROW_MAX];
 } story_semantic_scene;
 
 static story_semantic_scene g_story_semantic_scene;
@@ -275,6 +277,47 @@ static bool story_semantic_mirror_wrapped_text(cptr text, int row, int indent,
     return true;
 }
 
+static bool story_scene_add_spaces(app_ui_scene* scene, app_ui_panel* panel,
+    int count)
+{
+    char spaces[APP_UI_TEXT_MAX];
+
+    if (!scene || !panel || count <= 0)
+        return true;
+
+    memset(spaces, ' ', sizeof(spaces) - 1u);
+    spaces[sizeof(spaces) - 1u] = '\0';
+
+    while (count > 0)
+    {
+        int chunk = MIN(count, (int)sizeof(spaces) - 1);
+
+        spaces[chunk] = '\0';
+        if (!app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, spaces))
+            return false;
+        spaces[chunk] = ' ';
+        count -= chunk;
+    }
+
+    return true;
+}
+
+static bool story_scene_add_semantic_row(app_ui_scene* scene,
+    app_ui_panel* panel, const story_semantic_row* semantic_row)
+{
+    if (!scene || !panel || !semantic_row || !semantic_row->used
+        || !semantic_row->text[0])
+    {
+        return true;
+    }
+
+    if (!story_scene_add_spaces(scene, panel, semantic_row->col))
+        return false;
+
+    return app_ui_panel_add_rich_text_ex(scene, panel, semantic_row->attr,
+        semantic_row->story, semantic_row->text);
+}
+
 static bool story_semantic_present(void)
 {
     app_ui_scene scene;
@@ -292,31 +335,61 @@ static bool story_semantic_present(void)
         return false;
     }
 
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
     panel->min_width_px = 0;
     panel->width_cap_px = 0;
+    if (!app_ui_panel_begin_rich_paragraph(&scene, panel))
+    {
+        g_story_semantic_scene.failed = true;
+        return false;
+    }
 
     for (int row = 0; row < g_story_semantic_scene.hgt; row++)
     {
         story_semantic_row* semantic_row = &g_story_semantic_scene.rows[row];
 
-        if (!semantic_row->used || !semantic_row->text[0])
-            continue;
-
-        if (!app_ui_panel_add_document_text_ex(&scene, panel, (s16b)row,
-                semantic_row->col, semantic_row->attr, semantic_row->story,
-                semantic_row->text))
+        if (row < g_story_semantic_scene.hgt - 1 && row > 0
+            && !app_ui_panel_add_rich_text(&scene, panel, TERM_WHITE, "\n"))
         {
             g_story_semantic_scene.failed = true;
             return false;
         }
+        if (row == g_story_semantic_scene.hgt - 1)
+        {
+            if (semantic_row->used && semantic_row->text[0])
+            {
+                char status_buf[APP_UI_TEXT_MAX];
+                int offset = 0;
 
-        wrote_any = true;
+                memset(status_buf, 0, sizeof(status_buf));
+                while (offset < semantic_row->col
+                    && offset < (int)sizeof(status_buf) - 1)
+                {
+                    status_buf[offset++] = ' ';
+                }
+                SDL_strlcpy(status_buf + offset, semantic_row->text,
+                    sizeof(status_buf) - (size_t)offset);
+                if (!app_ui_panel_add_body_line_ex(panel, semantic_row->attr,
+                        semantic_row->story, status_buf))
+                {
+                    g_story_semantic_scene.failed = true;
+                    return false;
+                }
+            }
+            wrote_any |= semantic_row->used && semantic_row->text[0];
+            continue;
+        }
+        if (!story_scene_add_semantic_row(&scene, panel, semantic_row))
+        {
+            g_story_semantic_scene.failed = true;
+            return false;
+        }
+        wrote_any |= semantic_row->used && semantic_row->text[0];
     }
 
     if (!wrote_any)
     {
-        if (!app_ui_panel_add_document_text(&scene, panel, 0, 0, TERM_WHITE,
+        if (!app_ui_panel_add_rich_text(&scene, panel, TERM_WHITE,
                 " "))
         {
             g_story_semantic_scene.failed = true;

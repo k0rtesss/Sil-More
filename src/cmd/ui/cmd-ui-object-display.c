@@ -153,23 +153,5 @@ bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
     return true;
 }
 
-/*
- * Legacy term-grid compatibility renderer for object-kind recall.
- */
-void display_koff(int k_idx)
-{
-    object_type object_type_body;
-    char o_name[80];
-
-    clear_from(0);
-
-    if (!object_recall_prepare_title(k_idx, &object_type_body, o_name,
-            sizeof(o_name)))
-    {
-        return;
-    }
-
-    c_prt(TERM_WHITE, o_name, 0, 0);
-}
 
 

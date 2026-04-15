@@ -14,6 +14,7 @@
  */
 
 #include "angband.h"
+#include "app/app-command.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -34,6 +35,22 @@ static void targeting_snapshot_prompt(cptr text)
     app_session_set_interaction_prompt(session, TERM_WHITE, text ? text : "");
     app_session_set_interaction_detail(session, TERM_SLATE,
         "Use direction keys to move, Enter targets, Esc cancels.");
+}
+
+static void targeting_direction_prompt(cptr prompt, cptr detail)
+{
+    app_session* session = app_session_current();
+
+    if (!app_session_interactions_enabled(session))
+        return;
+
+    app_session_begin_interaction(session, APP_INTERACTION_KIND_PROMPT,
+        APP_WAIT_REASON_TARGETING,
+        APP_INTERACTION_FLAG_CAN_CONFIRM
+            | APP_INTERACTION_FLAG_CAN_CANCEL);
+    app_session_set_interaction_prompt(session, TERM_WHITE, prompt ? prompt : "");
+    app_session_set_interaction_detail(session, TERM_SLATE,
+        detail ? detail : "");
 }
 
 static char targeting_inkey_with_wait_reason(void)
@@ -2400,10 +2417,12 @@ bool get_aim_dir(int* dp, int range)
         }
 
         message_flush();
+        targeting_direction_prompt(p,
+            "Use movement keys or digits. '*' chooses a target, Esc cancels.");
         prt(p, 0, 0);
         app_movement_command_clear(&movement_command);
         ch = '\0';
-        (void)input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_TARGETING,
+        (void)app_command_wait_input(APP_MOVEMENT_CONTEXT_TARGETING,
             APP_WAIT_REASON_NONE, &movement_command, &ch);
 
         if (app_movement_command_is_valid(&movement_command))
@@ -2501,9 +2520,7 @@ bool get_aim_dir(int* dp, int range)
         /* Possible direction */
         default:
         {
-            dir = target_dir(ch);
-            if ((dir == 5) && !target_okay(range))
-                dir = 0;
+            dir = 0;
             break;
         }
         }
@@ -2518,6 +2535,7 @@ bool get_aim_dir(int* dp, int range)
     /* No direction */
     if (!dir)
     {
+        app_session_clear_interaction(app_session_current());
         app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
     }
@@ -2551,6 +2569,7 @@ bool get_aim_dir(int* dp, int range)
 #endif /* ALLOW_REPEAT */
 
     /* A "valid" direction was entered */
+    app_session_clear_interaction(app_session_current());
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }
@@ -2597,13 +2616,11 @@ bool get_rep_dir(int* dp)
     /* Get a direction */
     while (!dir)
     {
-        /*
-         * Direction prompts are already represented by the active command
-         * flow. Avoid opening an extra modal prompt scene on the SDL path.
-         */
+        targeting_direction_prompt("Direction (ESC to cancel)?",
+            "Use movement keys or digits. Esc cancels.");
         app_movement_command_clear(&movement_command);
         ch = '\0';
-        (void)input_wait_for_movement_or_legacy(
+        (void)app_command_wait_input(
             APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT, APP_WAIT_REASON_NONE,
             &movement_command, &ch);
 
@@ -2625,6 +2642,7 @@ bool get_rep_dir(int* dp)
     /* Aborted */
     if (!dir)
     {
+        app_session_clear_interaction(app_session_current());
         app_session_pop_wait_scope(app_session_current(), &wait_scope);
         return (false);
     }
@@ -2642,6 +2660,7 @@ bool get_rep_dir(int* dp)
 #endif /* ALLOW_REPEAT */
 
     /* Success */
+    app_session_clear_interaction(app_session_current());
     app_session_pop_wait_scope(app_session_current(), &wait_scope);
     return (true);
 }

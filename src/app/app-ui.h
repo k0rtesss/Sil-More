@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 9u
+#define APP_UI_FORMAT_VERSION 10u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -19,7 +19,6 @@ extern "C" {
 #define APP_UI_FOOTER_ACTION_MAX 8u
 #define APP_UI_TAB_MAX 8u
 #define APP_UI_PANEL_MAX 4u
-#define APP_UI_DOCUMENT_OP_MAX 256u
 #define APP_UI_RICH_PARAGRAPH_MAX 96u
 #define APP_UI_RICH_RUN_MAX 512u
 #define APP_UI_CHARACTER_METRIC_MAX 24u
@@ -45,7 +44,6 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_PLAIN = 1,
     APP_UI_PANEL_STYLE_STATUS_RAIL = 2,
     APP_UI_PANEL_STYLE_STRIP = 3,
-    APP_UI_PANEL_STYLE_DOCUMENT = 4,
     APP_UI_PANEL_STYLE_BROWSER = 5,
     APP_UI_PANEL_STYLE_CHARACTER_SHEET = 6,
     APP_UI_PANEL_STYLE_MINIMAP = 7,
@@ -120,27 +118,6 @@ typedef struct app_ui_tab {
     char label[APP_UI_LABEL_MAX];
 } app_ui_tab;
 
-typedef enum app_ui_document_op_kind {
-    APP_UI_DOCUMENT_OP_NONE = 0,
-    APP_UI_DOCUMENT_OP_TEXT = 1,
-    APP_UI_DOCUMENT_OP_CELL = 2,
-    APP_UI_DOCUMENT_OP_CURSOR = 3
-} app_ui_document_op_kind;
-
-typedef struct app_ui_document_op {
-    byte kind;
-    byte attr;
-    byte story;
-    byte width;
-    s16b row;
-    s16b col;
-    byte terrain_attr;
-    char ch;
-    char terrain_char;
-    byte reserved;
-    char text[APP_UI_TEXT_MAX];
-} app_ui_document_op;
-
 typedef struct app_ui_rich_paragraph {
     u16b run_first;
     u16b run_count;
@@ -205,10 +182,6 @@ typedef struct app_ui_panel {
     u16b detail_line_count;
     u16b footer_action_count;
     u16b tab_count;
-    u16b document_op_first;
-    u16b document_op_count;
-    u16b document_rows;
-    u16b document_cols;
     u16b rich_paragraph_first;
     u16b rich_paragraph_count;
     u16b character_metric_count;
@@ -244,12 +217,10 @@ typedef struct app_ui_scene {
     u16b format_version;
     u16b flags;
     u16b panel_count;
-    u16b document_op_count;
     u16b rich_paragraph_count;
     u16b rich_run_count;
     u16b minimap_cell_count;
     app_ui_panel panels[APP_UI_PANEL_MAX];
-    app_ui_document_op document_ops[APP_UI_DOCUMENT_OP_MAX];
     app_ui_rich_paragraph rich_paragraphs[APP_UI_RICH_PARAGRAPH_MAX];
     app_ui_rich_run rich_runs[APP_UI_RICH_RUN_MAX];
     app_ui_minimap_cell minimap_cells[APP_UI_MINIMAP_CELL_MAX];
@@ -280,15 +251,6 @@ bool app_ui_panel_add_footer_action(app_ui_panel* panel, s16b id, byte attr,
     bool enabled, cptr key, cptr label);
 bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
-bool app_ui_panel_add_document_text_ex(app_ui_scene* scene,
-    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story, cptr text);
-bool app_ui_panel_add_document_text(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, cptr text);
-bool app_ui_panel_add_document_cell_ex(app_ui_scene* scene,
-    app_ui_panel* panel, s16b row, s16b col, byte attr, char ch,
-    byte terrain_attr, char terrain_char, byte story, byte width);
-bool app_ui_panel_add_document_cursor(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, byte width);
 bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene,
     app_ui_panel* panel);
 bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,

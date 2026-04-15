@@ -312,6 +312,7 @@ set(SIL_MORE_SOURCES_RUNTIME
 )
 
 set(SIL_MORE_SOURCES_APP_BOUNDARY
+    src/app/app-command.c
     src/app/app-movement.c
     src/app/app-interaction.c
     src/app/app-ui.c

@@ -747,12 +747,6 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
         {
             return;
         }
-
-        if (shift || ctrl || alt) {
-            sdl_send_macro_key('0' + dir, shift, ctrl, alt);
-        } else {
-            sdl_submit_legacy_input_byte('0' + dir);
-        }
         return;
     }
 

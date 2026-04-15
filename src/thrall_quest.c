@@ -48,8 +48,6 @@ static const int elf_thrall_weights[THRALL_QUEST_MAX] = {
     14   /* POTION_CLARITY - lift veils from the mind */
 };
 
-#define THRALL_REWARD_MENU_BASE_ROW 5
-
 enum
 {
     THRALL_QUEST_STATE_ACTIVE = 0,
@@ -1400,89 +1398,51 @@ static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
     int option_count, int selected, bool pending_reward)
 {
     app_ui_panel* panel;
-    int term_wid = platform_frame_active_view_cols();
-    int term_hgt = platform_frame_active_view_rows();
-    bool compact;
-    int title_row = 0;
-    int intro_row = 1;
-    int list_row;
-    int info_row;
-    int prompt_row;
+    byte accent_attr;
     char prompt[128];
 
     if (!scene || !m_ptr || !options || option_count <= 0)
         return false;
 
-    if (term_wid <= 0)
-        term_wid = 80;
-    if (term_hgt <= 0)
-        term_hgt = 24;
-
-    compact = (term_wid < 60) || (term_hgt < 16);
-    list_row = compact ? 3 : THRALL_REWARD_MENU_BASE_ROW;
-    prompt_row = MAX(0, term_hgt - 1);
-    info_row = prompt_row - 1;
-
     app_ui_scene_init(scene);
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
         return false;
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
     panel->min_width_px = 0;
     panel->width_cap_px = 0;
-
-    if (!app_ui_panel_add_document_text(scene, panel, title_row, 0,
-            (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL) ? TERM_L_BLUE : TERM_YELLOW,
-            compact ? ((m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-                           ? "Elven Thrall"
-                           : "Human Thrall")
-                    : ((m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
-                           ? "An Elven Thrall"
-                           : "A Human Thrall")))
-    {
-        return false;
-    }
-
-    if (!app_ui_panel_add_document_text(scene, panel, intro_row, 0,
-            TERM_L_WHITE,
-            pending_reward
-                ? (compact ? "Choose your reward."
-                           : "The boon you earned is still yours to claim.")
-                : (compact ? "Choose your reward."
-                           : "Choose what gift the thrall will grant you.")))
-    {
-        return false;
-    }
+    accent_attr = (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+        ? TERM_L_BLUE
+        : TERM_YELLOW;
+    panel->accent_attr = accent_attr;
+    app_ui_panel_set_title(panel, accent_attr,
+        (m_ptr->r_idx == R_IDX_ALERT_ELF_THRALL)
+            ? "An Elven Thrall"
+            : "A Human Thrall");
+    app_ui_panel_set_subtitle(panel, TERM_L_WHITE,
+        pending_reward
+            ? "The boon you earned is still yours to claim."
+            : "Choose what gift the thrall will grant you.");
 
     for (int i = 0; i < option_count; i++)
     {
-        int row = list_row + i;
-        byte prefix_attr = (i == selected) ? TERM_L_BLUE : TERM_SLATE;
-        byte label_attr = options[i].enabled
-            ? ((i == selected) ? TERM_L_WHITE : TERM_WHITE)
-            : TERM_L_DARK;
-        char label[96];
+        char key_buf[4];
+        char meta_buf[24];
 
-        if (row >= info_row)
-            break;
-
-        strnfmt(label, sizeof(label), "%c) %s", options[i].hotkey,
-            options[i].label);
-        if (!app_ui_panel_add_document_text(scene, panel, (s16b)row, 0,
-                prefix_attr,
-                (i == selected) ? "> " : "  ")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)row, 2, label_attr, label))
+        strnfmt(key_buf, sizeof(key_buf), "%c", options[i].hotkey);
+        SDL_strlcpy(meta_buf, options[i].enabled ? "" : "Unavailable",
+            sizeof(meta_buf));
+        if (!app_ui_panel_add_row_ex(panel, (s16b)options[i].reward,
+                options[i].enabled ? TERM_WHITE : TERM_L_DARK,
+                TERM_SLATE, 0, '\0', options[i].enabled, i == selected,
+                key_buf, options[i].label, meta_buf))
         {
             return false;
         }
     }
 
-    if (info_row > intro_row
-        && !app_ui_panel_add_document_text(scene, panel, (s16b)info_row, 0,
-            TERM_L_DARK,
-            compact ? "Grey = unavailable."
-                    : "Greyed options need a suitable item in inventory or equipment."))
+    if (!app_ui_panel_add_body_line(panel, TERM_L_DARK,
+            "Greyed options need a suitable item in inventory or equipment."))
     {
         return false;
     }
@@ -1501,20 +1461,17 @@ static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
         if (streq(back_label, "(unbound)") || streq(back_label, "Multiple"))
             SDL_strlcpy(back_label, "B", sizeof(back_label));
         strnfmt(prompt, sizeof(prompt),
-            compact ? "%s/%s move  %s choose  %s later"
-                    : "%s/%s navigate  %s accept  Letter select  %s later",
-            "8", "2", confirm_label, back_label);
+            "8/2 navigate  %s accept  Letter select  %s later",
+            confirm_label, back_label);
     }
     else
     {
         SDL_strlcpy(prompt,
-            compact ? "8/2 move  Enter choose  ESC later"
-                    : "8/2 or arrows navigate  Enter accept  Letter select  ESC later",
+            "8/2 or arrows navigate  Enter accept  Letter select  ESC later",
             sizeof(prompt));
     }
 
-    return app_ui_panel_add_document_text(
-        scene, panel, (s16b)prompt_row, 0, TERM_L_DARK, prompt);
+    return app_ui_panel_add_body_line(panel, TERM_SLATE, prompt);
 }
 
 static int choose_thrall_reward_information_scene(monster_type* m_ptr,

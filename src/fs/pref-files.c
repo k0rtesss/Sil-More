@@ -261,40 +261,9 @@ errr process_pref_file_command(char* buf)
         }
     }
 
-    else if (buf[0] == 'A')
+    else if (buf[0] == 'A' || buf[0] == 'P' || buf[0] == 'C')
     {
-        text_to_ascii(macro_buffer, sizeof(macro_buffer), buf + 2);
-        return 0;
-    }
-
-    else if (buf[0] == 'P')
-    {
-        char tmp[1024];
-        text_to_ascii(tmp, sizeof(tmp), buf + 2);
-        macro_add(tmp, macro_buffer);
-        return 0;
-    }
-
-    else if (buf[0] == 'C')
-    {
-        long mode;
-        char tmp[1024];
-
-        if (tokenize(buf + 2, 2, zz) != 2)
-            return 1;
-
-        mode = strtol(zz[0], NULL, 0);
-        if ((mode < 0) || (mode >= KEYMAP_MODES))
-            return 1;
-
-        text_to_ascii(tmp, sizeof(tmp), zz[1]);
-        if (!tmp[0] || tmp[1])
-            return 1;
-        i = (long)tmp[0];
-
-        str_free(keymap_act[mode][i]);
-        keymap_act[mode][i] = str_dup(macro_buffer);
-
+        /* Macro and keymap records are intentionally ignored. */
         return 0;
     }
 
@@ -315,70 +284,7 @@ errr process_pref_file_command(char* buf)
 
     else if (buf[0] == 'T')
     {
-        int tok;
-
-        tok = tokenize(buf + 2, MAX_MACRO_MOD + 2, zz);
-
-        if (tok >= 4)
-        {
-            int j;
-            int num;
-
-            macro_trigger_free();
-
-            if (*zz[0] == '\0')
-                return 0;
-
-            num = strlen(zz[1]);
-
-            if (num + 2 != tok)
-                return 1;
-
-            macro_template = str_dup(zz[0]);
-            macro_modifier_chr = str_dup(zz[1]);
-
-            for (j = 0; j < num; j++)
-                macro_modifier_name[j] = str_dup(zz[2 + j]);
-        }
-        else if (tok >= 2)
-        {
-            char* trigger_buf;
-            cptr s;
-            char* t;
-
-            if (max_macrotrigger >= MAX_MACRO_TRIGGER)
-            {
-                msg_print("Too many macro triggers!");
-                return 1;
-            }
-
-            trigger_buf = mem_alloc_array(strlen(zz[0]) + 1, char);
-
-            s = zz[0];
-            t = trigger_buf;
-
-            while (*s)
-            {
-                if ('\\' == *s)
-                    s++;
-                *t++ = *s++;
-            }
-
-            *t = '\0';
-
-            macro_trigger_name[max_macrotrigger] = str_dup(trigger_buf);
-            mem_free_null(trigger_buf);
-
-            macro_trigger_keycode[0][max_macrotrigger] = str_dup(zz[1]);
-
-            if (tok == 3)
-                macro_trigger_keycode[1][max_macrotrigger] = str_dup(zz[2]);
-            else
-                macro_trigger_keycode[1][max_macrotrigger] = str_dup(zz[1]);
-
-            max_macrotrigger++;
-        }
-
+        /* Macro trigger templates are intentionally ignored. */
         return 0;
     }
 

@@ -11,6 +11,7 @@
 #include "app/app-ui.h"
 #include "externs.h"
 #include "sdl-config.h"
+#include "sdl-main-internal.h"
 #include "ui/ui-information-scene.h"
 #include <SDL3/SDL_scancode.h>
 
@@ -1381,11 +1382,6 @@ static void test_movement_input_bridge(void)
         APP_WAIT_REASON_NONE, &resolved, &ch));
     CHECK(!app_movement_command_is_valid(&resolved));
     CHECK(ch == 'm');
-
-    input_set_active_movement_command(&dungeon_command);
-    CHECK(input_take_active_movement_command(&resolved));
-    CHECK(resolved.context == APP_MOVEMENT_CONTEXT_DUNGEON);
-    CHECK(!input_take_active_movement_command(&resolved));
 
     input_clear_movement_commands();
     app_session_destroy(session);

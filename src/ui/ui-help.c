@@ -31,7 +31,7 @@
  *  - Page 8: Steam Deck controls, with a drawn layout and dynamic key enum/mapping.
  *
  * Usage: paste this whole block where show_help_screen is defined. It only
- * depends on c_put_str() and the TERM_* colour constants already in your codebase.
+ * depends on the semantic help draw helpers and the TERM_* colour constants.
  */
 
 /* -------- Role-based colour shim ---------------------------------------- */
@@ -75,10 +75,6 @@ static int HELP_THEME[ROLE__COUNT] = {
     [ROLE_ELEM_DARKNESS]    = TERM_L_DARK,   /* darkness -> dark */
     [ROLE_ELEM_LIGHT]       = TERM_YELLOW,   /* light/radiance */
 };
-
-static inline void put_role(color_role_t role, const char *s, int row, int col) {
-    c_put_str(HELP_THEME[role], s, row, col);
-}
 
 static byte help_role_attr(color_role_t role)
 {
@@ -884,7 +880,7 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
  * Build the fixed-layout help document directly into semantic draw ops.
  */
 #define put_role help_record_role
-#define c_put_str help_record_attr
+#define help_put_attr help_record_attr
 #define help_emit_heading help_record_heading
 static void help_record_page_document_ops(int i, bool include_header)
 {
@@ -1312,41 +1308,41 @@ static void help_record_page_document_ops(int i, bool include_header)
         help_emit_heading("Terrain ", row - 2, col - 1);
 
         /* Keep gameplay glyph colours as-is; only change the labels to ROLE_BODY */
-        if (hybrid_walls) { c_put_str(TERM_L_WHITE + (MAX_COLORS * BG_DARK), "#", row, col); }
-        else if (solid_walls) { c_put_str(TERM_L_WHITE + (MAX_COLORS * BG_SAME), "#", row, col); }
-        else { c_put_str(TERM_L_WHITE, "#", row, col); }
+        if (hybrid_walls) { help_put_attr(TERM_L_WHITE + (MAX_COLORS * BG_DARK), "#", row, col); }
+        else if (solid_walls) { help_put_attr(TERM_L_WHITE + (MAX_COLORS * BG_SAME), "#", row, col); }
+        else { help_put_attr(TERM_L_WHITE, "#", row, col); }
         put_role(ROLE_BODY, "wall", row, col + 2); row++;
-        c_put_str(TERM_WHITE + (MAX_COLORS * BG_SAME), "%", row, col); put_role(ROLE_BODY, "quartz vein", row, col + 2); row++;
-        c_put_str(TERM_SLATE, ":", row, col); put_role(ROLE_BODY, "rubble", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "+", row, col); put_role(ROLE_BODY, "closed door", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "'", row, col); put_role(ROLE_BODY, "open door", row, col + 2); row++;
-        c_put_str(TERM_L_GREEN, "+", row, col); c_put_str(TERM_L_BLUE, "+", row, col + 1); c_put_str(TERM_VIOLET, "+", row, col + 2); put_role(ROLE_BODY, "warded doors", row, col + 4); row++;
-        c_put_str(TERM_L_WHITE, ">", row, col); put_role(ROLE_BODY, "staircase down", row, col + 2); row++;
-        c_put_str(TERM_L_WHITE, "<", row, col); put_role(ROLE_BODY, "staircase up", row, col + 2); row++;
-        c_put_str(TERM_SLATE, "0", row, col); put_role(ROLE_BODY, "forge", row, col + 2); row++;
-        c_put_str(TERM_YELLOW, "^", row, col); put_role(ROLE_BODY, "trap", row, col + 2); row++;
-        c_put_str(TERM_L_GREEN, ";", row, col); put_role(ROLE_BODY, "warding glyph", row, col + 2); row++;
-        c_put_str(TERM_L_WHITE, ".", row, col); put_role(ROLE_BODY, "empty floor", row, col + 2); row++;
+        help_put_attr(TERM_WHITE + (MAX_COLORS * BG_SAME), "%", row, col); put_role(ROLE_BODY, "quartz vein", row, col + 2); row++;
+        help_put_attr(TERM_SLATE, ":", row, col); put_role(ROLE_BODY, "rubble", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "+", row, col); put_role(ROLE_BODY, "closed door", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "'", row, col); put_role(ROLE_BODY, "open door", row, col + 2); row++;
+        help_put_attr(TERM_L_GREEN, "+", row, col); help_put_attr(TERM_L_BLUE, "+", row, col + 1); help_put_attr(TERM_VIOLET, "+", row, col + 2); put_role(ROLE_BODY, "warded doors", row, col + 4); row++;
+        help_put_attr(TERM_L_WHITE, ">", row, col); put_role(ROLE_BODY, "staircase down", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, "<", row, col); put_role(ROLE_BODY, "staircase up", row, col + 2); row++;
+        help_put_attr(TERM_SLATE, "0", row, col); put_role(ROLE_BODY, "forge", row, col + 2); row++;
+        help_put_attr(TERM_YELLOW, "^", row, col); put_role(ROLE_BODY, "trap", row, col + 2); row++;
+        help_put_attr(TERM_L_GREEN, ";", row, col); put_role(ROLE_BODY, "warding glyph", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, ".", row, col); put_role(ROLE_BODY, "empty floor", row, col + 2); row++;
 
         row = 3; col = 27;
         help_emit_heading("Items", row - 2, col - 1);
-        c_put_str(TERM_L_WHITE, "| ", row, col); put_role(ROLE_BODY, "blades", row, col + 2); row++;
-        c_put_str(TERM_SLATE, "/ ", row, col); put_role(ROLE_BODY, "axes & polearms", row, col + 2); row++;
-        c_put_str(TERM_UMBER, "\\ ", row, col); put_role(ROLE_BODY, "blunt weapons", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "( ", row, col); put_role(ROLE_BODY, "soft armour", row, col + 2); row++;
-        c_put_str(TERM_L_WHITE, "[ ", row, col); put_role(ROLE_BODY, "mail", row, col + 2); row++;
-        c_put_str(TERM_L_WHITE, ") ", row, col); put_role(ROLE_BODY, "shields", row, col + 2); row++;
-        c_put_str(TERM_L_WHITE, "] ", row, col); put_role(ROLE_BODY, "misc armour", row, col + 2); row++;
-        c_put_str(TERM_RED, "= ", row, col); put_role(ROLE_BODY, "rings", row, col + 2); row++;
-        c_put_str(TERM_ORANGE, "\" ", row, col); put_role(ROLE_BODY, "amulets", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "~ ", row, col); put_role(ROLE_BODY, "light sources", row, col + 2); row++;
-        c_put_str(TERM_UMBER, "} ", row, col); put_role(ROLE_BODY, "bows", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "- ", row, col); put_role(ROLE_BODY, "arrows", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, ", ", row, col); put_role(ROLE_BODY, "food", row, col + 2); row++;
-        c_put_str(TERM_L_BLUE, "! ", row, col); put_role(ROLE_BODY, "potions", row, col + 2); row++;
-        c_put_str(TERM_UMBER, "_ ", row, col); put_role(ROLE_BODY, "staves", row, col + 2); row++;
-        c_put_str(TERM_L_UMBER, "? ", row, col); put_role(ROLE_BODY, "instruments", row, col + 2); row++;
-        c_put_str(TERM_YELLOW, "! ", row, col); put_role(ROLE_BODY, "flasks of oil", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, "| ", row, col); put_role(ROLE_BODY, "blades", row, col + 2); row++;
+        help_put_attr(TERM_SLATE, "/ ", row, col); put_role(ROLE_BODY, "axes & polearms", row, col + 2); row++;
+        help_put_attr(TERM_UMBER, "\\ ", row, col); put_role(ROLE_BODY, "blunt weapons", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "( ", row, col); put_role(ROLE_BODY, "soft armour", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, "[ ", row, col); put_role(ROLE_BODY, "mail", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, ") ", row, col); put_role(ROLE_BODY, "shields", row, col + 2); row++;
+        help_put_attr(TERM_L_WHITE, "] ", row, col); put_role(ROLE_BODY, "misc armour", row, col + 2); row++;
+        help_put_attr(TERM_RED, "= ", row, col); put_role(ROLE_BODY, "rings", row, col + 2); row++;
+        help_put_attr(TERM_ORANGE, "\" ", row, col); put_role(ROLE_BODY, "amulets", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "~ ", row, col); put_role(ROLE_BODY, "light sources", row, col + 2); row++;
+        help_put_attr(TERM_UMBER, "} ", row, col); put_role(ROLE_BODY, "bows", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "- ", row, col); put_role(ROLE_BODY, "arrows", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, ", ", row, col); put_role(ROLE_BODY, "food", row, col + 2); row++;
+        help_put_attr(TERM_L_BLUE, "! ", row, col); put_role(ROLE_BODY, "potions", row, col + 2); row++;
+        help_put_attr(TERM_UMBER, "_ ", row, col); put_role(ROLE_BODY, "staves", row, col + 2); row++;
+        help_put_attr(TERM_L_UMBER, "? ", row, col); put_role(ROLE_BODY, "instruments", row, col + 2); row++;
+        help_put_attr(TERM_YELLOW, "! ", row, col); put_role(ROLE_BODY, "flasks of oil", row, col + 2); row++;
 
         row = 3; col = 52;
         help_emit_heading("Item Commands", row - 2, col - 1);
@@ -1617,7 +1613,7 @@ static void help_record_page_document_ops(int i, bool include_header)
 }
 
 #undef help_emit_heading
-#undef c_put_str
+#undef help_put_attr
 #undef put_role
 
 

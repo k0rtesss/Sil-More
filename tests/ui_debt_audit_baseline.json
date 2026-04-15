@@ -1,75 +1,52 @@
 {
-  "version": 2,
-  "scope": [
-    "src/**/*.c",
-    "src/**/*.h"
-  ],
-  "platform_sdl_exclusions": [
-    "src/main-sdl.c",
-    "src/main-sdl.h",
-    "src/platform-*.h",
-    "src/sdl-*.c",
-    "src/sdl-*.h"
-  ],
-  "metrics": {
-    "inkey_calls": {
-      "files": 0,
-      "matches": 0
-    },
-    "screen_overlay_calls": {
-      "files": 0,
-      "matches": 0
-    },
-    "term_render_control_calls": {
-      "files": 0,
-      "matches": 0
-    },
-    "platform_ui_includes": {
-      "files": 0,
-      "matches": 0
-    },
-    "sdl_named_ui_calls_outside_platform": {
-      "files": 0,
-      "matches": 0
-    }
-  },
   "audits": {
-    "ui0": {
-      "scope": [
-        "src/**/*.c",
-        "src/**/*.h"
-      ],
-      "platform_sdl_exclusions": [
-        "src/main-sdl.c",
-        "src/main-sdl.h",
-        "src/platform-*.h",
-        "src/sdl-*.c",
-        "src/sdl-*.h"
-      ],
-      "metrics": {
-        "inkey_calls": {
-          "files": 0,
-          "matches": 0
-        },
-        "screen_overlay_calls": {
-          "files": 0,
-          "matches": 0
-        },
-        "term_render_control_calls": {
-          "files": 0,
-          "matches": 0
-        },
-        "platform_ui_includes": {
-          "files": 0,
-          "matches": 0
-        },
-        "sdl_named_ui_calls_outside_platform": {
-          "files": 0,
-          "matches": 0
-        }
-      }
-    },
     "movement_input": {
+      "label": "Movement input debt audit",
+      "metrics": {
+        "movement_flush_calls": {
+          "file_matches": {},
+          "files": 0,
+          "label": "movement-related flush() usage",
+          "matches": 0,
+          "notes": "Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated settings/macro helpers."
+        },
+        "movement_inkey_waits": {
+          "file_matches": {},
+          "files": 0,
+          "label": "movement direction char fallbacks",
+          "matches": 0,
+          "notes": "Tracks remaining character-to-direction fallback in get_aim_dir()/get_rep_dir() after semantic movement input is wired on the SDL path."
+        },
+        "movement_pref_keymap_defaults": {
+          "file_matches": {},
+          "files": 0,
+          "label": "movement action defaults in pref.prf",
+          "matches": 0,
+          "notes": "Counts active shipped movement action defaults in pref.prf after removing commented lines."
+        },
+        "movement_pref_sdl_macro_defaults": {
+          "file_matches": {},
+          "files": 0,
+          "label": "movement macro defaults in pref-sdl.prf",
+          "matches": 0,
+          "notes": "Counts active shift/control directional macro defaults in pref-sdl.prf after removing commented lines."
+        },
+        "movement_request_command_ownership": {
+          "file_matches": {},
+          "files": 0,
+          "label": "movement request_command() ownership",
+          "matches": 0,
+          "notes": "Tracks the legacy command acquisition loop that still owns top-level movement input."
+        },
+        "movement_sdl_direction_macro_bridge": {
+          "file_matches": {},
+          "files": 0,
+          "label": "SDL directional macro bridge symbols",
+          "matches": 0,
+          "notes": "Tracks the SDL helper family that still resolves directional modifiers by feeding legacy macro-trigger input."
+        }
+      },
+      "notes": "Slice-0 guardrail for the legacy movement input stack that the movement rewrite is expected to delete.",
       "scope": [
         "src/externs.h",
         "src/util-input.c",
@@ -82,33 +59,225 @@
         "src/cmd/ui/cmd-ui-settings.c",
         "lib/pref/pref.prf",
         "lib/pref/pref-sdl.prf"
-      ],
+      ]
+    },
+    "terminal_model": {
+      "label": "Terminal-model debt audit",
       "metrics": {
-        "movement_inkey_waits": {
-          "files": 3,
-          "matches": 12
+        "compat_text_wrapper_symbols": {
+          "file_matches": {
+            "src/cmd/ui/cmd-ui-main-menu.c": 1,
+            "src/cmd/ui/cmd-ui-query.c": 1,
+            "src/dungeon.c": 2,
+            "src/externs.h": 6,
+            "src/load.c": 1,
+            "src/object/object-ui-select.c": 1,
+            "src/score/score_ui.c": 9,
+            "src/squelch.c": 72,
+            "src/targeting.c": 3,
+            "src/ui/story_font.c": 4,
+            "src/util-text.c": 8,
+            "src/wizard2.c": 34
+          },
+          "files": 12,
+          "label": "compat text wrapper symbols",
+          "matches": 142,
+          "notes": "Counts the row/column compat text authoring family, including declarations, definitions, calls, and text_out_hook bindings."
         },
-        "movement_request_command_ownership": {
-          "files": 3,
-          "matches": 4
-        },
-        "movement_flush_calls": {
-          "files": 5,
-          "matches": 18
-        },
-        "movement_sdl_direction_macro_bridge": {
+        "document_op_cell_grid_symbols": {
+          "file_matches": {},
           "files": 0,
-          "matches": 0
+          "label": "document-op cell-grid symbols",
+          "matches": 0,
+          "notes": "Counts the live document row/column/cell/cursor surface, including enum values and builder helpers."
         },
-        "movement_pref_keymap_defaults": {
-          "files": 0,
-          "matches": 0
+        "legacy_flush_symbols": {
+          "file_matches": {
+            "src/cave.c": 1,
+            "src/cmd/item/cmd-item-activate.c": 2,
+            "src/cmd/item/cmd-item-core.c": 2,
+            "src/cmd/ui/cmd-ui-settings.c": 5,
+            "src/cmd4.c": 1,
+            "src/externs.h": 1,
+            "src/files.c": 2,
+            "src/metarun.c": 1,
+            "src/monster-death.c": 1,
+            "src/runtime/runtime-game.c": 3,
+            "src/ui/ui-death.c": 1,
+            "src/use-obj.c": 1,
+            "src/util-input.c": 2,
+            "src/util-message.c": 1
+          },
+          "files": 14,
+          "label": "flush() symbols",
+          "matches": 24,
+          "notes": "Counts delayed flush ownership across the active source tree, including the remaining owner and gameplay/UI callers."
         },
-        "movement_pref_sdl_macro_defaults": {
+        "legacy_inkey_symbols": {
+          "file_matches": {},
           "files": 0,
-          "matches": 0
+          "label": "inkey() symbols",
+          "matches": 0,
+          "notes": "Counts the live legacy byte-input loop, including declarations, definitions, and callers."
+        },
+        "legacy_request_command_symbols": {
+          "file_matches": {},
+          "files": 0,
+          "label": "request_command() symbols",
+          "matches": 0,
+          "notes": "Tracks reintroduction of the removed request_command() API anywhere in the active source tree."
+        },
+        "sdl_term_host_symbols": {
+          "file_matches": {
+            "src/platform-frame.c": 5,
+            "src/sdl-layout.c": 7,
+            "src/sdl-main-internal.h": 6,
+            "src/sdl-render.c": 19,
+            "src/sdl-scene.c": 7,
+            "src/sdl-story-font.c": 5
+          },
+          "files": 6,
+          "label": "SDL term-host symbols",
+          "matches": 49,
+          "notes": "Tracks the SDL view lifetime/redraw layer that still passes through terminal hosts."
+        },
+        "term_host_story_font_state": {
+          "file_matches": {
+            "src/platform-story-font.h": 2,
+            "src/sdl-main-internal.h": 8,
+            "src/sdl-render.c": 10,
+            "src/sdl-story-font.c": 23,
+            "src/ui/story_font.c": 4,
+            "src/ui/ui-story.c": 1
+          },
+          "files": 6,
+          "label": "term-host story-font state",
+          "matches": 48,
+          "notes": "Tracks story-font activation, grid, and chunk state that is still stored on or driven through terminal hosts."
+        },
+        "terminal_size_query_symbols": {
+          "file_matches": {
+            "src/cmd/world/cmd-interact.c": 1,
+            "src/defines.h": 13,
+            "src/dungeon.c": 2,
+            "src/object/object-ui-display.c": 4,
+            "src/platform-frame.c": 6,
+            "src/platform-frame.h": 4,
+            "src/squelch.c": 4
+          },
+          "files": 7,
+          "label": "terminal-size query symbols",
+          "matches": 34,
+          "notes": "Tracks terminal-sized layout queries that still leak into document and utility flows."
         }
-      }
+      },
+      "notes": "Expanded guardrail for the remaining terminal-era UI ownership that still survives on the SDL path after the movement rewrite.",
+      "scope": [
+        "src/**/*.c",
+        "src/**/*.h"
+      ]
+    },
+    "ui0": {
+      "label": "UI0 debt audit",
+      "metrics": {
+        "inkey_calls": {
+          "file_matches": {},
+          "files": 0,
+          "label": "inkey() call sites",
+          "matches": 0,
+          "notes": "Excludes the declaration in externs.h and the legacy implementation in util-input.c."
+        },
+        "platform_ui_includes": {
+          "file_matches": {},
+          "files": 0,
+          "label": "#include \"platform-ui.h\"",
+          "matches": 0,
+          "notes": "Counts direct platform-ui.h imports across the live source tree."
+        },
+        "screen_overlay_calls": {
+          "file_matches": {},
+          "files": 0,
+          "label": "screen_save()/screen_load() call sites",
+          "matches": 0,
+          "notes": "Excludes declarations and the screen stack implementation owner."
+        },
+        "sdl_named_ui_calls_outside_platform": {
+          "file_matches": {},
+          "files": 0,
+          "label": "get_sdl_*/set_sdl_* usage outside platform code",
+          "matches": 0,
+          "notes": "Excludes SDL platform implementation files and platform-facing declaration headers."
+        },
+        "term_render_control_calls": {
+          "file_matches": {},
+          "files": 0,
+          "label": "direct Term_* render/control calls",
+          "matches": 0,
+          "notes": "Counts direct Term_* render/control usage outside z-term declarations/implementation; excludes input queue helpers and Term_xtra()."
+        }
+      },
+      "notes": "High-level guardrail for terminal-era UI APIs that should not grow during the extermination work.",
+      "platform_sdl_exclusions": [
+        "src/main-sdl.c",
+        "src/main-sdl.h",
+        "src/platform-*.h",
+        "src/sdl-*.c",
+        "src/sdl-*.h"
+      ],
+      "scope": [
+        "src/**/*.c",
+        "src/**/*.h"
+      ]
     }
-  }
+  },
+  "metrics": {
+    "inkey_calls": {
+      "file_matches": {},
+      "files": 0,
+      "label": "inkey() call sites",
+      "matches": 0,
+      "notes": "Excludes the declaration in externs.h and the legacy implementation in util-input.c."
+    },
+    "platform_ui_includes": {
+      "file_matches": {},
+      "files": 0,
+      "label": "#include \"platform-ui.h\"",
+      "matches": 0,
+      "notes": "Counts direct platform-ui.h imports across the live source tree."
+    },
+    "screen_overlay_calls": {
+      "file_matches": {},
+      "files": 0,
+      "label": "screen_save()/screen_load() call sites",
+      "matches": 0,
+      "notes": "Excludes declarations and the screen stack implementation owner."
+    },
+    "sdl_named_ui_calls_outside_platform": {
+      "file_matches": {},
+      "files": 0,
+      "label": "get_sdl_*/set_sdl_* usage outside platform code",
+      "matches": 0,
+      "notes": "Excludes SDL platform implementation files and platform-facing declaration headers."
+    },
+    "term_render_control_calls": {
+      "file_matches": {},
+      "files": 0,
+      "label": "direct Term_* render/control calls",
+      "matches": 0,
+      "notes": "Counts direct Term_* render/control usage outside z-term declarations/implementation; excludes input queue helpers and Term_xtra()."
+    }
+  },
+  "platform_sdl_exclusions": [
+    "src/main-sdl.c",
+    "src/main-sdl.h",
+    "src/platform-*.h",
+    "src/sdl-*.c",
+    "src/sdl-*.h"
+  ],
+  "repo_root": "C:\\Users\\efrem\\Documents\\GitHub\\Sil-More",
+  "scope": [
+    "src/**/*.c",
+    "src/**/*.h"
+  ],
+  "version": 2
 }

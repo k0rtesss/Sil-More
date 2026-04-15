@@ -987,79 +987,134 @@ static void spoil_mon_info(cptr fname)
     msg_print("Successfully created a spoiler file.");
 }
 
+static bool wizard_build_spoiler_scene(app_ui_scene* scene, int selected)
+{
+    static const struct {
+        const char* key;
+        const char* label;
+        const char* meta;
+    } rows[] = {
+        { "1", "Object List", "obj-list.txt" },
+        { "2", "Full Artefact Info", "art-info.txt" },
+        { "3", "Monster List", "mon-list.txt" },
+        { "4", "Full Monster Info", "mon-info.txt" },
+        { "5", "Monster Stat Spreadsheet", "mon-ss.txt" }
+    };
+    app_ui_panel* panel;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL | APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 900, 1600);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Create Spoiler File");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Write spoiler output to the user directory.");
+
+    for (int i = 0; i < (int)N_ELEMENTS(rows); i++)
+    {
+        if (!app_ui_panel_add_row_ex(panel, (s16b)i,
+                i == selected ? TERM_YELLOW : TERM_WHITE, TERM_SLATE,
+                TERM_WHITE, '\0', true, i == selected, rows[i].key,
+                rows[i].label, rows[i].meta))
+        {
+            return false;
+        }
+    }
+
+    if (selected >= 0 && selected < (int)N_ELEMENTS(rows))
+    {
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, rows[selected].label);
+        (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, rows[selected].meta);
+        (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+            "Press Enter or the number key to generate this spoiler file.");
+    }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+        "Enter", "Create");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+        "1-5", "Select");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "Esc", "Back");
+    return true;
+}
+
 /*
  * Create Spoiler files
  */
 void do_cmd_spoilers(void)
 {
-    char ch;
+    int selected = 0;
 
-    /* Interact */
     while (1)
     {
-        /* Clear screen */
-        clear_from(0);
+        ui_information_scene_scope scope;
+        app_ui_scene scene;
+        int ch;
 
-        /* Info */
-        prt("Create a spoiler file.", 2, 0);
-
-        /* Prompt for a file */
-        prt("(1) Object List (obj-list.txt)", 5, 5);
-        prt("(2) Full Artefact Info (art-info.txt)", 6, 5);
-        prt("(3) Monster List (mon-list.txt)", 7, 5);
-        prt("(4) Full Monster Info (mon-info.txt)", 8, 5);
-        prt("(5) Monster Stat Spreadsheet (mon-ss.txt)", 9, 5);
-
-        /* Prompt */
-        prt("Command: ", 13, 0);
-
-        /* Get a choice */
-        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
-
-        /* Escape */
-        if (ch == ESCAPE)
+        if (!ui_information_scene_enter(&scope))
+            break;
+        if (!wizard_build_spoiler_scene(&scene, selected)
+            || !ui_information_scene_present_ui(&scene))
         {
+            ui_information_scene_leave(&scope);
+            msg_print("Spoiler menu unavailable.");
             break;
         }
 
-        /* Option (1) */
-        else if (ch == '1')
+        ch = ui_information_scene_wait_key_hidden_with_wait_reason(
+            APP_WAIT_REASON_LIST_SELECTION);
+        ui_information_scene_leave(&scope);
+
+        if (ch == ESCAPE)
+            break;
+        if (ch == '8')
         {
+            selected = (selected + 4) % 5;
+            continue;
+        }
+        if (ch == '2')
+        {
+            selected = (selected + 1) % 5;
+            continue;
+        }
+        if (ch == '\r' || ch == '\n')
+            ch = '1' + selected;
+
+        switch (ch)
+        {
+        case '1':
+            selected = 0;
             spoil_obj_desc("obj-list.txt");
-        }
-
-        /* Option (2) */
-        else if (ch == '2')
-        {
+            break;
+        case '2':
+            selected = 1;
             spoil_artefact("art-info.txt");
-        }
-
-        /* Option (3) */
-        else if (ch == '3')
-        {
+            break;
+        case '3':
+            selected = 2;
             spoil_mon_desc("mon-list.txt");
-        }
-
-        /* Option (4) */
-        else if (ch == '4')
-        {
+            break;
+        case '4':
+            selected = 3;
             spoil_mon_info("mon-info.txt");
-        }
-
-        /* Option (5) */
-        else if (ch == '5')
-        {
+            break;
+        case '5':
+            selected = 4;
             spoil_mon_ss("mon-ss.txt");
-        }
-
-        /* Oops */
-        else
-        {
+            break;
+        default:
             bell("Illegal command for spoilers!");
+            break;
         }
 
-        /* Flush messages */
         message_flush();
     }
     do_cmd_redraw();

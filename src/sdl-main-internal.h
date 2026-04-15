@@ -256,7 +256,8 @@ bool sdl_gamepad_shift_active(void);
 bool sdl_gamepad_ctrl_active(void);
 bool sdl_gamepad_alt_active(void);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
-void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
+u16b sdl_movement_input_modifiers_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event);
 void sdl_submit_legacy_input_byte(int key);
 void sdl_drain_legacy_input_queue(void);
 void sdl_clear_legacy_input_queue(void);

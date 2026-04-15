@@ -16,6 +16,8 @@
 #include "log/log.h"
 #include <ctype.h>
 
+#define SHOW_FILE_SCROLL_PAGE_LINES 12
+
 /*
  * Make a string lower case.
  */
@@ -45,9 +47,9 @@ static int show_buffer_count_lines(cptr main_buffer)
     return count;
 }
 
-static int show_buffer_clamp_line(int line, int size, int hgt)
+static int show_buffer_clamp_line(int line, int size)
 {
-    int max_top = size - (hgt - 5);
+    int max_top = size - 1;
 
     if (max_top < 0)
         max_top = 0;
@@ -59,15 +61,7 @@ static int show_buffer_clamp_line(int line, int size, int hgt)
     return line;
 }
 
-static void show_file_document_layout_size(int* wid, int* hgt)
-{
-    if (wid)
-        *wid = 80;
-    if (hgt)
-        *hgt = 24;
-}
-
-static app_ui_panel* show_file_begin_document_scene(app_ui_scene* scene)
+static app_ui_panel* show_file_begin_browser_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
 
@@ -79,53 +73,129 @@ static app_ui_panel* show_file_begin_document_scene(app_ui_scene* scene)
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1180, 2800);
     return panel;
 }
 
-static bool show_file_scene_add_text(app_ui_scene* scene, app_ui_panel* panel,
-    s16b row, s16b col, byte attr, cptr text)
+static size_t show_file_trim_line(char* buf)
+{
+    size_t len;
+
+    if (!buf)
+        return 0;
+
+    len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r'))
+        buf[--len] = '\0';
+    return len;
+}
+
+static bool show_file_scene_add_rich_chunk(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, const char* text, size_t len)
+{
+    char chunk[APP_UI_TEXT_MAX];
+    size_t offset = 0;
+
+    if (!scene || !panel || !text || len == 0)
+        return true;
+
+    while (offset < len)
+    {
+        size_t part = len - offset;
+
+        if (part >= sizeof(chunk))
+            part = sizeof(chunk) - 1u;
+        memcpy(chunk, text + offset, part);
+        chunk[part] = '\0';
+        if (!app_ui_panel_add_rich_text(scene, panel, attr, chunk))
+            return false;
+        offset += part;
+    }
+
+    return true;
+}
+
+static bool show_file_scene_add_plain_line(app_ui_scene* scene,
+    app_ui_panel* panel, const char* text)
 {
     if (!text || !text[0])
         return true;
 
-    return app_ui_panel_add_document_text(scene, panel, row, col, attr, text);
+    return show_file_scene_add_rich_chunk(scene, panel, TERM_WHITE, text,
+        strlen(text));
+}
+
+static bool show_file_scene_add_highlighted_line(app_ui_scene* scene,
+    app_ui_panel* panel, const char* text, const char* highlight)
+{
+    char lower_line[1024];
+    const char* cursor;
+    const char* match;
+    size_t highlight_len;
+
+    if (!scene || !panel)
+        return false;
+    if (!text || !text[0])
+        return true;
+    if (!highlight || !highlight[0])
+        return show_file_scene_add_plain_line(scene, panel, text);
+
+    SDL_strlcpy(lower_line, text, sizeof(lower_line));
+    string_lower(lower_line);
+    highlight_len = strlen(highlight);
+    cursor = text;
+    match = strstr(lower_line, highlight);
+
+    while (match)
+    {
+        size_t prefix_len = (size_t)(match - lower_line) - (size_t)(cursor - text);
+
+        if (prefix_len > 0
+            && !show_file_scene_add_rich_chunk(scene, panel, TERM_WHITE,
+                cursor, prefix_len))
+        {
+            return false;
+        }
+        if (!show_file_scene_add_rich_chunk(scene, panel, TERM_YELLOW,
+                text + (match - lower_line), highlight_len))
+        {
+            return false;
+        }
+        cursor = text + (match - lower_line) + highlight_len;
+        match = strstr(lower_line + (cursor - text), highlight);
+    }
+
+    return show_file_scene_add_rich_chunk(scene, panel, TERM_WHITE, cursor,
+        strlen(cursor));
 }
 
 static bool show_buffer_build_ui_scene(app_ui_scene* scene,
-    cptr main_buffer, int line, int size, int hgt)
+    cptr main_buffer, int line, int size)
 {
     app_ui_panel* panel;
     int i;
     int j;
     int k;
-    int next = 0;
     char ch;
     char buf[1024];
 
     if (!scene)
         return false;
 
-    panel = show_file_begin_document_scene(scene);
+    panel = show_file_begin_browser_scene(scene);
     if (!panel)
         return false;
-    line = show_buffer_clamp_line(line, size, hgt);
+    app_ui_panel_set_row_offset(panel, (s16b)line);
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+    line = show_buffer_clamp_line(line, size);
 
-    for (j = 0; true; j++)
-    {
-        if (main_buffer[j] == '\n')
-            next++;
+    j = 0;
 
-        if (next == line || main_buffer[j] == '\0')
-            break;
-    }
-
-    if (main_buffer[j] == '\n')
-        j++;
-
-    for (i = 0; i < hgt - 5;)
+    for (i = 0; ; )
     {
         k = 0;
         while (true)
@@ -145,33 +215,32 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
         }
         buf[k] = '\0';
 
-        if (!show_file_scene_add_text(scene, panel, (s16b)(i + 2), 0,
-                TERM_WHITE, buf))
+        if (i > 0 && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n"))
+            return false;
+        if (!show_file_scene_add_plain_line(scene, panel, buf))
         {
             return false;
         }
         i++;
+
+        if (main_buffer[j] == '\0')
+            break;
     }
 
-    if (size <= hgt - 5)
+    if (size <= 1)
     {
-        return show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 1,
-                   TERM_SLATE, "(press ESC to exit)")
-            && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 8,
-                TERM_L_WHITE, "ESC");
+        return app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "ESC exit");
     }
 
-    return show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 1,
-               TERM_SLATE,
-               "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
-        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 8,
-            TERM_L_WHITE, "ESC")
-        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 21,
-            TERM_L_WHITE, "Space")
-        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 42,
-            TERM_L_WHITE, "Arrows")
-        && show_file_scene_add_text(scene, panel, (s16b)(hgt - 2), 49,
-            TERM_L_WHITE, "Keypad");
+    if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "ESC exit  Space +12  Arrows/Keypad scroll"))
+    {
+        return false;
+    }
+
+    return app_ui_panel_add_body_line(panel, TERM_SLATE,
+        format("[line %d/%d]", line + 1, size));
 }
 
 typedef enum show_file_scene_result {
@@ -193,13 +262,13 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
     while (true)
     {
         app_ui_scene scene;
-        int hgt;
         int dir;
         int ch;
+        int max_scroll;
 
-        show_file_document_layout_size(NULL, &hgt);
-        line = show_buffer_clamp_line(line, size, hgt);
-        if (!show_buffer_build_ui_scene(&scene, main_buffer, line, size, hgt)
+        max_scroll = MAX(0, size - 1);
+        line = show_buffer_clamp_line(line, size);
+        if (!show_buffer_build_ui_scene(&scene, main_buffer, line, size)
             || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
@@ -221,7 +290,9 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
         }
         else if (ch == '3' || ch == ' ')
         {
-            line += (hgt - 5);
+            line += SHOW_FILE_SCROLL_PAGE_LINES;
+            if (line > max_scroll)
+                line = max_scroll;
         }
         else if (ch == ESCAPE)
         {
@@ -252,11 +323,161 @@ static bool show_file_resume_information_scene(
     return ui_information_scene_enter(scope);
 }
 
+static bool show_file_find_next_match(cptr path, cptr find,
+    bool case_sensitive, int start_line, int* out_line)
+{
+    SDL_IOStream* fff;
+    char buf[1024];
+    char lc_buf[1024];
+    int next = 0;
+
+    if (!path || !find || !find[0] || !out_line)
+        return false;
+
+    fff = sdl_fopen(path, "r");
+    if (!fff)
+        return false;
+
+    while (true)
+    {
+        if (sdl_fgets(fff, buf, sizeof(buf)))
+            break;
+        if (prefix(buf, "***** "))
+            continue;
+
+        show_file_trim_line(buf);
+        SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
+        if (!case_sensitive)
+            string_lower(lc_buf);
+
+        if (next >= start_line && strstr(lc_buf, find))
+        {
+            *out_line = next;
+            sdl_fclose(fff);
+            return true;
+        }
+
+        next++;
+    }
+
+    sdl_fclose(fff);
+    return false;
+}
+
+static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
+    cptr caption, cptr shower, bool case_sensitive, bool menu, int size,
+    int line)
+{
+    SDL_IOStream* fff;
+    app_ui_panel* panel;
+    char buf[1024];
+    char lc_buf[1024];
+    bool wrote_any = false;
+    int scroll_offset = line;
+
+    if (!scene || !path)
+        return false;
+
+    fff = sdl_fopen(path, "r");
+    if (!fff)
+        return false;
+
+    panel = show_file_begin_browser_scene(scene);
+    if (!panel)
+    {
+        sdl_fclose(fff);
+        return false;
+    }
+    if (caption && caption[0])
+        scroll_offset += 2;
+    app_ui_panel_set_row_offset(panel, (s16b)scroll_offset);
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+    {
+        sdl_fclose(fff);
+        return false;
+    }
+
+    if (caption && caption[0])
+    {
+        if (!show_file_scene_add_rich_chunk(scene, panel, TERM_L_BLUE, caption,
+                strlen(caption))
+            || !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n\n"))
+        {
+            sdl_fclose(fff);
+            return false;
+        }
+        wrote_any = true;
+    }
+
+    while (true)
+    {
+        if (sdl_fgets(fff, buf, sizeof(buf)))
+            break;
+        if (prefix(buf, "***** "))
+            continue;
+
+        show_file_trim_line(buf);
+        SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
+        if (!case_sensitive)
+            string_lower(lc_buf);
+
+        if (wrote_any && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE,
+                "\n"))
+        {
+            sdl_fclose(fff);
+            return false;
+        }
+        if (!show_file_scene_add_highlighted_line(scene, panel, buf, shower))
+        {
+            sdl_fclose(fff);
+            return false;
+        }
+        wrote_any = true;
+    }
+
+    sdl_fclose(fff);
+    if (!wrote_any && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, " "))
+        return false;
+
+    if (menu)
+    {
+        if (!app_ui_panel_add_body_line(panel, TERM_WHITE,
+                "[Press a letter, number, or ESC to exit.]"))
+        {
+            return false;
+        }
+    }
+    else if (size <= 1)
+    {
+        if (!app_ui_panel_add_body_line(panel, TERM_SLATE, "ESC exit"))
+            return false;
+    }
+    else
+    {
+        if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+                "ESC exit  Space +12  Arrows/Keypad scroll"))
+        {
+            return false;
+        }
+    }
+
+    if (size > 1)
+    {
+        char scroll_buf[32];
+
+        strnfmt(scroll_buf, sizeof(scroll_buf), "[line %d/%d]", line + 1, size);
+        if (!app_ui_panel_add_body_line(panel, TERM_SLATE, scroll_buf))
+            return false;
+    }
+
+    return true;
+}
+
 static show_file_scene_result show_file_information_scene(
     cptr name, cptr what, int line)
 {
     ui_information_scene_scope scope;
-    int i, k, n;
+    int i, n;
     char ch;
     int next = 0;
     int size;
@@ -272,9 +493,6 @@ static show_file_scene_result show_file_information_scene(
     char caption[128];
     char path[1024];
     char buf[1024];
-    char lc_buf[1024];
-    char hook[26][32];
-    int hgt;
 
     if (!ui_information_scene_enter(&scope))
         return SHOW_FILE_SCENE_RESULT_ERROR;
@@ -282,10 +500,6 @@ static show_file_scene_result show_file_information_scene(
     SDL_strlcpy(finder, "", sizeof(finder));
     SDL_strlcpy(shower, "", sizeof(shower));
     SDL_strlcpy(caption, "", sizeof(caption));
-    for (i = 0; i < 26; i++)
-        hook[i][0] = '\0';
-
-    show_file_document_layout_size(NULL, &hgt);
 
     SDL_strlcpy(filename, name, sizeof(filename));
     n = strlen(filename);
@@ -334,9 +548,6 @@ static show_file_scene_result show_file_information_scene(
                 && (buf[8] == b2) && (buf[9] == ' '))
             {
                 menu = true;
-                k = A2I(buf[7]);
-                if ((k >= 0) && (k < 26))
-                    SDL_strlcpy(hook[k], buf + 10, sizeof(hook[0]));
             }
             else if (buf[6] == '<' && tag)
             {
@@ -356,155 +567,27 @@ static show_file_scene_result show_file_information_scene(
     while (true)
     {
         app_ui_scene scene;
-        app_ui_panel* panel;
-
-        panel = show_file_begin_document_scene(&scene);
-        if (!panel)
-        {
-            ui_information_scene_leave(&scope);
-            return SHOW_FILE_SCENE_RESULT_ERROR;
-        }
-        show_file_document_layout_size(NULL, &hgt);
-
-        if (line > (size - (hgt - 5)))
-            line = size - (hgt - 5);
-        if (line < 0)
-            line = 0;
-
-        if (next > line)
-        {
-            sdl_fclose(fff);
-            fff = sdl_fopen(path, "r");
-            if (!fff)
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_SHOWN;
-            }
-            next = 0;
-        }
-
-        while (next < line)
-        {
-            if (sdl_fgets(fff, buf, sizeof(buf)))
-                break;
-
-            if (prefix(buf, "***** "))
-                continue;
-
-            next++;
-        }
-
-        if (caption[0])
-        {
-            if (!show_file_scene_add_text(&scene, panel, 0, 0, TERM_L_BLUE,
-                    caption))
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_ERROR;
-            }
-        }
-
-        for (i = 0; i < hgt - 5;)
-        {
-            if (!i)
-                line = next;
-
-            if (sdl_fgets(fff, buf, sizeof(buf)))
-                break;
-
-            if (prefix(buf, "***** "))
-                continue;
-
-            next++;
-
-            SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
-            if (!case_sensitive)
-                string_lower(lc_buf);
-
-            if (find && !i && !strstr(lc_buf, find))
-                continue;
-
-            find = NULL;
-
-            if (!show_file_scene_add_text(&scene, panel, (s16b)(i + 2), 0,
-                    TERM_WHITE, buf))
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_ERROR;
-            }
-
-            if (shower[0])
-            {
-                cptr str = lc_buf;
-
-                while ((str = strstr(str, shower)) != NULL)
-                {
-                    int len = strlen(shower);
-                    char match[APP_UI_TEXT_MAX];
-
-                    strnfmt(match, sizeof(match), "%.*s", len,
-                        &buf[str - lc_buf]);
-                    if (!show_file_scene_add_text(&scene, panel, (s16b)(i + 2),
-                            (s16b)(str - lc_buf), TERM_YELLOW, match))
-                    {
-                        ui_information_scene_leave(&scope);
-                        return SHOW_FILE_SCENE_RESULT_ERROR;
-                    }
-                    str += len;
-                }
-            }
-
-            i++;
-        }
-
         if (find)
         {
-            bell("Search string not found!");
-            line = back;
+            int found_line = 0;
+
+            if (show_file_find_next_match(path, find, case_sensitive, line,
+                    &found_line))
+            {
+                line = found_line;
+            }
+            else
+            {
+                bell("Search string not found!");
+                line = back;
+            }
             find = NULL;
-            continue;
         }
 
-        if (menu)
-        {
-            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 1), 0,
-                    TERM_WHITE, "[Press a Number, or ESC to exit.]"))
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_ERROR;
-            }
-        }
-        else if (size <= hgt - 5)
-        {
-            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 1,
-                    TERM_SLATE, "(press ESC to exit)")
-                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 8,
-                    TERM_L_WHITE, "ESC"))
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_ERROR;
-            }
-        }
-        else
-        {
-            if (!show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 1,
-                    TERM_SLATE,
-                    "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
-                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 8,
-                    TERM_L_WHITE, "ESC")
-                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 21,
-                    TERM_L_WHITE, "Space")
-                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 42,
-                    TERM_L_WHITE, "Arrows")
-                || !show_file_scene_add_text(&scene, panel, (s16b)(hgt - 2), 49,
-                    TERM_L_WHITE, "Keypad"))
-            {
-                ui_information_scene_leave(&scope);
-                return SHOW_FILE_SCENE_RESULT_ERROR;
-            }
-        }
-
-        if (!ui_information_scene_present_ui(&scene))
+        line = show_buffer_clamp_line(line, size);
+        if (!show_file_build_ui_scene(&scene, path, caption, shower,
+                case_sensitive, menu, size, line)
+            || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
             return SHOW_FILE_SCENE_RESULT_ERROR;
@@ -569,10 +652,10 @@ static show_file_scene_result show_file_information_scene(
         }
 
         if (ch == '_')
-            line = line - ((hgt - 5) / 2);
+            line = line - (SHOW_FILE_SCROLL_PAGE_LINES / 2);
 
         if ((ch == '9') || (ch == '-'))
-            line = line - (hgt - 5);
+            line = line - SHOW_FILE_SCROLL_PAGE_LINES;
 
         if (ch == '7')
             line = 0;
@@ -581,10 +664,10 @@ static show_file_scene_result show_file_information_scene(
             line = line + 1;
 
         if (ch == '+')
-            line = line + ((hgt - 5) / 2);
+            line = line + (SHOW_FILE_SCROLL_PAGE_LINES / 2);
 
         if ((ch == '3') || (ch == ' '))
-            line = line + (hgt - 5);
+            line = line + SHOW_FILE_SCROLL_PAGE_LINES;
 
         if (ch == '1')
             line = size;
@@ -593,7 +676,8 @@ static show_file_scene_result show_file_information_scene(
             break;
     }
 
-    sdl_fclose(fff);
+    if (fff)
+        sdl_fclose(fff);
     ui_information_scene_leave(&scope);
     return (ch == '?') ? SHOW_FILE_SCENE_RESULT_QUERY_EXIT
                        : SHOW_FILE_SCENE_RESULT_SHOWN;

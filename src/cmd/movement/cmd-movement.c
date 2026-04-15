@@ -9,6 +9,7 @@
  */
 
 #include "angband.h"
+#include "app/app-command.h"
 #include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
@@ -435,7 +436,7 @@ void move_player(int dir)
                     /* Disturb the player */
                     disturb(0, 0);
 
-                    input_clear_movement_commands();
+                    app_command_clear_pending();
                     platform_frame_flush_events();
 
                     // Can't jump from within pits
@@ -565,7 +566,7 @@ void move_player(int dir)
                     /* Disturb the player */
                     disturb(0, 0);
 
-                    input_clear_movement_commands();
+                    app_command_clear_pending();
                     platform_frame_flush_events();
 
                     cptr prompt = "Step into the chasm? ";
@@ -588,7 +589,7 @@ void move_player(int dir)
                 /* Disturb the player */
                 disturb(0, 0);
 
-                input_clear_movement_commands();
+                app_command_clear_pending();
                 platform_frame_flush_events();
 
                 if (!get_check("Are you sure you want to step on the trap? "))

@@ -26,6 +26,7 @@ PLATFORM_SDL_GLOBS = (
     "src/sdl-*.c",
     "src/sdl-*.h",
 )
+TERMINAL_MODEL_SCOPE = ("src/**/*.c", "src/**/*.h")
 MOVEMENT_INPUT_SCOPE = (
     "src/externs.h",
     "src/util-input.c",
@@ -103,12 +104,10 @@ UI0_METRICS = (
 MOVEMENT_INPUT_METRICS = (
     MetricSpec(
         key="movement_inkey_waits",
-        label="movement-related inkey() waits",
-        pattern=re.compile(
-            r"\b(?:inkey|inkey_with_wait_reason|targeting_inkey_with_wait_reason)\s*\("
-        ),
-        include_paths=("src/externs.h", "src/util-input.c", "src/targeting.c"),
-        notes="Tracks the legacy inkey wait path still used by request_command() and directional prompts.",
+        label="movement direction char fallbacks",
+        pattern=re.compile(r"\btarget_dir\s*\(\s*ch\s*\)"),
+        include_paths=("src/targeting.c",),
+        notes="Tracks remaining character-to-direction fallback in get_aim_dir()/get_rep_dir() after semantic movement input is wired on the SDL path.",
     ),
     MetricSpec(
         key="movement_request_command_ownership",
@@ -122,13 +121,11 @@ MOVEMENT_INPUT_METRICS = (
         label="movement-related flush() usage",
         pattern=re.compile(r"\bflush\s*\("),
         include_paths=(
-            "src/util-input.c",
             "src/dungeon.c",
             "src/cmd/movement/cmd-movement.c",
             "src/cmd/world/cmd-interact.c",
-            "src/cmd/ui/cmd-ui-settings.c",
         ),
-        notes="Tracks delayed flush ownership in the movement loop, movement consumers, and the legacy movement settings UI.",
+        notes="Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated settings/macro helpers.",
     ),
     MetricSpec(
         key="movement_sdl_direction_macro_bridge",
@@ -161,6 +158,67 @@ MOVEMENT_INPUT_METRICS = (
     ),
 )
 
+TERMINAL_MODEL_METRICS = (
+    MetricSpec(
+        key="legacy_inkey_symbols",
+        label="inkey() symbols",
+        pattern=re.compile(r"\binkey\s*\("),
+        notes="Counts the live legacy byte-input loop, including declarations, definitions, and callers.",
+    ),
+    MetricSpec(
+        key="legacy_request_command_symbols",
+        label="request_command() symbols",
+        pattern=re.compile(r"\brequest_command\s*\("),
+        notes="Tracks reintroduction of the removed request_command() API anywhere in the active source tree.",
+    ),
+    MetricSpec(
+        key="legacy_flush_symbols",
+        label="flush() symbols",
+        pattern=re.compile(r"\bflush\s*\("),
+        notes="Counts delayed flush ownership across the active source tree, including the remaining owner and gameplay/UI callers.",
+    ),
+    MetricSpec(
+        key="compat_text_wrapper_symbols",
+        label="compat text wrapper symbols",
+        pattern=re.compile(
+            r"\b(?:c_put_str|put_str|c_prt|prt|clear_from)\s*\(|\btext_out_to_screen\b"
+        ),
+        notes="Counts the row/column compat text authoring family, including declarations, definitions, calls, and text_out_hook bindings.",
+    ),
+    MetricSpec(
+        key="terminal_size_query_symbols",
+        label="terminal-size query symbols",
+        pattern=re.compile(
+            r"\b(?:platform_frame_main_view_cols|platform_frame_main_view_rows|platform_frame_active_view_cols|platform_frame_active_view_rows)\s*\("
+        ),
+        notes="Tracks terminal-sized layout queries that still leak into document and utility flows.",
+    ),
+    MetricSpec(
+        key="document_op_cell_grid_symbols",
+        label="document-op cell-grid symbols",
+        pattern=re.compile(
+            r"\bAPP_UI_DOCUMENT_OP_[A-Z0-9_]+\b|\bapp_ui_panel_add_document_text(?:_ex)?\s*\(|\bapp_ui_panel_add_document_cell_ex\s*\(|\bapp_ui_panel_add_document_cursor\s*\("
+        ),
+        notes="Counts the live document row/column/cell/cursor surface, including enum values and builder helpers.",
+    ),
+    MetricSpec(
+        key="sdl_term_host_symbols",
+        label="SDL term-host symbols",
+        pattern=re.compile(
+            r"\b(?:term_ready|term_init|term_nuke|sdl_view_link_term|sdl_term_host_redraw|sdl_redraw_all_term_hosts)\b"
+        ),
+        notes="Tracks the SDL view lifetime/redraw layer that still passes through terminal hosts.",
+    ),
+    MetricSpec(
+        key="term_host_story_font_state",
+        label="term-host story-font state",
+        pattern=re.compile(
+            r"\b(?:story_font_active|story_font_grid|story_chunk_active|sdl_apply_story_font_state|sdl_apply_story_grid_state|sdl_story_font_reset_state|sdl_story_font_set_grid|sdl_is_story_font_grid|sdl_render_story_text_grid)\b"
+        ),
+        notes="Tracks story-font activation, grid, and chunk state that is still stored on or driven through terminal hosts.",
+    ),
+)
+
 AUDITS = (
     AuditSpec(
         key="ui0",
@@ -176,6 +234,13 @@ AUDITS = (
         scope=MOVEMENT_INPUT_SCOPE,
         metrics=MOVEMENT_INPUT_METRICS,
         notes="Slice-0 guardrail for the legacy movement input stack that the movement rewrite is expected to delete.",
+    ),
+    AuditSpec(
+        key="terminal_model",
+        label="Terminal-model debt audit",
+        scope=TERMINAL_MODEL_SCOPE,
+        metrics=TERMINAL_MODEL_METRICS,
+        notes="Expanded guardrail for the remaining terminal-era UI ownership that still survives on the SDL path after the movement rewrite.",
     ),
 )
 AUDITS_BY_KEY = {audit.key: audit for audit in AUDITS}

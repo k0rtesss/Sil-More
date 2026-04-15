@@ -15,32 +15,51 @@
 
 #include <limits.h>
 
+#define OBJECT_INFO_CAPTURE_WRAP_COLS 72
+#define OBJECT_INFO_NAME_BUF_COLS 128
+#define OBJECT_INFO_SCROLL_PAGE_LINES 12
+
 /* true if a paragraph break should be output before next p_text_out() */
 static bool new_paragraph = false;
+
+typedef struct object_info_capture_run
+{
+    byte attr;
+    char text[APP_UI_TEXT_MAX];
+} object_info_capture_run;
+
+typedef struct object_info_capture_line
+{
+    int run_first;
+    int run_count;
+} object_info_capture_line;
+
 typedef struct object_info_screen_capture
 {
-    int width;
-    int height;
-    int capacity;
+    int wrap_width;
+    int line_count;
+    int line_capacity;
+    int run_count;
+    int run_capacity;
     byte blank_attr;
-    byte* attrs;
-    char* chars;
-    byte* story;
+    object_info_capture_line* lines;
+    object_info_capture_run* runs;
 } object_info_screen_capture;
 
 static object_info_screen_capture* object_info_live_capture = NULL;
 static bool object_info_live_capture_failed = false;
-static int object_info_live_capture_row = 0;
 static int object_info_live_capture_col = 0;
 
 static void object_info_screen_multi_body(const object_type** objects,
     const char** headings, int count);
-static bool object_info_screen_capture_reserve_rows(
-    object_info_screen_capture* capture, int rows);
+static bool object_info_screen_capture_reserve_lines(
+    object_info_screen_capture* capture, int lines);
+static bool object_info_screen_capture_reserve_runs(
+    object_info_screen_capture* capture, int runs);
 static bool object_info_screen_capture_init(
-    object_info_screen_capture* capture, int width, byte blank_attr);
-static int object_info_screen_capture_used_rows_from_cells(
-    const object_info_screen_capture* capture);
+    object_info_screen_capture* capture, int wrap_width, byte blank_attr);
+static void object_info_screen_capture_trim_lines(
+    object_info_screen_capture* capture);
 static void object_info_screen_capture_free(
     object_info_screen_capture* capture);
 static bool note_info_screen_capture_build(const object_type* o_ptr,
@@ -73,124 +92,221 @@ static void p_text_out_c(byte attr, cptr str)
 }
 
 
-static bool object_info_screen_capture_reserve_rows(
-    object_info_screen_capture* capture, int rows)
+static bool object_info_screen_capture_reserve_lines(
+    object_info_screen_capture* capture, int lines)
 {
-    byte* new_attrs;
-    char* new_chars;
-    byte* new_story;
-    size_t old_size;
-    size_t new_size;
+    object_info_capture_line* new_lines;
     int new_capacity;
 
-    if (!capture || capture->width <= 0 || rows <= 0)
+    if (!capture || lines <= 0)
         return false;
-    if (rows <= capture->capacity)
+    if (lines <= capture->line_capacity)
         return true;
 
-    new_capacity = capture->capacity ? capture->capacity : 8;
-    while (new_capacity < rows)
+    new_capacity = capture->line_capacity ? capture->line_capacity : 8;
+    while (new_capacity < lines)
     {
         if (new_capacity > (INT_MAX / 2))
             return false;
         new_capacity *= 2;
     }
 
-    old_size = (size_t)capture->width * (size_t)capture->capacity;
-    new_size = (size_t)capture->width * (size_t)new_capacity;
-    if (capture->width > 0
-        && new_size / (size_t)capture->width != (size_t)new_capacity)
+    new_lines = mem_alloc_array((size_t)new_capacity, object_info_capture_line);
+    if (!new_lines)
     {
         return false;
     }
 
-    new_attrs = mem_alloc_array(new_size, byte);
-    new_chars = mem_alloc_array(new_size, char);
-    new_story = mem_alloc_array(new_size, byte);
-    if (!new_attrs || !new_chars || !new_story)
+    memset(new_lines, 0, (size_t)new_capacity * sizeof(*new_lines));
+    if (capture->line_count > 0)
     {
-        mem_free_null(new_attrs);
-        mem_free_null(new_chars);
-        mem_free_null(new_story);
+        memcpy(new_lines, capture->lines,
+            (size_t)capture->line_count * sizeof(*new_lines));
+    }
+
+    mem_free_null(capture->lines);
+    capture->lines = new_lines;
+    capture->line_capacity = new_capacity;
+    return true;
+}
+
+static bool object_info_screen_capture_reserve_runs(
+    object_info_screen_capture* capture, int runs)
+{
+    object_info_capture_run* new_runs;
+    int new_capacity;
+
+    if (!capture || runs <= 0)
         return false;
-    }
+    if (runs <= capture->run_capacity)
+        return true;
 
-    if (old_size > 0)
+    new_capacity = capture->run_capacity ? capture->run_capacity : 32;
+    while (new_capacity < runs)
     {
-        memcpy(new_attrs, capture->attrs, old_size * sizeof(byte));
-        memcpy(new_chars, capture->chars, old_size * sizeof(char));
-        memcpy(new_story, capture->story, old_size * sizeof(byte));
+        if (new_capacity > (INT_MAX / 2))
+            return false;
+        new_capacity *= 2;
     }
 
-    for (size_t idx = old_size; idx < new_size; idx++)
+    new_runs = mem_alloc_array((size_t)new_capacity, object_info_capture_run);
+    if (!new_runs)
+        return false;
+
+    memset(new_runs, 0, (size_t)new_capacity * sizeof(*new_runs));
+    if (capture->run_count > 0)
     {
-        new_attrs[idx] = capture->blank_attr;
-        new_chars[idx] = ' ';
-        new_story[idx] = 0;
+        memcpy(new_runs, capture->runs,
+            (size_t)capture->run_count * sizeof(*new_runs));
     }
 
-    mem_free_null(capture->attrs);
-    mem_free_null(capture->chars);
-    mem_free_null(capture->story);
-
-    capture->attrs = new_attrs;
-    capture->chars = new_chars;
-    capture->story = new_story;
-    capture->capacity = new_capacity;
+    mem_free_null(capture->runs);
+    capture->runs = new_runs;
+    capture->run_capacity = new_capacity;
     return true;
 }
 
 static bool object_info_screen_capture_init(
-    object_info_screen_capture* capture, int width, byte blank_attr)
+    object_info_screen_capture* capture, int wrap_width, byte blank_attr)
 {
     if (!capture)
         return false;
 
     memset(capture, 0, sizeof(*capture));
-    capture->width = MAX(1, width);
+    capture->wrap_width = MAX(1, wrap_width);
     capture->blank_attr = blank_attr;
-    return object_info_screen_capture_reserve_rows(capture, 1);
+    capture->line_count = 1;
+
+    return object_info_screen_capture_reserve_lines(capture, 1);
 }
 
-static bool object_info_screen_capture_put_char(byte attr, char ch)
+static object_info_capture_line* object_info_screen_capture_current_line(
+    object_info_screen_capture* capture)
+{
+    if (!capture || capture->line_count < 1
+        || capture->line_count > capture->line_capacity)
+    {
+        return NULL;
+    }
+
+    return &capture->lines[capture->line_count - 1];
+}
+
+static bool object_info_screen_capture_append_run(
+    object_info_screen_capture* capture, byte attr, const char* text)
+{
+    object_info_capture_line* line;
+
+    if (!capture || !text || !text[0])
+        return false;
+
+    line = object_info_screen_capture_current_line(capture);
+    if (!line)
+        return false;
+
+    while (*text)
+    {
+        object_info_capture_run* run = NULL;
+
+        if (line->run_count > 0)
+        {
+            run = &capture->runs[line->run_first + line->run_count - 1];
+            if (run->attr == attr)
+            {
+                size_t current_len = strlen(run->text);
+                size_t available = sizeof(run->text) - 1u - current_len;
+                size_t len;
+
+                if (available > 0)
+                {
+                    len = strlen(text);
+                    if (len > available)
+                        len = available;
+                    memcpy(run->text + current_len, text, len);
+                    run->text[current_len + len] = '\0';
+                    text += len;
+                    continue;
+                }
+            }
+        }
+
+        if (!object_info_screen_capture_reserve_runs(capture,
+                capture->run_count + 1))
+        {
+            return false;
+        }
+        if (line->run_count == 0)
+            line->run_first = capture->run_count;
+        else if (line->run_first + line->run_count != capture->run_count)
+            return false;
+
+        run = &capture->runs[capture->run_count++];
+        memset(run, 0, sizeof(*run));
+        run->attr = attr;
+        SDL_strlcpy(run->text, text, sizeof(run->text));
+        text += strlen(run->text);
+        line->run_count++;
+    }
+
+    return true;
+}
+
+static bool object_info_screen_capture_append_chunk(byte attr, const char* text,
+    int len)
 {
     object_info_screen_capture* capture = object_info_live_capture;
-    int idx;
+    char buf[APP_UI_TEXT_MAX];
+    int offset = 0;
 
-    if (!capture || object_info_live_capture_row < 0
-        || object_info_live_capture_col < 0
-        || object_info_live_capture_col >= capture->width)
-    {
+    if (!capture || len <= 0)
         return false;
-    }
-    if (!object_info_screen_capture_reserve_rows(capture,
-            object_info_live_capture_row + 1))
+
+    while (offset < len)
     {
-        return false;
+        int chunk = MIN(len - offset, (int)sizeof(buf) - 1);
+
+        for (int i = 0; i < chunk; i++)
+        {
+            unsigned char ch = (unsigned char)text[offset + i];
+
+            buf[i] = (char)(isprint(ch) || ch == ' ' ? ch : ' ');
+        }
+        buf[chunk] = '\0';
+        if (!object_info_screen_capture_append_run(capture, attr, buf))
+            return false;
+        offset += chunk;
     }
 
-    idx = object_info_live_capture_row * capture->width
-        + object_info_live_capture_col;
-    capture->attrs[idx] = attr;
-    capture->chars[idx] = ch;
-    capture->story[idx] = 0;
-    object_info_live_capture_col++;
-    if (capture->height < object_info_live_capture_row + 1)
-        capture->height = object_info_live_capture_row + 1;
+    object_info_live_capture_col += len;
     return true;
 }
 
 static bool object_info_screen_capture_append_indent(void)
 {
-    object_info_screen_capture* capture = object_info_live_capture;
+    char spaces[APP_UI_TEXT_MAX];
+    int remaining = text_out_indent - object_info_live_capture_col;
 
-    if (!capture)
-        return false;
+    if (remaining <= 0)
+        return true;
 
-    while (object_info_live_capture_col < text_out_indent)
+    memset(spaces, ' ', sizeof(spaces) - 1u);
+    spaces[sizeof(spaces) - 1u] = '\0';
+
+    while (remaining > 0)
     {
-        if (!object_info_screen_capture_put_char(capture->blank_attr, ' '))
+        int chunk = MIN(remaining, (int)sizeof(spaces) - 1);
+        char saved = spaces[chunk];
+
+        spaces[chunk] = '\0';
+        if (!object_info_screen_capture_append_run(object_info_live_capture,
+                object_info_live_capture->blank_attr, spaces))
+        {
+            spaces[chunk] = saved;
             return false;
+        }
+        spaces[chunk] = saved;
+        object_info_live_capture_col += chunk;
+        remaining -= chunk;
     }
 
     return true;
@@ -204,14 +320,14 @@ static bool object_info_screen_capture_newline(void)
         return false;
 
     object_info_live_capture_col = 0;
-    object_info_live_capture_row++;
-    if (!object_info_screen_capture_reserve_rows(capture,
-            object_info_live_capture_row + 1))
+    if (!object_info_screen_capture_reserve_lines(capture,
+            capture->line_count + 1))
     {
         return false;
     }
-    if (capture->height < object_info_live_capture_row + 1)
-        capture->height = object_info_live_capture_row + 1;
+    memset(&capture->lines[capture->line_count], 0,
+        sizeof(capture->lines[capture->line_count]));
+    capture->line_count++;
     return true;
 }
 
@@ -276,15 +392,19 @@ static void text_out_to_object_info_capture(byte attr, cptr str)
                 len = l_space;
         }
 
-        for (n = 0; n < len; n++)
+        if (len <= 0)
         {
-            char ch = (isprint((unsigned char)s[n]) ? s[n] : ' ');
-
-            if (!object_info_screen_capture_put_char(attr, ch))
+            if (!object_info_screen_capture_newline())
             {
                 object_info_live_capture_failed = true;
                 return;
             }
+            continue;
+        }
+        if (!object_info_screen_capture_append_chunk(attr, s, len))
+        {
+            object_info_live_capture_failed = true;
+            return;
         }
 
         s += len;
@@ -2179,17 +2299,14 @@ static bool screen_out_head(const object_type* o_ptr)
     char* o_name;
     char base_desc_buf[2048];
     cptr base_desc = NULL;
-    int name_size = platform_frame_active_view_cols();
+    int name_size = OBJECT_INFO_NAME_BUF_COLS;
 
     bool has_description = false;
 
-    if (name_size <= 0)
-        name_size = 80;
+    log_trace("screen_out_head: Starting, wrap_cols=%d",
+        OBJECT_INFO_CAPTURE_WRAP_COLS);
 
-    log_trace("screen_out_head: Starting, view=%dx%d",
-        platform_frame_active_view_cols(), platform_frame_active_view_rows());
-
-    /* Allocate memory to the size of the screen */
+    /* Allocate memory sized for semantic capture, not the legacy term width. */
     o_name = mem_alloc_array(name_size, char);
 
     /* Description */
@@ -2350,46 +2467,28 @@ static void object_info_screen_capture_free(
     if (!capture)
         return;
 
-    mem_free_null(capture->attrs);
-    mem_free_null(capture->chars);
-    mem_free_null(capture->story);
+    mem_free_null(capture->lines);
+    mem_free_null(capture->runs);
 
-    capture->width = 0;
-    capture->height = 0;
-    capture->capacity = 0;
+    capture->wrap_width = 0;
+    capture->line_count = 0;
+    capture->line_capacity = 0;
+    capture->run_count = 0;
+    capture->run_capacity = 0;
     capture->blank_attr = 0;
 }
 
-static int object_info_screen_capture_used_rows_from_cells(
-    const object_info_screen_capture* capture)
+static void object_info_screen_capture_trim_lines(
+    object_info_screen_capture* capture)
 {
-    if (!capture || !capture->attrs || !capture->chars || !capture->story)
-        return 0;
+    if (!capture)
+        return;
 
-    for (int y = capture->height - 1; y >= 0; y--)
+    while (capture->line_count > 1
+        && capture->lines[capture->line_count - 1].run_count == 0)
     {
-        for (int x = 0; x < capture->width; x++)
-        {
-            int idx = y * capture->width + x;
-
-            if ((capture->chars[idx] != ' ')
-                || (capture->attrs[idx] != capture->blank_attr)
-                || (capture->story[idx] != 0))
-            {
-                return y + 1;
-            }
-        }
+        capture->line_count--;
     }
-
-    return 0;
-}
-
-static void object_info_document_layout_size(int* wid, int* hgt)
-{
-    if (wid)
-        *wid = 80;
-    if (hgt)
-        *hgt = 24;
 }
 
 static bool object_info_screen_capture_build(
@@ -2401,25 +2500,21 @@ static bool object_info_screen_capture_build(
     int old_indent = text_out_indent;
     bool old_paragraph = new_paragraph;
     bool success = false;
-    int term_wid = 80;
-    int term_hgt = 24;
+    int wrap_cols = OBJECT_INFO_CAPTURE_WRAP_COLS;
 
     if (!capture || !objects || count <= 0)
         return false;
 
-    object_info_document_layout_size(&term_wid, &term_hgt);
-    if (term_wid < 20)
-        term_wid = 20;
-    (void)term_hgt;
-    if (!object_info_screen_capture_init(capture, term_wid - 1, TERM_WHITE))
+    if (wrap_cols < 20)
+        wrap_cols = 20;
+    if (!object_info_screen_capture_init(capture, wrap_cols, TERM_WHITE))
         goto cleanup;
 
     object_info_live_capture = capture;
     object_info_live_capture_failed = false;
-    object_info_live_capture_row = 0;
     object_info_live_capture_col = 0;
     text_out_hook = text_out_to_object_info_capture;
-    text_out_wrap = term_wid - 1;
+    text_out_wrap = wrap_cols;
     text_out_indent = 0;
     new_paragraph = false;
 
@@ -2427,15 +2522,12 @@ static bool object_info_screen_capture_build(
     if (object_info_live_capture_failed)
         goto cleanup;
 
-    capture->height = object_info_screen_capture_used_rows_from_cells(capture);
-    if (capture->height < 1)
-        capture->height = 1;
+    object_info_screen_capture_trim_lines(capture);
     success = true;
 
 cleanup:
     object_info_live_capture = NULL;
     object_info_live_capture_failed = false;
-    object_info_live_capture_row = 0;
     object_info_live_capture_col = 0;
     text_out_hook = old_hook;
     text_out_wrap = old_wrap;
@@ -2465,7 +2557,6 @@ static bool note_info_screen_capture_build(const object_type* o_ptr,
 
     object_info_live_capture = capture;
     object_info_live_capture_failed = false;
-    object_info_live_capture_row = 0;
     object_info_live_capture_col = 0;
     text_out_hook = text_out_to_object_info_capture;
     text_out_wrap = 60;
@@ -2477,15 +2568,12 @@ static bool note_info_screen_capture_build(const object_type* o_ptr,
     if (object_info_live_capture_failed)
         goto cleanup;
 
-    capture->height = object_info_screen_capture_used_rows_from_cells(capture);
-    if (capture->height < 1)
-        capture->height = 1;
+    object_info_screen_capture_trim_lines(capture);
     success = true;
 
 cleanup:
     object_info_live_capture = NULL;
     object_info_live_capture_failed = false;
-    object_info_live_capture_row = 0;
     object_info_live_capture_col = 0;
     text_out_hook = old_hook;
     text_out_wrap = old_wrap;
@@ -2498,44 +2586,7 @@ cleanup:
     return success;
 }
 
-static int object_info_screen_capture_row_end(
-    const object_info_screen_capture* capture, int row)
-{
-    int end;
-
-    if (!capture || row < 0 || row >= capture->height)
-        return 0;
-
-    end = capture->width;
-    while (end > 0)
-    {
-        int idx = row * capture->width + (end - 1);
-
-        if (capture->chars[idx] != ' '
-            || capture->attrs[idx] != capture->blank_attr
-            || capture->story[idx] != 0)
-        {
-            break;
-        }
-        end--;
-    }
-
-    return end;
-}
-
-static bool object_info_screen_capture_run_has_text(
-    const object_info_screen_capture* capture, int row, int start, int end)
-{
-    for (int x = start; x < end; x++)
-    {
-        if (capture->chars[row * capture->width + x] != ' ')
-            return true;
-    }
-
-    return false;
-}
-
-static app_ui_panel* object_info_begin_document_scene(app_ui_scene* scene)
+static app_ui_panel* object_info_begin_browser_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
 
@@ -2547,15 +2598,15 @@ static app_ui_panel* object_info_begin_document_scene(app_ui_scene* scene)
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 1180, 2200);
     return panel;
 }
 
-static bool object_info_scene_add_text_run(app_ui_scene* scene,
-    app_ui_panel* panel, s16b row, s16b col, byte attr, byte story,
-    const char* text, int len)
+static bool object_info_scene_add_rich_run(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, const char* text, int len)
 {
     char buf[APP_UI_TEXT_MAX];
     const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
@@ -2569,12 +2620,10 @@ static bool object_info_scene_add_text_run(app_ui_scene* scene,
 
         memcpy(buf, text, (size_t)chunk);
         buf[chunk] = '\0';
-        if (!app_ui_panel_add_document_text_ex(
-                scene, panel, row, col, attr, story, buf))
+        if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))
         {
             return false;
         }
-        col += (s16b)chunk;
         text += chunk;
         len -= chunk;
     }
@@ -2582,65 +2631,27 @@ static bool object_info_scene_add_text_run(app_ui_scene* scene,
     return true;
 }
 
-static bool object_info_scene_add_capture_row(app_ui_scene* scene,
-    app_ui_panel* panel, const object_info_screen_capture* capture, int src_row,
-    int dst_row)
+static bool object_info_scene_add_capture_line(app_ui_scene* scene,
+    app_ui_panel* panel, const object_info_screen_capture* capture, int src_line)
 {
-    int end;
+    object_info_capture_line* line;
 
-    if (!scene || !panel || !capture || src_row < 0 || src_row >= capture->height)
-        return false;
-
-    end = object_info_screen_capture_row_end(capture, src_row);
-    for (int start = 0; start < end;)
+    if (!scene || !panel || !capture || src_line < 0
+        || src_line >= capture->line_count)
     {
-        int idx = src_row * capture->width + start;
-        byte attr = capture->attrs[idx];
-        byte story = capture->story[idx];
-        int run_end = start + 1;
+        return false;
+    }
 
-        while (run_end < end)
+    line = &capture->lines[src_line];
+    for (int i = 0; i < line->run_count; i++)
+    {
+        object_info_capture_run* run = &capture->runs[line->run_first + i];
+
+        if (!object_info_scene_add_rich_run(scene, panel, run->attr, run->text,
+                (int)strlen(run->text)))
         {
-            int run_idx = src_row * capture->width + run_end;
-
-            if (capture->attrs[run_idx] != attr
-                || capture->story[run_idx] != story)
-            {
-                break;
-            }
-            run_end++;
+            return false;
         }
-
-        if (object_info_screen_capture_run_has_text(
-                capture, src_row, start, run_end))
-        {
-            char buf[APP_UI_TEXT_MAX];
-            const int max_chunk = (int)APP_UI_TEXT_MAX - 1;
-            int offset = start;
-
-            while (offset < run_end)
-            {
-                int chunk = MIN(run_end - offset, max_chunk);
-
-                for (int i = 0; i < chunk; i++)
-                {
-                    unsigned char ch
-                        = (unsigned char)capture->chars[src_row * capture->width
-                            + offset + i];
-
-                    buf[i] = (char)(isprint(ch) || ch == ' ' ? ch : ' ');
-                }
-                buf[chunk] = '\0';
-                if (!object_info_scene_add_text_run(scene, panel,
-                        (s16b)dst_row, (s16b)offset, attr, story, buf, chunk))
-                {
-                    return false;
-                }
-                offset += chunk;
-            }
-        }
-
-        start = run_end;
     }
 
     return true;
@@ -2651,38 +2662,34 @@ static bool object_info_screen_capture_build_scene(
     int scroll, byte prompt_attr, cptr exit_prompt)
 {
     app_ui_panel* panel;
-    int term_wid = 80;
-    int term_hgt = 24;
-    int visible_rows;
-    int prompt_row;
     int max_scroll;
     char scroll_buf[32];
 
-    if (!scene || !capture || !capture->attrs || !capture->chars || !capture->story)
+    if (!scene || !capture || !capture->lines
+        || (capture->run_count > 0 && !capture->runs))
+    {
         return false;
+    }
 
-    object_info_document_layout_size(&term_wid, &term_hgt);
-    visible_rows = MAX(1, term_hgt - 1);
-    prompt_row = MAX(0, term_hgt - 1);
-    max_scroll = MAX(0, capture->height - visible_rows);
+    max_scroll = MAX(0, capture->line_count - 1);
 
     if (scroll < 0)
         scroll = 0;
     if (scroll > max_scroll)
         scroll = max_scroll;
 
-    panel = object_info_begin_document_scene(scene);
+    panel = object_info_begin_browser_scene(scene);
     if (!panel)
         return false;
+    app_ui_panel_set_row_offset(panel, (s16b)scroll);
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
 
-    for (int row = 0; row < visible_rows; row++)
+    for (int row = 0; row < capture->line_count; row++)
     {
-        int src_row = row + scroll;
-
-        if (src_row >= capture->height)
-            break;
-        if (!object_info_scene_add_capture_row(scene, panel, capture, src_row,
-                row))
+        if (row > 0 && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n"))
+            return false;
+        if (!object_info_scene_add_capture_line(scene, panel, capture, row))
             return false;
     }
 
@@ -2691,51 +2698,18 @@ static bool object_info_screen_capture_build_scene(
         if (!exit_prompt)
             exit_prompt = "(press any key)";
 
-        return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
-            0, prompt_attr, exit_prompt);
+        return app_ui_panel_add_body_line(panel, prompt_attr, exit_prompt);
     }
 
-    if (term_wid >= 70)
-    {
-        if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
-                TERM_SLATE,
-                "(press ESC to exit, Space for next page, Arrows/Keypad to scroll)")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 7, TERM_L_WHITE, "ESC")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 20, TERM_L_WHITE, "Space")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 41, TERM_L_WHITE, "Arrows")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 48, TERM_L_WHITE, "Keypad"))
-        {
-            return false;
-        }
-    }
-    else if (term_wid >= 40)
-    {
-        if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
-                TERM_SLATE, "(ESC exit, Space page, Arrows scroll)")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 1, TERM_L_WHITE, "ESC")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 11, TERM_L_WHITE, "Space")
-            || !app_ui_panel_add_document_text(
-                scene, panel, (s16b)prompt_row, 23, TERM_L_WHITE, "Arrows"))
-        {
-            return false;
-        }
-    }
-    else if (!app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row, 0,
-                 TERM_SLATE, "(ESC exit, Arrows scroll)"))
+    if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "ESC exit  Space +12  Arrows/Keypad scroll"))
     {
         return false;
     }
 
-    strnfmt(scroll_buf, sizeof(scroll_buf), "[%d/%d]", scroll + 1, max_scroll + 1);
-    return app_ui_panel_add_document_text(scene, panel, (s16b)prompt_row,
-        (s16b)MAX(0, term_wid - (int)strlen(scroll_buf)), TERM_SLATE,
-        scroll_buf);
+    strnfmt(scroll_buf, sizeof(scroll_buf), "[line %d/%d]", scroll + 1,
+        capture->line_count);
+    return app_ui_panel_add_body_line(panel, TERM_SLATE, scroll_buf);
 }
 
 static bool object_info_screen_capture_view_document(
@@ -2744,23 +2718,18 @@ static bool object_info_screen_capture_view_document(
 {
     ui_information_scene_scope scope;
     int scroll = 0;
+    int max_scroll;
 
     if (!capture || !ui_information_scene_enter(&scope))
         return false;
 
+    max_scroll = MAX(0, capture->line_count - 1);
+
     while (true)
     {
         app_ui_scene scene;
-        int term_wid = 80;
-        int term_hgt = 24;
-        int visible_rows;
-        int max_scroll;
         int dir;
         char ch;
-
-        object_info_document_layout_size(&term_wid, &term_hgt);
-        visible_rows = MAX(1, term_hgt - 1);
-        max_scroll = MAX(0, capture->height - visible_rows);
 
         if (scroll > max_scroll)
             scroll = max_scroll;
@@ -2793,13 +2762,13 @@ static bool object_info_screen_capture_view_document(
         }
         else if ((ch == '3') || (ch == ' '))
         {
-            scroll += visible_rows;
+            scroll += OBJECT_INFO_SCROLL_PAGE_LINES;
             if (scroll > max_scroll)
                 scroll = max_scroll;
         }
         else if ((ch == '9') || (ch == '-'))
         {
-            scroll -= visible_rows;
+            scroll -= OBJECT_INFO_SCROLL_PAGE_LINES;
             if (scroll < 0)
                 scroll = 0;
         }
@@ -2829,9 +2798,6 @@ void object_info_screen_multi(const object_type** objects, const char** headings
     }
 
     object_info_screen_capture_free(&capture);
-    text_out_hook = text_out_to_screen;
-    text_out_wrap = 0;
-    text_out_indent = 0;
     new_paragraph = false;
 }
 

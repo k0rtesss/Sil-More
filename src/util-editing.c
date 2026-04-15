@@ -130,28 +130,6 @@ int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos)
 }
 
 /*
- * Hack - Efficient printing function.
- */
-void editing_buffer_display(editing_buffer* eb_ptr, int x, int y, byte col)
-{
-    char buf[1024];
-    size_t len;
-
-    if (!eb_ptr)
-        return;
-
-    /*
-     * This renderer is no longer on the active SDL runtime path, but keep the
-     * helper functional without writing through the term backend directly.
-     */
-    editing_buffer_get_all(eb_ptr, buf, sizeof(buf));
-    len = strlen(buf);
-    c_prt(col, "", y, x);
-    if (len > 0)
-        c_put_str(col, buf, y, x);
-}
-
-/*
  * Deletes the character under the "cursor". Returns 1 if it succeds.
  */
 int editing_buffer_delete(editing_buffer* eb_ptr)

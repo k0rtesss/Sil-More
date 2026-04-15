@@ -162,7 +162,6 @@ static errr init_other(void)
 {
     int i;
 
-    (void)macro_init();
     (void)quarks_init();
     (void)autoinscribe_init();
     (void)messages_init();
@@ -1022,9 +1021,6 @@ menu_done:
 
 void cleanup_angband(void)
 {
-    macro_free();
-    macro_trigger_free();
-
     mem_free_null(alloc_ego_table);
     mem_free_null(alloc_race_table);
     mem_free_null(alloc_kind_table);
