@@ -87,7 +87,7 @@ Movement input should be action-based, not macro-based.
   - `Modern Arrows`
   - `Modern WASD+QEZC`
   - `Vi Keys`
-  - optional `Classic Sil` import preset for migration only
+  - `Classic Sil`
 
 ### 4. Modifier chords are first-class
 - `Shift`, `Ctrl`, and `Alt` should be represented structurally in the binding
@@ -134,7 +134,6 @@ Deliverables:
 - add an app-facing command-input service for movement acquisition
 - add keyboard binding storage to SDL config
 - add default movement presets
-- add a one-shot migration path from old movement keymaps
 
 Implementation notes:
 - The semantic service should be owned by `src/app/*` or a narrow adjacent
@@ -144,13 +143,10 @@ Implementation notes:
   lookup, not byte-sequence synthesis.
 - The service should produce semantic command payloads such as action plus
   direction plus modifiers, not command chars plus embedded digits.
-- The migration path only needs to understand known movement actions from old
-  data:
-  - `;1` through `;9`
-  - `.1` through `.9`
-  - `/1` through `/9`
-  - `z`, `Z`, and `/5`
-- Unknown user macros should be left alone and logged as not imported.
+- Missing movement bindings at startup should be filled with the configured
+  default preset, not imported from legacy keymaps.
+- Old movement keymaps and macro text should simply stop being authoritative
+  for movement.
 
 Exit when:
 - the game can load, save, reset, and display keyboard movement bindings
@@ -291,19 +287,16 @@ Rules:
 
 ### Slice 2. Settings, Config, And Migration
 Goal:
-- move keyboard movement bindings into structured settings and provide
-  migration from known legacy movement definitions
+- move keyboard movement bindings into structured settings
 
 Write set:
 - `src/sdl-config.c`
 - `src/sdl-config.h`
 - `src/cmd/ui/cmd-ui-settings.c`
-- migration helpers owned by the settings or config path
 
 Outputs:
 - JSON-backed keyboard movement bindings
 - preset load or reset flow
-- migration from known legacy movement keymaps
 
 Dependencies:
 - starts after Slice 1 interface is frozen
@@ -372,12 +365,11 @@ Write set:
 - `lib/pref/pref-sdl.prf`
 - `src/fs/pref-files.c`
 - `src/util-convert.c`
-- follow-up docs touched by the migration
+- follow-up docs touched by the cleanup
 
 Outputs:
 - shipped defaults no longer define movement through keymap or macro text
-- movement-specific legacy import paths reduced to migration-only behavior or
-  deleted
+- movement-specific legacy parser ownership reduced or deleted
 
 Dependencies:
 - starts only after Slices 2, 3, and 4 are landed
@@ -426,8 +418,7 @@ Rules:
 - The movement rewrite is allowed to leave unrelated command families on the
   legacy path temporarily, but it is not allowed to create a fresh movement-only
   compatibility bridge that would survive the extermination work.
-- Read old movement keymaps for migration; do not continue to write them as the
-  primary format.
+- Do not add startup import logic for old movement keymaps.
 - Unknown or advanced automation macros should remain opt-in legacy behavior
   until a broader input rewrite is planned.
 
@@ -436,7 +427,6 @@ Rules:
   - binding lookup by key plus modifiers
   - conflict detection
   - preset load and reset
-  - migration from known legacy movement actions
 - SDL smoke coverage:
   - walk in 8 directions
   - run with `Shift + direction`
@@ -459,15 +449,15 @@ Rules:
 2. Land Slice 1 and freeze the semantic movement interface.
 3. Run Slices 2, 3, and 4 in parallel with disjoint ownership.
 4. Integrate the slices and verify the movement path end to end.
-5. Run Slice 5 to delete movement-specific legacy defaults and migration-only
-   leftovers.
+5. Run Slice 5 to delete movement-specific legacy defaults and remaining
+   cleanup leftovers.
 
 ## Done When
 - Movement is bound by settings, not by macro text.
 - Modifier chords are explicit data, not encoded byte sequences.
 - Direction is carried as structured payload, not extracted from `;8`-style
   strings.
-- `hjkl_movement` and `angband_keyset` are presets or migration aids, not live
+- `hjkl_movement` and `angband_keyset` are no longer live movement
   architecture switches.
 - A player can configure movement entirely through the settings UI without
   touching `.prf` files or learning macro syntax.

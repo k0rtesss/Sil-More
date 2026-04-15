@@ -1226,6 +1226,28 @@ static void test_sdl_movement_presets(void)
         APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_PERIOD,
         APP_INPUT_MODIFIER_SHIFT));
 
+    sdl_config_set_default_movement_bindings(&config,
+        APP_MOVEMENT_PRESET_CLASSIC_SIL);
+    CHECK(config.movement_keyboard_present);
+    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_CLASSIC_SIL);
+    CHECK(config.movement_binding_count > 0);
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
+        APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_KP_8, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+        APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_KP_8,
+        APP_INPUT_MODIFIER_SHIFT));
+    CHECK(test_find_movement_binding(&config,
+        APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_NORTH,
+        SDL_SCANCODE_KP_8, APP_INPUT_MODIFIER_CTRL));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+        APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP,
+        APP_INPUT_MODIFIER_SHIFT));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_KP_5, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_KP_5,
+        APP_INPUT_MODIFIER_SHIFT));
+
     for (i = 0; i < config.movement_binding_count; i++)
     {
         CHECK(app_movement_binding_is_valid(&config.movement_bindings[i]));

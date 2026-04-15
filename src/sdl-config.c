@@ -798,6 +798,12 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* config,
 
     if (preset_id == APP_MOVEMENT_PRESET_CLASSIC_SIL)
     {
+        /* On Windows, Shift+numpad navigation can surface as the navigation
+         * cluster rather than keypad scancodes. Keep classic numpad defaults,
+         * but accept the navigation-cluster scancodes too so running and
+         * directed interact continue to work in deployment builds.
+         */
+        sdl_config_add_directional_preset_set(config, arrows_scancodes);
         sdl_config_add_wait_rest_bindings(config, SDL_SCANCODE_KP_5,
             SDL_SCANCODE_KP_5, SDL_SCANCODE_Z, SDL_SCANCODE_Z);
     }

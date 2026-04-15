@@ -248,6 +248,43 @@ static errr input_byte_read(char* ch, bool take)
     return 0;
 }
 
+static bool input_take_queued_legacy_key(char* out_ch)
+{
+    app_session* session = app_session_current();
+    app_input input;
+    char ch = '\0';
+
+    if (session)
+    {
+        while (app_session_peek_input(session, &input))
+        {
+            if (input.layer != APP_INPUT_LAYER_LEGACY
+                || input.type != APP_INPUT_TYPE_KEY)
+            {
+                app_input discarded;
+
+                (void)app_session_pop_input(session, &discarded);
+                continue;
+            }
+
+            ch = (char)(input.payload.key.logical_key & 0xFFu);
+            (void)app_session_pop_input(session, &input);
+            if (out_ch)
+                *out_ch = ch;
+            return true;
+        }
+    }
+
+    if (input_byte_read(&ch, true) == 0)
+    {
+        if (out_ch)
+            *out_ch = ch;
+        return true;
+    }
+
+    return false;
+}
+
 static bool inkey_information_scene_candidate(const app_input* input)
 {
     return input && input->layer == APP_INPUT_LAYER_LEGACY
@@ -692,14 +729,10 @@ bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
             return true;
         }
 
-        if (inkey_can_consume_immediately())
+        if (input_take_queued_legacy_key(out_ch))
         {
-            char ch = inkey();
-
             if (out_command)
                 app_movement_command_clear(out_command);
-            if (out_ch)
-                *out_ch = ch;
             if (scope_active)
                 app_session_pop_wait_scope(app_session_current(), &scope);
             return true;

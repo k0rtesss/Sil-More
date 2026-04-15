@@ -435,8 +435,8 @@ void move_player(int dir)
                     /* Disturb the player */
                     disturb(0, 0);
 
-                    /* Flush input */
-                    flush();
+                    input_clear_movement_commands();
+                    platform_frame_flush_events();
 
                     // Can't jump from within pits
                     if (cave_pit_bold(p_ptr->py, p_ptr->px))
@@ -565,8 +565,8 @@ void move_player(int dir)
                     /* Disturb the player */
                     disturb(0, 0);
 
-                    /* Flush input */
-                    flush();
+                    input_clear_movement_commands();
+                    platform_frame_flush_events();
 
                     cptr prompt = "Step into the chasm? ";
                     if (p_ptr->depth >= MORGOTH_DEPTH)
@@ -588,8 +588,8 @@ void move_player(int dir)
                 /* Disturb the player */
                 disturb(0, 0);
 
-                /* Flush input */
-                flush();
+                input_clear_movement_commands();
+                platform_frame_flush_events();
 
                 if (!get_check("Are you sure you want to step on the trap? "))
                 {

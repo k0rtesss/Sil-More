@@ -89,22 +89,20 @@ static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
 void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
-static int sdl_keymap_mode(void);
-static void sdl_submit_legacy_input_byte_repeat(int key, bool repeat);
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
-static bool sdl_parse_movement_action_string(cptr action, u16b* out_action,
-    u16b* out_direction);
-static bool sdl_build_movement_command_from_action(u16b action,
+static bool sdl_build_movement_command_from_input(u16b context, u16b action,
     u16b direction, const app_input* input,
     app_movement_command* out_command);
-static bool sdl_bridge_movement_command_to_legacy(
+static u16b sdl_current_movement_input_context(void);
+static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
+    app_input* out_input);
+static bool sdl_submit_movement_command(
     const app_movement_command* command);
-static bool sdl_try_submit_movement_action(cptr action, u16b device,
-    u16b input_type, u16b source_id, u16b modifiers, u16b input_flags,
-    u32b trigger, u32b trigger_aux);
 static int sdl_key_to_legacy_keypad_dir(int key);
 static char sdl_direction_char_for_key(int key);
 static char sdl_legacy_key_char_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event);
+static bool sdl_keyboard_event_reserved_for_movement(
     const SDL_KeyboardEvent* key_event);
 static bool sdl_try_submit_keyboard_movement_event(
     const SDL_KeyboardEvent* key_event);
@@ -175,14 +173,6 @@ static bool sdl_queue_legacy_input_byte_ex(int key, bool repeat)
 static bool sdl_queue_legacy_input_byte(int key)
 {
     return sdl_queue_legacy_input_byte_ex(key, false);
-}
-
-static void sdl_submit_legacy_input_byte_repeat(int key, bool repeat)
-{
-    if (sdl_queue_legacy_input_byte_ex(key, repeat))
-        return;
-
-    (void)input_byte_enqueue(key);
 }
 
 void sdl_submit_legacy_input_byte(int key)
@@ -287,17 +277,6 @@ void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt)
         key, ctrl ? "C" : "", shift ? "S" : "", alt ? "A" : "", key / 16, key % 16);
 }
 
-static int sdl_keymap_mode(void)
-{
-    if (!hjkl_movement && !angband_keyset)
-        return KEYMAP_MODE_SIL;
-    if (hjkl_movement && !angband_keyset)
-        return KEYMAP_MODE_SIL_HJKL;
-    if (!hjkl_movement && angband_keyset)
-        return KEYMAP_MODE_ANGBAND;
-    return KEYMAP_MODE_ANGBAND_HJKL;
-}
-
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod)
 {
     u16b modifiers = 0;
@@ -322,75 +301,7 @@ static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod)
     return modifiers;
 }
 
-static bool sdl_parse_movement_action_string(cptr action, u16b* out_action,
-    u16b* out_direction)
-{
-    u16b parsed_action = APP_MOVEMENT_ACTION_NONE;
-    u16b parsed_direction = APP_MOVEMENT_DIRECTION_NONE;
-
-    if (!action || !action[0])
-        return false;
-
-    if (!action[1])
-    {
-        switch (action[0])
-        {
-        case 'z':
-            parsed_action = APP_MOVEMENT_ACTION_WAIT;
-            parsed_direction = APP_MOVEMENT_DIRECTION_CENTER;
-            break;
-
-        case 'Z':
-            parsed_action = APP_MOVEMENT_ACTION_REST;
-            parsed_direction = APP_MOVEMENT_DIRECTION_CENTER;
-            break;
-
-        default:
-            return false;
-        }
-    }
-    else
-    {
-        int legacy_dir;
-
-        if (action[2] || !isdigit((unsigned char)action[1]))
-            return false;
-
-        legacy_dir = D2I(action[1]);
-        if (!app_movement_direction_from_legacy_keypad(legacy_dir,
-                &parsed_direction))
-        {
-            return false;
-        }
-
-        switch (action[0])
-        {
-        case ';':
-            parsed_action = APP_MOVEMENT_ACTION_MOVE_DIR;
-            break;
-
-        case '.':
-            parsed_action = APP_MOVEMENT_ACTION_RUN_DIR;
-            break;
-
-        case '/':
-            parsed_action = APP_MOVEMENT_ACTION_INTERACT_DIR;
-            break;
-
-        default:
-            return false;
-        }
-    }
-
-    if (out_action)
-        *out_action = parsed_action;
-    if (out_direction)
-        *out_direction = parsed_direction;
-
-    return true;
-}
-
-static bool sdl_build_movement_command_from_action(u16b action,
+static bool sdl_build_movement_command_from_input(u16b context, u16b action,
     u16b direction, const app_input* input,
     app_movement_command* out_command)
 {
@@ -398,7 +309,7 @@ static bool sdl_build_movement_command_from_action(u16b action,
         return false;
 
     app_movement_command_clear(out_command);
-    out_command->context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    out_command->context = context;
     out_command->action = action;
     out_command->modifiers = input->modifiers;
     out_command->device = input->device;
@@ -447,66 +358,93 @@ static bool sdl_build_movement_command_from_action(u16b action,
     return app_movement_command_is_valid(out_command);
 }
 
-static bool sdl_bridge_movement_command_to_legacy(
+static u16b sdl_current_movement_input_context(void)
+{
+    app_session* session = app_session_current();
+    const app_wait_state* wait_state = session
+        ? app_session_wait_state(session)
+        : NULL;
+
+    if (wait_state && wait_state->reason == APP_WAIT_REASON_TARGETING)
+    {
+        return APP_MOVEMENT_CONTEXT_ANY;
+    }
+
+    return APP_MOVEMENT_CONTEXT_DUNGEON;
+}
+
+static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
+    app_input* out_input)
+{
+    if (!out_input)
+        return;
+
+    memset(out_input, 0, sizeof(*out_input));
+    if (!key_event)
+        return;
+
+    out_input->layer = APP_INPUT_LAYER_INTENT;
+    out_input->type = APP_INPUT_TYPE_KEY;
+    out_input->device = APP_INPUT_DEVICE_KEYBOARD;
+    out_input->modifiers = sdl_input_modifiers_from_keymod(key_event->mod);
+    out_input->flags = APP_INPUT_FLAG_PRESS;
+    if (key_event->repeat)
+        out_input->flags |= APP_INPUT_FLAG_REPEAT;
+    out_input->sequence = ++g_legacy_input_sequence;
+    out_input->timestamp_usec = SDL_GetTicksNS() / 1000ULL;
+    out_input->payload.key.logical_key = (u32b)key_event->key;
+    out_input->payload.key.physical_key = (u32b)key_event->scancode;
+    out_input->payload.key.repeat_count = key_event->repeat ? 1 : 0;
+}
+
+static bool sdl_submit_movement_command(
     const app_movement_command* command)
 {
-    int dir;
-    bool repeat;
-
     if (!command || !app_movement_command_is_valid(command))
         return false;
 
-    repeat = (command->flags & APP_MOVEMENT_COMMAND_FLAG_REPEAT) != 0;
-    dir = app_movement_direction_to_legacy_keypad(
-        command->direction.direction);
-
-    switch (command->action)
-    {
-    case APP_MOVEMENT_ACTION_MOVE_DIR:
-        if (!dir)
-            return false;
-        sdl_submit_legacy_input_byte_repeat(';', repeat);
-        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
-        return true;
-
-    case APP_MOVEMENT_ACTION_RUN_DIR:
-        if (!dir)
-            return false;
-        sdl_submit_legacy_input_byte_repeat('.', repeat);
-        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
-        return true;
-
-    case APP_MOVEMENT_ACTION_INTERACT_DIR:
-        if (!dir)
-            return false;
-        sdl_submit_legacy_input_byte_repeat('/', repeat);
-        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
-        return true;
-
-    case APP_MOVEMENT_ACTION_WAIT:
-        sdl_submit_legacy_input_byte_repeat('z', repeat);
-        return true;
-
-    case APP_MOVEMENT_ACTION_REST:
-        sdl_submit_legacy_input_byte_repeat('Z', repeat);
-        return true;
-
-    default:
-        return false;
-    }
+    return input_submit_movement_command(command);
 }
 
-static bool sdl_try_submit_movement_action(cptr action, u16b device,
-    u16b input_type, u16b source_id, u16b modifiers, u16b input_flags,
+bool sdl_submit_directional_movement(int dir, bool shift, bool ctrl, bool alt,
+    u16b device, u16b input_type, u16b source_id, u16b input_flags,
     u32b trigger, u32b trigger_aux)
 {
     app_input input;
     app_movement_command command;
-    u16b movement_action = APP_MOVEMENT_ACTION_NONE;
-    u16b direction = APP_MOVEMENT_DIRECTION_NONE;
+    u16b context;
+    u16b action;
+    u16b direction;
+    u16b modifiers = 0;
+    int modifier_count = (shift ? 1 : 0) + (ctrl ? 1 : 0) + (alt ? 1 : 0);
 
-    if (!sdl_parse_movement_action_string(action, &movement_action, &direction))
+    if (dir < 1 || dir > 9)
         return false;
+    if (modifier_count > 1)
+        return false;
+
+    if (shift)
+        modifiers |= APP_INPUT_MODIFIER_SHIFT;
+    if (ctrl)
+        modifiers |= APP_INPUT_MODIFIER_CTRL;
+    if (alt)
+        modifiers |= APP_INPUT_MODIFIER_ALT;
+
+    if (alt) {
+        return false;
+    }
+
+    if (!app_movement_direction_from_legacy_keypad(dir, &direction))
+        return false;
+
+    if (shift)
+        action = (dir == 5) ? APP_MOVEMENT_ACTION_REST
+            : APP_MOVEMENT_ACTION_RUN_DIR;
+    else if (ctrl)
+        action = APP_MOVEMENT_ACTION_INTERACT_DIR;
+    else
+        action = (dir == 5) ? APP_MOVEMENT_ACTION_WAIT
+            : APP_MOVEMENT_ACTION_MOVE_DIR;
 
     memset(&input, 0, sizeof(input));
     input.layer = APP_INPUT_LAYER_INTENT;
@@ -542,55 +480,14 @@ static bool sdl_try_submit_movement_action(cptr action, u16b device,
         break;
     }
 
-    if (!sdl_build_movement_command_from_action(movement_action, direction,
+    context = sdl_current_movement_input_context();
+    if (!sdl_build_movement_command_from_input(context, action, direction,
             &input, &command))
     {
         return false;
     }
 
-    return sdl_bridge_movement_command_to_legacy(&command);
-}
-
-bool sdl_submit_directional_movement(int dir, bool shift, bool ctrl, bool alt,
-    u16b device, u16b input_type, u16b source_id, u16b input_flags,
-    u32b trigger, u32b trigger_aux)
-{
-    char action[4];
-    u16b modifiers = 0;
-    int modifier_count = (shift ? 1 : 0) + (ctrl ? 1 : 0) + (alt ? 1 : 0);
-
-    if (dir < 1 || dir > 9)
-        return false;
-    if (modifier_count > 1)
-        return false;
-
-    if (shift)
-        modifiers |= APP_INPUT_MODIFIER_SHIFT;
-    if (ctrl)
-        modifiers |= APP_INPUT_MODIFIER_CTRL;
-    if (alt)
-        modifiers |= APP_INPUT_MODIFIER_ALT;
-
-    if (shift) {
-        if (dir == 5) {
-            SDL_strlcpy(action, "Z", sizeof(action));
-        } else {
-            strnfmt(action, sizeof(action), ".%d", dir);
-        }
-    } else if (ctrl) {
-        strnfmt(action, sizeof(action), "/%d", dir);
-    } else if (alt) {
-        return false;
-    } else {
-        if (dir == 5) {
-            SDL_strlcpy(action, "z", sizeof(action));
-        } else {
-            strnfmt(action, sizeof(action), ";%d", dir);
-        }
-    }
-
-    return sdl_try_submit_movement_action(action, device, input_type, source_id,
-        modifiers, input_flags, trigger, trigger_aux);
+    return sdl_submit_movement_command(&command);
 }
 
 static int sdl_key_to_legacy_keypad_dir(int key)
@@ -699,63 +596,48 @@ static char sdl_legacy_key_char_from_keyboard_event(
     return (char)key;
 }
 
-static bool sdl_try_submit_keyboard_movement_event(
+static bool sdl_keyboard_event_reserved_for_movement(
     const SDL_KeyboardEvent* key_event)
 {
     char ch;
-    const char* action;
-    char direct_action[2];
-    bool shift;
-    bool alt;
-    bool ctrl;
-    bool gui;
-    bool control;
-    int dir;
-    int mode;
-    u16b modifiers;
-    u16b input_flags = APP_INPUT_FLAG_PRESS;
+
+    if (!key_event)
+        return false;
+
+    if (sdl_key_to_legacy_keypad_dir(key_event->key))
+        return true;
+
+    ch = sdl_legacy_key_char_from_keyboard_event(key_event);
+    return ch == ';' || ch == 'z' || ch == 'Z' || ch == '.'
+        || ch == '/';
+}
+
+static bool sdl_try_submit_keyboard_movement_event(
+    const SDL_KeyboardEvent* key_event)
+{
+    app_input input;
+    app_movement_command command;
+    u16b context;
 
     if (!key_event || !character_dungeon || sdl_session_input_capture_active())
         return false;
 
-    shift = (key_event->mod & SDL_KMOD_SHIFT) != 0;
-    alt = (key_event->mod & SDL_KMOD_ALT) != 0;
-    ctrl = (key_event->mod & SDL_KMOD_CTRL) != 0;
-    gui = (key_event->mod & SDL_KMOD_GUI) != 0;
-    control = ctrl || gui;
-    dir = sdl_key_to_legacy_keypad_dir(key_event->key);
-
-    if (key_event->repeat)
-        input_flags |= APP_INPUT_FLAG_REPEAT;
-
-    modifiers = sdl_input_modifiers_from_keymod(key_event->mod);
-    if (gui)
-        modifiers |= APP_INPUT_MODIFIER_CTRL;
-
-    if (dir && !alt && ((shift ? 1 : 0) + (control ? 1 : 0) == 1)) {
-        return sdl_submit_directional_movement(dir, shift, control, false,
-            APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, input_flags,
-            (u32b)key_event->scancode, (u32b)('0' + dir));
-    }
-
-    ch = sdl_legacy_key_char_from_keyboard_event(key_event);
-    if (!ch)
+    if (!sdl_config_has_movement_bindings(&config))
         return false;
 
-    mode = sdl_keymap_mode();
-    action = keymap_act[mode][(byte)ch];
-    if (action && sdl_try_submit_movement_action(action,
-            APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, modifiers,
-            input_flags, (u32b)key_event->scancode, (u32b)(byte)ch))
+    context = sdl_current_movement_input_context();
+    sdl_init_keyboard_input_event(key_event, &input);
+    app_movement_command_clear(&command);
+    if (app_movement_resolve_input(config.movement_bindings,
+            config.movement_binding_count, &input, context, &command))
     {
-        return true;
+        return sdl_submit_movement_command(&command);
     }
 
-    direct_action[0] = ch;
-    direct_action[1] = '\0';
-    return sdl_try_submit_movement_action(direct_action,
-        APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, modifiers,
-        input_flags, (u32b)key_event->scancode, (u32b)(byte)ch);
+    /* Once movement bindings exist, movement keys should not fall through to
+     * the legacy command-byte path and bypass the configured bindings.
+     */
+    return sdl_keyboard_event_reserved_for_movement(key_event);
 }
 
 static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
@@ -2184,6 +2066,12 @@ errr init_sdl(int argc, char **argv)
               config.main_view_scale, config.aux_view_font_size,
               config.menu_panel_font_size, config.margin,
               config.fullscreen, config.tiles);
+
+    if (!sdl_config_has_movement_bindings(&config)) {
+        sdl_config_set_default_movement_bindings(&config,
+            APP_MOVEMENT_PRESET_CLASSIC_SIL);
+        log_info("Initialized default movement bindings: Classic Sil");
+    }
 
 #ifdef __ANDROID__
     {

@@ -2459,7 +2459,8 @@ void death_spectator_view(void)
     p_ptr->command_dir = 0;
 
     /* Prevent lingering keypresses from auto-triggering commands. */
-    flush();
+    input_clear_movement_commands();
+    platform_frame_flush_events();
 
     death_spectator_prepare_display();
 
@@ -2813,7 +2814,8 @@ static void process_player(void)
                 app_session* session = app_session_current();
 
                 /* Flush input */
-                flush();
+                input_clear_movement_commands();
+                platform_frame_flush_events();
                 if (session)
                     app_session_clear_inputs(session);
 

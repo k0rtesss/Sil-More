@@ -2618,12 +2618,7 @@ bool get_rep_dir(int* dp)
 
         if (ch == ESCAPE)
             break;
-
-        /* Convert keypress into a direction */
-        dir = target_dir(ch);
-
-        /* Oops */
-        if (!dir)
+        if (ch)
             bell("Illegal repeatable direction!");
     }
 
