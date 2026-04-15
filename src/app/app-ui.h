@@ -126,7 +126,8 @@ typedef struct app_ui_rich_paragraph {
 typedef struct app_ui_rich_run {
     byte attr;
     byte story;
-    u16b reserved;
+    byte alpha;
+    byte reserved;
     char text[APP_UI_TEXT_MAX];
 } app_ui_rich_run;
 
@@ -253,8 +254,12 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
 bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene,
     app_ui_panel* panel);
+bool app_ui_panel_add_rich_text_alpha_ex(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte story, byte alpha, cptr text);
 bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, byte story, cptr text);
+bool app_ui_panel_add_rich_text_alpha(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte alpha, cptr text);
 bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, cptr text);
 bool app_ui_panel_set_minimap(app_ui_scene* scene, app_ui_panel* panel,

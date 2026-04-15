@@ -2,7 +2,7 @@
 
 #include "sdl-main-internal.h"
 
-static SDL_Color sdl_menu_color(byte attr)
+static SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 {
     byte color = attr & 0x0Fu;
 
@@ -10,8 +10,13 @@ static SDL_Color sdl_menu_color(byte attr)
         angband_color_table[color][1],
         angband_color_table[color][2],
         angband_color_table[color][3],
-        255
+        alpha
     };
+}
+
+static SDL_Color sdl_menu_color(byte attr)
+{
+    return sdl_menu_color_alpha(attr, 255);
 }
 
 static void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color)
@@ -1018,7 +1023,8 @@ static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
 
             (void)sdl_menu_render_document_text_run_px(font,
                 (float)x_px + current_x, (float)current_y,
-                sdl_menu_color(run->attr), cursor, len, line_h,
+                sdl_menu_color_alpha(run->attr, run->alpha), cursor, len,
+                line_h,
                 (float)width_px - current_x);
             current_x += token_w;
             if (current_x > (float)width_px)

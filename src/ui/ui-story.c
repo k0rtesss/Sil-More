@@ -8,6 +8,7 @@
 #include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
+#include "platform-time.h"
 #include "metarun.h"
 #include "ui/story_font.h"
 #include "ui/ui-information-scene.h"
@@ -17,6 +18,9 @@
 #define STORY_BROWSER_VISIBLE_LINES 18
 #define STORY_BROWSER_MIN_WIDTH 1000
 #define STORY_BROWSER_MAX_WIDTH 1800
+#define STORY_FADE_DURATION_MS 500u
+#define STORY_FADE_FRAME_SLICE_MS 16u
+#define STORY_REVEAL_HOLD_MS 1000u
 
 static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
 {
@@ -124,15 +128,15 @@ static void story_build_final_prompt(char* buf, size_t buflen)
 }
 
 static bool story_append_paragraph(app_ui_scene* scene, app_ui_panel* panel,
-    byte attr, cptr text)
+    byte attr, byte alpha, cptr text)
 {
     if (!scene || !panel || !text || !text[0])
         return true;
     if (!app_ui_panel_begin_rich_paragraph(scene, panel))
         return false;
 
-    return app_ui_panel_add_rich_text_ex(scene, panel, attr, STORY_FLAG_USE,
-        text);
+    return app_ui_panel_add_rich_text_alpha_ex(scene, panel, attr,
+        STORY_FLAG_USE, alpha, text);
 }
 
 static void story_add_paragraph_line_count(int* total_lines,
@@ -148,7 +152,7 @@ static void story_add_paragraph_line_count(int* total_lines,
 }
 
 static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
-    int start, int complete_count, int active_index, byte active_attr,
+    int start, int complete_count, int active_index, byte active_alpha,
     cptr footer_text, byte footer_attr)
 {
     app_ui_panel* panel;
@@ -176,8 +180,8 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
         cptr heading = st_name + st->name;
         cptr text = st_text + st->text;
 
-        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, heading)
-            || !story_append_paragraph(scene, panel, TERM_WHITE, text))
+        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, 0xFFu, heading)
+            || !story_append_paragraph(scene, panel, TERM_WHITE, 0xFFu, text))
         {
             return false;
         }
@@ -193,8 +197,10 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
         cptr heading = st_name + st->name;
         cptr text = st_text + st->text;
 
-        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, heading)
-            || !story_append_paragraph(scene, panel, active_attr, text))
+        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, active_alpha,
+                heading)
+            || !story_append_paragraph(scene, panel, TERM_WHITE, active_alpha,
+                text))
         {
             return false;
         }
@@ -220,13 +226,13 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
 }
 
 static bool story_present_progress(const int* sel_idx, int start,
-    int complete_count, int active_index, byte active_attr, cptr footer_text,
+    int complete_count, int active_index, byte active_alpha, cptr footer_text,
     byte footer_attr)
 {
     app_ui_scene scene;
 
     if (!story_build_browser_scene(&scene, sel_idx, start, complete_count,
-            active_index, active_attr, footer_text, footer_attr))
+            active_index, active_alpha, footer_text, footer_attr))
     {
         return false;
     }
@@ -264,30 +270,45 @@ static int story_delay_with_skip(u32b total_ms)
     return 0;
 }
 
+static byte story_fade_alpha(u32b elapsed_ms, u32b duration_ms)
+{
+    if (duration_ms == 0 || elapsed_ms >= duration_ms)
+        return 0xFFu;
+
+    return (byte)((elapsed_ms * 255u) / duration_ms);
+}
+
 static int story_render_fade_sequence(const int* sel_idx, int start,
     int complete_count, int active_index, cptr footer_text)
 {
-    static const byte fade_cols[] = {
-        TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE
-    };
+    u64b start_ms = platform_monotonic_ms();
 
-    for (int s = 0; s < (int)N_ELEMENTS(fade_cols); s++)
+    while (true)
     {
+        u64b now_ms = platform_monotonic_ms();
+        u64b elapsed_ms64 = (now_ms > start_ms) ? (now_ms - start_ms) : 0;
+        u32b elapsed_ms = (elapsed_ms64 > STORY_FADE_DURATION_MS)
+            ? STORY_FADE_DURATION_MS
+            : (u32b)elapsed_ms64;
+        byte alpha = story_fade_alpha(elapsed_ms, STORY_FADE_DURATION_MS);
         int key_state;
 
         if (!story_present_progress(sel_idx, start, complete_count,
-                active_index, fade_cols[s], footer_text, TERM_SLATE))
+                active_index, alpha, footer_text, TERM_SLATE))
         {
             return -1;
         }
+        if (elapsed_ms >= STORY_FADE_DURATION_MS)
+            break;
 
-        key_state = story_delay_with_skip(125u);
+        key_state = story_delay_with_skip(MIN(STORY_FADE_FRAME_SLICE_MS,
+            STORY_FADE_DURATION_MS - elapsed_ms));
         if (key_state == 2)
             return 2;
         if (key_state == 1)
         {
             if (!story_present_progress(sel_idx, start, complete_count,
-                    active_index, TERM_WHITE, footer_text, TERM_SLATE))
+                    active_index, 0xFFu, footer_text, TERM_SLATE))
             {
                 return -1;
             }
@@ -295,13 +316,14 @@ static int story_render_fade_sequence(const int* sel_idx, int start,
         }
     }
 
-    return story_delay_with_skip(1000u);
+    return story_delay_with_skip(STORY_REVEAL_HOLD_MS);
 }
 
 void print_story(int last_parts, bool fade_in,
     bool restore_previous_snapshot)
 {
     ui_information_scene_scope info_scope;
+    app_session* session = app_session_current();
     bool fast_forward = false;
     bool scene_failed = false;
     bool saved_hide_cursor = false;
@@ -374,6 +396,10 @@ void print_story(int last_parts, bool fade_in,
         return;
     }
 
+    /* Clear captured legacy key events without forcing an intermediate frame. */
+    if (session)
+        app_session_clear_inputs(session);
+
     saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
 
@@ -400,13 +426,14 @@ void print_story(int last_parts, bool fade_in,
         else
         {
             if (!story_present_progress(sel_idx, start, complete_count, idx,
-                    TERM_WHITE, reveal_prompt, TERM_SLATE))
+                    0xFFu, reveal_prompt, TERM_SLATE))
             {
                 log_warn("story display: semantic paragraph presentation failed");
                 scene_failed = true;
                 goto cleanup;
             }
-            result = fast_forward ? 0 : story_delay_with_skip(1000u);
+            result = fast_forward ? 0 : story_delay_with_skip(
+                STORY_REVEAL_HOLD_MS);
         }
 
         if (result == 2)
@@ -419,7 +446,7 @@ void print_story(int last_parts, bool fade_in,
         complete_count = idx + 1;
     }
 
-    if (!story_present_progress(sel_idx, start, complete_count, -1, TERM_WHITE,
+    if (!story_present_progress(sel_idx, start, complete_count, -1, 0xFFu,
             final_prompt, TERM_L_WHITE))
     {
         log_warn("story display: semantic final prompt failed");

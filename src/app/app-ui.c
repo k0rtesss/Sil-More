@@ -324,8 +324,8 @@ bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene, app_ui_panel* panel)
     return app_ui_panel_append_rich_paragraph(scene, panel) != NULL;
 }
 
-bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
-    byte attr, byte story, cptr text)
+bool app_ui_panel_add_rich_text_alpha_ex(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte story, byte alpha, cptr text)
 {
     app_ui_rich_paragraph* paragraph;
     bool wrote_any = false;
@@ -351,7 +351,8 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
         {
             run = &scene->rich_runs[(u16b)(paragraph->run_first
                 + paragraph->run_count - 1)];
-            if (run->attr == attr && run->story == story)
+            if (run->attr == attr && run->story == story
+                && run->alpha == alpha)
             {
                 size_t current_len = strlen(run->text);
                 size_t available = APP_UI_TEXT_MAX - 1u - current_len;
@@ -382,6 +383,7 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
 
         run->attr = attr;
         run->story = story;
+        run->alpha = alpha;
         memcpy(run->text, cursor, len);
         run->text[len] = '\0';
         cursor += len;
@@ -391,10 +393,24 @@ bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
     return wrote_any;
 }
 
+bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, byte story, cptr text)
+{
+    return app_ui_panel_add_rich_text_alpha_ex(scene, panel, attr, story,
+        0xFFu, text);
+}
+
+bool app_ui_panel_add_rich_text_alpha(app_ui_scene* scene,
+    app_ui_panel* panel, byte attr, byte alpha, cptr text)
+{
+    return app_ui_panel_add_rich_text_alpha_ex(scene, panel, attr, 0,
+        alpha, text);
+}
+
 bool app_ui_panel_add_rich_text(app_ui_scene* scene, app_ui_panel* panel,
     byte attr, cptr text)
 {
-    return app_ui_panel_add_rich_text_ex(scene, panel, attr, 0, text);
+    return app_ui_panel_add_rich_text_alpha(scene, panel, attr, 0xFFu, text);
 }
 
 bool app_ui_panel_set_minimap(app_ui_scene* scene, app_ui_panel* panel,
