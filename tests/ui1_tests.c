@@ -1237,59 +1237,6 @@ static void test_sdl_movement_presets(void)
     }
 }
 
-static void test_sdl_movement_legacy_import(void)
-{
-    struct sdl_config config;
-    const int mode = KEYMAP_MODE_SIL_HJKL;
-    cptr saved_h = keymap_act[mode]['h'];
-    cptr saved_H = keymap_act[mode]['H'];
-    cptr saved_ctrl_h = keymap_act[mode][KTRL('H')];
-    cptr saved_z = keymap_act[mode]['z'];
-    cptr saved_Z = keymap_act[mode]['Z'];
-    cptr saved_space = keymap_act[mode][' '];
-
-    keymap_act[mode]['h'] = str_dup(";4");
-    keymap_act[mode]['H'] = str_dup(".4");
-    keymap_act[mode][KTRL('H')] = str_dup("/4");
-    keymap_act[mode]['z'] = str_dup("z");
-    keymap_act[mode]['Z'] = str_dup("Z");
-    keymap_act[mode][' '] = str_dup("/5");
-
-    memset(&config, 0, sizeof(config));
-    CHECK(sdl_config_import_legacy_movement_bindings(&config, mode));
-    CHECK(config.movement_keyboard_present);
-    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_VI_KEYS);
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
-        APP_MOVEMENT_DIRECTION_WEST, SDL_SCANCODE_H, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
-        APP_MOVEMENT_DIRECTION_WEST, SDL_SCANCODE_H,
-        APP_INPUT_MODIFIER_SHIFT));
-    CHECK(test_find_movement_binding(&config,
-        APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_WEST,
-        SDL_SCANCODE_H, APP_INPUT_MODIFIER_CTRL));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
-        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_Z, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
-        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_SPACE, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
-        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_Z,
-        APP_INPUT_MODIFIER_SHIFT));
-
-    keymap_act[mode]['h'] = str_free(keymap_act[mode]['h']);
-    keymap_act[mode]['H'] = str_free(keymap_act[mode]['H']);
-    keymap_act[mode][KTRL('H')] = str_free(keymap_act[mode][KTRL('H')]);
-    keymap_act[mode]['z'] = str_free(keymap_act[mode]['z']);
-    keymap_act[mode]['Z'] = str_free(keymap_act[mode]['Z']);
-    keymap_act[mode][' '] = str_free(keymap_act[mode][' ']);
-
-    keymap_act[mode]['h'] = saved_h;
-    keymap_act[mode]['H'] = saved_H;
-    keymap_act[mode][KTRL('H')] = saved_ctrl_h;
-    keymap_act[mode]['z'] = saved_z;
-    keymap_act[mode]['Z'] = saved_Z;
-    keymap_act[mode][' '] = saved_space;
-}
-
 static void test_sdl_movement_config_round_trip(void)
 {
     struct sdl_config saved;
@@ -1438,7 +1385,6 @@ int main(void)
     test_ui_scene_direct_panel_payload();
     test_movement_service();
     test_sdl_movement_presets();
-    test_sdl_movement_legacy_import();
     test_sdl_movement_config_round_trip();
     test_movement_input_bridge();
 

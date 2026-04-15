@@ -11,10 +11,12 @@
 # A: action
 # C: keyset : key
 #
-# There are 4 keysets (0, 1, 2, 3), representing the Sil and Angband-style sets
-#   without and with the hjkl movement
+# There are 4 keysets (0, 1, 2, 3), representing the Sil and Angband-style
+# command sets without and with the legacy hjkl command remaps.
 #
 # When you press the 'key', the underlying 'action' is triggered.
+# Movement, wait, rest, and direct directional interact defaults are now loaded
+# from structured keyboard bindings in sil_sdl.json instead of pref keymaps.
 
 
 ##### Force certain options #####
@@ -28,105 +30,8 @@
 
 ##### Sil Keyset Mappings #####
 
-# Stay still (numerical)
-A:z
-C:0:5
-
-# Control-z / , / Space -- Interact with own square
-A:/5
-C:0:,
-A:/5
-C:0: 
-A:/5
-C:0:^Z
-
-# Movement (numerical)
-
-A:;1
-C:0:1
-A:;2
-C:0:2
-A:;3
-C:0:3
-A:;4
-C:0:4
-A:;6
-C:0:6
-A:;7
-C:0:7
-A:;8
-C:0:8
-A:;9
-C:0:9
-
 
 ##### hjkl Movement Keyset Mappings #####
-
-# Stay still (numerical)
-A:z
-C:1:5
-
-# Control-z / , / Space -- Interact with own square
-A:/5
-C:1:,
-A:/5
-C:1: 
-A:/5
-C:1:^Z
-
-# Movement (numerical)
-A:;1
-C:1:1
-A:;2
-C:1:2
-A:;3
-C:1:3
-A:;4
-C:1:4
-A:;6
-C:1:6
-A:;7
-C:1:7
-A:;8
-C:1:8
-A:;9
-C:1:9
-
-# Movement (rogue keys)
-A:;1
-C:1:b
-A:;2
-C:1:j
-A:;3
-C:1:n
-A:;4
-C:1:h
-A:;6
-C:1:l
-A:;7
-C:1:y
-A:;8
-C:1:k
-A:;9
-C:1:u
-
-# Running (shift + rogue keys)
-A:.1
-C:1:B
-A:.2
-C:1:J
-A:.3
-C:1:N
-A:.4
-C:1:H
-A:.6
-C:1:L
-A:.7
-C:1:Y
-A:.8
-C:1:K
-A:.9
-C:1:U
 
 # The missing commands (control + rogue keys)
 A:b
@@ -145,36 +50,6 @@ C:1:W
 
 
 ##### Angband-like Keyset Mappings #####
-
-# Stay still (numerical)
-A:z
-C:2:5
-
-# Control-z / , / Space -- Interact with own square
-A:/5
-C:2:,
-A:/5
-C:2: 
-A:/5
-C:2:^Z
-
-# Movement (numerical)
-A:;1
-C:2:1
-A:;2
-C:2:2
-A:;3
-C:2:3
-A:;4
-C:2:4
-A:;6
-C:2:6
-A:;7
-C:2:7
-A:;8
-C:2:8
-A:;9
-C:2:9
 
 # Examine
 A:x
@@ -204,21 +79,9 @@ C:2:u
 A:b
 C:2:B
 
-# Wait
-#A:z
-#C:3:,
-
 # Forge
 #A:^D
 #C:2:m
-
-# Wait
-A:z
-C:2:s
-
-# Rest
-A:Z
-C:2:R
 
 # Sing
 A:s
@@ -260,72 +123,6 @@ C:2:^t
 
 ##### Angband-like Keyset Mappings with hjkl movement #####
 
-# Stay still (numerical)
-A:z
-C:3:5
-
-# Control-z / , / Space -- Interact with own square
-A:/5
-C:3:,
-A:/5
-C:3: 
-A:/5
-C:3:^Z
-
-# Movement (numerical)
-A:;1
-C:3:1
-A:;2
-C:3:2
-A:;3
-C:3:3
-A:;4
-C:3:4
-A:;6
-C:3:6
-A:;7
-C:3:7
-A:;8
-C:3:8
-A:;9
-C:3:9
-
-# Movement (rogue keys)
-A:;1
-C:3:b
-A:;2
-C:3:j
-A:;3
-C:3:n
-A:;4
-C:3:h
-A:;6
-C:3:l
-A:;7
-C:3:y
-A:;8
-C:3:k
-A:;9
-C:3:u
-
-# Running (shift + rogue keys)
-A:.1
-C:3:B
-A:.2
-C:3:J
-A:.3
-C:3:N
-A:.4
-C:3:H
-A:.6
-C:3:L
-A:.7
-C:3:Y
-A:.8
-C:3:K
-A:.9
-C:3:U
-
 # The missing commands (control + rogue keys)
 A:b
 C:3:^B
@@ -358,21 +155,9 @@ C:3:^v
 A:r
 C:3:t
 
-# Wait
-#A:z
-#C:3:,
-
 # Forge
 #A:^D
 #C:3:m
-
-# Wait
-A:z
-C:3:s
-
-# Rest
-A:Z
-C:3:R
 
 # Sing
 A:s

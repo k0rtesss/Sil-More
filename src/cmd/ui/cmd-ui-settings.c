@@ -4175,18 +4175,6 @@ static const movement_setting_entry movement_settings[] = {
     { APP_MOVEMENT_ACTION_REST, APP_MOVEMENT_DIRECTION_NONE, "Rest", false },
 };
 
-static int movement_legacy_keymap_mode(void)
-{
-    if (!hjkl_movement && !angband_keyset)
-        return KEYMAP_MODE_SIL;
-    if (hjkl_movement && !angband_keyset)
-        return KEYMAP_MODE_SIL_HJKL;
-    if (!hjkl_movement && angband_keyset)
-        return KEYMAP_MODE_ANGBAND;
-
-    return KEYMAP_MODE_ANGBAND_HJKL;
-}
-
 static cptr movement_preset_label(u16b preset_id)
 {
     switch (preset_id)
@@ -5772,22 +5760,11 @@ void do_cmd_keybinds(void)
 
     if (!sdl_config_has_movement_bindings(&working_config))
     {
-        if (!sdl_config_import_legacy_movement_bindings(&working_config,
-                movement_legacy_keymap_mode()))
-        {
-            sdl_config_set_default_movement_bindings(&working_config,
-                APP_MOVEMENT_PRESET_CLASSIC_SIL);
-            SDL_strlcpy(note,
-                "Initialized Classic Sil bindings. Save to persist them.",
-                sizeof(note));
-        }
-        else
-        {
-            SDL_strlcpy(note,
-                "Imported legacy movement bindings. Save to persist them.",
-                sizeof(note));
-        }
-
+        sdl_config_set_default_movement_bindings(&working_config,
+            APP_MOVEMENT_PRESET_CLASSIC_SIL);
+        SDL_strlcpy(note,
+            "Initialized Classic Sil bindings. Save to persist them.",
+            sizeof(note));
         preset_id = working_config.movement_keyboard_preset;
         dirty = true;
     }

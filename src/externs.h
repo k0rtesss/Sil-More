@@ -1022,7 +1022,7 @@ extern int get_menu_choice(s16b max, char* prompt);
 extern bool get_com(cptr prompt, char* command);
 extern bool preconfirm_enter_morgoth_hall(void);
 extern void pause_line(int row);
-extern void request_command(void);
+extern void request_player_command(void);
 extern int int_exp(int base, int power);
 extern int damroll(int num, int sides);
 extern bool is_a_vowel(int ch);

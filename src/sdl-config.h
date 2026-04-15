@@ -113,10 +113,6 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* config,
 // Returns true when the config carries at least one stored movement binding.
 bool sdl_config_has_movement_bindings(const struct sdl_config* config);
 
-// Import known legacy movement keymaps from the supplied keymap mode.
-bool sdl_config_import_legacy_movement_bindings(struct sdl_config* config,
-    int keymap_mode);
-
 // Set default configuration values based on screen resolution
 void sdl_config_set_defaults_for_resolution(struct sdl_config* config, 
                                             struct pane_config* pane_configs,

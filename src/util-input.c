@@ -731,23 +731,52 @@ static char input_movement_command_legacy_command_char(
     }
 }
 
+static bool command_requires_inscription_confirmation(char command_char)
+{
+    int i;
+
+    if (!command_char)
+        return false;
+
+    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+    {
+        cptr s;
+        object_type* o_ptr = &inventory[i];
+
+        if (!o_ptr->k_idx)
+            continue;
+        if (!o_ptr->obj_note)
+            continue;
+
+        s = strchr(quark_str(o_ptr->obj_note), '^');
+        while (s)
+        {
+            if ((s[1] == command_char) || (s[1] == '*'))
+            {
+                if (!get_check("Are you sure? "))
+                    return true;
+            }
+
+            s = strchr(s + 1, '^');
+        }
+    }
+
+    return false;
+}
+
 /*
- * Request a command from the user.
+ * Request a legacy command from the user.
  *
  * Sets p_ptr->command_cmd, p_ptr->command_dir, p_ptr->command_rep,
  * p_ptr->command_arg.  May modify p_ptr->command_new.
  */
-void request_command(void)
+static void request_legacy_command(void)
 {
-    int i;
-
     char ch;
 
     int mode;
 
     cptr act;
-    app_movement_command movement_command;
-    bool have_movement_command = false;
 
     // Determine the keyset
     if (!hjkl_movement && !angband_keyset)
@@ -774,9 +803,6 @@ void request_command(void)
     /* Get command */
     while (1)
     {
-        app_movement_command_clear(&movement_command);
-        have_movement_command = false;
-
         /* Hack -- auto-commands */
         if (p_ptr->command_new)
         {
@@ -799,18 +825,8 @@ void request_command(void)
             /* Activate "command mode" */
             inkey_set_flag(true);
 
-            /* Get a command or a semantic movement command. */
-            ch = '\0';
-            (void)input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_DUNGEON,
-                APP_WAIT_REASON_COMMAND_INPUT, &movement_command, &ch);
-            if (app_movement_command_is_valid(&movement_command))
-            {
-                have_movement_command = true;
-                ch = input_movement_command_legacy_command_char(
-                    &movement_command);
-                if (!ch)
-                    continue;
-            }
+            /* Get a command keypress. */
+            ch = inkey_with_wait_reason(APP_WAIT_REASON_COMMAND_INPUT);
             if (ch == ESCAPE) {
                 log_debug("[metarun-esc-trace] request_command read esc command_new=%d info_scene=%d",
                     p_ptr->command_new ? 1 : 0,
@@ -918,13 +934,6 @@ void request_command(void)
             }
         }
 
-        if (have_movement_command)
-        {
-            /* Keep the legacy command char for repeat/inscription checks. */
-            p_ptr->command_cmd = ch;
-            break;
-        }
-
         /* Allow "keymaps" to be bypassed */
         if (ch == '\\')
         {
@@ -973,46 +982,64 @@ void request_command(void)
         break;
     }
 
-    /* Hack -- Scan equipment */
-    for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
-    {
-        cptr s;
-
-        object_type* o_ptr = &inventory[i];
-
-        /* Skip non-objects */
-        if (!o_ptr->k_idx)
-            continue;
-
-        /* No inscription */
-        if (!o_ptr->obj_note)
-            continue;
-
-        /* Find a '^' */
-        s = strchr(quark_str(o_ptr->obj_note), '^');
-
-        /* Process preventions */
-        while (s)
-        {
-            /* Check the "restriction" character */
-            if ((s[1] == p_ptr->command_cmd) || (s[1] == '*'))
-            {
-                /* Hack -- Verify command */
-                if (!get_check("Are you sure? "))
-                {
-                    /* Hack -- Use "newline" */
-                    p_ptr->command_cmd = '\n';
-                }
-            }
-
-            /* Find another '^' */
-            s = strchr(s + 1, '^');
-        }
-    }
-
-    if (have_movement_command && p_ptr->command_cmd != '\n')
-        input_set_active_movement_command(&movement_command);
+    if (command_requires_inscription_confirmation(p_ptr->command_cmd))
+        p_ptr->command_cmd = '\n';
 
     /* Hack -- erase the message line. */
     prt("", 0, 0);
+}
+
+void request_player_command(void)
+{
+    app_movement_command movement_command;
+    char ch = '\0';
+    char movement_char = '\0';
+
+    /* No command yet */
+    p_ptr->command_cmd = 0;
+
+    /* No "argument" yet */
+    p_ptr->command_arg = 0;
+
+    /* No "direction" yet */
+    p_ptr->command_dir = 0;
+
+    /* Drop any semantic command that was not consumed by the caller. */
+    (void)input_take_active_movement_command(NULL);
+
+    /* Auto-commands still belong to the legacy command loop. */
+    if (p_ptr->command_new)
+    {
+        request_legacy_command();
+        return;
+    }
+
+    /* Hack -- no flush needed */
+    msg_flag = false;
+
+    /* Activate "command mode" */
+    inkey_set_flag(true);
+
+    app_movement_command_clear(&movement_command);
+    (void)input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_DUNGEON,
+        APP_WAIT_REASON_COMMAND_INPUT, &movement_command, &ch);
+
+    if (!app_movement_command_is_valid(&movement_command))
+    {
+        if (ch)
+            (void)input_byte_unshift((byte)ch);
+        request_legacy_command();
+        return;
+    }
+
+    movement_char = input_movement_command_legacy_command_char(&movement_command);
+    p_ptr->command_cmd = movement_char;
+
+    if (command_requires_inscription_confirmation(movement_char))
+    {
+        p_ptr->command_cmd = '\n';
+        return;
+    }
+
+    input_set_active_movement_command(&movement_command);
 }

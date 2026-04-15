@@ -394,56 +394,16 @@ int motion_dir(int y1, int x1, int y2, int x2)
  */
 int target_dir(char ch)
 {
-    int d = 0;
-
-    int mode;
-
-    cptr act;
-    size_t len;
-
-    /* Already a direction? */
     if (isdigit((unsigned char)ch))
     {
-        d = D2I(ch);
-    }
-    else
-    {
-        // allow 'z' to indicate center direction
-        if (ch == 'z')
-            d = 5;
-
-        else
-        {
-            // Determine the keyset
-            if (!hjkl_movement && !angband_keyset)
-                mode = KEYMAP_MODE_SIL;
-            else if (hjkl_movement && !angband_keyset)
-                mode = KEYMAP_MODE_SIL_HJKL;
-            else if (!hjkl_movement && angband_keyset)
-                mode = KEYMAP_MODE_ANGBAND;
-            else
-                mode = KEYMAP_MODE_ANGBAND_HJKL;
-
-            /* Extract the action (if any) */
-            act = keymap_act[mode][(byte)(ch)];
-
-            /* Analyze */
-            if (act)
-            {
-                len = strlen(act);
-
-                if ((len == 2)
-                    && ((act[0] == ';') || (act[0] == '.') || (act[0] == '/'))
-                    && isdigit((unsigned char)act[1]))
-                {
-                    d = D2I(act[1]);
-                }
-            }
-        }
+        return D2I(ch);
     }
 
-    /* Return direction */
-    return (d);
+    /* Preserve the prompt-local center key. */
+    if (ch == 'z')
+        return 5;
+
+    return 0;
 }
 
 /*

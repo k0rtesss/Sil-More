@@ -86,7 +86,7 @@
       "metrics": {
         "movement_inkey_waits": {
           "files": 3,
-          "matches": 13
+          "matches": 12
         },
         "movement_request_command_ownership": {
           "files": 3,
@@ -94,19 +94,19 @@
         },
         "movement_flush_calls": {
           "files": 5,
-          "matches": 17
+          "matches": 18
         },
         "movement_sdl_direction_macro_bridge": {
-          "files": 2,
-          "matches": 17
+          "files": 0,
+          "matches": 0
         },
         "movement_pref_keymap_defaults": {
-          "files": 1,
-          "matches": 84
+          "files": 0,
+          "matches": 0
         },
         "movement_pref_sdl_macro_defaults": {
-          "files": 1,
-          "matches": 36
+          "files": 0,
+          "matches": 0
         }
       }
     }

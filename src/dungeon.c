@@ -2465,7 +2465,7 @@ void death_spectator_view(void)
 
     while (true)
     {
-        request_command();
+        request_player_command();
 
         if ((p_ptr->command_cmd == ESCAPE)
             || death_spectator_continue_input(p_ptr->command_cmd))
@@ -3221,7 +3221,7 @@ static void process_player(void)
                 p_ptr->restoring = false;
 
                 /* Get a command (normal) */
-                request_command();
+                request_player_command();
 
                 /* Process the command */
                 process_command();
