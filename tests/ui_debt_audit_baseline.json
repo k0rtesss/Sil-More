@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "scope": [
     "src/**/*.c",
     "src/**/*.h"
@@ -13,24 +13,102 @@
   ],
   "metrics": {
     "inkey_calls": {
-      "files": 39,
-      "matches": 89
+      "files": 0,
+      "matches": 0
     },
     "screen_overlay_calls": {
-      "files": 33,
-      "matches": 215
+      "files": 0,
+      "matches": 0
     },
     "term_render_control_calls": {
-      "files": 65,
-      "matches": 1697
+      "files": 0,
+      "matches": 0
     },
     "platform_ui_includes": {
       "files": 0,
       "matches": 0
     },
     "sdl_named_ui_calls_outside_platform": {
-      "files": 6,
-      "matches": 208
+      "files": 0,
+      "matches": 0
+    }
+  },
+  "audits": {
+    "ui0": {
+      "scope": [
+        "src/**/*.c",
+        "src/**/*.h"
+      ],
+      "platform_sdl_exclusions": [
+        "src/main-sdl.c",
+        "src/main-sdl.h",
+        "src/platform-*.h",
+        "src/sdl-*.c",
+        "src/sdl-*.h"
+      ],
+      "metrics": {
+        "inkey_calls": {
+          "files": 0,
+          "matches": 0
+        },
+        "screen_overlay_calls": {
+          "files": 0,
+          "matches": 0
+        },
+        "term_render_control_calls": {
+          "files": 0,
+          "matches": 0
+        },
+        "platform_ui_includes": {
+          "files": 0,
+          "matches": 0
+        },
+        "sdl_named_ui_calls_outside_platform": {
+          "files": 0,
+          "matches": 0
+        }
+      }
+    },
+    "movement_input": {
+      "scope": [
+        "src/externs.h",
+        "src/util-input.c",
+        "src/dungeon.c",
+        "src/targeting.c",
+        "src/main-sdl.c",
+        "src/sdl-main-internal.h",
+        "src/cmd/movement/cmd-movement.c",
+        "src/cmd/world/cmd-interact.c",
+        "src/cmd/ui/cmd-ui-settings.c",
+        "lib/pref/pref.prf",
+        "lib/pref/pref-sdl.prf"
+      ],
+      "metrics": {
+        "movement_inkey_waits": {
+          "files": 3,
+          "matches": 13
+        },
+        "movement_request_command_ownership": {
+          "files": 3,
+          "matches": 4
+        },
+        "movement_flush_calls": {
+          "files": 5,
+          "matches": 17
+        },
+        "movement_sdl_direction_macro_bridge": {
+          "files": 2,
+          "matches": 17
+        },
+        "movement_pref_keymap_defaults": {
+          "files": 1,
+          "matches": 84
+        },
+        "movement_pref_sdl_macro_defaults": {
+          "files": 1,
+          "matches": 36
+        }
+      }
     }
   }
 }

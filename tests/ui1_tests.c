@@ -5,6 +5,7 @@
 #include "angband.h"
 #include "app/app-events.h"
 #include "app/app-host.h"
+#include "app/app-movement.h"
 #include "app/app-scene-menu.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
@@ -1006,6 +1007,164 @@ static void test_ui_scene_direct_panel_payload(void)
     CHECK((panel->tabs[0].flags & APP_UI_ITEM_FLAG_ACTIVE) != 0);
 }
 
+static void test_movement_service(void)
+{
+    app_movement_direction_payload payload;
+    u16b direction = APP_MOVEMENT_DIRECTION_NONE;
+    app_movement_binding plain_move;
+    app_movement_binding shift_run;
+    app_movement_binding wait_binding;
+    app_movement_binding prompt_move;
+    app_movement_binding conflicting_plain_move;
+    app_movement_binding wildcard_wait;
+    app_movement_binding bindings[4];
+    app_input input;
+    app_movement_command command;
+
+    CHECK(app_movement_action_is_directional(APP_MOVEMENT_ACTION_MOVE_DIR));
+    CHECK(app_movement_action_is_directional(APP_MOVEMENT_ACTION_RUN_DIR));
+    CHECK(!app_movement_action_is_directional(APP_MOVEMENT_ACTION_WAIT));
+
+    CHECK(app_movement_direction_payload_from_direction(
+        APP_MOVEMENT_DIRECTION_NORTHWEST, &payload));
+    CHECK(payload.direction == APP_MOVEMENT_DIRECTION_NORTHWEST);
+    CHECK(payload.dy == -1);
+    CHECK(payload.dx == -1);
+    CHECK(app_movement_direction_to_legacy_keypad(
+        APP_MOVEMENT_DIRECTION_NORTHWEST) == 7);
+    CHECK(app_movement_direction_from_legacy_keypad(3, &direction));
+    CHECK(direction == APP_MOVEMENT_DIRECTION_SOUTHEAST);
+    CHECK(!app_movement_direction_from_legacy_keypad(0, &direction));
+
+    app_movement_binding_clear(&plain_move);
+    plain_move.context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    plain_move.action = APP_MOVEMENT_ACTION_MOVE_DIR;
+    plain_move.direction = APP_MOVEMENT_DIRECTION_NORTH;
+    plain_move.device = APP_INPUT_DEVICE_KEYBOARD;
+    plain_move.input_type = APP_INPUT_TYPE_KEY;
+    plain_move.forbidden_modifiers = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT;
+    plain_move.trigger = 0x52u;
+    CHECK(app_movement_binding_is_valid(&plain_move));
+
+    app_movement_binding_clear(&shift_run);
+    shift_run.context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    shift_run.action = APP_MOVEMENT_ACTION_RUN_DIR;
+    shift_run.direction = APP_MOVEMENT_DIRECTION_NORTH;
+    shift_run.device = APP_INPUT_DEVICE_KEYBOARD;
+    shift_run.input_type = APP_INPUT_TYPE_KEY;
+    shift_run.required_modifiers = APP_INPUT_MODIFIER_SHIFT;
+    shift_run.forbidden_modifiers = APP_INPUT_MODIFIER_CTRL
+        | APP_INPUT_MODIFIER_ALT;
+    shift_run.trigger = 0x52u;
+    CHECK(app_movement_binding_is_valid(&shift_run));
+    CHECK(!app_movement_bindings_conflict(&plain_move, &shift_run));
+
+    conflicting_plain_move = plain_move;
+    conflicting_plain_move.forbidden_modifiers = APP_INPUT_MODIFIER_CTRL
+        | APP_INPUT_MODIFIER_ALT;
+    CHECK(app_movement_bindings_conflict(&conflicting_plain_move, &shift_run));
+
+    app_movement_binding_clear(&wait_binding);
+    wait_binding.context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    wait_binding.action = APP_MOVEMENT_ACTION_WAIT;
+    wait_binding.device = APP_INPUT_DEVICE_KEYBOARD;
+    wait_binding.input_type = APP_INPUT_TYPE_KEY;
+    wait_binding.forbidden_modifiers = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT;
+    wait_binding.trigger = 0x35u;
+    CHECK(app_movement_binding_is_valid(&wait_binding));
+
+    app_movement_binding_clear(&prompt_move);
+    prompt_move.context = APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT;
+    prompt_move.action = APP_MOVEMENT_ACTION_MOVE_DIR;
+    prompt_move.direction = APP_MOVEMENT_DIRECTION_WEST;
+    prompt_move.device = APP_INPUT_DEVICE_KEYBOARD;
+    prompt_move.input_type = APP_INPUT_TYPE_KEY;
+    prompt_move.forbidden_modifiers = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT;
+    prompt_move.trigger = 0x48u;
+    CHECK(app_movement_binding_is_valid(&prompt_move));
+    CHECK(!app_movement_bindings_conflict(&plain_move, &prompt_move));
+
+    wildcard_wait = wait_binding;
+    wildcard_wait.context = APP_MOVEMENT_CONTEXT_ANY;
+    CHECK(app_movement_bindings_conflict(&wildcard_wait, &wait_binding));
+
+    bindings[0] = plain_move;
+    bindings[1] = shift_run;
+    bindings[2] = prompt_move;
+    bindings[3] = wildcard_wait;
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_INTENT;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.physical_key = 0x52u;
+    input.payload.key.logical_key = 'W';
+    CHECK(app_movement_binding_matches_input(&plain_move, &input,
+        APP_MOVEMENT_CONTEXT_DUNGEON));
+    CHECK(!app_movement_binding_matches_input(&plain_move, &input,
+        APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT));
+
+    input.modifiers = APP_INPUT_MODIFIER_SHIFT;
+    input.flags = APP_INPUT_FLAG_PRESS | APP_INPUT_FLAG_REPEAT
+        | APP_INPUT_FLAG_SYNTHETIC;
+    input.source_id = 2u;
+    input.sequence = 41u;
+    input.timestamp_usec = 777u;
+    CHECK(app_movement_resolve_input(bindings, N_ELEMENTS(bindings), &input,
+        APP_MOVEMENT_CONTEXT_DUNGEON, &command));
+    CHECK(app_movement_command_is_valid(&command));
+    CHECK(command.context == APP_MOVEMENT_CONTEXT_DUNGEON);
+    CHECK(command.action == APP_MOVEMENT_ACTION_RUN_DIR);
+    CHECK(command.flags == (APP_MOVEMENT_COMMAND_FLAG_REPEAT
+        | APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC));
+    CHECK(command.modifiers == APP_INPUT_MODIFIER_SHIFT);
+    CHECK(command.device == APP_INPUT_DEVICE_KEYBOARD);
+    CHECK(command.input_type == APP_INPUT_TYPE_KEY);
+    CHECK(command.source_id == 2u);
+    CHECK(command.trigger == 0x52u);
+    CHECK(command.trigger_aux == 'W');
+    CHECK(command.sequence == 41u);
+    CHECK(command.timestamp_usec == 777u);
+    CHECK(command.direction.direction == APP_MOVEMENT_DIRECTION_NORTH);
+    CHECK(command.direction.dy == -1);
+    CHECK(command.direction.dx == 0);
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_INTENT;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 0x48u;
+    CHECK(app_movement_resolve_input(bindings, N_ELEMENTS(bindings), &input,
+        APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT, &command));
+    CHECK(command.action == APP_MOVEMENT_ACTION_MOVE_DIR);
+    CHECK(command.direction.direction == APP_MOVEMENT_DIRECTION_WEST);
+    CHECK(command.direction.dy == 0);
+    CHECK(command.direction.dx == -1);
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_INTENT;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 0x35u;
+    CHECK(app_movement_resolve_input(bindings, N_ELEMENTS(bindings), &input,
+        APP_MOVEMENT_CONTEXT_TARGETING, &command));
+    CHECK(command.context == APP_MOVEMENT_CONTEXT_TARGETING);
+    CHECK(command.action == APP_MOVEMENT_ACTION_WAIT);
+    CHECK(command.direction.direction == APP_MOVEMENT_DIRECTION_CENTER);
+    CHECK(command.direction.dy == 0);
+    CHECK(command.direction.dx == 0);
+
+    input.flags = APP_INPUT_FLAG_RELEASE;
+    CHECK(!app_movement_resolve_input(bindings, N_ELEMENTS(bindings), &input,
+        APP_MOVEMENT_CONTEXT_TARGETING, &command));
+}
+
 int main(void)
 {
     test_record_round_trip();
@@ -1019,6 +1178,7 @@ int main(void)
     test_information_scene_wait_key_nonrepeat();
     test_information_scene_wait_key_with_wait_reason();
     test_ui_scene_direct_panel_payload();
+    test_movement_service();
 
     if (g_failures != 0)
     {

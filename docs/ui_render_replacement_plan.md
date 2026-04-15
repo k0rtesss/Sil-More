@@ -1,446 +1,323 @@
-# UI Render Replacement Plan
+# UI Terminal Extermination Plan
 
-Status: active on April 15, 2026. This is the current finish-line plan for
-SDL runtime UI replacement. It replaces historical rollout tracking.
+Status: active on April 15, 2026. This replaces the completed
+render-replacement plan.
 
-## End State
-- Ship one SDL runtime UI renderer driven by snapshots and `app_ui_scene`.
-- Preserve the Sil visual language without keeping terminal-grid layout
-  ownership on the normal SDL path.
-- Keep dungeon scale and overlay or menu scale independent.
-- Remove the live `Term_*`, `inkey()`, and `z-term` compatibility stack from
-  the repo's active source tree and build graph, not just from the visible SDL
-  happy path.
-- Do not keep or reintroduce fallback runtime renderers, captured-term bodies,
-  no-op compatibility switches, or "temporary" term-mirror bridges.
+## Mission
+- The SDL render replacement is done. The remaining work is removal of the
+  terminal-era UI model from the active source tree.
+- Preserve gameplay-space grids and cells: dungeon topology, LOS math,
+  projectile paths, minimap data, and map snapshots are not the target here.
+- Remove terminal-space concepts from the normal SDL UI path: blocking byte
+  input, delayed flush ownership, row or column text writes, document cell ops,
+  SDL `term` hosts, and char or attr screen captures.
+- Do not add new compatibility wrappers, raw-cell fallback renderers, or new
+  UI APIs whose ownership is still `term_*`, `prt()`, or `*_wid` / `*_hgt`.
 
-## Current State
-- Core renderer work is already landed. Dungeon chrome is built as semantic
-  chrome scenes in `src/app/app-scene-dungeon.c` and rendered in
-  `src/sdl-scene-dungeon.c`, so chrome is no longer the top migration lane.
-- The normal SDL path is already semantic for the main settings, help, file
-  viewer, score, quest status, welcome, metarun story-statistics, inventory or
-  equipment overlay, and pile-pickup surfaces. Those families should stay out
-  of the active plan unless a regression appears.
-- Current UI debt audit on April 15, 2026
-  (`py -3 tools/ui_debt_audit.py --check`):
-  - `inkey()`: 0 files / 0 matches
-  - `screen_save()/screen_load()`: 0 files / 0 matches
-  - direct `Term_*` render or control calls: 8 files / 61 matches
-  - `get_sdl_*` / `set_sdl_*` outside platform code: 0 files / 0 matches
-- Slice 1 is complete in the working tree on April 14, 2026:
-  `src/util-prompt.c`, `src/object/object-ui-select.c`,
-  `src/object/object-ui-enhanced.c`, and `src/cmd/ui/cmd-ui-main-menu.c`
-  now wait through the shared semantic scene or session input path instead of
-  owning file-local `inkey()` or `Term_xtra(TERM_XTRA_EVENT/FRESH)` loops.
-- Workstream 4 is complete in the working tree on April 14, 2026:
-  `src/ui/smithing/ui-smithing-screen.c`, `src/birth.c`, and
-  `src/metarun.c` now reuse the shared semantic scene or wait-input helpers
-  instead of bespoke workflow-scoped snapshot ownership.
-- Workstream 6 is complete in the working tree on April 15, 2026:
-  the side-pane and subwindow family no longer dominates the audit, and the
-  former concentration in `src/ui/ui-status.c`,
-  `src/object/object-ui-display.c`, `src/cmd/ui/cmd-ui-object-display.c`,
-  `src/monster1.c`, `src/monster2.c`, `src/cave.c` overhead-map window code,
-  `src/ui/ui-character-screen.c`, and `src/ui/ui-look-sidebar.c` has been
-  drained off the normal SDL pane-refresh path.
-- Workstream 7 is complete in the working tree on April 15, 2026:
-  `src/cmd/item/cmd-item-core.c`, `src/cmd/movement/cmd-movement.c`,
-  `src/cmd/ui/cmd-ui-knowledge.c`, `src/load.c`, `src/score/score_entry.c`,
-  and `src/signals.c` no longer dominate the live debt count, so the refresh,
-  clear, and panic-control tail is no longer the next blocker.
-- Workstream 8 is complete in the working tree on April 15, 2026:
-  `src/squelch.c`, `src/wizard1.c`, and `src/wizard2.c` no longer own the
-  last repo-visible `inkey()` call sites or direct `Term_*` control paths in
-  the debug/admin slice, so the audit floor for that family is now zero.
-- The April 15 wrapper-input pass is complete in the working tree:
-  `src/util-prompt.c` no longer exports `term_get_string()`, the remaining
-  file-name, note, password, inscription, and show/find prompts now call
-  `prompt_text_input()` directly, and the last user-facing
-  `Term_xtra(TERM_XTRA_FRESH, ...)` fences on the SDL path have been replaced
-  by narrower scene or platform-frame presentation calls.
-- Dead snapshot-renderer fallback branches have now been deleted from the
-  semantic UI entry surfaces. The remaining repo-wide audit hits are now
-  treated as first-class removal work, not as acceptable residual debt.
-- Workstream 10 is complete in the working tree on April 15, 2026:
-  `src/z-term.c` and `src/z-term.h` have been deleted, `CMakeLists.txt`
-  no longer defines or links `sil-legacy-compat`, and the runtime or test
-  targets now build through the narrower view/layout surface instead of the
-  old `Term` / `angband_term` dependency chain.
-- The current audit understates the full removal scope because it does not
-  count `Term_xtra()` or wrapper debt such as `move_cursor_relative()`,
-  `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`, or
-  `display_map()`. Those wrappers are still in scope.
-- Targeted search on April 15, 2026 now finds:
-  - `term_get_string()`: 0 matches in `src/`
-  - `z-term`: 0 matches in `src/` and `CMakeLists.txt`
-  - `angband_term`: 0 matches in `src/`
-  - `Term_`: 0 matches in `src/`
-- Excluding the final backend files in Workstream 10, the remaining counted
-  debt is now 6 files / 53 matches, concentrated in `src/cave.c`,
-  `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
-  `src/ui/ui-story.c`, and `src/obj-info.c`.
-- The remaining term-legacy work now clusters into two families:
-  - one consolidated runtime cleanup slice containing counted debt owners in
-    `src/cave.c`, `src/util-text.c`, `src/ui/story_font.c`,
-    `src/util-editing.c`, `src/ui/ui-story.c`, and `src/obj-info.c`, plus
-    wrapper and caller cleanup around `move_cursor_relative()`,
-    `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`, and
-    `display_map()` across `src/ui/ui-status.c`, `src/targeting.c`,
-    `src/cmd/ui/cmd-ui-look.c`, `src/cmd/combat/cmd-combat.c`,
-    `src/cmd/combat/cmd-ranged.c`, `src/spell/spell-projection.c`,
-    `src/util-message.c`, `src/dungeon.c`,
-    `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
-    `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
-    `src/monster2.c`, `src/object/object-list.c`,
-    `src/object/object-place.c`, `src/spell/spell-detection.c`,
-    `src/spell/spell-terrain.c`, `src/player/player-song-effects.c`,
-    `src/ui/smithing/ui-smithing-screen.c`, `src/wizard2.c`, and declaration
-    surfaces in `src/externs.h`
-  - the final build-graph and backend tail in `src/z-term.c`,
-    `src/sdl-layout.c`, `src/sdl-render.c`, `src/main-sdl.c`, and related
-    SDL term-host files
-- Because the goal is now full term-legacy removal, no remaining audit family
-  is treated as permanently acceptable. Some slices are sequenced later, but
-  all of them are now in scope.
+## Audit Snapshot
+- `py -3 tools/ui_debt_audit.py --details` currently reports:
+  - `ui0`: `inkey()`, `screen_save()/screen_load()`, direct `Term_*`, and
+    `get_sdl_*`/`set_sdl_*` outside platform code all remain at 0 files /
+    0 matches
+  - `movement_input`: `inkey()` waits 3 files / 13 matches,
+    `request_command()` ownership 3 files / 4 matches, movement-related
+    `flush()` usage 5 files / 17 matches, SDL directional macro bridge
+    symbols 2 files / 17 matches, movement defaults in `pref.prf`
+    1 file / 84 matches, and movement macro defaults in `pref-sdl.prf`
+    1 file / 36 matches
+- That audit is still incomplete for the broader extermination mission. A
+  targeted search in `src/` on April 15, 2026 still finds:
+  - `inkey()`: 9 matches / 3 files
+  - `request_command()`: 4 matches / 3 files
+  - `flush()`: 37 matches / 17 files
+  - SDL term-host symbols (`term_ready`, `term_init`, `term_nuke`,
+    `sdl_view_link_term`, `sdl_term_host_redraw`,
+    `sdl_redraw_all_term_hosts`): 49 matches / 6 files
+  - document-op symbols (`APP_UI_DOCUMENT_OP_*`,
+    `app_ui_panel_add_document_text*`, `app_ui_panel_add_document_cell_ex`,
+    `app_ui_panel_add_document_cursor`): 49 matches / 8 files
+  - compat text-surface symbols (`prt`, `c_prt`, `put_str`, `c_put_str`,
+    `clear_from`, `text_out_to_screen`): 316 matches / 30 files
+  - terminal-size queries (`platform_frame_main_view_cols/rows`,
+    `platform_frame_active_view_cols/rows`): 42 matches / 12 files
 
-## Active Workstreams
-### 1. Replace legacy blocking loops in semantic SDL scenes
-Status:
-- completed in the working tree on April 14, 2026
+## Live Remnant Families
+### 1. Legacy input and command loop
+Primary files:
+- `src/util-input.c`
+- `src/dungeon.c`
+- `src/externs.h`
+- `src/cmd4.c`
 
-Goal:
-- stop semantic overlay and modal scenes from owning `inkey()` loops or
-  `Term_xtra(TERM_XTRA_EVENT/FRESH)` polling on the normal SDL path
-
-Primary targets:
-- `src/util-prompt.c`
-- `src/object/object-ui-select.c`
-- `src/object/object-ui-enhanced.c`
-- `src/cmd/ui/cmd-ui-main-menu.c`
+What remains:
+- `inkey()` still owns the byte queue, macro expansion, wait loop, and delayed
+  `flush()` handling.
+- `request_command()` still owns repeat-count prompting, keymap expansion, and
+  command-byte assembly.
+- The dungeon loop still explicitly calls `request_command()`.
 
 Exit when:
-- these flows wait through the shared scene or session input path instead of
-  direct blocking terminal loops
-- opening and closing them does not require manual refresh polling to keep the
-  scene current
+- input waits come from `src/app/*` interaction primitives instead of
+  `inkey()`
+- command acquisition has a named semantic API instead of byte queues and
+  global flags
+- gameplay code no longer calls `flush()` as part of normal UI flow
 
-### 2. Retire shared terminal text, story, and editing helpers
-Status:
-- folded into consolidated Workstream 9 on April 15, 2026
-
-Goal:
-- remove the shared term-grid text, wrapping, cursor, and editing primitives
-  that still underpin semantic information flows and prompt surfaces
-
-Primary targets:
+### 2. Compat text surface and cursor-state writers
+Primary files:
 - `src/util-text.c`
-- `src/ui/story_font.c`
 - `src/util-editing.c`
+- `src/externs.h`
+- callers in `src/monster1.c`, `src/monster2.c`,
+  `src/cmd/ui/cmd-ui-object-display.c`, `src/squelch.c`, `src/wizard1.c`,
+  `src/wizard2.c`, `src/score/score_ui.c`, `src/ui/ui-help.c`, and others
+
+What remains:
+- `ui_text_surface` is still a global row or column text buffer.
+- `prt()`, `c_prt()`, `put_str()`, `c_put_str()`, `clear_from()`, and
+  `text_out_to_screen()` remain a major authoring API.
+- several screens still depend on implicit cursor state and line erasure
+  behavior rather than scene widgets
+
+Exit when:
+- normal SDL UI authors text through scene widgets or dedicated semantic
+  builders
+- no user-facing flow depends on global text-surface cursor state
+- the compat writer family is deleted or isolated outside the normal SDL path
+
+### 3. Document-op cell grid
+Primary files:
+- `src/app/app-ui.h`
+- `src/app/app-ui.c`
+- `src/sdl-scene-menu.c`
 - `src/ui/ui-story.c`
 - `src/obj-info.c`
-- remaining document-style callers that still depend on those helpers
-
-Exit when:
-- normal SDL document, story, prompt, and editing flows no longer depend on
-  `Term_get_size()`, `Term_locate()`, `Term_what()`, `Term_erase()`,
-  `Term_putstr()`, or `Term_addch()`
-- story-font wrapping and text layout come from scene or frontend-side layout
-  policy rather than terminal cursor state
-
-### 3. Remove main-map and cursor term mirroring
-Status:
-- folded into consolidated Workstream 9 on April 15, 2026
-
-Goal:
-- stop mirroring dungeon map, cursor, and transient projectile highlights
-  through the term buffer on the SDL runtime path
-
-Primary targets:
-- `src/cave.c`
-- `src/ui/ui-status.c` map redraw path
-- `src/targeting.c`
-- `src/cmd/ui/cmd-ui-look.c`
-- `src/cmd/combat/cmd-combat.c`
-- `src/cmd/combat/cmd-ranged.c`
-- `src/spell/spell-projection.c`
-- `src/util-message.c`
-- high-frequency `lite_spot()` or `print_rel()` callers that still expect
-  direct term animation
-
-Exit when:
-- `move_cursor_relative()`, `restore_game_cursor()`, `print_rel()`,
-  `lite_spot()`, `prt_map()`, and `display_map()` are gone from the normal SDL
-  runtime path
-- map invalidation, cursor visibility, and transient combat or projectile
-  overlays flow through snapshot or scene state rather than queued term cells
-
-### 4. Close bespoke workflow tails
-Status:
-- completed in the working tree on April 14, 2026
-
-Goal:
-- finish the remaining file-local snapshot loops in late custom workflows
-
-Primary targets:
-- `src/ui/smithing/ui-smithing-screen.c`
-- `src/birth.c`
-- `src/metarun.c`
-
-Exit when:
-- these flows reuse the same semantic scene and input conventions as the rest
-  of SDL UI
-- no bespoke workflow keeps its own refresh loop unless it is intentionally
-  documented as legacy-only
-
-### 5. Remove stale fallback surface area
-Status:
-- completed in the working tree on April 14, 2026
-
-Goal:
-- delete stale switches, usage text, and doc wording that still imply the
-  removed fallback renderer exists
-
-Primary targets:
-- `src/main.c`
-- `src/runtime-cli.c`
-- `src/runtime-cli.h`
-- this document and any linked UI migration docs that still describe the old
-  rollout state
-
-Exit when:
-- the tree no longer advertises `-X` or any other removed snapshot-renderer
-  toggle
-- docs describe current finish-line work only, not rollout history
-
-### 6. Drain The Remaining Side-Pane And Subwindow Debt
-Status:
-- completed in the working tree on April 15, 2026
-
-Goal:
-- remove the last side-pane and subwindow dependencies that still need the
-  terminal compatibility surface on the normal SDL path
-- move supporting-pane content ownership onto snapshot or scene data instead
-  of `p_ptr->window` fan-out plus `Term_activate()` refresh loops
-- split the remaining work into independent renderer lanes so agents can work
-  in parallel without overlapping edits
-
-Primary targets:
-- `src/ui/ui-status.c`
-- `src/object/object-ui-display.c`
-- `src/cmd/ui/cmd-ui-object-display.c`
-- `src/monster1.c`
-- `src/monster2.c`
-- `src/cave.c`
+- `src/ui/ui-file-viewer.c`
 - `src/ui/ui-character-screen.c`
-- `src/ui/ui-look-sidebar.c`
+- `src/thrall_quest.c`
+- `src/ui/ui-help.c`
+- `src/object/object-ui-display.c`
+
+What remains:
+- `APP_UI_PANEL_STYLE_DOCUMENT` still accepts explicit row, column, cell, and
+  cursor operations.
+- multiple converted scenes still build row or column documents from captured
+  screen cells or terminal-sized layout.
+- `src/obj-info.c` builds `attrs`, `chars`, and `story` capture buffers before
+  presenting them.
+- `src/ui/ui-story.c` mirrors rows through `story_semantic_row`.
+- `src/ui/ui-file-viewer.c`, `src/thrall_quest.c`,
+  `src/ui/ui-character-screen.c`, and `src/ui/ui-help.c` still paginate or lay
+  out by terminal height and width.
 
 Exit when:
-- side panes stop using `Term_activate()` / `Term_fresh()` as their refresh
-  mechanism
-- layout code no longer reads `Term->wid`, `Term->hgt`, or `Term_get_size()`
-  for SDL-visible side panes
-- `PW_INVEN`, `PW_EQUIP`, `PW_PLAYER_0`, `PW_MESSAGE`, `PW_OBJECT`,
-  `PW_OVERHEAD`, `PW_MONSTER`, and `PW_MONLIST` no longer depend on
-  term-grid `display_*()` content on the normal SDL path
-- any remaining compatibility-only renderer is isolated away from the normal
-  SDL runtime finish line
+- document and browser screens use paragraph, list, table, glyph-row, and
+  scroll widgets with renderer-owned layout
+- row or column document ops are deleted from active runtime code
+- terminal-sized document pagination is replaced by explicit widget layout
 
-Parallel lanes:
-- Lane A: inventory and equipment subwindow rendering in
-  `src/object/object-ui-display.c`
-- Lane B: object recall and monster recall renderers in
-  `src/cmd/ui/cmd-ui-object-display.c`, `src/monster1.c`, and
-  `src/monster2.c`
-- Lane C: overhead-map renderer in `src/cave.c`
-- Lane D: player sheet legacy path in `src/ui/ui-character-screen.c`
-- Lane E: dispatcher and invalidation glue in `src/ui/ui-status.c` and
-  `src/ui/ui-look-sidebar.c`
+### 4. SDL term host layer that survived the renderer migration
+Primary files:
+- `src/sdl-main-internal.h`
+- `src/sdl-render.c`
+- `src/sdl-layout.c`
+- `src/platform-frame.c`
+- `src/sdl-scene.c`
+- `src/sdl-story-font.c`
 
-Not in this slice:
-- `src/ui/ui-death.c`
-- `src/ui/ui-story.c`
-- `src/spell/spell-utility.c`
-- `src/util-text.c`
-- `src/squelch.c`
-- `src/obj-info.c`
-- `src/ui/story_font.c`
+What remains:
+- `struct term_win` and `struct term`
+- `term_ready`, `term_init()`, `term_nuke()`
+- term-linked view lifetime and redraw APIs
+- story-font and grid-alignment state stored on the active term host
 
-### 7. Drain refresh, clear, and panic-control tails
-Status:
-- completed in the working tree on April 15, 2026
+Exit when:
+- SDL views own canvases, focus, and text caches directly
+- view lifetime no longer passes through `term_*`
+- story-font state lives on scene or view state, not term host state
 
+### 5. Residual char or attr screen capture and export logic
+Primary files:
+- `src/files.c`
+
+What remains:
+- `mini_screenshot_char`
+- `mini_screenshot_attr`
+- the character dump screenshot still serializes a faux screen-cell slice
+
+Exit when:
+- dump and export code consumes semantic snapshot data directly
+- any intentionally retained ASCII export is explicit data formatting, not a UI
+  compatibility dependency
+
+### 6. Audit and documentation blind spots
+Primary files:
+- `tools/ui_debt_audit.py`
+- `docs/ui_migration_inventory.md`
+- `docs/ui_architecture_migration_plan.md`
+- this file
+- legacy roadmap docs that still talk about `z-term` as live debt
+
+What remains:
+- the current audit now covers `ui0` plus the movement slice, but large
+  terminal-model debt families still remain untracked
+- several docs still describe the old render-replacement finish line instead of
+  the current cleanup target
+
+Exit when:
+- the audit tracks the actual remaining terminal model
+- docs clearly distinguish completed renderer replacement from unfinished
+  terminal-logic removal
+
+## Execution Order
+### A. Expand the audit first
 Goal:
-- remove the remaining file-local `Term_fresh()`, `Term_clear()`,
-  `Term_putstr()`, and similar control calls that still paper over SDL state
-  transitions after semantic UI work
+- make the remaining work measurable before touching code
 
-Primary targets:
-- `src/cmd/item/cmd-item-core.c`
-- `src/cmd/movement/cmd-movement.c`
-- `src/cmd/ui/cmd-ui-knowledge.c`
-- `src/load.c`
-- `src/score/score_entry.c`
-- `src/signals.c`
+Tasks:
+- extend `tools/ui_debt_audit.py` or add a second audit for:
+  - `inkey`, `request_command`, `flush`
+  - compat text wrappers
+  - `platform_frame_*_view_cols/rows`
+  - `APP_UI_DOCUMENT_OP_*`
+  - SDL term-host symbols
+  - story-font grid mode
+- check in a baseline so new debt cannot be introduced during the cleanup
 
 Exit when:
-- normal SDL command and info flows do not need manual `Term_fresh()` or
-  `Term_clear()` fences after `handle_stuff()` or semantic scene presentation
-- panic or interrupt messaging is routed through a narrower host or platform
-  surface instead of term writes
+- CI can fail on regressions in the real remaining debt families
 
-### 8. Remove debug and admin term debt
-Status:
-- completed in the working tree on April 15, 2026
-
+### B. Replace the live input stack
 Goal:
-- delete the remaining term-grid control and `inkey()` dependencies in debug
-  or admin-only tools so the repo-wide debt count can actually reach zero
+- remove terminal-era command acquisition from gameplay flow
 
-Primary targets:
-- `src/squelch.c`
-- `src/wizard1.c`
-- `src/wizard2.c`
+Tasks:
+- introduce a semantic command-input service behind `src/app/*`
+- move macro or keymap expansion into that service or into a narrow reusable
+  translator
+- convert `src/dungeon.c` and repeat-count prompting off
+  `inkey()` / `request_command()` / `flush()`
 
 Exit when:
-- the UI debt audit reports zero `inkey()` call sites
-- wizard and squelch flows no longer use direct `Term_*` control or rendering
+- `src/util-input.c` is gone or reduced to platform-only translation with no
+  gameplay callers
 
-### 9. Drain all remaining runtime term debt before backend removal
-Status:
-- active
-
+### C. Kill the compat text surface
 Goal:
-- remove every remaining non-backend term-legacy artifact in one coordinated
-  pass before the final `z-term` / SDL term-host teardown
-- absorb the residual work previously tracked separately under Workstreams 2,
-  3, and the already-landed wrapper-input pass
+- remove row or column screen-authoring from normal SDL UI code
 
-Primary targets:
-- counted debt owners in `src/cave.c`, `src/util-text.c`,
-  `src/ui/story_font.c`, `src/util-editing.c`, `src/ui/ui-story.c`, and
-  `src/obj-info.c`
-- wrapper and caller integration in `src/ui/ui-status.c`, `src/targeting.c`,
-  `src/cmd/ui/cmd-ui-look.c`, `src/cmd/combat/cmd-combat.c`,
-  `src/cmd/combat/cmd-ranged.c`, `src/spell/spell-projection.c`,
-  `src/util-message.c`, `src/dungeon.c`,
-  `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
-  `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
-  `src/monster2.c`, `src/object/object-list.c`,
-  `src/object/object-place.c`, `src/spell/spell-detection.c`,
-  `src/spell/spell-terrain.c`, `src/player/player-song-effects.c`,
-  `src/ui/smithing/ui-smithing-screen.c`, `src/wizard2.c`, and
-  declaration surfaces in `src/externs.h`
+Tasks:
+- replace `prt()` / `c_put_str()` / `clear_from()` family by screen family:
+  - monster recall and monster list
+  - object recall fallback
+  - squelch, wizard, and score utility screens
+  - help diagrams and editing helpers
+- delete `ui_text_surface` screen-authoring APIs once callers are drained
 
 Exit when:
-- `py -3 tools/ui_debt_audit.py --details` drops from `8 files / 61 matches`
-  to the final backend-only floor in `src/sdl-layout.c` and
-  `src/sdl-render.c`
-- targeted searches for `move_cursor_relative`, `restore_game_cursor`,
-  `print_rel`, `lite_spot`, `prt_map`, and `display_map` are empty outside
-  archived code or the final backend boundary
-- runtime document, story-font, object-info, map redraw, cursor, and
-  projectile or combat-highlight paths no longer depend on term-grid state
+- user-facing UI flows no longer depend on the compat writer family
 
-### 10. Remove `z-term` and the SDL term backend from the build graph
-Status:
-- completed in the working tree on April 15, 2026
-
+### D. Replace document row or column ops with real widgets
 Goal:
-- remove `src/z-term.c` from `CMakeLists.txt`, stop treating the `z-term`
-  compatibility layer as part of the active runtime build, and delete the SDL
-  term-host backend that still exists only to serve it
+- stop calling semantic documents "semantic" when they are still cell-addressed
 
-Primary targets:
-- `CMakeLists.txt`
-- `src/z-term.c`
-- `src/z-term.h`
-- direct compile-time dependencies that still force `z-term` into the build,
-  especially `src/angband.h`, `src/dungeon.c`, `src/files.c`, and
-  `src/sdl-main-internal.h`
-- SDL implementation units that still inherit `z-term.h` through
-  `src/sdl-main-internal.h`, especially `src/main-sdl.c`,
-  `src/platform-frame.c`, `src/sdl-layout.c`, `src/sdl-render.c`,
-  `src/sdl-scene-bootstrap.c`, `src/sdl-scene-dungeon.c`,
-  `src/sdl-scene-information.c`, `src/sdl-scene-menu.c`, `src/sdl-scene.c`,
-  `src/sdl-story-font.c`, `src/sdl-touch.c`, `src/sdl-ui-style.c`, and
-  `src/util-message.c`
-- the `sil-legacy-compat` target and every target that links it today:
-  `sil-more`, `sil-ui1-tests`, `sil-ui8-tests`, and `sil-ui8-demo-packets`
+Tasks:
+- add renderer-facing widgets for paragraphs, glyph-plus-label rows, tables,
+  scroll prompts, and tutorial or help callouts
+- migrate `src/obj-info.c`, `src/ui/ui-story.c`, `src/ui/ui-file-viewer.c`,
+  `src/ui/ui-help.c`, `src/thrall_quest.c`, and remaining tutorial or browser
+  flows
+- remove `APP_UI_DOCUMENT_OP_CELL` and `APP_UI_DOCUMENT_OP_CURSOR` first, then
+  the row or column text op path
 
 Exit when:
-- `src/z-term.c` no longer appears in active source lists in `CMakeLists.txt`
-- `sil-more` no longer links `sil-legacy-compat` just to pull `z-term` in
-- `src/sdl-layout.c`, `src/sdl-render.c`, and the remaining SDL frontend no
-  longer create or resize `term` hosts for rendering
-- the remaining runtime and test targets build through narrower headers and
-  interfaces that do not require `z-term.h` transitively through `angband.h`
-- any intentionally retained legacy frontend code is either unbuilt,
-  separately archived, or isolated behind a target that is not part of the
-  normal SDL runtime finish line
+- document screens are no longer built from row or column operations
 
-## Parallel Execution
-- Lane A: Workstream 9, text/story/editing core. Write set:
-  `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
-  `src/ui/ui-story.c`, and `src/obj-info.c`.
-- Lane B: Workstream 9, map/cursor core. Write set: `src/cave.c`,
-  `src/ui/ui-status.c`, `src/targeting.c`, `src/cmd/ui/cmd-ui-look.c`,
-  `src/cmd/combat/cmd-combat.c`, `src/cmd/combat/cmd-ranged.c`,
-  `src/spell/spell-projection.c`, `src/util-message.c`, and
-  `src/externs.h`.
-- Lane C: Workstream 9, caller sweep. Write set: `src/dungeon.c`,
-  `src/cmd/movement/cmd-movement.c`, `src/cmd/movement/cmd-search.c`,
-  `src/cmd/monster/cmd-monster-alert.c`, `src/cmd/world/cmd-interact.c`,
-  `src/monster2.c`, `src/object/object-list.c`, `src/object/object-place.c`,
-  `src/spell/spell-detection.c`, `src/spell/spell-terrain.c`,
-  `src/player/player-song-effects.c`, `src/ui/smithing/ui-smithing-screen.c`,
-  and `src/wizard2.c`.
-- Lane D: Workstream 10. Write set: build graph, `z-term`, SDL term backend,
-  and direct
-  compile-time dependency files.
+### E. Remove SDL term hosts
+Goal:
+- delete the SDL-side terminal container that still anchors view ownership
 
-Rules:
-- Do not add or widen fallback renderers.
-- Do not reintroduce `screen_save()` / `screen_load()` or captured-term
-  presentation on the SDL path.
-- Do not preserve `print_rel()`, `lite_spot()`, `prt_map()`, or similar
-  wrappers as permanent no-op bridges on the SDL path.
-- If a slice cannot delete a bridge cleanly, stop and document the blocker
-  instead of preserving the bridge.
+Tasks:
+- rename view readiness and lifetime APIs away from `term`
+- replace `struct term` and `struct term_win` storage with direct SDL view
+  state
+- move story-font activation and grid flags off the host object
+- remove `term_init`, `term_nuke`, `sdl_view_link_term`,
+  `sdl_term_host_redraw`, and `sdl_redraw_all_term_hosts`
+
+Exit when:
+- active SDL code no longer defines or references `struct term`
+
+### F. Finish exports and docs
+Goal:
+- remove leftover screen-cell mirrors and bring repo guidance back in sync
+
+Tasks:
+- rewrite mini screenshot and dump helpers against semantic snapshot data
+- update docs and audit baselines to the post-render-replacement reality
+
+Exit when:
+- repo guidance no longer points engineers at already-finished work
+
+## Parallel Lanes
+- Lane 1: audit and docs
+- Lane 2: input stack (`src/util-input.c`, `src/dungeon.c`, prompt and command
+  plumbing)
+- Lane 3: compat text surface and utility screens
+- Lane 4: document and widget migration
+- Lane 5: SDL term-host removal
+
+Dependencies:
+- Lane 1 starts first and stays active until the end.
+- Lane 2 should land before the SDL host teardown.
+- Lane 3 and Lane 4 can run in parallel after the audit baseline exists.
+- Lane 5 starts only after no gameplay or UI authoring path still depends on
+  compat text or document cell ops.
 
 ## Validation
-- Run `py -3 tools/ui_debt_audit.py --check`.
-- Run targeted searches for debt the audit does not count, especially:
-  - `move_cursor_relative`
-  - `restore_game_cursor`
-  - `print_rel`
-  - `lite_spot`
-  - `prt_map`
-  - `display_map`
-  - `z-term.h`
-- Smoke-test every touched surface in SDL:
-  - main menu
-  - prompt or confirm flows
-  - object info or other document-style scenes
-  - look or targeting, including cursor movement
-  - map redraw, movement, and one projectile or combat animation
-  - inventory, equipment, and floor selection
-  - message, monster recall, object recall, and player document screens
-  - one wrapper-heavy path such as search, detection, or wizard map debug if
-    touched
-- Confirm there is no stale-screen flash during menu or prompt transitions.
+- Run `py -3 tools/ui_debt_audit.py --details`.
+- Run the expanded terminal-debt audit from Workstream A.
+- Run targeted searches for:
+  - `inkey`
+  - `request_command`
+  - `flush(`
+  - `struct term`
+  - `term_ready`
+  - `term_init(`
+  - `term_nuke(`
+  - `sdl_view_link_term`
+  - `sdl_term_host_redraw`
+  - `sdl_redraw_all_term_hosts`
+  - `APP_UI_DOCUMENT_OP_`
+  - `app_ui_panel_add_document_text`
+  - `app_ui_panel_add_document_cell_ex`
+  - `app_ui_panel_add_document_cursor`
+  - `c_put_str`
+  - `put_str(`
+  - `c_prt`
+  - `prt(`
+  - `clear_from`
+  - `text_out_to_screen`
+- Build with `.\build-cmake.bat` or `cmake --build build-standard --parallel`.
+- Smoke-test:
+  - command input, including repeat counts and keymaps
+  - object info, note info, and file viewer
+  - story pages, help pages, and thrall reward selection
+  - monster recall, monster list, inventory, and equipment panes
+  - squelch or wizard utility screens if touched
+  - resize and pane-layout changes
+  - character dump generation
 
 ## Done When
-- `py -3 tools/ui_debt_audit.py --details` reports:
-  - `inkey()`: 0 files / 0 matches
-  - `screen_save()/screen_load()`: 0 files / 0 matches
-  - direct `Term_*` render or control calls: 0 files / 0 matches
-- targeted searches for `Term_xtra`, `term_get_string`, `move_cursor_relative`,
-  `restore_game_cursor`, `print_rel`, `lite_spot`, `prt_map`, `display_map`,
-  and `z-term.h` are either empty or intentionally confined to archived or
-  unbuilt code.
-- `src/z-term.c` is no longer in `CMakeLists.txt` for the normal runtime and
-  test build graph, and the SDL frontend no longer renders through `term`
-  hosts.
-- This plan can stay short because the remaining work is a finite cleanup
-  list, not another staged migration.
+- the expanded debt audit reports zero live terminal-model ownership on the
+  normal SDL path
+- `src/util-input.c` no longer exposes gameplay-facing `inkey()` or
+  `request_command()`
+- `src/util-text.c` no longer exports row or column screen-authoring APIs to
+  gameplay modules
+- `src/app/app-ui.*` no longer defines document row, column, cell, or cursor
+  ops for normal runtime UI
+- `src/sdl-main-internal.h` no longer defines `struct term` or `struct term_win`
+- `src/files.c` no longer owns char or attr screen mirrors
+- any remaining uses of grid or cell terminology are clearly gameplay-space
+  data, not terminal UI compatibility

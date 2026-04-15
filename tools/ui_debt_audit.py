@@ -8,21 +8,36 @@ import json
 import re
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = REPO_ROOT / "src"
 DEFAULT_BASELINE = REPO_ROOT / "tests" / "ui_debt_audit_baseline.json"
 SOURCE_SUFFIXES = {".c", ".h"}
+PREF_SUFFIXES = {".prf"}
+AUDIT_SUFFIXES = SOURCE_SUFFIXES | PREF_SUFFIXES
 COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
+PRF_COMMENT_LINE_RE = re.compile(r"^\s*#.*$", re.MULTILINE)
 PLATFORM_SDL_GLOBS = (
     "src/main-sdl.c",
     "src/main-sdl.h",
     "src/platform-*.h",
     "src/sdl-*.c",
     "src/sdl-*.h",
+)
+MOVEMENT_INPUT_SCOPE = (
+    "src/externs.h",
+    "src/util-input.c",
+    "src/dungeon.c",
+    "src/targeting.c",
+    "src/main-sdl.c",
+    "src/sdl-main-internal.h",
+    "src/cmd/movement/cmd-movement.c",
+    "src/cmd/world/cmd-interact.c",
+    "src/cmd/ui/cmd-ui-settings.c",
+    "lib/pref/pref.prf",
+    "lib/pref/pref-sdl.prf",
 )
 
 
@@ -31,12 +46,24 @@ class MetricSpec:
     key: str
     label: str
     pattern: re.Pattern[str]
+    include_paths: tuple[str, ...] = ()
+    include_globs: tuple[str, ...] = ()
     exclude_paths: tuple[str, ...] = ()
     exclude_globs: tuple[str, ...] = ()
     notes: str = ""
 
 
-METRICS = (
+@dataclass(frozen=True)
+class AuditSpec:
+    key: str
+    label: str
+    scope: tuple[str, ...]
+    metrics: tuple[MetricSpec, ...]
+    notes: str = ""
+    platform_sdl_exclusions: tuple[str, ...] = ()
+
+
+UI0_METRICS = (
     MetricSpec(
         key="inkey_calls",
         label="inkey() call sites",
@@ -73,43 +100,166 @@ METRICS = (
     ),
 )
 
+MOVEMENT_INPUT_METRICS = (
+    MetricSpec(
+        key="movement_inkey_waits",
+        label="movement-related inkey() waits",
+        pattern=re.compile(
+            r"\b(?:inkey|inkey_with_wait_reason|targeting_inkey_with_wait_reason)\s*\("
+        ),
+        include_paths=("src/externs.h", "src/util-input.c", "src/targeting.c"),
+        notes="Tracks the legacy inkey wait path still used by request_command() and directional prompts.",
+    ),
+    MetricSpec(
+        key="movement_request_command_ownership",
+        label="movement request_command() ownership",
+        pattern=re.compile(r"\brequest_command\s*\("),
+        include_paths=("src/externs.h", "src/util-input.c", "src/dungeon.c"),
+        notes="Tracks the legacy command acquisition loop that still owns top-level movement input.",
+    ),
+    MetricSpec(
+        key="movement_flush_calls",
+        label="movement-related flush() usage",
+        pattern=re.compile(r"\bflush\s*\("),
+        include_paths=(
+            "src/util-input.c",
+            "src/dungeon.c",
+            "src/cmd/movement/cmd-movement.c",
+            "src/cmd/world/cmd-interact.c",
+            "src/cmd/ui/cmd-ui-settings.c",
+        ),
+        notes="Tracks delayed flush ownership in the movement loop, movement consumers, and the legacy movement settings UI.",
+    ),
+    MetricSpec(
+        key="movement_sdl_direction_macro_bridge",
+        label="SDL directional macro bridge symbols",
+        pattern=re.compile(
+            r"\b(?:sdl_send_modified_direction_action|sdl_try_send_modified_direction_key|sdl_try_send_modified_direction_event|sdl_gamepad_send_direction_mods)\s*\("
+        ),
+        include_paths=("src/main-sdl.c", "src/sdl-main-internal.h"),
+        notes="Tracks the SDL helper family that still resolves directional modifiers by feeding legacy macro-trigger input.",
+    ),
+    MetricSpec(
+        key="movement_pref_keymap_defaults",
+        label="movement action defaults in pref.prf",
+        pattern=re.compile(
+            r"^A:(?:z|Z|/5|;[12346789]|\.[12346789])$",
+            re.MULTILINE,
+        ),
+        include_paths=("lib/pref/pref.prf",),
+        notes="Counts active shipped movement action defaults in pref.prf after removing commented lines.",
+    ),
+    MetricSpec(
+        key="movement_pref_sdl_macro_defaults",
+        label="movement macro defaults in pref-sdl.prf",
+        pattern=re.compile(
+            r"^(?:A:\\a\\(?:\\\.[12346789]|\\Z|\\/[123456789])|P:\^_[SC]x[0-9A-Fa-f]{2}\\r)$",
+            re.MULTILINE,
+        ),
+        include_paths=("lib/pref/pref-sdl.prf",),
+        notes="Counts active shift/control directional macro defaults in pref-sdl.prf after removing commented lines.",
+    ),
+)
+
+AUDITS = (
+    AuditSpec(
+        key="ui0",
+        label="UI0 debt audit",
+        scope=("src/**/*.c", "src/**/*.h"),
+        metrics=UI0_METRICS,
+        notes="High-level guardrail for terminal-era UI APIs that should not grow during the extermination work.",
+        platform_sdl_exclusions=PLATFORM_SDL_GLOBS,
+    ),
+    AuditSpec(
+        key="movement_input",
+        label="Movement input debt audit",
+        scope=MOVEMENT_INPUT_SCOPE,
+        metrics=MOVEMENT_INPUT_METRICS,
+        notes="Slice-0 guardrail for the legacy movement input stack that the movement rewrite is expected to delete.",
+    ),
+)
+AUDITS_BY_KEY = {audit.key: audit for audit in AUDITS}
+
 
 def strip_comments(text: str) -> str:
     return COMMENT_RE.sub("", text)
 
 
-def is_source_file(path: Path) -> bool:
-    return path.is_file() and path.suffix.lower() in SOURCE_SUFFIXES
+def strip_pref_comments(text: str) -> str:
+    return PRF_COMMENT_LINE_RE.sub("", text)
 
 
-def iter_source_files() -> Iterable[Path]:
-    for path in sorted(SOURCE_ROOT.rglob("*")):
-        if is_source_file(path):
-            yield path
+def normalize_text(path: Path) -> str:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    suffix = path.suffix.lower()
+    if suffix in SOURCE_SUFFIXES:
+        return strip_comments(text)
+    if suffix in PREF_SUFFIXES:
+        return strip_pref_comments(text)
+    return text
+
+
+def is_audited_file(path: Path) -> bool:
+    return path.is_file() and path.suffix.lower() in AUDIT_SUFFIXES
 
 
 def rel_path(path: Path) -> str:
     return path.relative_to(REPO_ROOT).as_posix()
 
 
+def path_matches(path: Path, pattern: str) -> bool:
+    return PurePosixPath(rel_path(path)).match(pattern)
+
+
+def iter_scope_files(scope: tuple[str, ...]) -> Iterable[Path]:
+    seen: set[str] = set()
+
+    for pattern in scope:
+        for path in sorted(REPO_ROOT.glob(pattern)):
+            if not is_audited_file(path):
+                continue
+
+            relative = rel_path(path)
+            if relative in seen:
+                continue
+
+            seen.add(relative)
+            yield path
+
+
+def is_included(path: Path, spec: MetricSpec) -> bool:
+    if not spec.include_paths and not spec.include_globs:
+        return True
+
+    relative = rel_path(path)
+    if relative in spec.include_paths:
+        return True
+
+    return any(path_matches(path, glob) for glob in spec.include_globs)
+
+
 def is_excluded(path: Path, spec: MetricSpec) -> bool:
     relative = rel_path(path)
     if relative in spec.exclude_paths:
         return True
-    return any(path.match(glob) for glob in spec.exclude_globs)
+
+    return any(path_matches(path, glob) for glob in spec.exclude_globs)
 
 
-def collect_metric(spec: MetricSpec, files: Iterable[Path]) -> dict:
+def collect_metric(
+    spec: MetricSpec, files: Iterable[Path], text_cache: Dict[str, str]
+) -> dict:
     file_matches: Dict[str, int] = {}
 
     for path in files:
-        if is_excluded(path, spec):
+        if not is_included(path, spec) or is_excluded(path, spec):
             continue
 
-        text = strip_comments(path.read_text(encoding="utf-8", errors="ignore"))
+        relative = rel_path(path)
+        text = text_cache.setdefault(relative, normalize_text(path))
         match_count = sum(1 for _ in spec.pattern.finditer(text))
         if match_count:
-            file_matches[rel_path(path)] = match_count
+            file_matches[relative] = match_count
 
     return {
         "label": spec.label,
@@ -120,60 +270,133 @@ def collect_metric(spec: MetricSpec, files: Iterable[Path]) -> dict:
     }
 
 
-def collect_audit() -> dict:
-    files = tuple(iter_source_files())
-    metrics = {spec.key: collect_metric(spec, files) for spec in METRICS}
-    return {
-        "version": 1,
-        "repo_root": str(REPO_ROOT),
-        "scope": ["src/**/*.c", "src/**/*.h"],
-        "platform_sdl_exclusions": list(PLATFORM_SDL_GLOBS),
+def collect_audit_family(audit_spec: AuditSpec) -> dict:
+    files = tuple(iter_scope_files(audit_spec.scope))
+    text_cache: Dict[str, str] = {}
+    metrics = {
+        spec.key: collect_metric(spec, files, text_cache) for spec in audit_spec.metrics
+    }
+    result = {
+        "label": audit_spec.label,
+        "scope": list(audit_spec.scope),
+        "notes": audit_spec.notes,
         "metrics": metrics,
     }
+    if audit_spec.platform_sdl_exclusions:
+        result["platform_sdl_exclusions"] = list(audit_spec.platform_sdl_exclusions)
+    return result
+
+
+def collect_audit(selected_audits: tuple[str, ...]) -> dict:
+    audits = {
+        audit_key: collect_audit_family(AUDITS_BY_KEY[audit_key])
+        for audit_key in selected_audits
+    }
+    result = {
+        "version": 2,
+        "repo_root": str(REPO_ROOT),
+        "audits": audits,
+    }
+
+    # Keep the original top-level UI0 shape for compatibility with older
+    # docs and local automation that still expects the legacy keys.
+    if "ui0" in audits:
+        result["scope"] = audits["ui0"]["scope"]
+        result["metrics"] = audits["ui0"]["metrics"]
+        if "platform_sdl_exclusions" in audits["ui0"]:
+            result["platform_sdl_exclusions"] = audits["ui0"][
+                "platform_sdl_exclusions"
+            ]
+
+    return result
 
 
 def render_summary(audit: dict, include_details: bool) -> str:
     lines = [
         "UI debt audit",
         f"Repo root: {audit['repo_root']}",
-        f"Scope: {', '.join(audit['scope'])}",
-        "SDL platform exclusions for get_sdl_*/set_sdl_*: "
-        + ", ".join(audit["platform_sdl_exclusions"]),
-        "",
-        f"{'Metric':39} {'Files':>5} {'Matches':>7}",
-        f"{'-' * 39} {'-' * 5} {'-' * 7}",
     ]
 
-    for spec in METRICS:
-        metric = audit["metrics"][spec.key]
-        lines.append(
-            f"{metric['label'][:39]:39} {metric['files']:5d} {metric['matches']:7d}"
-        )
-        if include_details and metric["file_matches"]:
-            lines.append(f"  notes: {metric['notes']}")
-            for path, count in metric["file_matches"].items():
-                lines.append(f"  {count:4d}  {path}")
+    for index, (audit_key, audit_data) in enumerate(audit["audits"].items()):
+        audit_spec = AUDITS_BY_KEY[audit_key]
+        if index:
             lines.append("")
+
+        lines.append(f"[{audit_key}] {audit_data['label']}")
+        lines.append(f"Scope: {', '.join(audit_data['scope'])}")
+        if audit_data.get("platform_sdl_exclusions"):
+            lines.append(
+                "SDL platform exclusions for get_sdl_*/set_sdl_*: "
+                + ", ".join(audit_data["platform_sdl_exclusions"])
+            )
+        lines.append("")
+        lines.append(f"{'Metric':39} {'Files':>5} {'Matches':>7}")
+        lines.append(f"{'-' * 39} {'-' * 5} {'-' * 7}")
+
+        for metric_spec in audit_spec.metrics:
+            metric = audit_data["metrics"][metric_spec.key]
+            lines.append(
+                f"{metric['label'][:39]:39} {metric['files']:5d} {metric['matches']:7d}"
+            )
+            if include_details and metric["file_matches"]:
+                lines.append(f"  notes: {metric['notes']}")
+                for path, count in metric["file_matches"].items():
+                    lines.append(f"  {count:4d}  {path}")
+                lines.append("")
 
     return "\n".join(lines)
 
 
+def extract_audits(payload: dict) -> dict[str, dict]:
+    if "audits" in payload:
+        return payload["audits"]
+
+    # Backward-compatible view for pre-v2 baseline files.
+    return {
+        "ui0": {
+            "label": "UI0 debt audit",
+            "scope": payload.get("scope", []),
+            "platform_sdl_exclusions": payload.get("platform_sdl_exclusions", []),
+            "metrics": payload.get("metrics", {}),
+        }
+    }
+
+
 def compare_against_baseline(audit: dict, baseline_path: Path) -> list[str]:
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    current_audits = extract_audits(audit)
+    baseline_audits = extract_audits(baseline)
     failures: list[str] = []
 
-    for spec in METRICS:
-        current = audit["metrics"][spec.key]
-        expected = baseline["metrics"][spec.key]
+    for audit_key, current_audit in current_audits.items():
+        audit_spec = AUDITS_BY_KEY[audit_key]
+        expected_audit = baseline_audits.get(audit_key)
 
-        if current["files"] > expected["files"]:
-            failures.append(
-                f"{current['label']}: files {current['files']} > baseline {expected['files']}"
-            )
-        if current["matches"] > expected["matches"]:
-            failures.append(
-                f"{current['label']}: matches {current['matches']} > baseline {expected['matches']}"
-            )
+        if expected_audit is None:
+            if "audits" in baseline:
+                failures.append(f"Missing audit in baseline: {audit_key}")
+            continue
+
+        expected_metrics = expected_audit.get("metrics", {})
+        for metric_spec in audit_spec.metrics:
+            current = current_audit["metrics"][metric_spec.key]
+            expected = expected_metrics.get(metric_spec.key)
+
+            if expected is None:
+                if "audits" in baseline:
+                    failures.append(
+                        f"Missing metric in baseline {audit_key}: {metric_spec.key}"
+                    )
+                continue
+
+            if current["files"] > expected["files"]:
+                failures.append(
+                    f"[{audit_key}] {current['label']}: files {current['files']} > baseline {expected['files']}"
+                )
+            if current["matches"] > expected["matches"]:
+                failures.append(
+                    f"[{audit_key}] {current['label']}: matches {current['matches']} > baseline {expected['matches']}"
+                )
 
     return failures
 
@@ -191,6 +414,12 @@ def parse_args() -> argparse.Namespace:
         help="Include per-file match counts in text output.",
     )
     parser.add_argument(
+        "--audit",
+        choices=("all",) + tuple(AUDITS_BY_KEY),
+        default="all",
+        help="Select a single audit family to emit or check. Defaults to all families.",
+    )
+    parser.add_argument(
         "--check",
         nargs="?",
         const=str(DEFAULT_BASELINE),
@@ -202,7 +431,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    audit = collect_audit()
+    selected_audits = (
+        tuple(AUDITS_BY_KEY) if args.audit == "all" else (args.audit,)
+    )
+    audit = collect_audit(selected_audits)
 
     if args.json:
         print(json.dumps(audit, indent=2, sort_keys=True))
