@@ -38,9 +38,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-/* Countdown for forcing a redraw after showing the per-style banner */
-int g_banner_force_redraw_remaining = 0;
 static char g_active_partition_banner_text[1024] = "";
+static u64b g_active_partition_banner_started_ms = 0;
+static u32b g_active_partition_banner_hold_ms = 0;
 
 /* Morgoth vault tracking variables - file scope for cross-function access */
 static int last_player_y = 0;
@@ -59,10 +59,10 @@ static int last_narrated_style_idx = -1;
 static bool is_big_partition_kind(level_partition_kind kind);
 static bool is_small_cave_partition_kind(level_partition_kind kind);
 
-#define DUNGEON_PARTITION_BANNER_WRAP_CHARS 80
-#define DUNGEON_PARTITION_BANNER_LINE_LIMIT 23
-#define DUNGEON_PARTITION_BANNER_BASE_INDENT 14
-#define DUNGEON_PARTITION_BANNER_STAIR_STEP 2
+enum {
+    DUNGEON_NARRATIVE_BANNER_POP_IN_MS = 220u,
+    DUNGEON_NARRATIVE_BANNER_POP_OUT_MS = 260u
+};
 /* Track greater-vault encounter XP so repeated warning prompts can't be farmed. */
 static char greater_vault_xp_name[80] = "";
 static bool greater_vault_xp_awarded = false;
@@ -87,26 +87,14 @@ static void reset_level_entry_tracking(void)
 {
     g_labyrinth_view_active = false;
     g_active_partition_banner_text[0] = '\0';
+    g_active_partition_banner_started_ms = 0;
+    g_active_partition_banner_hold_ms = 0;
     greater_vault_xp_name[0] = '\0';
     greater_vault_xp_awarded = false;
     last_partition_pi = -1;
     last_partition_kind = LEVEL_PART_NONE;
     partition_narrated_mask = 0;
     last_narrated_style_idx = -1;
-}
-
-static bool banner_messages_use_stairs(void)
-{
-#ifdef __ANDROID__
-    const bool default_value = false;
-#else
-    const bool default_value = true;
-#endif
-
-    if (!op_ptr)
-        return default_value;
-
-    return op_ptr->opt[OPT_banner_message_stairs];
 }
 
 static bool dungeon_poll_pending_key(void)
@@ -133,136 +121,25 @@ static void dungeon_publish_runtime_snapshot(u32b update_mask, u32b redraw_mask,
 
 static void dungeon_refresh_partition_banner_snapshot(void);
 
-bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene)
+static byte narrative_banner_seconds(void)
 {
-    app_ui_panel* panel;
-    const char* p = g_active_partition_banner_text;
-    int printed_lines = 0;
-    enum { MAX_LINES = 32, MAX_LEN = 255 };
-    bool stair_layout = banner_messages_use_stairs();
+    byte seconds;
 
-    if (!scene)
-        return false;
-    if (!p[0] || (g_banner_force_redraw_remaining <= 0) || character_icky > 0)
-        return true;
+    if (!op_ptr)
+        return NARRATIVE_BANNER_SECONDS_DEFAULT;
 
-    scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_TRANSIENT);
-    if (!panel)
-        return false;
-    panel->style = APP_UI_PANEL_STYLE_OVERLAY_RAIL;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
-    panel->accent_attr = TERM_ORANGE;
+    seconds = op_ptr->narrative_banner_seconds;
+    if (seconds > NARRATIVE_BANNER_SECONDS_MAX)
+        return NARRATIVE_BANNER_SECONDS_DEFAULT;
 
-    while (*p && printed_lines < MAX_LINES
-        && printed_lines < DUNGEON_PARTITION_BANNER_LINE_LIMIT)
-    {
-        int indent = DUNGEON_PARTITION_BANNER_BASE_INDENT
-            + (stair_layout ? (DUNGEON_PARTITION_BANNER_STAIR_STEP
-                * printed_lines)
-                            : 0);
-        int avail;
-        char buf[MAX_LEN + 1];
-        char line_buf[APP_UI_LABEL_MAX];
-        int linelen = 0;
+    return seconds;
+}
 
-        if (indent >= DUNGEON_PARTITION_BANNER_WRAP_CHARS - 1)
-            break;
-
-        avail = DUNGEON_PARTITION_BANNER_WRAP_CHARS - indent - 1;
-        if (avail < 8)
-            avail = 8;
-
-        buf[0] = '\0';
-        while (*p && (unsigned char)*p <= ' ')
-        {
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-            p++;
-        }
-
-        while (*p)
-        {
-            const char* w;
-            int wlen;
-            int need;
-
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-
-            w = p;
-            while (*p && *p != '\n' && !isspace((unsigned char)*p))
-                p++;
-            wlen = (int)(p - w);
-
-            if (wlen > avail && linelen == 0)
-            {
-                int take = (wlen > avail) ? avail : wlen;
-
-                if (take > MAX_LEN)
-                    take = MAX_LEN;
-                memcpy(buf, w, (size_t)take);
-                linelen = take;
-                buf[linelen] = '\0';
-                p = w + take;
-                break;
-            }
-
-            need = (linelen ? 1 : 0) + wlen;
-            if (linelen + need <= avail && linelen + need <= MAX_LEN)
-            {
-                if (linelen)
-                    buf[linelen++] = ' ';
-                memcpy(buf + linelen, w, (size_t)wlen);
-                linelen += wlen;
-                buf[linelen] = '\0';
-            }
-            else
-            {
-                p = w;
-                break;
-            }
-
-            while (*p && isspace((unsigned char)*p))
-            {
-                if (*p == '\n')
-                    break;
-                p++;
-            }
-            if (*p == '\n')
-            {
-                p++;
-                break;
-            }
-        }
-
-        if (linelen == 0)
-            break;
-
-        if (indent >= (int)sizeof(line_buf))
-            indent = (int)sizeof(line_buf) - 1;
-        memset(line_buf, ' ', (size_t)indent);
-        line_buf[indent] = '\0';
-        SDL_strlcat(line_buf, buf, sizeof(line_buf));
-
-        if (!app_ui_panel_add_row_ex(panel, (s16b)printed_lines, TERM_ORANGE,
-                TERM_ORANGE, 0, '\0', true, false, "", line_buf, ""))
-        {
-            return false;
-        }
-        panel->rows[panel->row_count - 1].flags |= APP_UI_ITEM_FLAG_STORY_LABEL;
-
-        printed_lines++;
-    }
-
-    return printed_lines > 0;
+static u32b narrative_banner_total_ms(void)
+{
+    return g_active_partition_banner_hold_ms
+        + DUNGEON_NARRATIVE_BANNER_POP_IN_MS
+        + DUNGEON_NARRATIVE_BANNER_POP_OUT_MS;
 }
 
 static void dungeon_refresh_partition_banner_snapshot(void)
@@ -283,9 +160,48 @@ static void dungeon_refresh_partition_banner_snapshot(void)
 
 void clear_active_narrative_banner(void)
 {
-    g_banner_force_redraw_remaining = 0;
+    bool had_active = g_active_partition_banner_text[0]
+        || g_active_partition_banner_started_ms != 0
+        || g_active_partition_banner_hold_ms != 0;
+
     g_active_partition_banner_text[0] = '\0';
-    dungeon_refresh_partition_banner_snapshot();
+    g_active_partition_banner_started_ms = 0;
+    g_active_partition_banner_hold_ms = 0;
+
+    if (had_active)
+        dungeon_refresh_partition_banner_snapshot();
+}
+
+bool dungeon_active_narrative_banner_animating(u64b now_ms)
+{
+    if (!g_active_partition_banner_text[0])
+        return false;
+
+    if (narrative_banner_seconds() == 0
+        || now_ms >= g_active_partition_banner_started_ms
+            + narrative_banner_total_ms())
+    {
+        clear_active_narrative_banner();
+        return false;
+    }
+
+    return true;
+}
+
+bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
+    size_t text_size, u64b* started_ms, u32b* hold_ms)
+{
+    if (!dungeon_active_narrative_banner_animating(now_ms))
+        return false;
+
+    if (text && text_size)
+        SDL_strlcpy(text, g_active_partition_banner_text, text_size);
+    if (started_ms)
+        *started_ms = g_active_partition_banner_started_ms;
+    if (hold_ms)
+        *hold_ms = g_active_partition_banner_hold_ms;
+
+    return true;
 }
 
 /*
@@ -398,45 +314,31 @@ static void build_partition_narrative_text(int old_sidx, int new_sidx,
     append_narrative_piece(buf, size, styles_get_style_m2(new_sidx));
 }
 
-static void display_narrative_text(cptr text, int narrative_mode,
-    bool line_delay)
+static bool narrative_banner_popup_enabled(void)
 {
-    if (!text || !text[0])
-        return;
+    return narrative_banner_seconds() > 0;
+}
 
-    if (narrative_mode == PARTITION_NARRATIVE_MESSAGE)
-    {
-        msg_print(text);
-        return;
-    }
-
-    if (narrative_mode != PARTITION_NARRATIVE_BANNER)
+static void display_narrative_text(cptr text)
+{
+    if (!text || !text[0] || !narrative_banner_popup_enabled())
         return;
 
     SDL_strlcpy(g_active_partition_banner_text, text,
         sizeof(g_active_partition_banner_text));
-    g_banner_force_redraw_remaining = 3;
+    g_active_partition_banner_started_ms = platform_monotonic_ms();
+    g_active_partition_banner_hold_ms
+        = (u32b)narrative_banner_seconds() * 1000u;
     dungeon_refresh_partition_banner_snapshot();
-    if (line_delay)
-        platform_delay_ms(800u);
 }
 
-static void display_partition_narrative(int old_sidx, int new_sidx,
+static void display_partition_narrative_banner(int old_sidx, int new_sidx,
     level_partition_kind kind)
 {
     char buf[1024];
 
     build_partition_narrative_text(old_sidx, new_sidx, kind, buf, sizeof(buf));
-    display_narrative_text(buf, PARTITION_NARRATIVE_MESSAGE, false);
-}
-
-static void display_partition_narrative_banner(int old_sidx, int new_sidx,
-    level_partition_kind kind, bool line_delay)
-{
-    char buf[1024];
-
-    build_partition_narrative_text(old_sidx, new_sidx, kind, buf, sizeof(buf));
-    display_narrative_text(buf, PARTITION_NARRATIVE_BANNER, line_delay);
+    display_narrative_text(buf);
 }
 
 static bool dungeon_fullscreen_scene_enter(ui_information_scene_scope* scope,
@@ -655,33 +557,6 @@ static bool is_small_cave_partition_kind(level_partition_kind kind)
     return (kind == LEVEL_PART_CAVEY);
 }
 
-static int discovery_narrative_mode(bool force_message, int narrative_mode)
-{
-    if (!force_message)
-        return narrative_mode;
-
-    if (!op_ptr)
-        return PARTITION_NARRATIVE_OFF;
-
-    switch (op_ptr->level_entry_narrative_mode)
-    {
-    case LEVEL_ENTRY_NARRATIVE_BANNER_DELAY:
-    case LEVEL_ENTRY_NARRATIVE_BANNER:
-        return PARTITION_NARRATIVE_BANNER;
-    case LEVEL_ENTRY_NARRATIVE_MESSAGE:
-        return PARTITION_NARRATIVE_MESSAGE;
-    default:
-        return PARTITION_NARRATIVE_OFF;
-    }
-}
-
-static bool discovery_narrative_line_delay(bool force_message)
-{
-    return force_message && op_ptr
-        && (op_ptr->level_entry_narrative_mode
-            == LEVEL_ENTRY_NARRATIVE_BANNER_DELAY);
-}
-
 static byte partition_discovery_lore_flag(level_partition_kind kind)
 {
     if (!p_ptr)
@@ -722,8 +597,7 @@ static cptr partition_discovery_lore_text(level_partition_kind kind)
     return partition_config_get_discovery_text(kind, cave_type);
 }
 
-static void maybe_award_partition_discovery_xp(level_partition_kind kind,
-    int narrative_mode, bool line_delay)
+static void maybe_award_partition_discovery_xp(level_partition_kind kind)
 {
     byte bit = partition_discovery_lore_flag(kind);
     cptr text = partition_discovery_lore_text(kind);
@@ -736,7 +610,7 @@ static void maybe_award_partition_discovery_xp(level_partition_kind kind,
 
     p_ptr->discovery_lore_flags |= bit;
     gain_exp(300);
-    display_narrative_text(text, narrative_mode, line_delay);
+    display_narrative_text(text);
 }
 
 static cptr vault_entry_message_for_name(cptr vault_name)
@@ -769,8 +643,6 @@ static cptr vault_entry_message_for_name(cptr vault_name)
 
 static void describe_greater_vault_entry(cptr vault_name)
 {
-    int narrative_mode = op_ptr ? op_ptr->partition_narrative_mode
-                                : PARTITION_NARRATIVE_MESSAGE;
     cptr text = vault_entry_message_for_name(vault_name);
 
     if (!text)
@@ -780,11 +652,10 @@ static void describe_greater_vault_entry(cptr vault_name)
      * when the current setting also shows them as banners. */
     msg_print(text);
 
-    if (narrative_mode == PARTITION_NARRATIVE_BANNER)
-        display_narrative_text(text, PARTITION_NARRATIVE_BANNER, false);
+    display_narrative_text(text);
 }
 
-static void handle_partition_entry(bool force_message, int narrative_mode)
+static void handle_partition_entry(bool force_message)
 {
     if (!p_ptr || p_ptr->is_dead)
         return;
@@ -809,20 +680,16 @@ static void handle_partition_entry(bool force_message, int narrative_mode)
     }
 
     if (entered_big)
-        maybe_award_partition_discovery_xp(
-            kind, discovery_narrative_mode(force_message, narrative_mode),
-            discovery_narrative_line_delay(force_message));
+        maybe_award_partition_discovery_xp(kind);
 
-    if ((pi >= 0) && (pi < 25) && (sidx >= 0))
+    if (!force_message && (pi >= 0) && (pi < 25) && (sidx >= 0))
     {
         u32b bit = (u32b)(1U << pi);
         if (!(partition_narrated_mask & bit))
         {
-            if (narrative_mode == PARTITION_NARRATIVE_BANNER)
+            if (narrative_banner_popup_enabled())
                 display_partition_narrative_banner(
-                    last_narrated_style_idx, sidx, kind, false);
-            else if (narrative_mode == PARTITION_NARRATIVE_MESSAGE)
-                display_partition_narrative(last_narrated_style_idx, sidx, kind);
+                    last_narrated_style_idx, sidx, kind);
 
             if (is_small_cave_partition_kind(kind))
                 msg_print("Here torch and lamp drink their fuel twice as fast.");
@@ -3195,7 +3062,7 @@ static void process_player(void)
 
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
-        handle_partition_entry(false, op_ptr->partition_narrative_mode);
+        handle_partition_entry(false);
 
         bool in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
@@ -3767,15 +3634,6 @@ static void process_player(void)
 
     playerturn++;
 
-    /* If a banner was recently shown, count down per full player turn and force a full redraw when it expires.
-       This ensures the redraw happens after the third normal action without consuming input. */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining--;
-        if (g_banner_force_redraw_remaining == 0)
-            clear_active_narrative_banner();
-    }
-
     min_depth_timer_status(NULL, NULL, &depth_counter_increment, NULL, NULL);
 
     min_depth_counter += depth_counter_increment > 0 ?
@@ -4016,13 +3874,9 @@ static void dungeon(void)
         APP_SNAPSHOT_INVALIDATE_ALL);
     dungeon_publish_runtime_snapshot(0, 0, 0);
 
-    /* Show partition entry messages/XP after the initial draw so they can't be cleared by the setup flush. */
-    {
-        int entry_mode = PARTITION_NARRATIVE_OFF;
-        if (op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_MESSAGE)
-            entry_mode = PARTITION_NARRATIVE_MESSAGE;
-        handle_partition_entry(true, entry_mode);
-    }
+    /* Show discovery text/XP after the initial draw so setup redraws do not
+     * wipe the popup immediately. */
+    handle_partition_entry(true);
 
     log_info("Dungeon display setup completed successfully");
 
@@ -4060,18 +3914,18 @@ static void dungeon(void)
     monster_level = player_generation_depth();
     object_level = player_generation_depth();
 
-    /* Show initial partition narrative according to the configured display mode. */
-    if ((op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_BANNER_DELAY)
-        || (op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_BANNER))
+    /* Show the initial partition narrative as a non-blocking popup. */
+    if (narrative_banner_popup_enabled())
     {
+        int spawn_pi = level_partition_index_for_point(p_ptr->py, p_ptr->px);
         int spawn_sidx = styles_decode_color_style(cave_color[p_ptr->py][p_ptr->px]);
         level_partition_kind spawn_kind =
             level_partition_kind_for_point(p_ptr->py, p_ptr->px);
         if (spawn_sidx >= 0) {
-            display_partition_narrative_banner(
-                -1, spawn_sidx, spawn_kind,
-                op_ptr->level_entry_narrative_mode
-                    == LEVEL_ENTRY_NARRATIVE_BANNER_DELAY);
+            display_partition_narrative_banner(-1, spawn_sidx, spawn_kind);
+            if (spawn_pi >= 0 && spawn_pi < 25)
+                partition_narrated_mask |= (u32b)(1U << spawn_pi);
+            last_narrated_style_idx = spawn_sidx;
         }
     }
 
@@ -4496,7 +4350,7 @@ static void print_story_intro(void)
         {
             if (session)
                 app_session_clear_inputs(session);
-            ui_information_scene_leave(&scope);
+            ui_information_scene_leave_without_restore(&scope);
             choose_difficulty_level();
             return;
         }
@@ -4506,7 +4360,7 @@ static void print_story_intro(void)
 
     if (session)
         app_session_clear_inputs(session);
-    ui_information_scene_leave(&scope);
+    ui_information_scene_leave_without_restore(&scope);
 }
 
 static void maybe_show_blitz_unlock_screen(void)
@@ -4542,7 +4396,7 @@ static void maybe_show_blitz_unlock_screen(void)
     (void)ui_information_scene_wait_key_nonrepeat();
     if (session)
         app_session_clear_inputs(session);
-    ui_information_scene_leave(&scope);
+    ui_information_scene_leave_without_restore(&scope);
     op_ptr->opt[OPT_unlock_blitz_mode] = true;
     save_pane_config_to_json();
 }
@@ -4802,7 +4656,7 @@ PlayResult play_game(void)
     if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
     {
         sdl_music_play_main_full();
-        print_story(15,1);
+        print_story(15, 1, false);
     }
 
     log_debug("Game initialization complete, starting main game loop");

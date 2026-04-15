@@ -237,16 +237,16 @@ cptr option_text[OPT_MAX] = {
     "more_stairs", /* OPT_more_stairs */
     "unidentified_items_slate", /* OPT_unidentified_items_slate */
     "space_acts_as_comma", /* OPT_space_acts_as_comma */
-    "level_entry_narrative_mode", /* OPT_show_level_entry_banner */
+    NULL, /* OPT_banner_popup_seconds */
     "ability_desc_mode", /* OPT_ability_desc_mode */
     "vault_drop_frequency", /* OPT_vault_drop_frequency */
     "show_smithing_difficulty", /* OPT_show_smithing_difficulty */
     "show_smithing_difficulty_look", /* OPT_show_smithing_difficulty_look */
     NULL, /* xxx */
-    "partition_narrative_mode", /* OPT_show_partition_narrative */
+    NULL, /* OPT_show_partition_narrative */
     "noble_item_spawn_mode", /* OPT_noble_item_spawn_mode */
     NULL, /* OPT_hide_left_panel */
-    "banner_message_stairs", /* OPT_banner_message_stairs */
+    NULL, /* OPT_banner_message_stairs */
     "show_level_generation_debug", /* OPT_show_level_generation_debug */
     "unlock_blitz_mode", /* OPT_unlock_blitz_mode */
     "look_objects_sort_by_difficulty", /* OPT_look_objects_sort_by_difficulty */
@@ -480,16 +480,16 @@ cptr option_desc[OPT_MAX] = {
     "More stairs (50% more; double max)", /* OPT_more_stairs */
     "Show unidentified items in slate color", /* OPT_unidentified_items_slate */
     "Space acts as comma (interact with square)", /* OPT_space_acts_as_comma */
-    "Level entry narrative (banner with delay/banner without delay/message/off)", /* OPT_show_level_entry_banner */
+    "Narrative banner popup duration (0=off, 1-9 seconds)", /* OPT_banner_popup_seconds */
     "Ability descriptions (0=lore+effect, 1=effect+lore, 2=effect only)", /* OPT_ability_desc_mode */
     "Vault drop frequency (0=Normal, 1=Modest, 2=Scarce, 3=Meager, 4=Plentiful)", /* OPT_vault_drop_frequency */
     "Debug: Show {sd,wr} in item descriptions", /* OPT_show_smithing_difficulty */
     "Debug: Show {sd,wr} in look (L) sidebar and message", /* OPT_show_smithing_difficulty_look */
     "Welcome screen (0-6=fixed, 7=random)", /* OPT_intro_style */
-    "Partition transition narrative (banner without delay/message/off)", /* OPT_show_partition_narrative */
+    NULL, /* OPT_show_partition_narrative */
     "Noble item spawns (0=good+/chests/human+elf skeletons, 1=also &/! vault drops)", /* OPT_noble_item_spawn_mode */
     "Hide the classic left panel and use the compact overlay", /* OPT_hide_left_panel */
-    "Banner message layout (stairs/straight)", /* OPT_banner_message_stairs */
+    NULL, /* OPT_banner_message_stairs */
     "Debug: Show detailed level-generation screen info and pause before play", /* OPT_show_level_generation_debug */
     "Unlock Blitz Mode after winning a metarun", /* OPT_unlock_blitz_mode */
     "Sort look (L) objects by difficulty only (off = category, then difficulty)", /* OPT_look_objects_sort_by_difficulty */
@@ -740,19 +740,15 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_more_stairs */
     true, /* OPT_unidentified_items_slate */
     true, /* OPT_space_acts_as_comma */
-    true, /* OPT_show_level_entry_banner */
+    false, /* OPT_banner_popup_seconds */
     false, /* OPT_ability_desc_mode (default 0 via byte field) */
     false, /* OPT_vault_drop_frequency (default 0 via byte field) */
     false, /* OPT_show_smithing_difficulty */
     false, /* OPT_show_smithing_difficulty_look */
     false, /* xxx */
-    true, /* OPT_show_partition_narrative */
+    false, /* OPT_show_partition_narrative */
     false, /* OPT_noble_item_spawn_mode (default 0 via byte field) */
-#ifdef __ANDROID__
     false, /* OPT_banner_message_stairs */
-#else
-    true, /* OPT_banner_message_stairs */
-#endif
     false, /* OPT_show_level_generation_debug */
     false, /* OPT_unlock_blitz_mode */
     false, /* OPT_look_objects_sort_by_difficulty */
@@ -955,8 +951,8 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_artifact_unique_color, OPT_hilite_player, OPT_hilite_target,
         OPT_hilite_unwary, OPT_solid_walls, OPT_hybrid_walls, OPT_unidentified_items_slate,
         OPT_stealth_vision, OPT_sleep_icon,
-        OPT_show_level_entry_banner, OPT_show_partition_narrative, OPT_intro_style,
-        OPT_banner_message_stairs, OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
+        OPT_banner_popup_seconds, OPT_intro_style, OPT_show_smithing_difficulty,
+        OPT_show_smithing_difficulty_look, OPT_NONE, OPT_NONE,
         OPT_NONE, OPT_NONE },
 
     /*** Birth ***/

@@ -570,13 +570,6 @@ void do_cmd_main_menu(void)
     main_menu_scene_scope menu_scene_scope;
     bool refresh_on_leave;
 
-    /* Clear any active banner before opening main menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (!main_menu_scene_enter(&menu_scene_scope))
     {
         if (app_session_interactions_enabled(session))
@@ -686,7 +679,7 @@ void do_cmd_main_menu(void)
     }
     case 10: // The story so far (y)
     {
-        print_story(15, 1);
+        print_story(15, 1, true);
         break;
     }
     case 11: // Options and misc (o)
@@ -1351,13 +1344,6 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     int* out_look_x)
 {
-    /* Clear any active banner before opening hint messages */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     hint_messages_ensure_level_state();
 
     int n = (int)hint_messages_count_for_save();
@@ -1610,13 +1596,6 @@ static bool do_cmd_messages_information_scene(void)
 
 void do_cmd_messages(void)
 {
-    /* Clear any active banner before opening message history */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (!do_cmd_messages_information_scene())
     {
         log_warn("message recall: semantic scene presentation failed");

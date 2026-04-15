@@ -554,13 +554,6 @@ void do_cmd_unified_look(void)
     bool need_redraw = true;
     int original_wy, original_wx; /* Store original viewport */
     
-    /* Clear entry level banner when using look command */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-    
     /* Enable story font for unified look if the setting is on */
     bool use_story_font = story_look_enabled();
     if (use_story_font)
@@ -1852,13 +1845,6 @@ void do_cmd_locate(void)
     {
         msg_print("Your vision is too distorted to map your location.");
         return;
-    }
-
-    /* Clear entry level banner when using L command */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
     }
 
     /* Calculate explored bounds */

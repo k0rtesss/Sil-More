@@ -45,13 +45,6 @@ void do_cmd_observe_enhanced(void)
     
     log_trace("do_cmd_observe_enhanced: Starting enhanced observe cycle");
     
-    /* Clear any active banner before starting enhanced menu cycle */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-    
     /* Continue cycling until user escapes or performs an action */
     while (true)
     {

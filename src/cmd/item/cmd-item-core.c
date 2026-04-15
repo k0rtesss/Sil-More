@@ -422,13 +422,6 @@ void do_cmd_wield_enhanced(void)
     
     log_trace("do_cmd_wield_enhanced: Starting enhanced wear/wield cycle");
     
-    /* Clear any active banner before starting enhanced menu cycle */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-    
     /* Set the filter to only show wearable items */
     item_tester_hook = item_tester_hook_wear;
     log_debug("do_cmd_wield_enhanced: Set item_tester_hook to item_tester_hook_wear (%p)", (void*)item_tester_hook);
@@ -505,13 +498,6 @@ void do_cmd_use_item_enhanced(void)
     enhanced_equip_action = 0;
     
     log_trace("do_cmd_use_item_enhanced: Starting enhanced use item cycle");
-    
-    /* Clear any active banner before starting enhanced menu cycle */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
     
     /* Continue cycling until user escapes or performs an action */
     while (true)
@@ -684,13 +670,6 @@ void do_cmd_inven(void)
 {
     log_debug("do_cmd_inven: Starting inventory command");
     
-    /* Clear any active banner before showing the menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-    
     /* Hack -- Start in "inventory" mode */
     p_ptr->command_wrk = (USE_INVEN);
 
@@ -801,13 +780,6 @@ void do_cmd_inven(void)
 void do_cmd_equip(void)
 {
     log_debug("do_cmd_equip: Starting equipment command");
-    
-    /* Clear any active banner before showing the menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
     
     /* Hack -- Start in "equipment" mode */
     p_ptr->command_wrk = (USE_EQUIP);

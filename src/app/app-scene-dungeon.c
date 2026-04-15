@@ -1874,12 +1874,6 @@ static bool app_build_overlay_blob(app_dungeon_snapshot* snapshot,
     if (transient_scene)
         overlay->transient_scene = *transient_scene;
 
-    if (!dungeon_append_active_partition_banner_ui_scene(
-            &overlay->transient_scene))
-    {
-        log_warn("dungeon overlay: failed to append active partition banner");
-    }
-
     if (overlay->transient_scene.panel_count > 0)
         overlay->flags |= APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU;
 

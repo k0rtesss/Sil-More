@@ -2758,6 +2758,8 @@ static void finalize_character_creation_selection(void)
 
     if (op_ptr->main_combat_rolls > 4)
         op_ptr->main_combat_rolls = 0;
+    if (op_ptr->narrative_banner_seconds > NARRATIVE_BANNER_SECONDS_MAX)
+        op_ptr->narrative_banner_seconds = NARRATIVE_BANNER_SECONDS_DEFAULT;
     if (op_ptr->ability_desc_mode > 2)
         op_ptr->ability_desc_mode = 0;
     if (op_ptr->vault_drop_frequency > VDF_PLENTIFUL)

@@ -316,6 +316,21 @@ int ui_information_scene_wait_key_hidden_with_wait_reason(u16b reason)
     return key;
 }
 
+void ui_information_scene_leave_without_restore(
+    ui_information_scene_scope* scope)
+{
+    bool refresh_enabled;
+
+    if (!scope || !scope->active)
+        return;
+
+    refresh_enabled = ui_information_scene_set_refresh_enabled(false);
+    scope->restore_snapshot = false;
+    scope->previous_menu_snapshot = mem_free(scope->previous_menu_snapshot);
+    ui_information_scene_leave(scope);
+    (void)ui_information_scene_set_refresh_enabled(refresh_enabled);
+}
+
 void ui_information_scene_leave(ui_information_scene_scope* scope)
 {
     app_session* session = app_session_current();

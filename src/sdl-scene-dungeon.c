@@ -34,6 +34,11 @@ typedef struct sdl_scene_status_rail_metrics {
     int row_visible;
 } sdl_scene_status_rail_metrics;
 
+enum {
+    SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS = 220u,
+    SDL_SCENE_NARRATIVE_BANNER_POP_OUT_MS = 260u
+};
+
 static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
     const SDL_FRect* dst);
 static void sdl_scene_render_look_prompt(const sdl_view* view,
@@ -171,6 +176,355 @@ static void sdl_scene_render_ui_text_line(TTF_Font* font, float x_px,
     SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
     SDL_DestroyTexture(texture);
     SDL_DestroySurface(surface);
+}
+
+static void sdl_scene_render_ui_text_line_alpha(TTF_Font* font, float x_px,
+    float y_px, int line_h, SDL_Color color, byte alpha, cptr text)
+{
+    SDL_Surface* surface;
+    SDL_Texture* texture;
+    SDL_FRect dst;
+    float render_w;
+    float render_h;
+    float scale = 1.0f;
+
+    if (!font || !text || !text[0] || line_h <= 0 || alpha == 0)
+        return;
+
+    color.a = 255;
+    surface = TTF_RenderText_Blended(font, text, 0, color);
+    if (!surface)
+        return;
+
+    texture = SDL_CreateTextureFromSurface(g_state.renderer, surface);
+    if (!texture)
+    {
+        SDL_DestroySurface(surface);
+        return;
+    }
+
+    render_w = (float)surface->w;
+    render_h = (float)surface->h;
+    if (render_h > (float)line_h && render_h > 0.0f)
+    {
+        scale = (float)line_h / render_h;
+        render_w *= scale;
+        render_h *= scale;
+    }
+
+    dst.x = x_px;
+    dst.y = y_px;
+    dst.w = render_w;
+    dst.h = render_h;
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(texture, alpha);
+    SDL_RenderTexture(g_state.renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+    SDL_DestroySurface(surface);
+}
+
+static float sdl_scene_ease_out_cubic(float t)
+{
+    float one_minus_t;
+
+    if (t <= 0.0f)
+        return 0.0f;
+    if (t >= 1.0f)
+        return 1.0f;
+
+    one_minus_t = 1.0f - t;
+    return 1.0f - one_minus_t * one_minus_t * one_minus_t;
+}
+
+static int sdl_scene_wrap_banner_text(TTF_Font* font, cptr text, int max_w_px,
+    char lines[][APP_UI_TEXT_MAX], int max_lines)
+{
+    const char* cursor;
+    int line_count = 0;
+
+    if (!font || !text || !text[0] || max_w_px <= 0 || !lines || max_lines <= 0)
+        return 0;
+
+    cursor = text;
+    while (*cursor && line_count < max_lines)
+    {
+        char line[APP_UI_TEXT_MAX];
+        int line_len = 0;
+        bool forced_break = false;
+
+        line[0] = '\0';
+
+        while (*cursor && isspace((unsigned char)*cursor))
+        {
+            if (*cursor == '\n')
+            {
+                forced_break = true;
+                cursor++;
+                break;
+            }
+            cursor++;
+        }
+
+        if (forced_break && line_count > 0)
+            continue;
+        if (!*cursor)
+            break;
+
+        while (*cursor)
+        {
+            const char* word = cursor;
+            int word_len;
+            char candidate[APP_UI_TEXT_MAX];
+            int candidate_w;
+
+            if (*cursor == '\n')
+            {
+                cursor++;
+                break;
+            }
+
+            while (*cursor && *cursor != '\n'
+                && !isspace((unsigned char)*cursor))
+            {
+                cursor++;
+            }
+            word_len = (int)(cursor - word);
+
+            candidate[0] = '\0';
+            if (line_len > 0)
+                SDL_strlcpy(candidate, line, sizeof(candidate));
+            if (line_len > 0)
+                SDL_strlcat(candidate, " ", sizeof(candidate));
+            SDL_strlcat(candidate, "", sizeof(candidate));
+            if (word_len > 0)
+            {
+                size_t copy_len = (size_t)word_len;
+                size_t candidate_len = strlen(candidate);
+                size_t available = sizeof(candidate) - candidate_len - 1u;
+
+                if (copy_len > available)
+                    copy_len = available;
+                memcpy(candidate + candidate_len, word, copy_len);
+                candidate[candidate_len + copy_len] = '\0';
+            }
+
+            candidate_w = sdl_scene_measure_ui_text(font, candidate);
+            if (candidate_w <= max_w_px)
+            {
+                SDL_strlcpy(line, candidate, sizeof(line));
+                line_len = (int)strlen(line);
+            }
+            else if (line_len == 0)
+            {
+                int take = word_len;
+                char truncated[APP_UI_TEXT_MAX];
+
+                truncated[0] = '\0';
+                if (take >= (int)sizeof(truncated))
+                    take = (int)sizeof(truncated) - 1;
+                while (take > 1)
+                {
+                    memcpy(truncated, word, (size_t)take);
+                    truncated[take] = '\0';
+                    if (sdl_scene_measure_ui_text(font, truncated) <= max_w_px)
+                        break;
+                    take--;
+                }
+                SDL_strlcpy(line, truncated, sizeof(line));
+                line_len = (int)strlen(line);
+            }
+            else
+            {
+                cursor = word;
+                break;
+            }
+
+            while (*cursor && isspace((unsigned char)*cursor))
+            {
+                if (*cursor == '\n')
+                {
+                    cursor++;
+                    forced_break = true;
+                    break;
+                }
+                cursor++;
+            }
+
+            if (forced_break)
+                break;
+        }
+
+        if (line_len > 0)
+        {
+            SDL_strlcpy(lines[line_count], line, APP_UI_TEXT_MAX);
+            line_count++;
+        }
+    }
+
+    return line_count;
+}
+
+static void sdl_scene_render_narrative_banner(const sdl_view* view,
+    const sdl_scene_layout* layout, Uint64 now_ns)
+{
+    enum { BANNER_LINE_MAX = 12 };
+    char text[1024];
+    char lines[BANNER_LINE_MAX][APP_UI_TEXT_MAX];
+    TTF_Font* font;
+    u64b started_ms = 0;
+    u32b hold_ms = 0;
+    u64b now_ms = now_ns / 1000000ULL;
+    u64b elapsed_ms;
+    float alpha = 1.0f;
+    float progress;
+    float y_progress = 1.0f;
+    SDL_FRect panel_rect;
+    SDL_FRect shadow_rect;
+    SDL_Rect clip_rect;
+    int desired_px;
+    int fallback_px;
+    int line_h;
+    int line_gap;
+    int pad_x;
+    int pad_y;
+    int margin;
+    int max_text_w;
+    int max_line_w = 0;
+    int panel_w;
+    int panel_h;
+    int line_count;
+    int target_y;
+    float start_y;
+    float panel_y;
+    byte text_alpha;
+    int i;
+
+    if (!view || !layout)
+        return;
+    if (!dungeon_query_active_narrative_banner(now_ms, text, sizeof(text),
+            &started_ms, &hold_ms))
+    {
+        return;
+    }
+
+    desired_px = sdl_scene_ui_scale_px(
+        (float)sdl_scene_interaction_font_size_logical(view));
+    fallback_px = sdl_scene_ui_scale_px(12.0f);
+    if (fallback_px < 12)
+        fallback_px = 12;
+    if (desired_px < fallback_px)
+        desired_px = fallback_px;
+
+    font = sdl_story_font_for_height(desired_px);
+    if (!font)
+        font = sdl_ui_font_for_height(desired_px);
+    if (!font)
+        return;
+
+    line_h = MAX(desired_px, TTF_GetFontHeight(font));
+    line_gap = sdl_scene_ui_scale_px(4.0f);
+    pad_x = sdl_scene_ui_scale_px(20.0f);
+    pad_y = sdl_scene_ui_scale_px(14.0f);
+    margin = sdl_scene_ui_scale_px(20.0f);
+    if (layout->canvas_w <= margin * 2 || layout->canvas_h <= margin * 2)
+        return;
+    max_text_w = (int)((float)layout->canvas_w * 0.72f) - pad_x * 2;
+    if (max_text_w > sdl_scene_ui_scale_px(920.0f) - pad_x * 2)
+        max_text_w = sdl_scene_ui_scale_px(920.0f) - pad_x * 2;
+    if (max_text_w < sdl_scene_ui_scale_px(240.0f))
+        max_text_w = sdl_scene_ui_scale_px(240.0f);
+
+    memset(lines, 0, sizeof(lines));
+    line_count = sdl_scene_wrap_banner_text(font, text, max_text_w, lines,
+        BANNER_LINE_MAX);
+    if (line_count <= 0)
+        return;
+
+    for (i = 0; i < line_count; i++)
+        max_line_w = MAX(max_line_w, sdl_scene_measure_ui_text(font, lines[i]));
+
+    panel_w = max_line_w + pad_x * 2;
+    if (panel_w < sdl_scene_ui_scale_px(320.0f))
+        panel_w = sdl_scene_ui_scale_px(320.0f);
+    if (panel_w > layout->canvas_w - margin * 2)
+        panel_w = layout->canvas_w - margin * 2;
+    if (panel_w <= 0)
+        return;
+
+    panel_h = line_count * line_h + (line_count - 1) * line_gap + pad_y * 2;
+    if (panel_h < sdl_scene_ui_scale_px(72.0f))
+        panel_h = sdl_scene_ui_scale_px(72.0f);
+    if (panel_h > layout->canvas_h - margin * 2)
+        panel_h = layout->canvas_h - margin * 2;
+    if (panel_h <= 0)
+        return;
+
+    elapsed_ms = now_ms - started_ms;
+    if (elapsed_ms < SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS)
+    {
+        progress = (float)elapsed_ms
+            / (float)SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS;
+        progress = sdl_scene_ease_out_cubic(progress);
+        alpha = progress;
+        y_progress = progress;
+    }
+    else if (elapsed_ms > hold_ms + SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS)
+    {
+        progress = (float)(elapsed_ms
+            - hold_ms - SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS)
+            / (float)SDL_SCENE_NARRATIVE_BANNER_POP_OUT_MS;
+        progress = sdl_scene_ease_out_cubic(progress);
+        alpha = 1.0f - progress;
+        y_progress = 1.0f - progress;
+    }
+
+    target_y = layout->top_strip_h_px + margin;
+    if (target_y + panel_h > layout->canvas_h - margin)
+        target_y = MAX(margin, layout->canvas_h - margin - panel_h);
+    start_y = (float)(-panel_h - margin);
+    panel_y = start_y + (float)(target_y - start_y) * y_progress;
+
+    panel_rect.w = (float)panel_w;
+    panel_rect.h = (float)panel_h;
+    panel_rect.x = (float)((layout->canvas_w - panel_w) / 2);
+    panel_rect.y = panel_y;
+
+    shadow_rect = panel_rect;
+    shadow_rect.x += sdl_scene_ui_scale_px(6.0f);
+    shadow_rect.y += sdl_scene_ui_scale_px(8.0f);
+
+    text_alpha = sdl_scene_alpha_byte(alpha);
+    SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
+    sdl_scene_fill_rect(&shadow_rect, (SDL_Color){
+        0, 0, 0, sdl_scene_alpha_byte(alpha * 0.32f)
+    });
+    sdl_scene_fill_rect(&panel_rect, (SDL_Color){
+        12, 14, 18, sdl_scene_alpha_byte(alpha * 0.90f)
+    });
+    sdl_scene_draw_rect(&panel_rect, (SDL_Color){
+        189, 125, 32, sdl_scene_alpha_byte(alpha * 0.95f)
+    });
+
+    clip_rect.x = (int)panel_rect.x + pad_x;
+    clip_rect.y = (int)panel_rect.y + pad_y;
+    clip_rect.w = panel_w - pad_x * 2;
+    clip_rect.h = panel_h - pad_y * 2;
+    if (clip_rect.w <= 0 || clip_rect.h <= 0)
+        return;
+
+    SDL_SetRenderClipRect(g_state.renderer, &clip_rect);
+    for (i = 0; i < line_count; i++)
+    {
+        float text_x = panel_rect.x + (float)((panel_w
+            - sdl_scene_measure_ui_text(font, lines[i])) / 2);
+        float text_y = panel_rect.y + (float)pad_y
+            + (float)i * (float)(line_h + line_gap);
+
+        sdl_scene_render_ui_text_line_alpha(font, text_x, text_y, line_h,
+            (SDL_Color){ 236, 228, 214, 255 }, text_alpha, lines[i]);
+    }
+    SDL_SetRenderClipRect(g_state.renderer, NULL);
 }
 
 static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
@@ -2053,6 +2407,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
         SDL_SetRenderTarget(g_state.renderer, NULL);
         return false;
     }
+    sdl_scene_render_narrative_banner(main_view, &layout, now_ns);
     if (transient_scene)
         (void)sdl_scene_ui_render_overlay(main_view,
             layout.canvas_w, layout.canvas_h, transient_scene);

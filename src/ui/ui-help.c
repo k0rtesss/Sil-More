@@ -1699,13 +1699,6 @@ static bool do_cmd_help_information_scene(void)
 
 void do_cmd_help(void)
 {
-    extern int g_banner_force_redraw_remaining;
-
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (p_ptr && p_ptr->playing)
         sdl_music_play_menu_theme();
 

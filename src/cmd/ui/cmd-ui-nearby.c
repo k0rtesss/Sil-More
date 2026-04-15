@@ -432,13 +432,6 @@ static bool nearby_information_scene(nearby_scene_build_fn build_fn,
 
 void do_cmd_view_monsters()
 {
-    /* Clear entry level banner when using [ command */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (nearby_information_scene(nearby_monsters_build_scene,
             "Monsters you can see (press [ to toggle):",
             "Monsters on screen (press [ to toggle):", '['))
@@ -452,13 +445,6 @@ void do_cmd_view_monsters()
 
 void do_cmd_view_objects()
 {
-    /* Clear entry level banner when using ] command */
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (nearby_information_scene(nearby_objects_build_scene,
             "Objects you can see (press ] to toggle):",
             "Objects on screen (press ] to toggle):", ']'))

@@ -32,9 +32,6 @@ void do_cmd_redraw(void)
 {
     input_clear_pending();
 
-    if (g_banner_force_redraw_remaining <= 0)
-        clear_active_narrative_banner();
-
     /* Hack -- React to changes */
     platform_frame_react();
 

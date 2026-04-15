@@ -453,6 +453,7 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
     const app_dungeon_snapshot* snapshot;
     const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_menu_snapshot* menu_snapshot;
+    bool banner_animating = false;
 
     if (!g_scene_stack.enabled)
         return;
@@ -472,6 +473,9 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
     snapshot = app_session_dungeon_snapshot(session);
     bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
+    if (g_scene_stack.dungeon_active)
+        banner_animating = dungeon_active_narrative_banner_animating(
+            now_ns / 1000000ULL);
     if ((g_scene_stack.dungeon_active && snapshot
             && snapshot->snapshot.revision != g_scene_stack.rendered_revision)
         || (g_scene_stack.bootstrap_active && bootstrap_snapshot
@@ -498,10 +502,11 @@ void sdl_scene_stack_prepare_frame(Uint64 now_ns)
         sdl_scene_stack_reset_animations();
     }
 
-    if (g_scene_stack.frame_dirty || g_scene_stack.animation_count > 0)
+    if (g_scene_stack.frame_dirty || g_scene_stack.animation_count > 0
+        || banner_animating)
         g_state.need_present = true;
 
-    if (g_scene_stack.animation_count > 0)
+    if (g_scene_stack.animation_count > 0 || banner_animating)
     {
         if (g_scene_stack.next_frame_ns == 0 || now_ns >= g_scene_stack.next_frame_ns)
             g_scene_stack.next_frame_ns = now_ns + SDL_SCENE_FRAME_NS;
@@ -519,6 +524,7 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
     const app_dungeon_snapshot* dungeon_snapshot;
     const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_menu_snapshot* menu_snapshot;
+    bool banner_animating = false;
     Uint64 delta_ns;
 
     if (!g_scene_stack.enabled)
@@ -526,6 +532,8 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
 
     session = app_session_current();
     snapshot = session ? app_session_snapshot(session) : NULL;
+    banner_animating = snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON
+        && dungeon_active_narrative_banner_animating(now_ns / 1000000ULL);
     if (snapshot && snapshot->scene == APP_SCENE_KIND_DUNGEON)
     {
         dungeon_snapshot = app_session_dungeon_snapshot(session);
@@ -558,7 +566,7 @@ int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns)
         }
     }
 
-    if (g_scene_stack.animation_count == 0)
+    if (g_scene_stack.animation_count == 0 && !banner_animating)
         return -1;
 
     if (g_scene_stack.next_frame_ns == 0 || now_ns >= g_scene_stack.next_frame_ns)
@@ -581,6 +589,7 @@ bool sdl_scene_stack_render_main_layer(void)
     const app_bootstrap_snapshot* bootstrap_snapshot;
     const app_menu_snapshot* menu_snapshot;
     Uint64 now_ns = SDL_GetTicksNS();
+    bool banner_animating = false;
 
     if (!g_scene_stack.enabled)
         return false;
@@ -600,6 +609,9 @@ bool sdl_scene_stack_render_main_layer(void)
     snapshot = app_session_dungeon_snapshot(session);
     bootstrap_snapshot = app_session_bootstrap_snapshot(session);
     menu_snapshot = app_session_menu_snapshot(session);
+    if (g_scene_stack.dungeon_active)
+        banner_animating = dungeon_active_narrative_banner_animating(
+            now_ns / 1000000ULL);
     if (g_scene_stack.dungeon_active && !snapshot)
         return false;
     if (g_scene_stack.bootstrap_active && !bootstrap_snapshot)
@@ -608,6 +620,7 @@ bool sdl_scene_stack_render_main_layer(void)
         return false;
 
     if (g_scene_stack.frame_dirty || g_scene_stack.animation_count > 0
+        || banner_animating
         || (g_scene_stack.dungeon_active && snapshot
             && (g_scene_stack.rendered_revision != snapshot->snapshot.revision))
         || (g_scene_stack.bootstrap_active && bootstrap_snapshot

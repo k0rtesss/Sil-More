@@ -2815,6 +2815,9 @@
 #define OPT_look_objects_sort_by_difficulty 102
 #define OPT_look_nearby_filter_default 103
 
+/* Reuse the old option slot for the new popup-duration setting. */
+#define OPT_banner_popup_seconds OPT_show_level_entry_banner
+
 /* Intro screen style constants */
 #define INTRO_STYLE_FLAME       0   /* Flame Imperishable (Ainulindale) */
 #define INTRO_STYLE_FEANOR      1   /* Oath of Feanor */
@@ -2997,6 +3000,9 @@
 #define PARTITION_NARRATIVE_BANNER            0
 #define PARTITION_NARRATIVE_MESSAGE           1
 #define PARTITION_NARRATIVE_OFF               2
+
+#define NARRATIVE_BANNER_SECONDS_DEFAULT      5
+#define NARRATIVE_BANNER_SECONDS_MAX          9
 
 /* Vault drop frequency modes */
 #define VDF_NORMAL 0

@@ -298,7 +298,8 @@ static int story_render_fade_sequence(const int* sel_idx, int start,
     return story_delay_with_skip(1000u);
 }
 
-void print_story(int last_parts, bool fade_in)
+void print_story(int last_parts, bool fade_in,
+    bool restore_previous_snapshot)
 {
     ui_information_scene_scope info_scope;
     bool fast_forward = false;
@@ -429,7 +430,10 @@ void print_story(int last_parts, bool fade_in)
 
 cleanup:
     sdl_story_font_disable();
-    ui_information_scene_leave(&info_scope);
+    if (!scene_failed && !restore_previous_snapshot)
+        ui_information_scene_leave_without_restore(&info_scope);
+    else
+        ui_information_scene_leave(&info_scope);
     inkey_set_cursor_hidden(saved_hide_cursor);
 
     if (scene_failed)

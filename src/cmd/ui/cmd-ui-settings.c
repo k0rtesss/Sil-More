@@ -614,7 +614,7 @@ static const struct option_group_marker visual_option_groups[] = {
     { 0, "Lists and Overlays" },
     { 3, "Map and Highlights" },
     { 12, "Narrative" },
-    { 16, "Debug" },
+    { 14, "Debug" },
     { -1, NULL }
 };
 
@@ -1303,12 +1303,9 @@ static cptr option_menu_label(const settings_ui_layout* layout, int opt)
     case OPT_hide_left_panel:
         return compact ? (narrow ? "Compact panel" : "Compact left panel")
                        : "Hide Left Panel [Alt+P]";
-    case OPT_show_level_entry_banner:
-        return compact ? (narrow ? "Entry text" : "Entry narrative")
-                       : "Level entry narrative";
-    case OPT_show_partition_narrative:
-        return compact ? (narrow ? "Partition text" : "Partition narrative")
-                       : "Partition transition narrative";
+    case OPT_banner_popup_seconds:
+        return compact ? (narrow ? "Banner popup" : "Banner duration")
+                       : "Narrative banner popup";
     case OPT_ability_desc_mode:
         return compact ? (narrow ? "Ability text" : "Ability descriptions")
                        : "Ability descriptions (0=lore+effect, 1=effect+lore, 2=effect)";
@@ -1326,8 +1323,6 @@ static cptr option_menu_label(const settings_ui_layout* layout, int opt)
     case OPT_intro_style:
         return compact ? (narrow ? "Welcome art" : "Welcome screen")
                        : "Welcome screen style";
-    case OPT_banner_message_stairs:
-        return compact ? "Banner layout" : "Banner message layout";
     case OPT_unlock_blitz_mode:
         return compact ? (narrow ? "Blitz unlocked" : "Unlock Blitz Mode")
                        : "Unlock Blitz Mode";
@@ -1519,36 +1514,16 @@ static cptr option_menu_describe_value(const settings_ui_layout* layout,
         strnfmt(value_buf, buflen, "%d",
             op_ptr->main_combat_rolls);
     }
-    else if (opt[index] == OPT_show_level_entry_banner)
+    else if (opt[index] == OPT_banner_popup_seconds)
     {
-        const char* mode_str;
-
-        switch (op_ptr->level_entry_narrative_mode)
-        {
-        case LEVEL_ENTRY_NARRATIVE_BANNER:
-            mode_str = compact ? "Banner" : "Banner without delay";
-            break;
-        case LEVEL_ENTRY_NARRATIVE_MESSAGE: mode_str = "Message"; break;
-        case LEVEL_ENTRY_NARRATIVE_OFF:     mode_str = "Off"; break;
-        default:
-            mode_str = compact ? "Banner delay" : "Banner with delay";
-            break;
-        }
-        strnfmt(value_buf, buflen, "%s", mode_str);
-    }
-    else if (opt[index] == OPT_show_partition_narrative)
-    {
-        const char* mode_str;
-
-        switch (op_ptr->partition_narrative_mode)
-        {
-        case PARTITION_NARRATIVE_BANNER:
-            mode_str = compact ? "Banner" : "Banner without delay";
-            break;
-        case PARTITION_NARRATIVE_OFF: mode_str = "Off"; break;
-        default: mode_str = "Message"; break;
-        }
-        strnfmt(value_buf, buflen, "%s", mode_str);
+        if (op_ptr->narrative_banner_seconds == 0)
+            strnfmt(value_buf, buflen, "Off");
+        else if (compact)
+            strnfmt(value_buf, buflen, "%d sec",
+                op_ptr->narrative_banner_seconds);
+        else
+            strnfmt(value_buf, buflen, "%d seconds",
+                op_ptr->narrative_banner_seconds);
     }
     else if (opt[index] == OPT_ability_desc_mode)
     {
@@ -1607,11 +1582,6 @@ static cptr option_menu_describe_value(const settings_ui_layout* layout,
         if (mode > INTRO_STYLE_RANDOM)
             mode = INTRO_STYLE_FLAME;
         strnfmt(value_buf, buflen, "%s", is_names[mode]);
-    }
-    else if (opt[index] == OPT_banner_message_stairs)
-    {
-        strnfmt(value_buf, buflen, "%s",
-            op_ptr->opt[opt[index]] ? "Stair" : "Straight");
     }
     else
     {
@@ -1884,19 +1854,14 @@ extern void do_cmd_options_aux(int page, cptr info)
                     display_main_combat_rolls();
                     p_ptr->redraw |= (PR_MAP);
                 }
-                else if (opt[k] == OPT_show_level_entry_banner)
+                else if (opt[k] == OPT_banner_popup_seconds)
                 {
-                    op_ptr->level_entry_narrative_mode =
-                        (op_ptr->level_entry_narrative_mode < LEVEL_ENTRY_NARRATIVE_OFF)
-                        ? op_ptr->level_entry_narrative_mode + 1
-                        : LEVEL_ENTRY_NARRATIVE_BANNER_DELAY;
-                }
-                else if (opt[k] == OPT_show_partition_narrative)
-                {
-                    op_ptr->partition_narrative_mode =
-                        (op_ptr->partition_narrative_mode < PARTITION_NARRATIVE_OFF)
-                        ? op_ptr->partition_narrative_mode + 1
-                        : PARTITION_NARRATIVE_BANNER;
+                    op_ptr->narrative_banner_seconds =
+                        (op_ptr->narrative_banner_seconds
+                            < NARRATIVE_BANNER_SECONDS_MAX)
+                        ? op_ptr->narrative_banner_seconds + 1
+                        : 0;
+                    clear_active_narrative_banner();
                 }
                 else if (opt[k] == OPT_intro_style)
                 {
@@ -2003,19 +1968,14 @@ extern void do_cmd_options_aux(int page, cptr info)
                     display_main_combat_rolls();
                     p_ptr->redraw |= (PR_MAP);
                 }
-                else if (opt[k] == OPT_show_level_entry_banner)
+                else if (opt[k] == OPT_banner_popup_seconds)
                 {
-                    op_ptr->level_entry_narrative_mode =
-                        (op_ptr->level_entry_narrative_mode < LEVEL_ENTRY_NARRATIVE_OFF)
-                        ? op_ptr->level_entry_narrative_mode + 1
-                        : LEVEL_ENTRY_NARRATIVE_OFF;
-                }
-                else if (opt[k] == OPT_show_partition_narrative)
-                {
-                    op_ptr->partition_narrative_mode =
-                        (op_ptr->partition_narrative_mode < PARTITION_NARRATIVE_OFF)
-                        ? op_ptr->partition_narrative_mode + 1
-                        : PARTITION_NARRATIVE_OFF;
+                    if (op_ptr->narrative_banner_seconds
+                        < NARRATIVE_BANNER_SECONDS_MAX)
+                    {
+                        op_ptr->narrative_banner_seconds++;
+                        clear_active_narrative_banner();
+                    }
                 }
                 else if (opt[k] == OPT_ability_desc_mode)
                 {
@@ -2121,19 +2081,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                     display_main_combat_rolls();
                     p_ptr->redraw |= (PR_MAP);
                 }
-                else if (opt[k] == OPT_show_level_entry_banner)
+                else if (opt[k] == OPT_banner_popup_seconds)
                 {
-                    op_ptr->level_entry_narrative_mode =
-                        (op_ptr->level_entry_narrative_mode > LEVEL_ENTRY_NARRATIVE_BANNER_DELAY)
-                        ? op_ptr->level_entry_narrative_mode - 1
-                        : LEVEL_ENTRY_NARRATIVE_BANNER_DELAY;
-                }
-                else if (opt[k] == OPT_show_partition_narrative)
-                {
-                    op_ptr->partition_narrative_mode =
-                        (op_ptr->partition_narrative_mode > PARTITION_NARRATIVE_BANNER)
-                        ? op_ptr->partition_narrative_mode - 1
-                        : PARTITION_NARRATIVE_BANNER;
+                    if (op_ptr->narrative_banner_seconds > 0)
+                    {
+                        op_ptr->narrative_banner_seconds--;
+                        clear_active_narrative_banner();
+                    }
                 }
                 else if (opt[k] == OPT_ability_desc_mode)
                 {
@@ -4626,13 +4580,6 @@ void do_cmd_options(void)
     bool return_to_game = false;
     ui_information_scene_scope settings_scope;
 
-    /* Clear any active banner before opening options */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (!ui_information_scene_enter(&settings_scope))
         return;
 
@@ -6134,13 +6081,6 @@ void do_cmd_macros(void)
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
 
-    /* Clear any active banner before opening macros menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     /* Process requests until done */
     while (1)
     {
@@ -7573,13 +7513,6 @@ void do_cmd_colors(void)
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
-
-    /* Clear any active banner before opening colors menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
 
     /* Interact until done */
     while (1)

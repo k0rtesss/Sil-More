@@ -2774,13 +2774,6 @@ void do_cmd_knowledge_browser_page(int page)
 
     FILE_TYPE(FILE_TYPE_TEXT);
 
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0)
-    {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (!knowledge_enter_information_scene_or_report(&info_scope,
             "knowledge browser",
             "Known lore browser unavailable."))
@@ -3606,13 +3599,6 @@ void do_cmd_knowledge(void)
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
-
-    /* Clear any active banner before opening knowledge menu */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
 
     if (!knowledge_enter_information_scene_or_report(&info_scope,
             "knowledge menu",

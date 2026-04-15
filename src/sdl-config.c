@@ -1013,7 +1013,6 @@ static const byte app_visual_options[] = {
     OPT_auto_display_lists, OPT_artifact_unique_color, OPT_hilite_player,
     OPT_hilite_target, OPT_hilite_unwary, OPT_solid_walls, OPT_hybrid_walls,
     OPT_unidentified_items_slate, OPT_stealth_vision, OPT_sleep_icon,
-    OPT_banner_message_stairs,
     OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
     OPT_NONE
 };
@@ -1034,7 +1033,7 @@ static bool option_list_contains(const byte* ids, int opt)
 bool option_is_app_persistent(int opt)
 {
     /* Multi-value non-bool options saved explicitly in the visual JSON block */
-    if (opt == OPT_intro_style)
+    if (opt == OPT_intro_style || opt == OPT_banner_popup_seconds)
         return true;
     return option_list_contains(app_interface_options, opt)
         || option_list_contains(app_text_options, opt)
@@ -1051,14 +1050,13 @@ static void sdl_config_apply_app_option_defaults(void)
     op_ptr->delay_factor = 5;
     op_ptr->hitpoint_warn = 3;
     op_ptr->main_combat_rolls = get_sdl_steamdeck_mode() ? 2 : 0;
+    op_ptr->narrative_banner_seconds = NARRATIVE_BANNER_SECONDS_DEFAULT;
 #ifdef __ANDROID__
     op_ptr->ability_desc_mode = 1;
 #else
     op_ptr->ability_desc_mode = 0;
 #endif
     op_ptr->intro_style = INTRO_STYLE_RANDOM;
-    op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_BANNER_DELAY;
-    op_ptr->partition_narrative_mode = PARTITION_NARRATIVE_BANNER;
 }
 
 static void sdl_config_load_app_option_group(cJSON* app_options,
@@ -1191,12 +1189,10 @@ void sdl_config_load_app_options(const char* filename)
     item = cJSON_GetObjectItemCaseSensitive(app_options, "visual");
     if (cJSON_IsObject(item)) {
         sdl_config_load_byte_value(item, "mainCombatRolls", &op_ptr->main_combat_rolls, 4);
+        sdl_config_load_byte_value(item, "bannerPopupSeconds",
+            &op_ptr->narrative_banner_seconds, NARRATIVE_BANNER_SECONDS_MAX);
         sdl_config_load_byte_value(item, "abilityDescMode", &op_ptr->ability_desc_mode, 2);
         sdl_config_load_byte_value(item, "introStyle", &op_ptr->intro_style, INTRO_STYLE_RANDOM);
-        sdl_config_load_byte_value(item, "levelEntryNarrativeMode",
-            &op_ptr->level_entry_narrative_mode, LEVEL_ENTRY_NARRATIVE_OFF);
-        sdl_config_load_byte_value(item, "partitionNarrativeMode",
-            &op_ptr->partition_narrative_mode, PARTITION_NARRATIVE_OFF);
     }
 
     cJSON_Delete(root);
@@ -2015,12 +2011,10 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             visual = cJSON_GetObjectItemCaseSensitive(app_options, "visual");
             if (cJSON_IsObject(visual)) {
                 cJSON_AddNumberToObject(visual, "mainCombatRolls", op_ptr->main_combat_rolls);
+                cJSON_AddNumberToObject(visual, "bannerPopupSeconds",
+                    op_ptr->narrative_banner_seconds);
                 cJSON_AddNumberToObject(visual, "abilityDescMode", op_ptr->ability_desc_mode);
                 cJSON_AddNumberToObject(visual, "introStyle", op_ptr->intro_style);
-                cJSON_AddNumberToObject(visual, "levelEntryNarrativeMode",
-                    op_ptr->level_entry_narrative_mode);
-                cJSON_AddNumberToObject(visual, "partitionNarrativeMode",
-                    op_ptr->partition_narrative_mode);
             }
 
             cJSON_AddItemToObject(root, "appOptions", app_options);

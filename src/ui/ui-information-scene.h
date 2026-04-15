@@ -36,6 +36,8 @@ int ui_information_scene_wait_key_with_wait_reason(u16b reason);
 int ui_information_scene_wait_key_hidden_with_wait_reason(u16b reason);
 bool ui_information_scene_is_active(void);
 bool ui_information_scene_owns_input(void);
+void ui_information_scene_leave_without_restore(
+    ui_information_scene_scope* scope);
 void ui_information_scene_leave(ui_information_scene_scope* scope);
 
 #ifdef __cplusplus

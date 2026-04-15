@@ -6171,7 +6171,7 @@ metarun_redraw:
             if (key == back_key || key == confirm_key || key == '\r'
                 || key == '\n')
             {
-                ui_information_scene_leave(&info_scope);
+                ui_information_scene_leave_without_restore(&info_scope);
                 return;
             } else if (key == alt_key) {
                 key = 'b';
@@ -6219,14 +6219,14 @@ metarun_redraw:
             }
             goto metarun_redraw;
         } else if ((key == 'x' || key == 'X') && view.blitz_enabled) {
-            ui_information_scene_leave(&info_scope);
+            ui_information_scene_leave_without_restore(&info_scope);
             run_mode_set_pending(RUN_MODE_BLITZ);
             run_mode_set_current(RUN_MODE_BLITZ);
             return;
         }
     }
 
-    ui_information_scene_leave(&info_scope);
+    ui_information_scene_leave_without_restore(&info_scope);
 }
 
 /* Generate curse description for a runtype */

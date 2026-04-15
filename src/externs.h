@@ -409,11 +409,10 @@ extern const char* styles_get_style_display(int sidx);
 extern const char* styles_get_style_short_desc(int sidx);
 extern const char* styles_get_style_m1(int sidx);
 extern const char* styles_get_style_m2(int sidx);
-/* After showing the per-style banner on level entry, count down user inputs
- * and force a full screen redraw when it reaches zero. */
-extern int g_banner_force_redraw_remaining;
 extern void clear_active_narrative_banner(void);
-extern bool dungeon_append_active_partition_banner_ui_scene(app_ui_scene* scene);
+extern bool dungeon_active_narrative_banner_animating(u64b now_ms);
+extern bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
+    size_t text_size, u64b* started_ms, u32b* hold_ms);
 extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);

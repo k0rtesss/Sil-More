@@ -149,13 +149,6 @@ void do_cmd_character_sheet(void)
     ui_information_scene_scope info_scope;
     bool steamdeck;
 
-    /* Clear any active banner before opening character sheet */
-    extern int g_banner_force_redraw_remaining;
-    if (g_banner_force_redraw_remaining > 0) {
-        g_banner_force_redraw_remaining = 0;
-        do_cmd_redraw();
-    }
-
     if (!ui_information_scene_enter(&info_scope))
         return;
 
