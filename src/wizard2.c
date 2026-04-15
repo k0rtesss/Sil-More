@@ -77,29 +77,32 @@ void display_noise_map(void)
     dungeon_mark_map_for_redraw();
 }
 
-/*
- * Output a long int in binary format.
- */
-static void prt_binary(u32b flags, int row, int col)
+static void wizard_buffer_append_line(char* dest, size_t dest_size, cptr text)
+{
+    if (!dest || dest_size == 0 || !text)
+        return;
+
+    if (dest[0])
+        SDL_strlcat(dest, "\n", dest_size);
+    SDL_strlcat(dest, text, dest_size);
+}
+
+static void wizard_format_binary_line(char* out, size_t out_size, u32b flags)
 {
     int i;
     u32b bitmask;
 
-    /* Scan the flags */
-    for (i = bitmask = 1; i <= 32; i++, bitmask *= 2)
+    if (!out || out_size == 0)
+        return;
+    if (out_size < 33)
     {
-        /* Dump set bits */
-        if (flags & bitmask)
-        {
-            c_put_str(TERM_BLUE, "*", row, col++);
-        }
-
-        /* Dump unset bits */
-        else
-        {
-            c_put_str(TERM_WHITE, "-", row, col++);
-        }
+        out[0] = '\0';
+        return;
     }
+
+    for (i = 0, bitmask = 1; i < 32; i++, bitmask <<= 1)
+        out[i] = (flags & bitmask) ? '*' : '-';
+    out[32] = '\0';
 }
 
 /*
@@ -261,70 +264,102 @@ static void do_cmd_wiz_change(void)
  */
 static void wiz_display_item(const object_type* o_ptr)
 {
-    int j = 0;
-
     u32b f1, f2, f3;
-
     char buf[256];
+    char line[256];
+    char screen[4096];
+    char binary[40];
 
     /* Extract the flags */
     object_flags(o_ptr, &f1, &f2, &f3);
 
-    /* Clear screen */
-    clear_from(0);
+    screen[0] = '\0';
 
     /* Describe fully */
     object_desc_spoil(buf, sizeof(buf), o_ptr, true, 3);
+    wizard_buffer_append_line(screen, sizeof(screen), buf);
+    wizard_buffer_append_line(screen, sizeof(screen), "");
 
-    prt(buf, 2, j);
+    strnfmt(line, sizeof(line),
+        "kind = %-5d  level = %-4d  tval = %-5d  sval = %-5d",
+        o_ptr->k_idx, k_info[o_ptr->k_idx].level, o_ptr->tval, o_ptr->sval);
+    wizard_buffer_append_line(screen, sizeof(screen), line);
 
-    prt(format("kind = %-5d  level = %-4d  tval = %-5d  sval = %-5d",
-            o_ptr->k_idx, k_info[o_ptr->k_idx].level, o_ptr->tval, o_ptr->sval),
-        4, j);
+    strnfmt(line, sizeof(line),
+        "number = %-3d  wgt = %-6d  prt = %dd%d    damage = %dd%d",
+        o_ptr->number, o_ptr->weight, o_ptr->pd, o_ptr->ps, o_ptr->dd,
+        o_ptr->ds);
+    wizard_buffer_append_line(screen, sizeof(screen), line);
 
-    prt(format("number = %-3d  wgt = %-6d  prt = %dd%d    damage = %dd%d",
-            o_ptr->number, o_ptr->weight, o_ptr->pd, o_ptr->ps, o_ptr->dd,
-            o_ptr->ds),
-        5, j);
+    strnfmt(line, sizeof(line), "pval = %-5d  toev = %-5d  tohit = %-4d",
+        o_ptr->pval, o_ptr->evn, o_ptr->att);
+    wizard_buffer_append_line(screen, sizeof(screen), line);
 
-    prt(format("pval = %-5d  toev = %-5d  tohit = %-4d", o_ptr->pval,
-            o_ptr->evn, o_ptr->att),
-        6, j);
+    strnfmt(line, sizeof(line),
+        "name1 = %-4d  egoP = %-4d  egoS = %-4d  cost = %ld",
+        o_ptr->name1, object_ego_prefix(o_ptr), object_ego_suffix(o_ptr),
+        (long)object_value(o_ptr));
+    wizard_buffer_append_line(screen, sizeof(screen), line);
 
-    prt(format("name1 = %-4d  egoP = %-4d  egoS = %-4d  cost = %ld", o_ptr->name1,
-            object_ego_prefix(o_ptr), object_ego_suffix(o_ptr),
-            (long)object_value(o_ptr)),
-        7, j);
+    strnfmt(line, sizeof(line), "ident = %04x  timeout = %-d", o_ptr->ident,
+        o_ptr->timeout);
+    wizard_buffer_append_line(screen, sizeof(screen), line);
+    wizard_buffer_append_line(screen, sizeof(screen), "");
 
-    prt(format("ident = %04x  timeout = %-d", o_ptr->ident, o_ptr->timeout), 8,
-        j);
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "+------------FLAGS1------------+");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "AFFECT..........SLAY.......BRAND");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "                ae      xxxaefcp");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "siwdcc  ssitsasmnvudotgddduclioo");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "tnieoh  trnupthgiinmrrnrrmnierli");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "rtsxna..lcfndkttmldncltggnddceds");
+    wizard_format_binary_line(binary, sizeof(binary), f1);
+    wizard_buffer_append_line(screen, sizeof(screen), binary);
+    wizard_buffer_append_line(screen, sizeof(screen), "");
 
-    prt("+------------FLAGS1------------+", 10, j);
-    prt("AFFECT..........SLAY.......BRAND", 11, j);
-    prt("                ae      xxxaefcp", 12, j);
-    prt("siwdcc  ssitsasmnvudotgddduclioo", 13, j);
-    prt("tnieoh  trnupthgiinmrrnrrmnierli", 14, j);
-    prt("rtsxna..lcfndkttmldncltggnddceds", 15, j);
-    prt_binary(f1, 16, j);
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "+------------FLAGS2------------+");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "SUST.......IMM..RESIST.........");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "           afecpaefcpfldbc s n  ");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "siwdcc     ciloocliooeialoshnecd");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "tnieoh     ireliierliatrnnnrethi");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "rtsxna.....decdsdcedsrekdfddxhss");
+    wizard_format_binary_line(binary, sizeof(binary), f2);
+    wizard_buffer_append_line(screen, sizeof(screen), binary);
+    wizard_buffer_append_line(screen, sizeof(screen), "");
 
-    prt("+------------FLAGS2------------+", 17, j);
-    prt("SUST.......IMM..RESIST.........", 18, j);
-    prt("           afecpaefcpfldbc s n  ", 19, j);
-    prt("siwdcc     ciloocliooeialoshnecd", 20, j);
-    prt("tnieoh     ireliierliatrnnnrethi", 21, j);
-    prt("rtsxna.....decdsdcedsrekdfddxhss", 22, j);
-    prt_binary(f2, 23, j);
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "+------------FLAGS3------------+");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "s   ts h     tadiiii   aiehs  hp");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "lf  eefoni   egrgggg  bcnaih  vr");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "we  lerler  ilgannnn  ltssdo  ym");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "da reiedvo  merirrrr  eityew ccc");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "itlepnelpn  ppanaefc  svaktm uuu");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "ghigavaiim  aoveclio  saanyo rrr");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "seteticfca  craxierl  etropd sss");
+    wizard_buffer_append_line(screen, sizeof(screen),
+        "trenhstekn  tttpdced  detwes eee");
+    wizard_format_binary_line(binary, sizeof(binary), f3);
+    wizard_buffer_append_line(screen, sizeof(screen), binary);
 
-    prt("+------------FLAGS3------------+", 10, j + 32);
-    prt("s   ts h     tadiiii   aiehs  hp", 11, j + 32);
-    prt("lf  eefoni   egrgggg  bcnaih  vr", 12, j + 32);
-    prt("we  lerler  ilgannnn  ltssdo  ym", 13, j + 32);
-    prt("da reiedvo  merirrrr  eityew ccc", 14, j + 32);
-    prt("itlepnelpn  ppanaefc  svaktm uuu", 15, j + 32);
-    prt("ghigavaiim  aoveclio  saanyo rrr", 16, j + 32);
-    prt("seteticfca  craxierl  etropd sss", 17, j + 32);
-    prt("trenhstekn  tttpdced  detwes eee", 18, j + 32);
-    prt_binary(f3, 19, j + 32);
+    (void)show_buffer(screen, 0);
 }
 
 /*
@@ -359,7 +394,6 @@ static const tval_desc tvals[] = { { TV_SWORD, "Sword" },
 static int wiz_create_itemtype(void)
 {
     int i, num, max_num;
-    int col, row;
     int tval;
 
     cptr tval_desc;
@@ -372,21 +406,23 @@ static int wiz_create_itemtype(void)
     const char* cp;
 
     char buf[160];
-
-    /* Clear screen */
-    clear_from(0);
+    char viewer[4096];
 
     /* Print all tval's and their descriptions */
+    viewer[0] = '\0';
+    wizard_buffer_append_line(viewer, sizeof(viewer),
+        "Create what type of object?");
+    wizard_buffer_append_line(viewer, sizeof(viewer), "");
     for (num = 0; (num < 60) && tvals[num].tval; num++)
     {
-        row = 2 + (num % 20);
-        col = 30 * (num / 20);
         ch = choice_name[num];
-        prt(format("[%c] %s", ch, tvals[num].desc), row, col);
+        strnfmt(buf, sizeof(buf), "[%c] %s", ch, tvals[num].desc);
+        wizard_buffer_append_line(viewer, sizeof(viewer), buf);
     }
 
     /* We need to know the maximal possible tval_index */
     max_num = num;
+    (void)show_buffer(viewer, 0);
 
     /* Choose! */
     if (!get_com("Create what type of object? ", &ch))
@@ -407,8 +443,10 @@ static int wiz_create_itemtype(void)
 
     /*** And now we go for k_idx ***/
 
-    /* Clear screen */
-    clear_from(0);
+    viewer[0] = '\0';
+    strnfmt(buf, sizeof(buf), "What kind of %s?", tval_desc);
+    wizard_buffer_append_line(viewer, sizeof(viewer), buf);
+    wizard_buffer_append_line(viewer, sizeof(viewer), "");
 
     /* We have to search the whole itemlist. */
     for (num = 0, i = 1; (num < 60) && (i < z_info->k_max); i++)
@@ -422,16 +460,14 @@ static int wiz_create_itemtype(void)
             if (k_ptr->flags3 & (TR3_INSTA_ART))
                 continue;
 
-            /* Prepare it */
-            row = 2 + (num % 20);
-            col = 30 * (num / 20);
             ch = choice_name[num];
 
             /* Get the "name" of object "i" */
             strip_name(buf, i);
 
             /* Print it */
-            prt(format("[%c] %s", ch, buf), row, col);
+            wizard_buffer_append_line(viewer, sizeof(viewer),
+                format("[%c] %s", ch, buf));
 
             /* Remember the object index */
             choice[num++] = i;
@@ -440,6 +476,7 @@ static int wiz_create_itemtype(void)
 
     /* Me need to know the maximal possible remembered object_index */
     max_num = num;
+    (void)show_buffer(viewer, 0);
 
     /* Choose! */
     if (!get_com(format("What Kind of %s? ", tval_desc), &ch))

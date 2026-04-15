@@ -61,7 +61,7 @@ bool platform_frame_main_view_ready(void)
     return platform_frame_view_ready(0);
 }
 
-int platform_frame_main_view_cols(void)
+int platform_frame_main_grid_cols(void)
 {
     if (platform_frame_main_view_ready() && g_views[0].cols > 0)
         return g_views[0].cols;
@@ -69,7 +69,7 @@ int platform_frame_main_view_cols(void)
     return 80;
 }
 
-int platform_frame_main_view_rows(void)
+int platform_frame_main_grid_rows(void)
 {
     if (platform_frame_main_view_ready() && g_views[0].rows > 0)
         return g_views[0].rows;
@@ -77,24 +77,24 @@ int platform_frame_main_view_rows(void)
     return 24;
 }
 
-int platform_frame_active_view_cols(void)
+int platform_frame_active_grid_cols(void)
 {
     int view_index = platform_frame_active_view_index();
 
     if (platform_frame_view_ready(view_index) && g_views[view_index].cols > 0)
         return g_views[view_index].cols;
 
-    return platform_frame_main_view_cols();
+    return platform_frame_main_grid_cols();
 }
 
-int platform_frame_active_view_rows(void)
+int platform_frame_active_grid_rows(void)
 {
     int view_index = platform_frame_active_view_index();
 
     if (platform_frame_view_ready(view_index) && g_views[view_index].rows > 0)
         return g_views[view_index].rows;
 
-    return platform_frame_main_view_rows();
+    return platform_frame_main_grid_rows();
 }
 
 bool platform_frame_active_view_is_main(void)

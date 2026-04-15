@@ -2306,7 +2306,7 @@ static void process_command(void)
     /* Hack -- Unknown command */
     default:
     {
-        prt("Type '?' for help.", 0, 0);
+        msg_print("Type '?' for help.");
         break;
     }
     }
@@ -3115,7 +3115,7 @@ static void process_player(void)
             msg_flag = false;
 
             /* Clear the top line */
-            prt("", 0, 0);
+            message_topline_clear_override();
 
             /* Process the command */
             process_command();
@@ -4608,8 +4608,8 @@ PlayResult play_game(void)
     {
         const int min_hgt = sdl_current_min_terminal_rows();
         const int min_wid = sdl_current_min_terminal_cols();
-        const int main_hgt = platform_frame_main_view_rows();
-        const int main_wid = platform_frame_main_view_cols();
+        const int main_hgt = platform_frame_main_grid_rows();
+        const int main_wid = platform_frame_main_grid_cols();
 
         if ((main_hgt < min_hgt) || (main_wid < min_wid))
         {

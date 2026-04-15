@@ -779,8 +779,6 @@ extern byte object_attr_graphics_override(
     const object_type* o_ptr, byte base_attr);
 extern char object_char_graphics_override(
     const object_type* o_ptr, char base_char);
-extern void display_inven(void);
-extern void display_equip(void);
 extern void inventory_menu_set_include_equip(bool include);
 extern bool player_can_treat_as_throwing(const object_type* o_ptr);
 extern bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
@@ -988,16 +986,10 @@ extern void msg_debug(cptr fmt, ...);
 extern void message(u16b message_type, s16b extra, cptr message);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
 extern void message_flush(void);
-extern void c_put_str(byte attr, cptr str, int row, int col);
-extern void put_str(cptr str, int row, int col);
-extern void c_prt(byte attr, cptr str, int row, int col);
-extern void prt(cptr str, int row, int col);
 extern void text_out_to_file(byte attr, cptr str);
 extern int count_wrapped_lines(cptr str, int wrap_width, int indent);
-extern void text_out_to_screen(byte a, cptr str);
 extern void text_out(cptr str);
 extern void text_out_c(byte a, cptr str);
-extern void clear_from(int row);
 extern bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
     bool allow_randomize);
 extern bool askfor_aux(char* buf, size_t len);

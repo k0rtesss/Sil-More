@@ -1723,7 +1723,7 @@ bool get_item(int* cp, cptr pmt, cptr str, int mode)
     window_stuff();
 
     /* Clear the prompt line */
-    prt("", 0, 0);
+    message_topline_clear_override();
 
     /* Warning if needed */
     if (oops && str)

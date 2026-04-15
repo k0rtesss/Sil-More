@@ -182,14 +182,7 @@ static u16b art_norm_count;
  */
 static void note(cptr msg)
 {
-    static int y = 2;
-
-    /* Draw the message */
-    prt(msg, y, 0);
-
-    /* Advance one line (wrap if needed) */
-    if (++y >= 24)
-        y = 2;
+    message_topline_override(TERM_WHITE, msg);
 
     /* Flush it */
     platform_frame_present();

@@ -5,8 +5,6 @@
 
 struct high_score;
 
-void display_single_score(byte attr, int row, int col, int place, int fake,
-                          struct high_score* the_score);
 void display_scores(int from, int to);
 void display_scores_short(int from, int to);
 void show_scores(bool longscore);

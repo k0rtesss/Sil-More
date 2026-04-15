@@ -65,23 +65,10 @@
       "label": "Terminal-model debt audit",
       "metrics": {
         "compat_text_wrapper_symbols": {
-          "file_matches": {
-            "src/cmd/ui/cmd-ui-main-menu.c": 1,
-            "src/cmd/ui/cmd-ui-query.c": 1,
-            "src/dungeon.c": 2,
-            "src/externs.h": 6,
-            "src/load.c": 1,
-            "src/object/object-ui-select.c": 1,
-            "src/score/score_ui.c": 9,
-            "src/squelch.c": 72,
-            "src/targeting.c": 3,
-            "src/ui/story_font.c": 4,
-            "src/util-text.c": 8,
-            "src/wizard2.c": 34
-          },
-          "files": 12,
+          "file_matches": {},
+          "files": 0,
           "label": "compat text wrapper symbols",
-          "matches": 142,
+          "matches": 0,
           "notes": "Counts the row/column compat text authoring family, including declarations, definitions, calls, and text_out_hook bindings."
         },
         "document_op_cell_grid_symbols": {
@@ -147,26 +134,18 @@
             "src/sdl-main-internal.h": 8,
             "src/sdl-render.c": 10,
             "src/sdl-story-font.c": 23,
-            "src/ui/story_font.c": 4
+            "src/ui/story_font.c": 3
           },
           "files": 5,
           "label": "term-host story-font state",
-          "matches": 47,
+          "matches": 46,
           "notes": "Tracks story-font activation, grid, and chunk state that is still stored on or driven through terminal hosts."
         },
         "terminal_size_query_symbols": {
-          "file_matches": {
-            "src/cmd/world/cmd-interact.c": 1,
-            "src/defines.h": 13,
-            "src/dungeon.c": 2,
-            "src/object/object-ui-display.c": 4,
-            "src/platform-frame.c": 6,
-            "src/platform-frame.h": 4,
-            "src/squelch.c": 4
-          },
-          "files": 7,
+          "file_matches": {},
+          "files": 0,
           "label": "terminal-size query symbols",
-          "matches": 34,
+          "matches": 0,
           "notes": "Tracks terminal-sized layout queries that still leak into document and utility flows."
         }
       },

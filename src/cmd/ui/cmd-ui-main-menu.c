@@ -745,8 +745,8 @@ void do_cmd_main_menu(void)
  */
 void do_cmd_message_one(void)
 {
-    /* Recall one message XXX XXX XXX */
-    c_prt(message_color(0), format("> %s", message_str(0)), 0, 0);
+    message_topline_override(message_color(0),
+        format("> %s", message_str(0)));
 }
 
 #define HINT_MESSAGE_UI_ROW_WINDOW 48

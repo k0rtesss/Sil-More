@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "platform-story-font.h"
 #include "object/object-desc.h"
 #include "object/object-display.h"
 #include "object/object-slot.h"
@@ -47,17 +46,8 @@ typedef struct object_subwindow_row_state {
 
 typedef struct object_subwindow_body_line_state {
     byte attr;
-    s16b col;
     char text[APP_UI_TEXT_MAX];
 } object_subwindow_body_line_state;
-
-static void clear_item_row(int row, int term_wid);
-static int subwindow_weight_col(int term_wid);
-static void draw_subwindow_item_icon(int row, int icon_col,
-    const object_type* o_ptr);
-static int subwindow_desc_col(int icon_col);
-static void truncate_display_desc(char* desc, size_t desc_size, int term_wid,
-    int desc_col, bool display_weights);
 
 typedef struct object_subwindow_content {
     bool use_story_font;
@@ -116,6 +106,8 @@ static bool object_subwindow_add_body_line(object_subwindow_content* content,
 {
     object_subwindow_body_line_state* line;
 
+    (void)col;
+
     if (!content || !text || !text[0]
         || content->body_line_count >= OBJECT_SUBWINDOW_BODY_LINE_MAX)
     {
@@ -125,7 +117,6 @@ static bool object_subwindow_add_body_line(object_subwindow_content* content,
     line = &content->body_lines[content->body_line_count++];
     memset(line, 0, sizeof(*line));
     line->attr = attr;
-    line->col = (s16b)col;
     SDL_strlcpy(line->text, text, sizeof(line->text));
     return true;
 }
@@ -156,46 +147,6 @@ static void object_subwindow_format_weight(char* buf, size_t buf_size,
 
     wgt = o_ptr->weight * o_ptr->number;
     strnfmt(buf, buf_size, "%3d.%1d lb", wgt / 10, wgt % 10);
-}
-
-static void object_subwindow_render_row(int row, int term_wid,
-    const object_subwindow_row_state* item)
-{
-    char desc[APP_UI_LABEL_MAX];
-    char icon_buf[2];
-    int desc_col;
-
-    if (!item)
-        return;
-
-    clear_item_row(row, term_wid);
-    story_print_text(row, 0, 3, item->key_attr,
-        item->key[0] ? item->key : "");
-
-    if (item->icon_object && item->icon_object->k_idx)
-    {
-        draw_subwindow_item_icon(row, 3, item->icon_object);
-    }
-    else if (item->icon_char)
-    {
-        icon_buf[0] = item->icon_char;
-        icon_buf[1] = '\0';
-        story_print_text_grid(row, 3, 1, item->icon_attr, icon_buf);
-    }
-
-    desc_col = subwindow_desc_col(3);
-    SDL_strlcpy(desc, item->label, sizeof(desc));
-    truncate_display_desc(desc, sizeof(desc), term_wid, desc_col,
-        item->meta[0] ? true : false);
-    story_print_text(row, desc_col, term_wid - desc_col, item->label_attr,
-        desc);
-
-    if (item->meta[0])
-    {
-        int weight_col = subwindow_weight_col(term_wid);
-
-        story_print_text_grid(row, weight_col, 8, item->meta_attr, item->meta);
-    }
 }
 
 static bool object_subwindow_content_build_scene(app_ui_scene* scene,
@@ -264,64 +215,6 @@ bool get_story_equipment_list_active(void)
 void set_story_equipment_list_active(bool active)
 {
     story_equipment_list_active = active;
-}
-
-void story_print_equipment_prefix(int row, int col, byte attr, cptr prefix)
-{
-    const int prefix_core_width = 12;
-    char label_buf[32];
-
-    if (!prefix) prefix = "";
-
-    const char* colon = strchr(prefix, ':');
-    size_t len = colon ? (size_t)(colon - prefix) : strlen(prefix);
-    if (len >= sizeof(label_buf))
-        len = sizeof(label_buf) - 1;
-
-    memcpy(label_buf, prefix, len);
-    label_buf[len] = '\0';
-
-    while (len > 0 && isspace((unsigned char)label_buf[len - 1]))
-        label_buf[--len] = '\0';
-
-    story_print_text(row, col, prefix_core_width, attr, label_buf);
-    story_print_text_grid(row, col + prefix_core_width, 2, attr, ": ");
-}
-
-void story_prepare_equipment_desc(char* dest, size_t dest_size, cptr src,
-    int slot, bool has_object, int max_cols)
-{
-    if (!dest || dest_size == 0)
-        return;
-
-    if (!src)
-        src = "";
-
-    SDL_strlcpy(dest, src, dest_size);
-
-    if (slot == INVEN_QUIVER2 && !has_object)
-    {
-        char base[160];
-        SDL_strlcpy(base, dest, sizeof(base));
-        if (base[0])
-            strnfmt(dest, dest_size, "%s (keeps passive bonuses)", base);
-        else
-            SDL_strlcpy(dest, "(keeps passive bonuses)", dest_size);
-    }
-
-    if (max_cols > 0 && sdl_is_story_font_enabled())
-    {
-        int cell_width = sdl_get_cell_width();
-        int max_pixels = max_cols * cell_width;
-        size_t len = strlen(dest);
-
-        while (len > 0 && sdl_story_font_text_width(dest, (int)len) > max_pixels)
-        {
-            dest[--len] = '\0';
-            while (len > 0 && isspace((unsigned char)dest[len - 1]))
-                dest[--len] = '\0';
-        }
-    }
 }
 
 bool supplies_visible_for_current_filter(void)
@@ -412,46 +305,6 @@ void format_supply_summary(char* buf, size_t len)
     SDL_strlcat(buf, ")", len);
 }
 
-int draw_item_tile(int x, int y, object_type* o_ptr)
-{
-    char glyph_buf[2];
-    byte glyph_attr;
-
-    if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO && o_ptr && o_ptr->k_idx)
-    {
-        glyph_buf[0] = object_char_default(o_ptr);
-        glyph_buf[1] = '\0';
-        glyph_attr = object_display_color(o_ptr, object_attr_default(o_ptr));
-        story_print_text_grid(y, x, 1, glyph_attr, glyph_buf);
-
-        if (use_bigtile)
-        {
-            story_print_text_grid(y, x + 1, 1, TERM_WHITE, " ");
-            return x + 2;
-        }
-
-        return x + 1;
-    }
-
-    return x;
-}
-
-static void clear_item_row_segment(int row, int col, int width)
-{
-    if (width <= 0)
-        return;
-
-    story_print_text(row, col, width, TERM_WHITE, "");
-}
-
-static void clear_item_row(int row, int term_wid)
-{
-    if (term_wid <= 0)
-        return;
-
-    clear_item_row_segment(row, 0, term_wid);
-}
-
 static int menu_item_tile_width(const object_type* o_ptr)
 {
     if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO
@@ -525,59 +378,6 @@ int menu_equipment_row_width(cptr desc, const object_type* o_ptr,
 
     return prefix_width + menu_inventory_row_width(desc, o_ptr,
         display_weights);
-}
-
-static int subwindow_weight_col(int term_wid)
-{
-    int col = term_wid - 11;
-
-    if (col < 0)
-        col = 0;
-
-    return col;
-}
-
-static void draw_subwindow_item_icon(int row, int icon_col,
-    const object_type* o_ptr)
-{
-    char icon_buf[2];
-
-    if (!o_ptr || !o_ptr->k_idx)
-        return;
-
-    if (use_graphics != GRAPHICS_NONE && use_graphics != GRAPHICS_PSEUDO)
-    {
-        (void)draw_item_tile(icon_col, row, (object_type*)o_ptr);
-        return;
-    }
-
-    icon_buf[0] = object_char(o_ptr);
-    icon_buf[1] = '\0';
-    story_print_text_grid(row, icon_col, 1, object_attr(o_ptr), icon_buf);
-}
-
-static int subwindow_desc_col(int icon_col)
-{
-    return icon_col + (use_bigtile ? 3 : 2);
-}
-
-static void truncate_display_desc(char* desc, size_t desc_size, int term_wid,
-    int desc_col, bool display_weights)
-{
-    int max_desc;
-    int weight_col = subwindow_weight_col(term_wid);
-
-    if (!desc || !desc_size)
-        return;
-
-    max_desc = term_wid - desc_col - 1;
-    if (display_weights && weight_col > desc_col)
-        max_desc = weight_col - desc_col - 1;
-    if (max_desc < 1)
-        max_desc = 1;
-    if (max_desc >= (int)desc_size)
-        max_desc = (int)desc_size - 1;
-    desc[max_desc] = '\0';
 }
 
 static bool object_build_inventory_subwindow_content(
@@ -768,82 +568,5 @@ bool build_equipment_subwindow_ui_scene(app_ui_scene* scene)
         return false;
 
     return object_subwindow_content_build_scene(scene, &content);
-}
-
-/*
- * Legacy term-grid compatibility wrapper for PW_INVEN.  The SDL pane lane now
- * owns shared semantic row content in object_build_inventory_subwindow_content().
- */
-void display_inven(void)
-{
-    object_subwindow_content content;
-    story_font_term_state story_state;
-    int i;
-    int term_wid = platform_frame_active_view_cols();
-    int term_hgt = platform_frame_active_view_rows();
-
-    if (term_wid <= 0)
-        term_wid = 80;
-
-    if (!object_build_inventory_subwindow_content(&content))
-        return;
-
-    story_font_term_push(content.use_story_font, false, &story_state);
-
-    for (i = 0; i < content.row_count; i++)
-        object_subwindow_render_row(i, term_wid, &content.rows[i]);
-
-    for (i = content.row_count; i < term_hgt; i++)
-        clear_item_row(i, term_wid);
-
-    story_font_term_pop(&story_state);
-}
-
-/*
- * Legacy term-grid compatibility wrapper for PW_EQUIP.  The SDL pane lane now
- * owns shared semantic row content in object_build_equipment_subwindow_content().
- */
-void display_equip(void)
-{
-    object_subwindow_content content;
-    story_font_term_state story_state;
-    int i;
-    int term_wid = platform_frame_active_view_cols();
-    int term_hgt = platform_frame_active_view_rows();
-    int weight_col = subwindow_weight_col(term_wid);
-
-    if (term_wid <= 0)
-        term_wid = 80;
-
-    if (!object_build_equipment_subwindow_content(&content))
-        return;
-
-    story_font_term_push(content.use_story_font, false, &story_state);
-
-    for (i = 0; i < content.row_count; i++)
-        object_subwindow_render_row(i, term_wid, &content.rows[i]);
-
-    for (i = 0; i < content.body_line_count; i++)
-    {
-        int row = content.row_count + i;
-        int col = content.body_lines[i].col;
-
-        clear_item_row(row, term_wid);
-        if (col == -1)
-            col = weight_col;
-        else if (col == -2)
-        {
-            col = weight_col - 8;
-            if (col < 0)
-                col = 0;
-        }
-        story_print_text_grid(row, col, term_wid - col,
-            content.body_lines[i].attr, content.body_lines[i].text);
-    }
-
-    for (i = content.row_count + content.body_line_count; i < term_hgt; i++)
-        clear_item_row(i, term_wid);
-
-    story_font_term_pop(&story_state);
 }
 

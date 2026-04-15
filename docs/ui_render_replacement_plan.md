@@ -1,7 +1,12 @@
 # UI Terminal Extermination Plan
 
-Status: active on April 15, 2026. This replaces the completed
-render-replacement plan.
+Status: active on April 15, 2026.
+Lane status on April 15, 2026:
+- Lane 1: completed
+- Lane 2: completed
+- Lane 3: completed
+- Lane 4: completed
+- Lane 5: active
 
 ## Mission
 - The SDL render replacement is done. The remaining work is removal of the
@@ -23,9 +28,9 @@ render-replacement plan.
     movement slice is complete and the baseline now preserves that state
   - `terminal_model`: `inkey()` 0 files / 0 matches, `request_command()` 0
     files / 0 matches, `flush()` 14 files / 24 matches, compat text wrappers
-    12 files / 142 matches, terminal-size queries 7 files / 34 matches,
+    0 files / 0 matches, terminal-size queries 0 files / 0 matches,
     document-op cell grid 0 files / 0 matches, SDL term-host symbols 6 files
-    / 49 matches, and term-host story-font state 5 files / 47 matches
+    / 49 matches, and term-host story-font state 5 files / 46 matches
 - `tests/ui_debt_audit_baseline.json` now carries `terminal_model` alongside
   `ui0` and `movement_input`, so `ctest -R sil_ui0_audit --output-on-failure`
   can fail on regressions in the real remaining debt families.
@@ -39,69 +44,37 @@ Primary files:
 - `src/targeting.c`
 
 What remains:
-- movement now enters through `request_player_command()` and the semantic
-  movement service, but the legacy byte queue still lives in `inkey()`
-- repeat-count prompting, keymap expansion, and fallback non-movement command
-  acquisition still live in `request_legacy_command()` inside
-  `src/util-input.c`
-- targeting and other prompt flows still own direct `inkey()` waits or delayed
-  `flush()` behavior
+- the gameplay-facing input loop is now semantic and the live
+  `request_command()` / `inkey()` ownership is gone
+- the only remaining debt in this family is delayed `flush()` ownership
 
 Exit when:
-- input waits come from `src/app/*` interaction primitives instead of
-  `inkey()`
-- command acquisition has a named semantic API instead of byte queues and
-  global flags
 - gameplay code no longer calls `flush()` as part of normal UI flow
 
 ### 2. Compat text surface and cursor-state writers
 Primary files:
-- `src/util-text.c`
-- `src/util-editing.c`
-- `src/externs.h`
-- callers in `src/monster1.c`, `src/monster2.c`,
-  `src/cmd/ui/cmd-ui-object-display.c`, `src/squelch.c`, `src/wizard1.c`,
-  `src/wizard2.c`, `src/score/score_ui.c`, `src/ui/ui-help.c`, and others
+- completed on April 15, 2026
 
 What remains:
-- `ui_text_surface` is still a global row or column text buffer.
-- `prt()`, `c_prt()`, `put_str()`, `c_put_str()`, `clear_from()`, and
-  `text_out_to_screen()` remain a major authoring API.
-- several screens still depend on implicit cursor state and line erasure
-  behavior rather than scene widgets
+- no live compat text writer debt remains on the SDL path
+- `src/util-text.c` no longer exports `prt()` / `c_put_str()` /
+  `clear_from()` / `text_out_to_screen()`
 
 Exit when:
-- normal SDL UI authors text through scene widgets or dedicated semantic
-  builders
-- no user-facing flow depends on global text-surface cursor state
-- the compat writer family is deleted or isolated outside the normal SDL path
+- complete
 
 ### 3. Document-op cell grid
 Primary files:
-- `src/obj-info.c`
-- `src/ui/ui-story.c`
-- `src/ui/ui-character-screen.c`
-- `src/ui/ui-file-viewer.c`
-- `src/ui/ui-help.c`
-- `src/object/object-ui-display.c`
+- completed on April 15, 2026
 
 What remains:
-- the shared `APP_UI_PANEL_STYLE_DOCUMENT` and `APP_UI_DOCUMENT_OP_*` runtime
-  surface has been deleted; remaining debt is now local to individual flows
-- `src/obj-info.c` now captures semantic lines and runs directly, but still
-  stages local line data before browser presentation
-- `src/ui/ui-story.c` and the character tutorial in
-  `src/ui/ui-character-screen.c` still mirror row-oriented content before
-  browser presentation
-- `src/ui/ui-file-viewer.c`, `src/ui/ui-help.c`, and related browser flows
-  still paginate or size content against terminal-era widths and heights
+- no live document-op runtime surface remains
+- browser and document flows no longer depend on terminal-size query helpers
+- remaining scene-local layout code is internal semantic assembly, not
+  terminal-model ownership
 
 Exit when:
-- document and browser screens use paragraph, list, table, glyph-row, and
-  scroll widgets with renderer-owned layout
-- local row or column document mirrors are deleted from the remaining runtime
-  UI flows
-- terminal-sized document pagination is replaced by explicit widget layout
+- complete
 
 ### 4. SDL term host layer that survived the renderer migration
 Primary files:
@@ -180,6 +153,11 @@ Exit when:
 - CI can fail on regressions in the real remaining debt families
 
 ### B. Replace the live input stack
+Status:
+- completed on April 15, 2026 for live command acquisition and movement input
+- the only remaining debt adjacent to this workstream is repo-wide `flush()`
+  cleanup
+
 Goal:
 - remove terminal-era command acquisition from gameplay flow
 
@@ -195,6 +173,10 @@ Exit when:
   gameplay callers
 
 ### C. Kill the compat text surface
+Status:
+- completed on April 15, 2026 via deletion of the compat writer family and the
+  remaining utility-screen callers
+
 Goal:
 - remove row or column screen-authoring from normal SDL UI code
 
@@ -211,10 +193,9 @@ Exit when:
 
 ### D. Replace document row or column ops with real widgets
 Status:
-- the shared `APP_UI_DOCUMENT_OP_*` runtime surface and SDL document-panel
-  renderer were removed on April 15, 2026; remaining work is local row/capture
-  builders and terminal-sized pagination in the surviving tutorial/browser
-  flows
+- completed on April 15, 2026 after the shared document-op surface,
+  terminal-size query helpers, and the remaining live browser/widget callers
+  were moved off terminal-model ownership
 
 Goal:
 - stop calling semantic documents "semantic" when they are still cell-addressed
@@ -258,12 +239,13 @@ Exit when:
 - repo guidance no longer points engineers at already-finished work
 
 ## Parallel Lanes
-- Lane 1: audit and docs
+- Lane 1: audit and docs - completed on April 15, 2026
 - Lane 2: input stack (`src/util-input.c`, `src/dungeon.c`, prompt and command
-  plumbing)
-- Lane 3: compat text surface and utility screens
-- Lane 4: document and widget migration
-- Lane 5: SDL term-host removal
+  plumbing) - completed on April 15, 2026
+- Lane 3: compat text surface and utility screens - completed on April 15,
+  2026
+- Lane 4: document and widget migration - completed on April 15, 2026
+- Lane 5: SDL term-host removal - still active
 
 Dependencies:
 - Lane 1 starts first and stays active until the end.

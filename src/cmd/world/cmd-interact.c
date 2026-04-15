@@ -2342,7 +2342,7 @@ static int skeleton_note_append_expanded_lines(const skeleton_note_line* line,
 static int skeleton_note_effective_wrap_width(int col)
 {
     int wrap = 70;
-    int cols = platform_frame_active_view_cols();
+    int cols = platform_frame_active_grid_cols();
 
     if (cols > 0)
     {

@@ -481,7 +481,7 @@ void do_cmd_query_symbol(void)
     }
 
     /* Display the result */
-    prt(buf, 0, 0);
+    message_topline_override(TERM_WHITE, buf);
 
     /* Allocate the "who" array */
     who = mem_alloc_array(z_info->r_max, u16b);

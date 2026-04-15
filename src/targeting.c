@@ -2269,9 +2269,6 @@ bool target_set_interactive(int mode, int range)
     /* Forget */
     temp_n = 0;
 
-    /* Clear the top line */
-    prt("", 0, 0);
-
     /* Recenter around player */
     verify_panel();
 
@@ -2419,7 +2416,6 @@ bool get_aim_dir(int* dp, int range)
         message_flush();
         targeting_direction_prompt(p,
             "Use movement keys or digits. '*' chooses a target, Esc cancels.");
-        prt(p, 0, 0);
         app_movement_command_clear(&movement_command);
         ch = '\0';
         (void)app_command_wait_input(APP_MOVEMENT_CONTEXT_TARGETING,
@@ -2529,8 +2525,6 @@ bool get_aim_dir(int* dp, int range)
         if (!dir)
             bell("Illegal aim direction!");
     }
-
-    prt("", 0, 0);
 
     /* No direction */
     if (!dir)
