@@ -1320,6 +1320,9 @@ static cptr option_menu_label(const settings_ui_layout* layout, int opt)
     case OPT_look_nearby_filter_default:
         return compact ? (narrow ? "Look near def" : "Look nearby default")
                        : "Default look (l) nearby filter";
+    case OPT_show_elemental_item_rolls:
+        return compact ? (narrow ? "Dbg elem items" : "Debug elemental items")
+                       : "Debug elemental items";
     case OPT_intro_style:
         return compact ? (narrow ? "Welcome art" : "Welcome screen")
                        : "Welcome screen style";

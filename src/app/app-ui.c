@@ -94,6 +94,7 @@ void app_ui_panel_init(app_ui_panel* panel, u16b layer)
     panel->subtitle_attr = TERM_WHITE;
     panel->detail_title_attr = TERM_L_BLUE;
     panel->accent_attr = TERM_L_BLUE;
+    panel->alpha = 0xFFu;
 }
 
 void app_ui_scene_init(app_ui_scene* scene)

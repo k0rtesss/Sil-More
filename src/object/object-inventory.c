@@ -585,7 +585,7 @@ int object_stack_limit(const object_type* o_ptr)
         return 48;
 
     if (o_ptr->tval == TV_HORN)
-        return 2;
+        return 1;
 
     return MAX_STACK_SIZE - 1;
 }
@@ -1644,6 +1644,12 @@ s16b inven_takeoff(int item, int amt)
     /* Modify quantity */
     i_ptr->number = amt;
 
+    const bool discard_spent_light = (item == INVEN_LITE)
+        && (i_ptr->tval == TV_LIGHT)
+        && ((i_ptr->sval == SV_LIGHT_TORCH)
+            || (i_ptr->sval == SV_LIGHT_MALLORN))
+        && (player_light_fuel(i_ptr) <= 0);
+
     object_type drop_obj;
     object_copy(&drop_obj, i_ptr);
     drop_obj.pickup = false;
@@ -1697,6 +1703,16 @@ s16b inven_takeoff(int item, int amt)
               i_ptr->k_idx, (int)object_ego_prefix(i_ptr), (int)object_ego_suffix(i_ptr), i_ptr->number);
     inven_item_increase(item, -amt);
     inven_item_optimize(item);
+
+    if (discard_spent_light)
+    {
+        msg_format("%s %s; %s too spent to keep.", act, o_name,
+            (i_ptr->number > 1) ? "they are" : "it is");
+        p_ptr->redraw |= (PR_MAP | PR_LIGHT);
+        p_ptr->window |= (PW_MESSAGE);
+        handle_stuff();
+        return (-1);
+    }
 
     /* Carry the object */
     log_debug("inven_takeoff: Calling inven_carry with k_idx=%d, prefix=%d, suffix=%d", 

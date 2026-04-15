@@ -774,6 +774,128 @@ static bool hint_message_phrase_matches(const char* line, int offset, const char
     return hint_message_is_word_boundary(line[offset + len]);
 }
 
+static bool hint_message_phrase_matches_ci(const char* line, int offset,
+    const char* phrase)
+{
+    size_t len;
+
+    if (!line || !phrase || !phrase[0])
+        return false;
+
+    len = strlen(phrase);
+    if (SDL_strncasecmp(line + offset, phrase, len) != 0)
+        return false;
+
+    if (offset > 0 && !hint_message_is_word_boundary(line[offset - 1]))
+        return false;
+
+    return hint_message_is_word_boundary(line[offset + len]);
+}
+
+typedef struct tutorial_highlight_rule {
+    const char* phrase;
+    byte attr;
+} tutorial_highlight_rule;
+
+static const tutorial_highlight_rule tutorial_highlight_rules[] = {
+    { "Alt+'+'", TERM_WHITE },
+    { "Alt+'-'", TERM_WHITE },
+    { "Alt+'i'", TERM_WHITE },
+    { "Alt+'l'", TERM_WHITE },
+    { "Alt+'p'", TERM_WHITE },
+    { "'S'", TERM_WHITE },
+    { "critical hit", TERM_L_BLUE },
+    { "damage dice", TERM_L_BLUE },
+    { "damage die", TERM_L_BLUE },
+    { "damage sides", TERM_L_BLUE },
+    { "damage side", TERM_L_BLUE },
+    { "song points", TERM_L_BLUE },
+    { "line of sight", TERM_L_BLUE },
+    { "light radius", TERM_YELLOW },
+    { "right panel", TERM_UMBER },
+    { "bottom panel", TERM_UMBER },
+    { "left status panel", TERM_UMBER },
+    { "status panel", TERM_UMBER },
+    { "bright star rating", TERM_L_GREEN },
+    { "mixed elemental", TERM_L_BLUE },
+    { "pure elemental", TERM_L_BLUE },
+    { "vulnerabilities", TERM_L_RED },
+    { "vulnerability", TERM_L_RED },
+    { "vulnerable", TERM_L_RED },
+    { "resistances", TERM_L_GREEN },
+    { "resistance", TERM_L_GREEN },
+    { "cursed", TERM_ORANGE },
+    { "curse", TERM_ORANGE },
+    { "jinx", TERM_ORANGE },
+    { "elemental", TERM_L_BLUE },
+    { "Protection", TERM_L_BLUE },
+    { "protection", TERM_L_BLUE },
+    { "Evasion", TERM_L_BLUE },
+    { "evasion", TERM_L_BLUE },
+    { "Attack", TERM_L_BLUE },
+    { "attack", TERM_L_BLUE },
+    { "Damage", TERM_L_BLUE },
+    { "damage", TERM_L_BLUE },
+    { "Stealth", TERM_L_BLUE },
+    { "stealth", TERM_L_BLUE },
+    { "Will", TERM_L_BLUE },
+    { "will", TERM_L_BLUE },
+    { "Perception", TERM_L_BLUE },
+    { "perception", TERM_L_BLUE },
+    { "Constitution", TERM_L_BLUE },
+    { "constitution", TERM_L_BLUE },
+    { "Dexterity", TERM_L_BLUE },
+    { "dexterity", TERM_L_BLUE },
+    { "Grace", TERM_L_BLUE },
+    { "grace", TERM_L_BLUE },
+    { "Strength", TERM_L_BLUE },
+    { "strength", TERM_L_BLUE },
+    { "Smithing", TERM_L_BLUE },
+    { "smithing", TERM_L_BLUE },
+    { "Song", TERM_L_BLUE },
+    { "song", TERM_L_BLUE },
+    { "Archery", TERM_L_BLUE },
+    { "archery", TERM_L_BLUE },
+    { "HP", TERM_L_BLUE },
+    { "XP", TERM_L_BLUE },
+    { "quiver", TERM_L_BLUE },
+    { "inventory", TERM_L_BLUE },
+    { "options", TERM_UMBER },
+    { "light", TERM_YELLOW },
+    { "fire", TERM_L_RED },
+    { "ice", TERM_BLUE },
+    { "cold", TERM_BLUE },
+    { "poison", TERM_L_GREEN },
+};
+
+static int tutorial_hint_match_length(const char* line, int offset,
+    byte* out_attr)
+{
+    int best_len = 0;
+    byte best_attr = TERM_WHITE;
+
+    for (int i = 0; i < (int)N_ELEMENTS(tutorial_highlight_rules); ++i)
+    {
+        const tutorial_highlight_rule* rule = &tutorial_highlight_rules[i];
+        int len;
+
+        if (!hint_message_phrase_matches_ci(line, offset, rule->phrase))
+            continue;
+
+        len = (int)strlen(rule->phrase);
+        if (len > best_len)
+        {
+            best_len = len;
+            best_attr = rule->attr;
+        }
+    }
+
+    if (out_attr)
+        *out_attr = best_attr;
+
+    return best_len;
+}
+
 static int hint_message_match_length(const char* line, int offset,
     const hint_message_meta* meta, byte* out_attr)
 {
@@ -842,7 +964,7 @@ static bool hint_message_append_rich_span(app_ui_scene* scene,
 
 static bool hint_message_append_colored_rich_line(app_ui_scene* scene,
     app_ui_panel* panel, byte base_attr, byte story, const char* line,
-    const hint_message_meta* meta)
+    const hint_message_meta* meta, bool highlight_tutorial)
 {
     int start = 0;
     int len;
@@ -857,6 +979,18 @@ static bool hint_message_append_colored_rich_line(app_ui_scene* scene,
     {
         byte match_attr = base_attr;
         int match_len = hint_message_match_length(line, i, meta, &match_attr);
+
+        if (highlight_tutorial)
+        {
+            byte tutorial_attr = base_attr;
+            int tutorial_len = tutorial_hint_match_length(line, i,
+                &tutorial_attr);
+            if (tutorial_len > match_len)
+            {
+                match_len = tutorial_len;
+                match_attr = tutorial_attr;
+            }
+        }
 
         if (match_len > 0)
         {
@@ -906,6 +1040,79 @@ static const char* hint_message_title(int index)
     }
 
     return "";
+}
+
+static int skeleton_tip_template_count(void)
+{
+    int count = 0;
+
+    if (!skeleton_note_info || !skeleton_note_text || !z_info)
+        return 0;
+
+    for (int i = 0; i < z_info->skeleton_note_max; ++i)
+    {
+        const skeleton_note_template* tip = &skeleton_note_info[i];
+
+        if (tip->role != SKELETON_NOTE_ROLE_HINT || tip->hint != SKEL_HINT_TIP)
+            continue;
+        if (tip->weight == 0 || tip->text == 0)
+            continue;
+
+        count++;
+    }
+
+    return count;
+}
+
+static const skeleton_note_template* skeleton_tip_template_by_index(int index)
+{
+    int seen = 0;
+
+    if (index < 0 || !skeleton_note_info || !skeleton_note_text || !z_info)
+        return NULL;
+
+    for (int i = 0; i < z_info->skeleton_note_max; ++i)
+    {
+        const skeleton_note_template* tip = &skeleton_note_info[i];
+
+        if (tip->role != SKELETON_NOTE_ROLE_HINT || tip->hint != SKEL_HINT_TIP)
+            continue;
+        if (tip->weight == 0 || tip->text == 0)
+            continue;
+
+        if (seen == index)
+            return tip;
+
+        seen++;
+    }
+
+    return NULL;
+}
+
+static bool skeleton_tip_text_by_index(int index, char* buf, size_t buf_sz)
+{
+    const skeleton_note_template* tip = skeleton_tip_template_by_index(index);
+    const char* main_text;
+    const char* extra_text = NULL;
+
+    if (!buf || buf_sz == 0)
+        return false;
+
+    buf[0] = '\0';
+
+    if (!tip || !skeleton_note_text)
+        return false;
+
+    main_text = skeleton_note_text + tip->text;
+    if (tip->extra_text)
+        extra_text = skeleton_note_text + tip->extra_text;
+
+    if (extra_text && extra_text[0])
+        strnfmt(buf, buf_sz, "%s %s", main_text, extra_text);
+    else
+        strnfmt(buf, buf_sz, "%s", main_text);
+
+    return (buf[0] != '\0');
 }
 
 static void hint_message_fit_text(char* buf, size_t buf_sz, const char* title,
@@ -961,7 +1168,7 @@ static void hint_message_build_cue_summary(const hint_message_meta* meta,
 }
 
 static void hint_message_add_list_footer_actions(app_ui_panel* panel,
-    bool can_look)
+    bool can_look, bool can_toggle, bool show_all_tips)
 {
     if (!panel)
         return;
@@ -972,19 +1179,23 @@ static void hint_message_add_list_footer_actions(app_ui_panel* panel,
         "8/2", "Move");
     (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, can_look,
         "l", "Look");
-    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, can_toggle,
+        "h", show_all_tips ? "Level hints" : "All tips");
+    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
         "Esc", "Back");
 }
 
 static void hint_message_add_detail_footer_actions(app_ui_panel* panel,
-    bool can_look)
+    bool can_look, bool can_toggle, bool show_all_tips)
 {
     if (!panel)
         return;
 
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, can_look,
         "l", "Look");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, can_toggle,
+        "h", show_all_tips ? "Level hints" : "All tips");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
         "Esc", "Back");
 }
 
@@ -1030,16 +1241,34 @@ static void hint_message_add_list_detail(app_ui_panel* panel, int index)
     }
 }
 
+static void skeleton_tip_add_list_detail(app_ui_panel* panel, int index)
+{
+    char tip_text[APP_UI_TEXT_MAX];
+
+    if (!panel)
+        return;
+
+    if (!skeleton_tip_text_by_index(index, tip_text, sizeof(tip_text)))
+        return;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Selected");
+    (void)app_ui_panel_add_detail_line_ex(panel, TERM_WHITE, STORY_FLAG_USE,
+        tip_text);
+    (void)app_ui_panel_add_detail_line(panel, TERM_SLATE,
+        "Press Enter to read the full hint.");
+}
+
 static bool hint_message_build_ui_list_scene(app_ui_scene* scene, int n,
-    int sel)
+    int sel, bool show_all_tips, int tip_n)
 {
     app_ui_panel* panel;
     int window_start;
     int window_end;
     char subtitle[64];
-    hint_message_meta selected_meta;
+    hint_message_meta selected_meta = { 0 };
+    int active_n = show_all_tips ? tip_n : n;
 
-    if (!scene || n <= 0)
+    if (!scene)
         return false;
 
     app_ui_scene_init(scene);
@@ -1053,59 +1282,97 @@ static bool hint_message_build_ui_list_scene(app_ui_scene* scene, int n,
         | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_WHITE, "Hint Messages");
-    strnfmt(subtitle, sizeof(subtitle), "%d remembered on this level", n);
+    app_ui_panel_set_title(panel, TERM_L_WHITE,
+        show_all_tips ? "Tutorial Hints" : "Hint Messages");
+    if (show_all_tips)
+        strnfmt(subtitle, sizeof(subtitle), "%d total tutorial hints", tip_n);
+    else
+        strnfmt(subtitle, sizeof(subtitle), "%d remembered on this level", n);
     app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
-    window_start = sel - (HINT_MESSAGE_UI_ROW_WINDOW / 2);
-    if (window_start < 0)
-        window_start = 0;
-    if (window_start > n - HINT_MESSAGE_UI_ROW_WINDOW)
-        window_start = MAX(0, n - HINT_MESSAGE_UI_ROW_WINDOW);
-    window_end = MIN(n, window_start + HINT_MESSAGE_UI_ROW_WINDOW);
-
-    for (int idx = window_start; idx < window_end; ++idx)
+    if (active_n > 0)
     {
-        hint_message_meta meta;
-        char title_buf[APP_UI_LABEL_MAX];
-        char cue_buf[APP_UI_META_MAX];
-        const char* title = hint_message_title(idx);
+        window_start = sel - (HINT_MESSAGE_UI_ROW_WINDOW / 2);
+        if (window_start < 0)
+            window_start = 0;
+        if (window_start > active_n - HINT_MESSAGE_UI_ROW_WINDOW)
+            window_start = MAX(0, active_n - HINT_MESSAGE_UI_ROW_WINDOW);
+        window_end = MIN(active_n, window_start + HINT_MESSAGE_UI_ROW_WINDOW);
 
-        hint_messages_message_meta(idx, &meta);
-        hint_message_fit_text(title_buf, sizeof(title_buf), title,
-            APP_UI_LABEL_MAX - 1);
-        hint_message_build_cue_summary(&meta, cue_buf, sizeof(cue_buf));
-        if (!app_ui_panel_add_row_ex(panel, (s16b)idx,
-                (idx == sel) ? TERM_L_WHITE : TERM_WHITE,
-                cue_buf[0] ? TERM_SLATE : TERM_WHITE,
-                0, '\0', true, idx == sel, "", title_buf, cue_buf))
+        for (int idx = window_start; idx < window_end; ++idx)
         {
-            return false;
+            char title_buf[APP_UI_LABEL_MAX];
+            char cue_buf[APP_UI_META_MAX];
+
+            title_buf[0] = '\0';
+            cue_buf[0] = '\0';
+
+            if (show_all_tips)
+            {
+                char full_tip[APP_UI_TEXT_MAX];
+
+                if (!skeleton_tip_text_by_index(idx, full_tip,
+                        sizeof(full_tip)))
+                {
+                    SDL_strlcpy(full_tip, "(missing hint)", sizeof(full_tip));
+                }
+                hint_message_fit_text(title_buf, sizeof(title_buf), full_tip,
+                    APP_UI_LABEL_MAX - 1);
+            }
+            else
+            {
+                hint_message_meta meta;
+                const char* title = hint_message_title(idx);
+
+                hint_messages_message_meta(idx, &meta);
+                hint_message_fit_text(title_buf, sizeof(title_buf), title,
+                    APP_UI_LABEL_MAX - 1);
+                hint_message_build_cue_summary(&meta, cue_buf,
+                    sizeof(cue_buf));
+            }
+
+            if (!app_ui_panel_add_row_ex(panel, (s16b)idx,
+                    (idx == sel) ? TERM_L_WHITE : TERM_WHITE,
+                    cue_buf[0] ? TERM_SLATE : TERM_WHITE, 0, '\0', true,
+                    idx == sel, "", title_buf, cue_buf))
+            {
+                return false;
+            }
         }
     }
 
-    hint_messages_message_meta(sel, &selected_meta);
-    hint_message_add_list_detail(panel, sel);
+    if (active_n <= 0)
+    {
+        (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+            show_all_tips ? "No tutorial hints are available."
+                          : "You recall no hint messages on this level.");
+    }
+    else if (show_all_tips)
+    {
+        skeleton_tip_add_list_detail(panel, sel);
+    }
+    else
+    {
+        hint_messages_message_meta(sel, &selected_meta);
+        hint_message_add_list_detail(panel, sel);
+    }
+
     hint_message_add_list_footer_actions(panel,
-        hint_message_has_source(&selected_meta));
+        (!show_all_tips && active_n > 0 && hint_message_has_source(&selected_meta)),
+        tip_n > 0, show_all_tips);
     return true;
 }
 
-static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
+static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index,
+    bool show_all_tips)
 {
     app_ui_panel* panel;
     hint_message_meta meta;
     byte line_count;
+    char tip_text[APP_UI_TEXT_MAX];
 
     if (!scene)
         return false;
-
-    hint_messages_ensure_level_state();
-    line_count = hint_messages_message_line_count(index);
-    if (!line_count)
-        return false;
-
-    hint_messages_message_meta(index, &meta);
     app_ui_scene_init(scene);
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
@@ -1116,6 +1383,32 @@ static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
         | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
     panel->accent_attr = TERM_SLATE;
     app_ui_panel_set_widths(panel, 1500, 2800);
+
+    if (show_all_tips)
+    {
+        if (!skeleton_tip_text_by_index(index, tip_text, sizeof(tip_text)))
+            return false;
+
+        app_ui_panel_set_title(panel, TERM_L_WHITE, "Survival Tip");
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, "Press Esc to return.");
+        if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+            return false;
+        if (!hint_message_append_colored_rich_line(scene, panel, TERM_WHITE,
+                STORY_FLAG_USE, tip_text, NULL, true))
+        {
+            return false;
+        }
+
+        hint_message_add_detail_footer_actions(panel, false, false, true);
+        return true;
+    }
+
+    hint_messages_ensure_level_state();
+    line_count = hint_messages_message_line_count(index);
+    if (!line_count)
+        return false;
+
+    hint_messages_message_meta(index, &meta);
     app_ui_panel_set_title(panel, TERM_L_WHITE, hint_message_title(index));
     if (hint_message_has_source(&meta))
     {
@@ -1124,8 +1417,7 @@ static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
     }
     else
     {
-        app_ui_panel_set_subtitle(panel, TERM_SLATE,
-            "Press Esc to return.");
+        app_ui_panel_set_subtitle(panel, TERM_SLATE, "Press Esc to return.");
     }
 
     for (int li = 0; li < line_count; ++li)
@@ -1139,7 +1431,7 @@ static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
         {
             if (!hint_message_append_colored_rich_line(scene, panel,
                     (li == 0) ? TERM_L_WHITE : TERM_WHITE, STORY_FLAG_USE,
-                    line, line_meta))
+                    line, line_meta, false))
             {
                 return false;
             }
@@ -1151,12 +1443,13 @@ static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index)
         }
     }
 
-    hint_message_add_detail_footer_actions(panel, hint_message_has_source(&meta));
+    hint_message_add_detail_footer_actions(panel, hint_message_has_source(&meta),
+        false, false);
     return true;
 }
 
 static bool hint_message_show_ui_scene(int index, int* look_y,
-    int* look_x, bool* out_request_look)
+    int* look_x, bool* out_request_look, bool show_all_tips)
 {
     ui_information_scene_scope scope;
     app_ui_scene scene;
@@ -1166,21 +1459,28 @@ static bool hint_message_show_ui_scene(int index, int* look_y,
     if (out_request_look)
         *out_request_look = false;
 
-    hint_messages_ensure_level_state();
-    line_count = hint_messages_message_line_count(index);
-    if (!line_count)
+    if (!show_all_tips)
+    {
+        hint_messages_ensure_level_state();
+        line_count = hint_messages_message_line_count(index);
+        if (!line_count)
+            return false;
+
+        hint_messages_message_meta(index, &meta);
+    }
+    else if (!skeleton_tip_template_by_index(index))
+    {
         return false;
+    }
 
     if (!ui_information_scene_enter(&scope))
         return false;
-
-    hint_messages_message_meta(index, &meta);
 
     while (1)
     {
         char ch;
 
-        if (!hint_message_build_ui_detail_scene(&scene, index))
+        if (!hint_message_build_ui_detail_scene(&scene, index, show_all_tips))
         {
             ui_information_scene_leave(&scope);
             return false;
@@ -1193,7 +1493,8 @@ static bool hint_message_show_ui_scene(int index, int* look_y,
         }
 
         ch = (char)ui_information_scene_wait_key_nonrepeat();
-        if ((ch == 'l' || ch == 'L') && hint_message_has_source(&meta))
+        if (!show_all_tips && (ch == 'l' || ch == 'L')
+            && hint_message_has_source(&meta))
         {
             if (look_y)
                 *look_y = meta.source_y;
@@ -1219,7 +1520,7 @@ void show_hint_message_screen(int index)
     bool request_look = false;
 
     if (!hint_message_show_ui_scene(index, &look_y, &look_x,
-            &request_look))
+            &request_look, false))
     {
         log_warn("hint message detail: semantic scene presentation failed");
         msg_print("Hint message viewer unavailable.");
@@ -1241,11 +1542,14 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
     int look_y = -1;
     int look_x = -1;
     int n;
+    int tip_n;
     int sel = 0;
+    bool show_all_tips = false;
 
     hint_messages_ensure_level_state();
     n = (int)hint_messages_count_for_save();
-    if (n <= 0)
+    tip_n = skeleton_tip_template_count();
+    if (n <= 0 && tip_n <= 0)
         return false;
 
     if (!ui_information_scene_enter(&scope))
@@ -1255,13 +1559,22 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
     {
         app_ui_scene scene;
         char ch;
+        int active_n = show_all_tips ? tip_n : n;
 
-        if (sel < 0)
+        if (active_n > 0)
+        {
+            if (sel < 0)
+                sel = 0;
+            if (sel >= active_n)
+                sel = active_n - 1;
+        }
+        else
+        {
             sel = 0;
-        if (sel >= n)
-            sel = n - 1;
+        }
 
-        if (!hint_message_build_ui_list_scene(&scene, n, sel)
+        if (!hint_message_build_ui_list_scene(&scene, n, sel, show_all_tips,
+                tip_n)
             || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
@@ -1273,15 +1586,34 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
         if (ch == ESCAPE)
             break;
 
+        if (ch == 'h' || ch == 'H')
+        {
+            if (tip_n <= 0)
+            {
+                bell(NULL);
+                continue;
+            }
+
+            show_all_tips = !show_all_tips;
+            sel = 0;
+            continue;
+        }
+
+        if (active_n <= 0)
+        {
+            bell(NULL);
+            continue;
+        }
+
         if (ch == '8')
         {
-            sel = (sel > 0) ? (sel - 1) : (n - 1);
+            sel = (sel > 0) ? (sel - 1) : (active_n - 1);
             continue;
         }
 
         if (ch == '2')
         {
-            sel = (sel + 1 < n) ? (sel + 1) : 0;
+            sel = (sel + 1 < active_n) ? (sel + 1) : 0;
             continue;
         }
 
@@ -1293,7 +1625,7 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
             bool request_look = false;
 
             if (!hint_message_show_ui_scene(sel, &selected_look_y,
-                    &selected_look_x, &request_look))
+                    &selected_look_x, &request_look, show_all_tips))
             {
                 ui_information_scene_leave(&scope);
                 return false;
@@ -1312,6 +1644,12 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
         if (ch == 'l' || ch == 'L')
         {
             hint_message_meta meta;
+
+            if (show_all_tips)
+            {
+                bell(NULL);
+                continue;
+            }
 
             hint_messages_message_meta(sel, &meta);
             if (hint_message_has_source(&meta))
@@ -1347,7 +1685,8 @@ static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,
     hint_messages_ensure_level_state();
 
     int n = (int)hint_messages_count_for_save();
-    if (n <= 0)
+    int tip_n = skeleton_tip_template_count();
+    if (n <= 0 && tip_n <= 0)
     {
         msg_print("You recall no hint messages on this level.");
         return;

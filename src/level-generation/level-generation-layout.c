@@ -4010,6 +4010,41 @@ static int partition_bridge_style_for_index(int pi)
     return current_partition_bridge_styles[pi];
 }
 
+/* Organic cave/blob anchors should meet corridors as open floor, not doors.
+ * Chasm anchors reuse the same kind marker for shaping, so exclude them. */
+static bool room_prefers_floor_thresholds(int room_idx)
+{
+    int cy, cx;
+
+    if (room_idx < 0 || room_idx >= dun->cent_n || room_idx >= CENT_MAX)
+        return false;
+    if (room_anchor_kind[room_idx] != LAYOUT_ANCHOR_CA_BLOB)
+        return false;
+
+    cy = dun->cent[room_idx].y;
+    cx = dun->cent[room_idx].x;
+    if (!in_bounds_fully(cy, cx))
+        return false;
+
+    return ((cave_info[cy][cx] & CAVE_CHASM_AREA) == 0);
+}
+
+static bool tunnel_prefers_floor_thresholds(int r1, int r2)
+{
+    return room_prefers_floor_thresholds(r1)
+        || room_prefers_floor_thresholds(r2);
+}
+
+static void carve_floor_threshold(
+    int y, int x, int r1, int r2, bool mark_escape)
+{
+    cave_set_feat(y, x, FEAT_FLOOR);
+    cave_corridor1[y][x] = r1;
+    cave_corridor2[y][x] = r2;
+    if (mark_escape)
+        mark_generation_escape_tunnel(y, x);
+}
+
 /* Shared-boundary fallback connector for adjacent partitions.
  * Standard tunnel rules often reject some otherwise-valid joins, so when two
  * partitions have native walkable floor near the same shared boundary we carve
@@ -4019,6 +4054,7 @@ static bool carve_straight_big_partition_connector(
 {
     int dy = (y2 > y1) ? 1 : (y2 < y1) ? -1 : 0;
     int dx = (x2 > x1) ? 1 : (x2 < x1) ? -1 : 0;
+    bool floor_thresholds = tunnel_prefers_floor_thresholds(r1, r2);
 
     /* Must be a straight segment. */
     if (!((dy == 0) ^ (dx == 0)))
@@ -4045,7 +4081,14 @@ static bool carve_straight_big_partition_connector(
 
         if (feat == FEAT_WALL_OUTER)
         {
-            cave_set_feat(y, x, FEAT_DOOR_HEAD);
+            if (floor_thresholds)
+            {
+                carve_floor_threshold(y, x, r1, r2, false);
+            }
+            else
+            {
+                cave_set_feat(y, x, FEAT_DOOR_HEAD);
+            }
             carved = true;
         }
         else if (feat == FEAT_WALL_EXTRA || feat == FEAT_CHASM)

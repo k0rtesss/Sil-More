@@ -21,8 +21,10 @@
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-config.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
+#include "platform-time.h"
 #include "reliability-checks.h"
 #include "app/app-ui.h"
 #include "metarun.h"
@@ -1125,6 +1127,7 @@ static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     const char* subtitle);
 static app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
     byte title_attr, const char* title);
+static bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in);
 static void metarun_ui_clear_pending_input(void);
 static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
     const char* text);
@@ -2370,6 +2373,7 @@ static bool metarun_show_completed_quests_information_scene(bool steamdeck,
     int entry_count = 0;
     int completed_quests = 0;
     int selected = 0;
+    bool first_present = true;
     const int challenge_ids[] = {
         CHALLENGE_DISCONNECTED,
         CHALLENGE_SINGLE_STAIR,
@@ -2513,8 +2517,9 @@ static bool metarun_show_completed_quests_information_scene(bool steamdeck,
                 true, back_label, "Back");
         }
 
-        if (!ui_information_scene_present_ui(&scene))
+        if (!metarun_ui_present_scene(&scene, first_present))
             return false;
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == '8' || key == 'k' || key == '-') {
@@ -3705,6 +3710,7 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
     int active_count = 0;
     int active_ids[64];
     int selected = 0;
+    bool first_present = true;
 
     for (int id = 0; id < z_info->cu_max && active_count < 64; id++)
     {
@@ -3759,8 +3765,9 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
                 back_label, "Back");
         }
 
-        if (!ui_information_scene_present_ui(&scene))
+        if (!metarun_ui_present_scene(&scene, first_present))
             return false;
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == '8' || key == 'k' || key == '-')
@@ -3798,6 +3805,7 @@ static bool metarun_show_known_curses_information_scene(bool steamdeck,
     int selected = 0;
     int row_offset = 0;
     int limit;
+    bool first_present = true;
 
     if (!z_info || !cu_info)
         return false;
@@ -3885,8 +3893,9 @@ static bool metarun_show_known_curses_information_scene(bool steamdeck,
         (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
             steamdeck ? back_label : "Esc", "Back");
 
-        if (!ui_information_scene_present_ui(&scene))
+        if (!metarun_ui_present_scene(&scene, first_present))
             return false;
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == '8' || key == 'k' || key == '-')
@@ -4296,6 +4305,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
     char status_msg[256] = "";
     byte status_attr = TERM_WHITE;
     bool clear_status_on_next_key = false;
+    bool first_present = true;
 
     log_debug("[metarun-esc-trace] blessing exchange semantic enter");
 
@@ -4418,8 +4428,9 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
                 steamdeck ? back_label : "Esc", "Leave");
 
-            if (!ui_information_scene_present_ui(&scene))
-                return false;
+        if (!metarun_ui_present_scene(&scene, first_present))
+            return false;
+        first_present = false;
 
             key = ui_information_scene_wait_key_nonrepeat();
             metarun_log_blessing_key("blessing-scene-read", mode, key);
@@ -4556,8 +4567,9 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
                 steamdeck ? back_label : "Esc", "Back");
 
-            if (!ui_information_scene_present_ui(&scene))
+            if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
+            first_present = false;
 
             key = ui_information_scene_wait_key_nonrepeat();
             metarun_log_blessing_key("blessing-scene-read", mode, key);
@@ -4678,8 +4690,9 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
                 steamdeck ? back_label : "Esc", "Back");
 
-            if (!ui_information_scene_present_ui(&scene))
+            if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
+            first_present = false;
 
             key = ui_information_scene_wait_key_nonrepeat();
             metarun_log_blessing_key("blessing-scene-read", mode, key);
@@ -4817,8 +4830,9 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
                 steamdeck ? back_label : "Esc", "Back");
 
-            if (!ui_information_scene_present_ui(&scene))
+            if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
+            first_present = false;
 
             key = ui_information_scene_wait_key_nonrepeat();
             metarun_log_blessing_key("blessing-scene-read", mode, key);
@@ -5107,6 +5121,62 @@ static void metarun_trim_first_line(char* dst, size_t dst_size,
 
 #define METARUN_UI_WRAP_WIDTH 68
 #define METARUN_HISTORY_PAGE_SIZE 48
+#define METARUN_UI_FADE_DURATION_MS 250u
+#define METARUN_UI_FADE_FRAME_SLICE_MS 16u
+
+static byte metarun_ui_fade_alpha(u32b elapsed_ms, u32b duration_ms)
+{
+    if (duration_ms == 0 || elapsed_ms >= duration_ms)
+        return 0xFFu;
+
+    return (byte)((elapsed_ms * 255u) / duration_ms);
+}
+
+static void metarun_ui_set_scene_alpha(app_ui_scene* scene, byte alpha)
+{
+    if (!scene)
+        return;
+
+    for (u16b i = 0; i < scene->panel_count; i++)
+        scene->panels[i].alpha = alpha;
+}
+
+static bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in)
+{
+    u64b start_ms;
+
+    if (!scene)
+        return false;
+    if (!fade_in)
+    {
+        metarun_ui_set_scene_alpha(scene, 0xFFu);
+        return ui_information_scene_present_ui(scene);
+    }
+
+    start_ms = platform_monotonic_ms();
+    while (true)
+    {
+        u64b now_ms = platform_monotonic_ms();
+        u64b elapsed_ms64 = (now_ms > start_ms) ? (now_ms - start_ms) : 0;
+        u32b elapsed_ms = (elapsed_ms64 > METARUN_UI_FADE_DURATION_MS)
+            ? METARUN_UI_FADE_DURATION_MS
+            : (u32b)elapsed_ms64;
+        byte alpha = metarun_ui_fade_alpha(elapsed_ms,
+            METARUN_UI_FADE_DURATION_MS);
+
+        metarun_ui_set_scene_alpha(scene, alpha);
+        if (!ui_information_scene_present_ui(scene))
+            return false;
+        if (elapsed_ms >= METARUN_UI_FADE_DURATION_MS)
+            break;
+
+        platform_frame_delay_ms(MIN(METARUN_UI_FADE_FRAME_SLICE_MS,
+            METARUN_UI_FADE_DURATION_MS - elapsed_ms));
+    }
+
+    metarun_ui_set_scene_alpha(scene, 0xFFu);
+    return true;
+}
 
 static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     byte title_attr, const char* title, byte subtitle_attr,
@@ -5332,7 +5402,8 @@ static void metarun_ui_clear_pending_input(void)
         ui_information_scene_is_active() ? 1 : 0);
     if (session)
         app_session_clear_inputs(session);
-    input_clear_pending();
+    input_byte_queue_clear();
+    input_clear_movement_commands();
 }
 
 static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
@@ -5524,7 +5595,7 @@ static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
         steamdeck ? accept_label : "Any",
         (action_label && action_label[0]) ? action_label : "Continue");
 
-    if (!ui_information_scene_present_ui(&scene))
+    if (!metarun_ui_present_scene(&scene, true))
         return false;
 
     (void)ui_information_scene_wait_key_nonrepeat();
@@ -5556,7 +5627,7 @@ static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
         steamdeck ? accept_label : "Any", "Continue");
 
-    if (!ui_information_scene_present_ui(&scene))
+    if (!metarun_ui_present_scene(&scene, true))
         return false;
 
     (void)ui_information_scene_wait_key_nonrepeat();
@@ -5568,6 +5639,8 @@ static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label, const char* back_label)
 {
+    bool first_present = true;
+
     while (true)
     {
         app_ui_scene scene;
@@ -5603,8 +5676,9 @@ static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
                 "N/Esc", "Cancel");
         }
 
-        if (!ui_information_scene_present_ui(&scene))
+        if (!metarun_ui_present_scene(&scene, first_present))
             return false;
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (steamdeck)
@@ -5645,6 +5719,7 @@ static int metarun_ui_choose_curse_scene(int n,
 {
     int selected = 0;
     char subtitle[APP_UI_TEXT_MAX];
+    bool first_present = true;
 
     strnfmt(subtitle, sizeof(subtitle),
         "Dark powers demand their price. Choose %s curse.",
@@ -5701,8 +5776,9 @@ static int metarun_ui_choose_curse_scene(int n,
                 "A-C", "Select");
         }
 
-        if (!ui_information_scene_present_ui(&scene))
+        if (!metarun_ui_present_scene(&scene, first_present))
             return -1;
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == '\r' || key == '\n' || key == ' '
@@ -5956,6 +6032,7 @@ static bool metarun_adjust_blessing_threshold_information_scene(
     bool accepted = false;
     metarun_blessing_threshold_mode chosen_mode = current_mode;
     bool semantic_ok = true;
+    bool first_present = true;
 
     while (true) {
         app_ui_scene scene;
@@ -6037,10 +6114,11 @@ static bool metarun_adjust_blessing_threshold_information_scene(
         (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
             steamdeck ? back_label : "Esc", "Cancel");
 
-        if (!ui_information_scene_present_ui(&scene)) {
+        if (!metarun_ui_present_scene(&scene, first_present)) {
             semantic_ok = false;
             break;
         }
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
@@ -6122,6 +6200,7 @@ void print_metarun_stats(void)
     ui_information_scene_scope info_scope;
     app_ui_scene metarun_scene;
     metarun_stats_view_model view;
+    bool first_present = true;
     bool use_information_scene = ui_information_scene_enter(&info_scope);
 
     if (!use_information_scene) {
@@ -6151,12 +6230,13 @@ metarun_redraw:
     metarun_stats_prepare_view_model(&view);
 
     if (!metarun_build_stats_browser_scene(&metarun_scene, &view)
-        || !ui_information_scene_present_ui(&metarun_scene))
+        || !metarun_ui_present_scene(&metarun_scene, first_present))
     {
         log_error("print_metarun_stats: failed to publish semantic scene");
         ui_information_scene_leave(&info_scope);
         return;
     }
+    first_present = false;
 
     {
         int key = ui_information_scene_wait_key_nonrepeat();
@@ -6298,6 +6378,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
     char back_label[16] = "";
     char status_msg[APP_UI_TEXT_MAX] = "";
     byte status_attr = TERM_WHITE;
+    bool first_present = true;
 
     if (steamdeck) {
         metarun_prompt_label(steamdeck_confirm_key(), "A", accept_label,
@@ -6407,10 +6488,11 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
         (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
             steamdeck ? back_label : "Esc", "Cancel");
 
-        if (!ui_information_scene_present_ui(&scene)) {
+        if (!metarun_ui_present_scene(&scene, first_present)) {
             log_error("choose_difficulty_menu: failed to publish semantic scene");
             break;
         }
+        first_present = false;
 
         key = ui_information_scene_wait_key_nonrepeat();
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
@@ -6579,6 +6661,7 @@ static bool metarun_list_history_information_scene(bool steamdeck,
     {
         bool semantic_ok = true;
         int highlight = 0;
+        bool first_present = true;
 
         for (s16b i = 0; i < metarun_max; i++) {
             s16b idx = order ? order[i] : i;
@@ -6737,10 +6820,11 @@ static bool metarun_list_history_information_scene(bool steamdeck,
                     back_label, "Back");
             }
 
-            if (!ui_information_scene_present_ui(&scene)) {
+            if (!metarun_ui_present_scene(&scene, first_present)) {
                 semantic_ok = false;
                 break;
             }
+            first_present = false;
 
             key = ui_information_scene_wait_key_nonrepeat();
             if (key == '8' || key == 'k' || key == '-') {

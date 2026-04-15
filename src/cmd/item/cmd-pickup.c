@@ -664,6 +664,9 @@ void py_pickup_aux(int o_idx)
     int pickup_y = o_ptr->iy;
     int pickup_x = o_ptr->ix;
 
+    if (object_is_searched_skeleton(o_ptr))
+        return;
+
     /*hack - don't pickup &nothings*/
     if (o_ptr->k_idx)
     {
@@ -1468,6 +1471,9 @@ void py_pickup(void)
             next_o_idx = 0;
             continue;
         }
+
+        if (object_is_searched_skeleton(o_ptr))
+            continue;
 
         if (pickup_handle_floor_object(this_o_idx, true))
             done_pickup = true;

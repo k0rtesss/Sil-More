@@ -1014,6 +1014,7 @@ static const byte app_visual_options[] = {
     OPT_hilite_target, OPT_hilite_unwary, OPT_solid_walls, OPT_hybrid_walls,
     OPT_unidentified_items_slate, OPT_stealth_vision, OPT_sleep_icon,
     OPT_show_smithing_difficulty, OPT_show_smithing_difficulty_look,
+    OPT_show_elemental_item_rolls,
     OPT_NONE
 };
 

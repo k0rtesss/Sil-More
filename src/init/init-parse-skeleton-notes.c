@@ -86,11 +86,12 @@ static byte skeleton_note_parse_hint_token(const char* tok)
  * Formats:
  *   O:<SVAL>:<weight>:<text>
  *   C:<SVAL>:<weight>:<text>
- *   M:<SVAL>:<HINT>:<weight>:<text>
+ *   M:<SVAL>:<HINT>:<weight>:<text>[||<extra text>]
  *
  * SVAL may be ELF/HUMAN/ORC/ANY
  * HINT may be GREAT_VAULT/VAULT_ARTIFACT/STAIRS/PARTITION/FORGE/UNIQUE/TIP/SIZE/QUEST/LABYRINTH/CHASM/CAVE/CAVE_ICE/CAVE_FIRE/CAVE_POIS/ROOMY/RUINED/CAVEY
  * Weight is optional (defaults to 100) and clamped to a byte.
+ * Extra text, when present, is stored as an optional companion line.
  */
 errr parse_skeleton_note_info(char* buf, header* head)
 {
@@ -184,6 +185,19 @@ errr parse_skeleton_note_info(char* buf, header* head)
         return PARSE_ERROR_OUT_OF_BOUNDS;
     }
 
+    char* extra_cursor = strstr(cursor, "||");
+    if (extra_cursor)
+    {
+        *extra_cursor = '\0';
+        extra_cursor += 2;
+        if (extra_cursor[0] == '\0')
+        {
+            log_error("skeleton_note.txt: missing extra text payload on line %d (buf='%s')",
+                error_line, buf_copy);
+            return PARSE_ERROR_GENERIC;
+        }
+    }
+
     if (!cursor || cursor[0] == '\0')
     {
         log_error("skeleton_note.txt: missing text payload on line %d (buf='%s')",
@@ -195,8 +209,11 @@ errr parse_skeleton_note_info(char* buf, header* head)
     note->hint = hint;
     note->role = role;
     note->weight = (byte)weight;
+    note->extra_text = 0;
 
     if (!add_text(&note->text, head, cursor))
+        return PARSE_ERROR_OUT_OF_MEMORY;
+    if (extra_cursor && !add_text(&note->extra_text, head, extra_cursor))
         return PARSE_ERROR_OUT_OF_MEMORY;
 
     next_idx++;

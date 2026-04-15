@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define APP_UI_FORMAT_VERSION 10u
+#define APP_UI_FORMAT_VERSION 11u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -201,7 +201,8 @@ typedef struct app_ui_panel {
     s16b minimap_player_y;
     byte minimap_border_attr;
     byte minimap_player_attr;
-    u16b reserved;
+    byte alpha;
+    byte reserved;
     char title[APP_UI_TITLE_MAX];
     char subtitle[APP_UI_TEXT_MAX];
     char detail_title[APP_UI_TITLE_MAX];

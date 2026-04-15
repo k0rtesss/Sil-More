@@ -1133,7 +1133,7 @@ static bool run_test(void)
              o_ptr = get_next_object(o_ptr))
         {
             /* Visible object */
-            if (o_ptr->marked)
+            if (o_ptr->marked && !object_is_searched_skeleton(o_ptr))
                 return (true);
         }
 

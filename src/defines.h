@@ -2814,6 +2814,7 @@
 #define OPT_unlock_blitz_mode 101
 #define OPT_look_objects_sort_by_difficulty 102
 #define OPT_look_nearby_filter_default 103
+#define OPT_show_elemental_item_rolls 104
 
 /* Reuse the old option slot for the new popup-duration setting. */
 #define OPT_banner_popup_seconds OPT_show_level_entry_banner
@@ -2976,6 +2977,7 @@
 #define show_level_generation_debug op_ptr->opt[OPT_show_level_generation_debug]
 #define look_objects_sort_by_difficulty op_ptr->opt[OPT_look_objects_sort_by_difficulty]
 #define look_nearby_filter_default op_ptr->opt[OPT_look_nearby_filter_default]
+#define show_elemental_item_rolls op_ptr->opt[OPT_show_elemental_item_rolls]
 #define story_display_lists op_ptr->opt[OPT_story_lists]
 #define story_inventory_lists op_ptr->opt[OPT_story_lists_inven]
 #define story_equipment_lists op_ptr->opt[OPT_story_lists_equip]

@@ -235,6 +235,9 @@ bool item_tester_okay(const object_type* o_ptr)
         return (false);
     }
 
+    if (!in_inventory && object_is_searched_skeleton(o_ptr))
+        return false;
+
     if (item_tester_tval)
     {
         if (!(item_tester_tval == o_ptr->tval))

@@ -53,6 +53,12 @@ bool weapon_is_impale_eligible(const object_type* o_ptr)
     return false;
 }
 
+bool object_is_searched_skeleton(const object_type* o_ptr)
+{
+    return o_ptr && o_ptr->k_idx && (o_ptr->tval == TV_SKELETON)
+        && (o_ptr->pval <= 0);
+}
+
 bool player_can_treat_as_throwing(const object_type* o_ptr)
 {
     u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;

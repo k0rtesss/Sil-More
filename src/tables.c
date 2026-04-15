@@ -251,6 +251,7 @@ cptr option_text[OPT_MAX] = {
     "unlock_blitz_mode", /* OPT_unlock_blitz_mode */
     "look_objects_sort_by_difficulty", /* OPT_look_objects_sort_by_difficulty */
     "look_nearby_filter_default", /* OPT_look_nearby_filter_default */
+    "show_elemental_item_rolls", /* OPT_show_elemental_item_rolls */
     NULL, /* xxx */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -494,6 +495,7 @@ cptr option_desc[OPT_MAX] = {
     "Unlock Blitz Mode after winning a metarun", /* OPT_unlock_blitz_mode */
     "Sort look (L) objects by difficulty only (off = category, then difficulty)", /* OPT_look_objects_sort_by_difficulty */
     "Start look (l) with the nearby-only sidebar filter enabled", /* OPT_look_nearby_filter_default */
+    "Debug: Show elemental item break rolls and target probabilities", /* OPT_show_elemental_item_rolls */
     NULL, /* xxx */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -753,6 +755,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_unlock_blitz_mode */
     false, /* OPT_look_objects_sort_by_difficulty */
     false, /* OPT_look_nearby_filter_default */
+    false, /* OPT_show_elemental_item_rolls */
     false, /* xxx */
     false, /* xxx */
     false, /* xxx */
@@ -904,7 +907,6 @@ const bool option_norm[OPT_MAX] = {
     false, /* xxx */
     false, /* xxx */
     false, /* xxx */
-    false, /* xxx */
     false /* xxx */
 };
 
@@ -952,7 +954,7 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
         OPT_hilite_unwary, OPT_solid_walls, OPT_hybrid_walls, OPT_unidentified_items_slate,
         OPT_stealth_vision, OPT_sleep_icon,
         OPT_banner_popup_seconds, OPT_intro_style, OPT_show_smithing_difficulty,
-        OPT_show_smithing_difficulty_look, OPT_NONE, OPT_NONE,
+        OPT_show_smithing_difficulty_look, OPT_show_elemental_item_rolls, OPT_NONE,
         OPT_NONE, OPT_NONE },
 
     /*** Birth ***/
