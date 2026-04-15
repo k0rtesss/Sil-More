@@ -197,6 +197,9 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-settings-keybinds.c
     src/cmd/ui/cmd-ui-settings-panes.c
     src/cmd/ui/cmd-ui-settings-visuals.c
+    src/cmd/world/cmd-interact-chest.c
+    src/cmd/world/cmd-interact-door.c
+    src/cmd/world/cmd-interact-terrain.c
     src/cmd/world/cmd-interact.c
 )
 
