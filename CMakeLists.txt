@@ -139,6 +139,8 @@ add_subdirectory(src/log)
 set(SIL_MORE_SOURCES_CORE
     src/blitz.c
     src/birth.c
+    src/cave/cave-geometry.c
+    src/cave/cave-map-ui.c
     src/cave.c
     src/cJSON.c
     src/dungeon.c
@@ -191,6 +193,10 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-object-display.c
     src/cmd/ui/cmd-ui-query.c
     src/cmd/ui/cmd-ui-settings.c
+    src/cmd/ui/cmd-ui-settings-controller.c
+    src/cmd/ui/cmd-ui-settings-keybinds.c
+    src/cmd/ui/cmd-ui-settings-panes.c
+    src/cmd/ui/cmd-ui-settings-visuals.c
     src/cmd/world/cmd-interact.c
 )
 
