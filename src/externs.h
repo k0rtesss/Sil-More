@@ -666,8 +666,6 @@ extern void safe_setuid_grab(void);
 extern errr file_character(cptr name, bool full);
 extern void do_cmd_escape(int);
 extern void do_cmd_suicide(void);
-extern void mini_screenshot(void);
-extern void prt_mini_screenshot(int col, int row);
 extern int meta_write(const metarun*);
 extern errr meta_read(metarun*);
 extern int meta_seek(int i);

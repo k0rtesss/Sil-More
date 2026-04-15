@@ -26,7 +26,7 @@
  *
  * This command is also used to "instantiate" the results of the user
  * selecting various things, such as graphics mode, so it must call
- * the "TERM_XTRA_REACT" hook before redrawing the windows.
+ * the platform-frame react step before redrawing the windows.
  */
 void do_cmd_redraw(void)
 {

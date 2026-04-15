@@ -65,65 +65,49 @@
       "label": "Terminal-kernel debt audit",
       "metrics": {
         "mini_screenshot_mirror_symbols": {
-          "file_matches": {
-            "src/files.c": 7
-          },
-          "files": 1,
+          "file_matches": {},
+          "files": 0,
           "label": "mini screenshot mirror symbols",
-          "matches": 7,
-          "notes": "Tracks char/attr screenshot mirrors that should be replaced by semantic export data."
+          "matches": 0,
+          "notes": "Tracks reintroduction of char or attr screenshot mirrors in export code."
         },
         "sdl_buffer_replay_redraw_symbols": {
-          "file_matches": {
-            "src/sdl-render.c": 26
-          },
-          "files": 1,
+          "file_matches": {},
+          "files": 0,
           "label": "SDL buffer-replay redraw symbols",
-          "matches": 26,
-          "notes": "Tracks redraw paths that still replay compatibility row/cell buffers instead of consuming direct render state."
+          "matches": 0,
+          "notes": "Tracks reintroduction of redraw paths that replay compatibility row or cell buffers instead of semantic render state."
         },
         "sdl_view_state_hook_symbols": {
-          "file_matches": {
-            "src/sdl-main-internal.h": 6,
-            "src/sdl-render.c": 8
-          },
-          "files": 2,
+          "file_matches": {},
+          "files": 0,
           "label": "SDL view-state hook symbols",
-          "matches": 14,
-          "notes": "Tracks the legacy hook table still embedded in SDL view state and renderer setup."
+          "matches": 0,
+          "notes": "Tracks reintroduction of the legacy SDL view-state hook table and related renderer setup."
         },
         "sdl_view_state_key_queue_symbols": {
-          "file_matches": {
-            "src/sdl-main-internal.h": 5,
-            "src/sdl-render.c": 4
-          },
-          "files": 2,
+          "file_matches": {},
+          "files": 0,
           "label": "SDL view-state key-queue symbols",
-          "matches": 9,
-          "notes": "Tracks the compatibility key queue still carried by the SDL view state."
+          "matches": 0,
+          "notes": "Tracks reintroduction of the compatibility key queue on SDL view objects."
         },
         "sdl_view_state_shadow_buffer_symbols": {
-          "file_matches": {
-            "src/sdl-main-internal.h": 6,
-            "src/sdl-render.c": 77
-          },
-          "files": 2,
+          "file_matches": {},
+          "files": 0,
           "label": "SDL shadow-buffer state symbols",
-          "matches": 83,
-          "notes": "Tracks terminal-sized dimensions, dirty spans, and shadow buffers that still back SDL view compatibility rendering."
+          "matches": 0,
+          "notes": "Tracks reintroduction of terminal-sized dimensions, dirty spans, and shadow buffers in SDL view rendering."
         },
         "term_xtra_symbols": {
-          "file_matches": {
-            "src/sdl-main-internal.h": 13,
-            "src/sdl-render.c": 8
-          },
-          "files": 2,
+          "file_matches": {},
+          "files": 0,
           "label": "TERM_XTRA_* symbols",
-          "matches": 21,
-          "notes": "Tracks terminal-style xtra constants and dispatch that still drive SDL event, clear, present, delay, and react behavior."
+          "matches": 0,
+          "notes": "Tracks reintroduction of terminal-style xtra constants and dispatch in the SDL runtime path."
         }
       },
-      "notes": "Slice-6A guardrail for the internal SDL terminal kernel and export-mirror compatibility state that still survives after the public term-host surface was removed.",
+      "notes": "Zero-debt guardrail against reintroducing the internal SDL terminal kernel or export-mirror compatibility state.",
       "scope": [
         "src/**/*.c",
         "src/**/*.h"
@@ -189,7 +173,7 @@
           "notes": "Tracks terminal-sized layout queries that still leak into document and utility flows."
         }
       },
-      "notes": "Expanded guardrail for the remaining terminal-era UI ownership that still survives on the SDL path after the movement rewrite.",
+      "notes": "Zero-debt guardrail against reintroducing public terminal-model UI ownership on the SDL path.",
       "scope": [
         "src/**/*.c",
         "src/**/*.h"

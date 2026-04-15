@@ -226,7 +226,7 @@ TERMINAL_KERNEL_METRICS = (
         label="TERM_XTRA_* symbols",
         pattern=re.compile(r"\bTERM_XTRA_[A-Z0-9_]+\b"),
         include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
-        notes="Tracks terminal-style xtra constants and dispatch that still drive SDL event, clear, present, delay, and react behavior.",
+        notes="Tracks reintroduction of terminal-style xtra constants and dispatch in the SDL runtime path.",
     ),
     MetricSpec(
         key="sdl_view_state_hook_symbols",
@@ -235,14 +235,14 @@ TERMINAL_KERNEL_METRICS = (
             r"\b(?:xtra_hook|curs_hook|bigcurs_hook|wipe_hook|text_hook|pict_hook)\b"
         ),
         include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
-        notes="Tracks the legacy hook table still embedded in SDL view state and renderer setup.",
+        notes="Tracks reintroduction of the legacy SDL view-state hook table and related renderer setup.",
     ),
     MetricSpec(
         key="sdl_view_state_key_queue_symbols",
         label="SDL view-state key-queue symbols",
         pattern=re.compile(r"\b(?:key_queue|key_head|key_tail|key_xtra|key_size)\b"),
         include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
-        notes="Tracks the compatibility key queue still carried by the SDL view state.",
+        notes="Tracks reintroduction of the compatibility key queue on SDL view objects.",
     ),
     MetricSpec(
         key="sdl_view_state_shadow_buffer_symbols",
@@ -254,7 +254,7 @@ TERMINAL_KERNEL_METRICS = (
             r"|(?:state->(?:wid|hgt|x1|x2|old|scr))"
         ),
         include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
-        notes="Tracks terminal-sized dimensions, dirty spans, and shadow buffers that still back SDL view compatibility rendering.",
+        notes="Tracks reintroduction of terminal-sized dimensions, dirty spans, and shadow buffers in SDL view rendering.",
     ),
     MetricSpec(
         key="sdl_buffer_replay_redraw_symbols",
@@ -264,14 +264,14 @@ TERMINAL_KERNEL_METRICS = (
             r"|state->scr->"
         ),
         include_paths=("src/sdl-render.c",),
-        notes="Tracks redraw paths that still replay compatibility row/cell buffers instead of consuming direct render state.",
+        notes="Tracks reintroduction of redraw paths that replay compatibility row or cell buffers instead of semantic render state.",
     ),
     MetricSpec(
         key="mini_screenshot_mirror_symbols",
         label="mini screenshot mirror symbols",
         pattern=re.compile(r"\bmini_screenshot_(?:char|attr)\b"),
         include_paths=("src/files.c",),
-        notes="Tracks char/attr screenshot mirrors that should be replaced by semantic export data.",
+        notes="Tracks reintroduction of char or attr screenshot mirrors in export code.",
     ),
 )
 
@@ -296,14 +296,14 @@ AUDITS = (
         label="Terminal-model debt audit",
         scope=TERMINAL_MODEL_SCOPE,
         metrics=TERMINAL_MODEL_METRICS,
-        notes="Expanded guardrail for the remaining terminal-era UI ownership that still survives on the SDL path after the movement rewrite.",
+        notes="Zero-debt guardrail against reintroducing public terminal-model UI ownership on the SDL path.",
     ),
     AuditSpec(
         key="terminal_kernel",
         label="Terminal-kernel debt audit",
         scope=TERMINAL_KERNEL_SCOPE,
         metrics=TERMINAL_KERNEL_METRICS,
-        notes="Slice-6A guardrail for the internal SDL terminal kernel and export-mirror compatibility state that still survives after the public term-host surface was removed.",
+        notes="Zero-debt guardrail against reintroducing the internal SDL terminal kernel or export-mirror compatibility state.",
     ),
 )
 AUDITS_BY_KEY = {audit.key: audit for audit in AUDITS}

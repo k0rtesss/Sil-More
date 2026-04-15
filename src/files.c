@@ -6,7 +6,7 @@
  * Remaining ownership here:
  *   - privilege helpers still used broadly across save/load/score code
  *   - escape/suicide commands
- *   - character dump and miniature screenshot helpers
+ *   - character dump helpers
  */
 
 #ifndef WINDOWS
@@ -15,7 +15,6 @@
 #endif
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
 #include "fs/io_sdl.h"
@@ -23,7 +22,6 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"
-#include "reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_logic.h"
 #include "scorefile.h"
@@ -46,10 +44,6 @@
 #include <unistd.h>    /* For setregid, getgid, etc. */
 #include <signal.h>    /* For kill, SIGSTOP */
 #endif
-
-/* Mini screenshot buffers (local to this module) */
-static char mini_screenshot_char[7][7];
-static byte mini_screenshot_attr[7][7];
 
 void safe_setuid_drop(void)
 {
@@ -417,7 +411,7 @@ static bool file_character_write_semantic_sheet(SDL_IOStream* fff)
 
 errr file_character(cptr name, bool full)
 {
-    int i, x, y;
+    int i;
     SDL_IOStream* fd;
     SDL_IOStream* fff = NULL;
     char o_name[80];
@@ -463,29 +457,6 @@ errr file_character(cptr name, bool full)
         SDL_IOprintf(fff, "\n  [Last Messages]\n\n");
         while (i-- > 0)
             SDL_IOprintf(fff, "> %s\n", message_str((s16b)i));
-        SDL_IOprintf(fff, "\n");
-
-        SDL_IOprintf(fff, "\n  [Screenshot]\n\n");
-        if (!p_ptr->escaped)
-        {
-            for (y = 0; y <= 6; y++)
-            {
-                SDL_IOprintf(fff, "  ");
-                for (x = 0; x <= 6; x++)
-                    SDL_IOprintf(fff, "%c", mini_screenshot_char[y][x]);
-                SDL_IOprintf(fff, "\n");
-            }
-        }
-        else
-        {
-            SDL_IOprintf(fff, "  .......\n");
-            SDL_IOprintf(fff, "  ~...#..\n");
-            SDL_IOprintf(fff, "  ~~.....\n");
-            SDL_IOprintf(fff, "  .~.@...\n");
-            SDL_IOprintf(fff, "  .~~...#\n");
-            SDL_IOprintf(fff, "  ..~~...\n");
-            SDL_IOprintf(fff, "  ...~...\n");
-        }
         SDL_IOprintf(fff, "\n");
     }
 
@@ -648,77 +619,4 @@ errr file_character(cptr name, bool full)
     sdl_fclose(fff);
 
     return 0;
-}
-
-static void mini_screenshot_clear_buffers(void)
-{
-    int x, y;
-
-    for (y = 0; y <= 6; y++)
-    {
-        for (x = 0; x <= 6; x++)
-        {
-            mini_screenshot_char[y][x] = ' ';
-            mini_screenshot_attr[y][x] = TERM_DARK;
-        }
-    }
-}
-
-static bool mini_screenshot_from_snapshot(const app_dungeon_snapshot* snapshot)
-{
-    const app_map_snapshot* map;
-    int player_y;
-    int player_x;
-    int sample_y;
-    int sample_x;
-    int x, y;
-
-    if (!snapshot || !snapshot->map_data)
-        return false;
-
-    map = (const app_map_snapshot*)snapshot->map_data;
-    if (!map->width || !map->height)
-        return false;
-
-    player_y = map->player_y - map->panel_y;
-    player_x = map->player_x - map->panel_x;
-    if (player_y < 0 || player_y >= map->height || player_x < 0
-        || player_x >= map->width)
-    {
-        return false;
-    }
-
-    mini_screenshot_clear_buffers();
-
-    for (y = 0; y <= 6; y++)
-    {
-        for (x = 0; x <= 6; x++)
-        {
-            if (reliability_sample_square_point(player_y, player_x, 3, y, x,
-                    map->height, map->width, &sample_y, &sample_x))
-            {
-                size_t index = ((size_t)sample_y * map->width) + (size_t)sample_x;
-                const app_map_cell_snapshot* cell = &map->cells[index];
-
-                mini_screenshot_char[y][x] = cell->ch ? cell->ch : ' ';
-                mini_screenshot_attr[y][x] = cell->attr;
-            }
-        }
-    }
-
-    return true;
-}
-
-void mini_screenshot(void)
-{
-    app_session* session = app_session_current();
-    const app_dungeon_snapshot* snapshot = NULL;
-
-    mini_screenshot_clear_buffers();
-
-    if (session && app_session_build_dungeon_snapshot(session, 0, 0, 0))
-        snapshot = app_session_dungeon_snapshot(session);
-
-    if (!mini_screenshot_from_snapshot(snapshot))
-        log_warn("mini_screenshot: dungeon snapshot unavailable");
 }

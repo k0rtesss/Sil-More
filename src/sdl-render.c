@@ -1,34 +1,10 @@
 #include "angband.h"
 #include "sdl-main-internal.h"
+#include "ui/ui-status.h"
 
 sdl_state g_state;
 sdl_view g_views[MAX_TERM_DATA];
 static int g_active_view_index = 0;
-
-static void sdl_view_buffer_init(sdl_view_buffer* buffer, int w, int h)
-{
-    int y;
-
-    buffer->a = mem_alloc_array(h, byte*);
-    buffer->c = mem_alloc_array(h, char*);
-    buffer->va = mem_alloc_array(h * w, byte);
-    buffer->vc = mem_alloc_array(h * w, char);
-    buffer->ta = mem_alloc_array(h, byte*);
-    buffer->tc = mem_alloc_array(h, char*);
-    buffer->vta = mem_alloc_array(h * w, byte);
-    buffer->vtc = mem_alloc_array(h * w, char);
-    buffer->story = mem_alloc_array(h, byte*);
-    buffer->vstory = mem_alloc_array(h * w, byte);
-
-    for (y = 0; y < h; y++)
-    {
-        buffer->a[y] = buffer->va + (w * y);
-        buffer->c[y] = buffer->vc + (w * y);
-        buffer->ta[y] = buffer->vta + (w * y);
-        buffer->tc[y] = buffer->vtc + (w * y);
-        buffer->story[y] = buffer->vstory + (w * y);
-    }
-}
 
 static void sdl_apply_mono_font_settings(TTF_Font* font)
 {
@@ -51,85 +27,10 @@ static void sdl_apply_mono_font_settings(TTF_Font* font)
         TTF_SetFontOutline(font, config.mono_outline);
 }
 
-static void draw_cursor(int x, int y, bool big);
-static errr callback_sdl_curs(int x, int y);
-static errr callback_sdl_bigcurs(int x, int y);
-static errr callback_sdl_wipe(int x, int y, int n);
-static errr callback_sdl_text(int x, int y, int n, byte a, cptr s);
-static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
-    const byte* tap, const char* tcp);
-static void callback_sdl_nuke(sdl_view_state* state);
-static void callback_sdl_init(sdl_view_state* state);
-static errr callback_sdl_xtra(int n, int v);
 static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int* actual_font_size);
-static void sdl_view_state_storage_dispose(sdl_view_state* state);
-static sdl_view* sdl_active_view(void);
-static sdl_view_state* sdl_active_view_state(void);
-static void sdl_view_redraw(sdl_view* view);
-
-static errr sdl_view_state_destroy(sdl_view_state* state)
-{
-    if (!state)
-        return -1;
-
-    if (state->active_flag)
-    {
-        if (state->nuke_hook)
-            (*state->nuke_hook)(state);
-
-        state->active_flag = false;
-        state->mapped_flag = false;
-    }
-
-    sdl_view_state_storage_dispose(state);
-    return 0;
-}
-
-static errr sdl_view_state_init(sdl_view_state* state, int w, int h, int k)
-{
-    int y;
-
-    if (!state || w < 1 || h < 1 || k < 1)
-        return -1;
-
-    memset(state, 0, sizeof(*state));
-    state->key_size = (u16b)k;
-    state->key_queue = mem_alloc_array((size_t)state->key_size, char);
-    state->wid = (byte)w;
-    state->hgt = (byte)h;
-    state->x1 = mem_alloc_array(h, byte);
-    state->x2 = mem_alloc_array(h, byte);
-    state->old = mem_alloc(sdl_view_buffer);
-    state->scr = mem_alloc(sdl_view_buffer);
-    sdl_view_buffer_init(state->old, w, h);
-    sdl_view_buffer_init(state->scr, w, h);
-
-    for (y = 0; y < h; y++)
-    {
-        state->x1[y] = 0;
-        state->x2[y] = (byte)(w - 1);
-    }
-
-    state->y1 = 0;
-    state->y2 = (byte)(h - 1);
-    state->total_erase = true;
-    state->attr_blank = 0;
-    state->char_blank = ' ';
-    return 0;
-}
-
-static bool sdl_legacy_input_pending(void)
-{
-    app_session* session = app_session_current();
-
-    if (!session)
-        return false;
-
-    if (!app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT))
-        return false;
-
-    return app_session_pending_input_count(session) > 0;
-}
+static void sdl_view_clear_canvas(sdl_view* view);
+static void sdl_clear_supporting_view_canvases(void);
+static u32b sdl_visible_window_mask(void);
 
 int sdl_active_view_index(void)
 {
@@ -138,45 +39,23 @@ int sdl_active_view_index(void)
 
 void sdl_set_active_view_index(int view_index)
 {
-    sdl_view_state* state;
-
     if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return;
     if (!g_views[view_index].ready)
         return;
 
-    state = &g_views[view_index].state;
-    if (!state->active_flag)
-    {
-        if (state->init_hook)
-            (*state->init_hook)(state);
-        state->active_flag = true;
-    }
-
-    state->mapped_flag = true;
     g_active_view_index = view_index;
 }
 
-static sdl_view_state* sdl_active_view_state(void)
+static void sdl_view_clear_canvas(sdl_view* view)
 {
-    if (g_active_view_index < 0 || g_active_view_index >= MAX_TERM_DATA)
-        return NULL;
-    if (!g_views[g_active_view_index].ready)
-        return NULL;
+    if (!view || !view->canvas)
+        return;
 
-    return &g_views[g_active_view_index].state;
-}
-
-static sdl_view* sdl_active_view(void)
-{
-    int view_index = sdl_active_view_index();
-
-    if (view_index < 0 || view_index >= MAX_TERM_DATA)
-        return NULL;
-    if (!g_views[view_index].ready)
-        return NULL;
-
-    return &g_views[view_index];
+    SDL_SetRenderTarget(g_state.renderer, view->canvas);
+    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+    SDL_RenderClear(g_state.renderer);
+    g_state.need_present = true;
 }
 
 void sdl_sync_palette(void)
@@ -193,8 +72,6 @@ void sdl_view_destroy(sdl_view* d)
 {
     if (!d)
         return;
-
-    (void)sdl_view_state_destroy(&d->state);
 
     if (d->canvas) {
         SDL_DestroyTexture(d->canvas);
@@ -308,9 +185,7 @@ void sdl_handle_renderer_reset(void)
         if (view->canvas) {
             SDL_SetTextureBlendMode(view->canvas, SDL_BLENDMODE_NONE);
             SDL_SetTextureScaleMode(view->canvas, SDL_SCALEMODE_NEAREST);
-            SDL_SetRenderTarget(g_state.renderer, view->canvas);
-            SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-            SDL_RenderClear(g_state.renderer);
+            sdl_view_clear_canvas(view);
         } else {
             log_error("Failed to recreate canvas for view %d: %s", i, SDL_GetError());
         }
@@ -334,184 +209,6 @@ void sdl_handle_renderer_reset(void)
     sdl_scene_stack_on_renderer_reset();
     g_state.need_present = true;
     sdl_redraw_all_views();
-}
-
-static errr callback_sdl_xtra(int n, int v)
-{
-    sdl_view* d = sdl_active_view();
-
-    switch (n) {
-    case TERM_XTRA_EVENT: {
-        SDL_Event ev;
-        if (v) {
-            bool legacy_pending = sdl_legacy_input_pending();
-
-            sdl_music_update();
-            if (legacy_pending) {
-                while (SDL_PollEvent(&ev))
-                    sdl_handle_event(&g_state, &ev);
-            } else {
-                Uint64 now_ns = SDL_GetTicksNS();
-                int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
-                int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
-                int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(now_ns);
-                if (timeout_ms < 0 || (touch_timeout_ms >= 0 && touch_timeout_ms < timeout_ms))
-                    timeout_ms = touch_timeout_ms;
-                if (timeout_ms < 0 || (scene_timeout_ms >= 0 && scene_timeout_ms < timeout_ms))
-                    timeout_ms = scene_timeout_ms;
-                if (timeout_ms >= 0) {
-                    if (SDL_WaitEventTimeout(&ev, timeout_ms))
-                        sdl_handle_event(&g_state, &ev);
-                } else {
-                    if (SDL_WaitEvent(&ev))
-                        sdl_handle_event(&g_state, &ev);
-                }
-            }
-            Uint64 flush_ns = SDL_GetTicksNS();
-            int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(flush_ns);
-            sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
-            sdl_gamepad_flush_pending_shoulder(flush_ns, false);
-            sdl_touch_pane_flush_pending_press(flush_ns);
-            sdl_drain_legacy_input_queue();
-            sdl_music_update();
-
-            if (scene_timeout_ms == 0)
-                g_state.need_present = true;
-        } else {
-            bool handled = false;
-            sdl_music_update();
-            while (SDL_PollEvent(&ev)) {
-                handled = true;
-                sdl_handle_event(&g_state, &ev);
-            }
-            Uint64 flush_ns = SDL_GetTicksNS();
-            int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(flush_ns);
-            sdl_gamepad_flush_pending_dpad(flush_ns, false);
-            sdl_gamepad_flush_pending_left_stick(flush_ns, false);
-            sdl_gamepad_flush_pending_shoulder(flush_ns, false);
-            sdl_touch_pane_flush_pending_press(flush_ns);
-            sdl_drain_legacy_input_queue();
-
-            if (!handled && !sdl_legacy_input_pending() && scene_timeout_ms != 0)
-                SDL_Delay(1);
-
-            if (scene_timeout_ms == 0)
-                g_state.need_present = true;
-        }
-        sdl_present_if_needed(d);
-        return 0;
-    }
-
-    case TERM_XTRA_FLUSH: {
-        SDL_Event ev;
-        while (SDL_PollEvent(&ev))
-            sdl_handle_event(&g_state, &ev);
-        sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
-        sdl_clear_legacy_input_queue();
-        sdl_present_if_needed(d);
-        return 0;
-    }
-
-    case TERM_XTRA_CLEAR:
-        if (!d || !d->canvas)
-            return 0;
-        SDL_SetRenderTarget(g_state.renderer, d->canvas);
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-        SDL_RenderClear(g_state.renderer);
-        g_state.need_present = true;
-        return 0;
-
-    case TERM_XTRA_FRESH:
-        sdl_present_if_needed(d);
-        return 0;
-
-    case TERM_XTRA_DELAY: {
-        Uint32 total_delay = (Uint32)v;
-        Uint32 chunk = 20;
-
-        while (total_delay > 0) {
-            Uint32 this_delay = (total_delay < chunk) ? total_delay : chunk;
-            SDL_Delay(this_delay);
-            total_delay -= this_delay;
-
-            sdl_music_update();
-
-            SDL_Event ev;
-            while (SDL_PollEvent(&ev))
-                sdl_handle_event(&g_state, &ev);
-            sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
-            sdl_drain_legacy_input_queue();
-            sdl_present_if_needed(d);
-        }
-        return 0;
-    }
-
-    case TERM_XTRA_REACT:
-        log_debug("TERM_XTRA_REACT received (tiles_mode=%d use_graphics=%d arg_graphics=%d)",
-            g_state.use_tiles, use_graphics, runtime_cli_graphics_mode());
-        sdl_sync_palette();
-        reset_visuals(true);
-        return 0;
-
-    default:
-        return 0;
-    }
-}
-
-static void draw_cursor(int x, int y, bool big)
-{
-    sdl_view_state* state = sdl_active_view_state();
-    sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !state)
-        return;
-    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
-        return;
-
-    SDL_SetRenderTarget(g_state.renderer, d->canvas);
-    SDL_Rect clip = { x * d->cell_w, y * d->cell_h, d->cell_w * (big + 1), d->cell_h };
-    SDL_SetRenderClipRect(g_state.renderer, &clip);
-    SDL_FRect r = { x * d->cell_w, y * d->cell_h, d->cell_w * (big + 1), d->cell_h };
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 255, 255, 255);
-    SDL_RenderRect(g_state.renderer, &r);
-    SDL_SetRenderClipRect(g_state.renderer, NULL);
-    g_state.need_present = true;
-}
-
-static errr callback_sdl_curs(int x, int y)
-{
-    draw_cursor(x, y, false);
-    return 0;
-}
-
-static errr callback_sdl_bigcurs(int x, int y)
-{
-    draw_cursor(x, y, true);
-    return 0;
-}
-
-static errr callback_sdl_wipe(int x, int y, int n)
-{
-    sdl_view_state* state = sdl_active_view_state();
-    sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !state || n <= 0)
-        return 0;
-    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
-        return 0;
-    if (x + n > state->wid)
-        n = state->wid - x;
-    if (n <= 0)
-        return 0;
-
-    SDL_SetRenderTarget(g_state.renderer, d->canvas);
-    SDL_Rect clip = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
-    SDL_SetRenderClipRect(g_state.renderer, &clip);
-    SDL_FRect r = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-    SDL_RenderFillRect(g_state.renderer, &r);
-    SDL_SetRenderClipRect(g_state.renderer, NULL);
-    g_state.need_present = true;
-    return 0;
 }
 
 void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col)
@@ -544,491 +241,82 @@ void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_C
     }
 }
 
-static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
+static void sdl_clear_supporting_view_canvases(void)
 {
-    sdl_view_state* state = sdl_active_view_state();
-    sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !state || !s || n <= 0)
-        return 0;
-    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
-        return 0;
-    if (x + n > state->wid)
-        n = state->wid - x;
-    if (n <= 0)
-        return 0;
-
-    SDL_SetRenderTarget(g_state.renderer, d->canvas);
-
-    TTF_Font* story_font = sdl_story_font_for_view(d);
-    bool story_mode = false;
-
-    if (state && state->scr && story_font) {
-        if (y >= 0 && y < state->hgt && state->scr->story
-            && state->scr->story[y])
-        {
-            for (int i = 0; i < n && (x + i) < state->wid; i++) {
-                if (state->scr->story[y][x + i]) {
-                    story_mode = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!story_mode) {
-        SDL_Rect clip = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
-        SDL_SetRenderClipRect(g_state.renderer, &clip);
-        SDL_FRect bg = {
-            (float)(x * d->cell_w),
-            (float)(y * d->cell_h),
-            (float)(n * d->cell_w),
-            (float)(d->cell_h)
-        };
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-        SDL_RenderFillRect(g_state.renderer, &bg);
-        SDL_SetRenderClipRect(g_state.renderer, NULL);
-    } else {
-        SDL_SetRenderClipRect(g_state.renderer, NULL);
-    }
-
-    SDL_Color col = {
-        angband_color_table[a][1],
-        angband_color_table[a][2],
-        angband_color_table[a][3],
-        255
-    };
-
-    byte* story_row = NULL;
-    char* row_chars = NULL;
-    byte* row_attr = NULL;
-    if (state && state->scr && y >= 0 && y < state->hgt) {
-        if (state->scr->story)
-            story_row = state->scr->story[y];
-        if (state->scr->c)
-            row_chars = state->scr->c[y];
-        if (state->scr->a)
-            row_attr = state->scr->a[y];
-    }
-
-    if (story_mode) {
-        if (story_row) {
-            if (row_chars && row_attr) {
-                sdl_render_story_row_packed(d, story_font, y, story_row, row_chars, row_attr);
-                g_state.need_present = true;
-                return 0;
-            }
-
-            int offset = 0;
-            while (offset < n && (x + offset) < state->wid) {
-                int term_col = x + offset;
-                byte flags = story_row[term_col];
-                bool use_story = (flags & STORY_FLAG_USE) != 0;
-                bool grid_align = (flags & STORY_FLAG_CELL_ALIGN) != 0;
-
-                int chunk_remaining = n - offset;
-                int chunk_run = 1;
-                while ((chunk_run < chunk_remaining)
-                    && (term_col + chunk_run) < state->wid) {
-                    byte next_flags = story_row[term_col + chunk_run];
-                    bool next_story = (next_flags & STORY_FLAG_USE) != 0;
-                    bool next_grid = (next_flags & STORY_FLAG_CELL_ALIGN) != 0;
-                    if (next_story != use_story || next_grid != grid_align)
-                        break;
-                    if (row_attr && row_attr[term_col + chunk_run] != a)
-                        break;
-                    chunk_run++;
-                }
-
-                bool can_extend_story = use_story && row_chars;
-                int render_col = term_col;
-                int render_end = term_col + chunk_run;
-
-                if (can_extend_story) {
-                    while (render_col > 0) {
-                        byte prev_flags = story_row[render_col - 1];
-                        bool prev_story = (prev_flags & STORY_FLAG_USE) != 0;
-                        bool prev_grid = (prev_flags & STORY_FLAG_CELL_ALIGN) != 0;
-                        if (!prev_story || prev_grid != grid_align)
-                            break;
-                        if (row_attr && row_attr[render_col - 1] != a)
-                            break;
-                        render_col--;
-                    }
-                    while (render_end < state->wid) {
-                        byte next_flags = story_row[render_end];
-                        bool next_story = (next_flags & STORY_FLAG_USE) != 0;
-                        bool next_grid = (next_flags & STORY_FLAG_CELL_ALIGN) != 0;
-                        if (!next_story || next_grid != grid_align)
-                            break;
-                        if (row_attr && row_attr[render_end] != a)
-                            break;
-                        render_end++;
-                    }
-                }
-
-                int render_run = render_end - render_col;
-                const char* render_text = (can_extend_story && row_chars) ? (row_chars + render_col) : (s + offset);
-
-                SDL_FRect clear_rect = {
-                    (float)(render_col * d->cell_w),
-                    (float)(y * d->cell_h),
-                    (float)(render_run * d->cell_w),
-                    (float)d->cell_h
-                };
-                SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-                SDL_RenderFillRect(g_state.renderer, &clear_rect);
-
-                if (use_story) {
-                    if (grid_align)
-                        sdl_render_story_text_cell_aligned(d, story_font,
-                            render_col, y, render_run, render_text, col);
-                    else
-                        sdl_render_story_text_free(d, story_font, render_col, y, render_run, render_text, col);
-                } else {
-                    sdl_render_mono_text(d, render_col, y, render_run, render_text, col);
-                }
-
-                offset += chunk_run;
-            }
-        } else {
-            SDL_FRect clear_rect = {
-                (float)(x * d->cell_w),
-                (float)(y * d->cell_h),
-                (float)(n * d->cell_w),
-                (float)d->cell_h
-            };
-            SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-            SDL_RenderFillRect(g_state.renderer, &clear_rect);
-            sdl_render_story_text_free(d, story_font, x, y, n, s, col);
-        }
-    } else {
-        sdl_render_mono_text(d, x, y, n, s, col);
-    }
-
-    g_state.need_present = true;
-    return 0;
-}
-
-static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
-    const byte* tap, const char* tcp)
-{
-    sdl_view_state* state = sdl_active_view_state();
-    sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !state || !ap || !cp || !tap || !tcp || n <= 0)
-        return 0;
-    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
-        return 0;
-    if (x + n > state->wid)
-        n = state->wid - x;
-    if (n <= 0)
-        return 0;
-
-    SDL_SetRenderTarget(g_state.renderer, d->canvas);
-    SDL_SetRenderClipRect(g_state.renderer, &(SDL_Rect){
-        x * d->cell_w,
-        y * d->cell_h,
-        n * d->cell_w * (use_bigtile + 1),
-        d->cell_h,
-    });
-
-    SDL_FRect src = { .w = TILE_SIZE, .h = TILE_SIZE };
-    SDL_FRect dst = {
-        x * d->cell_w,
-        y * d->cell_h,
-        d->cell_w * (use_bigtile + 1),
-        d->cell_h,
-    };
-
-    for (int i = 0; i < n; ++i, dst.x += dst.w) {
-        byte a = ap[i];
-        char c = cp[i];
-        bool glow = a & GRAPHICS_GLOW_MASK;
-        bool alert = c & GRAPHICS_ALERT_MASK;
-        bool seen = tcp[i] & GRAPHICS_SEEN_MASK;
-        bool sleep = tap[i] & GRAPHICS_SLEEP_MASK;
-
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-        SDL_RenderFillRect(g_state.renderer, &dst);
-
-        src.x = (tcp[i] & 0x3F) * TILE_SIZE;
-        src.y = (tap[i] & 0x3F) * TILE_SIZE;
-        SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-
-        if (platform_frame_active_view_is_main()) {
-            int term_x = x + (i * (use_bigtile + 1));
-            if (y >= ROW_MAP && term_x >= COL_MAP) {
-                int map_y = y - ROW_MAP;
-                int map_x = term_x - COL_MAP;
-                if (use_bigtile)
-                    map_x /= 2;
-
-                int dy = p_ptr->wy + map_y;
-                int dx = p_ptr->wx + map_x;
-
-                if ((dy >= 0) && (dx >= 0) && (dy < p_ptr->cur_map_hgt)
-                    && (dx < p_ptr->cur_map_wid)) {
-                    u16b info = cave_info[dy][dx];
-                    bool hide_square = (!p_ptr->is_dead)
-                        && (p_ptr->rage || g_labyrinth_view_active)
-                        && !(info & (CAVE_SEEN));
-
-                    if (!hide_square) {
-                        s16b m_idx = cave_m_idx[dy][dx];
-                        bool creature_visible = (m_idx < 0)
-                            || ((m_idx > 0) && mon_list[m_idx].ml);
-
-                        if (creature_visible && (info & (CAVE_MARK))) {
-                            byte feat = cave_feat[dy][dx];
-                            feat = f_info[feat].mimic;
-                            if (((feat >= FEAT_TRAP_HEAD) && (feat <= FEAT_TRAP_TAIL))
-                                || ((feat >= FEAT_STAIR_HEAD) && (feat <= FEAT_STAIR_TAIL))
-                                || ((feat >= FEAT_FORGE_HEAD) && (feat <= FEAT_FORGE_TAIL))
-                                || (feat == FEAT_SUNLIGHT)) {
-                                feature_type* f_ptr = &f_info[feat];
-                                byte feat_a = f_ptr->x_attr;
-                                char feat_c = f_ptr->x_char;
-
-                                if ((use_graphics == GRAPHICS_MICROCHASM)
-                                    && feat_supports_lighting(feat)) {
-                                    bool is_dark = p_ptr->blind
-                                        || ((cave_light[dy][dx] <= 0) && !(info & (CAVE_GLOW)));
-                                    if (is_dark || !(info & (CAVE_SEEN)))
-                                        feat_c += 1;
-                                }
-
-                                src.x = ((byte)feat_c & 0x3F) * TILE_SIZE;
-                                src.y = (feat_a & 0x3F) * TILE_SIZE;
-                                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (glow) {
-            byte icon_a = misc_to_attr[ICON_GLOW];
-            byte icon_c = (byte)misc_to_char[ICON_GLOW];
-            if ((icon_a & TILE_FLAG) && (icon_c & TILE_FLAG)) {
-                src.x = (icon_c & 0x7F) * TILE_SIZE;
-                src.y = (icon_a & 0x7F) * TILE_SIZE;
-                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-            }
-        }
-
-        src.x = (c & 0x3F) * TILE_SIZE;
-        src.y = (a & 0x3F) * TILE_SIZE;
-        SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-
-        if (sleep) {
-            byte icon_a = misc_to_attr[ICON_SLEEPING];
-            byte icon_c = (byte)misc_to_char[ICON_SLEEPING];
-            if ((icon_a & TILE_FLAG) && (icon_c & TILE_FLAG)) {
-                src.x = (icon_c & 0x7F) * TILE_SIZE;
-                src.y = (icon_a & 0x7F) * TILE_SIZE;
-                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-            }
-        }
-
-        if (seen) {
-            byte icon_a = misc_to_attr[ICON_MONSTER_SEES_PLAYER];
-            byte icon_c = (byte)misc_to_char[ICON_MONSTER_SEES_PLAYER];
-            if ((icon_a & TILE_FLAG) && (icon_c & TILE_FLAG)) {
-                src.x = (icon_c & 0x7F) * TILE_SIZE;
-                src.y = (icon_a & 0x7F) * TILE_SIZE;
-                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-            }
-        }
-
-        if (alert) {
-            byte icon_a = misc_to_attr[ICON_ALERT];
-            byte icon_c = (byte)misc_to_char[ICON_ALERT];
-            if ((icon_a & TILE_FLAG) && (icon_c & TILE_FLAG)) {
-                src.x = (icon_c & 0x7F) * TILE_SIZE;
-                src.y = (icon_a & 0x7F) * TILE_SIZE;
-                SDL_RenderTexture(g_state.renderer, g_state.tileset, &src, &dst);
-            }
-        }
-    }
-
-    SDL_SetRenderClipRect(g_state.renderer, NULL);
-    g_state.need_present = true;
-    return 0;
-}
-
-static void callback_sdl_nuke(sdl_view_state* state)
-{
-    (void)state;
-}
-
-static void callback_sdl_init(sdl_view_state* state)
-{
-    (void)state;
-}
-
-static void sdl_view_buffer_dispose(sdl_view_buffer* buffer)
-{
-    if (!buffer)
-        return;
-
-    mem_free_null(buffer->a);
-    mem_free_null(buffer->c);
-    mem_free_null(buffer->va);
-    mem_free_null(buffer->vc);
-    mem_free_null(buffer->ta);
-    mem_free_null(buffer->tc);
-    mem_free_null(buffer->vta);
-    mem_free_null(buffer->vtc);
-    mem_free_null(buffer->story);
-    mem_free_null(buffer->vstory);
-}
-
-static void sdl_view_state_storage_dispose(sdl_view_state* state)
-{
-    if (!state)
-        return;
-
-    if (state->old)
-    {
-        sdl_view_buffer_dispose(state->old);
-        mem_free_null(state->old);
-    }
-    if (state->scr)
-    {
-        sdl_view_buffer_dispose(state->scr);
-        mem_free_null(state->scr);
-    }
-    if (state->mem)
-    {
-        sdl_view_buffer_dispose(state->mem);
-        mem_free_null(state->mem);
-    }
-    if (state->tmp)
-    {
-        sdl_view_buffer_dispose(state->tmp);
-        mem_free_null(state->tmp);
-    }
-
-    mem_free_null(state->x1);
-    mem_free_null(state->x2);
-    mem_free_null(state->key_queue);
-}
-
-static void sdl_view_copy_buffer(sdl_view_buffer* dst,
-    const sdl_view_buffer* src, int w, int h)
-{
-    int y;
-
-    if (!dst || !src)
-        return;
-
-    for (y = 0; y < h; y++)
-    {
-        memcpy(dst->a[y], src->a[y], (size_t)w * sizeof(byte));
-        memcpy(dst->c[y], src->c[y], (size_t)w * sizeof(char));
-        memcpy(dst->ta[y], src->ta[y], (size_t)w * sizeof(byte));
-        memcpy(dst->tc[y], src->tc[y], (size_t)w * sizeof(char));
-        memcpy(dst->story[y], src->story[y], (size_t)w * sizeof(byte));
-    }
-
-    dst->cx = src->cx;
-    dst->cy = src->cy;
-    dst->cu = src->cu;
-    dst->cv = src->cv;
-}
-
-static void sdl_view_clear_dirty(sdl_view_state* state)
-{
-    int y;
-
-    if (!state || !state->x1 || !state->x2)
-        return;
-
-    state->total_erase = false;
-    state->y1 = state->hgt;
-    state->y2 = 0;
-    for (y = 0; y < state->hgt; y++)
-    {
-        state->x1[y] = state->wid;
-        state->x2[y] = 0;
-    }
-}
-
-static void sdl_view_redraw_text_row(sdl_view_state* state, int y)
-{
-    int x = 0;
-
-    while (x < state->wid)
-    {
-        byte attr = state->scr->a[y][x];
-        int run = 1;
-
-        while ((x + run) < state->wid && state->scr->a[y][x + run] == attr)
-            run++;
-
-        (void)callback_sdl_text(x, y, run, attr, state->scr->c[y] + x);
-        x += run;
-    }
-}
-
-static void sdl_view_redraw(sdl_view* view)
-{
-    int previous_index = sdl_active_view_index();
-    int view_index;
-    int y;
-    sdl_view_state* state;
-
-    if (!view)
-        return;
-    view_index = (int)(view - g_views);
-    if (view_index < 0 || view_index >= MAX_TERM_DATA)
-        return;
-
-    state = &view->state;
-    if (!state->scr || !state->old)
-        return;
-
-    sdl_set_active_view_index(view_index);
-
-    if (state->xtra_hook)
-        (void)(*state->xtra_hook)(TERM_XTRA_CLEAR, 0);
-
-    for (y = 0; y < state->hgt; y++)
-    {
-        if (state->higher_pict && g_state.use_tiles && g_state.tileset)
-        {
-            (void)callback_sdl_pict(0, y, state->wid, state->scr->a[y],
-                state->scr->c[y], state->scr->ta[y], state->scr->tc[y]);
-        }
-        else
-        {
-            sdl_view_redraw_text_row(state, y);
-        }
-    }
-
-    if (state->soft_cursor && !state->scr->cu && state->scr->cv)
-        (void)callback_sdl_curs(state->scr->cx, state->scr->cy);
-
-    sdl_view_copy_buffer(state->old, state->scr, state->wid, state->hgt);
-    sdl_view_clear_dirty(state);
-    if (previous_index >= 0 && previous_index < MAX_TERM_DATA
-        && g_views[previous_index].ready)
-    {
-        sdl_set_active_view_index(previous_index);
-    }
-}
-
-void sdl_redraw_all_views(void)
-{
-    int i;
-
-    for (i = 0; i < MAX_TERM_DATA; i++)
+    for (int i = 1; i < MAX_TERM_DATA; i++)
     {
         if (!g_views[i].ready)
             continue;
 
-        sdl_view_redraw(&g_views[i]);
+        sdl_view_clear_canvas(&g_views[i]);
     }
+}
+
+static u32b sdl_visible_window_mask(void)
+{
+    u32b mask = 0L;
+
+    if (!op_ptr)
+        return 0L;
+
+    for (int i = 0; i < MAX_TERM_DATA; i++)
+    {
+        if (!g_views[i].ready)
+            continue;
+
+        mask |= op_ptr->window_flag[i];
+    }
+
+    return mask;
+}
+
+void sdl_redraw_all_views(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot = session ? app_session_snapshot(session) : NULL;
+
+    if (!snapshot || snapshot->scene == APP_SCENE_KIND_NONE)
+    {
+        for (int i = 0; i < MAX_TERM_DATA; i++)
+        {
+            if (!g_views[i].ready)
+                continue;
+
+            sdl_view_clear_canvas(&g_views[i]);
+        }
+        sdl_present_if_needed(NULL);
+        return;
+    }
+
+    if (snapshot->scene == APP_SCENE_KIND_DUNGEON && p_ptr)
+    {
+        u32b update_mask = p_ptr->update;
+        u32b redraw_mask = p_ptr->redraw;
+        u32b window_mask = sdl_visible_window_mask() | p_ptr->window;
+
+        if (p_ptr->update)
+            update_stuff();
+        if (p_ptr->redraw)
+            redraw_stuff();
+        if (window_mask)
+            p_ptr->window &= ~window_mask;
+
+        (void)app_session_build_dungeon_snapshot(session, update_mask,
+            redraw_mask, window_mask);
+        sdl_scene_stack_clear();
+
+        if (window_mask)
+            ui_status_refresh_window_mask(window_mask);
+        else
+            sdl_clear_supporting_view_canvases();
+
+        sdl_present_if_needed(NULL);
+        return;
+    }
+
+    sdl_scene_stack_clear();
+    sdl_clear_supporting_view_canvases();
+    sdl_present_if_needed(NULL);
 }
 
 static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int* actual_font_size)
@@ -1147,8 +435,6 @@ void sdl_window_create(int window_width, int window_height, bool fullscreen, boo
 
 void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font_size, int scale, int margin)
 {
-    int view_index;
-
     if (!d)
         return;
 
@@ -1206,35 +492,11 @@ void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
     if (d->canvas) {
         SDL_SetTextureBlendMode(d->canvas, SDL_BLENDMODE_NONE);
         SDL_SetTextureScaleMode(d->canvas, SDL_SCALEMODE_NEAREST);
-        SDL_SetRenderTarget(g_state.renderer, d->canvas);
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-        SDL_RenderClear(g_state.renderer);
-        g_state.need_present = true;
+        sdl_view_clear_canvas(d);
     } else {
         log_error("Create canvas failed: %s", SDL_GetError());
         quit("could not create canvas");
     }
 
-    view_index = (int)(d - g_views);
-    if (view_index < 0 || view_index >= MAX_TERM_DATA)
-    {
-        log_error("sdl_view_create: invalid view index %d", view_index);
-        quit("could not resolve SDL view index");
-    }
-
-    (void)sdl_view_state_init(&d->state, d->cols, d->rows, 256);
-    d->state.soft_cursor = true;
-    d->state.higher_pict = g_state.use_tiles;
-    d->state.never_frosh = true;
-    d->state.init_hook = callback_sdl_init;
-    d->state.nuke_hook = callback_sdl_nuke;
-    d->state.xtra_hook = callback_sdl_xtra;
-    d->state.curs_hook = callback_sdl_curs;
-    d->state.bigcurs_hook = callback_sdl_bigcurs;
-    d->state.wipe_hook = callback_sdl_wipe;
-    d->state.text_hook = callback_sdl_text;
-    if (g_state.use_tiles)
-        d->state.pict_hook = callback_sdl_pict;
-    d->state.data = (void*)(uintptr_t)view_index;
     d->ready = true;
 }

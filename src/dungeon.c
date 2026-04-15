@@ -5070,10 +5070,10 @@ PlayResult play_game(void)
             }
         }
 
-        /* Take a mini screenshot for dead characters */
+        /* Reveal the final state for death handling and dumps. */
         if (p_ptr->is_dead)
         {
-            log_debug("Character dead - taking screenshot and revealing map");
+            log_debug("Character dead - revealing map state");
             
             /* Stop gameplay audio; the title screen chooses its own track. */
             sdl_music_stop_main();
@@ -5091,7 +5091,6 @@ PlayResult play_game(void)
 
             do_cmd_wiz_unhide(255);
             update_view();
-            mini_screenshot();
             detect_all_doors_traps();
         }
 
