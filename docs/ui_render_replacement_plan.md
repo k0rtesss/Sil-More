@@ -25,7 +25,7 @@ render-replacement plan.
     files / 0 matches, `flush()` 14 files / 24 matches, compat text wrappers
     12 files / 142 matches, terminal-size queries 7 files / 34 matches,
     document-op cell grid 0 files / 0 matches, SDL term-host symbols 6 files
-    / 49 matches, and term-host story-font state 6 files / 48 matches
+    / 49 matches, and term-host story-font state 5 files / 47 matches
 - `tests/ui_debt_audit_baseline.json` now carries `terminal_model` alongside
   `ui0` and `movement_input`, so `ctest -R sil_ui0_audit --output-on-failure`
   can fail on regressions in the real remaining debt families.

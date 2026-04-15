@@ -13,140 +13,10 @@
 #include "ui/ui-information-scene.h"
 #include "ui/ui-story.h"
 
-typedef struct story_semantic_row {
-    bool used;
-    s16b col;
-    byte attr;
-    byte story;
-    char text[APP_UI_TEXT_MAX];
-} story_semantic_row;
-
-#define STORY_SEMANTIC_ROW_MAX 64
-
-typedef struct story_semantic_scene {
-    bool active;
-    bool failed;
-    int wid;
-    int hgt;
-    story_semantic_row rows[STORY_SEMANTIC_ROW_MAX];
-} story_semantic_scene;
-
-static story_semantic_scene g_story_semantic_scene;
-
-static void story_layout_size(int* wid, int* hgt)
-{
-    if (wid)
-        *wid = 80;
-    if (hgt)
-        *hgt = 24;
-}
-
-static byte story_current_flags(void)
-{
-    byte flags = 0;
-
-    if (sdl_is_story_font_enabled())
-        flags |= STORY_FLAG_USE;
-    if (sdl_is_story_font_grid())
-        flags |= STORY_FLAG_CELL_ALIGN;
-
-    return flags;
-}
-
-static void story_semantic_end(void)
-{
-    memset(&g_story_semantic_scene, 0, sizeof(g_story_semantic_scene));
-}
-
-static void story_semantic_clear(void)
-{
-    if (!g_story_semantic_scene.active)
-        return;
-
-    memset(g_story_semantic_scene.rows, 0, sizeof(g_story_semantic_scene.rows));
-}
-
-static void story_semantic_begin(int wid, int hgt)
-{
-    story_semantic_end();
-
-    if (wid <= 0 || hgt <= 0 || hgt > (int)N_ELEMENTS(g_story_semantic_scene.rows))
-    {
-        g_story_semantic_scene.failed = true;
-        return;
-    }
-
-    g_story_semantic_scene.active = true;
-    g_story_semantic_scene.wid = wid;
-    g_story_semantic_scene.hgt = hgt;
-}
-
-static void story_semantic_clear_row(int row)
-{
-    if (!g_story_semantic_scene.active || row < 0
-        || row >= g_story_semantic_scene.hgt
-        || row >= (int)N_ELEMENTS(g_story_semantic_scene.rows))
-    {
-        return;
-    }
-
-    memset(&g_story_semantic_scene.rows[row], 0,
-        sizeof(g_story_semantic_scene.rows[row]));
-}
-
-static void story_semantic_set_row(int row, int col, byte attr, byte story,
-    cptr text)
-{
-    story_semantic_row* semantic_row;
-
-    if (!g_story_semantic_scene.active || row < 0 || col < 0
-        || row >= g_story_semantic_scene.hgt
-        || row >= (int)N_ELEMENTS(g_story_semantic_scene.rows))
-    {
-        return;
-    }
-
-    semantic_row = &g_story_semantic_scene.rows[row];
-    memset(semantic_row, 0, sizeof(*semantic_row));
-    if (!text || !text[0])
-        return;
-
-    semantic_row->used = true;
-    semantic_row->col = (s16b)col;
-    semantic_row->attr = attr;
-    semantic_row->story = story;
-    SDL_strlcpy(semantic_row->text, text, sizeof(semantic_row->text));
-}
-
-static int story_measure_text_width(cptr text, int len, bool use_story,
-    int cell_width)
-{
-    int width;
-
-    if (!text || len <= 0)
-        return 0;
-
-    if (!use_story)
-        return len * cell_width;
-
-    width = sdl_story_font_text_width(text, len);
-    if (width <= 0)
-        width = len * cell_width;
-    return width;
-}
-
-static int story_space_width(bool use_story, int cell_width)
-{
-    int width;
-
-    if (!use_story)
-        return cell_width;
-
-    width = sdl_story_font_text_width(" ", 1);
-    if (width <= 0)
-        width = cell_width;
-    return width;
-}
+#define STORY_BROWSER_WRAP_COLS 72
+#define STORY_BROWSER_VISIBLE_LINES 18
+#define STORY_BROWSER_MIN_WIDTH 1000
+#define STORY_BROWSER_MAX_WIDTH 1800
 
 static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
 {
@@ -154,296 +24,6 @@ static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
         return count_wrapped_lines_story(text, wrap_width, indent);
 
     return count_wrapped_lines(text, wrap_width, indent);
-}
-
-static bool story_semantic_mirror_wrapped_text(cptr text, int row, int indent,
-    int wrap_width, byte attr, byte story)
-{
-    const char* s = text ? text : "";
-    bool use_story = (story & STORY_FLAG_USE) != 0;
-    int cell_width = sdl_get_cell_width();
-    int wrap_pixels;
-    int indent_pixels;
-    int current_pixels;
-    int space_pixels;
-    int current_row = row;
-    bool wrote_any = false;
-    char line[APP_UI_TEXT_MAX];
-    int line_len = 0;
-
-    if (!g_story_semantic_scene.active)
-        return true;
-
-    if (cell_width <= 0)
-        cell_width = 1;
-    if (wrap_width <= 0)
-        wrap_width = (g_story_semantic_scene.wid > 0)
-            ? g_story_semantic_scene.wid
-            : 80;
-
-    wrap_pixels = wrap_width * cell_width;
-    indent_pixels = indent * cell_width;
-    current_pixels = indent_pixels;
-    space_pixels = story_space_width(use_story, cell_width);
-    if (space_pixels <= 0)
-        space_pixels = cell_width;
-
-    while (*s)
-    {
-        if (*s == '\n')
-        {
-            line[line_len] = '\0';
-            if (line_len > 0)
-                story_semantic_set_row(current_row, indent, attr, story, line);
-            else
-                story_semantic_clear_row(current_row);
-            wrote_any = true;
-            current_row++;
-            line_len = 0;
-            current_pixels = indent_pixels;
-            s++;
-            continue;
-        }
-
-        while (*s == ' ')
-        {
-            if (line_len < (int)sizeof(line) - 1)
-                line[line_len++] = ' ';
-            current_pixels += space_pixels;
-            s++;
-
-            if (current_pixels >= wrap_pixels)
-            {
-                line[line_len] = '\0';
-                if (line_len > 0)
-                    story_semantic_set_row(current_row, indent, attr, story,
-                        line);
-                else
-                    story_semantic_clear_row(current_row);
-                wrote_any = true;
-                current_row++;
-                line_len = 0;
-                current_pixels = indent_pixels;
-            }
-        }
-
-        if (!*s)
-            break;
-        if (*s == '\n')
-            continue;
-
-        {
-            const char* word_start = s;
-            int word_chars = 0;
-            int word_pixels;
-
-            while (s[word_chars] && s[word_chars] != ' ' && s[word_chars] != '\n')
-                word_chars++;
-            if (word_chars == 0)
-                continue;
-
-            word_pixels = story_measure_text_width(word_start, word_chars,
-                use_story, cell_width);
-            if (current_pixels > indent_pixels
-                && (current_pixels + word_pixels) > wrap_pixels)
-            {
-                line[line_len] = '\0';
-                if (line_len > 0)
-                    story_semantic_set_row(current_row, indent, attr, story,
-                        line);
-                else
-                    story_semantic_clear_row(current_row);
-                wrote_any = true;
-                current_row++;
-                line_len = 0;
-                current_pixels = indent_pixels;
-            }
-
-            for (int i = 0; i < word_chars; i++)
-            {
-                if (line_len < (int)sizeof(line) - 1)
-                    line[line_len++] = word_start[i];
-            }
-
-            current_pixels += word_pixels;
-            s += word_chars;
-        }
-    }
-
-    line[line_len] = '\0';
-    if (line_len > 0 || !wrote_any)
-        story_semantic_set_row(current_row, indent, attr, story, line);
-
-    return true;
-}
-
-static bool story_scene_add_spaces(app_ui_scene* scene, app_ui_panel* panel,
-    int count)
-{
-    char spaces[APP_UI_TEXT_MAX];
-
-    if (!scene || !panel || count <= 0)
-        return true;
-
-    memset(spaces, ' ', sizeof(spaces) - 1u);
-    spaces[sizeof(spaces) - 1u] = '\0';
-
-    while (count > 0)
-    {
-        int chunk = MIN(count, (int)sizeof(spaces) - 1);
-
-        spaces[chunk] = '\0';
-        if (!app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, spaces))
-            return false;
-        spaces[chunk] = ' ';
-        count -= chunk;
-    }
-
-    return true;
-}
-
-static bool story_scene_add_semantic_row(app_ui_scene* scene,
-    app_ui_panel* panel, const story_semantic_row* semantic_row)
-{
-    if (!scene || !panel || !semantic_row || !semantic_row->used
-        || !semantic_row->text[0])
-    {
-        return true;
-    }
-
-    if (!story_scene_add_spaces(scene, panel, semantic_row->col))
-        return false;
-
-    return app_ui_panel_add_rich_text_ex(scene, panel, semantic_row->attr,
-        semantic_row->story, semantic_row->text);
-}
-
-static bool story_semantic_present(void)
-{
-    app_ui_scene scene;
-    app_ui_panel* panel;
-    bool wrote_any = false;
-
-    if (!g_story_semantic_scene.active || g_story_semantic_scene.failed)
-        return false;
-
-    app_ui_scene_init(&scene);
-    panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-    {
-        g_story_semantic_scene.failed = true;
-        return false;
-    }
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    if (!app_ui_panel_begin_rich_paragraph(&scene, panel))
-    {
-        g_story_semantic_scene.failed = true;
-        return false;
-    }
-
-    for (int row = 0; row < g_story_semantic_scene.hgt; row++)
-    {
-        story_semantic_row* semantic_row = &g_story_semantic_scene.rows[row];
-
-        if (row < g_story_semantic_scene.hgt - 1 && row > 0
-            && !app_ui_panel_add_rich_text(&scene, panel, TERM_WHITE, "\n"))
-        {
-            g_story_semantic_scene.failed = true;
-            return false;
-        }
-        if (row == g_story_semantic_scene.hgt - 1)
-        {
-            if (semantic_row->used && semantic_row->text[0])
-            {
-                char status_buf[APP_UI_TEXT_MAX];
-                int offset = 0;
-
-                memset(status_buf, 0, sizeof(status_buf));
-                while (offset < semantic_row->col
-                    && offset < (int)sizeof(status_buf) - 1)
-                {
-                    status_buf[offset++] = ' ';
-                }
-                SDL_strlcpy(status_buf + offset, semantic_row->text,
-                    sizeof(status_buf) - (size_t)offset);
-                if (!app_ui_panel_add_body_line_ex(panel, semantic_row->attr,
-                        semantic_row->story, status_buf))
-                {
-                    g_story_semantic_scene.failed = true;
-                    return false;
-                }
-            }
-            wrote_any |= semantic_row->used && semantic_row->text[0];
-            continue;
-        }
-        if (!story_scene_add_semantic_row(&scene, panel, semantic_row))
-        {
-            g_story_semantic_scene.failed = true;
-            return false;
-        }
-        wrote_any |= semantic_row->used && semantic_row->text[0];
-    }
-
-    if (!wrote_any)
-    {
-        if (!app_ui_panel_add_rich_text(&scene, panel, TERM_WHITE,
-                " "))
-        {
-            g_story_semantic_scene.failed = true;
-            return false;
-        }
-    }
-
-    if (!ui_information_scene_present_ui(&scene))
-    {
-        g_story_semantic_scene.failed = true;
-        return false;
-    }
-
-    return true;
-}
-
-static void story_clear_screen(void)
-{
-    story_semantic_clear();
-}
-
-static void story_erase_row(int col, int row, int width)
-{
-    (void)col;
-    (void)width;
-    story_semantic_clear_row(row);
-}
-
-static void story_putstr(int col, int row, byte attr, cptr text)
-{
-    if (!text || !text[0])
-    {
-        story_semantic_clear_row(row);
-        return;
-    }
-
-    story_semantic_set_row(row, col, attr, story_current_flags(), text);
-}
-
-static int story_draw_wrapped_text(byte attr, cptr text, int row, int indent,
-    int wrap_width)
-{
-    int lines = story_count_wrapped_lines(text, wrap_width, indent);
-
-    if (lines < 1)
-        lines = 1;
-    (void)story_semantic_mirror_wrapped_text(text, row, indent, wrap_width,
-        attr, story_current_flags());
-    return row + lines - 1;
-}
-
-static bool story_present(void)
-{
-    return story_semantic_present();
 }
 
 static bool story_peek_key(char* out_key)
@@ -493,49 +73,6 @@ static char story_wait_key(void)
     return (char)ui_information_scene_wait_key();
 }
 
-/*
- * Helper: colour fade-in paragraph printer
- * Return values: 0=completed normally, 1=other key pressed (skip paragraph),
- * 2=ESC pressed (fast-forward)
- */
-static int print_paragraph_fade(cptr text, int row, int indent, int wrap_width)
-{
-    const byte fade_cols[] = { TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE };
-    const int steps = (int)(sizeof(fade_cols) / sizeof(fade_cols[0]));
-
-    for (int s = 0; s < steps; s++)
-    {
-        char ch;
-
-        if (story_peek_key(&ch))
-        {
-            story_consume_peeked_key(&ch);
-            (void)story_draw_wrapped_text(TERM_WHITE, text, row, indent,
-                wrap_width);
-            (void)story_present();
-            return (ch == ESCAPE) ? 2 : 1;
-        }
-
-        (void)story_draw_wrapped_text(fade_cols[s], text, row, indent,
-            wrap_width);
-        (void)story_present();
-        platform_frame_delay_ms(125u);
-    }
-
-    {
-        char ch;
-
-        if (story_peek_key(&ch))
-        {
-            story_consume_peeked_key(&ch);
-            return (ch == ESCAPE) ? 2 : 1;
-        }
-    }
-
-    platform_frame_delay_ms(1000u);
-    return 0;
-}
-
 static void story_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
@@ -547,33 +84,225 @@ static void story_prompt_label(int binding, const char* fallback, char* buf,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
-static void story_print_hint(int indent, int h)
+static void story_build_reveal_prompt(char* buf, size_t buflen)
 {
-    if (steamdeck_controls_active()) {
-        char next_label[16];
+    if (!buf || !buflen)
+        return;
+
+    if (steamdeck_controls_active())
+    {
+        char skip_label[16];
         char esc_label[16];
-        char prompt_buf[80];
+
+        story_prompt_label(' ', "A", skip_label, sizeof(skip_label));
+        story_prompt_label(ESCAPE, "ESC", esc_label, sizeof(esc_label));
+        strnfmt(buf, buflen, "[%s] skip  *  [%s] fast forward", skip_label,
+            esc_label);
+    }
+    else
+    {
+        SDL_strlcpy(buf, "[Any key] skip  *  [Esc] fast forward", buflen);
+    }
+}
+
+static void story_build_final_prompt(char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    if (steamdeck_controls_active())
+    {
+        char next_label[16];
 
         story_prompt_label(' ', "A", next_label, sizeof(next_label));
-        story_prompt_label(ESCAPE, "ESC", esc_label, sizeof(esc_label));
-
-        strnfmt(prompt_buf, sizeof(prompt_buf),
-            "[%s] next  *  [%s] fast forward", next_label, esc_label);
-        story_putstr(indent, h - 1, TERM_SLATE, prompt_buf);
-    } else {
-        story_putstr(indent, h - 1, TERM_SLATE,
-            "[Enter] next  *  [Esc] fast forward");
+        strnfmt(buf, buflen, "[%s] continue", next_label);
     }
+    else
+    {
+        SDL_strlcpy(buf, "[Press any key to continue]", buflen);
+    }
+}
+
+static bool story_append_paragraph(app_ui_scene* scene, app_ui_panel* panel,
+    byte attr, cptr text)
+{
+    if (!scene || !panel || !text || !text[0])
+        return true;
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+
+    return app_ui_panel_add_rich_text_ex(scene, panel, attr, STORY_FLAG_USE,
+        text);
+}
+
+static void story_add_paragraph_line_count(int* total_lines,
+    int* paragraph_count, int paragraph_lines)
+{
+    if (!total_lines || !paragraph_count || paragraph_lines <= 0)
+        return;
+
+    if (*paragraph_count > 0)
+        (*total_lines)++;
+    *total_lines += paragraph_lines;
+    (*paragraph_count)++;
+}
+
+static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
+    int start, int complete_count, int active_index, byte active_attr,
+    cptr footer_text, byte footer_attr)
+{
+    app_ui_panel* panel;
+    int total_lines = 0;
+    int paragraph_count = 0;
+
+    if (!scene || !sel_idx)
+        return false;
+
+    app_ui_scene_init(scene);
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, STORY_BROWSER_MIN_WIDTH,
+        STORY_BROWSER_MAX_WIDTH);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "The Tale So Far");
+
+    for (int i = start; i < complete_count; i++)
+    {
+        story_type* st = &st_info[sel_idx[i]];
+        cptr heading = st_name + st->name;
+        cptr text = st_text + st->text;
+
+        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, heading)
+            || !story_append_paragraph(scene, panel, TERM_WHITE, text))
+        {
+            return false;
+        }
+
+        story_add_paragraph_line_count(&total_lines, &paragraph_count, 1);
+        story_add_paragraph_line_count(&total_lines, &paragraph_count,
+            MAX(1, story_count_wrapped_lines(text, STORY_BROWSER_WRAP_COLS, 0)));
+    }
+
+    if (active_index >= start)
+    {
+        story_type* st = &st_info[sel_idx[active_index]];
+        cptr heading = st_name + st->name;
+        cptr text = st_text + st->text;
+
+        if (!story_append_paragraph(scene, panel, TERM_L_BLUE, heading)
+            || !story_append_paragraph(scene, panel, active_attr, text))
+        {
+            return false;
+        }
+
+        story_add_paragraph_line_count(&total_lines, &paragraph_count, 1);
+        story_add_paragraph_line_count(&total_lines, &paragraph_count,
+            MAX(1, story_count_wrapped_lines(text, STORY_BROWSER_WRAP_COLS, 0)));
+    }
+
+    if (total_lines > STORY_BROWSER_VISIBLE_LINES)
+    {
+        app_ui_panel_set_row_offset(panel,
+            (s16b)(total_lines - STORY_BROWSER_VISIBLE_LINES));
+    }
+
+    if (footer_text && footer_text[0]
+        && !app_ui_panel_add_body_line(panel, footer_attr, footer_text))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+static bool story_present_progress(const int* sel_idx, int start,
+    int complete_count, int active_index, byte active_attr, cptr footer_text,
+    byte footer_attr)
+{
+    app_ui_scene scene;
+
+    if (!story_build_browser_scene(&scene, sel_idx, start, complete_count,
+            active_index, active_attr, footer_text, footer_attr))
+    {
+        return false;
+    }
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+static int story_poll_skip_input(void)
+{
+    char ch;
+
+    if (!story_peek_key(&ch))
+        return 0;
+
+    story_consume_peeked_key(&ch);
+    return (ch == ESCAPE) ? 2 : 1;
+}
+
+static int story_delay_with_skip(u32b total_ms)
+{
+    u32b elapsed = 0;
+
+    while (elapsed < total_ms)
+    {
+        u32b slice = MIN((u32b)25, total_ms - elapsed);
+        int key_state = story_poll_skip_input();
+
+        if (key_state != 0)
+            return key_state;
+
+        platform_frame_delay_ms(slice);
+        elapsed += slice;
+    }
+
+    return 0;
+}
+
+static int story_render_fade_sequence(const int* sel_idx, int start,
+    int complete_count, int active_index, cptr footer_text)
+{
+    static const byte fade_cols[] = {
+        TERM_L_DARK, TERM_SLATE, TERM_L_WHITE, TERM_WHITE
+    };
+
+    for (int s = 0; s < (int)N_ELEMENTS(fade_cols); s++)
+    {
+        int key_state;
+
+        if (!story_present_progress(sel_idx, start, complete_count,
+                active_index, fade_cols[s], footer_text, TERM_SLATE))
+        {
+            return -1;
+        }
+
+        key_state = story_delay_with_skip(125u);
+        if (key_state == 2)
+            return 2;
+        if (key_state == 1)
+        {
+            if (!story_present_progress(sel_idx, start, complete_count,
+                    active_index, TERM_WHITE, footer_text, TERM_SLATE))
+            {
+                return -1;
+            }
+            return 1;
+        }
+    }
+
+    return story_delay_with_skip(1000u);
 }
 
 void print_story(int last_parts, bool fade_in)
 {
-    int wid, h;
-    const int indent = 2;
     ui_information_scene_scope info_scope;
     bool fast_forward = false;
     bool scene_failed = false;
-    bool show_page_instantly = false;
     bool saved_hide_cursor = false;
     int sils = metar.silmarils;
     byte rt = metar.type;
@@ -581,13 +310,14 @@ void print_story(int last_parts, bool fade_in)
     int max_st = z_info->st_max;
     static int sel_idx[1024];
     int start;
+    int complete_count;
+    char reveal_prompt[80];
+    char final_prompt[64];
 
     log_debug("=== Starting story display (parts=%d, fade_in=%s) ===",
         last_parts, fade_in ? "true" : "false");
     log_debug("last_parts=%d, fade_in=%s", last_parts,
         fade_in ? "true" : "false");
-
-#define REDRAW_HINT() story_print_hint(indent, h)
 
     if (max_st > (int)N_ELEMENTS(sel_idx))
         max_st = (int)N_ELEMENTS(sel_idx);
@@ -643,186 +373,53 @@ void print_story(int last_parts, bool fade_in)
         return;
     }
 
-    story_layout_size(&wid, &h);
-    story_semantic_begin(wid, h);
-    story_clear_screen();
     saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
 
     sdl_story_font_enable();
+    story_build_reveal_prompt(reveal_prompt, sizeof(reveal_prompt));
+    story_build_final_prompt(final_prompt, sizeof(final_prompt));
+    complete_count = start;
 
-    story_putstr(indent, 0, TERM_YELLOW, "=== The Tale So Far ===");
-
+    for (int idx = start; idx < total; idx++)
     {
-        int row = 2;
+        int result = 0;
 
-        REDRAW_HINT();
-
-        for (int idx = start; idx < total; idx++)
+        if (fade_in && !fast_forward)
         {
-            story_type* st = &st_info[sel_idx[idx]];
-            int wrap_width = wid - indent - 1;
-            cptr text = st_text + st->text;
-            int text_lines;
-            int estimated_space_needed;
-            bool will_add_blank_line;
-            int space_needed;
-            bool paginated = false;
-
-            if (wrap_width < 20)
-                wrap_width = 20;
-
-            text_lines = story_count_wrapped_lines(text, wrap_width, indent);
-            estimated_space_needed = 1 + text_lines + 1;
-
-            if (row + estimated_space_needed >= h - 2)
+            result = story_render_fade_sequence(sel_idx, start, complete_count,
+                idx, reveal_prompt);
+            if (result < 0)
             {
-                if (!fast_forward)
-                {
-                    char ch;
-
-                    show_page_instantly = false;
-                    REDRAW_HINT();
-                    if (!story_present())
-                    {
-                        log_warn("story display: semantic page presentation failed");
-                        scene_failed = true;
-                        goto cleanup;
-                    }
-                    ch = story_wait_key();
-                    if (ch == ESCAPE)
-                    {
-                        fast_forward = true;
-                        fade_in = false;
-                        story_erase_row(0, h - 1, wid);
-                        log_debug(
-                            "User pressed ESC - enabling fast forward mode");
-                    }
-                    else
-                    {
-                        row = 2;
-                        story_clear_screen();
-                        story_putstr(indent, 0, TERM_YELLOW,
-                            "=== The Tale So Far ===");
-                        REDRAW_HINT();
-                    }
-                }
-                else
-                {
-                    row = 2;
-                    story_clear_screen();
-                    story_putstr(indent, 0, TERM_YELLOW,
-                        "=== The Tale So Far ===");
-                }
-            }
-
-            story_putstr(indent, row, TERM_L_BLUE, st_name + st->name);
-            row++;
-
-            if (fade_in && !fast_forward && !show_page_instantly)
-            {
-                int fade_result =
-                    print_paragraph_fade(text, row, indent, wrap_width);
-
-                if (g_story_semantic_scene.failed)
-                {
-                    log_warn("story display: semantic fade presentation failed");
-                    scene_failed = true;
-                    goto cleanup;
-                }
-                if (fade_result == 2)
-                {
-                    fast_forward = true;
-                    fade_in = false;
-                    log_debug(
-                        "ESC pressed during fade - enabling fast forward mode");
-                }
-            }
-            else
-            {
-                (void)story_draw_wrapped_text(TERM_WHITE, text, row, indent,
-                    wrap_width);
-                if (!story_present())
-                {
-                    log_warn("story display: semantic paragraph presentation failed");
-                    scene_failed = true;
-                    goto cleanup;
-                }
-                if (!fast_forward && !show_page_instantly)
-                    platform_frame_delay_ms(1000u);
-            }
-
-            row += story_count_wrapped_lines(text, wrap_width, indent);
-
-            will_add_blank_line = (idx < total - 1);
-            space_needed = will_add_blank_line ? 1 : 0;
-
-            if (row + space_needed >= h - 2)
-            {
-                paginated = true;
-                if (!fast_forward)
-                {
-                    char ch;
-
-                    show_page_instantly = false;
-                    REDRAW_HINT();
-                    if (!story_present())
-                    {
-                        log_warn("story display: semantic pagination prompt failed");
-                        scene_failed = true;
-                        goto cleanup;
-                    }
-                    ch = story_wait_key();
-                    if (ch == ESCAPE)
-                    {
-                        fast_forward = true;
-                        fade_in = false;
-                        story_erase_row(0, h - 1, wid);
-                        log_debug(
-                            "User pressed ESC - enabling fast forward mode");
-                    }
-                    else
-                    {
-                        row = 2;
-                        story_clear_screen();
-                        sdl_story_font_enable();
-                        story_putstr(indent, 0, TERM_YELLOW,
-                            "=== The Tale So Far ===");
-                        sdl_story_font_disable();
-                        REDRAW_HINT();
-                        continue;
-                    }
-                }
-                else
-                {
-                    row = 2;
-                    story_clear_screen();
-                    story_putstr(indent, 0, TERM_YELLOW,
-                        "=== The Tale So Far ===");
-                }
-            }
-
-            if (will_add_blank_line && !paginated)
-            {
-                story_putstr(indent, row, TERM_WHITE, "");
-                row++;
+                log_warn("story display: semantic fade presentation failed");
+                scene_failed = true;
+                goto cleanup;
             }
         }
+        else
+        {
+            if (!story_present_progress(sel_idx, start, complete_count, idx,
+                    TERM_WHITE, reveal_prompt, TERM_SLATE))
+            {
+                log_warn("story display: semantic paragraph presentation failed");
+                scene_failed = true;
+                goto cleanup;
+            }
+            result = fast_forward ? 0 : story_delay_with_skip(1000u);
+        }
+
+        if (result == 2)
+        {
+            fast_forward = true;
+            fade_in = false;
+            log_debug("Story display: enabling fast forward mode");
+        }
+
+        complete_count = idx + 1;
     }
 
-    story_erase_row(0, h - 1, wid);
-    if (steamdeck_controls_active()) {
-        char next_label[16];
-        char prompt_buf[64];
-
-        story_prompt_label(' ', "A", next_label, sizeof(next_label));
-        strnfmt(prompt_buf, sizeof(prompt_buf), "[%s] continue", next_label);
-        story_putstr(indent, h - 1, TERM_L_WHITE, prompt_buf);
-    } else {
-        story_putstr(indent, h - 1, TERM_L_WHITE,
-            "[Press any key to continue]");
-    }
-    if (!story_present())
+    if (!story_present_progress(sel_idx, start, complete_count, -1, TERM_WHITE,
+            final_prompt, TERM_L_WHITE))
     {
         log_warn("story display: semantic final prompt failed");
         scene_failed = true;
@@ -833,12 +430,9 @@ void print_story(int last_parts, bool fade_in)
 cleanup:
     sdl_story_font_disable();
     ui_information_scene_leave(&info_scope);
-    story_semantic_end();
     inkey_set_cursor_hidden(saved_hide_cursor);
 
     if (scene_failed)
         log_warn("story display exited early because semantic rendering failed");
     log_debug("Story display completed");
-
-#undef REDRAW_HINT
 }

@@ -147,12 +147,11 @@
             "src/sdl-main-internal.h": 8,
             "src/sdl-render.c": 10,
             "src/sdl-story-font.c": 23,
-            "src/ui/story_font.c": 4,
-            "src/ui/ui-story.c": 1
+            "src/ui/story_font.c": 4
           },
-          "files": 6,
+          "files": 5,
           "label": "term-host story-font state",
-          "matches": 48,
+          "matches": 47,
           "notes": "Tracks story-font activation, grid, and chunk state that is still stored on or driven through terminal hosts."
         },
         "terminal_size_query_symbols": {

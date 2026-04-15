@@ -14,6 +14,16 @@
 #include <ctype.h>
 
 #define LINEW20 20
+#define TUTORIAL_BROWSER_LAYOUT_COLS 80
+#define TUTORIAL_BROWSER_TOP_PADDING_LINES 2
+#define TUTORIAL_BROWSER_CONTENT_LINES 20
+#define TUTORIAL_BROWSER_PROMPT_LINES 2
+#define TUTORIAL_BROWSER_LAYOUT_ROWS \
+    (TUTORIAL_BROWSER_TOP_PADDING_LINES + TUTORIAL_BROWSER_CONTENT_LINES \
+        + TUTORIAL_BROWSER_PROMPT_LINES)
+#define TUTORIAL_BROWSER_MIN_WIDTH 1000
+#define TUTORIAL_BROWSER_MAX_WIDTH 1800
+#define TUTORIAL_BROWSER_MAX_ROW_RUNS 16
 
 static byte format_deep_call_value(char* buf, size_t buflen, int max_width)
 {
@@ -137,114 +147,42 @@ typedef struct tutorial_render_run {
     char text[APP_UI_TEXT_MAX];
 } tutorial_render_run;
 
-typedef struct tutorial_render_row {
-    tutorial_render_run runs[16];
-    u16b run_count;
-} tutorial_render_row;
-
 typedef struct tutorial_render_target {
-    tutorial_render_row rows[32];
+    app_ui_scene* scene;
+    app_ui_panel* panel;
+    tutorial_render_run runs[TUTORIAL_BROWSER_MAX_ROW_RUNS];
+    u16b run_count;
     int width;
     int height;
+    int active_row;
+    int last_emitted_row;
+    bool failed;
 } tutorial_render_target;
 
-static void tutorial_render_target_init(tutorial_render_target* target, int wid,
-    int hgt)
+static void tutorial_render_target_init(tutorial_render_target* target,
+    app_ui_scene* scene, app_ui_panel* panel, int wid, int hgt)
 {
     if (!target)
         return;
 
     memset(target, 0, sizeof(*target));
-    target->width = MIN(wid, 95);
-    target->height = MIN(hgt, (int)N_ELEMENTS(target->rows));
+    target->scene = scene;
+    target->panel = panel;
+    target->width = wid;
+    target->height = hgt;
+    target->active_row = -1;
+    target->last_emitted_row = -1;
     if (target->width < 1)
         target->width = 1;
     if (target->height < 1)
         target->height = 1;
-}
-
-static void tutorial_layout_size(int* wid, int* hgt)
-{
-    if (wid)
-        *wid = 80;
-    if (hgt)
-        *hgt = 24;
-}
-
-static void tutorial_render_text(tutorial_render_target* target, int col,
-    int row, byte attr, const char* text)
-{
-    tutorial_render_row* render_row;
-    tutorial_render_run* run;
-    int remaining;
-
-    if (!target || !text || !text[0] || row < 0 || row >= target->height
-        || col >= target->width)
+    if (!scene || !panel
+        || !app_ui_panel_begin_rich_paragraph(scene, panel))
     {
-        return;
+        target->failed = true;
     }
-    if (col < 0)
-        col = 0;
-
-    render_row = &target->rows[row];
-    remaining = target->width - col;
-    if (remaining <= 0 || render_row->run_count >= N_ELEMENTS(render_row->runs))
-        return;
-
-    if (render_row->run_count > 0)
-    {
-        tutorial_render_run* last = &render_row->runs[render_row->run_count - 1];
-        int last_end = last->col + (int)strlen(last->text);
-
-        if (last->attr == attr && last_end == col)
-        {
-            SDL_strlcat(last->text, text, MIN(sizeof(last->text),
-                (size_t)remaining + 1u));
-            return;
-        }
-    }
-
-    run = &render_row->runs[render_row->run_count++];
-    memset(run, 0, sizeof(*run));
-    run->col = (s16b)col;
-    run->attr = attr;
-    SDL_strlcpy(run->text, text, MIN(sizeof(run->text),
-        (size_t)remaining + 1u));
 }
 
-static int tutorial_row_end(const tutorial_render_target* target, int row)
-{
-    int end = 0;
-    const tutorial_render_row* render_row;
-
-    if (!target || row < 0 || row >= target->height)
-        return 0;
-
-    render_row = &target->rows[row];
-    for (int i = 0; i < render_row->run_count; i++)
-    {
-        int run_end = render_row->runs[i].col
-            + (int)strlen(render_row->runs[i].text);
-
-        if (run_end > end)
-            end = run_end;
-    }
-    return end;
-}
-
-static byte tutorial_row_attr(const tutorial_render_target* target, int row)
-{
-    const tutorial_render_row* render_row;
-
-    if (!target || row < 0 || row >= target->height)
-        return TERM_WHITE;
-
-    render_row = &target->rows[row];
-    if (render_row->run_count == 0)
-        return TERM_WHITE;
-
-    return render_row->runs[0].attr;
-}
 
 static bool tutorial_scene_add_rich_run(app_ui_scene* scene,
     app_ui_panel* panel, byte attr, const char* text, int len)
@@ -294,118 +232,156 @@ static bool tutorial_scene_add_spaces(app_ui_scene* scene, app_ui_panel* panel,
     return true;
 }
 
-static bool tutorial_scene_add_row(app_ui_scene* scene, app_ui_panel* panel,
-    const tutorial_render_target* target, int row)
+static bool tutorial_render_target_flush_active_row(
+    tutorial_render_target* target)
 {
-    const tutorial_render_row* render_row;
     int current_col = 0;
+    int line_breaks;
 
-    if (!scene || !panel || !target)
+    if (!target)
         return false;
-
-    render_row = &target->rows[row];
-    if (render_row->run_count == 0)
+    if (target->failed)
+        return false;
+    if (target->active_row < 0)
         return true;
 
-    for (int i = 0; i < render_row->run_count; i++)
+    line_breaks = (target->last_emitted_row < 0)
+        ? target->active_row
+        : (target->active_row - target->last_emitted_row);
+    while (line_breaks-- > 0)
     {
-        const tutorial_render_run* run = &render_row->runs[i];
-
-        if (run->col > current_col
-            && !tutorial_scene_add_spaces(scene, panel, run->col - current_col))
+        if (!app_ui_panel_add_rich_text(target->scene, target->panel,
+                TERM_WHITE, "\n"))
         {
+            target->failed = true;
             return false;
         }
-        if (!tutorial_scene_add_rich_run(scene, panel, run->attr, run->text,
-                (int)strlen(run->text)))
+    }
+
+    for (int i = 0; i < target->run_count; i++)
+    {
+        tutorial_render_run* run = &target->runs[i];
+
+        if (run->col > current_col
+            && !tutorial_scene_add_spaces(target->scene, target->panel,
+                run->col - current_col))
         {
+            target->failed = true;
+            return false;
+        }
+        if (!tutorial_scene_add_rich_run(target->scene, target->panel,
+                run->attr, run->text, (int)strlen(run->text)))
+        {
+            target->failed = true;
             return false;
         }
         current_col = MAX(current_col, run->col + (int)strlen(run->text));
     }
 
+    target->last_emitted_row = target->active_row;
+    target->active_row = -1;
+    target->run_count = 0;
     return true;
 }
 
-static bool tutorial_build_browser_scene(app_ui_scene* scene,
-    const tutorial_render_target* target)
+static void tutorial_render_target_add_body_line(tutorial_render_target* target,
+    int col, byte attr, const char* text)
 {
-    app_ui_panel* panel;
-    int content_rows;
+    char buf[APP_UI_TEXT_MAX];
+    int padding;
 
-    if (!scene || !target)
-        return false;
+    if (!target || target->failed || !text || !text[0])
+        return;
+    if (!tutorial_render_target_flush_active_row(target))
+        return;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return false;
+    if (col < 0)
+        col = 0;
+    if (col >= target->width)
+        return;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->min_width_px = 0;
-    panel->width_cap_px = 0;
-    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
-        return false;
+    padding = MIN(col, (int)sizeof(buf) - 1);
+    memset(buf, ' ', (size_t)padding);
+    buf[padding] = '\0';
+    SDL_strlcat(buf, text, sizeof(buf));
+    if (!app_ui_panel_add_body_line(target->panel, attr, buf))
+        target->failed = true;
+}
 
-    content_rows = MAX(0, target->height - 2);
-    for (int row = 0; row < content_rows; row++)
+static void tutorial_render_text(tutorial_render_target* target, int col,
+    int row, byte attr, const char* text)
+{
+    tutorial_render_run* run;
+    int remaining;
+    int body_row_start;
+
+    if (!target || target->failed || !text || !text[0] || row < 0
+        || row >= target->height || col >= target->width)
     {
-        if (row > 0 && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n"))
-            return false;
-        if (!tutorial_scene_add_row(scene, panel, target, row))
-            return false;
+        return;
+    }
+    if (col < 0)
+        col = 0;
+
+    body_row_start = target->height - TUTORIAL_BROWSER_PROMPT_LINES;
+    if (row >= body_row_start)
+    {
+        tutorial_render_target_add_body_line(target, col, attr, text);
+        return;
     }
 
-    for (int row = content_rows; row < target->height; row++)
+    if (target->active_row != row)
     {
-        char line[96];
-        const tutorial_render_row* render_row = &target->rows[row];
-        int end = tutorial_row_end(target, row);
-        int cursor = 0;
+        if (!tutorial_render_target_flush_active_row(target))
+            return;
+        target->active_row = row;
+    }
 
-        if (end <= 0 || render_row->run_count == 0)
-            continue;
-        memset(line, ' ', (size_t)MIN(end, (int)sizeof(line) - 1));
-        for (int i = 0; i < render_row->run_count; i++)
-        {
-            const tutorial_render_run* run = &render_row->runs[i];
-            size_t len = strlen(run->text);
+    remaining = target->width - col;
+    if (remaining <= 0 || target->run_count >= N_ELEMENTS(target->runs))
+        return;
 
-            if (run->col >= (int)sizeof(line) - 1)
-                continue;
-            if ((int)len > (int)sizeof(line) - 1 - run->col)
-                len = (size_t)((int)sizeof(line) - 1 - run->col);
-            memcpy(line + run->col, run->text, len);
-            cursor = MAX(cursor, run->col + (int)len);
-        }
-        if (cursor > end)
-            end = cursor;
-        line[end] = '\0';
-        if (!app_ui_panel_add_body_line(panel, tutorial_row_attr(target, row),
-                line))
+    if (target->run_count > 0)
+    {
+        tutorial_render_run* last = &target->runs[target->run_count - 1];
+        int last_end = last->col + (int)strlen(last->text);
+
+        if (last->attr == attr && last_end == col)
         {
-            return false;
+            SDL_strlcat(last->text, text, MIN(sizeof(last->text),
+                (size_t)remaining + 1u));
+            return;
         }
     }
 
-    return true;
+    run = &target->runs[target->run_count++];
+    memset(run, 0, sizeof(*run));
+    run->col = (s16b)col;
+    run->attr = attr;
+    SDL_strlcpy(run->text, text, MIN(sizeof(run->text),
+        (size_t)remaining + 1u));
+}
+
+static bool tutorial_render_target_finish(tutorial_render_target* target)
+{
+    if (!target)
+        return false;
+
+    return tutorial_render_target_flush_active_row(target) && !target->failed;
 }
 
 static void tutorial_put_centered(tutorial_render_target* target, int row,
     byte attr, const char* text)
 {
-    int wid = 80;
     int len;
     int col = 0;
 
     if (!target || !text)
         return;
 
-    if (target->width > 0)
-        wid = target->width;
     len = (int)strlen(text);
-    if (len < wid)
-        col = (wid - len) / 2;
+    if (len < target->width)
+        col = (target->width - len) / 2;
     if (col < 0)
         col = 0;
 
@@ -448,8 +424,8 @@ static int tutorial_put_wrapped_limited(tutorial_render_target* target,
     const char* text, int start_col, int start_row, int max_width, int max_row,
     byte color)
 {
-    int term_width = 80;
-    int term_height = 24;
+    int term_width = TUTORIAL_BROWSER_LAYOUT_COLS;
+    int term_height = TUTORIAL_BROWSER_LAYOUT_ROWS;
     char line_buf[512];
     int row = start_row;
     int line_pos = 0;
@@ -815,9 +791,8 @@ void display_character_tutorial(void)
 
     while (1)
     {
-        int wid = 80;
-        int hgt = 24;
-        tutorial_layout_size(&wid, &hgt);
+        int wid = TUTORIAL_BROWSER_LAYOUT_COLS;
+        int hgt = TUTORIAL_BROWSER_LAYOUT_ROWS;
 
         bool steamdeck = steamdeck_controls_active();
         bool birth_context = (playerturn == 0);
@@ -1184,9 +1159,26 @@ void display_character_tutorial(void)
         if (page >= total_pages)
             page = total_pages - 1;
 
+        app_ui_scene ui_scene;
+        app_ui_panel* ui_panel;
         tutorial_render_target target;
 
-        tutorial_render_target_init(&target, wid, hgt);
+        app_ui_scene_init(&ui_scene);
+        ui_panel = app_ui_scene_append_panel(&ui_scene, APP_UI_LAYER_BROWSER);
+        if (!ui_panel)
+        {
+            ui_information_scene_leave(&info_scope);
+            log_warn("character tutorial: failed to allocate semantic tutorial panel");
+            msg_print("Character tutorial unavailable.");
+            return;
+        }
+        ui_panel->style = APP_UI_PANEL_STYLE_BROWSER;
+        ui_panel->accent_attr = TERM_L_BLUE;
+        app_ui_panel_set_title(ui_panel, TERM_L_BLUE, "Character Tutorial");
+        app_ui_panel_set_widths(ui_panel, TUTORIAL_BROWSER_MIN_WIDTH,
+            TUTORIAL_BROWSER_MAX_WIDTH);
+
+        tutorial_render_target_init(&target, &ui_scene, ui_panel, wid, hgt);
 
         {
             char title[96];
@@ -1586,17 +1578,13 @@ void display_character_tutorial(void)
             }
         }
 
+        if (!tutorial_render_target_finish(&target)
+            || !ui_information_scene_present_ui(&ui_scene))
         {
-            app_ui_scene ui_scene;
-
-            if (!tutorial_build_browser_scene(&ui_scene, &target)
-                || !ui_information_scene_present_ui(&ui_scene))
-            {
-                ui_information_scene_leave(&info_scope);
-                log_warn("character tutorial: failed to present semantic tutorial scene");
-                msg_print("Character tutorial unavailable.");
-                return;
-            }
+            ui_information_scene_leave(&info_scope);
+            log_warn("character tutorial: failed to present semantic tutorial scene");
+            msg_print("Character tutorial unavailable.");
+            return;
         }
 
         ch = (char)ui_information_scene_wait_key_nonrepeat();
