@@ -736,10 +736,23 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
     }
 
     if (sdl_touch_pane_binding_is_direction(binding)) {
-        sdl_gamepad_send_direction_mods(binding - '0',
-            ((!long_press) && second_panel) || sdl_gamepad_shift_active(),
-            long_press || sdl_gamepad_ctrl_active(),
-            sdl_gamepad_alt_active());
+        bool shift = ((!long_press) && second_panel) || sdl_gamepad_shift_active();
+        bool ctrl = long_press || sdl_gamepad_ctrl_active();
+        bool alt = sdl_gamepad_alt_active();
+        int dir = binding - '0';
+
+        if (sdl_submit_directional_movement(dir, shift, ctrl, alt,
+                APP_INPUT_DEVICE_TOUCH, APP_INPUT_TYPE_POINTER_BUTTON, 0,
+                APP_INPUT_FLAG_PRESS, (u32b)binding, 0))
+        {
+            return;
+        }
+
+        if (shift || ctrl || alt) {
+            sdl_send_macro_key('0' + dir, shift, ctrl, alt);
+        } else {
+            sdl_submit_legacy_input_byte('0' + dir);
+        }
         return;
     }
 

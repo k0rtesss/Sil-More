@@ -7,6 +7,7 @@
 #include "cJSON.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_filesystem.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -394,6 +395,784 @@ static char* read_file_contents(const char* filename)
     fclose(f);
     
     return content;
+}
+
+static const u16b movement_direction_order[] = {
+    APP_MOVEMENT_DIRECTION_NORTHWEST,
+    APP_MOVEMENT_DIRECTION_NORTH,
+    APP_MOVEMENT_DIRECTION_NORTHEAST,
+    APP_MOVEMENT_DIRECTION_WEST,
+    APP_MOVEMENT_DIRECTION_EAST,
+    APP_MOVEMENT_DIRECTION_SOUTHWEST,
+    APP_MOVEMENT_DIRECTION_SOUTH,
+    APP_MOVEMENT_DIRECTION_SOUTHEAST
+};
+
+static const char* sdl_config_movement_preset_name(u16b preset_id)
+{
+    switch (preset_id)
+    {
+    case APP_MOVEMENT_PRESET_MODERN_ARROWS:
+        return "modernArrows";
+    case APP_MOVEMENT_PRESET_MODERN_WASD_QEZC:
+        return "modernWasdQezc";
+    case APP_MOVEMENT_PRESET_VI_KEYS:
+        return "viKeys";
+    case APP_MOVEMENT_PRESET_CLASSIC_SIL:
+        return "classicSil";
+    default:
+        return "custom";
+    }
+}
+
+static bool sdl_config_movement_preset_from_name(const char* name,
+    u16b* out_preset_id)
+{
+    u16b preset_id = APP_MOVEMENT_PRESET_NONE;
+
+    if (!name)
+        return false;
+
+    if (streq(name, "modernArrows"))
+        preset_id = APP_MOVEMENT_PRESET_MODERN_ARROWS;
+    else if (streq(name, "modernWasdQezc"))
+        preset_id = APP_MOVEMENT_PRESET_MODERN_WASD_QEZC;
+    else if (streq(name, "viKeys"))
+        preset_id = APP_MOVEMENT_PRESET_VI_KEYS;
+    else if (streq(name, "classicSil"))
+        preset_id = APP_MOVEMENT_PRESET_CLASSIC_SIL;
+    else if (!streq(name, "custom"))
+        return false;
+
+    if (out_preset_id)
+        *out_preset_id = preset_id;
+
+    return true;
+}
+
+static const char* sdl_config_movement_context_name(u16b context)
+{
+    switch (context)
+    {
+    case APP_MOVEMENT_CONTEXT_DUNGEON:
+        return "dungeon";
+    case APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT:
+        return "directionPrompt";
+    case APP_MOVEMENT_CONTEXT_TARGETING:
+        return "targeting";
+    case APP_MOVEMENT_CONTEXT_ANY:
+    default:
+        return "any";
+    }
+}
+
+static bool sdl_config_movement_context_from_name(const char* name,
+    u16b* out_context)
+{
+    u16b context = APP_MOVEMENT_CONTEXT_ANY;
+
+    if (!name)
+        return false;
+
+    if (streq(name, "any"))
+        context = APP_MOVEMENT_CONTEXT_ANY;
+    else if (streq(name, "dungeon"))
+        context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    else if (streq(name, "directionPrompt"))
+        context = APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT;
+    else if (streq(name, "targeting"))
+        context = APP_MOVEMENT_CONTEXT_TARGETING;
+    else
+        return false;
+
+    if (out_context)
+        *out_context = context;
+
+    return true;
+}
+
+static const char* sdl_config_movement_action_name(u16b action)
+{
+    switch (action)
+    {
+    case APP_MOVEMENT_ACTION_MOVE_DIR:
+        return "moveDir";
+    case APP_MOVEMENT_ACTION_RUN_DIR:
+        return "runDir";
+    case APP_MOVEMENT_ACTION_INTERACT_DIR:
+        return "interactDir";
+    case APP_MOVEMENT_ACTION_WAIT:
+        return "wait";
+    case APP_MOVEMENT_ACTION_REST:
+        return "rest";
+    default:
+        return "none";
+    }
+}
+
+static bool sdl_config_movement_action_from_name(const char* name,
+    u16b* out_action)
+{
+    u16b action = APP_MOVEMENT_ACTION_NONE;
+
+    if (!name)
+        return false;
+
+    if (streq(name, "moveDir"))
+        action = APP_MOVEMENT_ACTION_MOVE_DIR;
+    else if (streq(name, "runDir"))
+        action = APP_MOVEMENT_ACTION_RUN_DIR;
+    else if (streq(name, "interactDir"))
+        action = APP_MOVEMENT_ACTION_INTERACT_DIR;
+    else if (streq(name, "wait"))
+        action = APP_MOVEMENT_ACTION_WAIT;
+    else if (streq(name, "rest"))
+        action = APP_MOVEMENT_ACTION_REST;
+    else
+        return false;
+
+    if (out_action)
+        *out_action = action;
+
+    return true;
+}
+
+static const char* sdl_config_movement_direction_name(u16b direction)
+{
+    switch (direction)
+    {
+    case APP_MOVEMENT_DIRECTION_CENTER:
+        return "center";
+    case APP_MOVEMENT_DIRECTION_NORTH:
+        return "north";
+    case APP_MOVEMENT_DIRECTION_NORTHEAST:
+        return "northeast";
+    case APP_MOVEMENT_DIRECTION_EAST:
+        return "east";
+    case APP_MOVEMENT_DIRECTION_SOUTHEAST:
+        return "southeast";
+    case APP_MOVEMENT_DIRECTION_SOUTH:
+        return "south";
+    case APP_MOVEMENT_DIRECTION_SOUTHWEST:
+        return "southwest";
+    case APP_MOVEMENT_DIRECTION_WEST:
+        return "west";
+    case APP_MOVEMENT_DIRECTION_NORTHWEST:
+        return "northwest";
+    default:
+        return "none";
+    }
+}
+
+static bool sdl_config_movement_direction_from_name(const char* name,
+    u16b* out_direction)
+{
+    u16b direction = APP_MOVEMENT_DIRECTION_NONE;
+
+    if (!name)
+        return false;
+
+    if (streq(name, "none"))
+        direction = APP_MOVEMENT_DIRECTION_NONE;
+    else if (streq(name, "center"))
+        direction = APP_MOVEMENT_DIRECTION_CENTER;
+    else if (streq(name, "north"))
+        direction = APP_MOVEMENT_DIRECTION_NORTH;
+    else if (streq(name, "northeast"))
+        direction = APP_MOVEMENT_DIRECTION_NORTHEAST;
+    else if (streq(name, "east"))
+        direction = APP_MOVEMENT_DIRECTION_EAST;
+    else if (streq(name, "southeast"))
+        direction = APP_MOVEMENT_DIRECTION_SOUTHEAST;
+    else if (streq(name, "south"))
+        direction = APP_MOVEMENT_DIRECTION_SOUTH;
+    else if (streq(name, "southwest"))
+        direction = APP_MOVEMENT_DIRECTION_SOUTHWEST;
+    else if (streq(name, "west"))
+        direction = APP_MOVEMENT_DIRECTION_WEST;
+    else if (streq(name, "northwest"))
+        direction = APP_MOVEMENT_DIRECTION_NORTHWEST;
+    else
+        return false;
+
+    if (out_direction)
+        *out_direction = direction;
+
+    return true;
+}
+
+static bool sdl_config_movement_binding_equals(
+    const app_movement_binding* left, const app_movement_binding* right)
+{
+    if (!left || !right)
+        return false;
+
+    return left->context == right->context
+        && left->action == right->action
+        && left->direction == right->direction
+        && left->device == right->device
+        && left->input_type == right->input_type
+        && left->required_modifiers == right->required_modifiers
+        && left->forbidden_modifiers == right->forbidden_modifiers
+        && left->trigger == right->trigger
+        && left->trigger_aux == right->trigger_aux;
+}
+
+static bool sdl_config_movement_append_binding(struct sdl_config* config,
+    const app_movement_binding* binding)
+{
+    u16b i;
+
+    if (!config || !binding || !app_movement_binding_is_valid(binding))
+        return false;
+    if (config->movement_binding_count >= SDL_MOVEMENT_BINDING_MAX)
+        return false;
+
+    for (i = 0; i < config->movement_binding_count; i++)
+    {
+        if (sdl_config_movement_binding_equals(&config->movement_bindings[i],
+                binding))
+        {
+            return true;
+        }
+    }
+
+    config->movement_bindings[config->movement_binding_count++] = *binding;
+    return true;
+}
+
+static SDL_Scancode sdl_config_ascii_scancode(int ch, bool keypad_digit)
+{
+    if (keypad_digit && ch >= '0' && ch <= '9')
+    {
+        switch (ch)
+        {
+        case '0': return SDL_SCANCODE_KP_0;
+        case '1': return SDL_SCANCODE_KP_1;
+        case '2': return SDL_SCANCODE_KP_2;
+        case '3': return SDL_SCANCODE_KP_3;
+        case '4': return SDL_SCANCODE_KP_4;
+        case '5': return SDL_SCANCODE_KP_5;
+        case '6': return SDL_SCANCODE_KP_6;
+        case '7': return SDL_SCANCODE_KP_7;
+        case '8': return SDL_SCANCODE_KP_8;
+        case '9': return SDL_SCANCODE_KP_9;
+        default:
+            break;
+        }
+    }
+
+    if (ch >= 'a' && ch <= 'z')
+        return (SDL_Scancode)(SDL_SCANCODE_A + (ch - 'a'));
+
+    switch (ch)
+    {
+    case '0': return SDL_SCANCODE_0;
+    case '1': return SDL_SCANCODE_1;
+    case '2': return SDL_SCANCODE_2;
+    case '3': return SDL_SCANCODE_3;
+    case '4': return SDL_SCANCODE_4;
+    case '5': return SDL_SCANCODE_5;
+    case '6': return SDL_SCANCODE_6;
+    case '7': return SDL_SCANCODE_7;
+    case '8': return SDL_SCANCODE_8;
+    case '9': return SDL_SCANCODE_9;
+    case ' ': return SDL_SCANCODE_SPACE;
+    case ',': return SDL_SCANCODE_COMMA;
+    case '.': return SDL_SCANCODE_PERIOD;
+    case '/': return SDL_SCANCODE_SLASH;
+    case ';': return SDL_SCANCODE_SEMICOLON;
+    case '-': return SDL_SCANCODE_MINUS;
+    case '=': return SDL_SCANCODE_EQUALS;
+    case '[': return SDL_SCANCODE_LEFTBRACKET;
+    case ']': return SDL_SCANCODE_RIGHTBRACKET;
+    case '\\': return SDL_SCANCODE_BACKSLASH;
+    case '\'': return SDL_SCANCODE_APOSTROPHE;
+    case '`': return SDL_SCANCODE_GRAVE;
+    default:
+        break;
+    }
+
+    return SDL_SCANCODE_UNKNOWN;
+}
+
+static void sdl_config_init_keyboard_binding(app_movement_binding* binding,
+    u16b action, u16b direction, SDL_Scancode scancode, u16b required_modifiers,
+    u16b forbidden_modifiers)
+{
+    app_movement_binding_clear(binding);
+    binding->context = APP_MOVEMENT_CONTEXT_ANY;
+    binding->action = action;
+    binding->direction = direction;
+    binding->device = APP_INPUT_DEVICE_KEYBOARD;
+    binding->input_type = APP_INPUT_TYPE_KEY;
+    binding->required_modifiers = required_modifiers;
+    binding->forbidden_modifiers = forbidden_modifiers;
+    binding->trigger = (u32b)scancode;
+}
+
+static bool sdl_config_add_keyboard_binding(struct sdl_config* config,
+    u16b action, u16b direction, SDL_Scancode scancode, u16b required_modifiers,
+    u16b forbidden_modifiers)
+{
+    app_movement_binding binding;
+
+    if (!config || scancode == SDL_SCANCODE_UNKNOWN)
+        return false;
+
+    sdl_config_init_keyboard_binding(&binding, action, direction, scancode,
+        required_modifiers, forbidden_modifiers);
+    return sdl_config_movement_append_binding(config, &binding);
+}
+
+static void sdl_config_add_directional_preset_set(struct sdl_config* config,
+    const SDL_Scancode* primary_scancodes)
+{
+    static const SDL_Scancode keypad_scancodes[] = {
+        SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9,
+        SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_6,
+        SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3
+    };
+    const u16b plain_forbidden = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT
+        | APP_INPUT_MODIFIER_META;
+    const u16b shift_forbidden = APP_INPUT_MODIFIER_CTRL
+        | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
+    const u16b ctrl_forbidden = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
+    size_t i;
+
+    for (i = 0; i < N_ELEMENTS(movement_direction_order); i++)
+    {
+        u16b direction = movement_direction_order[i];
+
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_MOVE_DIR, direction, primary_scancodes[i], 0,
+            plain_forbidden);
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_MOVE_DIR, direction, keypad_scancodes[i], 0,
+            plain_forbidden);
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_RUN_DIR, direction, primary_scancodes[i],
+            APP_INPUT_MODIFIER_SHIFT, shift_forbidden);
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_RUN_DIR, direction, keypad_scancodes[i],
+            APP_INPUT_MODIFIER_SHIFT, shift_forbidden);
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_INTERACT_DIR, direction, primary_scancodes[i],
+            APP_INPUT_MODIFIER_CTRL, ctrl_forbidden);
+        (void)sdl_config_add_keyboard_binding(config,
+            APP_MOVEMENT_ACTION_INTERACT_DIR, direction, keypad_scancodes[i],
+            APP_INPUT_MODIFIER_CTRL, ctrl_forbidden);
+    }
+}
+
+static void sdl_config_add_wait_rest_bindings(struct sdl_config* config,
+    SDL_Scancode wait_primary, SDL_Scancode rest_primary,
+    SDL_Scancode wait_secondary, SDL_Scancode rest_secondary)
+{
+    const u16b plain_forbidden = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT
+        | APP_INPUT_MODIFIER_META;
+    const u16b shift_forbidden = APP_INPUT_MODIFIER_CTRL
+        | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
+
+    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, wait_primary, 0, plain_forbidden);
+    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, wait_secondary, 0, plain_forbidden);
+    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_REST,
+        APP_MOVEMENT_DIRECTION_NONE, rest_primary, APP_INPUT_MODIFIER_SHIFT,
+        shift_forbidden);
+    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_REST,
+        APP_MOVEMENT_DIRECTION_NONE, rest_secondary, APP_INPUT_MODIFIER_SHIFT,
+        shift_forbidden);
+}
+
+void sdl_config_clear_movement_bindings(struct sdl_config* config)
+{
+    if (!config)
+        return;
+
+    config->movement_keyboard_present = false;
+    config->movement_keyboard_preset = APP_MOVEMENT_PRESET_NONE;
+    config->movement_binding_count = 0;
+    memset(config->movement_bindings, 0, sizeof(config->movement_bindings));
+}
+
+void sdl_config_set_default_movement_bindings(struct sdl_config* config,
+    u16b preset_id)
+{
+    static const SDL_Scancode classic_scancodes[] = {
+        SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9,
+        SDL_SCANCODE_KP_4, SDL_SCANCODE_KP_6,
+        SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3
+    };
+    static const SDL_Scancode arrows_scancodes[] = {
+        SDL_SCANCODE_HOME, SDL_SCANCODE_UP, SDL_SCANCODE_PAGEUP,
+        SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
+        SDL_SCANCODE_END, SDL_SCANCODE_DOWN, SDL_SCANCODE_PAGEDOWN
+    };
+    static const SDL_Scancode wasd_scancodes[] = {
+        SDL_SCANCODE_Q, SDL_SCANCODE_W, SDL_SCANCODE_E,
+        SDL_SCANCODE_A, SDL_SCANCODE_D,
+        SDL_SCANCODE_Z, SDL_SCANCODE_S, SDL_SCANCODE_C
+    };
+    static const SDL_Scancode vi_scancodes[] = {
+        SDL_SCANCODE_Y, SDL_SCANCODE_K, SDL_SCANCODE_U,
+        SDL_SCANCODE_H, SDL_SCANCODE_L,
+        SDL_SCANCODE_B, SDL_SCANCODE_J, SDL_SCANCODE_N
+    };
+    const SDL_Scancode* directional_scancodes = classic_scancodes;
+
+    if (!config)
+        return;
+
+    switch (preset_id)
+    {
+    case APP_MOVEMENT_PRESET_MODERN_ARROWS:
+        directional_scancodes = arrows_scancodes;
+        break;
+    case APP_MOVEMENT_PRESET_MODERN_WASD_QEZC:
+        directional_scancodes = wasd_scancodes;
+        break;
+    case APP_MOVEMENT_PRESET_VI_KEYS:
+        directional_scancodes = vi_scancodes;
+        break;
+    case APP_MOVEMENT_PRESET_CLASSIC_SIL:
+    default:
+        directional_scancodes = classic_scancodes;
+        preset_id = APP_MOVEMENT_PRESET_CLASSIC_SIL;
+        break;
+    }
+
+    sdl_config_clear_movement_bindings(config);
+    config->movement_keyboard_present = true;
+    config->movement_keyboard_preset = preset_id;
+    sdl_config_add_directional_preset_set(config, directional_scancodes);
+
+    if (preset_id == APP_MOVEMENT_PRESET_CLASSIC_SIL)
+    {
+        sdl_config_add_wait_rest_bindings(config, SDL_SCANCODE_KP_5,
+            SDL_SCANCODE_KP_5, SDL_SCANCODE_Z, SDL_SCANCODE_Z);
+    }
+    else
+    {
+        sdl_config_add_wait_rest_bindings(config, SDL_SCANCODE_PERIOD,
+            SDL_SCANCODE_PERIOD, SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_5);
+    }
+}
+
+bool sdl_config_has_movement_bindings(const struct sdl_config* config)
+{
+    return config && config->movement_binding_count > 0;
+}
+
+static bool sdl_config_import_legacy_binding_byte(struct sdl_config* config,
+    byte source_key, cptr action_text)
+{
+    app_movement_binding binding;
+    SDL_Scancode scancode;
+    u16b required_modifiers = 0;
+    u16b forbidden_modifiers = APP_INPUT_MODIFIER_SHIFT
+        | APP_INPUT_MODIFIER_CTRL | APP_INPUT_MODIFIER_ALT
+        | APP_INPUT_MODIFIER_META;
+    int base_key = source_key;
+    u16b action = APP_MOVEMENT_ACTION_NONE;
+    u16b direction = APP_MOVEMENT_DIRECTION_NONE;
+
+    if (!config || !action_text || !action_text[0])
+        return false;
+
+    if (action_text[0] == ';' && action_text[1] && !action_text[2])
+    {
+        action = APP_MOVEMENT_ACTION_MOVE_DIR;
+        if (!app_movement_direction_from_legacy_keypad(action_text[1] - '0',
+                &direction))
+        {
+            return false;
+        }
+    }
+    else if (action_text[0] == '.' && action_text[1] && !action_text[2])
+    {
+        action = APP_MOVEMENT_ACTION_RUN_DIR;
+        if (!app_movement_direction_from_legacy_keypad(action_text[1] - '0',
+                &direction))
+        {
+            return false;
+        }
+    }
+    else if (action_text[0] == '/' && action_text[1] && !action_text[2])
+    {
+        if (action_text[1] == '5')
+        {
+            action = APP_MOVEMENT_ACTION_WAIT;
+        }
+        else
+        {
+            action = APP_MOVEMENT_ACTION_INTERACT_DIR;
+            if (!app_movement_direction_from_legacy_keypad(action_text[1] - '0',
+                    &direction))
+            {
+                return false;
+            }
+        }
+    }
+    else if (streq(action_text, "z"))
+    {
+        action = APP_MOVEMENT_ACTION_WAIT;
+    }
+    else if (streq(action_text, "Z"))
+    {
+        action = APP_MOVEMENT_ACTION_REST;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (base_key >= KTRL('A') && base_key <= KTRL('Z'))
+    {
+        required_modifiers = APP_INPUT_MODIFIER_CTRL;
+        forbidden_modifiers = APP_INPUT_MODIFIER_SHIFT
+            | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
+        base_key = tolower((unsigned char)UN_KTRL(base_key));
+    }
+    else if (base_key >= 'A' && base_key <= 'Z')
+    {
+        required_modifiers = APP_INPUT_MODIFIER_SHIFT;
+        forbidden_modifiers = APP_INPUT_MODIFIER_CTRL
+            | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
+        base_key = tolower((unsigned char)base_key);
+    }
+
+    scancode = sdl_config_ascii_scancode(base_key,
+        base_key >= '0' && base_key <= '9');
+    if (scancode == SDL_SCANCODE_UNKNOWN)
+    {
+        log_warn("Movement migration skipped unsupported legacy key 0x%02X for action '%s'",
+            (unsigned)source_key, action_text);
+        return false;
+    }
+
+    sdl_config_init_keyboard_binding(&binding, action, direction, scancode,
+        required_modifiers, forbidden_modifiers);
+    if (!app_movement_binding_is_valid(&binding))
+    {
+        log_warn("Movement migration produced invalid binding for legacy key 0x%02X action '%s'",
+            (unsigned)source_key, action_text);
+        return false;
+    }
+
+    return sdl_config_movement_append_binding(config, &binding);
+}
+
+bool sdl_config_import_legacy_movement_bindings(struct sdl_config* config,
+    int keymap_mode)
+{
+    int key;
+    bool imported_any = false;
+    u16b preset_id = APP_MOVEMENT_PRESET_NONE;
+
+    if (!config || keymap_mode < 0 || keymap_mode >= KEYMAP_MODES)
+        return false;
+
+    sdl_config_clear_movement_bindings(config);
+
+    for (key = 0; key < 256; key++)
+    {
+        cptr action_text = keymap_act[keymap_mode][key];
+
+        if (!action_text)
+            continue;
+
+        if (sdl_config_import_legacy_binding_byte(config, (byte)key, action_text))
+            imported_any = true;
+    }
+
+    if (!imported_any)
+        return false;
+
+    switch (keymap_mode)
+    {
+    case KEYMAP_MODE_SIL_HJKL:
+    case KEYMAP_MODE_ANGBAND_HJKL:
+        preset_id = APP_MOVEMENT_PRESET_VI_KEYS;
+        break;
+    case KEYMAP_MODE_SIL:
+    case KEYMAP_MODE_ANGBAND:
+    default:
+        preset_id = APP_MOVEMENT_PRESET_CLASSIC_SIL;
+        break;
+    }
+
+    config->movement_keyboard_present = true;
+    config->movement_keyboard_preset = preset_id;
+    return true;
+}
+
+static void sdl_config_load_movement_bindings(cJSON* root,
+    struct sdl_config* config)
+{
+    cJSON* movement;
+    cJSON* preset;
+    cJSON* bindings;
+    int binding_count;
+    int i;
+
+    if (!root || !config)
+        return;
+
+    movement = cJSON_GetObjectItemCaseSensitive(root, "movement");
+    if (!cJSON_IsObject(movement))
+        return;
+
+    config->movement_keyboard_present = true;
+
+    preset = cJSON_GetObjectItemCaseSensitive(movement, "keyboardPreset");
+    if (cJSON_IsString(preset) && preset->valuestring)
+    {
+        (void)sdl_config_movement_preset_from_name(preset->valuestring,
+            &config->movement_keyboard_preset);
+    }
+
+    bindings = cJSON_GetObjectItemCaseSensitive(movement, "keyboardBindings");
+    if (!cJSON_IsArray(bindings))
+        return;
+
+    binding_count = cJSON_GetArraySize(bindings);
+    for (i = 0; i < binding_count && i < SDL_MOVEMENT_BINDING_MAX; i++)
+    {
+        cJSON* item = cJSON_GetArrayItem(bindings, i);
+        cJSON* context_item;
+        cJSON* action_item;
+        cJSON* direction_item;
+        cJSON* trigger_item;
+        cJSON* trigger_aux_item;
+        cJSON* required_item;
+        cJSON* forbidden_item;
+        app_movement_binding binding;
+
+        if (!cJSON_IsObject(item))
+            continue;
+
+        app_movement_binding_clear(&binding);
+        binding.device = APP_INPUT_DEVICE_KEYBOARD;
+        binding.input_type = APP_INPUT_TYPE_KEY;
+
+        context_item = cJSON_GetObjectItemCaseSensitive(item, "context");
+        action_item = cJSON_GetObjectItemCaseSensitive(item, "action");
+        direction_item = cJSON_GetObjectItemCaseSensitive(item, "direction");
+        trigger_item = cJSON_GetObjectItemCaseSensitive(item, "trigger");
+        trigger_aux_item = cJSON_GetObjectItemCaseSensitive(item, "triggerAux");
+        required_item = cJSON_GetObjectItemCaseSensitive(item,
+            "requiredModifiers");
+        forbidden_item = cJSON_GetObjectItemCaseSensitive(item,
+            "forbiddenModifiers");
+
+        if (!cJSON_IsString(context_item) || !context_item->valuestring
+            || !sdl_config_movement_context_from_name(context_item->valuestring,
+                &binding.context))
+        {
+            continue;
+        }
+
+        if (!cJSON_IsString(action_item) || !action_item->valuestring
+            || !sdl_config_movement_action_from_name(action_item->valuestring,
+                &binding.action))
+        {
+            continue;
+        }
+
+        if (cJSON_IsString(direction_item) && direction_item->valuestring)
+        {
+            if (!sdl_config_movement_direction_from_name(
+                    direction_item->valuestring, &binding.direction))
+            {
+                continue;
+            }
+        }
+
+        if (!cJSON_IsNumber(trigger_item) || trigger_item->valueint <= 0)
+            continue;
+
+        binding.trigger = (u32b)trigger_item->valueint;
+        if (cJSON_IsNumber(trigger_aux_item) && trigger_aux_item->valueint > 0)
+            binding.trigger_aux = (u32b)trigger_aux_item->valueint;
+        if (cJSON_IsNumber(required_item) && required_item->valueint >= 0)
+            binding.required_modifiers = (u16b)required_item->valueint;
+        if (cJSON_IsNumber(forbidden_item) && forbidden_item->valueint >= 0)
+            binding.forbidden_modifiers = (u16b)forbidden_item->valueint;
+
+        if (!sdl_config_movement_append_binding(config, &binding))
+        {
+            log_warn("Skipping invalid or duplicate movement binding at JSON index %d",
+                i);
+        }
+    }
+}
+
+static void sdl_config_save_movement_bindings(cJSON* root,
+    const struct sdl_config* config)
+{
+    cJSON* movement;
+    cJSON* bindings;
+    u16b i;
+
+    if (!root || !config)
+        return;
+    if (!config->movement_keyboard_present && config->movement_binding_count == 0
+        && config->movement_keyboard_preset == APP_MOVEMENT_PRESET_NONE)
+    {
+        return;
+    }
+
+    movement = cJSON_CreateObject();
+    if (!movement)
+        return;
+
+    cJSON_AddNumberToObject(movement, "version", APP_MOVEMENT_FORMAT_VERSION);
+    cJSON_AddStringToObject(movement, "keyboardPreset",
+        sdl_config_movement_preset_name(config->movement_keyboard_preset));
+
+    bindings = cJSON_CreateArray();
+    if (bindings)
+    {
+        for (i = 0; i < config->movement_binding_count; i++)
+        {
+            const app_movement_binding* binding = &config->movement_bindings[i];
+            cJSON* item;
+
+            if (!app_movement_binding_is_valid(binding))
+                continue;
+
+            item = cJSON_CreateObject();
+            if (!item)
+                continue;
+
+            cJSON_AddStringToObject(item, "context",
+                sdl_config_movement_context_name(binding->context));
+            cJSON_AddStringToObject(item, "action",
+                sdl_config_movement_action_name(binding->action));
+            cJSON_AddStringToObject(item, "direction",
+                sdl_config_movement_direction_name(binding->direction));
+            cJSON_AddNumberToObject(item, "trigger", (double)binding->trigger);
+            if (binding->trigger_aux != 0)
+            {
+                cJSON_AddNumberToObject(item, "triggerAux",
+                    (double)binding->trigger_aux);
+            }
+            cJSON_AddNumberToObject(item, "requiredModifiers",
+                (double)binding->required_modifiers);
+            cJSON_AddNumberToObject(item, "forbiddenModifiers",
+                (double)binding->forbidden_modifiers);
+            cJSON_AddItemToArray(bindings, item);
+        }
+
+        cJSON_AddItemToObject(movement, "keyboardBindings", bindings);
+    }
+
+    cJSON_AddItemToObject(root, "movement", movement);
 }
 
 static bool g_app_intro_seen = false;
@@ -1203,6 +1982,8 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             log_warn("'touchPane' object not found in JSON");
         }
     }
+
+    sdl_config_load_movement_bindings(root, config);
     
     cJSON_Delete(root);
     log_debug("Configuration loading complete. Total panes: %d", *pane_count);
@@ -1395,6 +2176,8 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         }
     }
 
+    sdl_config_save_movement_bindings(root, config);
+
     /* Create app-wide options object */
     {
         cJSON* app_options = cJSON_CreateObject();
@@ -1547,6 +2330,9 @@ void sdl_config_clear_touch_pane_labels(struct sdl_config* config)
 
 void sdl_config_set_defaults(struct sdl_config* config)
 {
+    if (!config)
+        return;
+
     config->main_view_scale = 1;
     config->aux_view_font_size = 0;
     config->menu_panel_font_size = 0;
@@ -1601,6 +2387,7 @@ void sdl_config_set_defaults(struct sdl_config* config)
     sdl_config_set_default_gamepad_bindings(config);
     sdl_config_set_default_touch_pane_bindings(config);
     sdl_config_clear_touch_pane_labels(config);
+    sdl_config_clear_movement_bindings(config);
 }
 
 void sdl_config_set_defaults_for_resolution(struct sdl_config* config, 

@@ -4,6 +4,10 @@
 #include "h-basic.h"
 #include "gamepad-config.h"
 
+bool sdl_submit_directional_movement(int keypad_dir, bool shift, bool ctrl,
+    bool alt, u16b device, u16b input_type, u16b source_id,
+    u16b input_flags, u32b trigger, u32b trigger_aux);
+
 bool steamdeck_controls_active(void);
 bool portable_controls_active(void);
 int steamdeck_back_key(void);

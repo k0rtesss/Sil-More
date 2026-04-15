@@ -1,8 +1,11 @@
 #pragma once
 
 #include <stdbool.h>
+#include "app/app-movement.h"
 #include "gamepad-config.h"
 #include "pane-config.h"
+
+#define SDL_MOVEMENT_BINDING_MAX 64
 
 enum sdl_min_terminal_mode {
     SDL_MIN_TERMINAL_NORMAL = 0,
@@ -71,7 +74,14 @@ struct sdl_config {
     int touch_pane_second_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
     char touch_pane_second_labels[SDL_TOUCH_PANE_BUTTON_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
     char touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
+
+    bool movement_keyboard_present;
+    u16b movement_keyboard_preset;
+    u16b movement_binding_count;
+    app_movement_binding movement_bindings[SDL_MOVEMENT_BINDING_MAX];
 };
+
+extern struct sdl_config config;
 
 // Load SDL configuration from JSON file
 void sdl_config_load(const char* filename, struct sdl_config* config, 
@@ -92,6 +102,20 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config);
 
 // Clear custom touch pane labels (does not touch other fields)
 void sdl_config_clear_touch_pane_labels(struct sdl_config* config);
+
+// Clear keyboard movement bindings and reset the stored preset metadata.
+void sdl_config_clear_movement_bindings(struct sdl_config* config);
+
+// Apply a built-in keyboard movement preset.
+void sdl_config_set_default_movement_bindings(struct sdl_config* config,
+    u16b preset_id);
+
+// Returns true when the config carries at least one stored movement binding.
+bool sdl_config_has_movement_bindings(const struct sdl_config* config);
+
+// Import known legacy movement keymaps from the supplied keymap mode.
+bool sdl_config_import_legacy_movement_bindings(struct sdl_config* config,
+    int keymap_mode);
 
 // Set default configuration values based on screen resolution
 void sdl_config_set_defaults_for_resolution(struct sdl_config* config, 

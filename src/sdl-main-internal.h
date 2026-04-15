@@ -255,7 +255,6 @@ void sdl_gamepad_apply_modifier(int binding, bool down);
 bool sdl_gamepad_shift_active(void);
 bool sdl_gamepad_ctrl_active(void);
 bool sdl_gamepad_alt_active(void);
-void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
 void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
 void sdl_submit_legacy_input_byte(int key);

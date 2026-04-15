@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-movement.h"
 #include "sdl-main-internal.h"
 #include "ui/ui-information-scene.h"
 
@@ -84,17 +85,29 @@ static void sdl_gamepad_close(SDL_JoystickID id);
 static void sdl_gamepad_mark_auto_ui(void);
 static int sdl_gamepad_axis_to_dir(Sint16 x, Sint16 y, int deadzone);
 static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone);
-static void sdl_gamepad_send_direction(int dir);
-void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt);
+static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
+    bool alt, u16b input_type);
 void sdl_gamepad_send_key(int key, bool use_macro_mods);
 void sdl_send_macro_key(int key, bool shift, bool ctrl, bool alt);
 static int sdl_keymap_mode(void);
+static void sdl_submit_legacy_input_byte_repeat(int key, bool repeat);
+static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
+static bool sdl_parse_movement_action_string(cptr action, u16b* out_action,
+    u16b* out_direction);
+static bool sdl_build_movement_command_from_action(u16b action,
+    u16b direction, const app_input* input,
+    app_movement_command* out_command);
+static bool sdl_bridge_movement_command_to_legacy(
+    const app_movement_command* command);
+static bool sdl_try_submit_movement_action(cptr action, u16b device,
+    u16b input_type, u16b source_id, u16b modifiers, u16b input_flags,
+    u32b trigger, u32b trigger_aux);
+static int sdl_key_to_legacy_keypad_dir(int key);
 static char sdl_direction_char_for_key(int key);
-static int sdl_direction_for_key_char(char ch);
-static bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift, bool ctrl, bool alt,
-    bool gui);
-static bool sdl_try_send_modified_direction_key(int key, bool shift, bool ctrl, bool alt, bool gui);
-static bool sdl_try_send_modified_direction_event(const SDL_KeyboardEvent* key_event);
+static char sdl_legacy_key_char_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event);
+static bool sdl_try_submit_keyboard_movement_event(
+    const SDL_KeyboardEvent* key_event);
 static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event);
 void sdl_gamepad_apply_modifier(int binding, bool down);
 bool sdl_gamepad_shift_active(void);
@@ -162,6 +175,14 @@ static bool sdl_queue_legacy_input_byte_ex(int key, bool repeat)
 static bool sdl_queue_legacy_input_byte(int key)
 {
     return sdl_queue_legacy_input_byte_ex(key, false);
+}
+
+static void sdl_submit_legacy_input_byte_repeat(int key, bool repeat)
+{
+    if (sdl_queue_legacy_input_byte_ex(key, repeat))
+        return;
+
+    (void)input_byte_enqueue(key);
 }
 
 void sdl_submit_legacy_input_byte(int key)
@@ -277,128 +298,464 @@ static int sdl_keymap_mode(void)
     return KEYMAP_MODE_ANGBAND_HJKL;
 }
 
-static char sdl_direction_char_for_key(int key)
+static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod)
 {
-    switch (key) {
-        case SDLK_UP:
-        case SDLK_KP_8:
-            return '8';
-        case SDLK_DOWN:
-        case SDLK_KP_2:
-            return '2';
-        case SDLK_LEFT:
-        case SDLK_KP_4:
-            return '4';
-        case SDLK_RIGHT:
-        case SDLK_KP_6:
-            return '6';
-        case SDLK_KP_1:
-        case SDLK_END:
-            return '1';
-        case SDLK_KP_3:
-        case SDLK_PAGEDOWN:
-            return '3';
-        case SDLK_KP_7:
-        case SDLK_HOME:
-            return '7';
-        case SDLK_KP_9:
-        case SDLK_PAGEUP:
-            return '9';
-        case SDLK_KP_5:
-            return '5';
-        default:
+    u16b modifiers = 0;
+
+    if (mod & SDL_KMOD_SHIFT)
+        modifiers |= APP_INPUT_MODIFIER_SHIFT;
+    if (mod & SDL_KMOD_CTRL)
+        modifiers |= APP_INPUT_MODIFIER_CTRL;
+    if (mod & SDL_KMOD_ALT)
+        modifiers |= APP_INPUT_MODIFIER_ALT;
+    if (mod & SDL_KMOD_GUI)
+        modifiers |= APP_INPUT_MODIFIER_META;
+#ifdef SDL_KMOD_CAPS
+    if (mod & SDL_KMOD_CAPS)
+        modifiers |= APP_INPUT_MODIFIER_CAPS_LOCK;
+#endif
+#ifdef SDL_KMOD_NUM
+    if (mod & SDL_KMOD_NUM)
+        modifiers |= APP_INPUT_MODIFIER_NUM_LOCK;
+#endif
+
+    return modifiers;
+}
+
+static bool sdl_parse_movement_action_string(cptr action, u16b* out_action,
+    u16b* out_direction)
+{
+    u16b parsed_action = APP_MOVEMENT_ACTION_NONE;
+    u16b parsed_direction = APP_MOVEMENT_DIRECTION_NONE;
+
+    if (!action || !action[0])
+        return false;
+
+    if (!action[1])
+    {
+        switch (action[0])
+        {
+        case 'z':
+            parsed_action = APP_MOVEMENT_ACTION_WAIT;
+            parsed_direction = APP_MOVEMENT_DIRECTION_CENTER;
             break;
+
+        case 'Z':
+            parsed_action = APP_MOVEMENT_ACTION_REST;
+            parsed_direction = APP_MOVEMENT_DIRECTION_CENTER;
+            break;
+
+        default:
+            return false;
+        }
+    }
+    else
+    {
+        int legacy_dir;
+
+        if (action[2] || !isdigit((unsigned char)action[1]))
+            return false;
+
+        legacy_dir = D2I(action[1]);
+        if (!app_movement_direction_from_legacy_keypad(legacy_dir,
+                &parsed_direction))
+        {
+            return false;
+        }
+
+        switch (action[0])
+        {
+        case ';':
+            parsed_action = APP_MOVEMENT_ACTION_MOVE_DIR;
+            break;
+
+        case '.':
+            parsed_action = APP_MOVEMENT_ACTION_RUN_DIR;
+            break;
+
+        case '/':
+            parsed_action = APP_MOVEMENT_ACTION_INTERACT_DIR;
+            break;
+
+        default:
+            return false;
+        }
     }
 
+    if (out_action)
+        *out_action = parsed_action;
+    if (out_direction)
+        *out_direction = parsed_direction;
+
+    return true;
+}
+
+static bool sdl_build_movement_command_from_action(u16b action,
+    u16b direction, const app_input* input,
+    app_movement_command* out_command)
+{
+    if (!input || !out_command)
+        return false;
+
+    app_movement_command_clear(out_command);
+    out_command->context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    out_command->action = action;
+    out_command->modifiers = input->modifiers;
+    out_command->device = input->device;
+    out_command->input_type = input->type;
+    out_command->source_id = input->source_id;
+    out_command->sequence = input->sequence;
+    out_command->timestamp_usec = input->timestamp_usec;
+
+    switch (input->type)
+    {
+    case APP_INPUT_TYPE_KEY:
+        out_command->trigger = input->payload.key.physical_key
+            ? input->payload.key.physical_key
+            : input->payload.key.logical_key;
+        out_command->trigger_aux = input->payload.key.logical_key;
+        break;
+
+    case APP_INPUT_TYPE_GAMEPAD_BUTTON:
+    case APP_INPUT_TYPE_GAMEPAD_AXIS:
+        out_command->trigger = input->payload.gamepad.control;
+        out_command->trigger_aux = input->payload.gamepad.secondary_control;
+        break;
+
+    case APP_INPUT_TYPE_POINTER_BUTTON:
+        out_command->trigger = input->payload.pointer.button;
+        out_command->trigger_aux = input->payload.pointer.clicks;
+        break;
+
+    default:
+        out_command->trigger = 0;
+        out_command->trigger_aux = 0;
+        break;
+    }
+
+    if (input->flags & APP_INPUT_FLAG_REPEAT)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_REPEAT;
+    if (input->flags & APP_INPUT_FLAG_SYNTHETIC)
+        out_command->flags |= APP_MOVEMENT_COMMAND_FLAG_SYNTHETIC;
+
+    if (!app_movement_direction_payload_from_direction(direction,
+            &out_command->direction))
+    {
+        return false;
+    }
+
+    return app_movement_command_is_valid(out_command);
+}
+
+static bool sdl_bridge_movement_command_to_legacy(
+    const app_movement_command* command)
+{
+    int dir;
+    bool repeat;
+
+    if (!command || !app_movement_command_is_valid(command))
+        return false;
+
+    repeat = (command->flags & APP_MOVEMENT_COMMAND_FLAG_REPEAT) != 0;
+    dir = app_movement_direction_to_legacy_keypad(
+        command->direction.direction);
+
+    switch (command->action)
+    {
+    case APP_MOVEMENT_ACTION_MOVE_DIR:
+        if (!dir)
+            return false;
+        sdl_submit_legacy_input_byte_repeat(';', repeat);
+        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
+        return true;
+
+    case APP_MOVEMENT_ACTION_RUN_DIR:
+        if (!dir)
+            return false;
+        sdl_submit_legacy_input_byte_repeat('.', repeat);
+        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
+        return true;
+
+    case APP_MOVEMENT_ACTION_INTERACT_DIR:
+        if (!dir)
+            return false;
+        sdl_submit_legacy_input_byte_repeat('/', repeat);
+        sdl_submit_legacy_input_byte_repeat('0' + dir, repeat);
+        return true;
+
+    case APP_MOVEMENT_ACTION_WAIT:
+        sdl_submit_legacy_input_byte_repeat('z', repeat);
+        return true;
+
+    case APP_MOVEMENT_ACTION_REST:
+        sdl_submit_legacy_input_byte_repeat('Z', repeat);
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static bool sdl_try_submit_movement_action(cptr action, u16b device,
+    u16b input_type, u16b source_id, u16b modifiers, u16b input_flags,
+    u32b trigger, u32b trigger_aux)
+{
+    app_input input;
+    app_movement_command command;
+    u16b movement_action = APP_MOVEMENT_ACTION_NONE;
+    u16b direction = APP_MOVEMENT_DIRECTION_NONE;
+
+    if (!sdl_parse_movement_action_string(action, &movement_action, &direction))
+        return false;
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_INTENT;
+    input.type = input_type;
+    input.device = device;
+    input.modifiers = modifiers;
+    input.flags = input_flags;
+    input.source_id = source_id;
+    input.sequence = ++g_legacy_input_sequence;
+    input.timestamp_usec = SDL_GetTicksNS() / 1000ULL;
+
+    switch (input_type)
+    {
+    case APP_INPUT_TYPE_KEY:
+        input.payload.key.logical_key = trigger_aux;
+        input.payload.key.physical_key = trigger ? trigger : trigger_aux;
+        input.payload.key.repeat_count
+            = (input_flags & APP_INPUT_FLAG_REPEAT) ? 1 : 0;
+        break;
+
+    case APP_INPUT_TYPE_GAMEPAD_BUTTON:
+    case APP_INPUT_TYPE_GAMEPAD_AXIS:
+        input.payload.gamepad.control = (u16b)trigger;
+        input.payload.gamepad.secondary_control = (u16b)trigger_aux;
+        break;
+
+    case APP_INPUT_TYPE_POINTER_BUTTON:
+        input.payload.pointer.button = (u16b)trigger;
+        input.payload.pointer.clicks = (u16b)trigger_aux;
+        break;
+
+    default:
+        break;
+    }
+
+    if (!sdl_build_movement_command_from_action(movement_action, direction,
+            &input, &command))
+    {
+        return false;
+    }
+
+    return sdl_bridge_movement_command_to_legacy(&command);
+}
+
+bool sdl_submit_directional_movement(int dir, bool shift, bool ctrl, bool alt,
+    u16b device, u16b input_type, u16b source_id, u16b input_flags,
+    u32b trigger, u32b trigger_aux)
+{
+    char action[4];
+    u16b modifiers = 0;
+    int modifier_count = (shift ? 1 : 0) + (ctrl ? 1 : 0) + (alt ? 1 : 0);
+
+    if (dir < 1 || dir > 9)
+        return false;
+    if (modifier_count > 1)
+        return false;
+
+    if (shift)
+        modifiers |= APP_INPUT_MODIFIER_SHIFT;
+    if (ctrl)
+        modifiers |= APP_INPUT_MODIFIER_CTRL;
+    if (alt)
+        modifiers |= APP_INPUT_MODIFIER_ALT;
+
+    if (shift) {
+        if (dir == 5) {
+            SDL_strlcpy(action, "Z", sizeof(action));
+        } else {
+            strnfmt(action, sizeof(action), ".%d", dir);
+        }
+    } else if (ctrl) {
+        strnfmt(action, sizeof(action), "/%d", dir);
+    } else if (alt) {
+        return false;
+    } else {
+        if (dir == 5) {
+            SDL_strlcpy(action, "z", sizeof(action));
+        } else {
+            strnfmt(action, sizeof(action), ";%d", dir);
+        }
+    }
+
+    return sdl_try_submit_movement_action(action, device, input_type, source_id,
+        modifiers, input_flags, trigger, trigger_aux);
+}
+
+static int sdl_key_to_legacy_keypad_dir(int key)
+{
+    switch (key) {
+    case SDLK_UP:
+    case SDLK_KP_8:
+        return 8;
+
+    case SDLK_DOWN:
+    case SDLK_KP_2:
+        return 2;
+
+    case SDLK_LEFT:
+    case SDLK_KP_4:
+        return 4;
+
+    case SDLK_RIGHT:
+    case SDLK_KP_6:
+        return 6;
+
+    case SDLK_KP_1:
+    case SDLK_END:
+        return 1;
+
+    case SDLK_KP_3:
+    case SDLK_PAGEDOWN:
+        return 3;
+
+    case SDLK_KP_7:
+    case SDLK_HOME:
+        return 7;
+
+    case SDLK_KP_9:
+    case SDLK_PAGEUP:
+        return 9;
+
+    case SDLK_KP_5:
+        return 5;
+
+    default:
+        return 0;
+    }
+}
+
+static char sdl_direction_char_for_key(int key)
+{
+    int dir = sdl_key_to_legacy_keypad_dir(key);
+
+    if (dir)
+        return (char)('0' + dir);
     if (SDL_isprint(key) && key > 0 && key < 256)
         return (char)key;
 
     return 0;
 }
 
-static int sdl_direction_for_key_char(char ch)
+static char sdl_legacy_key_char_from_keyboard_event(
+    const SDL_KeyboardEvent* key_event)
 {
-    int dir;
-    int mode;
-    cptr act;
+    static const char shifted[256] = {
+        ['1'] = '!', ['2'] = '@', ['3'] = '#', ['4'] = '$', ['5'] = '%',
+        ['6'] = '^', ['7'] = '&', ['8'] = '*', ['9'] = '(', ['0'] = ')',
+        ['-'] = '_', ['='] = '+',
+        [','] = '<', ['.'] = '>', ['/'] = '?',
+        ['['] = '{', [']'] = '}',
+        [';'] = ':', ['\''] = '"', ['\\'] = '|',
+        ['`'] = '~',
+    };
+    bool shift;
+    bool ctrl;
+    bool alt;
+    bool gui;
+    char dir_ch;
+    int key;
 
-    if (!ch)
+    if (!key_event)
         return 0;
 
-    dir = target_dir(ch);
-    if (dir)
-        return dir;
+    shift = (key_event->mod & SDL_KMOD_SHIFT) != 0;
+    ctrl = (key_event->mod & SDL_KMOD_CTRL) != 0;
+    alt = (key_event->mod & SDL_KMOD_ALT) != 0;
+    gui = (key_event->mod & SDL_KMOD_GUI) != 0;
+    key = key_event->key;
+    dir_ch = sdl_direction_char_for_key(key);
 
-    mode = sdl_keymap_mode();
-    act = keymap_act[mode][(byte)ch];
-    if (act && streq(act, "z"))
-        return 5;
+    if (dir_ch)
+        return (shift || ctrl || alt || gui) ? 0 : dir_ch;
 
-    return 0;
+    if (!SDL_isprint(key) || key <= 0 || key >= 256)
+        return 0;
+
+    if (ctrl && !alt && !gui && SDL_isalpha(key))
+        return (char)KTRL(key);
+    if (ctrl || alt || gui)
+        return 0;
+
+    if (shift) {
+        if (SDL_isalpha(key)) {
+            key = SDL_toupper(key);
+        } else if (shifted[key]) {
+            key = shifted[key];
+        }
+    }
+
+    return (char)key;
 }
 
-static bool sdl_send_modified_direction_action(int dir, char dir_ch, bool shift, bool ctrl, bool alt,
-    bool gui)
+static bool sdl_try_submit_keyboard_movement_event(
+    const SDL_KeyboardEvent* key_event)
 {
-    bool control = ctrl || gui;
-    int mod_count = (shift ? 1 : 0) + (control ? 1 : 0) + (alt ? 1 : 0);
-    char macro_key;
-
-    if (dir < 1 || dir > 9 || mod_count != 1)
-        return false;
-
-    /*
-     * Use the existing macro-trigger path for directional modifier combos.
-     * That keeps the legacy prompt machinery from briefly rendering the
-     * intermediate command/direction pair before the queued input resolves.
-     */
-    macro_key = (char)('0' + dir);
-    if (!macro_key)
-        return false;
-
-    (void)dir_ch;
-    sdl_send_macro_key(macro_key, shift, control, alt);
-    return true;
-}
-
-static bool sdl_try_send_modified_direction_key(int key, bool shift, bool ctrl, bool alt, bool gui)
-{
-    char dir_ch = sdl_direction_char_for_key(key);
-    int dir = sdl_direction_for_key_char(dir_ch);
-
-    if (!dir)
-        return false;
-
-    return sdl_send_modified_direction_action(dir, dir_ch, shift, ctrl, alt, gui);
-}
-
-static bool sdl_try_send_modified_direction_event(const SDL_KeyboardEvent* key_event)
-{
+    char ch;
+    const char* action;
+    char direct_action[2];
     bool shift;
     bool alt;
     bool ctrl;
     bool gui;
-    SDL_Keycode base_key;
+    bool control;
+    int dir;
+    int mode;
+    u16b modifiers;
+    u16b input_flags = APP_INPUT_FLAG_PRESS;
 
-    if (!key_event)
+    if (!key_event || !character_dungeon || sdl_session_input_capture_active())
         return false;
 
-    shift = key_event->mod & SDL_KMOD_SHIFT;
-    alt = key_event->mod & SDL_KMOD_ALT;
-    ctrl = key_event->mod & SDL_KMOD_CTRL;
-    gui = key_event->mod & SDL_KMOD_GUI;
+    shift = (key_event->mod & SDL_KMOD_SHIFT) != 0;
+    alt = (key_event->mod & SDL_KMOD_ALT) != 0;
+    ctrl = (key_event->mod & SDL_KMOD_CTRL) != 0;
+    gui = (key_event->mod & SDL_KMOD_GUI) != 0;
+    control = ctrl || gui;
+    dir = sdl_key_to_legacy_keypad_dir(key_event->key);
 
-    if (sdl_try_send_modified_direction_key(key_event->key, shift, ctrl, alt, gui))
-        return true;
+    if (key_event->repeat)
+        input_flags |= APP_INPUT_FLAG_REPEAT;
 
-    base_key = SDL_GetKeyFromScancode(key_event->scancode, SDL_KMOD_NONE, false);
-    if (base_key != key_event->key
-        && sdl_try_send_modified_direction_key(base_key, shift, ctrl, alt, gui))
+    modifiers = sdl_input_modifiers_from_keymod(key_event->mod);
+    if (gui)
+        modifiers |= APP_INPUT_MODIFIER_CTRL;
+
+    if (dir && !alt && ((shift ? 1 : 0) + (control ? 1 : 0) == 1)) {
+        return sdl_submit_directional_movement(dir, shift, control, false,
+            APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, input_flags,
+            (u32b)key_event->scancode, (u32b)('0' + dir));
+    }
+
+    ch = sdl_legacy_key_char_from_keyboard_event(key_event);
+    if (!ch)
+        return false;
+
+    mode = sdl_keymap_mode();
+    action = keymap_act[mode][(byte)ch];
+    if (action && sdl_try_submit_movement_action(action,
+            APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, modifiers,
+            input_flags, (u32b)key_event->scancode, (u32b)(byte)ch))
     {
         return true;
     }
 
-    return false;
+    direct_action[0] = ch;
+    direct_action[1] = '\0';
+    return sdl_try_submit_movement_action(direct_action,
+        APP_INPUT_DEVICE_KEYBOARD, APP_INPUT_TYPE_KEY, 0, modifiers,
+        input_flags, (u32b)key_event->scancode, (u32b)(byte)ch);
 }
 
 static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event)
@@ -532,21 +889,6 @@ static void sdl_gamepad_send_shoulder_combo(void)
     sdl_gamepad_send_key(binding, false);
 }
 
-void sdl_gamepad_send_direction_mods(int dir, bool shift, bool ctrl, bool alt)
-{
-    if (dir < 1 || dir > 9)
-        return;
-
-    if (sdl_send_modified_direction_action(dir, (char)('0' + dir), shift, ctrl, alt, false))
-        return;
-
-    if (shift || ctrl || alt) {
-        sdl_send_macro_key('0' + dir, shift, ctrl, alt);
-    } else {
-        sdl_submit_legacy_input_byte('0' + dir);
-    }
-}
-
 static int sdl_gamepad_axis_to_dir(Sint16 x, Sint16 y, int deadzone)
 {
     int dx = 0;
@@ -595,10 +937,21 @@ static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone)
     return (y >= 0) ? GAMEPAD_STICK_DIR_DOWN : GAMEPAD_STICK_DIR_UP;
 }
 
-static void sdl_gamepad_send_direction(int dir)
+static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
+    bool alt, u16b input_type)
 {
-    sdl_gamepad_send_direction_mods(dir, sdl_gamepad_shift_active(),
-        sdl_gamepad_ctrl_active(), sdl_gamepad_alt_active());
+    if (sdl_submit_directional_movement(dir, shift, ctrl, alt,
+            APP_INPUT_DEVICE_GAMEPAD, input_type, 0, APP_INPUT_FLAG_PRESS,
+            (u32b)dir, 0))
+    {
+        return;
+    }
+
+    if (shift || ctrl || alt) {
+        sdl_send_macro_key('0' + dir, shift, ctrl, alt);
+    } else {
+        sdl_submit_legacy_input_byte('0' + dir);
+    }
 }
 
 static void sdl_gamepad_clear_pending_dpad(void)
@@ -634,9 +987,9 @@ bool sdl_gamepad_flush_pending_dpad(Uint64 now_ns, bool force)
     if (!force && now_ns - g_gamepad_state.dpad_pending_time < window_ns)
         return false;
 
-    sdl_gamepad_send_direction_mods(g_gamepad_state.dpad_pending_dir,
+    sdl_dispatch_gamepad_direction(g_gamepad_state.dpad_pending_dir,
         g_gamepad_state.dpad_pending_shift, g_gamepad_state.dpad_pending_ctrl,
-        g_gamepad_state.dpad_pending_alt);
+        g_gamepad_state.dpad_pending_alt, APP_INPUT_TYPE_GAMEPAD_BUTTON);
     sdl_gamepad_clear_pending_dpad();
     return true;
 }
@@ -674,9 +1027,9 @@ bool sdl_gamepad_flush_pending_left_stick(Uint64 now_ns, bool force)
     if (!force && now_ns - g_gamepad_state.left_pending_time < window_ns)
         return false;
 
-    sdl_gamepad_send_direction_mods(g_gamepad_state.left_pending_dir,
+    sdl_dispatch_gamepad_direction(g_gamepad_state.left_pending_dir,
         g_gamepad_state.left_pending_shift, g_gamepad_state.left_pending_ctrl,
-        g_gamepad_state.left_pending_alt);
+        g_gamepad_state.left_pending_alt, APP_INPUT_TYPE_GAMEPAD_AXIS);
     sdl_gamepad_clear_pending_left_stick();
     return true;
 }
@@ -1135,7 +1488,9 @@ static void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
                 /* Keep pending to allow quick taps to resolve. */
             } else if (diagonal) {
                 sdl_gamepad_clear_pending_dpad();
-                sdl_gamepad_send_direction(dir);
+                sdl_dispatch_gamepad_direction(dir,
+                    sdl_gamepad_shift_active(), sdl_gamepad_ctrl_active(),
+                    sdl_gamepad_alt_active(), APP_INPUT_TYPE_GAMEPAD_BUTTON);
             } else {
                 if (g_gamepad_state.dpad_pending)
                     sdl_gamepad_flush_pending_dpad(SDL_GetTicksNS(), true);
@@ -1286,7 +1641,9 @@ static void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
                     /* Keep pending to allow quick taps to resolve. */
                 } else if (dir == 1 || dir == 3 || dir == 7 || dir == 9) {
                     sdl_gamepad_clear_pending_left_stick();
-                    sdl_gamepad_send_direction(dir);
+                    sdl_dispatch_gamepad_direction(dir,
+                        sdl_gamepad_shift_active(), sdl_gamepad_ctrl_active(),
+                        sdl_gamepad_alt_active(), APP_INPUT_TYPE_GAMEPAD_AXIS);
                 } else {
                     if (prev_dir == 1 || prev_dir == 3 || prev_dir == 7 || prev_dir == 9) {
                         sdl_gamepad_clear_pending_left_stick();
@@ -1505,7 +1862,7 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
         if (alt && !character_dungeon)
             return;
 
-        if (character_dungeon && sdl_try_send_modified_direction_event(&ev->key))
+        if (sdl_try_submit_keyboard_movement_event(&ev->key))
             return;
 
         if (SDL_isprint(ev->key.key)) {

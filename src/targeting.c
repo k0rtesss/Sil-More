@@ -399,8 +399,7 @@ int target_dir(char ch)
     int mode;
 
     cptr act;
-
-    cptr s;
+    size_t len;
 
     /* Already a direction? */
     if (isdigit((unsigned char)ch))
@@ -431,12 +430,13 @@ int target_dir(char ch)
             /* Analyze */
             if (act)
             {
-                /* Convert to a direction */
-                for (s = act; *s; ++s)
+                len = strlen(act);
+
+                if ((len == 2)
+                    && ((act[0] == ';') || (act[0] == '.') || (act[0] == '/'))
+                    && isdigit((unsigned char)act[1]))
                 {
-                    /* Use any digits in keymap */
-                    if (isdigit((unsigned char)*s))
-                        d = D2I(*s);
+                    d = D2I(act[1]);
                 }
             }
         }
@@ -2383,6 +2383,7 @@ int rough_direction(int y1, int x1, int y2, int x2)
 bool get_aim_dir(int* dp, int range)
 {
     app_wait_scope wait_scope;
+    app_movement_command movement_command;
     int dir;
 
     char ch;
@@ -2438,8 +2439,53 @@ bool get_aim_dir(int* dp, int range)
             p = "Direction ('f' for target, '*' to re-target, ESC to cancel)? ";
         }
 
-        /* Get a command (or Cancel) */
-        if (!get_com(p, &ch))
+        message_flush();
+        prt(p, 0, 0);
+        app_movement_command_clear(&movement_command);
+        ch = '\0';
+        (void)input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_TARGETING,
+            APP_WAIT_REASON_NONE, &movement_command, &ch);
+
+        if (app_movement_command_is_valid(&movement_command))
+        {
+            dir = app_movement_direction_to_legacy_keypad(
+                movement_command.direction.direction);
+
+            if (dir == 5)
+            {
+                if (target_okay(range))
+                {
+                    dir = 5;
+                }
+                else
+                {
+                    /* Prepare the "temp" array */
+                    get_sorted_target_list(TARGET_KILL, range);
+
+                    /* Monster */
+                    if (temp_n)
+                    {
+                        target_set_monster(cave_m_idx[temp_y[0]][temp_x[0]]);
+                        health_track(cave_m_idx[temp_y[0]][temp_x[0]]);
+                        dir = 5;
+                    }
+                    else
+                    {
+                        dir = 0;
+                    }
+                }
+            }
+            else if ((dir == 5) && !target_okay(range))
+            {
+                dir = 0;
+            }
+
+            if (!dir)
+                bell("Illegal aim direction!");
+            continue;
+        }
+
+        if (ch == ESCAPE)
             break;
 
         /* Analyze */
@@ -2507,6 +2553,8 @@ bool get_aim_dir(int* dp, int range)
             bell("Illegal aim direction!");
     }
 
+    prt("", 0, 0);
+
     /* No direction */
     if (!dir)
     {
@@ -2560,6 +2608,7 @@ bool get_aim_dir(int* dp, int range)
 bool get_rep_dir(int* dp)
 {
     app_wait_scope wait_scope;
+    app_movement_command movement_command;
     int dir;
 
     char ch;
@@ -2592,7 +2641,21 @@ bool get_rep_dir(int* dp)
          * Direction prompts are already represented by the active command
          * flow. Avoid opening an extra modal prompt scene on the SDL path.
          */
-        ch = targeting_inkey_with_wait_reason();
+        app_movement_command_clear(&movement_command);
+        ch = '\0';
+        (void)input_wait_for_movement_or_legacy(
+            APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT, APP_WAIT_REASON_NONE,
+            &movement_command, &ch);
+
+        if (app_movement_command_is_valid(&movement_command))
+        {
+            dir = app_movement_direction_to_legacy_keypad(
+                movement_command.direction.direction);
+            if (!dir)
+                bell("Illegal repeatable direction!");
+            continue;
+        }
+
         if (ch == ESCAPE)
             break;
 

@@ -17,6 +17,7 @@
  * Automatically generated "variable" declarations
  */
 #include "h-basic.h"
+#include "app/app-movement.h"
 #include "drop_system.h"
 #include "fs/pref-files.h"
 #include "fs/pref-time.h"
@@ -962,6 +963,15 @@ extern void inkey_set_scan(bool enabled);
 extern bool inkey_cursor_hidden(void);
 extern void inkey_set_cursor_hidden(bool hidden);
 extern bool inkey_can_consume_immediately(void);
+extern bool input_submit_movement_command(
+    const app_movement_command* command);
+extern void input_clear_movement_commands(void);
+extern bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
+    app_movement_command* out_command, char* out_ch);
+extern void input_set_active_movement_command(
+    const app_movement_command* command);
+extern bool input_take_active_movement_command(
+    app_movement_command* out_command);
 extern char inkey(void);
 extern void bell(cptr reason);
 extern void sound(int val);

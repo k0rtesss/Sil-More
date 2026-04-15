@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "app/app-movement.h"
 #include "app/app-session.h"
 #include "externs.h"
 #include "log/log.h"
@@ -99,6 +100,100 @@ struct input_byte_queue_state {
 };
 
 static struct input_byte_queue_state g_input_byte_queue = { 0 };
+
+enum {
+    INPUT_MOVEMENT_QUEUE_SIZE = 32
+};
+
+struct input_movement_command_state {
+    app_movement_command queued[INPUT_MOVEMENT_QUEUE_SIZE];
+    u16b count;
+    bool active;
+    app_movement_command current;
+};
+
+static struct input_movement_command_state g_input_movement_commands = { 0 };
+
+static bool input_movement_context_matches(u16b command_context,
+    u16b requested_context)
+{
+    return requested_context == APP_MOVEMENT_CONTEXT_ANY
+        || command_context == APP_MOVEMENT_CONTEXT_ANY
+        || command_context == requested_context;
+}
+
+static bool input_take_queued_movement_command(u16b context,
+    app_movement_command* out_command)
+{
+    u16b i;
+
+    for (i = 0; i < g_input_movement_commands.count; i++)
+    {
+        if (!input_movement_context_matches(
+                g_input_movement_commands.queued[i].context, context))
+        {
+            continue;
+        }
+
+        if (out_command)
+            *out_command = g_input_movement_commands.queued[i];
+
+        if (i + 1 < g_input_movement_commands.count)
+        {
+            memmove(&g_input_movement_commands.queued[i],
+                &g_input_movement_commands.queued[i + 1],
+                (g_input_movement_commands.count - (i + 1))
+                    * sizeof(g_input_movement_commands.queued[0]));
+        }
+        g_input_movement_commands.count--;
+        return true;
+    }
+
+    return false;
+}
+
+bool input_submit_movement_command(const app_movement_command* command)
+{
+    if (!app_movement_command_is_valid(command))
+        return false;
+    if (g_input_movement_commands.count >= INPUT_MOVEMENT_QUEUE_SIZE)
+        return false;
+
+    g_input_movement_commands
+        .queued[g_input_movement_commands.count++] = *command;
+    return true;
+}
+
+void input_set_active_movement_command(const app_movement_command* command)
+{
+    g_input_movement_commands.active = false;
+    app_movement_command_clear(&g_input_movement_commands.current);
+
+    if (!app_movement_command_is_valid(command))
+        return;
+
+    g_input_movement_commands.current = *command;
+    g_input_movement_commands.active = true;
+}
+
+bool input_take_active_movement_command(app_movement_command* out_command)
+{
+    if (!g_input_movement_commands.active)
+        return false;
+
+    if (out_command)
+        *out_command = g_input_movement_commands.current;
+
+    g_input_movement_commands.active = false;
+    app_movement_command_clear(&g_input_movement_commands.current);
+    return true;
+}
+
+void input_clear_movement_commands(void)
+{
+    g_input_movement_commands.count = 0;
+    (void)input_take_active_movement_command(NULL);
+}
 
 errr input_byte_unshift(int key)
 {
@@ -362,6 +457,27 @@ static char inkey_aux(void)
  */
 static cptr inkey_next = NULL;
 
+static void input_apply_pending_flush(void)
+{
+    if (!g_inkey_state.xtra)
+        return;
+
+    /* End "macro action" */
+    parse_macro = false;
+
+    /* End "macro trigger" */
+    parse_under = false;
+
+    /* Forget old deferred input state. */
+    inkey_next = NULL;
+    input_byte_queue_clear();
+    input_clear_movement_commands();
+    if (app_session_current())
+        app_session_clear_inputs(app_session_current());
+    platform_frame_flush_events();
+    g_inkey_state.xtra = false;
+}
+
 bool inkey_can_consume_immediately(void)
 {
     char ch;
@@ -412,20 +528,7 @@ char inkey(void)
     inkey_next = NULL;
 
     /* Hack -- handle delayed "flush()" */
-    if (g_inkey_state.xtra)
-    {
-        /* End "macro action" */
-        parse_macro = false;
-
-        /* End "macro trigger" */
-        parse_under = false;
-
-        /* Forget old keypresses */
-        input_byte_queue_clear();
-        if (app_session_current())
-            app_session_clear_inputs(app_session_current());
-        platform_frame_flush_events();
-    }
+    input_apply_pending_flush();
 
     /* Get a key */
     while (!ch)
@@ -559,10 +662,74 @@ char inkey(void)
     return (ch);
 }
 
+bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
+    app_movement_command* out_command, char* out_ch)
+{
+    app_wait_scope scope;
+    bool scope_active = false;
+
+    if (out_command)
+        app_movement_command_clear(out_command);
+    if (out_ch)
+        *out_ch = '\0';
+
+    if (wait_reason != APP_WAIT_REASON_NONE)
+    {
+        app_session_push_wait_scope(app_session_current(), &scope, wait_reason,
+            0, 0);
+        scope_active = scope.active;
+    }
+
+    while (true)
+    {
+        input_apply_pending_flush();
+
+        if (input_take_queued_movement_command(context, out_command))
+        {
+            inkey_clear_transient_flags();
+            if (scope_active)
+                app_session_pop_wait_scope(app_session_current(), &scope);
+            return true;
+        }
+
+        if (inkey_can_consume_immediately())
+        {
+            char ch = inkey();
+
+            if (out_command)
+                app_movement_command_clear(out_command);
+            if (out_ch)
+                *out_ch = ch;
+            if (scope_active)
+                app_session_pop_wait_scope(app_session_current(), &scope);
+            return true;
+        }
+
+        platform_frame_process_events(true);
+    }
+}
+
 /*
  * Hack -- special buffer to hold the action of the current keymap
  */
 static char request_command_buffer[256];
+
+static char input_movement_command_legacy_command_char(
+    const app_movement_command* command)
+{
+    if (!app_movement_command_is_valid(command))
+        return '\0';
+
+    switch (command->action)
+    {
+    case APP_MOVEMENT_ACTION_MOVE_DIR: return ';';
+    case APP_MOVEMENT_ACTION_RUN_DIR: return '.';
+    case APP_MOVEMENT_ACTION_INTERACT_DIR: return '/';
+    case APP_MOVEMENT_ACTION_WAIT: return 'z';
+    case APP_MOVEMENT_ACTION_REST: return 'Z';
+    default: return '\0';
+    }
+}
 
 /*
  * Request a command from the user.
@@ -579,6 +746,8 @@ void request_command(void)
     int mode;
 
     cptr act;
+    app_movement_command movement_command;
+    bool have_movement_command = false;
 
     // Determine the keyset
     if (!hjkl_movement && !angband_keyset)
@@ -599,9 +768,15 @@ void request_command(void)
     /* No "direction" yet */
     p_ptr->command_dir = 0;
 
+    /* Drop any semantic command that was not consumed by the caller. */
+    (void)input_take_active_movement_command(NULL);
+
     /* Get command */
     while (1)
     {
+        app_movement_command_clear(&movement_command);
+        have_movement_command = false;
+
         /* Hack -- auto-commands */
         if (p_ptr->command_new)
         {
@@ -624,8 +799,18 @@ void request_command(void)
             /* Activate "command mode" */
             inkey_set_flag(true);
 
-            /* Get a command */
-            ch = inkey_with_wait_reason(APP_WAIT_REASON_COMMAND_INPUT);
+            /* Get a command or a semantic movement command. */
+            ch = '\0';
+            (void)input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_DUNGEON,
+                APP_WAIT_REASON_COMMAND_INPUT, &movement_command, &ch);
+            if (app_movement_command_is_valid(&movement_command))
+            {
+                have_movement_command = true;
+                ch = input_movement_command_legacy_command_char(
+                    &movement_command);
+                if (!ch)
+                    continue;
+            }
             if (ch == ESCAPE) {
                 log_debug("[metarun-esc-trace] request_command read esc command_new=%d info_scene=%d",
                     p_ptr->command_new ? 1 : 0,
@@ -733,6 +918,13 @@ void request_command(void)
             }
         }
 
+        if (have_movement_command)
+        {
+            /* Keep the legacy command char for repeat/inscription checks. */
+            p_ptr->command_cmd = ch;
+            break;
+        }
+
         /* Allow "keymaps" to be bypassed */
         if (ch == '\\')
         {
@@ -817,6 +1009,9 @@ void request_command(void)
             s = strchr(s + 1, '^');
         }
     }
+
+    if (have_movement_command && p_ptr->command_cmd != '\n')
+        input_set_active_movement_command(&movement_command);
 
     /* Hack -- erase the message line. */
     prt("", 0, 0);

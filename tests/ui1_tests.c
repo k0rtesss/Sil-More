@@ -9,7 +9,10 @@
 #include "app/app-scene-menu.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
+#include "externs.h"
+#include "sdl-config.h"
 #include "ui/ui-information-scene.h"
+#include <SDL3/SDL_scancode.h>
 
 static int g_failures = 0;
 
@@ -1165,6 +1168,261 @@ static void test_movement_service(void)
         APP_MOVEMENT_CONTEXT_TARGETING, &command));
 }
 
+static bool test_find_movement_binding(const struct sdl_config* config,
+    u16b action, u16b direction, u32b trigger, u16b required_modifiers)
+{
+    u16b i;
+
+    if (!config)
+        return false;
+
+    for (i = 0; i < config->movement_binding_count; i++)
+    {
+        const app_movement_binding* binding = &config->movement_bindings[i];
+
+        if (!app_movement_binding_is_valid(binding))
+            continue;
+        if (binding->action != action)
+            continue;
+        if (binding->direction != direction)
+            continue;
+        if (binding->trigger != trigger)
+            continue;
+        if (binding->required_modifiers != required_modifiers)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+static void test_sdl_movement_presets(void)
+{
+    struct sdl_config config;
+    u16b i;
+    u16b j;
+
+    memset(&config, 0, sizeof(config));
+    sdl_config_set_defaults(&config);
+    CHECK(!sdl_config_has_movement_bindings(&config));
+
+    sdl_config_set_default_movement_bindings(&config,
+        APP_MOVEMENT_PRESET_MODERN_ARROWS);
+    CHECK(config.movement_keyboard_present);
+    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_MODERN_ARROWS);
+    CHECK(config.movement_binding_count > 0);
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
+        APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+        APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP,
+        APP_INPUT_MODIFIER_SHIFT));
+    CHECK(test_find_movement_binding(&config,
+        APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_NORTH,
+        SDL_SCANCODE_UP, APP_INPUT_MODIFIER_CTRL));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_PERIOD, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_PERIOD,
+        APP_INPUT_MODIFIER_SHIFT));
+
+    for (i = 0; i < config.movement_binding_count; i++)
+    {
+        CHECK(app_movement_binding_is_valid(&config.movement_bindings[i]));
+        for (j = (u16b)(i + 1); j < config.movement_binding_count; j++)
+        {
+            CHECK(!app_movement_bindings_conflict(&config.movement_bindings[i],
+                &config.movement_bindings[j]));
+        }
+    }
+}
+
+static void test_sdl_movement_legacy_import(void)
+{
+    struct sdl_config config;
+    const int mode = KEYMAP_MODE_SIL_HJKL;
+    cptr saved_h = keymap_act[mode]['h'];
+    cptr saved_H = keymap_act[mode]['H'];
+    cptr saved_ctrl_h = keymap_act[mode][KTRL('H')];
+    cptr saved_z = keymap_act[mode]['z'];
+    cptr saved_Z = keymap_act[mode]['Z'];
+    cptr saved_space = keymap_act[mode][' '];
+
+    keymap_act[mode]['h'] = str_dup(";4");
+    keymap_act[mode]['H'] = str_dup(".4");
+    keymap_act[mode][KTRL('H')] = str_dup("/4");
+    keymap_act[mode]['z'] = str_dup("z");
+    keymap_act[mode]['Z'] = str_dup("Z");
+    keymap_act[mode][' '] = str_dup("/5");
+
+    memset(&config, 0, sizeof(config));
+    CHECK(sdl_config_import_legacy_movement_bindings(&config, mode));
+    CHECK(config.movement_keyboard_present);
+    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_VI_KEYS);
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
+        APP_MOVEMENT_DIRECTION_WEST, SDL_SCANCODE_H, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+        APP_MOVEMENT_DIRECTION_WEST, SDL_SCANCODE_H,
+        APP_INPUT_MODIFIER_SHIFT));
+    CHECK(test_find_movement_binding(&config,
+        APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_WEST,
+        SDL_SCANCODE_H, APP_INPUT_MODIFIER_CTRL));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_Z, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_SPACE, 0));
+    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
+        APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_Z,
+        APP_INPUT_MODIFIER_SHIFT));
+
+    keymap_act[mode]['h'] = str_free(keymap_act[mode]['h']);
+    keymap_act[mode]['H'] = str_free(keymap_act[mode]['H']);
+    keymap_act[mode][KTRL('H')] = str_free(keymap_act[mode][KTRL('H')]);
+    keymap_act[mode]['z'] = str_free(keymap_act[mode]['z']);
+    keymap_act[mode]['Z'] = str_free(keymap_act[mode]['Z']);
+    keymap_act[mode][' '] = str_free(keymap_act[mode][' ']);
+
+    keymap_act[mode]['h'] = saved_h;
+    keymap_act[mode]['H'] = saved_H;
+    keymap_act[mode][KTRL('H')] = saved_ctrl_h;
+    keymap_act[mode]['z'] = saved_z;
+    keymap_act[mode]['Z'] = saved_Z;
+    keymap_act[mode][' '] = saved_space;
+}
+
+static void test_sdl_movement_config_round_trip(void)
+{
+    struct sdl_config saved;
+    struct sdl_config loaded;
+    struct pane_config pane_configs[1];
+    int pane_count = 0;
+    u16b i;
+    const char* path = "ui1-movement-config-test.json";
+
+    memset(&saved, 0, sizeof(saved));
+    memset(&loaded, 0, sizeof(loaded));
+    memset(pane_configs, 0, sizeof(pane_configs));
+
+    sdl_config_set_defaults(&saved);
+    sdl_config_set_default_movement_bindings(&saved,
+        APP_MOVEMENT_PRESET_MODERN_WASD_QEZC);
+    sdl_config_save(path, &saved, pane_configs, 0);
+
+    sdl_config_set_defaults(&loaded);
+    sdl_config_load(path, &loaded, pane_configs, &pane_count, 1);
+    CHECK(loaded.movement_keyboard_present);
+    CHECK(loaded.movement_keyboard_preset
+        == APP_MOVEMENT_PRESET_MODERN_WASD_QEZC);
+    CHECK(loaded.movement_binding_count == saved.movement_binding_count);
+    for (i = 0; i < saved.movement_binding_count; i++)
+    {
+        CHECK(loaded.movement_bindings[i].context
+            == saved.movement_bindings[i].context);
+        CHECK(loaded.movement_bindings[i].action
+            == saved.movement_bindings[i].action);
+        CHECK(loaded.movement_bindings[i].direction
+            == saved.movement_bindings[i].direction);
+        CHECK(loaded.movement_bindings[i].trigger
+            == saved.movement_bindings[i].trigger);
+        CHECK(loaded.movement_bindings[i].required_modifiers
+            == saved.movement_bindings[i].required_modifiers);
+        CHECK(loaded.movement_bindings[i].forbidden_modifiers
+            == saved.movement_bindings[i].forbidden_modifiers);
+    }
+
+    (void)remove(path);
+}
+
+static void test_movement_input_bridge(void)
+{
+    app_session_config config;
+    app_session* session;
+    app_movement_command dungeon_command;
+    app_movement_command prompt_command;
+    app_movement_command resolved;
+    app_input input;
+    char ch = '\0';
+
+    memset(&config, 0, sizeof(config));
+    config.api_version = APP_SESSION_API_VERSION;
+    config.initial_event_capacity = 1;
+    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+        | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
+
+    session = app_session_create(&config);
+    CHECK(session != NULL);
+    if (!session)
+        return;
+
+    app_session_make_current(session);
+    input_clear_movement_commands();
+
+    app_movement_command_clear(&dungeon_command);
+    dungeon_command.context = APP_MOVEMENT_CONTEXT_DUNGEON;
+    dungeon_command.action = APP_MOVEMENT_ACTION_MOVE_DIR;
+    dungeon_command.device = APP_INPUT_DEVICE_KEYBOARD;
+    dungeon_command.input_type = APP_INPUT_TYPE_KEY;
+    CHECK(app_movement_direction_payload_from_direction(
+        APP_MOVEMENT_DIRECTION_NORTH, &dungeon_command.direction));
+    CHECK(app_movement_command_is_valid(&dungeon_command));
+
+    app_movement_command_clear(&prompt_command);
+    prompt_command.context = APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT;
+    prompt_command.action = APP_MOVEMENT_ACTION_INTERACT_DIR;
+    prompt_command.device = APP_INPUT_DEVICE_KEYBOARD;
+    prompt_command.input_type = APP_INPUT_TYPE_KEY;
+    CHECK(app_movement_direction_payload_from_direction(
+        APP_MOVEMENT_DIRECTION_WEST, &prompt_command.direction));
+    CHECK(app_movement_command_is_valid(&prompt_command));
+
+    CHECK(input_submit_movement_command(&dungeon_command));
+    CHECK(input_submit_movement_command(&prompt_command));
+
+    app_movement_command_clear(&resolved);
+    CHECK(input_wait_for_movement_or_legacy(
+        APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT, APP_WAIT_REASON_NONE, &resolved,
+        &ch));
+    CHECK(app_movement_command_is_valid(&resolved));
+    CHECK(resolved.context == APP_MOVEMENT_CONTEXT_DIRECTION_PROMPT);
+    CHECK(resolved.action == APP_MOVEMENT_ACTION_INTERACT_DIR);
+    CHECK(resolved.direction.direction == APP_MOVEMENT_DIRECTION_WEST);
+    CHECK(ch == '\0');
+
+    app_movement_command_clear(&resolved);
+    CHECK(input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_DUNGEON,
+        APP_WAIT_REASON_NONE, &resolved, &ch));
+    CHECK(app_movement_command_is_valid(&resolved));
+    CHECK(resolved.context == APP_MOVEMENT_CONTEXT_DUNGEON);
+    CHECK(resolved.action == APP_MOVEMENT_ACTION_MOVE_DIR);
+    CHECK(resolved.direction.direction == APP_MOVEMENT_DIRECTION_NORTH);
+    CHECK(ch == '\0');
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_KEYBOARD;
+    input.flags = APP_INPUT_FLAG_PRESS;
+    input.payload.key.logical_key = 'm';
+    CHECK(app_session_submit_input(session, &input));
+
+    app_movement_command_clear(&resolved);
+    ch = '\0';
+    CHECK(input_wait_for_movement_or_legacy(APP_MOVEMENT_CONTEXT_DUNGEON,
+        APP_WAIT_REASON_NONE, &resolved, &ch));
+    CHECK(!app_movement_command_is_valid(&resolved));
+    CHECK(ch == 'm');
+
+    input_set_active_movement_command(&dungeon_command);
+    CHECK(input_take_active_movement_command(&resolved));
+    CHECK(resolved.context == APP_MOVEMENT_CONTEXT_DUNGEON);
+    CHECK(!input_take_active_movement_command(&resolved));
+
+    input_clear_movement_commands();
+    app_session_destroy(session);
+    CHECK(app_session_current() == NULL);
+}
+
 int main(void)
 {
     test_record_round_trip();
@@ -1179,6 +1437,10 @@ int main(void)
     test_information_scene_wait_key_with_wait_reason();
     test_ui_scene_direct_panel_payload();
     test_movement_service();
+    test_sdl_movement_presets();
+    test_sdl_movement_legacy_import();
+    test_sdl_movement_config_round_trip();
+    test_movement_input_bridge();
 
     if (g_failures != 0)
     {
