@@ -1,0 +1,341 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "status_date": "2026-04-16",
+    "notes": "Wave 0 modernization audit baseline. This file freezes the initial metric schema, temporary root src allowlist, early folder ownership rules, and the first no-growth baseline for the finish-line modernization work."
+  },
+  "policy": {
+    "platform_boundary_globs": [
+      "src/main.c",
+      "src/main.h",
+      "src/main-sdl.c",
+      "src/main-sdl.h",
+      "src/pane.c",
+      "src/pane.h",
+      "src/platform.h",
+      "src/platform-*.c",
+      "src/platform-*.h",
+      "src/sdl-*.c",
+      "src/sdl-*.h",
+      "src/fs/io_sdl.c",
+      "src/fs/io_sdl.h",
+      "src/fs/path.c",
+      "src/fs/path.h",
+      "src/init/init-paths.c",
+      "src/log/bootstrap.c",
+      "src/log/bootstrap.h",
+      "src/sound-config.c",
+      "src/sound-config.h"
+    ],
+    "root_src_c_allowlist": [
+      "src/birth.c",
+      "src/blitz.c",
+      "src/cJSON.c",
+      "src/cave.c",
+      "src/cmd1.c",
+      "src/cmd2.c",
+      "src/cmd3.c",
+      "src/cmd4.c",
+      "src/cmd5.c",
+      "src/cmd6.c",
+      "src/drop_system.c",
+      "src/dungeon.c",
+      "src/files.c",
+      "src/format.c",
+      "src/game-event.c",
+      "src/gen-log.c",
+      "src/generate.c",
+      "src/init1.c",
+      "src/init2.c",
+      "src/item_set.c",
+      "src/load.c",
+      "src/main-sdl.c",
+      "src/main.c",
+      "src/melee1.c",
+      "src/melee2.c",
+      "src/metarun.c",
+      "src/monster-death.c",
+      "src/monster1.c",
+      "src/monster2.c",
+      "src/object1.c",
+      "src/object2.c",
+      "src/obj-info.c",
+      "src/pane.c",
+      "src/platform-frame.c",
+      "src/platform-time.c",
+      "src/player-status.c",
+      "src/player-xp.c",
+      "src/quest.c",
+      "src/randart.c",
+      "src/reliability-checks.c",
+      "src/rng.c",
+      "src/runtime-cli.c",
+      "src/save.c",
+      "src/sdl-config.c",
+      "src/sdl-layout.c",
+      "src/sdl-render.c",
+      "src/sdl-scene-bootstrap.c",
+      "src/sdl-scene-dungeon.c",
+      "src/sdl-scene-information.c",
+      "src/sdl-scene-menu.c",
+      "src/sdl-scene.c",
+      "src/sdl-sound.c",
+      "src/sdl-story-font.c",
+      "src/sdl-touch.c",
+      "src/sdl-ui-style.c",
+      "src/signals.c",
+      "src/sound-config.c",
+      "src/spells1.c",
+      "src/spells2.c",
+      "src/squelch.c",
+      "src/supplies.c",
+      "src/tables.c",
+      "src/targeting.c",
+      "src/thrall_quest.c",
+      "src/use-obj.c",
+      "src/util-angle.c",
+      "src/util-convert.c",
+      "src/util-editing.c",
+      "src/util-input.c",
+      "src/util-macro.c",
+      "src/util-message.c",
+      "src/util-prompt.c",
+      "src/util-text.c",
+      "src/util.c",
+      "src/variable.c",
+      "src/wizard1.c",
+      "src/wizard2.c",
+      "src/xtra1.c",
+      "src/xtra2.c"
+    ],
+    "source_files_missing_from_cmake_allowlist": [
+      "src/cmd1.c",
+      "src/cmd2.c",
+      "src/cmd3.c",
+      "src/cmd5.c",
+      "src/cmd6.c",
+      "src/generate.c",
+      "src/init1.c",
+      "src/melee1.c",
+      "src/melee2.c",
+      "src/object1.c",
+      "src/object2.c",
+      "src/spells1.c",
+      "src/spells2.c",
+      "src/xtra1.c",
+      "src/xtra2.c"
+    ],
+    "folder_rule_allowlist": [],
+    "folder_rules": [
+      {
+        "key": "cave_family",
+        "match_globs": [
+          "src/**/cave*.c",
+          "src/**/cave*.h"
+        ],
+        "allowed_globs": [
+          "src/cave.c",
+          "src/cave/*.c",
+          "src/cave/*.h"
+        ]
+      },
+      {
+        "key": "metarun_family",
+        "match_globs": [
+          "src/**/metarun*.c",
+          "src/**/metarun*.h"
+        ],
+        "allowed_globs": [
+          "src/metarun.c",
+          "src/metarun.h",
+          "src/metarun/*.c",
+          "src/metarun/*.h"
+        ]
+      },
+      {
+        "key": "settings_family",
+        "match_globs": [
+          "src/**/cmd-ui-settings*.c",
+          "src/**/cmd-ui-settings*.h"
+        ],
+        "allowed_globs": [
+          "src/cmd/ui/cmd-ui-settings*.c",
+          "src/cmd/ui/cmd-ui-settings*.h"
+        ]
+      },
+      {
+        "key": "cmd_interact_family",
+        "match_globs": [
+          "src/**/cmd-interact*.c",
+          "src/**/cmd-interact*.h"
+        ],
+        "allowed_globs": [
+          "src/cmd/world/cmd-interact*.c",
+          "src/cmd/world/cmd-interact*.h"
+        ]
+      },
+      {
+        "key": "smithing_family",
+        "match_globs": [
+          "src/**/smithing*.c",
+          "src/**/smithing*.h"
+        ],
+        "allowed_globs": [
+          "src/smithing/*.c",
+          "src/smithing/*.h",
+          "src/ui/smithing/*.c",
+          "src/ui/smithing/*.h"
+        ]
+      },
+      {
+        "key": "platform_surface_family",
+        "match_globs": [
+          "src/**/platform-*.c",
+          "src/**/platform-*.h",
+          "src/**/sdl-*.c",
+          "src/**/sdl-*.h"
+        ],
+        "allowed_globs": [
+          "src/platform-*.c",
+          "src/platform-*.h",
+          "src/sdl-*.c",
+          "src/sdl-*.h"
+        ]
+      },
+      {
+        "key": "fs_sdl_io_family",
+        "match_globs": [
+          "src/**/io_sdl*.c",
+          "src/**/io_sdl*.h"
+        ],
+        "allowed_globs": [
+          "src/fs/io_sdl*.c",
+          "src/fs/io_sdl*.h"
+        ]
+      }
+    ]
+  },
+  "acceptance_criteria": {
+    "externs_header_lines": {
+      "wave0_freeze_max": 1159,
+      "finish_max": 400,
+      "notes": "Wave 0 must stop growth immediately. Finish-line target is under 400 lines."
+    },
+    "extern_include_sites": {
+      "wave0_freeze_max": 182,
+      "finish_max": 25,
+      "notes": "Wave 0 freezes direct include fan-out. Finish-line target is fewer than 25 direct include sites."
+    },
+    "variable_source_lines": {
+      "wave0_freeze_max": 831,
+      "finish_max": 200,
+      "notes": "Wave 0 freezes the global-state bucket. Finish-line target is under 200 lines or full removal."
+    },
+    "root_src_c_files": {
+      "wave0_freeze_max": 79,
+      "finish_target": "root src/*.c limited to entrypoints, platform files, and explicit thin facades only",
+      "notes": "Wave 0 stops growth of the root implementation bucket."
+    },
+    "root_src_h_files": {
+      "wave0_freeze_max": 44,
+      "finish_target": "root src/*.h limited to umbrella compatibility headers and true top-level interfaces",
+      "notes": "Wave 0 records the transitional header surface."
+    },
+    "nonplatform_sdl_header_includes": {
+      "wave0_freeze_max": 0,
+      "finish_max": 0,
+      "notes": "Finish-line target is zero SDL header imports outside the approved platform boundary."
+    },
+    "nonplatform_sdl_io_usages": {
+      "wave0_freeze_max": 23,
+      "finish_max": 0,
+      "notes": "Finish-line target is zero SDL I/O usage outside the approved platform boundary."
+    }
+  },
+  "audits": {
+    "architecture": {
+      "label": "Architecture debt audit",
+      "notes": "Wave 0 baseline for the shared modernization debt surface.",
+      "metrics": {
+        "externs_header_lines": {
+          "label": "externs.h line count",
+          "files": 1,
+          "value": 1159,
+          "notes": "Tracks the transitional umbrella header size."
+        },
+        "extern_declarations": {
+          "label": "extern declarations in externs.h",
+          "files": 1,
+          "value": 883,
+          "notes": "Tracks runtime ownership still exposed through externs.h."
+        },
+        "extern_include_sites": {
+          "label": "direct #include \"externs.h\" sites",
+          "files": 182,
+          "value": 182,
+          "notes": "Tracks the include fan-out of externs.h."
+        },
+        "variable_source_lines": {
+          "label": "variable.c line count",
+          "files": 1,
+          "value": 831,
+          "notes": "Tracks the remaining global-state ownership bucket."
+        },
+        "root_src_c_files": {
+          "label": "root-level src/*.c files",
+          "files": 79,
+          "value": 79,
+          "notes": "Tracks root implementation file count."
+        },
+        "root_src_h_files": {
+          "label": "root-level src/*.h files",
+          "files": 44,
+          "value": 44,
+          "notes": "Tracks root header count."
+        },
+        "nonplatform_sdl_header_includes": {
+          "label": "SDL3 header includes outside platform boundary",
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks non-platform SDL header leakage."
+        },
+        "nonplatform_sdl_io_usages": {
+          "label": "SDL I/O symbols outside platform boundary",
+          "files": 23,
+          "value": 23,
+          "notes": "Tracks non-platform SDL I/O leakage."
+        }
+      }
+    },
+    "folder_ownership": {
+      "label": "Folder ownership audit",
+      "notes": "Wave 0 guardrail against growing the root src/ bucket or placing files outside their owning subsystem.",
+      "metrics": {
+        "unallowlisted_root_src_c_files": {
+          "label": "root src/*.c files outside allowlist",
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks new root implementation files outside the temporary allowlist."
+        },
+        "folder_rule_violations": {
+          "label": "folder ownership rule violations",
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks explicit folder placement policy violations."
+        },
+        "source_files_missing_from_cmake": {
+          "label": "src/*.c files missing from root CMakeLists.txt",
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks source files not listed in the canonical build source lists after excluding intentional legacy-note files."
+        },
+        "cmake_referenced_missing_on_disk": {
+          "label": "CMake source entries missing on disk",
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks stale or invalid source-list references."
+        }
+      }
+    }
+  }
+}

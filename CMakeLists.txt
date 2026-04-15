@@ -707,11 +707,29 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_debt_audit_baseline.json
     )
     add_test(
+      NAME sil_architecture_debt_audit
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/modernization_audit.py
+        --audit
+        architecture
+        --check
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/modernization_audit_baseline.json
+    )
+    add_test(
+      NAME sil_folder_ownership_audit
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/modernization_audit.py
+        --audit
+        folder_ownership
+        --check
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/modernization_audit_baseline.json
+    )
+    add_test(
       NAME sil_smithing_parity
       COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/smithing_parity_test.py
     )
   else()
-    message(WARNING "Python3 interpreter not found; sil_smithing_parity test disabled.")
+    message(WARNING "Python3 interpreter not found; audit and parity Python tests disabled.")
   endif()
 endif()
