@@ -7,11 +7,13 @@
 #include "ui/ui-information-scene.h"
 
 struct inkey_state {
-    bool xtra;
     bool cursor_hidden;
 };
 
 static struct inkey_state g_inkey_state = { 0 };
+
+void input_byte_queue_clear(void);
+void input_clear_movement_commands(void);
 
 bool inkey_cursor_hidden(void)
 {
@@ -28,22 +30,21 @@ void inkey_set_cursor_hidden(bool hidden)
 }
 
 /*
- * Flush all pending input.
- *
- * Actually, remember the flush, using the "inkey_xtra" flag, and in the
- * next call to "inkey()", perform the actual flushing, for efficiency,
- * and correctness of the "inkey()" function.
+ * Clear all pending input immediately across the semantic session bridge,
+ * the legacy byte queue, and deferred movement input.
  */
-void flush(void)
+void input_clear_pending(void)
 {
-    /* Do it later */
-    g_inkey_state.xtra = true;
-}
+    app_session* session = app_session_current();
 
-/*
- * Flush all pending input if the flush_failure option is set.
- */
-void flush_fail(void) { flush(); }
+    if (session)
+        app_session_clear_inputs(session);
+
+    input_byte_queue_clear();
+    input_clear_movement_commands();
+    platform_frame_flush_events();
+    input_clear_movement_commands();
+}
 
 enum {
     INPUT_BYTE_QUEUE_SIZE = 256
@@ -271,19 +272,6 @@ static errr input_read_legacy_key(char* ch, bool wait, bool take)
     }
 }
 
-static void input_apply_pending_flush(void)
-{
-    if (!g_inkey_state.xtra)
-        return;
-
-    input_byte_queue_clear();
-    input_clear_movement_commands();
-    if (app_session_current())
-        app_session_clear_inputs(app_session_current());
-    platform_frame_flush_events();
-    g_inkey_state.xtra = false;
-}
-
 bool inkey_can_consume_immediately(void)
 {
     char ch;
@@ -311,8 +299,6 @@ bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
 
     while (true)
     {
-        input_apply_pending_flush();
-
         if (input_take_queued_movement_command(context, out_command))
         {
             if (scope_active)

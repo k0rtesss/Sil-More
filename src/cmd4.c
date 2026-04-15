@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "melee/melee-combat-display.h"
 #include "platform-frame.h"
 #include "platform-input.h"
@@ -31,13 +30,7 @@
  */
 void do_cmd_redraw(void)
 {
-    app_session* session = app_session_current();
-
-    if (session)
-        app_session_clear_inputs(session);
-
-    /* Reset "inkey()" */
-    flush();
+    input_clear_pending();
 
     if (g_banner_force_redraw_remaining <= 0)
         clear_active_narrative_banner();

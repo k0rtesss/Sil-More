@@ -22,9 +22,9 @@
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
-typedef struct term_win term_win;
+typedef struct sdl_view_buffer sdl_view_buffer;
 
-struct term_win
+struct sdl_view_buffer
 {
     bool cu, cv;
     byte cx, cy;
@@ -45,9 +45,9 @@ struct term_win
     byte* vstory;
 };
 
-typedef struct term term;
+typedef struct sdl_view_state sdl_view_state;
 
-struct term
+struct sdl_view_state
 {
     void* user;
     void* data;
@@ -66,9 +66,6 @@ struct term
     bool unused_flag;
     bool never_bored;
     bool never_frosh;
-    bool story_font_active;
-    bool story_font_grid;
-    bool story_chunk_active;
 
     byte attr_blank;
     char char_blank;
@@ -89,13 +86,13 @@ struct term
     byte* x1;
     byte* x2;
 
-    term_win* old;
-    term_win* scr;
-    term_win* tmp;
-    term_win* mem;
+    sdl_view_buffer* old;
+    sdl_view_buffer* scr;
+    sdl_view_buffer* tmp;
+    sdl_view_buffer* mem;
 
-    void (*init_hook)(term* t);
-    void (*nuke_hook)(term* t);
+    void (*init_hook)(sdl_view_state* state);
+    void (*nuke_hook)(sdl_view_state* state);
     errr (*user_hook)(int n);
     errr (*xtra_hook)(int n, int v);
     errr (*curs_hook)(int x, int y);
@@ -119,9 +116,6 @@ struct term
 #define TERM_XTRA_ALIVE 11
 #define TERM_XTRA_LEVEL 12
 #define TERM_XTRA_DELAY 13
-
-extern errr term_nuke(term* t);
-extern errr term_init(term* t, int w, int h, int k);
 
 enum {
     TILE_SIZE = 16,
@@ -151,7 +145,7 @@ typedef struct sdl_state {
     story_font_entry story_fonts[MAX_STORY_FONT_CACHE];
     int story_font_count;
     int story_font_depth;
-    bool story_font_grid;
+    bool story_cell_align;
 } sdl_state;
 
 typedef struct sdl_view {
@@ -165,8 +159,8 @@ typedef struct sdl_view {
     int rows;
     int margin_x;
     int margin_y;
-    term t;
-    bool term_ready;
+    sdl_view_state state;
+    bool ready;
 } sdl_view;
 
 typedef enum sdl_scene_animation_kind {
@@ -225,15 +219,10 @@ int sdl_max_scale_for_rect(const SDL_Rect* rect);
 void sdl_update_cursor_visibility(void);
 void resize(const SDL_Rect* screen);
 
-sdl_view* sdl_view_from_term(term* t);
 void sdl_view_destroy(sdl_view* d);
-errr sdl_view_link_term(sdl_view* d, int term_index);
 int sdl_active_view_index(void);
 void sdl_set_active_view_index(int view_index);
-term* sdl_active_view_host(void);
-void sdl_term_host_set_active(term* t);
-void sdl_term_host_redraw(term* t);
-void sdl_redraw_all_term_hosts(void);
+void sdl_redraw_all_views(void);
 void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font_size, int scale, int margin);
 void sdl_sync_palette(void);
 void sdl_present_if_needed(sdl_view* d);
@@ -276,9 +265,6 @@ void sdl_touch_pane_reset_input_state(void);
 
 void sdl_load_story_fonts(void);
 void sdl_story_font_cache_clear(void);
-void sdl_apply_story_font_state(bool active);
-void sdl_apply_story_grid_state(bool grid);
-void sdl_story_font_reset_state(void);
 TTF_Font* sdl_story_font_for_height(int pixel_height);
 TTF_Font* sdl_story_font_for_view(const sdl_view* d);
 int sdl_ui_scale_px(float logical_value);
@@ -294,7 +280,7 @@ void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
 void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col);
 void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
     SDL_Color col);
-void sdl_render_story_text_grid(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
+void sdl_render_story_text_cell_aligned(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
     SDL_Color col);
 int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y, const char* s, int n,
     SDL_Color col, float max_w_px);

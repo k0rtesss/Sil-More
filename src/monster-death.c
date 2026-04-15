@@ -598,7 +598,7 @@ static const char morgoth_second_wind_text[][100]
 
 static void morgoth_second_wind_message(void)
 {
-    flush();
+    input_clear_pending();
     pause_with_text(morgoth_second_wind_text, 4, 8, NULL, 0);
 }
 

@@ -109,14 +109,14 @@ void story_font_term_push(bool active, bool grid, story_font_term_state* prev)
         return;
 
     prev->active = sdl_is_story_font_enabled();
-    prev->grid = sdl_is_story_font_grid();
+    prev->grid = sdl_story_font_cell_align_enabled();
 
     if (active && !prev->active)
         sdl_story_font_enable();
     else if (!active && prev->active)
         sdl_story_font_disable();
 
-    sdl_story_font_set_grid(grid);
+    sdl_story_font_set_cell_align(grid);
 }
 
 void story_font_term_pop(story_font_term_state* prev)
@@ -129,5 +129,5 @@ void story_font_term_pop(story_font_term_state* prev)
     else if (!prev->active && sdl_is_story_font_enabled())
         sdl_story_font_disable();
 
-    sdl_story_font_set_grid(prev->grid);
+    sdl_story_font_set_cell_align(prev->grid);
 }

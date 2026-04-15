@@ -163,7 +163,7 @@ void bell(cptr reason)
         sdl_sound_handle(MSG_BELL);
 
     /* Flush the input (later!) */
-    flush();
+    input_clear_pending();
 }
 
 /*

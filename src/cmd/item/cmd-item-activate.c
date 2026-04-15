@@ -724,7 +724,7 @@ void do_cmd_activate_staff(object_type* default_o_ptr, int default_item)
     /* Notice empty staffs */
     if (o_ptr->pval < CHANNELING_CHARGE_MULTIPLIER)
     {
-        flush();
+        input_clear_pending();
         msg_print("The staff has no charges left.");
         o_ptr->ident |= (IDENT_EMPTY);
         p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -974,7 +974,7 @@ void do_cmd_activate(void)
     /* Roll for usage */
     if (skill_check(PLAYER, score, difficulty, NULL) <= 0)
     {
-        flush();
+        input_clear_pending();
         msg_print("You could not draw upon its powers.");
         return;
     }

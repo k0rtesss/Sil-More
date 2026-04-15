@@ -1379,7 +1379,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         if ((item < 0) && (&inventory[INVEN_PACK - 1])->tval)
         {
             /* Flush input */
-            flush();
+            input_clear_pending();
 
             if (inventory[INVEN_ARM].tval == TV_SHIELD)
             {
@@ -1423,7 +1423,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
         if ((item < 0) && (&inventory[INVEN_PACK - 1])->tval)
         {
             /* Flush input */
-            flush();
+            input_clear_pending();
 
             if (inventory[INVEN_ARM].tval == TV_SHIELD)
             {

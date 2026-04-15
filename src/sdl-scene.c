@@ -225,7 +225,7 @@ static bool sdl_scene_stack_dungeon_snapshot_active(const app_session* session)
     const app_dungeon_snapshot* dungeon_snapshot;
     const app_wait_state* wait_state;
 
-    if (!g_scene_stack.enabled || !session || !g_views[0].term_ready)
+    if (!g_scene_stack.enabled || !session || !g_views[0].ready)
         return false;
 
     snapshot = app_session_snapshot(session);
@@ -246,7 +246,7 @@ static bool sdl_scene_stack_bootstrap_snapshot_active(const app_session* session
     const app_snapshot* snapshot;
     const app_bootstrap_snapshot* bootstrap_snapshot;
 
-    if (!g_scene_stack.enabled || !session || !g_views[0].term_ready)
+    if (!g_scene_stack.enabled || !session || !g_views[0].ready)
         return false;
 
     snapshot = app_session_snapshot(session);
@@ -264,7 +264,7 @@ static bool sdl_scene_stack_menu_snapshot_active(const app_session* session)
     const app_snapshot* snapshot;
     const app_menu_snapshot* menu_snapshot;
 
-    if (!g_scene_stack.enabled || !session || !g_views[0].term_ready)
+    if (!g_scene_stack.enabled || !session || !g_views[0].ready)
         return false;
 
     snapshot = app_session_snapshot(session);
@@ -291,7 +291,7 @@ static void sdl_scene_stack_update_layers(app_session* session)
         && interaction->kind != APP_INTERACTION_KIND_NONE;
     bool next_overlay_active = next_dungeon_active && character_icky > 0
         && g_views[0].canvas && !interaction_owns_overlay;
-    bool next_modal_active = g_scene_stack.enabled && g_views[0].term_ready
+    bool next_modal_active = g_scene_stack.enabled && g_views[0].ready
         && g_views[0].canvas && session && snapshot && !next_bootstrap_active
         && !next_menu_active
         && (snapshot->scene != APP_SCENE_KIND_BOOTSTRAP)
@@ -302,9 +302,9 @@ static void sdl_scene_stack_update_layers(app_session* session)
     {
         const app_menu_snapshot* menu_snapshot = app_session_menu_snapshot(session);
 
-        log_warn("scene stack: menu snapshot inactive (enabled=%d term_ready=%d snapshot_rev=%llu menu_rev=%llu cols=%d rows=%d cell=%dx%d)",
+        log_warn("scene stack: menu snapshot inactive (enabled=%d ready=%d snapshot_rev=%llu menu_rev=%llu cols=%d rows=%d cell=%dx%d)",
             g_scene_stack.enabled ? 1 : 0,
-            g_views[0].term_ready ? 1 : 0,
+            g_views[0].ready ? 1 : 0,
             (unsigned long long)snapshot->revision,
             (unsigned long long)(menu_snapshot
                 ? menu_snapshot->snapshot.revision
@@ -342,7 +342,7 @@ static bool sdl_scene_stack_ensure_canvas(void)
     int required_w;
     int required_h;
 
-    if (!g_views[0].term_ready || g_views[0].cols <= 0 || g_views[0].rows <= 0
+    if (!g_views[0].ready || g_views[0].cols <= 0 || g_views[0].rows <= 0
         || g_views[0].cell_w <= 0 || g_views[0].cell_h <= 0)
     {
         return false;

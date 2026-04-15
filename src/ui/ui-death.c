@@ -633,7 +633,7 @@ void do_cmd_morgoth_victory(void)
     char buf[160];
 
     p_ptr->morgoth_slain = true;
-    flush();
+    input_clear_pending();
     p_ptr->is_dead = true;
     p_ptr->playing = false;
     p_ptr->leaving = true;

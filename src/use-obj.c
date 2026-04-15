@@ -1082,7 +1082,7 @@ static bool play_instrument(object_type* o_ptr, bool* ident)
         /* Check that you have enough voice */
         if (p_ptr->csp < voice_cost)
         {
-            flush();
+            input_clear_pending();
             msg_print("You are out of breath.");
             return (false);
         }

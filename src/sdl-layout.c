@@ -168,7 +168,8 @@ static int sdl_pane_current_size(int index, bool want_rows)
     if (type <= PANE_MAIN || type >= PANE_MAX)
         return 0;
 
-    if (g_views[type].term_ready && g_pane_rects[type].w > 0 && g_pane_rects[type].h > 0) {
+    if (g_views[type].ready && g_pane_rects[type].w > 0
+        && g_pane_rects[type].h > 0) {
         int live = want_rows ? g_views[type].rows : g_views[type].cols;
         if (live > 0)
             return live;
@@ -301,7 +302,7 @@ int sdl_auto_aux_view_font_size(void)
 
     if (g_auto_aux_main_cell_h_override > 0)
         main_cell_h_px = g_auto_aux_main_cell_h_override;
-    else if (g_views[0].term_ready && g_views[0].cell_h > 0)
+    else if (g_views[0].ready && g_views[0].cell_h > 0)
         main_cell_h_px = g_views[0].cell_h;
 
     main_font_size = (int)((float)main_cell_h_px / system_scale + 0.5f);
@@ -337,7 +338,7 @@ int sdl_auto_menu_panel_font_size(void)
     int canvas_h = 0;
     int size = 34;
 
-    if (g_views[0].term_ready && g_views[0].rows > 0 && g_views[0].cell_h > 0)
+    if (g_views[0].ready && g_views[0].rows > 0 && g_views[0].cell_h > 0)
         canvas_h = g_views[0].rows * g_views[0].cell_h;
 
     if (canvas_h > 0 && canvas_h < (int)(420.0f * system_scale + 0.5f))
@@ -531,15 +532,14 @@ void resize(const SDL_Rect* screen)
             sdl_view_create(&g_views[i], panes[i], font_path,
                 sdl_effective_pane_font_size_for_type((enum pane_type)i), 0,
                 config.margin);
-            sdl_view_link_term(&g_views[i], i);
         }
     }
 
     sdl_view_destroy(&g_views[0]);
-    sdl_view_create(&g_views[0], panes[PANE_MAIN], font_path, 0, config.main_view_scale, config.margin);
-    sdl_view_link_term(&g_views[0], 0);
+    sdl_view_create(&g_views[0], panes[PANE_MAIN], font_path, 0,
+        config.main_view_scale, config.margin);
 
-    sdl_term_host_set_active(&g_views[0].t);
+    sdl_set_active_view_index(0);
     sdl_scene_stack_on_layout_changed();
 
     if (character_dungeon && p_ptr) {
@@ -768,7 +768,7 @@ void set_sdl_fullscreen(bool value)
         resize(&window);
         sdl_update_cursor_visibility();
         g_state.need_present = true;
-        sdl_redraw_all_term_hosts();
+        sdl_redraw_all_views();
     }
 }
 
@@ -999,5 +999,5 @@ void sdl_apply_config(void)
     sdl_load_story_fonts();
     resize(&screen);
     g_auto_aux_main_cell_h_override = 0;
-    sdl_redraw_all_term_hosts();
+    sdl_redraw_all_views();
 }

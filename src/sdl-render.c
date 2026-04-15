@@ -5,28 +5,28 @@ sdl_state g_state;
 sdl_view g_views[MAX_TERM_DATA];
 static int g_active_view_index = 0;
 
-static void sdl_term_win_init(term_win* win, int w, int h)
+static void sdl_view_buffer_init(sdl_view_buffer* buffer, int w, int h)
 {
     int y;
 
-    win->a = mem_alloc_array(h, byte*);
-    win->c = mem_alloc_array(h, char*);
-    win->va = mem_alloc_array(h * w, byte);
-    win->vc = mem_alloc_array(h * w, char);
-    win->ta = mem_alloc_array(h, byte*);
-    win->tc = mem_alloc_array(h, char*);
-    win->vta = mem_alloc_array(h * w, byte);
-    win->vtc = mem_alloc_array(h * w, char);
-    win->story = mem_alloc_array(h, byte*);
-    win->vstory = mem_alloc_array(h * w, byte);
+    buffer->a = mem_alloc_array(h, byte*);
+    buffer->c = mem_alloc_array(h, char*);
+    buffer->va = mem_alloc_array(h * w, byte);
+    buffer->vc = mem_alloc_array(h * w, char);
+    buffer->ta = mem_alloc_array(h, byte*);
+    buffer->tc = mem_alloc_array(h, char*);
+    buffer->vta = mem_alloc_array(h * w, byte);
+    buffer->vtc = mem_alloc_array(h * w, char);
+    buffer->story = mem_alloc_array(h, byte*);
+    buffer->vstory = mem_alloc_array(h * w, byte);
 
     for (y = 0; y < h; y++)
     {
-        win->a[y] = win->va + (w * y);
-        win->c[y] = win->vc + (w * y);
-        win->ta[y] = win->vta + (w * y);
-        win->tc[y] = win->vtc + (w * y);
-        win->story[y] = win->vstory + (w * y);
+        buffer->a[y] = buffer->va + (w * y);
+        buffer->c[y] = buffer->vc + (w * y);
+        buffer->ta[y] = buffer->vta + (w * y);
+        buffer->tc[y] = buffer->vtc + (w * y);
+        buffer->story[y] = buffer->vstory + (w * y);
     }
 }
 
@@ -58,61 +58,63 @@ static errr callback_sdl_wipe(int x, int y, int n);
 static errr callback_sdl_text(int x, int y, int n, byte a, cptr s);
 static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     const byte* tap, const char* tcp);
-static void callback_sdl_nuke(term* t);
-static void callback_sdl_init(term* t);
+static void callback_sdl_nuke(sdl_view_state* state);
+static void callback_sdl_init(sdl_view_state* state);
 static errr callback_sdl_xtra(int n, int v);
 static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int* actual_font_size);
-static void sdl_term_storage_dispose(term* t);
+static void sdl_view_state_storage_dispose(sdl_view_state* state);
 static sdl_view* sdl_active_view(void);
+static sdl_view_state* sdl_active_view_state(void);
+static void sdl_view_redraw(sdl_view* view);
 
-errr term_nuke(term* t)
+static errr sdl_view_state_destroy(sdl_view_state* state)
 {
-    if (!t)
+    if (!state)
         return -1;
 
-    if (t->active_flag)
+    if (state->active_flag)
     {
-        if (t->nuke_hook)
-            (*t->nuke_hook)(t);
+        if (state->nuke_hook)
+            (*state->nuke_hook)(state);
 
-        t->active_flag = false;
-        t->mapped_flag = false;
+        state->active_flag = false;
+        state->mapped_flag = false;
     }
 
-    sdl_term_storage_dispose(t);
+    sdl_view_state_storage_dispose(state);
     return 0;
 }
 
-errr term_init(term* t, int w, int h, int k)
+static errr sdl_view_state_init(sdl_view_state* state, int w, int h, int k)
 {
     int y;
 
-    if (!t || w < 1 || h < 1 || k < 1)
+    if (!state || w < 1 || h < 1 || k < 1)
         return -1;
 
-    memset(t, 0, sizeof(*t));
-    t->key_size = (u16b)k;
-    t->key_queue = mem_alloc_array((size_t)t->key_size, char);
-    t->wid = (byte)w;
-    t->hgt = (byte)h;
-    t->x1 = mem_alloc_array(h, byte);
-    t->x2 = mem_alloc_array(h, byte);
-    t->old = mem_alloc(term_win);
-    t->scr = mem_alloc(term_win);
-    sdl_term_win_init(t->old, w, h);
-    sdl_term_win_init(t->scr, w, h);
+    memset(state, 0, sizeof(*state));
+    state->key_size = (u16b)k;
+    state->key_queue = mem_alloc_array((size_t)state->key_size, char);
+    state->wid = (byte)w;
+    state->hgt = (byte)h;
+    state->x1 = mem_alloc_array(h, byte);
+    state->x2 = mem_alloc_array(h, byte);
+    state->old = mem_alloc(sdl_view_buffer);
+    state->scr = mem_alloc(sdl_view_buffer);
+    sdl_view_buffer_init(state->old, w, h);
+    sdl_view_buffer_init(state->scr, w, h);
 
     for (y = 0; y < h; y++)
     {
-        t->x1[y] = 0;
-        t->x2[y] = (byte)(w - 1);
+        state->x1[y] = 0;
+        state->x2[y] = (byte)(w - 1);
     }
 
-    t->y1 = 0;
-    t->y2 = (byte)(h - 1);
-    t->total_erase = true;
-    t->attr_blank = 0;
-    t->char_blank = ' ';
+    state->y1 = 0;
+    state->y2 = (byte)(h - 1);
+    state->total_erase = true;
+    state->attr_blank = 0;
+    state->char_blank = ' ';
     return 0;
 }
 
@@ -136,33 +138,33 @@ int sdl_active_view_index(void)
 
 void sdl_set_active_view_index(int view_index)
 {
-    term* host;
+    sdl_view_state* state;
 
     if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return;
-    if (!g_views[view_index].term_ready)
+    if (!g_views[view_index].ready)
         return;
 
-    host = &g_views[view_index].t;
-    if (!host->active_flag)
+    state = &g_views[view_index].state;
+    if (!state->active_flag)
     {
-        if (host->init_hook)
-            (*host->init_hook)(host);
-        host->active_flag = true;
+        if (state->init_hook)
+            (*state->init_hook)(state);
+        state->active_flag = true;
     }
 
-    host->mapped_flag = true;
+    state->mapped_flag = true;
     g_active_view_index = view_index;
 }
 
-term* sdl_active_view_host(void)
+static sdl_view_state* sdl_active_view_state(void)
 {
     if (g_active_view_index < 0 || g_active_view_index >= MAX_TERM_DATA)
         return NULL;
-    if (!g_views[g_active_view_index].term_ready)
+    if (!g_views[g_active_view_index].ready)
         return NULL;
 
-    return &g_views[g_active_view_index].t;
+    return &g_views[g_active_view_index].state;
 }
 
 static sdl_view* sdl_active_view(void)
@@ -171,24 +173,10 @@ static sdl_view* sdl_active_view(void)
 
     if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return NULL;
-    if (!g_views[view_index].term_ready)
+    if (!g_views[view_index].ready)
         return NULL;
 
     return &g_views[view_index];
-}
-
-sdl_view* sdl_view_from_term(term* t)
-{
-    if (!t)
-        return NULL;
-
-    size_t idx = (size_t)(uintptr_t)t->data;
-    if (idx >= MAX_TERM_DATA) {
-        log_warn("sdl_view_from_term: invalid term index %zu (max %d)", idx, MAX_TERM_DATA - 1);
-        return NULL;
-    }
-
-    return &g_views[idx];
 }
 
 void sdl_sync_palette(void)
@@ -203,6 +191,11 @@ void sdl_sync_palette(void)
 
 void sdl_view_destroy(sdl_view* d)
 {
+    if (!d)
+        return;
+
+    (void)sdl_view_state_destroy(&d->state);
+
     if (d->canvas) {
         SDL_DestroyTexture(d->canvas);
         d->canvas = NULL;
@@ -211,6 +204,8 @@ void sdl_view_destroy(sdl_view* d)
         SDL_DestroyTexture(d->font_atlas);
         d->font_atlas = NULL;
     }
+
+    d->ready = false;
 }
 
 void sdl_present_if_needed(sdl_view* d)
@@ -300,7 +295,7 @@ void sdl_handle_renderer_reset(void)
 {
     for (int i = 0; i < MAX_TERM_DATA; i++) {
         sdl_view* view = &g_views[i];
-        if (!view->term_ready)
+        if (!view->ready)
             continue;
 
         if (view->canvas) {
@@ -338,7 +333,7 @@ void sdl_handle_renderer_reset(void)
 
     sdl_scene_stack_on_renderer_reset();
     g_state.need_present = true;
-    sdl_redraw_all_term_hosts();
+    sdl_redraw_all_views();
 }
 
 static errr callback_sdl_xtra(int n, int v)
@@ -466,11 +461,11 @@ static errr callback_sdl_xtra(int n, int v)
 
 static void draw_cursor(int x, int y, bool big)
 {
-    term* host = sdl_active_view_host();
+    sdl_view_state* state = sdl_active_view_state();
     sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !host)
+    if (!d || !d->canvas || !state)
         return;
-    if (x < 0 || y < 0 || x >= host->wid || y >= host->hgt)
+    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
         return;
 
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
@@ -497,14 +492,14 @@ static errr callback_sdl_bigcurs(int x, int y)
 
 static errr callback_sdl_wipe(int x, int y, int n)
 {
-    term* host = sdl_active_view_host();
+    sdl_view_state* state = sdl_active_view_state();
     sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !host || n <= 0)
+    if (!d || !d->canvas || !state || n <= 0)
         return 0;
-    if (x < 0 || y < 0 || x >= host->wid || y >= host->hgt)
+    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
         return 0;
-    if (x + n > host->wid)
-        n = host->wid - x;
+    if (x + n > state->wid)
+        n = state->wid - x;
     if (n <= 0)
         return 0;
 
@@ -551,34 +546,34 @@ void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_C
 
 static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
 {
-    term* host = sdl_active_view_host();
+    sdl_view_state* state = sdl_active_view_state();
     sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !host || !s || n <= 0)
+    if (!d || !d->canvas || !state || !s || n <= 0)
         return 0;
-    if (x < 0 || y < 0 || x >= host->wid || y >= host->hgt)
+    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
         return 0;
-    if (x + n > host->wid)
-        n = host->wid - x;
+    if (x + n > state->wid)
+        n = state->wid - x;
     if (n <= 0)
         return 0;
 
     SDL_SetRenderTarget(g_state.renderer, d->canvas);
 
     TTF_Font* story_font = sdl_story_font_for_view(d);
-    bool chunk_story_font = (host && host->story_chunk_active && story_font);
+    bool story_mode = false;
 
-    if (!chunk_story_font && host && host->scr && story_font) {
-        if (y >= 0 && y < host->hgt && host->scr->story && host->scr->story[y]) {
-            for (int i = 0; i < n && (x + i) < host->wid; i++) {
-                if (host->scr->story[y][x + i]) {
-                    chunk_story_font = true;
+    if (state && state->scr && story_font) {
+        if (y >= 0 && y < state->hgt && state->scr->story
+            && state->scr->story[y])
+        {
+            for (int i = 0; i < n && (x + i) < state->wid; i++) {
+                if (state->scr->story[y][x + i]) {
+                    story_mode = true;
                     break;
                 }
             }
         }
     }
-
-    bool story_mode = (chunk_story_font && story_font);
 
     if (!story_mode) {
         SDL_Rect clip = { x * d->cell_w, y * d->cell_h, n * d->cell_w, d->cell_h };
@@ -606,13 +601,13 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
     byte* story_row = NULL;
     char* row_chars = NULL;
     byte* row_attr = NULL;
-    if (host && host->scr && y >= 0 && y < host->hgt) {
-        if (host->scr->story)
-            story_row = host->scr->story[y];
-        if (host->scr->c)
-            row_chars = host->scr->c[y];
-        if (host->scr->a)
-            row_attr = host->scr->a[y];
+    if (state && state->scr && y >= 0 && y < state->hgt) {
+        if (state->scr->story)
+            story_row = state->scr->story[y];
+        if (state->scr->c)
+            row_chars = state->scr->c[y];
+        if (state->scr->a)
+            row_attr = state->scr->a[y];
     }
 
     if (story_mode) {
@@ -624,7 +619,7 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
             }
 
             int offset = 0;
-            while (offset < n && (x + offset) < host->wid) {
+            while (offset < n && (x + offset) < state->wid) {
                 int term_col = x + offset;
                 byte flags = story_row[term_col];
                 bool use_story = (flags & STORY_FLAG_USE) != 0;
@@ -632,7 +627,8 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
 
                 int chunk_remaining = n - offset;
                 int chunk_run = 1;
-                while ((chunk_run < chunk_remaining) && (term_col + chunk_run) < host->wid) {
+                while ((chunk_run < chunk_remaining)
+                    && (term_col + chunk_run) < state->wid) {
                     byte next_flags = story_row[term_col + chunk_run];
                     bool next_story = (next_flags & STORY_FLAG_USE) != 0;
                     bool next_grid = (next_flags & STORY_FLAG_CELL_ALIGN) != 0;
@@ -658,7 +654,7 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
                             break;
                         render_col--;
                     }
-                    while (render_end < host->wid) {
+                    while (render_end < state->wid) {
                         byte next_flags = story_row[render_end];
                         bool next_story = (next_flags & STORY_FLAG_USE) != 0;
                         bool next_grid = (next_flags & STORY_FLAG_CELL_ALIGN) != 0;
@@ -684,7 +680,8 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
 
                 if (use_story) {
                     if (grid_align)
-                        sdl_render_story_text_grid(d, story_font, render_col, y, render_run, render_text, col);
+                        sdl_render_story_text_cell_aligned(d, story_font,
+                            render_col, y, render_run, render_text, col);
                     else
                         sdl_render_story_text_free(d, story_font, render_col, y, render_run, render_text, col);
                 } else {
@@ -715,14 +712,14 @@ static errr callback_sdl_text(int x, int y, int n, byte a, cptr s)
 static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* cp,
     const byte* tap, const char* tcp)
 {
-    term* host = sdl_active_view_host();
+    sdl_view_state* state = sdl_active_view_state();
     sdl_view* d = sdl_active_view();
-    if (!d || !d->canvas || !host || !ap || !cp || !tap || !tcp || n <= 0)
+    if (!d || !d->canvas || !state || !ap || !cp || !tap || !tcp || n <= 0)
         return 0;
-    if (x < 0 || y < 0 || x >= host->wid || y >= host->hgt)
+    if (x < 0 || y < 0 || x >= state->wid || y >= state->hgt)
         return 0;
-    if (x + n > host->wid)
-        n = host->wid - x;
+    if (x + n > state->wid)
+        n = state->wid - x;
     if (n <= 0)
         return 0;
 
@@ -859,75 +856,66 @@ static errr callback_sdl_pict(int x, int y, int n, const byte* ap, const char* c
     return 0;
 }
 
-static void callback_sdl_nuke(term* t)
+static void callback_sdl_nuke(sdl_view_state* state)
 {
-    sdl_view* d = t ? sdl_view_from_term(t) : sdl_active_view();
-    if (!d)
+    (void)state;
+}
+
+static void callback_sdl_init(sdl_view_state* state)
+{
+    (void)state;
+}
+
+static void sdl_view_buffer_dispose(sdl_view_buffer* buffer)
+{
+    if (!buffer)
         return;
 
-    if (d->font_atlas)
-        SDL_DestroyTexture(d->font_atlas);
-    d->font_atlas = NULL;
-    if (d->canvas)
-        SDL_DestroyTexture(d->canvas);
-    d->canvas = NULL;
+    mem_free_null(buffer->a);
+    mem_free_null(buffer->c);
+    mem_free_null(buffer->va);
+    mem_free_null(buffer->vc);
+    mem_free_null(buffer->ta);
+    mem_free_null(buffer->tc);
+    mem_free_null(buffer->vta);
+    mem_free_null(buffer->vtc);
+    mem_free_null(buffer->story);
+    mem_free_null(buffer->vstory);
 }
 
-static void callback_sdl_init(term* t)
+static void sdl_view_state_storage_dispose(sdl_view_state* state)
 {
-    (void)t;
-}
-
-static void sdl_term_win_dispose(term_win* win)
-{
-    if (!win)
+    if (!state)
         return;
 
-    mem_free_null(win->a);
-    mem_free_null(win->c);
-    mem_free_null(win->va);
-    mem_free_null(win->vc);
-    mem_free_null(win->ta);
-    mem_free_null(win->tc);
-    mem_free_null(win->vta);
-    mem_free_null(win->vtc);
-    mem_free_null(win->story);
-    mem_free_null(win->vstory);
+    if (state->old)
+    {
+        sdl_view_buffer_dispose(state->old);
+        mem_free_null(state->old);
+    }
+    if (state->scr)
+    {
+        sdl_view_buffer_dispose(state->scr);
+        mem_free_null(state->scr);
+    }
+    if (state->mem)
+    {
+        sdl_view_buffer_dispose(state->mem);
+        mem_free_null(state->mem);
+    }
+    if (state->tmp)
+    {
+        sdl_view_buffer_dispose(state->tmp);
+        mem_free_null(state->tmp);
+    }
+
+    mem_free_null(state->x1);
+    mem_free_null(state->x2);
+    mem_free_null(state->key_queue);
 }
 
-static void sdl_term_storage_dispose(term* t)
-{
-    if (!t)
-        return;
-
-    if (t->old)
-    {
-        sdl_term_win_dispose(t->old);
-        mem_free_null(t->old);
-    }
-    if (t->scr)
-    {
-        sdl_term_win_dispose(t->scr);
-        mem_free_null(t->scr);
-    }
-    if (t->mem)
-    {
-        sdl_term_win_dispose(t->mem);
-        mem_free_null(t->mem);
-    }
-    if (t->tmp)
-    {
-        sdl_term_win_dispose(t->tmp);
-        mem_free_null(t->tmp);
-    }
-
-    mem_free_null(t->x1);
-    mem_free_null(t->x2);
-    mem_free_null(t->key_queue);
-}
-
-static void sdl_term_copy_window(term_win* dst, const term_win* src, int w,
-    int h)
+static void sdl_view_copy_buffer(sdl_view_buffer* dst,
+    const sdl_view_buffer* src, int w, int h)
 {
     int y;
 
@@ -949,151 +937,98 @@ static void sdl_term_copy_window(term_win* dst, const term_win* src, int w,
     dst->cv = src->cv;
 }
 
-static void sdl_term_clear_dirty(term* t)
+static void sdl_view_clear_dirty(sdl_view_state* state)
 {
     int y;
 
-    if (!t || !t->x1 || !t->x2)
+    if (!state || !state->x1 || !state->x2)
         return;
 
-    t->total_erase = false;
-    t->y1 = t->hgt;
-    t->y2 = 0;
-    for (y = 0; y < t->hgt; y++)
+    state->total_erase = false;
+    state->y1 = state->hgt;
+    state->y2 = 0;
+    for (y = 0; y < state->hgt; y++)
     {
-        t->x1[y] = t->wid;
-        t->x2[y] = 0;
+        state->x1[y] = state->wid;
+        state->x2[y] = 0;
     }
 }
 
-static void sdl_term_redraw_text_row(term* t, int y)
+static void sdl_view_redraw_text_row(sdl_view_state* state, int y)
 {
     int x = 0;
 
-    while (x < t->wid)
+    while (x < state->wid)
     {
-        byte attr = t->scr->a[y][x];
+        byte attr = state->scr->a[y][x];
         int run = 1;
 
-        while ((x + run) < t->wid && t->scr->a[y][x + run] == attr)
+        while ((x + run) < state->wid && state->scr->a[y][x + run] == attr)
             run++;
 
-        (void)callback_sdl_text(x, y, run, attr, t->scr->c[y] + x);
+        (void)callback_sdl_text(x, y, run, attr, state->scr->c[y] + x);
         x += run;
     }
 }
 
-void sdl_term_host_set_active(term* t)
-{
-    if (!t)
-        return;
-
-    sdl_set_active_view_index((int)(size_t)(uintptr_t)t->data);
-}
-
-void sdl_term_host_redraw(term* t)
+static void sdl_view_redraw(sdl_view* view)
 {
     int previous_index = sdl_active_view_index();
+    int view_index;
     int y;
+    sdl_view_state* state;
 
-    if (!t || !t->scr || !t->old)
+    if (!view)
+        return;
+    view_index = (int)(view - g_views);
+    if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return;
 
-    sdl_term_host_set_active(t);
+    state = &view->state;
+    if (!state->scr || !state->old)
+        return;
 
-    if (t->xtra_hook)
-        (void)(*t->xtra_hook)(TERM_XTRA_CLEAR, 0);
+    sdl_set_active_view_index(view_index);
 
-    for (y = 0; y < t->hgt; y++)
+    if (state->xtra_hook)
+        (void)(*state->xtra_hook)(TERM_XTRA_CLEAR, 0);
+
+    for (y = 0; y < state->hgt; y++)
     {
-        if (t->higher_pict && g_state.use_tiles && g_state.tileset)
+        if (state->higher_pict && g_state.use_tiles && g_state.tileset)
         {
-            (void)callback_sdl_pict(0, y, t->wid, t->scr->a[y], t->scr->c[y],
-                t->scr->ta[y], t->scr->tc[y]);
+            (void)callback_sdl_pict(0, y, state->wid, state->scr->a[y],
+                state->scr->c[y], state->scr->ta[y], state->scr->tc[y]);
         }
         else
         {
-            sdl_term_redraw_text_row(t, y);
+            sdl_view_redraw_text_row(state, y);
         }
     }
 
-    if (t->soft_cursor && !t->scr->cu && t->scr->cv)
-        (void)callback_sdl_curs(t->scr->cx, t->scr->cy);
+    if (state->soft_cursor && !state->scr->cu && state->scr->cv)
+        (void)callback_sdl_curs(state->scr->cx, state->scr->cy);
 
-    sdl_term_copy_window(t->old, t->scr, t->wid, t->hgt);
-    sdl_term_clear_dirty(t);
+    sdl_view_copy_buffer(state->old, state->scr, state->wid, state->hgt);
+    sdl_view_clear_dirty(state);
     if (previous_index >= 0 && previous_index < MAX_TERM_DATA
-        && g_views[previous_index].term_ready)
+        && g_views[previous_index].ready)
     {
         sdl_set_active_view_index(previous_index);
     }
 }
 
-void sdl_redraw_all_term_hosts(void)
+void sdl_redraw_all_views(void)
 {
     int i;
 
     for (i = 0; i < MAX_TERM_DATA; i++)
     {
-        if (!g_views[i].term_ready)
+        if (!g_views[i].ready)
             continue;
 
-        sdl_term_host_redraw(&g_views[i].t);
+        sdl_view_redraw(&g_views[i]);
     }
-}
-
-errr sdl_view_link_term(sdl_view* d, int term_index)
-{
-    term* t = &d->t;
-    if (d->term_ready) {
-        bool was_current = (sdl_active_view_index() == term_index);
-        bool was_active = t->active_flag;
-        bool was_mapped = t->mapped_flag;
-        bool story_font_active = t->story_font_active;
-        bool story_font_grid = t->story_font_grid;
-
-        sdl_term_storage_dispose(t);
-        (void)term_init(t, d->cols, d->rows, 256);
-        t->soft_cursor = true;
-        t->higher_pict = g_state.use_tiles;
-        t->never_frosh = true;
-        t->init_hook = callback_sdl_init;
-        t->nuke_hook = callback_sdl_nuke;
-        t->xtra_hook = callback_sdl_xtra;
-        t->curs_hook = callback_sdl_curs;
-        t->bigcurs_hook = callback_sdl_bigcurs;
-        t->wipe_hook = callback_sdl_wipe;
-        t->text_hook = callback_sdl_text;
-        t->pict_hook = callback_sdl_pict;
-        t->data = (void*)(uintptr_t)term_index;
-        t->active_flag = was_active;
-        t->mapped_flag = was_mapped;
-        t->story_font_active = story_font_active;
-        t->story_font_grid = story_font_grid;
-        d->term_ready = true;
-
-        if (was_current)
-            sdl_set_active_view_index(term_index);
-
-        sdl_term_host_redraw(t);
-        return 0;
-    }
-    term_init(t, d->cols, d->rows, 256);
-    t->soft_cursor = true;
-    t->higher_pict = g_state.use_tiles;
-    t->never_frosh = true;
-    t->init_hook = callback_sdl_init;
-    t->nuke_hook = callback_sdl_nuke;
-    t->xtra_hook = callback_sdl_xtra;
-    t->curs_hook = callback_sdl_curs;
-    t->bigcurs_hook = callback_sdl_bigcurs;
-    t->wipe_hook = callback_sdl_wipe;
-    t->text_hook = callback_sdl_text;
-    if (g_state.use_tiles)
-        t->pict_hook = callback_sdl_pict;
-    t->data = (void*)(uintptr_t)term_index;
-    d->term_ready = true;
-    return 0;
 }
 
 static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int* actual_font_size)
@@ -1212,6 +1147,11 @@ void sdl_window_create(int window_width, int window_height, bool fullscreen, boo
 
 void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font_size, int scale, int margin)
 {
+    int view_index;
+
+    if (!d)
+        return;
+
     if (scale) {
 #ifdef __ANDROID__
         int requested_scale = scale;
@@ -1274,4 +1214,27 @@ void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
         log_error("Create canvas failed: %s", SDL_GetError());
         quit("could not create canvas");
     }
+
+    view_index = (int)(d - g_views);
+    if (view_index < 0 || view_index >= MAX_TERM_DATA)
+    {
+        log_error("sdl_view_create: invalid view index %d", view_index);
+        quit("could not resolve SDL view index");
+    }
+
+    (void)sdl_view_state_init(&d->state, d->cols, d->rows, 256);
+    d->state.soft_cursor = true;
+    d->state.higher_pict = g_state.use_tiles;
+    d->state.never_frosh = true;
+    d->state.init_hook = callback_sdl_init;
+    d->state.nuke_hook = callback_sdl_nuke;
+    d->state.xtra_hook = callback_sdl_xtra;
+    d->state.curs_hook = callback_sdl_curs;
+    d->state.bigcurs_hook = callback_sdl_bigcurs;
+    d->state.wipe_hook = callback_sdl_wipe;
+    d->state.text_hook = callback_sdl_text;
+    if (g_state.use_tiles)
+        d->state.pict_hook = callback_sdl_pict;
+    d->state.data = (void*)(uintptr_t)view_index;
+    d->ready = true;
 }

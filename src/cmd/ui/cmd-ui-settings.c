@@ -510,25 +510,6 @@ static void pref_footer(SDL_IOStream* fff, cptr mark)
 }
 
 /*
- * Ask for a "user pref line" and process it
- */
-void do_cmd_pref(void)
-{
-    char tmp[80];
-
-    /* Default */
-    SDL_strlcpy(tmp, "", sizeof(tmp));
-
-    /* Ask for a "user pref command" */
-    if (!settings_ui_prompt_string("Pref Command",
-            "Enter a pref command to process.", "", tmp, sizeof(tmp)))
-        return;
-
-    /* Process that pref command */
-    (void)process_pref_file_command(tmp);
-}
-
-/*
  * Ask for a "user pref file" and process it.
  *
  * This function should only be used by standard interaction commands,
@@ -2222,116 +2203,6 @@ extern void do_cmd_options_aux(int page, cptr info)
             clear_skills_and_abilities();
         }
     }
-}
-
-/*
- * Write all current options to the given preference file in the
- * lib/user directory. Modified from KAmband 1.8.
- */
-static errr option_dump(cptr fname)
-{
-    static cptr mark = "Options Dump";
-
-    int i, j;
-
-    SDL_IOStream* fff;
-
-    char buf[1024];
-
-    /* Build the filename */
-    if (!path_build(buf, sizeof(buf), ANGBAND_DIR_USER, fname))
-    {
-        log_error("option_dump: failed to build path for '%s'", fname);
-        return (-1);
-    }
-
-    /* File type is "TEXT" */
-    FILE_TYPE(FILE_TYPE_TEXT);
-
-    /* Remove old options */
-    remove_old_dump(buf, mark);
-
-    /* Append to the file */
-    fff = sdl_fopen(buf, "a");
-
-    /* Failure */
-    if (!fff)
-        return (-1);
-
-    /* Output header */
-    pref_header(fff, mark);
-
-    /* Skip some lines */
-    SDL_IOprintf(fff, "\n\n");
-
-    /* Start dumping */
-    SDL_IOprintf(fff, "# Automatic option dump\n\n");
-
-    /* Dump options (skip cheat, adult, score) */
-    for (i = 0; i < OPT_CHEAT; i++)
-    {
-        /* Require a real option */
-        if (!option_text[i])
-            continue;
-
-        /* Comment */
-        SDL_IOprintf(fff, "# Option '%s'\n", option_desc[i]);
-
-        /* Dump the option */
-        if (op_ptr->opt[i])
-        {
-            SDL_IOprintf(fff, "Y:%s\n", option_text[i]);
-        }
-        else
-        {
-            SDL_IOprintf(fff, "X:%s\n", option_text[i]);
-        }
-
-        /* Skip a line */
-        SDL_IOprintf(fff, "\n");
-    }
-
-    /* Dump window flags */
-    for (i = 1; i < ANGBAND_TERM_MAX; i++)
-    {
-        /* Require a real window */
-        if (!platform_frame_view_ready(i))
-            continue;
-
-        /* Check each flag */
-        for (j = 0; j < 32; j++)
-        {
-            /* Require a real flag */
-            if (!window_flag_desc[j])
-                continue;
-
-            /* Comment */
-            SDL_IOprintf(fff, "# Window '%s', Flag '%s'\n",
-                platform_frame_view_name(i), window_flag_desc[j]);
-
-            /* Dump the flag */
-            if (op_ptr->window_flag[i] & (1L << j))
-            {
-                SDL_IOprintf(fff, "W:%d:%d:1\n", i, j);
-            }
-            else
-            {
-                SDL_IOprintf(fff, "W:%d:%d:0\n", i, j);
-            }
-
-            /* Skip a line */
-            SDL_IOprintf(fff, "\n");
-        }
-    }
-
-    /* Output footer */
-    pref_footer(fff, mark);
-
-    /* Close */
-    sdl_fclose(fff);
-
-    /* Success */
-    return (0);
 }
 
 /*
@@ -4654,20 +4525,17 @@ static int other_options_menu(int* highlight)
 {
     bool death_view = death_spectator_active();
     const settings_choice_entry entries[] = {
-        { 1, 'j', "j) Load a 'Pref' File", false },
-        { 2, 'k', "k) Append Options to a 'Pref' File", false },
-        { 3, 'l', "l) Macro Support Removed", false },
-        { 4, 'm', "m) Set Colours", false },
-        { 5, 'n', "n) Write a note", false },
-        { 6, 's', "s) Suicide", death_view },
-        { 7, 'o', "o) Return to Options", false },
+        { 1, 'm', "m) Set Colours", false },
+        { 2, 'n', "n) Write a note", false },
+        { 3, 's', "s) Suicide", death_view },
+        { 4, 'o', "o) Return to Options", false },
     };
 
-    if (death_view && *highlight == 6)
-        *highlight = 7;
+    if (death_view && *highlight == 3)
+        *highlight = 4;
 
     return settings_choice_menu("Other Options", entries,
-        (int)N_ELEMENTS(entries), highlight, 7);
+        (int)N_ELEMENTS(entries), highlight, 4);
 }
 
 static void do_cmd_other_options(void)
@@ -4675,7 +4543,6 @@ static void do_cmd_other_options(void)
     int choice = 0;
     int highlight = 1;
     bool return_to_options = false;
-    char ftmp[80];
 
     while (!return_to_options)
     {
@@ -4684,43 +4551,19 @@ static void do_cmd_other_options(void)
         switch (choice)
         {
         case 1:
-            do_cmd_pref_file_hack(12);
-            break;
-
-        case 2:
-            strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
-
-            if (!settings_ui_prompt_string("Other Options",
-                    "Enter the file name to save options.", "", ftmp,
-                    sizeof(ftmp)))
-            {
-                break;
-            }
-
-            if (option_dump(ftmp))
-                msg_print("Failed!");
-            else
-                msg_print("Done.");
-            break;
-
-        case 3:
-            msg_print("Macros and keymaps have been removed.");
-            break;
-
-        case 4:
             do_cmd_colors();
             break;
 
-        case 5:
+        case 2:
             do_cmd_note("", p_ptr->depth);
             break;
 
-        case 6:
+        case 3:
             do_cmd_suicide();
             return_to_options = true;
             break;
 
-        case 7:
+        case 4:
             return_to_options = true;
             break;
         }
@@ -5994,7 +5837,7 @@ void do_cmd_controller_settings(void)
                     }
                 }
 
-                flush();
+                input_clear_pending();
                 if (!sdl_gamepad_capture_begin()) {
                     msg_print("No controller detected.");
                     message_flush();
@@ -6113,8 +5956,8 @@ static errr macro_dump(cptr fname)
 /*
  * Hack -- ask for a "trigger" (see below)
  *
- * Note that both "flush()" calls are extremely important.  This may
- * no longer be true, since input handling is much simpler now.  XXX XXX XXX
+ * Clear pending input before and after capture so the trigger buffer only
+ * sees the keys entered for the current binding.
  */
 static void do_cmd_macro_aux(char* buf)
 {
@@ -6122,8 +5965,7 @@ static void do_cmd_macro_aux(char* buf)
 
     int n = 0;
 
-    /* Flush */
-    flush();
+    input_clear_pending();
 
     /* First key */
     ch = settings_ui_read_key(false);
@@ -6141,27 +5983,24 @@ static void do_cmd_macro_aux(char* buf)
     /* Terminate */
     buf[n] = '\0';
 
-    /* Flush */
-    flush();
+    input_clear_pending();
 }
 
 /*
  * Hack -- ask for a keymap "trigger" (see below)
  *
- * Note that both "flush()" calls are extremely important.  This may
- * no longer be true, since "util.c" is much simpler now.  XXX XXX XXX
+ * Clear pending input before and after capture so the keymap trigger reads
+ * exactly one fresh keypress.
  */
 static void do_cmd_macro_aux_keymap(char* buf)
 {
-    /* Flush */
-    flush();
+    input_clear_pending();
 
     /* Get a key */
     buf[0] = settings_ui_read_key(false);
     buf[1] = '\0';
 
-    /* Flush */
-    flush();
+    input_clear_pending();
 }
 
 /*

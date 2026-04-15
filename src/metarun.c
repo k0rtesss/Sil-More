@@ -5332,7 +5332,7 @@ static void metarun_ui_clear_pending_input(void)
         ui_information_scene_is_active() ? 1 : 0);
     if (session)
         app_session_clear_inputs(session);
-    flush();
+    input_clear_pending();
 }
 
 static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)

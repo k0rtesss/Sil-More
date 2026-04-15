@@ -308,7 +308,7 @@ static void close_game_aux(void)
 
     death_spectator_view();
 
-    flush();
+    input_clear_pending();
     message_flush();
 
     while (!wants_to_quit)
@@ -377,7 +377,7 @@ static void close_game_aux(void)
 
         if (!wants_to_quit && choice >= 1 && choice <= 6)
         {
-            flush();
+            input_clear_pending();
             message_flush();
         }
     }
@@ -392,7 +392,7 @@ void close_game(void)
 
     handle_stuff();
     message_flush();
-    flush();
+    input_clear_pending();
     signals_ignore_tstp();
 
     character_icky++;

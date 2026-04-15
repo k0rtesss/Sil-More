@@ -134,7 +134,7 @@ void do_cmd_escape(int silmarils)
     char buf[120];
 
     p_ptr->escaped = true;
-    flush();
+    input_clear_pending();
     p_ptr->is_dead = true;
     p_ptr->playing = false;
     p_ptr->leaving = true;
@@ -202,7 +202,7 @@ void do_cmd_suicide(void)
 {
     char ch;
 
-    flush();
+    input_clear_pending();
 
     if (!get_check("This will destroy the current character: are you sure? "))
         return;

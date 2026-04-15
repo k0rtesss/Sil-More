@@ -1,4 +1,5 @@
 #include "angband.h"
+#include "platform-story-font.h"
 #include "sdl-main-internal.h"
 
 static const char* const sdl_story_fallback_font = "lib/xtra/font/MarcellusSC-Regular.ttf";
@@ -115,78 +116,43 @@ void sdl_load_story_fonts(void)
     }
 
     g_state.story_font_depth = 0;
-    if (sdl_active_view_host())
-        sdl_active_view_host()->story_font_active = false;
-}
-
-void sdl_apply_story_font_state(bool active)
-{
-    for (int i = 0; i < MAX_TERM_DATA; i++) {
-        if (g_views[i].term_ready)
-            g_views[i].t.story_font_active = active;
-    }
-}
-
-void sdl_apply_story_grid_state(bool grid)
-{
-    for (int i = 0; i < MAX_TERM_DATA; i++) {
-        if (g_views[i].term_ready)
-            g_views[i].t.story_font_grid = grid;
-    }
-}
-
-void sdl_story_font_reset_state(void)
-{
-    g_state.story_font_depth = 0;
-    sdl_apply_story_font_state(false);
-    g_state.story_font_grid = false;
-    sdl_apply_story_grid_state(false);
-    if (sdl_active_view_host())
-        sdl_active_view_host()->story_chunk_active = false;
+    g_state.story_cell_align = false;
 }
 
 void sdl_story_font_enable(void)
 {
     g_state.story_font_depth++;
-    if (g_state.story_font_depth == 1)
-        sdl_apply_story_font_state(true);
 }
 
 void sdl_story_font_disable(void)
 {
     if (g_state.story_font_depth > 0)
         g_state.story_font_depth--;
-    bool active = (g_state.story_font_depth > 0);
-    sdl_apply_story_font_state(active);
-    if (!active)
-        sdl_story_font_set_grid(false);
+    if (g_state.story_font_depth == 0)
+        sdl_story_font_set_cell_align(false);
 }
 
 bool sdl_is_story_font_enabled(void)
 {
-    term* host = sdl_active_view_host();
-
-    return (host && host->story_font_active);
+    return g_state.story_font_depth > 0;
 }
 
-void sdl_story_font_set_grid(bool grid)
+void sdl_story_font_set_cell_align(bool enabled)
 {
-    if (g_state.story_font_grid == grid)
+    if (g_state.story_cell_align == enabled)
         return;
-    g_state.story_font_grid = grid;
-    sdl_apply_story_grid_state(grid);
+    g_state.story_cell_align = enabled;
 }
 
-bool sdl_is_story_font_grid(void)
+bool sdl_story_font_cell_align_enabled(void)
 {
-    term* host = sdl_active_view_host();
-
-    return (host && host->story_font_grid);
+    return g_state.story_cell_align;
 }
 
 void sdl_story_font_reset(void)
 {
-    sdl_story_font_reset_state();
+    g_state.story_font_depth = 0;
+    g_state.story_cell_align = false;
 }
 
 int sdl_story_font_text_width(cptr text, int len)
@@ -197,8 +163,8 @@ int sdl_story_font_text_width(cptr text, int len)
     sdl_view* d = NULL;
     if (platform_frame_view_ready(sdl_active_view_index()))
         d = &g_views[sdl_active_view_index()];
-    if (!d || !d->term_ready) {
-        if (g_views[0].term_ready)
+    if (!d || !d->ready) {
+        if (g_views[0].ready)
             d = &g_views[0];
     }
     if (!d)
@@ -224,7 +190,7 @@ int sdl_story_font_text_width(cptr text, int len)
 
 int sdl_get_cell_width(void)
 {
-    if (g_views[0].term_ready)
+    if (g_views[0].ready)
         return g_views[0].cell_w;
     return 8;
 }
@@ -363,12 +329,10 @@ static bool sdl_story_cell_is_text(byte a, char c)
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row,
     const char* row_chars, const byte* row_attr)
 {
-    term* host = sdl_active_view_host();
-
-    if (!d || !font || !host || !story_row || !row_chars || !row_attr)
+    if (!d || !font || !story_row || !row_chars || !row_attr)
         return;
 
-    const int wid = host->wid;
+    const int wid = d->cols;
     const float cell_w_f = (float)d->cell_w;
     const float cell_h_f = (float)d->cell_h;
 
@@ -431,7 +395,8 @@ void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte*
                 angband_color_table[attr][3],
                 255
             };
-            sdl_render_story_text_grid(d, font, run_start, y, run_len, row_chars + run_start, col);
+            sdl_render_story_text_cell_aligned(d, font, run_start, y, run_len,
+                row_chars + run_start, col);
             continue;
         }
 
@@ -494,8 +459,8 @@ void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte*
     }
 }
 
-void sdl_render_story_text_grid(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
-    SDL_Color col)
+void sdl_render_story_text_cell_aligned(sdl_view* d, TTF_Font* font, int x,
+    int y, int n, const char* s, SDL_Color col)
 {
     if (!d || !font || n <= 0)
         return;

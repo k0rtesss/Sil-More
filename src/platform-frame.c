@@ -32,7 +32,7 @@ static void platform_frame_flush_pending_inputs(Uint64 now_ns)
 bool platform_frame_view_ready(int view_index)
 {
     return view_index >= 0 && view_index < MAX_TERM_DATA
-        && g_views[view_index].term_ready;
+        && g_views[view_index].ready;
 }
 
 const char* platform_frame_view_name(int view_index)
@@ -106,11 +106,9 @@ void platform_frame_shutdown_views(void)
 {
     for (int i = MAX_TERM_DATA - 1; i >= 0; --i)
     {
-        if (!g_views[i].term_ready)
+        if (!g_views[i].ready)
             continue;
 
-        term_nuke(&g_views[i].t);
-        g_views[i].term_ready = false;
         sdl_view_destroy(&g_views[i]);
     }
 }
@@ -135,7 +133,7 @@ static bool platform_frame_render_ui_scene_to_canvas(sdl_view* view,
         return false;
     }
 
-    main_view = (g_views[0].term_ready && g_views[0].canvas)
+    main_view = (g_views[0].ready && g_views[0].canvas)
         ? &g_views[0]
         : view;
     canvas_w = view->cols * view->cell_w;
