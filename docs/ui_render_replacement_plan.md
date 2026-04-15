@@ -1,102 +1,75 @@
 # UI Terminal Extermination Plan
 
 Status: active on April 15, 2026.
-Lane status on April 15, 2026:
-- Lane 1: completed
-- Lane 2: completed
-- Lane 3: completed
-- Lane 4: completed
-- Lane 5: active
+
+Current checkpoint on April 15, 2026:
+- SDL renderer replacement is complete.
+- Gameplay and UI `flush()` ownership is gone from the active source tree.
+- Public SDL term-host naming is gone from the active source tree.
+- The current `terminal_model` debt audit is at zero.
+- Remaining work is the internal terminal kernel still embedded in the SDL
+  view implementation, plus the export and screenshot compatibility path.
 
 ## Mission
-- The SDL render replacement is done. The remaining work is removal of the
-  terminal-era UI model from the active source tree.
+- Purge all remaining terminal-era UI logic from the codebase, not just the
+  public names that exposed it.
 - Preserve gameplay-space grids and cells: dungeon topology, LOS math,
   projectile paths, minimap data, and map snapshots are not the target here.
-- Remove terminal-space concepts from the normal SDL UI path: blocking byte
-  input, delayed flush ownership, row or column text writes, document cell ops,
-  SDL `term` hosts, and char or attr screen captures.
+- Delete UI compatibility layers that still behave like a terminal:
+  hook tables, `TERM_XTRA_*`, shadow row buffers, dirty spans, and char or
+  attr screen mirrors.
 - Do not add new compatibility wrappers, raw-cell fallback renderers, or new
-  UI APIs whose ownership is still `term_*`, `prt()`, or `*_wid` / `*_hgt`.
+  APIs whose ownership is still hook-driven row or column replay.
 
-## Audit Snapshot
-- `py -3 tools/ui_debt_audit.py --details` currently reports:
-  - `ui0`: `inkey()`, `screen_save()/screen_load()`, direct `Term_*`, and
-    `get_sdl_*`/`set_sdl_*` outside platform code all remain at 0 files /
-    0 matches
-  - `movement_input`: all tracked metrics are now at 0 files / 0 matches; the
-    movement slice is complete and the baseline now preserves that state
-  - `terminal_model`: `inkey()` 0 files / 0 matches, `request_command()` 0
-    files / 0 matches, `flush()` 14 files / 24 matches, compat text wrappers
-    0 files / 0 matches, terminal-size queries 0 files / 0 matches,
-    document-op cell grid 0 files / 0 matches, SDL term-host symbols 6 files
-    / 49 matches, and term-host story-font state 5 files / 46 matches
-- `tests/ui_debt_audit_baseline.json` now carries `terminal_model` alongside
-  `ui0` and `movement_input`, so `ctest -R sil_ui0_audit --output-on-failure`
-  can fail on regressions in the real remaining debt families.
+## Audit Reality
+- `py -3 tools/ui_debt_audit.py --details` is currently green, but that audit
+  now measures only the public debt family that has already been removed.
+- Zero debt in the current report does not mean zero terminal logic in the
+  repo.
+- The next slice must expand the audit before landing the final purge, so the
+  remaining internal kernel becomes measurable and regressions are blocked.
+
+## Completed Foundation
+- gameplay-facing pending-input clearing now flows through
+  `input_clear_pending()` instead of `flush()`
+- SDL view readiness and redraw naming no longer pass through public
+  `term_*` APIs
+- story-font activation and cell-alignment state no longer live on per-host
+  SDL view objects
+- the tracked public `terminal_model` family is at zero and must remain there
 
 ## Live Remnant Families
-### 1. Legacy input and command loop
-Primary files:
-- `src/util-input.c`
-- `src/dungeon.c`
-- `src/externs.h`
-- `src/targeting.c`
-
-What remains:
-- the gameplay-facing input loop is now semantic and the live
-  `request_command()` / `inkey()` ownership is gone
-- the only remaining debt in this family is delayed `flush()` ownership
-
-Exit when:
-- gameplay code no longer calls `flush()` as part of normal UI flow
-
-### 2. Compat text surface and cursor-state writers
-Primary files:
-- completed on April 15, 2026
-
-What remains:
-- no live compat text writer debt remains on the SDL path
-- `src/util-text.c` no longer exports `prt()` / `c_put_str()` /
-  `clear_from()` / `text_out_to_screen()`
-
-Exit when:
-- complete
-
-### 3. Document-op cell grid
-Primary files:
-- completed on April 15, 2026
-
-What remains:
-- no live document-op runtime surface remains
-- browser and document flows no longer depend on terminal-size query helpers
-- remaining scene-local layout code is internal semantic assembly, not
-  terminal-model ownership
-
-Exit when:
-- complete
-
-### 4. SDL term host layer that survived the renderer migration
+### 1. Internal SDL terminal kernel
 Primary files:
 - `src/sdl-main-internal.h`
 - `src/sdl-render.c`
-- `src/sdl-layout.c`
 - `src/platform-frame.c`
-- `src/sdl-scene.c`
-- `src/sdl-story-font.c`
+- `src/sdl-layout.c`
 
 What remains:
-- `struct term_win` and `struct term`
-- `term_ready`, `term_init()`, `term_nuke()`
-- term-linked view lifetime and redraw APIs
-- story-font and grid-alignment state stored on the active term host
+- `sdl_view_state` still stores terminal-era compatibility state such as:
+  - `key_queue`
+  - `wid` / `hgt`
+  - dirty spans `x1` / `x2`
+  - shadow buffers `old` / `scr`
+- hook-driven render or control plumbing still exists:
+  - `xtra_hook`
+  - `curs_hook`
+  - `bigcurs_hook`
+  - `wipe_hook`
+  - `text_hook`
+  - `pict_hook`
+- `TERM_XTRA_*` still owns event pumping, flush, clear, fresh, delay, and
+  react behavior inside the SDL renderer
+- redraw still replays row or cell state from compatibility buffers instead of
+  consuming semantic scene or view data directly
 
 Exit when:
-- SDL views own canvases, focus, and text caches directly
-- view lifetime no longer passes through `term_*`
-- story-font state lives on scene or view state, not term host state
+- SDL view state contains only direct view and render state
+- no `TERM_XTRA_*` or hook-table dispatch remains
+- main redraw no longer depends on row or cell shadow buffers
 
-### 5. Residual char or attr screen capture and export logic
+### 2. Residual export and screenshot compatibility path
 Primary files:
 - `src/files.c`
 
@@ -106,198 +79,176 @@ What remains:
 - the character dump screenshot still serializes a faux screen-cell slice
 
 Exit when:
-- dump and export code consumes semantic snapshot data directly
-- any intentionally retained ASCII export is explicit data formatting, not a UI
-  compatibility dependency
+- dump and export helpers consume semantic snapshot data directly
+- any intentionally retained ASCII output is explicit formatting over semantic
+  data, not UI compatibility capture
 
-### 6. Audit and documentation blind spots
+### 3. Audit blind spot
 Primary files:
 - `tools/ui_debt_audit.py`
-- `docs/ui_migration_inventory.md`
-- `docs/ui_architecture_migration_plan.md`
+- `tests/ui_debt_audit_baseline.json`
 - this file
-- legacy roadmap docs that still talk about `z-term` as live debt
 
 What remains:
-- the audit now covers `ui0`, the completed `movement_input` slice, and the
-  broader `terminal_model` family
-- several docs still describe the old render-replacement finish line instead of
-  the current cleanup target
+- the current audit no longer measures the true remaining terminal kernel
+- the baseline still reflects the previous public debt family instead of the
+  actual terminal logic that survives in SDL internals and export code
 
 Exit when:
-- the audit tracks the actual remaining terminal model
-- docs clearly distinguish completed renderer replacement from unfinished
-  terminal-logic removal
+- the audit tracks the internal SDL kernel and export mirror debt directly
+- the baseline locks the new zero point after that code is deleted
+
+## Next Slice
+### Slice 6. Internal terminal-kernel purge
+Goal:
+- remove the remaining terminal compatibility engine from the SDL frontend
+  instead of merely renaming its surface
+
+Scope:
+- `src/sdl-main-internal.h`
+- `src/sdl-render.c`
+- `src/platform-frame.c`
+- `src/sdl-layout.c`
+- `src/files.c`
+- `tools/ui_debt_audit.py`
+- `tests/ui_debt_audit_baseline.json`
+
+Tasks:
+1. Expand the audit first
+- add metrics for `TERM_XTRA_`
+- add metrics for hook fields:
+  - `xtra_hook`
+  - `curs_hook`
+  - `bigcurs_hook`
+  - `wipe_hook`
+  - `text_hook`
+  - `pict_hook`
+- add metrics for SDL shadow buffers and dirty-span state:
+  - `old`
+  - `scr`
+  - `x1`
+  - `x2`
+  - `wid`
+  - `hgt`
+  - `key_queue`
+- add metrics for `mini_screenshot_char` and `mini_screenshot_attr`
+
+2. Split event and control flow away from terminal hooks
+- replace `TERM_XTRA_EVENT`, `TERM_XTRA_FLUSH`, `TERM_XTRA_CLEAR`,
+  `TERM_XTRA_FRESH`, `TERM_XTRA_DELAY`, and `TERM_XTRA_REACT` with direct
+  SDL or platform-frame functions
+- make `platform_frame_*` and direct SDL helpers own event pumping, clear,
+  delay, present, and react behavior without indirection through view-state
+  hooks
+
+3. Replace buffer-driven redraw with direct SDL view rendering
+- remove `old` / `scr` shadow buffers and dirty spans
+- stop redrawing by replaying row or cell writes from compatibility state
+- route any remaining legacy presentation through direct view or canvas helpers
+  until the last buffer-based caller is gone
+
+4. Delete compatibility export mirrors
+- rewrite miniature screenshot and character dump helpers against semantic
+  snapshots
+- remove `mini_screenshot_char`
+- remove `mini_screenshot_attr`
+
+5. Refresh baseline and docs
+- land the expanded audit baseline only after the remaining internal kernel and
+  export mirrors are gone
+- update migration docs to treat the repo as terminal-free rather than merely
+  host-renamed
+
+Exit when:
+- the internal SDL terminal kernel is gone
+- the export mirror path is gone
+- the expanded audit reports zero live debt for both
 
 ## Execution Order
-### A. Expand the audit first
-Status:
-- completed on April 15, 2026 via the `terminal_model` audit family in
-  `tools/ui_debt_audit.py` and the refreshed
-  `tests/ui_debt_audit_baseline.json`
-
+### A. Expand the audit
 Goal:
-- make the remaining work measurable before touching code
-
-Tasks:
-- extend `tools/ui_debt_audit.py` or add a second audit for:
-  - `inkey`, `request_command`, `flush`
-  - compat text wrappers
-  - `platform_frame_*_view_cols/rows`
-  - `APP_UI_DOCUMENT_OP_*`
-  - SDL term-host symbols
-  - story-font grid mode
-- check in a baseline so new debt cannot be introduced during the cleanup
+- make the true remaining debt measurable before touching the final kernel
 
 Exit when:
-- CI can fail on regressions in the real remaining debt families
+- CI can fail on regressions in internal terminal-kernel and export-mirror
+  debt, not just the already-finished public debt family
 
-### B. Replace the live input stack
-Status:
-- completed on April 15, 2026 for live command acquisition and movement input
-- the only remaining debt adjacent to this workstream is repo-wide `flush()`
-  cleanup
-
+### B. Remove `TERM_XTRA_*` and hook-driven control flow
 Goal:
-- remove terminal-era command acquisition from gameplay flow
-
-Tasks:
-- introduce a semantic command-input service behind `src/app/*`
-- move macro or keymap expansion into that service or into a narrow reusable
-  translator
-- convert the remaining repeat-count prompting and non-movement fallback path
-  off `inkey()` / `request_legacy_command()` / `flush()`
+- stop routing SDL event, clear, delay, and react behavior through terminal
+  callback semantics
 
 Exit when:
-- `src/util-input.c` is gone or reduced to platform-only translation with no
-  gameplay callers
+- the SDL renderer and platform frame use direct control helpers only
 
-### C. Kill the compat text surface
-Status:
-- completed on April 15, 2026 via deletion of the compat writer family and the
-  remaining utility-screen callers
-
+### C. Remove shadow buffers and dirty-row redraw
 Goal:
-- remove row or column screen-authoring from normal SDL UI code
-
-Tasks:
-- replace `prt()` / `c_put_str()` / `clear_from()` family by screen family:
-  - monster recall and monster list
-  - object recall fallback
-  - squelch, wizard, and score utility screens
-  - help diagrams and editing helpers
-- delete `ui_text_surface` screen-authoring APIs once callers are drained
+- stop replaying UI state from compatibility row or cell buffers
 
 Exit when:
-- user-facing UI flows no longer depend on the compat writer family
+- redraw consumes direct render state or semantic scene data
 
-### D. Replace document row or column ops with real widgets
-Status:
-- completed on April 15, 2026 after the shared document-op surface,
-  terminal-size query helpers, and the remaining live browser/widget callers
-  were moved off terminal-model ownership
-
+### D. Rewrite exports
 Goal:
-- stop calling semantic documents "semantic" when they are still cell-addressed
-
-Tasks:
-- add renderer-facing widgets for paragraphs, glyph-plus-label rows, tables,
-  scroll prompts, and tutorial or help callouts
-- migrate `src/obj-info.c`, `src/ui/ui-story.c`, `src/ui/ui-file-viewer.c`,
-  `src/ui/ui-help.c`, `src/thrall_quest.c`, and remaining tutorial or browser
-  flows
-- remove the remaining local row or column text mirrors and terminal-sized
-  pagination helpers after the shared document-op path is gone
+- remove char or attr compatibility capture from file output
 
 Exit when:
-- document screens are no longer built from row or column operations
+- character dump and screenshot paths no longer mirror screen cells
 
-### E. Remove SDL term hosts
+### E. Refresh baseline and docs
 Goal:
-- delete the SDL-side terminal container that still anchors view ownership
-
-Tasks:
-- rename view readiness and lifetime APIs away from `term`
-- replace `struct term` and `struct term_win` storage with direct SDL view
-  state
-- move story-font activation and grid flags off the host object
-- remove `term_init`, `term_nuke`, `sdl_view_link_term`,
-  `sdl_term_host_redraw`, and `sdl_redraw_all_term_hosts`
+- lock the new zero point and make the repo guidance accurate
 
 Exit when:
-- active SDL code no longer defines or references `struct term`
-
-### F. Finish exports and docs
-Goal:
-- remove leftover screen-cell mirrors and bring repo guidance back in sync
-
-Tasks:
-- rewrite mini screenshot and dump helpers against semantic snapshot data
-- update docs and audit baselines to the post-render-replacement reality
-
-Exit when:
-- repo guidance no longer points engineers at already-finished work
+- audit, baseline, and docs all describe the same terminal-free end state
 
 ## Parallel Lanes
-- Lane 1: audit and docs - completed on April 15, 2026
-- Lane 2: input stack (`src/util-input.c`, `src/dungeon.c`, prompt and command
-  plumbing) - completed on April 15, 2026
-- Lane 3: compat text surface and utility screens - completed on April 15,
-  2026
-- Lane 4: document and widget migration - completed on April 15, 2026
-- Lane 5: SDL term-host removal - still active
+- Lane 1: audit expansion for the real remaining debt
+- Lane 2: SDL control-flow and `TERM_XTRA_*` teardown
+- Lane 3: SDL shadow-buffer and dirty-row redraw teardown
+- Lane 4: export and screenshot rewrite
+- Lane 5: docs and baseline refresh
 
 Dependencies:
 - Lane 1 starts first and stays active until the end.
-- Lane 2 should land before the SDL host teardown.
-- Lane 3 and Lane 4 can run in parallel after the audit baseline exists.
-- Lane 5 starts only after no gameplay or UI authoring path still depends on
-  compat text or document cell ops.
+- Lane 2 should land before the buffer teardown.
+- Lane 3 depends on the direct control-flow path from Lane 2.
+- Lane 4 can proceed once the semantic data source for exports is chosen.
+- Lane 5 lands last.
 
 ## Validation
 - Run `py -3 tools/ui_debt_audit.py --details`.
-- Run the expanded terminal-debt audit from Workstream A.
 - Run targeted searches for:
-  - `inkey`
-  - `request_command`
-  - `flush(`
-  - `struct term`
-  - `term_ready`
-  - `term_init(`
-  - `term_nuke(`
-  - `sdl_view_link_term`
-  - `sdl_term_host_redraw`
-  - `sdl_redraw_all_term_hosts`
-  - `APP_UI_DOCUMENT_OP_`
-  - `app_ui_panel_add_document_text`
-  - `app_ui_panel_add_document_cell_ex`
-  - `app_ui_panel_add_document_cursor`
-  - `c_put_str`
-  - `put_str(`
-  - `c_prt`
-  - `prt(`
-  - `clear_from`
-  - `text_out_to_screen`
+  - `TERM_XTRA_`
+  - `xtra_hook`
+  - `curs_hook`
+  - `bigcurs_hook`
+  - `wipe_hook`
+  - `text_hook`
+  - `pict_hook`
+  - `key_queue`
+  - `old`
+  - `scr`
+  - `x1`
+  - `x2`
+  - `mini_screenshot_char`
+  - `mini_screenshot_attr`
 - Build with `.\build-cmake.bat` or `cmake --build build-standard --parallel`.
 - Smoke-test:
   - command input, including repeat counts and keymaps
-  - object info, note info, and file viewer
-  - story pages, help pages, and thrall reward selection
-  - monster recall, monster list, inventory, and equipment panes
-  - squelch or wizard utility screens if touched
-  - resize and pane-layout changes
+  - redraw and resize behavior across main and supporting panes
+  - story pages, help pages, and browser or document views
+  - inventory, equipment, monster recall, and monster list panes
   - character dump generation
 
 ## Done When
-- the expanded debt audit reports zero live terminal-model ownership on the
-  normal SDL path
-- `src/util-input.c` no longer exposes gameplay-facing `inkey()` or
-  `request_command()`
-- `src/util-text.c` no longer exports row or column screen-authoring APIs to
-  gameplay modules
-- `src/app/app-ui.*` no longer defines document row, column, cell, or cursor
-  ops for normal runtime UI
-- `src/sdl-main-internal.h` no longer defines `struct term` or `struct term_win`
-- `src/files.c` no longer owns char or attr screen mirrors
-- any remaining uses of grid or cell terminology are clearly gameplay-space
-  data, not terminal UI compatibility
+- no `TERM_XTRA_*` remains in active SDL code
+- no SDL view-state hook table remains
+- no SDL shadow row or cell buffers remain
+- no dirty-span replay remains
+- no compatibility key queue remains in SDL view state
+- `src/files.c` no longer owns char or attr screenshot mirrors
+- the expanded debt audit reports zero live terminal logic
+- the already-complete public `terminal_model` audit remains at zero
+- any remaining uses of grid, row, column, or cell terminology are clearly
+  gameplay-space or scene-layout data, not terminal UI compatibility state

@@ -27,6 +27,7 @@ PLATFORM_SDL_GLOBS = (
     "src/sdl-*.h",
 )
 TERMINAL_MODEL_SCOPE = ("src/**/*.c", "src/**/*.h")
+TERMINAL_KERNEL_SCOPE = ("src/**/*.c", "src/**/*.h")
 MOVEMENT_INPUT_SCOPE = (
     "src/externs.h",
     "src/util-input.c",
@@ -219,6 +220,61 @@ TERMINAL_MODEL_METRICS = (
     ),
 )
 
+TERMINAL_KERNEL_METRICS = (
+    MetricSpec(
+        key="term_xtra_symbols",
+        label="TERM_XTRA_* symbols",
+        pattern=re.compile(r"\bTERM_XTRA_[A-Z0-9_]+\b"),
+        include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
+        notes="Tracks terminal-style xtra constants and dispatch that still drive SDL event, clear, present, delay, and react behavior.",
+    ),
+    MetricSpec(
+        key="sdl_view_state_hook_symbols",
+        label="SDL view-state hook symbols",
+        pattern=re.compile(
+            r"\b(?:xtra_hook|curs_hook|bigcurs_hook|wipe_hook|text_hook|pict_hook)\b"
+        ),
+        include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
+        notes="Tracks the legacy hook table still embedded in SDL view state and renderer setup.",
+    ),
+    MetricSpec(
+        key="sdl_view_state_key_queue_symbols",
+        label="SDL view-state key-queue symbols",
+        pattern=re.compile(r"\b(?:key_queue|key_head|key_tail|key_xtra|key_size)\b"),
+        include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
+        notes="Tracks the compatibility key queue still carried by the SDL view state.",
+    ),
+    MetricSpec(
+        key="sdl_view_state_shadow_buffer_symbols",
+        label="SDL shadow-buffer state symbols",
+        pattern=re.compile(
+            r"\b(?:wid|hgt)\b(?=\s*;)"
+            r"|(?:\bx[12]\b(?=\s*;))"
+            r"|(?:\b(?:old|scr)\b(?=\s*;))"
+            r"|(?:state->(?:wid|hgt|x1|x2|old|scr))"
+        ),
+        include_paths=("src/sdl-main-internal.h", "src/sdl-render.c"),
+        notes="Tracks terminal-sized dimensions, dirty spans, and shadow buffers that still back SDL view compatibility rendering.",
+    ),
+    MetricSpec(
+        key="sdl_buffer_replay_redraw_symbols",
+        label="SDL buffer-replay redraw symbols",
+        pattern=re.compile(
+            r"\b(?:sdl_view_copy_buffer|sdl_view_clear_dirty|sdl_view_redraw_text_row)\b"
+            r"|state->scr->"
+        ),
+        include_paths=("src/sdl-render.c",),
+        notes="Tracks redraw paths that still replay compatibility row/cell buffers instead of consuming direct render state.",
+    ),
+    MetricSpec(
+        key="mini_screenshot_mirror_symbols",
+        label="mini screenshot mirror symbols",
+        pattern=re.compile(r"\bmini_screenshot_(?:char|attr)\b"),
+        include_paths=("src/files.c",),
+        notes="Tracks char/attr screenshot mirrors that should be replaced by semantic export data.",
+    ),
+)
+
 AUDITS = (
     AuditSpec(
         key="ui0",
@@ -241,6 +297,13 @@ AUDITS = (
         scope=TERMINAL_MODEL_SCOPE,
         metrics=TERMINAL_MODEL_METRICS,
         notes="Expanded guardrail for the remaining terminal-era UI ownership that still survives on the SDL path after the movement rewrite.",
+    ),
+    AuditSpec(
+        key="terminal_kernel",
+        label="Terminal-kernel debt audit",
+        scope=TERMINAL_KERNEL_SCOPE,
+        metrics=TERMINAL_KERNEL_METRICS,
+        notes="Slice-6A guardrail for the internal SDL terminal kernel and export-mirror compatibility state that still survives after the public term-host surface was removed.",
     ),
 )
 AUDITS_BY_KEY = {audit.key: audit for audit in AUDITS}
@@ -428,7 +491,7 @@ def extract_audits(payload: dict) -> dict[str, dict]:
 
 
 def compare_against_baseline(audit: dict, baseline_path: Path) -> list[str]:
-    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8-sig"))
     current_audits = extract_audits(audit)
     baseline_audits = extract_audits(baseline)
     failures: list[str] = []

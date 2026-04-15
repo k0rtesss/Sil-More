@@ -61,6 +61,74 @@
         "lib/pref/pref-sdl.prf"
       ]
     },
+    "terminal_kernel": {
+      "label": "Terminal-kernel debt audit",
+      "metrics": {
+        "mini_screenshot_mirror_symbols": {
+          "file_matches": {
+            "src/files.c": 7
+          },
+          "files": 1,
+          "label": "mini screenshot mirror symbols",
+          "matches": 7,
+          "notes": "Tracks char/attr screenshot mirrors that should be replaced by semantic export data."
+        },
+        "sdl_buffer_replay_redraw_symbols": {
+          "file_matches": {
+            "src/sdl-render.c": 26
+          },
+          "files": 1,
+          "label": "SDL buffer-replay redraw symbols",
+          "matches": 26,
+          "notes": "Tracks redraw paths that still replay compatibility row/cell buffers instead of consuming direct render state."
+        },
+        "sdl_view_state_hook_symbols": {
+          "file_matches": {
+            "src/sdl-main-internal.h": 6,
+            "src/sdl-render.c": 8
+          },
+          "files": 2,
+          "label": "SDL view-state hook symbols",
+          "matches": 14,
+          "notes": "Tracks the legacy hook table still embedded in SDL view state and renderer setup."
+        },
+        "sdl_view_state_key_queue_symbols": {
+          "file_matches": {
+            "src/sdl-main-internal.h": 5,
+            "src/sdl-render.c": 4
+          },
+          "files": 2,
+          "label": "SDL view-state key-queue symbols",
+          "matches": 9,
+          "notes": "Tracks the compatibility key queue still carried by the SDL view state."
+        },
+        "sdl_view_state_shadow_buffer_symbols": {
+          "file_matches": {
+            "src/sdl-main-internal.h": 6,
+            "src/sdl-render.c": 77
+          },
+          "files": 2,
+          "label": "SDL shadow-buffer state symbols",
+          "matches": 83,
+          "notes": "Tracks terminal-sized dimensions, dirty spans, and shadow buffers that still back SDL view compatibility rendering."
+        },
+        "term_xtra_symbols": {
+          "file_matches": {
+            "src/sdl-main-internal.h": 13,
+            "src/sdl-render.c": 8
+          },
+          "files": 2,
+          "label": "TERM_XTRA_* symbols",
+          "matches": 21,
+          "notes": "Tracks terminal-style xtra constants and dispatch that still drive SDL event, clear, present, delay, and react behavior."
+        }
+      },
+      "notes": "Slice-6A guardrail for the internal SDL terminal kernel and export-mirror compatibility state that still survives after the public term-host surface was removed.",
+      "scope": [
+        "src/**/*.c",
+        "src/**/*.h"
+      ]
+    },
     "terminal_model": {
       "label": "Terminal-model debt audit",
       "metrics": {
@@ -79,25 +147,10 @@
           "notes": "Counts the live document row/column/cell/cursor surface, including enum values and builder helpers."
         },
         "legacy_flush_symbols": {
-          "file_matches": {
-            "src/cave.c": 1,
-            "src/cmd/item/cmd-item-activate.c": 2,
-            "src/cmd/item/cmd-item-core.c": 2,
-            "src/cmd/ui/cmd-ui-settings.c": 5,
-            "src/cmd4.c": 1,
-            "src/externs.h": 1,
-            "src/files.c": 2,
-            "src/metarun.c": 1,
-            "src/monster-death.c": 1,
-            "src/runtime/runtime-game.c": 3,
-            "src/ui/ui-death.c": 1,
-            "src/use-obj.c": 1,
-            "src/util-input.c": 2,
-            "src/util-message.c": 1
-          },
-          "files": 14,
+          "file_matches": {},
+          "files": 0,
           "label": "flush() symbols",
-          "matches": 24,
+          "matches": 0,
           "notes": "Counts delayed flush ownership across the active source tree, including the remaining owner and gameplay/UI callers."
         },
         "legacy_inkey_symbols": {
@@ -115,30 +168,17 @@
           "notes": "Tracks reintroduction of the removed request_command() API anywhere in the active source tree."
         },
         "sdl_term_host_symbols": {
-          "file_matches": {
-            "src/platform-frame.c": 5,
-            "src/sdl-layout.c": 7,
-            "src/sdl-main-internal.h": 6,
-            "src/sdl-render.c": 19,
-            "src/sdl-scene.c": 7,
-            "src/sdl-story-font.c": 5
-          },
-          "files": 6,
+          "file_matches": {},
+          "files": 0,
           "label": "SDL term-host symbols",
-          "matches": 49,
+          "matches": 0,
           "notes": "Tracks the SDL view lifetime/redraw layer that still passes through terminal hosts."
         },
         "term_host_story_font_state": {
-          "file_matches": {
-            "src/platform-story-font.h": 2,
-            "src/sdl-main-internal.h": 8,
-            "src/sdl-render.c": 10,
-            "src/sdl-story-font.c": 23,
-            "src/ui/story_font.c": 3
-          },
-          "files": 5,
+          "file_matches": {},
+          "files": 0,
           "label": "term-host story-font state",
-          "matches": 46,
+          "matches": 0,
           "notes": "Tracks story-font activation, grid, and chunk state that is still stored on or driven through terminal hosts."
         },
         "terminal_size_query_symbols": {
