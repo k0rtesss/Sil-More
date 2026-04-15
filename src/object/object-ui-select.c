@@ -771,7 +771,7 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
 
         for (j = 0; j < ANGBAND_TERM_MAX; j++)
         {
-            if (!angband_term[j])
+            if (!platform_frame_view_ready(j))
                 continue;
 
             if (op_ptr->window_flag[j] & (PW_INVEN))
@@ -1197,7 +1197,7 @@ void toggle_inven_equip(void)
     for (j = 0; j < ANGBAND_TERM_MAX; j++)
     {
         /* Unused */
-        if (!angband_term[j])
+        if (!platform_frame_view_ready(j))
             continue;
 
         /* Flip inven to equip */

@@ -114,12 +114,12 @@
 /*
  * Number of grids in each screen (vertically)
  */
-#define SCREEN_HGT (Term->hgt - ROW_MAP - 1 - (op_ptr ? op_ptr->main_combat_rolls : 0))
+#define SCREEN_HGT (platform_frame_main_view_rows() - ROW_MAP - 1 - (op_ptr ? op_ptr->main_combat_rolls : 0))
 
 /*
  * Number of grids in each screen (horizontally)
  */
-#define SCREEN_WID ((Term->wid - COL_MAP - 1) / (use_bigtile ? 2 : 1))
+#define SCREEN_WID ((platform_frame_main_view_cols() - COL_MAP - 1) / (use_bigtile ? 2 : 1))
 
 /*
  * Maximum level size in blocks (each block is PANEL_HGT x PANEL_WID_FIXED)
@@ -846,7 +846,7 @@
  * For smaller terminals we switch to a compact row layout so the left panel
  * fits in ~20 rows (while keeping the classic layout when there is room).
  */
-#define SIL_UI_COMPACT_HEIGHT (Term && (Term->hgt < 24))
+#define SIL_UI_COMPACT_HEIGHT (platform_frame_main_view_rows() < 24)
 
 #define ROW_NAME 1
 #define COL_NAME 0 /* <race name> */
@@ -902,34 +902,34 @@
 #define ROW_STEALTH 24
 #define COL_STEALTH 0 /* <stealth> */
 
-#define ROW_HUNGRY (Term->hgt - 1)
+#define ROW_HUNGRY (platform_frame_main_view_rows() - 1)
 #define COL_HUNGRY 0 /* "Starving" "Weak" / "Hungry" / "Full" */
 
-#define ROW_BLIND (Term->hgt - 1)
+#define ROW_BLIND (platform_frame_main_view_rows() - 1)
 #define COL_BLIND 9 /* "Blind" */
 
-#define ROW_CONFUSED (Term->hgt - 1)
+#define ROW_CONFUSED (platform_frame_main_view_rows() - 1)
 #define COL_CONFUSED 15 /* "Confused" */
 
-#define ROW_STUN (Term->hgt - 1)
+#define ROW_STUN (platform_frame_main_view_rows() - 1)
 #define COL_STUN 24 /* <stun> */
 
-#define ROW_AFRAID (Term->hgt - 1)
+#define ROW_AFRAID (platform_frame_main_view_rows() - 1)
 #define COL_AFRAID 36 /* "Afraid" */
 
-#define ROW_STATE (Term->hgt - 1)
+#define ROW_STATE (platform_frame_main_view_rows() - 1)
 #define COL_STATE 43 /* <state> */
 
-#define ROW_SPEED (Term->hgt - 1)
+#define ROW_SPEED (platform_frame_main_view_rows() - 1)
 #define COL_SPEED 56 /* "Slow" or "Fast" */
 
-#define ROW_TERRAIN (Term->hgt - 1)
+#define ROW_TERRAIN (platform_frame_main_view_rows() - 1)
 #define COL_TERRAIN 61 /* "Web" or "Pit" or "Sun" */
 
-#define ROW_PARTITION (Term->hgt - 1)
+#define ROW_PARTITION (platform_frame_main_view_rows() - 1)
 #define COL_PARTITION 66 /* "Room"/"Ruin"/"Cave"/"BigCa"/"Labir"/"Chasm" */
 
-#define ROW_DEPTH (Term->hgt - 1)
+#define ROW_DEPTH (platform_frame_main_view_rows() - 1)
 #define COL_DEPTH 72 /* "Lev NNN" / "NNNN ft" */
 
 /*** General index values ***/
@@ -3120,8 +3120,6 @@
 /*
  * Hack -- The main "screen"
  */
-#define term_screen (angband_term[0])
-
 /*
  * Monster macros
  */

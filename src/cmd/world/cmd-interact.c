@@ -2341,10 +2341,11 @@ static int skeleton_note_append_expanded_lines(const skeleton_note_line* line,
 static int skeleton_note_effective_wrap_width(int col)
 {
     int wrap = 70;
+    int cols = platform_frame_active_view_cols();
 
-    if (Term && Term->wid > 0)
+    if (cols > 0)
     {
-        int avail = Term->wid - col - 1;
+        int avail = cols - col - 1;
         if (avail < wrap)
             wrap = avail;
     }

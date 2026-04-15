@@ -28,7 +28,6 @@
 #include "score/score_logic.h"
 #include "scorefile.h"
 #include "ui/ui-character-screen.h"
-#include "z-term.h"
 
 #include <ctype.h>
 #include <limits.h>

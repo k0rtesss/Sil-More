@@ -1923,7 +1923,8 @@ bool app_build_dungeon_snapshot(app_dungeon_snapshot* snapshot,
 {
     u16b snapshot_flags = 0;
 
-    if (!snapshot || !Term || !p_ptr || !op_ptr || !character_generated)
+    if (!snapshot || !platform_frame_main_view_ready() || !p_ptr || !op_ptr
+        || !character_generated)
         return false;
 
     if (!app_build_map_blob(snapshot, wait_state)

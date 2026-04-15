@@ -22,9 +22,19 @@
 #include "log/fatal.h"
 #include "mem/alloc.h"
 #include "format.h"
+#include "platform-frame.h"
 #include "rng.h"
 #include "support/strl.h"
-#include "z-term.h"
+
+/* Story font flags used by semantic document and menu rendering. */
+#define STORY_FLAG_USE        0x01
+#define STORY_FLAG_CELL_ALIGN 0x02
+
+/* Background-variant color encoding used by map/tile rendering. */
+#define MAX_COLORS 32
+#define BG_BLACK 0
+#define BG_SAME 1
+#define BG_DARK 2
 
 /*
  * Include the high-level includes.

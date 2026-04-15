@@ -62,13 +62,10 @@ static void squelch_get_layout(squelch_layout* layout)
 
     layout->term_wid = 80;
     layout->term_hgt = 24;
-    if (Term)
-    {
-        if (Term->wid > 0)
-            layout->term_wid = Term->wid;
-        if (Term->hgt > 0)
-            layout->term_hgt = Term->hgt;
-    }
+    if (platform_frame_active_view_cols() > 0)
+        layout->term_wid = platform_frame_active_view_cols();
+    if (platform_frame_active_view_rows() > 0)
+        layout->term_hgt = platform_frame_active_view_rows();
     if (layout->term_wid < 1)
         layout->term_wid = 80;
     if (layout->term_hgt < 1)

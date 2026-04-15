@@ -82,7 +82,7 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
 
 static bool story_term_is_main(void)
 {
-    return (Term && term_screen && (Term == term_screen));
+    return platform_frame_active_view_is_main();
 }
 
 bool story_inventory_enabled(void)

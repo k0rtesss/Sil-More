@@ -899,7 +899,7 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
  */
 static void monlist_clear_from_row(int row)
 {
-    int hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+    int hgt = platform_frame_active_view_rows();
 
     for (int y = row; y < hgt; y++)
         prt("", y, 0);
@@ -1016,7 +1016,7 @@ void display_monlist(void)
 {
     int idx;
     int line = 0;
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+    int term_hgt = platform_frame_active_view_rows();
 
     char* m_name;
     char buf[80];

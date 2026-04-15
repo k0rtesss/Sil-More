@@ -539,7 +539,7 @@ void resize(const SDL_Rect* screen)
     sdl_view_create(&g_views[0], panes[PANE_MAIN], font_path, 0, config.main_view_scale, config.margin);
     sdl_view_link_term(&g_views[0], 0);
 
-    Term_activate(&g_views[0].t);
+    sdl_term_host_set_active(&g_views[0].t);
     sdl_scene_stack_on_layout_changed();
 
     if (character_dungeon && p_ptr) {
@@ -768,7 +768,7 @@ void set_sdl_fullscreen(bool value)
         resize(&window);
         sdl_update_cursor_visibility();
         g_state.need_present = true;
-        Term_redraw();
+        sdl_redraw_all_term_hosts();
     }
 }
 
@@ -999,5 +999,5 @@ void sdl_apply_config(void)
     sdl_load_story_fonts();
     resize(&screen);
     g_auto_aux_main_cell_h_override = 0;
-    Term_redraw();
+    sdl_redraw_all_term_hosts();
 }

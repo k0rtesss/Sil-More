@@ -16,12 +16,112 @@
 #include "sdl-config.h"
 #include "sdl-sound.h"
 #include "sound-config.h"
-#include "z-term.h"
 #include <string.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
+
+typedef struct term_win term_win;
+
+struct term_win
+{
+    bool cu, cv;
+    byte cx, cy;
+
+    byte** a;
+    char** c;
+
+    byte* va;
+    char* vc;
+
+    byte** ta;
+    char** tc;
+
+    byte* vta;
+    char* vtc;
+
+    byte** story;
+    byte* vstory;
+};
+
+typedef struct term term;
+
+struct term
+{
+    void* user;
+    void* data;
+
+    bool user_flag;
+    bool data_flag;
+    bool active_flag;
+    bool mapped_flag;
+    bool total_erase;
+    bool fixed_shape;
+    bool icky_corner;
+    bool soft_cursor;
+    bool always_pict;
+    bool higher_pict;
+    bool always_text;
+    bool unused_flag;
+    bool never_bored;
+    bool never_frosh;
+    bool story_font_active;
+    bool story_font_grid;
+    bool story_chunk_active;
+
+    byte attr_blank;
+    char char_blank;
+
+    char* key_queue;
+
+    u16b key_head;
+    u16b key_tail;
+    u16b key_xtra;
+    u16b key_size;
+
+    byte wid;
+    byte hgt;
+
+    byte y1;
+    byte y2;
+
+    byte* x1;
+    byte* x2;
+
+    term_win* old;
+    term_win* scr;
+    term_win* tmp;
+    term_win* mem;
+
+    void (*init_hook)(term* t);
+    void (*nuke_hook)(term* t);
+    errr (*user_hook)(int n);
+    errr (*xtra_hook)(int n, int v);
+    errr (*curs_hook)(int x, int y);
+    errr (*bigcurs_hook)(int x, int y);
+    errr (*wipe_hook)(int x, int y, int n);
+    errr (*text_hook)(int x, int y, int n, byte a, cptr s);
+    errr (*pict_hook)(int x, int y, int n, const byte* ap, const char* cp,
+        const byte* tap, const char* tcp);
+};
+
+#define TERM_XTRA_EVENT 1
+#define TERM_XTRA_FLUSH 2
+#define TERM_XTRA_CLEAR 3
+#define TERM_XTRA_SHAPE 4
+#define TERM_XTRA_FROSH 5
+#define TERM_XTRA_FRESH 6
+#define TERM_XTRA_NOISE 7
+#define TERM_XTRA_SOUND 8
+#define TERM_XTRA_BORED 9
+#define TERM_XTRA_REACT 10
+#define TERM_XTRA_ALIVE 11
+#define TERM_XTRA_LEVEL 12
+#define TERM_XTRA_DELAY 13
+
+extern errr term_nuke(term* t);
+extern errr term_init(term* t, int w, int h, int k);
 
 enum {
     TILE_SIZE = 16,
@@ -128,6 +228,12 @@ void resize(const SDL_Rect* screen);
 sdl_view* sdl_view_from_term(term* t);
 void sdl_view_destroy(sdl_view* d);
 errr sdl_view_link_term(sdl_view* d, int term_index);
+int sdl_active_view_index(void);
+void sdl_set_active_view_index(int view_index);
+term* sdl_active_view_host(void);
+void sdl_term_host_set_active(term* t);
+void sdl_term_host_redraw(term* t);
+void sdl_redraw_all_term_hosts(void);
 void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font_size, int scale, int margin);
 void sdl_sync_palette(void);
 void sdl_present_if_needed(sdl_view* d);

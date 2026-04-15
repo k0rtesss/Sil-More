@@ -2293,7 +2293,7 @@ static errr option_dump(cptr fname)
     for (i = 1; i < ANGBAND_TERM_MAX; i++)
     {
         /* Require a real window */
-        if (!angband_term[i])
+        if (!platform_frame_view_ready(i))
             continue;
 
         /* Check each flag */
@@ -2304,8 +2304,8 @@ static errr option_dump(cptr fname)
                 continue;
 
             /* Comment */
-            SDL_IOprintf(fff, "# Window '%s', Flag '%s'\n", angband_term_name[i],
-                window_flag_desc[j]);
+            SDL_IOprintf(fff, "# Window '%s', Flag '%s'\n",
+                platform_frame_view_name(i), window_flag_desc[j]);
 
             /* Dump the flag */
             if (op_ptr->window_flag[i] & (1L << j))

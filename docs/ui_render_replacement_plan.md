@@ -62,21 +62,20 @@ SDL runtime UI replacement. It replaces historical rollout tracking.
 - Dead snapshot-renderer fallback branches have now been deleted from the
   semantic UI entry surfaces. The remaining repo-wide audit hits are now
   treated as first-class removal work, not as acceptable residual debt.
-- The remaining finish-line build blocker is still explicit: `src/z-term.c`
-  appears in `CMakeLists.txt` under `SIL_MORE_SOURCES_LEGACY_COMPAT`, and
-  `sil-legacy-compat` is still linked into `sil-more`,
-  `sil-ui1-tests`, `sil-ui8-tests`, and `sil-ui8-demo-packets`.
-- The real transitive pulls are now easy to name: `src/angband.h` still
-  includes `src/z-term.h`, `src/sdl-main-internal.h` still includes
-  `src/z-term.h`, and `src/dungeon.c` plus `src/files.c` still include
-  `src/z-term.h` directly.
+- Workstream 10 is complete in the working tree on April 15, 2026:
+  `src/z-term.c` and `src/z-term.h` have been deleted, `CMakeLists.txt`
+  no longer defines or links `sil-legacy-compat`, and the runtime or test
+  targets now build through the narrower view/layout surface instead of the
+  old `Term` / `angband_term` dependency chain.
 - The current audit understates the full removal scope because it does not
   count `Term_xtra()` or wrapper debt such as `move_cursor_relative()`,
   `restore_game_cursor()`, `print_rel()`, `lite_spot()`, `prt_map()`, or
   `display_map()`. Those wrappers are still in scope.
 - Targeted search on April 15, 2026 now finds:
   - `term_get_string()`: 0 matches in `src/`
-  - `Term_xtra(TERM_XTRA_FRESH, ...)`: confined to `src/z-term.c`
+  - `z-term`: 0 matches in `src/` and `CMakeLists.txt`
+  - `angband_term`: 0 matches in `src/`
+  - `Term_`: 0 matches in `src/`
 - Excluding the final backend files in Workstream 10, the remaining counted
   debt is now 6 files / 53 matches, concentrated in `src/cave.c`,
   `src/util-text.c`, `src/ui/story_font.c`, `src/util-editing.c`,
@@ -344,6 +343,9 @@ Exit when:
   projectile or combat-highlight paths no longer depend on term-grid state
 
 ### 10. Remove `z-term` and the SDL term backend from the build graph
+Status:
+- completed in the working tree on April 15, 2026
+
 Goal:
 - remove `src/z-term.c` from `CMakeLists.txt`, stop treating the `z-term`
   compatibility layer as part of the active runtime build, and delete the SDL

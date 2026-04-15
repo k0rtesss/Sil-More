@@ -341,11 +341,6 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/story_font.c
 )
 
-set(SIL_MORE_SOURCES_LEGACY_COMPAT
-    src/z-term.c
-    ${SIL_MORE_SOURCES_FRONTEND}
-)
-
 set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
     src/sdl-layout.c
@@ -400,6 +395,7 @@ set(SIL_MORE_SOURCES_CORE_LIBRARY
     ${SIL_MORE_SOURCES_FS}
     ${SIL_MORE_SOURCES_RUNTIME}
     ${SIL_MORE_SOURCES_APP_BOUNDARY}
+    ${SIL_MORE_SOURCES_FRONTEND}
     ${SIL_MORE_SOURCES_LOG}
     ${SIL_MORE_SOURCES_SUPPORT}
 )
@@ -472,10 +468,6 @@ add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
 set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sil-core PUBLIC sil-build-config log)
 
-add_library(sil-legacy-compat OBJECT ${SIL_MORE_SOURCES_LEGACY_COMPAT})
-set_target_properties(sil-legacy-compat PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(sil-legacy-compat PUBLIC sil-build-config log)
-
 if (SIL_STRICT_WARNINGS)
   add_library(sil-phase01-strict-gate OBJECT
     src/drop/drop-system-difficulty.c
@@ -532,7 +524,7 @@ if(MINGW)
   target_link_options(sil-more PRIVATE -mwindows)
 endif()
 
-target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core sil-legacy-compat m)
+target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core m)
 
 if(BUILD_TESTING)
   add_executable(sil-phase01-tests
@@ -555,7 +547,6 @@ if(BUILD_TESTING)
   target_link_libraries(sil-ui1-tests PRIVATE
     sil-build-config
     sil-core
-    sil-legacy-compat
     sil-platform-sdl
   )
   if(SIL_STRICT_WARNINGS)
@@ -571,7 +562,6 @@ if(BUILD_TESTING)
   target_link_libraries(sil-ui8-tests PRIVATE
     sil-build-config
     sil-core
-    sil-legacy-compat
     sil-platform-sdl
   )
   if(SIL_STRICT_WARNINGS)
@@ -587,7 +577,6 @@ if(BUILD_TESTING)
   target_link_libraries(sil-ui8-demo-packets PRIVATE
     sil-build-config
     sil-core
-    sil-legacy-compat
     sil-platform-sdl
   )
   if(SIL_STRICT_WARNINGS)

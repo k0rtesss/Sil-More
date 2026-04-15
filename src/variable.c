@@ -149,20 +149,6 @@ cptr* macro__pat;
  */
 cptr* macro__act;
 
-/*
- * The array[ANGBAND_TERM_MAX] of window pointers
- */
-term* angband_term[ANGBAND_TERM_MAX];
-
-/*
- * The array[ANGBAND_TERM_MAX] of window names (modifiable?)
- *
- * ToDo: Make the names independent of ANGBAND_TERM_MAX.
- */
-char angband_term_name[ANGBAND_TERM_MAX][16]
-    = { VERSION_NAME, "Inventory", "Equipment", "Combat Rolls", "Recall",
-          "Character", "Messages", "Monster List" };
-
 int max_macrotrigger = 0;
 cptr macro_template = NULL;
 cptr macro_modifier_chr;

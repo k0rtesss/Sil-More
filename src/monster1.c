@@ -133,7 +133,7 @@ static void monster_recall_trim_empty_rich_tail(app_ui_scene* scene,
 
 static int monster_recall_term_width(void)
 {
-    return (Term && Term->wid > 0) ? Term->wid : 80;
+    return platform_frame_active_view_cols();
 }
 
 static void monster_recall_begin_term_output(int row,

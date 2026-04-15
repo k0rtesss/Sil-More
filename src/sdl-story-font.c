@@ -115,8 +115,8 @@ void sdl_load_story_fonts(void)
     }
 
     g_state.story_font_depth = 0;
-    if (Term)
-        Term->story_font_active = false;
+    if (sdl_active_view_host())
+        sdl_active_view_host()->story_font_active = false;
 }
 
 void sdl_apply_story_font_state(bool active)
@@ -125,8 +125,6 @@ void sdl_apply_story_font_state(bool active)
         if (g_views[i].term_ready)
             g_views[i].t.story_font_active = active;
     }
-    if (Term)
-        Term->story_font_active = active;
 }
 
 void sdl_apply_story_grid_state(bool grid)
@@ -135,8 +133,6 @@ void sdl_apply_story_grid_state(bool grid)
         if (g_views[i].term_ready)
             g_views[i].t.story_font_grid = grid;
     }
-    if (Term)
-        Term->story_font_grid = grid;
 }
 
 void sdl_story_font_reset_state(void)
@@ -145,8 +141,8 @@ void sdl_story_font_reset_state(void)
     sdl_apply_story_font_state(false);
     g_state.story_font_grid = false;
     sdl_apply_story_grid_state(false);
-    if (Term)
-        Term->story_chunk_active = false;
+    if (sdl_active_view_host())
+        sdl_active_view_host()->story_chunk_active = false;
 }
 
 void sdl_story_font_enable(void)
@@ -168,7 +164,9 @@ void sdl_story_font_disable(void)
 
 bool sdl_is_story_font_enabled(void)
 {
-    return (Term && Term->story_font_active);
+    term* host = sdl_active_view_host();
+
+    return (host && host->story_font_active);
 }
 
 void sdl_story_font_set_grid(bool grid)
@@ -181,7 +179,9 @@ void sdl_story_font_set_grid(bool grid)
 
 bool sdl_is_story_font_grid(void)
 {
-    return (Term && Term->story_font_grid);
+    term* host = sdl_active_view_host();
+
+    return (host && host->story_font_grid);
 }
 
 void sdl_story_font_reset(void)
@@ -195,8 +195,8 @@ int sdl_story_font_text_width(cptr text, int len)
         return 0;
 
     sdl_view* d = NULL;
-    if (Term)
-        d = sdl_view_from_term(Term);
+    if (platform_frame_view_ready(sdl_active_view_index()))
+        d = &g_views[sdl_active_view_index()];
     if (!d || !d->term_ready) {
         if (g_views[0].term_ready)
             d = &g_views[0];
@@ -363,10 +363,12 @@ static bool sdl_story_cell_is_text(byte a, char c)
 void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row,
     const char* row_chars, const byte* row_attr)
 {
-    if (!d || !font || !Term || !story_row || !row_chars || !row_attr)
+    term* host = sdl_active_view_host();
+
+    if (!d || !font || !host || !story_row || !row_chars || !row_attr)
         return;
 
-    const int wid = Term->wid;
+    const int wid = host->wid;
     const float cell_w_f = (float)d->cell_w;
     const float cell_h_f = (float)d->cell_h;
 

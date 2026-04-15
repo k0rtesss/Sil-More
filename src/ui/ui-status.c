@@ -103,18 +103,23 @@ static bool ui_status_refresh_matching_windows(u32b flag,
     for (j = 0; j < ANGBAND_TERM_MAX; j++)
     {
         app_ui_scene scene;
+        int previous_view;
 
-        if (!angband_term[j])
+        if (!platform_frame_view_ready(j))
             continue;
         if (!(op_ptr->window_flag[j] & flag))
             continue;
+        previous_view = platform_frame_active_view_index();
+        platform_frame_set_active_view(j);
         if (!build_scene(&scene)
-            || !platform_frame_render_ui_scene_to_term(j, &scene))
+            || !platform_frame_render_ui_scene_to_view(j, &scene))
         {
+            platform_frame_set_active_view(previous_view);
             log_warn("window refresh: semantic pane render failed for flag 0x%08X on term %d",
                 flag, j);
             continue;
         }
+        platform_frame_set_active_view(previous_view);
 
         rendered_any = true;
     }
@@ -516,7 +521,7 @@ void window_stuff(void)
     for (j = 0; j < ANGBAND_TERM_MAX; j++)
     {
         /* Save usable flags */
-        if (angband_term[j])
+        if (platform_frame_view_ready(j))
         {
             /* Build the mask */
             mask |= op_ptr->window_flag[j];

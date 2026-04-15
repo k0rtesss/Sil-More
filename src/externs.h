@@ -10,7 +10,7 @@
 
 /*
  * Note that some files have their own header files
- * (z-virt.h, z-term.h, rng.h)
+ * (z-virt.h, rng.h)
  */
 
 /*
@@ -147,8 +147,6 @@ extern char savefile[1024];
 extern s16b macro__num;
 extern cptr* macro__pat;
 extern cptr* macro__act;
-extern term* angband_term[ANGBAND_TERM_MAX];
-extern char angband_term_name[ANGBAND_TERM_MAX][16];
 extern byte angband_color_table[256][4];
 extern const cptr angband_sound_name[MSG_MAX];
 extern int view_n;
@@ -955,6 +953,7 @@ extern errr macro_free(void);
 extern errr macro_trigger_free(void);
 extern void flush(void);
 extern void flush_fail(void);
+extern errr input_byte_unshift(int key);
 extern errr input_byte_enqueue(int key);
 extern void input_byte_queue_clear(void);
 extern bool input_byte_queue_pending(void);

@@ -977,7 +977,7 @@ static void level_gen_screen_draw_now(void)
 {
     app_ui_scene scene;
 
-    if (!level_gen_screen.active || !Term)
+    if (!level_gen_screen.active || !platform_frame_main_view_ready())
         return;
     if (!level_gen_screen.semantic_active)
         return;
@@ -1006,7 +1006,7 @@ static void level_gen_screen_maybe_draw(bool force)
     u64b now;
     u64b min_interval;
 
-    if (!level_gen_screen.active || !Term)
+    if (!level_gen_screen.active || !platform_frame_main_view_ready())
         return;
 
     now = platform_monotonic_ms();
@@ -1058,7 +1058,7 @@ void level_gen_screen_begin(void)
 
     memset(&level_gen_screen, 0, sizeof(level_gen_screen));
 
-    if (!Term)
+    if (!platform_frame_main_view_ready())
         return;
 
     level_gen_screen.active = true;

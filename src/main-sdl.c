@@ -1987,8 +1987,8 @@ errr init_sdl(int argc, char **argv)
     resize(&window);
     sdl_scene_stack_init();
 
-    log_debug("init_sdl: SDL term opened (tiles_mode=%d higher_pict=%d always_pict=%d)",
-            config.tiles, Term->higher_pict, Term->always_pict);
+    log_debug("init_sdl: SDL views initialized (tiles_mode=%d)",
+        config.tiles);
     
     return 0;
 }

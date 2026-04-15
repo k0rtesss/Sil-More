@@ -1400,8 +1400,8 @@ static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
     int option_count, int selected, bool pending_reward)
 {
     app_ui_panel* panel;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 24;
+    int term_wid = platform_frame_active_view_cols();
+    int term_hgt = platform_frame_active_view_rows();
     bool compact;
     int title_row = 0;
     int intro_row = 1;
@@ -1412,6 +1412,11 @@ static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
 
     if (!scene || !m_ptr || !options || option_count <= 0)
         return false;
+
+    if (term_wid <= 0)
+        term_wid = 80;
+    if (term_hgt <= 0)
+        term_hgt = 24;
 
     compact = (term_wid < 60) || (term_hgt < 16);
     list_row = compact ? 3 : THRALL_REWARD_MENU_BASE_ROW;

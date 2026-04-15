@@ -8,28 +8,20 @@
 static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
 
-static void ui_information_scene_term_xtra(int action, int value)
+static void ui_information_scene_process_events(bool wait)
 {
     if (!g_ui_information_scene_refresh_enabled)
         return;
 
-    switch (action)
-    {
-    case TERM_XTRA_EVENT:
-        platform_frame_process_events(value ? true : false);
-        break;
+    platform_frame_process_events(wait);
+}
 
-    case TERM_XTRA_FRESH:
-        platform_frame_present();
-        break;
+static void ui_information_scene_present_frame(void)
+{
+    if (!g_ui_information_scene_refresh_enabled)
+        return;
 
-    case TERM_XTRA_DELAY:
-        platform_frame_delay_ms((u32b)MAX(0, value));
-        break;
-
-    default:
-        break;
-    }
+    platform_frame_present();
 }
 
 static bool ui_information_scene_publish_ui_scene(const app_ui_scene* scene,
@@ -50,7 +42,7 @@ static bool ui_information_scene_publish_ui_scene(const app_ui_scene* scene,
         return false;
     }
 
-    ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+    ui_information_scene_present_frame();
     return true;
 }
 
@@ -106,7 +98,7 @@ bool ui_information_scene_present_ui(const app_ui_scene* scene)
     if (!app_session_publish_menu_scene(session, scene))
         return false;
 
-    ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+    ui_information_scene_present_frame();
     return true;
 }
 
@@ -267,8 +259,8 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
             return (int)(input.payload.key.logical_key & 0xFFu);
         }
 
-        ui_information_scene_term_xtra(TERM_XTRA_EVENT, 1);
-        ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+        ui_information_scene_process_events(true);
+        ui_information_scene_present_frame();
     }
 }
 
@@ -365,10 +357,10 @@ void ui_information_scene_leave(ui_information_scene_scope* scope)
     {
         app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_ALL);
         (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
-        ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+        ui_information_scene_present_frame();
     }
     else
     {
-        ui_information_scene_term_xtra(TERM_XTRA_FRESH, 0);
+        ui_information_scene_present_frame();
     }
 }

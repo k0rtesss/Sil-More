@@ -779,8 +779,11 @@ void display_inven(void)
     object_subwindow_content content;
     story_font_term_state story_state;
     int i;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+    int term_wid = platform_frame_active_view_cols();
+    int term_hgt = platform_frame_active_view_rows();
+
+    if (term_wid <= 0)
+        term_wid = 80;
 
     if (!object_build_inventory_subwindow_content(&content))
         return;
@@ -805,9 +808,12 @@ void display_equip(void)
     object_subwindow_content content;
     story_font_term_state story_state;
     int i;
-    int term_wid = (Term && Term->wid > 0) ? Term->wid : 80;
-    int term_hgt = (Term && Term->hgt > 0) ? Term->hgt : 0;
+    int term_wid = platform_frame_active_view_cols();
+    int term_hgt = platform_frame_active_view_rows();
     int weight_col = subwindow_weight_col(term_wid);
+
+    if (term_wid <= 0)
+        term_wid = 80;
 
     if (!object_build_equipment_subwindow_content(&content))
         return;

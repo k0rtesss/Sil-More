@@ -100,7 +100,7 @@ struct input_byte_queue_state {
 
 static struct input_byte_queue_state g_input_byte_queue = { 0 };
 
-static errr input_byte_unshift(int key)
+errr input_byte_unshift(int key)
 {
     if (!key)
         return -1;

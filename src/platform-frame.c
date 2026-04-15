@@ -3,6 +3,11 @@
 #include "platform-frame.h"
 #include "sdl-main-internal.h"
 
+static const char* const g_platform_view_names[ANGBAND_TERM_MAX] = {
+    VERSION_NAME, "Inventory", "Equipment", "Combat Rolls",
+    "Recall", "Character", "Messages", "Monster List"
+};
+
 static bool platform_frame_session_input_pending(void)
 {
     app_session* session = app_session_current();
@@ -24,12 +29,98 @@ static void platform_frame_flush_pending_inputs(Uint64 now_ns)
     sdl_drain_legacy_input_queue();
 }
 
+bool platform_frame_view_ready(int view_index)
+{
+    return view_index >= 0 && view_index < MAX_TERM_DATA
+        && g_views[view_index].term_ready;
+}
+
+const char* platform_frame_view_name(int view_index)
+{
+    if (view_index < 0 || view_index >= ANGBAND_TERM_MAX)
+        return "View";
+
+    return g_platform_view_names[view_index];
+}
+
+int platform_frame_active_view_index(void)
+{
+    return sdl_active_view_index();
+}
+
+void platform_frame_set_active_view(int view_index)
+{
+    if (!platform_frame_view_ready(view_index))
+        return;
+
+    sdl_set_active_view_index(view_index);
+}
+
+bool platform_frame_main_view_ready(void)
+{
+    return platform_frame_view_ready(0);
+}
+
+int platform_frame_main_view_cols(void)
+{
+    if (platform_frame_main_view_ready() && g_views[0].cols > 0)
+        return g_views[0].cols;
+
+    return 80;
+}
+
+int platform_frame_main_view_rows(void)
+{
+    if (platform_frame_main_view_ready() && g_views[0].rows > 0)
+        return g_views[0].rows;
+
+    return 24;
+}
+
+int platform_frame_active_view_cols(void)
+{
+    int view_index = platform_frame_active_view_index();
+
+    if (platform_frame_view_ready(view_index) && g_views[view_index].cols > 0)
+        return g_views[view_index].cols;
+
+    return platform_frame_main_view_cols();
+}
+
+int platform_frame_active_view_rows(void)
+{
+    int view_index = platform_frame_active_view_index();
+
+    if (platform_frame_view_ready(view_index) && g_views[view_index].rows > 0)
+        return g_views[view_index].rows;
+
+    return platform_frame_main_view_rows();
+}
+
+bool platform_frame_active_view_is_main(void)
+{
+    return platform_frame_active_view_index() == 0;
+}
+
+void platform_frame_shutdown_views(void)
+{
+    for (int i = MAX_TERM_DATA - 1; i >= 0; --i)
+    {
+        if (!g_views[i].term_ready)
+            continue;
+
+        term_nuke(&g_views[i].t);
+        g_views[i].term_ready = false;
+        sdl_view_destroy(&g_views[i]);
+    }
+}
+
 void platform_frame_present(void)
 {
     sdl_present_if_needed(NULL);
 }
 
-static bool platform_frame_render_ui_scene_to_view(sdl_view* view,
+static bool platform_frame_render_ui_scene_to_canvas(sdl_view* view,
     const app_ui_scene* scene)
 {
     const sdl_view* main_view;
@@ -57,22 +148,27 @@ static bool platform_frame_render_ui_scene_to_view(sdl_view* view,
     return true;
 }
 
-bool platform_frame_render_ui_scene_to_term(int term_index,
+bool platform_frame_render_ui_scene_to_view(int view_index,
     const app_ui_scene* scene)
 {
-    if (term_index < 0 || term_index >= MAX_TERM_DATA)
+    if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return false;
 
-    return platform_frame_render_ui_scene_to_view(&g_views[term_index], scene);
+    return platform_frame_render_ui_scene_to_canvas(&g_views[view_index], scene);
 }
 
-bool platform_frame_render_ui_scene_to_active_term(const app_ui_scene* scene)
+bool platform_frame_render_ui_scene_to_active_view(const app_ui_scene* scene)
 {
-    if (!scene || !Term)
+    int view_index;
+
+    if (!scene)
         return false;
 
-    return platform_frame_render_ui_scene_to_view(sdl_view_from_term(Term),
-        scene);
+    view_index = platform_frame_active_view_index();
+    if (!platform_frame_view_ready(view_index))
+        return false;
+
+    return platform_frame_render_ui_scene_to_canvas(&g_views[view_index], scene);
 }
 
 void platform_frame_process_events(bool wait)

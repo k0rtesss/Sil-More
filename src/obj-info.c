@@ -2179,12 +2179,15 @@ static bool screen_out_head(const object_type* o_ptr)
     char* o_name;
     char base_desc_buf[2048];
     cptr base_desc = NULL;
-    int name_size = Term->wid;
+    int name_size = platform_frame_active_view_cols();
 
     bool has_description = false;
 
-    log_trace("screen_out_head: Starting, Term->wid=%d, Term->hgt=%d", Term->wid, Term->hgt);
-    log_trace("screen_out_head: Current cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
+    if (name_size <= 0)
+        name_size = 80;
+
+    log_trace("screen_out_head: Starting, view=%dx%d",
+        platform_frame_active_view_cols(), platform_frame_active_view_rows());
 
     /* Allocate memory to the size of the screen */
     o_name = mem_alloc_array(name_size, char);
@@ -2236,8 +2239,6 @@ static bool screen_out_head(const object_type* o_ptr)
         int wr = object_weight_rarity(o_ptr, depth);
         text_out_c(TERM_SLATE, format(" {%d,%d}", sd, wr));
     }
-
-    log_trace("screen_out_head: After printing object name, cursor position: x=%d, y=%d", Term->scr->cx, Term->scr->cy);
 
     /* Free up the memory */
     mem_free_null(o_name);

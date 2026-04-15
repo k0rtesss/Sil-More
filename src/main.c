@@ -38,21 +38,10 @@ bool game_in_progress = false;
  */
 static void quit_hook(cptr s)
 {
-    int j;
-
     /* Unused parameter */
     (void)s;
 
-    /* Scan windows */
-    for (j = ANGBAND_TERM_MAX - 1; j >= 0; j--)
-    {
-        /* Unused */
-        if (!angband_term[j])
-            continue;
-
-        /* Nuke it */
-        term_nuke(angband_term[j]);
-    }
+    platform_frame_shutdown_views();
 }
 
 /*
@@ -463,7 +452,7 @@ int main(int argc, char* argv[])
         display_scores(0, show_score);
 
     /* Wait for response */
-    // pause_line(Term->hgt - 1);
+    // pause_line(platform_frame_main_view_rows() - 1);
 
     /* Play the game */
     // play_game(new_game);

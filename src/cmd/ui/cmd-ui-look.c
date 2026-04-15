@@ -1099,7 +1099,7 @@ command_key:
                 }
                 done = true;
                 /* Don't consume the key - let it be processed by the main game loop */
-                Term_key_push(query);
+                (void)input_byte_unshift(query);
                 break;
                 
             case '2':

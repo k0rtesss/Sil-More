@@ -32,7 +32,6 @@
 #include "ui/ui-information-scene.h"
 #include "score/score_ui.h"
 #include "platform-audio.h"
-#include "z-term.h"
 #include <time.h>
 #include <string.h>
 #include <stddef.h>
@@ -4597,7 +4596,7 @@ PlayResult play_game(void)
     log_debug("play_game: character_icky incremented to %d", character_icky);
 
     /* Verify main term */
-    if (!term_screen)
+    if (!platform_frame_main_view_ready())
     {
         quit("main window does not exist");
     }
@@ -4606,14 +4605,17 @@ PlayResult play_game(void)
     {
         const int min_hgt = sdl_current_min_terminal_rows();
         const int min_wid = sdl_current_min_terminal_cols();
-        if ((term_screen->hgt < min_hgt) || (term_screen->wid < min_wid))
+        const int main_hgt = platform_frame_main_view_rows();
+        const int main_wid = platform_frame_main_view_cols();
+
+        if ((main_hgt < min_hgt) || (main_wid < min_wid))
         {
 #ifdef __ANDROID__
             log_error("main window too small on Android: %dx%d (need at least %dx%d)",
-                term_screen->wid, term_screen->hgt, min_wid, min_hgt);
+                main_wid, main_hgt, min_wid, min_hgt);
 #else
             log_error("main window too small: %dx%d (need at least %dx%d)",
-                term_screen->wid, term_screen->hgt, min_wid, min_hgt);
+                main_wid, main_hgt, min_wid, min_hgt);
 #endif
             quit("main window is too small");
         }
