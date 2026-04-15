@@ -396,7 +396,7 @@ static bool test_session_advance_callback(app_session* session,
 
 static void test_session_scaffolding(void)
 {
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     app_wait_state wait_state;
     app_wait_scope wait_scope;
@@ -417,20 +417,20 @@ static void test_session_scaffolding(void)
     u64b emitted_baseline;
     static const byte snapshot_bytes[] = { 1, 2, 3, 4 };
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.initial_event_capacity = 1;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.initial_event_capacity = 1;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
         | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
     session = app_session_create(NULL);
     CHECK(session == NULL);
-    config.api_version = APP_SESSION_API_VERSION + 1;
-    session = app_session_create(&config);
+    session_config.api_version = APP_SESSION_API_VERSION + 1;
+    session = app_session_create(&session_config);
     CHECK(session == NULL);
-    config.api_version = APP_SESSION_API_VERSION;
-    session = app_session_create(&config);
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
         return;
@@ -440,7 +440,7 @@ static void test_session_scaffolding(void)
     CHECK(app_session_current() == session);
 
     CHECK(app_session_host(session) == NULL);
-    CHECK(app_session_flags(session) == config.flags);
+    CHECK(app_session_flags(session) == session_config.flags);
     CHECK(app_session_has_flag(session, APP_SESSION_FLAG_ALLOW_LEGACY_INPUT));
     CHECK(app_session_has_flag(session, APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT));
     CHECK(app_session_state_id(session) == APP_SESSION_STATE_IDLE);
@@ -616,7 +616,7 @@ static void test_session_scaffolding(void)
 static void test_public_boundary_wrappers(void)
 {
     static const byte snapshot_bytes[] = { 7, 6, 5, 4 };
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     app_input input;
     app_intent intent;
@@ -628,12 +628,12 @@ static void test_public_boundary_wrappers(void)
     app_event_span span;
     test_advance_state advance_state;
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT;
 
-    session = app_session_create(&config);
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
         return;
@@ -711,7 +711,7 @@ static void test_public_boundary_wrappers(void)
 
 static void test_information_scene_nested_restore(void)
 {
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     app_snapshot snapshot;
     app_snapshot_blob blob;
@@ -727,14 +727,14 @@ static void test_information_scene_nested_restore(void)
 
     refresh_enabled = ui_information_scene_set_refresh_enabled(false);
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.initial_event_capacity = 1;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.initial_event_capacity = 1;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
         | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
-    session = app_session_create(&config);
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
     {
@@ -835,7 +835,7 @@ cleanup:
 
 static void test_information_scene_wait_key_nonrepeat(void)
 {
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     ui_information_scene_scope scope;
     app_input input;
@@ -844,14 +844,14 @@ static void test_information_scene_wait_key_nonrepeat(void)
 
     refresh_enabled = ui_information_scene_set_refresh_enabled(false);
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.initial_event_capacity = 1;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.initial_event_capacity = 1;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
         | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
-    session = app_session_create(&config);
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
     {
@@ -891,21 +891,21 @@ cleanup:
 
 static void test_information_scene_wait_key_with_wait_reason(void)
 {
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     app_input input;
     bool refresh_enabled;
 
     refresh_enabled = ui_information_scene_set_refresh_enabled(false);
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.initial_event_capacity = 1;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.initial_event_capacity = 1;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
         | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
-    session = app_session_create(&config);
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
     {
@@ -1169,17 +1169,19 @@ static void test_movement_service(void)
         APP_MOVEMENT_CONTEXT_TARGETING, &command));
 }
 
-static bool test_find_movement_binding(const struct sdl_config* config,
+static bool test_find_movement_binding(
+    const struct sdl_config* movement_config,
     u16b action, u16b direction, u32b trigger, u16b required_modifiers)
 {
     u16b i;
 
-    if (!config)
+    if (!movement_config)
         return false;
 
-    for (i = 0; i < config->movement_binding_count; i++)
+    for (i = 0; i < movement_config->movement_binding_count; i++)
     {
-        const app_movement_binding* binding = &config->movement_bindings[i];
+        const app_movement_binding* binding
+            = &movement_config->movement_bindings[i];
 
         if (!app_movement_binding_is_valid(binding))
             continue;
@@ -1200,62 +1202,75 @@ static bool test_find_movement_binding(const struct sdl_config* config,
 
 static void test_sdl_movement_presets(void)
 {
-    struct sdl_config config;
+    struct sdl_config movement_config;
     u16b i;
     u16b j;
 
-    memset(&config, 0, sizeof(config));
-    sdl_config_set_defaults(&config);
-    CHECK(!sdl_config_has_movement_bindings(&config));
+    memset(&movement_config, 0, sizeof(movement_config));
+    sdl_config_set_defaults(&movement_config);
+    CHECK(!sdl_config_has_movement_bindings(&movement_config));
 
-    sdl_config_set_default_movement_bindings(&config,
+    sdl_config_set_default_movement_bindings(&movement_config,
         APP_MOVEMENT_PRESET_MODERN_ARROWS);
-    CHECK(config.movement_keyboard_present);
-    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_MODERN_ARROWS);
-    CHECK(config.movement_binding_count > 0);
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
+    CHECK(movement_config.movement_keyboard_present);
+    CHECK(movement_config.movement_keyboard_preset
+        == APP_MOVEMENT_PRESET_MODERN_ARROWS);
+    CHECK(movement_config.movement_binding_count > 0);
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_MOVE_DIR,
         APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_RUN_DIR,
         APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP,
         APP_INPUT_MODIFIER_SHIFT));
-    CHECK(test_find_movement_binding(&config,
+    CHECK(test_find_movement_binding(&movement_config,
         APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_NORTH,
         SDL_SCANCODE_UP, APP_INPUT_MODIFIER_CTRL));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_WAIT,
         APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_PERIOD, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_REST,
         APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_PERIOD,
         APP_INPUT_MODIFIER_SHIFT));
 
-    sdl_config_set_default_movement_bindings(&config,
+    sdl_config_set_default_movement_bindings(&movement_config,
         APP_MOVEMENT_PRESET_CLASSIC_SIL);
-    CHECK(config.movement_keyboard_present);
-    CHECK(config.movement_keyboard_preset == APP_MOVEMENT_PRESET_CLASSIC_SIL);
-    CHECK(config.movement_binding_count > 0);
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_MOVE_DIR,
+    CHECK(movement_config.movement_keyboard_present);
+    CHECK(movement_config.movement_keyboard_preset
+        == APP_MOVEMENT_PRESET_CLASSIC_SIL);
+    CHECK(movement_config.movement_binding_count > 0);
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_MOVE_DIR,
         APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_KP_8, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_RUN_DIR,
         APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_KP_8,
         APP_INPUT_MODIFIER_SHIFT));
-    CHECK(test_find_movement_binding(&config,
+    CHECK(test_find_movement_binding(&movement_config,
         APP_MOVEMENT_ACTION_INTERACT_DIR, APP_MOVEMENT_DIRECTION_NORTH,
         SDL_SCANCODE_KP_8, APP_INPUT_MODIFIER_CTRL));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_RUN_DIR,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_RUN_DIR,
         APP_MOVEMENT_DIRECTION_NORTH, SDL_SCANCODE_UP,
         APP_INPUT_MODIFIER_SHIFT));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_WAIT,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_WAIT,
         APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_KP_5, 0));
-    CHECK(test_find_movement_binding(&config, APP_MOVEMENT_ACTION_REST,
+    CHECK(test_find_movement_binding(&movement_config,
+        APP_MOVEMENT_ACTION_REST,
         APP_MOVEMENT_DIRECTION_NONE, SDL_SCANCODE_KP_5,
         APP_INPUT_MODIFIER_SHIFT));
 
-    for (i = 0; i < config.movement_binding_count; i++)
+    for (i = 0; i < movement_config.movement_binding_count; i++)
     {
-        CHECK(app_movement_binding_is_valid(&config.movement_bindings[i]));
-        for (j = (u16b)(i + 1); j < config.movement_binding_count; j++)
+        CHECK(app_movement_binding_is_valid(
+            &movement_config.movement_bindings[i]));
+        for (j = (u16b)(i + 1); j < movement_config.movement_binding_count; j++)
         {
-            CHECK(!app_movement_bindings_conflict(&config.movement_bindings[i],
-                &config.movement_bindings[j]));
+            CHECK(!app_movement_bindings_conflict(
+                &movement_config.movement_bindings[i],
+                &movement_config.movement_bindings[j]));
         }
     }
 }
@@ -1305,7 +1320,7 @@ static void test_sdl_movement_config_round_trip(void)
 
 static void test_movement_input_bridge(void)
 {
-    app_session_config config;
+    app_session_config session_config;
     app_session* session;
     app_movement_command dungeon_command;
     app_movement_command prompt_command;
@@ -1313,14 +1328,14 @@ static void test_movement_input_bridge(void)
     app_input input;
     char ch = '\0';
 
-    memset(&config, 0, sizeof(config));
-    config.api_version = APP_SESSION_API_VERSION;
-    config.initial_event_capacity = 1;
-    config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.initial_event_capacity = 1;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
         | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
         | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
 
-    session = app_session_create(&config);
+    session = app_session_create(&session_config);
     CHECK(session != NULL);
     if (!session)
         return;

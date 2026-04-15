@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "smithing/smithing-internal.h"
-#include "externs.h"
 #include "log/log.h"
 
 static void dif_mod(int value, int positive_base, int* dif_inc)

@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "smithing/smithing-internal.h"
-#include "externs.h"
 
 /* Smithing flow control (used by the UI). */
 bool enchant_then_numbers = false;

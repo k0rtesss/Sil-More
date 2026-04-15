@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "smithing/smithing-internal.h"
-#include "externs.h"
 
 bool melt_metal_item(int item_num)
 {

@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "smithing/smithing-internal.h"
-#include "externs.h"
 #include "log/log.h"
 
 int too_difficult(object_type* o_ptr)

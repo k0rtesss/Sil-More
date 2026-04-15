@@ -9,7 +9,7 @@
 #include "sdl-config.h"
 #include "sdl-main-internal.h"
 #include "sound-config.h"
-#include "externs.h"
+#include "cmd-ui-settings-internal.h"
 #include "cmd-ui.h"
 #include "cmd-ui-settings.h"
 #include "fs/io_sdl.h"

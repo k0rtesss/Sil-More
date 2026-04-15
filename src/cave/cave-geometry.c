@@ -3,7 +3,6 @@
 #include "angband.h"
 
 #include "cave/cave-internal.h"
-#include "externs.h"
 
 /*
  * Approximate distance between two points.

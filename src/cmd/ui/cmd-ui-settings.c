@@ -23,7 +23,7 @@
 #include "platform-audio.h"
 
 extern struct sound_config g_sound_config;
-#include "externs.h"
+#include "cmd-ui-settings-internal.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
@@ -344,26 +344,26 @@ int settings_ui_list_visible_rows(const settings_ui_layout* layout,
 static cptr dump_seperator = "#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#=#";
 
 void dump_visual_pair(
-    SDL_IOStream* fff, const char* tag, int index, byte attr, byte chr)
+    ang_file* fff, const char* tag, int index, byte attr, byte chr)
 {
     bool attr_tile = (attr & TILE_FLAG) != 0;
     bool char_tile = (chr & TILE_FLAG) != 0;
 
-    SDL_IOprintf(fff, "%s:%d:", tag, index);
+    ang_file_printf_compat(fff, "%s:%d:", tag, index);
     if (attr_tile)
-        SDL_IOprintf(fff, "R%d", TILE_GET_INDEX(attr));
+        ang_file_printf_compat(fff, "R%d", TILE_GET_INDEX(attr));
     else
-        SDL_IOprintf(fff, "0x%02X", attr);
+        ang_file_printf_compat(fff, "0x%02X", attr);
 
-    SDL_WriteU8(fff, ':');
+    (void)ang_file_write_u8_compat(fff, ':');
 
     if (char_tile)
-        SDL_IOprintf(fff, "C%d", TILE_GET_INDEX(chr));
+        ang_file_printf_compat(fff, "C%d", TILE_GET_INDEX(chr));
     else
-        SDL_IOprintf(fff, "0x%02X", (byte)chr);
+        ang_file_printf_compat(fff, "0x%02X", (byte)chr);
 
-SDL_WriteU8(fff, '\n');
-SDL_WriteU8(fff, '\n');
+    (void)ang_file_write_u8_compat(fff, '\n');
+    (void)ang_file_write_u8_compat(fff, '\n');
 }
 
 /*
@@ -371,7 +371,8 @@ SDL_WriteU8(fff, '\n');
  */
 void remove_old_dump(cptr orig_file, cptr mark)
 {
-    SDL_IOStream* tmp_fff, *orig_fff;
+    ang_file* tmp_fff;
+    ang_file* orig_fff;
 
     char tmp_file[1024];
     char buf[1024];
@@ -380,7 +381,7 @@ void remove_old_dump(cptr orig_file, cptr mark)
     char expected_line[1024];
 
     /* Open an old dump file in read-only mode */
-    orig_fff = sdl_fopen(orig_file, "r");
+    orig_fff = ang_file_open_compat(orig_file, "r");
 
     /* If original file does not exist, nothing to do */
     if (!orig_fff)
@@ -457,28 +458,28 @@ void remove_old_dump(cptr orig_file, cptr mark)
         if (!between_marks)
         {
             /* Copy orginal line */
-            SDL_IOprintf(tmp_fff, "%s\n", buf);
+            ang_file_printf_compat(tmp_fff, "%s\n", buf);
         }
     }
 
     /* Close files */
-    sdl_fclose(orig_fff);
-    sdl_fclose(tmp_fff);
+    (void)ang_file_close_compat(orig_fff);
+    (void)ang_file_close_compat(tmp_fff);
 
     /* If there are changes, overwrite the original file with the new one */
     if (changed)
     {
         /* Copy contents of temporary file */
-        tmp_fff = sdl_fopen(tmp_file, "r");
-        orig_fff = sdl_fopen(orig_file, "w");
+        tmp_fff = ang_file_open_compat(tmp_file, "r");
+        orig_fff = ang_file_open_compat(orig_file, "w");
 
         while (!sdl_fgets(tmp_fff, buf, sizeof(buf)))
         {
-            SDL_IOprintf(orig_fff, "%s\n", buf);
+            ang_file_printf_compat(orig_fff, "%s\n", buf);
         }
 
-        sdl_fclose(orig_fff);
-        sdl_fclose(tmp_fff);
+        (void)ang_file_close_compat(orig_fff);
+        (void)ang_file_close_compat(tmp_fff);
     }
 
     /* Kill the temporary file */
@@ -488,13 +489,14 @@ void remove_old_dump(cptr orig_file, cptr mark)
 /*
  * Output the header of a pref-file dump
  */
-void pref_header(SDL_IOStream* fff, cptr mark)
+void pref_header(ang_file* fff, cptr mark)
 {
     /* Start of dump */
-    SDL_IOprintf(fff, "%s begin %s\n", dump_seperator, mark);
+    ang_file_printf_compat(fff, "%s begin %s\n", dump_seperator, mark);
 
-    SDL_IOprintf(fff, "# *Warning!*  The lines below are an automatic dump.\n");
-    SDL_IOprintf(fff,
+    ang_file_printf_compat(fff,
+        "# *Warning!*  The lines below are an automatic dump.\n");
+    ang_file_printf_compat(fff,
         "# Don't edit them; changes will be deleted and replaced "
         "automatically.\n");
 }
@@ -502,15 +504,16 @@ void pref_header(SDL_IOStream* fff, cptr mark)
 /*
  * Output the footer of a pref-file dump
  */
-void pref_footer(SDL_IOStream* fff, cptr mark)
+void pref_footer(ang_file* fff, cptr mark)
 {
-    SDL_IOprintf(fff, "# *Warning!*  The lines above are an automatic dump.\n");
-    SDL_IOprintf(fff,
+    ang_file_printf_compat(fff,
+        "# *Warning!*  The lines above are an automatic dump.\n");
+    ang_file_printf_compat(fff,
         "# Don't edit them; changes will be deleted and replaced "
         "automatically.\n");
 
     /* End of dump */
-    SDL_IOprintf(fff, "%s end %s\n", dump_seperator, mark);
+    ang_file_printf_compat(fff, "%s end %s\n", dump_seperator, mark);
 }
 
 /*

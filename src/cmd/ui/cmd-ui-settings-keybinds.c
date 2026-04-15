@@ -9,7 +9,7 @@
 #include "sdl-config.h"
 #include "sdl-main-internal.h"
 #include "sound-config.h"
-#include "externs.h"
+#include "cmd-ui-settings-internal.h"
 #include "cmd-ui.h"
 #include "cmd-ui-settings.h"
 #include "fs/io_sdl.h"
@@ -954,7 +954,7 @@ static errr macro_dump(cptr fname)
 
     int i;
 
-    SDL_IOStream* fff;
+    ang_file* fff;
 
     char buf[1024];
 
@@ -972,7 +972,7 @@ static errr macro_dump(cptr fname)
     remove_old_dump(buf, mark);
 
     /* Append to the file */
-    fff = sdl_fopen(buf, "a");
+    fff = ang_file_open_compat(buf, "a");
 
     /* Failure */
     if (!fff)
@@ -982,41 +982,41 @@ static errr macro_dump(cptr fname)
     pref_header(fff, mark);
 
     /* Skip some lines */
-    SDL_IOprintf(fff, "\n\n");
+    ang_file_printf_compat(fff, "\n\n");
 
     /* Start dumping */
-    SDL_IOprintf(fff, "# Automatic macro dump\n\n");
+    ang_file_printf_compat(fff, "# Automatic macro dump\n\n");
 
     /* Dump them */
     for (i = 0; i < macro__num; i++)
     {
         /* Start the macro */
-        SDL_IOprintf(fff, "# Macro '%d'\n\n", i);
+        ang_file_printf_compat(fff, "# Macro '%d'\n\n", i);
 
         /* Extract the macro action */
         ascii_to_text(buf, sizeof(buf), macro__act[i]);
 
         /* Dump the macro action */
-        SDL_IOprintf(fff, "A:%s\n", buf);
+        ang_file_printf_compat(fff, "A:%s\n", buf);
 
         /* Extract the macro pattern */
         ascii_to_text(buf, sizeof(buf), macro__pat[i]);
 
         /* Dump the macro pattern */
-        SDL_IOprintf(fff, "P:%s\n", buf);
+        ang_file_printf_compat(fff, "P:%s\n", buf);
 
         /* End the macro */
-        SDL_IOprintf(fff, "\n\n");
+        ang_file_printf_compat(fff, "\n\n");
     }
 
     /* Start dumping */
-    SDL_IOprintf(fff, "\n\n\n\n");
+    ang_file_printf_compat(fff, "\n\n\n\n");
 
     /* Output footer */
     pref_footer(fff, mark);
 
     /* Close */
-    sdl_fclose(fff);
+    (void)ang_file_close_compat(fff);
 
     /* Success */
     return (0);
@@ -1080,7 +1080,7 @@ static errr keymap_dump(cptr fname)
 
     int i;
 
-    SDL_IOStream* fff;
+    ang_file* fff;
 
     char buf[1024];
 
@@ -1110,7 +1110,7 @@ static errr keymap_dump(cptr fname)
     remove_old_dump(buf, mark);
 
     /* Append to the file */
-    fff = sdl_fopen(buf, "a");
+    fff = ang_file_open_compat(buf, "a");
 
     /* Failure */
     if (!fff)
@@ -1120,10 +1120,10 @@ static errr keymap_dump(cptr fname)
     pref_header(fff, mark);
 
     /* Skip some lines */
-    SDL_IOprintf(fff, "\n\n");
+    ang_file_printf_compat(fff, "\n\n");
 
     /* Start dumping */
-    SDL_IOprintf(fff, "# Automatic keymap dump\n\n");
+    ang_file_printf_compat(fff, "# Automatic keymap dump\n\n");
 
     /* Dump them */
     for (i = 0; i < (int)N_ELEMENTS(keymap_act[mode]); i++)
@@ -1143,7 +1143,7 @@ static errr keymap_dump(cptr fname)
         ascii_to_text(buf, sizeof(buf), act);
 
         /* Dump the keymap action */
-        SDL_IOprintf(fff, "A:%s\n", buf);
+        ang_file_printf_compat(fff, "A:%s\n", buf);
 
         /* Convert the key into a string */
         key[0] = i;
@@ -1152,20 +1152,20 @@ static errr keymap_dump(cptr fname)
         ascii_to_text(buf, sizeof(buf), key);
 
         /* Dump the keymap pattern */
-        SDL_IOprintf(fff, "C:%d:%s\n", mode, buf);
+        ang_file_printf_compat(fff, "C:%d:%s\n", mode, buf);
 
         /* Skip a line */
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf_compat(fff, "\n");
     }
 
     /* Skip some lines */
-    SDL_IOprintf(fff, "\n\n\n");
+    ang_file_printf_compat(fff, "\n\n\n");
 
     /* Output footer */
     pref_footer(fff, mark);
 
     /* Close */
-    sdl_fclose(fff);
+    (void)ang_file_close_compat(fff);
 
     /* Success */
     return (0);

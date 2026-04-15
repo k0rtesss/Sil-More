@@ -3,7 +3,7 @@
 
 #include "angband.h"
 #include "app/app-ui.h"
-#include "fs/io_sdl.h"
+#include "platform-io.h"
 #include "sdl-config.h"
 
 #define SETTINGS_SDL_GET(name) get ## _sdl_ ## name
@@ -99,10 +99,10 @@ const char* settings_sdl_config_path(void);
 settings_ui_layout settings_ui_read_layout(void);
 int settings_ui_list_visible_rows(const settings_ui_layout* layout,
     int top_reserved_rows, int bottom_reserved_rows, int min_rows);
-void dump_visual_pair(SDL_IOStream* fff, cptr what, int num, byte a, byte c);
+void dump_visual_pair(ang_file* fff, cptr what, int num, byte a, byte c);
 void remove_old_dump(cptr orig_file, cptr mark);
-void pref_header(SDL_IOStream* fff, cptr mark);
-void pref_footer(SDL_IOStream* fff, cptr mark);
+void pref_header(ang_file* fff, cptr mark);
+void pref_footer(ang_file* fff, cptr mark);
 void do_cmd_pref_file_hack(int row);
 void settings_ui_fit_text(char* buf, size_t buflen, cptr text, int max_chars);
 cptr settings_ui_pick_label(int max_chars, cptr long_label,

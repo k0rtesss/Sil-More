@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "smithing/smithing-internal.h"
-#include "externs.h"
 #include "log/log.h"
 #include "score/score_artefact.h"
 #include "score/score_guid.h"

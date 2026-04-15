@@ -9,7 +9,7 @@
 #include "sdl-config.h"
 #include "sdl-main-internal.h"
 #include "sound-config.h"
-#include "externs.h"
+#include "cmd-ui-settings-internal.h"
 #include "cmd-ui.h"
 #include "cmd-ui-settings.h"
 #include "fs/io_sdl.h"
@@ -376,7 +376,7 @@ void do_cmd_visuals(void)
     int choice = 0;
     int highlight = 1;
     int i;
-    SDL_IOStream* fff;
+    ang_file* fff;
     char buf[1024];
 
     /* File type is "TEXT" */
@@ -424,7 +424,7 @@ void do_cmd_visuals(void)
             remove_old_dump(buf, mark);
 
             /* Append to the file */
-            fff = sdl_fopen(buf, "a");
+            fff = ang_file_open_compat(buf, "a");
 
             /* Failure */
             if (!fff)
@@ -434,10 +434,10 @@ void do_cmd_visuals(void)
             pref_header(fff, mark);
 
             /* Skip some lines */
-            SDL_IOprintf(fff, "\n\n");
+            ang_file_printf_compat(fff, "\n\n");
 
             /* Start dumping */
-            SDL_IOprintf(fff, "# Monster attr/char definitions\n\n");
+            ang_file_printf_compat(fff, "# Monster attr/char definitions\n\n");
 
             /* Dump monsters */
             for (i = 0; i < z_info->r_max; i++)
@@ -449,20 +449,20 @@ void do_cmd_visuals(void)
                     continue;
 
                 /* Dump a comment */
-                SDL_IOprintf(fff, "# %s\n", (r_name + r_ptr->name));
+                ang_file_printf_compat(fff, "# %s\n", (r_name + r_ptr->name));
 
                 /* Dump the monster attr/char info */
                 dump_visual_pair(fff, "R", i, r_ptr->x_attr, (byte)r_ptr->x_char);
             }
 
             /* All done */
-            SDL_IOprintf(fff, "\n\n\n\n");
+            ang_file_printf_compat(fff, "\n\n\n\n");
 
             /* Output footer */
             pref_footer(fff, mark);
 
             /* Close */
-            sdl_fclose(fff);
+            (void)ang_file_close_compat(fff);
 
             /* Message */
             msg_print("Dumped monster attr/chars.");
@@ -494,7 +494,7 @@ void do_cmd_visuals(void)
             remove_old_dump(buf, mark);
 
             /* Append to the file */
-            fff = sdl_fopen(buf, "a");
+            fff = ang_file_open_compat(buf, "a");
 
             /* Failure */
             if (!fff)
@@ -504,10 +504,10 @@ void do_cmd_visuals(void)
             pref_header(fff, mark);
 
             /* Skip some lines */
-            SDL_IOprintf(fff, "\n\n");
+            ang_file_printf_compat(fff, "\n\n");
 
             /* Start dumping */
-            SDL_IOprintf(fff, "# Object attr/char definitions\n\n");
+            ang_file_printf_compat(fff, "# Object attr/char definitions\n\n");
 
             /* Dump objects */
             for (i = 0; i < z_info->k_max; i++)
@@ -519,7 +519,7 @@ void do_cmd_visuals(void)
                     continue;
 
                 /* Dump a comment */
-                SDL_IOprintf(fff, "# %s\n", (k_name + k_ptr->name));
+                ang_file_printf_compat(fff, "# %s\n", (k_name + k_ptr->name));
 
                 /* Dump the object attr/char info */
                 dump_visual_pair(
@@ -527,13 +527,13 @@ void do_cmd_visuals(void)
             }
 
             /* All done */
-            SDL_IOprintf(fff, "\n\n\n\n");
+            ang_file_printf_compat(fff, "\n\n\n\n");
 
             /* Output footer */
             pref_footer(fff, mark);
 
             /* Close */
-            sdl_fclose(fff);
+            (void)ang_file_close_compat(fff);
 
             /* Message */
             msg_print("Dumped object attr/chars.");
@@ -565,7 +565,7 @@ void do_cmd_visuals(void)
             remove_old_dump(buf, mark);
 
             /* Append to the file */
-            fff = sdl_fopen(buf, "a");
+            fff = ang_file_open_compat(buf, "a");
 
             /* Failure */
             if (!fff)
@@ -575,10 +575,10 @@ void do_cmd_visuals(void)
             pref_header(fff, mark);
 
             /* Skip some lines */
-            SDL_IOprintf(fff, "\n\n");
+            ang_file_printf_compat(fff, "\n\n");
 
             /* Start dumping */
-            SDL_IOprintf(fff, "# Feature attr/char definitions\n\n");
+            ang_file_printf_compat(fff, "# Feature attr/char definitions\n\n");
 
             /* Dump features */
             for (i = 0; i < z_info->f_max; i++)
@@ -590,7 +590,7 @@ void do_cmd_visuals(void)
                     continue;
 
                 /* Dump a comment */
-                SDL_IOprintf(fff, "# %s\n", (f_name + f_ptr->name));
+                ang_file_printf_compat(fff, "# %s\n", (f_name + f_ptr->name));
 
                 /* Dump the feature attr/char info */
                 dump_visual_pair(
@@ -598,13 +598,13 @@ void do_cmd_visuals(void)
             }
 
             /* All done */
-            SDL_IOprintf(fff, "\n\n\n\n");
+            ang_file_printf_compat(fff, "\n\n\n\n");
 
             /* Output footer */
             pref_footer(fff, mark);
 
             /* Close */
-            sdl_fclose(fff);
+            (void)ang_file_close_compat(fff);
 
             /* Message */
             msg_print("Dumped feature attr/chars.");
@@ -636,7 +636,7 @@ void do_cmd_visuals(void)
             remove_old_dump(buf, mark);
 
             /* Append to the file */
-            fff = sdl_fopen(buf, "a");
+            fff = ang_file_open_compat(buf, "a");
 
             /* Failure */
             if (!fff)
@@ -646,10 +646,10 @@ void do_cmd_visuals(void)
             pref_header(fff, mark);
 
             /* Skip some lines */
-            SDL_IOprintf(fff, "\n\n");
+            ang_file_printf_compat(fff, "\n\n");
 
             /* Start dumping */
-            SDL_IOprintf(fff, "# Flavor attr/char definitions\n\n");
+            ang_file_printf_compat(fff, "# Flavor attr/char definitions\n\n");
 
             /* Dump flavors */
             for (i = 0; i < z_info->flavor_max; i++)
@@ -657,7 +657,7 @@ void do_cmd_visuals(void)
                 flavor_type* flavor_ptr = &flavor_info[i];
 
                 /* Dump a comment */
-                SDL_IOprintf(fff, "# %s\n", (flavor_text + flavor_ptr->text));
+                ang_file_printf_compat(fff, "# %s\n", (flavor_text + flavor_ptr->text));
 
                 /* Dump the flavor attr/char info */
                 dump_visual_pair(
@@ -665,13 +665,13 @@ void do_cmd_visuals(void)
             }
 
             /* All done */
-            SDL_IOprintf(fff, "\n\n\n\n");
+            ang_file_printf_compat(fff, "\n\n\n\n");
 
             /* Output footer */
             pref_footer(fff, mark);
 
             /* Close */
-            sdl_fclose(fff);
+            (void)ang_file_close_compat(fff);
 
             /* Message */
             msg_print("Dumped flavor attr/chars.");
@@ -1218,7 +1218,7 @@ void do_cmd_colors(void)
     int choice = 0;
     int highlight = 1;
     int i;
-    SDL_IOStream* fff;
+    ang_file* fff;
     char buf[1024];
 
     /* File type is "TEXT" */
@@ -1267,7 +1267,7 @@ void do_cmd_colors(void)
             remove_old_dump(buf, mark);
 
             /* Append to the file */
-            fff = sdl_fopen(buf, "a");
+            fff = ang_file_open_compat(buf, "a");
 
             /* Failure */
             if (!fff)
@@ -1277,10 +1277,10 @@ void do_cmd_colors(void)
             pref_header(fff, mark);
 
             /* Skip some lines */
-            SDL_IOprintf(fff, "\n\n");
+            ang_file_printf_compat(fff, "\n\n");
 
             /* Start dumping */
-            SDL_IOprintf(fff, "# Color redefinitions\n\n");
+            ang_file_printf_compat(fff, "# Color redefinitions\n\n");
 
             /* Dump colors */
             for (i = 0; i < 256; i++)
@@ -1301,21 +1301,22 @@ void do_cmd_colors(void)
                     name = color_names[i];
 
                 /* Dump a comment */
-                SDL_IOprintf(fff, "# Color '%s'\n", name);
+                ang_file_printf_compat(fff, "# Color '%s'\n", name);
 
                 /* Dump the monster attr/char info */
-                SDL_IOprintf(fff, "V:%d:0x%02X:0x%02X:0x%02X:0x%02X\n\n", i, kv, rv,
+                ang_file_printf_compat(fff,
+                    "V:%d:0x%02X:0x%02X:0x%02X:0x%02X\n\n", i, kv, rv,
                     gv, bv);
             }
 
             /* All done */
-            SDL_IOprintf(fff, "\n\n\n\n");
+            ang_file_printf_compat(fff, "\n\n\n\n");
 
             /* Output footer */
             pref_footer(fff, mark);
 
             /* Close */
-            sdl_fclose(fff);
+            (void)ang_file_close_compat(fff);
 
             /* Message */
             msg_print("Dumped color redefinitions.");

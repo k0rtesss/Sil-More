@@ -2,6 +2,7 @@
 #define INCLUDED_CAVE_INTERNAL_H
 
 #include "../angband.h"
+#include "../externs.h"
 #include "cave.h"
 
 /*

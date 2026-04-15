@@ -4,7 +4,6 @@
 
 #include "app/app-ui.h"
 #include "cave/cave-internal.h"
-#include "externs.h"
 #include "log/log.h"
 #include "ui/ui-information-scene.h"
 
