@@ -228,9 +228,7 @@ extern int value_check_aux1(const object_type* o_ptr);
 extern void land(void);
 extern void pseudo_id_everything(void);
 extern void id_everything(void);
-extern PlayResult play_game(void);
 extern void death_spectator_view(void);
-extern void reset_dungeon_state(void);
 
 /* files.c */
 extern void safe_setuid_drop(void);
@@ -244,11 +242,6 @@ extern int meta_fill(bool);
 
 /* init2.c */
 extern void init_file_paths(char* path);
-extern void display_introduction(void);
-extern void init_angband(void);
-extern void re_init_some_things(void);
-extern NavResult initial_menu(bool *start_new);
-extern void cleanup_angband(void);
 
 /* load.c */
 extern bool load_player(void);
@@ -349,8 +342,6 @@ extern errr macro_init(void);
 extern errr macro_free(void);
 extern errr macro_trigger_free(void);
 extern errr input_byte_enqueue(int key);
-extern void input_byte_queue_clear(void);
-extern bool input_byte_queue_pending(void);
 extern bool inkey_can_consume_immediately(void);
 extern bool input_submit_movement_command(
     const app_movement_command* command);
@@ -362,8 +353,6 @@ extern errr message_color_define(u16b type, byte color);
 extern void message_add(cptr str, u16b type);
 extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
-extern errr messages_init(void);
-extern void messages_free(void);
 extern void move_cursor(int row, int col);
 extern void msg_debug(cptr fmt, ...);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);

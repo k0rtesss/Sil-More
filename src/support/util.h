@@ -9,6 +9,8 @@ s16b quark_add(cptr str);
 cptr quark_str(s16b i);
 errr quarks_init(void);
 errr quarks_free(void);
+errr messages_init(void);
+void messages_free(void);
 
 void bell(cptr reason);
 void sound(int val);
@@ -24,6 +26,8 @@ bool get_check_oath_multiline(cptr prompt);
 s16b get_quantity(cptr prompt, int max);
 bool get_com(cptr prompt, char* command);
 errr input_byte_unshift(int key);
+void input_byte_queue_clear(void);
+bool input_byte_queue_pending(void);
 void inkey_set_cursor_hidden(bool hidden);
 bool inkey_cursor_hidden(void);
 void input_clear_pending(void);

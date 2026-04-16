@@ -11,9 +11,9 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "blitz.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "fs/path.h"
+#include "init/init-lifecycle.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "runtime-cli.h"
@@ -28,6 +28,7 @@
 
 static int g_welcome_scene_intro_style = -1;
 
+static void display_introduction(void);
 static void welcome_screen_begin_session(void);
 static bool welcome_screen_present_ui(cptr status_line, bool show_footer);
 static int welcome_screen_current_intro_style(void);
@@ -706,7 +707,7 @@ static bool welcome_screen_present_ui(cptr status_line, bool show_footer)
     return ui_information_scene_present_ui(&scene);
 }
 
-void display_introduction(void)
+static void display_introduction(void)
 {
     welcome_screen_begin_session();
     (void)welcome_screen_present_ui(NULL, false);

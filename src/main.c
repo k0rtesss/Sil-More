@@ -10,7 +10,8 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
+#include "fs/file.h"
+#include "init/init-lifecycle.h"
 #include "log/bootstrap.h"
 #include "gen-log.h"
 

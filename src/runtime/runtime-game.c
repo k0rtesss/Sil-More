@@ -1,8 +1,7 @@
 /* File: runtime/runtime-game.c */
 
-#include "runtime/runtime-game.h"
-
 #include "angband.h"
+#include "runtime/runtime-game.h"
 #include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
