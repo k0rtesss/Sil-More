@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "app/app-ui.h"
-#include "externs.h"
 
 #include "log/log.h"
 #include "platform-input.h"
@@ -10,6 +9,7 @@
 #include "ui/story_font.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-status.h"
 
 #include <ctype.h>
 

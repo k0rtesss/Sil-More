@@ -18,8 +18,12 @@
  */
 #include "h-basic.h"
 #include "app/app-movement.h"
+#include "cave/cave.h"
 #include "drop_system.h"
 #include "cave/cave-state.h"
+#include "cmd/item/cmd-item.h"
+#include "cmd/movement/cmd-movement.h"
+#include "cmd/ui/cmd-ui.h"
 #include "fs/pref-files.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
@@ -28,7 +32,9 @@
 #include "init/init-paths.h"
 #include "level-generation/level-generation.h"
 #include "melee/melee.h"
+#include "monster/monster.h"
 #include "monster/monster-state.h"
+#include "object/object.h"
 #include "object/object-state.h"
 #include "object/object-slot.h"
 #include "object/object-ui-select.h"
@@ -60,6 +66,7 @@ typedef struct app_ui_scene app_ui_scene;
 #include "spell/spell.h"
 #include "support/macro-state.h"
 #include "support/text-output.h"
+#include "support/util.h"
 #include "ui/ui-character-name.h"
 #include "ui/ui-character-screen.h"
 #include "ui/colors.h"
@@ -69,6 +76,8 @@ typedef struct app_ui_scene app_ui_scene;
 #include "ui/ui-look-sidebar.h"
 #include "ui/ui-story.h"
 #include "ui/story_font.h"
+#include "ui/targeting.h"
+#include "ui/ui-status.h"
 // extern FILE *log_file;
 
 /* variable.c */
@@ -96,9 +105,6 @@ extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
 extern autoinscription* inscriptions;
 extern u16b inscriptionsCount;
-
-bool player_suppresses_unseen_grid_info(void);
-bool grid_info_is_available(int y, int x);
 
 #ifndef GENERATION_DEPTH_HELPERS_DEFINED
 #define GENERATION_DEPTH_HELPERS_DEFINED
@@ -130,65 +136,8 @@ extern NavResult blitz_character_creation(void);
 void player_wipe(void);
 
 /* cave.c */
-extern int distance(int y1, int x1, int y2, int x2);
-extern int distance_squared(int y1, int x1, int y2, int x2);
-extern bool los(int y1, int x1, int y2, int x2);
-extern void random_unseen_floor(int* ry, int* rx);
 extern bool no_light(void);
-extern bool seen_by_keen_senses(int y, int x);
-extern bool cave_valid_bold(int y, int x);
-extern bool feat_supports_lighting(int feat);
-extern void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
-extern void map_info_default(int y, int x, byte* ap, char* cp);
-extern int player_tile_offset(void);
-extern void dungeon_mark_map_for_redraw(void);
-extern void dungeon_note_cursor_relative(int y, int x);
-extern void dungeon_sync_cursor_state(void);
-extern void note_spot(int y, int x);
-extern bool build_overhead_subwindow_ui_scene(app_ui_scene* scene);
-extern void do_cmd_view_map(void);
-extern errr vinfo_init(void);
-extern void forget_view(void);
-extern void update_view(void);
-extern int flow_dist(int which_flow, int y, int x);
-extern void update_flow(int cy, int cx, int which_flow);
-extern void update_smell(void);
-extern void map_feature(int y, int x);
-extern void map_area(void);
-extern void map_area_radius(int radius);
-extern void wiz_light(void);
-extern void wiz_dark(void);
-extern void gates_illuminate(bool daytime);
-extern void cave_set_feat(int y, int x, int feat);
-extern void cave_set_feat_with_color(int y, int x, int feat, int color);
-extern byte get_depth_color(int depth);
-extern void reset_depth_color_cache(void);
 /* Style-weight APIs */
-extern void styles_init_for_level(void);
-extern void styles_begin_vault(int extra_sidx, int extra_weight);
-extern void styles_end_vault(void);
-extern void styles_reset_level_weights(void);
-extern void styles_add_level_weight(int sidx, int weight);
-extern void styles_reset_vault_weights(void);
-extern void styles_add_vault_weight(int sidx, int weight);
-extern void styles_add_vault_from_level(int factor);
-extern void styles_set_vault_avoid_style(int sidx);
-extern void styles_default_vault_clear(void);
-extern void styles_default_vault_add(int sidx_or_star, int weight);
-extern void styles_apply_vault_list(const int* sidx, const int* weight, int count);
-extern void styles_vault_rules_clear(void);
-extern void styles_set_vault_rule(int depth, const int* sidx, const int* weight, int count);
-extern void styles_apply_vault_default_for_depth(int depth);
-extern void styles_partition_rules_clear(void);
-extern void styles_add_partition_rule(int depth, int kind, const int* sidx, const int* weight, int count);
-extern int styles_pick_partition_style(int depth, int kind);
-extern int styles_get_level_primary_style(void);
-extern int styles_get_vault_primary_style(void);
-extern void styles_select_vault_primary(void);
-extern int styles_pick_random_from_level(void);
-extern int styles_decode_color_style(byte color_value);
-extern void styles_rules_clear(void);
-extern void styles_add_level_rule(int min_depth, int max_depth, const int* sidx, const int* weight, int count);
 /* Narrative text: from style.txt (S:/M1:/M2: lines) */
 extern const char* styles_get_style_display(int sidx);
 extern const char* styles_get_style_short_desc(int sidx);
@@ -201,19 +150,9 @@ extern bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
 extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);
-extern void styles_set_loaded_level_primary(int sidx);
 /* Persisted door-style variant choices for consistency across save/load */
-extern int styles_get_choice_capacity(void);
-extern void styles_copy_level_door_choices(byte* out_buf, int max_n);
-extern void styles_load_level_door_choices(const byte* in_buf, int n);
-extern int project_path(
-    u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);
 extern void scatter(int* yp, int* xp, int y, int x, int d, int m);
-extern void health_track(int m_idx);
-extern void monster_race_track(int r_idx);
-extern void object_kind_track(int k_idx);
-extern void disturb(int stop_stealth, int unused_flag);
 
 /* cmd1.c */
 extern void apply_oath_breaking_curse(int oath_type);
@@ -294,9 +233,6 @@ extern void flanking_or_retreat(int y, int x);
 extern void move_player(int dir);
 
 /* cmd2.c */
-extern int min_depth(void);
-extern void min_depth_timer_status(int* base_increment, int* additional_increment,
-    int* total_increment, int* progress, int* threshold);
 extern void note_lost_greater_vault(void);
 extern void do_cmd_go_up(void);
 extern void do_cmd_go_down(void);
@@ -339,11 +275,8 @@ extern void do_cmd_inven(void);
 extern void do_cmd_inven_direct(void);
 extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
-extern void do_cmd_wield(object_type* default_o_ptr, int default_item);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
-extern void do_cmd_takeoff(object_type* default_o_ptr, int default_item);
-extern void do_cmd_drop_item_by_index(int item);
 extern void do_cmd_drop(void);
 extern bool open_supplies_menu_with_context(supply_menu_action default_action, int default_group, bool default_focus, bool default_hotkey);
 extern void do_cmd_destroy(void);
@@ -355,33 +288,17 @@ extern void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item);
 extern void do_cmd_refuel_torch(
     object_type* default_o_ptr, int default_item, bool is_mallorn);
 extern void do_cmd_refuel(void);
-extern void do_cmd_target(void);
-extern void do_cmd_look(void);
-extern void do_cmd_look_at(int y, int x);
-extern void do_cmd_unified_look(void);
-extern void do_cmd_locate(void);
-extern void do_cmd_query_symbol(void);
-extern void do_cmd_view_monsters(void);
-extern void do_cmd_view_objects(void);
-extern void highlight_entity_on_map(int y, int x, bool highlight);
-extern void highlight_entity_on_map_type(int y, int x, bool highlight, int entity_type);
 extern bool ang_sort_comp_hook(const void* u, const void* v, int a, int b);
 extern void ang_sort_swap_hook(void* u, void* v, int a, int b);
 extern void py_steal(int y, int x);
 
 /* cmd4.c */
-extern void do_cmd_redraw(void);
 extern void options_birth_menu(bool adult);
-extern void do_cmd_character_sheet(void);
 extern void do_cmd_change_song(void);
 extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
 extern void do_cmd_smithing_screen(void);
-extern void do_cmd_main_menu(void);
-extern void do_cmd_message_one(void);
-extern void do_cmd_messages(void);
 extern void do_cmd_options_aux(int page, cptr info);
-extern void do_cmd_options(void);
 extern void do_cmd_pane_settings(void);
 extern void do_cmd_macros(void);
 extern void do_cmd_keybinds(void);
@@ -395,11 +312,6 @@ extern void do_cmd_knowledge_monsters(void);
 extern bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 extern void do_cmd_knowledge_objects(void);
 extern void do_cmd_knowledge_kills(void);
-#define KNOWLEDGE_PAGE_ARTEFACTS 0
-#define KNOWLEDGE_PAGE_OBJECTS 1
-#define KNOWLEDGE_PAGE_MONSTERS 2
-#define KNOWLEDGE_PAGE_CURSES 3
-extern void do_cmd_knowledge_browser_page(int page);
 extern void ghost_challenge(void);
 extern void desc_art_fake(int a_idx);
 extern void apply_magic_fake(object_type* o_ptr);
@@ -407,14 +319,7 @@ extern void do_cmd_knowledge(void);
 extern void add_random_curse(object_type *o_ptr);
 
 /* cmd5.c */
-extern bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
-    cptr prompt, bool overlay_dungeon);
-
 /* cmd6.c */
-extern void do_cmd_eat_food(object_type* default_o_ptr, int default_item);
-extern void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item);
-extern void do_cmd_use_gem(object_type* default_o_ptr, int default_item);
-extern void do_cmd_activate_staff(object_type* default_o_ptr, int default_item);
 extern void do_cmd_play_instrument(
     object_type* default_o_ptr, int default_item);
 extern void do_cmd_activate(void);
@@ -423,13 +328,10 @@ extern void do_cmd_activate(void);
 extern bool can_be_pseudo_ided(const object_type* o_ptr);
 extern int value_check_aux1(const object_type* o_ptr);
 extern void land(void);
-extern void pseudo_id(object_type* o_ptr);
 extern void pseudo_id_everything(void);
-extern void id_known_specials(void);
 extern void id_everything(void);
 extern PlayResult play_game(void);
 extern void death_spectator_view(void);
-extern bool death_spectator_active(void);
 extern void reset_dungeon_state(void);
 
 /* files.c */
@@ -459,12 +361,9 @@ extern bool load_meta(void);
 /* monster1.c */
 extern void describe_monster(
     int r_idx, bool spoilers, const monster_type* m_ptr);
-extern bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
-    const monster_type* m_ptr, cptr prompt, bool overlay_dungeon);
 
 /* monster2.c */
 extern s16b poly_r_idx(const monster_type* m_ptr);
-extern void delete_monster_idx(int i);
 extern void delete_monster(int y, int x);
 extern void compact_monsters(int size);
 extern void wipe_mon_list(void);
@@ -472,10 +371,8 @@ extern s16b mon_pop(void);
 extern errr get_mon_num_prep(void);
 extern s16b get_mon_num(
     int level, bool special, bool allow_non_smart, bool vault);
-extern bool build_monlist_subwindow_ui_scene(app_ui_scene* scene);
 extern void lore_probe_aux(int r_idx);
 extern void lore_treasure(int m_idx, int num_item);
-extern int monster_stat(monster_type* m_ptr, int stat_type);
 extern void listen_hint_new_player_turn(void);
 extern bool listen_hint_overlay(int m_idx, byte* a, char* c);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);
@@ -497,8 +394,6 @@ extern void monster_special_vault_debug_context(
 extern void log_live_special_vault_only_monsters(const char* reason);
 extern bool monster_special_vault_selection_allowed(void);
 extern bool monster_special_vault_only_allowed_at(int y, int x);
-extern bool place_monster_one(
-    int y, int x, int r_idx, bool slp, bool ingnore_depth, monster_type* m_ptr);
 extern bool place_monster_aux(int y, int x, int r_idx, bool slp, bool grp);
 extern bool place_monster(int y, int x, bool slp, bool grp, bool vault);
 extern bool quest_monster_spawn_okay(int r_idx);
@@ -525,17 +420,7 @@ extern bool elemental_attack_destroys_object(int attack_type,
     const object_type* o_ptr);
 extern void sound_dam(int raw_dam, int min_raw, int max_raw, int hp_dam);
 
-extern bool make_object(
-    object_type* j_ptr, drop_quality quality, int objecttype);
-extern bool make_object_with_profile(object_type* j_ptr, drop_quality quality,
-    int objecttype, const drop_profile* profile);
-extern bool make_guaranteed_artefact(
-    object_type* j_ptr, drop_quality quality, int objecttype);
-extern bool make_guaranteed_artefact_with_profile(object_type* j_ptr,
-    drop_quality quality, int objecttype, const drop_profile* profile);
 extern bool prep_object_theme(int themetype);
-extern s16b floor_carry(int y, int x, object_type* j_ptr);
-extern s16b drop_near(object_type* j_ptr, int chance, int y, int x);
 extern void acquirement(int y1, int x1, int num, drop_quality quality);
 extern void place_object(int y, int x, drop_quality quality, int droptype,
     bool allow_artefacts);
@@ -558,12 +443,8 @@ extern bool inven_carry_limit_failed(void);
 extern cptr inven_carry_limit_label(void);
 extern int inven_carry_limit_value(void);
 extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
-extern int object_stack_limit(const object_type* o_ptr);
 extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
 extern s16b inven_takeoff(int item, int amt);
-extern void inven_drop(int item, int amt);
-extern void combine_pack(void);
-extern void reorder_pack(bool display_message);
 extern void steal_object_from_monster(int y, int x);
 
 /* randart.c */
@@ -586,15 +467,10 @@ extern int do_cmd_autoinscribe_item(s16b k_idx);
 extern void do_cmd_squelch_autoinsc(void);
 extern int squelch_itemp(object_type* o_ptr, byte feeling, bool fullid);
 extern int do_squelch_item(int squelch, int item, object_type* o_ptr);
-extern void rearrange_stack(int y, int x);
 extern void do_squelch_pile(int y, int x);
 extern int get_autoinscription_index(s16b k_idx);
-extern void obliterate_autoinscription(s16b kind);
-extern void autoinscribe_ground(void);
-extern void autoinscribe_pack(void);
 extern int remove_autoinscription(s16b kind);
 extern int add_autoinscription(s16b kind, cptr inscription);
-extern int apply_autoinscription(object_type* o_ptr);
 extern char* squelch_to_label(int squelch);
 
 /*use-obj.c*/
@@ -615,46 +491,30 @@ extern errr macro_add(cptr pat, cptr act);
 extern errr macro_init(void);
 extern errr macro_free(void);
 extern errr macro_trigger_free(void);
-extern void input_clear_pending(void);
-extern errr input_byte_unshift(int key);
 extern errr input_byte_enqueue(int key);
 extern void input_byte_queue_clear(void);
 extern bool input_byte_queue_pending(void);
-extern bool inkey_cursor_hidden(void);
-extern void inkey_set_cursor_hidden(bool hidden);
 extern bool inkey_can_consume_immediately(void);
 extern bool input_submit_movement_command(
     const app_movement_command* command);
 extern void input_clear_movement_commands(void);
 extern bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
     app_movement_command* out_command, char* out_ch);
-extern s16b quark_add(cptr str);
 extern bool parse_u64b_hex(const char* text, u64b* out);
-extern s16b message_num(void);
-extern cptr message_str(s16b age);
 extern u16b message_type(s16b age);
-extern byte message_color(s16b age);
 extern errr message_color_define(u16b type, byte color);
 extern void message_add(cptr str, u16b type);
-extern bool build_message_subwindow_ui_scene(app_ui_scene* scene);
 extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
-extern void message_topline_override(byte color, cptr text);
 extern void message_topline_clear_override(void);
 extern errr messages_init(void);
 extern void messages_free(void);
 extern void move_cursor(int row, int col);
-extern void msg_print(cptr msg);
-extern void msg_format(cptr fmt, ...);
 extern void msg_debug(cptr fmt, ...);
 extern void message(u16b message_type, s16b extra, cptr message);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
 extern void text_out_to_file(byte attr, cptr str);
-extern bool askfor_aux(char* buf, size_t len);
-extern bool askfor_name(char* buf, size_t len);
-extern s16b get_quantity(cptr prompt, int max);
 extern int get_menu_choice(s16b max, char* prompt);
-extern bool get_com(cptr prompt, char* command);
 extern bool preconfirm_enter_morgoth_hall(void);
 extern void pause_line(int row);
 extern int int_exp(int base, int power);
@@ -683,11 +543,6 @@ extern int editing_buffer_put_str(
 extern cptr get_ext_color_name(byte ext_color);
 
 /* xtra1.c */
-extern void cnv_stat(int val, char* out_val);
-extern int health_level(int current, int max);
-extern bool get_alertness_text(
-    monster_type* m_ptr, int text_size, char* text, int* color);
-extern byte health_attr(int current, int max);
 extern byte object_display_color(const object_type* o_ptr, byte base_color);
 
 /* xtra2.c */
@@ -730,8 +585,6 @@ extern void falling_damage(bool stun);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
 extern void anger_morgoth(int level);
-extern void ang_sort_aux(void* u, void* v, int p, int q);
-extern void ang_sort(void* u, void* v, int n);
 /*
  * Hack -- conditional (or "bizarre") externs
  */
@@ -745,9 +598,6 @@ extern void user_name(char* buf, size_t len, int id);
 #endif /* SET_UID */
 
 #ifdef ALLOW_REPEAT
-extern void repeat_push(int what);
-extern bool repeat_pull(int* what);
-extern void repeat_clear(void);
 extern void repeat_check(void);
 #endif /* ALLOW_REPEAT */
 
