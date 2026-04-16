@@ -1,7 +1,6 @@
 /* File: init-parse-vault.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
 

@@ -5,7 +5,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/io_sdl.h"
 #include "init.h"
 #include "init/init-parse-internal.h"

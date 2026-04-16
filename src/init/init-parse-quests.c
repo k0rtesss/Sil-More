@@ -1,7 +1,6 @@
 /* File: init-parse-quests.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
 #include "log/log.h"

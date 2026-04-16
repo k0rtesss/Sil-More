@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "app/app-session.h"
 #include "platform-frame.h"
 #include "platform-input.h"

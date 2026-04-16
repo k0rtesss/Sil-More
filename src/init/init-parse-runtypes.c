@@ -1,7 +1,6 @@
 /* File: init-parse-runtypes.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "metarun.h"
 

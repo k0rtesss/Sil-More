@@ -1,7 +1,6 @@
 /* File: init-parse-ability.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
 

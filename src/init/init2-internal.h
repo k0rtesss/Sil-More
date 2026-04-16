@@ -11,6 +11,7 @@ errr free_info(header* head);
 errr init_z_info(void);
 errr init_f_info(void);
 errr init_style_info(void);
+void styles_reload_messages_from_text(void);
 errr init_partition_info(void);
 errr init_k_info(void);
 errr init_b_info(void);

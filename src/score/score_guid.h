@@ -6,6 +6,7 @@
 guid64 score_guid_from_u64(u64b value);
 guid64 score_guid_from_string(const char* text, u32b salt);
 guid64 score_guid_random(void);
+bool parse_u64b_hex(const char* text, u64b* out);
 bool score_guid_is_zero(const guid64* guid);
 void score_guid_clear(guid64* guid);
 

@@ -7,7 +7,6 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
-#include "externs.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
 #include "log/log.h"

@@ -42,4 +42,8 @@ static inline errr ang_file_puts(ang_file* stream, cptr buf, size_t n)
 #define ang_file_printf ang_file_printf_compat
 #define ang_file_write_u8 ang_file_write_u8_compat
 
+errr check_modification_date_sdl(cptr raw_path, cptr txt_path);
+void safe_setuid_drop(void);
+void safe_setuid_grab(void);
+
 #endif /* INCLUDED_FS_FILE_H */

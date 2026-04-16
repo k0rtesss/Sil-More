@@ -1,7 +1,6 @@
 /* File: init-style.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "fs/path.h"
 #include "init.h"

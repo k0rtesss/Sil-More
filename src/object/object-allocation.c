@@ -1,7 +1,6 @@
 /* File: object-allocation.c */
 
 #include "angband.h"
-#include "externs.h"
 
 s16b o_max = 1;
 s16b o_cnt = 0;

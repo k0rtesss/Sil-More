@@ -1,7 +1,6 @@
 /* File: object-make.c */
 
 #include "angband.h"
-#include "externs.h"
 
 static const u32b pval_stat_flag_pos[A_MAX] = {
     [A_STR] = TR1_STR,

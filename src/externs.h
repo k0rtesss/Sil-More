@@ -153,7 +153,6 @@ extern void clear_active_narrative_banner(void);
 extern bool dungeon_active_narrative_banner_animating(u64b now_ms);
 extern bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
     size_t text_size, u64b* started_ms, u32b* hold_ms);
-extern void styles_reload_messages_from_text(void);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);
 /* Persisted door-style variant choices for consistency across save/load */
@@ -368,13 +367,11 @@ extern bool input_submit_movement_command(
 extern void input_clear_movement_commands(void);
 extern bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
     app_movement_command* out_command, char* out_ch);
-extern bool parse_u64b_hex(const char* text, u64b* out);
 extern u16b message_type(s16b age);
 extern errr message_color_define(u16b type, byte color);
 extern void message_add(cptr str, u16b type);
 extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
-extern void message_topline_clear_override(void);
 extern errr messages_init(void);
 extern void messages_free(void);
 extern void move_cursor(int row, int col);
@@ -384,8 +381,6 @@ extern void text_out_to_file(byte attr, cptr str);
 extern int get_menu_choice(s16b max, char* prompt);
 extern void pause_line(int row);
 extern int int_exp(int base, int power);
-extern int color_char_to_attr(char c);
-extern int color_text_to_attr(cptr name);
 
 #ifdef SUPPORT_GAMMA
 extern void build_gamma_table(int gamma);

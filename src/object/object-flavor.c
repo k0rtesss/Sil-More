@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "object/object-flavor.h"
 
 static void flavor_assign_fixed(void)

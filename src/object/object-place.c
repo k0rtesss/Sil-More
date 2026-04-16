@@ -1,7 +1,6 @@
 /* File: object-place.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "app/app-session.h"
 
 /*

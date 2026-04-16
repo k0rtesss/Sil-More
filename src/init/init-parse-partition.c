@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "drop_system.h"
-#include "externs.h"
 #include "init.h"
 
 #ifdef ALLOW_TEMPLATES

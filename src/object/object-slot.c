@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "object/object-slot.h"
 #include "supplies.h"
 

@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "object/object-flags.h"
 #include "object/object-internal.h"
 

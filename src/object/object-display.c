@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "cJSON.h"
 #include "fs/file.h"
 #include "fs/path.h"

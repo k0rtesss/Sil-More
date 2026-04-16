@@ -34,6 +34,7 @@ s16b message_num(void);
 cptr message_str(s16b age);
 byte message_color(s16b age);
 void message_topline_override(byte color, cptr text);
+void message_topline_clear_override(void);
 bool build_message_subwindow_ui_scene(app_ui_scene* scene);
 bool askfor_aux(char* buf, size_t len);
 bool askfor_name(char* buf, size_t len);
@@ -44,5 +45,6 @@ void text_out_c(byte a, cptr str);
 
 bool is_a_vowel(int ch);
 int damroll(int num, int sides);
+bool parse_u64b_hex(const char* text, u64b* out);
 
 #endif /* INCLUDED_SUPPORT_UTIL_H */
