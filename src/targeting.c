@@ -16,7 +16,6 @@
 #include "angband.h"
 #include "app/app-command.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-story-font.h"
 #include "ui/ui-information-scene.h"

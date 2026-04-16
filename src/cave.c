@@ -45,6 +45,16 @@ byte update_center_y[MAX_FLOWS];
 byte update_center_x[MAX_FLOWS];
 s16b wandering_pause[MAX_FLOWS];
 
+bool player_suppresses_unseen_grid_info(void)
+{
+    return (!p_ptr->is_dead) && (p_ptr->rage || g_labyrinth_view_active);
+}
+
+bool grid_info_is_available(int y, int x)
+{
+    return !player_suppresses_unseen_grid_info() || player_can_see_bold(y, x);
+}
+
 /* Encoded color range that indicates an absolute style index per cell.
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals

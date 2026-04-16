@@ -12,7 +12,6 @@
 #include "app/app-ui.h"
 #include "ui-help.h"
 #include "ui-information-scene.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-input.h"

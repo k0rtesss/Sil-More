@@ -97,22 +97,8 @@ extern void (*object_info_out_flags)(
 extern autoinscription* inscriptions;
 extern u16b inscriptionsCount;
 
-/*
- * Rage and labyrinth partitions both suppress remembered-grid information.
- * When inactive, remembered information remains available to look/target UI.
- */
-#ifndef GRID_INFO_VISIBILITY_HELPERS_DEFINED
-#define GRID_INFO_VISIBILITY_HELPERS_DEFINED
-static inline bool player_suppresses_unseen_grid_info(void)
-{
-    return (!p_ptr->is_dead) && (p_ptr->rage || g_labyrinth_view_active);
-}
-
-static inline bool grid_info_is_available(int y, int x)
-{
-    return !player_suppresses_unseen_grid_info() || player_can_see_bold(y, x);
-}
-#endif
+bool player_suppresses_unseen_grid_info(void);
+bool grid_info_is_available(int y, int x);
 
 #ifndef GENERATION_DEPTH_HELPERS_DEFINED
 #define GENERATION_DEPTH_HELPERS_DEFINED
@@ -139,7 +125,6 @@ static inline int player_generation_depth(void)
 
 /* birth.c */
 extern NavResult player_birth(void);
-extern NavResult gain_skills(void);
 extern NavResult character_creation(void);
 extern NavResult blitz_character_creation(void);
 void player_wipe(void);
@@ -391,7 +376,6 @@ extern void do_cmd_character_sheet(void);
 extern void do_cmd_change_song(void);
 extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
-extern void do_cmd_ability_screen(void);
 extern void do_cmd_smithing_screen(void);
 extern void do_cmd_main_menu(void);
 extern void do_cmd_message_one(void);
@@ -405,7 +389,6 @@ extern void do_cmd_visuals(void);
 extern void do_cmd_colors(void);
 extern void do_cmd_version(void);
 extern void do_cmd_feeling(void);
-extern void do_cmd_knowledge_notes(void);
 extern void do_cmd_knowledge_oaths(void);
 extern void do_cmd_knowledge_artefacts(void);
 extern void do_cmd_knowledge_monsters(void);
@@ -452,7 +435,6 @@ extern void reset_dungeon_state(void);
 /* files.c */
 extern void safe_setuid_drop(void);
 extern void safe_setuid_grab(void);
-extern errr file_character(cptr name, bool full);
 extern void do_cmd_escape(int);
 extern void do_cmd_suicide(void);
 extern int meta_write(const metarun*);
@@ -580,7 +562,6 @@ extern int object_stack_limit(const object_type* o_ptr);
 extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
 extern s16b inven_takeoff(int item, int amt);
 extern void inven_drop(int item, int amt);
-extern void inven_enforce_current_pack_limits(void);
 extern void combine_pack(void);
 extern void reorder_pack(bool display_message);
 extern void steal_object_from_monster(int y, int x);
@@ -668,16 +649,10 @@ extern void msg_format(cptr fmt, ...);
 extern void msg_debug(cptr fmt, ...);
 extern void message(u16b message_type, s16b extra, cptr message);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
-extern void message_flush(void);
 extern void text_out_to_file(byte attr, cptr str);
-extern bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
-    bool allow_randomize);
 extern bool askfor_aux(char* buf, size_t len);
 extern bool askfor_name(char* buf, size_t len);
 extern s16b get_quantity(cptr prompt, int max);
-extern int get_check_other(cptr prompt, char other);
-extern bool get_check(cptr prompt);
-extern bool get_check_oath_multiline(cptr prompt);
 extern int get_menu_choice(s16b max, char* prompt);
 extern bool get_com(cptr prompt, char* command);
 extern bool preconfirm_enter_morgoth_hall(void);

@@ -8,7 +8,6 @@
  * are included in all such copies.  Other copyrights may also apply.
  */
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "ui-look-sidebar.h"
 #include "ui-status.h"

@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 
 #include "object/object-ui-display.h"
 #include "platform-frame.h"

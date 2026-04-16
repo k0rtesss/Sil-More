@@ -1,7 +1,6 @@
 /* File: ui/ui-death.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "blitz.h"
 #include "log/log.h"

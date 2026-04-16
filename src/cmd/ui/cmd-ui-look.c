@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-frame.h"
 #include "platform-input.h"

@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "cmd-ui.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"

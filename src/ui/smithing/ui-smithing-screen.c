@@ -14,7 +14,6 @@
 #include "platform-frame.h"
 #include "ui/ui-information-scene.h"
 #include "ui/smithing/ui-smithing-internal.h"
-#include "externs.h"
 #include "log/log.h"
 
 static bool smith_ui_snapshot_active(void);

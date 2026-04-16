@@ -8,6 +8,4 @@
  * translation units stop including externs.h directly while the narrower
  * subsystem headers are still being carved out.
  */
-#include "externs.h"
-
 #endif /* INCLUDED_CMD_UI_SETTINGS_INTERNAL_H */

@@ -20,7 +20,6 @@
 #include "platform-audio.h"
 
 extern struct sound_config g_sound_config;
-#include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"

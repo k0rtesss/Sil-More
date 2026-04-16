@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 
 static bool object_recall_prepare_fake_kind(int k_idx, object_type* o_ptr)
 {

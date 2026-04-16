@@ -6,6 +6,7 @@
 extern bool save_game_quietly;
 
 bool death_processing_in_progress(void);
+bool death_spectator_active(void);
 
 void do_cmd_save_game(void);
 void close_game(void);

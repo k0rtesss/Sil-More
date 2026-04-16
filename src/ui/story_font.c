@@ -1,7 +1,6 @@
 /* ui/story_font.c - Story font rendering helpers */
 
 #include "../angband.h"
-#include "../externs.h"
 #include "../platform-story-font.h"
 #include "story_font.h"
 

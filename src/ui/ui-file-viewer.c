@@ -11,7 +11,6 @@
 #include "angband.h"
 #include "ui-file-viewer.h"
 #include "ui-information-scene.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "log/log.h"
 #include <ctype.h>

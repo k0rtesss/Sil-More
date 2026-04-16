@@ -1,7 +1,6 @@
 /* File: ui/ui-story.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "log/log.h"
 #include "app/app-ui.h"

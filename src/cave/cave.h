@@ -12,9 +12,14 @@
 
 struct app_ui_scene;
 
+bool player_suppresses_unseen_grid_info(void);
+bool grid_info_is_available(int y, int x);
+
 int distance(int y1, int x1, int y2, int x2);
 int distance_squared(int y1, int x1, int y2, int x2);
 bool los(int y1, int x1, int y2, int x2);
+int project_path(
+    u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 void random_unseen_floor(int* ry, int* rx);
 bool seen_by_keen_senses(int y, int x);
 bool cave_valid_bold(int y, int x);
@@ -79,6 +84,9 @@ void styles_set_loaded_level_primary(int sidx);
 int styles_get_choice_capacity(void);
 void styles_copy_level_door_choices(byte* out_buf, int max_n);
 void styles_load_level_door_choices(const byte* in_buf, int n);
+void health_track(int m_idx);
+void monster_race_track(int r_idx);
+void object_kind_track(int k_idx);
 void disturb(int stop_stealth, int unused_flag);
 
 #endif /* INCLUDED_CAVE_CAVE_H */

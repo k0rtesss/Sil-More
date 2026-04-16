@@ -1,7 +1,6 @@
 #include "angband.h"
 
 #include "ui-information-scene.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-frame.h"
 

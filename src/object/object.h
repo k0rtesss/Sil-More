@@ -64,8 +64,14 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x);
 void reveal_trap(int y, int x);
 void place_secret_door(int y, int x);
 void place_closed_door(int y, int x);
+void inven_enforce_current_pack_limits(void);
+void combine_pack(void);
+void autoinscribe_ground(void);
+void autoinscribe_pack(void);
 void inven_drop(int item, int amt);
 int object_stack_limit(const object_type* o_ptr);
+bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
+    cptr prompt, bool overlay_dungeon);
 void reorder_pack(bool display_message);
 int apply_autoinscription(object_type* o_ptr);
 void rearrange_stack(int y, int x);

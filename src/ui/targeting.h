@@ -13,6 +13,8 @@ bool modify_panel(int wy, int wx);
 bool adjust_panel(int y, int x);
 bool change_panel(int dir);
 void verify_panel(void);
+void ang_sort_aux(void* u, void* v, int p, int q);
+void ang_sort(void* u, void* v, int n);
 int motion_dir(int y1, int x1, int y2, int x2);
 int target_dir(char ch);
 bool target_able(int m_idx);

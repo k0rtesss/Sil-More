@@ -19,4 +19,6 @@
 #include "player-xp.h"
 #include "weapon_stats.h"
 
+NavResult gain_skills(void);
+
 #endif /* INCLUDED_PLAYER_PLAYER_H */

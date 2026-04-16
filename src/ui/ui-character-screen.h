@@ -16,5 +16,6 @@ enum {
 bool build_player_subwindow_ui_scene(app_ui_scene* scene);
 bool build_character_sheet_ui_scene(app_ui_scene* scene, cptr prompt_text);
 void display_character_tutorial(void);
+errr file_character(cptr name, bool full);
 
 #endif /* INCLUDED_UI_CHARACTER_SCREEN_H */
