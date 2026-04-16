@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 4 modernization audit baseline after parallel folder normalization, retired root-note cleanup, and tightened folder ownership rules."
+    "notes": "Wave 4 modernization audit baseline after the third folder-normalization batch, including the game-tables move and explicit remaining root holdouts."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -28,24 +28,17 @@
       "src/sound-config.h"
     ],
     "root_src_c_allowlist": [
-      "src/birth.c",
       "src/cJSON.c",
-      "src/cmd4.c",
       "src/dungeon.c",
       "src/files.c",
       "src/init2.c",
       "src/item_set.c",
-      "src/load.c",
       "src/main-sdl.c",
       "src/main.c",
-      "src/monster-death.c",
-      "src/monster1.c",
-      "src/monster2.c",
       "src/pane.c",
       "src/platform-frame.c",
       "src/platform-signals.c",
       "src/platform-time.c",
-      "src/save.c",
       "src/sdl-config.c",
       "src/sdl-layout.c",
       "src/sdl-render.c",
@@ -61,7 +54,6 @@
       "src/sound-config.c",
       "src/squelch.c",
       "src/supplies.c",
-      "src/tables.c",
       "src/targeting.c",
       "src/variable.c",
       "src/wizard1.c",
@@ -70,29 +62,6 @@
     "source_files_missing_from_cmake_allowlist": [],
     "folder_rule_allowlist": [],
     "folder_rules": [
-      {
-        "key": "cave_family",
-        "match_globs": [
-          "src/**/cave*.c",
-          "src/**/cave*.h"
-        ],
-        "allowed_globs": [
-          "src/cave/*.c",
-          "src/cave/*.h"
-        ]
-      },
-      {
-        "key": "metarun_family",
-        "match_globs": [
-          "src/**/metarun*.c",
-          "src/**/metarun*.h"
-        ],
-        "allowed_globs": [
-          "src/metarun.h",
-          "src/metarun/*.c",
-          "src/metarun/*.h"
-        ]
-      },
       {
         "key": "settings_family",
         "match_globs": [
@@ -382,6 +351,117 @@
           "src/object/object-randart.c",
           "src/object/object-randart.h"
         ]
+      },
+      {
+        "key": "cave_family",
+        "match_globs": [
+          "src/**/cave*.c",
+          "src/**/cave*.h"
+        ],
+        "allowed_globs": [
+          "src/cave/*.c",
+          "src/cave/*.h"
+        ]
+      },
+      {
+        "key": "metarun_family",
+        "match_globs": [
+          "src/**/metarun*.c",
+          "src/**/metarun*.h"
+        ],
+        "allowed_globs": [
+          "src/metarun.h",
+          "src/metarun/*.c",
+          "src/metarun/*.h"
+        ]
+      },
+      {
+        "key": "birth_family",
+        "match_globs": [
+          "src/**/birth.c",
+          "src/**/birth.h",
+          "src/**/app-scene-birth.c",
+          "src/**/app-scene-birth.h"
+        ],
+        "allowed_globs": [
+          "src/app/app-scene-birth.c",
+          "src/app/app-scene-birth.h"
+        ]
+      },
+      {
+        "key": "cmd_ui_info_family",
+        "match_globs": [
+          "src/**/cmd4.c",
+          "src/**/cmd-ui-info.c",
+          "src/**/cmd-ui-info.h"
+        ],
+        "allowed_globs": [
+          "src/cmd/ui/cmd-ui-info.c",
+          "src/cmd/ui/cmd-ui-info.h"
+        ]
+      },
+      {
+        "key": "load_family",
+        "match_globs": [
+          "src/**/load.c",
+          "src/**/load.h"
+        ],
+        "allowed_globs": [
+          "src/fs/load.c",
+          "src/fs/load.h"
+        ]
+      },
+      {
+        "key": "save_family",
+        "match_globs": [
+          "src/**/save.c",
+          "src/**/save.h"
+        ],
+        "allowed_globs": [
+          "src/fs/save.c",
+          "src/fs/save.h"
+        ]
+      },
+      {
+        "key": "monster_death_family",
+        "match_globs": [
+          "src/**/monster-death.c",
+          "src/**/monster-death.h"
+        ],
+        "allowed_globs": [
+          "src/monster/monster-death.c",
+          "src/monster/monster-death.h"
+        ]
+      },
+      {
+        "key": "monster1_family",
+        "match_globs": [
+          "src/**/monster1.c"
+        ],
+        "allowed_globs": [
+          "src/monster/monster1.c"
+        ]
+      },
+      {
+        "key": "monster2_family",
+        "match_globs": [
+          "src/**/monster2.c"
+        ],
+        "allowed_globs": [
+          "src/monster/monster2.c"
+        ]
+      },
+      {
+        "key": "game_tables_family",
+        "match_globs": [
+          "src/**/tables.c",
+          "src/**/game-tables.c",
+          "src/**/game-tables.h"
+        ],
+        "allowed_globs": [
+          "src/support/game-tables.c",
+          "src/support/game-tables.h"
+        ]
       }
     ]
   },
@@ -451,24 +531,24 @@
           "value": 25,
           "notes": "Tracks the direct include fan-out of the compatibility header.",
           "file_matches": {
-            "src/birth.c": 1,
+            "src/app/app-scene-birth.c": 1,
             "src/cave/cave.c": 1,
-            "src/cmd4.c": 1,
+            "src/cmd/ui/cmd-ui-info.c": 1,
             "src/dungeon.c": 1,
             "src/files.c": 1,
+            "src/fs/load.c": 1,
+            "src/fs/save.c": 1,
             "src/level-generation/level-generation-connectivity.c": 1,
             "src/level-generation/level-generation-rooms.c": 1,
-            "src/load.c": 1,
             "src/melee/melee-attack.c": 1,
             "src/melee/melee-movement.c": 1,
             "src/melee/melee-process.c": 1,
             "src/metarun/metarun.c": 1,
-            "src/monster1.c": 1,
-            "src/monster2.c": 1,
+            "src/monster/monster1.c": 1,
+            "src/monster/monster2.c": 1,
             "src/object/object-randart.c": 1,
             "src/object/object-use.c": 1,
             "src/runtime/runtime-game.c": 1,
-            "src/save.c": 1,
             "src/score/score_ui.c": 1,
             "src/sdl-main-internal.h": 1,
             "src/sdl-sound.c": 1,
@@ -489,28 +569,21 @@
         },
         "root_src_c_files": {
           "label": "root-level src/*.c files",
-          "files": 38,
-          "value": 38,
+          "files": 30,
+          "value": 30,
           "notes": "Tracks root implementation file count to ensure the root source bucket stops growing.",
           "file_matches": {
-            "src/birth.c": 1,
             "src/cJSON.c": 1,
-            "src/cmd4.c": 1,
             "src/dungeon.c": 1,
             "src/files.c": 1,
             "src/init2.c": 1,
             "src/item_set.c": 1,
-            "src/load.c": 1,
             "src/main-sdl.c": 1,
             "src/main.c": 1,
-            "src/monster-death.c": 1,
-            "src/monster1.c": 1,
-            "src/monster2.c": 1,
             "src/pane.c": 1,
             "src/platform-frame.c": 1,
             "src/platform-signals.c": 1,
             "src/platform-time.c": 1,
-            "src/save.c": 1,
             "src/sdl-config.c": 1,
             "src/sdl-layout.c": 1,
             "src/sdl-render.c": 1,
@@ -526,7 +599,6 @@
             "src/sound-config.c": 1,
             "src/squelch.c": 1,
             "src/supplies.c": 1,
-            "src/tables.c": 1,
             "src/targeting.c": 1,
             "src/variable.c": 1,
             "src/wizard1.c": 1,

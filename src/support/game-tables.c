@@ -1,4 +1,4 @@
-/* File: tables.c */
+/* File: support/game-tables.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke

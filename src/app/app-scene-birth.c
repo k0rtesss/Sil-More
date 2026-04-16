@@ -1,4 +1,4 @@
-/* File: birth.c */
+/* File: app-scene-birth.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke

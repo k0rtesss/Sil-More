@@ -1,4 +1,4 @@
-/* File: monster2.c */
+/* File: monster/monster2.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
@@ -14,6 +14,7 @@
 #include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "monster/monster.h"
 
 static void listen_hint_handle_monster_removed(int m_idx);
 static void listen_hint_set(int m_idx);

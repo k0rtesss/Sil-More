@@ -20,6 +20,8 @@ int cmd_ui_knowledge_last_page(void);
 void controller_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen);
 void do_cmd_redraw(void);
+void do_cmd_version(void);
+void do_cmd_feeling(void);
 void do_cmd_character_sheet(void);
 void do_cmd_main_menu(void);
 void do_cmd_message_one(void);
@@ -40,6 +42,7 @@ void do_cmd_ability_screen(void);
 void do_cmd_note(char* note, int what_depth);
 void do_cmd_knowledge_notes(void);
 void do_cmd_knowledge_browser_page(int page);
+void ghost_challenge(void);
 void desc_art_fake(int a_idx);
 void apply_magic_fake(object_type* o_ptr);
 void add_random_curse(object_type* o_ptr);

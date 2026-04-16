@@ -1,4 +1,4 @@
-/* File: monster-death.c */
+/* File: monster/monster-death.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
@@ -17,6 +17,7 @@
 #include "app/app-session.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "monster/monster-death.h"
 #include "player/killer.h"
 #include "ui/ui-death.h"
 

@@ -137,7 +137,6 @@ add_subdirectory(src/log)
 # Transitional subsystem groupings for the unstable refactor port.
 # Keep the compiled source set unchanged until each split lands.
 set(SIL_MORE_SOURCES_CORE
-    src/birth.c
     src/cave/cave-geometry.c
     src/cave/cave.c
     src/cave/cave-map-ui.c
@@ -146,14 +145,12 @@ set(SIL_MORE_SOURCES_CORE
     src/item_set.c
     src/squelch.c
     src/supplies.c
-    src/tables.c
     src/variable.c
     src/wizard1.c
     src/wizard2.c
 )
 
 set(SIL_MORE_SOURCES_CMD
-    src/cmd4.c
     src/cmd/combat/cmd-combat-rolls.c
     src/cmd/combat/cmd-combat.c
     src/cmd/combat/cmd-ranged.c
@@ -170,6 +167,7 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/movement/cmd-travel.c
     src/cmd/ui/cmd-ui-abilities.c
     src/cmd/ui/cmd-ui-character.c
+    src/cmd/ui/cmd-ui-info.c
     src/cmd/ui/cmd-ui-knowledge.c
     src/cmd/ui/cmd-ui-look.c
     src/cmd/ui/cmd-ui-main-menu.c
@@ -265,9 +263,9 @@ set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
     src/melee/melee-movement.c
     src/melee/melee-process.c
     src/melee/melee-util.c
-    src/monster-death.c
-    src/monster1.c
-    src/monster2.c
+    src/monster/monster-death.c
+    src/monster/monster1.c
+    src/monster/monster2.c
 )
 
 set(SIL_MORE_SOURCES_SPELL
@@ -322,9 +320,7 @@ set(SIL_MORE_SOURCES_SMITHING
 )
 
 set(SIL_MORE_SOURCES_SAVE_AND_META
-    src/load.c
     src/metarun/metarun.c
-    src/save.c
 )
 
 set(SIL_MORE_SOURCES_SCORE
@@ -338,7 +334,9 @@ set(SIL_MORE_SOURCES_SCORE
 )
 
 set(SIL_MORE_SOURCES_FS
+    src/fs/load.c
     src/fs/resource.c
+    src/fs/save.c
     src/fs/savefile-name.c
 )
 
@@ -352,6 +350,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-command.c
     src/app/app-movement.c
     src/app/app-interaction.c
+    src/app/app-scene-birth.c
     src/app/app-ui.c
     src/app/app-events.c
     src/app/app-host.c
@@ -415,6 +414,7 @@ set(SIL_MORE_SOURCES_LOG
 
 set(SIL_MORE_SOURCES_SUPPORT
     src/support/angle.c
+    src/support/game-tables.c
     src/support/input.c
     src/support/message.c
     src/support/prompt.c
@@ -521,8 +521,8 @@ if (SIL_STRICT_WARNINGS)
   add_library(sil-phase01-strict-gate OBJECT
     src/drop/drop-system-difficulty.c
     src/files.c
+    src/fs/load.c
     src/init2.c
-    src/load.c
     src/metarun/metarun.c
     src/support/reliability-checks.c
     src/runtime/runtime-game.c

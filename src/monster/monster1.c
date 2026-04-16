@@ -1,4 +1,4 @@
-/* File: monster1.c */
+/* File: monster/monster1.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
+#include "monster/monster.h"
 
 s16b num_repro;
 s16b monster_level;

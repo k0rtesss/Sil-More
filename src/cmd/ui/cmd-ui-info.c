@@ -1,4 +1,4 @@
-/* File: cmd4.c */
+/* File: cmd-ui-info.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
@@ -13,6 +13,7 @@
 #include "platform-frame.h"
 #include "platform-input.h"
 #include "externs.h"
+#include "cmd/ui/cmd-ui.h"
 
 #include <ctype.h>
 
