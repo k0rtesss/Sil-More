@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "app/app-command.h"
-#include "externs.h"
+#include "cmd/world/cmd-world.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "object/object-ui-enhanced.h"
@@ -23,7 +23,9 @@
 #define MIN_DEPTH_BASE_INCREMENT_DIVISOR 850
 #define MIN_DEPTH_INCREMENT_PER_BONUS 3
 
-bool do_cmd_walk_test(int y, int x)
+static void move_player(int dir);
+
+static bool do_cmd_walk_test(int y, int x)
 {
     /* Hack -- walking obtains knowledge XXX XXX */
     if (!(cave_info[y][x] & (CAVE_MARK)))
@@ -279,7 +281,7 @@ void do_cmd_rest(void)
  * Note that artefacts never break, see the "drop_near()" function.
  */
 
-void move_player(int dir)
+static void move_player(int dir)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;

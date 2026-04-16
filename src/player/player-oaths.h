@@ -18,5 +18,7 @@ char* oath_description(int oath_id);
 char* oath_pledge(int oath_id);
 char* oath_forbidden(int oath_id);
 char* oath_reward_text(int oath_id);
+bool smith_oath_forbids_object(const object_type* o_ptr);
+bool smith_oath_confirm_break(void);
 
 #endif /* INCLUDED_PLAYER_OATHS_H */

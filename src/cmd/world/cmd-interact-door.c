@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "app/app-command.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "platform-story-font.h"
@@ -409,4 +408,3 @@ void do_cmd_close(void)
     if (!more)
         disturb(0, 0);
 }
-

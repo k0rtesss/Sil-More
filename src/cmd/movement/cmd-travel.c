@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "object/object-ui-enhanced.h"
@@ -200,7 +199,7 @@ void note_lost_greater_vault(void)
  * It gets more likely the more stairs you have recently taken.
  * It is designed to stop you stair-scumming.
  */
-bool trapped_stairs(void)
+static bool trapped_stairs(void)
 {
     int chance;
 

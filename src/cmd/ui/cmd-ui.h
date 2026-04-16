@@ -9,6 +9,8 @@
 
 #include "h-basic.h"
 
+typedef struct supply_menu_request supply_menu_request;
+
 #define KNOWLEDGE_PAGE_ARTEFACTS 0
 #define KNOWLEDGE_PAGE_OBJECTS 1
 #define KNOWLEDGE_PAGE_MONSTERS 2
@@ -38,5 +40,6 @@ void do_cmd_ability_screen(void);
 void do_cmd_note(char* note, int what_depth);
 void do_cmd_knowledge_notes(void);
 void do_cmd_knowledge_browser_page(int page);
+bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 
 #endif /* INCLUDED_CMD_UI_H */

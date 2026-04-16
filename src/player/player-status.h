@@ -11,10 +11,13 @@ bool get_alertness_text(monster_type* m_ptr, int text_size, char* text,
 byte health_attr(int current, int max);
 
 bool set_blind(int v);
+bool allow_player_confusion(monster_type* m_ptr);
 bool set_confused(int v);
 bool set_poisoned(int v);
 bool set_afraid(int v);
+bool allow_player_entrancement(monster_type* m_ptr);
 bool set_entranced(int v);
+bool allow_player_image(monster_type* m_ptr);
 bool set_image(int v);
 bool set_fast(int v);
 bool set_slow(int v);
@@ -33,6 +36,7 @@ bool set_darkened(int v);
 bool set_oppose_fire(int v);
 bool set_oppose_cold(int v);
 bool set_oppose_pois(int v);
+bool allow_player_stun(monster_type* m_ptr);
 bool set_stun(int v);
 bool set_cut(int v);
 bool set_food(int v);

@@ -9,11 +9,13 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
+#include "object/object-squelch.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
+
+static void do_cmd_observe_enhanced(void);
 
 void do_cmd_observe(void)
 {
@@ -32,7 +34,7 @@ void do_cmd_observe(void)
 /*
  * Enhanced observe command that supports cycling between inventory/equipment
  */
-void do_cmd_observe_enhanced(void)
+static void do_cmd_observe_enhanced(void)
 {
     extern char current_menu_command;
     extern int current_menu_state;

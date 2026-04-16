@@ -25,5 +25,14 @@ bool cmd_interact_close_aux(int y, int x);
 bool cmd_interact_tunnel_aux(int y, int x);
 bool cmd_interact_disarm_aux(int y, int x);
 bool cmd_interact_bash_aux(int y, int x);
+void do_cmd_exchange(void);
+void do_cmd_alter(void);
+bool do_cmd_open_aux(int y, int x);
+void do_cmd_open(void);
+void do_cmd_close(void);
+void do_cmd_tunnel(void);
+void do_cmd_disarm(void);
+void do_cmd_bash(void);
+bool break_free_of_web(void);
 
 #endif /* INCLUDED_CMD_WORLD_H */

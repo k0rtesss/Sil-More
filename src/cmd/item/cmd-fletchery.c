@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "object/object-ui-enhanced.h"

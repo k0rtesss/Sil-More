@@ -14,6 +14,7 @@ void bell(cptr reason);
 void sound(int val);
 void msg_print(cptr msg);
 void msg_format(cptr fmt, ...);
+void message(u16b message_type, s16b extra, cptr message);
 void message_flush(void);
 bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
     bool allow_randomize);

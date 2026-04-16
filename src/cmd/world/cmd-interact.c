@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "app/app-command.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "platform-story-font.h"
@@ -19,6 +18,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "cmd-world.h"
+#include "ui/smithing/ui-smithing-screen.h"
 
 /*
  * Determine if a grid contains a chest

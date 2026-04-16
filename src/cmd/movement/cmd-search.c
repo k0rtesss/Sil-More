@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "object/object-ui-enhanced.h"
@@ -85,7 +84,7 @@ void do_cmd_toggle_stealth(void)
     }
 }
 
-void search_square(int y, int x, int dist, int searching)
+static void search_square(int y, int x, int dist, int searching)
 {
     int score = 0;
     int difficulty = 0;
@@ -264,7 +263,7 @@ void search(void)
 /*
  * Maybe notice hidden things nearby
  */
-extern void perceive(void)
+void perceive(void)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;

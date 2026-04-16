@@ -11,6 +11,7 @@
 #include "h-basic.h"
 
 void maybe_update_morgoth_state_from_hp(monster_type* m_ptr);
+void anger_morgoth(int level);
 void monster_death(int m_idx);
 bool mon_take_hit(int m_idx, int dam, cptr note, int who);
 

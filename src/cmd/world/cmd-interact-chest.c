@@ -10,10 +10,10 @@
 
 #include "angband.h"
 #include "app/app-command.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "platform-story-font.h"
+#include "object/object-squelch.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "player/killer.h"
@@ -4070,4 +4070,3 @@ bool cmd_interact_disarm_chest(int y, int x, s16b o_idx)
     /* Result */
     return (more);
 }
-

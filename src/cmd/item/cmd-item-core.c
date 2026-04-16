@@ -9,11 +9,13 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
+
+static void do_cmd_wield_enhanced(void);
+static void do_cmd_use_item_enhanced(void);
 
 static int get_equip_sound(const object_type* o_ptr)
 {
@@ -409,7 +411,7 @@ void do_cmd_wield_wrapper(void)
 /*
  * Enhanced wear/wield command that supports cycling between inventory/equipment
  */
-void do_cmd_wield_enhanced(void)
+static void do_cmd_wield_enhanced(void)
 {
     extern char current_menu_command;
     extern int current_menu_state;
@@ -486,7 +488,7 @@ void do_cmd_wield_enhanced(void)
 /*
  * Enhanced use item command that supports cycling between inventory/equipment
  */
-void do_cmd_use_item_enhanced(void)
+static void do_cmd_use_item_enhanced(void)
 {
     extern char current_menu_command;
     extern int current_menu_state;

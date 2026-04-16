@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "object/object-ui-enhanced.h"

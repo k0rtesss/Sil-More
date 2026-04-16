@@ -9,8 +9,9 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "object/object-ui-select.h"
+#include "object/object-squelch.h"
+#include "object/object-use.h"
 
 static void format_staff_prompt_name(char* buf, size_t max,
     const object_type* o_ptr, bool pref)

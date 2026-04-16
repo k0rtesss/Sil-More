@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "app/app-command.h"
-#include "externs.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "platform-story-font.h"
@@ -19,6 +18,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 #include "cmd-world.h"
+#include "cmd/combat/cmd-ranged.h"
 
 static bool do_cmd_tunnel_test(int y, int x)
 {
@@ -1183,4 +1183,3 @@ void do_cmd_bash(void)
         }
     }
 }
-

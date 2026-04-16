@@ -7,8 +7,10 @@ extern bool save_game_quietly;
 
 bool death_processing_in_progress(void);
 bool death_spectator_active(void);
+bool preconfirm_enter_morgoth_hall(void);
 
 void do_cmd_save_game(void);
+void do_cmd_escape(int silmarils);
 void close_game(void);
 void exit_game_panic(void);
 

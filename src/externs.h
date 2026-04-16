@@ -21,9 +21,12 @@
 #include "cave/cave.h"
 #include "drop_system.h"
 #include "cave/cave-state.h"
+#include "cmd/combat/cmd-ranged.h"
 #include "cmd/item/cmd-item.h"
 #include "cmd/movement/cmd-movement.h"
 #include "cmd/ui/cmd-ui.h"
+#include "cmd/world/cmd-world.h"
+#include "cmd/world/cmd-interact-chest.h"
 #include "fs/pref-files.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
@@ -35,9 +38,11 @@
 #include "monster/monster.h"
 #include "monster/monster-state.h"
 #include "object/object.h"
+#include "object/object-squelch.h"
 #include "object/object-state.h"
 #include "object/object-slot.h"
 #include "object/object-ui-select.h"
+#include "object/object-use.h"
 #include "player/ability_log.h"
 #include "player/encumbrance.h"
 #include "player/identification.h"
@@ -74,6 +79,7 @@ typedef struct app_ui_scene app_ui_scene;
 #include "ui/ui-file-viewer.h"
 #include "ui/ui-help.h"
 #include "ui/ui-look-sidebar.h"
+#include "ui/smithing/ui-smithing-screen.h"
 #include "ui/ui-story.h"
 #include "ui/story_font.h"
 #include "ui/targeting.h"
@@ -136,7 +142,6 @@ extern NavResult blitz_character_creation(void);
 void player_wipe(void);
 
 /* cave.c */
-extern bool no_light(void);
 /* Style-weight APIs */
 /* Narrative text: from style.txt (S:/M1:/M2: lines) */
 extern const char* styles_get_style_display(int sidx);
@@ -169,49 +174,15 @@ extern void new_wandering_flow(monster_type* m_ptr, int y, int x);
 extern void new_wandering_destination(
     monster_type* m_ptr, monster_type* leader_ptr);
 extern void drop_iron_crown(monster_type* m_ptr, const char* msg);
-extern void perceive(void);
 extern int success_chance(int sides, int skill, int difficulty);
 extern int light_penalty(const monster_type* m_ptr);
-extern bool check_hit(int power, bool display_roll);
-extern int hit_roll(int att, int evn, const monster_type* m_ptr1,
-    const monster_type* m_ptr2, bool display_roll);
 extern int total_player_attack(monster_type* m_ptr, int base);
 extern int total_player_evasion(monster_type* m_ptr, bool archery);
 extern int total_monster_attack(monster_type* m_ptr, int base);
 extern int total_monster_evasion(monster_type* m_ptr, bool archery);
 extern int stealth_melee_bonus(const monster_type* m_ptr, bool allow_unseen);
 extern int overwhelming_att_mod(monster_type* m_ptr);
-extern int crit_bonus(int hit_result, int weight, const monster_race* r_ptr,
-    int skill_type, bool thrown, monster_type* attacker,
-    const object_type* o_ptr);
-extern void ident_on_wield(object_type* o_ptr);
-extern void ident_resist(u32b flag);
-extern void ident_passive(void);
-extern void ident_see_invisible(const monster_type* m_ptr);
-extern void ident_haunted(void);
-extern void ident_hunger(void);
-extern void ident_f2(u32b flag, object_type* supplied_object);
-extern void ident_f3(u32b flag, object_type* supplied_object);
-extern void ident_weapon_by_use(
-    object_type* o_ptr, const monster_type* m_ptr, u32b flag);
-extern void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
-    object_type* o_ptr, const monster_type* m_ptr, u32b bow_flag,
-    u32b arrow_flag);
-extern void apply_weapon_combat_effects(object_type* o_ptr,
-    monster_type* m_ptr, int skill_type, int net_dam, bool fatal_blow,
-    cptr armor_shatter_noun);
-extern int slay_bonus(
-    const object_type* o_ptr, const monster_type* m_ptr, u32b* noticed_flag);
-extern int prt_after_sharpness(const object_type* o_ptr, u32b* noticed_flag);
-extern void search(void);
 extern void do_cmd_pickup_from_pile(void);
-extern void py_pickup_aux(int o_idx);
-extern void py_pickup(void);
-extern void chest_release_contents(object_type* o_ptr, int y, int x,
-    int destroy_typ);
-extern bool smith_oath_forbids_object(const object_type* o_ptr);
-extern bool smith_oath_confirm_break(void);
-extern void hit_trap(int y, int x);
 extern void display_hit(
     int y, int x, int net_dam, int dam_type, bool fatal_blow);
 extern int concentration_bonus(int y, int x);
@@ -228,39 +199,13 @@ extern void attack_punctuation(
     char* punctuation, int net_dam, int crit_bonus_dice);
 extern int count_open_adjacent_squares(int y, int x);
 extern void py_attack_aux(int y, int x, int attack_type);
-extern void py_attack(int y, int x, int attack_type);
-extern void flanking_or_retreat(int y, int x);
-extern void move_player(int dir);
 
 /* cmd2.c */
-extern void note_lost_greater_vault(void);
-extern void do_cmd_go_up(void);
-extern void do_cmd_go_down(void);
-extern void do_cmd_search(void);
-extern void do_cmd_toggle_stealth(void);
-extern bool do_cmd_open_aux(int y, int x);
-extern void do_cmd_open(void);
-extern void do_cmd_close(void);
-extern void do_cmd_exchange(void);
-extern void do_cmd_fletchery(void);
-extern void finish_fletching(int);
-extern void do_cmd_tunnel(void);
-extern bool break_free_of_web(void);
-extern void do_cmd_disarm(void);
-extern void do_cmd_bash(void);
 extern void do_cmd_steal(void);
-extern void do_cmd_alter(void);
 extern void do_cmd_spike(void);
-extern bool do_cmd_walk_test(int y, int x);
-extern void do_cmd_walk(void);
 extern void do_cmd_jump(void);
-extern void do_cmd_run(void);
-extern void do_cmd_hold(void);
-extern void do_cmd_pickup(void);
-extern void do_cmd_rest(void);
 extern int archery_range(const object_type* j_ptr);
 extern int throwing_range(const object_type* i_ptr);
-extern void attacks_of_opportunity(int neutralized_y, int neutralized_x);
 extern void do_cmd_fire(int quiver);
 extern void do_cmd_throw(bool automatic);
 extern void do_cmd_throw_from_slot(int slot);
@@ -271,23 +216,15 @@ extern bool throw_slot_enabled[INVEN_TOTAL];
 extern void do_cmd_use_item_by_index(int item);
 extern void do_cmd_use_item(void);
 extern void do_cmd_use_item_enhanced(void);
-extern void do_cmd_inven(void);
 extern void do_cmd_inven_direct(void);
-extern void do_cmd_equip(void);
 extern void do_cmd_equip_direct(void);
 extern void do_cmd_wield_wrapper(void);
 extern void do_cmd_wield_enhanced(void);
-extern void do_cmd_drop(void);
-extern bool open_supplies_menu_with_context(supply_menu_action default_action, int default_group, bool default_focus, bool default_hotkey);
 extern void do_cmd_destroy(void);
 extern void do_cmd_observe(void);
 extern void do_cmd_observe_enhanced(void);
 extern void do_cmd_uninscribe(void);
 extern void do_cmd_inscribe(void);
-extern void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item);
-extern void do_cmd_refuel_torch(
-    object_type* default_o_ptr, int default_item, bool is_mallorn);
-extern void do_cmd_refuel(void);
 extern bool ang_sort_comp_hook(const void* u, const void* v, int a, int b);
 extern void ang_sort_swap_hook(void* u, void* v, int a, int b);
 extern void py_steal(int y, int x);
@@ -297,7 +234,6 @@ extern void options_birth_menu(bool adult);
 extern void do_cmd_change_song(void);
 extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
-extern void do_cmd_smithing_screen(void);
 extern void do_cmd_options_aux(int page, cptr info);
 extern void do_cmd_pane_settings(void);
 extern void do_cmd_macros(void);
@@ -309,7 +245,6 @@ extern void do_cmd_feeling(void);
 extern void do_cmd_knowledge_oaths(void);
 extern void do_cmd_knowledge_artefacts(void);
 extern void do_cmd_knowledge_monsters(void);
-extern bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 extern void do_cmd_knowledge_objects(void);
 extern void do_cmd_knowledge_kills(void);
 extern void ghost_challenge(void);
@@ -413,7 +348,6 @@ extern bool object_is_damaged_item(const object_type* o_ptr);
 extern bool object_can_repair_damage(const object_type* o_ptr);
 extern int find_broken_item_to_upgrade(void);
 extern bool repair_damaged_item(int slot);
-extern bool is_smithed_by_player(const object_type* o_ptr);
 extern bool upgrade_broken_item(int slot);
 extern bool reveal_random_artifact(void);
 extern bool elemental_attack_destroys_object(int attack_type,
@@ -427,24 +361,6 @@ extern void place_object(int y, int x, drop_quality quality, int droptype,
 extern void place_trap(int y, int x);
 extern void place_random_door(int y, int x);
 extern void place_forge(int y, int x);
-extern void inven_item_charges(int item);
-extern void inven_item_describe(int item);
-extern void inven_item_increase(int item, int num);
-extern void inven_item_optimize(int item);
-extern void floor_item_charges(int item);
-extern void floor_item_describe(int item);
-extern void floor_item_increase(int item, int num);
-extern void floor_item_optimize(int item);
-extern void check_pack_overflow(void);
-extern bool inven_carry_okay(const object_type* o_ptr);
-extern bool inven_carry_okay_after_removing(
-    const object_type* o_ptr, int remove_item, int remove_amt);
-extern bool inven_carry_limit_failed(void);
-extern cptr inven_carry_limit_label(void);
-extern int inven_carry_limit_value(void);
-extern bool inven_carry_limit_can_replace(const object_type* o_ptr);
-extern s16b inven_carry(object_type* o_ptr, bool combine_ammo);
-extern s16b inven_takeoff(int item, int amt);
 extern void steal_object_from_monster(int y, int x);
 
 /* randart.c */
@@ -462,22 +378,11 @@ extern bool can_be_randart(const object_type* o_ptr);
 extern bool save_player(void);
 
 /* squelch.c */
-extern byte squelch_level[SQUELCH_BYTES];
-extern int do_cmd_autoinscribe_item(s16b k_idx);
 extern void do_cmd_squelch_autoinsc(void);
 extern int squelch_itemp(object_type* o_ptr, byte feeling, bool fullid);
 extern int do_squelch_item(int squelch, int item, object_type* o_ptr);
-extern void do_squelch_pile(int y, int x);
-extern int get_autoinscription_index(s16b k_idx);
-extern int remove_autoinscription(s16b kind);
-extern int add_autoinscription(s16b kind, cptr inscription);
-extern char* squelch_to_label(int squelch);
 
 /*use-obj.c*/
-extern int consumable_healing_points(const object_type* o_ptr);
-extern bool use_object(object_type* o_ptr, bool* ident);
-extern bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident);
-
 /* util.c */
 
 /* Legacy - still used by some systems */
@@ -511,11 +416,9 @@ extern errr messages_init(void);
 extern void messages_free(void);
 extern void move_cursor(int row, int col);
 extern void msg_debug(cptr fmt, ...);
-extern void message(u16b message_type, s16b extra, cptr message);
 extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
 extern void text_out_to_file(byte attr, cptr str);
 extern int get_menu_choice(s16b max, char* prompt);
-extern bool preconfirm_enter_morgoth_hall(void);
 extern void pause_line(int row);
 extern int int_exp(int base, int power);
 extern int color_char_to_attr(char c);
@@ -581,10 +484,8 @@ extern bool allow_player_stun(monster_type* m_ptr);
 extern bool set_stun(int v);
 extern bool set_cut(int v);
 extern bool set_food(int v);
-extern void falling_damage(bool stun);
 extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
-extern void anger_morgoth(int level);
 /*
  * Hack -- conditional (or "bizarre") externs
  */

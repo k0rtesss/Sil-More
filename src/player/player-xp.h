@@ -10,6 +10,7 @@ void check_experience(void);
 s32b adjusted_mon_exp(const monster_race* r_ptr, bool kill);
 void gain_exp(s32b amount);
 void lose_exp(s32b amount);
+void falling_damage(bool stun);
 void scare_onlooking_friends(const monster_type* m_ptr, int amount);
 
 #endif /* INCLUDED_PLAYER_XP_H */

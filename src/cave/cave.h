@@ -18,6 +18,7 @@ bool grid_info_is_available(int y, int x);
 int distance(int y1, int x1, int y2, int x2);
 int distance_squared(int y1, int x1, int y2, int x2);
 bool los(int y1, int x1, int y2, int x2);
+bool no_light(void);
 int project_path(
     u16b* gp, int range, int y1, int x1, int* y2, int* x2, u32b flg);
 void random_unseen_floor(int* ry, int* rx);

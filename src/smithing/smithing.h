@@ -17,5 +17,6 @@ typedef struct object_type object_type;
 extern object_type* smith_o_ptr;
 extern int object_difficulty(object_type* o_ptr);
 extern void create_smithing_item(void);
+bool is_smithed_by_player(const object_type* o_ptr);
 
 #endif /* INCLUDED_SMITHING_H */
