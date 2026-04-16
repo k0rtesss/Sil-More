@@ -199,7 +199,7 @@ static void create_chosen_artefact_marked(
     log_trace("create_chosen_artefact: Successfully created and dropped artifact %d", name1);
 }
 
-extern void create_chosen_artefact(byte name1, int y, int x, bool identify)
+void create_chosen_artefact(byte name1, int y, int x, bool identify)
 {
     create_chosen_artefact_marked(name1, y, x, identify, 0);
 }

@@ -39,6 +39,7 @@ extern byte do_feeling;
 extern s16b rating;
 extern bool good_item_flag;
 extern int closing_flag;
+extern bool use_sound;
 
 extern int player_uid;
 extern int player_euid;

@@ -35,5 +35,7 @@ void do_cmd_refuel_lamp(object_type* default_o_ptr, int default_item);
 void do_cmd_refuel_torch(
     object_type* default_o_ptr, int default_item, bool is_mallorn);
 void do_cmd_refuel(void);
+extern bool throw_slot_menu_active;
+extern bool throw_slot_enabled[];
 
 #endif /* INCLUDED_CMD_ITEM_H */

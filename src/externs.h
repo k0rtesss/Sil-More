@@ -19,8 +19,10 @@
 #include "h-basic.h"
 #include "app/app-movement.h"
 #include "cave/cave.h"
+#include "cmd/combat/cmd-combat.h"
 #include "drop_system.h"
 #include "cave/cave-state.h"
+#include "cmd/monster/cmd-monster.h"
 #include "cmd/combat/cmd-ranged.h"
 #include "cmd/item/cmd-item.h"
 #include "cmd/movement/cmd-movement.h"
@@ -88,7 +90,6 @@ typedef struct app_ui_scene app_ui_scene;
 
 /* variable.c */
 extern s16b object_level;
-extern bool use_sound;
 extern s16b image_count;
 extern bool shimmer_objects;
 extern const cptr angband_sound_name[MSG_MAX];
@@ -170,47 +171,13 @@ extern bool player_try_identify_smithing_object_on_examine(
     object_type* o_ptr, bool is_equipped);
 extern bool player_auto_identify_smithing_object(
     object_type* o_ptr, bool ignore_distance_penalty);
-extern void new_wandering_flow(monster_type* m_ptr, int y, int x);
-extern void new_wandering_destination(
-    monster_type* m_ptr, monster_type* leader_ptr);
-extern void drop_iron_crown(monster_type* m_ptr, const char* msg);
-extern int success_chance(int sides, int skill, int difficulty);
-extern int light_penalty(const monster_type* m_ptr);
-extern int total_player_attack(monster_type* m_ptr, int base);
-extern int total_player_evasion(monster_type* m_ptr, bool archery);
-extern int total_monster_attack(monster_type* m_ptr, int base);
-extern int total_monster_evasion(monster_type* m_ptr, bool archery);
-extern int stealth_melee_bonus(const monster_type* m_ptr, bool allow_unseen);
-extern int overwhelming_att_mod(monster_type* m_ptr);
 extern void do_cmd_pickup_from_pile(void);
-extern void display_hit(
-    int y, int x, int net_dam, int dam_type, bool fatal_blow);
-extern int concentration_bonus(int y, int x);
-extern int focused_attack_bonus(void);
-extern int master_hunter_bonus(monster_type* m_ptr);
-extern bool knock_back(int y1, int x1, int y2, int x2);
-extern bool abort_for_mercy(monster_type* m_ptr);
-extern bool abort_for_valorous(monster_type* m_ptr);
-extern bool cowardly_attack(monster_type* m_ptr);
-extern bool is_aoe_attack_type(int attack_type);
-extern void break_mercy_oath(monster_type* m_ptr, int damage);
-extern void break_valorous_oath(monster_type* m_ptr, int damage, int attack_type, int damage_source);
-extern void attack_punctuation(
-    char* punctuation, int net_dam, int crit_bonus_dice);
 extern int count_open_adjacent_squares(int y, int x);
-extern void py_attack_aux(int y, int x, int attack_type);
 
 /* cmd2.c */
 extern void do_cmd_steal(void);
 extern void do_cmd_spike(void);
 extern void do_cmd_jump(void);
-extern int archery_range(const object_type* j_ptr);
-extern int throwing_range(const object_type* i_ptr);
-extern void do_cmd_fire(int quiver);
-extern void do_cmd_throw(bool automatic);
-extern void do_cmd_throw_from_slot(int slot);
-extern bool throw_slot_menu_active;
-extern bool throw_slot_enabled[INVEN_TOTAL];
 
 /* cmd3.c */
 extern void do_cmd_use_item_by_index(int item);
@@ -311,14 +278,12 @@ extern void lore_treasure(int m_idx, int num_item);
 extern void listen_hint_new_player_turn(void);
 extern bool listen_hint_overlay(int m_idx, byte* a, char* c);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);
-extern int monster_base_armour_sides(const monster_type* m_ptr);
 extern int monster_song_hp_loss(const monster_type* m_ptr);
 extern void monster_swap(int y1, int x1, int y2, int x2);
 extern s16b player_place(int y, int x);
 extern s16b monster_place(int y, int x, monster_type* n_ptr);
 extern void calc_monster_speed(int y, int x);
 extern void set_monster_haste(s16b m_idx, s16b counter, bool message);
-extern void set_monster_slow(s16b m_idx, s16b counter, bool message);
 extern void produce_cloud(monster_type* m_ptr);
 extern s16b monster_lookup_guid(u64b guid);
 extern s16b monster_lookup_guid_text(const char* text);
@@ -333,9 +298,7 @@ extern bool place_monster_aux(int y, int x, int r_idx, bool slp, bool grp);
 extern bool place_monster(int y, int x, bool slp, bool grp, bool vault);
 extern bool quest_monster_spawn_okay(int r_idx);
 extern bool alloc_monster(bool on_stairs, bool force_undead);
-extern bool summon_specific(int y1, int x1, int lev, int type);
 extern bool reproduce_monster(int old_m_idx, int new_r_idx);
-extern void message_pain(int m_idx, int dam);
 
 /* thrall_quest.c */
 extern bool is_alert_thrall(monster_type* m_ptr);
@@ -449,9 +412,7 @@ extern cptr get_ext_color_name(byte ext_color);
 extern byte object_display_color(const object_type* o_ptr, byte base_color);
 
 /* xtra2.c */
-extern bool saving_throw(monster_type* m_ptr, int resistance);
 extern bool turin_resist_bad_effect(void);
-extern bool allow_player_blind(monster_type* m_ptr);
 extern bool set_blind(int v);
 extern bool allow_player_confusion(monster_type* m_ptr);
 extern bool set_confused(int v);
@@ -463,7 +424,6 @@ extern bool set_entranced(int v);
 extern bool allow_player_image(monster_type* m_ptr);
 extern bool set_image(int v);
 extern bool set_fast(int v);
-extern bool allow_player_slow(monster_type* m_ptr);
 extern bool set_slow(int v);
 extern bool set_shield(int v);
 extern bool set_blessed(int v);
@@ -484,7 +444,6 @@ extern bool allow_player_stun(monster_type* m_ptr);
 extern bool set_stun(int v);
 extern bool set_cut(int v);
 extern bool set_food(int v);
-extern void create_chosen_artefact(byte name1, int y, int x, bool identify);
 extern int drop_loot(monster_type* m_ptr);
 /*
  * Hack -- conditional (or "bizarre") externs

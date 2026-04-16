@@ -10,7 +10,8 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
+#include "cmd/combat/cmd-ranged.h"
 #include "item_set.h"
 #include "log/log.h"
 #include "platform-frame.h"
@@ -26,6 +27,7 @@
 
 #define THROW_PENDING_NONE -9999
 static int throw_pending_slot = THROW_PENDING_NONE;
+static void do_cmd_throw_from_slot(int slot);
 
 static int breakage_chance(const object_type* o_ptr, bool hit_wall)
 {
@@ -95,7 +97,7 @@ static int breakage_chance(const object_type* o_ptr, bool hit_wall)
 /*
  *  Determines if a bow shoots radiant arrows and lights the current grid if so
  */
-bool do_radiance(int y, int x, const object_type* j_ptr)
+static bool do_radiance(int y, int x, const object_type* j_ptr)
 {
     bool radiance = false;
     u32b f1 = 0, f2 = 0, f3 = 0, f4 = 0;
@@ -129,7 +131,7 @@ bool do_radiance(int y, int x, const object_type* j_ptr)
     }
 }
 
-extern int archery_range(const object_type* j_ptr)
+int archery_range(const object_type* j_ptr)
 {
     int range;
 
@@ -178,7 +180,7 @@ static int throwing_range_ds_penalty(int dist, int max_range)
     return ds_penalties[throwing_range_band(dist, max_range) - 1];
 }
 
-extern int throwing_range(const object_type* i_ptr)
+int throwing_range(const object_type* i_ptr)
 {
     int div;
     int range;
@@ -2259,7 +2261,7 @@ void do_cmd_throw(bool automatic)
 /*
  * Throw the item currently stored in the supplied slot.
  */
-void do_cmd_throw_from_slot(int slot)
+static void do_cmd_throw_from_slot(int slot)
 {
     throw_pending_slot = slot;
     do_cmd_throw(false);

@@ -9,11 +9,12 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
+
+static int overwhelming_att_mod(monster_type* m_ptr);
 
 int skill_check(
     monster_type* m_ptr1, int skill, int difficulty, monster_type* m_ptr2)
@@ -68,7 +69,7 @@ int skill_check(
  * square is too bright.
  */
 
-extern int light_penalty(const monster_type* m_ptr)
+static int light_penalty(const monster_type* m_ptr)
 {
     int penalty = 0;
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
@@ -369,7 +370,7 @@ int stealth_melee_bonus(const monster_type* m_ptr, bool allow_unseen)
  *
  * We should lessen this with the crowd fighting ability
  */
-int overwhelming_att_mod(monster_type* m_ptr)
+static int overwhelming_att_mod(monster_type* m_ptr)
 {
     int mod = 0;
     int dir;

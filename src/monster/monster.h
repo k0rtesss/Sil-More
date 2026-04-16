@@ -16,6 +16,8 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode);
 void monster_desc_race(char* desc, size_t max, int r_idx);
 void delete_monster_idx(int i);
 void monster_swap(int y1, int x1, int y2, int x2);
+void set_monster_slow(s16b m_idx, s16b counter, bool message);
+void message_pain(int m_idx, int dam);
 void make_alert(monster_type* m_ptr);
 void set_alertness(monster_type* m_ptr, int alertness);
 bool place_monster_one(
@@ -23,6 +25,8 @@ bool place_monster_one(
 void monster_add_song_hp_loss(monster_type* m_ptr, int amount);
 int monster_skill(monster_type* m_ptr, int skill_type);
 int monster_stat(monster_type* m_ptr, int stat_type);
+int monster_base_armour_sides(const monster_type* m_ptr);
+bool summon_specific(int y1, int x1, int lev, int type);
 bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
     const monster_type* m_ptr, cptr prompt, bool overlay_dungeon);
 bool build_monlist_subwindow_ui_scene(app_ui_scene* scene);

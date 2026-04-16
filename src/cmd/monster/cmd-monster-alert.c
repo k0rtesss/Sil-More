@@ -9,7 +9,7 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
@@ -432,7 +432,7 @@ void set_alertness(monster_type* m_ptr, int alertness)
  * note that this will be a percentage for normal skills (10 sides)
  * but will be out of 400 for hit rolls
  */
-extern int success_chance(int sides, int skill, int difficulty)
+int success_chance(int sides, int skill, int difficulty)
 {
     int i, j;
     int ways = 0;

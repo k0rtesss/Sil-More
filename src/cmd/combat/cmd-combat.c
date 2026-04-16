@@ -9,13 +9,14 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "platform-frame.h"
 #include "platform-time.h"
+#include "thrall_quest.h"
 
 static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr);
 
@@ -145,7 +146,7 @@ bool graphics_are_ascii(void)
  * player turn.
  */
 
-bool is_normal_attack(int attack_type)
+static bool is_normal_attack(int attack_type)
 {
     return (attack_type == ATT_MAIN) || (attack_type == ATT_FLANKING)
         || (attack_type == ATT_CONTROLLED_RETREAT)
@@ -157,7 +158,7 @@ bool is_normal_attack(int attack_type)
  * (a utility function called by 'search' and 'perceive')
  */
 
-extern bool check_hit(int power, bool display_roll)
+bool check_hit(int power, bool display_roll)
 {
     if (hit_roll(power, p_ptr->skill_use[S_EVN] + dodging_bonus(), NULL, PLAYER,
             display_roll)
@@ -694,7 +695,7 @@ void display_hit(int y, int x, int net_dam, int dam_type, bool fatal_blow)
  *  Determines whether an attack is a charge attack
  */
 
-bool valid_charge(int fy, int fx, int attack_type)
+static bool valid_charge(int fy, int fx, int attack_type)
 {
     int d, i;
 
@@ -723,7 +724,7 @@ bool valid_charge(int fy, int fx, int attack_type)
  *  Attacks a new monster with 'follow through' if applicable
  */
 
-void possible_follow_through(int fy, int fx, int attack_type)
+static void possible_follow_through(int fy, int fx, int attack_type)
 {
     int d, i;
 
@@ -975,7 +976,7 @@ bool knock_back(int y1, int x1, int y2, int x2)
     return (knocked);
 }
 
-bool merciless_attack(monster_type* m_ptr)
+static bool merciless_attack(monster_type* m_ptr)
 {
     monster_race* r_ptr = &r_info[m_ptr->r_idx];
 
@@ -1049,7 +1050,7 @@ bool abort_for_valorous(monster_type* m_ptr)
  * Check if an attack type is an Area of Effect (AoE) attack
  * vs a direct targeted attack
  */
-bool is_aoe_attack_type(int attack_type)
+static bool is_aoe_attack_type(int attack_type)
 {
     switch (attack_type)
     {
@@ -1924,7 +1925,7 @@ void py_attack_aux(int y, int x, int attack_type)
  * (not walls, not rubble, not closed doors)
  * Returns the longest sequence of adjacent passable squares
  */
-int count_open_adjacent_squares(int y, int x)
+static int count_open_adjacent_squares(int y, int x)
 {
     bool passable[8];
     int i;

@@ -10,6 +10,8 @@ bool get_alertness_text(monster_type* m_ptr, int text_size, char* text,
     int* color);
 byte health_attr(int current, int max);
 
+bool saving_throw(monster_type* m_ptr, int resistance);
+bool allow_player_blind(monster_type* m_ptr);
 bool set_blind(int v);
 bool allow_player_confusion(monster_type* m_ptr);
 bool set_confused(int v);
@@ -20,6 +22,7 @@ bool set_entranced(int v);
 bool allow_player_image(monster_type* m_ptr);
 bool set_image(int v);
 bool set_fast(int v);
+bool allow_player_slow(monster_type* m_ptr);
 bool set_slow(int v);
 bool set_shield(int v);
 bool set_blessed(int v);
