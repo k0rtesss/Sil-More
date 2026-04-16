@@ -17,7 +17,7 @@
 #include "platform-frame.h"
 #include "runtime-cli.h"
 #include "player/killer.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 #include "score/score_guid.h"
 #include <string.h> /* memset, strstr */
 #include <stdio.h>  /* FILE, getc, ftell, fseek, ferror */

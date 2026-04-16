@@ -1,5 +1,5 @@
 #include "angband.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 
 ang_file* text_out_file = NULL;
 void (*text_out_hook)(byte a, cptr str);
@@ -9,7 +9,7 @@ int text_out_indent = 0;
 static void write_text_out_byte(unsigned char value)
 {
     char byte = (char)value;
-    (void)sdl_write(text_out_file, &byte, 1);
+    (void)ang_file_write(text_out_file, &byte, 1);
 }
 
 /*

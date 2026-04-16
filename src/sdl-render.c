@@ -1,4 +1,8 @@
 #include "angband.h"
+#define ANGBAND_NO_IO_COMPAT
+#include "fs/io_sdl.h"
+#undef ANGBAND_NO_IO_COMPAT
+#include "fs/resource.h"
 #include "sdl-main-internal.h"
 #include "ui/ui-status.h"
 
@@ -195,7 +199,17 @@ void sdl_handle_renderer_reset(void)
         SDL_DestroyTexture(g_state.tileset);
         g_state.tileset = NULL;
 
-        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
+        char tileset_path[1024];
+        SDL_Surface* ts = NULL;
+
+        if (resource_build_default_tileset_path(tileset_path,
+                sizeof(tileset_path)))
+        {
+            ang_file* stream = sdl_fopen(tileset_path, "rb");
+            if (stream)
+                ts = IMG_Load_IO(stream, true);
+        }
+
         if (ts) {
             g_state.tileset = SDL_CreateTextureFromSurface(g_state.renderer, ts);
             if (g_state.tileset) {
@@ -328,14 +342,20 @@ static SDL_Texture* sdl_load_ttf_font(const char* font_path, int font_size, int*
 
     for (; font_size >= min_size; font_size--) {
         int measured_w = 0;
-        if (font == NULL) {
-            font = TTF_OpenFont(font_path, font_size);
-            if (!font) {
-                log_error("TTF_OpenFont failed: %s", SDL_GetError());
-                quit("could not load TTF font");
-            }
-            sdl_apply_mono_font_settings(font);
+        ang_file* stream = sdl_fopen(font_path, "rb");
+        if (!stream) {
+            log_error("Failed to open TTF font '%s': %s", font_path,
+                SDL_GetError());
+            quit("could not open TTF font");
         }
+
+        font = TTF_OpenFontIO(stream, true, (float)font_size);
+        if (!font) {
+            log_error("TTF_OpenFontIO failed: %s", SDL_GetError());
+            quit("could not load TTF font");
+        }
+
+        sdl_apply_mono_font_settings(font);
         TTF_MeasureString(font, "M", 1, 0, &measured_w, NULL);
         if (measured_w <= cell_width)
             break;
@@ -415,7 +435,17 @@ void sdl_window_create(int window_width, int window_height, bool fullscreen, boo
     SDL_SetRenderDrawBlendMode(g_state.renderer, SDL_BLENDMODE_BLEND);
     g_state.use_tiles = use_tiles;
     if (g_state.use_tiles) {
-        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
+        char tileset_path[1024];
+        SDL_Surface* ts = NULL;
+
+        if (resource_build_default_tileset_path(tileset_path,
+                sizeof(tileset_path)))
+        {
+            ang_file* stream = sdl_fopen(tileset_path, "rb");
+            if (stream)
+                ts = IMG_Load_IO(stream, true);
+        }
+
         if (!ts) {
             log_error("Failed to load tileset PNG: %s", SDL_GetError());
             quit("could not load tileset");

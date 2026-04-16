@@ -4,6 +4,7 @@
 #include "h-basic.h"
 
 typedef struct app_ui_scene app_ui_scene;
+struct editing_buffer;
 
 s16b quark_add(cptr str);
 cptr quark_str(s16b i);
@@ -57,10 +58,25 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent);
 void text_out(cptr str);
 void text_out_c(byte a, cptr str);
 void msg_debug(cptr fmt, ...);
+void text_to_ascii(char* buf, size_t len, cptr str);
+void ascii_to_text(char* buf, size_t len, cptr str);
 
 bool is_a_vowel(int ch);
 int damroll(int num, int sides);
 int int_exp(int base, int power);
 bool parse_u64b_hex(const char* text, u64b* out);
+cptr get_ext_color_name(byte ext_color);
+void editing_buffer_init(
+    struct editing_buffer* eb_ptr, const char* buf, size_t max_size);
+void editing_buffer_destroy(struct editing_buffer* eb_ptr);
+int editing_buffer_put_chr(struct editing_buffer* eb_ptr, char ch);
+int editing_buffer_set_position(
+    struct editing_buffer* eb_ptr, size_t new_pos);
+int editing_buffer_delete(struct editing_buffer* eb_ptr);
+void editing_buffer_clear(struct editing_buffer* eb_ptr);
+void editing_buffer_get_all(
+    struct editing_buffer* eb_ptr, char buf[], size_t max_size);
+int editing_buffer_put_str(
+    struct editing_buffer* eb_ptr, const char* str, int n);
 
 #endif /* INCLUDED_SUPPORT_UTIL_H */

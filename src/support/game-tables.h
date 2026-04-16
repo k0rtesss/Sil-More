@@ -11,6 +11,7 @@ extern const s16b ddy_ddd[9];
 extern const char hexsym[16];
 extern const byte extract_energy[8];
 extern const byte chest_traps[25 + 1];
+extern byte get_angle_to_grid[41][41];
 extern cptr color_names[16];
 extern cptr stat_names[A_MAX];
 extern cptr stat_names_reduced[A_MAX];

@@ -1,5 +1,5 @@
 #include "angband.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 
 #include <stdint.h>
 #include <string.h>

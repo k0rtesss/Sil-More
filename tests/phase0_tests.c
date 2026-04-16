@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include "angband.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 
 static int g_failures = 0;
 

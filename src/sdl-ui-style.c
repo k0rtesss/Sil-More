@@ -1,5 +1,9 @@
 #include "angband.h"
 
+#define ANGBAND_NO_IO_COMPAT
+#include "fs/io_sdl.h"
+#undef ANGBAND_NO_IO_COMPAT
+#include "fs/resource.h"
 #include "sdl-main-internal.h"
 
 typedef struct sdl_ui_font_cache {
@@ -13,9 +17,16 @@ static sdl_ui_font_cache g_sdl_ui_font_cache;
 
 static const char* sdl_ui_font_path(void)
 {
-    return config.monospace_font[0] != '\0'
-        ? config.monospace_font
-        : "lib/xtra/font/VictorMono-Medium.ttf";
+    static char path[1024];
+
+    if (!resource_resolve_xtra_path(path, sizeof(path),
+            config.monospace_font[0] ? config.monospace_font : NULL,
+            "font/VictorMono-Medium.ttf"))
+    {
+        return NULL;
+    }
+
+    return path;
 }
 
 static int sdl_ui_font_signature(void)
@@ -90,6 +101,8 @@ TTF_Font* sdl_ui_font_for_height(int pixel_height)
 
     if (pixel_height <= 0)
         return NULL;
+    if (!font_path)
+        return NULL;
 
     if (g_sdl_ui_font_cache.font
         && g_sdl_ui_font_cache.pixel_height == pixel_height
@@ -101,7 +114,18 @@ TTF_Font* sdl_ui_font_for_height(int pixel_height)
 
     sdl_ui_font_cache_clear();
 
-    g_sdl_ui_font_cache.font = TTF_OpenFont(font_path, pixel_height);
+    {
+        ang_file* stream = sdl_fopen(font_path, "rb");
+        if (!stream)
+        {
+            log_warn("SDL UI font open failed for '%s': %s", font_path,
+                SDL_GetError());
+            return NULL;
+        }
+
+        g_sdl_ui_font_cache.font = TTF_OpenFontIO(stream, true,
+            (float)pixel_height);
+    }
     if (!g_sdl_ui_font_cache.font)
     {
         log_warn("SDL UI font load failed for '%s': %s", font_path,

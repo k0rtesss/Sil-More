@@ -1,5 +1,5 @@
 #include "angband.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 
 /*
  * Initialize a editing_buffer structure. It takes a pointer to a valid

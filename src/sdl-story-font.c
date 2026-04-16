@@ -1,8 +1,12 @@
 #include "angband.h"
+#define ANGBAND_NO_IO_COMPAT
+#include "fs/io_sdl.h"
+#undef ANGBAND_NO_IO_COMPAT
+#include "fs/resource.h"
 #include "platform-story-font.h"
 #include "sdl-main-internal.h"
 
-static const char* const sdl_story_fallback_font = "lib/xtra/font/MarcellusSC-Regular.ttf";
+static const char* const sdl_story_fallback_font = "font/MarcellusSC-Regular.ttf";
 
 static void sdl_apply_font_settings(TTF_Font* font, bool is_story_font)
 {
@@ -37,7 +41,9 @@ static TTF_Font* sdl_load_font_with_fallback(const char* font_path, int font_siz
     TTF_Font* font = NULL;
 
     if (font_path && font_path[0] != '\0') {
-        font = TTF_OpenFont(font_path, font_size);
+        ang_file* stream = sdl_fopen(font_path, "rb");
+        if (stream)
+            font = TTF_OpenFontIO(stream, true, (float)font_size);
         if (font) {
             sdl_apply_font_settings(font, true);
             return font;
@@ -45,7 +51,11 @@ static TTF_Font* sdl_load_font_with_fallback(const char* font_path, int font_siz
         log_warn("Failed to load custom font '%s': %s", font_path, SDL_GetError());
     }
 
-    font = TTF_OpenFont(fallback_path, font_size);
+    {
+        ang_file* stream = sdl_fopen(fallback_path, "rb");
+        if (stream)
+            font = TTF_OpenFontIO(stream, true, (float)font_size);
+    }
     if (font) {
         sdl_apply_font_settings(font, true);
     } else {
@@ -82,8 +92,27 @@ TTF_Font* sdl_story_font_for_height(int pixel_height)
         return g_state.story_fonts[0].font;
     }
 
-    const char* font_path = (config.story_font[0] != '\0') ? config.story_font : NULL;
-    TTF_Font* font = sdl_load_font_with_fallback(font_path, pixel_height, sdl_story_fallback_font);
+    char font_path_buf[1024];
+    char fallback_path_buf[1024];
+    const char* font_path = NULL;
+    TTF_Font* font;
+
+    if (!resource_resolve_xtra_path(fallback_path_buf, sizeof(fallback_path_buf),
+            NULL, sdl_story_fallback_font))
+    {
+        log_error("Failed to resolve story font fallback path");
+        return NULL;
+    }
+
+    if (config.story_font[0] != '\0'
+        && resource_resolve_xtra_path(font_path_buf, sizeof(font_path_buf),
+            config.story_font, NULL))
+    {
+        font_path = font_path_buf;
+    }
+
+    font = sdl_load_font_with_fallback(font_path, pixel_height,
+        fallback_path_buf);
     if (!font)
         return NULL;
 

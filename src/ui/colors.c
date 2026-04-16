@@ -3,10 +3,10 @@
 #include "../angband.h"
 #include "colors.h"
 #include "cJSON.h"
-#include "fs/path.h"
+#include "fs/file.h"
+#include "fs/resource.h"
 #include "log/log.h"
 
-#include <stdio.h>
 #include <string.h>
 
 int use_graphics = GRAPHICS_NONE;
@@ -213,33 +213,29 @@ static bool ui_colors_parse_preset_colors(cJSON* colors, byte out[16][3])
 
 static bool ui_colors_load_presets_from_file(const char* path)
 {
-    FILE* f = NULL;
+    ang_file* f = NULL;
     cJSON* root = NULL;
     cJSON* presets = NULL;
     char* buffer = NULL;
-    long file_size = 0;
+    Sint64 file_size = 0;
     bool loaded_any = false;
 
     if (!path || !path[0])
         return false;
 
-    f = fopen(path, "rb");
+    f = ang_file_open(path, "rb");
     if (!f)
         return false;
 
-    if (fseek(f, 0L, SEEK_END) != 0)
-        goto cleanup;
-    file_size = ftell(f);
+    file_size = ang_file_size(f);
     if (file_size <= 0 || file_size > 1024 * 1024)
-        goto cleanup;
-    if (fseek(f, 0L, SEEK_SET) != 0)
         goto cleanup;
 
     buffer = mem_alloc_array((size_t)file_size + 1, char);
     if (!buffer)
         goto cleanup;
 
-    if (fread(buffer, 1, (size_t)file_size, f) != (size_t)file_size)
+    if (ang_file_read(f, buffer, (size_t)file_size) != (size_t)file_size)
         goto cleanup;
     buffer[file_size] = '\0';
 
@@ -278,7 +274,7 @@ cleanup:
     if (buffer)
         mem_free(buffer);
     if (f)
-        fclose(f);
+        ang_file_close(f);
     return loaded_any;
 }
 
@@ -367,8 +363,7 @@ bool ui_colors_load_palette_presets(void)
 
     ui_colors_reset_preset_registry();
 
-    if (!ANGBAND_DIR_PREF || !ANGBAND_DIR_PREF[0]
-        || !path_build(path, sizeof(path), ANGBAND_DIR_PREF,
+    if (!resource_build_path(path, sizeof(path), RESOURCE_ROOT_PREF,
             "palette_presets.json")
         || !ui_colors_load_presets_from_file(path))
     {

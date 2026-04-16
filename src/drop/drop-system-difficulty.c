@@ -2,7 +2,7 @@
 
 #include "angband.h"
 #include "drop/drop-system-internal.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 
 /* Baseline smithing difficulty (player-neutral). */
 static void drop_dif_mod(int value, int positive_base, int* dif_inc)

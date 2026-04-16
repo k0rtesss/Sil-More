@@ -1,6 +1,7 @@
 #ifndef INCLUDED_FS_IO_SDL_H
 #define INCLUDED_FS_IO_SDL_H
 
+#include "fs/resource.h"
 #include "platform-io.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -35,6 +36,8 @@ extern int ang_file_flush_compat(ang_file* stream);
 extern size_t ang_file_printf_compat(ang_file* stream, const char* fmt, ...);
 extern bool ang_file_write_u8_compat(ang_file* stream, byte value);
 extern const char* ang_file_get_error_compat(void);
+extern bool sdl_enumerate_directory(cptr path,
+    resource_enumerate_directory_callback callback, void* userdata);
 
 enum {
     ANG_FILE_SEEK_SET = 0,

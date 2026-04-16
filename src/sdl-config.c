@@ -2168,8 +2168,10 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->window_height = 0; // 0 means use default calculation
     
     // Default fonts
-    SDL_strlcpy(config->story_font, "lib/xtra/font/Cinzel-Medium.ttf", sizeof(config->story_font));
-    SDL_strlcpy(config->monospace_font, "lib/xtra/font/VictorMono-Medium.ttf", sizeof(config->monospace_font));
+    SDL_strlcpy(config->story_font, "font/Cinzel-Medium.ttf",
+        sizeof(config->story_font));
+    SDL_strlcpy(config->monospace_font, "font/VictorMono-Medium.ttf",
+        sizeof(config->monospace_font));
     
     // Default monospace font rendering options
     config->mono_bold = false;

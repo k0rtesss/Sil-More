@@ -144,7 +144,6 @@ set(SIL_MORE_SOURCES_CORE
     src/cave.c
     src/cJSON.c
     src/dungeon.c
-    src/format.c
     src/game-event.c
     src/item_set.c
     src/quest.c
@@ -154,14 +153,9 @@ set(SIL_MORE_SOURCES_CORE
     src/squelch.c
     src/supplies.c
     src/tables.c
-    src/util-angle.c
-    src/util-convert.c
-    src/util-editing.c
     src/util-input.c
-    src/util-macro.c
     src/util-message.c
     src/util-prompt.c
-    src/util-text.c
     src/util.c
     src/variable.c
     src/wizard1.c
@@ -248,9 +242,9 @@ set(SIL_MORE_SOURCES_LEVEL_GENERATION
 
 set(SIL_MORE_SOURCES_DROP
     src/drop/drop-system-catalog.c
+    src/drop/drop-system.c
     src/drop/drop-system-difficulty.c
     src/drop/drop-system-selection.c
-    src/drop_system.c
 )
 
 set(SIL_MORE_SOURCES_OBJECT
@@ -352,6 +346,7 @@ set(SIL_MORE_SOURCES_SCORE
 )
 
 set(SIL_MORE_SOURCES_FS
+    src/fs/resource.c
     src/fs/pref-time.c
     src/fs/savefile-name.c
 )
@@ -425,8 +420,14 @@ set(SIL_MORE_SOURCES_LOG
 )
 
 set(SIL_MORE_SOURCES_SUPPORT
-    src/reliability-checks.c
+    src/support/angle.c
+    src/support/format.c
+    src/support/editing-buffer.c
+    src/support/reliability-checks.c
+    src/support/text-convert.c
+    src/support/macro-state.c
     src/support/strl.c
+    src/support/text-output.c
 )
 
 set(SIL_MORE_SOURCES_CORE_LIBRARY
@@ -526,7 +527,7 @@ if (SIL_STRICT_WARNINGS)
     src/init2.c
     src/load.c
     src/metarun.c
-    src/reliability-checks.c
+    src/support/reliability-checks.c
     src/runtime/runtime-game.c
     src/score/score_io.c
     src/util.c
@@ -626,7 +627,7 @@ target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core m)
 if(BUILD_TESTING)
   add_executable(sil-phase01-tests
     tests/phase0_tests.c
-    src/reliability-checks.c
+    src/support/reliability-checks.c
   )
   target_link_libraries(sil-phase01-tests PRIVATE sil-build-config)
   if(SIL_STRICT_WARNINGS)

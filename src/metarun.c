@@ -25,7 +25,7 @@
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "platform-time.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 #include "app/app-ui.h"
 #include "metarun.h"
 #include "metarun/metarun-internal.h"

@@ -12,6 +12,7 @@
 #include "ui-file-viewer.h"
 #include "ui-information-scene.h"
 #include "fs/file.h"
+#include "fs/resource.h"
 #include "log/log.h"
 #include <ctype.h>
 
@@ -322,6 +323,14 @@ static bool show_file_resume_information_scene(
     return ui_information_scene_enter(scope);
 }
 
+static bool show_file_resolve_path(char* path, size_t max, cptr name)
+{
+    if (!path || !max || !name || !name[0])
+        return false;
+
+    return resource_resolve_path(path, max, RESOURCE_ROOT_HELP, name);
+}
+
 static bool show_file_find_next_match(cptr path, cptr find,
     bool case_sensitive, int start_line, int* out_line)
 {
@@ -514,24 +523,31 @@ static show_file_scene_result show_file_information_scene(
 
     name = filename;
 
-    if (what)
-    {
-        SDL_strlcpy(caption, what, sizeof(caption));
-        SDL_strlcpy(path, name, sizeof(path));
-        log_debug("Opening help file: %s", path);
-        fff = ang_file_open(path, "r");
-    }
-
-    if (!fff)
+    if (!show_file_resolve_path(path, sizeof(path), name))
     {
         ui_information_scene_leave(&scope);
-        log_warn("Failed to open help file: %s", name);
+        log_warn("Failed to resolve file viewer path: %s", name);
         msg_format("Cannot open '%s'.", name);
         message_flush();
         return SHOW_FILE_SCENE_RESULT_SHOWN;
     }
 
-    log_debug("Successfully opened help file: %s", name);
+    if (what)
+        SDL_strlcpy(caption, what, sizeof(caption));
+
+    log_debug("Opening viewer file: %s (requested: %s)", path, name);
+    fff = ang_file_open(path, "r");
+
+    if (!fff)
+    {
+        ui_information_scene_leave(&scope);
+        log_warn("Failed to open viewer file: %s", path);
+        msg_format("Cannot open '%s'.", name);
+        message_flush();
+        return SHOW_FILE_SCENE_RESULT_SHOWN;
+    }
+
+    log_debug("Successfully opened viewer file: %s", path);
 
     while (true)
     {

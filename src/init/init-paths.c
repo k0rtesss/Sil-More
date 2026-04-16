@@ -2,6 +2,7 @@
 #include "angband.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
+#include "fs/resource.h"
 #include "log/log.h"
 #include "metarun.h"
 #include <SDL3/SDL.h>
@@ -457,7 +458,8 @@ static void seed_sound_config(const char* user_dir)
         return;
 
     char user_sound_path[1024];
-    if (!path_build(user_sound_path, sizeof(user_sound_path), user_dir, "sound.json"))
+    if (!resource_build_path(user_sound_path, sizeof(user_sound_path),
+            RESOURCE_ROOT_USER, "sound.json"))
         return;
 
     /* Check if sound.json already exists in user folder */
@@ -467,24 +469,22 @@ static void seed_sound_config(const char* user_dir)
         return;
     }
 
-    /* Copy sound.json from lib/pref to user folder */
+    /* Copy the bundled default sound config into the user folder. */
     char pref_sound_path[1024];
 
-    /* ANGBAND_DIR_PREF already points to lib/pref */
     if (!ANGBAND_DIR_PREF || !*ANGBAND_DIR_PREF)
     {
         log_warn("init_file_paths: ANGBAND_DIR_PREF not set, cannot seed sound.json");
         return;
     }
 
-    /* Build path to lib/pref/sound.json */
-    if (!path_build(pref_sound_path, sizeof(pref_sound_path), ANGBAND_DIR_PREF,
-            "sound.json"))
+    if (!resource_build_default_sound_config_path(pref_sound_path,
+            sizeof(pref_sound_path)))
         return;
 
     /* Prefer streaming copy so it can work when source lives in Android assets. */
     if (copy_file_io(pref_sound_path, user_sound_path))
-        log_info("init_file_paths: copied sound.json from lib/pref to user folder");
+        log_info("init_file_paths: copied default sound.json to user folder");
     else
         log_warn("init_file_paths: failed to seed sound.json from '%s'",
             pref_sound_path);

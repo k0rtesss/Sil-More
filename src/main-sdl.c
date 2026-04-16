@@ -1,5 +1,6 @@
 #include "angband.h"
 #include "app/app-movement.h"
+#include "fs/resource.h"
 #include "sdl-main-internal.h"
 #include "ui/ui-information-scene.h"
 
@@ -1876,9 +1877,7 @@ errr init_sdl(int argc, char **argv)
     
     // Save config file path for later use on exit
     char config_file[1024];
-    if (ANGBAND_DIR_USER && ANGBAND_DIR_USER[0])
-        path_build(config_file, sizeof(config_file), ANGBAND_DIR_USER, "sil_sdl.json");
-    else
+    if (!resource_build_ui_config_path(config_file, sizeof(config_file)))
         SDL_strlcpy(config_file, "sil_sdl.json", sizeof(config_file));
     SDL_strlcpy(config_file_path, config_file, sizeof(config_file_path));
     
@@ -1898,21 +1897,14 @@ errr init_sdl(int argc, char **argv)
         
         sdl_config_load(config_file_path, &config, pane_config, &pane_config_count, MAX_PANE_CONFIGS);
         
-        // Load sound configuration from sound.json
-        // For local builds: read from lib/pref (ANGBAND_DIR_PREF)
-        // For standard builds: read from user folder (ANGBAND_DIR_USER)
+        // Load the active sound configuration via the resource layer.
         char sound_config_path[1024];
-#ifdef SIL_USE_LOCAL_DATA
-        if (ANGBAND_DIR_PREF && ANGBAND_DIR_PREF[0])
-            path_build(sound_config_path, sizeof(sound_config_path), ANGBAND_DIR_PREF, "sound.json");
-        else
-            SDL_strlcpy(sound_config_path, "sound.json", sizeof(sound_config_path));
-#else
-        if (ANGBAND_DIR_USER && ANGBAND_DIR_USER[0])
-            path_build(sound_config_path, sizeof(sound_config_path), ANGBAND_DIR_USER, "sound.json");
-        else
-            SDL_strlcpy(sound_config_path, "sound.json", sizeof(sound_config_path));
-#endif
+        if (!resource_build_active_sound_config_path(sound_config_path,
+                sizeof(sound_config_path)))
+        {
+            SDL_strlcpy(sound_config_path, "sound.json",
+                sizeof(sound_config_path));
+        }
         sound_config_load(sound_config_path, &g_sound_config);
         
         // Apply sound setting to global variable

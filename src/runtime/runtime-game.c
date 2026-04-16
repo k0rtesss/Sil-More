@@ -12,7 +12,7 @@
 #include "metarun.h"
 #include "platform-frame.h"
 #include "player/killer.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "score/score_runs.h"

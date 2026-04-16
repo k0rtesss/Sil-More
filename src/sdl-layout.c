@@ -1,4 +1,8 @@
 #include "angband.h"
+#define ANGBAND_NO_IO_COMPAT
+#include "fs/io_sdl.h"
+#undef ANGBAND_NO_IO_COMPAT
+#include "fs/resource.h"
 #include "sdl-main-internal.h"
 
 struct sdl_config config;
@@ -522,9 +526,14 @@ void resize(const SDL_Rect* screen)
 
     memcpy(g_pane_rects, panes, sizeof(g_pane_rects));
 
-    const char* font_path = config.monospace_font[0] != '\0'
-        ? config.monospace_font
-        : "lib/xtra/font/VictorMono-Medium.ttf";
+    char font_path[1024];
+
+    if (!resource_resolve_xtra_path(font_path, sizeof(font_path),
+            config.monospace_font[0] ? config.monospace_font : NULL,
+            "font/VictorMono-Medium.ttf"))
+    {
+        quit("could not resolve monospace font path");
+    }
 
     for (int i = 1; i < MAX_TERM_DATA; i++) {
         sdl_view_destroy(&g_views[i]);
@@ -803,7 +812,24 @@ static bool sdl_apply_live_tiles_mode(bool value)
     g_state.tileset_cols = 0;
 
     if (value) {
-        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
+        char tileset_path[1024];
+        SDL_Surface* ts;
+
+        if (!resource_build_default_tileset_path(tileset_path,
+                sizeof(tileset_path)))
+        {
+            log_error("Failed to resolve tileset path while enabling tiles");
+            g_state.use_tiles = false;
+            return false;
+        }
+
+        {
+            ang_file* stream = sdl_fopen(tileset_path, "rb");
+            if (stream)
+                ts = IMG_Load_IO(stream, true);
+            else
+                ts = NULL;
+        }
         int tileset_width;
 
         if (!ts) {

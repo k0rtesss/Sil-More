@@ -36,8 +36,8 @@ struct sdl_config {
     int window_height;
     
     // Custom fonts
-    char story_font[256];      // Font for story/narrative text (non-monospace, e.g., "lib/xtra/font/Story.ttf")
-    char monospace_font[256];  // Font for regular game text (monospace, default: VictorMono-Medium.ttf)
+    char story_font[256];      // Story font path, relative to xtra/ or absolute
+    char monospace_font[256];  // Monospace font path, relative to xtra/ or absolute
     
     // Monospace font rendering options
     bool mono_bold;            // Apply bold style to monospace font

@@ -7,6 +7,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
+#include "fs/resource.h"
 #include "log/log.h"
 #include "sound-config.h"
 #include <ctype.h>
@@ -106,25 +107,25 @@ static bool sdl_music_play_with_fallback(const char* primary_path,
     const char* fallback_path, MIX_Track* track, float gain, int loops,
     const char* label, char* resolved_path, size_t resolved_len);
 
-static SDL_EnumerationResult SDLCALL sdl_sound_scan_enum_cb(void* userdata,
+static resource_enumeration_result sdl_sound_scan_enum_cb(void* userdata,
     const char* dirname, const char* fname)
 {
     sound_scan_ctx* ctx = (sound_scan_ctx*)userdata;
     if (!ctx || !ctx->files || !ctx->file_count || !dirname || !fname) {
-        return SDL_ENUM_CONTINUE;
+        return RESOURCE_ENUM_CONTINUE;
     }
 
     if (!fname[0] || streq(fname, ".") || streq(fname, "..")) {
-        return SDL_ENUM_CONTINUE;
+        return RESOURCE_ENUM_CONTINUE;
     }
 
     if (!sdl_sound_is_audio_file(fname)) {
-        return SDL_ENUM_CONTINUE;
+        return RESOURCE_ENUM_CONTINUE;
     }
 
     int idx = *ctx->file_count;
     if (idx >= ctx->max_files) {
-        return SDL_ENUM_SUCCESS;
+        return RESOURCE_ENUM_SUCCESS;
     }
 
     char candidate_path[1024];
@@ -134,7 +135,7 @@ static SDL_EnumerationResult SDLCALL sdl_sound_scan_enum_cb(void* userdata,
 
     SDL_strlcpy(ctx->files[idx], candidate_path, SDL_SOUND_NAME_LEN);
     (*ctx->file_count)++;
-    return SDL_ENUM_CONTINUE;
+    return RESOURCE_ENUM_CONTINUE;
 }
 
 static bool is_sound_enabled(int sound_idx)
@@ -255,30 +256,8 @@ static void sdl_sound_build_path(const char* base_path, char* dst, size_t dst_le
         return;
     }
 
-    bool is_absolute = false;
-#ifdef _WIN32
-    if (((base_path[0] >= 'A' && base_path[0] <= 'Z') ||
-            (base_path[0] >= 'a' && base_path[0] <= 'z')) &&
-        base_path[1] == ':') {
-        is_absolute = true;
-    }
-#endif
-    if (base_path[0] == '/' || base_path[0] == '\\') {
-        is_absolute = true;
-    }
-
-    if (is_absolute) {
-        SDL_strlcpy(dst, base_path, dst_len);
-        return;
-    }
-
-    const char* anchor = ANGBAND_DIR_XTRA;
-    if (!anchor || !anchor[0]) {
+    if (!resource_resolve_xtra_path(dst, dst_len, base_path, NULL))
         dst[0] = '\0';
-        return;
-    }
-
-    path_build(dst, dst_len, anchor, base_path);
 }
 
 static bool sdl_sound_scan_folder(const char* folder_path, char files[][SDL_SOUND_NAME_LEN],
@@ -294,8 +273,9 @@ static bool sdl_sound_scan_folder(const char* folder_path, char files[][SDL_SOUN
     ctx.file_count = file_count;
     ctx.max_files = max_files;
 
-    if (!SDL_EnumerateDirectory(folder_path, sdl_sound_scan_enum_cb, &ctx)) {
-        log_debug("Cannot open sound folder: %s", folder_path);
+    if (!resource_enumerate_directory(folder_path, sdl_sound_scan_enum_cb,
+            &ctx)) {
+        log_debug("Cannot enumerate sound folder: %s", folder_path);
         return false;
     }
 
@@ -365,7 +345,8 @@ static bool sdl_sound_load_default_config(struct sound_config* defaults)
     }
 
     char defaults_path[1024];
-    if (!path_build(defaults_path, sizeof(defaults_path), ANGBAND_DIR_PREF, "sound.json")) {
+    if (!resource_build_default_sound_config_path(defaults_path,
+            sizeof(defaults_path))) {
         return false;
     }
 
@@ -882,21 +863,10 @@ void platform_sound_reload(void)
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
 
-#ifdef SIL_USE_LOCAL_DATA
-    if (ANGBAND_DIR_PREF && ANGBAND_DIR_PREF[0]) {
-        path_build(g_sound_config_path, sizeof(g_sound_config_path), ANGBAND_DIR_PREF,
-            "sound.json");
-    } else {
+    if (!resource_build_active_sound_config_path(g_sound_config_path,
+            sizeof(g_sound_config_path))) {
         SDL_strlcpy(g_sound_config_path, "sound.json", sizeof(g_sound_config_path));
     }
-#else
-    if (ANGBAND_DIR_USER && ANGBAND_DIR_USER[0]) {
-        path_build(g_sound_config_path, sizeof(g_sound_config_path), ANGBAND_DIR_USER,
-            "sound.json");
-    } else {
-        SDL_strlcpy(g_sound_config_path, "sound.json", sizeof(g_sound_config_path));
-    }
-#endif
 
     sound_config_load(g_sound_config_path, &g_sound_config);
     sdl_sound_fill_missing_events_from_defaults(&g_sound_config);

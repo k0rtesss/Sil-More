@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "cJSON.h"
 #include "fs/file.h"
-#include "fs/path.h"
+#include "fs/resource.h"
 #include "log/log.h"
 #include "object/object-display.h"
 
@@ -116,13 +116,7 @@ static void load_object_text_colors_json(void)
     for (int i = 0; i < (int)N_ELEMENTS(g_object_text_colors); i++)
         g_object_text_colors[i] = TERM_L_DARK;
 
-    if (!ANGBAND_DIR_PREF || !ANGBAND_DIR_PREF[0])
-    {
-        log_warn("object text colors: ANGBAND_DIR_PREF is not set");
-        return;
-    }
-
-    if (!path_build(path, sizeof(path), ANGBAND_DIR_PREF,
+    if (!resource_build_path(path, sizeof(path), RESOURCE_ROOT_PREF,
             "object_text_colors.json"))
     {
         log_warn("object text colors: unable to build config path");

@@ -236,13 +236,6 @@ extern bool save_player(void);
 extern errr check_modification_date(int fd, cptr template_file);
 extern errr check_modification_date_sdl(cptr raw_path, cptr txt_path);
 
-extern void text_to_ascii(char* buf, size_t len, cptr str);
-extern void ascii_to_text(char* buf, size_t len, cptr str);
-extern int macro_find_exact(cptr pat);
-extern errr macro_add(cptr pat, cptr act);
-extern errr macro_init(void);
-extern errr macro_free(void);
-extern errr macro_trigger_free(void);
 extern bool inkey_can_consume_immediately(void);
 extern errr message_color_define(u16b type, byte color);
 extern void move_cursor(int row, int col);
@@ -253,22 +246,6 @@ extern void pause_line(int row);
 extern void build_gamma_table(int gamma);
 extern byte gamma_table[256];
 #endif /* SUPPORT_GAMMA */
-
-extern byte get_angle_to_grid[41][41];
-extern int get_angle_to_target(int y0, int x0, int y1, int x1, int dir);
-extern void get_grid_using_angle(int angle, int y0, int x0, int* ty, int* tx);
-extern void editing_buffer_init(
-    editing_buffer* eb_ptr, const char* buf, size_t max_size);
-extern void editing_buffer_destroy(editing_buffer* eb_ptr);
-extern int editing_buffer_put_chr(editing_buffer* eb_ptr, char ch);
-extern int editing_buffer_set_position(editing_buffer* eb_ptr, size_t new_pos);
-extern int editing_buffer_delete(editing_buffer* eb_ptr);
-extern void editing_buffer_clear(editing_buffer* eb_ptr);
-extern void editing_buffer_get_all(
-    editing_buffer* eb_ptr, char buf[], size_t max_size);
-extern int editing_buffer_put_str(
-    editing_buffer* eb_ptr, const char* str, int n);
-extern cptr get_ext_color_name(byte ext_color);
 
 /*
  * Hack -- conditional (or "bizarre") externs

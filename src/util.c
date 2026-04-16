@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "fs/path.h"
 #include "log/log.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 #include <sys/stat.h>
 
 bool no_light(void)

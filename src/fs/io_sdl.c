@@ -8,6 +8,11 @@
 
 #define TAB_COLUMNS 8
 
+typedef struct sdl_enumeration_bridge {
+    resource_enumerate_directory_callback callback;
+    void* userdata;
+} sdl_enumeration_bridge;
+
 static bool sanitize_path(char* out, size_t out_len, cptr file)
 {
     if (!path_parse(out, out_len, file))
@@ -16,6 +21,30 @@ static bool sanitize_path(char* out, size_t out_len, cptr file)
         return false;
     }
     return true;
+}
+
+static SDL_EnumerationResult SDLCALL sdl_enumerate_directory_bridge(
+    void* userdata, const char* dirname, const char* fname)
+{
+    sdl_enumeration_bridge* bridge = userdata;
+    resource_enumeration_result result;
+
+    if (!bridge || !bridge->callback)
+        return SDL_ENUM_FAILURE;
+
+    result = bridge->callback(bridge->userdata, dirname, fname);
+    switch (result)
+    {
+    case RESOURCE_ENUM_CONTINUE:
+        return SDL_ENUM_CONTINUE;
+
+    case RESOURCE_ENUM_SUCCESS:
+        return SDL_ENUM_SUCCESS;
+
+    case RESOURCE_ENUM_FAILURE:
+    default:
+        return SDL_ENUM_FAILURE;
+    }
 }
 
 ang_file* sdl_fopen(cptr file, cptr mode)
@@ -335,5 +364,20 @@ bool ang_file_write_u8_compat(ang_file* stream, byte value)
 const char* ang_file_get_error_compat(void)
 {
     return SDL_GetError();
+}
+
+bool sdl_enumerate_directory(cptr path,
+    resource_enumerate_directory_callback callback, void* userdata)
+{
+    sdl_enumeration_bridge bridge;
+
+    if (!path || !path[0] || !callback)
+        return false;
+
+    bridge.callback = callback;
+    bridge.userdata = userdata;
+
+    return SDL_EnumerateDirectory(path, sdl_enumerate_directory_bridge,
+        &bridge);
 }
 

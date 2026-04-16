@@ -38,10 +38,8 @@
       "src/cmd4.c",
       "src/cmd5.c",
       "src/cmd6.c",
-      "src/drop_system.c",
       "src/dungeon.c",
       "src/files.c",
-      "src/format.c",
       "src/game-event.c",
       "src/gen-log.c",
       "src/generate.c",
@@ -67,7 +65,6 @@
       "src/player-xp.c",
       "src/quest.c",
       "src/randart.c",
-      "src/reliability-checks.c",
       "src/rng.c",
       "src/runtime-cli.c",
       "src/save.c",
@@ -93,14 +90,9 @@
       "src/targeting.c",
       "src/thrall_quest.c",
       "src/use-obj.c",
-      "src/util-angle.c",
-      "src/util-convert.c",
-      "src/util-editing.c",
       "src/util-input.c",
-      "src/util-macro.c",
       "src/util-message.c",
       "src/util-prompt.c",
-      "src/util-text.c",
       "src/util.c",
       "src/variable.c",
       "src/wizard1.c",
@@ -211,6 +203,93 @@
         "allowed_globs": [
           "src/fs/io_sdl*.c",
           "src/fs/io_sdl*.h"
+        ]
+      },
+      {
+        "key": "text_output_family",
+        "match_globs": [
+          "src/**/text-output.c",
+          "src/**/text-output.h"
+        ],
+        "allowed_globs": [
+          "src/support/text-output.c",
+          "src/support/text-output.h"
+        ]
+      },
+      {
+        "key": "macro_state_family",
+        "match_globs": [
+          "src/**/macro-state.c",
+          "src/**/macro-state.h"
+        ],
+        "allowed_globs": [
+          "src/support/macro-state.c",
+          "src/support/macro-state.h"
+        ]
+      },
+      {
+        "key": "editing_buffer_family",
+        "match_globs": [
+          "src/**/editing-buffer.c",
+          "src/**/editing-buffer.h"
+        ],
+        "allowed_globs": [
+          "src/support/editing-buffer.c",
+          "src/support/editing-buffer.h"
+        ]
+      },
+      {
+        "key": "text_convert_family",
+        "match_globs": [
+          "src/**/text-convert.c",
+          "src/**/text-convert.h"
+        ],
+        "allowed_globs": [
+          "src/support/text-convert.c",
+          "src/support/text-convert.h"
+        ]
+      },
+      {
+        "key": "reliability_checks_family",
+        "match_globs": [
+          "src/**/reliability-checks.c",
+          "src/**/reliability-checks.h"
+        ],
+        "allowed_globs": [
+          "src/support/reliability-checks.c",
+          "src/support/reliability-checks.h"
+        ]
+      },
+      {
+        "key": "format_family",
+        "match_globs": [
+          "src/**/format.c",
+          "src/**/format.h"
+        ],
+        "allowed_globs": [
+          "src/support/format.c",
+          "src/format.h"
+        ]
+      },
+      {
+        "key": "angle_family",
+        "match_globs": [
+          "src/**/angle.c"
+        ],
+        "allowed_globs": [
+          "src/support/angle.c"
+        ]
+      },
+      {
+        "key": "drop_system_family",
+        "match_globs": [
+          "src/**/drop-system.c",
+          "src/**/drop_system.c",
+          "src/**/drop_system.h"
+        ],
+        "allowed_globs": [
+          "src/drop/drop-system.c",
+          "src/drop_system.h"
         ]
       }
     ]

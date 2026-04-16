@@ -6,7 +6,7 @@
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
-#include "reliability-checks.h"
+#include "support/reliability-checks.h"
 #include "score/score_entry.h"
 #include "score/score_logic.h"
 #include "score/score_runs.h"
