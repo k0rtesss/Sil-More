@@ -2,7 +2,7 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
+#include "cmd/world/cmd-interact-chest.h"
 #include "log/log.h"
 #include "player/killer.h"
 #include "spell/spell-damage.h"

@@ -14,6 +14,7 @@
 #include "log/log.h"
 #include "gen-log.h"
 #include "metarun.h"
+#include "thrall_quest.h"
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>
 #include <string.h>

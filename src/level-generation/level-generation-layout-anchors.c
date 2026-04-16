@@ -1,7 +1,6 @@
 /* File: level-generation-layout-anchors.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "level-generation/level-generation-internal.h"
 

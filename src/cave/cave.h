@@ -28,6 +28,8 @@ bool cave_valid_bold(int y, int x);
 bool feat_supports_lighting(int feat);
 void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp);
 void map_info_default(int y, int x, byte* ap, char* cp);
+byte projectable(int y1, int x1, int y2, int x2, u32b flg);
+void scatter(int* yp, int* xp, int y, int x, int d, int m);
 int player_tile_offset(void);
 void dungeon_mark_map_for_redraw(void);
 void dungeon_note_cursor_relative(int y, int x);

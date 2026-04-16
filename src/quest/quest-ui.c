@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "metarun.h"
 #include "platform-time.h"
 #include "quest/quest.h"

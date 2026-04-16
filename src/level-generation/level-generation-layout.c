@@ -1,7 +1,6 @@
 /* File: level-generation-layout.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "gen-log.h"
 #include "log/log.h"
 #include "level-generation/level-generation-internal.h"

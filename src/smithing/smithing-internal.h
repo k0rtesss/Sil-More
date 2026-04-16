@@ -11,7 +11,7 @@
 #define INCLUDED_SMITHING_INTERNAL_H
 
 #include "smithing/smithing.h"
-#include "externs.h"
+#include "thrall_quest.h"
 
 typedef struct artefact_type artefact_type;
 typedef struct object_kind object_kind;

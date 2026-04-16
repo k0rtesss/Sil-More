@@ -1,7 +1,6 @@
 #include "angband.h"
 
 #include "app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "runtime-cli.h"
 

@@ -14,7 +14,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/killer.h"
 #include "player/player-songs.h"
 #include "spell/spell-monster.h"

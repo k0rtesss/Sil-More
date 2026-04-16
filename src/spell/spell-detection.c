@@ -14,7 +14,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/identification.h"
 #include "spell/spell-detection.h"
 

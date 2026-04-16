@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "drop/drop-system-internal.h"
-#include "externs.h"
 #include "gen-log.h"
 #include "mem/alloc.h"
 

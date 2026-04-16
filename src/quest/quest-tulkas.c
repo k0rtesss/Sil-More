@@ -1,7 +1,6 @@
 /* File: quest-tulkas.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "metarun.h"
 #include "quest/quest.h"
 #include "quest/quest-internal.h"

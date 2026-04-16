@@ -1,7 +1,6 @@
 /* File: level-generation-layout-morgoth.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "level-generation-internal.h"
 
 bool morgoth_region_active(void)

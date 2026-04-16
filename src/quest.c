@@ -1,6 +1,5 @@
 /* Quest tracking helpers split from metarun.c */
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
 #include <string.h>

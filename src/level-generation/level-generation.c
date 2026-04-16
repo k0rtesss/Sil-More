@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "level-generation/level-generation-internal.h"
 #include "log/log.h"
 #include "gen-log.h"

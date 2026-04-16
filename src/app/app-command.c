@@ -1,7 +1,6 @@
 #include "angband.h"
 
 #include "app/app-command.h"
-#include "externs.h"
 
 static char app_command_movement_legacy_command_char(
     const app_movement_command* command)

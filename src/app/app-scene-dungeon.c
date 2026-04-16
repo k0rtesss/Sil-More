@@ -2,7 +2,6 @@
 
 #include "app-scene-dungeon.h"
 #include "app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "melee/melee-combat-display.h"
 #include "ui/ui-status.h"

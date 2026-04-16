@@ -1,6 +1,5 @@
 #define ANGBAND_NO_IO_COMPAT
 #include "angband.h"
-#include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"

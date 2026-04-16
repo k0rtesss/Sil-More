@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "app/app-ui.h"
-#include "externs.h"
 #include "level-generation/level-generation-internal.h"
 #include "log/log.h"
 #include "gen-log.h"

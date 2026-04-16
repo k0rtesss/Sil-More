@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "drop/drop-system-internal.h"
-#include "externs.h"
 #include "mem/alloc.h"
 #include "fs/path.h"
 #include "fs/file.h"

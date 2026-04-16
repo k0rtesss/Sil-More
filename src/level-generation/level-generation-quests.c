@@ -7,7 +7,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "level-generation/level-generation-internal.h"

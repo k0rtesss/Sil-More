@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "drop/drop-system-internal.h"
-#include "externs.h"
 #include "reliability-checks.h"
 
 /* Baseline smithing difficulty (player-neutral). */

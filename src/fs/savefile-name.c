@@ -1,7 +1,6 @@
 /* File: fs/savefile-name.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "blitz.h"
 #include "fs/path.h"

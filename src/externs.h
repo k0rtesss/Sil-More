@@ -87,7 +87,6 @@ typedef struct app_ui_scene app_ui_scene;
 // extern FILE *log_file;
 
 /* variable.c */
-extern s16b object_level;
 extern s16b image_count;
 extern bool shimmer_objects;
 extern const cptr angband_sound_name[MSG_MAX];
@@ -133,21 +132,10 @@ extern bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
     size_t text_size, u64b* started_ms, u32b* hold_ms);
 extern void styles_clear_display_messages(void);
 extern int p_ptr_depth_proxy(void);
-/* Persisted door-style variant choices for consistency across save/load */
-extern byte projectable(int y1, int x1, int y2, int x2, u32b flg);
-extern void scatter(int* yp, int* xp, int y, int x, int d, int m);
 
 /* cmd1.c */
 extern void apply_oath_breaking_curse(int oath_type);
 extern void give_player_item(object_type * o_ptr);
-extern bool player_auto_identifies_object(const object_type* o_ptr);
-extern void player_mark_object_experienced(object_type* o_ptr);
-extern bool player_try_identify_smithing_object(
-    object_type* o_ptr, bool is_equipped, int bonus);
-extern bool player_try_identify_smithing_object_on_examine(
-    object_type* o_ptr, bool is_equipped);
-extern bool player_auto_identify_smithing_object(
-    object_type* o_ptr, bool ignore_distance_penalty);
 extern void do_cmd_pickup_from_pile(void);
 extern int count_open_adjacent_squares(int y, int x);
 
@@ -192,9 +180,7 @@ extern void do_cmd_knowledge_monsters(void);
 extern void do_cmd_knowledge_objects(void);
 extern void do_cmd_knowledge_kills(void);
 extern void ghost_challenge(void);
-extern void apply_magic_fake(object_type* o_ptr);
 extern void do_cmd_knowledge(void);
-extern void add_random_curse(object_type *o_ptr);
 
 /* cmd5.c */
 /* cmd6.c */
@@ -227,70 +213,7 @@ extern void init_file_paths(char* path);
 extern bool load_player(void);
 extern bool load_meta(void);
 
-/* monster1.c */
-extern void describe_monster(
-    int r_idx, bool spoilers, const monster_type* m_ptr);
-
-/* monster2.c */
-extern s16b poly_r_idx(const monster_type* m_ptr);
-extern void delete_monster(int y, int x);
-extern void compact_monsters(int size);
-extern void wipe_mon_list(void);
-extern s16b mon_pop(void);
-extern errr get_mon_num_prep(void);
-extern s16b get_mon_num(
-    int level, bool special, bool allow_non_smart, bool vault);
-extern void lore_probe_aux(int r_idx);
-extern void listen_hint_new_player_turn(void);
-extern bool listen_hint_overlay(int m_idx, byte* a, char* c);
-extern s16b monster_carry(int m_idx, object_type* j_ptr);
-extern int monster_song_hp_loss(const monster_type* m_ptr);
-extern void monster_swap(int y1, int x1, int y2, int x2);
-extern s16b player_place(int y, int x);
-extern s16b monster_place(int y, int x, monster_type* n_ptr);
-extern void calc_monster_speed(int y, int x);
-extern void set_monster_haste(s16b m_idx, s16b counter, bool message);
-extern void produce_cloud(monster_type* m_ptr);
-extern s16b monster_lookup_guid(u64b guid);
-extern s16b monster_lookup_guid_text(const char* text);
-extern bool place_monster_by_guid(
-    int y, int x, u64b guid, bool slp, bool ignore_depth, monster_type* summoner);
-extern void monster_special_vault_debug_context(
-    int* build_vault_type, bool* exact_token);
-extern void log_live_special_vault_only_monsters(const char* reason);
-extern bool monster_special_vault_selection_allowed(void);
-extern bool monster_special_vault_only_allowed_at(int y, int x);
-extern bool place_monster_aux(int y, int x, int r_idx, bool slp, bool grp);
-extern bool place_monster(int y, int x, bool slp, bool grp, bool vault);
-extern bool quest_monster_spawn_okay(int r_idx);
-extern bool alloc_monster(bool on_stairs, bool force_undead);
-extern bool reproduce_monster(int old_m_idx, int new_r_idx);
-
-/* thrall_quest.c */
-extern bool is_alert_thrall(monster_type* m_ptr);
-extern void init_thrall_quest(monster_type* m_ptr);
-extern cptr get_thrall_quest_item_name(byte quest_item);
-extern int player_has_thrall_quest_item(byte quest_item);
-extern bool handle_thrall_interaction(monster_type* m_ptr);
-extern void complete_thrall_quest(monster_type* m_ptr, int item_slot);
-extern bool object_is_damaged_item(const object_type* o_ptr);
-extern bool object_can_repair_damage(const object_type* o_ptr);
-extern int find_broken_item_to_upgrade(void);
-extern bool repair_damaged_item(int slot);
-extern bool upgrade_broken_item(int slot);
-extern bool reveal_random_artifact(void);
-extern bool elemental_attack_destroys_object(int attack_type,
-    const object_type* o_ptr);
-extern void sound_dam(int raw_dam, int min_raw, int max_raw, int hp_dam);
-
 extern bool prep_object_theme(int themetype);
-extern void acquirement(int y1, int x1, int num, drop_quality quality);
-extern void place_object(int y, int x, drop_quality quality, int droptype,
-    bool allow_artefacts);
-extern void place_trap(int y, int x);
-extern void place_random_door(int y, int x);
-extern void place_forge(int y, int x);
-extern void steal_object_from_monster(int y, int x);
 
 /* randart.c */
 extern void make_random_name(char* random_name, size_t max);
@@ -320,24 +243,11 @@ extern errr macro_add(cptr pat, cptr act);
 extern errr macro_init(void);
 extern errr macro_free(void);
 extern errr macro_trigger_free(void);
-extern errr input_byte_enqueue(int key);
 extern bool inkey_can_consume_immediately(void);
-extern bool input_submit_movement_command(
-    const app_movement_command* command);
-extern void input_clear_movement_commands(void);
-extern bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,
-    app_movement_command* out_command, char* out_ch);
-extern u16b message_type(s16b age);
 extern errr message_color_define(u16b type, byte color);
-extern void message_add(cptr str, u16b type);
-extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
-    byte* out_color, u16b* out_type, bool* out_more_pending);
 extern void move_cursor(int row, int col);
-extern void msg_debug(cptr fmt, ...);
-extern void text_out_to_file(byte attr, cptr str);
 extern int get_menu_choice(s16b max, char* prompt);
 extern void pause_line(int row);
-extern int int_exp(int base, int power);
 
 #ifdef SUPPORT_GAMMA
 extern void build_gamma_table(int gamma);
@@ -360,41 +270,6 @@ extern int editing_buffer_put_str(
     editing_buffer* eb_ptr, const char* str, int n);
 extern cptr get_ext_color_name(byte ext_color);
 
-/* xtra1.c */
-extern byte object_display_color(const object_type* o_ptr, byte base_color);
-
-/* xtra2.c */
-extern bool set_blind(int v);
-extern bool allow_player_confusion(monster_type* m_ptr);
-extern bool set_confused(int v);
-extern bool set_poisoned(int v);
-extern bool set_afraid(int v);
-extern bool allow_player_entrancement(monster_type* m_ptr);
-extern bool set_entranced(int v);
-extern bool allow_player_image(monster_type* m_ptr);
-extern bool set_image(int v);
-extern bool set_fast(int v);
-extern bool set_slow(int v);
-extern bool set_shield(int v);
-extern bool set_blessed(int v);
-extern bool set_hero(int v);
-extern bool set_rage(int v);
-extern bool set_tmp_str(int v);
-extern bool set_tmp_dex(int v);
-extern bool set_tmp_con(int v);
-extern bool set_tmp_gra(int v);
-extern bool set_protevil(int v);
-extern bool set_tmp_per(int v);
-extern bool set_tim_invis(int v);
-extern bool set_darkened(int v);
-extern bool set_oppose_fire(int v);
-extern bool set_oppose_cold(int v);
-extern bool set_oppose_pois(int v);
-extern bool allow_player_stun(monster_type* m_ptr);
-extern bool set_stun(int v);
-extern bool set_cut(int v);
-extern bool set_food(int v);
-extern int drop_loot(monster_type* m_ptr);
 /*
  * Hack -- conditional (or "bizarre") externs
  */

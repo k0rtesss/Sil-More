@@ -1,7 +1,6 @@
 /* File: fs/pref-time.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "fs/file.h"
 #include "fs/path.h"

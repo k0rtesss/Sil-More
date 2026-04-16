@@ -9,8 +9,9 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/combat/cmd-ranged.h"
 #include "log/log.h"
+#include "object/object-use.h"
 #include "ui/ui-information-scene.h"
 
 #include <limits.h>

@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "log/log.h"
-#include "externs.h"
 
 #include <ctype.h>
 #include <limits.h>

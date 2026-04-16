@@ -14,7 +14,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "metarun.h"
 #include "player/killer.h"
 #include "spell/spell-terrain.h"

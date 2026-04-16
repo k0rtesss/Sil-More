@@ -18,7 +18,7 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-util.h"
 

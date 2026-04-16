@@ -41,6 +41,8 @@ void do_cmd_note(char* note, int what_depth);
 void do_cmd_knowledge_notes(void);
 void do_cmd_knowledge_browser_page(int page);
 void desc_art_fake(int a_idx);
+void apply_magic_fake(object_type* o_ptr);
+void add_random_curse(object_type* o_ptr);
 bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 
 #endif /* INCLUDED_CMD_UI_H */

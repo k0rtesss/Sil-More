@@ -16,7 +16,6 @@
 #include "angband.h"
 #include "app/app-ui.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-combat-display.h"

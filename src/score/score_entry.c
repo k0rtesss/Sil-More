@@ -4,7 +4,6 @@
 
 #include "angband.h"
 #include "blitz.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "log/log.h"
 #include "metarun.h"

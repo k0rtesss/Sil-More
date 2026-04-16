@@ -1,7 +1,6 @@
 /* File: spell-teleport.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "spell/spell-teleport.h"
 
 /*
