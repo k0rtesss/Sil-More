@@ -69,6 +69,56 @@ bool similar_monsters(int m1y, int m1x, int m2y, int m2x)
     return (false);
 }
 
+void break_truce(bool obvious)
+{
+    int i;
+    monster_type* m_ptr = NULL;
+    char m_name[80];
+
+    if (!p_ptr->truce)
+        return;
+
+    for (i = mon_max - 1; i >= 1; i--)
+    {
+        m_ptr = &mon_list[i];
+
+        if (!m_ptr->r_idx)
+            continue;
+        if (!los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
+            continue;
+        if (m_ptr->alertness < ALERTNESS_ALERT)
+            continue;
+
+        monster_desc(m_name, sizeof(m_name), m_ptr, 0x04);
+        p_ptr->truce = false;
+    }
+
+    if (obvious)
+        p_ptr->truce = false;
+
+    if (p_ptr->truce)
+        return;
+
+    if (!obvious)
+    {
+        msg_format("%^s lets out a cry! The tension is broken.", m_name);
+        update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
+        monster_perception(false, false, -10);
+    }
+    else
+    {
+        msg_print("The tension is broken.");
+    }
+
+    for (i = mon_max - 1; i >= 1; i--)
+    {
+        m_ptr = &mon_list[i];
+        if (!m_ptr->r_idx)
+            continue;
+        m_ptr->min_range = 0;
+    }
+}
+
 /*
  *  Cause a temporary penalty to morale in monsters of the same type who can see
  * the specified monster. (Used when it dies and for cruel blow).

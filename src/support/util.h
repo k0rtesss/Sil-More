@@ -66,6 +66,9 @@ int damroll(int num, int sides);
 int int_exp(int base, int power);
 bool parse_u64b_hex(const char* text, u64b* out);
 cptr get_ext_color_name(byte ext_color);
+#ifdef SET_UID
+void user_name(char* buf, size_t len, int id);
+#endif
 void editing_buffer_init(
     struct editing_buffer* eb_ptr, const char* buf, size_t max_size);
 void editing_buffer_destroy(struct editing_buffer* eb_ptr);
@@ -78,5 +81,8 @@ void editing_buffer_get_all(
     struct editing_buffer* eb_ptr, char buf[], size_t max_size);
 int editing_buffer_put_str(
     struct editing_buffer* eb_ptr, const char* str, int n);
+#ifdef ALLOW_REPEAT
+void repeat_check(void);
+#endif
 
 #endif /* INCLUDED_SUPPORT_UTIL_H */

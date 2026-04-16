@@ -24,7 +24,7 @@ extern struct sound_config g_sound_config;
 #include "fs/path.h"
 #include "log/log.h"
 #include "runtime/runtime-game.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"

@@ -21,7 +21,7 @@
 #include "platform-story-font.h"
 #include "player/killer.h"
 #include "metarun.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "score/score_entry.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-information-scene.h"

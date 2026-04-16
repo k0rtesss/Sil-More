@@ -12,7 +12,7 @@
 #include "main.h"
 #include "main-sdl.h"
 #include "pane.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
 #include "sound-config.h"

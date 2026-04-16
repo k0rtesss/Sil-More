@@ -31,7 +31,6 @@
 #include "cmd/world/cmd-interact-chest.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
-#include "game-event.h"
 #include "init/init-data.h"
 #include "init/init-paths.h"
 #include "level-generation/level-generation.h"
@@ -66,7 +65,7 @@ typedef struct app_ui_scene app_ui_scene;
 #include "score/score_io.h"
 #include "score/score_logic.h"
 #include "score/score_ui.h"
-#include "signals.h"
+#include "platform-signals.h"
 #include "smithing/smithing.h"
 #include "spell/spell.h"
 #include "support/macro-state.h"
@@ -232,35 +231,16 @@ extern bool save_player(void);
 /*use-obj.c*/
 /* util.c */
 
-/* Legacy - still used by some systems */
-extern errr check_modification_date(int fd, cptr template_file);
-extern errr check_modification_date_sdl(cptr raw_path, cptr txt_path);
-
 extern bool inkey_can_consume_immediately(void);
-extern errr message_color_define(u16b type, byte color);
-extern void move_cursor(int row, int col);
-extern int get_menu_choice(s16b max, char* prompt);
-extern void pause_line(int row);
-
-#ifdef SUPPORT_GAMMA
-extern void build_gamma_table(int gamma);
-extern byte gamma_table[256];
-#endif /* SUPPORT_GAMMA */
 
 /*
  * Hack -- conditional (or "bizarre") externs
  */
 
 #ifdef SET_UID
-#ifndef HAVE_USLEEP
-/* util.c */
-extern int usleep(unsigned long usecs);
-#endif /* HAVE_USLEEP */
-extern void user_name(char* buf, size_t len, int id);
 #endif /* SET_UID */
 
 #ifdef ALLOW_REPEAT
-extern void repeat_check(void);
 #endif /* ALLOW_REPEAT */
 
 #ifdef ALLOW_DEBUG

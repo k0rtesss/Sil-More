@@ -144,19 +144,13 @@ set(SIL_MORE_SOURCES_CORE
     src/cave.c
     src/cJSON.c
     src/dungeon.c
-    src/game-event.c
     src/item_set.c
     src/quest.c
     src/randart.c
     src/rng.c
-    src/runtime-cli.c
     src/squelch.c
     src/supplies.c
     src/tables.c
-    src/util-input.c
-    src/util-message.c
-    src/util-prompt.c
-    src/util.c
     src/variable.c
     src/wizard1.c
     src/wizard2.c
@@ -352,6 +346,7 @@ set(SIL_MORE_SOURCES_FS
 )
 
 set(SIL_MORE_SOURCES_RUNTIME
+    src/runtime/runtime-cli.c
     src/runtime/runtime-game.c
 )
 
@@ -373,7 +368,6 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
 
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
-    src/signals.c
     src/ui/colors.c
     src/ui/ui-character-name.c
     src/ui/ui-character-screen.c
@@ -382,6 +376,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/ui-help.c
     src/ui/ui-information-scene.c
     src/ui/ui-look-sidebar.c
+    src/ui/ui-narrative.c
     src/ui/ui-story.c
     src/ui/ui-status.c
     src/ui/story_font.c
@@ -404,6 +399,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/fs/path.c
     src/init/init-paths.c
     src/platform-frame.c
+    src/platform-signals.c
     src/platform-time.c
     src/log/bootstrap.c
     src/sdl-config.c
@@ -421,6 +417,9 @@ set(SIL_MORE_SOURCES_LOG
 
 set(SIL_MORE_SOURCES_SUPPORT
     src/support/angle.c
+    src/support/input.c
+    src/support/message.c
+    src/support/prompt.c
     src/support/format.c
     src/support/editing-buffer.c
     src/support/reliability-checks.c
@@ -428,6 +427,7 @@ set(SIL_MORE_SOURCES_SUPPORT
     src/support/macro-state.c
     src/support/strl.c
     src/support/text-output.c
+    src/support/util.c
 )
 
 set(SIL_MORE_SOURCES_CORE_LIBRARY
@@ -530,7 +530,7 @@ if (SIL_STRICT_WARNINGS)
     src/support/reliability-checks.c
     src/runtime/runtime-game.c
     src/score/score_io.c
-    src/util.c
+    src/support/util.c
   )
   target_link_libraries(sil-phase01-strict-gate PRIVATE
     sil-build-config

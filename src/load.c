@@ -15,7 +15,7 @@
 #include "log/log.h"
 #include "platform-config.h"
 #include "platform-frame.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "player/killer.h"
 #include "support/reliability-checks.h"
 #include "score/score_guid.h"

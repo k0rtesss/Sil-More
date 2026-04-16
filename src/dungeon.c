@@ -21,7 +21,7 @@
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "platform-time.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "runtime/runtime-game.h"
 #include "player/killer.h"
 #include "metarun.h"

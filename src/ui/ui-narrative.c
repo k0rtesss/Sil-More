@@ -1,125 +1,12 @@
-/* File: game-event.c */
-
 #include "angband.h"
 #include "app/app-ui.h"
-#include "game-event.h"
 #include "log/log.h"
 #include "platform-story-font.h"
 #include "ui/ui-information-scene.h"
-
-bool random_stair_location(int* sy, int* sx)
-{
-    int stair_y[100];
-    int stair_x[100];
-    int stair_num = 0;
-    int y, x;
-
-    // Note all the stairs
-    for (y = 0; y < p_ptr->cur_map_hgt; y++)
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            if (cave_stair_bold(y, x))
-            {
-                stair_y[stair_num] = y;
-                stair_x[stair_num] = x;
-                if (stair_num < 99)
-                    stair_num++;
-            }
-        }
-    }
-
-    // If no valid stairs are found, then bail out (paranoia)
-    if (stair_num == 0)
-    {
-        return (false);
-    }
-
-    // Choose a random stair
-    stair_num = rand_int(stair_num);
-    *sy = stair_y[stair_num];
-    *sx = stair_x[stair_num];
-
-    return (true);
-}
-
-/*
- * Break the truce in Morgoth's throne room
- */
-extern void break_truce(bool obvious)
-{
-    int i;
-
-    monster_type* m_ptr = NULL; // default to soothe compiler warnings
-
-    char m_name[80];
-
-    if (p_ptr->truce)
-    {
-        /* Scan all other monsters */
-        for (i = mon_max - 1; i >= 1; i--)
-        {
-            /* Access the monster */
-            m_ptr = &mon_list[i];
-
-            /* Ignore dead monsters */
-            if (!m_ptr->r_idx)
-                continue;
-
-            // Ignore monsters out of line of sight
-            if (!los(m_ptr->fy, m_ptr->fx, p_ptr->py, p_ptr->px))
-                continue;
-
-            // Ignore unalert monsters
-            if (m_ptr->alertness < ALERTNESS_ALERT)
-                continue;
-
-            /* Get the monster name (using 'something' for hidden creatures) */
-            monster_desc(m_name, sizeof(m_name), m_ptr, 0x04);
-
-            p_ptr->truce = false;
-        }
-
-        if (obvious)
-            p_ptr->truce = false;
-
-        if (!p_ptr->truce)
-        {
-            if (!obvious)
-            {
-                msg_format(
-                    "%^s lets out a cry! The tension is broken.", m_name);
-
-                /* Make a lot of noise */
-                update_flow(m_ptr->fy, m_ptr->fx, FLOW_MONSTER_NOISE);
-                monster_perception(false, false, -10);
-            }
-            else
-            {
-                msg_print("The tension is broken.");
-            }
-
-            /* Scan all other monsters */
-            for (i = mon_max - 1; i >= 1; i--)
-            {
-                /* Access the monster */
-                m_ptr = &mon_list[i];
-
-                /* Ignore dead monsters */
-                if (!m_ptr->r_idx)
-                    continue;
-
-                /* Mark minimum desired range for recalculation */
-                m_ptr->min_range = 0;
-            }
-        }
-    }
-}
+#include "ui/ui-narrative.h"
 
 const char entry_poetry[][100] = { { "Into the vast and echoing gloom," },
     { "more dread than many-tunnelled tomb" },
-    //	{ "in labyrinthine pyramid" },
-    //	{ "where everlasting death is hid," },
     { "  down awful corridors that wind" },
     { "    down to a menace dark enshrined;" },
     { "      down to the mountain's roots profound," },
@@ -213,34 +100,6 @@ const char throne_poetry[][100] = { { "Loud rose a din of laughter hoarse," },
     { "          stabbed with flickering lightning-gleams." },
 
     { "" } };
-
-/*
-const char throne_poetry2[][100] =
-{
-        { "To Morgoth's hall, where dreadful feast" },
-        { "he held, and drank the blood of beast" },
-        { "and lives of Men, she stumbling came:" },
-        { "her eyes were dazed with smoke and flame." },
-        { "The pillars, reared like monstrous shores" },
-        { "to bear earth's overwhelming floors," },
-        { "were devil-carven, shaped with skill" },
-        { "such as unholy dreams doth fill:" },
-        { "they towered like trees into the air," },
-        { "whose trunks are rooted in despair," },
-        { "whose shade is death, whose fruit is bane," },
-        { "whose boughs like serpents writhe in pain." },
-        { "Beneath them ranged with spear and sword" },
-        { "stood Morgoth's sable-armoured horde:" },
-        { "the fire on blade and boss of shield" },
-        { "was red as blood on stricken field." },
-        { "Beneath a monstrous column loomed" },
-        { "the throne of Morgoth, and the doomed" },
-        { "and dying gasped upon the floor:" },
-        { "his hideous footstool, rape of war." },
-
-        { "" }
-};
-*/
 
 const char ultimate_bug_text[][100]
     = { { "Against all hope, you defeated the Dark Enemy," },
@@ -381,9 +240,8 @@ static bool pause_with_text_scene_present(const app_ui_scene* scene)
     return scene ? ui_information_scene_present_ui(scene) : false;
 }
 
-/* pause_with_text: prints name+alt, explicit blank line, then wrapped start splits */
 void pause_with_text(const char desc[][100], int row, int col,
-                     const char extra[][100], byte extra_attr)
+    const char extra[][100], byte extra_attr)
 {
     ui_information_scene_scope scope;
     app_ui_scene scene;

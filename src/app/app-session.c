@@ -2,7 +2,7 @@
 
 #include "app-session.h"
 #include "log/log.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 
 typedef struct app_input_queue {
     app_input* items;

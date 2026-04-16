@@ -1,7 +1,7 @@
 /* File: runtime-cli.c */
 
 #include "angband.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 
 struct runtime_cli_state {
     bool fiddle;

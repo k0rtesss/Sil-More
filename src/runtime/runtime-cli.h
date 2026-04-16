@@ -1,4 +1,4 @@
-/* runtime-cli.h - runtime command-line state and usage */
+/* runtime/runtime-cli.h - runtime command-line state and usage */
 
 #ifndef INCLUDED_RUNTIME_CLI_H
 #define INCLUDED_RUNTIME_CLI_H

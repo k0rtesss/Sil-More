@@ -55,6 +55,37 @@ bool grid_info_is_available(int y, int x)
     return !player_suppresses_unseen_grid_info() || player_can_see_bold(y, x);
 }
 
+bool random_stair_location(int* sy, int* sx)
+{
+    int stair_y[100];
+    int stair_x[100];
+    int stair_num = 0;
+    int y, x;
+
+    for (y = 0; y < p_ptr->cur_map_hgt; y++)
+    {
+        for (x = 0; x < p_ptr->cur_map_wid; x++)
+        {
+            if (cave_stair_bold(y, x))
+            {
+                stair_y[stair_num] = y;
+                stair_x[stair_num] = x;
+                if (stair_num < 99)
+                    stair_num++;
+            }
+        }
+    }
+
+    if (stair_num == 0)
+        return false;
+
+    stair_num = rand_int(stair_num);
+    *sy = stair_y[stair_num];
+    *sx = stair_x[stair_num];
+
+    return true;
+}
+
 /* Encoded color range that indicates an absolute style index per cell.
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals

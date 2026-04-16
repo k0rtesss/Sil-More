@@ -24,7 +24,7 @@
 #include "log/log.h"
 #include "platform-frame.h"
 #include "runtime/runtime-game.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "platform-audio.h"
 #include <SDL3/SDL_filesystem.h>
 

@@ -9,7 +9,7 @@
 #include "player/identification.h"
 #include "player/player-calc.h"
 #include "player/weapon_stats.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 
 const player_race* rp_ptr;
 character_profile* current_character_profile;

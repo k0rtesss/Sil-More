@@ -1,7 +1,7 @@
 /* File: signals.c */
 
 #include "angband.h"
-#include "signals.h"
+#include "platform-signals.h"
 #include "log/log.h"
 #include "platform-frame.h"
 #include "runtime/runtime-game.h"

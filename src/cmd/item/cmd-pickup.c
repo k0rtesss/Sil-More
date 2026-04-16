@@ -16,7 +16,7 @@
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "player/killer.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "metarun.h"
 #include <math.h>
 

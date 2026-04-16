@@ -12,9 +12,11 @@
 
 void maybe_update_morgoth_state_from_hp(monster_type* m_ptr);
 void anger_morgoth(int level);
+void break_truce(bool obvious);
 void create_chosen_artefact(byte name1, int y, int x, bool identify);
 int drop_loot(monster_type* m_ptr);
 void monster_death(int m_idx);
 bool mon_take_hit(int m_idx, int dam, cptr note, int who);
+bool similar_monsters(int m1y, int m1x, int m2y, int m2x);
 
 #endif /* INCLUDED_MONSTER_MONSTER_DEATH_H */

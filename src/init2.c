@@ -16,7 +16,7 @@
 #include "init/init-lifecycle.h"
 #include "log/log.h"
 #include "platform-audio.h"
-#include "runtime-cli.h"
+#include "runtime/runtime-cli.h"
 #include "platform-config.h"
 #include "platform-input.h"
 #include "platform-time.h"

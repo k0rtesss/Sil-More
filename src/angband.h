@@ -53,7 +53,6 @@
 #include "cmd/ui/cmd-ui.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
-#include "game-event.h"
 #include "init/init-data.h"
 #include "init/init-paths.h"
 #include "level-generation/level-generation.h"
@@ -79,7 +78,7 @@
 #include "score/score_io.h"
 #include "score/score_logic.h"
 #include "score/score_ui.h"
-#include "signals.h"
+#include "platform-signals.h"
 #include "smithing/smithing.h"
 #include "spell/spell.h"
 #include "support/game-tables.h"
@@ -96,6 +95,7 @@
 #include "ui/ui-file-viewer.h"
 #include "ui/ui-help.h"
 #include "ui/ui-look-sidebar.h"
+#include "ui/ui-narrative.h"
 #include "ui/ui-story.h"
 
 /***** Some older copyright messages follow below *****/

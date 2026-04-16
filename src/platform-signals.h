@@ -1,4 +1,4 @@
-/* File: signals.h */
+/* File: platform-signals.h */
 
 #ifndef INCLUDED_SIGNALS_H
 #define INCLUDED_SIGNALS_H

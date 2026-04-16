@@ -40,7 +40,6 @@
       "src/cmd6.c",
       "src/dungeon.c",
       "src/files.c",
-      "src/game-event.c",
       "src/gen-log.c",
       "src/generate.c",
       "src/init1.c",
@@ -60,13 +59,13 @@
       "src/obj-info.c",
       "src/pane.c",
       "src/platform-frame.c",
+      "src/platform-signals.c",
       "src/platform-time.c",
       "src/player-status.c",
       "src/player-xp.c",
       "src/quest.c",
       "src/randart.c",
       "src/rng.c",
-      "src/runtime-cli.c",
       "src/save.c",
       "src/sdl-config.c",
       "src/sdl-layout.c",
@@ -80,7 +79,6 @@
       "src/sdl-story-font.c",
       "src/sdl-touch.c",
       "src/sdl-ui-style.c",
-      "src/signals.c",
       "src/sound-config.c",
       "src/spells1.c",
       "src/spells2.c",
@@ -90,10 +88,6 @@
       "src/targeting.c",
       "src/thrall_quest.c",
       "src/use-obj.c",
-      "src/util-input.c",
-      "src/util-message.c",
-      "src/util-prompt.c",
-      "src/util.c",
       "src/variable.c",
       "src/wizard1.c",
       "src/wizard2.c",
@@ -290,6 +284,44 @@
         "allowed_globs": [
           "src/drop/drop-system.c",
           "src/drop_system.h"
+        ]
+      },
+      {
+        "key": "support_input_message_prompt_family",
+        "match_globs": [
+          "src/**/util-input.c",
+          "src/**/util-message.c",
+          "src/**/util-prompt.c",
+          "src/**/input.c",
+          "src/**/message.c",
+          "src/**/prompt.c"
+        ],
+        "allowed_globs": [
+          "src/support/input.c",
+          "src/support/message.c",
+          "src/support/prompt.c"
+        ]
+      },
+      {
+        "key": "support_util_family",
+        "match_globs": [
+          "src/**/util.c",
+          "src/**/util.h"
+        ],
+        "allowed_globs": [
+          "src/support/util.c",
+          "src/support/util.h"
+        ]
+      },
+      {
+        "key": "runtime_family",
+        "match_globs": [
+          "src/**/runtime-*.c",
+          "src/**/runtime-*.h"
+        ],
+        "allowed_globs": [
+          "src/runtime/*.c",
+          "src/runtime/*.h"
         ]
       }
     ]
