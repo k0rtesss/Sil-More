@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "ui/ui-information-scene.h"
@@ -423,7 +423,7 @@ static void squelch_save_values_to_file(void)
     int i;
     char ftmp[80];
     char buf[1024];
-    SDL_IOStream* fff;
+    ang_file* fff;
 
     sprintf(ftmp, "%s.squ", op_ptr->base_name);
     if (!askfor_aux(ftmp, sizeof(ftmp)))
@@ -436,7 +436,7 @@ static void squelch_save_values_to_file(void)
     }
 
     safe_setuid_drop();
-    fff = sdl_fopen(buf, "a");
+    fff = ang_file_open(buf, "a");
     safe_setuid_grab();
     if (!fff)
     {
@@ -445,7 +445,7 @@ static void squelch_save_values_to_file(void)
         return;
     }
 
-    SDL_IOprintf(fff, "\n\n# Squelch bits\n\n");
+    ang_file_printf(fff, "\n\n# Squelch bits\n\n");
     for (i = 1; i < z_info->k_max; i++)
     {
         int tval = k_info[i].tval;
@@ -453,15 +453,15 @@ static void squelch_save_values_to_file(void)
         int squelch = k_info[i].squelch;
 
         if (tval || sval)
-            SDL_IOprintf(fff, "Q:%d:%d:%d:%d\n", i, tval, sval, squelch);
+            ang_file_printf(fff, "Q:%d:%d:%d:%d\n", i, tval, sval, squelch);
     }
 
-    SDL_IOprintf(fff, "\n\n# squelch_level array\n\n");
+    ang_file_printf(fff, "\n\n# squelch_level array\n\n");
     for (i = 0; i < SQUELCH_BYTES; i++)
-        SDL_IOprintf(fff, "Q:%d:%d\n", i, squelch_level[i]);
-    SDL_IOprintf(fff, "\n\n");
+        ang_file_printf(fff, "Q:%d:%d\n", i, squelch_level[i]);
+    ang_file_printf(fff, "\n\n");
 
-    sdl_fclose(fff);
+    ang_file_close(fff);
     squelch_show_status_message("Squelch file saved successfully.");
 }
 
@@ -484,7 +484,7 @@ static void squelch_save_autoinscriptions_to_file(void)
     int i;
     char ftmp[80];
     char buf[1024];
-    SDL_IOStream* fff;
+    ang_file* fff;
 
     SDL_strlcpy(ftmp, op_ptr->base_name, sizeof(ftmp));
     if (!askfor_aux(ftmp, sizeof(ftmp)))
@@ -498,7 +498,7 @@ static void squelch_save_autoinscriptions_to_file(void)
     }
 
     safe_setuid_drop();
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
     safe_setuid_grab();
     if (!fff)
     {
@@ -509,23 +509,23 @@ static void squelch_save_autoinscriptions_to_file(void)
     }
     if (!inscriptions)
     {
-        sdl_fclose(fff);
+        ang_file_close(fff);
         log_warn("squelch: no inscriptions available to save");
         squelch_show_status_message("No autoinscriptions to save.");
         return;
     }
 
-    SDL_IOprintf(fff, "# Format: B:[Item Kind]:[Inscription]\n\n");
+    ang_file_printf(fff, "# Format: B:[Item Kind]:[Inscription]\n\n");
     for (i = 0; i < inscriptionsCount; i++)
     {
         object_kind* k_ptr = &k_info[inscriptions[i].kindIdx];
 
-        SDL_IOprintf(fff, "# Autoinscription for %s\n", k_name + k_ptr->name);
-        SDL_IOprintf(fff, "B:%d:%s\n\n", inscriptions[i].kindIdx,
+        ang_file_printf(fff, "# Autoinscription for %s\n", k_name + k_ptr->name);
+        ang_file_printf(fff, "B:%d:%s\n\n", inscriptions[i].kindIdx,
             quark_str(inscriptions[i].inscriptionIdx));
     }
 
-    sdl_fclose(fff);
+    ang_file_close(fff);
     squelch_show_status_message("Autoinscribe file saved successfully.");
 }
 

@@ -3,7 +3,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -48,12 +48,12 @@ static void score_runs_fill_guid(score_guid64* guid, u64b value);
 static score_killer_kind score_runs_killer_kind_from_string(const char* how);
 static void score_runs_normalize_name(const char* name, char* out, size_t out_len);
 static u32b score_runs_hash_persona(const char* normalized);
-static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* header,
-                                        bool* created);
-static bool score_runs_write_record(SDL_IOStream* file,
+static ang_file* score_runs_open_db(const char* path, score_db_header* header,
+                                    bool* created);
+static bool score_runs_write_record(ang_file* file,
                                     const score_record_v1* record,
                                     const score_run_detail_block* details);
-static bool score_runs_write_header(SDL_IOStream* file,
+static bool score_runs_write_header(ang_file* file,
                                     const score_db_header* header);
 
 static bool score_runs_legacy_checked = false;
@@ -235,7 +235,7 @@ static void score_runs_import_legacy_scores(void)
 
     log_debug("score_runs: opening legacy file %s", score_path);
     safe_setuid_grab();
-    SDL_IOStream* source = score_file_open(score_path, O_RDONLY);
+    ang_file* source = score_file_open(score_path, O_RDONLY);
     safe_setuid_drop();
     if (!source) {
         log_debug("score_runs: scores.raw missing, import skipped");
@@ -245,7 +245,7 @@ static void score_runs_import_legacy_scores(void)
     snapshot.fd = source;
 
     if (highscore_seek(0) != 0) {
-        SDL_CloseIO(source);
+        (void)ang_file_close_compat(source);
         snapshot.fd = NULL;
         log_debug("score_runs: highscore_seek() failed");
         score_file_set_active_ctx(previous_ctx);
@@ -257,7 +257,7 @@ static void score_runs_import_legacy_scores(void)
     if (header_entries > MAX_HISCORES)
         header_entries = MAX_HISCORES;
     if (header_entries == 0) {
-        SDL_CloseIO(source);
+        (void)ang_file_close_compat(source);
         snapshot.fd = NULL;
         score_file_set_active_ctx(previous_ctx);
         return;
@@ -266,7 +266,7 @@ static void score_runs_import_legacy_scores(void)
     high_score* legacy = mem_alloc_array(header_entries, high_score);
     if (!legacy) {
         log_debug("score_runs: unable to alloc %u legacy slots", header_entries);
-        SDL_CloseIO(source);
+        (void)ang_file_close_compat(source);
         snapshot.fd = NULL;
         score_file_set_active_ctx(previous_ctx);
         return;
@@ -281,7 +281,7 @@ static void score_runs_import_legacy_scores(void)
         legacy_entries++;
     }
 
-    SDL_CloseIO(source);
+    (void)ang_file_close_compat(source);
     snapshot.fd = NULL;
 
     if (legacy_entries == 0) {
@@ -305,7 +305,7 @@ static void score_runs_import_legacy_scores(void)
 
     score_db_header header;
     bool created = false;
-    SDL_IOStream* runs_db = score_runs_open_db(runs_path, &header, &created);
+    ang_file* runs_db = score_runs_open_db(runs_path, &header, &created);
     if (!runs_db) {
         log_debug("score_runs: unable to open runs.db for import");
         mem_free(legacy);
@@ -316,7 +316,7 @@ static void score_runs_import_legacy_scores(void)
         log_debug("score_runs: runs.db already has %u entries (legacy=%u)",
             header.record_count, legacy_entries);
         mem_free(legacy);
-        SDL_CloseIO(runs_db);
+        (void)ang_file_close_compat(runs_db);
         return;
     }
 
@@ -328,7 +328,7 @@ static void score_runs_import_legacy_scores(void)
     details.header.artefact_count = 0;
     details.header.monster_count = 0;
 
-    SDL_SeekIO(runs_db, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(runs_db, 0, ANG_FILE_SEEK_END);
 
     u32b imported = 0;
     for (u32b i = header.record_count; i < legacy_entries; ++i) {
@@ -369,7 +369,7 @@ static void score_runs_import_legacy_scores(void)
     }
 
     mem_free(legacy);
-    SDL_CloseIO(runs_db);
+    (void)ang_file_close_compat(runs_db);
 }
 
 static void score_runs_init_header(score_db_header* header)
@@ -379,15 +379,15 @@ static void score_runs_init_header(score_db_header* header)
     header->version = SCORE_RUNS_DB_VERSION;
 }
 
-static bool score_runs_read_header(SDL_IOStream* file, score_db_header* header)
+static bool score_runs_read_header(ang_file* file, score_db_header* header)
 {
     if (!file || !header)
         return false;
 
-    if (SDL_SeekIO(file, 0, SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET) < 0)
         return false;
 
-    if (SDL_ReadIO(file, header, sizeof(*header)) != sizeof(*header))
+    if (ang_file_read_compat(file, header, sizeof(*header)) != sizeof(*header))
         return false;
 
     if (memcmp(header->magic, SCORE_DB_MAGIC, sizeof(header->magic)) != 0)
@@ -396,15 +396,15 @@ static bool score_runs_read_header(SDL_IOStream* file, score_db_header* header)
     return true;
 }
 
-static bool score_runs_write_header(SDL_IOStream* file, const score_db_header* header)
+static bool score_runs_write_header(ang_file* file, const score_db_header* header)
 {
     if (!file || !header)
         return false;
 
-    if (SDL_SeekIO(file, 0, SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET) < 0)
         return false;
 
-    return SDL_WriteIO(file, header, sizeof(*header)) == sizeof(*header);
+    return ang_file_write_compat(file, header, sizeof(*header)) == sizeof(*header);
 }
 
 static u16b score_runs_choose_artefact_capacity(void)
@@ -478,12 +478,12 @@ static void score_runs_release_detail_block(score_run_detail_block* block)
     memset(block, 0, sizeof(*block));
 }
 
-static bool score_runs_read_detail_header(SDL_IOStream* file,
+static bool score_runs_read_detail_header(ang_file* file,
                                           score_run_detail_header_v1* header)
 {
     if (!file || !header)
         return false;
-    return SDL_ReadIO(file, header, sizeof(*header)) == sizeof(*header);
+    return ang_file_read_compat(file, header, sizeof(*header)) == sizeof(*header);
 }
 
 bool score_runs_skip_detail_payload(ang_file* file,
@@ -498,70 +498,70 @@ bool score_runs_skip_detail_payload(ang_file* file,
         u16b ability_count = 0;
         u16b milestone_count = 0;
 
-        if (SDL_ReadIO(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
+        if (ang_file_read_compat(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
             return false;
-        if (SDL_SeekIO(file,
-                       (Sint64)stats_count * (Sint64)sizeof(score_run_stat_v1),
-                       SDL_IO_SEEK_CUR) < 0)
-            return false;
-
-        if (SDL_ReadIO(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
-            return false;
-        if (SDL_SeekIO(file,
-                       (Sint64)skills_count * (Sint64)sizeof(score_run_skill_v1),
-                       SDL_IO_SEEK_CUR) < 0)
+        if (ang_file_seek_compat(file,
+                       (ang_file_off_t)stats_count * (ang_file_off_t)sizeof(score_run_stat_v1),
+                       ANG_FILE_SEEK_CUR) < 0)
             return false;
 
-        if (SDL_ReadIO(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
+        if (ang_file_read_compat(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
             return false;
-        if (SDL_SeekIO(file,
-                       (Sint64)ability_count * (Sint64)sizeof(score_run_ability_v1),
-                       SDL_IO_SEEK_CUR) < 0)
+        if (ang_file_seek_compat(file,
+                       (ang_file_off_t)skills_count * (ang_file_off_t)sizeof(score_run_skill_v1),
+                       ANG_FILE_SEEK_CUR) < 0)
             return false;
 
-        if (SDL_ReadIO(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
+        if (ang_file_read_compat(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
             return false;
-        if (SDL_SeekIO(file,
-                       (Sint64)milestone_count * (Sint64)sizeof(score_run_milestone_v1),
-                       SDL_IO_SEEK_CUR) < 0)
+        if (ang_file_seek_compat(file,
+                       (ang_file_off_t)ability_count * (ang_file_off_t)sizeof(score_run_ability_v1),
+                       ANG_FILE_SEEK_CUR) < 0)
+            return false;
+
+        if (ang_file_read_compat(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
+            return false;
+        if (ang_file_seek_compat(file,
+                       (ang_file_off_t)milestone_count * (ang_file_off_t)sizeof(score_run_milestone_v1),
+                       ANG_FILE_SEEK_CUR) < 0)
             return false;
     } else {
         /* Older detail payloads have no extra sections to skip */
     }
 
-    Sint64 skip = 0;
-    skip += (Sint64)header->artefact_capacity
-        * (Sint64)sizeof(score_run_artefact_v1);
-    skip += (Sint64)header->monster_capacity
-        * (Sint64)sizeof(score_run_monster_v1);
+    ang_file_off_t skip = 0;
+    skip += (ang_file_off_t)header->artefact_capacity
+        * (ang_file_off_t)sizeof(score_run_artefact_v1);
+    skip += (ang_file_off_t)header->monster_capacity
+        * (ang_file_off_t)sizeof(score_run_monster_v1);
     if (skip < 0)
         return false;
-    return SDL_SeekIO(file, skip, SDL_IO_SEEK_CUR) >= 0;
+    return ang_file_seek_compat(file, skip, ANG_FILE_SEEK_CUR) >= 0;
 }
 
-static bool score_runs_read_detail_header_at(SDL_IOStream* file, Sint64 record_offset,
+static bool score_runs_read_detail_header_at(ang_file* file, ang_file_off_t record_offset,
                                              score_run_detail_header_v1* header)
 {
     if (!file || !header)
         return false;
-    if (SDL_SeekIO(file,
-                   record_offset + (Sint64)sizeof(score_record_v1),
-                   SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file,
+                   record_offset + (ang_file_off_t)sizeof(score_record_v1),
+                   ANG_FILE_SEEK_SET) < 0)
         return false;
     return score_runs_read_detail_header(file, header);
 }
 
-static bool score_runs_write_record(SDL_IOStream* file,
+static bool score_runs_write_record(ang_file* file,
                                     const score_record_v1* record,
                                     const score_run_detail_block* details)
 {
     if (!file || !record || !details)
         return false;
 
-    if (SDL_WriteIO(file, record, sizeof(*record)) != sizeof(*record))
+    if (ang_file_write_compat(file, record, sizeof(*record)) != sizeof(*record))
         return false;
 
-    if (SDL_WriteIO(file, &details->header, sizeof(details->header))
+    if (ang_file_write_compat(file, &details->header, sizeof(details->header))
         != sizeof(details->header))
         return false;
 
@@ -571,39 +571,39 @@ static bool score_runs_write_record(SDL_IOStream* file,
         u16b ability_count = details->ability_count;
         u16b milestone_count = details->milestone_count;
 
-        if (SDL_WriteIO(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
+        if (ang_file_write_compat(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
             return false;
         if (stats_count > 0) {
             size_t bytes = (size_t)stats_count * sizeof(score_run_stat_v1);
             if (!details->stats ||
-                SDL_WriteIO(file, details->stats, bytes) != bytes)
+                ang_file_write_compat(file, details->stats, bytes) != bytes)
                 return false;
         }
 
-        if (SDL_WriteIO(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
+        if (ang_file_write_compat(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
             return false;
         if (skills_count > 0) {
             size_t bytes = (size_t)skills_count * sizeof(score_run_skill_v1);
             if (!details->skills ||
-                SDL_WriteIO(file, details->skills, bytes) != bytes)
+                ang_file_write_compat(file, details->skills, bytes) != bytes)
                 return false;
         }
 
-        if (SDL_WriteIO(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
+        if (ang_file_write_compat(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
             return false;
         if (ability_count > 0) {
             size_t bytes = (size_t)ability_count * sizeof(score_run_ability_v1);
             if (!details->abilities ||
-                SDL_WriteIO(file, details->abilities, bytes) != bytes)
+                ang_file_write_compat(file, details->abilities, bytes) != bytes)
                 return false;
         }
 
-        if (SDL_WriteIO(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
+        if (ang_file_write_compat(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
             return false;
         if (milestone_count > 0) {
             size_t bytes = (size_t)milestone_count * sizeof(score_run_milestone_v1);
             if (!details->milestones ||
-                SDL_WriteIO(file, details->milestones, bytes) != bytes)
+                ang_file_write_compat(file, details->milestones, bytes) != bytes)
                 return false;
         }
     }
@@ -611,7 +611,7 @@ static bool score_runs_write_record(SDL_IOStream* file,
     size_t artefact_bytes = (size_t)details->header.artefact_capacity
         * sizeof(score_run_artefact_v1);
     if (artefact_bytes > 0 && details->artefacts) {
-        if (SDL_WriteIO(file, details->artefacts, artefact_bytes)
+        if (ang_file_write_compat(file, details->artefacts, artefact_bytes)
             != artefact_bytes)
             return false;
     } else if (artefact_bytes > 0) {
@@ -621,7 +621,7 @@ static bool score_runs_write_record(SDL_IOStream* file,
     size_t monster_bytes = (size_t)details->header.monster_capacity
         * sizeof(score_run_monster_v1);
     if (monster_bytes > 0 && details->monsters) {
-        if (SDL_WriteIO(file, details->monsters, monster_bytes)
+        if (ang_file_write_compat(file, details->monsters, monster_bytes)
             != monster_bytes)
             return false;
     } else if (monster_bytes > 0) {
@@ -631,14 +631,14 @@ static bool score_runs_write_record(SDL_IOStream* file,
     return true;
 }
 
-static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* header,
-                                        bool* created)
+static ang_file* score_runs_open_db(const char* path, score_db_header* header,
+                                    bool* created)
 {
     if (created)
         *created = false;
-    SDL_IOStream* file = SDL_IOFromFile(path, "r+b");
+    ang_file* file = ang_file_open_compat(path, "r+b");
     if (!file) {
-        file = SDL_IOFromFile(path, "w+b");
+        file = ang_file_open_compat(path, "w+b");
         if (!file)
             return NULL;
         if (created)
@@ -648,7 +648,7 @@ static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* heade
     if (created && *created) {
         score_runs_init_header(header);
         (void)score_runs_write_header(file, header);
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+        ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
         return file;
     }
 
@@ -660,38 +660,38 @@ static SDL_IOStream* score_runs_open_db(const char* path, score_db_header* heade
     }
 
     if (need_reset) {
-        SDL_CloseIO(file);
-        file = SDL_IOFromFile(path, "w+b");
+        (void)ang_file_close_compat(file);
+        file = ang_file_open_compat(path, "w+b");
         if (!file)
             return NULL;
         if (created)
             *created = true;
         score_runs_init_header(header);
-        if (SDL_WriteIO(file, header, sizeof(*header)) != sizeof(*header)) {
-            SDL_CloseIO(file);
+        if (ang_file_write_compat(file, header, sizeof(*header)) != sizeof(*header)) {
+            (void)ang_file_close_compat(file);
             return NULL;
         }
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return file;
 }
 
-static bool score_runs_find_existing(SDL_IOStream* file, u32b metarun_id,
+static bool score_runs_find_existing(ang_file* file, u32b metarun_id,
                                      u32b persona_id,
                                      score_record_v1* existing,
-                                     Sint64* offset)
+                                     ang_file_off_t* offset)
 {
     if (!file)
         return false;
 
-    if (SDL_SeekIO(file, sizeof(score_db_header), SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, sizeof(score_db_header), ANG_FILE_SEEK_SET) < 0)
         return false;
 
     score_record_v1 temp;
     score_run_detail_header_v1 detail;
-    Sint64 pos = SDL_TellIO(file);
-    while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
+    ang_file_off_t pos = ang_file_tell_compat(file);
+    while (ang_file_read_compat(file, &temp, sizeof(temp)) == sizeof(temp)) {
         if (temp.metarun_id == metarun_id &&
             temp.persona_id == persona_id &&
             temp.status == SCORE_RECORD_ALIVE) {
@@ -699,32 +699,32 @@ static bool score_runs_find_existing(SDL_IOStream* file, u32b metarun_id,
                 *existing = temp;
             if (offset)
                 *offset = pos;
-            SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+            ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
             return true;
         }
         if (!score_runs_read_detail_header(file, &detail) ||
             !score_runs_skip_detail_payload(file, &detail)) {
             break;
         }
-        pos = SDL_TellIO(file);
+        pos = ang_file_tell_compat(file);
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return false;
 }
 
-static int score_runs_count_for_metarun(SDL_IOStream* file, u32b metarun_id)
+static int score_runs_count_for_metarun(ang_file* file, u32b metarun_id)
 {
     if (!file)
         return 0;
 
-    if (SDL_SeekIO(file, sizeof(score_db_header), SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, sizeof(score_db_header), ANG_FILE_SEEK_SET) < 0)
         return 0;
 
     score_record_v1 temp;
     score_run_detail_header_v1 detail;
     int count = 0;
-    while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
+    while (ang_file_read_compat(file, &temp, sizeof(temp)) == sizeof(temp)) {
         if (temp.metarun_id == metarun_id)
             count++;
         if (!score_runs_read_detail_header(file, &detail) ||
@@ -733,7 +733,7 @@ static int score_runs_count_for_metarun(SDL_IOStream* file, u32b metarun_id)
         }
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return count;
 }
 
@@ -1461,7 +1461,7 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
 
     score_db_header header;
     bool created = false;
-    SDL_IOStream* db = score_runs_open_db(path, &header, &created);
+    ang_file* db = score_runs_open_db(path, &header, &created);
     if (!db) {
         safe_setuid_drop();
         log_warn("score_runs: unable to open %s", path);
@@ -1469,7 +1469,7 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
     }
 
     score_record_v1 existing;
-    Sint64 offset = -1;
+    ang_file_off_t offset = -1;
     bool found = score_runs_find_existing(db, record.metarun_id,
                                           record.persona_id, &existing, &offset);
 
@@ -1491,7 +1491,7 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
                                              existing_detail.monster_capacity)) {
             log_warn("score_runs: unable to rebuild detail payload for record_id=%u",
                 existing.record_id);
-            SDL_CloseIO(db);
+            (void)ang_file_close_compat(db);
             safe_setuid_drop();
             return false;
         } else {
@@ -1502,7 +1502,7 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
     if (!details_ready) {
         if (!score_runs_build_details(&details, default_art_cap, default_mon_cap)) {
             log_warn("score_runs: unable to gather run detail payload");
-            SDL_CloseIO(db);
+            (void)ang_file_close_compat(db);
             safe_setuid_drop();
             return false;
         }
@@ -1513,13 +1513,13 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
     if (found) {
         record.record_id = existing.record_id;
         record.chronological_idx = existing.chronological_idx;
-        if (SDL_SeekIO(db, offset, SDL_IO_SEEK_SET) >= 0 &&
+        if (ang_file_seek_compat(db, offset, ANG_FILE_SEEK_SET) >= 0 &&
             score_runs_write_record(db, &record, &details)) {
             success = true;
         } else {
             log_warn("score_runs: failed to update record_id=%u", record.record_id);
         }
-        SDL_SeekIO(db, 0, SDL_IO_SEEK_END);
+        ang_file_seek_compat(db, 0, ANG_FILE_SEEK_END);
     } else {
         record.record_id = header.record_count;
         record.chronological_idx = (u32b)score_runs_count_for_metarun(db, record.metarun_id);
@@ -1537,7 +1537,7 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
     }
 
     score_runs_release_detail_block(&details);
-    SDL_CloseIO(db);
+    (void)ang_file_close_compat(db);
     safe_setuid_drop();
 
     if (success) {
@@ -1561,13 +1561,13 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
         return false;
 
     safe_setuid_grab();
-    SDL_IOStream* file = SDL_IOFromFile(path, "rb");
+    ang_file* file = ang_file_open_compat(path, "rb");
     safe_setuid_drop();
     if (!file)
         return false;
 
     bool ok = false;
-    if (SDL_SeekIO(file, (Sint64)detail_offset, SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, (ang_file_off_t)detail_offset, ANG_FILE_SEEK_SET) < 0)
         goto done;
 
     score_run_detail_header_v1 header;
@@ -1585,7 +1585,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
         u16b ability_count = 0;
         u16b milestone_count = 0;
 
-        if (SDL_ReadIO(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
+        if (ang_file_read_compat(file, &stats_count, sizeof(stats_count)) != sizeof(stats_count))
             goto done;
         out->stats_count = stats_count;
         if (stats_count > 0) {
@@ -1593,11 +1593,11 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
             if (!out->stats)
                 goto done;
             size_t bytes = (size_t)stats_count * sizeof(score_run_stat_v1);
-            if (SDL_ReadIO(file, out->stats, bytes) != bytes)
+            if (ang_file_read_compat(file, out->stats, bytes) != bytes)
                 goto done;
         }
 
-        if (SDL_ReadIO(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
+        if (ang_file_read_compat(file, &skills_count, sizeof(skills_count)) != sizeof(skills_count))
             goto done;
         out->skills_count = skills_count;
         if (skills_count > 0) {
@@ -1605,11 +1605,11 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
             if (!out->skills)
                 goto done;
             size_t bytes = (size_t)skills_count * sizeof(score_run_skill_v1);
-            if (SDL_ReadIO(file, out->skills, bytes) != bytes)
+            if (ang_file_read_compat(file, out->skills, bytes) != bytes)
                 goto done;
         }
 
-        if (SDL_ReadIO(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
+        if (ang_file_read_compat(file, &ability_count, sizeof(ability_count)) != sizeof(ability_count))
             goto done;
         out->ability_count = ability_count;
         if (ability_count > 0) {
@@ -1617,11 +1617,11 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
             if (!out->abilities)
                 goto done;
             size_t bytes = (size_t)ability_count * sizeof(score_run_ability_v1);
-            if (SDL_ReadIO(file, out->abilities, bytes) != bytes)
+            if (ang_file_read_compat(file, out->abilities, bytes) != bytes)
                 goto done;
         }
 
-        if (SDL_ReadIO(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
+        if (ang_file_read_compat(file, &milestone_count, sizeof(milestone_count)) != sizeof(milestone_count))
             goto done;
         out->milestone_count = milestone_count;
         if (milestone_count > 0) {
@@ -1629,7 +1629,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
             if (!out->milestones)
                 goto done;
             size_t bytes = (size_t)milestone_count * sizeof(score_run_milestone_v1);
-            if (SDL_ReadIO(file, out->milestones, bytes) != bytes)
+            if (ang_file_read_compat(file, out->milestones, bytes) != bytes)
                 goto done;
         }
     }
@@ -1637,7 +1637,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
     size_t artefact_bytes = (size_t)header.artefact_capacity
         * sizeof(score_run_artefact_v1);
     if (artefact_bytes > 0) {
-        if (SDL_ReadIO(file, out->artefacts, artefact_bytes)
+        if (ang_file_read_compat(file, out->artefacts, artefact_bytes)
             != artefact_bytes)
             goto done;
     }
@@ -1645,7 +1645,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
     size_t monster_bytes = (size_t)header.monster_capacity
         * sizeof(score_run_monster_v1);
     if (monster_bytes > 0) {
-        if (SDL_ReadIO(file, out->monsters, monster_bytes)
+        if (ang_file_read_compat(file, out->monsters, monster_bytes)
             != monster_bytes)
             goto done;
     }
@@ -1655,7 +1655,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
 done:
     if (!ok)
         score_runs_release_detail_block(out);
-    SDL_CloseIO(file);
+    (void)ang_file_close_compat(file);
     return ok;
 }
 

@@ -34,6 +34,11 @@ ang_file* sdl_fopen(cptr file, cptr mode)
     return stream;
 }
 
+ang_file* ang_file_open_path(cptr file, cptr mode)
+{
+    return sdl_fopen(file, mode);
+}
+
 errr sdl_fclose(ang_file* stream)
 {
     if (!stream)
@@ -48,12 +53,22 @@ errr sdl_fclose(ang_file* stream)
     return 0;
 }
 
+errr ang_file_close_path(ang_file* stream)
+{
+    return sdl_fclose(stream);
+}
+
 ang_file* sdl_fopen_temp(char* buf, size_t max)
 {
     if (!path_temp(buf, max))
         return NULL;
 
     return sdl_fopen(buf, "w");
+}
+
+ang_file* ang_file_open_temp_path(char* buf, size_t max)
+{
+    return sdl_fopen_temp(buf, max);
 }
 
 ang_file* sdl_fmake(cptr file, int mode)
@@ -72,6 +87,11 @@ ang_file* sdl_fmake(cptr file, int mode)
     }
 
     return SDL_IOFromFile(buf, "wb");
+}
+
+ang_file* ang_file_create_path(cptr file, int mode)
+{
+    return sdl_fmake(file, mode);
 }
 
 errr sdl_fgets(ang_file* stream, char* buf, size_t n)
@@ -129,6 +149,11 @@ errr sdl_fgets(ang_file* stream, char* buf, size_t n)
     return 0;
 }
 
+errr ang_file_read_line(ang_file* stream, char* buf, size_t n)
+{
+    return sdl_fgets(stream, buf, n);
+}
+
 errr sdl_fputs(ang_file* stream, cptr buf, size_t n)
 {
     (void)n;
@@ -140,6 +165,11 @@ errr sdl_fputs(ang_file* stream, cptr buf, size_t n)
     }
 
     return 0;
+}
+
+errr ang_file_write_line(ang_file* stream, cptr buf, size_t n)
+{
+    return sdl_fputs(stream, buf, n);
 }
 
 errr sdl_read(ang_file* stream, char* buf, size_t n)

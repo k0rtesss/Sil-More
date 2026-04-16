@@ -9,8 +9,8 @@
  */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "externs.h"
+#include "app/app-session.h"
 #include "log/log.h"
 #include "platform-frame.h"
 #include "object/object-desc.h"

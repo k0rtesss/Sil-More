@@ -5,7 +5,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"
@@ -115,7 +115,7 @@ bool highscore_is_empty(void)
 
     bool is_empty = (scores_file_entry_count == 0);
     if (opened_here) {
-        SDL_CloseIO(highscore_fd);
+        (void)ang_file_close_compat(highscore_fd);
         highscore_fd = NULL;
     }
     log_debug("highscore_is_empty: entry_count=%u, returning %s",
@@ -191,7 +191,7 @@ errr score_entry_submit(high_score* the_score)
     if (highscore_fd)
     {
         safe_setuid_grab();
-        SDL_CloseIO(highscore_fd);
+        (void)ang_file_close_compat(highscore_fd);
         highscore_fd = NULL;
         safe_setuid_drop();
     }
@@ -268,17 +268,17 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         log_trace("opened highscore_fd (score file loaded)");
     }
 
-    SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_END);
-    off_t file_end = SDL_TellIO(highscore_fd);
-    off_t payload = file_end - (off_t)sizeof(score_file_header);
-    int n_recs = (int)(payload / (off_t)sizeof(high_score));
+    ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_END);
+    ang_file_off_t file_end = ang_file_tell_compat(highscore_fd);
+    ang_file_off_t payload = file_end - (ang_file_off_t)sizeof(score_file_header);
+    int n_recs = (int)(payload / (ang_file_off_t)sizeof(high_score));
     log_trace("hi-score file size=%lld, payload=%lld, records=%d",
         (long long)file_end, (long long)payload, n_recs);
 
     bool* hero_ineligible = calloc(z_info->c_max, sizeof(*hero_ineligible));
     if (!hero_ineligible) {
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
+        if (!ang_file_close_compat(highscore_fd))
             log_warn("fclose(highscore_fd) failed, errno=%d", errno);
         safe_setuid_drop();
         highscore_fd = NULL;
@@ -333,7 +333,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         log_debug("No eligible races found - no kill performed");
         free(hero_ineligible);
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
+        if (!ang_file_close_compat(highscore_fd))
             log_warn("fclose(highscore_fd) failed, errno=%d", errno);
         safe_setuid_drop();
         highscore_fd = NULL;
@@ -367,7 +367,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
     uint16_t* pool = malloc(z_info->c_max * sizeof *pool);
     if (!pool) {
         free(hero_ineligible);
-        SDL_CloseIO(highscore_fd);
+        (void)ang_file_close_compat(highscore_fd);
         quit("Out of memory in kinslayer_try_kill()");
     }
 
@@ -387,7 +387,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         free(pool);
         free(hero_ineligible);
         safe_setuid_grab();
-        if (SDL_CloseIO(highscore_fd) != 0)
+        if (!ang_file_close_compat(highscore_fd))
             log_warn("fclose(highscore_fd) failed, errno=%d", errno);
         safe_setuid_drop();
         highscore_fd = NULL;
@@ -424,7 +424,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         if (highscore_dead(entry.who)) {
             log_debug("hero already dead - no kill performed");
             safe_setuid_grab();
-            if (SDL_CloseIO(highscore_fd) != 0)
+            if (!ang_file_close_compat(highscore_fd))
                 log_warn("fclose(highscore_fd) failed, errno=%d", errno);
             safe_setuid_drop();
             highscore_fd = NULL;
@@ -434,7 +434,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
         if (entry.escaped[0] == 't') {
             log_debug("hero has escaped - no kill performed");
             safe_setuid_grab();
-            if (SDL_CloseIO(highscore_fd) != 0)
+            if (!ang_file_close_compat(highscore_fd))
                 log_warn("fclose(highscore_fd) failed, errno=%d", errno);
             safe_setuid_drop();
             highscore_fd = NULL;
@@ -467,7 +467,7 @@ const char* kinslayer_try_kill(uint8_t n_sils, bool do_roll)
     SDL_strlcpy(killed_character, hname, sizeof killed_character);
 
     safe_setuid_grab();
-    if (SDL_CloseIO(highscore_fd) != 0)
+    if (!ang_file_close_compat(highscore_fd))
         log_warn("fclose(highscore_fd) failed, errno=%d", errno);
     safe_setuid_drop();
     highscore_fd = NULL;

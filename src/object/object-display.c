@@ -9,9 +9,9 @@
  */
 
 #include "angband.h"
-#include "cJSON.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "cJSON.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "object/object-display.h"
@@ -164,7 +164,7 @@ byte object_display_color(const object_type* o_ptr, byte base_color)
 static void load_object_text_colors_json(void)
 {
     char path[1024];
-    SDL_IOStream* f = NULL;
+    ang_file* f = NULL;
     char* buffer = NULL;
     cJSON* root = NULL;
     int loaded_entries = 0;
@@ -181,7 +181,7 @@ static void load_object_text_colors_json(void)
         return;
     }
 
-    f = sdl_fopen(path, "rb");
+    f = ang_file_open(path, "rb");
     if (!f)
     {
         log_warn("object text colors: config not found at '%s'", path);
@@ -192,7 +192,7 @@ static void load_object_text_colors_json(void)
     if (file_size < 0 || file_size > 1024 * 1024)
     {
         log_warn("object text colors: invalid file size for '%s'", path);
-        sdl_fclose(f);
+        ang_file_close(f);
         return;
     }
 
@@ -200,14 +200,14 @@ static void load_object_text_colors_json(void)
     if (!buffer)
     {
         log_error("object text colors: out of memory");
-        sdl_fclose(f);
+        ang_file_close(f);
         return;
     }
 
     size_t length = (size_t)file_size;
     size_t read = SDL_ReadIO(f, buffer, length);
     buffer[read] = '\0';
-    sdl_fclose(f);
+    ang_file_close(f);
     f = NULL;
 
     root = cJSON_Parse(buffer);

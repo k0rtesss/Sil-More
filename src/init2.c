@@ -12,7 +12,7 @@
 #include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "platform-audio.h"
@@ -735,7 +735,7 @@ void display_introduction(void)
 
 void init_angband(void)
 {
-    SDL_IOStream* fd;
+    ang_file* fd;
     int mode = 0644;
     char buf[1024];
     int i;
@@ -763,7 +763,7 @@ void init_angband(void)
     }
 #endif
 
-    fd = sdl_fopen(buf, "rb");
+    fd = ang_file_open(buf, "rb");
 
     if (!fd)
     {
@@ -793,7 +793,7 @@ void init_angband(void)
         }
     }
 
-    sdl_fclose(fd);
+    ang_file_close(fd);
 
     log_info("Loading metarun...");
     if (load_metaruns(1) != 0)
@@ -829,7 +829,7 @@ void init_angband(void)
 
     note("[Initializing arrays... (item sets)]");
     {
-        SDL_IOStream* fp;
+        ang_file* fp;
         char path[1024];
         char linebuf[1024];
         header set_head;
@@ -839,7 +839,7 @@ void init_angband(void)
         item_sets_reset();
 
         path_build(path, sizeof(path), ANGBAND_DIR_EDIT, format("%s.txt", "set"));
-        fp = sdl_fopen(path, "r");
+        fp = ang_file_open(path, "r");
         if (!fp)
         {
             log_warn("init_angband: No set.txt found at '%s' (item sets disabled)",
@@ -848,7 +848,7 @@ void init_angband(void)
         else
         {
             err = init_info_txt(fp, linebuf, &set_head, parse_set_info);
-            sdl_fclose(fp);
+            ang_file_close(fp);
 
             if (err)
                 display_parse_error("set", err, linebuf);

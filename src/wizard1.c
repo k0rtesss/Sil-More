@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "ui/ui-information-scene.h"
@@ -21,7 +21,7 @@
 /*
  * The spoiler file being created
  */
-static SDL_IOStream* fff = NULL;
+static ang_file* fff = NULL;
 
 /*
  * Write out `n' of the character `c' to the spoiler file
@@ -31,7 +31,7 @@ static void spoiler_out_n_chars(int n, char c)
     while (--n >= 0)
     {
         unsigned char _ch = c;
-        SDL_WriteIO(fff, &_ch, 1);
+        ang_file_write(fff, &_ch, 1);
     }
 }
 
@@ -166,7 +166,7 @@ static void spoil_obj_desc(cptr fname)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Open the file */
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
 
     /* Oops */
     if (!fff)
@@ -176,11 +176,11 @@ static void spoil_obj_desc(cptr fname)
     }
 
     /* Header */
-    SDL_IOprintf(fff, "Spoiler File -- Basic Items (%s)\n\n\n", VERSION_STRING);
+    ang_file_printf(fff, "Spoiler File -- Basic Items (%s)\n\n\n", VERSION_STRING);
 
     /* More Header */
-    SDL_IOprintf(fff, format, "Description", "Weight", "Level", "/ Rarity");
-    SDL_IOprintf(fff, format, "----------------------------------------", "-------",
+    ang_file_printf(fff, format, "Description", "Weight", "Level", "/ Rarity");
+    ang_file_printf(fff, format, "----------------------------------------", "-------",
         "-----", "---------");
 
     /* List the groups */
@@ -227,7 +227,7 @@ static void spoil_obj_desc(cptr fname)
                 kind_info(&d_char, buf, wgt, &e, &r, who[s]);
 
                 /* Dump it */
-                SDL_IOprintf(fff, "%c %-42s%7s%8d / %2d\n", d_char, buf, wgt, e, r);
+                ang_file_printf(fff, "%c %-42s%7s%8d / %2d\n", d_char, buf, wgt, e, r);
             }
 
             /* Start a new set */
@@ -238,7 +238,7 @@ static void spoil_obj_desc(cptr fname)
                 break;
 
             /* Start a new set */
-            SDL_IOprintf(fff, "\n\n%s\n\n", group_item[i].name);
+            ang_file_printf(fff, "\n\n%s\n\n", group_item[i].name);
         }
 
         /* Get legal item types */
@@ -260,7 +260,7 @@ static void spoil_obj_desc(cptr fname)
     }
 
     /* Check for errors */
-    if (0 || sdl_fclose(fff))
+    if (0 || ang_file_close(fff))
     {
         msg_print("Cannot close spoiler file.");
         return;
@@ -370,7 +370,7 @@ static void spoil_artefact(cptr fname)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Open the file */
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
 
     /* Oops */
     if (!fff)
@@ -456,7 +456,7 @@ static void spoil_artefact(cptr fname)
     }
 
     /* Check for errors */
-    if (0 || sdl_fclose(fff))
+    if (0 || ang_file_close(fff))
     {
         msg_print("Cannot close spoiler file.");
         return;
@@ -499,7 +499,7 @@ static void spoil_mon_desc(cptr fname)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Open the file */
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
 
     /* Oops */
     if (!fff)
@@ -509,14 +509,14 @@ static void spoil_mon_desc(cptr fname)
     }
 
     /* Dump the header */
-    SDL_IOprintf(fff, "Monster Spoilers for %s Version %s\n", VERSION_NAME,
+    ang_file_printf(fff, "Monster Spoilers for %s Version %s\n", VERSION_NAME,
         VERSION_STRING);
-    SDL_IOprintf(fff, "------------------------------------------\n\n");
+    ang_file_printf(fff, "------------------------------------------\n\n");
 
     /* Dump the header */
-    SDL_IOprintf(fff, "%-42.42s%10s%6s%8s%13s%30s\n", "Name", "Lev / Rar", "Spd",
+    ang_file_printf(fff, "%-42.42s%10s%6s%8s%13s%30s\n", "Name", "Lev / Rar", "Spd",
         "Health", "Defence", "Attacks        ");
-    SDL_IOprintf(fff, "%-42.42s%10s%6s%8s%13s%30s\n",
+    ang_file_printf(fff, "%-42.42s%10s%6s%8s%13s%30s\n",
         "-----------------------------------------", "---------", "---",
         "------", "----------", "--------------------------");
 
@@ -642,18 +642,18 @@ static void spoil_mon_desc(cptr fname)
         // r_ptr->d_char);
 
         /* Dump the info */
-        SDL_IOprintf(fff, "%-42.42s%4s /%3s%7s%8s%7s%-6s%16s%14s\n", nam, lev, rar,
+        ang_file_printf(fff, "%-42.42s%4s /%3s%7s%8s%7s%-6s%16s%14s\n", nam, lev, rar,
             spd, hp, def1, def2, att1, att2);
     }
 
     /* End it */
-    SDL_IOprintf(fff, "\n");
+    ang_file_printf(fff, "\n");
 
     /* Free the "who" array */
     mem_free_null(who);
 
     /* Check for errors */
-    if (0 || sdl_fclose(fff))
+    if (0 || ang_file_close(fff))
     {
         msg_print("Cannot close spoiler file.");
         return;
@@ -696,7 +696,7 @@ static void spoil_mon_ss(cptr fname)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Open the file */
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
 
     /* Oops */
     if (!fff)
@@ -820,18 +820,18 @@ static void spoil_mon_ss(cptr fname)
         // r_ptr->d_char);
 
         /* Dump the info */
-        SDL_IOprintf(fff, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", nam, lev, rar, spd,
+        ang_file_printf(fff, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", nam, lev, rar, spd,
             hp, def1, def2, att1, att2);
     }
 
     /* End it */
-    SDL_IOprintf(fff, "\n");
+    ang_file_printf(fff, "\n");
 
     /* Free the "who" array */
     mem_free_null(who);
 
     /* Check for errors */
-    if (0 || sdl_fclose(fff))
+    if (0 || ang_file_close(fff))
     {
         msg_print("Cannot close spoiler file.");
         return;
@@ -867,7 +867,7 @@ static void spoil_mon_info(cptr fname)
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Open the file */
-    fff = sdl_fopen(buf, "w");
+    fff = ang_file_open(buf, "w");
 
     /* Oops */
     if (!fff)
@@ -978,7 +978,7 @@ static void spoil_mon_info(cptr fname)
     mem_free_null(who);
 
     /* Check for errors */
-    if (0 || sdl_fclose(fff))
+    if (0 || ang_file_close(fff))
     {
         msg_print("Cannot close spoiler file.");
         return;

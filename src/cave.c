@@ -22,6 +22,29 @@
 #include <math.h>
 #include <stddef.h>
 
+int view_n = 0;
+u16b* view_g;
+int temp_n = 0;
+u16b* temp_g;
+byte* temp_y;
+byte* temp_x;
+
+u16b (*cave_info)[256];
+byte (*cave_feat)[MAX_DUNGEON_WID];
+byte (*cave_color)[MAX_DUNGEON_WID];
+s16b (*cave_light)[MAX_DUNGEON_WID];
+s16b (*cave_o_idx)[MAX_DUNGEON_WID];
+s16b (*cave_m_idx)[MAX_DUNGEON_WID];
+
+byte cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+byte (*cave_when)[MAX_DUNGEON_WID];
+int scent_when = 250;
+byte flow_center_y[MAX_FLOWS];
+byte flow_center_x[MAX_FLOWS];
+byte update_center_y[MAX_FLOWS];
+byte update_center_x[MAX_FLOWS];
+s16b wandering_pause[MAX_FLOWS];
+
 /* Encoded color range that indicates an absolute style index per cell.
  * We now store the chosen style for each cell directly in cave_color as
  * COLOR_STYLE_BASE + style_index. This guarantees deterministic visuals

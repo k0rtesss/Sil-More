@@ -12,6 +12,19 @@
 #include "player/weapon_stats.h"
 #include "runtime-cli.h"
 
+const player_race* rp_ptr;
+character_profile* current_character_profile;
+
+static player_other player_other_body;
+player_other* op_ptr = &player_other_body;
+
+static player_type player_type_body;
+player_type* p_ptr = &player_type_body;
+
+s16b stealth_score = 0;
+bool player_attacked = false;
+bool attacked_player = false;
+
 static bool player_has_equipped_flag3(u32b flag3)
 {
     for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)

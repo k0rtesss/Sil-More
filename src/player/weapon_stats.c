@@ -1,9 +1,9 @@
 /* File: weapon_stats.c */
 
 #include "angband.h"
+#include "externs.h"
 #include "player/weapon_stats.h"
 
-#include "externs.h"
 
 /*
  * Determines the total melee damage dice (before criticals and slays)

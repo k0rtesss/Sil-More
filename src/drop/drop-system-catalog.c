@@ -3,7 +3,7 @@
 #include "externs.h"
 #include "mem/alloc.h"
 #include "fs/path.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "log/log.h"
 #include <string.h>
 
@@ -1465,19 +1465,19 @@ static bool load_drop_raw(void)
     char path[1024];
     path_build(path, sizeof(path), ANGBAND_DIR_DATA, format("%s.raw", DROP_RAW_FILE));
 
-    SDL_IOStream* fd = sdl_fopen(path, "rb");
+    ang_file* fd = ang_file_open(path, "rb");
     if (!fd)
         return false;
 
     drop_raw_header hdr;
     if (sdl_read(fd, (char*)&hdr, sizeof(hdr)))
     {
-        sdl_fclose(fd);
+        ang_file_close(fd);
         return false;
     }
     if (hdr.magic != DROP_RAW_MAGIC || hdr.version != DROP_RAW_VERSION)
     {
-        sdl_fclose(fd);
+        ang_file_close(fd);
         return false;
     }
 
@@ -1486,11 +1486,11 @@ static bool load_drop_raw(void)
     if (sdl_read(fd, (char*)buf, bytes))
     {
         mem_free_null(buf);
-        sdl_fclose(fd);
+        ang_file_close(fd);
         return false;
     }
 
-    sdl_fclose(fd);
+    ang_file_close(fd);
     clear_drop_entries();
     g_drop_entries = buf;
     g_drop_count = hdr.count;
@@ -1502,7 +1502,7 @@ static bool save_drop_raw(void)
     char path[1024];
     path_build(path, sizeof(path), ANGBAND_DIR_DATA, format("%s.raw", DROP_RAW_FILE));
 
-    SDL_IOStream* fd = sdl_fopen(path, "wb");
+    ang_file* fd = ang_file_open(path, "wb");
     if (!fd)
         return false;
 
@@ -1517,7 +1517,7 @@ static bool save_drop_raw(void)
     if (ok && sdl_write(fd, (cptr)g_drop_entries, g_drop_count * sizeof(drop_entry)))
         ok = false;
 
-    sdl_fclose(fd);
+    ang_file_close(fd);
     return ok;
 }
 

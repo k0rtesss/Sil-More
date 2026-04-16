@@ -3,6 +3,20 @@
 #include "angband.h"
 #include "externs.h"
 
+s16b o_max = 1;
+s16b o_cnt = 0;
+object_type* o_list;
+object_type* inventory;
+
+s16b alloc_kind_size;
+alloc_entry* alloc_kind_table;
+s16b alloc_ego_size;
+alloc_entry* alloc_ego_table;
+s16b alloc_race_size;
+alloc_entry* alloc_race_table;
+
+byte object_generation_mode;
+
 /*
  * Hack -- determine if a template is a damaged item
  *

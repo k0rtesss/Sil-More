@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include <stdio.h>
@@ -326,7 +326,7 @@ static errr rd_savefile(void)
     byte fake[4];
 
     /* Open the savefile */
-    data_fd = sdl_fopen(savefile, "rb");
+    data_fd = ang_file_open(savefile, "rb");
 
     /* No file */
     if (data_fd < 0)
@@ -388,7 +388,7 @@ static errr rd_savefile(void)
  * Some "local" parameters, used to help write savefiles
  */
 
-static SDL_IOStream* fff; /* Current save "file" */
+static ang_file* fff; /* Current save "file" */
 
 static byte xor_byte; /* Simple encryption */
 
@@ -1908,7 +1908,7 @@ static bool save_player_aux(cptr name)
 {
     bool ok = false;
 
-    SDL_IOStream* fd;
+    ang_file* fd;
 
     int mode = 0644;
 
@@ -1940,13 +1940,13 @@ static bool save_player_aux(cptr name)
     if (fd)
     {
         /* Close the "fd" */
-        sdl_fclose(fd);
+        ang_file_close(fd);
 
         /* Grab permissions */
         safe_setuid_grab();
 
         /* Open the savefile */
-        fff = sdl_fopen(name, "wb");
+        fff = ang_file_open(name, "wb");
 
         /* Drop permissions */
         safe_setuid_drop();
@@ -1968,10 +1968,10 @@ static bool save_player_aux(cptr name)
             }
 
             /* Attempt to close it */
-            if (sdl_fclose(fff))
+            if (ang_file_close(fff))
             {
                 ok = false;
-                log_error("sdl_fclose() failed");
+                log_error("ang_file_close() failed");
             }
         }
         else
@@ -2084,12 +2084,12 @@ bool save_player(void)
         /* Preserve old savefile if it exists */
         /* Check if old savefile exists first (important for first-time saves) */
         bool had_old_savefile = false;
-        SDL_IOStream* old_fd = sdl_fopen(savefile, "rb");
+        ang_file* old_fd = ang_file_open(savefile, "rb");
         if (old_fd)
         {
             /* Old file exists, close it and preserve it */
             had_old_savefile = true;
-            sdl_fclose(old_fd);
+            ang_file_close(old_fd);
             log_debug("Old savefile exists, preserving it as .old");
             
             if (!fd_move(savefile, temp))

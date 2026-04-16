@@ -18,7 +18,7 @@
 
 extern struct sound_config g_sound_config;
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include <ctype.h>
@@ -215,7 +215,7 @@ void do_cmd_knowledge_notes(void) { show_buffer(notes_buffer, 0); }
  */
 void do_cmd_knowledge_oaths(void)
 {
-    SDL_IOStream* fff;
+    ang_file* fff;
     char file_name[1024];
     
     /* Temporary file */
@@ -223,113 +223,113 @@ void do_cmd_knowledge_oaths(void)
         return;
 
     /* Open a new file */
-    fff = sdl_fopen(file_name, "w");
+    fff = ang_file_open(file_name, "w");
 
     /* File type is "TEXT" */
     FILE_TYPE(FILE_TYPE_TEXT);
 
     /* Scan the oaths */
-    SDL_IOprintf(fff, "Oath Status\n\n");
+    ang_file_printf(fff, "Oath Status\n\n");
     
     /* Check current character oath */
     if (p_ptr->have_ability[S_SPC][SPC_OATH_MERCY])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_MERCY])
-            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Active)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Mercy (Active)\n\n");
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Mercy (Broken)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Mercy (Broken)\n\n");
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_SILENCE])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_SILENCE])
-            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Active)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Silence (Active)\n\n");
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Silence (Broken)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Silence (Broken)\n\n");
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_IRON])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_IRON])
-            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Active)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Iron (Active)\n\n");
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Iron (Broken)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Iron (Broken)\n\n");
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_SMITH])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_SMITH])
-            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Active)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of the Smith (Active)\n\n");
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of the Smith (Broken)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of the Smith (Broken)\n\n");
     }
     else if (p_ptr->have_ability[S_SPC][SPC_OATH_VALOROUS])
     {
         if (p_ptr->active_ability[S_SPC][SPC_OATH_VALOROUS])
-            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Active)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Valorous Heart (Active)\n\n");
         else
-            SDL_IOprintf(fff, "Current Oath: Oath of Valorous Heart (Broken)\n\n");
+            ang_file_printf(fff, "Current Oath: Oath of Valorous Heart (Broken)\n\n");
     }
     else
     {
-        SDL_IOprintf(fff, "Current Oath: None\n\n");
+        ang_file_printf(fff, "Current Oath: None\n\n");
     }
     
     /* Display metarun oath status */
-    SDL_IOprintf(fff, "Metarun Oath Status:\n");
+    ang_file_printf(fff, "Metarun Oath Status:\n");
     
     /* Check unlocked oaths */
     bool has_unlocked = false;
     if (oath_unlocked(OATH_MERCY)) 
     {
-        SDL_IOprintf(fff, "  Oath of Mercy: Unlocked");
+        ang_file_printf(fff, "  Oath of Mercy: Unlocked");
         if (oath_banned(OATH_MERCY))
-            SDL_IOprintf(fff, " (Banned this run)");
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, " (Banned this run)");
+        ang_file_printf(fff, "\n");
         has_unlocked = true;
     }
     
     if (oath_unlocked(OATH_SILENCE)) 
     {
-        SDL_IOprintf(fff, "  Oath of Silence: Unlocked");
+        ang_file_printf(fff, "  Oath of Silence: Unlocked");
         if (oath_banned(OATH_SILENCE))
-            SDL_IOprintf(fff, " (Banned this run)");
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, " (Banned this run)");
+        ang_file_printf(fff, "\n");
         has_unlocked = true;
     }
     
     if (oath_unlocked(OATH_IRON)) 
     {
-        SDL_IOprintf(fff, "  Oath of Iron: Unlocked");
+        ang_file_printf(fff, "  Oath of Iron: Unlocked");
         if (oath_banned(OATH_IRON))
-            SDL_IOprintf(fff, " (Banned this run)");
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, " (Banned this run)");
+        ang_file_printf(fff, "\n");
         has_unlocked = true;
     }
     
     if (oath_unlocked(OATH_SMITH)) 
     {
-        SDL_IOprintf(fff, "  Oath of the Smith: Unlocked");
+        ang_file_printf(fff, "  Oath of the Smith: Unlocked");
         if (oath_banned(OATH_SMITH))
-            SDL_IOprintf(fff, " (Banned this run)");
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, " (Banned this run)");
+        ang_file_printf(fff, "\n");
         has_unlocked = true;
     }
     
     if (oath_unlocked(OATH_VALOROUS)) 
     {
-        SDL_IOprintf(fff, "  Oath of Valorous Heart: Unlocked");
+        ang_file_printf(fff, "  Oath of Valorous Heart: Unlocked");
         if (oath_banned(OATH_VALOROUS))
-            SDL_IOprintf(fff, " (Banned this run)");
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, " (Banned this run)");
+        ang_file_printf(fff, "\n");
         has_unlocked = true;
     }
     
     if (!has_unlocked)
     {
-        SDL_IOprintf(fff, "  No oaths unlocked yet.\n");
-        SDL_IOprintf(fff, "  Complete Valar quests to unlock new oaths.\n");
+        ang_file_printf(fff, "  No oaths unlocked yet.\n");
+        ang_file_printf(fff, "  Complete Valar quests to unlock new oaths.\n");
     }
     
     /* Close the file */
-    sdl_fclose(fff);
+    ang_file_close(fff);
 
     /* Display the file contents */
     show_file(file_name, "Oath Status", 0);
@@ -3530,7 +3530,7 @@ void do_cmd_knowledge_kills(void)
 {
     int n, i;
 
-    SDL_IOStream* fff;
+    ang_file* fff;
 
     char file_name[1024];
 
@@ -3538,7 +3538,7 @@ void do_cmd_knowledge_kills(void)
     //	u16b why = 4;
 
     /* Temporary file */
-    fff = sdl_fopen_temp(file_name, sizeof(file_name));
+    fff = ang_file_open_temp(file_name, sizeof(file_name));
 
     /* Failure */
     if (!fff)
@@ -3577,12 +3577,12 @@ void do_cmd_knowledge_kills(void)
         if (r_ptr->flags1 & (RF1_UNIQUE))
         {
             /* Print a message */
-            SDL_IOprintf(fff, "         %-40s\n", (r_name + r_ptr->name));
+            ang_file_printf(fff, "         %-40s\n", (r_name + r_ptr->name));
         }
         else
         {
             /* Print a message */
-            SDL_IOprintf(
+            ang_file_printf(
                 fff, "  %5d  %-40s\n", l_ptr->pkills, (r_name + r_ptr->name));
         }
     }
@@ -3591,7 +3591,7 @@ void do_cmd_knowledge_kills(void)
     mem_free_null(who);
 
     /* Close the file */
-    sdl_fclose(fff);
+    ang_file_close(fff);
 
     /* Display the file contents */
     show_file(file_name, "Kill counts", 0);

@@ -11,6 +11,20 @@
 #include "angband.h"
 #include "externs.h"
 
+s16b num_repro;
+s16b monster_level;
+char summon_kin_type;
+
+bool shimmer_monsters;
+bool repair_mflag_mark;
+bool repair_mflag_show;
+
+s16b mon_max = 1;
+s16b mon_cnt = 0;
+monster_type* mon_list;
+monster_lore* l_list;
+u32b mon_power_ave[MAX_DEPTH][CREATURE_TYPE_MAX];
+
 /*
  * Pronoun arrays, by gender.
  */

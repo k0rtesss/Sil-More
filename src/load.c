@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "log/log.h"
 #include "platform-config.h"
 #include "platform-frame.h"
@@ -58,7 +58,7 @@
 /*
  * Local "savefile" pointer
  */
-static SDL_IOStream* fff;
+static ang_file* fff;
 
 /*
  * Hack -- old "encryption" byte
@@ -3592,7 +3592,7 @@ static errr rd_savefile(void)
     safe_setuid_grab();
 
     /* The savefile is a binary file */
-    fff = sdl_fopen(savefile, "rb");
+    fff = ang_file_open(savefile, "rb");
 
     /* Drop permissions */
     safe_setuid_drop();
@@ -3611,7 +3611,7 @@ static errr rd_savefile(void)
     /* Note: SDL doesn't have ferror equivalent - errors are caught during read operations */
     
     /* Close the file */
-    sdl_fclose(fff);
+    ang_file_close(fff);
     log_debug("Savefile closed");
 
     /* Result */
@@ -3634,7 +3634,7 @@ static errr rd_savefile(void)
  */
 bool load_player(void)
 {
-    SDL_IOStream* fd = NULL;
+    ang_file* fd = NULL;
 
     errr err = 0;
 
@@ -3666,7 +3666,7 @@ bool load_player(void)
     safe_setuid_grab();
 
     /* Open the savefile */
-    fd = sdl_fopen(savefile, "rb");
+    fd = ang_file_open(savefile, "rb");
 
     /* Drop permissions */
     safe_setuid_drop();
@@ -3687,14 +3687,14 @@ bool load_player(void)
     log_debug("Savefile exists, proceeding with load");
 
     /* Close the file */
-    sdl_fclose(fd);
+    ang_file_close(fd);
 
 #ifdef VERIFY_SAVEFILE
 
     /* Verify savefile usage */
     if (!err)
     {
-        SDL_IOStream* fkk;
+        ang_file* fkk;
 
         char temp[1024];
 
@@ -3706,7 +3706,7 @@ bool load_player(void)
         safe_setuid_grab();
 
         /* Check for lock */
-        fkk = sdl_fopen(temp, "r");
+        fkk = ang_file_open(temp, "r");
 
         /* Drop permissions */
         safe_setuid_drop();
@@ -3715,7 +3715,7 @@ bool load_player(void)
         if (fkk)
         {
             /* Close the file */
-            sdl_fclose(fkk);
+            ang_file_close(fkk);
 
             /* Message */
             msg_print("Savefile is currently in use.");
@@ -3729,7 +3729,7 @@ bool load_player(void)
         safe_setuid_grab();
 
         /* Create a lock file */
-        fkk = sdl_fopen(temp, "w");
+        fkk = ang_file_open(temp, "w");
 
         /* Drop permissions */
         safe_setuid_drop();
@@ -3738,7 +3738,7 @@ bool load_player(void)
         fprintf(fkk, "Lock file for savefile '%s'\n", savefile);
 
         /* Close the lock file */
-        sdl_fclose(fkk);
+        ang_file_close(fkk);
     }
 
 #endif /* VERIFY_SAVEFILE */
@@ -3750,7 +3750,7 @@ bool load_player(void)
         safe_setuid_grab();
 
         /* Open the savefile */
-        fd = sdl_fopen(savefile, "rb");
+        fd = ang_file_open(savefile, "rb");
 
         /* Drop permissions */
         safe_setuid_drop();
@@ -3768,9 +3768,9 @@ bool load_player(void)
     if (!err)
     {
 #ifdef VERIFY_TIMESTAMP
-        /* Note: fstat requires integer file descriptor, not available with SDL_IOStream */
+        /* Note: fstat requires an integer file descriptor, not the ang_file facade. */
         /* Timestamp verification disabled for SDL builds */
-        log_debug("Timestamp verification skipped (not supported with SDL_IOStream)");
+        log_debug("Timestamp verification skipped (not supported with ang_file)");
 #endif /* VERIFY_TIMESTAMP */
 
         /* Read the first four bytes */
@@ -3782,7 +3782,7 @@ bool load_player(void)
             what = "Cannot read savefile";
 
         /* Close the file */
-        sdl_fclose(fd);
+        ang_file_close(fd);
     }
 
     /* Process file */

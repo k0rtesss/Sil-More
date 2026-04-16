@@ -19,12 +19,17 @@
 #include "h-basic.h"
 #include "app/app-movement.h"
 #include "drop_system.h"
+#include "cave/cave-state.h"
 #include "fs/pref-files.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
 #include "game-event.h"
+#include "init/init-data.h"
+#include "init/init-paths.h"
 #include "level-generation/level-generation.h"
 #include "melee/melee.h"
+#include "monster/monster-state.h"
+#include "object/object-state.h"
 #include "object/object-slot.h"
 #include "object/object-ui-select.h"
 #include "player/ability_log.h"
@@ -39,11 +44,13 @@
 #include "player/player-song-duels.h"
 #include "player/player-song-effects.h"
 #include "player/player-songs.h"
+#include "player/player-state.h"
 
 typedef struct app_ui_scene app_ui_scene;
 #include "player/weapon_stats.h"
 #include "quest/quest.h"
 #include "runtime/runtime-game.h"
+#include "runtime/runtime-state.h"
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "score/score_logic.h"
@@ -51,8 +58,11 @@ typedef struct app_ui_scene app_ui_scene;
 #include "signals.h"
 #include "smithing/smithing.h"
 #include "spell/spell.h"
+#include "support/macro-state.h"
+#include "support/text-output.h"
 #include "ui/ui-character-name.h"
 #include "ui/ui-character-screen.h"
+#include "ui/colors.h"
 #include "ui/ui-death.h"
 #include "ui/ui-file-viewer.h"
 #include "ui/ui-help.h"
@@ -60,12 +70,6 @@ typedef struct app_ui_scene app_ui_scene;
 #include "ui/ui-story.h"
 #include "ui/story_font.h"
 // extern FILE *log_file;
-extern int max_macrotrigger;
-extern cptr macro_template;
-extern cptr macro_modifier_chr;
-extern cptr macro_modifier_name[MAX_MACRO_MOD];
-extern cptr macro_trigger_name[MAX_MACRO_TRIGGER];
-extern cptr macro_trigger_keycode[2][MAX_MACRO_TRIGGER];
 
 /* tables.c */
 extern const s16b ddd[9];
@@ -92,210 +96,30 @@ extern byte spell_info_RF4[32][3];
 extern byte spell_desire_RF4[32][2];
 
 /* variable.c */
-extern cptr copyright;
-extern byte version_major;
-extern byte version_minor;
-extern byte version_patch;
-extern byte version_extra;
-extern byte sf_major;
-extern byte sf_minor;
-extern byte sf_patch;
-extern byte sf_extra;
-extern u32b sf_xtra;
-extern u32b sf_when;
-extern u16b sf_lives;
-extern u16b sf_saves;
-extern bool character_generated;
-extern bool character_dungeon;
-extern bool character_loaded;
-extern bool character_loaded_dead;
-extern bool character_saved;
-extern s16b character_icky;
-extern s16b character_xtra;
-extern u32b seed_randart;
-extern u32b seed_flavor;
-extern s16b num_repro;
 extern s16b object_level;
-extern s16b monster_level;
-extern char summon_kin_type;
-extern s32b turn;
-extern s32b playerturn;
-extern s32b min_depth_counter;
 extern bool use_sound;
-extern int use_graphics;
 extern s16b image_count;
-extern bool use_bigtile;
-extern s16b signal_count;
-extern bool msg_flag;
-extern byte object_generation_mode;
-extern bool shimmer_monsters;
 extern bool shimmer_objects;
-extern bool repair_mflag_mark;
-extern bool repair_mflag_show;
-extern s16b o_max;
-extern s16b o_cnt;
-extern s16b mon_max;
-extern s16b mon_cnt;
-extern byte feeling;
-extern byte do_feeling;
-extern s16b rating;
-extern bool good_item_flag;
-extern int closing_flag;
-extern int player_uid;
-extern int player_euid;
-extern int player_egid;
-extern char savefile[1024];
-extern s16b macro__num;
-extern cptr* macro__pat;
-extern cptr* macro__act;
-extern byte angband_color_table[256][4];
 extern const cptr angband_sound_name[MSG_MAX];
-extern int view_n;
-extern u16b* view_g;
-extern int temp_n;
-extern u16b* temp_g;
-extern byte* temp_y;
-extern byte* temp_x;
-extern u16b (*cave_info)[256];
-extern byte (*cave_feat)[MAX_DUNGEON_WID];
-extern byte (*cave_color)[MAX_DUNGEON_WID];
-extern s16b (*cave_light)[MAX_DUNGEON_WID];
-extern s16b (*cave_o_idx)[MAX_DUNGEON_WID];
-extern s16b (*cave_m_idx)[MAX_DUNGEON_WID];
-extern u32b mon_power_ave[MAX_DEPTH][CREATURE_TYPE_MAX];
-
-extern byte cave_cost[MAX_FLOWS][MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-extern byte (*cave_when)[MAX_DUNGEON_WID];
-extern int scent_when;
-extern byte flow_center_y[MAX_FLOWS];
-extern byte flow_center_x[MAX_FLOWS];
-extern byte update_center_y[MAX_FLOWS];
-extern byte update_center_x[MAX_FLOWS];
-extern s16b wandering_pause[MAX_FLOWS];
 
 /* Public style color encoding base for save/load */
 #ifndef COLOR_STYLE_BASE
 #define COLOR_STYLE_BASE 128
 #endif
 
-extern s16b stealth_score;
-extern bool player_attacked;
-extern bool attacked_player;
-extern maxima* z_info;
-extern object_type* o_list;
-extern monster_type* mon_list;
-extern monster_lore* l_list;
-extern object_type* inventory;
-extern s16b alloc_kind_size;
-extern alloc_entry* alloc_kind_table;
-extern s16b alloc_ego_size;
-extern alloc_entry* alloc_ego_table;
-extern s16b alloc_race_size;
-extern alloc_entry* alloc_race_table;
-extern byte misc_to_attr[256];
-extern char misc_to_char[256];
-extern byte tval_to_attr[128];
-extern char macro_buffer[1024];
-extern cptr keymap_act[KEYMAP_MODES][256];
-extern const player_race* rp_ptr;
-extern character_profile* current_character_profile;
-extern player_other* op_ptr;
-extern player_type* p_ptr;
-extern vault_type* v_info;
-extern char* v_name;
-extern char* v_text;
-extern feature_type* f_info;
-extern char* f_name;
-extern char* f_text;
-extern object_kind* k_info;
-extern char* k_name;
-extern char* k_text;
-extern ability_type* b_info;
-extern char* b_name;
-extern char* b_text;
-extern artefact_type* a_info;
-extern char* a_text;
-extern bool* valar_reserved_artifacts;
-extern ego_item_type* e_info;
-extern char* e_name;
-extern char* e_text;
-extern monster_race* r_info;
-extern monster_race* r_base;
-extern char* r_name;
-extern char* r_text;
-extern player_race* p_info;
-extern char* p_name;
-extern char* p_text;
-extern character_profile* c_info;
-extern char* c_name;
-extern char* c_text;
-extern hist_type* h_info;
-extern story_type* st_info;
-extern char* st_text;
-extern char* st_name;
-extern curse_type* cu_info;
-extern char* cu_text;
-extern char* cu_name;
-extern major_blessing_type* mb_info;
-extern char* mb_text;
-extern char* mb_name;
-extern quest_type* quest_info;
-extern char* quest_name_text;
-extern char* quest_desc_text;
-extern char* q_text;
-extern oath_type* oath_info;
-extern char* oath_name_text;
-extern char* oath_desc_text;
-extern char* h_text;
-extern flavor_type* flavor_info;
-extern char* flavor_name;
-extern char* flavor_text;
-extern names_type* n_info;
-extern style_type* style_info;
-extern skeleton_note_template* skeleton_note_info;
-extern char* skeleton_note_text;
 /* Default vein tile accessors (defined in init1.c) */
 byte get_default_vein_row(void);
 byte get_default_vein_col(void);
 bool get_overlay_key_enabled(void);
 void get_overlay_key_rgb(byte* r, byte* g, byte* b);
-extern char* style_name;
-
-extern cptr ANGBAND_SYS;
-extern cptr ANGBAND_GRAF;
-extern cptr ANGBAND_DIR;
-extern cptr ANGBAND_DIR_APEX;
-extern cptr ANGBAND_DIR_METARUN;
-extern cptr ANGBAND_DIR_BONE;
-extern cptr ANGBAND_DIR_DATA;
-extern cptr ANGBAND_DIR_EDIT;
-extern cptr ANGBAND_DIR_FILE;
-extern cptr ANGBAND_DIR_HELP;
-extern cptr ANGBAND_DIR_INFO;
-extern cptr ANGBAND_DIR_SAVE;
-extern cptr ANGBAND_DIR_PREF;
-extern cptr ANGBAND_DIR_USER;
-extern cptr ANGBAND_DIR_XTRA;
-extern cptr ANGBAND_DIR_SCRIPT;
 extern bool (*ang_sort_comp)(const void* u, const void* v, int a, int b);
 extern void (*ang_sort_swap)(void* u, void* v, int a, int b);
 extern bool (*get_mon_num_hook)(int r_idx);
 extern bool (*get_obj_num_hook)(int k_idx);
 extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
-extern ang_file* text_out_file;
-extern void (*text_out_hook)(byte a, cptr str);
-extern int text_out_wrap;
-extern int text_out_indent;
-extern bool use_transparency;
-extern char notes_buffer[NOTES_LENGTH];
 extern autoinscription* inscriptions;
 extern u16b inscriptionsCount;
-extern byte bones_selector;
-extern int r_ghost;
-extern char ghost_name[80];
-extern bool g_labyrinth_view_active;
-extern bool stop_stealth_mode;
 
 /*
  * Rage and labyrinth partitions both suppress remembered-grid information.
@@ -771,16 +595,9 @@ extern void object_desc_floor(
 extern void object_desc_spoil(
     char* buf, size_t max, const object_type* o_ptr, int pref, int mode);
 extern void identify_random_gen(const object_type* o_ptr);
-extern byte object_attr_graphics_override(
-    const object_type* o_ptr, byte base_attr);
-extern char object_char_graphics_override(
-    const object_type* o_ptr, char base_char);
-extern void inventory_menu_set_include_equip(bool include);
-extern bool player_can_treat_as_throwing(const object_type* o_ptr);
-extern bool player_can_treat_as_throwing_flags(const object_type* o_ptr, u32b f3);
-extern bool weapon_is_impale_eligible(const object_type* o_ptr);
+extern bool player_can_treat_as_throwing_flags(
+    const object_type* o_ptr, u32b f3);
 extern bool object_is_searched_skeleton(const object_type* o_ptr);
-extern int get_paired_artefact(int art_idx);
 
 /* object2.c */
 extern void excise_object_idx(int o_idx);
@@ -921,16 +738,6 @@ extern bool use_object(object_type* o_ptr, bool* ident);
 extern bool use_sanctity_gem_on(object_type* target_o_ptr, bool* ident);
 
 /* util.c */
-
-/* SDL3-based file I/O operations */
-extern errr sdl_fclose(ang_file* stream);
-extern errr sdl_fgets(ang_file* stream, char* buf, size_t n);
-extern errr sdl_fputs(ang_file* stream, cptr buf, size_t n);
-extern errr sdl_read(ang_file* stream, char* buf, size_t n);
-extern errr sdl_write(ang_file* stream, cptr buf, size_t n);
-extern errr sdl_seek(ang_file* stream, ang_file_off_t offset);
-extern ang_file_off_t sdl_tell(ang_file* stream);
-extern ang_file_off_t sdl_size(ang_file* stream);
 
 /* Legacy - still used by some systems */
 extern errr check_modification_date(int fd, cptr template_file);

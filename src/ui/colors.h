@@ -5,6 +5,11 @@
 
 #include "../h-basic.h"
 
+extern int use_graphics;
+extern bool use_bigtile;
+extern bool use_transparency;
+extern byte angband_color_table[256][4];
+
 /*
  * Extract a textual representation of an attribute.
  * Returns the base color name with optional shade suffix.

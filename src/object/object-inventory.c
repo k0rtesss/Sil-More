@@ -1,8 +1,8 @@
 /* File: object-inventory.c */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "externs.h"
+#include "app/app-session.h"
 #include "log/log.h"
 #include "supplies.h"
 

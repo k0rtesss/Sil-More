@@ -3,7 +3,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -264,34 +264,34 @@ ang_file* score_file_open(const char *filepath, int mode)
         score_file_load_header(ctx, filepath);
     }
 
-    SDL_IOStream* file = NULL;
+    ang_file* file = NULL;
     const char* mode_str = file_mode_from_flags(mode);
 
     if (mode_str == NULL) {
-        file = SDL_IOFromFile(filepath, "r+b");
+        file = ang_file_open_compat(filepath, "r+b");
         if (!file) {
-            file = SDL_IOFromFile(filepath, "w+b");
+            file = ang_file_open_compat(filepath, "w+b");
         }
     } else {
-        file = SDL_IOFromFile(filepath, mode_str);
+        file = ang_file_open_compat(filepath, mode_str);
     }
 
     if (file && exists && mode != O_RDONLY) {
-        Sint64 file_size = SDL_GetIOSize(file);
+        ang_file_off_t file_size = ang_file_size_compat(file);
 
-        if (file_size >= (Sint64)sizeof(score_file_header)) {
-            SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
+        if (file_size >= (ang_file_off_t)sizeof(score_file_header)) {
+            ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
             score_file_header score_hdr;
-            if (SDL_ReadIO(file, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr)) {
-                Sint64 payload = file_size - (Sint64)sizeof(score_file_header);
-                if (payload >= 0 && (payload % (Sint64)sizeof(high_score)) == 0) {
-                    u32b actual_entries = (u32b)(payload / (Sint64)sizeof(high_score));
+            if (ang_file_read_compat(file, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr)) {
+                ang_file_off_t payload = file_size - (ang_file_off_t)sizeof(score_file_header);
+                if (payload >= 0 && (payload % (ang_file_off_t)sizeof(high_score)) == 0) {
+                    u32b actual_entries = (u32b)(payload / (ang_file_off_t)sizeof(high_score));
                     if (score_hdr.entry_count != actual_entries) {
                         log_info("Reconciling scores header: entry_count %u -> %u",
                                  score_hdr.entry_count, actual_entries);
                         score_hdr.entry_count = actual_entries;
-                        SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-                        SDL_WriteIO(file, &score_hdr, sizeof(score_hdr));
+                        ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
+                        ang_file_write_compat(file, &score_hdr, sizeof(score_hdr));
                         ctx->entry_count = actual_entries;
                     }
                 }
@@ -302,7 +302,7 @@ ang_file* score_file_open(const char *filepath, int mode)
     return file;
 }
 
-static int collect_scores_load(SDL_IOStream* file, high_score* entries, int limit)
+static int collect_scores_load(ang_file* file, high_score* entries, int limit)
 {
     if (!file || !entries || limit <= 0)
         return 0;
@@ -310,7 +310,7 @@ static int collect_scores_load(SDL_IOStream* file, high_score* entries, int limi
     int count = 0;
     while (count < limit) {
         high_score temp;
-        if (SDL_ReadIO(file, &temp, sizeof(temp)) != sizeof(temp))
+        if (ang_file_read_compat(file, &temp, sizeof(temp)) != sizeof(temp))
             break;
         if (temp.who[0] == '\0')
             break;
@@ -417,9 +417,9 @@ int collect_high_scores(high_score* out, int capacity, bool sort_by_score)
     build_current_score_path(score_path, sizeof(score_path));
 
     score_file_ctx* ctx = score_file_active_ctx();
-    SDL_IOStream* file = ctx ? ctx->fd : NULL;
+    ang_file* file = ctx ? ctx->fd : NULL;
     bool opened_new = false;
-    Sint64 restore_pos = 0;
+    ang_file_off_t restore_pos = 0;
 
     if (!file) {
         safe_setuid_grab();
@@ -429,14 +429,14 @@ int collect_high_scores(high_score* out, int capacity, bool sort_by_score)
             return 0;
         opened_new = true;
     } else {
-        restore_pos = SDL_TellIO(file);
+        restore_pos = ang_file_tell_compat(file);
     }
 
-    if (SDL_SeekIO(file, sizeof(score_file_header), SDL_IO_SEEK_SET) < 0) {
+    if (ang_file_seek_compat(file, sizeof(score_file_header), ANG_FILE_SEEK_SET) < 0) {
         if (opened_new)
-            SDL_CloseIO(file);
+            (void)ang_file_close_compat(file);
         else
-            SDL_SeekIO(file, restore_pos, SDL_IO_SEEK_SET);
+            ang_file_seek_compat(file, restore_pos, ANG_FILE_SEEK_SET);
         return 0;
     }
 
@@ -444,9 +444,9 @@ int collect_high_scores(high_score* out, int capacity, bool sort_by_score)
     int count = collect_scores_load(file, out, limit);
 
     if (opened_new)
-        SDL_CloseIO(file);
+        (void)ang_file_close_compat(file);
     else
-        SDL_SeekIO(file, restore_pos, SDL_IO_SEEK_SET);
+        ang_file_seek_compat(file, restore_pos, ANG_FILE_SEEK_SET);
 
     if (count <= 0)
         return 0;
@@ -467,7 +467,7 @@ static int highscore_seek_versioned(int i)
 {
     long offset = sizeof(score_file_header) + i * sizeof(high_score);
 
-    Sint64 result = SDL_SeekIO(highscore_fd, offset, SDL_IO_SEEK_SET);
+    ang_file_off_t result = ang_file_seek_compat(highscore_fd, offset, ANG_FILE_SEEK_SET);
     if (result < 0 || result != offset) {
         log_warn("Failed to seek to offset %ld (result=%lld)", offset, (long long)result);
         return -1;
@@ -491,16 +491,16 @@ static void update_scores_file_header_count(void)
 
     if (scores_file_entry_count != count) {
         score_file_header score_hdr;
-        if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) < 0)
+        if (ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET) < 0)
             return;
-        size_t read_items = SDL_ReadIO(highscore_fd, &score_hdr, sizeof(score_hdr));
+        size_t read_items = ang_file_read_compat(highscore_fd, &score_hdr, sizeof(score_hdr));
         if (read_items != sizeof(score_hdr))
             return;
 
         score_hdr.entry_count = count;
-        if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) < 0)
+        if (ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET) < 0)
             return;
-        size_t written_items = SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
+        size_t written_items = ang_file_write_compat(highscore_fd, &score_hdr, sizeof(score_hdr));
         if (written_items != sizeof(score_hdr))
             return;
         scores_file_entry_count = count;
@@ -518,13 +518,13 @@ errr highscore_read(high_score* score)
     if (!score || !highscore_fd)
         return 1;
 
-    Sint64 current_pos = SDL_TellIO(highscore_fd);
-    Sint64 file_size = SDL_GetIOSize(highscore_fd);
+    ang_file_off_t current_pos = ang_file_tell_compat(highscore_fd);
+    ang_file_off_t file_size = ang_file_size_compat(highscore_fd);
 
-    if (current_pos + (Sint64)sizeof(high_score) > file_size)
+    if (current_pos + (ang_file_off_t)sizeof(high_score) > file_size)
         return 1;
 
-    size_t bytes_read = SDL_ReadIO(highscore_fd, score, sizeof(high_score));
+    size_t bytes_read = ang_file_read_compat(highscore_fd, score, sizeof(high_score));
     if (bytes_read != sizeof(high_score))
         return 1;
 
@@ -547,11 +547,11 @@ int highscore_write(const high_score* score)
         return 0;
     }
 
-    size_t bytes_written = SDL_WriteIO(highscore_fd, score, sizeof(high_score));
+    size_t bytes_written = ang_file_write_compat(highscore_fd, score, sizeof(high_score));
     if (bytes_written != sizeof(high_score))
         return 1;
 
-    SDL_FlushIO(highscore_fd);
+    ang_file_flush_compat(highscore_fd);
     update_scores_file_header_count();
 
     return 0;
@@ -559,29 +559,29 @@ int highscore_write(const high_score* score)
 
 errr backup_scores_file(const char *filepath)
 {
-    SDL_IOStream* fd_src = sdl_fopen(filepath, "rb");
+    ang_file* fd_src = ang_file_open(filepath, "rb");
     if (!fd_src)
         return 0;
 
-    Sint64 file_size_64 = sdl_size(fd_src);
+    ang_file_off_t file_size_64 = sdl_size(fd_src);
     int file_size = (file_size_64 > 0) ? (int)file_size_64 : 0;
     if (file_size <= 0) {
-        sdl_fclose(fd_src);
+        ang_file_close(fd_src);
         return 0;
     }
 
     char *buffer = mem_alloc_array(file_size, char);
     if (!buffer) {
-        sdl_fclose(fd_src);
+        ang_file_close(fd_src);
         return -1;
     }
 
     if (sdl_read(fd_src, buffer, file_size) != 0) {
         mem_free_null(buffer);
-        sdl_fclose(fd_src);
+        ang_file_close(fd_src);
         return -1;
     }
-    sdl_fclose(fd_src);
+    ang_file_close(fd_src);
 
     char backup_path1[1024], backup_path2[1024], backup_path3[1024];
     strnfmt(backup_path1, sizeof(backup_path1), "%s.bak1", filepath);
@@ -590,30 +590,30 @@ errr backup_scores_file(const char *filepath)
 
     fd_kill(backup_path3);
 
-    SDL_IOStream* fd_test2 = sdl_fopen(backup_path2, "rb");
+    ang_file* fd_test2 = ang_file_open(backup_path2, "rb");
     if (fd_test2) {
-        sdl_fclose(fd_test2);
+        ang_file_close(fd_test2);
         if (fd_move(backup_path2, backup_path3) != 0) {
             log_error("backup_scores_file: failed to move bak2 to bak3");
         }
     }
 
-    SDL_IOStream* fd_test1 = sdl_fopen(backup_path1, "rb");
+    ang_file* fd_test1 = ang_file_open(backup_path1, "rb");
     if (fd_test1) {
-        sdl_fclose(fd_test1);
+        ang_file_close(fd_test1);
         if (fd_move(backup_path1, backup_path2) != 0) {
             log_error("backup_scores_file: failed to move bak1 to bak2");
         }
     }
 
-    SDL_IOStream* fd_dst = sdl_fmake(backup_path1, 0644);
+    ang_file* fd_dst = sdl_fmake(backup_path1, 0644);
     if (!fd_dst) {
         mem_free_null(buffer);
         return -1;
     }
 
     errr result = sdl_write(fd_dst, buffer, file_size);
-    sdl_fclose(fd_dst);
+    ang_file_close(fd_dst);
     mem_free_null(buffer);
 
     if (result == 0) {
@@ -628,7 +628,7 @@ int score_count_alive_entries(void)
     char score_path[1024];
     build_current_score_path(score_path, sizeof(score_path));
 
-    SDL_IOStream* saved_fd = highscore_fd;
+    ang_file* saved_fd = highscore_fd;
     byte saved_major = scores_file_version_major;
     byte saved_minor = scores_file_version_minor;
     byte saved_patch = scores_file_version_patch;
@@ -636,7 +636,7 @@ int score_count_alive_entries(void)
     u32b saved_entry_count = scores_file_entry_count;
 
     safe_setuid_grab();
-    SDL_IOStream* scan_fd = score_file_open(score_path, O_RDONLY);
+    ang_file* scan_fd = score_file_open(score_path, O_RDONLY);
     safe_setuid_drop();
     if (!scan_fd) {
         highscore_fd = saved_fd;
@@ -660,7 +660,7 @@ int score_count_alive_entries(void)
         }
     }
 
-    SDL_CloseIO(highscore_fd);
+    (void)ang_file_close_compat(highscore_fd);
     highscore_fd = saved_fd;
     scores_file_version_major = saved_major;
     scores_file_version_minor = saved_minor;
@@ -676,7 +676,7 @@ u32b score_sum_dead_points(void)
     char score_path[1024];
     build_current_score_path(score_path, sizeof(score_path));
 
-    SDL_IOStream* saved_fd = highscore_fd;
+    ang_file* saved_fd = highscore_fd;
     byte saved_major = scores_file_version_major;
     byte saved_minor = scores_file_version_minor;
     byte saved_patch = scores_file_version_patch;
@@ -684,7 +684,7 @@ u32b score_sum_dead_points(void)
     u32b saved_entry_count = scores_file_entry_count;
 
     safe_setuid_grab();
-    SDL_IOStream* scan_fd = score_file_open(score_path, O_RDONLY);
+    ang_file* scan_fd = score_file_open(score_path, O_RDONLY);
     safe_setuid_drop();
     if (!scan_fd) {
         highscore_fd = saved_fd;
@@ -728,7 +728,7 @@ u32b score_sum_dead_points(void)
         }
     }
 
-    SDL_CloseIO(highscore_fd);
+    (void)ang_file_close_compat(highscore_fd);
     highscore_fd = saved_fd;
     scores_file_version_major = saved_major;
     scores_file_version_minor = saved_minor;
@@ -873,26 +873,26 @@ int highscore_add(high_score* score)
 
     for (int i = 0; i < count; i++)
     {
-        if (SDL_WriteIO(highscore_fd, &entries[i], sizeof(high_score)) != sizeof(high_score))
+        if (ang_file_write_compat(highscore_fd, &entries[i], sizeof(high_score)) != sizeof(high_score))
         {
             log_error("Failed to rewrite high score table entry %d", i);
             return -1;
         }
     }
 
-    if (SDL_FlushIO(highscore_fd) != 0)
+    if (ang_file_flush_compat(highscore_fd) != 0)
     {
         log_error("Failed to flush high score file: %s", SDL_GetError());
     }
 
     score_file_header score_hdr;
-    if (SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET) >= 0
-        && SDL_ReadIO(highscore_fd, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr))
+    if (ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET) >= 0
+        && ang_file_read_compat(highscore_fd, &score_hdr, sizeof(score_hdr)) == sizeof(score_hdr))
     {
         score_hdr.entry_count = count;
-        SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
-        SDL_FlushIO(highscore_fd);
+        ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET);
+        ang_file_write_compat(highscore_fd, &score_hdr, sizeof(score_hdr));
+        ang_file_flush_compat(highscore_fd);
         scores_file_entry_count = count;
     }
     else
@@ -920,14 +920,14 @@ static bool upsert_live_score_entry(const high_score* live_score)
     log_info("upsert_live_score_on_save: Score path: %s", score_path);
 
     safe_setuid_grab();
-    SDL_IOStream* live_fd = score_file_open(score_path, O_RDWR | O_CREAT);
+    ang_file* live_fd = score_file_open(score_path, O_RDWR | O_CREAT);
     safe_setuid_drop();
     if (!live_fd) {
         log_warn("Could not open %s to upsert live save entry", score_path);
         return false;
     }
 
-    SDL_IOStream* prev_fd = highscore_fd;
+    ang_file* prev_fd = highscore_fd;
     byte prev_major = scores_file_version_major;
     byte prev_minor = scores_file_version_minor;
     byte prev_patch = scores_file_version_patch;
@@ -944,8 +944,8 @@ static bool upsert_live_score_entry(const high_score* live_score)
         score_hdr.entry_count = 0;
         score_hdr.reserved[0] = 0;
         score_hdr.reserved[1] = 0;
-        SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(highscore_fd, &score_hdr, sizeof(score_hdr));
+        ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET);
+        ang_file_write_compat(highscore_fd, &score_hdr, sizeof(score_hdr));
         scores_file_version_major = SCORE_FILE_VERSION_MAJOR;
         scores_file_version_minor = SCORE_FILE_VERSION_MINOR;
         scores_file_version_patch = SCORE_FILE_VERSION_PATCH;
@@ -970,21 +970,20 @@ static bool upsert_live_score_entry(const high_score* live_score)
         }
     }
 
-    SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_END);
-    long phys_size = SDL_TellIO(highscore_fd);
-    SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
+    long phys_size = (long)ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_END);
+    ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET);
 
     score_file_header hdrchk;
-    SDL_SeekIO(highscore_fd, 0, SDL_IO_SEEK_SET);
+    ang_file_seek_compat(highscore_fd, 0, ANG_FILE_SEEK_SET);
 
-    if (SDL_ReadIO(highscore_fd, &hdrchk, sizeof(hdrchk)) == sizeof(hdrchk))
+    if (ang_file_read_compat(highscore_fd, &hdrchk, sizeof(hdrchk)) == sizeof(hdrchk))
     {
         long payload = phys_size - (long)sizeof(score_file_header);
         long logical = (payload >= 0) ? (payload / (long)sizeof(high_score)) : -1;
         log_debug("scores.raw post-save header.entry_count=%u physical_entries=%ld file_size=%ld", hdrchk.entry_count, logical, phys_size);
     }
 
-    SDL_CloseIO(highscore_fd);
+    (void)ang_file_close_compat(highscore_fd);
     highscore_fd = prev_fd;
     scores_file_version_major = prev_major;
     scores_file_version_minor = prev_minor;
@@ -1056,12 +1055,12 @@ int highscore_dead(char* name)
     }
 
     if (highscore_seek(0)) {
-        if (opened_here) { SDL_CloseIO(highscore_fd); highscore_fd = NULL; }
+        if (opened_here) { (void)ang_file_close_compat(highscore_fd); highscore_fd = NULL; }
         return 0;
     }
 
     if (scores_file_entry_count == 0) {
-        if (opened_here) { SDL_CloseIO(highscore_fd); highscore_fd = NULL; }
+        if (opened_here) { (void)ang_file_close_compat(highscore_fd); highscore_fd = NULL; }
         return 0;
     }
 
@@ -1070,12 +1069,12 @@ int highscore_dead(char* name)
         if (highscore_read(&the_score)) break;
         if (strcmp(name, the_score.who) == 0) {
             int dead = (strcmp(the_score.how, "(alive and well)") != 0);
-            if (opened_here) { SDL_CloseIO(highscore_fd); highscore_fd = NULL; }
+            if (opened_here) { (void)ang_file_close_compat(highscore_fd); highscore_fd = NULL; }
             return dead;
         }
     }
 
-    if (opened_here) { SDL_CloseIO(highscore_fd); highscore_fd = NULL; }
+    if (opened_here) { (void)ang_file_close_compat(highscore_fd); highscore_fd = NULL; }
     return 0;
 }
 
@@ -1088,7 +1087,7 @@ void clear_scorefile(void)
     build_current_score_path(cur_path, sizeof(cur_path));
 
     if (was_open) {
-        SDL_CloseIO(highscore_fd);
+        (void)ang_file_close_compat(highscore_fd);
         highscore_fd = NULL;
     }
 
@@ -1136,9 +1135,9 @@ void clear_scorefile(void)
     }
 
     safe_setuid_grab();
-    SDL_IOStream* fd_new = sdl_fmake(cur_path, 0644);
+    ang_file* fd_new = sdl_fmake(cur_path, 0644);
     if (fd_new)
-        sdl_fclose(fd_new);
+        ang_file_close(fd_new);
     safe_setuid_drop();
 
     if (was_open) {

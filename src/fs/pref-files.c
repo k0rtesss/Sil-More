@@ -3,7 +3,7 @@
 #include "angband.h"
 #include "externs.h"
 
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "fs/pref-files.h"
 #include "log/log.h"
@@ -505,7 +505,7 @@ static cptr process_pref_file_expr(char** sp, char* fp)
 
 static errr process_pref_file_aux(cptr name)
 {
-    SDL_IOStream* fp;
+    ang_file* fp;
     char buf[1024];
     char old[1024];
     int line = -1;
@@ -514,7 +514,7 @@ static errr process_pref_file_aux(cptr name)
 
     log_debug("Processing preference file: %s", name);
 
-    fp = sdl_fopen(name, "r");
+    fp = ang_file_open(name, "r");
 
     if (!fp)
     {
@@ -572,7 +572,7 @@ static errr process_pref_file_aux(cptr name)
 
     log_debug("Successfully processed preference file '%s' (%d lines)", name, line + 1);
 
-    sdl_fclose(fp);
+    ang_file_close(fp);
 
     return err;
 }

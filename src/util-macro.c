@@ -1,6 +1,20 @@
 #include "angband.h"
 #include "externs.h"
 
+s16b macro__num;
+cptr* macro__pat;
+cptr* macro__act;
+
+int max_macrotrigger = 0;
+cptr macro_template = NULL;
+cptr macro_modifier_chr;
+cptr macro_modifier_name[MAX_MACRO_MOD];
+cptr macro_trigger_name[MAX_MACRO_TRIGGER];
+cptr macro_trigger_keycode[2][MAX_MACRO_TRIGGER];
+
+char macro_buffer[1024];
+cptr keymap_act[KEYMAP_MODES][256];
+
 /*
  * The "macro" package
  *

@@ -3,7 +3,7 @@
 #include "angband.h"
 #include "externs.h"
 
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "fs/pref-time.h"
 
@@ -40,12 +40,12 @@ errr check_time(void)
 errr check_time_init(void)
 {
 #ifdef CHECK_TIME
-    SDL_IOStream* fp;
+    ang_file* fp;
     char buf[1024];
 
     path_build(buf, sizeof(buf), ANGBAND_DIR_FILE, "time.txt");
 
-    fp = sdl_fopen(buf, "r");
+    fp = ang_file_open(buf, "r");
 
     if (!fp)
         return 0;
@@ -75,7 +75,7 @@ errr check_time_init(void)
             SDL_strlcpy(days[6], buf, sizeof(days[6]));
     }
 
-    sdl_fclose(fp);
+    ang_file_close(fp);
 #endif /* CHECK_TIME */
 
     return 0;

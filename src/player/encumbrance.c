@@ -1,9 +1,9 @@
 /* File: encumbrance.c */
 
 #include "angband.h"
+#include "externs.h"
 #include "player/encumbrance.h"
 
-#include "externs.h"
 
 /*
  * Computes current weight limit in tenths of pounds.

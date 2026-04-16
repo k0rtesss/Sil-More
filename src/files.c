@@ -17,7 +17,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -245,7 +245,7 @@ static void file_character_append_field(char* buf, size_t buf_size, cptr text)
     SDL_strlcat(buf, text, buf_size);
 }
 
-static void file_character_write_metric(SDL_IOStream* fff,
+static void file_character_write_metric(ang_file* fff,
     const app_ui_character_metric* metric)
 {
     char line[256];
@@ -255,7 +255,7 @@ static void file_character_write_metric(SDL_IOStream* fff,
 
     if (!metric->label[0] && !metric->value[0] && !metric->secondary[0])
     {
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf(fff, "\n");
         return;
     }
 
@@ -278,10 +278,10 @@ static void file_character_write_metric(SDL_IOStream* fff,
         file_character_append_field(line, sizeof(line), metric->secondary);
     }
 
-    SDL_IOprintf(fff, "%s\n", line);
+    ang_file_printf(fff, "%s\n", line);
 }
 
-static void file_character_write_stat(SDL_IOStream* fff,
+static void file_character_write_stat(ang_file* fff,
     const app_ui_character_stat* stat)
 {
     char line[256];
@@ -292,7 +292,7 @@ static void file_character_write_stat(SDL_IOStream* fff,
     if (!stat->label[0] && !stat->value[0] && !stat->base[0] && !stat->mod1[0]
         && !stat->mod2[0] && !stat->mod3[0])
     {
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf(fff, "\n");
         return;
     }
 
@@ -314,10 +314,10 @@ static void file_character_write_stat(SDL_IOStream* fff,
     file_character_append_field(line, sizeof(line), stat->mod2);
     file_character_append_field(line, sizeof(line), stat->mod3);
 
-    SDL_IOprintf(fff, "%s\n", line);
+    ang_file_printf(fff, "%s\n", line);
 }
 
-static void file_character_write_history(SDL_IOStream* fff,
+static void file_character_write_history(ang_file* fff,
     const app_ui_scene* scene, const app_ui_panel* panel)
 {
     void (*old_hook)(byte, cptr) = text_out_hook;
@@ -364,7 +364,7 @@ static void file_character_write_history(SDL_IOStream* fff,
     text_out_indent = old_indent;
 }
 
-static bool file_character_write_semantic_sheet(SDL_IOStream* fff)
+static bool file_character_write_semantic_sheet(ang_file* fff)
 {
     app_ui_scene scene;
     const app_ui_panel* panel;
@@ -380,29 +380,29 @@ static bool file_character_write_semantic_sheet(SDL_IOStream* fff)
         return false;
 
     if (panel->title[0])
-        SDL_IOprintf(fff, "  %s\n\n", panel->title);
+        ang_file_printf(fff, "  %s\n\n", panel->title);
 
     for (i = 0; i < panel->character_metric_count; i++)
         file_character_write_metric(fff, &panel->character_metrics[i]);
 
     if (panel->detail_line_count > 0)
     {
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf(fff, "\n");
         for (i = 0; i < panel->detail_line_count; i++)
-            SDL_IOprintf(fff, "%s\n",
+            ang_file_printf(fff, "%s\n",
                 panel->detail_lines[i].text[0] ? panel->detail_lines[i].text : "");
     }
 
     if (panel->character_stat_count > 0)
     {
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf(fff, "\n");
         for (i = 0; i < panel->character_stat_count; i++)
             file_character_write_stat(fff, &panel->character_stats[i]);
     }
 
     if (panel->rich_paragraph_count > 0)
     {
-        SDL_IOprintf(fff, "\n");
+        ang_file_printf(fff, "\n");
         file_character_write_history(fff, &scene, panel);
     }
 
@@ -412,8 +412,8 @@ static bool file_character_write_semantic_sheet(SDL_IOStream* fff)
 errr file_character(cptr name, bool full)
 {
     int i;
-    SDL_IOStream* fd;
-    SDL_IOStream* fff = NULL;
+    ang_file* fd;
+    ang_file* fff = NULL;
     char o_name[80];
     char buf[1024];
     ability_type* b_ptr;
@@ -426,26 +426,26 @@ errr file_character(cptr name, bool full)
     path_build(buf, sizeof(buf), ANGBAND_DIR_USER, name);
     FILE_TYPE(FILE_TYPE_TEXT);
 
-    fd = sdl_fopen(buf, "rb");
+    fd = ang_file_open(buf, "rb");
     if (fd)
     {
         char out_val[160];
-        sdl_fclose(fd);
+        ang_file_close(fd);
         strnfmt(out_val, sizeof(out_val), "Replace existing file %s? ", buf);
         if (get_check(out_val))
             fd = NULL;
     }
 
     if (!fd)
-        fff = sdl_fopen(buf, "w");
+        fff = ang_file_open(buf, "w");
     if (!fff)
         return -1;
 
-    SDL_IOprintf(fff, "  [%s %s Character Dump]\n\n", VERSION_NAME, VERSION_STRING);
+    ang_file_printf(fff, "  [%s %s Character Dump]\n\n", VERSION_NAME, VERSION_STRING);
 
     if (!file_character_write_semantic_sheet(fff))
     {
-        sdl_fclose(fff);
+        ang_file_close(fff);
         return -1;
     }
 
@@ -454,15 +454,15 @@ errr file_character(cptr name, bool full)
         i = message_num();
         if (i > 15)
             i = 15;
-        SDL_IOprintf(fff, "\n  [Last Messages]\n\n");
+        ang_file_printf(fff, "\n  [Last Messages]\n\n");
         while (i-- > 0)
-            SDL_IOprintf(fff, "> %s\n", message_str((s16b)i));
-        SDL_IOprintf(fff, "\n");
+            ang_file_printf(fff, "> %s\n", message_str((s16b)i));
+        ang_file_printf(fff, "\n");
     }
 
     if (p_ptr->equip_cnt)
     {
-        SDL_IOprintf(fff, "\n  [Equipment]\n\n");
+        ang_file_printf(fff, "\n  [Equipment]\n\n");
         for (i = INVEN_WIELD; i < INVEN_TOTAL; i++)
         {
             object_type* o_ptr = &inventory[i];
@@ -479,13 +479,13 @@ errr file_character(cptr name, bool full)
                 SDL_strlcat(o_name, wgt_buf, sizeof(o_name));
             }
 
-            SDL_IOprintf(fff, "%c) %s\n", index_to_label(i), o_name);
+            ang_file_printf(fff, "%c) %s\n", index_to_label(i), o_name);
             identify_random_gen(o_ptr);
         }
-        SDL_IOprintf(fff, "\n\n");
+        ang_file_printf(fff, "\n\n");
     }
 
-    SDL_IOprintf(fff, "  [Inventory]\n\n");
+    ang_file_printf(fff, "  [Inventory]\n\n");
     for (i = 0; i < INVEN_PACK; i++)
     {
         object_type* o_ptr = &inventory[i];
@@ -505,11 +505,11 @@ errr file_character(cptr name, bool full)
             SDL_strlcat(o_name, wgt_buf, sizeof(o_name));
         }
 
-        SDL_IOprintf(fff, "%c) %s\n", index_to_label(i), o_name);
+        ang_file_printf(fff, "%c) %s\n", index_to_label(i), o_name);
         identify_random_gen(o_ptr);
     }
 
-    SDL_IOprintf(fff, "\n\n  [Abilities]\n\n");
+    ang_file_printf(fff, "\n\n  [Abilities]\n\n");
     for (i = 0; i < z_info->b_max; i++)
     {
         b_ptr = &b_info[i];
@@ -522,25 +522,25 @@ errr file_character(cptr name, bool full)
             if (b_ptr->skilltype == S_PER && b_ptr->abilitynum == PER_BANE
                 && p_ptr->bane_type > 0)
             {
-                SDL_IOprintf(fff, "%s-%s\n", bane_name[p_ptr->bane_type],
+                ang_file_printf(fff, "%s-%s\n", bane_name[p_ptr->bane_type],
                     (b_name + b_ptr->name));
             }
             else if (b_ptr->skilltype == S_WIL && b_ptr->abilitynum == WIL_OATH
                 && p_ptr->oath_type > 0)
             {
                 if (oath_invalid(p_ptr->oath_type))
-                    SDL_IOprintf(fff, "%s: %s (Broken)\n", (b_name + b_ptr->name),
+                    ang_file_printf(fff, "%s: %s (Broken)\n", (b_name + b_ptr->name),
                         oath_name[p_ptr->oath_type]);
                 else
-                    SDL_IOprintf(fff, "%s: %s\n", (b_name + b_ptr->name),
+                    ang_file_printf(fff, "%s: %s\n", (b_name + b_ptr->name),
                         oath_name[p_ptr->oath_type]);
             }
             else
-                SDL_IOprintf(fff, "%s\n", (b_name + b_ptr->name));
+                ang_file_printf(fff, "%s\n", (b_name + b_ptr->name));
         }
     }
 
-    SDL_IOprintf(fff, "\n\n  [Enemies]\n\n");
+    ang_file_printf(fff, "\n\n  [Enemies]\n\n");
     for (i = 1; i < z_info->r_max - 1; i++)
     {
         monster_race* r_ptr = &r_info[i];
@@ -550,16 +550,16 @@ errr file_character(cptr name, bool full)
             continue;
 
         if (r_ptr->flags1 & (RF1_UNIQUE))
-            SDL_IOprintf(fff, "  %-7s %s \n", l_ptr->pkills ? "(slain)" : "(seen)",
+            ang_file_printf(fff, "  %-7s %s \n", l_ptr->pkills ? "(slain)" : "(seen)",
                 (r_name + r_ptr->name));
         else
-            SDL_IOprintf(fff, "%3d /%3d  %-40s\n", l_ptr->pkills, l_ptr->psights,
+            ang_file_printf(fff, "%3d /%3d  %-40s\n", l_ptr->pkills, l_ptr->psights,
                 (r_name + r_ptr->name));
     }
 
     if (p_ptr->is_dead)
     {
-        SDL_IOprintf(fff, "\n\n  [Artefacts]\n\n");
+        ang_file_printf(fff, "\n\n  [Artefacts]\n\n");
 
         for (i = 0; i < z_info->art_norm_max; i++)
         {
@@ -576,12 +576,12 @@ errr file_character(cptr name, bool full)
             make_fake_artefact(o_ptr, i);
             object_desc_spoil(art_name, sizeof(art_name), o_ptr, true, 0);
 
-            SDL_IOprintf(fff, "%s %s\n", art_name,
+            ang_file_printf(fff, "%s %s\n", art_name,
                 a_ptr->found_num > 0 ? "(found)" : "");
         }
     }
 
-    SDL_IOprintf(fff, "\n\n  [Notes]\n\n");
+    ang_file_printf(fff, "\n\n  [Notes]\n\n");
 
     i = 0;
     holder = notes_buffer[i];
@@ -589,11 +589,11 @@ errr file_character(cptr name, bool full)
     {
         holder = notes_buffer[i];
         if (holder != '\0')
-            SDL_IOprintf(fff, "%c", holder);
+            ang_file_printf(fff, "%c", holder);
         i++;
     }
 
-    SDL_IOprintf(fff, "\n");
+    ang_file_printf(fff, "\n");
 
     for (i = OPT_BIRTH; i < OPT_CHEAT; i++)
     {
@@ -603,20 +603,20 @@ errr file_character(cptr name, bool full)
 
     if (challenges)
     {
-        SDL_IOprintf(fff, "  [Challenges]\n\n");
+        ang_file_printf(fff, "  [Challenges]\n\n");
 
         for (i = OPT_BIRTH; i < OPT_CHEAT; i++)
         {
             if (option_desc[i] && op_ptr->opt[i])
-                SDL_IOprintf(fff, "%-45s\n", option_desc[i]);
+                ang_file_printf(fff, "%-45s\n", option_desc[i]);
         }
     }
 
-    SDL_IOprintf(fff, "\n\n");
+    ang_file_printf(fff, "\n\n");
     create_score(&the_score);
-    SDL_IOprintf(fff, "  ['Score' %.9d]\n\n", score_points(&the_score));
+    ang_file_printf(fff, "  ['Score' %.9d]\n\n", score_points(&the_score));
 
-    sdl_fclose(fff);
+    ang_file_close(fff);
 
     return 0;
 }

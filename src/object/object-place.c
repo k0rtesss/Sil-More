@@ -1,8 +1,8 @@
 /* File: object-place.c */
 
 #include "angband.h"
-#include "app/app-session.h"
 #include "externs.h"
+#include "app/app-session.h"
 
 /*
  * Let the floor carry an object

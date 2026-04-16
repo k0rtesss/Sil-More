@@ -2,7 +2,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "init.h"
 #include "init/init-parse-internal.h"
@@ -885,7 +885,7 @@ void styles_clear_display_messages(void)
 void styles_reload_messages_from_text(void)
 {
     char path[1024];
-    SDL_IOStream* fp;
+    ang_file* fp;
     char buf[1024];
 
     styles_clear_display_messages();
@@ -896,7 +896,7 @@ void styles_reload_messages_from_text(void)
         return;
     }
 
-    fp = sdl_fopen(path, "r");
+    fp = ang_file_open(path, "r");
     if (!fp)
     {
         log_warn("styles_reload_messages_from_text: couldn't open %s", path);
@@ -943,7 +943,7 @@ void styles_reload_messages_from_text(void)
         }
     }
 
-    sdl_fclose(fp);
+    ang_file_close(fp);
     log_info("styles_reload_messages_from_text: loaded per-style narrative text");
 }
 

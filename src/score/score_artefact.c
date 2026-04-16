@@ -2,7 +2,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "score/score_format.h"
@@ -53,16 +53,16 @@ static void artefact_db_init_header(artefact_db_header* header)
     header->version = SCORE_ARTEFACT_DB_VERSION;
 }
 
-static SDL_IOStream* artefact_db_open(const char* path,
-                                      artefact_db_header* header,
-                                      bool* created)
+static ang_file* artefact_db_open(const char* path,
+                                  artefact_db_header* header,
+                                  bool* created)
 {
     if (created)
         *created = false;
 
-    SDL_IOStream* file = SDL_IOFromFile(path, "r+b");
+    ang_file* file = ang_file_open_compat(path, "r+b");
     if (!file) {
-        file = SDL_IOFromFile(path, "w+b");
+        file = ang_file_open_compat(path, "w+b");
         if (!file)
             return NULL;
         if (created)
@@ -71,46 +71,46 @@ static SDL_IOStream* artefact_db_open(const char* path,
 
     if (created && *created) {
         artefact_db_init_header(header);
-        SDL_WriteIO(file, header, sizeof(*header));
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+        ang_file_write_compat(file, header, sizeof(*header));
+        ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
         return file;
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-    if (SDL_ReadIO(file, header, sizeof(*header)) != sizeof(*header) ||
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
+    if (ang_file_read_compat(file, header, sizeof(*header)) != sizeof(*header) ||
         memcmp(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic)) != 0) {
         artefact_db_init_header(header);
-        SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-        SDL_WriteIO(file, header, sizeof(*header));
+        ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
+        ang_file_write_compat(file, header, sizeof(*header));
     }
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return file;
 }
 
-static bool artefact_db_find(SDL_IOStream* file, const score_guid64* guid,
-                             artefact_db_record_v1* out, Sint64* offset)
+static bool artefact_db_find(ang_file* file, const score_guid64* guid,
+                             artefact_db_record_v1* out, ang_file_off_t* offset)
 {
     if (!file || !guid)
         return false;
 
-    if (SDL_SeekIO(file, sizeof(artefact_db_header), SDL_IO_SEEK_SET) < 0)
+    if (ang_file_seek_compat(file, sizeof(artefact_db_header), ANG_FILE_SEEK_SET) < 0)
         return false;
 
     artefact_db_record_v1 rec;
-    Sint64 pos = SDL_TellIO(file);
-    while (SDL_ReadIO(file, &rec, sizeof(rec)) == sizeof(rec)) {
+    ang_file_off_t pos = ang_file_tell_compat(file);
+    while (ang_file_read_compat(file, &rec, sizeof(rec)) == sizeof(rec)) {
         if (rec.guid.hi == guid->hi && rec.guid.lo == guid->lo) {
             if (out)
                 *out = rec;
             if (offset)
                 *offset = pos;
-            SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+            ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
             return true;
         }
-        pos = SDL_TellIO(file);
+        pos = ang_file_tell_compat(file);
     }
 
-    SDL_SeekIO(file, 0, SDL_IO_SEEK_END);
+    ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return false;
 }
 
@@ -158,7 +158,7 @@ bool score_artefact_register(const artefact_type* art)
     bool created = false;
 
     safe_setuid_grab();
-    SDL_IOStream* file = artefact_db_open(path, &header, &created);
+    ang_file* file = artefact_db_open(path, &header, &created);
     safe_setuid_drop();
 
     if (!file) {
@@ -167,7 +167,7 @@ bool score_artefact_register(const artefact_type* art)
     }
 
     artefact_db_record_v1 existing;
-    Sint64 offset = -1;
+    ang_file_off_t offset = -1;
     bool found = artefact_db_find(file, &art->guid, &existing, &offset);
 
     artefact_db_record_v1 snapshot;
@@ -175,19 +175,19 @@ bool score_artefact_register(const artefact_type* art)
 
     bool ok = false;
     if (found) {
-        if (SDL_SeekIO(file, offset, SDL_IO_SEEK_SET) >= 0 &&
-            SDL_WriteIO(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
+        if (ang_file_seek_compat(file, offset, ANG_FILE_SEEK_SET) >= 0 &&
+            ang_file_write_compat(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
             ok = true;
         }
     } else {
-        if (SDL_WriteIO(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
+        if (ang_file_write_compat(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
             header.record_count++;
-            SDL_SeekIO(file, 0, SDL_IO_SEEK_SET);
-            SDL_WriteIO(file, &header, sizeof(header));
+            ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
+            ang_file_write_compat(file, &header, sizeof(header));
             ok = true;
         }
     }
 
-    SDL_CloseIO(file);
+    (void)ang_file_close_compat(file);
     return ok;
 }

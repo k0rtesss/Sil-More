@@ -1,9 +1,9 @@
 /* File: ability_log.c */
 
 #include "angband.h"
+#include "externs.h"
 #include "player/ability_log.h"
 
-#include "externs.h"
 
 static u32b ability_log_turn_value(void)
 {

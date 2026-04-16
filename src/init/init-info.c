@@ -1,7 +1,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "reliability-checks.h"
@@ -10,6 +10,85 @@
 #include "h-define.h"
 #include "init.h"
 #include "init2-internal.h"
+
+maxima* z_info;
+
+vault_type* v_info;
+char* v_name;
+char* v_text;
+
+feature_type* f_info;
+char* f_name;
+char* f_text;
+
+object_kind* k_info;
+char* k_name;
+char* k_text;
+
+ability_type* b_info;
+char* b_name;
+char* b_text;
+
+artefact_type* a_info;
+char* a_text;
+bool* valar_reserved_artifacts;
+
+ego_item_type* e_info;
+char* e_name;
+char* e_text;
+
+monster_race* r_info;
+monster_race* r_base;
+char* r_name;
+char* r_text;
+
+player_race* p_info;
+char* p_name;
+char* p_text;
+
+character_profile* c_info;
+char* c_name;
+char* c_text;
+
+hist_type* h_info;
+char* h_text;
+
+story_type* st_info;
+char* st_text;
+char* st_name;
+
+curse_type* cu_info;
+char* cu_text;
+char* cu_name;
+
+major_blessing_type* mb_info;
+char* mb_text;
+char* mb_name;
+
+quest_type* quest_info;
+char* quest_name_text;
+char* quest_desc_text;
+char* q_text;
+
+oath_type* oath_info;
+char* oath_name_text;
+char* oath_desc_text;
+
+flavor_type* flavor_info;
+char* flavor_name;
+char* flavor_text;
+
+names_type* n_info;
+style_type* style_info;
+char* style_name;
+skeleton_note_template* skeleton_note_info;
+char* skeleton_note_text;
+
+byte misc_to_attr[256];
+char misc_to_char[256];
+byte tval_to_attr[128];
+
+runtype_type* runtype_info = NULL;
 
 #ifdef ALLOW_TEMPLATES
 
@@ -76,7 +155,7 @@ header skeleton_note_head;
 /*
  * Initialize a "*_info" array, by parsing a binary "image" file
  */
-static errr init_info_raw(SDL_IOStream* fd, header* head)
+static errr init_info_raw(ang_file* fd, header* head)
 {
     header test;
     Sint64 file_size_64;
@@ -212,11 +291,11 @@ void display_parse_error(cptr filename, errr err, cptr buf)
  */
 static errr init_info(cptr filename, header* head)
 {
-    SDL_IOStream* fd;
+    ang_file* fd;
 
     errr err = 1;
 
-    SDL_IOStream* fp;
+    ang_file* fp;
 
     /* General buffer */
     char buf[1024];
@@ -229,7 +308,7 @@ static errr init_info(cptr filename, header* head)
     path_build(buf, sizeof(buf), ANGBAND_DIR_DATA, format("%s.raw", filename));
 
     /* Attempt to open the "raw" file */
-    fd = sdl_fopen(buf, "rb");
+    fd = ang_file_open(buf, "rb");
 
     /* Process existing "raw" file */
     if (fd)
@@ -244,7 +323,7 @@ static errr init_info(cptr filename, header* head)
         {
             /* Text file is newer - close raw and regenerate */
             log_info("Text file '%s.txt' is newer than raw file - regenerating", filename);
-            sdl_fclose(fd);
+            ang_file_close(fd);
             fd = NULL;
         }
         else
@@ -258,7 +337,7 @@ static errr init_info(cptr filename, header* head)
             err = init_info_raw(fd, head);
 
         /* Close it */
-        sdl_fclose(fd);
+        ang_file_close(fd);
     }
 
     /* Do we have to parse the *.txt file? */
@@ -282,7 +361,7 @@ static errr init_info(cptr filename, header* head)
         path_build(buf, sizeof(buf), ANGBAND_DIR_EDIT, format("%s.txt", filename));
 
         /* Open the file */
-        fp = sdl_fopen(buf, "r");
+        fp = ang_file_open(buf, "r");
 
         /* Parse it */
         if (!fp)
@@ -292,7 +371,7 @@ static errr init_info(cptr filename, header* head)
         err = init_info_txt(fp, buf, head, head->parse_info_txt);
 
         /* Close it */
-        sdl_fclose(fp);
+        ang_file_close(fp);
 
         /* Errors */
         if (err)
@@ -307,7 +386,7 @@ static errr init_info(cptr filename, header* head)
         path_build(buf, sizeof(buf), ANGBAND_DIR_DATA, format("%s.raw", filename));
 
         /* Attempt to open the file */
-        fd = sdl_fopen(buf, "rb");
+        fd = ang_file_open(buf, "rb");
 
         /* Failure */
         if (!fd)
@@ -335,13 +414,13 @@ static errr init_info(cptr filename, header* head)
         }
 
         /* Close it */
-        sdl_fclose(fd);
+        ang_file_close(fd);
 
         /* Grab permissions */
         safe_setuid_grab();
 
         /* Attempt to create the raw file */
-        fd = sdl_fopen(buf, "wb");
+        fd = ang_file_open(buf, "wb");
 
         /* Drop permissions */
         safe_setuid_drop();
@@ -372,7 +451,7 @@ static errr init_info(cptr filename, header* head)
             sdl_write(fd, head->text_ptr, head->text_size);
 
             /* Close */
-            sdl_fclose(fd);
+            ang_file_close(fd);
         }
 
         /*** Kill the fake arrays ***/
@@ -395,7 +474,7 @@ static errr init_info(cptr filename, header* head)
         path_build(buf, sizeof(buf), ANGBAND_DIR_DATA, format("%s.raw", filename));
 
         /* Attempt to open the "raw" file */
-        fd = sdl_fopen(buf, "rb");
+        fd = ang_file_open(buf, "rb");
 
         /* Process existing "raw" file */
         if (!fd)
@@ -405,7 +484,7 @@ static errr init_info(cptr filename, header* head)
         err = init_info_raw(fd, head);
 
         /* Close it */
-        sdl_fclose(fd);
+        ang_file_close(fd);
 
         /* Error */
         if (err)
@@ -505,20 +584,20 @@ errr init_style_info(void)
     styles_reload_messages_from_text();
     /* Load level/vault rules from separate file (always parse text for side-effects). */
     {
-        SDL_IOStream* fp;
+        ang_file* fp;
         char buf[1024];
         header levels_head;
         init_header(&levels_head, 1, 1);
         path_build(buf, sizeof(buf), ANGBAND_DIR_EDIT,
             format("%s.txt", "style-levels"));
-        fp = sdl_fopen(buf, "r");
+        fp = ang_file_open(buf, "r");
         if (!fp)
             quit("Cannot open 'style-levels.txt' file.");
         {
             char linebuf[1024];
             err = init_info_txt(fp, linebuf, &levels_head, parse_style_levels);
         }
-        sdl_fclose(fp);
+        ang_file_close(fp);
         if (err)
         {
             display_parse_error("style-levels", err, "style-levels");
@@ -532,7 +611,7 @@ errr init_style_info(void)
 errr init_partition_info(void)
 {
     errr err;
-    SDL_IOStream* fp;
+    ang_file* fp;
     char path[1024];
     char linebuf[1024];
     header part_head;
@@ -541,12 +620,12 @@ errr init_partition_info(void)
     partition_config_reset();
 
     path_build(path, sizeof(path), ANGBAND_DIR_EDIT, format("%s.txt", "partition"));
-    fp = sdl_fopen(path, "r");
+    fp = ang_file_open(path, "r");
     if (!fp)
         quit("Cannot open 'partition.txt' file.");
 
     err = init_info_txt(fp, linebuf, &part_head, parse_partition_info);
-    sdl_fclose(fp);
+    ang_file_close(fp);
 
     if (err)
     {

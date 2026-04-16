@@ -12,7 +12,7 @@
 #include "ui-file-viewer.h"
 #include "ui-information-scene.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "log/log.h"
 #include <ctype.h>
 
@@ -326,7 +326,7 @@ static bool show_file_resume_information_scene(
 static bool show_file_find_next_match(cptr path, cptr find,
     bool case_sensitive, int start_line, int* out_line)
 {
-    SDL_IOStream* fff;
+    ang_file* fff;
     char buf[1024];
     char lc_buf[1024];
     int next = 0;
@@ -334,13 +334,13 @@ static bool show_file_find_next_match(cptr path, cptr find,
     if (!path || !find || !find[0] || !out_line)
         return false;
 
-    fff = sdl_fopen(path, "r");
+    fff = ang_file_open(path, "r");
     if (!fff)
         return false;
 
     while (true)
     {
-        if (sdl_fgets(fff, buf, sizeof(buf)))
+        if (ang_file_gets(fff, buf, sizeof(buf)))
             break;
         if (prefix(buf, "***** "))
             continue;
@@ -353,14 +353,14 @@ static bool show_file_find_next_match(cptr path, cptr find,
         if (next >= start_line && strstr(lc_buf, find))
         {
             *out_line = next;
-            sdl_fclose(fff);
+            ang_file_close(fff);
             return true;
         }
 
         next++;
     }
 
-    sdl_fclose(fff);
+    ang_file_close(fff);
     return false;
 }
 
@@ -368,7 +368,7 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
     cptr caption, cptr shower, bool case_sensitive, bool menu, int size,
     int line)
 {
-    SDL_IOStream* fff;
+    ang_file* fff;
     app_ui_panel* panel;
     char buf[1024];
     char lc_buf[1024];
@@ -378,14 +378,14 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
     if (!scene || !path)
         return false;
 
-    fff = sdl_fopen(path, "r");
+    fff = ang_file_open(path, "r");
     if (!fff)
         return false;
 
     panel = show_file_begin_browser_scene(scene);
     if (!panel)
     {
-        sdl_fclose(fff);
+        ang_file_close(fff);
         return false;
     }
     if (caption && caption[0])
@@ -393,7 +393,7 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
     app_ui_panel_set_row_offset(panel, (s16b)scroll_offset);
     if (!app_ui_panel_begin_rich_paragraph(scene, panel))
     {
-        sdl_fclose(fff);
+        ang_file_close(fff);
         return false;
     }
 
@@ -403,7 +403,7 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
                 strlen(caption))
             || !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, "\n\n"))
         {
-            sdl_fclose(fff);
+            ang_file_close(fff);
             return false;
         }
         wrote_any = true;
@@ -411,7 +411,7 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
 
     while (true)
     {
-        if (sdl_fgets(fff, buf, sizeof(buf)))
+        if (ang_file_gets(fff, buf, sizeof(buf)))
             break;
         if (prefix(buf, "***** "))
             continue;
@@ -424,18 +424,18 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
         if (wrote_any && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE,
                 "\n"))
         {
-            sdl_fclose(fff);
+            ang_file_close(fff);
             return false;
         }
         if (!show_file_scene_add_highlighted_line(scene, panel, buf, shower))
         {
-            sdl_fclose(fff);
+            ang_file_close(fff);
             return false;
         }
         wrote_any = true;
     }
 
-    sdl_fclose(fff);
+    ang_file_close(fff);
     if (!wrote_any && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE, " "))
         return false;
 
@@ -484,7 +484,7 @@ static show_file_scene_result show_file_information_scene(
     int back = 0;
     bool menu = false;
     bool case_sensitive = false;
-    SDL_IOStream* fff = NULL;
+    ang_file* fff = NULL;
     char* find = NULL;
     cptr tag = NULL;
     char finder[80];
@@ -520,7 +520,7 @@ static show_file_scene_result show_file_information_scene(
         SDL_strlcpy(caption, what, sizeof(caption));
         SDL_strlcpy(path, name, sizeof(path));
         log_debug("Opening help file: %s", path);
-        fff = sdl_fopen(path, "r");
+        fff = ang_file_open(path, "r");
     }
 
     if (!fff)
@@ -536,7 +536,7 @@ static show_file_scene_result show_file_information_scene(
 
     while (true)
     {
-        if (sdl_fgets(fff, buf, sizeof(buf)))
+        if (ang_file_gets(fff, buf, sizeof(buf)))
             break;
 
         if (prefix(buf, "***** "))
@@ -677,7 +677,7 @@ static show_file_scene_result show_file_information_scene(
     }
 
     if (fff)
-        sdl_fclose(fff);
+        ang_file_close(fff);
     ui_information_scene_leave(&scope);
     return (ch == '?') ? SHOW_FILE_SCENE_RESULT_QUERY_EXIT
                        : SHOW_FILE_SCENE_RESULT_SHOWN;

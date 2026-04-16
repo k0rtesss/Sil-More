@@ -6,7 +6,7 @@
 #include "app/app-session.h"
 #include "blitz.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "fs/savefile-name.h"
 #include "log/log.h"
@@ -27,6 +27,66 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+cptr copyright
+    = "Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Keoneke\n"
+      "\n"
+      "This software may be copied and distributed for educational, research,\n"
+      "and not for profit purposes provided that this copyright and statement\n"
+      "are included in all such copies.  Other copyrights may also apply.\n";
+
+byte version_major = VERSION_MAJOR;
+byte version_minor = VERSION_MINOR;
+byte version_patch = VERSION_PATCH;
+byte version_extra = VERSION_EXTRA;
+
+byte sf_major;
+byte sf_minor;
+byte sf_patch;
+byte sf_extra;
+u32b sf_xtra;
+u32b sf_when;
+u16b sf_lives;
+u16b sf_saves;
+
+bool character_generated;
+bool character_dungeon;
+bool character_loaded;
+bool character_loaded_dead;
+bool character_saved;
+s16b character_icky;
+s16b character_xtra;
+
+u32b seed_randart;
+u32b seed_flavor;
+
+s32b turn;
+s32b playerturn;
+s32b min_depth_counter;
+
+byte feeling;
+byte do_feeling;
+s16b rating;
+bool good_item_flag;
+int closing_flag;
+
+int player_uid;
+int player_euid;
+int player_egid;
+char savefile[1024];
+
+s16b signal_count;
+bool msg_flag;
+bool command_repeating = false;
+
+char notes_buffer[NOTES_LENGTH];
+byte bones_selector;
+int r_ghost;
+char ghost_name[80];
+int ghost_string_type = 0;
+char ghost_string[80];
+bool g_labyrinth_view_active = false;
+bool stop_stealth_mode = false;
 
 #ifdef WINDOWS
 #include <windows.h>
@@ -235,10 +295,10 @@ static void close_game_aux(void)
         char score_path[1024];
         build_current_score_path(score_path, sizeof(score_path));
         safe_setuid_grab();
-        SDL_IOStream* score_fd = score_file_open(score_path, O_RDWR | O_CREAT);
+        ang_file* score_fd = score_file_open(score_path, O_RDWR | O_CREAT);
         safe_setuid_drop();
         if (score_fd) {
-            SDL_IOStream* previous_fd = score_file_active_ctx()->fd;
+            ang_file* previous_fd = score_file_active_ctx()->fd;
             score_file_active_ctx()->fd = score_fd;
             legacy_score_written = (score_entry_submit(&the_score) == 0);
             score_file_active_ctx()->fd = previous_fd;
@@ -663,9 +723,9 @@ void backup_and_clear_saves(void)
         path_build(test_path, sizeof(test_path), save_dir, test_patterns[i]);
         log_trace("Checking for save file pattern: %s", test_path);
 
-        SDL_IOStream* test_fd = sdl_fopen(test_path, "rb");
+        ang_file* test_fd = ang_file_open(test_path, "rb");
         if (test_fd) {
-            sdl_fclose(test_fd);
+            ang_file_close(test_fd);
             has_files = true;
             log_trace("Found save file: %s", test_path);
             break;
@@ -686,9 +746,9 @@ void backup_and_clear_saves(void)
 
             log_trace("Checking directory pattern: %s", test_path);
 
-            SDL_IOStream* test_fd = sdl_fopen(test_path, "rb");
+            ang_file* test_fd = ang_file_open(test_path, "rb");
             if (test_fd) {
-                sdl_fclose(test_fd);
+                ang_file_close(test_fd);
                 has_files = true;
                 log_trace("Found file with pattern: %s", test_path);
                 break;

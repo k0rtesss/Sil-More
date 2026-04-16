@@ -2,6 +2,11 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 
+ang_file* text_out_file = NULL;
+void (*text_out_hook)(byte a, cptr str);
+int text_out_wrap = 0;
+int text_out_indent = 0;
+
 static void write_text_out_byte(unsigned char value)
 {
     char byte = (char)value;

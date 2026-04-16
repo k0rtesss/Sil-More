@@ -2,7 +2,7 @@
 
 #include "angband.h"
 #include "externs.h"
-#include "fs/io_sdl.h"
+#include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "platform-input.h"
@@ -1143,7 +1143,7 @@ void show_scores_interactive_highlight_from_file(bool longscore,
     show_scores_interactive_highlight(longscore, entry);
     score_file_set_active_ctx(previous_ctx);
 
-    SDL_CloseIO(temp_ctx.fd);
+    (void)ang_file_close_compat(temp_ctx.fd);
     score_file_reset_ctx(&temp_ctx);
 }
 
@@ -1171,14 +1171,14 @@ static const char* score_run_status_label(score_record_status status)
     }
 }
 
-static bool run_history_skip_details(SDL_IOStream* file, s64b* detail_offset)
+static bool run_history_skip_details(ang_file* file, s64b* detail_offset)
 {
     if (!file)
         return false;
 
-    Sint64 header_pos = SDL_TellIO(file);
+    ang_file_off_t header_pos = ang_file_tell_compat(file);
     score_run_detail_header_v1 header;
-    if (SDL_ReadIO(file, &header, sizeof(header)) != sizeof(header))
+    if (ang_file_read_compat(file, &header, sizeof(header)) != sizeof(header))
         return false;
 
     if (detail_offset)
@@ -1324,29 +1324,29 @@ static int collect_run_history(run_history_entry* out, int capacity)
         return 0;
 
     safe_setuid_grab();
-    SDL_IOStream* file = SDL_IOFromFile(path, "rb");
+    ang_file* file = ang_file_open_compat(path, "rb");
     safe_setuid_drop();
 
     if (!file)
         return 0;
 
     score_db_header header;
-    if (SDL_ReadIO(file, &header, sizeof(header)) != sizeof(header) ||
+    if (ang_file_read_compat(file, &header, sizeof(header)) != sizeof(header) ||
         memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) != 0) {
-        SDL_CloseIO(file);
+        (void)ang_file_close_compat(file);
         return 0;
     }
 
     run_history_entry* ring = mem_alloc_array(capacity, run_history_entry);
     if (!ring) {
-        SDL_CloseIO(file);
+        (void)ang_file_close_compat(file);
         return 0;
     }
 
     int stored = 0;
     score_record_v1 temp;
-    while (SDL_ReadIO(file, &temp, sizeof(temp)) == sizeof(temp)) {
-        s64b detail_offset = (s64b)SDL_TellIO(file);
+    while (ang_file_read_compat(file, &temp, sizeof(temp)) == sizeof(temp)) {
+        s64b detail_offset = (s64b)ang_file_tell_compat(file);
         if (!run_history_skip_details(file, &detail_offset))
             break;
         run_history_entry* slot = &ring[stored % capacity];
@@ -1356,7 +1356,7 @@ static int collect_run_history(run_history_entry* out, int capacity)
         stored++;
     }
 
-    SDL_CloseIO(file);
+    (void)ang_file_close_compat(file);
 
     int count = (stored < capacity) ? stored : capacity;
     if (count <= 0) {

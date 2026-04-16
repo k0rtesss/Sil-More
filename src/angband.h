@@ -43,6 +43,23 @@
 #include "defines.h"
 #include "types.h"
 #include "supplies.h"
+#include "cave/cave-state.h"
+#include "cave/cave.h"
+#include "init/init-data.h"
+#include "init/init-paths.h"
+#include "monster/monster-state.h"
+#include "object/object-desc.h"
+#include "object/object-display.h"
+#include "object/object-flags.h"
+#include "object/object-flavor.h"
+#include "object/object-state.h"
+#include "object/object-util.h"
+#include "player/player-state.h"
+#include "player/identification.h"
+#include "runtime/runtime-state.h"
+#include "support/macro-state.h"
+#include "support/text-output.h"
+#include "ui/colors.h"
 
 /***** Some older copyright messages follow below *****/
 
