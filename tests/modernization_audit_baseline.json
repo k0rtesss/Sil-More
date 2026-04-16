@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 4 modernization audit baseline after the third folder-normalization batch, including the game-tables move and explicit remaining root holdouts."
+    "notes": "Wave 4 modernization audit baseline after the fourth folder-normalization batch, including the targeting/object-family moves and the tightened root holdout allowlist."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -32,7 +32,6 @@
       "src/dungeon.c",
       "src/files.c",
       "src/init2.c",
-      "src/item_set.c",
       "src/main-sdl.c",
       "src/main.c",
       "src/pane.c",
@@ -51,9 +50,6 @@
       "src/sdl-touch.c",
       "src/sdl-ui-style.c",
       "src/sound-config.c",
-      "src/squelch.c",
-      "src/supplies.c",
-      "src/targeting.c",
       "src/variable.c",
       "src/wizard1.c",
       "src/wizard2.c"
@@ -223,6 +219,52 @@
         "allowed_globs": [
           "src/support/util.c",
           "src/support/util.h"
+        ]
+      },
+      {
+        "key": "targeting_family",
+        "match_globs": [
+          "src/**/targeting.c",
+          "src/**/targeting.h"
+        ],
+        "allowed_globs": [
+          "src/ui/targeting.c",
+          "src/ui/targeting.h"
+        ]
+      },
+      {
+        "key": "item_set_family",
+        "match_globs": [
+          "src/**/item_set.c",
+          "src/**/item_set.h"
+        ],
+        "allowed_globs": [
+          "src/object/item_set.c",
+          "src/item_set.h",
+          "src/object/item_set.h"
+        ]
+      },
+      {
+        "key": "supplies_family",
+        "match_globs": [
+          "src/**/supplies.c",
+          "src/**/supplies.h"
+        ],
+        "allowed_globs": [
+          "src/object/supplies.c",
+          "src/supplies.h",
+          "src/object/supplies.h"
+        ]
+      },
+      {
+        "key": "squelch_family",
+        "match_globs": [
+          "src/**/squelch.c",
+          "src/**/squelch.h"
+        ],
+        "allowed_globs": [
+          "src/object/squelch.c",
+          "src/object/squelch.h"
         ]
       },
       {
@@ -509,19 +551,19 @@
         "externs_header_lines": {
           "label": "externs.h line count",
           "files": 1,
-          "value": 271,
+          "value": 265,
           "notes": "Tracks the transitional umbrella header size. The finish-line target is under 400 lines.",
           "file_matches": {
-            "src/externs.h": 271
+            "src/externs.h": 265
           }
         },
         "extern_declarations": {
           "label": "extern declarations in externs.h",
           "files": 1,
-          "value": 103,
+          "value": 98,
           "notes": "Tracks how much runtime ownership still lives in the compatibility umbrella header.",
           "file_matches": {
-            "src/externs.h": 103
+            "src/externs.h": 98
           }
         },
         "extern_include_sites": {
@@ -568,15 +610,14 @@
         },
         "root_src_c_files": {
           "label": "root-level src/*.c files",
-          "files": 30,
-          "value": 30,
+          "files": 25,
+          "value": 25,
           "notes": "Tracks root implementation file count to ensure the root source bucket stops growing.",
           "file_matches": {
             "src/cJSON.c": 1,
             "src/dungeon.c": 1,
             "src/files.c": 1,
             "src/init2.c": 1,
-            "src/item_set.c": 1,
             "src/main-sdl.c": 1,
             "src/main.c": 1,
             "src/pane.c": 1,
@@ -595,9 +636,6 @@
             "src/sdl-touch.c": 1,
             "src/sdl-ui-style.c": 1,
             "src/sound-config.c": 1,
-            "src/squelch.c": 1,
-            "src/supplies.c": 1,
-            "src/targeting.c": 1,
             "src/variable.c": 1,
             "src/wizard1.c": 1,
             "src/wizard2.c": 1

@@ -142,9 +142,6 @@ set(SIL_MORE_SOURCES_CORE
     src/cave/cave-map-ui.c
     src/cJSON.c
     src/dungeon.c
-    src/item_set.c
-    src/squelch.c
-    src/supplies.c
     src/variable.c
     src/wizard1.c
     src/wizard2.c
@@ -236,6 +233,7 @@ set(SIL_MORE_SOURCES_DROP
 )
 
 set(SIL_MORE_SOURCES_OBJECT
+    src/object/item_set.c
     src/object/object-allocation.c
     src/object/object-desc.c
     src/object/object-display.c
@@ -255,6 +253,8 @@ set(SIL_MORE_SOURCES_OBJECT
     src/object/object-ui-select.c
     src/object/object-use.c
     src/object/object-util.c
+    src/object/squelch.c
+    src/object/supplies.c
 )
 
 set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
@@ -295,7 +295,6 @@ set(SIL_MORE_SOURCES_PLAYER
     src/player/identification.c
     src/player/killer.c
     src/player/weapon_stats.c
-    src/targeting.c
 )
 
 set(SIL_MORE_SOURCES_QUEST
@@ -364,6 +363,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
 
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
+    src/ui/targeting.c
     src/ui/colors.c
     src/ui/ui-character-screen.c
     src/ui/ui-death.c
