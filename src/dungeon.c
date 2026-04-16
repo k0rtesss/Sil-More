@@ -4428,8 +4428,8 @@ PlayResult play_game(void)
 
     /* Verify minimum size */
     {
-        const int min_hgt = sdl_current_min_terminal_rows();
-        const int min_wid = sdl_current_min_terminal_cols();
+        const int min_hgt = platform_current_min_terminal_rows();
+        const int min_wid = platform_current_min_terminal_cols();
         const int main_hgt = platform_frame_main_grid_rows();
         const int main_wid = platform_frame_main_grid_cols();
 

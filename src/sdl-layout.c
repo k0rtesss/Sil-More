@@ -114,7 +114,7 @@ static void sdl_apply_dynamic_auto_pane_sizes(struct pane_config* active,
     if (desired_touch_cols < min_touch_cols)
         desired_touch_cols = min_touch_cols;
 
-    min_main_width_px = sdl_current_min_terminal_cols() * cell_widths[PANE_MAIN];
+    min_main_width_px = platform_current_min_terminal_cols() * cell_widths[PANE_MAIN];
     max_touch_px = temp_panes[PANE_MAIN].w + temp_panes[PANE_TOUCH].w
         - min_main_width_px;
 
@@ -203,12 +203,12 @@ bool sdl_min_terminal_mode_is_valid(int mode)
     return (mode == SDL_MIN_TERMINAL_NORMAL || mode == SDL_MIN_TERMINAL_COMPACT);
 }
 
-int sdl_current_min_terminal_cols(void)
+int platform_current_min_terminal_cols(void)
 {
     return sdl_min_terminal_cols_for_mode(config.min_terminal_mode);
 }
 
-int sdl_current_min_terminal_rows(void)
+int platform_current_min_terminal_rows(void)
 {
     return sdl_min_terminal_rows_for_mode(config.min_terminal_mode);
 }
@@ -450,8 +450,8 @@ int sdl_max_scale_for_rect(const SDL_Rect* rect)
     if (!rect)
         return 1;
 
-    min_cols = sdl_current_min_terminal_cols();
-    min_rows = sdl_current_min_terminal_rows();
+    min_cols = platform_current_min_terminal_cols();
+    min_rows = platform_current_min_terminal_rows();
     max_scale_w = (rect->w / min_cols) * 2 / TILE_SIZE;
     max_scale_h = rect->h / min_rows / TILE_SIZE;
     max_scale = (max_scale_w < max_scale_h) ? max_scale_w : max_scale_h;
@@ -473,8 +473,8 @@ void resize(const SDL_Rect* screen)
     {
         int cell_w = config.main_view_scale * TILE_SIZE / 2;
         int cell_h = config.main_view_scale * TILE_SIZE;
-        int min_main_cols = sdl_current_min_terminal_cols();
-        int min_main_rows = sdl_current_min_terminal_rows();
+        int min_main_cols = platform_current_min_terminal_cols();
+        int min_main_rows = platform_current_min_terminal_rows();
         int cols;
         int rows;
 
@@ -551,7 +551,7 @@ void resize(const SDL_Rect* screen)
     sdl_update_cursor_visibility();
 }
 
-void get_sdl_config_info(char* buf, size_t size)
+void platform_config_info(char* buf, size_t size)
 {
     size_t offset = 0;
     int support_count = 0;
@@ -560,7 +560,7 @@ void get_sdl_config_info(char* buf, size_t size)
     offset += (size_t)strnfmt(buf + offset, size - offset, "Main View Scale: %d\n", config.main_view_scale);
     offset += (size_t)strnfmt(buf + offset, size - offset, "Minimum Terminal Size: %s (%dx%d)\n",
         sdl_min_terminal_mode_name(config.min_terminal_mode),
-        sdl_current_min_terminal_cols(), sdl_current_min_terminal_rows());
+        platform_current_min_terminal_cols(), platform_current_min_terminal_rows());
     if (config.aux_view_font_size > 0) {
         offset += (size_t)strnfmt(buf + offset, size - offset,
             "Default Aux View Font Size: %d\n", config.aux_view_font_size);
@@ -639,93 +639,93 @@ bool save_pane_config_to_json(void)
     return true;
 }
 
-cptr get_sdl_config_path(void)
+cptr platform_config_path(void)
 {
     return config_file_path;
 }
 
 void platform_load_app_options(void)
 {
-    sdl_config_load_app_options(get_sdl_config_path());
+    sdl_config_load_app_options(platform_config_path());
 }
 
-int get_sdl_main_view_scale(void)
+int platform_main_view_scale(void)
 {
     return config.main_view_scale;
 }
 
-int get_sdl_min_terminal_mode(void)
+int platform_min_terminal_mode(void)
 {
     return config.min_terminal_mode;
 }
 
-void set_sdl_min_terminal_mode(int value)
+void platform_set_min_terminal_mode(int value)
 {
     if (!sdl_min_terminal_mode_is_valid(value))
         return;
 
     config.min_terminal_mode = value;
 
-    if (config.main_view_scale > get_sdl_max_scale())
-        config.main_view_scale = get_sdl_max_scale();
+    if (config.main_view_scale > platform_max_scale())
+        config.main_view_scale = platform_max_scale();
 }
 
-void set_sdl_main_view_scale(int value)
+void platform_set_main_view_scale(int value)
 {
-    int max_scale = get_sdl_max_scale();
+    int max_scale = platform_max_scale();
     if (value > 0 && value <= max_scale)
         config.main_view_scale = value;
 }
 
-int get_sdl_aux_view_font_size(void)
+int platform_aux_view_font_size(void)
 {
     return config.aux_view_font_size;
 }
 
-int get_sdl_effective_aux_view_font_size(void)
+int platform_effective_aux_view_font_size(void)
 {
     return sdl_resolve_aux_view_font_size(config.aux_view_font_size);
 }
 
-void set_sdl_aux_view_font_size(int value)
+void platform_set_aux_view_font_size(int value)
 {
     if (value == 0 || (value >= 8 && value <= 48))
         config.aux_view_font_size = value;
 }
 
-int get_sdl_menu_panel_font_size(void)
+int platform_menu_panel_font_size(void)
 {
     return config.menu_panel_font_size;
 }
 
-int get_sdl_effective_menu_panel_font_size(void)
+int platform_effective_menu_panel_font_size(void)
 {
     return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
 }
 
-void set_sdl_menu_panel_font_size(int value)
+void platform_set_menu_panel_font_size(int value)
 {
     if (value == 0 || (value >= 8 && value <= 64))
         config.menu_panel_font_size = value;
 }
 
-int get_sdl_margin(void)
+int platform_margin(void)
 {
     return config.margin;
 }
 
-void set_sdl_margin(int value)
+void platform_set_margin(int value)
 {
     if (value >= 0 && value <= 20)
         config.margin = value;
 }
 
-bool get_sdl_fullscreen(void)
+bool platform_fullscreen(void)
 {
     return config.fullscreen;
 }
 
-void set_sdl_fullscreen(bool value)
+void platform_set_fullscreen(bool value)
 {
     if (config.fullscreen == value)
         return;
@@ -772,7 +772,7 @@ void set_sdl_fullscreen(bool value)
     }
 }
 
-bool get_sdl_tiles(void)
+bool platform_tiles(void)
 {
     return config.tiles;
 }
@@ -840,7 +840,7 @@ static bool sdl_apply_live_tiles_mode(bool value)
     return true;
 }
 
-void set_sdl_tiles(bool value)
+void platform_set_tiles(bool value)
 {
     if (config.tiles == value)
         return;
@@ -862,21 +862,21 @@ int get_pane_config_count(void)
     return pane_config_count;
 }
 
-int get_sdl_pane_type(int index)
+int platform_pane_type(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return -1;
     return (int)pane_config[index].pane;
 }
 
-int get_sdl_pane_where(int index)
+int platform_pane_where(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return 0;
     return (int)pane_config[index].where;
 }
 
-void set_sdl_pane_where(int index, int where)
+void platform_set_pane_where(int index, int where)
 {
     enum pane_placement placement = (enum pane_placement)where;
 
@@ -888,35 +888,35 @@ void set_sdl_pane_where(int index, int where)
     pane_config[index].where = placement;
 }
 
-bool get_sdl_pane_enabled(int index)
+bool platform_pane_enabled(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return false;
     return pane_config[index].enabled;
 }
 
-int get_sdl_pane_rows(int index)
+int platform_pane_rows(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return 0;
     return pane_config[index].rect.rows;
 }
 
-int get_sdl_pane_cols(int index)
+int platform_pane_cols(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return 0;
     return pane_config[index].rect.cols;
 }
 
-int get_sdl_pane_font_size(int index)
+int platform_pane_font_size(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return 0;
     return pane_config[index].font_size;
 }
 
-int get_sdl_pane_effective_font_size(int index)
+int platform_pane_effective_font_size(int index)
 {
     if (index < 0 || index >= pane_config_count)
         return sdl_resolve_aux_view_font_size(config.aux_view_font_size);
@@ -924,17 +924,17 @@ int get_sdl_pane_effective_font_size(int index)
     return sdl_effective_pane_font_size_for_config(&pane_config[index]);
 }
 
-int get_sdl_pane_current_rows(int index)
+int platform_pane_current_rows(int index)
 {
     return sdl_pane_current_size(index, true);
 }
 
-int get_sdl_pane_current_cols(int index)
+int platform_pane_current_cols(int index)
 {
     return sdl_pane_current_size(index, false);
 }
 
-void set_sdl_pane_rows(int index, int rows)
+void platform_set_pane_rows(int index, int rows)
 {
     if (index < 0 || index >= pane_config_count)
         return;
@@ -945,7 +945,7 @@ void set_sdl_pane_rows(int index, int rows)
     pane_config[index].rect.rows = rows;
 }
 
-void set_sdl_pane_cols(int index, int cols)
+void platform_set_pane_cols(int index, int cols)
 {
     if (index < 0 || index >= pane_config_count)
         return;
@@ -956,7 +956,7 @@ void set_sdl_pane_cols(int index, int cols)
     pane_config[index].rect.cols = cols;
 }
 
-void set_sdl_pane_font_size(int index, int font_size)
+void platform_set_pane_font_size(int index, int font_size)
 {
     if (index < 0 || index >= pane_config_count)
         return;
@@ -969,34 +969,34 @@ void set_sdl_pane_font_size(int index, int font_size)
     pane_config[index].font_size = font_size;
 }
 
-void set_sdl_pane_enabled(int index, bool enabled)
+void platform_set_pane_enabled(int index, bool enabled)
 {
     if (index < 0 || index >= pane_config_count)
         return;
     pane_config[index].enabled = enabled;
 }
 
-bool get_sdl_enable_right_panes(void)
+bool platform_enable_right_panes(void)
 {
     return config.enable_right_panes;
 }
 
-void set_sdl_enable_right_panes(bool value)
+void platform_set_enable_right_panes(bool value)
 {
     config.enable_right_panes = value;
 }
 
-bool get_sdl_enable_bottom_panes(void)
+bool platform_enable_bottom_panes(void)
 {
     return config.enable_bottom_panes;
 }
 
-void set_sdl_enable_bottom_panes(bool value)
+void platform_set_enable_bottom_panes(bool value)
 {
     config.enable_bottom_panes = value;
 }
 
-bool get_sdl_hide_left_panel(void)
+bool platform_hide_left_panel(void)
 {
     return g_hide_left_panel;
 }
@@ -1006,13 +1006,13 @@ bool ui_left_panel_hidden(void)
     return g_hide_left_panel;
 }
 
-void set_sdl_hide_left_panel(bool value)
+void platform_set_hide_left_panel(bool value)
 {
     g_hide_left_panel = value;
     config.hide_left_panel = value;
 }
 
-int get_sdl_intro_style(void)
+int platform_intro_style(void)
 {
     if (!op_ptr)
         return 0;
@@ -1021,7 +1021,7 @@ int get_sdl_intro_style(void)
         : (int)op_ptr->intro_style;
 }
 
-void set_sdl_intro_style(int style)
+void platform_set_intro_style(int style)
 {
     if (!op_ptr)
         return;
@@ -1030,7 +1030,7 @@ void set_sdl_intro_style(int style)
         : (byte)(style < 0 ? 0 : style > (INTRO_STYLE_RANDOM - 1) ? (INTRO_STYLE_RANDOM - 1) : style);
 }
 
-int get_sdl_max_scale(void)
+int platform_max_scale(void)
 {
     int w;
     int h;
@@ -1046,27 +1046,27 @@ int get_sdl_max_scale(void)
     sdl_compute_split_panes(&screen, panes);
     max_scale = sdl_max_scale_for_rect(&panes[PANE_MAIN]);
 
-    log_debug("get_sdl_max_scale: window=%dx%d main=%dx%d min=%dx%d (%s) max_scale=%d",
+    log_debug("platform_max_scale: window=%dx%d main=%dx%d min=%dx%d (%s) max_scale=%d",
         w, h, panes[PANE_MAIN].w, panes[PANE_MAIN].h,
-        sdl_current_min_terminal_cols(), sdl_current_min_terminal_rows(),
+        platform_current_min_terminal_cols(), platform_current_min_terminal_rows(),
         sdl_min_terminal_mode_name(config.min_terminal_mode), max_scale);
 
     return max_scale;
 }
 
-void sdl_apply_config(void)
+void platform_apply_config(void)
 {
     int w;
     int h;
 
     if (!g_state.window) {
-        log_warn("sdl_apply_config: no window, skipping");
+        log_warn("platform_apply_config: no window, skipping");
         return;
     }
 
     SDL_GetWindowSizeInPixels(g_state.window, &w, &h);
     {
-        int max_scale = get_sdl_max_scale();
+        int max_scale = platform_max_scale();
         if (config.main_view_scale > max_scale) {
             log_info("Clamping main_view_scale from %d to %d for current pane layout",
                 config.main_view_scale, max_scale);

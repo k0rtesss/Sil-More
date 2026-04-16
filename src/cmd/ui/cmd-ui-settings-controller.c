@@ -336,7 +336,7 @@ void controller_prompt_label(int binding, const char* default_label, char* buf, 
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    platform_gamepad_action_binding_short_label(binding, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple")) {
         SDL_strlcpy(buf, default_label, buflen);
     }
@@ -648,7 +648,7 @@ void do_cmd_controller_settings(void)
                 message_flush();
             }
         } else if (ch == 'R' || (steamdeck && ch == steamdeck_secondary_key())) {
-            sdl_gamepad_reset_bindings_to_default();
+            platform_gamepad_reset_bindings_to_default();
             msg_print("All bindings reset to defaults.");
             message_flush();
         } else if (ch == '\r' || ch == '\n' || ch == ' ') {
@@ -711,7 +711,7 @@ void do_cmd_controller_settings(void)
                 }
 
                 input_clear_pending();
-                if (!sdl_gamepad_capture_begin()) {
+                if (!platform_gamepad_capture_begin()) {
                     msg_print("No controller detected.");
                     message_flush();
                     continue;
@@ -719,9 +719,9 @@ void do_cmd_controller_settings(void)
 
                 bool waiting = true;
                 while (waiting) {
-                    if (sdl_gamepad_capture_poll(&cap_type, &cap_id)) {
+                    if (platform_gamepad_capture_poll(&cap_type, &cap_id)) {
                         if (controller_binding_matches_action(ESCAPE, cap_type, cap_id)) {
-                            sdl_gamepad_capture_cancel();
+                            platform_gamepad_capture_cancel();
                             waiting = false;
                             break;
                         }
@@ -732,10 +732,10 @@ void do_cmd_controller_settings(void)
 
                     char choice = settings_ui_read_key(true);
                     if (choice == ESCAPE) {
-                        sdl_gamepad_capture_cancel();
+                        platform_gamepad_capture_cancel();
                         waiting = false;
                     } else if (choice == '\b' || choice == 127) {
-                        sdl_gamepad_capture_cancel();
+                        platform_gamepad_capture_cancel();
                         controller_clear_action_bindings(entry->id, -1, -1);
                         waiting = false;
                     } else if (choice == 0) {

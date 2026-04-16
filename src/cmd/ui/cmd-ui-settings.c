@@ -40,8 +40,8 @@ extern struct sound_config g_sound_config;
 
 #define COLOR_SAMPLE "###"
 
-#define SETTINGS_SDL_GET(name) get ## _sdl_ ## name
-#define SETTINGS_SDL_SET(name) set ## _sdl_ ## name
+#define SETTINGS_SDL_GET(name) platform_ ## name
+#define SETTINGS_SDL_SET(name) platform_set_ ## name
 
 void do_cmd_macro_aux(char* buf);
 void do_cmd_macro_aux_keymap(char* buf);
@@ -1831,7 +1831,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                         SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL,
                         !settings_sdl_get_bool_config(
                             SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL));
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
                 {
@@ -1944,7 +1944,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 {
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL, true);
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
                 {
@@ -2057,7 +2057,7 @@ extern void do_cmd_options_aux(int page, cptr info)
                 {
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_HIDE_LEFT_PANEL, false);
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (opt[k] == OPT_main_combat_rolls)
                 {

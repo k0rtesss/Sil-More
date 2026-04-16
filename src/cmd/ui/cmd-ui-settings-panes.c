@@ -439,7 +439,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, 0);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 3)
@@ -449,7 +449,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, 0);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else
@@ -469,7 +469,7 @@ void do_cmd_pane_settings(void)
                 settings_sdl_set_int_config(SETTINGS_SDL_INT_MIN_TERMINAL_MODE,
                     overview.min_terminal_mode == 0 ? 1 : 0);
                 settings_changed = true;
-                sdl_apply_config();
+                platform_apply_config();
             }
             else if (k == 5) /* Fullscreen */
             {
@@ -482,7 +482,7 @@ void do_cmd_pane_settings(void)
                 settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
                     !overview.tiles);
                 settings_changed = true;
-                sdl_apply_config();
+                platform_apply_config();
             }
             else if (k == 7) /* Enable Side Panes */
             {
@@ -490,7 +490,7 @@ void do_cmd_pane_settings(void)
                     SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED,
                     !overview.right_panes_enabled);
                 settings_changed = true;
-                sdl_apply_config();
+                platform_apply_config();
             }
             else if (k == 8) /* Enable Bottom Panes */
             {
@@ -498,7 +498,7 @@ void do_cmd_pane_settings(void)
                     SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED,
                     !overview.bottom_panes_enabled);
                 settings_changed = true;
-                sdl_apply_config();
+                platform_apply_config();
             }
             else if (k == 9) /* Supporting Pane Layout */
             {
@@ -536,7 +536,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MAIN_VIEW_SCALE, val + 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 1) /* Minimum Terminal Size */
@@ -546,7 +546,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MIN_TERMINAL_MODE, 0);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 2) /* Aux View Font Size */
@@ -558,14 +558,14 @@ void do_cmd_pane_settings(void)
                         SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE,
                         overview.effective_aux_view_font_size);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (val < 48)
                 {
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, val + 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 3) /* Menu + Left Panel Font Size */
@@ -577,14 +577,14 @@ void do_cmd_pane_settings(void)
                         SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
                         overview.effective_menu_panel_font_size);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (val < 64)
                 {
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, val + 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 4) /* Margin */
@@ -595,7 +595,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(SETTINGS_SDL_INT_MARGIN,
                         val + 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 5) /* Fullscreen */
@@ -613,7 +613,7 @@ void do_cmd_pane_settings(void)
                 {
                     settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES, true);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 7) /* Enable Side Panes */
@@ -623,7 +623,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED, true);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 8) /* Enable Bottom Panes */
@@ -633,7 +633,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED, true);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             break;
@@ -653,7 +653,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MAIN_VIEW_SCALE, val - 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 1) /* Minimum Terminal Size */
@@ -663,7 +663,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MIN_TERMINAL_MODE, 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 2) /* Aux View Font Size */
@@ -675,14 +675,14 @@ void do_cmd_pane_settings(void)
                         SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE,
                         overview.effective_aux_view_font_size);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (val > 8)
                 {
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_AUX_VIEW_FONT_SIZE, val - 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 3) /* Menu + Left Panel Font Size */
@@ -694,14 +694,14 @@ void do_cmd_pane_settings(void)
                         SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
                         overview.effective_menu_panel_font_size);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 else if (val > 8)
                 {
                     settings_sdl_set_int_config(
                         SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE, val - 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 4) /* Margin */
@@ -712,7 +712,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_int_config(SETTINGS_SDL_INT_MARGIN,
                         val - 1);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 5) /* Fullscreen */
@@ -731,7 +731,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
                         false);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 7) /* Enable Side Panes */
@@ -741,7 +741,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED, false);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             else if (k == 8) /* Enable Bottom Panes */
@@ -751,7 +751,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED, false);
                     settings_changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
             }
             break;
@@ -941,7 +941,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                     settings_sdl_set_pane_metric(SETTINGS_SDL_PANE_FONT_SIZE,
                         idx, 0);
                     changed = true;
-                    sdl_apply_config();
+                    platform_apply_config();
                 }
                 break;
             }
@@ -965,7 +965,7 @@ static void do_cmd_supporting_pane_font_editor(bool* settings_changed)
                         idx, value + delta);
 
                 changed = true;
-                sdl_apply_config();
+                platform_apply_config();
                 break;
             }
 
@@ -1177,7 +1177,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
     if (supporting_pane_normalize_shared_sizes(pane_indices, pane_count))
     {
         changed = true;
-        sdl_apply_config();
+        platform_apply_config();
     }
     supporting_pane_ensure_editable_field(&field, pane_indices, pane_count, sel);
 
@@ -1373,7 +1373,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                 changed = true;
             supporting_pane_ensure_editable_field(&field, pane_indices, pane_count, sel);
             changed = true;
-            sdl_apply_config();
+            platform_apply_config();
             break;
         }
 
@@ -1440,7 +1440,7 @@ static void do_cmd_supporting_pane_layout_editor(bool* settings_changed)
                 changed = true;
             supporting_pane_ensure_editable_field(&field, pane_indices, pane_count, sel);
             changed = true;
-            sdl_apply_config();
+            platform_apply_config();
             break;
         }
 
@@ -1816,12 +1816,12 @@ void do_cmd_touch_pane_button_editor(bool* settings_changed)
         case 'r':
             settings_sdl_set_touch_binding(panel, highlight,
                 settings_sdl_touch_default_binding(panel, highlight));
-            clear_sdl_touch_pane_button_label_for_panel(panel, highlight);
+            platform_clear_touch_pane_button_label_for_panel(panel, highlight);
             changed = true;
             break;
 
         case 'R':
-            sdl_touch_pane_reset_bindings_to_default();
+            platform_touch_pane_reset_bindings_to_default();
             changed = true;
             break;
 

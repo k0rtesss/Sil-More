@@ -20,7 +20,7 @@
 #include <string.h>
 
 #define HELP_TOTAL_PAGES 8
-#define HELP_SDL_GET(name) get ## _sdl_ ## name
+#define HELP_SDL_GET(name) platform_ ## name
 
 /* Drop-in replacement for show_help_screen(int i)
  * Adds a tiny role-based colour shim for consistent, accessible styling.
@@ -503,7 +503,7 @@ static void help_prompt_label(int binding, const char* fallback, char* buf, size
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    platform_gamepad_action_binding_short_label(binding, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }

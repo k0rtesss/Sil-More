@@ -1488,11 +1488,11 @@ static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
         char confirm_label[16];
         char back_label[16];
 
-        sdl_gamepad_action_binding_short_label(
+        platform_gamepad_action_binding_short_label(
             steamdeck_confirm_key(), confirm_label, sizeof(confirm_label));
         if (streq(confirm_label, "(unbound)") || streq(confirm_label, "Multiple"))
             SDL_strlcpy(confirm_label, "A", sizeof(confirm_label));
-        sdl_gamepad_action_binding_short_label(
+        platform_gamepad_action_binding_short_label(
             steamdeck_back_key(), back_label, sizeof(back_label));
         if (streq(back_label, "(unbound)") || streq(back_label, "Multiple"))
             SDL_strlcpy(back_label, "B", sizeof(back_label));

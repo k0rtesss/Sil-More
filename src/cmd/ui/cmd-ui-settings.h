@@ -6,8 +6,8 @@
 #include "platform-io.h"
 #include "sdl-config.h"
 
-#define SETTINGS_SDL_GET(name) get ## _sdl_ ## name
-#define SETTINGS_SDL_SET(name) set ## _sdl_ ## name
+#define SETTINGS_SDL_GET(name) platform_ ## name
+#define SETTINGS_SDL_SET(name) platform_set_ ## name
 
 typedef bool (*settings_bool_getter_fn)(void);
 typedef void (*settings_bool_setter_fn)(bool value);

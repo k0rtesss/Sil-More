@@ -1049,7 +1049,7 @@ static void sdl_config_apply_app_option_defaults(void)
 
     op_ptr->delay_factor = 5;
     op_ptr->hitpoint_warn = 3;
-    op_ptr->main_combat_rolls = get_sdl_steamdeck_mode() ? 2 : 0;
+    op_ptr->main_combat_rolls = platform_steamdeck_mode() ? 2 : 0;
     op_ptr->narrative_banner_seconds = NARRATIVE_BANNER_SECONDS_DEFAULT;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     op_ptr->ability_desc_mode = 1;
@@ -1198,12 +1198,12 @@ void sdl_config_load_app_options(const char* filename)
     cJSON_Delete(root);
 }
 
-bool sdl_config_should_force_intro_flame(void)
+bool platform_intro_should_force_flame(void)
 {
     return !g_app_intro_seen;
 }
 
-void sdl_config_mark_intro_seen(void)
+void platform_intro_mark_seen(void)
 {
     g_app_intro_seen = true;
 }

@@ -81,7 +81,7 @@ static void main_menu_prompt_label(int binding, const char* fallback,
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    platform_gamepad_action_binding_short_label(binding, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }

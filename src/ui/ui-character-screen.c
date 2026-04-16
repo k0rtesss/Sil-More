@@ -136,7 +136,7 @@ static void tutorial_prompt_label(int binding, const char* fallback, char* out,
     if (!out || !out_size)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, out, out_size);
+    platform_gamepad_action_binding_short_label(binding, out, out_size);
     if (streq(out, "(unbound)") || streq(out, "Multiple"))
         SDL_strlcpy(out, fallback, out_size);
 }

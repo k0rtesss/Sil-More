@@ -403,7 +403,7 @@ static bool sdl_submit_movement_command(
     return input_submit_movement_command(command);
 }
 
-bool sdl_submit_directional_movement(int dir, bool shift, bool ctrl, bool alt,
+bool platform_submit_directional_movement(int dir, bool shift, bool ctrl, bool alt,
     u16b device, u16b input_type, u16b source_id, u16b input_flags,
     u32b trigger, u32b trigger_aux)
 {
@@ -668,12 +668,12 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
     key = key_event->key;
 
     if (key == '+' || key == '=' || key == SDLK_KP_PLUS) {
-        int current_scale = get_sdl_main_view_scale();
-        int max_scale = get_sdl_max_scale();
+        int current_scale = platform_main_view_scale();
+        int max_scale = platform_max_scale();
 
         if (current_scale < max_scale) {
-            set_sdl_main_view_scale(current_scale + 1);
-            sdl_apply_config();
+            platform_set_main_view_scale(current_scale + 1);
+            platform_apply_config();
             if (character_dungeon)
                 sdl_submit_legacy_input_byte(KTRL('R'));
         }
@@ -681,11 +681,11 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
     }
 
     if (key == '-' || key == SDLK_KP_MINUS) {
-        int current_scale = get_sdl_main_view_scale();
+        int current_scale = platform_main_view_scale();
 
         if (current_scale > 1) {
-            set_sdl_main_view_scale(current_scale - 1);
-            sdl_apply_config();
+            platform_set_main_view_scale(current_scale - 1);
+            platform_apply_config();
             if (character_dungeon)
                 sdl_submit_legacy_input_byte(KTRL('R'));
         }
@@ -693,30 +693,30 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
     }
 
     if (key == 'i' || key == 'I') {
-        bool enabled = get_sdl_enable_right_panes();
+        bool enabled = platform_enable_right_panes();
 
-        set_sdl_enable_right_panes(!enabled);
-        sdl_apply_config();
+        platform_set_enable_right_panes(!enabled);
+        platform_apply_config();
         if (character_dungeon)
             sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
     }
 
     if (key == 'l' || key == 'L') {
-        bool enabled = get_sdl_enable_bottom_panes();
+        bool enabled = platform_enable_bottom_panes();
 
-        set_sdl_enable_bottom_panes(!enabled);
-        sdl_apply_config();
+        platform_set_enable_bottom_panes(!enabled);
+        platform_apply_config();
         if (character_dungeon)
             sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
     }
 
     if (key == 'p' || key == 'P') {
-        bool hidden = get_sdl_hide_left_panel();
+        bool hidden = platform_hide_left_panel();
 
-        set_sdl_hide_left_panel(!hidden);
-        sdl_apply_config();
+        platform_set_hide_left_panel(!hidden);
+        platform_apply_config();
         if (character_dungeon)
             sdl_submit_legacy_input_byte(KTRL('R'));
         return true;
@@ -807,7 +807,7 @@ static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone)
 static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type)
 {
-    (void)sdl_submit_directional_movement(dir, shift, ctrl, alt,
+    (void)platform_submit_directional_movement(dir, shift, ctrl, alt,
         APP_INPUT_DEVICE_GAMEPAD, input_type, 0, APP_INPUT_FLAG_PRESS,
         (u32b)dir, 0);
 }
@@ -1201,12 +1201,12 @@ static void sdl_gamepad_action_binding_label_ex(int binding, char* buf, size_t b
     }
 }
 
-void sdl_gamepad_action_binding_label(int binding, char* buf, size_t buflen)
+void platform_gamepad_action_binding_label(int binding, char* buf, size_t buflen)
 {
     sdl_gamepad_action_binding_label_ex(binding, buf, buflen, false);
 }
 
-void sdl_gamepad_action_binding_short_label(int binding, char* buf, size_t buflen)
+void platform_gamepad_action_binding_short_label(int binding, char* buf, size_t buflen)
 {
     sdl_gamepad_action_binding_label_ex(binding, buf, buflen, true);
 }
@@ -1215,31 +1215,31 @@ void sdl_gamepad_action_binding_short_label(int binding, char* buf, size_t bufle
 int steamdeck_back_key(void)
 {
     /* B button (EAST) - for back/quit in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
+    return platform_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);
 }
 
 int steamdeck_confirm_key(void)
 {
     /* A button (SOUTH) - for confirm/ok in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
+    return platform_gamepad_button_binding(SDL_GAMEPAD_BUTTON_SOUTH);
 }
 
 int steamdeck_info_key(void)
 {
     /* RS Right - for info/recall in menus */
-    return get_sdl_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT);
+    return platform_gamepad_right_stick_binding(GAMEPAD_STICK_DIR_RIGHT);
 }
 
 int steamdeck_alt_action_key(void)
 {
     /* X button (WEST) - for alternate action in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_WEST);
+    return platform_gamepad_button_binding(SDL_GAMEPAD_BUTTON_WEST);
 }
 
 int steamdeck_secondary_key(void)
 {
     /* Y button (NORTH) - for secondary action in menus */
-    return get_sdl_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH);
+    return platform_gamepad_button_binding(SDL_GAMEPAD_BUTTON_NORTH);
 }
 
 static void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
@@ -1977,8 +1977,8 @@ errr init_sdl(int argc, char **argv)
 
 #if defined(__ANDROID__) || defined(SIL_IOS)
     {
-        int mobile_min_cols = sdl_current_min_terminal_cols();
-        int mobile_min_rows = sdl_current_min_terminal_rows();
+        int mobile_min_cols = platform_current_min_terminal_cols();
+        int mobile_min_rows = platform_current_min_terminal_rows();
         int mobile_max_scale_w = (screen_pixels_w / mobile_min_cols) * 2 / TILE_SIZE;
         int mobile_max_scale_h = screen_pixels_h / mobile_min_rows / TILE_SIZE;
         int mobile_max_scale = mobile_max_scale_w;
@@ -2086,7 +2086,7 @@ errr init_sdl(int argc, char **argv)
     log_info("  Tiles: %s", config.tiles ? "true" : "false");
     log_info("  Minimum terminal size: %s (%dx%d)",
              sdl_min_terminal_mode_name(config.min_terminal_mode),
-             sdl_current_min_terminal_cols(), sdl_current_min_terminal_rows());
+             platform_current_min_terminal_cols(), platform_current_min_terminal_rows());
     log_info("  Pane configurations: %d", pane_config_count);
     log_info("  Palette preset: %s",
         config.palette_preset[0] ? config.palette_preset : "classic");
@@ -2201,12 +2201,12 @@ bool portable_controls_active(void)
 #endif
 }
 
-bool get_sdl_gamepad_enabled(void)
+bool platform_gamepad_enabled(void)
 {
     return config.gamepad_enabled;
 }
 
-void set_sdl_gamepad_enabled(bool value)
+void platform_set_gamepad_enabled(bool value)
 {
     config.gamepad_enabled = value;
     if (!value) {
@@ -2234,32 +2234,32 @@ void set_sdl_gamepad_enabled(bool value)
     }
 }
 
-bool get_sdl_gamepad_auto_mode(void)
+bool platform_gamepad_auto_mode(void)
 {
     return config.gamepad_auto_mode;
 }
 
-void set_sdl_gamepad_auto_mode(bool value)
+void platform_set_gamepad_auto_mode(bool value)
 {
     config.gamepad_auto_mode = value;
 }
 
-bool get_sdl_steamdeck_mode(void)
+bool platform_steamdeck_mode(void)
 {
     return config.steamdeck_mode;
 }
 
-void set_sdl_steamdeck_mode(bool value)
+void platform_set_steamdeck_mode(bool value)
 {
     config.steamdeck_mode = value;
 }
 
-bool get_sdl_gamepad_use_dpad(void)
+bool platform_gamepad_use_dpad(void)
 {
     return config.gamepad_use_dpad;
 }
 
-void set_sdl_gamepad_use_dpad(bool value)
+void platform_set_gamepad_use_dpad(bool value)
 {
     config.gamepad_use_dpad = value;
     if (value) {
@@ -2277,12 +2277,12 @@ void set_sdl_gamepad_use_dpad(bool value)
     }
 }
 
-bool get_sdl_gamepad_use_left_stick(void)
+bool platform_gamepad_use_left_stick(void)
 {
     return config.gamepad_use_left_stick;
 }
 
-void set_sdl_gamepad_use_left_stick(bool value)
+void platform_set_gamepad_use_left_stick(bool value)
 {
     config.gamepad_use_left_stick = value;
     if (value) {
@@ -2305,73 +2305,73 @@ void set_sdl_gamepad_use_left_stick(bool value)
     }
 }
 
-int get_sdl_gamepad_button_binding(int button)
+int platform_gamepad_button_binding(int button)
 {
     if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.gamepad_button_bindings[button];
 }
 
-void set_sdl_gamepad_button_binding(int button, int binding)
+void platform_set_gamepad_button_binding(int button, int binding)
 {
     if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return;
     config.gamepad_button_bindings[button] = binding;
 }
 
-int get_sdl_gamepad_trigger_binding(int index)
+int platform_gamepad_trigger_binding(int index)
 {
     if (index < 0 || index >= GAMEPAD_TRIGGER_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.gamepad_trigger_bindings[index];
 }
 
-void set_sdl_gamepad_trigger_binding(int index, int binding)
+void platform_set_gamepad_trigger_binding(int index, int binding)
 {
     if (index < 0 || index >= GAMEPAD_TRIGGER_COUNT)
         return;
     config.gamepad_trigger_bindings[index] = binding;
 }
 
-int get_sdl_gamepad_left_stick_binding(int dir)
+int platform_gamepad_left_stick_binding(int dir)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.gamepad_left_stick_bindings[dir];
 }
 
-void set_sdl_gamepad_left_stick_binding(int dir, int binding)
+void platform_set_gamepad_left_stick_binding(int dir, int binding)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return;
     config.gamepad_left_stick_bindings[dir] = binding;
 }
 
-int get_sdl_gamepad_right_stick_binding(int dir)
+int platform_gamepad_right_stick_binding(int dir)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
     return config.gamepad_right_stick_bindings[dir];
 }
 
-void set_sdl_gamepad_right_stick_binding(int dir, int binding)
+void platform_set_gamepad_right_stick_binding(int dir, int binding)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return;
     config.gamepad_right_stick_bindings[dir] = binding;
 }
 
-int get_sdl_gamepad_shoulder_combo_binding(void)
+int platform_gamepad_shoulder_combo_binding(void)
 {
     return config.gamepad_shoulder_combo_binding;
 }
 
-void set_sdl_gamepad_shoulder_combo_binding(int binding)
+void platform_set_gamepad_shoulder_combo_binding(int binding)
 {
     config.gamepad_shoulder_combo_binding = binding;
 }
 
-int get_sdl_gamepad_default_button_binding(int button)
+int platform_gamepad_default_button_binding(int button)
 {
     if (button < 0 || button >= GAMEPAD_BUTTON_COUNT)
         return GAMEPAD_BIND_NONE;
@@ -2379,7 +2379,7 @@ int get_sdl_gamepad_default_button_binding(int button)
     return g_default_gamepad_button_bindings[button];
 }
 
-int get_sdl_gamepad_default_trigger_binding(int index)
+int platform_gamepad_default_trigger_binding(int index)
 {
     if (index < 0 || index >= GAMEPAD_TRIGGER_COUNT)
         return GAMEPAD_BIND_NONE;
@@ -2387,7 +2387,7 @@ int get_sdl_gamepad_default_trigger_binding(int index)
     return g_default_gamepad_trigger_bindings[index];
 }
 
-int get_sdl_gamepad_default_left_stick_binding(int dir)
+int platform_gamepad_default_left_stick_binding(int dir)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
@@ -2395,7 +2395,7 @@ int get_sdl_gamepad_default_left_stick_binding(int dir)
     return g_default_gamepad_left_stick_bindings[dir];
 }
 
-int get_sdl_gamepad_default_right_stick_binding(int dir)
+int platform_gamepad_default_right_stick_binding(int dir)
 {
     if (dir < 0 || dir >= GAMEPAD_STICK_DIR_COUNT)
         return GAMEPAD_BIND_NONE;
@@ -2403,32 +2403,32 @@ int get_sdl_gamepad_default_right_stick_binding(int dir)
     return g_default_gamepad_right_stick_bindings[dir];
 }
 
-int get_sdl_gamepad_default_shoulder_combo_binding(void)
+int platform_gamepad_default_shoulder_combo_binding(void)
 {
     sdl_gamepad_load_default_bindings();
     return g_default_gamepad_shoulder_combo_binding;
 }
 
-void sdl_gamepad_reset_bindings_to_default(void)
+void platform_gamepad_reset_bindings_to_default(void)
 {
     sdl_config_set_default_gamepad_bindings(&config);
 }
 
-bool sdl_gamepad_capture_begin(void)
+bool platform_gamepad_capture_begin(void)
 {
     g_gamepad_capture_ready = false;
     g_gamepad_capture_active = (g_gamepad_state.pad_count > 0);
     return g_gamepad_capture_active;
 }
 
-void sdl_gamepad_capture_cancel(void)
+void platform_gamepad_capture_cancel(void)
 {
     g_gamepad_capture_active = false;
     g_gamepad_capture_ready = false;
     sdl_gamepad_clear_pending_shoulder();
 }
 
-bool sdl_gamepad_capture_poll(int* out_type, int* out_id)
+bool platform_gamepad_capture_poll(int* out_type, int* out_id)
 {
     if (!g_gamepad_capture_ready)
         return false;

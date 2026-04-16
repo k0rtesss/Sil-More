@@ -538,7 +538,7 @@ static const welcome_ui_line* welcome_screen_intro_lines_for_style(int style)
 
 static int welcome_screen_current_intro_style(void)
 {
-    if (sdl_config_should_force_intro_flame())
+    if (platform_intro_should_force_flame())
         return INTRO_STYLE_FLAME;
     if (op_ptr->intro_style == INTRO_STYLE_RANDOM)
         return (int)(platform_monotonic_ms() % 7u);
@@ -551,7 +551,7 @@ static void welcome_prompt_label(int binding, const char* fallback,
     if (!buf || !buflen)
         return;
 
-    sdl_gamepad_action_binding_short_label(binding, buf, buflen);
+    platform_gamepad_action_binding_short_label(binding, buf, buflen);
     if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
         SDL_strlcpy(buf, fallback, buflen);
 }
@@ -990,9 +990,9 @@ NavResult initial_menu(bool* start_new)
 
 menu_done:
     log_info("initial_menu: EXITING with result=%d", result);
-    if (sdl_config_should_force_intro_flame())
+    if (platform_intro_should_force_flame())
     {
-        sdl_config_mark_intro_seen();
+        platform_intro_mark_seen();
         save_pane_config_to_json();
     }
     return result;

@@ -441,8 +441,8 @@ void sdl_view_create(sdl_view* d, SDL_Rect rect, const char* font_path, int font
     if (scale) {
 #ifdef __ANDROID__
         int requested_scale = scale;
-        int min_cols = sdl_current_min_terminal_cols();
-        int min_rows = sdl_current_min_terminal_rows();
+        int min_cols = platform_current_min_terminal_cols();
+        int min_rows = platform_current_min_terminal_rows();
         int max_scale_for_min_cols = (rect.w / min_cols) * 2 / TILE_SIZE;
         int max_scale_for_min_rows = rect.h / min_rows / TILE_SIZE;
         int effective_scale = requested_scale;

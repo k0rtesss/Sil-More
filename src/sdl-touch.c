@@ -139,7 +139,7 @@ static void sdl_touch_pane_finish_reset_confirm(bool confirmed)
     g_touch_pane_reset_confirm_active = false;
 
     if (confirmed) {
-        sdl_touch_pane_reset_bindings_to_default();
+        platform_touch_pane_reset_bindings_to_default();
         msg_print("Touch controls reset to defaults.");
     }
 
@@ -741,7 +741,7 @@ static void sdl_touch_pane_send_binding(int binding, bool second_panel, bool lon
         bool alt = sdl_gamepad_alt_active();
         int dir = binding - '0';
 
-        if (sdl_submit_directional_movement(dir, shift, ctrl, alt,
+        if (platform_submit_directional_movement(dir, shift, ctrl, alt,
                 APP_INPUT_DEVICE_TOUCH, APP_INPUT_TYPE_POINTER_BUTTON, 0,
                 APP_INPUT_FLAG_PRESS, (u32b)binding, 0))
         {
@@ -1086,12 +1086,12 @@ void sdl_touch_pane_render(void)
     }
 }
 
-int get_sdl_touch_pane_binding(int index)
+int platform_touch_pane_binding(int index)
 {
-    return get_sdl_touch_pane_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
+    return platform_touch_pane_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
 }
 
-int get_sdl_touch_pane_binding_for_panel(int panel, int index)
+int platform_touch_pane_binding_for_panel(int panel, int index)
 {
     if (!sdl_touch_pane_panel_is_valid(panel))
         return GAMEPAD_BIND_NONE;
@@ -1100,12 +1100,12 @@ int get_sdl_touch_pane_binding_for_panel(int panel, int index)
     return sdl_touch_pane_raw_binding_for_panel(panel, index);
 }
 
-void set_sdl_touch_pane_binding(int index, int binding)
+void platform_set_touch_pane_binding(int index, int binding)
 {
-    set_sdl_touch_pane_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, binding);
+    platform_set_touch_pane_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, binding);
 }
 
-void set_sdl_touch_pane_binding_for_panel(int panel, int index, int binding)
+void platform_set_touch_pane_binding_for_panel(int panel, int index, int binding)
 {
     if (!sdl_touch_pane_panel_is_valid(panel))
         return;
@@ -1117,12 +1117,12 @@ void set_sdl_touch_pane_binding_for_panel(int panel, int index, int binding)
         config.touch_pane_bindings[index] = binding;
 }
 
-int get_sdl_touch_pane_default_binding(int index)
+int platform_touch_pane_default_binding(int index)
 {
-    return get_sdl_touch_pane_default_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
+    return platform_touch_pane_default_binding_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
 }
 
-int get_sdl_touch_pane_default_binding_for_panel(int panel, int index)
+int platform_touch_pane_default_binding_for_panel(int panel, int index)
 {
     if (!sdl_touch_pane_panel_is_valid(panel))
         return GAMEPAD_BIND_NONE;
@@ -1132,36 +1132,36 @@ int get_sdl_touch_pane_default_binding_for_panel(int panel, int index)
     return g_default_touch_pane_bindings[panel][index];
 }
 
-void sdl_touch_pane_reset_bindings_to_default(void)
+void platform_touch_pane_reset_bindings_to_default(void)
 {
     sdl_touch_pane_reset_input_state();
     sdl_config_set_default_touch_pane_bindings(&config);
     sdl_config_clear_touch_pane_labels(&config);
 }
 
-cptr get_sdl_touch_pane_slot_name(int index)
+cptr platform_touch_pane_slot_name(int index)
 {
     if (index < 0 || index >= SDL_TOUCH_PANE_BUTTON_COUNT)
         return "";
     return g_touch_pane_slots[index].slot_name;
 }
 
-void get_sdl_touch_pane_button_label(int index, char* buf, size_t buflen)
+void platform_touch_pane_button_label(int index, char* buf, size_t buflen)
 {
-    get_sdl_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, buf, buflen);
+    platform_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, buf, buflen);
 }
 
-void set_sdl_touch_pane_button_label(int index, cptr label)
+void platform_set_touch_pane_button_label(int index, cptr label)
 {
-    set_sdl_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, label);
+    platform_set_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index, label);
 }
 
-void clear_sdl_touch_pane_button_label(int index)
+void platform_clear_touch_pane_button_label(int index)
 {
-    clear_sdl_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
+    platform_clear_touch_pane_button_label_for_panel(SDL_TOUCH_PANE_PANEL_MAIN, index);
 }
 
-void get_sdl_touch_pane_button_label_for_panel(int panel, int index, char* buf, size_t buflen)
+void platform_touch_pane_button_label_for_panel(int panel, int index, char* buf, size_t buflen)
 {
     if (!sdl_touch_pane_panel_is_valid(panel)) {
         if (buf && buflen)
@@ -1172,7 +1172,7 @@ void get_sdl_touch_pane_button_label_for_panel(int panel, int index, char* buf, 
     sdl_touch_pane_base_label_for_slot(panel, index, buf, buflen);
 }
 
-void set_sdl_touch_pane_button_label_for_panel(int panel, int index, cptr label)
+void platform_set_touch_pane_button_label_for_panel(int panel, int index, cptr label)
 {
     char (*labels)[SDL_TOUCH_PANE_LABEL_LEN];
 
@@ -1194,7 +1194,7 @@ void set_sdl_touch_pane_button_label_for_panel(int panel, int index, cptr label)
     SDL_strlcpy(labels[index], label, SDL_TOUCH_PANE_LABEL_LEN);
 }
 
-void clear_sdl_touch_pane_button_label_for_panel(int panel, int index)
+void platform_clear_touch_pane_button_label_for_panel(int panel, int index)
 {
     char (*labels)[SDL_TOUCH_PANE_LABEL_LEN];
 
@@ -1209,7 +1209,7 @@ void clear_sdl_touch_pane_button_label_for_panel(int panel, int index)
     labels[index][0] = '\0';
 }
 
-void get_sdl_touch_pane_panel_name(int panel, char* buf, size_t buflen)
+void platform_touch_pane_panel_name(int panel, char* buf, size_t buflen)
 {
     if (!buf || !buflen)
         return;
@@ -1227,7 +1227,7 @@ void get_sdl_touch_pane_panel_name(int panel, char* buf, size_t buflen)
     }
 }
 
-void set_sdl_touch_pane_panel_name(int panel, cptr name)
+void platform_set_touch_pane_panel_name(int panel, cptr name)
 {
     if (!sdl_touch_pane_panel_is_valid(panel))
         return;
