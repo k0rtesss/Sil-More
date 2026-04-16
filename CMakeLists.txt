@@ -340,7 +340,6 @@ set(SIL_MORE_SOURCES_SCORE
 
 set(SIL_MORE_SOURCES_FS
     src/fs/resource.c
-    src/fs/pref-time.c
     src/fs/savefile-name.c
 )
 
@@ -422,8 +421,6 @@ set(SIL_MORE_SOURCES_SUPPORT
     src/support/format.c
     src/support/editing-buffer.c
     src/support/reliability-checks.c
-    src/support/text-convert.c
-    src/support/macro-state.c
     src/support/rng.c
     src/support/strl.c
     src/support/text-output.c
@@ -577,7 +574,7 @@ if(SIL_IOS)
   )
 
   file(GLOB SIL_RES_EDIT "lib/edit/*.txt")
-  file(GLOB SIL_RES_PREF "lib/pref/*.prf" "lib/pref/*.json")
+  file(GLOB SIL_RES_PREF "lib/pref/*.json")
   file(GLOB SIL_RES_FONT "lib/xtra/font/*.ttf")
   file(GLOB SIL_RES_GRAF "lib/xtra/graf/*.png")
   file(GLOB SIL_RES_SOUND "lib/xtra/sound/*")

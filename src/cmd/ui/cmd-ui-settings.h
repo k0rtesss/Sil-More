@@ -99,20 +99,11 @@ const char* settings_sdl_config_path(void);
 settings_ui_layout settings_ui_read_layout(void);
 int settings_ui_list_visible_rows(const settings_ui_layout* layout,
     int top_reserved_rows, int bottom_reserved_rows, int min_rows);
-void dump_visual_pair(ang_file* fff, cptr what, int num, byte a, byte c);
-void remove_old_dump(cptr orig_file, cptr mark);
-void pref_header(ang_file* fff, cptr mark);
-void pref_footer(ang_file* fff, cptr mark);
-void do_cmd_pref_file_hack(int row);
 void settings_ui_fit_text(char* buf, size_t buflen, cptr text, int max_chars);
 cptr settings_ui_pick_label(int max_chars, cptr long_label,
     cptr medium_label, cptr short_label);
 bool settings_ui_prompt_string(cptr title, cptr prompt, cptr note, char* buf,
     size_t len);
-void settings_ui_show_text_value(cptr title, cptr prompt, cptr note,
-    cptr label, cptr value);
-bool settings_ui_capture_macro_input(cptr title, cptr prompt, cptr note,
-    bool keymap, char* buf, size_t buflen, char* desc, size_t desclen);
 app_ui_panel* settings_browser_scene_begin_ex(app_ui_scene* scene, cptr title,
     cptr subtitle, int min_width_px, int width_cap_px);
 app_ui_panel* settings_browser_scene_begin(app_ui_scene* scene, cptr title,
@@ -126,8 +117,5 @@ int settings_choice_menu(cptr title, const settings_choice_entry* entries,
 void do_cmd_pane_settings(void);
 void do_cmd_touch_pane_button_editor(bool* settings_changed);
 void do_cmd_controller_settings(void);
-void do_cmd_macro_aux(char* buf);
-void do_cmd_macro_aux_keymap(char* buf);
-void do_cmd_macros(void);
 
 #endif /* INCLUDED_CMD_UI_SETTINGS_H */

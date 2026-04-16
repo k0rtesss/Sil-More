@@ -15,10 +15,8 @@ from typing import Dict, Iterable
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASELINE = REPO_ROOT / "tests" / "ui_debt_audit_baseline.json"
 SOURCE_SUFFIXES = {".c", ".h"}
-PREF_SUFFIXES = {".prf"}
-AUDIT_SUFFIXES = SOURCE_SUFFIXES | PREF_SUFFIXES
+AUDIT_SUFFIXES = SOURCE_SUFFIXES
 COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
-PRF_COMMENT_LINE_RE = re.compile(r"^\s*#.*$", re.MULTILINE)
 PLATFORM_SDL_GLOBS = (
     "src/main-sdl.c",
     "src/main-sdl.h",
@@ -38,8 +36,6 @@ MOVEMENT_INPUT_SCOPE = (
     "src/cmd/movement/cmd-movement.c",
     "src/cmd/world/cmd-interact.c",
     "src/cmd/ui/cmd-ui-settings.c",
-    "lib/pref/pref.prf",
-    "lib/pref/pref-sdl.prf",
 )
 
 
@@ -126,36 +122,16 @@ MOVEMENT_INPUT_METRICS = (
             "src/cmd/movement/cmd-movement.c",
             "src/cmd/world/cmd-interact.c",
         ),
-        notes="Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated settings/macro helpers.",
+        notes="Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated removed legacy helpers.",
     ),
     MetricSpec(
-        key="movement_sdl_direction_macro_bridge",
-        label="SDL directional macro bridge symbols",
+        key="movement_sdl_direction_modifier_bridge",
+        label="SDL directional modifier bridge symbols",
         pattern=re.compile(
             r"\b(?:sdl_send_modified_direction_action|sdl_try_send_modified_direction_key|sdl_try_send_modified_direction_event|sdl_gamepad_send_direction_mods)\s*\("
         ),
         include_paths=("src/main-sdl.c", "src/sdl-main-internal.h"),
-        notes="Tracks the SDL helper family that still resolves directional modifiers by feeding legacy macro-trigger input.",
-    ),
-    MetricSpec(
-        key="movement_pref_keymap_defaults",
-        label="movement action defaults in pref.prf",
-        pattern=re.compile(
-            r"^A:(?:z|Z|/5|;[12346789]|\.[12346789])$",
-            re.MULTILINE,
-        ),
-        include_paths=("lib/pref/pref.prf",),
-        notes="Counts active shipped movement action defaults in pref.prf after removing commented lines.",
-    ),
-    MetricSpec(
-        key="movement_pref_sdl_macro_defaults",
-        label="movement macro defaults in pref-sdl.prf",
-        pattern=re.compile(
-            r"^(?:A:\\a\\(?:\\\.[12346789]|\\Z|\\/[123456789])|P:\^_[SC]x[0-9A-Fa-f]{2}\\r)$",
-            re.MULTILINE,
-        ),
-        include_paths=("lib/pref/pref-sdl.prf",),
-        notes="Counts active shift/control directional macro defaults in pref-sdl.prf after removing commented lines.",
+        notes="Tracks the SDL helper family that still resolves directional modifiers through the legacy bridge layer.",
     ),
 )
 
@@ -313,17 +289,11 @@ def strip_comments(text: str) -> str:
     return COMMENT_RE.sub("", text)
 
 
-def strip_pref_comments(text: str) -> str:
-    return PRF_COMMENT_LINE_RE.sub("", text)
-
-
 def normalize_text(path: Path) -> str:
     text = path.read_text(encoding="utf-8", errors="ignore")
     suffix = path.suffix.lower()
     if suffix in SOURCE_SUFFIXES:
         return strip_comments(text)
-    if suffix in PREF_SUFFIXES:
-        return strip_pref_comments(text)
     return text
 
 

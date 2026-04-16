@@ -8,7 +8,7 @@
           "files": 0,
           "label": "movement-related flush() usage",
           "matches": 0,
-          "notes": "Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated settings/macro helpers."
+          "notes": "Tracks delayed flush ownership in movement gameplay consumers after excluding the generic flush implementation and unrelated removed legacy helpers."
         },
         "movement_inkey_waits": {
           "file_matches": {},
@@ -17,20 +17,6 @@
           "matches": 0,
           "notes": "Tracks remaining character-to-direction fallback in get_aim_dir()/get_rep_dir() after semantic movement input is wired on the SDL path."
         },
-        "movement_pref_keymap_defaults": {
-          "file_matches": {},
-          "files": 0,
-          "label": "movement action defaults in pref.prf",
-          "matches": 0,
-          "notes": "Counts active shipped movement action defaults in pref.prf after removing commented lines."
-        },
-        "movement_pref_sdl_macro_defaults": {
-          "file_matches": {},
-          "files": 0,
-          "label": "movement macro defaults in pref-sdl.prf",
-          "matches": 0,
-          "notes": "Counts active shift/control directional macro defaults in pref-sdl.prf after removing commented lines."
-        },
         "movement_request_command_ownership": {
           "file_matches": {},
           "files": 0,
@@ -38,12 +24,12 @@
           "matches": 0,
           "notes": "Tracks the legacy command acquisition loop that still owns top-level movement input."
         },
-        "movement_sdl_direction_macro_bridge": {
+        "movement_sdl_direction_modifier_bridge": {
           "file_matches": {},
           "files": 0,
-          "label": "SDL directional macro bridge symbols",
+          "label": "SDL directional modifier bridge symbols",
           "matches": 0,
-          "notes": "Tracks the SDL helper family that still resolves directional modifiers by feeding legacy macro-trigger input."
+          "notes": "Tracks the SDL helper family that still resolves directional modifiers through the legacy bridge layer."
         }
       },
       "notes": "Slice-0 guardrail for the legacy movement input stack that the movement rewrite is expected to delete.",
@@ -56,9 +42,7 @@
         "src/sdl-main-internal.h",
         "src/cmd/movement/cmd-movement.c",
         "src/cmd/world/cmd-interact.c",
-        "src/cmd/ui/cmd-ui-settings.c",
-        "lib/pref/pref.prf",
-        "lib/pref/pref-sdl.prf"
+        "src/cmd/ui/cmd-ui-settings.c"
       ]
     },
     "terminal_kernel": {

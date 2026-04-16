@@ -1309,41 +1309,6 @@ static void process_world(void)
     if (turn % 10)
         return;
 
-    /*** Check the Time and Load ***/
-    if (!(turn % 1000))
-    {
-        /* Check time and load */
-        if (0 != check_time())
-        {
-            /* Warning */
-            if (closing_flag <= 2)
-            {
-                /* Disturb */
-                disturb(0, 0);
-
-                /* Count warnings */
-                closing_flag++;
-
-                /* Message */
-                msg_print("The gates to ANGBAND are closing...");
-                msg_print("Please finish up and/or save your game.");
-            }
-
-            /* Slam the gate */
-            else
-            {
-                /* Message */
-                msg_print("The gates to ANGBAND are now closed.");
-
-                /* Stop playing */
-                p_ptr->playing = false;
-
-                /* Leaving */
-                p_ptr->leaving = true;
-            }
-        }
-    }
-
     /*** Handle the "surface" ***/
 
     /* While on the surface */
@@ -4141,14 +4106,6 @@ static void dungeon(void)
 int p_ptr_depth_proxy(void) { return p_ptr ? p_ptr->depth : 0; }
 
 /*
- * Process some user pref files
- */
-static void process_some_user_pref_files(void)
-{
-    /* Legacy external pref files were removed. */
-}
-
-/*
  * Hack - Know inventory upon death
  */
 static void death_knowledge(void)
@@ -4663,9 +4620,6 @@ PlayResult play_game(void)
 
     /* Window stuff */
     window_stuff();
-
-    /* Process some user pref files */
-    process_some_user_pref_files();
 
     /* Set or clear "hjkl_movement" if requested */
     if (runtime_cli_force_original())

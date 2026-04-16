@@ -424,12 +424,6 @@
 #define ACTION_BASH 12
 
 /*
- * OPTION: Maximum number of macros (see "util.c")
- * Default: assume at most 256 macros are used
- */
-#define MACRO_MAX 256
-
-/*
  * OPTION: Maximum number of "quarks" (see "util.c")
  * Default: assume at most 512 different inscriptions are used
  */
@@ -1111,20 +1105,7 @@
 
 #define LRN_MAX 60
 
-/*
- * Number of keymap modes
- */
-#define KEYMAP_MODES 4
-
-/*
- * Modes
- */
-#define KEYMAP_MODE_SIL 0 // The original Sil keyset
-#define KEYMAP_MODE_SIL_HJKL 1 // The original Sil keyset with hjkl movement
-#define KEYMAP_MODE_ANGBAND 2 // The Angband-like keyset
-#define KEYMAP_MODE_ANGBAND_HJKL 3 // The Angband-like keyset with hjkl movement
-
-/*** Icons mapped in "lib/edit/graf-new.prf" ***/
+/*** Reserved icon slots ***/
 
 #define ICON_UNKNOWN_ENEMY 0x0A
 #define ICON_ALERT 0x0B
@@ -3661,20 +3642,12 @@
 #define MSG_MONSTER_ATTACK_BREATH 65
 #define MSG_MAX 66
 
-/*
- * Maximum number of macro trigger names
- */
-#define MAX_MACRO_TRIGGER 200
-#define MAX_MACRO_MOD 12
-
 /*** Hack ***/
 
 /*
  * Hack -- attempt to reduce various values
  */
 #ifdef ANGBAND_LITE
-#undef MACRO_MAX
-#define MACRO_MAX 128
 #undef QUARK_MAX
 #define QUARK_MAX 128
 #undef MESSAGE_MAX

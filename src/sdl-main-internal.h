@@ -148,7 +148,7 @@ void sdl_gamepad_apply_modifier(int binding, bool down);
 bool sdl_gamepad_shift_active(void);
 bool sdl_gamepad_ctrl_active(void);
 bool sdl_gamepad_alt_active(void);
-void sdl_gamepad_send_key(int key, bool use_macro_mods);
+void sdl_gamepad_send_key(int key, bool apply_modifiers);
 u16b sdl_movement_input_modifiers_from_keyboard_event(
     const SDL_KeyboardEvent* key_event);
 void sdl_submit_legacy_input_byte(int key);

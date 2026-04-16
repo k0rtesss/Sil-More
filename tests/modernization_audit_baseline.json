@@ -209,17 +209,6 @@
         ]
       },
       {
-        "key": "macro_state_family",
-        "match_globs": [
-          "src/**/macro-state.c",
-          "src/**/macro-state.h"
-        ],
-        "allowed_globs": [
-          "src/support/macro-state.c",
-          "src/support/macro-state.h"
-        ]
-      },
-      {
         "key": "editing_buffer_family",
         "match_globs": [
           "src/**/editing-buffer.c",

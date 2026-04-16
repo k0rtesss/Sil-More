@@ -29,7 +29,6 @@
 #include "cmd/ui/cmd-ui.h"
 #include "cmd/world/cmd-world.h"
 #include "cmd/world/cmd-interact-chest.h"
-#include "fs/pref-time.h"
 #include "fs/savefile-name.h"
 #include "init/init-data.h"
 #include "init/init-paths.h"
@@ -68,7 +67,6 @@ typedef struct app_ui_scene app_ui_scene;
 #include "platform-signals.h"
 #include "smithing/smithing.h"
 #include "spell/spell.h"
-#include "support/macro-state.h"
 #include "support/text-output.h"
 #include "support/util.h"
 #include "ui/ui-character-name.h"
@@ -167,7 +165,6 @@ extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
 extern void do_cmd_options_aux(int page, cptr info);
 extern void do_cmd_pane_settings(void);
-extern void do_cmd_macros(void);
 extern void do_cmd_keybinds(void);
 extern void do_cmd_visuals(void);
 extern void do_cmd_colors(void);

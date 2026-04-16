@@ -88,7 +88,7 @@ static int sdl_gamepad_axis_to_dir(Sint16 x, Sint16 y, int deadzone);
 static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone);
 static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type);
-void sdl_gamepad_send_key(int key, bool use_macro_mods);
+void sdl_gamepad_send_key(int key, bool apply_modifiers);
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
 static bool sdl_build_movement_command_from_input(u16b context, u16b action,
     u16b direction, const app_input* input,
@@ -99,7 +99,6 @@ static void sdl_init_keyboard_input_event(const SDL_KeyboardEvent* key_event,
 static bool sdl_submit_movement_command(
     const app_movement_command* command);
 static int sdl_key_to_legacy_keypad_dir(int key);
-static char sdl_direction_char_for_key(int key);
 static char sdl_legacy_key_char_from_keyboard_event(
     const SDL_KeyboardEvent* key_event);
 static bool sdl_keyboard_event_reserved_for_movement(
@@ -726,7 +725,7 @@ static bool sdl_handle_global_layout_shortcut(const SDL_KeyboardEvent* key_event
     return false;
 }
 
-void sdl_gamepad_send_key(int key, bool use_macro_mods)
+void sdl_gamepad_send_key(int key, bool apply_modifiers)
 {
     bool shift = sdl_gamepad_shift_active();
     bool ctrl = sdl_gamepad_ctrl_active();
@@ -734,7 +733,7 @@ void sdl_gamepad_send_key(int key, bool use_macro_mods)
     int translated = 0;
 
     if (!sdl_translate_legacy_input_key(key, shift, ctrl, alt, false,
-            use_macro_mods, &translated))
+            apply_modifiers, &translated))
     {
         return;
     }

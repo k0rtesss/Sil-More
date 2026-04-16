@@ -1391,7 +1391,6 @@ static void help_record_page_document_ops(int i, bool include_header)
 
         put_role(ROLE_KEY,  " :", row, col); put_role(ROLE_UI,   "write a note", row, col + 3); row++;
         put_role(ROLE_KEY,  " )", row, col); put_role(ROLE_UI,   "save screen shot", row, col + 3); row += 2;
-        if (angband_keyset) put_role(ROLE_KEY, " @", row, col); else put_role(ROLE_KEY, " $", row, col); put_role(ROLE_UI,   "set macros", row, col + 3); row++;
         put_role(ROLE_KEY,  " &", row, col); put_role(ROLE_UI,   "set colours", row, col + 3); row += 2;
         put_role(ROLE_KEY,  "^p", row, col); put_role(ROLE_UI,   "display prior messages", row, col + 3); row++;
         put_role(ROLE_KEY,  "^r", row, col); put_role(ROLE_UI,   "redraw screen", row, col + 3); row++;

@@ -58,8 +58,6 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent);
 void text_out(cptr str);
 void text_out_c(byte a, cptr str);
 void msg_debug(cptr fmt, ...);
-void text_to_ascii(char* buf, size_t len, cptr str);
-void ascii_to_text(char* buf, size_t len, cptr str);
 
 bool is_a_vowel(int ch);
 int damroll(int num, int sides);

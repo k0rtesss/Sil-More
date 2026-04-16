@@ -155,11 +155,6 @@
 #define ALLOW_VISUALS
 
 /*
- * OPTION: Allow "do_cmd_macros" at run-time
- */
-#define ALLOW_MACROS
-
-/*
  * OPTION: Allow characteres to be "auto-rolled"
  */
 #define ALLOW_AUTOROLLER
@@ -313,7 +308,6 @@
 #ifdef ANGBAND_LITE
 #undef ALLOW_COLORS
 #undef ALLOW_VISUALS
-#undef ALLOW_MACROS
 #undef ALLOW_TERROR
 #undef ALLOW_DEBUG
 #undef ALLOW_SPOILERS
