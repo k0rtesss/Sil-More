@@ -1,4 +1,4 @@
-/* File: use-obj.c */
+/* File: object-use.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
@@ -10,6 +10,7 @@
 
 #include "angband.h"
 #include "externs.h"
+#include "object/object-use.h"
 #include "player/killer.h"
 
 static int medicine_count(void)

@@ -1,4 +1,4 @@
-/* File: randart.c */
+/* File: object-randart.c */
 
 /*
  * Copyright (c) 1997 Ben Harrison
@@ -10,8 +10,8 @@
 
 #include "angband.h"
 #include "externs.h"
-
 #include "init.h"
+#include "object/object-randart.h"
 
 #define MAX_TRIES 200
 #define BUFLEN 1024

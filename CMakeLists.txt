@@ -137,16 +137,13 @@ add_subdirectory(src/log)
 # Transitional subsystem groupings for the unstable refactor port.
 # Keep the compiled source set unchanged until each split lands.
 set(SIL_MORE_SOURCES_CORE
-    src/blitz.c
     src/birth.c
     src/cave/cave-geometry.c
+    src/cave/cave.c
     src/cave/cave-map-ui.c
-    src/cave.c
     src/cJSON.c
     src/dungeon.c
     src/item_set.c
-    src/quest.c
-    src/randart.c
     src/squelch.c
     src/supplies.c
     src/tables.c
@@ -241,24 +238,25 @@ set(SIL_MORE_SOURCES_DROP
 )
 
 set(SIL_MORE_SOURCES_OBJECT
-    src/obj-info.c
     src/object/object-allocation.c
     src/object/object-desc.c
     src/object/object-display.c
     src/object/object-flags.c
     src/object/object-flavor.c
+    src/object/object-info.c
     src/object/object-inventory.c
     src/object/object-knowledge.c
     src/object/object-list.c
     src/object/object-make.c
     src/object/object-place.c
+    src/object/object-randart.c
     src/object/object-slot.c
     src/object/object-ui-display.c
     src/object/object-ui-enhanced.c
     src/object/object-ui-identify.c
     src/object/object-ui-select.c
+    src/object/object-use.c
     src/object/object-util.c
-    src/use-obj.c
 )
 
 set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
@@ -293,20 +291,21 @@ set(SIL_MORE_SOURCES_PLAYER
     src/player/player-song-duels.c
     src/player/player-song-effects.c
     src/player/player-songs.c
+    src/player/player-status.c
+    src/player/player-xp.c
     src/player/encumbrance.c
     src/player/identification.c
     src/player/killer.c
     src/player/weapon_stats.c
-    src/player-status.c
-    src/player-xp.c
     src/targeting.c
-    src/thrall_quest.c
 )
 
 set(SIL_MORE_SOURCES_QUEST
+    src/quest/quest.c
     src/quest/quest-niena.c
     src/quest/quest-orome.c
     src/quest/quest-rewards.c
+    src/quest/thrall_quest.c
     src/quest/quest-tulkas.c
     src/quest/quest-ui.c
     src/quest/quest-valar.c
@@ -324,7 +323,7 @@ set(SIL_MORE_SOURCES_SMITHING
 
 set(SIL_MORE_SOURCES_SAVE_AND_META
     src/load.c
-    src/metarun.c
+    src/metarun/metarun.c
     src/save.c
 )
 
@@ -344,6 +343,7 @@ set(SIL_MORE_SOURCES_FS
 )
 
 set(SIL_MORE_SOURCES_RUNTIME
+    src/runtime/blitz.c
     src/runtime/runtime-cli.c
     src/runtime/runtime-game.c
 )
@@ -523,7 +523,7 @@ if (SIL_STRICT_WARNINGS)
     src/files.c
     src/init2.c
     src/load.c
-    src/metarun.c
+    src/metarun/metarun.c
     src/support/reliability-checks.c
     src/runtime/runtime-game.c
     src/score/score_io.c

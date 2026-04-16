@@ -1,5 +1,5 @@
 ﻿/* --------------------------------------------------------------------
- *  src/metarun.c   (2025-07-06)   â€“ final, crash-free, warning-free
+ *  src/metarun/metarun.c   (2025-07-06)   â€“ final, crash-free, warning-free
  * --------------------------------------------------------------------
  *  Tracks a â€œmeta-runâ€ that ends after 15 Silmarils (win) or
  *  15 deaths (lose).  Finished runs are appended to meta.raw so

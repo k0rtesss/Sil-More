@@ -1,4 +1,4 @@
-/* File: obj-info.c */
+/* File: object-info.c */
 
 /*
  * Copyright (c) 2002 Andrew Sidwell, Robert Ruehlmann
@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "cmd/combat/cmd-ranged.h"
 #include "log/log.h"
+#include "object/object-info.h"
 #include "object/object-use.h"
 #include "ui/ui-information-scene.h"
 

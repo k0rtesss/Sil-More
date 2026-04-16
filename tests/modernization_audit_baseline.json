@@ -1,8 +1,8 @@
 {
   "metadata": {
     "schema_version": 1,
-    "status_date": "2026-04-16",
-    "notes": "Wave 0 modernization audit baseline. This file freezes the initial metric schema, temporary root src allowlist, early folder ownership rules, and the first no-growth baseline for the finish-line modernization work."
+    "status_date": "2026-04-17",
+    "notes": "Wave 4 modernization audit baseline after parallel folder normalization, retired root-note cleanup, and tightened folder ownership rules."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -29,41 +29,22 @@
     ],
     "root_src_c_allowlist": [
       "src/birth.c",
-      "src/blitz.c",
       "src/cJSON.c",
-      "src/cave.c",
-      "src/cmd1.c",
-      "src/cmd2.c",
-      "src/cmd3.c",
       "src/cmd4.c",
-      "src/cmd5.c",
-      "src/cmd6.c",
       "src/dungeon.c",
       "src/files.c",
-      "src/generate.c",
-      "src/init1.c",
       "src/init2.c",
       "src/item_set.c",
       "src/load.c",
       "src/main-sdl.c",
       "src/main.c",
-      "src/melee1.c",
-      "src/melee2.c",
-      "src/metarun.c",
       "src/monster-death.c",
       "src/monster1.c",
       "src/monster2.c",
-      "src/object1.c",
-      "src/object2.c",
-      "src/obj-info.c",
       "src/pane.c",
       "src/platform-frame.c",
       "src/platform-signals.c",
       "src/platform-time.c",
-      "src/player-status.c",
-      "src/player-xp.c",
-      "src/quest.c",
-      "src/randart.c",
       "src/save.c",
       "src/sdl-config.c",
       "src/sdl-layout.c",
@@ -78,37 +59,15 @@
       "src/sdl-touch.c",
       "src/sdl-ui-style.c",
       "src/sound-config.c",
-      "src/spells1.c",
-      "src/spells2.c",
       "src/squelch.c",
       "src/supplies.c",
       "src/tables.c",
       "src/targeting.c",
-      "src/thrall_quest.c",
-      "src/use-obj.c",
       "src/variable.c",
       "src/wizard1.c",
-      "src/wizard2.c",
-      "src/xtra1.c",
-      "src/xtra2.c"
+      "src/wizard2.c"
     ],
-    "source_files_missing_from_cmake_allowlist": [
-      "src/cmd1.c",
-      "src/cmd2.c",
-      "src/cmd3.c",
-      "src/cmd5.c",
-      "src/cmd6.c",
-      "src/generate.c",
-      "src/init1.c",
-      "src/melee1.c",
-      "src/melee2.c",
-      "src/object1.c",
-      "src/object2.c",
-      "src/spells1.c",
-      "src/spells2.c",
-      "src/xtra1.c",
-      "src/xtra2.c"
-    ],
+    "source_files_missing_from_cmake_allowlist": [],
     "folder_rule_allowlist": [],
     "folder_rules": [
       {
@@ -118,7 +77,6 @@
           "src/**/cave*.h"
         ],
         "allowed_globs": [
-          "src/cave.c",
           "src/cave/*.c",
           "src/cave/*.h"
         ]
@@ -130,7 +88,6 @@
           "src/**/metarun*.h"
         ],
         "allowed_globs": [
-          "src/metarun.c",
           "src/metarun.h",
           "src/metarun/*.c",
           "src/metarun/*.h"
@@ -332,6 +289,99 @@
           "src/runtime/*.c",
           "src/runtime/*.h"
         ]
+      },
+      {
+        "key": "blitz_family",
+        "match_globs": [
+          "src/**/blitz.c",
+          "src/**/blitz.h"
+        ],
+        "allowed_globs": [
+          "src/runtime/blitz.c",
+          "src/blitz.h",
+          "src/runtime/blitz.h"
+        ]
+      },
+      {
+        "key": "player_status_family",
+        "match_globs": [
+          "src/**/player-status.c",
+          "src/**/player-status.h"
+        ],
+        "allowed_globs": [
+          "src/player/player-status.c",
+          "src/player/player-status.h"
+        ]
+      },
+      {
+        "key": "player_xp_family",
+        "match_globs": [
+          "src/**/player-xp.c",
+          "src/**/player-xp.h"
+        ],
+        "allowed_globs": [
+          "src/player/player-xp.c",
+          "src/player/player-xp.h"
+        ]
+      },
+      {
+        "key": "quest_core_family",
+        "match_globs": [
+          "src/**/quest.c",
+          "src/**/quest.h"
+        ],
+        "allowed_globs": [
+          "src/quest/quest.c",
+          "src/quest/quest.h"
+        ]
+      },
+      {
+        "key": "thrall_quest_family",
+        "match_globs": [
+          "src/**/thrall_quest.c",
+          "src/**/thrall_quest.h"
+        ],
+        "allowed_globs": [
+          "src/quest/thrall_quest.c",
+          "src/thrall_quest.h",
+          "src/quest/thrall_quest.h"
+        ]
+      },
+      {
+        "key": "object_info_family",
+        "match_globs": [
+          "src/**/obj-info.c",
+          "src/**/object-info.c",
+          "src/**/object-info.h"
+        ],
+        "allowed_globs": [
+          "src/object/object-info.c",
+          "src/object/object-info.h"
+        ]
+      },
+      {
+        "key": "object_use_family",
+        "match_globs": [
+          "src/**/use-obj.c",
+          "src/**/object-use.c",
+          "src/**/object-use.h"
+        ],
+        "allowed_globs": [
+          "src/object/object-use.c",
+          "src/object/object-use.h"
+        ]
+      },
+      {
+        "key": "object_randart_family",
+        "match_globs": [
+          "src/**/randart.c",
+          "src/**/object-randart.c",
+          "src/**/object-randart.h"
+        ],
+        "allowed_globs": [
+          "src/object/object-randart.c",
+          "src/object/object-randart.h"
+        ]
       }
     ]
   },
@@ -380,50 +430,169 @@
         "externs_header_lines": {
           "label": "externs.h line count",
           "files": 1,
-          "value": 1159,
-          "notes": "Tracks the transitional umbrella header size."
+          "value": 271,
+          "notes": "Tracks the transitional umbrella header size. The finish-line target is under 400 lines.",
+          "file_matches": {
+            "src/externs.h": 271
+          }
         },
         "extern_declarations": {
           "label": "extern declarations in externs.h",
           "files": 1,
-          "value": 883,
-          "notes": "Tracks runtime ownership still exposed through externs.h."
+          "value": 103,
+          "notes": "Tracks how much runtime ownership still lives in the compatibility umbrella header.",
+          "file_matches": {
+            "src/externs.h": 103
+          }
         },
         "extern_include_sites": {
           "label": "direct #include \"externs.h\" sites",
-          "files": 182,
-          "value": 182,
-          "notes": "Tracks the include fan-out of externs.h."
+          "files": 25,
+          "value": 25,
+          "notes": "Tracks the direct include fan-out of the compatibility header.",
+          "file_matches": {
+            "src/birth.c": 1,
+            "src/cave/cave.c": 1,
+            "src/cmd4.c": 1,
+            "src/dungeon.c": 1,
+            "src/files.c": 1,
+            "src/level-generation/level-generation-connectivity.c": 1,
+            "src/level-generation/level-generation-rooms.c": 1,
+            "src/load.c": 1,
+            "src/melee/melee-attack.c": 1,
+            "src/melee/melee-movement.c": 1,
+            "src/melee/melee-process.c": 1,
+            "src/metarun/metarun.c": 1,
+            "src/monster1.c": 1,
+            "src/monster2.c": 1,
+            "src/object/object-randart.c": 1,
+            "src/object/object-use.c": 1,
+            "src/runtime/runtime-game.c": 1,
+            "src/save.c": 1,
+            "src/score/score_ui.c": 1,
+            "src/sdl-main-internal.h": 1,
+            "src/sdl-sound.c": 1,
+            "src/spell/spell-projection.c": 1,
+            "src/variable.c": 1,
+            "src/wizard1.c": 1,
+            "src/wizard2.c": 1
+          }
         },
         "variable_source_lines": {
           "label": "variable.c line count",
           "files": 1,
-          "value": 831,
-          "notes": "Tracks the remaining global-state ownership bucket."
+          "value": 102,
+          "notes": "Tracks the remaining size of the global runtime ownership bucket.",
+          "file_matches": {
+            "src/variable.c": 102
+          }
         },
         "root_src_c_files": {
           "label": "root-level src/*.c files",
-          "files": 79,
-          "value": 79,
-          "notes": "Tracks root implementation file count."
+          "files": 38,
+          "value": 38,
+          "notes": "Tracks root implementation file count to ensure the root source bucket stops growing.",
+          "file_matches": {
+            "src/birth.c": 1,
+            "src/cJSON.c": 1,
+            "src/cmd4.c": 1,
+            "src/dungeon.c": 1,
+            "src/files.c": 1,
+            "src/init2.c": 1,
+            "src/item_set.c": 1,
+            "src/load.c": 1,
+            "src/main-sdl.c": 1,
+            "src/main.c": 1,
+            "src/monster-death.c": 1,
+            "src/monster1.c": 1,
+            "src/monster2.c": 1,
+            "src/pane.c": 1,
+            "src/platform-frame.c": 1,
+            "src/platform-signals.c": 1,
+            "src/platform-time.c": 1,
+            "src/save.c": 1,
+            "src/sdl-config.c": 1,
+            "src/sdl-layout.c": 1,
+            "src/sdl-render.c": 1,
+            "src/sdl-scene-bootstrap.c": 1,
+            "src/sdl-scene-dungeon.c": 1,
+            "src/sdl-scene-information.c": 1,
+            "src/sdl-scene-menu.c": 1,
+            "src/sdl-scene.c": 1,
+            "src/sdl-sound.c": 1,
+            "src/sdl-story-font.c": 1,
+            "src/sdl-touch.c": 1,
+            "src/sdl-ui-style.c": 1,
+            "src/sound-config.c": 1,
+            "src/squelch.c": 1,
+            "src/supplies.c": 1,
+            "src/tables.c": 1,
+            "src/targeting.c": 1,
+            "src/variable.c": 1,
+            "src/wizard1.c": 1,
+            "src/wizard2.c": 1
+          }
         },
         "root_src_h_files": {
           "label": "root-level src/*.h files",
-          "files": 44,
-          "value": 44,
-          "notes": "Tracks root header count."
+          "files": 39,
+          "value": 39,
+          "notes": "Tracks root header count while the ownership surface is still transitional.",
+          "file_matches": {
+            "src/angband.h": 1,
+            "src/blitz.h": 1,
+            "src/cJSON.h": 1,
+            "src/config.h": 1,
+            "src/defines.h": 1,
+            "src/drop_system.h": 1,
+            "src/externs.h": 1,
+            "src/format.h": 1,
+            "src/gamepad-config.h": 1,
+            "src/h-basic.h": 1,
+            "src/h-config.h": 1,
+            "src/h-define.h": 1,
+            "src/h-system.h": 1,
+            "src/h-type.h": 1,
+            "src/init.h": 1,
+            "src/item_set.h": 1,
+            "src/main-sdl.h": 1,
+            "src/main.h": 1,
+            "src/metarun.h": 1,
+            "src/pane-config.h": 1,
+            "src/pane.h": 1,
+            "src/platform-audio.h": 1,
+            "src/platform-config.h": 1,
+            "src/platform-frame.h": 1,
+            "src/platform-input.h": 1,
+            "src/platform-io.h": 1,
+            "src/platform-signals.h": 1,
+            "src/platform-story-font.h": 1,
+            "src/platform-time.h": 1,
+            "src/platform.h": 1,
+            "src/project-path.h": 1,
+            "src/scorefile.h": 1,
+            "src/sdl-config.h": 1,
+            "src/sdl-main-internal.h": 1,
+            "src/sdl-sound.h": 1,
+            "src/sound-config.h": 1,
+            "src/supplies.h": 1,
+            "src/thrall_quest.h": 1,
+            "src/types.h": 1
+          }
         },
         "nonplatform_sdl_header_includes": {
           "label": "SDL3 header includes outside platform boundary",
           "files": 0,
           "value": 0,
-          "notes": "Tracks non-platform SDL header leakage."
+          "notes": "Tracks direct SDL header imports that still leak into non-platform code.",
+          "file_matches": {}
         },
         "nonplatform_sdl_io_usages": {
           "label": "SDL I/O symbols outside platform boundary",
-          "files": 23,
-          "value": 23,
-          "notes": "Tracks non-platform SDL I/O leakage."
+          "files": 0,
+          "value": 0,
+          "notes": "Tracks SDL_IO*, SDL_IOStream, and sdl_fopen/sdl_fclose usage outside platform-facing code.",
+          "file_matches": {}
         }
       }
     },
@@ -435,25 +604,29 @@
           "label": "root src/*.c files outside allowlist",
           "files": 0,
           "value": 0,
-          "notes": "Tracks new root implementation files outside the temporary allowlist."
+          "notes": "Fails when new root implementation files appear outside the Wave 0 temporary allowlist.",
+          "file_matches": {}
         },
         "folder_rule_violations": {
           "label": "folder ownership rule violations",
           "files": 0,
           "value": 0,
-          "notes": "Tracks explicit folder placement policy violations."
+          "notes": "Tracks files whose placement violates the explicit Wave 0 folder mapping rules.",
+          "file_matches": {}
         },
         "source_files_missing_from_cmake": {
           "label": "src/*.c files missing from root CMakeLists.txt",
           "files": 0,
           "value": 0,
-          "notes": "Tracks source files not listed in the canonical build source lists after excluding intentional legacy-note files."
+          "notes": "Tracks translation units under src/ that are not referenced by the root source lists, excluding intentional legacy-note exceptions.",
+          "file_matches": {}
         },
         "cmake_referenced_missing_on_disk": {
           "label": "CMake source entries missing on disk",
           "files": 0,
           "value": 0,
-          "notes": "Tracks stale or invalid source-list references."
+          "notes": "Tracks stale source-list entries that point at nonexistent files.",
+          "file_matches": {}
         }
       }
     }
