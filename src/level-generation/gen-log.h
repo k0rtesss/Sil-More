@@ -1,4 +1,4 @@
-/* gen-log.h - Dedicated generation logging for debugging dungeon generation
+/* level-generation/gen-log.h - Dedicated generation logging for debugging dungeon generation
  *
  * This creates a separate generation.txt log file with maximum detail
  * about level generation, partition modes, room placement, connectivity,
@@ -8,10 +8,7 @@
 #ifndef GEN_LOG_H
 #define GEN_LOG_H
 
-#include <stdio.h>
-#include <stdarg.h>
 #include <stdbool.h>
-#include <time.h>
 
 /*
  * Master switch for generation logging.
@@ -34,10 +31,7 @@
 #define GENLOG_SUMMARY      1   /* Per-level generation summary */
 #define GENLOG_MONSTERS     1   /* Monster placement during generation */
 
-/* File handle for generation log (defined in gen-log.c) */
-extern FILE *gen_log_file;
 extern bool gen_log_initialized;
-extern int gen_log_level_count;  /* Track how many levels generated this session */
 
 typedef void (*gen_log_observer_fn)(const char *category, const char *message);
 

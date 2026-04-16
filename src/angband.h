@@ -23,7 +23,7 @@
 #include "mem/alloc.h"
 #include "format.h"
 #include "platform-frame.h"
-#include "rng.h"
+#include "support/rng.h"
 #include "support/strl.h"
 
 /* Story font flags used by semantic document and menu rendering. */

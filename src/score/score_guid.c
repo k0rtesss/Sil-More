@@ -1,6 +1,6 @@
 #include "score/score_guid.h"
 
-#include "rng.h"
+#include "support/rng.h"
 
 guid64 score_guid_from_u64(u64b value)
 {

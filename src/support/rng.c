@@ -1,6 +1,6 @@
-/* File: rng.c */
+/* File: support/rng.c */
 
-#include "rng.h"
+#include "support/rng.h"
 #include "platform-time.h"
 #include <time.h>
 

@@ -1,6 +1,6 @@
 #include "angband.h"
 #include "drop/drop-system-internal.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 #include "mem/alloc.h"
 
 static const int DROP_MIN_DIFFICULTY = -15;

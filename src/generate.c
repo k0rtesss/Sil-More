@@ -4,7 +4,7 @@
  * Legacy note for the unstable refactor port.
  *
  * The former generate monolith now lives in:
- *   - src/gen-log.c
+ *   - src/level-generation/gen-log.c
  *   - src/level-generation/level-generation.c
  *   - src/level-generation/level-generation-big-cave.c
  *   - src/level-generation/level-generation-connectivity.c

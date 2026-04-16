@@ -13,7 +13,7 @@
 #include "fs/file.h"
 #include "init/init-lifecycle.h"
 #include "log/bootstrap.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 
 /*
  * Some machines have a "main()" function in their "main-xxx.c" file,

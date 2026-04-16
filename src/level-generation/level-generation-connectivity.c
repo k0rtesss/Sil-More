@@ -12,7 +12,7 @@
 #include "level-generation/level-generation.h"
 #include "externs.h"
 #include "log/log.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 #include "metarun.h"
 #include "level-generation/level-generation-internal.h"
 #include <string.h>

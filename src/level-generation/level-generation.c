@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "level-generation/level-generation-internal.h"
 #include "log/log.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 #include "metarun.h"
 /* Ensure C library prototypes are visible for tools */
 #include <stdio.h>

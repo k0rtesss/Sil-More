@@ -12,7 +12,7 @@
 #include "app/app-ui.h"
 #include "level-generation/level-generation-internal.h"
 #include "log/log.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 #include "metarun.h"
 #include "platform-time.h"
 #include "ui/ui-information-scene.h"

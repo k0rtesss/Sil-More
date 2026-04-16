@@ -1,7 +1,7 @@
-/* gen-log.c - Implementation of dedicated generation logging */
+/* level-generation/gen-log.c - Implementation of dedicated generation logging */
 
 #include "angband.h"
-#include "gen-log.h"
+#include "level-generation/gen-log.h"
 #include "fs/path.h"
 #include <time.h>
 #include <string.h>

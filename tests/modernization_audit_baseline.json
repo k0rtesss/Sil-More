@@ -40,7 +40,6 @@
       "src/cmd6.c",
       "src/dungeon.c",
       "src/files.c",
-      "src/gen-log.c",
       "src/generate.c",
       "src/init1.c",
       "src/init2.c",
@@ -65,7 +64,6 @@
       "src/player-xp.c",
       "src/quest.c",
       "src/randart.c",
-      "src/rng.c",
       "src/save.c",
       "src/sdl-config.c",
       "src/sdl-layout.c",
@@ -311,6 +309,28 @@
         "allowed_globs": [
           "src/support/util.c",
           "src/support/util.h"
+        ]
+      },
+      {
+        "key": "gen_log_family",
+        "match_globs": [
+          "src/**/gen-log.c",
+          "src/**/gen-log.h"
+        ],
+        "allowed_globs": [
+          "src/level-generation/gen-log.c",
+          "src/level-generation/gen-log.h"
+        ]
+      },
+      {
+        "key": "rng_family",
+        "match_globs": [
+          "src/**/rng.c",
+          "src/**/rng.h"
+        ],
+        "allowed_globs": [
+          "src/support/rng.c",
+          "src/support/rng.h"
         ]
       },
       {

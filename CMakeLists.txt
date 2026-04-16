@@ -147,7 +147,6 @@ set(SIL_MORE_SOURCES_CORE
     src/item_set.c
     src/quest.c
     src/randart.c
-    src/rng.c
     src/squelch.c
     src/supplies.c
     src/tables.c
@@ -220,7 +219,7 @@ set(SIL_MORE_SOURCES_INIT
 )
 
 set(SIL_MORE_SOURCES_LEVEL_GENERATION
-    src/gen-log.c
+    src/level-generation/gen-log.c
     src/level-generation/level-generation-big-cave.c
     src/level-generation/level-generation-connectivity.c
     src/level-generation/level-generation-layout-anchors.c
@@ -425,6 +424,7 @@ set(SIL_MORE_SOURCES_SUPPORT
     src/support/reliability-checks.c
     src/support/text-convert.c
     src/support/macro-state.c
+    src/support/rng.c
     src/support/strl.c
     src/support/text-output.c
     src/support/util.c

@@ -1,4 +1,4 @@
-/* File: rng.h */
+/* File: support/rng.h */
 
 #ifndef INCLUDED_RNG_H
 #define INCLUDED_RNG_H
