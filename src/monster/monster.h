@@ -16,6 +16,7 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode);
 void monster_desc_race(char* desc, size_t max, int r_idx);
 void delete_monster_idx(int i);
 void monster_swap(int y1, int x1, int y2, int x2);
+void lore_treasure(int m_idx, int num_item);
 void set_monster_slow(s16b m_idx, s16b counter, bool message);
 void message_pain(int m_idx, int dam);
 void make_alert(monster_type* m_ptr);

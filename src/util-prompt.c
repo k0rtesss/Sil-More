@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "platform-frame.h"
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"

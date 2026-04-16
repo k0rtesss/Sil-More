@@ -8,6 +8,8 @@ extern bool save_game_quietly;
 bool death_processing_in_progress(void);
 bool death_spectator_active(void);
 bool preconfirm_enter_morgoth_hall(void);
+int generation_depth_for_level(int depth);
+int player_generation_depth(void);
 void reset_dungeon_state(void);
 PlayResult play_game(void);
 

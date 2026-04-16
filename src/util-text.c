@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "externs.h"
 #include "fs/io_sdl.h"
 
 ang_file* text_out_file = NULL;

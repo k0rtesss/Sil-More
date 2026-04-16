@@ -11,11 +11,13 @@ bool get_alertness_text(monster_type* m_ptr, int text_size, char* text,
 byte health_attr(int current, int max);
 
 bool saving_throw(monster_type* m_ptr, int resistance);
+bool turin_resist_bad_effect(void);
 bool allow_player_blind(monster_type* m_ptr);
 bool set_blind(int v);
 bool allow_player_confusion(monster_type* m_ptr);
 bool set_confused(int v);
 bool set_poisoned(int v);
+bool allow_player_fear(monster_type* m_ptr);
 bool set_afraid(int v);
 bool allow_player_entrancement(monster_type* m_ptr);
 bool set_entranced(int v);

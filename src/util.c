@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "reliability-checks.h"

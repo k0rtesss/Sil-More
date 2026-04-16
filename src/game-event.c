@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "app/app-ui.h"
-#include "externs.h"
 #include "game-event.h"
 #include "log/log.h"
 #include "platform-story-font.h"

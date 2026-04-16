@@ -17,6 +17,22 @@
 #include "score/score_io.h"
 #include "score/score_runs.h"
 #include "score/score_ui.h"
+
+int generation_depth_for_level(int depth)
+{
+    if (depth == 0)
+        return MORGOTH_DEPTH;
+    if (depth < 1)
+        return 1;
+    return depth;
+}
+
+int player_generation_depth(void)
+{
+    if (!p_ptr)
+        return 1;
+    return generation_depth_for_level(p_ptr->depth);
+}
 #include "ui/ui-death.h"
 #include "ui/ui-information-scene.h"
 

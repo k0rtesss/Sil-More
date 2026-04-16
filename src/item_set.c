@@ -1,7 +1,6 @@
 /* File: item_set.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "log/log.h"
 #include "score/score_guid.h"

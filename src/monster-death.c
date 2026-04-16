@@ -15,7 +15,6 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "player/killer.h"

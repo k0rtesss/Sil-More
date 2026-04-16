@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "externs.h"
 
 /*
  * Accept values for y and x (considered as the endpoints of lines) between

@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "externs.h"
 
 static int util_ascii_tolower(int ch)
 {

@@ -110,25 +110,6 @@ extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
 extern byte squelch_level[SQUELCH_BYTES];
 
-#ifndef GENERATION_DEPTH_HELPERS_DEFINED
-#define GENERATION_DEPTH_HELPERS_DEFINED
-static inline int generation_depth_for_level(int depth)
-{
-    if (depth == 0)
-        return MORGOTH_DEPTH;
-    if (depth < 1)
-        return 1;
-    return depth;
-}
-
-static inline int player_generation_depth(void)
-{
-    if (!p_ptr)
-        return 1;
-    return generation_depth_for_level(p_ptr->depth);
-}
-#endif
-
 /*
  * Automatically generated "function declarations"
  */
@@ -211,7 +192,6 @@ extern void do_cmd_knowledge_monsters(void);
 extern void do_cmd_knowledge_objects(void);
 extern void do_cmd_knowledge_kills(void);
 extern void ghost_challenge(void);
-extern void desc_art_fake(int a_idx);
 extern void apply_magic_fake(object_type* o_ptr);
 extern void do_cmd_knowledge(void);
 extern void add_random_curse(object_type *o_ptr);
@@ -261,7 +241,6 @@ extern errr get_mon_num_prep(void);
 extern s16b get_mon_num(
     int level, bool special, bool allow_non_smart, bool vault);
 extern void lore_probe_aux(int r_idx);
-extern void lore_treasure(int m_idx, int num_item);
 extern void listen_hint_new_player_turn(void);
 extern bool listen_hint_overlay(int m_idx, byte* a, char* c);
 extern s16b monster_carry(int m_idx, object_type* j_ptr);
@@ -355,7 +334,6 @@ extern bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
 extern void move_cursor(int row, int col);
 extern void msg_debug(cptr fmt, ...);
-extern void message_format(u16b message_type, s16b extra, cptr fmt, ...);
 extern void text_out_to_file(byte attr, cptr str);
 extern int get_menu_choice(s16b max, char* prompt);
 extern void pause_line(int row);
@@ -386,12 +364,10 @@ extern cptr get_ext_color_name(byte ext_color);
 extern byte object_display_color(const object_type* o_ptr, byte base_color);
 
 /* xtra2.c */
-extern bool turin_resist_bad_effect(void);
 extern bool set_blind(int v);
 extern bool allow_player_confusion(monster_type* m_ptr);
 extern bool set_confused(int v);
 extern bool set_poisoned(int v);
-extern bool allow_player_fear(monster_type* m_ptr);
 extern bool set_afraid(int v);
 extern bool allow_player_entrancement(monster_type* m_ptr);
 extern bool set_entranced(int v);

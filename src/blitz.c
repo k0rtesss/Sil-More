@@ -3,7 +3,6 @@
 #include "app/app-ui.h"
 
 #include "blitz.h"
-#include "externs.h"
 #include "fs/path.h"
 #include "log/log.h"
 #include "metarun.h"

@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "externs.h"
 #include "reliability-checks.h"
 
 /*

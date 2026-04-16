@@ -1,6 +1,5 @@
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "sdl-main-internal.h"

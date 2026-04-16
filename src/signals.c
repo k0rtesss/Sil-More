@@ -2,7 +2,6 @@
 
 #include "angband.h"
 #include "signals.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-frame.h"
 #include "runtime/runtime-game.h"

@@ -5,7 +5,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "mem/alloc.h"
 #include "object/object-ui-select.h"

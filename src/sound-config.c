@@ -3,7 +3,6 @@
 #include <SDL3/SDL.h>
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
 #include "cJSON.h"

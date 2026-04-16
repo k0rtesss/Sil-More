@@ -1,5 +1,4 @@
 #include "angband.h"
-#include "externs.h"
 
 s16b macro__num;
 cptr* macro__pat;

@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 
 /*
  * Global array for looping through the "keypad directions".

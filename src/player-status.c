@@ -14,7 +14,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 
 /*

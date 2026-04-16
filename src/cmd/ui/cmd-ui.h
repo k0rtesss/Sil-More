@@ -40,6 +40,7 @@ void do_cmd_ability_screen(void);
 void do_cmd_note(char* note, int what_depth);
 void do_cmd_knowledge_notes(void);
 void do_cmd_knowledge_browser_page(int page);
+void desc_art_fake(int a_idx);
 bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 
 #endif /* INCLUDED_CMD_UI_H */
