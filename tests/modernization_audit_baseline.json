@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 4 modernization audit baseline after the fourth folder-normalization batch, including the targeting/object-family moves and the tightened root holdout allowlist."
+    "notes": "Wave 4 modernization audit baseline after the sixth folder-normalization batch, including the files/variable deletion slice, the runtime/fs/ui ownership split, and the tightened remaining root holdout allowlist."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -30,8 +30,6 @@
     "root_src_c_allowlist": [
       "src/cJSON.c",
       "src/dungeon.c",
-      "src/files.c",
-      "src/init2.c",
       "src/main-sdl.c",
       "src/main.c",
       "src/pane.c",
@@ -49,10 +47,7 @@
       "src/sdl-story-font.c",
       "src/sdl-touch.c",
       "src/sdl-ui-style.c",
-      "src/sound-config.c",
-      "src/variable.c",
-      "src/wizard1.c",
-      "src/wizard2.c"
+      "src/sound-config.c"
     ],
     "source_files_missing_from_cmake_allowlist": [],
     "folder_rule_allowlist": [],
@@ -77,6 +72,17 @@
         "allowed_globs": [
           "src/cmd/world/cmd-interact*.c",
           "src/cmd/world/cmd-interact*.h"
+        ]
+      },
+      {
+        "key": "wizard_debug_family",
+        "match_globs": [
+          "src/**/wizard1.c",
+          "src/**/wizard2.c"
+        ],
+        "allowed_globs": [
+          "src/cmd/debug/wizard1.c",
+          "src/cmd/debug/wizard2.c"
         ]
       },
       {
@@ -117,6 +123,31 @@
           "src/fs/io_sdl*.c",
           "src/fs/io_sdl*.h"
         ]
+      },
+      {
+        "key": "fs_file_family",
+        "match_globs": [
+          "src/**/file.c",
+          "src/**/file.h"
+        ],
+        "allowed_globs": [
+          "src/fs/file.c",
+          "src/fs/file.h"
+        ]
+      },
+      {
+        "key": "legacy_files_monolith",
+        "match_globs": [
+          "src/**/files.c"
+        ],
+        "allowed_globs": []
+      },
+      {
+        "key": "legacy_variable_monolith",
+        "match_globs": [
+          "src/**/variable.c"
+        ],
+        "allowed_globs": []
       },
       {
         "key": "text_output_family",
@@ -233,6 +264,17 @@
         ]
       },
       {
+        "key": "ui_character_dump_family",
+        "match_globs": [
+          "src/**/ui-character-dump.c",
+          "src/**/ui-character-dump.h"
+        ],
+        "allowed_globs": [
+          "src/ui/ui-character-dump.c",
+          "src/ui/ui-character-dump.h"
+        ]
+      },
+      {
         "key": "item_set_family",
         "match_globs": [
           "src/**/item_set.c",
@@ -254,17 +296,6 @@
           "src/object/supplies.c",
           "src/supplies.h",
           "src/object/supplies.h"
-        ]
-      },
-      {
-        "key": "squelch_family",
-        "match_globs": [
-          "src/**/squelch.c",
-          "src/**/squelch.h"
-        ],
-        "allowed_globs": [
-          "src/object/squelch.c",
-          "src/object/squelch.h"
         ]
       },
       {
@@ -298,6 +329,15 @@
         "allowed_globs": [
           "src/runtime/*.c",
           "src/runtime/*.h"
+        ]
+      },
+      {
+        "key": "init2_family",
+        "match_globs": [
+          "src/**/init2.c"
+        ],
+        "allowed_globs": [
+          "src/init/init2.c"
         ]
       },
       {
@@ -551,32 +591,33 @@
         "externs_header_lines": {
           "label": "externs.h line count",
           "files": 1,
-          "value": 265,
+          "value": 262,
           "notes": "Tracks the transitional umbrella header size. The finish-line target is under 400 lines.",
           "file_matches": {
-            "src/externs.h": 265
+            "src/externs.h": 262
           }
         },
         "extern_declarations": {
           "label": "extern declarations in externs.h",
           "files": 1,
-          "value": 98,
+          "value": 96,
           "notes": "Tracks how much runtime ownership still lives in the compatibility umbrella header.",
           "file_matches": {
-            "src/externs.h": 98
+            "src/externs.h": 96
           }
         },
         "extern_include_sites": {
           "label": "direct #include \"externs.h\" sites",
-          "files": 25,
-          "value": 25,
+          "files": 23,
+          "value": 23,
           "notes": "Tracks the direct include fan-out of the compatibility header.",
           "file_matches": {
             "src/app/app-scene-birth.c": 1,
             "src/cave/cave.c": 1,
+            "src/cmd/debug/wizard1.c": 1,
+            "src/cmd/debug/wizard2.c": 1,
             "src/cmd/ui/cmd-ui-info.c": 1,
             "src/dungeon.c": 1,
-            "src/files.c": 1,
             "src/fs/load.c": 1,
             "src/fs/save.c": 1,
             "src/level-generation/level-generation-connectivity.c": 1,
@@ -593,31 +634,24 @@
             "src/score/score_ui.c": 1,
             "src/sdl-main-internal.h": 1,
             "src/sdl-sound.c": 1,
-            "src/spell/spell-projection.c": 1,
-            "src/variable.c": 1,
-            "src/wizard1.c": 1,
-            "src/wizard2.c": 1
+            "src/spell/spell-projection.c": 1
           }
         },
         "variable_source_lines": {
           "label": "variable.c line count",
-          "files": 1,
-          "value": 102,
+          "files": 0,
+          "value": 0,
           "notes": "Tracks the remaining size of the global runtime ownership bucket.",
-          "file_matches": {
-            "src/variable.c": 102
-          }
+          "file_matches": {}
         },
         "root_src_c_files": {
           "label": "root-level src/*.c files",
-          "files": 25,
-          "value": 25,
+          "files": 20,
+          "value": 20,
           "notes": "Tracks root implementation file count to ensure the root source bucket stops growing.",
           "file_matches": {
             "src/cJSON.c": 1,
             "src/dungeon.c": 1,
-            "src/files.c": 1,
-            "src/init2.c": 1,
             "src/main-sdl.c": 1,
             "src/main.c": 1,
             "src/pane.c": 1,
@@ -635,10 +669,7 @@
             "src/sdl-story-font.c": 1,
             "src/sdl-touch.c": 1,
             "src/sdl-ui-style.c": 1,
-            "src/sound-config.c": 1,
-            "src/variable.c": 1,
-            "src/wizard1.c": 1,
-            "src/wizard2.c": 1
+            "src/sound-config.c": 1
           }
         },
         "root_src_h_files": {

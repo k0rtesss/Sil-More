@@ -142,12 +142,11 @@ set(SIL_MORE_SOURCES_CORE
     src/cave/cave-map-ui.c
     src/cJSON.c
     src/dungeon.c
-    src/variable.c
-    src/wizard1.c
-    src/wizard2.c
 )
 
 set(SIL_MORE_SOURCES_CMD
+    src/cmd/debug/wizard1.c
+    src/cmd/debug/wizard2.c
     src/cmd/combat/cmd-combat-rolls.c
     src/cmd/combat/cmd-combat.c
     src/cmd/combat/cmd-ranged.c
@@ -185,6 +184,7 @@ set(SIL_MORE_SOURCES_CMD
 set(SIL_MORE_SOURCES_INIT
     src/init/init-info.c
     src/init/init-flags.c
+    src/init/init2.c
     src/init/init-object-bonuses.c
     src/init/init-parse-limits.c
     src/init/init-parse-partition.c
@@ -207,7 +207,6 @@ set(SIL_MORE_SOURCES_INIT
     src/init/init-parse-flavor.c
     src/init/init-parse-effects.c
     src/init/init-parse-quests.c
-    src/init2.c
 )
 
 set(SIL_MORE_SOURCES_LEVEL_GENERATION
@@ -253,7 +252,6 @@ set(SIL_MORE_SOURCES_OBJECT
     src/object/object-ui-select.c
     src/object/object-use.c
     src/object/object-util.c
-    src/object/squelch.c
     src/object/supplies.c
 )
 
@@ -333,6 +331,7 @@ set(SIL_MORE_SOURCES_SCORE
 )
 
 set(SIL_MORE_SOURCES_FS
+    src/fs/file.c
     src/fs/load.c
     src/fs/resource.c
     src/fs/save.c
@@ -342,7 +341,9 @@ set(SIL_MORE_SOURCES_FS
 set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/blitz.c
     src/runtime/runtime-cli.c
+    src/runtime/runtime-exit.c
     src/runtime/runtime-game.c
+    src/runtime/runtime-state.c
 )
 
 set(SIL_MORE_SOURCES_APP_BOUNDARY
@@ -362,9 +363,9 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
 )
 
 set(SIL_MORE_SOURCES_FRONTEND
-    src/files.c
     src/ui/targeting.c
     src/ui/colors.c
+    src/ui/ui-character-dump.c
     src/ui/ui-character-screen.c
     src/ui/ui-death.c
     src/ui/ui-file-viewer.c
@@ -517,14 +518,17 @@ target_link_libraries(sil-core PUBLIC sil-build-config log)
 if (SIL_STRICT_WARNINGS)
   add_library(sil-phase01-strict-gate OBJECT
     src/drop/drop-system-difficulty.c
-    src/files.c
+    src/fs/file.c
     src/fs/load.c
-    src/init2.c
+    src/init/init2.c
     src/metarun/metarun.c
-    src/support/reliability-checks.c
+    src/runtime/runtime-exit.c
     src/runtime/runtime-game.c
+    src/runtime/runtime-state.c
     src/score/score_io.c
+    src/support/reliability-checks.c
     src/support/util.c
+    src/ui/ui-character-dump.c
   )
   target_link_libraries(sil-phase01-strict-gate PRIVATE
     sil-build-config

@@ -290,7 +290,7 @@ cptr option_text[OPT_MAX] = {
     "birth_tulkas_blunt", /* OPT_birth_tulkas_blunt */
     "birth_torchlight", /* OPT_birth_torchlight */
     NULL, /* xxx birth_force_small_lev */
-    NULL, /* xxx birth_retain_squelch */
+    NULL, /* xxx reserved legacy option slot */
     NULL, /* xxx birth_no_quests*/
     NULL, /* xxx birth_no_player ghosts*/
     NULL, /* xxx birth_no_store_services*/
@@ -354,7 +354,7 @@ cptr option_text[OPT_MAX] = {
     "adult_tulkas_blunt", /* OPT_adult_tulkas_blunt */
     "adult_torchlight", /* OPT_adult_torchlight */
     NULL, /* xxx adult_force_small_lev*/
-    NULL, /* xxx adult_retain_squelch */
+    NULL, /* xxx reserved legacy option slot */
     NULL, /* xxx adult_no_quests*/
     NULL, /* xxx adult_no_player ghosts*/
     NULL, /* xxx adult_no_store_services*/
@@ -535,7 +535,7 @@ cptr option_desc[OPT_MAX] = {
     "Varda's challenge: torches only", /* OPT_birth_torchlight */
     NULL, /* xxx birth_take_notes */
     NULL, /* xxx birth_force_small_lev */
-    NULL, /* xxx birth_retain_squelch*/
+    NULL, /* xxx reserved legacy option slot */
     NULL, /* xxx birth_no_quests*/
     NULL, /* xxx birth_no_player ghosts*/
     NULL, /* xxx birth_no_store_services*/
@@ -598,7 +598,7 @@ cptr option_desc[OPT_MAX] = {
     "Tulkas' challenge: blunt weapons only", /* OPT_adult_tulkas_blunt */
     "Varda's challenge: torches only", /* OPT_adult_torchlight */
     NULL, /* xxx adult_force_small_lev */
-    NULL, /* xxx adult_retain_squelch*/
+    NULL, /* xxx reserved legacy option slot */
     NULL, /* xxx adult_no_quests*/
     NULL, /* xxx adult_no_player ghosts*/
     NULL, /* xxx adult_no_store_services*/
@@ -796,7 +796,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_birth_tulkas_blunt */
     false, /* OPT_birth_torchlight */
     false, /* xxx birth_force_small_lev */
-    false, /* xxx birth_retain_squelch */
+    false, /* xxx reserved legacy option slot */
     false, /* xxx OPT_birth_no_quests*/
     false, /* xxx birth_no_player ghosts*/
     false, /* xxx birth_no_store_services*/
@@ -860,7 +860,7 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_adult_tulkas_blunt */
     false, /* OPT_adult_torchlight */
     false, /* xxx adult_force_small_lev*/
-    false, /* xxx adult_retain_squelch */
+    false, /* xxx reserved legacy option slot */
     false, /* xxx OPT_adult_no_quests */
     false, /* xxx adult_no_player ghosts */
     false, /* xxx adult_no_store_services */

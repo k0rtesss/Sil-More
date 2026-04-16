@@ -8,12 +8,12 @@
 | 1 | Highscore I/O rewrite | ✅ Done | `highscore_add()` and `open_scores_file_versioned()` use SDL IO streams + flush behavior (see `session_notes.md:374-512`). |
 | 2 | Remove `USE_SDL` shims | ✅ Done | All conditional compilation stripped; `src/main.c` now assumes SDL everywhere and build scripts no longer pass `-DUSE_SDL/-DUSE_GCU`. |
 | 3 | C17 modernization | ⚙️ In progress | Formatting/log glue complete (`format.c`), but filesystem helpers still return `errr` and use legacy error codes. |
-| 4 | Filesystem breakout | ⚙️ In progress | SDL-backed `fs/io_sdl.c` + `fs/path.c` land; remaining callers in `init1.c`, `init2.c`, `squelch.c` still need migration. |
+| 4 | Filesystem breakout | ⚙️ In progress | SDL-backed `fs/io_sdl.c` + `fs/path.c` land; remaining callers in `init1.c` and `init2.c` still need migration. |
 | 5 | Regression testing | ⚙️ Rolling | SDL3 build + smoke runs executed after each phase; need focused dumps/spoiler verification once file helpers settle. |
 
 ### Next Implementation Targets
-1. **Stage S7 (in progress):** With `path_parse()`, `path_build()`, `path_temp()`, and the `fd_*` helpers now returning `bool`, audit the remaining loaders (`init1.c`, `init2.c` follow-ups, `squelch.c`, metarun maintenance) to use the new error contract.  
-2. **Stage S7:** Finish the Phase 4 sweep by moving the remaining bespoke file walkers out of `init1.c`, `init2.c`, and `squelch.c` onto `fs/*`.  
+1. **Stage S7 (in progress):** With `path_parse()`, `path_build()`, `path_temp()`, and the `fd_*` helpers now returning `bool`, audit the remaining loaders (`init1.c`, `init2.c` follow-ups, metarun maintenance) to use the new error contract.  
+2. **Stage S7:** Finish the Phase 4 sweep by moving the remaining bespoke file walkers out of `init1.c` and `init2.c` onto `fs/*`.  
 3. **Stage S9 prep:** Re-test character dumps, spoilers, and metarun backups after the filesystem changes; capture evidence in `session_notes.md`.  
 4. Track the terminal (`z-term`) refactor separately—keep that file stable until the dedicated plan lands.
 
@@ -48,7 +48,7 @@
 - [x] SDL I/O + path helpers live under `src/fs/`.  
 - [x] `util.c` trimmed down to gameplay utilities.  
 - [ ] `init1.c`/`init2.c`: still contain ad-hoc file walkers—migrate to `fs/*`.  
-- [ ] `squelch.c` + any lingering dump generators: ensure they use the new helpers.  
+- [ ] Any lingering dump generators: ensure they use the new helpers.  
 - [ ] Remove final dependencies on proprietary `errr`/`fd_*` patterns once above migrations finish.
 
 ## Phase 5 – Testing Matrix

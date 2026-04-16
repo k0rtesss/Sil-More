@@ -295,59 +295,6 @@ static const grouper group_artefact[] = { { TV_SWORD, "Blades" },
     { 0, NULL } };
 
 /*
- * Hack -- Create a "forged" artefact
- */
-bool make_fake_artefact(object_type* o_ptr, byte name1)
-{
-    int i;
-
-    artefact_type* a_ptr = &a_info[name1];
-
-    /* Ignore "empty" artefacts */
-    if (a_ptr->tval + a_ptr->sval == 0)
-        return false;
-
-    /* Get the "kind" index */
-    i = lookup_kind(a_ptr->tval, a_ptr->sval);
-
-    /* Oops */
-    if (!i)
-        return (false);
-
-    /* Create the artefact */
-    object_prep(o_ptr, i);
-
-    /* Save the name */
-    o_ptr->name1 = name1;
-
-    /* Extract the fields */
-    o_ptr->pval = a_ptr->pval;
-    o_ptr->att = a_ptr->att;
-    o_ptr->dd = a_ptr->dd;
-    o_ptr->ds = a_ptr->ds;
-    o_ptr->evn = a_ptr->evn;
-    o_ptr->pd = a_ptr->pd;
-    o_ptr->ps = a_ptr->ps;
-    o_ptr->weight = a_ptr->weight;
-
-    // add the abilities
-    for (i = 0; i < a_ptr->abilities; i++)
-    {
-        o_ptr->skilltype[i + o_ptr->abilities] = a_ptr->skilltype[i];
-        o_ptr->abilitynum[i + o_ptr->abilities] = a_ptr->abilitynum[i];
-        o_ptr->bane_type[i + o_ptr->abilities] = a_ptr->bane_type[i];
-    }
-    o_ptr->abilities += a_ptr->abilities;
-
-    /* Hack -- extract the "cursed" flag */
-    if (a_ptr->flags3 & (TR3_LIGHT_CURSE | TR3_HEAVY_CURSE | TR3_PERMA_CURSE))
-        o_ptr->ident |= (IDENT_CURSED);
-
-    /* Success */
-    return (true);
-}
-
-/*
  * Create a spoiler file for artefacts
  */
 static void spoil_artefact(cptr fname)

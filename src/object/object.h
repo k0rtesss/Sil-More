@@ -96,6 +96,4 @@ int object_stack_limit(const object_type* o_ptr);
 bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
     cptr prompt, bool overlay_dungeon);
 void reorder_pack(bool display_message);
-void rearrange_stack(int y, int x);
-
 #endif /* INCLUDED_OBJECT_OBJECT_H */

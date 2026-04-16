@@ -888,28 +888,6 @@ quantity_done:
     return (amt);
 }
 
-/*
- * Hack - duplication of get_check prompt to give option of setting destroyed
- * option to squelch.
- */
-int get_check_other(cptr prompt, char other)
-{
-    bool prompt_scene_supported = prompt_menu_scene_supported();
-
-    /* Paranoia XXX XXX XXX */
-    message_flush();
-
-    if (prompt_scene_supported)
-    {
-        int scene_result = prompt_menu_scene_run_confirm(prompt,
-            "Y confirms, N declines.", false, other);
-
-        if (scene_result >= 0)
-            return scene_result;
-    }
-
-    return 0;
-}
 
 /*
  * Verify something with the user

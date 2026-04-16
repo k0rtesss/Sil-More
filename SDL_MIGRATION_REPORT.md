@@ -81,7 +81,6 @@ These old FILE* functions are still in util.c but should be deleted:
 Some files still call deprecated functions:
 - `init1.c` - uses fd_* functions for parsing game data files
 - `init2.c` - partially migrated
-- `squelch.c` - may use old file functions
 
 ## Phase 2: Next Steps
 
@@ -97,7 +96,6 @@ Some files still call deprecated functions:
 3. **Migrate Remaining Files**
    - Update init1.c to use sdl_* functions
    - Complete init2.c migration
-   - Check squelch.c
 
 4. **Modern C17 Improvements**
    - Replace `errr` with `bool` where appropriate

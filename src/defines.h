@@ -1556,41 +1556,8 @@
 
 #define SV_CHEST_PRESENT 4
 
-/*Squelch Modes for k_info->squelch*/
-
-#define SQUELCH_NEVER 0 /*allow pickup, but defer to OPT_always_pickup*/
-#define NO_SQUELCH_NEVER_PICKUP 1 /*never pickup, override OPT_always_pickup*/
-#define NO_SQUELCH_ALWAYS_PICKUP                                               \
-    2 /*always pickup, override pickup and floor query options*/
-#define SQUELCH_ALWAYS 3 /*destroy when player walks over*/
-#define SQUELCH_HEAD 0
-#define SQUELCH_TAIL 3
-
-/*
- * These are the various levels of quality squelching supported by the game.
- * Less concisely:
- * 0 ---> No squelching
- * 1 ---> Squelch cursed items
- * 2 ---> Squelch average and worse items
- * 3 ---> Squelch good and worse items
- * 4 ---> squelch all but artefacts
- * 5 ---> squelch open chests
- */
-
-#define SQUELCH_NONE 0
-#define SQUELCH_CURSED 1
-#define SQUELCH_AVERAGE 2
-#define SQUELCH_GOOD_STRONG 3
-#define SQUELCH_GOOD_WEAK 4
-#define SQUELCH_ALL 5
-#define SQUELCH_OPENED_CHESTS 6 /*chests*/
-
-/*others are defines in squelch.c, static int do_qual_squelch,
- *but this one is used in chest opening. JG*/
-#define CHEST_INDEX 20
-
-/*number of bytes used in squelch sub-quality array*/
-#define SQUELCH_BYTES 24
+/* Number of retired item-quality filter bytes kept in savefiles. */
+#define LEGACY_ITEM_QUALITY_BYTES 24
 
 /*
  * Special "sval" value -- unknown "sval"
@@ -2852,7 +2819,7 @@
 // xxx adult_no_stacking
 // xxx adult_take_notes
 // xxx adult_force_small_lev
-// xxx adult_retain_squelch
+// xxx reserved legacy option slot
 // xxx adult_no_quests
 // xxx OPT_adult_no_player_ghosts
 // xxx OPT_adult_no_store_services
@@ -3011,7 +2978,7 @@
 #define birth_fixed_exp op_ptr->opt[OPT_birth_fixed_exp]
 #define birth_tulkas_blunt op_ptr->opt[OPT_birth_tulkas_blunt]
 #define birth_torchlight op_ptr->opt[OPT_birth_torchlight]
-// xxx birth_retain_squelch
+// xxx reserved legacy option slot
 // xxx birth_no_quests
 // xxx birth_no_player ghosts
 // xxx birth_no_store_services
@@ -3054,7 +3021,7 @@
 // xxx adult_no_stacking
 // xxx adult_take_notes
 // xxx adult_force_small_lev
-// xxx adult_retain_squelch
+// xxx reserved legacy option slot
 // xxx adult_no_quests
 // xxx adult_no_player_ghosts
 // xxx adult_no_store_services
@@ -3065,7 +3032,7 @@
 
 // xxx hp_changes_color
 // xxx verify_leave_quest
-// xxx mark_squelch_items
+// xxx reserved legacy option slot
 #define score_peek op_ptr->opt[OPT_score_peek]
 #define score_hear op_ptr->opt[OPT_score_hear]
 #define score_room op_ptr->opt[OPT_score_room]
@@ -3820,13 +3787,6 @@
  * Number of shades, including the shade 0 (base colors)
  */
 #define MAX_SHADES 8
-
-/*
- * Legacy item-filter result codes retained for compatibility.
- */
-#define SQUELCH_FAILED -1
-#define SQUELCH_NO 0
-#define SQUELCH_YES 1
 
 /*
  * Flags for the Oath skill

@@ -1612,11 +1612,10 @@ static errr rd_extra(void)
         strip_bytes(10);
     }
 
-    /* Read item-quality squelch sub-menu */
-    for (i = 0; i < SQUELCH_BYTES; i++)
+    /* Discard legacy item-quality filter bytes. */
+    for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)
     {
         rd_byte(&tmp8u);
-        squelch_level[i] = SQUELCH_NONE;
     }
 
     /* Load the name of the current greater vault */
@@ -1625,7 +1624,7 @@ static errr rd_extra(void)
     /* Read the number of saved special item types */
     rd_u16b(&file_e_max);
 
-    /* Read special item squelch settings */
+    /* Read legacy special-item visibility flags. */
     for (i = 0; i < z_info->e_max; i++)
     {
         ego_item_type* e_ptr = &e_info[i];
@@ -1637,7 +1636,6 @@ static errr rd_extra(void)
 
         e_ptr->everseen |= (tmp8u & 0x02);
         e_ptr->aware |= (tmp8u & 0x04);
-        e_ptr->squelch = false;
     }
 
     /* Read possible extra elements */
@@ -3018,8 +3016,6 @@ static errr rd_dungeon(void)
             /* Link the floor to the object */
             cave_o_idx[obj_y][obj_x] = o_idx;
 
-            /* Rearrange stack if needed */
-            rearrange_stack(obj_y, obj_x);
         }
     }
     if (load_expect_stream_ok("dungeon objects"))
@@ -3449,7 +3445,6 @@ static errr rd_savefile_new_aux(void)
         k_ptr->everseen = (memory_flags & 0x08) ? true : false;
 
         rd_byte(&tmp8u);
-        k_ptr->squelch = SQUELCH_NEVER;
     }
     if (load_expect_stream_ok("object memory"))
         return (-1);

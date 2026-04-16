@@ -82,7 +82,7 @@ typedef struct app_ui_scene app_ui_scene;
 #include "ui/ui-status.h"
 // extern FILE *log_file;
 
-/* variable.c */
+/* Transitional globals */
 extern s16b image_count;
 extern bool shimmer_objects;
 extern const cptr angband_sound_name[MSG_MAX];
@@ -103,8 +103,6 @@ extern bool (*get_mon_num_hook)(int r_idx);
 extern bool (*get_obj_num_hook)(int k_idx);
 extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
-extern byte squelch_level[SQUELCH_BYTES];
-
 /*
  * Automatically generated "function declarations"
  */
@@ -191,7 +189,7 @@ extern void pseudo_id_everything(void);
 extern void id_everything(void);
 extern void death_spectator_view(void);
 
-/* files.c */
+/* Runtime compatibility declarations */
 extern void safe_setuid_drop(void);
 extern void safe_setuid_grab(void);
 extern void do_cmd_escape(int);
@@ -249,7 +247,6 @@ extern void do_cmd_wiz_unhide(int d);
 extern void do_cmd_spoilers(void);
 
 #endif /* ALLOW_SPOILERS */
-extern bool make_fake_artefact(object_type* o_ptr, byte name1);
 
 // Metarun.c
 

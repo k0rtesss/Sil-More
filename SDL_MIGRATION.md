@@ -61,9 +61,6 @@ Added comprehensive SDL-based file I/O API:
    - Replace `fprintf()` with `SDL_IOprintf()`
    - Replace `ferror()` checks
 
-7. **squelch.c** - Auto-inscription
-   - Simple FILE* to SDL_IOStream conversion
-
 8. **sdl-config.c** - JSON config files
    - Replace `fopen/fclose/fread` with SDL functions
 
@@ -177,7 +174,6 @@ build-cmake.bat
 - [ ] Migrate load.c
 - [ ] Migrate metarun.c
 - [ ] Migrate wizard1.c
-- [ ] Migrate squelch.c
 - [ ] Migrate sdl-config.c
 - [ ] Migrate main-sdl.c
 - [ ] Delete deprecated functions

@@ -2052,6 +2052,6 @@ int do_ident_item(int item, object_type* o_ptr)
         msg_format("On the ground: %s.", o_name);
     }
 
-    return (SQUELCH_NO);
+    return 0;
 }
 

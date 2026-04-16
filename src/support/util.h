@@ -26,7 +26,6 @@ bool message_topline_snapshot(char* out_text, size_t out_text_size,
     byte* out_color, u16b* out_type, bool* out_more_pending);
 bool prompt_text_input(cptr prompt, cptr detail, char* buf, size_t len,
     bool allow_randomize);
-int get_check_other(cptr prompt, char other);
 bool get_check(cptr prompt);
 bool get_check_oath_multiline(cptr prompt);
 s16b get_quantity(cptr prompt, int max);

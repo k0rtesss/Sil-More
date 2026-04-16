@@ -77,9 +77,6 @@ s16b floor_carry(int y, int x, object_type* j_ptr)
         /* Link the floor to the object */
         cave_o_idx[y][x] = o_idx;
 
-        /* Rearrange to reflect squelching */
-        rearrange_stack(y, x);
-
         /* Notice */
         note_spot(y, x);
 

@@ -166,6 +166,14 @@ def metric_extern_include_sites(_: dict, texts: dict[str, str]) -> MetricResult:
 
 def metric_variable_source_lines(_: dict, __: dict[str, str]) -> MetricResult:
     path = REPO_ROOT / "src" / "variable.c"
+    if not path.is_file():
+        return MetricResult(
+            label="variable.c line count",
+            files=0,
+            value=0,
+            notes="Tracks the remaining size of the global runtime ownership bucket.",
+            file_matches={},
+        )
     value = count_lines(path)
     return metric_for_single_file(
         "src/variable.c",

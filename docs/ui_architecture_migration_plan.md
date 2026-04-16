@@ -546,8 +546,8 @@ Status:
     (LIST_SELECTION, CONFIRM, INFORMATIONAL_PAUSE)
   - `dungeon.c`: Morgoth's hall confirmation wrapped with CONFIRM wait scope;
     story intro and blitz unlock prompts wrapped with INFORMATIONAL_PAUSE
-  - `squelch.c`, `files.c`, `wizard1.c`: remaining gameplay-coupled `inkey()`
-    calls wrapped with appropriate wait-reason scopes
+  - `files.c`, `wizard1.c`: remaining gameplay-coupled `inkey()` calls
+    wrapped with appropriate wait-reason scopes
   - `obj-info.c`, `cave.c`, `blitz.c`: informational pause `inkey()` calls
     wrapped with INFORMATIONAL_PAUSE wait scopes
 - the SDL dungeon scene renders interaction overlays from snapshot data, so

@@ -21,7 +21,7 @@ This document now focuses solely on the remaining modernization work (Stages S7-
 _Stage S8 (terminal abstraction + SDL panes) now lives in `SDL_CLEANUP_PLAN.md` so we can finish S7 and S9 before touching the rendering stack again._
 
 ### Stage S7 - Filesystem breakout & utility split (In progress)
-1. **Honor the bool-returning filesystem contract everywhere.** (Done) `cmd4.c:8568-8688`, `wizard1.c:143-230`, `metarun.c:835-1282`, and `squelch.c:236-340` now log failures and bail whenever `path_build()`/`path_temp()` or `sdl_fopen()` fails, preventing partially written files.
+1. **Honor the bool-returning filesystem contract everywhere.** (Done) `cmd4.c:8568-8688`, `wizard1.c:143-230`, `metarun.c:835-1282`, and the retired autoinscription utility now log failures and bail whenever `path_build()`/`path_temp()` or `sdl_fopen()` fails, preventing partially written files.
 2. **Consolidate filesystem helpers under `src/fs/`.** (Done) Dumping/spoiler/metarun files include `fs/io_sdl.h` and `fs/path.h` directly (`src/cmd4.c:12-20`, `src/wizard1.c:12-18`, `src/metarun.c:10-21`), so no TU relies on transitive `util.h` exports.
 3. **Split `util.c` by responsibility.** (In progress) The color tables (`src/ui/colors.c:7-31`) and `init_logger()` (`src/log/bootstrap.c:15-110`) were split out, but the story-font overlay (`src/util.c:2553-2974`) still lives in util-land and needs a dedicated `ui/story_font.c`.
 4. **Remove duplicate string helpers from `z-util`.** (Done) The inline helpers in `src/angband.h:85-122` are now the sole implementations and `z-util.*` has been deleted.

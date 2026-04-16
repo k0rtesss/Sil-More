@@ -81,6 +81,45 @@
 // Useful 'sign' function
 #define sign(x) ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 
+bool make_fake_artefact(object_type* o_ptr, byte name1)
+{
+    int i;
+
+    artefact_type* a_ptr = &a_info[name1];
+
+    if (a_ptr->tval + a_ptr->sval == 0)
+        return false;
+
+    i = lookup_kind(a_ptr->tval, a_ptr->sval);
+    if (!i)
+        return false;
+
+    object_prep(o_ptr, i);
+
+    o_ptr->name1 = name1;
+    o_ptr->pval = a_ptr->pval;
+    o_ptr->att = a_ptr->att;
+    o_ptr->dd = a_ptr->dd;
+    o_ptr->ds = a_ptr->ds;
+    o_ptr->evn = a_ptr->evn;
+    o_ptr->pd = a_ptr->pd;
+    o_ptr->ps = a_ptr->ps;
+    o_ptr->weight = a_ptr->weight;
+
+    for (i = 0; i < a_ptr->abilities; i++)
+    {
+        o_ptr->skilltype[i + o_ptr->abilities] = a_ptr->skilltype[i];
+        o_ptr->abilitynum[i + o_ptr->abilities] = a_ptr->abilitynum[i];
+        o_ptr->bane_type[i + o_ptr->abilities] = a_ptr->bane_type[i];
+    }
+    o_ptr->abilities += a_ptr->abilities;
+
+    if (a_ptr->flags3 & (TR3_LIGHT_CURSE | TR3_HEAVY_CURSE | TR3_PERMA_CURSE))
+        o_ptr->ident |= (IDENT_CURSED);
+
+    return true;
+}
+
 /*
  * Table of frequency of each ability for each type.
  * Notice the total values in each row are not consitstent.

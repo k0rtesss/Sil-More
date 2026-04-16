@@ -731,7 +731,7 @@ static void wr_xtra(int k_idx)
 
     wr_byte(tmp8u);
 
-    /* Legacy squelch byte retained for save compatibility. */
+    /* Legacy item-filter byte retained for save compatibility. */
     wr_byte(0);
 }
 
@@ -1028,8 +1028,8 @@ static void wr_extra(void)
     wr_u32b(0L);
     wr_u32b(0L);
 
-    /* Save item-quality squelch sub-menu */
-    for (i = 0; i < SQUELCH_BYTES; i++)
+    /* Preserve the retired item-quality filter section. */
+    for (i = 0; i < LEGACY_ITEM_QUALITY_BYTES; i++)
         wr_byte(0);
 
     /* Store the name of the current greater vault */
@@ -1038,7 +1038,7 @@ static void wr_extra(void)
     /* Save the current number of special item types */
     wr_u16b(z_info->e_max);
 
-    /* Save special item squelch settings */
+    /* Save legacy special-item visibility flags. */
     for (i = 0; i < z_info->e_max; i++)
     {
         ego_item_type* e_ptr = &e_info[i];

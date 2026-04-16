@@ -44,6 +44,8 @@ byte flow_center_x[MAX_FLOWS];
 byte update_center_y[MAX_FLOWS];
 byte update_center_x[MAX_FLOWS];
 s16b wandering_pause[MAX_FLOWS];
+s16b image_count;
+bool shimmer_objects;
 
 bool player_suppresses_unseen_grid_info(void)
 {

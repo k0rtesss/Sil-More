@@ -14,6 +14,7 @@ alloc_entry* alloc_ego_table;
 s16b alloc_race_size;
 alloc_entry* alloc_race_table;
 
+s16b object_level;
 byte object_generation_mode;
 
 /*

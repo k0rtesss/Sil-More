@@ -1,30 +1,7 @@
-/* File: variable.c */
-
-/*
- * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
- *
- * This software may be copied and distributed for educational, research,
- * and not for profit purposes provided that this copyright and statement
- * are included in all such copies.  Other copyrights may also apply.
- */
-
 #include "angband.h"
-#include "externs.h"
-#include "h-basic.h"
-#include "init.h"
 
-/*
- * Remaining transitional globals that do not yet have a better ownership
- * module in this pass.
- */
 bool use_sound;
-s16b image_count;
-s16b object_level;
-bool shimmer_objects;
 
-/*
- * Standard sound (and message) names
- */
 const cptr angband_sound_name[MSG_MAX] = {
     "",
     "hit",
