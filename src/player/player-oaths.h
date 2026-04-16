@@ -6,6 +6,7 @@
 extern char* oath_name[];
 
 bool oath_invalid(int oath_id);
+void apply_oath_breaking_curse(int oath_id);
 bool chosen_oath(int oath_id);
 char* oath_confirmation_prompt(int oath_id);
 char* oath_curse_message(int oath_id);

@@ -1,7 +1,6 @@
 /* File: player/player-song-duels.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/player-song-duels.h"
 
 #define SONG_DUEL_STACK_LIMIT 3

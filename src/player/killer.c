@@ -1,7 +1,6 @@
 #include "player/killer.h"
 
 #include "angband.h"
-#include "externs.h"
 #include "score/score_guid.h"
 
 static killer_info pending_info;

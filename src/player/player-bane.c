@@ -1,7 +1,6 @@
 /* File: player/player-bane.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "player/player-bane.h"
 

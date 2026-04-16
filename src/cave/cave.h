@@ -79,5 +79,6 @@ void styles_set_loaded_level_primary(int sidx);
 int styles_get_choice_capacity(void);
 void styles_copy_level_door_choices(byte* out_buf, int max_n);
 void styles_load_level_door_choices(const byte* in_buf, int n);
+void disturb(int stop_stealth, int unused_flag);
 
 #endif /* INCLUDED_CAVE_CAVE_H */

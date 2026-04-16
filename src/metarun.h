@@ -343,6 +343,7 @@ void choose_difficulty_level(void);   /* Difficulty selection menu    */
 u32b curse_flag_mask(void);            /* bitmask of active flags      */
 int  curse_flag_count_rhf(u32b rhf_flag);  /* #curses with RHF bit  */
 int  curse_flag_count_cur(u32b cur_flag);  /* #curses with CUR bit  */
+int  curse_flag_delta_cur(u32b cur_flag);  /* signed stack delta for CUR bit */
 int  any_curse_flag_active(u32b flag);     /* CUR-only helper      */
 void metarun_clear_blessing_runtime_fields(metarun *m); /* Reset runtime blessing fields */
 void metarun_sanitize_blessing_economy(metarun *m);     /* Clamp blessing totals */

@@ -1,7 +1,6 @@
 /* File: encumbrance.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/encumbrance.h"
 
 

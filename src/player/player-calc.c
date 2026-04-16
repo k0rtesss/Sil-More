@@ -1,7 +1,6 @@
 /* File: player/player-calc.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "item_set.h"
 #include "log/log.h"

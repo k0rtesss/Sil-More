@@ -1,7 +1,6 @@
 /* File: player/player-oaths.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "player/player-oaths.h"
 

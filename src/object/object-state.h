@@ -15,6 +15,7 @@ extern alloc_entry* alloc_ego_table;
 extern s16b alloc_race_size;
 extern alloc_entry* alloc_race_table;
 
+extern s16b object_level;
 extern byte object_generation_mode;
 
 #endif /* INCLUDED_OBJECT_OBJECT_STATE_H */

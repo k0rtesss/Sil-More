@@ -1,7 +1,6 @@
 /* File: weapon_stats.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/weapon_stats.h"
 
 

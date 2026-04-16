@@ -1,7 +1,6 @@
 /* File: player/player-song-effects.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "log/log.h"
 #include "player/identification.h"
 #include "player/player-song-effects.h"

@@ -1,7 +1,6 @@
 /* File: player/player-abilities.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "player/player-abilities.h"
 

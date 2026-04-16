@@ -109,7 +109,7 @@
 #define PANEL_WID (use_bigtile ? 16 : PANEL_WID_FIXED)
 
 #define ROW_MAP 1
-#define COL_MAP (g_hide_left_panel ? 0 : 13)
+#define COL_MAP (ui_left_panel_hidden() ? 0 : 13)
 
 /*
  * Number of grids in each screen (vertically)

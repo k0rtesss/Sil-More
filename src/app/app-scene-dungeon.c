@@ -1841,7 +1841,7 @@ static bool app_build_chrome_ui_scene(app_dungeon_overlay_snapshot* overlay)
     app_ui_scene_init(&overlay->chrome_scene);
     app_build_top_strip_ui_panel(&overlay->chrome_scene);
     app_build_left_rail_ui_panel(&overlay->chrome_scene, &live,
-        g_hide_left_panel ? true : false);
+        ui_left_panel_hidden());
     app_build_bottom_strip_ui_panel(&overlay->chrome_scene, &live);
     return true;
 }

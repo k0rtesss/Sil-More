@@ -926,6 +926,11 @@ bool get_sdl_hide_left_panel(void)
     return g_hide_left_panel;
 }
 
+bool ui_left_panel_hidden(void)
+{
+    return g_hide_left_panel;
+}
+
 void set_sdl_hide_left_panel(bool value)
 {
     g_hide_left_panel = value;

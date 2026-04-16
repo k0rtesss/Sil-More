@@ -1,7 +1,6 @@
 /* File: ability_log.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/ability_log.h"
 
 

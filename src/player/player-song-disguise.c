@@ -1,7 +1,6 @@
 /* File: player/player-song-disguise.c */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/player-song-disguise.h"
 
 bool song_disguise_active = false;

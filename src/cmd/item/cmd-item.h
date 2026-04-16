@@ -9,4 +9,9 @@
 
 #include "h-basic.h"
 
+typedef struct object_type object_type;
+
+void do_cmd_wield(object_type* default_o_ptr, int default_item);
+void do_cmd_takeoff(object_type* default_o_ptr, int default_item);
+
 #endif /* INCLUDED_CMD_ITEM_H */

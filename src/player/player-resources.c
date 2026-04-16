@@ -1,7 +1,6 @@
 /* File: player/player-resources.c */
 
 #include "angband.h"
-#include "externs.h"
 
 #include "player/player-resources.h"
 
