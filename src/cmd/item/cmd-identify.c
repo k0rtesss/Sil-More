@@ -97,9 +97,6 @@ extern void ident(object_type* o_ptr)
     object_aware(o_ptr);
     object_known(o_ptr);
 
-    /* Apply an autoinscription, if necessary */
-    apply_autoinscription(o_ptr);
-
     /* Recalculate bonuses */
     p_ptr->update |= (PU_BONUS);
 
@@ -1313,10 +1310,6 @@ void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
             object_aware(o_ptr);
             object_known(o_ptr);
 
-            /* Apply an autoinscription, if necessary */
-            apply_autoinscription(i_ptr);
-            apply_autoinscription(o_ptr);
-
             /* Recalculate bonuses */
             p_ptr->update |= (PU_BONUS);
 
@@ -1350,9 +1343,6 @@ void ident_bow_arrow_by_use(object_type* j_ptr, object_type* i_ptr,
             /* Identify the bow */
             object_aware(j_ptr);
             object_known(j_ptr);
-
-            /* Apply an autoinscription, if necessary */
-            apply_autoinscription(j_ptr);
 
             /* Recalculate bonuses */
             p_ptr->update |= (PU_BONUS);

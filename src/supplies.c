@@ -512,7 +512,6 @@ static void supplies_apply_auto_identification(object_type* obj)
     if (player_auto_identifies_object(obj))
     {
         ident(obj);
-        apply_autoinscription(obj);
     }
 }
 

@@ -101,8 +101,7 @@ static byte look_object_name_color(const object_type* o_ptr)
     if (weapon_glows(o_ptr))
         return object_display_color(o_ptr, TERM_L_BLUE);
 
-    return object_display_color(o_ptr,
-        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+    return object_display_color(o_ptr, object_default_text_color(o_ptr));
 }
 
 static void append_look_smithing_debug(char* buf, size_t buf_size,

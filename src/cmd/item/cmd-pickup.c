@@ -12,7 +12,6 @@
 #include "app/app-ui.h"
 #include "app/app-session.h"
 #include "platform-frame.h"
-#include "object/object-squelch.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
@@ -218,8 +217,7 @@ static byte pickup_pile_row_attr(const object_type* o_ptr)
     if (weapon_glows(o_ptr))
         return object_display_color(o_ptr, TERM_L_BLUE);
 
-    return object_display_color(o_ptr,
-        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+    return object_display_color(o_ptr, object_default_text_color(o_ptr));
 }
 
 static void pickup_pile_format_weight(char* buf, size_t buf_size,
@@ -1449,9 +1447,6 @@ void py_pickup(void)
 
     object_type* o_ptr;
 
-    /* Automatically destroy squelched items in pile if necessary */
-    do_squelch_pile(py, px);
-
     /* Scan the pile of objects */
     for (this_o_idx = cave_o_idx[py][px]; this_o_idx; this_o_idx = next_o_idx)
     {
@@ -1463,14 +1458,6 @@ void py_pickup(void)
 
         /* Hack -- disturb */
         disturb(0, 0);
-
-        /* End loop if squelched stuff reached */
-        if ((k_info[o_ptr->k_idx].squelch == SQUELCH_ALWAYS)
-            && (k_info[o_ptr->k_idx].aware))
-        {
-            next_o_idx = 0;
-            continue;
-        }
 
         if (object_is_searched_skeleton(o_ptr))
             continue;

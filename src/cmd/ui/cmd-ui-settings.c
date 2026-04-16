@@ -526,29 +526,8 @@ void pref_footer(ang_file* fff, cptr mark)
  */
 void do_cmd_pref_file_hack(int row)
 {
-    char ftmp[80];
-
     (void)row;
-
-    /* Default filename */
-    strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
-
-    /* Ask for a file (or cancel) */
-    if (!settings_ui_prompt_string("Pref File",
-            "Enter the pref file name to load.", "", ftmp, sizeof(ftmp)))
-        return;
-
-    /* Process the given filename */
-    if (process_pref_file(ftmp))
-    {
-        /* Mention failure */
-        msg_format("Failed to load '%s'!", ftmp);
-    }
-    else
-    {
-        /* Mention success */
-        msg_format("Loaded '%s'.", ftmp);
-    }
+    msg_print("Legacy pref files are no longer supported.");
 }
 
 void clear_skills_and_abilities()
@@ -2173,7 +2152,7 @@ static int other_options_menu(int* highlight)
 {
     bool death_view = death_spectator_active();
     const settings_choice_entry entries[] = {
-        { 1, 'm', "m) Set Colours", false },
+        { 1, 'm', "m) Choose Palette", false },
         { 2, 'n', "n) Write a note", false },
         { 3, 's', "s) Suicide", death_view },
         { 4, 'o', "o) Return to Options", false },

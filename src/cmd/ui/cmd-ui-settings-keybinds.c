@@ -20,7 +20,7 @@
 static int macros_menu(int* highlight)
 {
     const settings_choice_entry entries[] = {
-        { 1, '1', "1) Load a user pref file", false },
+        { 1, '1', "1) Legacy pref files removed", false },
 #ifdef ALLOW_MACROS
         { 2, '2', "2) Append macros to a file", false },
         { 3, '3', "3) Query a macro", false },

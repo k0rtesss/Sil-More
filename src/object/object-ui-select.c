@@ -161,8 +161,7 @@ static byte item_selector_row_attr(const object_type* o_ptr, bool empty_slot)
     if (weapon_glows(o_ptr))
         return object_display_color(o_ptr, TERM_L_BLUE);
 
-    return object_display_color(o_ptr,
-        tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+    return object_display_color(o_ptr, object_default_text_color(o_ptr));
 }
 
 static void item_selector_add_tabs(app_ui_panel* panel, int current_mode,

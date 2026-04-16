@@ -975,7 +975,7 @@ void display_character_tutorial(void)
             controls[ctl_n++] = (ctl_line){ "m", "Main menu" };
             controls[ctl_n++] = (ctl_line){ "Tab", "Abilities" };
             controls[ctl_n++] = (ctl_line){ "?", "Help" };
-            controls[ctl_n++] = (ctl_line){ NULL, "Shortcuts can be changed in user prefs." };
+            controls[ctl_n++] = (ctl_line){ NULL, "Shortcuts can be changed in Settings." };
         }
 
         if (steamdeck)

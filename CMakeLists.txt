@@ -352,7 +352,6 @@ set(SIL_MORE_SOURCES_SCORE
 )
 
 set(SIL_MORE_SOURCES_FS
-    src/fs/pref-files.c
     src/fs/pref-time.c
     src/fs/savefile-name.c
 )

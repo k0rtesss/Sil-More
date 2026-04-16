@@ -20,7 +20,7 @@
 static int visuals_menu(int* highlight)
 {
     const settings_choice_entry entries[] = {
-        { 1, '1', "1) Load a user pref file", false },
+        { 1, '1', "1) Legacy pref files removed", false },
 #ifdef ALLOW_VISUALS
         { 2, '2', "2) Dump monster attr/chars", false },
         { 3, '3', "3) Dump object attr/chars", false },
@@ -41,15 +41,40 @@ static int visuals_menu(int* highlight)
 static int colors_menu(int* highlight)
 {
     const settings_choice_entry entries[] = {
-        { 1, '1', "1) Load a user pref file", false },
+        { 1, '1', "1) Palette presets are in Settings", false },
 #ifdef ALLOW_COLORS
-        { 2, '2', "2) Dump colors", false },
-        { 3, '3', "3) Modify colors", false },
+        { 2, '2', "2) Dump colors (removed)", false },
+        { 3, '3', "3) Modify colors (removed)", false },
 #endif
     };
 
     return settings_choice_menu("Interact with Colors", entries,
         (int)N_ELEMENTS(entries), highlight, 0);
+}
+
+static int palette_presets_menu(int* highlight)
+{
+    settings_choice_entry entries[UI_COLOR_PRESET_MAX + 1];
+    char labels[UI_COLOR_PRESET_MAX][96];
+    int entry_count = 0;
+
+    for (int i = 0; i < ui_colors_palette_preset_count()
+        && entry_count < UI_COLOR_PRESET_MAX; i++)
+    {
+        char hotkey = (i < 9) ? (char)('1' + i) : (char)('a' + (i - 9));
+
+        strnfmt(labels[entry_count], sizeof(labels[entry_count]), "%c) %s",
+            hotkey, ui_colors_palette_preset_label(i));
+        entries[entry_count] = (settings_choice_entry){ entry_count + 1,
+            hotkey, labels[entry_count], false };
+        entry_count++;
+    }
+
+    if (entry_count <= 0)
+        return 0;
+
+    return settings_choice_menu("Palette Presets", entries, entry_count,
+        highlight, 0);
 }
 
 /*
@@ -1215,130 +1240,57 @@ static void modify_colors(void)
  */
 void do_cmd_colors(void)
 {
-    int choice = 0;
     int highlight = 1;
-    int i;
-    ang_file* fff;
-    char buf[1024];
+    int choice;
+    cptr current = ui_colors_current_palette_preset();
+    cptr config_label = settings_sdl_config_path();
+    cptr preset_id;
 
-    /* File type is "TEXT" */
-    FILE_TYPE(FILE_TYPE_TEXT);
-
-    /* Interact until done */
-    while (1)
+    if (ui_colors_palette_preset_count() <= 0)
+        ui_colors_load_palette_presets();
+    if (ui_colors_palette_preset_count() <= 0)
     {
-        choice = colors_menu(&highlight);
-        if (choice == 0)
-            break;
-
-        /* Load a user pref file */
-        if (choice == 1)
-        {
-            /* Ask for and load a user pref file */
-            do_cmd_pref_file_hack(8);
-            do_cmd_redraw();
-        }
-
-#ifdef ALLOW_COLORS
-
-        /* Dump colors */
-        else if (choice == 2)
-        {
-            static cptr mark = "Colors";
-            char ftmp[80];
-
-            /* Default filename */
-            strnfmt(ftmp, sizeof(ftmp), "%s.prf", op_ptr->base_name);
-
-            /* Get a filename */
-            if (!settings_ui_prompt_string("Interact with Colors",
-                    "Enter the file name for the color dump.", "", ftmp,
-                    sizeof(ftmp)))
-                continue;
-
-            /* Build the filename */
-            if (!path_build(buf, sizeof(buf), ANGBAND_DIR_USER, ftmp))
-            {
-                log_error("dump_colors: failed to build path for '%s'", ftmp);
-                continue;
-            }
-
-            /* Remove old colors */
-            remove_old_dump(buf, mark);
-
-            /* Append to the file */
-            fff = ang_file_open_compat(buf, "a");
-
-            /* Failure */
-            if (!fff)
-                continue;
-
-            /* Output header */
-            pref_header(fff, mark);
-
-            /* Skip some lines */
-            ang_file_printf_compat(fff, "\n\n");
-
-            /* Start dumping */
-            ang_file_printf_compat(fff, "# Color redefinitions\n\n");
-
-            /* Dump colors */
-            for (i = 0; i < 256; i++)
-            {
-                int kv = angband_color_table[i][0];
-                int rv = angband_color_table[i][1];
-                int gv = angband_color_table[i][2];
-                int bv = angband_color_table[i][3];
-
-                cptr name = "unknown";
-
-                /* Skip non-entries */
-                if (!kv && !rv && !gv && !bv)
-                    continue;
-
-                /* Extract the color name */
-                if (i < 16)
-                    name = color_names[i];
-
-                /* Dump a comment */
-                ang_file_printf_compat(fff, "# Color '%s'\n", name);
-
-                /* Dump the monster attr/char info */
-                ang_file_printf_compat(fff,
-                    "V:%d:0x%02X:0x%02X:0x%02X:0x%02X\n\n", i, kv, rv,
-                    gv, bv);
-            }
-
-            /* All done */
-            ang_file_printf_compat(fff, "\n\n\n\n");
-
-            /* Output footer */
-            pref_footer(fff, mark);
-
-            /* Close */
-            (void)ang_file_close_compat(fff);
-
-            /* Message */
-            msg_print("Dumped color redefinitions.");
-        }
-
-        /* Edit colors */
-        else if (choice == 3)
-        {
-            modify_colors();
-        }
-
-#endif /* ALLOW_COLORS */
-
-        /* Unknown option */
-        else
-        {
-            bell("Illegal command for colors!");
-        }
-
-        /* Flush messages */
+        msg_print("No palette presets are available.");
         message_flush();
+        return;
     }
+
+    for (int i = 0; i < ui_colors_palette_preset_count(); i++)
+    {
+        if (current && streq(current, ui_colors_palette_preset_id(i)))
+        {
+            highlight = i + 1;
+            break;
+        }
+    }
+
+    choice = palette_presets_menu(&highlight);
+    if (choice <= 0)
+        return;
+
+    preset_id = ui_colors_palette_preset_id(choice - 1);
+    if (!preset_id || !ui_colors_apply_palette_preset(preset_id))
+    {
+        msg_print("Failed to apply palette preset.");
+        message_flush();
+        return;
+    }
+
+    SDL_strlcpy(config.palette_preset, preset_id, sizeof(config.palette_preset));
+    sdl_sync_palette();
+    platform_frame_react();
+
+    if (save_pane_config_to_json())
+    {
+        msg_format("Palette preset saved to %s",
+            (config_label && config_label[0]) ? config_label : "sil_sdl.json");
+    }
+    else
+    {
+        msg_print("Palette preset changed, but saving the SDL config failed.");
+    }
+
+    message_flush();
 }
 
 

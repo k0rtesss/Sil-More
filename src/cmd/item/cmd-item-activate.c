@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "object/object-ui-select.h"
-#include "object/object-squelch.h"
 #include "object/object-use.h"
 
 static void format_staff_prompt_name(char* buf, size_t max,
@@ -278,8 +277,6 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
 {
     int item;
     bool ident;
-    bool aware;
-    int kind_index;
 
     object_type* o_ptr = NULL;
     int supply_index = supplies_current_action();
@@ -321,10 +318,6 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
     /* Identity not known yet */
     ident = false;
 
-    // Save the k_idx and awareness info
-    kind_index = o_ptr->k_idx;
-    aware = object_aware_p(o_ptr);
-
     /* Eat the food */
     use_object(o_ptr, &ident);
 
@@ -364,25 +357,6 @@ void do_cmd_eat_food(object_type* default_o_ptr, int default_item)
         floor_item_describe(0 - item);
         floor_item_optimize(0 - item);
     }
-
-    // allow autoinscribing of the herb
-    if (!ident && !aware)
-    {
-        if (easter_time())
-        {
-            if (get_check("Autoinscribe this easter egg type? "))
-            {
-                do_cmd_autoinscribe_item(kind_index);
-            }
-        }
-        else
-        {
-            if (get_check("Autoinscribe this herb type? "))
-            {
-                do_cmd_autoinscribe_item(kind_index);
-            }
-        }
-    }
 }
 
 /*
@@ -392,8 +366,6 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
 {
     int item;
     bool ident;
-    bool aware;
-    int kind_index;
     object_type* o_ptr = NULL;
     int supply_index = supplies_current_action();
     bool from_supplies = (supply_index >= 0);
@@ -431,10 +403,6 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
 
     /* Not identified yet */
     ident = false;
-
-    // Save the k_idx and awareness info
-    kind_index = o_ptr->k_idx;
-    aware = object_aware_p(o_ptr);
 
     /* Quaff the potion */
     use_object(o_ptr, &ident);
@@ -474,15 +442,6 @@ void do_cmd_quaff_potion(object_type* default_o_ptr, int default_item)
         floor_item_increase(0 - item, -1);
         floor_item_describe(0 - item);
         floor_item_optimize(0 - item);
-    }
-
-    // allow autoinscribing of the potion
-    if (!ident && !aware)
-    {
-        if (get_check("Autoinscribe this potion type? "))
-        {
-            do_cmd_autoinscribe_item(kind_index);
-        }
     }
 }
 

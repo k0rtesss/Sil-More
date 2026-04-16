@@ -27,6 +27,7 @@ struct sdl_config {
     bool enable_bottom_panes;
     bool hide_left_panel;
     int min_terminal_mode;
+    char palette_preset[UI_COLOR_PRESET_ID_LEN];
     
     // Window position and size for windowed mode
     int window_x;

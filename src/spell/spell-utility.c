@@ -1477,8 +1477,7 @@ bool ident_spell(bool include_floor)
     if (!display_unified_identify_menu(include_floor, &item, &o_ptr))
         return false;
 
-    int squelch = do_ident_item(item, o_ptr);
-    do_squelch_item(squelch, item, o_ptr);
+    (void)do_ident_item(item, o_ptr);
 
     return true;
 }
@@ -1647,7 +1646,7 @@ static bool recharge_build_target_ui_scene(app_ui_scene* scene,
         }
 
         attr = highlighted ? TERM_L_BLUE : object_display_color(o_ptr,
-            tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            object_default_text_color(o_ptr));
 
         if (!app_ui_panel_add_row_ex(panel, (s16b)entry->item, attr, attr,
                 object_attr(o_ptr), object_char(o_ptr), true, highlighted, key,
@@ -1928,12 +1927,11 @@ bool item_tester_hook_ordinary_ammo(const object_type* o_ptr)
 }
 
 /*
- * Identifies all objects in the equipment and inventory.
- * Applies quality/special item squelch in the inventory.
+ * Identifies all objects in the equipment, inventory, and supplies.
  */
-void identify_and_squelch_pack(void)
+void identify_pack_contents(void)
 {
-    int item, squelch;
+    int item;
     object_type* o_ptr;
 
     /* Identify equipment */
@@ -1970,18 +1968,9 @@ void identify_and_squelch_pack(void)
             if (object_known_p(o_ptr))
                 break;
 
-            /* Identify it and get the squelch setting */
-            squelch = do_ident_item(item, o_ptr);
-
-            /*
-             * If the object was squelched, keep analyzing
-             * the same slot (the inventory was displaced). -DG-
-             */
-            if (squelch != SQUELCH_YES)
-                break;
-
-            /* Now squelch the object */
-            do_squelch_item(squelch, item, o_ptr);
+            /* Identify it */
+            (void)do_ident_item(item, o_ptr);
+            break;
         }
     }
 
@@ -2008,8 +1997,8 @@ bool mass_identify(int rad)
     /* Cast the ball spell */
     fire_ball(GF_IDENTIFY, 5, 0, 0, -1, rad);
 
-    /* Identify equipment and inventory, apply quality squelch */
-    identify_and_squelch_pack();
+    /* Identify equipment, inventory, and supplies */
+    identify_pack_contents();
 
     /* This spell always works */
     return (true);
@@ -2021,24 +2010,15 @@ bool mass_identify(int rad)
  * ANY negative value assigned to "item" can be used for specifying an object
  * on the floor (they don't have a slot, example: the code used to handle
  * GF_IDENTIFY in project_o).
- * It returns the value returned by squelch_itemp.
- * The object is NOT squelched here.
+ * The return value is retained for compatibility and is always neutral.
  */
 int do_ident_item(int item, object_type* o_ptr)
 {
     char o_name[80];
-    int squelch = SQUELCH_NO;
 
     /* Identify it */
     object_aware(o_ptr);
     object_known(o_ptr);
-
-    /* Apply an autoinscription, if necessary */
-    apply_autoinscription(o_ptr);
-
-    /* Squelch it? */
-    if (item < INVEN_WIELD)
-        squelch = squelch_itemp(o_ptr, 0, true);
 
     /* Recalculate bonuses */
     p_ptr->update |= (PU_BONUS);
@@ -2056,7 +2036,7 @@ int do_ident_item(int item, object_type* o_ptr)
     if (item >= SUPPLIES_INDEX)
     {
         int supply_index = item - SUPPLIES_INDEX;
-        msg_format("In your supplies: %s.  %s", o_name, squelch_to_label(squelch));
+        msg_format("In your supplies: %s.", o_name);
         supplies_refresh_entry(supply_index);
     }
     else if (item >= INVEN_WIELD)
@@ -2066,14 +2046,13 @@ int do_ident_item(int item, object_type* o_ptr)
     }
     else if (item >= 0)
     {
-        msg_format("In your pack: %s (%c).  %s", o_name, index_to_label(item),
-            squelch_to_label(squelch));
+        msg_format("In your pack: %s (%c).", o_name, index_to_label(item));
     }
     else
     {
-        msg_format("On the ground: %s.  %s", o_name, squelch_to_label(squelch));
+        msg_format("On the ground: %s.", o_name);
     }
 
-    return (squelch);
+    return (SQUELCH_NO);
 }
 

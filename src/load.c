@@ -1396,6 +1396,7 @@ static errr rd_extra(void)
     int i, j;
 
     byte tmp8u;
+    u16b tmp16u;
     u16b file_e_max;
 
     log_debug("rd_extra: begin (byte_ofs=%u)", (unsigned)load_byte_offset);
@@ -1613,7 +1614,10 @@ static errr rd_extra(void)
 
     /* Read item-quality squelch sub-menu */
     for (i = 0; i < SQUELCH_BYTES; i++)
-        rd_byte(&squelch_level[i]);
+    {
+        rd_byte(&tmp8u);
+        squelch_level[i] = SQUELCH_NONE;
+    }
 
     /* Load the name of the current greater vault */
     rd_string(g_vault_name, sizeof(g_vault_name));
@@ -1631,13 +1635,9 @@ static errr rd_extra(void)
         if (i < file_e_max)
             rd_byte(&tmp8u);
 
-        e_ptr->squelch |= (tmp8u & 0x01);
         e_ptr->everseen |= (tmp8u & 0x02);
         e_ptr->aware |= (tmp8u & 0x04);
-
-        /* Hack - Repair the savefile */
-        if (!e_ptr->everseen)
-            e_ptr->squelch = false;
+        e_ptr->squelch = false;
     }
 
     /* Read possible extra elements */
@@ -1647,19 +1647,15 @@ static errr rd_extra(void)
         i++;
     }
 
-    /*Write the current number of auto-inscriptions*/
-    rd_u16b(&inscriptionsCount);
-
-    /*Write the autoinscriptions array*/
-    for (i = 0; i < inscriptionsCount; i++)
+    /* Autoinscriptions were removed; read and discard any legacy data. */
+    rd_u16b(&tmp16u);
+    for (i = 0; i < tmp16u; i++)
     {
+        s16b kind_idx;
         char tmp[80];
 
-        rd_s16b(&inscriptions[i].kindIdx);
-
-        rd_string(tmp, 80);
-
-        inscriptions[i].inscriptionIdx = quark_add(tmp);
+        rd_s16b(&kind_idx);
+        rd_string(tmp, sizeof(tmp));
     }
 
     for (i = 0; i < MAX_GREATER_VAULTS; i++)
@@ -3452,7 +3448,8 @@ static errr rd_savefile_new_aux(void)
         k_ptr->tried = (memory_flags & 0x02) ? true : false;
         k_ptr->everseen = (memory_flags & 0x08) ? true : false;
 
-        rd_byte(&k_ptr->squelch);
+        rd_byte(&tmp8u);
+        k_ptr->squelch = SQUELCH_NEVER;
     }
     if (load_expect_stream_ok("object memory"))
         return (-1);

@@ -1410,9 +1410,6 @@ s16b inven_carry(object_type* o_ptr, bool combine_ammo)
     /* Use that slot */
     i = j;
 
-    /* Apply an autoinscription */
-    apply_autoinscription(o_ptr);
-
     /* Reset the pickup flag */
     o_ptr->pickup = false;
     o_ptr->pickup_slot = -1;

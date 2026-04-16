@@ -84,15 +84,11 @@ void check_pack_overflow(void);
 s16b inven_takeoff(int item, int amt);
 void inven_enforce_current_pack_limits(void);
 void combine_pack(void);
-void autoinscribe_ground(void);
-void autoinscribe_pack(void);
 void inven_drop(int item, int amt);
 int object_stack_limit(const object_type* o_ptr);
 bool build_object_kind_recall_ui_scene(app_ui_scene* scene, int k_idx,
     cptr prompt, bool overlay_dungeon);
 void reorder_pack(bool display_message);
-int apply_autoinscription(object_type* o_ptr);
 void rearrange_stack(int y, int x);
-void obliterate_autoinscription(s16b kind);
 
 #endif /* INCLUDED_OBJECT_OBJECT_H */

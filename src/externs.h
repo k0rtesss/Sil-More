@@ -29,7 +29,6 @@
 #include "cmd/ui/cmd-ui.h"
 #include "cmd/world/cmd-world.h"
 #include "cmd/world/cmd-interact-chest.h"
-#include "fs/pref-files.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
 #include "game-event.h"
@@ -40,7 +39,6 @@
 #include "monster/monster.h"
 #include "monster/monster-state.h"
 #include "object/object.h"
-#include "object/object-squelch.h"
 #include "object/object-state.h"
 #include "object/object-slot.h"
 #include "object/object-ui-select.h"
@@ -110,8 +108,7 @@ extern bool (*get_mon_num_hook)(int r_idx);
 extern bool (*get_obj_num_hook)(int k_idx);
 extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
-extern autoinscription* inscriptions;
-extern u16b inscriptionsCount;
+extern byte squelch_level[SQUELCH_BYTES];
 
 #ifndef GENERATION_DEPTH_HELPERS_DEFINED
 #define GENERATION_DEPTH_HELPERS_DEFINED
@@ -249,8 +246,6 @@ extern int meta_fill(bool);
 extern void init_file_paths(char* path);
 extern void display_introduction(void);
 extern void init_angband(void);
-extern void autoinscribe_clean(void);
-extern void autoinscribe_init(void);
 extern void re_init_some_things(void);
 extern NavResult initial_menu(bool *start_new);
 extern void cleanup_angband(void);
@@ -338,11 +333,6 @@ extern bool can_be_randart(const object_type* o_ptr);
 
 /* save.c */
 extern bool save_player(void);
-
-/* squelch.c */
-extern void do_cmd_squelch_autoinsc(void);
-extern int squelch_itemp(object_type* o_ptr, byte feeling, bool fullid);
-extern int do_squelch_item(int squelch, int item, object_type* o_ptr);
 
 /*use-obj.c*/
 /* util.c */

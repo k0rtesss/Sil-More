@@ -750,7 +750,7 @@ static void unified_sidebar_format_object_row(
         *base_color = weapon_glows(o_ptr)
             ? object_display_color(o_ptr, TERM_L_BLUE)
             : object_display_color(o_ptr,
-                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+                object_default_text_color(o_ptr));
     }
 
     strnfmt(weight_buf, sizeof(weight_buf), " %d.%1d",

@@ -11,7 +11,6 @@
 #include "angband.h"
 #include "log/log.h"
 #include "metarun.h"
-#include "object/object-squelch.h"
 #include "object/object-ui-enhanced.h"
 #include "object/object-ui-select.h"
 
@@ -122,42 +121,6 @@ void uninscribe(object_type* o_ptr)
     /* Remove the inscription */
     o_ptr->obj_note = 0;
 
-    /*The object kind has an autoinscription*/
-    // Sil-y: removed restriction to known items (through 'object_aware')
-    if (!(k_info[o_ptr->k_idx].flags3 & (TR3_INSTA_ART))
-        && (get_autoinscription_index(o_ptr->k_idx) != -1))
-    {
-        char tmp_val[160];
-        char o_name2[80];
-
-        /*make a fake object so we can give a proper message*/
-        object_type* i_ptr;
-        object_type object_type_body;
-
-        /* Get local object */
-        i_ptr = &object_type_body;
-
-        /* Wipe the object */
-        object_wipe(i_ptr);
-
-        /* Create the object */
-        object_prep(i_ptr, o_ptr->k_idx);
-
-        /*make it plural*/
-        i_ptr->number = 2;
-
-        /*now describe with correct amount*/
-        object_desc(o_name2, sizeof(o_name2), i_ptr, false, 0);
-
-        /* Prompt */
-        strnfmt(tmp_val, sizeof(tmp_val),
-            "Remove automatic inscription for %s? ", o_name2);
-
-        /* Auto-Inscribe if they want that */
-        if (get_check(tmp_val))
-            obliterate_autoinscription(o_ptr->k_idx);
-    }
-
     /* Message */
     msg_print("Inscription removed.");
 
@@ -267,13 +230,6 @@ void do_cmd_inscribe(void)
             "Enter accepts, Esc cancels, Backspace erases.", tmp,
             sizeof(tmp), false))
     {
-        char tmp_val[160];
-        char o_name2[80];
-
-        /*make a fake object so we can give a proper message*/
-        object_type* i_ptr;
-        object_type object_type_body;
-
         // if given an empty inscription, then uninscribe instead
         if (strlen(tmp) == 0)
         {
@@ -283,34 +239,6 @@ void do_cmd_inscribe(void)
 
         /* Save the inscription */
         o_ptr->obj_note = quark_add(tmp);
-
-        /* Add an autoinscription? */
-        // Sil-y: removed restriction to known items (through 'object_aware')
-        if (!(k_info[o_ptr->k_idx].flags3 & (TR3_INSTA_ART)))
-        {
-            /* Get local object */
-            i_ptr = &object_type_body;
-
-            /* Wipe the object */
-            object_wipe(i_ptr);
-
-            /* Create the object */
-            object_prep(i_ptr, o_ptr->k_idx);
-
-            /*make it plural*/
-            i_ptr->number = 2;
-
-            /*now describe with correct amount*/
-            object_desc(o_name2, sizeof(o_name2), i_ptr, false, 0);
-
-            /* Prompt */
-            strnfmt(tmp_val, sizeof(tmp_val),
-                "Automatically inscribe all %s with '%s'? ", o_name2, tmp);
-
-            /* Auto-Inscribe if they want that */
-            if (get_check(tmp_val))
-                add_autoinscription(o_ptr->k_idx, tmp);
-        }
 
         /* Combine the pack */
         p_ptr->notice |= (PN_COMBINE);

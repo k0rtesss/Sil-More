@@ -2153,9 +2153,6 @@ bool target_set_interactive(int mode, int range)
                     apply_magic(
                         i_ptr, p_ptr->depth, false, false, false, false);
 
-                    // apply the autoinscription (if any)
-                    apply_autoinscription(i_ptr);
-
                     if (i_ptr->tval == TV_ARROW)
                         i_ptr->number = 24;
 

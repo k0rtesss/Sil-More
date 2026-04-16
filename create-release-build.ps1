@@ -276,7 +276,7 @@ $manifestText += "- All $($requiredDlls.Count) DLL files must remain in the game
 $manifestText += "- No external dependencies beyond what's included`n"
 $manifestText += "`n"
 $manifestText += "=== CONFIGURATION ===" + "`n"
-$manifestText += "Edit lib/pref/pref.prf to customize game settings`n"
+$manifestText += "Choose a palette preset and other settings in-game; SDL settings are saved to sil_sdl.json`n"
 $manifestText += "`n"
 
 $manifestText | Set-Content "$OutputFolder/MANIFEST.txt"

@@ -1,8 +1,0 @@
-T:&x#:CSA:control-:shift-:alt-
-
-# SDL still loads the trigger template above for the legacy macro editor and
-# query UI.
-#
-# Directional movement defaults no longer ship as macro text in this file.
-# Keyboard movement, run, interact, wait, and rest bindings now come from the
-# structured movement settings stored in sil_sdl.json.

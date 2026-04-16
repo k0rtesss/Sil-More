@@ -14,6 +14,7 @@ typedef struct object_type object_type;
 
 byte object_attr_graphics_override(const object_type* o_ptr, byte base_attr);
 char object_char_graphics_override(const object_type* o_ptr, char base_char);
+byte object_default_text_color(const object_type* o_ptr);
 byte object_display_color(const object_type* o_ptr, byte base_color);
 bool object_is_unidentified_for_display(const object_type* o_ptr);
 void inventory_menu_set_include_equip(bool include);

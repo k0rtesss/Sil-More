@@ -576,8 +576,6 @@ static bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
         /* Mass-identify */
         case GF_IDENTIFY:
         {
-            int squelch;
-
             /* Ignore hidden objects */
             if (!o_ptr->marked)
                 continue;
@@ -586,16 +584,12 @@ static bool project_o(int who, int y, int x, int dd, int ds, int dif, int typ)
             if (object_known_p(o_ptr))
                 continue;
 
-            /* Identify object and get squelch setting */
+            /* Identify object */
             /* Note the first argument */
-            squelch = do_ident_item(-1, o_ptr);
+            (void)do_ident_item(-1, o_ptr);
 
             /* Redraw purple dots */
             dungeon_mark_map_for_redraw();
-
-            /* Squelch? */
-            if (squelch == SQUELCH_YES)
-                do_kill = true;
 
             break;
         }

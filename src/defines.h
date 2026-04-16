@@ -3823,7 +3823,7 @@
 #define MAX_SHADES 8
 
 /*
- * These are the return values of squelch_itemp()
+ * Legacy item-filter result codes retained for compatibility.
  */
 #define SQUELCH_FAILED -1
 #define SQUELCH_NO 0

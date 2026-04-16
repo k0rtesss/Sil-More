@@ -34,23 +34,6 @@ static int welcome_screen_current_intro_style(void);
 static void welcome_prompt_label(int binding, const char* fallback,
     char* buf, size_t buflen);
 
-void autoinscribe_clean(void)
-{
-    if (inscriptions)
-    {
-        mem_free_null(inscriptions);
-    }
-
-    inscriptions = 0;
-    inscriptionsCount = 0;
-}
-
-void autoinscribe_init(void)
-{
-    autoinscribe_clean();
-    inscriptions = mem_alloc_array(AUTOINSCRIPTIONS_MAX, autoinscription);
-}
-
 /*
  * Reinitialize some things between games
  *
@@ -74,9 +57,6 @@ void re_init_some_things(void)
     playerturn = 0;
     min_depth_counter = 0;
     op_ptr->full_name[0] = '\0';
-
-    autoinscribe_clean();
-    autoinscribe_init();
 
     display_introduction();
 
@@ -163,7 +143,6 @@ static errr init_other(void)
     int i;
 
     (void)quarks_init();
-    (void)autoinscribe_init();
     (void)messages_init();
 
     view_g = mem_alloc_array(VIEW_MAX, u16b);
@@ -932,8 +911,7 @@ void init_angband(void)
     if (init_alloc())
         quit("Cannot initialize alloc stuff");
 
-    note("[Loading basic user pref file...]");
-    (void)process_pref_file("pref.prf");
+    note("[Initializing display defaults...]");
 
     note("[Initializing Random Artefact Tables...]");
     if (init_n_info())
@@ -1026,8 +1004,6 @@ void cleanup_angband(void)
     mem_free_null(alloc_kind_table);
 
     mem_free_null(inventory);
-
-    autoinscribe_clean();
 
     mem_free_null(l_list);
     mem_free_null(mon_list);

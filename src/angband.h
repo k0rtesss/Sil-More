@@ -51,7 +51,6 @@
 #include "cmd/item/cmd-item.h"
 #include "cmd/movement/cmd-movement.h"
 #include "cmd/ui/cmd-ui.h"
-#include "fs/pref-files.h"
 #include "fs/pref-time.h"
 #include "fs/savefile-name.h"
 #include "game-event.h"

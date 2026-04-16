@@ -2324,7 +2324,7 @@ static bool screen_out_head(const object_type* o_ptr)
     }
     else
     {
-        base_color = tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)];
+        base_color = object_default_text_color(o_ptr);
     }
     
     /* Apply artifact/shade coloring using the same function as inventory */

@@ -78,7 +78,7 @@ extern char* skeleton_note_text;
 
 extern byte misc_to_attr[256];
 extern char misc_to_char[256];
-extern byte tval_to_attr[128];
+void refresh_effect_visuals_for_graphics_mode(void);
 
 extern runtype_type* runtype_info;
 

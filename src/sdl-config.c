@@ -1357,6 +1357,13 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             log_warn("tiles not found or not a boolean");
         }
 
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "palettePreset");
+        if (cJSON_IsString(item) && item->valuestring && item->valuestring[0]) {
+            SDL_strlcpy(config->palette_preset, item->valuestring,
+                sizeof(config->palette_preset));
+            log_debug("Loaded palettePreset: %s", config->palette_preset);
+        }
+
         item = cJSON_GetObjectItemCaseSensitive(sdl, "enableRightPanes");
         if (cJSON_IsBool(item)) {
             config->enable_right_panes = cJSON_IsTrue(item);
@@ -1818,6 +1825,8 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     cJSON_AddNumberToObject(sdl, "margin", config->margin);
     cJSON_AddBoolToObject(sdl, "fullscreen", config->fullscreen);
     cJSON_AddBoolToObject(sdl, "tiles", config->tiles);
+    cJSON_AddStringToObject(sdl, "palettePreset",
+        (config->palette_preset[0]) ? config->palette_preset : "classic");
     cJSON_AddBoolToObject(sdl, "enableRightPanes", config->enable_right_panes);
     cJSON_AddBoolToObject(sdl, "enableBottomPanes", config->enable_bottom_panes);
     cJSON_AddBoolToObject(sdl, "hideLeftPanel", config->hide_left_panel);
@@ -2142,6 +2151,8 @@ void sdl_config_set_defaults(struct sdl_config* config)
     config->margin = 4;
     config->fullscreen = true;
     config->tiles = true;
+    SDL_strlcpy(config->palette_preset, "classic",
+        sizeof(config->palette_preset));
     config->enable_right_panes = true;
     config->enable_bottom_panes = true;
     config->hide_left_panel = false;

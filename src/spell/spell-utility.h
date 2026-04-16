@@ -45,7 +45,7 @@ bool item_tester_hook_ordinary_ammo(const object_type* o_ptr);
 int do_ident_item(int item, object_type* o_ptr);
 bool ident_spell(bool include_floor);
 bool recharge(int num);
-void identify_and_squelch_pack(void);
+void identify_pack_contents(void);
 bool mass_identify(int rad);
 
 #endif /* INCLUDED_SPELL_UTILITY_H */

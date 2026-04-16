@@ -2349,16 +2349,6 @@ static bool auto_pickup_okay(const object_type* o_ptr)
             return (false);
     }
 
-    /*object is marked to not pickup*/
-    if ((k_info[o_ptr->k_idx].squelch == NO_SQUELCH_NEVER_PICKUP)
-        && object_aware_p(o_ptr))
-        return (false);
-
-    /*object is marked to not pickup*/
-    if ((k_info[o_ptr->k_idx].squelch == NO_SQUELCH_ALWAYS_PICKUP)
-        && object_aware_p(o_ptr))
-        return (true);
-
     /* object has pickup flag set */
     if (o_ptr->pickup)
         return (true);
@@ -4155,22 +4145,7 @@ int p_ptr_depth_proxy(void) { return p_ptr ? p_ptr->depth : 0; }
  */
 static void process_some_user_pref_files(void)
 {
-    char buf[1024];
-
-    /* Process the "user.prf" file */
-    (void)process_pref_file("user.prf");
-
-    /* Process the "user.scb" autoinscriptions file */
-    (void)process_pref_file("user.scb");
-
-    /* Process the "races.prf" file */
-    (void)process_pref_file("races.prf");
-
-    /* Get the "PLAYER.prf" filename */
-    (void)strnfmt(buf, sizeof(buf), "%s.prf", op_ptr->base_name);
-
-    /* Process the "PLAYER.prf" file */
-    (void)process_pref_file(buf);
+    /* Legacy external pref files were removed. */
 }
 
 /*
@@ -4616,12 +4591,6 @@ PlayResult play_game(void)
             return PLAY_QUIT;
         }
         /* NAV_OK falls through */
-
-        // Reset the autoinscriptions
-        autoinscribe_clean();
-        autoinscribe_init();
-
-        log_debug("New character rolled up - autoinscriptions reset");
 
         /* Hack -- enter the world */
         if (!character_loaded) {

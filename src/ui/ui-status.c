@@ -301,12 +301,7 @@ void notice_stuff(void)
         reorder_pack(true);
     }
 
-    if (p_ptr->notice & PN_AUTOINSCRIBE)
-    {
-        p_ptr->notice &= ~(PN_AUTOINSCRIBE);
-        autoinscribe_pack();
-        autoinscribe_ground();
-    }
+    p_ptr->notice &= ~(PN_AUTOINSCRIBE);
 }
 
 /*

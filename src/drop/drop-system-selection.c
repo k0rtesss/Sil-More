@@ -1358,7 +1358,6 @@ static void drop_apply_chosen_entry(const drop_entry* chosen, int depth,
         if (out->number > 48)
             out->number = 48;
     }
-    apply_autoinscription(out);
 }
 
 static bool drop_generate_object_internal(int depth, drop_quality quality,

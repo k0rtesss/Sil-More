@@ -731,10 +731,8 @@ static void wr_xtra(int k_idx)
 
     wr_byte(tmp8u);
 
-    /*write the squelch settings*/
-    tmp8u = k_ptr->squelch;
-
-    wr_byte(tmp8u);
+    /* Legacy squelch byte retained for save compatibility. */
+    wr_byte(0);
 }
 
 /*
@@ -1032,7 +1030,7 @@ static void wr_extra(void)
 
     /* Save item-quality squelch sub-menu */
     for (i = 0; i < SQUELCH_BYTES; i++)
-        wr_byte(squelch_level[i]);
+        wr_byte(0);
 
     /* Store the name of the current greater vault */
     wr_string(g_vault_name);
@@ -1046,8 +1044,6 @@ static void wr_extra(void)
         ego_item_type* e_ptr = &e_info[i];
         byte tmp8u = 0;
 
-        if (e_ptr->squelch)
-            tmp8u |= 0x01;
         if (e_ptr->everseen)
             tmp8u |= 0x02;
         if (e_ptr->aware)
@@ -1056,15 +1052,8 @@ static void wr_extra(void)
         wr_byte(tmp8u);
     }
 
-    /*Write the current number of auto-inscriptions*/
-    wr_u16b(inscriptionsCount);
-
-    /*Write the autoinscriptions array*/
-    for (i = 0; i < inscriptionsCount; i++)
-    {
-        wr_s16b(inscriptions[i].kindIdx);
-        wr_string(quark_str(inscriptions[i].inscriptionIdx));
-    }
+    /* Autoinscriptions were removed; retain an empty section for compatibility. */
+    wr_u16b(0);
 
     // Greater vaults seen
     for (i = 0; i < MAX_GREATER_VAULTS; i++)

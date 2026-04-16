@@ -346,8 +346,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
             entry->color = weapon_glows(o_ptr)
                 ? object_display_color(o_ptr, TERM_L_BLUE)
-                : object_display_color(o_ptr,
-                    tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+                : object_display_color(o_ptr, object_default_text_color(o_ptr));
 
             entry_count++;
         }
@@ -381,8 +380,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
         entry->color = weapon_glows(o_ptr)
             ? object_display_color(o_ptr, TERM_L_BLUE)
-            : object_display_color(o_ptr,
-                tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)]);
+            : object_display_color(o_ptr, object_default_text_color(o_ptr));
 
         entry_count++;
     }
@@ -406,7 +404,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
         entry->color = weapon_glows(o_ptr)
             ? TERM_L_BLUE
-            : tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)];
+            : object_default_text_color(o_ptr);
 
         entry_count++;
     }
@@ -430,7 +428,7 @@ bool display_unified_identify_menu(bool include_floor, int* out_item,
 
         object_desc(entry->desc, sizeof(entry->desc), o_ptr, true, 3);
 
-        entry->color = tval_to_attr[o_ptr->tval % N_ELEMENTS(tval_to_attr)];
+        entry->color = object_default_text_color(o_ptr);
 
         entry_count++;
     }

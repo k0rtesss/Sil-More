@@ -85,7 +85,6 @@ char* skeleton_note_text;
 
 byte misc_to_attr[256];
 char misc_to_char[256];
-byte tval_to_attr[128];
 
 runtype_type* runtype_info = NULL;
 
@@ -953,6 +952,79 @@ errr init_flavor_info(void)
  */
 static header effect_head;
 
+static void effect_visuals_apply(bool ascii_mode)
+{
+    const effect_glyph* glyphs = (const effect_glyph*)effect_head.info_ptr;
+
+    if (!glyphs)
+        return;
+
+    for (int i = 0; i < 256; i++)
+    {
+        byte attr = ascii_mode ? glyphs[i].d_attr : glyphs[i].x_attr;
+        byte ch = ascii_mode ? glyphs[i].d_char : glyphs[i].x_char;
+
+        if (ascii_mode && attr == 0 && ch == 0)
+        {
+            attr = (byte)(i & 0x0F);
+
+            if (i >= 0x30 && i <= 0x3F)
+                ch = (byte)'*';
+            else if (i >= 0x40 && i <= 0x4F)
+                ch = (byte)'|';
+            else if (i >= 0x50 && i <= 0x5F)
+                ch = (byte)'-';
+            else if (i >= 0x60 && i <= 0x6F)
+                ch = (byte)'/';
+            else if (i >= 0x70 && i <= 0x7F)
+                ch = (byte)'\\';
+            else if (i >= 0x00 && i <= 0x09)
+            {
+                attr = TERM_WHITE;
+                ch = (byte)('0' + i);
+            }
+            else if (i == ICON_UNKNOWN_ENEMY)
+            {
+                attr = TERM_WHITE;
+                ch = (byte)'?';
+            }
+            else if (i == ICON_ALERT)
+            {
+                attr = TERM_L_RED;
+                ch = (byte)'!';
+            }
+            else if (i == ICON_GLOW)
+            {
+                attr = TERM_YELLOW;
+                ch = (byte)'*';
+            }
+            else if (i == ICON_MONSTER_SEES_PLAYER)
+            {
+                attr = TERM_L_BLUE;
+                ch = (byte)'!';
+            }
+            else if (i == ICON_SLEEPING)
+            {
+                attr = TERM_SLATE;
+                ch = (byte)'z';
+            }
+            else
+            {
+                attr = TERM_WHITE;
+                ch = (byte)'*';
+            }
+        }
+
+        misc_to_attr[i] = attr;
+        misc_to_char[i] = (char)ch;
+    }
+}
+
+void refresh_effect_visuals_for_graphics_mode(void)
+{
+    effect_visuals_apply(graphics_are_ascii());
+}
+
 errr init_effect_info(void)
 {
     errr err;
@@ -965,16 +1037,8 @@ errr init_effect_info(void)
 
     err = init_info("effect", &effect_head);
 
-    /* Populate the global misc_to_* tables from the loaded raw-backed data */
-    if (!err && effect_head.info_ptr)
-    {
-        const effect_glyph* glyphs = (const effect_glyph*)effect_head.info_ptr;
-        for (int i = 0; i < 256; i++)
-        {
-            misc_to_attr[i] = glyphs[i].a;
-            misc_to_char[i] = (char)glyphs[i].c;
-        }
-    }
+    if (!err)
+        refresh_effect_visuals_for_graphics_mode();
 
     return (err);
 }

@@ -37,7 +37,6 @@ void object_known(object_type* o_ptr)
  */
 void object_aware(object_type* o_ptr)
 {
-    int x, y;
     bool flag = k_info[o_ptr->k_idx].aware;
 
     /* Fully aware of the effects */
@@ -56,21 +55,6 @@ void object_aware(object_type* o_ptr)
         object_desc(o_name, sizeof(o_name), o_ptr, true, 0);
         msg_format("The true virtue of %s is unveiled to you, and 75 experience is won.",
             o_name);
-
-        // remove any autoinscription
-        obliterate_autoinscription(o_ptr->k_idx);
-    }
-
-    /* If newly aware and squelched, must rearrange stacks */
-    if ((!flag) && (k_info[o_ptr->k_idx].squelch == SQUELCH_ALWAYS))
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            for (y = 0; y < p_ptr->cur_map_hgt; y++)
-            {
-                rearrange_stack(y, x);
-            }
-        }
     }
 }
 
