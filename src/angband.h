@@ -87,7 +87,6 @@
 #include "ui/layout.h"
 #include "ui/story_font.h"
 #include "ui/targeting.h"
-#include "ui/ui-character-name.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-death.h"
 #include "ui/ui-file-viewer.h"

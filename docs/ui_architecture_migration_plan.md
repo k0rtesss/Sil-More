@@ -63,8 +63,6 @@ Status date: April 2, 2026.
     `app_session` snapshots and drained event spans
   - `src/sdl-scene-menu.c` renders menus from semantic payloads in logical
     pixels
-  - `src/sdl-scene-information.c` bridges legacy `Term` content for
-    informational screens
   - `src/ui/ui-status.c` still owns `update_stuff()`, `redraw_stuff()`,
     `window_stuff()`, and `handle_stuff()`, and now rebuilds the dungeon
     snapshot after `handle_stuff()`
@@ -183,7 +181,7 @@ Key rule:
 | UI1 | complete | `src/app/app-*.h`, the event buffer, host surface, and `tests/ui1_tests.c` cover the neutral boundary scaffolding. |
 | UI2 | complete for the active runtime | wait reasons, input queues, the SDL legacy-input bridge, and the stepper surface are landed; the remaining blocking loops are consumer-migration work now tracked under `OVER2`-`OVER5` rather than missing driver scaffolding. |
 | UI3 | complete for the current renderer path | `app-scene-dungeon`, snapshot invalidation, message/event hooks, and `ui-status.c` snapshot rebuilds provide the data the SDL scene stack consumes. |
-| UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-information.c` now render from snapshots and drained event spans. |
+| UI4 | complete for the current renderer path | `sdl-scene.c`, `sdl-scene-dungeon.c`, `sdl-scene-bootstrap.c`, and `sdl-scene-menu.c` now render from snapshots and drained event spans. |
 | UI5 | closed as a boundary stage | interaction kinds, wait scopes, and snapshot overlays are in place; the remaining look/target/item cleanup is renderer migration work in `OVER2`-`OVER5`, not missing session primitives. |
 | UI6 | closed as a scene-substrate stage | the scene plumbing is landed, and scene-backed help, quest, run-history, message-recall, and hint-message entry flows no longer emergency-fallback to legacy render on the scene-backed SDL path; remaining hybrids are tracked in `OVER3`-`OVER5`. |
 | UI7 | closed for planning purposes | the build split is live; the remaining semantic cleanup is now best understood as legacy-render removal inside migrated consumers, so it is carried by the overlay track rather than by another UI-stage. |
@@ -299,10 +297,10 @@ Exit when:
 
 Status:
 - complete in the working tree on 2026-03-28
-- `src/app/` contains 12 header/source pairs: `app-session`, `app-input`,
+- `src/app/` contains 11 header/source pairs plus header-only scaffolding such as `app-input` and `app-snapshot`:
   `app-snapshot`, `app-events`, `app-host`, `app-host-bridge`, `app-wire`,
   `app-interaction`, `app-scene-bootstrap`, `app-scene-dungeon`,
-  `app-scene-information`, `app-scene-menu`
+  `app-scene-menu`
 - event buffer (`app-events.c`) is core-owned with explicit capacity and drain
 - host surface (`app-host.h`, `app-host.c`) covers timing, persistence, and
   resource hooks without SDL types
@@ -460,8 +458,8 @@ Exit when:
 
 Status:
 - complete in the working tree on 2026-03-28
-- five SDL scene files: `sdl-scene.c` (coordinator), `sdl-scene-dungeon.c`,
-  `sdl-scene-information.c`, `sdl-scene-menu.c`, `sdl-scene-bootstrap.c`
+- four SDL scene files: `sdl-scene.c` (coordinator), `sdl-scene-dungeon.c`,
+  `sdl-scene-menu.c`, `sdl-scene-bootstrap.c`
 - `sdl-scene-dungeon.c` renders entirely from `app_dungeon_snapshot` blobs;
   no `Term_queue_char` or `Term_putstr` calls in the dungeon scene renderer
 - scene kinds: BOOTSTRAP, DUNGEON, OVERLAY, MENU, INFORMATION
@@ -599,8 +597,7 @@ Status:
   renderer replacement and bridge removal in `OVER3`-`OVER5` rather than
   missing scene plumbing
 - substrate: `ui-information-scene.c` provides `enter`/`leave`/`present`/
-  `present_term`/`wait_key`/`capture_term` API; SDL renders through
-  `sdl-scene-information.c`
+  `present_term`/`wait_key`/`capture_term` API for informational overlays
 - fully migrated: `ui-file-viewer.c` (all rendering and input through
   information scene; no `screen_save`/`screen_load()`/`inkey()` calls remain)
 - scene-backed and authoritative on the snapshot path: `ui-help.c`,
@@ -825,9 +822,9 @@ Current blocker summary:
 - `src/object/object-ui-select.c`, `src/cmd/ui/cmd-ui-look.c`, and much of the
   inventory/equipment family still keep normal-path blocking redraw and input
   ownership
-- `src/sdl-scene-information.c` and `src/ui/ui-information-scene.c` still form
-  a useful bridge for raw-cell parity, but keeping that bridge alive for more
-  overlay families would continue the current ad hoc architecture
+- `src/ui/ui-information-scene.c` still forms a useful bridge for raw-cell
+  parity, but keeping that bridge alive for more overlay families would
+  continue the current ad hoc architecture
 - many modules still branch on `Term->wid` / `Term->hgt` for compact layouts,
   wrapping, prompt rows, and side-panel width
 

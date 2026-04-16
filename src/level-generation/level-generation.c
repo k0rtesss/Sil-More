@@ -539,8 +539,6 @@ static bool cave_gen(void)
     seed_prefab_anchors();
     /* Apply quadrant generation modes - this is now the primary room generation */
     apply_quadrant_generation_modes();
-    /* DISABLED: ensure_partition_connectivity() was creating dead-end corridors.
-     * The corridor system and rescue tunnels handle connectivity instead. */
     /* Repair all outer walls - critical fix for tunnel connectivity after overlapping generation */
     repair_all_outer_walls();
 
@@ -561,95 +559,8 @@ static bool cave_gen(void)
         return false;
     }
 
-    /* Room saturation loop DISABLED - partition system handles room generation
-     * The old approach saturated the map with random rooms which conflicted with
-     * the partition-based generation that already creates themed areas. */
-#if 0
-    /* Build some rooms */
-    int failed_in_row = 0;
-    for (i = 0; i < room_attempts; i++)
-    {
-        int r = dieroll(p_ptr->depth + 5);
-        log_trace("Room generation: depth+5 roll = %d", r);
-
-        if (one_in_(5))
-        {
-            int bonus = dieroll(5);
-            r += bonus;
-            log_trace("Room generation: bonus roll (+%d) = %d total", bonus, r);
-        }
-
-        // choose a room type based on the level (bias toward vaults)
-        if ((r < 4) || one_in_(3))
-        {
-            // standard room
-            log_trace("Room generation: Building standard room (r=%d)", r);
-            if (!room_build(1))
-                failed_in_row++;
-            else
-                failed_in_row = 0;
-        }
-        else if (r < 7)
-        {
-            // cross room
-            log_trace("Room generation: Building cross room (r=%d)", r);
-            if (!room_build(2))
-                failed_in_row++;
-            else
-                failed_in_row = 0;
-        }
-        else if ((r < 14) || one_in_(2))
-        {
-            // interesting room
-            log_trace("Room generation: Building interesting room (r=%d)", r);
-            if (!room_build(6))
-                failed_in_row++;
-            else
-                failed_in_row = 0;
-        }
-        else if (r < 19)
-        {
-            // lesser vault
-            log_trace("Room generation: Building lesser vault (r=%d)", r);
-            if (!room_build(7))
-                failed_in_row++;
-            else
-                failed_in_row = 0;
-        }
-        else
-        {
-            // greater vault
-            log_trace("Room generation: Building greater vault (r=%d)", r);
-            if (!room_build(8))
-                failed_in_row++;
-            else
-                failed_in_row = 0;
-        }
-
-        // stop if there are too many rooms
-        if (dun->cent_n >= room_capacity_limit())
-            break;
-
-        // bail out if we are not making progress to avoid infinite loops
-        if (failed_in_row > 200)
-        {
-            log_trace("Room generation: aborting after %d consecutive failures (cent_n=%d)", failed_in_row, dun->cent_n);
-            break;
-        }
-    }
-#endif
-
     /*set the permanent walls*/
     set_perm_boundry();
-
-    /* Post-partition seeders DISABLED - partition system already handles these
-     * CA blob and BSP slice anchors were duplicating work the partitions do */
-#if 0
-    /* Carve CA blob anchors into remaining granite */
-    seed_ca_blob_anchors();
-    /* Add BSP-slice anchors for rectangular-but-offset caverns */
-    seed_bsp_slice_anchors();
-#endif
 
     /* If generation stalled, force a couple of simple rooms to avoid regen loops */
     ensure_minimum_rooms();
@@ -1444,76 +1355,6 @@ static void gates_gen(void)
     /* Place the player */
     player_place(py, px);
 }
-
-/*
- * Create the level containing Morgoth's throne room
- */
-#if 0
-static void throne_gen(void)
-{
-    int y, x;
-    int i;
-    int py = 0, px = 0;
-
-    // display the throne poetry
-    pause_with_text(throne_poetry, 5, 13, NULL, 0);
-
-    // set the 'truce' in action
-    p_ptr->truce = true;
-
-    /* Restrict to single-screen size */
-    p_ptr->cur_map_hgt = (3 * PANEL_HGT);
-    p_ptr->cur_map_wid = (3 * PANEL_WID_FIXED);
-
-    /*start with basic granite*/
-    basic_granite();
-
-    /*set the permanent walls*/
-    set_perm_boundry();
-
-    build_type9(16, 38, NULL);
-
-    /* Find an up staircase */
-    for (y = 0; y < p_ptr->cur_map_hgt; y++)
-    {
-        for (x = 0; x < p_ptr->cur_map_wid; x++)
-        {
-            // Sil-y: assumes the important staircase is at the centre of the
-            // level
-            if ((cave_feat[y][x] == FEAT_LESS) && (x >= 30) && (x <= 45))
-            {
-                py = y;
-                px = x;
-            }
-        }
-    }
-
-    if ((py == 0) || (px == 0))
-    {
-        msg_format("Failed to find an up staircase in the throne-room");
-    }
-
-    /* Delete any monster on the starting square */
-    for (i = 1; i < mon_max; i++)
-    {
-        monster_type* m_ptr = &mon_list[i];
-
-        /* Paranoia -- Skip dead monsters */
-        if (!m_ptr->r_idx)
-            continue;
-
-        /* Only get the monster on the same square */
-        if ((m_ptr->fy != py) || (m_ptr->fx != px))
-            continue;
-
-        /* Delete the monster */
-        delete_monster_idx(i);
-    }
-
-    /* Place the player */
-    player_place(py, px);
-}
-#endif
 
 /*
  * Spawn Nienna for the Morgoth-hall mercy quest when conditions are met.

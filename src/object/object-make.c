@@ -570,102 +570,12 @@ static bool too_many_artefacts(void)
 
     return (false);
 }
-
-#if 0
-/*
- * Mega-Hack -- Attempt to create one of the "Special Objects".
- *
- * We are only called from "make_object()", and we assume that
- * "apply_magic()" is called immediately after we return.
- *
- * Note -- see "make_artefact()" and "apply_magic()".
- *
- * We *prefer* to create the special artefacts in order, but this is
- * normally outweighed by the "rarity" rolls for those artefacts.
- */
-static bool make_artefact_special(object_type* o_ptr)
-{
-    int i;
-
-    int k_idx;
-
-    int depth_check = ((object_generation_mode) ? object_level : p_ptr->depth);
-
-    /* No artefacts, do nothing */
-    if (adult_no_artefacts)
-        return (false);
-
-    // as more artefacts are generated, the chance for another decreases
-    if (too_many_artefacts())
-        return (false);
-
-    /* Check the special artefacts */
-    for (i = 0; i < z_info->art_spec_max; ++i)
-    {
-        artefact_type* a_ptr = &a_info[i];
-
-        /* Skip "empty" artefacts */
-        if (a_ptr->tval + a_ptr->sval == 0)
-            continue;
-
-        /* Cannot make an artefact twice */
-        if (a_ptr->cur_num)
-            continue;
-
-        /* Cannot make an artefact reserved for Valar quest */
-        if (valar_reserved_artifacts && valar_reserved_artifacts[i])
-            continue;
-
-        /* Enforce minimum "depth" (loosely) */
-        if (a_ptr->level > depth_check)
-        {
-            /* Get the "out-of-depth factor" */
-            int d = (a_ptr->level - depth_check) * 2;
-
-            /* Roll for out-of-depth creation */
-            if (rand_int(d) != 0)
-                continue;
-        }
-
-        /* Artefact "rarity roll" */
-        if (rand_int(a_ptr->rarity) != 0)
-            continue;
-
-        /* Find the base object */
-        k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
-
-        /* Enforce minimum "object" level (loosely) */
-        if (k_info[k_idx].level > depth_check)
-        {
-            /* Get the "out-of-depth factor" */
-            int d = (k_info[k_idx].level - depth_check) * 5;
-
-            /* Roll for out-of-depth creation */
-            if (rand_int(d) != 0)
-                continue;
-        }
-
-        /* Assign the template */
-        object_prep(o_ptr, k_idx);
-
-        /* Mark the item as an artefact */
-        o_ptr->name1 = i;
-
-        /* Success */
-        return (true);
-    }
-
-    /* Failure */
-    return (false);
-}
-#endif
-
 /*
  * Attempt to change an object into an artefact
  *
  * This routine should only be called by "apply_magic()"
  *
- * Note -- see "make_artefact_special()" and "apply_magic()"
+ * Note -- see "apply_magic()"
  */
 static bool make_artefact(object_type* o_ptr, bool allow_insta)
 {

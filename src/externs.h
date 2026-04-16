@@ -69,7 +69,6 @@ typedef struct app_ui_scene app_ui_scene;
 #include "spell/spell.h"
 #include "support/text-output.h"
 #include "support/util.h"
-#include "ui/ui-character-name.h"
 #include "ui/ui-character-screen.h"
 #include "ui/colors.h"
 #include "ui/ui-death.h"
@@ -197,17 +196,12 @@ extern void safe_setuid_drop(void);
 extern void safe_setuid_grab(void);
 extern void do_cmd_escape(int);
 extern void do_cmd_suicide(void);
-extern int meta_write(const metarun*);
-extern errr meta_read(metarun*);
-extern int meta_seek(int i);
-extern int meta_fill(bool);
 
 /* init2.c */
 extern void init_file_paths(char* path);
 
 /* load.c */
 extern bool load_player(void);
-extern bool load_meta(void);
 
 extern bool prep_object_theme(int themetype);
 

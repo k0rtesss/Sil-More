@@ -357,7 +357,6 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-host-bridge.c
     src/app/app-scene-bootstrap.c
     src/app/app-scene-dungeon.c
-    src/app/app-scene-information.c
     src/app/app-scene-menu.c
     src/app/app-session.c
     src/app/app-wire.c
@@ -366,7 +365,6 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
 set(SIL_MORE_SOURCES_FRONTEND
     src/files.c
     src/ui/colors.c
-    src/ui/ui-character-name.c
     src/ui/ui-character-screen.c
     src/ui/ui-death.c
     src/ui/ui-file-viewer.c
@@ -385,7 +383,6 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-render.c
     src/sdl-scene-bootstrap.c
     src/sdl-scene-dungeon.c
-    src/sdl-scene-information.c
     src/sdl-scene-menu.c
     src/sdl-scene.c
     src/sdl-story-font.c
