@@ -482,6 +482,7 @@ void do_cmd_pane_settings(void)
                 settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
                     !overview.tiles);
                 settings_changed = true;
+                sdl_apply_config();
             }
             else if (k == 7) /* Enable Side Panes */
             {
@@ -612,6 +613,7 @@ void do_cmd_pane_settings(void)
                 {
                     settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES, true);
                     settings_changed = true;
+                    sdl_apply_config();
                 }
             }
             else if (k == 7) /* Enable Side Panes */
@@ -729,6 +731,7 @@ void do_cmd_pane_settings(void)
                     settings_sdl_set_bool_config(SETTINGS_SDL_BOOL_TILES,
                         false);
                     settings_changed = true;
+                    sdl_apply_config();
                 }
             }
             else if (k == 7) /* Enable Side Panes */

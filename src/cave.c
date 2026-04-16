@@ -926,6 +926,26 @@ static bool apply_style_door_graphics(int y, int x, int feat, int info, byte* a,
     return false;
 }
 
+static byte feature_visual_attr(const feature_type* f_ptr)
+{
+    return graphics_are_ascii() ? f_ptr->d_attr : f_ptr->x_attr;
+}
+
+static char feature_visual_char(const feature_type* f_ptr)
+{
+    return graphics_are_ascii() ? f_ptr->d_char : f_ptr->x_char;
+}
+
+static byte race_visual_attr(const monster_race* r_ptr)
+{
+    return graphics_are_ascii() ? r_ptr->d_attr : r_ptr->x_attr;
+}
+
+static char race_visual_char(const monster_race* r_ptr)
+{
+    return graphics_are_ascii() ? r_ptr->d_char : r_ptr->x_char;
+}
+
 int player_tile_offset()
 {
     object_type * main_wield_ptr = &inventory[INVEN_WIELD];
@@ -1258,10 +1278,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
         f_ptr = &f_info[FEAT_NONE];
 
         /* Normal attr */
-        a = f_ptr->x_attr;
+        a = feature_visual_attr(f_ptr);
 
         /* Normal char */
-        c = f_ptr->x_char;
+        c = feature_visual_char(f_ptr);
     }
 
     // hiding squares out of line of sight during rage
@@ -1271,10 +1291,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
         f_ptr = &f_info[FEAT_NONE];
 
         /* Normal attr */
-        a = f_ptr->x_attr;
+        a = feature_visual_attr(f_ptr);
 
         /* Normal char */
-        c = f_ptr->x_char;
+        c = feature_visual_char(f_ptr);
     }
 
     /* Boring grids (floors, etc) */
@@ -1294,10 +1314,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             f_ptr = &f_info[feat];
 
             /* Normal attr */
-            a = f_ptr->x_attr;
+            a = feature_visual_attr(f_ptr);
 
             /* Normal char */
-            c = f_ptr->x_char;
+            c = feature_visual_char(f_ptr);
 
             /* Optional: apply group-based override for floor tiles */
             (void)apply_style_floor_graphics(y, x, feat, info, &a, &c);
@@ -1313,10 +1333,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             f_ptr = &f_info[FEAT_NONE];
 
             /* Normal attr */
-            a = f_ptr->x_attr;
+            a = feature_visual_attr(f_ptr);
 
             /* Normal char */
-            c = f_ptr->x_char;
+            c = feature_visual_char(f_ptr);
         }
     }
 
@@ -1339,10 +1359,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             f_ptr = &f_info[feat];
 
             /* Normal attr */
-            a = f_ptr->x_attr;
+            a = feature_visual_attr(f_ptr);
 
             /* Normal char */
-            c = f_ptr->x_char;
+            c = feature_visual_char(f_ptr);
 
             /* Optional: apply group-based override for doors */
             (void)apply_style_door_graphics(y, x, feat, info, &a, &c);
@@ -1508,10 +1528,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             f_ptr = &f_info[FEAT_NONE];
 
             /* Normal attr */
-            a = f_ptr->x_attr;
+            a = feature_visual_attr(f_ptr);
 
             /* Normal char */
-            c = f_ptr->x_char;
+            c = feature_visual_char(f_ptr);
         }
     }
 
@@ -1534,8 +1554,8 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             floor_feat = FEAT_RAGE_FLOOR;
 
         feature_type* floor_ptr = &f_info[floor_feat];
-        terrain_a = floor_ptr->x_attr;
-        terrain_c = floor_ptr->x_char;
+        terrain_a = feature_visual_attr(floor_ptr);
+        terrain_c = feature_visual_char(floor_ptr);
 
         (void)apply_style_floor_graphics(y, x, floor_feat, info, &terrain_a, &terrain_c);
         special_lighting_floor(&terrain_a, &terrain_c, info, cave_light[y][x]);
@@ -1597,10 +1617,10 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
             }
 
             /* Desired attr */
-            da = r_ptr->x_attr;
+            da = race_visual_attr(r_ptr);
 
             /* Desired char */
-            dc = r_ptr->x_char;
+            dc = race_visual_char(r_ptr);
 
             /* Special attr/char codes */
             if ((da & 0x80) && (dc & 0x80))
@@ -1696,7 +1716,7 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
         if (graphics_are_ascii())
         {
             a = health_attr(p_ptr->chp, p_ptr->mhp);
-            c = r_ptr->x_char;
+            c = r_ptr->d_char;
         }
         else
         {

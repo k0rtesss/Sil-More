@@ -2144,6 +2144,7 @@ errr init_sdl(int argc, char **argv)
         ANGBAND_GRAF = "old";
         runtime_cli_set_graphics_mode(GRAPHICS_PSEUDO);
         use_graphics = GRAPHICS_PSEUDO;
+        use_bigtile = false;
     }
 
     SDL_Rect window = { 0 };

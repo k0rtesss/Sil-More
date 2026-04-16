@@ -777,9 +777,84 @@ bool get_sdl_tiles(void)
     return config.tiles;
 }
 
+static void sdl_request_tiles_mode_refresh(void)
+{
+    if (!p_ptr)
+        return;
+
+    p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_MONSTERS);
+    p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_MAP | PR_EQUIPPY | PR_RESIST);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+    p_ptr->window |= (PW_MESSAGE | PW_OVERHEAD | PW_MONSTER | PW_OBJECT
+        | PW_MONLIST);
+}
+
+static bool sdl_apply_live_tiles_mode(bool value)
+{
+    if (!g_state.renderer)
+        return true;
+
+    if (g_state.tileset) {
+        SDL_DestroyTexture(g_state.tileset);
+        g_state.tileset = NULL;
+    }
+
+    g_state.use_tiles = value;
+    g_state.tileset_cols = 0;
+
+    if (value) {
+        SDL_Surface* ts = IMG_Load("lib/xtra/graf/16x16.png");
+        int tileset_width;
+
+        if (!ts) {
+            log_error("Failed to load tileset PNG while enabling tiles: %s",
+                SDL_GetError());
+            g_state.use_tiles = false;
+            return false;
+        }
+
+        tileset_width = ts->w;
+        g_state.tileset = SDL_CreateTextureFromSurface(g_state.renderer, ts);
+        SDL_DestroySurface(ts);
+        if (!g_state.tileset) {
+            log_error("Failed to create tileset texture while enabling tiles: %s",
+                SDL_GetError());
+            g_state.use_tiles = false;
+            return false;
+        }
+
+        SDL_SetTextureScaleMode(g_state.tileset, SDL_SCALEMODE_NEAREST);
+        SDL_SetTextureBlendMode(g_state.tileset, SDL_BLENDMODE_BLEND);
+        g_state.tileset_cols = tileset_width / TILE_SIZE;
+    }
+
+    ANGBAND_GRAF = value ? "new" : "old";
+    runtime_cli_set_graphics_mode(value ? GRAPHICS_MICROCHASM
+        : GRAPHICS_PSEUDO);
+    use_graphics = value ? GRAPHICS_MICROCHASM : GRAPHICS_PSEUDO;
+    use_bigtile = value;
+    sdl_sync_palette();
+    reset_visuals(true);
+    sdl_request_tiles_mode_refresh();
+
+    return true;
+}
+
 void set_sdl_tiles(bool value)
 {
+    if (config.tiles == value)
+        return;
+
     config.tiles = value;
+
+    if (!sdl_apply_live_tiles_mode(value)) {
+        config.tiles = false;
+        (void)sdl_apply_live_tiles_mode(false);
+        log_warn("Falling back to ASCII mode because the tileset could not be loaded");
+        return;
+    }
+
+    log_info("Tiles mode %s", value ? "enabled" : "disabled");
 }
 
 int get_pane_config_count(void)

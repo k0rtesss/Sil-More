@@ -3179,16 +3179,24 @@
 #define object_attr(T)                                                         \
     ((p_ptr->image)                                                            \
             ? ((k_info[(T)->image_k_idx].flavor)                               \
-                    ? (flavor_info[k_info[(T)->image_k_idx].flavor].x_attr)    \
-                    : (k_info[(T)->image_k_idx].x_attr))                       \
+                    ? (graphics_are_ascii()                                    \
+                              ? (flavor_info[k_info[(T)->image_k_idx].flavor]  \
+                                     .d_attr)                                  \
+                              : (flavor_info[k_info[(T)->image_k_idx].flavor]  \
+                                     .x_attr))                                 \
+                    : (graphics_are_ascii()                                    \
+                              ? (k_info[(T)->image_k_idx].d_attr)              \
+                              : (k_info[(T)->image_k_idx].x_attr)))            \
             : ((k_info[(T)->k_idx].flavor)                                     \
-                    ? (flavor_info[k_info[(T)->k_idx].flavor].x_attr)          \
+                    ? (graphics_are_ascii()                                    \
+                              ? (flavor_info[k_info[(T)->k_idx].flavor].d_attr)\
+                              : (flavor_info[k_info[(T)->k_idx].flavor].x_attr))\
                     : graphics_are_ascii()                                     \
                         ? weapon_glows(T)                                      \
                             ? (TERM_L_BLUE)                                    \
                             : (((T)->name1 && a_info[(T)->name1].d_attr)       \
                                     ? (a_info[(T)->name1].d_attr)              \
-                                    : (k_info[(T)->k_idx].x_attr))             \
+                                    : (k_info[(T)->k_idx].d_attr))             \
                         : object_attr_graphics_override(                       \
                               (T), weapon_glows(T)                             \
                                        ? ((k_info[(T)->k_idx].x_attr)          \
@@ -3200,8 +3208,11 @@
  * Default to user definitions.
  */
 #define object_type_attr(T)                                                    \
-    ((k_info[T].flavor) ? (flavor_info[k_info[T].flavor].x_attr)               \
-                        : (k_info[T].x_attr))
+    ((k_info[T].flavor)                                                        \
+            ? (graphics_are_ascii()                                            \
+                      ? (flavor_info[k_info[T].flavor].d_attr)                 \
+                      : (flavor_info[k_info[T].flavor].x_attr))                \
+            : (graphics_are_ascii() ? (k_info[T].d_attr) : (k_info[T].x_attr)))
 
 /*
  * Return the "char" for a given item.
@@ -3209,16 +3220,28 @@
  * Default to user definitions.
  */
 #define object_char(T)                                                         \
-    ((p_ptr->image) ? ((k_info[(T)->image_k_idx].flavor)                       \
-             ? (flavor_info[k_info[(T)->image_k_idx].flavor].x_char)           \
-             : (k_info[(T)->image_k_idx].x_char))                              \
-                    : ((k_info[(T)->k_idx].flavor)                             \
-                            ? (flavor_info[k_info[(T)->k_idx].flavor].x_char)  \
-                            : (((T)->name1 && a_info[(T)->name1].d_char        \
-                                   && graphics_are_ascii())                    \
-                                    ? (a_info[(T)->name1].d_char)              \
-                                    : object_char_graphics_override(           \
-                                          (T), (k_info[(T)->k_idx].x_char)))))
+    ((p_ptr->image)                                                            \
+            ? ((k_info[(T)->image_k_idx].flavor)                               \
+                    ? (graphics_are_ascii()                                    \
+                              ? (flavor_info[k_info[(T)->image_k_idx].flavor]  \
+                                     .d_char)                                  \
+                              : (flavor_info[k_info[(T)->image_k_idx].flavor]  \
+                                     .x_char))                                 \
+                    : (graphics_are_ascii()                                    \
+                              ? (k_info[(T)->image_k_idx].d_char)              \
+                              : (k_info[(T)->image_k_idx].x_char)))            \
+            : ((k_info[(T)->k_idx].flavor)                                     \
+                    ? (graphics_are_ascii()                                    \
+                              ? (flavor_info[k_info[(T)->k_idx].flavor].d_char)\
+                              : (flavor_info[k_info[(T)->k_idx].flavor].x_char))\
+                    : (((T)->name1 && a_info[(T)->name1].d_char                \
+                               && graphics_are_ascii())                        \
+                              ? (a_info[(T)->name1].d_char)                    \
+                              : (graphics_are_ascii()                          \
+                                        ? (k_info[(T)->k_idx].d_char)          \
+                                        : object_char_graphics_override(       \
+                                              (T),                            \
+                                              (k_info[(T)->k_idx].x_char))))))
 
 /*
  * Return the "attr" for a given item.
@@ -3250,8 +3273,11 @@
  * Default to user definitions.
  */
 #define object_type_char(T)                                                    \
-    ((k_info[T].flavor) ? (flavor_info[k_info[T].flavor].x_char)               \
-                        : (k_info[T].x_char))
+    ((k_info[T].flavor)                                                        \
+            ? (graphics_are_ascii()                                            \
+                      ? (flavor_info[k_info[T].flavor].d_char)                 \
+                      : (flavor_info[k_info[T].flavor].x_char))                \
+            : (graphics_are_ascii() ? (k_info[T].d_char) : (k_info[T].x_char)))
 
 /*
  * Artefacts use the "name1" field
