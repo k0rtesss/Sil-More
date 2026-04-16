@@ -175,7 +175,7 @@ void platform_frame_process_events(bool wait)
 
     if (wait)
     {
-        sdl_music_update();
+        platform_music_update();
         if (platform_frame_session_input_pending())
         {
             while (SDL_PollEvent(&ev))
@@ -215,7 +215,7 @@ void platform_frame_process_events(bool wait)
             int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(flush_ns);
 
             platform_frame_flush_pending_inputs(flush_ns);
-            sdl_music_update();
+            platform_music_update();
             if (scene_timeout_ms == 0)
                 g_state.need_present = true;
         }
@@ -226,7 +226,7 @@ void platform_frame_process_events(bool wait)
         Uint64 flush_ns;
         int scene_timeout_ms;
 
-        sdl_music_update();
+        platform_music_update();
         while (SDL_PollEvent(&ev))
         {
             handled = true;

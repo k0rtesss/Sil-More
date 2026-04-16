@@ -1685,7 +1685,7 @@ extern void do_cmd_options_aux(int page, cptr info)
     bool metarun_settings_dirty = false;
     bool sound_settings_dirty = false;
     const struct option_group_marker* groups = get_option_groups_for_page(page);
-    struct sound_config* sound_cfg = sdl_sound_get_config();
+    struct sound_config* sound_cfg = platform_sound_config();
 
     /* Scan the options */
     for (i = 0; i < OPT_PAGE_PER; i++)
@@ -1766,8 +1766,8 @@ extern void do_cmd_options_aux(int page, cptr info)
 
             if (sound_settings_dirty)
             {
-                sdl_sound_save_config();
-                sdl_sound_reload();
+                platform_sound_save_config();
+                platform_sound_reload();
             }
 
             if (app_settings_dirty)
@@ -1921,11 +1921,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                     else if (k == 11) sound_cfg->music_ambient_enabled = true;
                     else if (k == 12) {
                         sound_cfg->music_main_volume = (sound_cfg->music_main_volume < 1.0f) ? sound_cfg->music_main_volume + 0.1f : 1.0f;
-                        sdl_sound_save_config(); /* Apply volume change immediately */
+                        platform_sound_save_config(); /* Apply volume change immediately */
                     }
                     else if (k == 13) {
                         sound_cfg->music_ambient_volume = (sound_cfg->music_ambient_volume < 1.0f) ? sound_cfg->music_ambient_volume + 0.1f : 1.0f;
-                        sdl_sound_save_config(); /* Apply volume change immediately */
+                        platform_sound_save_config(); /* Apply volume change immediately */
                     }
                 }
                 else if (opt[k] == OPT_delay_factor)
@@ -2034,11 +2034,11 @@ extern void do_cmd_options_aux(int page, cptr info)
                     else if (k == 11) sound_cfg->music_ambient_enabled = false;
                     else if (k == 12) {
                         sound_cfg->music_main_volume = (sound_cfg->music_main_volume > 0.0f) ? sound_cfg->music_main_volume - 0.1f : 0.0f;
-                        sdl_sound_save_config(); /* Apply volume change immediately */
+                        platform_sound_save_config(); /* Apply volume change immediately */
                     }
                     else if (k == 13) {
                         sound_cfg->music_ambient_volume = (sound_cfg->music_ambient_volume > 0.0f) ? sound_cfg->music_ambient_volume - 0.1f : 0.0f;
-                        sdl_sound_save_config(); /* Apply volume change immediately */
+                        platform_sound_save_config(); /* Apply volume change immediately */
                     }
                 }
                 else if (opt[k] == OPT_delay_factor)
@@ -2257,7 +2257,7 @@ void do_cmd_options(void)
         return;
 
     if (p_ptr && p_ptr->playing)
-        sdl_music_play_menu_theme();
+        platform_music_play_menu_theme();
 
     /* Process Events until "Return to Game" is selected */
     while (!return_to_game)
@@ -2343,6 +2343,6 @@ void do_cmd_options(void)
 
     ui_information_scene_leave(&settings_scope);
     if (p_ptr && p_ptr->playing)
-        sdl_music_stop_main();
+        platform_music_stop_main();
 }
 

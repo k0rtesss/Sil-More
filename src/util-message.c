@@ -159,7 +159,7 @@ void bell(cptr reason)
 
     /* Make a bell noise (if allowed) */
     if (system_beep)
-        sdl_sound_handle(MSG_BELL);
+        platform_sound_handle(MSG_BELL);
 
     /* Flush the input (later!) */
     input_clear_pending();
@@ -175,7 +175,7 @@ void sound(int val)
         return;
 
     /* Route directly to SDL sound backend */
-    sdl_sound_handle(val);
+    platform_sound_handle(val);
 }
 
 /*

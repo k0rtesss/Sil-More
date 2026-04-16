@@ -14,10 +14,10 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
         return 1;
 
     /* Convert column-based wrap to pixel width */
-    int cell_width = sdl_get_cell_width();
+    int cell_width = platform_story_font_cell_width();
     int wrap_pixels = wrap_cols * cell_width;
     int indent_pixels = indent * cell_width;
-    int space_pixels = sdl_story_font_text_width(" ", 1);
+    int space_pixels = platform_story_font_text_width(" ", 1);
     if (space_pixels <= 0)
         space_pixels = cell_width;
 
@@ -61,7 +61,7 @@ int count_wrapped_lines_story(cptr str, int wrap_cols, int indent)
             continue;
 
         /* Measure the word in pixels */
-        int word_pixels = sdl_story_font_text_width(word_start, word_chars);
+        int word_pixels = platform_story_font_text_width(word_start, word_chars);
         /* Check if word fits on current line */
         if (x_pixels > indent_pixels && (x_pixels + word_pixels) > wrap_pixels)
         {
@@ -107,15 +107,15 @@ void story_font_term_push(bool active, bool grid, story_font_term_state* prev)
     if (!prev)
         return;
 
-    prev->active = sdl_is_story_font_enabled();
-    prev->grid = sdl_story_font_cell_align_enabled();
+    prev->active = platform_story_font_enabled();
+    prev->grid = platform_story_font_cell_align_enabled();
 
     if (active && !prev->active)
-        sdl_story_font_enable();
+        platform_story_font_enable();
     else if (!active && prev->active)
-        sdl_story_font_disable();
+        platform_story_font_disable();
 
-    sdl_story_font_set_cell_align(grid);
+    platform_story_font_set_cell_align(grid);
 }
 
 void story_font_term_pop(story_font_term_state* prev)
@@ -123,10 +123,10 @@ void story_font_term_pop(story_font_term_state* prev)
     if (!prev)
         return;
 
-    if (prev->active && !sdl_is_story_font_enabled())
-        sdl_story_font_enable();
-    else if (!prev->active && sdl_is_story_font_enabled())
-        sdl_story_font_disable();
+    if (prev->active && !platform_story_font_enabled())
+        platform_story_font_enable();
+    else if (!prev->active && platform_story_font_enabled())
+        platform_story_font_disable();
 
-    sdl_story_font_set_cell_align(prev->grid);
+    platform_story_font_set_cell_align(prev->grid);
 }

@@ -226,7 +226,7 @@ static void main_menu_about(void)
     ui_information_scene_scope scope;
 
     if (p_ptr && p_ptr->playing)
-        sdl_music_play_death();
+        platform_music_play_death();
 
     if (ui_information_scene_enter(&scope))
     {
@@ -252,7 +252,7 @@ static void main_menu_about(void)
     }
 
     if (p_ptr && p_ptr->playing)
-        sdl_music_stop_main();
+        platform_music_stop_main();
 }
 
 static void do_cmd_hint_messages(bool* out_pending_look, int* out_look_y,

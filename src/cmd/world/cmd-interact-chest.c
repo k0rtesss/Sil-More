@@ -2060,7 +2060,7 @@ static int skeleton_note_max_chars_fit_pixels(const char* text, int max_chars, i
     while (lo <= hi)
     {
         int mid = (lo + hi) / 2;
-        int w = sdl_story_font_text_width(text, mid);
+        int w = platform_story_font_text_width(text, mid);
         if (w <= 0)
             w = mid * cell_width;
 
@@ -2090,7 +2090,7 @@ static void skeleton_note_pad_line_for_story(char line[100], int wrap_cols, int 
     if (wrap_cols > 99)
         wrap_cols = 99;
 
-    int px = sdl_story_font_text_width(line, len);
+    int px = platform_story_font_text_width(line, len);
     if (px <= 0)
         px = len * cell_width;
 
@@ -2121,12 +2121,12 @@ static int skeleton_note_append_wrapped_segment_story(
     if (wrap_cols > 95)
         wrap_cols = 95;
 
-    int cell_width = sdl_get_cell_width();
+    int cell_width = platform_story_font_cell_width();
     if (cell_width <= 0)
         return skeleton_note_append_wrapped_segment_mono(seg, lines, idx, limit, wrap_cols);
 
     int wrap_px = wrap_cols * cell_width;
-    int space_px = sdl_story_font_text_width(" ", 1);
+    int space_px = platform_story_font_text_width(" ", 1);
     if (space_px <= 0)
         space_px = cell_width;
 
@@ -2159,7 +2159,7 @@ static int skeleton_note_append_wrapped_segment_story(
             while (word[word_len] && word[word_len] != ' ')
                 word_len++;
 
-            int word_px = sdl_story_font_text_width(word, word_len);
+            int word_px = platform_story_font_text_width(word, word_len);
             if (word_px <= 0)
                 word_px = word_len * cell_width;
 
@@ -2225,7 +2225,8 @@ static int skeleton_note_append_wrapped_segment(
     if (!seg || !seg[0] || limit <= idx)
         return idx;
 
-    if (sdl_story_font_text_width(" ", 1) > 0 && sdl_get_cell_width() > 0)
+    if (platform_story_font_text_width(" ", 1) > 0
+        && platform_story_font_cell_width() > 0)
         return skeleton_note_append_wrapped_segment_story(seg, lines, idx, limit, wrap_cols);
 
     return skeleton_note_append_wrapped_segment_mono(seg, lines, idx, limit, wrap_cols);

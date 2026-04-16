@@ -558,7 +558,7 @@ void do_cmd_unified_look(void)
     if (use_story_font)
     {
         log_debug("do_cmd_unified_look: Enabling story font");
-        sdl_story_font_enable();
+        platform_story_font_enable();
     }
 
     if (unified_look_snapshot_active())
@@ -946,7 +946,7 @@ void do_cmd_unified_look(void)
                 
                 /* Disable story font for info screens */
                 if (use_story_font)
-                    sdl_story_font_disable();
+                    platform_story_font_disable();
 
                 unified_look_snapshot_clear();
                 
@@ -1403,7 +1403,7 @@ command_key:
                 
                 /* Disable story font for info screens */
                 if (use_story_font)
-                    sdl_story_font_disable();
+                    platform_story_font_disable();
 
                 unified_look_snapshot_clear();
                 
@@ -1515,7 +1515,7 @@ command_key:
                 
                 /* Re-enable story font */
                 if (use_story_font)
-                    sdl_story_font_enable();
+                    platform_story_font_enable();
                 
                 need_redraw = true;
                 break;
@@ -1789,7 +1789,7 @@ command_key:
     if (use_story_font)
     {
         log_debug("do_cmd_unified_look: Disabling story font");
-        sdl_story_font_disable();
+        platform_story_font_disable();
     }
     
     /* Restore original viewport */

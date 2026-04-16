@@ -1618,10 +1618,10 @@ bool target_set_interactive(int mode, int range)
 
             /* Describe and Prompt */
             if (use_story_look)
-                sdl_story_font_enable();
+                platform_story_font_enable();
             query = target_set_interactive_aux(y, x, mode, info, use_story_look);
             if (use_story_look)
-                sdl_story_font_disable();
+                platform_story_font_disable();
 
             /* Assume no "direction" */
             d = 0;
@@ -1801,10 +1801,10 @@ bool target_set_interactive(int mode, int range)
 
             /* Describe and Prompt (enable "TARGET_LOOK") */
             if (use_story_look)
-                sdl_story_font_enable();
+                platform_story_font_enable();
             query = target_set_interactive_aux(y, x, mode | TARGET_LOOK, info, use_story_look);
             if (use_story_look)
-                sdl_story_font_disable();
+                platform_story_font_disable();
 
             /* Assume no direction */
             d = 0;

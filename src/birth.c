@@ -1403,7 +1403,7 @@ static bool birth_build_description_ui_scene(app_ui_scene* scene,
     cptr title, cptr text)
 {
     app_ui_panel* panel;
-    byte story = sdl_is_story_font_enabled() ? STORY_FLAG_USE : 0;
+    byte story = platform_story_font_enabled() ? STORY_FLAG_USE : 0;
 
     if (!scene)
         return false;

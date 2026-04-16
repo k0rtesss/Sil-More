@@ -119,43 +119,43 @@ void sdl_load_story_fonts(void)
     g_state.story_cell_align = false;
 }
 
-void sdl_story_font_enable(void)
+void platform_story_font_enable(void)
 {
     g_state.story_font_depth++;
 }
 
-void sdl_story_font_disable(void)
+void platform_story_font_disable(void)
 {
     if (g_state.story_font_depth > 0)
         g_state.story_font_depth--;
     if (g_state.story_font_depth == 0)
-        sdl_story_font_set_cell_align(false);
+        platform_story_font_set_cell_align(false);
 }
 
-bool sdl_is_story_font_enabled(void)
+bool platform_story_font_enabled(void)
 {
     return g_state.story_font_depth > 0;
 }
 
-void sdl_story_font_set_cell_align(bool enabled)
+void platform_story_font_set_cell_align(bool enabled)
 {
     if (g_state.story_cell_align == enabled)
         return;
     g_state.story_cell_align = enabled;
 }
 
-bool sdl_story_font_cell_align_enabled(void)
+bool platform_story_font_cell_align_enabled(void)
 {
     return g_state.story_cell_align;
 }
 
-void sdl_story_font_reset(void)
+void platform_story_font_reset(void)
 {
     g_state.story_font_depth = 0;
     g_state.story_cell_align = false;
 }
 
-int sdl_story_font_text_width(cptr text, int len)
+int platform_story_font_text_width(cptr text, int len)
 {
     if (!text)
         return 0;
@@ -188,7 +188,7 @@ int sdl_story_font_text_width(cptr text, int len)
     return w;
 }
 
-int sdl_get_cell_width(void)
+int platform_story_font_cell_width(void)
 {
     if (g_views[0].ready)
         return g_views[0].cell_w;

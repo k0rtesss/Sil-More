@@ -1337,7 +1337,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
     int blessing_points_before = (metar.blessing_points < 0) ? 0 : metar.blessing_points;
     if (escaped)
     {
-        sdl_music_play_main();
+        platform_music_play_main();
     }
     bool challenge_disconnected = (op_ptr && op_ptr->opt[OPT_adult_discon_stair]);
     bool challenge_single_stair = (op_ptr && op_ptr->opt[OPT_adult_single_stair]);

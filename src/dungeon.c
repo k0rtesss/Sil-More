@@ -3668,13 +3668,13 @@ static void dungeon(void)
     if (now_in_dungeon && !was_in_dungeon) {
         /* Entering dungeon from surface - switch to ambient */
         log_debug("Switching to ambient music (entering dungeon)");
-        sdl_music_stop_main();
-        sdl_music_play_ambient();
+        platform_music_stop_main();
+        platform_music_play_ambient();
     } else if (!now_in_dungeon && was_in_dungeon) {
         /* Leaving dungeon gameplay - keep ambient running, clear any overlay. */
         log_debug("Leaving dungeon gameplay - preserving ambient music");
-        sdl_music_stop_main();
-        sdl_music_play_ambient();
+        platform_music_stop_main();
+        platform_music_play_ambient();
     }
     
     last_music_depth = p_ptr->depth;
@@ -4291,7 +4291,7 @@ static void print_story_intro(void)
     int total = sizeof(intro_texts) / sizeof(intro_texts[0]);
     int index = 0;
 
-    sdl_music_play_main_full();
+    platform_music_play_main_full();
 
     if (!dungeon_fullscreen_scene_enter(&scope, &overlay_dungeon))
     {
@@ -4502,8 +4502,8 @@ PlayResult play_game(void)
                                            : character_creation();
         if (cr == NAV_TO_MAIN) {
             log_info("Returning to main menu from character creation");
-            sdl_music_stop_main();
-            sdl_music_stop_ambient();
+            platform_music_stop_main();
+            platform_music_stop_ambient();
             return PLAY_DONE;
         }
         if (cr == NAV_QUIT) {
@@ -4582,8 +4582,8 @@ PlayResult play_game(void)
         }
         if (br == NAV_TO_MAIN) {
             log_info("Returning to main menu from character birth");
-            sdl_music_stop_main();
-            sdl_music_stop_ambient();
+            platform_music_stop_main();
+            platform_music_stop_ambient();
             return PLAY_DONE;
         }
         if (br == NAV_QUIT) {
@@ -4624,7 +4624,7 @@ PlayResult play_game(void)
     /* Only show story when no alive character exists (fresh start or all characters dead) */
     if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
     {
-        sdl_music_play_main_full();
+        platform_music_play_main_full();
         print_story(15, 1, false);
     }
 
@@ -4746,8 +4746,8 @@ PlayResult play_game(void)
     
     /* Any active run, including the Gates at depth 0, uses ambient gameplay music. */
     log_debug("Starting game session at depth=%d - switching to ambient music", p_ptr->depth);
-    sdl_music_stop_main();
-    sdl_music_play_ambient();
+    platform_music_stop_main();
+    platform_music_play_ambient();
     last_music_depth = p_ptr->depth;
 
     /* Hack -- Enforce "delayed death" */
@@ -4821,8 +4821,8 @@ PlayResult play_game(void)
             log_info("Player quit and saved - exiting game loop");
             
             /* Stop gameplay audio; the title screen chooses its own track. */
-            sdl_music_stop_main();
-            sdl_music_stop_ambient();
+            platform_music_stop_main();
+            platform_music_stop_ambient();
             
             break;
         }
@@ -4899,15 +4899,15 @@ PlayResult play_game(void)
             log_debug("Character dead - revealing map state");
             
             /* Stop gameplay audio; the title screen chooses its own track. */
-            sdl_music_stop_main();
-            sdl_music_stop_ambient();
+            platform_music_stop_main();
+            platform_music_stop_ambient();
             if (p_ptr->escaped || p_ptr->morgoth_slain)
             {
-                sdl_music_play_main();
+                platform_music_play_main();
             }
             else
             {
-                sdl_music_play_death();
+                platform_music_play_death();
             }
             
             death_knowledge();

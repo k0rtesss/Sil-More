@@ -23,7 +23,7 @@
 
 static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
 {
-    if (sdl_is_story_font_enabled())
+    if (platform_story_font_enabled())
         return count_wrapped_lines_story(text, wrap_width, indent);
 
     return count_wrapped_lines(text, wrap_width, indent);
@@ -402,7 +402,7 @@ void print_story(int last_parts, bool fade_in,
     saved_hide_cursor = inkey_cursor_hidden();
     inkey_set_cursor_hidden(true);
 
-    sdl_story_font_enable();
+    platform_story_font_enable();
     story_build_reveal_prompt(reveal_prompt, sizeof(reveal_prompt));
     story_build_final_prompt(final_prompt, sizeof(final_prompt));
     complete_count = start;
@@ -455,7 +455,7 @@ void print_story(int last_parts, bool fade_in,
     (void)story_wait_key();
 
 cleanup:
-    sdl_story_font_disable();
+    platform_story_font_disable();
     if (!scene_failed && !restore_previous_snapshot)
         ui_information_scene_leave_without_restore(&info_scope);
     else

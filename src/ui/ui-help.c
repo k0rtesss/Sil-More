@@ -1699,7 +1699,7 @@ static bool do_cmd_help_information_scene(void)
 void do_cmd_help(void)
 {
     if (p_ptr && p_ptr->playing)
-        sdl_music_play_menu_theme();
+        platform_music_play_menu_theme();
 
     if (!do_cmd_help_information_scene())
     {
@@ -1708,7 +1708,7 @@ void do_cmd_help(void)
     }
 
     if (p_ptr && p_ptr->playing)
-        sdl_music_stop_main();
+        platform_music_stop_main();
 }
 
 /*

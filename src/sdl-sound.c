@@ -838,8 +838,8 @@ static bool sdl_music_play_title_track(const char* primary_path,
     char resolved_path[1024];
 
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
-        sdl_music_stop_ambient();
+        platform_music_stop_main();
+        platform_music_stop_ambient();
         return false;
     }
 
@@ -847,7 +847,7 @@ static bool sdl_music_play_title_track(const char* primary_path,
         return false;
     }
 
-    sdl_music_stop_ambient();
+    platform_music_stop_ambient();
     sdl_music_stop_track(sound_state.music_menu_track);
 
     if ((MIX_TrackPlaying(sound_state.music_main_track) ||
@@ -872,12 +872,12 @@ static bool sdl_music_play_title_track(const char* primary_path,
     return true;
 }
 
-bool sdl_sound_initialize(void)
+bool platform_sound_initialize(void)
 {
     return true;
 }
 
-void sdl_sound_reload(void)
+void platform_sound_reload(void)
 {
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
@@ -964,38 +964,38 @@ void sdl_sound_reload(void)
         return;
     }
 
-    sdl_music_update_volumes();
+    platform_music_update_volumes();
 }
 
-void sdl_sound_shutdown(void)
+void platform_sound_shutdown(void)
 {
     sdl_sound_destroy_mixer();
     sdl_sound_reset_bank();
 }
 
-void sdl_music_play_main(void)
+void platform_music_play_main(void)
 {
     log_debug("Starting title music: %s", sound_state.music_main_path);
     (void)sdl_music_play_title_track(sound_state.music_main_path, NULL, "main");
 }
 
-void sdl_music_play_main_full(void)
+void platform_music_play_main_full(void)
 {
     log_debug("Starting full title music: %s", sound_state.music_main_full_path);
     (void)sdl_music_play_title_track(sound_state.music_main_full_path,
         sound_state.music_main_path, "main_full");
 }
 
-void sdl_music_play_death(void)
+void platform_music_play_death(void)
 {
     log_debug("Starting death music: %s", sound_state.music_death_path);
     (void)sdl_music_play_title_track(sound_state.music_death_path, NULL, "death");
 }
 
-void sdl_music_play_menu_theme(void)
+void platform_music_play_menu_theme(void)
 {
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
+        platform_music_stop_main();
         return;
     }
 
@@ -1004,7 +1004,7 @@ void sdl_music_play_menu_theme(void)
     }
 
     sdl_music_stop_title_track();
-    sdl_music_play_ambient();
+    platform_music_play_ambient();
     sdl_music_stop_track(sound_state.music_menu_track);
 
     log_debug("Starting menu theme overlay: %s", sound_state.music_main_full_path);
@@ -1013,10 +1013,10 @@ void sdl_music_play_menu_theme(void)
         sound_state.music_main_volume, 0, "main_full", NULL, 0);
 }
 
-void sdl_music_play_ambient(void)
+void platform_music_play_ambient(void)
 {
     if (!sound_state.music_ambient_enabled) {
-        sdl_music_stop_ambient();
+        platform_music_stop_ambient();
         return;
     }
 
@@ -1035,22 +1035,22 @@ void sdl_music_play_ambient(void)
         "ambient", NULL, 0);
 }
 
-void sdl_music_stop_main(void)
+void platform_music_stop_main(void)
 {
     sdl_music_stop_title_track();
     sdl_music_stop_track(sound_state.music_menu_track);
 }
 
-void sdl_music_stop_ambient(void)
+void platform_music_stop_ambient(void)
 {
     sdl_music_stop_track(sound_state.music_ambient_track);
 }
 
-void sdl_music_update(void)
+void platform_music_update(void)
 {
 }
 
-void sdl_music_update_volumes(void)
+void platform_music_update_volumes(void)
 {
     if (!sound_state.mixer) {
         return;
@@ -1077,19 +1077,19 @@ void sdl_music_update_volumes(void)
     }
 }
 
-void sdl_music_request_welcome_main_once(void)
+void platform_music_request_welcome_main_once(void)
 {
     g_music_force_main_on_next_welcome = true;
 }
 
-bool sdl_music_consume_welcome_main_once(void)
+bool platform_music_consume_welcome_main_once(void)
 {
     bool consume = g_music_force_main_on_next_welcome;
     g_music_force_main_on_next_welcome = false;
     return consume;
 }
 
-void sdl_sound_handle(int sound_idx)
+void platform_sound_handle(int sound_idx)
 {
     if (sound_idx < 0 || sound_idx >= MSG_MAX || !g_sound_config.enabled) {
         return;
@@ -1120,17 +1120,17 @@ void sdl_sound_handle(int sound_idx)
     (void)sdl_sound_play_track_audio(track, audio, get_sound_volume(sound_idx), 0);
 }
 
-void sdl_init_sounds(void)
+void platform_sound_init(void)
 {
-    sdl_sound_reload();
+    platform_sound_reload();
 }
 
-struct sound_config* sdl_sound_get_config(void)
+struct sound_config* platform_sound_config(void)
 {
     return &g_sound_config;
 }
 
-void sdl_sound_save_config(void)
+void platform_sound_save_config(void)
 {
     sound_state.enable_combat = g_sound_config.enable_combat;
     sound_state.enable_inventory = g_sound_config.enable_inventory;
@@ -1166,13 +1166,13 @@ void sdl_sound_save_config(void)
     }
 
     if (!sound_state.music_main_enabled) {
-        sdl_music_stop_main();
+        platform_music_stop_main();
     }
     if (!sound_state.music_ambient_enabled) {
-        sdl_music_stop_ambient();
+        platform_music_stop_ambient();
     }
 
-    sdl_music_update_volumes();
+    platform_music_update_volumes();
     sound_config_save(g_sound_config_path, &g_sound_config);
     log_debug("Sound configuration saved to %s", g_sound_config_path);
 }

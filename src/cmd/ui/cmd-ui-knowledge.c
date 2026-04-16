@@ -2818,7 +2818,7 @@ void do_cmd_knowledge_browser_page(int page)
     curse_cnt = knowledge_collect_curses(curse_idx);
 
     if (p_ptr && p_ptr->playing)
-        sdl_music_play_menu_theme();
+        platform_music_play_menu_theme();
 
     while (!done)
     {
@@ -3196,7 +3196,7 @@ cleanup:
     if (info_scope.active)
         ui_information_scene_leave(&info_scope);
     if (p_ptr && p_ptr->playing)
-        sdl_music_stop_main();
+        platform_music_stop_main();
 }
 
 /*

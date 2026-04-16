@@ -1795,7 +1795,7 @@ static void sdl_quit_hook(cptr str)
     (void)str; // Unused parameter
     
     // Shut down audio before tearing down SDL
-    sdl_sound_shutdown();
+    platform_sound_shutdown();
 
     // Close any open gamepads
     sdl_gamepad_shutdown();
@@ -2101,8 +2101,8 @@ errr init_sdl(int argc, char **argv)
     sdl_sync_palette();
 
     // Prepare sound registry and audio playback
-    sdl_sound_reload();
-    if (!sdl_sound_initialize()) {
+    platform_sound_reload();
+    if (!platform_sound_initialize()) {
         log_info("Sound subsystem not initialized; continuing without audio output");
     }
 
