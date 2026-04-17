@@ -305,12 +305,12 @@ void metarun_mark_quest_completed(u32b quest_flag)
     bool changed = false;
 
     if (slot >= 0 && slot < METARUN_QUEST_SLOT_MAX) {
-        byte current = metar.quest_completion_counts[slot];
+        byte completion_count = metar.quest_completion_counts[slot];
         int quest_id = quest_id_from_slot(slot);
         int cap = quest_completion_cap(quest_id);
         if (cap < 1) cap = METARUN_QUEST_COMPLETION_CAP;
-        if (current < cap) {
-            metar.quest_completion_counts[slot] = current + 1;
+        if (completion_count < cap) {
+            metar.quest_completion_counts[slot] = completion_count + 1;
             changed = true;
         }
         /* Always sync the per-run marker so we don't double-count this character */

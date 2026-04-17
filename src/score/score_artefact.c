@@ -45,15 +45,16 @@ static void artefact_db_build_path(char* path, size_t len)
     path_build(path, len, ANGBAND_DIR_APEX, "artefacts.db");
 }
 
-static void artefact_db_init_header(artefact_db_header* header)
+static void artefact_db_init_header(artefact_db_header* db_header)
 {
-    memset(header, 0, sizeof(*header));
-    memcpy(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic));
-    header->version = SCORE_ARTEFACT_DB_VERSION;
+    memset(db_header, 0, sizeof(*db_header));
+    memcpy(db_header->magic, SCORE_ARTEFACT_DB_MAGIC,
+        sizeof(db_header->magic));
+    db_header->version = SCORE_ARTEFACT_DB_VERSION;
 }
 
 static ang_file* artefact_db_open(const char* path,
-                                  artefact_db_header* header,
+                                  artefact_db_header* db_header,
                                   bool* created)
 {
     if (created)
@@ -69,18 +70,21 @@ static ang_file* artefact_db_open(const char* path,
     }
 
     if (created && *created) {
-        artefact_db_init_header(header);
-        ang_file_write_compat(file, header, sizeof(*header));
+        artefact_db_init_header(db_header);
+        ang_file_write_compat(file, db_header, sizeof(*db_header));
         ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
         return file;
     }
 
     ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
-    if (ang_file_read_compat(file, header, sizeof(*header)) != sizeof(*header) ||
-        memcmp(header->magic, SCORE_ARTEFACT_DB_MAGIC, sizeof(header->magic)) != 0) {
-        artefact_db_init_header(header);
+    if (ang_file_read_compat(file, db_header, sizeof(*db_header))
+            != sizeof(*db_header)
+        || memcmp(db_header->magic, SCORE_ARTEFACT_DB_MAGIC,
+               sizeof(db_header->magic))
+            != 0) {
+        artefact_db_init_header(db_header);
         ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
-        ang_file_write_compat(file, header, sizeof(*header));
+        ang_file_write_compat(file, db_header, sizeof(*db_header));
     }
     ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
     return file;
@@ -153,11 +157,11 @@ bool score_artefact_register(const artefact_type* art)
     char path[1024];
     artefact_db_build_path(path, sizeof(path));
 
-    artefact_db_header header;
+    artefact_db_header db_header;
     bool created = false;
 
     safe_setuid_grab();
-    ang_file* file = artefact_db_open(path, &header, &created);
+    ang_file* file = artefact_db_open(path, &db_header, &created);
     safe_setuid_drop();
 
     if (!file) {
@@ -180,9 +184,9 @@ bool score_artefact_register(const artefact_type* art)
         }
     } else {
         if (ang_file_write_compat(file, &snapshot, sizeof(snapshot)) == sizeof(snapshot)) {
-            header.record_count++;
+            db_header.record_count++;
             ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET);
-            ang_file_write_compat(file, &header, sizeof(header));
+            ang_file_write_compat(file, &db_header, sizeof(db_header));
             ok = true;
         }
     }

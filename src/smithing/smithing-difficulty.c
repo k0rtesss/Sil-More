@@ -387,14 +387,14 @@ int object_difficulty(object_type* o_ptr)
 
     if (f1 & TR1_SHARPNESS)
     {
-        int base = (o_ptr->tval == TV_ARROW) ? 14 : 24;
-        dif_inc += base;
+        int sharpness_base = (o_ptr->tval == TV_ARROW) ? 14 : 24;
+        dif_inc += sharpness_base;
         smithing_cost.str += (o_ptr->tval == TV_ARROW) ? 1 : 2;
     }
     if (f1 & TR1_SHARPNESS2)
     {
-        int base = 40;
-        dif_inc += base;
+        int sharpness2_base = 40;
+        dif_inc += sharpness2_base;
         smithing_cost.str += 4;
     }
     if (f1 & TR1_VAMPIRIC)

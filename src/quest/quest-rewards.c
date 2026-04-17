@@ -440,7 +440,7 @@ cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_com
     if (previous <= 0) return texts;
 
     cptr quest_title = quest_display_title(quest_idx);
-    cptr oath_name = get_oath_name_from_id(q_ptr->oath_id);
+    cptr quest_oath_name = get_oath_name_from_id(q_ptr->oath_id);
 
     char repeat_line[180];
     strnfmt(repeat_line, sizeof(repeat_line),
@@ -448,7 +448,7 @@ cptr* prepend_repeat_context(int quest_idx, cptr* texts, int* count, bool is_com
                 ? "%s honors your %s oath after %d earlier success%s."
                 : "%s returns under your %s oath; you have succeeded %d time%s before.",
             quest_title ? quest_title : "This quest",
-            oath_name ? oath_name : "oath",
+            quest_oath_name ? quest_oath_name : "oath",
             previous,
             (previous == 1 ? "" : "s"));
 

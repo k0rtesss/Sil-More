@@ -1576,11 +1576,6 @@ bool inven_carry_limit_failed(void)
     return carry_limit_last_failed;
 }
 
-enum inventory_limit_group inven_carry_limit_group(void)
-{
-    return carry_limit_last_group;
-}
-
 cptr inven_carry_limit_label(void)
 {
     if (!carry_limit_last_failed)

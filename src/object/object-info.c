@@ -1420,7 +1420,6 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
         else
         {
             /* No curses, handle special coloring for bad effects */
-            int i;
             for (i = 0; i < bc; i++)
             {
                 if (i != 0)

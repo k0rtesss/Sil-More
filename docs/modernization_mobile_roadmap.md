@@ -11,7 +11,7 @@ monolith breakup for its own sake. The next wave is:
 - make the platform boundary truly SDL-free on the core side
 - make Android and future iOS support first-class architectural constraints
 
-Status date: March 26, 2026.
+Status date: April 17, 2026.
 
 ## Current Status
 - `CMAKE_C_STANDARD 17` is already enabled in [`CMakeLists.txt`](../CMakeLists.txt).
@@ -19,7 +19,7 @@ Status date: March 26, 2026.
   - `sil-core`
   - `sil-platform-sdl`
   - `sil-more`
-- The current desktop audit on March 26, 2026 confirmed:
+- The current desktop audit on April 17, 2026 confirmed:
   - `powershell -ExecutionPolicy Bypass -File .\build-incremental.ps1` succeeds
   - the tree is structurally past the old unstable-port milestone
 - `Phase 0` is complete in the live tree:
@@ -31,8 +31,12 @@ Status date: March 26, 2026.
 - `Phase 1` is complete in the live tree:
   - `CTest` now runs `sil_phase01_regressions` plus `sil_smithing_parity`
   - `CMakePresets.json` now provides `dev-standard`, `dev-portable`, `dev-strict`, and `dev-sanitize`
-  - the strict preset builds a warning-free gate for the touched `Phase 0` / `Phase 1` files
   - the sanitizer preset probes ASan/UBSan runtime availability and falls back with a configure warning on hosts where those runtimes are unavailable
+- The finish-line gate ratchet is complete in the live tree:
+  - `tools/modernization_audit.py` and `tests/modernization_audit_baseline.json` now enforce the checked-in architecture and folder-ownership baselines
+  - `CTest` now also runs `sil_architecture_debt_audit` and `sil_folder_ownership_audit`
+  - `dev-strict` and `dev-sanitize` exercise the production targets (`sil-core`, `sil-platform-sdl`, and `sil-more`) instead of a sentinel-only warning gate
+  - `test-portable` provides the portable validation path alongside the standard and strict desktop suites
 - `Phase 3` is complete in the live tree:
   - [`src/util.c`](../src/util.c) is down to 490 lines
   - [`src/init2.c`](../src/init2.c) is down to 927 lines

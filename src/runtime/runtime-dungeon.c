@@ -996,7 +996,7 @@ void id_known_specials(void)
  *  This lets hasted players regenerate at the right speed.
  */
 
-int regen_amount(int turn_number, int max, int regen_period)
+static int regen_amount(int turn_number, int max, int regen_period)
 {
     int regen_so_far, regen_next;
 
@@ -2369,7 +2369,7 @@ void land(void)
 /*
  * Continue your leap
  */
-void continue_leap(void)
+static void continue_leap(void)
 {
     int dir;
     int y_end, x_end; // the desired endpoint of the leap

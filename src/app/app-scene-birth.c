@@ -741,8 +741,8 @@ static void replace_start_food(start_item list[MAX_START_ITEMS], byte from_sval,
  */
 static int find_named_artifact_for_character(void)
 {
-    character_profile *current_character_profile = &c_info[p_ptr->pcharacter];
-    const char *character_name = c_name + current_character_profile->name;
+    character_profile* character_profile_ptr = &c_info[p_ptr->pcharacter];
+    const char* character_name = c_name + character_profile_ptr->name;
     
     /* Build pattern: "of {CharacterName}" */
     char pattern[64];
@@ -882,22 +882,24 @@ static void player_outfit(void)
     if (curse_flag_count_cur(CUR_NOSTART)) return;
 
     /* ---------- pointers into info arrays ---------- */
-    player_race  *rp_ptr = &p_info[p_ptr->prace];
-    character_profile *current_character_profile = &c_info[p_ptr->pcharacter];
+    player_race* birth_race_ptr = &p_info[p_ptr->prace];
+    character_profile* birth_character_profile = &c_info[p_ptr->pcharacter];
     start_item race_start_items[MAX_START_ITEMS];
 
-    copy_start_items(race_start_items, rp_ptr->start_items);
+    copy_start_items(race_start_items, birth_race_ptr->start_items);
 
-    if (current_character_profile->flags_u & UNQ_SMT_EOL)
+    if (birth_character_profile->flags_u & UNQ_SMT_EOL)
     {
         replace_start_food(race_start_items, SV_FOOD_LEMBAS, SV_FOOD_BREAD);
     }
 
     /* ---------- hand out gear ---------- */
-    log_debug("Giving starting items for race: %s", p_name + rp_ptr->name);
+    log_debug("Giving starting items for race: %s",
+        p_name + birth_race_ptr->name);
     give_start_items(race_start_items);   /* race first  */
-    log_debug("Giving starting items for character: %s", c_name + current_character_profile->name);
-    give_start_items(current_character_profile->start_items);   /* character kit */
+    log_debug("Giving starting items for character: %s",
+        c_name + birth_character_profile->name);
+    give_start_items(birth_character_profile->start_items);   /* character kit */
 
     if (!run_mode_is_blitz()
         && metarun_has_major_blessing_effect(METARUN_MAJOR_EFFECT_START_ARTIFACT)) {

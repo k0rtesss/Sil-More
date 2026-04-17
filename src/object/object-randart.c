@@ -2290,10 +2290,10 @@ static void add_feature_aux(artefact_type* a_ptr, int choice)
     case CAT_STATS:
     {
         /*add a stat, or if all stats are taken and sustained, don't try again*/
-        byte choice = dieroll(((a_ptr->level > 30) ? 30 : a_ptr->level));
+        byte stat_roll = dieroll(((a_ptr->level > 30) ? 30 : a_ptr->level));
 
         /*2/3 of the time, try to add a stat, except at low levels*/
-        if (choice <= 10)
+        if (stat_roll <= 10)
         {
             if (!add_sustain(a_ptr))
             {
@@ -2340,7 +2340,7 @@ static void add_feature_aux(artefact_type* a_ptr, int choice)
     }
     case CAT_RESISTS:
     {
-        byte choice;
+        byte resist_roll;
 
         /*resists are added by depth*/
         byte highest = ((a_ptr->level > 52) ? 52 : a_ptr->level);
@@ -2350,23 +2350,23 @@ static void add_feature_aux(artefact_type* a_ptr, int choice)
             highest += 3;
 
         /*make the selection*/
-        choice = dieroll(highest);
+        resist_roll = dieroll(highest);
 
         /*add resists, the power of which depends on artefact depth*/
-        if (choice <= 18)
+        if (resist_roll <= 18)
         {
             /*exit if we added a base resist*/
             if (add_one_resist(a_ptr, TR2_RESISTANCE))
                 break;
         }
         /*add resists, the power of which depends on artefact depth*/
-        if (choice <= 30)
+        if (resist_roll <= 30)
         {
             /*exit if we added a low resist*/
             if (add_one_resist(a_ptr, TR2_LOW_RESIST))
                 break;
         }
-        if (choice <= 50)
+        if (resist_roll <= 50)
         {
             /*exit if we added a low resist*/
             if (add_one_resist(a_ptr, TR2_HIGH_RESIST))

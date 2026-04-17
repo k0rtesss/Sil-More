@@ -720,7 +720,6 @@ static bool get_move_retreat(monster_type* m_ptr, int* ty, int* tx)
         {
             int yy = m_ptr->fy + ddy_ddd[i];
             int xx = m_ptr->fx + ddx_ddd[i];
-            bool dummy;
 
             // check for (accessible) stairs
             if (cave_stair_bold(yy, xx)

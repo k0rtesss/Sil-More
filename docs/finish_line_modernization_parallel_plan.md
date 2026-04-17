@@ -1,6 +1,6 @@
 # Finish-Line Modernization Parallel Execution Plan
 
-Status date: April 16, 2026.
+Status date: April 17, 2026.
 
 This document turns the finish-line modernization goals into an execution plan
 that can be carried out by multiple agents and subagents in parallel without
@@ -27,27 +27,34 @@ validation gates.
   - `dev-portable`
   - `dev-strict`
   - `dev-sanitize`
-- Current registered tests in `build-standard`:
+- Current test presets:
+  - `test-standard`
+  - `test-portable`
+  - `test-strict`
+  - `test-sanitize`
+- Current registered tests in the configured desktop build trees:
   - `sil_phase01_regressions`
   - `sil_ui1_scaffolding`
   - `sil_ui8_wire`
   - `sil_ui8_demo_packets`
   - `sil_ui0_audit`
+  - `sil_architecture_debt_audit`
+  - `sil_folder_ownership_audit`
   - `sil_smithing_parity`
-- Current source-surface metrics measured on April 16, 2026:
-  - `src/externs.h`: 1159 lines, 883 `extern` declarations
-  - direct `externs.h` include sites: 182 files
-  - `src/variable.c`: 831 lines
-  - root-level `src/*.c`: 79 files
-  - root-level `src/*.h`: 44 files
+- Current source-surface metrics measured on April 17, 2026:
+  - `src/externs.h`: 262 lines, 96 `extern` declarations
+  - direct `externs.h` include sites: 23 files
+  - `src/variable.c`: removed from the live tree
+  - root-level `src/*.c`: 18 files
+  - root-level `src/*.h`: 39 files
   - non-platform SDL header include sites: 0 files
-  - non-platform SDL I/O usage sites: 23 files
+  - non-platform SDL I/O usage sites: 0 files
 - Largest active monoliths:
-  - `src/cmd/ui/cmd-ui-settings.c`: 6636 lines
-  - `src/metarun.c`: 6205 lines
-  - `src/ui/smithing/ui-smithing-screen.c`: 5610 lines
-  - `src/cmd/world/cmd-interact.c`: 5342 lines
-  - `src/cave.c`: 5033 lines
+  - `src/level-generation/level-generation-connectivity.c`: 4892 lines
+  - `src/cave/cave.c`: 4561 lines
+  - `src/runtime/runtime-dungeon.c`: 4051 lines
+  - `src/level-generation/level-generation-rooms.c`: 4019 lines
+  - `src/ui/smithing/ui-smithing-screen.c`: 3969 lines
 
 ## End State
 - `src/externs.h` is transitional compatibility only.
@@ -315,6 +322,8 @@ Deliverables:
 ### Wave 5: Final Gate Ratchet
 Owner: main integrator only.
 
+Status: complete in the live tree on April 17, 2026.
+
 Deliverables:
 - add `tools/modernization_audit.py`
 - add `tests/modernization_audit_baseline.json`
@@ -325,6 +334,17 @@ Deliverables:
   targets
 - add a portable test preset or equivalent portable validation path
 - refresh stale docs only after the code and baselines are stable
+
+Completion notes:
+- `tools/modernization_audit.py` and
+  `tests/modernization_audit_baseline.json` are checked in and enforced by
+  CTest.
+- `sil_architecture_debt_audit` and `sil_folder_ownership_audit` are both
+  registered in the configured desktop build trees.
+- `dev-strict` and `dev-sanitize` now exercise the real production targets
+  (`sil-core`, `sil-platform-sdl`, and `sil-more`).
+- `test-portable` provides the portable validation path, and both
+  `build-strict` and `build-portable` currently pass the full eight-test suite.
 
 ## Work Package Map
 | ID | Type | Scope | Owner | Depends on |
@@ -345,13 +365,16 @@ Deliverables:
 ## Validation Matrix
 ### Required After Every Merged Package
 - `cmake --build build-standard --parallel`
-- `ctest --output-on-failure` in `build-standard`
+- `ctest --preset test-standard`
 
 ### Required After Shared-Surface Passes
 - `cmake --preset dev-strict`
-- strict build and test
+- `cmake --build build-strict --parallel`
+- `ctest --preset test-strict`
+- `ctest --preset test-portable`
 - `cmake --preset dev-sanitize`
-- sanitizer build and test when runtime support is available
+- `cmake --build build-sanitize --parallel`
+- `ctest --preset test-sanitize` when runtime support is available
 
 ### Required After Settings Work
 - smoke-test options, sound config, controller bindings, macros, keymaps,

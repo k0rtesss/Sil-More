@@ -1,5 +1,16 @@
 # Session notes
 
+## 2026-04-17: Wave 5 final gate ratchet closeout
+- `docs/finish_line_modernization_parallel_plan.md`
+  - refreshed the Wave 5 status, current measured baseline metrics, active test preset list, and validation matrix so the plan matches the live tree instead of the pre-ratchet snapshot
+  - recorded that the modernization audits, strict production-target gate, and portable test path are already landed and currently green
+- `docs/modernization_mobile_roadmap.md`
+  - refreshed the roadmap status date and replaced the stale narrow strict-gate note with the current finish-line ratchet state
+- Validation:
+  - `ctest --test-dir build-strict --output-on-failure`
+  - `ctest --test-dir build-portable --output-on-failure`
+  - both configured trees passed the full eight-test suite, including `sil_architecture_debt_audit` and `sil_folder_ownership_audit`
+
 ## 2026-04-14: UI render replacement settings, prompt, and main-menu input fallback removal
 - `src/cmd/ui/cmd-ui-settings.c`
   - removed the file-local `inkey()` wrapper from the settings family and switched its blocking/non-blocking key reads to the app-session legacy input queue while the semantic settings scene owns input

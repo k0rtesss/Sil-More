@@ -785,7 +785,7 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
     int doc_start_y, int doc_end_y)
 {
     app_ui_panel* panel;
-    char header[96];
+    char page_header[96];
     char nav[160];
     int row;
 
@@ -804,10 +804,10 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
     panel->min_width_px = 1600;
     panel->width_cap_px = 2800;
 
-    strnfmt(header, sizeof(header),
+    strnfmt(page_header, sizeof(page_header),
         "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
         page, total_pages);
-    app_ui_panel_set_title(panel, help_role_attr(ROLE_HEADER), header);
+    app_ui_panel_set_title(panel, help_role_attr(ROLE_HEADER), page_header);
 
     if (!app_ui_panel_begin_rich_paragraph(scene, panel))
         return false;

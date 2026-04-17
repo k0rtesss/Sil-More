@@ -302,18 +302,18 @@ static void score_runs_import_legacy_scores(void)
         return;
     }
 
-    score_db_header header;
+    score_db_header db_header;
     bool created = false;
-    ang_file* runs_db = score_runs_open_db(runs_path, &header, &created);
+    ang_file* runs_db = score_runs_open_db(runs_path, &db_header, &created);
     if (!runs_db) {
         log_debug("score_runs: unable to open runs.db for import");
         mem_free(legacy);
         return;
     }
 
-    if (header.record_count >= legacy_entries) {
+    if (db_header.record_count >= legacy_entries) {
         log_debug("score_runs: runs.db already has %u entries (legacy=%u)",
-            header.record_count, legacy_entries);
+            db_header.record_count, legacy_entries);
         mem_free(legacy);
         (void)ang_file_close_compat(runs_db);
         return;
@@ -330,7 +330,7 @@ static void score_runs_import_legacy_scores(void)
     ang_file_seek_compat(runs_db, 0, ANG_FILE_SEEK_END);
 
     u32b imported = 0;
-    for (u32b i = header.record_count; i < legacy_entries; ++i) {
+    for (u32b i = db_header.record_count; i < legacy_entries; ++i) {
         score_record_v1 record;
         score_runs_build_record_from_legacy(&record, &legacy[i]);
 
@@ -339,7 +339,7 @@ static void score_runs_import_legacy_scores(void)
             continue;
         }
 
-        record.record_id = header.record_count + imported;
+        record.record_id = db_header.record_count + imported;
         record.chronological_idx = record.record_id;
         log_debug("score_runs: importing legacy[%u] player='%s' day=%u status=%d depth=%u sil=%u",
             i, record.player_name, record.created_utc, record.status,
@@ -352,8 +352,8 @@ static void score_runs_import_legacy_scores(void)
     }
 
     if (imported > 0) {
-        header.record_count += imported;
-        if (!score_runs_write_header(runs_db, &header)) {
+        db_header.record_count += imported;
+        if (!score_runs_write_header(runs_db, &db_header)) {
             log_warn("score_runs: unable to update header after legacy import");
         } else {
             log_info("score_runs: imported %u legacy entries into runs.db", imported);
@@ -371,39 +371,43 @@ static void score_runs_import_legacy_scores(void)
     (void)ang_file_close_compat(runs_db);
 }
 
-static void score_runs_init_header(score_db_header* header)
+static void score_runs_init_header(score_db_header* db_header)
 {
-    memset(header, 0, sizeof(*header));
-    memcpy(header->magic, SCORE_DB_MAGIC, sizeof(header->magic));
-    header->version = SCORE_RUNS_DB_VERSION;
+    memset(db_header, 0, sizeof(*db_header));
+    memcpy(db_header->magic, SCORE_DB_MAGIC, sizeof(db_header->magic));
+    db_header->version = SCORE_RUNS_DB_VERSION;
 }
 
-static bool score_runs_read_header(ang_file* file, score_db_header* header)
+static bool score_runs_read_header(ang_file* file, score_db_header* db_header)
 {
-    if (!file || !header)
+    if (!file || !db_header)
         return false;
 
     if (ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET) < 0)
         return false;
 
-    if (ang_file_read_compat(file, header, sizeof(*header)) != sizeof(*header))
+    if (ang_file_read_compat(file, db_header, sizeof(*db_header))
+            != sizeof(*db_header))
         return false;
 
-    if (memcmp(header->magic, SCORE_DB_MAGIC, sizeof(header->magic)) != 0)
+    if (memcmp(db_header->magic, SCORE_DB_MAGIC, sizeof(db_header->magic))
+            != 0)
         return false;
 
     return true;
 }
 
-static bool score_runs_write_header(ang_file* file, const score_db_header* header)
+static bool score_runs_write_header(ang_file* file,
+    const score_db_header* db_header)
 {
-    if (!file || !header)
+    if (!file || !db_header)
         return false;
 
     if (ang_file_seek_compat(file, 0, ANG_FILE_SEEK_SET) < 0)
         return false;
 
-    return ang_file_write_compat(file, header, sizeof(*header)) == sizeof(*header);
+    return ang_file_write_compat(file, db_header, sizeof(*db_header))
+        == sizeof(*db_header);
 }
 
 static u16b score_runs_choose_artefact_capacity(void)
@@ -478,20 +482,21 @@ static void score_runs_release_detail_block(score_run_detail_block* block)
 }
 
 static bool score_runs_read_detail_header(ang_file* file,
-                                          score_run_detail_header_v1* header)
+                                          score_run_detail_header_v1* detail_header)
 {
-    if (!file || !header)
+    if (!file || !detail_header)
         return false;
-    return ang_file_read_compat(file, header, sizeof(*header)) == sizeof(*header);
+    return ang_file_read_compat(file, detail_header, sizeof(*detail_header))
+        == sizeof(*detail_header);
 }
 
 bool score_runs_skip_detail_payload(ang_file* file,
-                                    const score_run_detail_header_v1* header)
+                                    const score_run_detail_header_v1* detail_header)
 {
-    if (!file || !header)
+    if (!file || !detail_header)
         return false;
 
-    if (header->version >= 2) {
+    if (detail_header->version >= 2) {
         u16b stats_count = 0;
         u16b skills_count = 0;
         u16b ability_count = 0;
@@ -529,25 +534,25 @@ bool score_runs_skip_detail_payload(ang_file* file,
     }
 
     ang_file_off_t skip = 0;
-    skip += (ang_file_off_t)header->artefact_capacity
+    skip += (ang_file_off_t)detail_header->artefact_capacity
         * (ang_file_off_t)sizeof(score_run_artefact_v1);
-    skip += (ang_file_off_t)header->monster_capacity
+    skip += (ang_file_off_t)detail_header->monster_capacity
         * (ang_file_off_t)sizeof(score_run_monster_v1);
     if (skip < 0)
         return false;
     return ang_file_seek_compat(file, skip, ANG_FILE_SEEK_CUR) >= 0;
 }
 
-static bool score_runs_read_detail_header_at(ang_file* file, ang_file_off_t record_offset,
-                                             score_run_detail_header_v1* header)
+static bool score_runs_read_detail_header_at(ang_file* file,
+    ang_file_off_t record_offset, score_run_detail_header_v1* detail_header)
 {
-    if (!file || !header)
+    if (!file || !detail_header)
         return false;
     if (ang_file_seek_compat(file,
                    record_offset + (ang_file_off_t)sizeof(score_record_v1),
                    ANG_FILE_SEEK_SET) < 0)
         return false;
-    return score_runs_read_detail_header(file, header);
+    return score_runs_read_detail_header(file, detail_header);
 }
 
 static bool score_runs_write_record(ang_file* file,
@@ -630,7 +635,8 @@ static bool score_runs_write_record(ang_file* file,
     return true;
 }
 
-static ang_file* score_runs_open_db(const char* path, score_db_header* header,
+static ang_file* score_runs_open_db(const char* path,
+    score_db_header* db_header,
                                     bool* created)
 {
     if (created)
@@ -645,15 +651,15 @@ static ang_file* score_runs_open_db(const char* path, score_db_header* header,
     }
 
     if (created && *created) {
-        score_runs_init_header(header);
-        (void)score_runs_write_header(file, header);
+        score_runs_init_header(db_header);
+        (void)score_runs_write_header(file, db_header);
         ang_file_seek_compat(file, 0, ANG_FILE_SEEK_END);
         return file;
     }
 
     bool need_reset = false;
-    if (!score_runs_read_header(file, header) ||
-        header->version != SCORE_RUNS_DB_VERSION) {
+    if (!score_runs_read_header(file, db_header)
+        || db_header->version != SCORE_RUNS_DB_VERSION) {
         log_warn("score_runs: invalid or legacy header in %s, recreating", path);
         need_reset = true;
     }
@@ -665,8 +671,9 @@ static ang_file* score_runs_open_db(const char* path, score_db_header* header,
             return NULL;
         if (created)
             *created = true;
-        score_runs_init_header(header);
-        if (ang_file_write_compat(file, header, sizeof(*header)) != sizeof(*header)) {
+        score_runs_init_header(db_header);
+        if (ang_file_write_compat(file, db_header, sizeof(*db_header))
+                != sizeof(*db_header)) {
             (void)ang_file_close_compat(file);
             return NULL;
         }
@@ -1181,8 +1188,8 @@ static u16b score_runs_collect_milestones(score_run_milestone_v1* entries,
         size_t len = 0;
         while (cursor[len] && cursor[len] != '\n')
             len++;
-        bool header = score_runs_is_milestone_header(cursor, len);
-        if (header) {
+        bool is_header = score_runs_is_milestone_header(cursor, len);
+        if (is_header) {
             if (have_current && stored < capacity) {
                 if (entries)
                     entries[stored] = current;
@@ -1458,9 +1465,9 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
 
     safe_setuid_grab();
 
-    score_db_header header;
+    score_db_header db_header;
     bool created = false;
-    ang_file* db = score_runs_open_db(path, &header, &created);
+    ang_file* db = score_runs_open_db(path, &db_header, &created);
     if (!db) {
         safe_setuid_drop();
         log_warn("score_runs: unable to open %s", path);
@@ -1520,11 +1527,11 @@ bool score_runs_record_current_run(const struct high_score* legacy_score,
         }
         ang_file_seek_compat(db, 0, ANG_FILE_SEEK_END);
     } else {
-        record.record_id = header.record_count;
+        record.record_id = db_header.record_count;
         record.chronological_idx = (u32b)score_runs_count_for_metarun(db, record.metarun_id);
         if (score_runs_write_record(db, &record, &details)) {
-            header.record_count++;
-            if (score_runs_write_header(db, &header)) {
+            db_header.record_count++;
+            if (score_runs_write_header(db, &db_header)) {
                 success = true;
             } else {
                 log_warn("score_runs: failed to refresh runs.db header");
@@ -1569,16 +1576,16 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
     if (ang_file_seek_compat(file, (ang_file_off_t)detail_offset, ANG_FILE_SEEK_SET) < 0)
         goto done;
 
-    score_run_detail_header_v1 header;
-    if (!score_runs_read_detail_header(file, &header))
+    score_run_detail_header_v1 detail_header;
+    if (!score_runs_read_detail_header(file, &detail_header))
         goto done;
 
     if (!score_runs_alloc_detail_block(out,
-            header.artefact_capacity, header.monster_capacity))
+            detail_header.artefact_capacity, detail_header.monster_capacity))
         goto done;
-    out->header = header;
+    out->header = detail_header;
 
-    if (header.version >= 2) {
+    if (detail_header.version >= 2) {
         u16b stats_count = 0;
         u16b skills_count = 0;
         u16b ability_count = 0;
@@ -1633,7 +1640,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
         }
     }
 
-    size_t artefact_bytes = (size_t)header.artefact_capacity
+    size_t artefact_bytes = (size_t)detail_header.artefact_capacity
         * sizeof(score_run_artefact_v1);
     if (artefact_bytes > 0) {
         if (ang_file_read_compat(file, out->artefacts, artefact_bytes)
@@ -1641,7 +1648,7 @@ bool score_runs_load_details(s64b detail_offset, score_run_detail_block* out)
             goto done;
     }
 
-    size_t monster_bytes = (size_t)header.monster_capacity
+    size_t monster_bytes = (size_t)detail_header.monster_capacity
         * sizeof(score_run_monster_v1);
     if (monster_bytes > 0) {
         if (ang_file_read_compat(file, out->monsters, monster_bytes)

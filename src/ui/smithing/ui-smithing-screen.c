@@ -13,6 +13,7 @@
 #include "object/object-ui-select.h"
 #include "platform-frame.h"
 #include "ui/ui-information-scene.h"
+#include "ui/smithing/ui-smithing-screen.h"
 #include "ui/smithing/ui-smithing-internal.h"
 #include "log/log.h"
 
@@ -136,7 +137,7 @@ static const smithing_flag_desc smithing_flag_types[] = { { CAT_STAT, TR1_STR,
     { CAT_RES, TR2_RES_STUN, 2, "Resist Stunning" },
     { CAT_RES, TR2_RES_HALLU, 2, "Resist Hallucination" }, { 0, 0, 0, "" } };
 
-void create_tval_menu(void)
+static void create_tval_menu(void)
 {
     (void)smith_ui_base_item_snapshot_menu();
     enchant_then_numbers = false;
@@ -150,7 +151,7 @@ static void smith_bonus_menu(void)
 /*
  * Displays a menu for modifying numerical bonuses and weight of an item.
  */
-void numbers_menu(void)
+static void numbers_menu(void)
 {
     if (object_has_ego(smith_o_ptr))
         enchant_then_numbers = true;
@@ -251,12 +252,12 @@ static void rename_artefact(void)
     artefact_copy(smith_a_ptr, smith2_a_ptr);
 }
 
-void artefact_menu(void)
+static void artefact_menu(void)
 {
     smith_ui_artefact_snapshot_menu();
 }
 
-void melt_menu(void)
+static void melt_menu(void)
 {
     smith_ui_melt_snapshot_menu();
 }

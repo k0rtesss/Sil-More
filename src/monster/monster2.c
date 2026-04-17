@@ -516,10 +516,10 @@ void compact_monsters(int size)
     for (i = mon_max - 1; i >= 1; i--)
     {
         /* Get the i'th monster */
-        monster_type* m_ptr = &mon_list[i];
+        monster_type* hole_m_ptr = &mon_list[i];
 
         /* Skip real monsters */
-        if (m_ptr->r_idx)
+        if (hole_m_ptr->r_idx)
             continue;
 
         /* Move last monster into open hole */
@@ -584,7 +584,7 @@ void wipe_mon_list(void)
  *
  * This routine should almost never fail, but it *can* happen.
  */
-s16b mon_pop(void)
+static s16b mon_pop(void)
 {
     int i;
 
@@ -1493,7 +1493,7 @@ bool detect_monster_noise(monster_type* m_ptr, int skill)
     return true;
 }
 
-void listen(monster_type* m_ptr)
+static void listen(monster_type* m_ptr)
 {
     // must have the listen skill
     if (!p_ptr->active_ability[S_PER][PER_LISTEN])
@@ -1957,7 +1957,7 @@ s16b monster_carry(int m_idx, object_type* j_ptr)
 /*
  * Check if the monster in the given location needs to fall down a chasm
  */
-void m_fall_in_chasm(int fy, int fx)
+static void m_fall_in_chasm(int fy, int fx)
 {
     monster_type* m_ptr;
     monster_race* r_ptr;
@@ -2034,7 +2034,7 @@ void m_fall_in_chasm(int fy, int fx)
 /*
  * Print a message saying what is underfoot.
  */
-void describe_floor_object(void)
+static void describe_floor_object(void)
 {
     object_type* o_ptr;
     char o_name[80];
@@ -2687,7 +2687,7 @@ void set_monster_slow(s16b m_idx, s16b counter, bool message)
 /*
  * Set Hallucinatory monster race
  */
-int random_r_idx(void)
+static int random_r_idx(void)
 {
     monster_race* r_ptr;
     int race_idx;

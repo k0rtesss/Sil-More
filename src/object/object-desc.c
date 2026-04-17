@@ -33,11 +33,11 @@
 #define object_desc_str_macro(T, S)                                            \
     do                                                                         \
     {                                                                          \
-        cptr s = (S);                                                          \
+        cptr desc_s = (S);                                                     \
                                                                                \
         /* Copy the string */                                                  \
-        while (*s)                                                             \
-            *(T)++ = *s++;                                                     \
+        while (*desc_s)                                                        \
+            *(T)++ = *desc_s++;                                                \
                                                                                \
     } while (0)
 
@@ -1182,75 +1182,75 @@ void object_desc(
 
         if (pval_f1 & (TR1_STR | TR1_NEG_STR))
         {
-            int v = o_ptr->stat_bonus[A_STR];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->stat_bonus[A_STR];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & (TR1_DEX | TR1_NEG_DEX))
         {
-            int v = o_ptr->stat_bonus[A_DEX];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->stat_bonus[A_DEX];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & (TR1_CON | TR1_NEG_CON))
         {
-            int v = o_ptr->stat_bonus[A_CON];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->stat_bonus[A_CON];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & (TR1_GRA | TR1_NEG_GRA))
         {
-            int v = o_ptr->stat_bonus[A_GRA];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->stat_bonus[A_GRA];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_MEL)
         {
-            int v = o_ptr->skill_bonus[S_MEL];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_MEL];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_ARC)
         {
-            int v = o_ptr->skill_bonus[S_ARC];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_ARC];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_STL)
         {
-            int v = o_ptr->skill_bonus[S_STL];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_STL];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_PER)
         {
-            int v = o_ptr->skill_bonus[S_PER];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_PER];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_WIL)
         {
-            int v = o_ptr->skill_bonus[S_WIL];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_WIL];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_SMT)
         {
-            int v = o_ptr->skill_bonus[S_SMT];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_SMT];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & TR1_SNG)
         {
-            int v = o_ptr->skill_bonus[S_SNG];
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->skill_bonus[S_SNG];
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
         if (pval_f1 & (TR1_TUNNEL | TR1_DAMAGE_SIDES))
         {
-            int v = o_ptr->pval;
-            int av = ABS(v);
-            if (av > best_abs) { best_abs = av; best = v; }
+            int bonus_value = o_ptr->pval;
+            int av = ABS(bonus_value);
+            if (av > best_abs) { best_abs = av; best = bonus_value; }
         }
 
         cptr tail = "";

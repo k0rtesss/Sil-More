@@ -13,6 +13,7 @@ static struct inkey_state g_inkey_state = { 0 };
 
 void input_byte_queue_clear(void);
 void input_clear_movement_commands(void);
+bool inkey_can_consume_immediately(void);
 
 bool inkey_cursor_hidden(void)
 {

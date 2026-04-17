@@ -4,6 +4,9 @@
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"
 
+int get_menu_choice(s16b max, char* prompt);
+void pause_line(int row);
+
 static cptr g_prompt_interaction_label = NULL;
 
 typedef struct prompt_menu_scene_scope {

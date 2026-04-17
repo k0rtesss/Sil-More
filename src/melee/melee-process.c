@@ -1083,18 +1083,18 @@ static void process_monster(monster_type* m_ptr)
             /* Look at adjacent grids */
             for (i = 0; i < 8; i++)
             {
-                int y = m_ptr->fy + ddy_ddd[i];
-                int x = m_ptr->fx + ddx_ddd[i];
+                int adj_y = m_ptr->fy + ddy_ddd[i];
+                int adj_x = m_ptr->fx + ddx_ddd[i];
 
                 /* Check bounds */
-                if (!in_bounds(y, x))
+                if (!in_bounds(adj_y, adj_x))
                     continue;
 
                 /* Accept a chasm square */
-                if (cave_feat[y][x] == FEAT_CHASM)
+                if (cave_feat[adj_y][adj_x] == FEAT_CHASM)
                 {
-                    chasm_y = y;
-                    chasm_x = x;
+                    chasm_y = adj_y;
+                    chasm_x = adj_x;
 
                     break;
                 }

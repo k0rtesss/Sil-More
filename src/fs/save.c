@@ -16,7 +16,7 @@
 #include "log/log.h"
 #include <stdio.h>
 
-void updatecharinfoS(void)
+static void updatecharinfoS(void)
 {
     char tmp_Path[1024];
     char parsed_dir_user[1024];
@@ -1582,7 +1582,8 @@ static void wr_dungeon(void)
         log_debug("Writing door-choices block: magic=0x%04X, len=%d", DOOR_CHOICES_MAGIC, cap);
         wr_u16b(DOOR_CHOICES_MAGIC);
         wr_byte((byte)cap);
-        for (int i = 0; i < cap; ++i) wr_byte(buf[i]);
+        for (int choice_idx = 0; choice_idx < cap; ++choice_idx)
+            wr_byte(buf[choice_idx]);
     }
     log_trace("[save:%06u] === END DOOR_CHOICES ===", (unsigned)save_byte_offset);
 

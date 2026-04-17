@@ -1057,13 +1057,13 @@ void monster_death(int m_idx)
     // since it was killed, it was definitely encountered
     if (!m_ptr->encountered)
     {
-        int new_exp;
+        int encounter_exp_gain;
 
-        new_exp = adjusted_mon_exp(r_ptr, false);
+        encounter_exp_gain = adjusted_mon_exp(r_ptr, false);
 
         // gain experience for encounter
-        gain_exp(new_exp);
-        p_ptr->encounter_exp += new_exp;
+        gain_exp(encounter_exp_gain);
+        p_ptr->encounter_exp += encounter_exp_gain;
 
         // update stats
         m_ptr->encountered = true;

@@ -1074,13 +1074,16 @@ void self_knowledge(void)
     }
 
     // Add equipment stat modifiers
-    const char* stat_names[] = {"Strength", "Dexterity", "Constitution", "Grace"};
+    const char* equip_stat_names[] = {
+        "Strength", "Dexterity", "Constitution", "Grace"
+    };
     for (int stat = 0; stat < 4; stat++) {
         if (p_ptr->stat_equip_mod[stat] != 0) {
             strnfmt(s[i], 80, "Your %s is affected by your equipment", 
                     (stat == A_STR) ? "strength" : (stat == A_DEX) ? "dexterity" : 
                     (stat == A_CON) ? "constitution" : "grace");
-            strnfmt(t[i], 80, "(%+d %s)", p_ptr->stat_equip_mod[stat], stat_names[stat]);
+            strnfmt(t[i], 80, "(%+d %s)", p_ptr->stat_equip_mod[stat],
+                equip_stat_names[stat]);
             good[i] = (p_ptr->stat_equip_mod[stat] > 0);
             i++;
         }

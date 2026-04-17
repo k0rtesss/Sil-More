@@ -1667,8 +1667,8 @@ bool make_attack_normal(monster_type* m_ptr)
             /* Hit to disarm */
             case RBE_DISARM:
             {
-                object_type* o_ptr;
-                char o_name[120];
+                object_type* disarm_o_ptr;
+                char disarm_o_name[120];
 
                 object_type* i_ptr;
                 object_type object_type_body;
@@ -1680,14 +1680,15 @@ bool make_attack_normal(monster_type* m_ptr)
                 int difficulty;
 
                 /* Select the melee weapon */
-                o_ptr = &inventory[INVEN_WIELD];
+                disarm_o_ptr = &inventory[INVEN_WIELD];
 
                 /* Nothing to disamr */
-                if (!o_ptr->k_idx)
+                if (!disarm_o_ptr->k_idx)
                     break;
 
                 /* Describe */
-                object_desc(o_name, sizeof(o_name), o_ptr, false, 0);
+                object_desc(disarm_o_name, sizeof(disarm_o_name), disarm_o_ptr,
+                    false, 0);
 
                 /* Base difficulty */
                 difficulty = 2;
@@ -1714,10 +1715,10 @@ bool make_attack_normal(monster_type* m_ptr)
                     /* Oops */
                     msg_format(
                         "%^s disarms you! Your %s falls to the ground nearby.",
-                        m_name, o_name);
+                        m_name, disarm_o_name);
 
                     /* Get the original object */
-                    o_ptr = &inventory[item];
+                    disarm_o_ptr = &inventory[item];
 
                     /* Take off equipment */
                     if (item >= INVEN_WIELD)
@@ -1729,16 +1730,16 @@ bool make_attack_normal(monster_type* m_ptr)
 
                         /* Get the original object */
                         if (item >= 0)
-                            o_ptr = &inventory[item];
+                            disarm_o_ptr = &inventory[item];
                         else
-                            o_ptr = &o_list[0 - item];
+                            disarm_o_ptr = &o_list[0 - item];
                     }
 
                     /* Get local object */
                     i_ptr = &object_type_body;
 
                     /* Obtain local object */
-                    object_copy(i_ptr, o_ptr);
+                    object_copy(i_ptr, disarm_o_ptr);
 
                     /* Modify quantity */
                     i_ptr->number = 1;
@@ -1904,11 +1905,12 @@ bool make_attack_normal(monster_type* m_ptr)
                     {
                         if (p_ptr->stand_fast)
                         {
-                            char m_name[80];
-                            monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+                            char knockback_m_name[80];
+                            monster_desc(knockback_m_name,
+                                sizeof(knockback_m_name), m_ptr, 0);
                             msg_format("%^s attempts to knock you back, but "
                                        "you stand fast.",
-                                m_name);
+                                knockback_m_name);
 
                             ident_f3(TR3_STAND_FAST, NULL);
                         }
@@ -2745,12 +2747,13 @@ bool make_attack_ranged(monster_type* m_ptr, int attack)
         for (int i = mon_max - 1; i >= 1; i--)
         {
             monster_type* target = &mon_list[i];
-            monster_race* r_ptr = &r_info[target->r_idx];
+            monster_race* target_r_ptr = &r_info[target->r_idx];
 
             // Rally works on living monsters which are orcs, men, or raukar
             if (!target->r_idx || target == m_ptr
-                || (!(r_ptr->flags3 & (RF3_ORC)) && !(r_ptr->flags3 & (RF3_MAN))
-                    && !(r_ptr->flags3 & (RF3_RAUKO))))
+                || (!(target_r_ptr->flags3 & (RF3_ORC))
+                    && !(target_r_ptr->flags3 & (RF3_MAN))
+                    && !(target_r_ptr->flags3 & (RF3_RAUKO))))
             {
                 continue;
             }

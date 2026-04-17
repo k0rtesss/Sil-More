@@ -1069,8 +1069,8 @@ static bool project_m(
                 /* Stun and damage work when light level > 2 and player-caused */
                 if ((who < 0) && (light_level > 2))
                 {
-                    int resistance;
-                    int result;
+                    int will_resistance;
+                    int light_check_result;
                     int actual_dam;
                     int stun_amount;
                     int skill_to_use;
@@ -1083,16 +1083,16 @@ static bool project_m(
                         skill_to_use = p_ptr->skill_use[S_WIL];
                     
                     /* Get monster's Will resistance */
-                    resistance = monster_skill(m_ptr, S_WIL);
+                    will_resistance = monster_skill(m_ptr, S_WIL);
                     
                     /* Adjust difficulty by the distance to the player */
-                    result = skill_check(PLAYER, skill_to_use, 
-                        resistance + 5 + distance(p_ptr->py, p_ptr->px, y, x),
+                    light_check_result = skill_check(PLAYER, skill_to_use,
+                        will_resistance + 5 + distance(p_ptr->py, p_ptr->px, y, x),
                         m_ptr);
                     
                     /* Stun is applied when monster FAILS Will save (result > 0 means player wins) */
                     /* Stun amount scales with light level */
-                    if (result > 0)
+                    if (light_check_result > 0)
                     {
                         stun_amount = damroll(dd, light_level);
                         
@@ -1114,20 +1114,22 @@ static bool project_m(
                     
                     /* Damage only happens on STRONG Will failure (result >= 10) */
                     /* This represents intense light overwhelming the monster */
-                    if (result >= 10)
+                    if (light_check_result >= 10)
                     {
                         /* Use light level as dice sides, dd from the attack */
                         actual_dam = damroll(dd, light_level);
                         
                         /* Reduce damage based on how much the monster failed */
                         int raw_dam = actual_dam;
-                        actual_dam = (actual_dam * result) / (result + 5);
+                        actual_dam = (actual_dam * light_check_result)
+                            / (light_check_result + 5);
                         
                         /* Debug logging */
                         if (seen)
                         {
                             log_debug("GF_LIGHT: dd=%d light=%d raw=%d result=%d final=%d stun=%d", 
-                                dd, light_level, raw_dam, result, actual_dam, stun_amount);
+                                dd, light_level, raw_dam, light_check_result,
+                                actual_dam, stun_amount);
                         }
                         
                         if (actual_dam > 0)
@@ -1152,7 +1154,7 @@ static bool project_m(
                                 note = " cringes from the light!";
                         }
                     }
-                    else if (result > 0)
+                    else if (light_check_result > 0)
                     {
                         /* Stunned but not enough to damage */
                         dam = 0;

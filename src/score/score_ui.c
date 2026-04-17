@@ -1163,14 +1163,15 @@ static bool run_history_skip_details(ang_file* file, s64b* detail_offset)
         return false;
 
     ang_file_off_t header_pos = ang_file_tell_compat(file);
-    score_run_detail_header_v1 header;
-    if (ang_file_read_compat(file, &header, sizeof(header)) != sizeof(header))
+    score_run_detail_header_v1 detail_header;
+    if (ang_file_read_compat(file, &detail_header, sizeof(detail_header))
+            != sizeof(detail_header))
         return false;
 
     if (detail_offset)
         *detail_offset = (s64b)header_pos;
 
-    return score_runs_skip_detail_payload(file, &header);
+    return score_runs_skip_detail_payload(file, &detail_header);
 }
 static const char* run_history_race_name(byte idx)
 {
@@ -1202,8 +1203,10 @@ static void run_history_format_timestamp(u32b utc, bool include_time,
         return;
     }
 
-    const char* fmt = include_time ? "%Y-%m-%d %H:%M" : "%Y-%m-%d";
-    if (strftime(out, out_len, fmt, tm_info) == 0) {
+    if (include_time) {
+        if (strftime(out, out_len, "%Y-%m-%d %H:%M", tm_info) == 0)
+            SDL_strlcpy(out, "----", out_len);
+    } else if (strftime(out, out_len, "%Y-%m-%d", tm_info) == 0) {
         SDL_strlcpy(out, "----", out_len);
     }
 }
@@ -1274,9 +1277,11 @@ static int collect_run_history(run_history_entry* out, int capacity)
     if (!file)
         return 0;
 
-    score_db_header header;
-    if (ang_file_read_compat(file, &header, sizeof(header)) != sizeof(header) ||
-        memcmp(header.magic, SCORE_DB_MAGIC, sizeof(header.magic)) != 0) {
+    score_db_header db_header;
+    if (ang_file_read_compat(file, &db_header, sizeof(db_header))
+            != sizeof(db_header)
+        || memcmp(db_header.magic, SCORE_DB_MAGIC, sizeof(db_header.magic))
+            != 0) {
         (void)ang_file_close_compat(file);
         return 0;
     }

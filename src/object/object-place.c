@@ -323,10 +323,11 @@ s16b drop_near(object_type* j_ptr, int chance, int y, int x)
         // Clear ordinary junk if this object must be force-placed.
         if (can_clobber && cave_o_idx[ty][tx] != 0)
         {
-            object_type* o_ptr = &o_list[cave_o_idx[ty][tx]];
+            object_type* grid_o_ptr = &o_list[cave_o_idx[ty][tx]];
             const bool o_is_silmaril =
-                (o_ptr->tval == TV_LIGHT) && (o_ptr->sval == SV_LIGHT_SILMARIL);
-            if (!artefact_p(o_ptr) && !o_is_silmaril)
+                (grid_o_ptr->tval == TV_LIGHT)
+                && (grid_o_ptr->sval == SV_LIGHT_SILMARIL);
+            if (!artefact_p(grid_o_ptr) && !o_is_silmaril)
             {
                 /* Delete the object */
                 delete_object_idx(cave_o_idx[ty][tx]);

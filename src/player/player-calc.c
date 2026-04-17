@@ -116,18 +116,18 @@ void calc_voice(void)
     /* New maximum hitpoints */
     if (p_ptr->msp != msp)
     {
-        int i = 100;
+        int sp_percent = 100;
 
         /* Get percentage of maximum sp */
         if (p_ptr->msp)
-            i = ((100 * p_ptr->csp) / p_ptr->msp);
+            sp_percent = ((100 * p_ptr->csp) / p_ptr->msp);
 
         /* Save new limit */
         p_ptr->msp = msp;
 
         /* Update current maximum sp */
-        p_ptr->csp = ((i * p_ptr->msp) / 100)
-            + (((i * p_ptr->msp) % 100 >= 50) ? 1 : 0);
+        p_ptr->csp = ((sp_percent * p_ptr->msp) / 100)
+            + (((sp_percent * p_ptr->msp) % 100 >= 50) ? 1 : 0);
 
         /* Hack - any change in max voice resets frac */
         p_ptr->csp_frac = 0;
@@ -181,18 +181,18 @@ void calc_hitpoints(void)
     /* New maximum hitpoints */
     if (p_ptr->mhp != mhp)
     {
-        int i = 100;
+        int hp_percent = 100;
 
         /* Get percentage of maximum hp */
         if (p_ptr->mhp)
-            i = ((100 * p_ptr->chp) / p_ptr->mhp);
+            hp_percent = ((100 * p_ptr->chp) / p_ptr->mhp);
 
         /* Save new limit */
         p_ptr->mhp = mhp;
 
         /* Update current maximum hp */
-        p_ptr->chp = ((i * p_ptr->mhp) / 100)
-            + (((i * p_ptr->mhp) % 100 >= 50) ? 1 : 0);
+        p_ptr->chp = ((hp_percent * p_ptr->mhp) / 100)
+            + (((hp_percent * p_ptr->mhp) % 100 >= 50) ? 1 : 0);
 
         /* Hack - any change in max hitpoint resets frac */
         p_ptr->chp_frac = 0;
@@ -659,14 +659,15 @@ void calc_bonuses(void)
     /* Oath of Light: wearing shadowed gear immediately breaks the vow */
     if (p_ptr->oath_type == OATH_LIGHT && !oath_invalid(OATH_LIGHT))
     {
-        for (int i = INVEN_WIELD; i < INVEN_TOTAL; i++)
+        for (int slot_idx = INVEN_WIELD; slot_idx < INVEN_TOTAL; slot_idx++)
         {
-            object_type* o_ptr = &inventory[i];
-            if (!o_ptr->k_idx) continue;
+            object_type* gear_o_ptr = &inventory[slot_idx];
+            if (!gear_o_ptr->k_idx) continue;
 
-            u32b f1, f2, f3, f4;
-            object_flags4(o_ptr, &f1, &f2, &f3, &f4);
-            if ((f2 & TR2_DARKNESS) || (f4 & TR4_UNLIGHT) || (f3 & TR3_LIGHT_CURSE))
+            u32b gear_f1, gear_f2, gear_f3, gear_f4;
+            object_flags4(gear_o_ptr, &gear_f1, &gear_f2, &gear_f3, &gear_f4);
+            if ((gear_f2 & TR2_DARKNESS) || (gear_f4 & TR4_UNLIGHT)
+                || (gear_f3 & TR3_LIGHT_CURSE))
             {
                 p_ptr->oaths_broken |= OATH_LIGHT_FLAG;
                 p_ptr->active_ability[S_SPC][SPC_OATH_LIGHT] = false;

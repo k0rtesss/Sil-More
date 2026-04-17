@@ -295,7 +295,7 @@ void object_copy(object_type* o_ptr, const object_type* j_ptr)
 /*
  * Set Hallucinatory object kind
  */
-int random_k_idx(void)
+static int random_k_idx(void)
 {
     object_kind* k_ptr;
     int kind_idx;

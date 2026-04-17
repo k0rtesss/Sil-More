@@ -24,6 +24,8 @@ extern char current_menu_command;
 extern int current_menu_state;
 
 void describe_item_with_comparisons(int item_index, bool include_comparisons);
+void show_inven_enhanced(void);
+void show_equip_enhanced(void);
 void run_inven_enhanced_menu(void);
 void run_equip_enhanced_menu(void);
 
