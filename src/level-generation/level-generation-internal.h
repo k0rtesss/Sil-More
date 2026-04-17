@@ -118,6 +118,10 @@ typedef struct partition_drop_profile
     drop_profile profile;
 } partition_drop_profile;
 
+bool place_room_forced(int y0, int x0, vault_type* v_ptr);
+bool place_room_forced_exhaustive(
+    vault_type* v_ptr, int* placed_y, int* placed_x);
+
 #ifndef ALLOC_SET_CORR
 #define ALLOC_SET_CORR 1
 #endif

@@ -22,37 +22,32 @@ high-value dependency cleanup.
   subagents with explicit write sets and sequencing rules.
 
 ## Current Baseline
-- The finish-line plan is complete in the live tree.
-- `src/externs.h` is down to 262 lines with 23 direct include sites.
+- The finish-line plan is complete in the live tree, and this post-finish-line
+  program is now at its final gate ratchet.
+- `src/externs.h` is down to 184 lines with 39 `extern` declarations and 16
+  direct include sites.
 - `src/variable.c` is gone from the live tree.
 - The checked-in modernization audit now scans normal source files plus
-  compiled `*.inc` payloads reachable from the source tree.
+  compiled `*.inc` payloads reachable from the source tree, and the current
+  baseline records zero compiled code-bearing `*.inc` files plus zero
+  non-platform SDL I/O leakage.
 - A checked-in source size audit now freezes oversized non-vendor source files
   against a committed baseline.
-- `src/metarun/metarun.c` still compiles code from:
-  - `src/metarun/metarun-persistence.inc`
-  - `src/metarun/metarun-score.inc`
-  - `src/metarun/metarun-state.inc`
-  - `src/metarun/metarun-ui-history.inc`
-- Those `metarun` `*.inc` files still contain non-platform SDL I/O usage, and
-  the live modernization audit now exposes that debt directly.
-- Quick shell line counts measured on April 17, 2026 show:
-  - 21 non-vendor `src/**/*.c` files above 2500 lines
-  - 15 non-vendor `src/**/*.c` files above 3500 lines
-  - 11 non-vendor `src/**/*.c` files above 4000 lines
+- Quick audit counts measured on April 17, 2026 show:
+  - 14 non-vendor `src/**/*.c` files above 2500 lines
+  - 7 non-vendor `src/**/*.c` files above 3500 lines
+  - 4 non-vendor `src/**/*.c` files above 4000 lines
+  - 9 non-vendor `src/**/*.h` files above 250 lines
+  - 2 non-vendor `src/**/*.h` files above 1000 lines
 - Largest current non-vendor hotspots:
   - `src/level-generation/level-generation-connectivity.c`: 5636 lines
-  - `src/cave/cave.c`: 5317 lines
-  - `src/runtime/runtime-dungeon.c`: 4910 lines
-  - `src/level-generation/level-generation-rooms.c`: 4579 lines
-  - `src/ui/smithing/ui-smithing-screen.c`: 4496 lines
-  - `src/app/app-scene-birth.c`: 4408 lines
-  - `src/metarun/metarun.c`: 4393 lines
   - `src/monster/monster2.c`: 4211 lines
   - `src/level-generation/level-generation-layout.c`: 4189 lines
-  - `src/cmd/world/cmd-interact-chest.c`: 4067 lines
-  - `src/fs/load.c`: 4008 lines
-  - `src/cmd/ui/cmd-ui-knowledge.c`: 3722 lines
+  - `src/runtime/runtime-dungeon.c`: 4036 lines
+  - `src/sdl-scene-menu.c`: 3994 lines
+  - `src/level-generation/level-generation-rooms.c`: 3732 lines
+  - `src/melee/melee-movement.c`: 3704 lines
+  - `src/object/object-randart.c`: 3337 lines
 
 ## End State
 - No compiled code-bearing `*.inc` files remain in the live tree.
@@ -401,6 +396,8 @@ Constraints:
 ### Wave 5: Final Gate Ratchet
 Owner: main integrator only.
 
+Status: complete in the live tree on April 17, 2026.
+
 Deliverables:
 - refresh docs after the code and audits are stable
 - freeze the size-audit baseline and vendor allowlist
@@ -418,6 +415,47 @@ Validation:
 - `cmake --preset dev-sanitize`
 - `cmake --build build-sanitize --parallel`
 - `ctest --preset test-sanitize` when runtime support is available
+
+Completion notes:
+- `tests/source_size_audit_baseline.json` is ratcheted to the current
+  oversized-file set, and the vendor allowlist remains limited to
+  `src/support/cJSON.c`, `src/cJSON.h`, and `src/support/cJSON.h`.
+- `tests/modernization_audit_baseline.json` is ratcheted to
+  `src/externs.h` at 184 lines, 39 `extern` declarations, and 16 direct
+  include sites, with zero compiled code-bearing `*.inc` files and zero
+  non-platform SDL leakage.
+- The remaining oversize-file exceptions are now explicitly frozen in the
+  source-size baseline:
+  - C files above 4000 lines:
+    `src/level-generation/level-generation-connectivity.c`,
+    `src/monster/monster2.c`,
+    `src/level-generation/level-generation-layout.c`,
+    `src/runtime/runtime-dungeon.c`
+  - C files from 3501 to 4000 lines:
+    `src/sdl-scene-menu.c`,
+    `src/level-generation/level-generation-rooms.c`,
+    `src/melee/melee-movement.c`
+  - C files from 2501 to 3500 lines:
+    `src/object/object-randart.c`,
+    `src/cave/cave.c`,
+    `src/melee/melee-attack.c`,
+    `src/object/object-info.c`,
+    `src/ui/targeting.c`,
+    `src/score/score_ui.c`,
+    `src/cmd/ui/cmd-ui-abilities.c`
+  - H files above 1000 lines:
+    `src/defines.h`,
+    `src/types.h`
+  - H files from 251 to 1000 lines:
+    `src/level-generation/level-generation-internal.h`,
+    `src/metarun.h`,
+    `src/config.h`,
+    `src/angband.h`,
+    `src/app/app-ui.h`,
+    `src/app/app-scene-dungeon.h`,
+    `src/smithing/smithing-internal.h`
+- The remaining direct `externs.h` include sites are frozen at 16 and tracked
+  directly by the modernization baseline instead of by doc-only counts.
 
 ## Work Package Map
 | ID | Type | Scope | Owner | Depends on |

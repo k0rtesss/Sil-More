@@ -7,6 +7,9 @@
 
 typedef struct object_type object_type;
 
+void cmd_interact_search_skeleton(int y, int x, s16b o_idx);
+bool cmd_interact_open_chest(int y, int x, s16b o_idx);
+bool cmd_interact_disarm_chest(int y, int x, s16b o_idx);
 void chest_release_contents(object_type* o_ptr, int y, int x, int destroy_typ);
 
 #endif /* INCLUDED_CMD_INTERACT_CHEST_H */

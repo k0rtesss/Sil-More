@@ -13,10 +13,6 @@
 #include "level-generation/level-generation-internal.h"
 #include <string.h>
 
-bool place_room_forced(int y0, int x0, vault_type* v_ptr);
-bool place_room_forced_exhaustive(vault_type* v_ptr, int* placed_y,
-    int* placed_x);
-
 /* Quest vault debug instrumentation */
 #define DEBUG_QUEST_VAULT 0
 #if DEBUG_QUEST_VAULT

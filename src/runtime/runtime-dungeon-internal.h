@@ -1,7 +1,7 @@
 #ifndef INCLUDED_RUNTIME_DUNGEON_INTERNAL_H
 #define INCLUDED_RUNTIME_DUNGEON_INTERNAL_H
 
-#include "h-basic.h"
+#include "runtime/runtime-dungeon.h"
 
 bool runtime_dungeon_confirm_enter_morgoth_hall(void);
 void runtime_dungeon_describe_greater_vault_entry(cptr vault_name);

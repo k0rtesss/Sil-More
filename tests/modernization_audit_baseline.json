@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 3 post-finish-line modernization audit baseline after the metarun compiled-include split landed and the live tree reached zero non-platform SDL I/O leakage."
+    "notes": "Wave 5 final-gate modernization audit baseline after the externs drain and post-finish-line monolith waves stabilized."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -613,24 +613,24 @@
   "audits": {
     "architecture": {
       "label": "Architecture debt audit",
-      "notes": "Wave 3 baseline for the shared modernization debt surface after the metarun compiled-include split.",
+      "notes": "Wave 5 final-gate baseline for the shared modernization debt surface.",
       "metrics": {
         "externs_header_lines": {
           "label": "externs.h line count",
           "files": 1,
-          "value": 262,
+          "value": 184,
           "notes": "Tracks the transitional umbrella header size. The finish-line target is under 400 lines.",
           "file_matches": {
-            "src/externs.h": 262
+            "src/externs.h": 184
           }
         },
         "extern_declarations": {
           "label": "extern declarations in externs.h",
           "files": 1,
-          "value": 96,
+          "value": 39,
           "notes": "Tracks how much runtime ownership still lives in the compatibility umbrella header.",
           "file_matches": {
-            "src/externs.h": 96
+            "src/externs.h": 39
           }
         },
         "extern_include_sites": {

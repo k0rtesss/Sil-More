@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 3 baseline for oversized non-vendor source files after the first post-finish-line split wave landed."
+    "notes": "Wave 5 final-gate baseline for oversized non-vendor source files after the post-finish-line monolith lanes and header follow-up work stabilized."
   },
   "policy": {
     "allowlist_globs": [
@@ -61,19 +61,19 @@
   "audits": {
     "source_size": {
       "label": "Source size audit",
-      "notes": "Wave 3 baseline for oversized non-vendor source files.",
+      "notes": "Wave 5 final-gate baseline for oversized non-vendor source files.",
       "metrics": {
         "c_files_over_2500": {
           "label": "non-vendor src/**/*.c files over 2500 lines",
-          "files": 15,
-          "value": 53920,
+          "files": 14,
+          "value": 49540,
           "notes": "Tracks remaining oversized C translation units against the post-finish-line target.",
           "file_matches": {
             "src/cave/cave.c": 3043,
             "src/cmd/ui/cmd-ui-abilities.c": 2579,
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
-            "src/level-generation/level-generation-rooms.c": 4579,
+            "src/level-generation/level-generation-rooms.c": 3732,
             "src/melee/melee-attack.c": 2856,
             "src/melee/melee-movement.c": 3704,
             "src/monster/monster2.c": 4211,
@@ -82,43 +82,40 @@
             "src/runtime/runtime-dungeon.c": 4036,
             "src/score/score_ui.c": 2702,
             "src/sdl-scene-menu.c": 3994,
-            "src/spell/spell-projection.c": 3533,
             "src/ui/targeting.c": 2712
           }
         },
         "c_files_over_3500": {
           "label": "non-vendor src/**/*.c files over 3500 lines",
-          "files": 8,
-          "value": 33882,
+          "files": 7,
+          "value": 29502,
           "notes": "Tracks the highest-risk C monoliths that should be split first.",
           "file_matches": {
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
-            "src/level-generation/level-generation-rooms.c": 4579,
+            "src/level-generation/level-generation-rooms.c": 3732,
             "src/melee/melee-movement.c": 3704,
             "src/monster/monster2.c": 4211,
             "src/runtime/runtime-dungeon.c": 4036,
-            "src/sdl-scene-menu.c": 3994,
-            "src/spell/spell-projection.c": 3533
+            "src/sdl-scene-menu.c": 3994
           }
         },
         "c_files_over_4000": {
           "label": "non-vendor src/**/*.c files over 4000 lines",
-          "files": 5,
-          "value": 22651,
+          "files": 4,
+          "value": 18072,
           "notes": "Tracks the densest C ownership buckets requiring the most urgent follow-up.",
           "file_matches": {
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
-            "src/level-generation/level-generation-rooms.c": 4579,
             "src/monster/monster2.c": 4211,
             "src/runtime/runtime-dungeon.c": 4036
           }
         },
         "h_files_over_250": {
           "label": "non-vendor src/**/*.h files over 250 lines",
-          "files": 10,
-          "value": 8119,
+          "files": 9,
+          "value": 7861,
           "notes": "Tracks oversized headers that still act as broad ownership buckets.",
           "file_matches": {
             "src/angband.h": 298,
@@ -126,8 +123,7 @@
             "src/app/app-ui.h": 280,
             "src/config.h": 329,
             "src/defines.h": 4012,
-            "src/externs.h": 262,
-            "src/level-generation/level-generation-internal.h": 408,
+            "src/level-generation/level-generation-internal.h": 412,
             "src/metarun.h": 352,
             "src/smithing/smithing-internal.h": 251,
             "src/types.h": 1656

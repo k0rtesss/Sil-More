@@ -52,17 +52,27 @@ Status date: April 17, 2026.
   - SDL activity wrapper exists
   - asset sync exists
   - touch pane and gamepad plumbing exist
+- The dependency-surface cleanup wave is now largely complete in the live tree:
+  - [`src/externs.h`](../src/externs.h) is down to 184 lines, 39 `extern`
+    declarations, and 16 direct include sites
+  - [`src/variable.c`](../src/variable.c) is removed from the live tree
+  - `tests/modernization_audit_baseline.json` and
+    `tests/source_size_audit_baseline.json` freeze the current architecture and
+    oversize-file exceptions
 - The remaining bottlenecks are now concentrated in a smaller set of files and
   surfaces:
-  - [`src/z-term.c`](../src/z-term.c): 2,150 lines
-  - [`src/externs.h`](../src/externs.h): 1,074 lines / 883 `extern`s
-  - [`src/variable.c`](../src/variable.c): 710 lines
+  - [`src/level-generation/level-generation-connectivity.c`](../src/level-generation/level-generation-connectivity.c): 5,636 lines
+  - [`src/monster/monster2.c`](../src/monster/monster2.c): 4,211 lines
+  - [`src/level-generation/level-generation-layout.c`](../src/level-generation/level-generation-layout.c): 4,189 lines
+  - [`src/runtime/runtime-dungeon.c`](../src/runtime/runtime-dungeon.c): 4,036 lines
+  - [`src/sdl-scene-menu.c`](../src/sdl-scene-menu.c): 3,994 lines
 - The biggest newly-audited risk areas are:
   - save/load corruption handling
   - metarun atomicity and corruption recovery
   - score persistence consistency
-  - script/engine drift for smithing difficulty
-  - remaining SDL leakage into core-facing code
+  - keeping script and engine smithing difficulty in sync
+  - keeping SDL leakage at zero outside the platform boundary
+  - the remaining oversize ownership buckets frozen by the source-size baseline
   - mobile safe-area, device-class, and resource-path assumptions
 - Detailed finish-line planning for the current UI replacement work now lives
   in [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md).
@@ -372,16 +382,17 @@ These can run in parallel as long as write sets stay disjoint.
 - story/death screens if touched
 
 ## Recommended Execution Order
-1. Treat `WP110` through `WP121` as complete in the live tree.
-2. Start the dependency cleanup wave: `WP130`, `WP131`, `WP140`, `WP141`, `WP142`.
-3. Treat the true platform boundary as the gate before any iOS-facing work: `WP150`, `WP151`.
-4. Do mobile adaptation after the boundary is real: `WP160`, `WP161`.
+1. Treat `WP110` through `WP151` as complete in the live tree.
+2. Use [`post_finish_line_refactor_parallel_plan.md`](./post_finish_line_refactor_parallel_plan.md) as the active execution plan for the remaining monolith, audit-baseline, and `externs.h` follow-up work.
+3. Use [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) for the current UI replacement lane once the active core refactor window is stable.
+4. Do mobile adaptation after the platform boundary and post-finish-line ownership cleanup are stable: `WP160`, `WP161`.
 5. Close with docs and integration: `WP170`, `WP199`.
 
 ## Recommended Immediate Start
-1. Start `WP130` to keep reducing direct reliance on [`src/externs.h`](../src/externs.h).
-2. Follow with `WP131` to keep localizing obvious ownership out of [`src/variable.c`](../src/variable.c).
-3. Open the next monolith reduction slice only after the header/global surface starts shrinking again.
+1. Start from the active post-finish-line plan instead of reopening `WP130` or `WP131`; those dependency-surface goals are already landed.
+2. Keep ratcheting `tests/modernization_audit_baseline.json` and `tests/source_size_audit_baseline.json` downward whenever another oversized ownership bucket lands.
+3. Take the next UI or mobile slice from [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) once the current monolith lane is green.
 
 The hardening and validation ratchet are in place now; the next highest-value
-work is dependency-surface reduction rather than more Phase 0/1 fallout.
+work is closing the remaining oversized ownership buckets and then carrying the
+same discipline into the UI and mobile follow-through.
