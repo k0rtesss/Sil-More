@@ -1,6 +1,6 @@
 # Post-Finish-Line Parallel Refactor Plan
 
-Status date: April 17, 2026.
+Status date: April 18, 2026.
 
 This document follows the completed finish-line modernization program in
 `docs/finish_line_modernization_parallel_plan.md`. It turns the next round of
@@ -22,8 +22,10 @@ high-value dependency cleanup.
   subagents with explicit write sets and sequencing rules.
 
 ## Current Baseline
-- The finish-line plan is complete in the live tree, and this post-finish-line
-  program is now at its final gate ratchet.
+- The finish-line plan is complete in the live tree.
+- This post-finish-line program completed its first ratchet snapshot on
+  April 17, 2026, but it is now reopened for continuation waves because the
+  original end-state thresholds are still not fully met.
 - `src/externs.h` is down to 184 lines with 39 `extern` declarations and 16
   direct include sites.
 - `src/variable.c` is gone from the live tree.
@@ -48,6 +50,21 @@ high-value dependency cleanup.
   - `src/level-generation/level-generation-rooms.c`: 3732 lines
   - `src/melee/melee-movement.c`: 3704 lines
   - `src/object/object-randart.c`: 3337 lines
+
+## Continuation Trigger
+- The first ratchet snapshot closed the audit blind spots and froze the
+  remaining exceptions, but it did not satisfy the original quantitative end
+  state.
+- The active continuation targets are:
+  - reduce direct `#include "externs.h"` sites from 16 to fewer than 15
+  - reduce oversized non-vendor `src/**/*.c` files from 14 to 0 above 2500
+    lines
+  - keep the zero-debt wins intact:
+    - zero compiled code-bearing `*.inc` files
+    - zero non-platform SDL header leakage
+    - zero non-platform SDL I/O leakage
+- Earlier waves remain historically complete. The continuation waves below
+  reopen only the remaining explicit exceptions.
 
 ## End State
 - No compiled code-bearing `*.inc` files remain in the live tree.
@@ -456,6 +473,205 @@ Completion notes:
     `src/smithing/smithing-internal.h`
 - The remaining direct `externs.h` include sites are frozen at 16 and tracked
   directly by the modernization baseline instead of by doc-only counts.
+- This wave closed the first ratchet snapshot, not the full quantitative end
+  state. The continuation waves below reopen only the still-failing targets.
+
+### Wave 6: Serial Continuation Re-Scope
+Owner: main integrator only.
+
+Status: complete in the live tree on April 18, 2026.
+
+Deliverables:
+- Re-freeze the remaining target list as active closure work rather than
+  baseline-only exceptions.
+- Publish the continuation lane ownership for:
+  - `externs.h` last-mile removal
+  - `runtime-dungeon` final split
+  - frontend and UI orchestration holdouts
+  - remaining algorithmic monoliths
+  - remaining mid-size gameplay holdouts
+- Define any staging headers needed so the continuation lanes can run in
+  parallel without reopening ownership questions.
+- Freeze the rule that no baseline is ratcheted upward during continuation
+  waves; continuation work must reduce counts.
+
+Write set:
+- `docs/`
+- any new staging headers needed for continuation lanes
+- shared merge-point notes owned by the integrator
+
+Validation:
+- `.\build-incremental.ps1`
+- `ctest --preset test-standard`
+- modernization audit
+- size audit
+
+Completion notes:
+- The continuation target list is now frozen as active closure work rather than
+  passive baseline exceptions.
+- The continuation staging headers are now explicit:
+  - `src/runtime/runtime-dungeon.h`
+  - `src/runtime/runtime-dungeon-internal.h`
+  - `src/cmd/ui/cmd-ui-abilities.h`
+  - existing lane-owned surfaces in `src/score/score_ui.h` and
+    `src/ui/targeting.h`
+- The frontend menu-scene continuation surface remains frozen in
+  `src/sdl-main-internal.h` rather than adding a new root-level header, so
+  Wave 6 does not ratchet the root-header baseline upward.
+- `src/cmd/ui/cmd-ui.h` now routes the abilities command surface through the
+  lane-local header, and `src/sdl-main-internal.h` explicitly marks the
+  menu-scene entrypoint as the frozen Wave 7A continuation surface.
+- The integrator-owned `externs.h` consumer buckets are frozen for Wave 7A:
+  - `fs` and `score`: `src/fs/load.c`, `src/fs/save.c`, `src/score/score_ui.c`
+  - runtime/platform UI: `src/cmd/ui/cmd-ui-info.c`, `src/sdl-main-internal.h`,
+    `src/sdl-sound.c`
+  - gameplay algorithms: `src/level-generation/level-generation-connectivity.c`,
+    `src/level-generation/level-generation-rooms.c`,
+    `src/melee/melee-attack.c`, `src/melee/melee-movement.c`,
+    `src/melee/melee-process.c`, `src/monster/monster1.c`,
+    `src/monster/monster2.c`, `src/object/object-randart.c`,
+    `src/object/object-use.c`, `src/spell/spell-projection.c`
+- Continuation waves must ratchet baselines downward only; no continuation
+  package is allowed to increase the checked-in exception counts.
+
+### Wave 7A: Parallel Surface Cleanup Lanes
+Run these four lanes together after Wave 6 contracts are frozen.
+
+#### Lane M: `Externs` Last Mile
+- Lead owner:
+  - main integrator for `src/externs.h`
+- Subagents:
+  - `fs` and `score` consumers
+  - runtime and UI consumers
+  - level-generation and monster/combat consumers
+- Deliverables:
+  - reduce direct `externs.h` include sites from 16 to fewer than 15,
+    preferably to 12 or below if the local headers are already clear
+  - move the last declarations into owning subsystem headers
+  - keep `src/externs.h` compatibility-only
+
+Constraints:
+- Only the integrator edits `src/externs.h`.
+
+#### Lane N: `Runtime-dungeon` Final Split
+- Lead owns:
+  - `src/runtime/runtime-dungeon.c`
+  - new `src/runtime/runtime-dungeon-*.c`
+  - optional `src/runtime/runtime-dungeon.h`
+- Subagents:
+  - loop core and turn processing
+  - runtime snapshot, banner, and presentation helpers
+  - death and story flow helpers
+- Deliverables:
+  - separate gameplay-loop ownership from fullscreen and banner presentation
+  - drive `runtime-dungeon.c` below 2500 lines if the split remains coherent,
+    or else leave it as a thin orchestrator with the bulk of logic moved out
+
+#### Lane O: `Frontend Scene Menu`
+- Lead owns:
+  - `src/sdl-scene-menu.c`
+  - new `src/sdl-scene-menu-*.c`
+  - optional `src/sdl-scene-menu.h`
+- Subagents:
+  - browser and root-menu scene scaffolding
+  - save, continue, and profile/menu flows
+  - scene adapters for informational frontend pages
+- Deliverables:
+  - reduce the platform-side menu scene monolith
+  - keep frontend-specific orchestration out of core-facing modules
+
+#### Lane P: `UI Holdouts`
+- Lead owns:
+  - `src/cmd/ui/cmd-ui-abilities.c`
+  - `src/score/score_ui.c`
+  - `src/ui/targeting.c`
+- Subagents:
+  - abilities scene and browser flow
+  - score scene pages and navigation
+  - targeting scene helpers and presentation extraction
+- Deliverables:
+  - reduce the remaining UI orchestration buckets under 2500 lines where
+    practical
+  - align these files with the shared scene/browser helper patterns already
+    established by earlier waves
+
+Constraints:
+- Lane P may create lane-local helper files in its owning folders, but it must
+  not introduce new repo-wide shared helper contracts during this wave.
+
+### Wave 7B: Parallel Remaining Monolith Lanes
+Start after Wave 7A contracts are stable.
+
+#### Lane Q: `Level-generation` Closeout
+- Lead owns:
+  - `src/level-generation/*`
+- Subagents:
+  - connectivity, rescue traversal, and stair/trap placement
+  - layout partitions, anchor carving, and big-cave/chasm/labyrinth shaping
+  - room, vault, and quest placement
+- Deliverables:
+  - reduce the three remaining level-generation monoliths below 2500 lines
+    where the ownership boundaries are real
+  - keep generation behavior stable; this is extraction work, not a gameplay
+    redesign
+
+Constraints:
+- Do not run Lane Q with more than 2 active subagents.
+
+#### Lane R: `Monster And Combat` Closeout
+- Lead owns:
+  - `src/monster/monster2.c`
+  - `src/melee/melee-movement.c`
+- Subagents:
+  - monster lifecycle, spawn/summon, and messaging
+  - movement-resolution, chase/path helpers, and combat-side movement effects
+- Deliverables:
+  - reduce the remaining monster/combat ownership buckets below 2500 lines
+    where coherent
+  - avoid mixing behavior changes with extraction
+
+#### Lane S: `Mid-Size Gameplay Holdouts`
+- Lead owns:
+  - `src/cave/cave.c`
+  - `src/melee/melee-attack.c`
+  - `src/object/object-info.c`
+  - `src/object/object-randart.c`
+- Subagents:
+  - cave presentation/state holdouts
+  - melee attack helper extraction
+  - object info and randart helper extraction
+- Deliverables:
+  - clear the remaining 2500-3500 line gameplay files that were left frozen in
+    the first ratchet snapshot
+  - leave only true exceptions with an explicit follow-up owner if any remain
+
+Constraints:
+- Lane S should keep write scopes disjoint by file family to avoid cross-lane
+  conflicts with Lane Q and Lane R.
+
+### Wave 8: Final End-State Closure
+Owner: main integrator only.
+
+Deliverables:
+- Re-run the full validation matrix after the continuation lanes merge.
+- Ratchet the architecture and size baselines downward only if counts actually
+  improved.
+- Confirm the continuation goals are met:
+  - fewer than 15 direct `#include "externs.h"` sites
+  - zero non-vendor gameplay or UI source files above 2500 lines, or a clearly
+    documented rescope into a separate follow-up plan
+- Refresh the plan and surrounding docs to reflect the true final status.
+
+Validation:
+- `.\build-incremental.ps1`
+- `ctest --preset test-standard`
+- `ctest --preset test-portable`
+- `cmake --preset dev-strict`
+- `cmake --build build-strict --parallel`
+- `ctest --preset test-strict`
+- `cmake --preset dev-sanitize`
+- `cmake --build build-sanitize --parallel`
+- `ctest --preset test-sanitize` when runtime support is available
 
 ## Work Package Map
 | ID | Type | Scope | Owner | Depends on |
@@ -475,6 +691,15 @@ Completion notes:
 | P10 | Parallel | level-generation split | lane lead + 2 subagents | S2 |
 | P11 | Parallel | monster/combat hotspot split | lane lead + 2 subagents | S2 |
 | S3 | Serial | final gate ratchet and docs refresh | integrator | P10-P11 |
+| S4 | Serial | continuation re-scope and staging headers | integrator | S3 |
+| P12 | Parallel | `externs.h` last-mile header drain | integrator + 3 subagents | S4 |
+| P13 | Parallel | `runtime-dungeon` final split | lane lead + 3 subagents | S4 |
+| P14 | Parallel | frontend scene-menu split | lane lead + 3 subagents | S4 |
+| P15 | Parallel | remaining UI holdouts split | lane lead + 3 subagents | S4 |
+| P16 | Parallel | level-generation closeout | lane lead + 2 subagents | P12-P15 |
+| P17 | Parallel | monster/combat closeout | lane lead + 2 subagents | P12-P15 |
+| P18 | Parallel | mid-size gameplay holdout split | lane lead + 3 subagents | P12-P15 |
+| S5 | Serial | final end-state closure and docs refresh | integrator | P16-P18 |
 
 ## Validation Matrix
 ### Required After Every Merged Package
@@ -503,6 +728,10 @@ Completion notes:
 - smoke-test map redraw, overhead map, minimap, sidebar, narrative banners,
   death flow, and story intro
 
+### Required After `Frontend Scene Menu` Or UI Holdout Work
+- smoke-test main menu, save/continue flows, settings/help entrypoints, score
+  scene pages, targeting flows, and abilities scene navigation
+
 ### Required After `Birth`
 - smoke-test standard character creation, starting loadout, starting artefacts,
   and Blitz auto-build flow
@@ -518,14 +747,18 @@ Completion notes:
 - smoke-test partitioned maps, chasm layouts, labyrinth layouts, big caves,
   stairs, traps, and quest vault placement
 
-## Immediate Start Order
-1. Land `S0` so the audit can no longer miss compiled `*.inc` payloads and
-   oversize-file regressions.
-2. Run `P1`, `P2`, `P3`, and `P4` together as the first broad parallel wave.
-3. Once cave and runtime contracts are clearer, run `P5`, `P6`, and `P7`.
-4. Merge through `S1`, then run `P8` and `P9`.
-5. Finish with `P10`, `P11`, and the final serial ratchet in `S3`.
+### Required After `Monster And Combat` Or Gameplay Holdout Work
+- smoke-test monster placement, summoning, movement/chase behavior, melee
+  attack messaging, object knowledge displays, and randart generation paths
 
-This ordering front-loads the audit truth fix, attacks the highest-value
-ownership buckets first, and postpones the densest algorithmic files until the
-rest of the codebase is easier to reason about.
+## Immediate Start Order
+1. Land `S4` to reopen the frozen exceptions as active continuation work and
+   freeze the continuation contracts.
+2. Run `P12`, `P13`, `P14`, and `P15` together as the first continuation wave.
+3. Once the surface cleanup contracts are stable, run `P16`, `P17`, and `P18`.
+4. Close with `S5` only after the continuation targets are either met or
+   explicitly rescaled into a separate follow-up plan.
+
+This continuation ordering clears the surface and orchestration debt first,
+then attacks the densest algorithmic files once the remaining dependency
+surface is narrower and easier to reason about.

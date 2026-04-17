@@ -8,6 +8,7 @@
 #define INCLUDED_CMD_UI_H
 
 #include "h-basic.h"
+#include "cmd/ui/cmd-ui-abilities.h"
 
 typedef struct supply_menu_request supply_menu_request;
 
@@ -22,7 +23,6 @@ void controller_prompt_label(int binding, const char* fallback, char* buf,
 void do_cmd_redraw(void);
 void do_cmd_version(void);
 void do_cmd_feeling(void);
-void do_cmd_change_song(void);
 void do_cmd_character_sheet(void);
 void do_cmd_main_menu(void);
 void do_cmd_message_one(void);
@@ -40,7 +40,6 @@ void do_cmd_view_objects(void);
 void highlight_entity_on_map(int y, int x, bool highlight);
 void highlight_entity_on_map_type(int y, int x, bool highlight,
     int entity_type);
-void do_cmd_ability_screen(void);
 void do_cmd_note(char* note, int what_depth);
 void do_cmd_knowledge_notes(void);
 void do_cmd_knowledge_browser_page(int page);
@@ -55,7 +54,6 @@ void ang_sort_swap_hook(void* u, void* v, int a, int b);
 void ghost_challenge(void);
 void desc_art_fake(int a_idx);
 void apply_magic_fake(object_type* o_ptr);
-void add_random_curse(object_type* o_ptr);
 bool do_cmd_knowledge_supplies(const supply_menu_request* request);
 
 #endif /* INCLUDED_CMD_UI_H */
