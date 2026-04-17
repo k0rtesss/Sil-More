@@ -28,6 +28,7 @@ void do_cmd_main_menu(void);
 void do_cmd_message_one(void);
 void do_cmd_messages(void);
 void do_cmd_options(void);
+void do_cmd_options_aux(int page, cptr info);
 void do_cmd_target(void);
 void do_cmd_look(void);
 void do_cmd_look_at(int y, int x);

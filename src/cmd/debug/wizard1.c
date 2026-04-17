@@ -9,7 +9,7 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/debug/cmd-debug.h"
 #include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"

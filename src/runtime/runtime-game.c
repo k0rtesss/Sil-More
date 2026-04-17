@@ -1,13 +1,12 @@
 /* File: runtime/runtime-game.c */
 
 #include "angband.h"
-#include "runtime/runtime-dungeon.h"
-#include "runtime/runtime-game.h"
 #include "app/app-session.h"
 #include "blitz.h"
-#include "externs.h"
 #include "fs/file.h"
+#include "fs/load.h"
 #include "fs/path.h"
+#include "fs/save.h"
 #include "fs/savefile-name.h"
 #include "log/log.h"
 #include "metarun.h"
@@ -18,6 +17,8 @@
 #include "score/score_io.h"
 #include "score/score_runs.h"
 #include "score/score_ui.h"
+#include "runtime/runtime-dungeon.h"
+#include "runtime/runtime-game.h"
 
 int generation_depth_for_level(int depth)
 {

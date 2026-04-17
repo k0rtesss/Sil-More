@@ -37,6 +37,7 @@ bool input_byte_queue_pending(void);
 void inkey_set_cursor_hidden(bool hidden);
 bool inkey_cursor_hidden(void);
 void input_clear_pending(void);
+bool inkey_can_consume_immediately(void);
 bool input_submit_movement_command(const app_movement_command* command);
 void input_clear_movement_commands(void);
 bool input_wait_for_movement_or_legacy(u16b context, u16b wait_reason,

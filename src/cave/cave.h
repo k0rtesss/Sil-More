@@ -80,6 +80,10 @@ int styles_get_level_primary_style(void);
 int styles_get_vault_primary_style(void);
 void styles_select_vault_primary(void);
 int styles_pick_random_from_level(void);
+const char* styles_get_style_display(int sidx);
+const char* styles_get_style_short_desc(int sidx);
+const char* styles_get_style_m1(int sidx);
+const char* styles_get_style_m2(int sidx);
 int styles_decode_color_style(byte color_value);
 void styles_rules_clear(void);
 void styles_add_level_rule(int min_depth, int max_depth, const int* sidx,
@@ -88,6 +92,7 @@ void styles_set_loaded_level_primary(int sidx);
 int styles_get_choice_capacity(void);
 void styles_copy_level_door_choices(byte* out_buf, int max_n);
 void styles_load_level_door_choices(const byte* in_buf, int n);
+void styles_clear_display_messages(void);
 void health_track(int m_idx);
 void monster_race_track(int r_idx);
 void object_kind_track(int k_idx);

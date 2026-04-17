@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 0 post-finish-line modernization audit baseline after compiled-include coverage was added and non-platform SDL I/O is measured across compiled metarun *.inc payloads."
+    "notes": "Wave 3 post-finish-line modernization audit baseline after the metarun compiled-include split landed and the live tree reached zero non-platform SDL I/O leakage."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -613,7 +613,7 @@
   "audits": {
     "architecture": {
       "label": "Architecture debt audit",
-      "notes": "Wave 0 baseline for the shared modernization debt surface.",
+      "notes": "Wave 3 baseline for the shared modernization debt surface after the metarun compiled-include split.",
       "metrics": {
         "externs_header_lines": {
           "label": "externs.h line count",
@@ -635,14 +635,10 @@
         },
         "extern_include_sites": {
           "label": "direct #include \"externs.h\" sites",
-          "files": 23,
-          "value": 23,
+          "files": 16,
+          "value": 16,
           "notes": "Tracks the direct include fan-out of the compatibility header.",
           "file_matches": {
-            "src/app/app-scene-birth.c": 1,
-            "src/cave/cave.c": 1,
-            "src/cmd/debug/wizard1.c": 1,
-            "src/cmd/debug/wizard2.c": 1,
             "src/cmd/ui/cmd-ui-info.c": 1,
             "src/fs/load.c": 1,
             "src/fs/save.c": 1,
@@ -651,13 +647,10 @@
             "src/melee/melee-attack.c": 1,
             "src/melee/melee-movement.c": 1,
             "src/melee/melee-process.c": 1,
-            "src/metarun/metarun.c": 1,
             "src/monster/monster1.c": 1,
             "src/monster/monster2.c": 1,
             "src/object/object-randart.c": 1,
             "src/object/object-use.c": 1,
-            "src/runtime/runtime-dungeon.c": 1,
-            "src/runtime/runtime-game.c": 1,
             "src/score/score_ui.c": 1,
             "src/sdl-main-internal.h": 1,
             "src/sdl-sound.c": 1,
@@ -746,15 +739,10 @@
         },
         "compiled_include_payload_files": {
           "label": "compiled code-bearing *.inc files",
-          "files": 4,
-          "value": 4,
+          "files": 0,
+          "value": 0,
           "notes": "Tracks compiled include payloads that should be migrated into normal translation units.",
-          "file_matches": {
-            "src/metarun/metarun-persistence.inc": 1,
-            "src/metarun/metarun-score.inc": 1,
-            "src/metarun/metarun-state.inc": 1,
-            "src/metarun/metarun-ui-history.inc": 1
-          }
+          "file_matches": {}
         },
         "nonplatform_sdl_header_includes": {
           "label": "SDL3 header includes outside platform boundary",
@@ -765,13 +753,10 @@
         },
         "nonplatform_sdl_io_usages": {
           "label": "SDL I/O symbols outside platform boundary",
-          "files": 2,
-          "value": 2,
+          "files": 0,
+          "value": 0,
           "notes": "Tracks SDL_IO*, SDL_IOStream, and sdl_fopen/sdl_fclose usage outside platform-facing code.",
-          "file_matches": {
-            "src/metarun/metarun-persistence.inc": 49,
-            "src/metarun/metarun-score.inc": 4
-          }
+          "file_matches": {}
         }
       }
     },

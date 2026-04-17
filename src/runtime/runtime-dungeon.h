@@ -9,7 +9,12 @@ void clear_active_narrative_banner(void);
 bool dungeon_active_narrative_banner_animating(u64b now_ms);
 bool dungeon_query_active_narrative_banner(u64b now_ms, char* text,
     size_t text_size, u64b* started_ms, u32b* hold_ms);
+bool can_be_pseudo_ided(const object_type* o_ptr);
+int value_check_aux1(const object_type* o_ptr);
 void death_spectator_view(void);
+void land(void);
+void pseudo_id_everything(void);
+void id_everything(void);
 int p_ptr_depth_proxy(void);
 
 #endif /* INCLUDED_RUNTIME_DUNGEON_H */

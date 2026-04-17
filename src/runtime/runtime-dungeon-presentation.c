@@ -4,7 +4,6 @@
 #include "app/app-session.h"
 #include "app/app-ui.h"
 #include "blitz.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-config.h"

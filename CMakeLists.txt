@@ -343,8 +343,14 @@ set(SIL_MORE_SOURCES_SCORE
 
 set(SIL_MORE_SOURCES_FS
     src/fs/file.c
+    src/fs/load-dungeon.c
+    src/fs/load-notes-inventory.c
+    src/fs/load-player.c
     src/fs/load.c
     src/fs/resource.c
+    src/fs/save-dungeon.c
+    src/fs/save-notes-inventory.c
+    src/fs/save-player.c
     src/fs/save.c
     src/fs/savefile-name.c
 )

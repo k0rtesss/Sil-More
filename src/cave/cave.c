@@ -11,7 +11,6 @@
 #include "angband.h"
 #include "app/app-session.h"
 #include "cave/cave-internal.h"
-#include "externs.h"
 #include "log/log.h"
 #include "project-path.h"
 #include "ui/colors.h"

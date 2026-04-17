@@ -10,7 +10,7 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
+#include "cmd/debug/cmd-debug.h"
 #include "object/object-ui-select.h"
 #include "log/log.h"
 #include "metarun.h"

@@ -1,5 +1,4 @@
 /* File: dungeon.c */
-
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
  *
@@ -7,14 +6,17 @@
  * and not for profit purposes provided that this copyright and statement
  * are included in all such copies.  Other copyrights may also apply.
  */
-
 #include "angband.h"
 #include "app/app-command.h"
+#include "app/app-scene-birth.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
+#include "cmd/combat/cmd-ranged.h"
+#include "cmd/debug/cmd-debug.h"
+#include "cmd/world/cmd-world.h"
+#include "fs/load.h"
 #include "object/object-ui-select.h"
 #include "blitz.h"
-#include "externs.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-config.h"
@@ -32,16 +34,14 @@
 #include "score/score_runs.h"
 #include "ui/ui-story.h"
 #include "ui/ui-information-scene.h"
+#include "ui/smithing/ui-smithing-screen.h"
 #include "score/score_ui.h"
-#include "platform-audio.h"
 #include <time.h>
 #include <string.h>
 #include <stddef.h>
 #include <stdlib.h>
-
 /* Morgoth vault tracking variables - file scope for cross-function access */
-static int last_player_y = 0;
-static int last_player_x = 0;
+static int last_player_y = 0, last_player_x = 0;
 static bool was_in_morgoth_vault = false;
 static bool morgoth_entry_preconfirmed = false;
 /* Track greater-vault encounter XP so repeated warning prompts can't be farmed. */

@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 0 baseline for oversized non-vendor source files after the post-finish-line refactor plan was introduced."
+    "notes": "Wave 3 baseline for oversized non-vendor source files after the first post-finish-line split wave landed."
   },
   "policy": {
     "allowlist_globs": [
@@ -61,77 +61,58 @@
   "audits": {
     "source_size": {
       "label": "Source size audit",
-      "notes": "Wave 0 baseline for oversized non-vendor source files.",
+      "notes": "Wave 3 baseline for oversized non-vendor source files.",
       "metrics": {
         "c_files_over_2500": {
           "label": "non-vendor src/**/*.c files over 2500 lines",
-          "files": 21,
-          "value": 82177,
+          "files": 15,
+          "value": 53920,
           "notes": "Tracks remaining oversized C translation units against the post-finish-line target.",
           "file_matches": {
-            "src/app/app-scene-birth.c": 4408,
-            "src/cave/cave.c": 5317,
+            "src/cave/cave.c": 3043,
             "src/cmd/ui/cmd-ui-abilities.c": 2579,
-            "src/cmd/ui/cmd-ui-knowledge.c": 3722,
-            "src/cmd/world/cmd-interact-chest.c": 4067,
-            "src/fs/load.c": 4008,
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
             "src/level-generation/level-generation-rooms.c": 4579,
             "src/melee/melee-attack.c": 2856,
             "src/melee/melee-movement.c": 3704,
-            "src/metarun/metarun.c": 4393,
             "src/monster/monster2.c": 4211,
             "src/object/object-info.c": 2809,
             "src/object/object-randart.c": 3337,
-            "src/runtime/runtime-dungeon.c": 4910,
-            "src/score/score_ui.c": 2717,
+            "src/runtime/runtime-dungeon.c": 4036,
+            "src/score/score_ui.c": 2702,
             "src/sdl-scene-menu.c": 3994,
             "src/spell/spell-projection.c": 3533,
-            "src/ui/smithing/ui-smithing-screen.c": 4496,
             "src/ui/targeting.c": 2712
           }
         },
         "c_files_over_3500": {
           "label": "non-vendor src/**/*.c files over 3500 lines",
-          "files": 15,
-          "value": 65167,
+          "files": 8,
+          "value": 33882,
           "notes": "Tracks the highest-risk C monoliths that should be split first.",
           "file_matches": {
-            "src/app/app-scene-birth.c": 4408,
-            "src/cave/cave.c": 5317,
-            "src/cmd/ui/cmd-ui-knowledge.c": 3722,
-            "src/cmd/world/cmd-interact-chest.c": 4067,
-            "src/fs/load.c": 4008,
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
             "src/level-generation/level-generation-rooms.c": 4579,
             "src/melee/melee-movement.c": 3704,
-            "src/metarun/metarun.c": 4393,
             "src/monster/monster2.c": 4211,
-            "src/runtime/runtime-dungeon.c": 4910,
+            "src/runtime/runtime-dungeon.c": 4036,
             "src/sdl-scene-menu.c": 3994,
-            "src/spell/spell-projection.c": 3533,
-            "src/ui/smithing/ui-smithing-screen.c": 4496
+            "src/spell/spell-projection.c": 3533
           }
         },
         "c_files_over_4000": {
           "label": "non-vendor src/**/*.c files over 4000 lines",
-          "files": 11,
-          "value": 50214,
+          "files": 5,
+          "value": 22651,
           "notes": "Tracks the densest C ownership buckets requiring the most urgent follow-up.",
           "file_matches": {
-            "src/app/app-scene-birth.c": 4408,
-            "src/cave/cave.c": 5317,
-            "src/cmd/world/cmd-interact-chest.c": 4067,
-            "src/fs/load.c": 4008,
             "src/level-generation/level-generation-connectivity.c": 5636,
             "src/level-generation/level-generation-layout.c": 4189,
             "src/level-generation/level-generation-rooms.c": 4579,
-            "src/metarun/metarun.c": 4393,
             "src/monster/monster2.c": 4211,
-            "src/runtime/runtime-dungeon.c": 4910,
-            "src/ui/smithing/ui-smithing-screen.c": 4496
+            "src/runtime/runtime-dungeon.c": 4036
           }
         },
         "h_files_over_250": {
