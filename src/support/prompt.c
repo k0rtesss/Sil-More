@@ -4,9 +4,6 @@
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"
 
-int get_menu_choice(s16b max, char* prompt);
-void pause_line(int row);
-
 static cptr g_prompt_interaction_label = NULL;
 
 typedef struct prompt_menu_scene_scope {
@@ -469,57 +466,6 @@ static int prompt_menu_scene_run_oath_confirm(cptr prompt)
     }
 }
 
-static int prompt_menu_scene_run_menu_choice(s16b max, cptr prompt)
-{
-    prompt_menu_scene_scope menu_scope;
-    int choice = -1;
-    char ch;
-
-    if (!prompt_menu_scene_enter(&menu_scope))
-        return -2;
-
-    while (true)
-    {
-        app_ui_scene scene;
-
-        if (!prompt_menu_scene_build_prompt_scene(&scene, "Choose", prompt,
-                "Press a menu letter or Esc to cancel.", "A-Z", "Select",
-                "Esc", "Cancel")
-            || !prompt_menu_scene_present(&menu_scope, &scene))
-        {
-            choice = -2;
-            break;
-        }
-
-        ch = prompt_inkey_with_wait_reason(APP_WAIT_REASON_LIST_SELECTION);
-        if (isalpha((unsigned char)ch))
-        {
-            if (islower((unsigned char)ch))
-                choice = A2I(ch);
-            else
-                choice = ch - 'A' + 26;
-
-            if ((choice > -1) && (choice < max))
-                break;
-
-            bell("Illegal response to question!");
-            choice = -1;
-            continue;
-        }
-
-        if (ch == ESCAPE)
-        {
-            choice = -1;
-            break;
-        }
-
-        bell("Illegal response to question!");
-    }
-
-    prompt_menu_scene_leave(&menu_scope);
-    return choice;
-}
-
 static int prompt_menu_scene_run_command_prompt(cptr prompt)
 {
     prompt_menu_scene_scope menu_scope;
@@ -539,31 +485,6 @@ static int prompt_menu_scene_run_command_prompt(cptr prompt)
     {
         int ch = (unsigned char)prompt_inkey_with_wait_reason(
             APP_WAIT_REASON_CONFIRM);
-        prompt_menu_scene_leave(&menu_scope);
-        return ch;
-    }
-}
-
-static int prompt_menu_scene_run_pause(cptr prompt)
-{
-    prompt_menu_scene_scope menu_scope;
-    app_ui_scene scene;
-
-    if (!prompt_menu_scene_enter(&menu_scope))
-        return -2;
-
-    if (!prompt_menu_scene_build_prompt_scene(&scene, "Pause",
-            prompt ? prompt : "(press any key)",
-            "Press any key to continue.", "Any", "Continue", NULL, NULL)
-        || !prompt_menu_scene_present(&menu_scope, &scene))
-    {
-        prompt_menu_scene_leave(&menu_scope);
-        return -2;
-    }
-
-    {
-        int ch = (unsigned char)prompt_inkey_with_wait_reason(
-            APP_WAIT_REASON_INFORMATIONAL_PAUSE);
         prompt_menu_scene_leave(&menu_scope);
         return ch;
     }
@@ -936,23 +857,6 @@ bool get_check_oath_multiline(cptr prompt)
 }
 
 /*
- * Give a prompt, then get a choice withing a certain range.
- */
-int get_menu_choice(s16b max, char* prompt)
-{
-    bool prompt_scene_supported = prompt_menu_scene_supported();
-
-    if (prompt_scene_supported)
-    {
-        int scene_choice = prompt_menu_scene_run_menu_choice(max, prompt);
-
-        if (scene_choice != -2)
-            return scene_choice;
-    }
-    return -1;
-}
-
-/*
  * Prompts for a keypress
  *
  * The "prompt" should take the form "Command: "
@@ -980,20 +884,3 @@ bool get_com(cptr prompt, char* command)
     return false;
 }
 
-/*
- * Pause for user response
- *
- * This function is stupid.  XXX XXX XXX
- */
-void pause_line(int row)
-{
-    bool prompt_scene_supported = prompt_menu_scene_supported();
-
-    (void)row;
-
-    if (prompt_scene_supported)
-    {
-        if (prompt_menu_scene_run_pause("(press any key)") != -2)
-            return;
-    }
-}

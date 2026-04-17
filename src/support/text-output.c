@@ -8,8 +8,8 @@ int text_out_indent = 0;
 
 static void write_text_out_byte(unsigned char value)
 {
-    char byte = (char)value;
-    (void)ang_file_write(text_out_file, &byte, 1);
+    char out_byte = (char)value;
+    (void)ang_file_write(text_out_file, &out_byte, 1);
 }
 
 /*

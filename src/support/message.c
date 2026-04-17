@@ -411,19 +411,6 @@ static byte message_type_color(u16b type)
  */
 byte message_color(s16b age) { return message_type_color(message_type(age)); }
 
-errr message_color_define(u16b type, byte color)
-{
-    /* Ignore illegal types */
-    if (type >= MSG_MAX)
-        return (1);
-
-    /* Store the color */
-    message__color[type] = color;
-
-    /* Success */
-    return (0);
-}
-
 /*
  * Add a new message, with great efficiency
  */
@@ -694,12 +681,6 @@ static bool message_topline_active = false;
 
 static void message_topline_reset(void);
 static void message_topline_append(cptr text, u16b type, byte color);
-
-void move_cursor(int row, int col)
-{
-    app_session_note_cursor_absolute(app_session_current(), row, col,
-        !inkey_cursor_hidden());
-}
 
 /*
  * Hack -- flush

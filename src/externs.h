@@ -221,10 +221,6 @@ extern bool save_player(void);
 /* util.c */
 
 extern bool inkey_can_consume_immediately(void);
-extern errr message_color_define(u16b type, byte color);
-extern void move_cursor(int row, int col);
-extern int get_menu_choice(s16b max, char* prompt);
-extern void pause_line(int row);
 
 /*
  * Hack -- conditional (or "bizarre") externs
