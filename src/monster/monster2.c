@@ -11,7 +11,7 @@
 #include "angband.h"
 #include "app/app-ui.h"
 #include "app/app-session.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
 #include "log/log.h"
 #include "metarun.h"
 #include "monster/monster.h"

@@ -162,6 +162,8 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/movement/cmd-search.c
     src/cmd/movement/cmd-travel.c
     src/cmd/ui/cmd-ui-abilities.c
+    src/cmd/ui/cmd-ui-abilities-scenes.c
+    src/cmd/ui/cmd-ui-abilities-songs.c
     src/cmd/ui/cmd-ui-character.c
     src/cmd/ui/cmd-ui-info.c
     src/cmd/ui/cmd-ui-knowledge-browser.c
@@ -340,6 +342,7 @@ set(SIL_MORE_SOURCES_SCORE
     src/score/score_artefact.c
     src/score/score_runs.c
     src/score/score_ui.c
+    src/score/score_ui-run-history.c
 )
 
 set(SIL_MORE_SOURCES_FS
@@ -361,6 +364,7 @@ set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/runtime-cli.c
     src/runtime/runtime-dungeon.c
     src/runtime/runtime-dungeon-presentation.c
+    src/runtime/runtime-dungeon-session.c
     src/runtime/runtime-exit.c
     src/runtime/runtime-game.c
     src/runtime/runtime-state.c
@@ -387,6 +391,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
 
 set(SIL_MORE_SOURCES_FRONTEND
     src/ui/targeting.c
+    src/ui/targeting-interactive.c
     src/ui/colors.c
     src/ui/ui-character-dump.c
     src/ui/ui-character-screen.c

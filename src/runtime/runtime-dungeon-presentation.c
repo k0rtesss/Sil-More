@@ -1,16 +1,21 @@
 /* File: runtime/runtime-dungeon-presentation.c */
 
 #include "angband.h"
+#include "app/app-command.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
 #include "blitz.h"
+#include "cmd/debug/cmd-debug.h"
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-config.h"
+#include "platform-frame.h"
 #include "platform-input.h"
 #include "platform-time.h"
 #include "runtime/runtime-dungeon-internal.h"
 #include "runtime/runtime-dungeon.h"
+#include "score/score_io.h"
+#include "spell/spell-detection.h"
 #include "ui/ui-information-scene.h"
 #include "ui/ui-semantic-scene.h"
 
@@ -19,6 +24,9 @@
 static char g_active_partition_banner_text[1024] = "";
 static u64b g_active_partition_banner_started_ms = 0;
 static u32b g_active_partition_banner_hold_ms = 0;
+static int last_music_depth = -999;
+static bool first_entry_to_dungeon = true;
+static bool death_spectator_mode = false;
 
 static int last_partition_pi = -1;
 static level_partition_kind last_partition_kind = LEVEL_PART_NONE;
@@ -45,6 +53,14 @@ void runtime_dungeon_reset_level_entry_tracking(void)
     last_partition_kind = LEVEL_PART_NONE;
     partition_narrated_mask = 0;
     last_narrated_style_idx = -1;
+}
+
+void runtime_dungeon_reset_presentation_state(void)
+{
+    last_music_depth = -999;
+    first_entry_to_dungeon = true;
+    death_spectator_mode = false;
+    runtime_dungeon_reset_level_entry_tracking();
 }
 
 static void dungeon_refresh_partition_banner_snapshot(void);
@@ -655,6 +671,354 @@ void runtime_dungeon_prepare_death_knowledge(void)
 
     /* Handle stuff */
     handle_stuff();
+}
+
+void runtime_dungeon_publish_runtime_snapshot(u32b update_mask, u32b redraw_mask,
+    u32b window_mask)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot;
+
+    if (!session)
+        return;
+
+    snapshot = app_session_snapshot(session);
+    if (!snapshot || snapshot->scene != APP_SCENE_KIND_DUNGEON)
+        return;
+
+    (void)app_session_build_dungeon_snapshot(session, update_mask, redraw_mask,
+        window_mask);
+}
+
+static void dungeon_transition_level_music(void)
+{
+    bool was_in_dungeon;
+    bool now_in_dungeon;
+
+    if (!first_entry_to_dungeon)
+        sound(MSG_LEVEL);
+    first_entry_to_dungeon = false;
+
+    /* Depth 0 (the Gates) is still active gameplay and should use ambient music. */
+    was_in_dungeon = (last_music_depth >= 0);
+    now_in_dungeon = (p_ptr->depth >= 0);
+
+    if (now_in_dungeon && !was_in_dungeon)
+    {
+        log_debug("Switching to ambient music (entering dungeon)");
+        platform_music_stop_main();
+        platform_music_play_ambient();
+    }
+    else if (!now_in_dungeon && was_in_dungeon)
+    {
+        log_debug("Leaving dungeon gameplay - preserving ambient music");
+        platform_music_stop_main();
+        platform_music_play_ambient();
+    }
+
+    last_music_depth = p_ptr->depth;
+}
+
+bool runtime_dungeon_prepare_level_presentation(void)
+{
+    log_debug("Entering dungeon level %d", p_ptr->depth);
+    dungeon_transition_level_music();
+
+    log_debug("Verifying panel position");
+    verify_panel();
+
+    log_debug("Flushing messages");
+    message_flush();
+
+    runtime_dungeon_update_labyrinth_view_state(false);
+
+    log_debug("Increasing character_xtra depth for display setup");
+    character_xtra++;
+
+    log_info("Starting initial dungeon display setup");
+    p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
+
+    log_debug("Running initial update_stuff");
+    update_stuff();
+
+    log_debug("Setting up view and distance updates");
+    p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_DISTANCE);
+
+    log_debug("Setting up full redraw");
+    p_ptr->redraw |= (PR_BASIC | PR_EXTRA | PR_MAP | PR_EQUIPPY | PR_RESIST);
+
+    log_debug("Setting up window updates");
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
+    p_ptr->window |= (PW_MONSTER | PW_MONLIST);
+
+    if (op_ptr->main_combat_rolls > 0)
+        display_main_combat_rolls();
+
+    p_ptr->window |= (PW_OVERHEAD);
+
+    log_debug("Running second update_stuff");
+    update_stuff();
+
+    log_debug("Running redraw_stuff");
+    redraw_stuff();
+
+    log_debug("Running window_stuff");
+    window_stuff();
+
+    log_debug("Decreasing character_xtra depth after display setup");
+    character_xtra--;
+
+    log_debug("Final update_stuff in setup");
+    p_ptr->update |= (PU_BONUS | PU_HP | PU_MANA);
+
+    log_debug("Setting up inventory notices");
+    p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+
+    log_debug("Running notice_stuff");
+    notice_stuff();
+
+    log_debug("Running final update_stuff");
+    update_stuff();
+
+    log_debug("Running final redraw_stuff");
+    redraw_stuff();
+
+    log_debug("Running final window_stuff");
+    window_stuff();
+
+    log_debug("Publishing initial dungeon snapshot");
+    app_session_mark_snapshot_dirty(app_session_current(),
+        APP_SNAPSHOT_INVALIDATE_ALL);
+    runtime_dungeon_publish_runtime_snapshot(0, 0, 0);
+
+    runtime_dungeon_handle_partition_entry(true);
+
+    log_info("Dungeon display setup completed successfully");
+    log_debug("Final setup state: character_generated=%s, character_icky=%d, update=0x%08X, redraw=0x%08X, window=0x%08X",
+        character_generated ? "true" : "false", character_icky, p_ptr->update,
+        p_ptr->redraw, p_ptr->window);
+
+    if (p_ptr->is_dead)
+    {
+        log_info("Player is dead, exiting dungeon");
+        return false;
+    }
+
+    if (bones_selector)
+        ghost_challenge();
+
+    if ((p_ptr->depth == MORGOTH_DEPTH) && p_ptr->truce)
+    {
+        msg_print("There is a strange tension in the air.");
+        if (p_ptr->skill_use[S_PER] >= 15)
+        {
+            msg_print("You feel that Morgoth's servants are reluctant to "
+                "attack before he delivers judgment.");
+        }
+    }
+
+    runtime_dungeon_show_initial_partition_banner();
+    return true;
+}
+
+void runtime_dungeon_show_startup_presentations(void)
+{
+    app_session_set_cursor_visible(app_session_current(), false);
+    runtime_dungeon_maybe_show_blitz_unlock_screen();
+
+    if (run_mode_is_blitz())
+        return;
+
+    if (metarun_created)
+        runtime_dungeon_print_story_intro();
+    else
+        print_metarun_stats();
+}
+
+void runtime_dungeon_show_opening_story_if_needed(void)
+{
+    if (!run_mode_is_blitz() && score_count_alive_entries() == 0)
+    {
+        platform_music_play_main_full();
+        print_story(15, 1, false);
+    }
+}
+
+void runtime_dungeon_begin_active_run_presentation(void)
+{
+    app_session* session = app_session_current();
+    app_snapshot snapshot;
+
+    memset(&snapshot, 0, sizeof(snapshot));
+    snapshot.scene = APP_SCENE_KIND_DUNGEON;
+    app_session_set_snapshot(session, &snapshot);
+    app_session_resume_running(session);
+
+    log_info("Game session started - entering play mode");
+
+    /* Any active run, including the Gates at depth 0, uses ambient gameplay music. */
+    log_debug("Starting game session at depth=%d - switching to ambient music",
+        p_ptr->depth);
+    platform_music_stop_main();
+    platform_music_play_ambient();
+    last_music_depth = p_ptr->depth;
+
+    do_cmd_redraw();
+
+    app_session_mark_snapshot_dirty(session, APP_SNAPSHOT_INVALIDATE_ALL);
+    (void)app_session_build_dungeon_snapshot(session, 0, 0, 0);
+}
+
+void runtime_dungeon_prepare_death_presentation(void)
+{
+    log_debug("Character dead - revealing map state");
+
+    platform_music_stop_main();
+    platform_music_stop_ambient();
+    if (p_ptr->escaped || p_ptr->morgoth_slain)
+        platform_music_play_main();
+    else
+        platform_music_play_death();
+
+    runtime_dungeon_prepare_death_knowledge();
+    do_cmd_wiz_unhide(255);
+    update_view();
+    detect_all_doors_traps();
+}
+
+bool runtime_dungeon_death_spectator_command_allowed(int command)
+{
+    if (command == 0)
+        return true;
+
+    switch (command)
+    {
+    case ' ':
+    case '\n':
+    case '\r':
+    case '\a':
+    case '?':
+    case '@':
+    case 'h':
+    case 'H':
+    case 'i':
+    case 'e':
+    case 'x':
+    case 'M':
+    case 'L':
+    case 'l':
+    case 'm':
+    case 'O':
+    case ':':
+    case 'j':
+    case '~':
+    case '[':
+    case ']':
+    case KTRL('E'):
+    case KTRL('O'):
+    case KTRL('P'):
+    case KTRL('R'):
+    case ESCAPE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool death_spectator_continue_input(int command)
+{
+    if ((command == ' ') || (command == '\n') || (command == '\r'))
+        return true;
+
+    if (steamdeck_controls_active() && (command == steamdeck_confirm_key()))
+        return true;
+
+    return false;
+}
+
+static void death_spectator_reset_command_state(void)
+{
+    p_ptr->command_cmd = 0;
+    p_ptr->command_new = 0;
+    p_ptr->command_rep = 0;
+    p_ptr->command_arg = 0;
+    p_ptr->command_dir = 0;
+}
+
+static void death_spectator_prepare_display(void)
+{
+    int i;
+
+    for (i = 1; i < o_max; i++)
+    {
+        object_type* o_ptr = &o_list[i];
+
+        if (!o_ptr->k_idx)
+            continue;
+
+        object_aware(o_ptr);
+        object_known(o_ptr);
+    }
+
+    wiz_light();
+    do_cmd_wiz_unhide(255);
+
+    p_ptr->redraw |= 0x0FFFFFFFL;
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0 | PW_MONSTER
+        | PW_MONLIST | PW_OVERHEAD);
+
+    handle_stuff();
+
+    if (op_ptr->main_combat_rolls > 0)
+        display_main_combat_rolls();
+
+    msg_print(
+        "You linger for a final look. Press Esc, Space, or Enter to continue to the tomb.");
+}
+
+void death_spectator_view(void)
+{
+    death_spectator_mode = true;
+
+    death_spectator_reset_command_state();
+
+    app_command_clear_pending();
+    platform_frame_flush_events();
+
+    death_spectator_prepare_display();
+
+    while (true)
+    {
+        app_request_player_command();
+
+        if ((p_ptr->command_cmd == ESCAPE)
+            || death_spectator_continue_input(p_ptr->command_cmd))
+        {
+            break;
+        }
+
+        if (!runtime_dungeon_death_spectator_command_allowed(p_ptr->command_cmd))
+        {
+            if (p_ptr->command_cmd)
+                msg_print("You can no longer take that action.");
+            p_ptr->command_cmd = 0;
+            continue;
+        }
+
+        process_command();
+        handle_stuff();
+        death_spectator_reset_command_state();
+    }
+
+    death_spectator_mode = false;
+
+    p_ptr->energy_use = 0;
+    death_spectator_reset_command_state();
+}
+
+bool death_spectator_active(void)
+{
+    return death_spectator_mode;
 }
 
 static bool story_intro_build_ui_scene(app_ui_scene* scene,

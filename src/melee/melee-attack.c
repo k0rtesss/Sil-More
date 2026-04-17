@@ -14,7 +14,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "player/killer.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-combat-display.h"

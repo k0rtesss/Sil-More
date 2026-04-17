@@ -18,7 +18,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "melee/melee-attack.h"
 #include "melee/melee-movement.h"
 #include "melee/melee-process.h"

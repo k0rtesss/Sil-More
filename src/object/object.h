@@ -23,6 +23,7 @@ s16b o_pop(void);
 object_type* get_first_object(int y, int x);
 object_type* get_next_object(const object_type* o_ptr);
 void get_obj_num_prep(void);
+bool prep_object_theme(int themetype);
 s16b get_obj_num(int level);
 void object_known(object_type* o_ptr);
 void object_aware(object_type* o_ptr);

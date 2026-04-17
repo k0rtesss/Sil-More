@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "monster/monster.h"
 
 s16b num_repro;

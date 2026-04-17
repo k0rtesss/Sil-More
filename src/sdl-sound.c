@@ -4,7 +4,6 @@
 #include <SDL3_mixer/SDL_mixer.h>
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "fs/resource.h"
@@ -291,7 +290,6 @@ static bool sdl_sound_load_from_config(const struct sound_config* config)
 
     sdl_sound_reset_bank();
 
-    extern const cptr angband_sound_name[];
     int loaded_events = 0;
 
     for (int i = 0; i < MSG_MAX; i++) {

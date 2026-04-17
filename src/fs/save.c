@@ -10,7 +10,6 @@
 
 #include "angband.h"
 #include "blitz.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "fs/path.h"
 #include "fs/save-internal.h"

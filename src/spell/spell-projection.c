@@ -15,7 +15,6 @@
 
 #include "angband.h"
 #include "app/app-session.h"
-#include "externs.h"
 #include "platform-frame.h"
 #include "spell/spell-monster.h"
 #include "spell/spell-projection.h"

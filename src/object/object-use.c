@@ -9,7 +9,7 @@
  */
 
 #include "angband.h"
-#include "externs.h"
+#include "cmd/monster/cmd-monster.h"
 #include "object/object-use.h"
 #include "player/killer.h"
 

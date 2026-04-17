@@ -65,5 +65,6 @@ extern bool (*get_mon_num_hook)(int r_idx);
 extern bool (*get_obj_num_hook)(int k_idx);
 extern void (*object_info_out_flags)(
     const object_type* o_ptr, u32b* f1, u32b* f2, u32b* f3);
+extern const cptr angband_sound_name[MSG_MAX];
 
 #endif /* INCLUDED_RUNTIME_RUNTIME_STATE_H */

@@ -12,7 +12,6 @@
 #include "melee/melee-combat-display.h"
 #include "platform-frame.h"
 #include "platform-input.h"
-#include "externs.h"
 #include "cmd/ui/cmd-ui.h"
 
 #include <ctype.h>

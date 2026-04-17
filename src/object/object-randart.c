@@ -9,7 +9,6 @@
  */
 
 #include "angband.h"
-#include "externs.h"
 #include "init.h"
 #include "object/object-randart.h"
 
