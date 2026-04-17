@@ -11,6 +11,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$androidApplicationId = 'com.silqh.silmore.unstable'
+$androidLaunchActivity = 'com.silqh.silmore.SilMoreActivity'
+
 $repoRoot = $PSScriptRoot
 $buildScript = Join-Path $repoRoot 'build-android-apk.ps1'
 $installScript = Join-Path $repoRoot 'install-android-apk.ps1'
@@ -52,12 +55,12 @@ if ($LaunchApp) {
         throw "adb not found for launch step: $adb"
     }
 
-    & $adb shell am start -n com.silqh.silmore/com.silqh.silmore.SilMoreActivity
+    & $adb shell am start -n "$androidApplicationId/$androidLaunchActivity"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to launch app via adb (exit code $LASTEXITCODE)"
     }
 
-    Write-Host 'Launched com.silqh.silmore.' -ForegroundColor Green
+    Write-Host "Launched $androidApplicationId." -ForegroundColor Green
 }
 
 Write-Host "Deploy complete for $Config." -ForegroundColor Green

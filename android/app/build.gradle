@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+// Keep the unstable branch installable alongside stable Android builds.
+def androidNamespace = 'com.silqh.silmore'
+def androidApplicationId = 'com.silqh.silmore.unstable'
+
 def repoRoot = rootProject.projectDir.parentFile
 def definesHeader = new File(repoRoot, 'src/defines.h')
 def versionMatcher = (definesHeader.text =~ /#define\s+VERSION_STRING\s+"([^"]+)"/)
@@ -22,11 +26,11 @@ def gameVersionCode =
         gameVersionParts[3]
 
 android {
-    namespace 'com.silqh.silmore'
+    namespace androidNamespace
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.silqh.silmore'
+        applicationId androidApplicationId
         minSdk 21
         targetSdk 34
         versionCode gameVersionCode

@@ -2,6 +2,10 @@
 
 This folder contains an Android Studio / Gradle project that builds Sil-More as an SDL-based Android app.
 
+This branch uses the Android application ID `com.silqh.silmore.unstable` and
+the launcher label `Sil-More Unstable`, so it can be installed alongside the
+stable `master` or `develop` Android app builds.
+
 ## What this does
 
 - Builds the native code via **CMake + Android NDK**.
