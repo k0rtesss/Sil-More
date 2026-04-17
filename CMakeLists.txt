@@ -276,6 +276,7 @@ set(SIL_MORE_SOURCES_SPELL
     src/spell/spell-damage.c
     src/spell/spell-detection.c
     src/spell/spell-monster.c
+    src/spell/spell-projection-effects.c
     src/spell/spell-projection.c
     src/spell/spell-teleport.c
     src/spell/spell-terrain.c

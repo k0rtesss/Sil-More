@@ -1,5 +1,16 @@
 # Session notes
 
+## 2026-04-17: Wave 4 Lane K quest-vault ownership split
+- `src/level-generation/level-generation-quests.c`
+  - absorbed the quest-vault monitoring and placement family from `level-generation-rooms.c`, including quest-vault template filtering, placement verification, deferred quest-state updates, and bespoke Orc Stronghold / Duruin Bastion / Shadow Bastion placement
+  - now owns the `qv_stored_*` / `qv_placed_this_level` monitoring state and `check_quest_vault_integrity()` instead of leaving that quest-specific state in the generic rooms module
+- `src/level-generation/level-generation-rooms.c`
+  - dropped the moved quest-vault helpers and bespoke quest placement flows so the file stays focused on room, vault, and special-room construction
+  - kept `place_room_forced()` and `place_room_forced_exhaustive()` as exported lane-local helpers because the quest lane now reuses the existing forced-fit vault builder instead of duplicating it
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\\build-incremental.ps1`
+  - `ctest --preset test-standard`
+
 ## 2026-04-17: Wave 5 final gate ratchet closeout
 - `docs/finish_line_modernization_parallel_plan.md`
   - refreshed the Wave 5 status, current measured baseline metrics, active test preset list, and validation matrix so the plan matches the live tree instead of the pre-ratchet snapshot

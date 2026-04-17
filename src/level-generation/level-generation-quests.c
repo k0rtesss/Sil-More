@@ -8,9 +8,119 @@
 
 #include "angband.h"
 #include "log/log.h"
+#include "level-generation/gen-log.h"
 #include "metarun.h"
 #include "level-generation/level-generation-internal.h"
 #include <string.h>
+
+bool place_room_forced(int y0, int x0, vault_type* v_ptr);
+bool place_room_forced_exhaustive(vault_type* v_ptr, int* placed_y,
+    int* placed_x);
+
+/* Quest vault debug instrumentation */
+#define DEBUG_QUEST_VAULT 0
+#if DEBUG_QUEST_VAULT
+static int qv_y1 = -1, qv_x1 = -1, qv_y2 = -1, qv_x2 = -1;
+static int qv_h = 0, qv_w = 0;
+static unsigned short *qv_feat_snapshot = NULL;
+
+static void qv_capture(void)
+{
+    int y, x;
+
+    if (qv_y1 < 0)
+        return;
+
+    qv_h = qv_y2 - qv_y1 + 1;
+    qv_w = qv_x2 - qv_x1 + 1;
+    mem_free_null(qv_feat_snapshot);
+    qv_feat_snapshot = mem_alloc_array(qv_h * qv_w, unsigned short);
+    for (y = qv_y1; y <= qv_y2; ++y)
+    {
+        for (x = qv_x1; x <= qv_x2; ++x)
+        {
+            qv_feat_snapshot[(y - qv_y1) * qv_w + (x - qv_x1)] =
+                cave_feat[y][x];
+        }
+    }
+    log_trace("Quest vault DEBUG: snapshot captured (%d x %d) bounds (%d,%d)-(%d,%d)",
+        qv_h, qv_w, qv_y1, qv_x1, qv_y2, qv_x2);
+}
+
+static char qv_glyph(int feat)
+{
+    switch (feat)
+    {
+    case FEAT_FLOOR:
+        return '.';
+    case FEAT_WALL_OUTER:
+        return '#';
+    case FEAT_WALL_INNER:
+        return '+';
+    case FEAT_WALL_EXTRA:
+        return 'X';
+#ifdef FEAT_DOOR_CLOSED
+    case FEAT_DOOR_CLOSED:
+        return 'D';
+#endif
+    case FEAT_FORGE_HEAD:
+    case FEAT_FORGE_TAIL:
+        return 'F';
+    default:
+        return '?';
+    }
+}
+
+static void qv_dump(const char *phase)
+{
+    int y, x;
+    char row[256];
+
+    if (qv_y1 < 0)
+        return;
+
+    log_trace("Quest vault DEBUG: layout (%s) bounds (%d,%d)-(%d,%d)", phase,
+        qv_y1, qv_x1, qv_y2, qv_x2);
+    for (y = qv_y1; y <= qv_y2; ++y)
+    {
+        int idx = 0;
+
+        for (x = qv_x1; x <= qv_x2 && idx < (int)sizeof(row) - 2; ++x)
+            row[idx++] = qv_glyph(cave_feat[y][x]);
+        row[idx] = '\0';
+        log_trace("Quest vault DEBUG ROW %2d: %s", y, row);
+    }
+}
+
+static void qv_compare(void)
+{
+    int diffs = 0;
+    int y, x;
+
+    if (!qv_feat_snapshot)
+        return;
+
+    for (y = qv_y1; y <= qv_y2; ++y)
+    {
+        for (x = qv_x1; x <= qv_x2; ++x)
+        {
+            unsigned short before =
+                qv_feat_snapshot[(y - qv_y1) * qv_w + (x - qv_x1)];
+            unsigned short now = cave_feat[y][x];
+
+            if (before != now)
+            {
+                log_trace("Quest vault DEBUG: tile changed (%d,%d) %d->%d",
+                    y, x, before, now);
+                if (++diffs >= 50)
+                    return;
+            }
+        }
+    }
+
+    log_trace("Quest vault DEBUG: no tile changes detected since snapshot");
+}
+#endif
 
 /* Global variable to track pending quest state changes */
 pending_quest_states_t pending_quest_states = {0};
@@ -126,6 +236,967 @@ bool is_maeglin_quest_vault(vault_type *v)
 {
     if (!v) return false;
     return (strstr(v_name + v->name, "Maeglin") != NULL);
+}
+
+static bool vault_template_has_aule(vault_type *v)
+{
+    char *s;
+
+    if (!v || v->text == 0 || v->hgt == 0)
+        return false;
+
+    s = v_text + v->text;
+    for (int row = 0; row < v->hgt; ++row)
+    {
+        if (strchr(s, 'L'))
+            return true;
+        s += strlen(s) + 1;
+    }
+
+    return false;
+}
+
+static bool vault_template_has_mandos(vault_type *v)
+{
+    char *s;
+
+    if (!v || v->text == 0 || v->hgt == 0)
+        return false;
+
+    s = v_text + v->text;
+    for (int row = 0; row < v->hgt; ++row)
+    {
+        if (strchr(s, 'N'))
+            return true;
+        s += strlen(s) + 1;
+    }
+
+    return false;
+}
+
+static bool vault_template_has_duruin(vault_type *v)
+{
+    const char *name;
+
+    if (!v)
+        return false;
+
+    name = v_name + v->name;
+    return strstr(name, "Duruin") != NULL;
+}
+
+static bool vault_template_has_shadow_bastion(vault_type *v)
+{
+    if (!v)
+        return false;
+
+    return strstr(v_name + v->name, "Shadow Bastion") != NULL;
+}
+
+static bool vault_template_is_orc_stronghold(vault_type *v)
+{
+    if (!v)
+        return false;
+
+    return strstr(v_name + v->name, "Orc Stronghold") != NULL;
+}
+
+int qv_stored_y1 = -1;
+int qv_stored_x1 = -1;
+int qv_stored_y2 = -1;
+int qv_stored_x2 = -1;
+bool qv_placed_this_level = false;
+
+void check_quest_vault_integrity(const char* checkpoint_name)
+{
+    int check_walls = 0;
+    int check_floors = 0;
+    int check_features = 0;
+    int check_monsters = 0;
+    int check_icky = 0;
+    int check_room = 0;
+    int check_extra = 0;
+
+    if (!qv_placed_this_level)
+    {
+        log_trace("VAULT INTEGRITY CHECK [%s]: No quest vault placed this level - skipping check",
+            checkpoint_name);
+        return;
+    }
+    if (qv_stored_y1 < 0 || qv_stored_y2 < 0)
+    {
+        log_trace("VAULT INTEGRITY CHECK [%s]: No quest vault coordinates stored",
+            checkpoint_name);
+        return;
+    }
+
+    for (int cy = qv_stored_y1; cy <= qv_stored_y2; cy++)
+    {
+        for (int cx = qv_stored_x1; cx <= qv_stored_x2; cx++)
+        {
+            if (cave_feat[cy][cx] == FEAT_WALL_OUTER
+                || cave_feat[cy][cx] == FEAT_WALL_INNER)
+            {
+                check_walls++;
+            }
+            else if (cave_feat[cy][cx] == FEAT_FLOOR)
+            {
+                check_floors++;
+            }
+            else if (cave_feat[cy][cx] == FEAT_WALL_EXTRA)
+            {
+                check_extra++;
+            }
+            else
+            {
+                check_features++;
+            }
+
+            if (cave_m_idx[cy][cx] > 0)
+                check_monsters++;
+            if (cave_info[cy][cx] & CAVE_ICKY)
+                check_icky++;
+            if (cave_info[cy][cx] & CAVE_ROOM)
+                check_room++;
+        }
+    }
+
+    log_trace("VAULT INTEGRITY CHECK [%s]: Area (%d,%d) to (%d,%d)",
+        checkpoint_name, qv_stored_y1, qv_stored_x1, qv_stored_y2,
+        qv_stored_x2);
+    log_trace("VAULT INTEGRITY CHECK [%s]: %d walls, %d floors, %d features, %d monsters, %d extra_walls",
+        checkpoint_name, check_walls, check_floors, check_features,
+        check_monsters, check_extra);
+    log_trace("VAULT INTEGRITY CHECK [%s]: %d CAVE_ICKY, %d CAVE_ROOM flags",
+        checkpoint_name, check_icky, check_room);
+
+    if (check_walls < 50 && check_floors < 30)
+    {
+        log_trace("VAULT INTEGRITY WARNING [%s]: Vault appears to have been OVERWRITTEN! Very low content.",
+            checkpoint_name);
+    }
+}
+
+static void process_quest_vault_area(int y0, int x0, vault_type *qv)
+{
+    int y1 = y0 - qv->hgt / 2;
+    int x1 = x0 - qv->wid / 2;
+    int y2 = y1 + qv->hgt - 1;
+    int x2 = x1 + qv->wid - 1;
+    bool has_forge = false;
+    bool has_aule = false;
+    bool has_mandos = false;
+    int wall_count = 0;
+    int floor_count = 0;
+    int monster_count = 0;
+    int feature_count = 0;
+
+    log_trace("Quest vault processing: Area (%d,%d) to (%d,%d), size %dx%d",
+        y1, x1, y2, x2, qv->wid, qv->hgt);
+
+    for (int dy = y1; dy <= y2; ++dy)
+    {
+        for (int dx = x1; dx <= x2; ++dx)
+        {
+            if (cave_feat[dy][dx] == FEAT_WALL_OUTER
+                || cave_feat[dy][dx] == FEAT_WALL_INNER)
+            {
+                wall_count++;
+            }
+            else if (cave_feat[dy][dx] == FEAT_FLOOR)
+            {
+                floor_count++;
+            }
+            else if (cave_feat[dy][dx] != FEAT_WALL_EXTRA)
+            {
+                feature_count++;
+            }
+
+            if (cave_m_idx[dy][dx] > 0)
+                monster_count++;
+
+            if ((cave_feat[dy][dx] >= FEAT_FORGE_HEAD)
+                && (cave_feat[dy][dx] <= FEAT_FORGE_TAIL))
+            {
+                if (!has_forge)
+                {
+                    p_ptr->aule_forge_y = (byte)dy;
+                    p_ptr->aule_forge_x = (byte)dx;
+                    has_forge = true;
+                    log_trace("Quest vault: Found forge at (%d,%d), feature=%d",
+                        dy, dx, cave_feat[dy][dx]);
+                }
+            }
+            if (cave_m_idx[dy][dx] > 0)
+            {
+                monster_type *m_ptr = &mon_list[cave_m_idx[dy][dx]];
+
+                if (m_ptr->r_idx == R_IDX_AULE)
+                {
+                    has_aule = true;
+                    log_trace("Quest vault: Found Aule at (%d,%d)", dy, dx);
+                }
+                if (m_ptr->r_idx == R_IDX_MANDOS)
+                {
+                    has_mandos = true;
+                    p_ptr->mandos_vault_y = (byte)dy;
+                    p_ptr->mandos_vault_x = (byte)dx;
+                    log_trace("Quest vault: Found Mandos at (%d,%d)", dy, dx);
+                }
+            }
+        }
+    }
+
+    log_trace("Quest vault contents: %d walls, %d floors, %d features, %d monsters",
+        wall_count, floor_count, feature_count, monster_count);
+
+    qv_stored_y1 = y1;
+    qv_stored_x1 = x1;
+    qv_stored_y2 = y2;
+    qv_stored_x2 = x2;
+    qv_placed_this_level = true;
+    log_trace("QUEST VAULT MONITOR: Storing bounds (%d,%d) to (%d,%d) for tracking",
+        qv_stored_y1, qv_stored_x1, qv_stored_y2, qv_stored_x2);
+
+#if DEBUG_QUEST_VAULT
+    qv_y1 = y1;
+    qv_x1 = x1;
+    qv_y2 = y2;
+    qv_x2 = x2;
+    qv_capture();
+    qv_dump("initial");
+    for (int ry = y1; ry <= y2; ++ry)
+    {
+        for (int rx = x1; rx <= x2; ++rx)
+            cave_info[ry][rx] |= (CAVE_MARK | CAVE_SEEN | CAVE_GLOW);
+    }
+#endif
+
+    if (has_forge && has_aule
+        && p_ptr->aule_quest == AULE_QUEST_NOT_STARTED
+        && !quest_metarun_blocked(QUEST_ID_AULE, METARUN_QUEST_AULE)
+        && !p_ptr->quest_reserved[0])
+    {
+        p_ptr->quest_reserved[0] = 1;
+        pending_quest_states.has_aule_change = true;
+        pending_quest_states.aule_level = p_ptr->depth;
+        pending_quest_states.aule_forge_y = p_ptr->aule_forge_y;
+        pending_quest_states.aule_forge_x = p_ptr->aule_forge_x;
+        level_gen_debug_note_questgiver(QUEST_ID_AULE);
+        log_trace("Aule quest: FORGE_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0] set to 1",
+            p_ptr->aule_forge_y, p_ptr->aule_forge_x, p_ptr->depth);
+    }
+    if (has_mandos)
+    {
+        int mandos_target = QUEST_ID_MANDOS;
+        bool nonblocking;
+        byte mandos_state;
+        u32b mandos_flag;
+
+        if (is_maeglin_quest_vault(qv))
+            mandos_target = QUEST_ID_MANDOS_BETRAYER;
+        else if (is_easterling_quest_vault(qv))
+            mandos_target = QUEST_ID_MANDOS_TRAITOR;
+        else if (pending_quest_states.mandos_quest_id > 0)
+            mandos_target = pending_quest_states.mandos_quest_id;
+
+        pending_quest_states.mandos_quest_id = mandos_target;
+        pending_quest_states.mandos_next_state = QUEST_STATE_GIVER_PRESENT;
+        nonblocking = (mandos_target == QUEST_ID_MANDOS_BETRAYER);
+        mandos_state = (mandos_target == QUEST_ID_MANDOS)
+            ? p_ptr->mandos_quest
+            : quest_get_state(mandos_target);
+        mandos_flag = quest_metarun_flag(mandos_target);
+
+        if (mandos_state == QUEST_STATE_NOT_STARTED
+            && (!p_ptr->quest_reserved[0] || nonblocking))
+        {
+            if (mandos_flag
+                && quest_metarun_blocked(mandos_target, mandos_flag))
+            {
+                log_trace("Mandos quest: blocked during vault processing (quest_id=%d)",
+                    mandos_target);
+            }
+            else
+            {
+                if (!nonblocking)
+                    p_ptr->quest_reserved[0] = 1;
+
+                pending_quest_states.has_mandos_change = true;
+                pending_quest_states.mandos_level = p_ptr->depth;
+                pending_quest_states.mandos_vault_y = p_ptr->mandos_vault_y;
+                pending_quest_states.mandos_vault_x = p_ptr->mandos_vault_x;
+                level_gen_debug_note_questgiver(mandos_target);
+                log_trace("Mandos quest: GIVER_PRESENT change DEFERRED (quest vault) at %d,%d depth=%d, quest_reserved[0]=%d, quest_id=%d",
+                    p_ptr->mandos_vault_y, p_ptr->mandos_vault_x, p_ptr->depth,
+                    p_ptr->quest_reserved[0], mandos_target);
+            }
+        }
+    }
+}
+
+bool place_orc_stronghold(void)
+{
+    vault_type* qv_ptr;
+    int y, x;
+
+    log_trace("Tulkas orc quest: Attempting to force-place Orc Stronghold at depth %d",
+        p_ptr->depth);
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        qv_ptr = &v_info[i];
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (!vault_template_is_orc_stronghold(qv_ptr)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+        if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
+
+        level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
+
+        y = p_ptr->cur_map_hgt / 2
+            + rand_range(-p_ptr->cur_map_hgt / 6, p_ptr->cur_map_hgt / 6);
+        x = p_ptr->cur_map_wid / 2
+            + rand_range(-p_ptr->cur_map_wid / 6, p_ptr->cur_map_wid / 6);
+        y = MAX(qv_ptr->hgt / 2 + 3,
+            MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3,
+            MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_tulkas_change = true;
+            pending_quest_states.tulkas_level = p_ptr->depth;
+            pending_quest_states.tulkas_next_state = QUEST_STATE_GIVER_PRESENT;
+            pending_quest_states.tulkas_spawn_pending = true;
+            log_trace("Tulkas orc quest: Orc Stronghold placed at (%d,%d)", y,
+                x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d)",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        for (int attempts = 0; attempts < 10; attempts++)
+        {
+            y = p_ptr->cur_map_hgt / 2
+                + rand_range(-p_ptr->cur_map_hgt / 4, p_ptr->cur_map_hgt / 4);
+            x = p_ptr->cur_map_wid / 2
+                + rand_range(-p_ptr->cur_map_wid / 4, p_ptr->cur_map_wid / 4);
+            y = MAX(qv_ptr->hgt / 2 + 3,
+                MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+            x = MAX(qv_ptr->wid / 2 + 3,
+                MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+            if (place_room_forced(y, x, qv_ptr))
+            {
+                qv_placed_this_level = true;
+                level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+                process_quest_vault_area(y, x, qv_ptr);
+                p_ptr->quest_reserved[0] = 1;
+                pending_quest_states.has_tulkas_change = true;
+                pending_quest_states.tulkas_level = p_ptr->depth;
+                pending_quest_states.tulkas_next_state = QUEST_STATE_GIVER_PRESENT;
+                pending_quest_states.tulkas_spawn_pending = true;
+                log_trace("Tulkas orc quest: Orc Stronghold placed on fallback attempt %d at (%d,%d)",
+                    attempts + 1, y, x);
+                genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) on fallback %d",
+                    v_name + qv_ptr->name, y, x, attempts + 1);
+                return true;
+            }
+        }
+
+        if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_tulkas_change = true;
+            pending_quest_states.tulkas_level = p_ptr->depth;
+            pending_quest_states.tulkas_next_state = QUEST_STATE_GIVER_PRESENT;
+            pending_quest_states.tulkas_spawn_pending = true;
+            log_trace("Tulkas orc quest: Orc Stronghold placed by exhaustive scan at (%d,%d)",
+                y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) after full-map scan",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        log_trace("Tulkas orc quest: Orc Stronghold placement failed after all attempts, returning false");
+        genlog_quest("QUEST VAULT FAILED: '%s' could not be placed",
+            v_name + qv_ptr->name);
+        return false;
+    }
+
+    log_trace("Tulkas orc quest: Failed to find Orc Stronghold vault template at depth %d",
+        p_ptr->depth);
+    return false;
+}
+
+bool place_duruin_bastion(void)
+{
+    vault_type* qv_ptr;
+    int y, x;
+
+    log_trace("Varda quest: Attempting to force-place Duruin Bastion at depth %d",
+        p_ptr->depth);
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        int center_y;
+        int center_x;
+
+        qv_ptr = &v_info[i];
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (!vault_template_has_duruin(qv_ptr)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+        if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
+
+        log_trace("Varda quest: Found Duruin Bastion vault at index %d: '%s', attempting placement",
+            i, v_name + qv_ptr->name);
+        log_trace("Varda quest: Vault details - typ=%d, hgt=%d, wid=%d, depth=%d, flags=0x%x",
+            qv_ptr->typ, qv_ptr->hgt, qv_ptr->wid, qv_ptr->depth, qv_ptr->flags);
+        level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
+
+        center_y = p_ptr->cur_map_hgt / 2;
+        center_x = p_ptr->cur_map_wid / 2;
+        y = center_y + rand_range(-p_ptr->cur_map_hgt / 6, p_ptr->cur_map_hgt / 6);
+        x = center_x + rand_range(-p_ptr->cur_map_wid / 6, p_ptr->cur_map_wid / 6);
+        y = MAX(qv_ptr->hgt / 2 + 3,
+            MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3,
+            MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_varda_change = true;
+            pending_quest_states.varda_level = p_ptr->depth;
+            pending_quest_states.varda_vault_y = y;
+            pending_quest_states.varda_vault_x = x;
+            log_trace("Varda quest: Duruin Bastion placed at (%d,%d)", y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d)",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        for (int attempts = 0; attempts < 10; attempts++)
+        {
+            y = center_y + rand_range(-p_ptr->cur_map_hgt / 4, p_ptr->cur_map_hgt / 4);
+            x = center_x + rand_range(-p_ptr->cur_map_wid / 4, p_ptr->cur_map_wid / 4);
+            y = MAX(qv_ptr->hgt / 2 + 3,
+                MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+            x = MAX(qv_ptr->wid / 2 + 3,
+                MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+            if (place_room_forced(y, x, qv_ptr))
+            {
+                qv_placed_this_level = true;
+                level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+                process_quest_vault_area(y, x, qv_ptr);
+                p_ptr->quest_reserved[0] = 1;
+                pending_quest_states.has_varda_change = true;
+                pending_quest_states.varda_level = p_ptr->depth;
+                pending_quest_states.varda_vault_y = y;
+                pending_quest_states.varda_vault_x = x;
+                log_trace("Varda quest: Duruin Bastion placed on fallback attempt %d at (%d,%d)",
+                    attempts + 1, y, x);
+                genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) on fallback %d",
+                    v_name + qv_ptr->name, y, x, attempts + 1);
+                return true;
+            }
+        }
+
+        log_trace("Varda quest: Random placement failed for '%s', scanning the full map for a guaranteed fit",
+            v_name + qv_ptr->name);
+        if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_varda_change = true;
+            pending_quest_states.varda_level = p_ptr->depth;
+            pending_quest_states.varda_vault_y = y;
+            pending_quest_states.varda_vault_x = x;
+            log_trace("Varda quest: Duruin Bastion placed by exhaustive scan at (%d,%d)",
+                y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) after full-map scan",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        log_trace("Varda quest: Duruin Bastion placement failed after all attempts, returning false");
+        genlog_quest("QUEST VAULT FAILED: '%s' could not be placed",
+            v_name + qv_ptr->name);
+        return false;
+    }
+
+    log_trace("Varda quest: Failed to find Duruin Bastion vault template at depth %d",
+        p_ptr->depth);
+    return false;
+}
+
+bool place_shadow_bastion(void)
+{
+    vault_type* qv_ptr;
+    int y, x;
+
+    log_trace("Varda quest: Attempting to force-place Shadow Bastion at depth %d",
+        p_ptr->depth);
+
+    for (int i = 0; i < z_info->v_max; i++)
+    {
+        qv_ptr = &v_info[i];
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (!vault_template_has_shadow_bastion(qv_ptr)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+        if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
+
+        log_trace("Varda quest: Found Shadow Bastion vault at index %d: '%s', attempting placement",
+            i, v_name + qv_ptr->name);
+        level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
+
+        y = p_ptr->cur_map_hgt / 2
+            + rand_range(-p_ptr->cur_map_hgt / 6, p_ptr->cur_map_hgt / 6);
+        x = p_ptr->cur_map_wid / 2
+            + rand_range(-p_ptr->cur_map_wid / 6, p_ptr->cur_map_wid / 6);
+        y = MAX(qv_ptr->hgt / 2 + 3,
+            MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+        x = MAX(qv_ptr->wid / 2 + 3,
+            MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+        if (place_room_forced(y, x, qv_ptr))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_varda_shadow_change = true;
+            pending_quest_states.varda_shadow_level = p_ptr->depth;
+            pending_quest_states.varda_shadow_y = y;
+            pending_quest_states.varda_shadow_x = x;
+            log_trace("Varda quest: Shadow Bastion placed at (%d,%d)", y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d)",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        for (int attempts = 0; attempts < 10; attempts++)
+        {
+            y = p_ptr->cur_map_hgt / 2
+                + rand_range(-p_ptr->cur_map_hgt / 4, p_ptr->cur_map_hgt / 4);
+            x = p_ptr->cur_map_wid / 2
+                + rand_range(-p_ptr->cur_map_wid / 4, p_ptr->cur_map_wid / 4);
+            y = MAX(qv_ptr->hgt / 2 + 3,
+                MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+            x = MAX(qv_ptr->wid / 2 + 3,
+                MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+            if (place_room_forced(y, x, qv_ptr))
+            {
+                qv_placed_this_level = true;
+                level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+                process_quest_vault_area(y, x, qv_ptr);
+                p_ptr->quest_reserved[0] = 1;
+                pending_quest_states.has_varda_shadow_change = true;
+                pending_quest_states.varda_shadow_level = p_ptr->depth;
+                pending_quest_states.varda_shadow_y = y;
+                pending_quest_states.varda_shadow_x = x;
+                log_trace("Varda quest: Shadow Bastion placed on fallback attempt %d at (%d,%d)",
+                    attempts + 1, y, x);
+                genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) on fallback %d",
+                    v_name + qv_ptr->name, y, x, attempts + 1);
+                return true;
+            }
+        }
+
+        if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+        {
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+            process_quest_vault_area(y, x, qv_ptr);
+            p_ptr->quest_reserved[0] = 1;
+            pending_quest_states.has_varda_shadow_change = true;
+            pending_quest_states.varda_shadow_level = p_ptr->depth;
+            pending_quest_states.varda_shadow_y = y;
+            pending_quest_states.varda_shadow_x = x;
+            log_trace("Varda quest: Shadow Bastion placed by exhaustive scan at (%d,%d)",
+                y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' at (%d,%d) after full-map scan",
+                v_name + qv_ptr->name, y, x);
+            return true;
+        }
+
+        log_trace("Varda quest: Shadow Bastion placement failed after all attempts, returning false");
+        genlog_quest("QUEST VAULT FAILED: '%s' could not be placed",
+            v_name + qv_ptr->name);
+        return false;
+    }
+
+    log_trace("Varda quest: Failed to find Shadow Bastion vault template at depth %d",
+        p_ptr->depth);
+    return false;
+}
+
+bool try_quest_vault_type(int v_type, bool *had_eligible_candidate)
+{
+    int i;
+    vault_type* qv_ptr;
+    int y, x;
+    bool attempted_placement = false;
+
+    if (had_eligible_candidate)
+        *had_eligible_candidate = false;
+
+    log_trace("Quest vault: Attempting type %d quest vault with forced placement strategy",
+        v_type);
+
+    for (i = 0; i < z_info->v_max; i++)
+    {
+        bool reserve_slot_for_this = true;
+
+        qv_ptr = &v_info[i];
+        if (qv_ptr->typ != v_type) continue;
+        if (!(qv_ptr->flags & VLT_QUEST)) continue;
+        if (qv_ptr->depth > p_ptr->depth) continue;
+        if (qv_ptr->max_depth != 0 && p_ptr->depth > qv_ptr->max_depth) continue;
+        if (!quest_vault_surface_roll_allows(qv_ptr, p_ptr->depth)) continue;
+        if (vault_template_has_duruin(qv_ptr)
+            || vault_template_has_shadow_bastion(qv_ptr)
+            || vault_template_is_orc_stronghold(qv_ptr))
+        {
+            log_trace("Quest vault: Skipping bespoke quest vault in generic placement path");
+            continue;
+        }
+
+        log_trace("Quest vault: Checking vault %d '%s' (rarity=%d)", i,
+            v_name + qv_ptr->name, qv_ptr->rarity);
+
+        if (vault_template_has_aule(qv_ptr))
+        {
+            log_trace("Quest vault: === AULE VAULT DETECTED === Checking eligibility (depth=%d)",
+                p_ptr->depth);
+            log_trace("Quest vault: CRITICAL CHECK - quest_reserved[0]=%d (MUST be 0 to proceed)",
+                p_ptr->quest_reserved[0]);
+            log_trace("  Player SMT skill_base = %d", p_ptr->skill_base[S_SMT]);
+            log_trace("  Player SMT skill_use = %d", p_ptr->skill_use[S_SMT]);
+
+            if (!check_quest_eligibility(2, p_ptr->depth))
+            {
+                log_trace("Quest vault: Aule vault skipped (eligibility check failed)");
+                continue;
+            }
+            log_trace("Quest vault: Aule eligibility check PASSED");
+
+            if (quest_metarun_blocked(QUEST_ID_AULE, METARUN_QUEST_AULE))
+            {
+                log_trace("Quest vault: Aule vault skipped (quest blocked by metarun)");
+                continue;
+            }
+            if (p_ptr->quest_reserved[0])
+            {
+                log_trace("Quest vault: === AULE BLOCKED === Another quest already spawned (quest_reserved[0]=1)");
+                continue;
+            }
+            log_trace("Quest vault: === AULE APPROVED === All checks passed, proceeding with generation");
+        }
+
+        if (vault_template_has_mandos(qv_ptr))
+        {
+            bool is_easterling = is_easterling_quest_vault(qv_ptr);
+            bool is_maeglin = is_maeglin_quest_vault(qv_ptr);
+            int mandos_stage = is_maeglin ? 3 : (is_easterling ? 2 : 1);
+            int mandos_quest_id = (mandos_stage == 3)
+                ? QUEST_ID_MANDOS_BETRAYER
+                : (mandos_stage == 2) ? QUEST_ID_MANDOS_TRAITOR
+                                      : QUEST_ID_MANDOS;
+            u32b mandos_flag = quest_metarun_flag(mandos_quest_id);
+            byte mandos_state = (mandos_stage == 1)
+                ? p_ptr->mandos_quest
+                : quest_get_state(mandos_quest_id);
+            bool uses_reserve = (mandos_stage < 3);
+
+            log_trace("Quest vault: Checking Mandos vault '%s' - quest_id=%d stage=%d state=%d, quest_reserved[0]=%d",
+                v_name + qv_ptr->name, mandos_quest_id, mandos_stage,
+                mandos_state, p_ptr->quest_reserved[0]);
+            if (mandos_stage == 2 && (p_ptr->depth < 10 || p_ptr->depth > 13))
+            {
+                log_trace("Quest vault: Mandos second quest '%s' skipped - depth %d outside 10-13",
+                    v_name + qv_ptr->name, p_ptr->depth);
+                continue;
+            }
+            if (mandos_stage == 3 && (p_ptr->depth < 17 || p_ptr->depth > 19))
+            {
+                log_trace("Quest vault: Mandos third quest '%s' skipped - depth %d outside 17-19",
+                    v_name + qv_ptr->name, p_ptr->depth);
+                continue;
+            }
+            if (mandos_state != QUEST_STATE_NOT_STARTED)
+            {
+                log_trace("Quest vault: Mandos vault skipped (quest state %d)",
+                    mandos_state);
+                continue;
+            }
+            if (mandos_stage == 2 && !mandos_second_stage_ready())
+            {
+                log_trace("Quest vault: Mandos second quest skipped (requirements not met)");
+                continue;
+            }
+            if (mandos_stage == 3 && !mandos_third_stage_ready())
+            {
+                log_trace("Quest vault: Mandos third quest skipped (requirements not met)");
+                continue;
+            }
+            if (mandos_stage == 1
+                && metarun_quest_completion_count(METARUN_QUEST_MANDOS) != 0)
+            {
+                log_trace("Quest vault: Mandos first quest skipped - later quest is pending");
+                continue;
+            }
+            if (quest_metarun_blocked(mandos_quest_id, mandos_flag))
+            {
+                log_trace("Quest vault: Mandos vault skipped (quest blocked by metarun)");
+                continue;
+            }
+            if (mandos_stage == 2)
+            {
+                monster_race *ulf = &r_info[R_IDX_ULFANG];
+                monster_race *uld = &r_info[R_IDX_ULDOR];
+
+                if (ulf->max_num == 0 || uld->max_num == 0
+                    || ulf->cur_num > 0 || uld->cur_num > 0)
+                {
+                    log_trace("Quest vault: Mandos second quest skipped - traitors unavailable (ulf max=%d cur=%d, uld max=%d cur=%d)",
+                        ulf->max_num, ulf->cur_num, uld->max_num,
+                        uld->cur_num);
+                    continue;
+                }
+            }
+            if (mandos_stage == 3)
+            {
+                monster_race *mae = &r_info[R_IDX_MAEGLIN];
+
+                if (mae->max_num == 0 || mae->cur_num > 0)
+                {
+                    log_trace("Quest vault: Mandos third quest skipped - Maeglin unavailable (max=%d cur=%d)",
+                        mae->max_num, mae->cur_num);
+                    continue;
+                }
+            }
+            if (uses_reserve && p_ptr->quest_reserved[0])
+            {
+                log_trace("Quest vault: Mandos vault skipped (another quest already spawned this run)");
+                continue;
+            }
+            pending_quest_states.mandos_quest_id = mandos_quest_id;
+            pending_quest_states.mandos_next_state = QUEST_STATE_GIVER_PRESENT;
+            reserve_slot_for_this = uses_reserve;
+        }
+
+        attempted_placement = true;
+        if (had_eligible_candidate)
+            *had_eligible_candidate = true;
+        level_gen_debug_note_quest_vault_name(v_name + qv_ptr->name);
+
+        {
+            int center_y = p_ptr->cur_map_hgt / 2;
+            int center_x = p_ptr->cur_map_wid / 2;
+
+            y = center_y + rand_range(-p_ptr->cur_map_hgt / 6,
+                p_ptr->cur_map_hgt / 6);
+            x = center_x + rand_range(-p_ptr->cur_map_wid / 6,
+                p_ptr->cur_map_wid / 6);
+            y = MAX(qv_ptr->hgt / 2 + 3,
+                MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+            x = MAX(qv_ptr->wid / 2 + 3,
+                MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+            log_trace("Quest vault: Attempting forced placement of '%s' at optimal location (%d,%d) (center: %d,%d)",
+                v_name + qv_ptr->name, y, x, center_y, center_x);
+        }
+
+        if (place_room_forced(y, x, qv_ptr))
+        {
+            int y1 = y - qv_ptr->hgt / 2;
+            int x1 = x - qv_ptr->wid / 2;
+            int y2 = y1 + qv_ptr->hgt - 1;
+            int x2 = x1 + qv_ptr->wid - 1;
+            int verify_walls = 0;
+            int verify_floors = 0;
+            int verify_features = 0;
+            int verify_monsters = 0;
+            int verify_icky = 0;
+            int verify_room = 0;
+
+            qv_placed_this_level = true;
+            level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+
+            for (int vy = y1; vy <= y2; vy++)
+            {
+                for (int vx = x1; vx <= x2; vx++)
+                {
+                    if (cave_feat[vy][vx] == FEAT_WALL_OUTER
+                        || cave_feat[vy][vx] == FEAT_WALL_INNER)
+                    {
+                        verify_walls++;
+                    }
+                    else if (cave_feat[vy][vx] == FEAT_FLOOR)
+                    {
+                        verify_floors++;
+                    }
+                    else if (cave_feat[vy][vx] != FEAT_WALL_EXTRA)
+                    {
+                        verify_features++;
+                    }
+
+                    if (cave_m_idx[vy][vx] > 0)
+                        verify_monsters++;
+                    if (cave_info[vy][vx] & CAVE_ICKY)
+                        verify_icky++;
+                    if (cave_info[vy][vx] & CAVE_ROOM)
+                        verify_room++;
+                }
+            }
+
+            log_trace("VAULT VERIFICATION IMMEDIATELY AFTER PLACEMENT: Area (%d,%d) to (%d,%d)",
+                y1, x1, y2, x2);
+            log_trace("VAULT VERIFICATION: %d walls, %d floors, %d features, %d monsters",
+                verify_walls, verify_floors, verify_features, verify_monsters);
+            log_trace("VAULT VERIFICATION: %d CAVE_ICKY, %d CAVE_ROOM flags",
+                verify_icky, verify_room);
+
+            process_quest_vault_area(y, x, qv_ptr);
+            if (reserve_slot_for_this)
+                p_ptr->quest_reserved[0] = 1;
+
+            log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) using forced strategy",
+                v_type, v_name + qv_ptr->name, y, x);
+            genlog_quest("QUEST VAULT PLACED: '%s' type=%d at (%d,%d)",
+                v_name + qv_ptr->name, v_type, y, x);
+            return true;
+        }
+        else
+        {
+            log_trace("Quest vault: Failed to place vault '%s' at (%d,%d) even with forced strategy",
+                v_name + qv_ptr->name, y, x);
+            for (int attempts = 0; attempts < 10; attempts++)
+            {
+                int center_y = p_ptr->cur_map_hgt / 2;
+                int center_x = p_ptr->cur_map_wid / 2;
+
+                y = center_y + rand_range(-p_ptr->cur_map_hgt / 4,
+                    p_ptr->cur_map_hgt / 4);
+                x = center_x + rand_range(-p_ptr->cur_map_wid / 4,
+                    p_ptr->cur_map_wid / 4);
+                y = MAX(qv_ptr->hgt / 2 + 3,
+                    MIN(y, p_ptr->cur_map_hgt - qv_ptr->hgt / 2 - 3));
+                x = MAX(qv_ptr->wid / 2 + 3,
+                    MIN(x, p_ptr->cur_map_wid - qv_ptr->wid / 2 - 3));
+
+                if (place_room_forced(y, x, qv_ptr))
+                {
+                    int y1 = y - qv_ptr->hgt / 2;
+                    int x1 = x - qv_ptr->wid / 2;
+                    int y2 = y1 + qv_ptr->hgt - 1;
+                    int x2 = x1 + qv_ptr->wid - 1;
+                    int verify_walls = 0;
+                    int verify_floors = 0;
+                    int verify_features = 0;
+                    int verify_monsters = 0;
+                    int verify_icky = 0;
+                    int verify_room = 0;
+
+                    qv_placed_this_level = true;
+                    level_gen_debug_activate_quest_vault_name(
+                        v_name + qv_ptr->name);
+
+                    for (int vy = y1; vy <= y2; vy++)
+                    {
+                        for (int vx = x1; vx <= x2; vx++)
+                        {
+                            if (cave_feat[vy][vx] == FEAT_WALL_OUTER
+                                || cave_feat[vy][vx] == FEAT_WALL_INNER)
+                            {
+                                verify_walls++;
+                            }
+                            else if (cave_feat[vy][vx] == FEAT_FLOOR)
+                            {
+                                verify_floors++;
+                            }
+                            else if (cave_feat[vy][vx] != FEAT_WALL_EXTRA)
+                            {
+                                verify_features++;
+                            }
+
+                            if (cave_m_idx[vy][vx] > 0)
+                                verify_monsters++;
+                            if (cave_info[vy][vx] & CAVE_ICKY)
+                                verify_icky++;
+                            if (cave_info[vy][vx] & CAVE_ROOM)
+                                verify_room++;
+                        }
+                    }
+
+                    log_trace("VAULT VERIFICATION (FALLBACK) IMMEDIATELY AFTER PLACEMENT: Area (%d,%d) to (%d,%d)",
+                        y1, x1, y2, x2);
+                    log_trace("VAULT VERIFICATION (FALLBACK): %d walls, %d floors, %d features, %d monsters",
+                        verify_walls, verify_floors, verify_features,
+                        verify_monsters);
+                    log_trace("VAULT VERIFICATION (FALLBACK): %d CAVE_ICKY, %d CAVE_ROOM flags",
+                        verify_icky, verify_room);
+
+                    process_quest_vault_area(y, x, qv_ptr);
+                    if (reserve_slot_for_this)
+                        p_ptr->quest_reserved[0] = 1;
+
+                    log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) using fallback attempt %d",
+                        v_type, v_name + qv_ptr->name, y, x, attempts + 1);
+                    genlog_quest("QUEST VAULT PLACED: '%s' type=%d at (%d,%d) on fallback %d",
+                        v_name + qv_ptr->name, v_type, y, x, attempts + 1);
+                    return true;
+                }
+            }
+
+            log_trace("Quest vault: Random placement failed for '%s', scanning the full map for any valid fit",
+                v_name + qv_ptr->name);
+            if (place_room_forced_exhaustive(qv_ptr, &y, &x))
+            {
+                qv_placed_this_level = true;
+                level_gen_debug_activate_quest_vault_name(v_name + qv_ptr->name);
+                process_quest_vault_area(y, x, qv_ptr);
+                if (reserve_slot_for_this)
+                    p_ptr->quest_reserved[0] = 1;
+
+                log_trace("Quest vault: Type %d quest vault '%s' placed at (%d,%d) by exhaustive scan",
+                    v_type, v_name + qv_ptr->name, y, x);
+                genlog_quest("QUEST VAULT PLACED: '%s' type=%d at (%d,%d) after full-map scan",
+                    v_name + qv_ptr->name, v_type, y, x);
+                return true;
+            }
+
+            genlog_quest("QUEST VAULT FAILED: '%s' type=%d could not be placed",
+                v_name + qv_ptr->name, v_type);
+        }
+    }
+
+    if (attempted_placement)
+        log_trace("Quest vault: Type %d had eligible templates, but none fit this attempt",
+            v_type);
+    else
+        log_trace("Quest vault: Type %d has no eligible templates for this character/depth",
+            v_type);
+
+    return false;
 }
 
 static void schedule_tulkas_orc_stronghold(void)
