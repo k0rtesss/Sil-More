@@ -1,5 +1,192 @@
 #include "metarun-internal.h"
 
+static const char* challenge_display_name(int challenge_id)
+{
+    switch (challenge_id) {
+        case CHALLENGE_DISCONNECTED: return "Disconnected stairs";
+        case CHALLENGE_SINGLE_STAIR: return "Single stair";
+        case CHALLENGE_FIXED_50K_XP: return "Fixed 50k XP";
+        case CHALLENGE_TULKAS_BLUNT: return "Tulkas' blunt arms";
+        case CHALLENGE_TORCHLIGHT: return "Varda's torches-only";
+        default: return "Unknown challenge";
+    }
+}
+
+static bool metarun_show_completed_quests_information_scene(bool steamdeck,
+    const char* accept_label, const char* back_label)
+{
+    struct quest_summary_entry {
+        bool challenge_entry;
+        int id;
+        int count;
+        int unlock_count;
+    } entries[96];
+    int entry_count = 0;
+    int completed_quests = 0;
+    int selected = 0;
+    bool first_present = true;
+    const int challenge_ids[] = {
+        CHALLENGE_DISCONNECTED,
+        CHALLENGE_SINGLE_STAIR,
+        CHALLENGE_FIXED_50K_XP,
+        CHALLENGE_TULKAS_BLUNT,
+        CHALLENGE_TORCHLIGHT
+    };
+
+    if (z_info && quest_info) {
+        for (int i = 1; i < z_info->quest_max
+            && entry_count < (int)N_ELEMENTS(entries); i++)
+        {
+            quest_type *q_ptr = &quest_info[i];
+            u32b flag;
+            int count;
+
+            if (!q_ptr->name) continue;
+            flag = quest_metarun_flag(i);
+            if (!flag) continue;
+            count = metarun_quest_completion_count(flag);
+            if (count <= 0) continue;
+
+            entries[entry_count].challenge_entry = false;
+            entries[entry_count].id = i;
+            entries[entry_count].count = count;
+            entries[entry_count].unlock_count = q_ptr->challenge_unlock
+                ? metarun_challenge_completion_count(q_ptr->challenge_unlock)
+                : 0;
+            entry_count++;
+            completed_quests++;
+        }
+    }
+
+    for (int i = 0; i < (int)N_ELEMENTS(challenge_ids)
+        && entry_count < (int)N_ELEMENTS(entries); i++)
+    {
+        entries[entry_count].challenge_entry = true;
+        entries[entry_count].id = challenge_ids[i];
+        entries[entry_count].count =
+            metarun_challenge_completion_count(challenge_ids[i]);
+        entries[entry_count].unlock_count = 0;
+        entry_count++;
+    }
+
+    while (true) {
+        app_ui_scene scene;
+        app_ui_panel *panel;
+        char subtitle[APP_UI_TEXT_MAX];
+        int key;
+
+        if (selected < 0) selected = 0;
+        if (selected >= entry_count) selected = entry_count - 1;
+
+        strnfmt(subtitle, sizeof(subtitle), "%d completed quest%s",
+            completed_quests, (completed_quests == 1) ? "" : "s");
+        panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
+            "Completed Quests", TERM_SLATE, subtitle);
+        if (!panel)
+            return false;
+
+        if (completed_quests == 0) {
+            (void)app_ui_panel_add_body_line(panel, TERM_L_DARK,
+                "No quests completed yet in this metarun.");
+        }
+
+        for (int i = 0; i < entry_count; i++) {
+            char meta[APP_UI_META_MAX];
+            byte attr;
+
+            if (entries[i].challenge_entry) {
+                strnfmt(meta, sizeof(meta), "completed %d",
+                    entries[i].count);
+                attr = TERM_WHITE;
+                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                        i == selected, "", challenge_display_name(
+                            entries[i].id), meta))
+                {
+                    return false;
+                }
+            } else {
+                strnfmt(meta, sizeof(meta), "x%d", entries[i].count);
+                attr = TERM_WHITE;
+                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                        i == selected, "",
+                        quest_display_title(entries[i].id), meta))
+                {
+                    return false;
+                }
+            }
+        }
+
+        if (selected >= 0 && selected < entry_count) {
+            char line[APP_UI_TEXT_MAX];
+
+            if (entries[selected].challenge_entry) {
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Challenge");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                        challenge_display_name(entries[selected].id)))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Completed %d time%s.",
+                    entries[selected].count,
+                    (entries[selected].count == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                    return false;
+            } else {
+                quest_type *q_ptr = &quest_info[entries[selected].id];
+                app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
+                    "Quest");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE,
+                        quest_display_title(entries[selected].id)))
+                {
+                    return false;
+                }
+                strnfmt(line, sizeof(line), "Completed %d time%s.",
+                    entries[selected].count,
+                    (entries[selected].count == 1) ? "" : "s");
+                if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, line))
+                    return false;
+                if (q_ptr->challenge_unlock) {
+                    strnfmt(line, sizeof(line), "Unlocks %s (completed %d)",
+                        challenge_display_name(q_ptr->challenge_unlock),
+                        entries[selected].unlock_count);
+                    if (!app_ui_panel_add_detail_line(panel, TERM_L_BLUE,
+                            line))
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            steamdeck ? accept_label : "Any", "Close");
+        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8/2", "Move");
+        if (steamdeck) {
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                true, back_label, "Back");
+        }
+
+        if (!metarun_ui_present_scene(&scene, first_present))
+            return false;
+        first_present = false;
+
+        key = ui_information_scene_wait_key_nonrepeat();
+        if (key == '8' || key == 'k' || key == '-') {
+            selected = (selected + entry_count - 1) % entry_count;
+            continue;
+        }
+        if (key == '2' || key == 'j' || key == '+') {
+            selected = (selected + 1) % entry_count;
+            continue;
+        }
+
+        metarun_ui_clear_pending_input();
+        return true;
+    }
+}
+
 /* Generate curse description for a runtype */
 static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 {
@@ -57,7 +244,7 @@ static void get_curse_description(int runtype_id, char *buf, size_t buf_size)
 }
 
 /* Difficulty selection menu */
-static void choose_difficulty_menu(bool reopen_stats_on_exit)
+void metarun_choose_difficulty_menu(bool reopen_stats_on_exit)
 {
     int choice = metar.type;
     int max_difficulty = (runtype_info && z_info->rt_max > 0)
@@ -78,7 +265,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
             sizeof(back_label));
     }
     if (!use_information_scene) {
-        log_error("choose_difficulty_menu: semantic scene unavailable");
+        log_error("metarun_choose_difficulty_menu: semantic scene unavailable");
         if (reopen_stats_on_exit)
             print_metarun_stats();
         return;
@@ -98,7 +285,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
         panel = metarun_ui_begin_browser_scene(&scene, TERM_YELLOW,
             "Select Difficulty Level", TERM_SLATE, subtitle);
         if (!panel) {
-            log_error("choose_difficulty_menu: failed to build semantic scene");
+            log_error("metarun_choose_difficulty_menu: failed to build semantic scene");
             break;
         }
 
@@ -130,7 +317,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
             if (!app_ui_panel_add_row(panel, i, attr, !is_locked,
                     i == choice, key_buf, rt_name, meta))
             {
-                log_error("choose_difficulty_menu: failed to append row");
+                log_error("metarun_choose_difficulty_menu: failed to append row");
                 ui_information_scene_leave(&info_scope);
                 if (reopen_stats_on_exit)
                     print_metarun_stats();
@@ -180,7 +367,7 @@ static void choose_difficulty_menu(bool reopen_stats_on_exit)
             steamdeck ? back_label : "Esc", "Cancel");
 
         if (!metarun_ui_present_scene(&scene, first_present)) {
-            log_error("choose_difficulty_menu: failed to publish semantic scene");
+            log_error("metarun_choose_difficulty_menu: failed to publish semantic scene");
             break;
         }
         first_present = false;
@@ -611,5 +798,5 @@ void show_known_curses_menu(void)
 /* Public wrapper for difficulty selection menu */
 void choose_difficulty_level(void)
 {
-    choose_difficulty_menu(false);
+    metarun_choose_difficulty_menu(false);
 }

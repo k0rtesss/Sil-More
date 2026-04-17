@@ -65,33 +65,33 @@ static void recover_staged_metarun_file(const char* live_path)
 {
     char staged_new[1024];
     char staged_old[1024];
-    SDL_IOStream* live_fd = NULL;
-    SDL_IOStream* new_fd = NULL;
-    SDL_IOStream* old_fd = NULL;
+    ang_file* live_fd = NULL;
+    ang_file* new_fd = NULL;
+    ang_file* old_fd = NULL;
 
     if (!build_meta_sidecar_path(staged_new, sizeof(staged_new), live_path, ".new")
         || !build_meta_sidecar_path(staged_old, sizeof(staged_old), live_path, ".old"))
         return;
 
-    live_fd = sdl_fopen(live_path, "rb");
+    live_fd = ang_file_open_path(live_path, "rb");
     if (live_fd)
     {
-        sdl_fclose(live_fd);
+        ang_file_close_path(live_fd);
 
-        new_fd = sdl_fopen(staged_new, "rb");
+        new_fd = ang_file_open_path(staged_new, "rb");
         if (new_fd)
         {
-            sdl_fclose(new_fd);
+            ang_file_close_path(new_fd);
             log_warn("Removing stale staged metarun file '%s'", staged_new);
             fd_kill(staged_new);
         }
         return;
     }
 
-    new_fd = sdl_fopen(staged_new, "rb");
+    new_fd = ang_file_open_path(staged_new, "rb");
     if (new_fd)
     {
-        sdl_fclose(new_fd);
+        ang_file_close_path(new_fd);
         if (fd_move(staged_new, live_path))
         {
             log_warn("Recovered staged metarun file '%s' -> '%s'", staged_new,
@@ -100,17 +100,17 @@ static void recover_staged_metarun_file(const char* live_path)
         }
     }
 
-    old_fd = sdl_fopen(staged_old, "rb");
+    old_fd = ang_file_open_path(staged_old, "rb");
     if (old_fd)
     {
-        sdl_fclose(old_fd);
+        ang_file_close_path(old_fd);
         if (fd_move(staged_old, live_path))
             log_warn("Recovered previous metarun file '%s' -> '%s'", staged_old,
                 live_path);
     }
 }
 
-static void reset_defaults(metarun *m)
+void reset_defaults(metarun *m)
 {
     log_info("Initializing new metarun with default values");
     memset(m, 0, sizeof(*m));
@@ -179,7 +179,7 @@ static bool ensure_default_metarun_slot(const char *reason)
 }
 
 /* Apply initial curses based on difficulty level (runtype) */
-static void apply_difficulty_curses(metarun *m)
+void apply_difficulty_curses(metarun *m)
 {
     if (!runtype_info) return; /* runtype data not loaded yet */
     if (m->type >= z_info->rt_max) return; /* invalid runtype */
@@ -209,7 +209,7 @@ static void apply_difficulty_curses(metarun *m)
 }
 
 /* ensure directory apex/metaruns/NNNNNNNN exists */
-static void ensure_run_dir(const metarun *m)
+void ensure_run_dir(const metarun *m)
 {
     char dir[1024];
     if (!path_build(dir, sizeof dir, ANGBAND_DIR_APEX, META_SUBDIR))
@@ -228,7 +228,7 @@ static void ensure_run_dir(const metarun *m)
     MKDIR(dir);
 }
 
-static bool sync_current_metarun_slot(bool stamp_time)
+bool sync_current_metarun_slot(bool stamp_time)
 {
     if (!metaruns || current_run < 0 || current_run >= metarun_max) {
         return false;
@@ -327,9 +327,9 @@ void cleanup_old_game_files(void)
         char score_file[1024];
         if (path_build(score_file, sizeof(score_file), ANGBAND_DIR_APEX, "scores.raw"))
         {
-            SDL_IOStream* score_fd = sdl_fopen(score_file, "rb");
+            ang_file* score_fd = ang_file_open_path(score_file, "rb");
             if (score_fd) {
-                sdl_fclose(score_fd);
+                ang_file_close_path(score_fd);
                 log_info("*** REMOVING SCORE FILE FOR FRESH START ***");
 
                 /* Platform-agnostic file removal using standard C */
@@ -444,9 +444,9 @@ void cleanup_old_game_files(void)
         return;
     }
 
-    SDL_IOStream* score_fd = sdl_fopen(score_file, "rb");
+    ang_file* score_fd = ang_file_open_path(score_file, "rb");
     if (score_fd) {
-        sdl_fclose(score_fd);
+        ang_file_close_path(score_fd);
         log_info("*** REMOVING SCORE FILE FOR FRESH START ***");
 
         /* Platform-agnostic file removal using standard C */
@@ -460,13 +460,13 @@ void cleanup_old_game_files(void)
 errr load_metaruns(bool create_if_missing)
 {
     char fn[1024];
-    SDL_IOStream* fd;
+    ang_file* fd;
     bool found_existing_data = false;
 
     if (!build_meta_path(fn, sizeof fn, NULL, META_RAW))
         return -1;
     recover_staged_metarun_file(fn);
-    fd = sdl_fopen(fn, "rb");
+    fd = ang_file_open_path(fn, "rb");
 
     if (fd) {
         found_existing_data = true;
@@ -475,7 +475,7 @@ errr load_metaruns(bool create_if_missing)
     if (!fd && create_if_missing) {
         log_info("Creating new versioned metarun file: %s", fn);
         FILE_TYPE(FILE_TYPE_DATA);
-        fd = sdl_fmake(fn, 0644);
+        fd = ang_file_create_path(fn, 0644);
         if (!fd) return -1;
 
         /* Write versioned header */
@@ -492,8 +492,8 @@ errr load_metaruns(bool create_if_missing)
         reset_defaults(&seed);
         seed.score = compute_metarun_score(&seed);
         sdl_write(fd, (cptr)&seed, sizeof seed);
-        sdl_fclose(fd);
-        fd = sdl_fopen(fn, "rb");
+        ang_file_close_path(fd);
+        fd = ang_file_open_path(fn, "rb");
         /* Only set metarun_created if we truly created a NEW file, not migrating existing data */
         if (!found_existing_data) {
             metarun_created = true;
@@ -515,7 +515,7 @@ errr load_metaruns(bool create_if_missing)
     sdl_seek(fd, 0);
     if (sdl_read(fd, (char*)&meta_hdr, sizeof(meta_hdr)) != 0) {
         log_error("Failed to read metarun header");
-        sdl_fclose(fd);
+        ang_file_close_path(fd);
         return -1;
     }
 
@@ -548,7 +548,7 @@ errr load_metaruns(bool create_if_missing)
         metaruns = mem_alloc_array(metarun_max, metarun);
         if (!metaruns) {
             recovery_reason = "unable to allocate metarun array";
-            sdl_fclose(fd);
+            ang_file_close_path(fd);
             return -1;
         }
         sdl_seek(fd, sizeof(meta_file_header));
@@ -610,7 +610,7 @@ errr load_metaruns(bool create_if_missing)
         }
     }
 
-    sdl_fclose(fd);
+    ang_file_close_path(fd);
 
     bool seeded_default = false;
     if (metarun_max <= 0 || !metaruns) {
@@ -712,7 +712,7 @@ static errr backup_file(const char *filepath)
     }
 
     /* Check if original file exists */
-    SDL_IOStream* fd_src = sdl_fopen(filepath, "rb");
+    ang_file* fd_src = ang_file_open_path(filepath, "rb");
     if (!fd_src) {
         /* Original file doesn't exist, no backup needed */
         log_info("backup_file: original file %s doesn't exist, no backup needed", filepath);
@@ -724,7 +724,7 @@ static errr backup_file(const char *filepath)
     int file_size = (file_size_64 > 0) ? (int)file_size_64 : 0;
     if (file_size <= 0) {
         log_info("backup_file: original file %s is empty, no backup needed", filepath);
-        sdl_fclose(fd_src);
+        ang_file_close_path(fd_src);
         return 0;
     }
 
@@ -733,16 +733,16 @@ static errr backup_file(const char *filepath)
     /* Read original file */
     char *buffer = mem_alloc_array(file_size, char);
     if (!buffer) {
-        sdl_fclose(fd_src);
+        ang_file_close_path(fd_src);
         return -1;
     }
 
     if (sdl_read(fd_src, buffer, file_size) != 0) {
         buffer = mem_free(buffer);
-        sdl_fclose(fd_src);
+        ang_file_close_path(fd_src);
         return -1;
     }
-    sdl_fclose(fd_src);
+    ang_file_close_path(fd_src);
 
     /* Optimize backup rotation: Only do full rotation once per session/day
      * For frequent saves, just overwrite .bak1 */
@@ -753,7 +753,7 @@ static errr backup_file(const char *filepath)
 
     /* Check if this is the first backup of the day (roughly) */
     bool should_rotate = false;
-    SDL_IOStream* fd_test1 = sdl_fopen(backup_path1, "rb");
+    ang_file* fd_test1 = ang_file_open_path(backup_path1, "rb");
     if (fd_test1) {
         /* Check if bak1 is old enough to warrant rotation (use simple time check) */
         /* If we created a backup within the last hour, don't rotate */
@@ -761,7 +761,7 @@ static errr backup_file(const char *filepath)
             should_rotate = true;
             log_info("backup_file: enough time passed since last backup, will rotate backups");
         }
-        sdl_fclose(fd_test1);
+        ang_file_close_path(fd_test1);
     } else {
         /* No bak1 exists, create fresh backup */
         should_rotate = false;
@@ -776,9 +776,9 @@ static errr backup_file(const char *filepath)
         log_debug("backup_file: removed old bak3");
 
         /* Move bak2 to bak3 (if bak2 exists) */
-        SDL_IOStream* fd_test2 = sdl_fopen(backup_path2, "rb");
+        ang_file* fd_test2 = ang_file_open_path(backup_path2, "rb");
         if (fd_test2) {
-            sdl_fclose(fd_test2);
+            ang_file_close_path(fd_test2);
             log_debug("backup_file: moving bak2 to bak3");
             if (!fd_move(backup_path2, backup_path3)) {
                 log_debug("backup_file: failed to move bak2 to bak3");
@@ -786,9 +786,9 @@ static errr backup_file(const char *filepath)
         }
 
         /* Move bak1 to bak2 (if bak1 exists) */
-        fd_test1 = sdl_fopen(backup_path1, "rb");
+        fd_test1 = ang_file_open_path(backup_path1, "rb");
         if (fd_test1) {
-            sdl_fclose(fd_test1);
+            ang_file_close_path(fd_test1);
             log_debug("backup_file: moving bak1 to bak2");
             if (!fd_move(backup_path1, backup_path2)) {
                 log_debug("backup_file: failed to move bak1 to bak2");
@@ -802,14 +802,14 @@ static errr backup_file(const char *filepath)
 
     /* Create new bak1 from current file */
     log_info("backup_file: creating new bak1 from current file (size: %d)", file_size);
-    SDL_IOStream* fd_dst = sdl_fmake(backup_path1, 0644);
+    ang_file* fd_dst = ang_file_create_path(backup_path1, 0644);
     if (!fd_dst) {
         buffer = mem_free(buffer);
         return -1;
     }
 
     errr result = sdl_write(fd_dst, buffer, file_size);
-    sdl_fclose(fd_dst);
+    ang_file_close_path(fd_dst);
     buffer = mem_free(buffer);
 
     if (result == 0) {
@@ -843,7 +843,7 @@ errr save_metaruns(void)
     char fn[1024];
     char safe[1024];
     char previous[1024];
-    SDL_IOStream* old_fd = NULL;
+    ang_file* old_fd = NULL;
     if (!build_meta_path(fn, sizeof fn, NULL, META_RAW))
         return -1;
     if (!build_meta_sidecar_path(safe, sizeof(safe), fn, ".new")
@@ -866,7 +866,7 @@ errr save_metaruns(void)
 
     /* Write using the new versioned format */
     fd_kill(safe);
-    SDL_IOStream* fd = sdl_fmake(safe, 0644);
+    ang_file* fd = ang_file_create_path(safe, 0644);
     if (!fd) {
         log_info("Failed to create metarun file for writing");
         return -1;
@@ -882,7 +882,7 @@ errr save_metaruns(void)
 
     errr result = sdl_write(fd, (cptr)&meta_hdr, sizeof(meta_hdr));
     if (result != 0) {
-        sdl_fclose(fd);
+        ang_file_close_path(fd);
         log_info("Failed to write metarun header to file");
         return -1;
     }
@@ -890,7 +890,7 @@ errr save_metaruns(void)
     /* Write metarun data */
     int bytes_to_write = metarun_max * sizeof(metarun);
     result = sdl_write(fd, (cptr)metaruns, bytes_to_write);
-    sdl_fclose(fd);
+    ang_file_close_path(fd);
 
     if (result != 0) {
         log_info("Failed to write metarun data to file");
@@ -899,10 +899,10 @@ errr save_metaruns(void)
     }
 
     fd_kill(previous);
-    old_fd = sdl_fopen(fn, "rb");
+    old_fd = ang_file_open_path(fn, "rb");
     if (old_fd)
     {
-        sdl_fclose(old_fd);
+        ang_file_close_path(old_fd);
         if (!fd_move(fn, previous))
         {
             log_error("Failed to stage previous metarun file '%s' -> '%s'", fn,
@@ -914,13 +914,13 @@ errr save_metaruns(void)
 
     if (!fd_move(safe, fn))
     {
-        SDL_IOStream* previous_fd = NULL;
+        ang_file* previous_fd = NULL;
         log_error("Failed to activate staged metarun file '%s' -> '%s'", safe,
             fn);
-        previous_fd = sdl_fopen(previous, "rb");
+        previous_fd = ang_file_open_path(previous, "rb");
         if (previous_fd)
         {
-            sdl_fclose(previous_fd);
+            ang_file_close_path(previous_fd);
             fd_move(previous, fn);
         }
         fd_kill(safe);

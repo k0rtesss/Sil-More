@@ -19,12 +19,14 @@ EXTERN_DECL_RE = re.compile(r"^\s*extern\b", re.MULTILINE)
 EXTERN_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s+"(?:\.\./)?externs\.h"', re.MULTILINE
 )
+LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 SDL_HEADER_INCLUDE_RE = re.compile(r"^\s*#\s*include\s+<SDL3/[^>]+>", re.MULTILINE)
 SDL_IO_USAGE_RE = re.compile(
     r"\b(?:SDL_IO[A-Za-z0-9_]*|SDL_IOStream|sdl_fopen|sdl_fclose)\b"
 )
 CMAKE_SOURCE_RE = re.compile(r"src/[A-Za-z0-9_./-]+\.c")
-SOURCE_SUFFIXES = {".c", ".h"}
+SCANNED_SOURCE_SUFFIXES = {".c", ".h"}
+COMPILED_INCLUDE_SUFFIXES = {".inc"}
 
 
 @dataclass(frozen=True)
@@ -91,9 +93,52 @@ def src_root_files(suffix: str) -> list[Path]:
     return sorted((REPO_ROOT / "src").glob(f"*{suffix}"))
 
 
+def resolve_local_include(including_path: Path, include_name: str) -> Path | None:
+    candidates = (
+        (including_path.parent / include_name).resolve(),
+        (REPO_ROOT / "src" / include_name).resolve(),
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            candidate.relative_to(REPO_ROOT / "src")
+        except ValueError:
+            continue
+        return candidate
+    return None
+
+
+def compiled_include_files() -> list[Path]:
+    discovered: set[Path] = set()
+    pending = src_files(SCANNED_SOURCE_SUFFIXES)
+    scanned: set[Path] = set()
+
+    while pending:
+        path = pending.pop()
+        if path in scanned:
+            continue
+        scanned.add(path)
+
+        for include_name in LOCAL_INCLUDE_RE.findall(strip_comments(read_text(path))):
+            include_path = resolve_local_include(path, include_name)
+            if (
+                include_path is None
+                or include_path.suffix not in COMPILED_INCLUDE_SUFFIXES
+            ):
+                continue
+            if include_path not in discovered:
+                discovered.add(include_path)
+                pending.append(include_path)
+
+    return sorted(discovered)
+
+
 def source_text_map() -> dict[str, str]:
     texts: dict[str, str] = {}
-    for path in src_files(SOURCE_SUFFIXES):
+    for path in src_files(SCANNED_SOURCE_SUFFIXES):
+        texts[rel_posix(path)] = strip_comments(read_text(path))
+    for path in compiled_include_files():
         texts[rel_posix(path)] = strip_comments(read_text(path))
     return texts
 
@@ -205,6 +250,24 @@ def metric_root_src_h_files(_: dict, __: dict[str, str]) -> MetricResult:
     )
 
 
+def metric_compiled_include_payload_files(
+    policy: dict, __: dict[str, str]
+) -> MetricResult:
+    allowlist = policy.get("compiled_include_allowlist", [])
+    file_matches = {
+        rel_posix(path): 1
+        for path in compiled_include_files()
+        if not matches_any(rel_posix(path), allowlist)
+    }
+    return MetricResult(
+        label="compiled code-bearing *.inc files",
+        files=len(file_matches),
+        value=len(file_matches),
+        notes="Tracks compiled include payloads that should be migrated into normal translation units.",
+        file_matches=file_matches,
+    )
+
+
 def metric_nonplatform_sdl_header_includes(
     policy: dict, texts: dict[str, str]
 ) -> MetricResult:
@@ -267,7 +330,7 @@ def metric_folder_rule_violations(policy: dict, __: dict[str, str]) -> MetricRes
     file_matches: dict[str, int] = {}
     allowlist = policy.get("folder_rule_allowlist", [])
     rules = policy.get("folder_rules", [])
-    for path in src_files(SOURCE_SUFFIXES):
+    for path in src_files(SCANNED_SOURCE_SUFFIXES):
         rel_path = rel_posix(path)
         if matches_any(rel_path, allowlist):
             continue
@@ -384,6 +447,12 @@ AUDITS = (
                 collector=metric_root_src_h_files,
             ),
             AuditMetric(
+                key="compiled_include_payload_files",
+                label="compiled code-bearing *.inc files",
+                notes="Tracks compiled include payloads that remain in the source tree.",
+                collector=metric_compiled_include_payload_files,
+            ),
+            AuditMetric(
                 key="nonplatform_sdl_header_includes",
                 label="SDL3 header includes outside platform boundary",
                 notes="Tracks non-platform SDL header leakage.",
@@ -442,6 +511,9 @@ def build_audit(policy: dict, audit_keys: list[str]) -> dict:
             "root_src_c_allowlist_entries": len(policy.get("root_src_c_allowlist", [])),
             "folder_rule_entries": len(policy.get("folder_rules", [])),
             "platform_boundary_globs": len(policy.get("platform_boundary_globs", [])),
+            "compiled_include_allowlist_entries": len(
+                policy.get("compiled_include_allowlist", [])
+            ),
             "cmake_missing_allowlist_entries": len(
                 policy.get("source_files_missing_from_cmake_allowlist", [])
             ),
@@ -506,6 +578,7 @@ def render_summary(audit: dict, include_details: bool) -> str:
             f"root-src allowlist={audit['policy_summary']['root_src_c_allowlist_entries']}, "
             f"folder rules={audit['policy_summary']['folder_rule_entries']}, "
             f"platform globs={audit['policy_summary']['platform_boundary_globs']}, "
+            f"compiled-include allowlist={audit['policy_summary']['compiled_include_allowlist_entries']}, "
             f"cmake allowlist={audit['policy_summary']['cmake_missing_allowlist_entries']}"
         ),
     ]

@@ -162,6 +162,8 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-abilities.c
     src/cmd/ui/cmd-ui-character.c
     src/cmd/ui/cmd-ui-info.c
+    src/cmd/ui/cmd-ui-knowledge-browser.c
+    src/cmd/ui/cmd-ui-knowledge-supplies.c
     src/cmd/ui/cmd-ui-knowledge.c
     src/cmd/ui/cmd-ui-look.c
     src/cmd/ui/cmd-ui-main-menu.c
@@ -174,6 +176,9 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/ui/cmd-ui-settings-panes.c
     src/cmd/ui/cmd-ui-settings-visuals.c
     src/cmd/world/cmd-interact-chest.c
+    src/cmd/world/cmd-interact-chest-core.c
+    src/cmd/world/cmd-interact-chest-skeleton-loot.c
+    src/cmd/world/cmd-interact-chest-skeleton-note.c
     src/cmd/world/cmd-interact-door.c
     src/cmd/world/cmd-interact-terrain.c
     src/cmd/world/cmd-interact.c
@@ -718,6 +723,13 @@ if(BUILD_TESTING)
         folder_ownership
         --check
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/modernization_audit_baseline.json
+    )
+    add_test(
+      NAME sil_source_size_audit
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/source_size_audit.py
+        --check
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/source_size_audit_baseline.json
     )
     add_test(
       NAME sil_smithing_parity

@@ -1,11 +1,11 @@
 #include "metarun-internal.h"
 
-static int parse_character_file(SDL_IOStream *fp)
+static int parse_character_file(ang_file *fp)
 {
     int count = 0;
     char line[1024];
 
-    while (sdl_fgets(fp, line, sizeof(line)) == 0) {
+    while (ang_file_read_line(fp, line, sizeof(line)) == 0) {
         char *p = line;
         while (*p && isspace((unsigned char)*p)) p++;
         if (!*p || *p == '#') continue;
@@ -33,7 +33,7 @@ static int count_character_txt_entries(void)
     };
 
     char path[1024];
-    SDL_IOStream *fp = NULL;
+    ang_file *fp = NULL;
 
     for (size_t i = 0; candidates[i].dir; i++) {
         if (!candidates[i].dir || !*candidates[i].dir) continue;
@@ -45,10 +45,10 @@ static int count_character_txt_entries(void)
             continue;
         }
         log_debug("count_character_txt_entries: trying %s", path);
-        fp = sdl_fopen(path, "r");
+        fp = ang_file_open_path(path, "r");
         if (fp) {
             cached_total = parse_character_file(fp);
-            sdl_fclose(fp);
+            ang_file_close_path(fp);
             log_debug("count_character_txt_entries: loaded %d entries from %s", cached_total, path);
             break;
         }
@@ -62,13 +62,13 @@ static int count_character_txt_entries(void)
     return cached_total;
 }
 
-static u32b runtype_threshold_for_mode(int runtype_id,
+u32b runtype_threshold_for_mode(int runtype_id,
     metarun_blessing_threshold_mode mode);
-static u32b metarun_threshold_value(const metarun *m);
-static const char *threshold_mode_name(metarun_blessing_threshold_mode mode);
+u32b metarun_threshold_value(const metarun *m);
+const char *threshold_mode_name(metarun_blessing_threshold_mode mode);
 
 /* Clamp blessing economy values after (re)computing the ledger */
-static void update_blessing_ledger(metarun *m)
+void update_blessing_ledger(metarun *m)
 {
     if (!m) return;
 
@@ -123,7 +123,7 @@ void metarun_clear_blessing_runtime_fields(metarun *m)
     memset(m->reserved_runtime, 0, sizeof(m->reserved_runtime));
 }
 
-static int major_blessing_capacity(void)
+int major_blessing_capacity(void)
 {
     if (!z_info) return 0;
     int cap = (int)z_info->mb_max;
@@ -166,7 +166,7 @@ void metarun_sanitize_major_blessing_bits(metarun *m)
     m->major_blessings &= (mask & defined_mask);
 }
 
-static const major_blessing_type *major_blessing_def(int idx)
+const major_blessing_type *major_blessing_def(int idx)
 {
     if (!mb_info || !z_info) return NULL;
     if (idx < 0 || idx >= (int)z_info->mb_max) return NULL;
@@ -175,35 +175,35 @@ static const major_blessing_type *major_blessing_def(int idx)
     return def;
 }
 
-static cptr major_blessing_name_str(int idx)
+cptr major_blessing_name_str(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def || !mb_name || !def->name) return "(unknown)";
     return mb_name + def->name;
 }
 
-static cptr major_blessing_short_desc(int idx)
+cptr major_blessing_short_desc(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def || !mb_text || !def->short_desc) return NULL;
     return mb_text + def->short_desc;
 }
 
-static cptr major_blessing_detail_desc(int idx)
+cptr major_blessing_detail_desc(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def || !mb_text || !def->detail_desc) return NULL;
     return mb_text + def->detail_desc;
 }
 
-static cptr major_blessing_unlock_msg(int idx)
+cptr major_blessing_unlock_msg(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def || !mb_text || !def->unlock_msg) return NULL;
     return mb_text + def->unlock_msg;
 }
 
-static int major_blessing_cost(int idx)
+int major_blessing_cost(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def) return 0;
@@ -211,14 +211,14 @@ static int major_blessing_cost(int idx)
     return def->cost;
 }
 
-static metarun_major_effect major_blessing_effect(int idx)
+metarun_major_effect major_blessing_effect(int idx)
 {
     const major_blessing_type *def = major_blessing_def(idx);
     if (!def) return METARUN_MAJOR_EFFECT_NONE;
     return (metarun_major_effect)def->effect;
 }
 
-static void build_symbol_bar(char *out, size_t out_len, int current,
+void build_symbol_bar(char *out, size_t out_len, int current,
     int maximum, char filled)
 {
     if (!out || out_len == 0) return;
@@ -241,7 +241,7 @@ static void build_symbol_bar(char *out, size_t out_len, int current,
     strnfmt(out, out_len, "[%s]", buffer);
 }
 
-static void build_death_marks(char *out, size_t out_len, int deaths)
+void build_death_marks(char *out, size_t out_len, int deaths)
 {
     if (!out || out_len == 0) return;
     if (deaths <= 0) {
@@ -292,7 +292,7 @@ static void refresh_alive_cache(void)
               roster_total, metar.deaths, alive_scores, alive);
 }
 
-static u32b runtype_threshold_for_mode(int runtype_id,
+u32b runtype_threshold_for_mode(int runtype_id,
     metarun_blessing_threshold_mode mode)
 {
     u32b fallback = METARUN_BLESSING_POINT_THRESHOLD;
@@ -314,13 +314,13 @@ static u32b runtype_threshold_for_mode(int runtype_id,
     return (u32b)val;
 }
 
-static u32b metarun_threshold_value(const metarun *m)
+u32b metarun_threshold_value(const metarun *m)
 {
     if (!m) return METARUN_BLESSING_POINT_THRESHOLD;
     return runtype_threshold_for_mode(m->type, metarun_get_threshold_mode(m));
 }
 
-static const char *threshold_mode_name(metarun_blessing_threshold_mode mode)
+const char *threshold_mode_name(metarun_blessing_threshold_mode mode)
 {
     switch (mode) {
         case METARUN_BLESSING_THRESHOLD_EASIER: return "Easier";
@@ -329,7 +329,7 @@ static const char *threshold_mode_name(metarun_blessing_threshold_mode mode)
     }
 }
 
-static u32b get_best_run_score_from_highscores(void)
+u32b get_best_run_score_from_highscores(void)
 {
     #define MAX_SCORES 100
     high_score scores[MAX_SCORES];
@@ -380,7 +380,7 @@ static u32b compute_progressive_character_score(void)
     return (u32b)total;
 }
 
-static u32b compute_metarun_score(const metarun *m)
+u32b compute_metarun_score(const metarun *m)
 {
     if (!m) return 0;
 
@@ -412,7 +412,7 @@ void refresh_current_metar_score(void)
     metaruns[current_run].score = metar.score;
 }
 
-static int compare_metarun_indices(const void *a, const void *b)
+int compare_metarun_indices(const void *a, const void *b)
 {
     const s16b ia = *(const s16b *)a;
     const s16b ib = *(const s16b *)b;
