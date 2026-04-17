@@ -849,7 +849,7 @@ static int elemental_attack_probability_per_million(int attack_type, int raw_dam
     }
 
     percentile = elemental_clamp01(percentile);
-    q = elemental_clamp01((percentile - 0.75) / 0.25);
+    q = elemental_clamp01((percentile - 0.50) / 0.50);
     hurt = (hp * hp) / ((hp * hp) + (8.0 * 8.0));
     chance = base * q * q * hurt;
     threshold = (int)(chance * 1000000.0 + 0.5);

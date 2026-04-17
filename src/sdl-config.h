@@ -34,6 +34,7 @@ struct sdl_config {
     bool tiles;
     bool enable_right_panes;
     bool enable_bottom_panes;
+    bool show_pane_borders;
     bool hide_left_panel;
     int min_terminal_mode;
     char palette_preset[UI_COLOR_PRESET_ID_LEN];

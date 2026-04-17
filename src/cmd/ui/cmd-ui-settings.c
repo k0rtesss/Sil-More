@@ -138,6 +138,9 @@ static const settings_bool_binding settings_sdl_bool_bindings
         [SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED]
             = { SETTINGS_SDL_GET(enable_bottom_panes),
                 SETTINGS_SDL_SET(enable_bottom_panes) },
+        [SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS]
+            = { SETTINGS_SDL_GET(show_pane_borders),
+                SETTINGS_SDL_SET(show_pane_borders) },
     };
 
 static const settings_indexed_int_binding settings_sdl_pane_bindings

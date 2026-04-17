@@ -733,7 +733,7 @@ void sing_song_of_delvings(int score)
     int px = p_ptr->px;
     int py = p_ptr->py;
 
-    int range = score + 10;
+    int range = score + 8;
 
     min_y = MAX(1, py - range);
     max_y = MIN(MAX_DUNGEON_HGT, py + range + 1);
@@ -1576,7 +1576,7 @@ void sing_song_of_revealing(int score, bool primary_song)
     if (effective_skill <= 0)
         return;
 
-    int range = score + 10;
+    int range = (score / 2) + 8;
     if (range < 0)
         range = 0;
 

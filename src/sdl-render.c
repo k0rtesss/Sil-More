@@ -151,7 +151,11 @@ void sdl_present_if_needed(sdl_view* d)
                 .w = dst_w,
                 .h = dst_h,
             };
-            SDL_SetRenderDrawColor(g_state.renderer, 255, 255, 255, 128);
+            SDL_Color frame_color = config.show_pane_borders
+                ? (SDL_Color){ 255, 255, 255, 128 }
+                : (SDL_Color){ 0, 0, 0, 128 };
+            SDL_SetRenderDrawColor(g_state.renderer, frame_color.r,
+                frame_color.g, frame_color.b, frame_color.a);
             SDL_RenderRect(g_state.renderer, &frame);
         }
     }

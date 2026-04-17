@@ -1310,7 +1310,7 @@ static void ability_semantic_add_song_bonus_lines(app_ui_panel* panel,
     case SNG_DELVINGS:
         strnfmt(buf, sizeof(buf),
             "Current effect at Song %d: delving range %d squares.",
-            song_skill, song_skill + 10);
+            song_skill, song_skill + 8);
         break;
     case SNG_FREEDOM:
         strnfmt(buf, sizeof(buf),
@@ -1381,7 +1381,7 @@ static void ability_semantic_add_song_bonus_lines(app_ui_panel* panel,
     case SNG_REVEALING:
         strnfmt(buf, sizeof(buf),
             "Current effect at Song %d: revealing range %d squares.",
-            song_skill, song_skill + 10);
+            song_skill, (song_skill / 2) + 8);
         break;
     case SNG_ELVENESS:
     {

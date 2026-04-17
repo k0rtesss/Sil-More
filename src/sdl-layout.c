@@ -647,6 +647,8 @@ void platform_config_info(char* buf, size_t size)
     offset += (size_t)strnfmt(buf + offset, size - offset, "Margin: %d\n", config.margin);
     offset += (size_t)strnfmt(buf + offset, size - offset, "Fullscreen: %s\n", config.fullscreen ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Tiles: %s\n", config.tiles ? "Yes" : "No");
+    offset += (size_t)strnfmt(buf + offset, size - offset, "Pane Borders: %s\n",
+        config.show_pane_borders ? "White" : "Black");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Hide Left Panel: %s\n\n",
         config.hide_left_panel ? "Yes" : "No");
 
@@ -1117,6 +1119,15 @@ bool platform_enable_right_panes(void)
 void platform_set_enable_right_panes(bool value)
 {
     config.enable_right_panes = value;
+
+    if (value)
+    {
+        for (int i = 0; i < pane_config_count; i++)
+        {
+            if (pane_placement_is_side(pane_config[i].where))
+                pane_config[i].enabled = true;
+        }
+    }
 }
 
 bool platform_enable_bottom_panes(void)
@@ -1127,6 +1138,25 @@ bool platform_enable_bottom_panes(void)
 void platform_set_enable_bottom_panes(bool value)
 {
     config.enable_bottom_panes = value;
+
+    if (value)
+    {
+        for (int i = 0; i < pane_config_count; i++)
+        {
+            if (pane_config[i].where == PLACE_BOTTOM)
+                pane_config[i].enabled = true;
+        }
+    }
+}
+
+bool platform_show_pane_borders(void)
+{
+    return config.show_pane_borders;
+}
+
+void platform_set_show_pane_borders(bool value)
+{
+    config.show_pane_borders = value;
 }
 
 bool platform_hide_left_panel(void)

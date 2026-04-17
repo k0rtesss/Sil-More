@@ -35,6 +35,11 @@ static void inventory_prompt_label(int binding, const char* fallback, char* buf,
         SDL_strlcpy(buf, fallback, buflen);
 }
 
+static bool enhanced_item_same_button_cycle_enabled(void)
+{
+    return portable_controls_active() && steamdeck_controls_active();
+}
+
 static bool death_spectator_allow_menu_action(void)
 {
     if (!death_spectator_active())
@@ -314,6 +319,7 @@ static void enhanced_item_build_prompt_line(char* buf, size_t buf_size,
         char confirm_label[16];
         char desc_label[16];
         char cycle_label[16];
+        bool same_button_cycle = enhanced_item_same_button_cycle_enabled();
 
         inventory_prompt_label(' ', "A", confirm_label,
             sizeof(confirm_label));
@@ -336,6 +342,17 @@ static void enhanced_item_build_prompt_line(char* buf, size_t buf_size,
                 ? "%s-examine  %s-desc  <- drop  %s-cycle  (Inventory)"
                 : "%s-remove  %s-desc  <- drop  %s-cycle  (Equipment)",
                 confirm_label, desc_label, cycle_label);
+        }
+        else if (same_button_cycle)
+        {
+            inventory_prompt_label(inventory_mode ? 'i' : 'e',
+                inventory_mode ? "R1" : "L1", cycle_label,
+                sizeof(cycle_label));
+            strnfmt(buf, buf_size, inventory_mode
+                ? "%s-%s  %s-desc  <- drop  %s-cycle  (Inventory)"
+                : "%s-remove  %s-desc  <- drop  %s-cycle  (Equipment)",
+                confirm_label, (current_menu_command == 'w') ? "wield" : "use",
+                desc_label, cycle_label);
         }
         else
         {
@@ -812,6 +829,24 @@ static bool enhanced_item_run_snapshot_menu(int mode)
                 }
                 enhanced_item_set_result(mode, action,
                     state.entries[highlight_row].item_index);
+                done = true;
+            }
+            break;
+
+        case 'i':
+            if ((mode == (USE_INVEN)) && (current_menu_command == 0)
+                && enhanced_item_same_button_cycle_enabled())
+            {
+                enhanced_item_set_result(mode, ENHANCED_ACTION_SWITCH, -1);
+                done = true;
+            }
+            break;
+
+        case 'e':
+            if ((mode == (USE_EQUIP)) && (current_menu_command == 0)
+                && enhanced_item_same_button_cycle_enabled())
+            {
+                enhanced_item_set_result(mode, ENHANCED_ACTION_SWITCH, -1);
                 done = true;
             }
             break;

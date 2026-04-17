@@ -124,6 +124,7 @@ static const object_type* replacement_filter_incoming = NULL;
 static bool item_tester_limit_group(const object_type* o_ptr);
 static bool pickup_oil_flask(int o_idx, object_type* o_ptr);
 static bool pickup_brass_lamp(int o_idx, object_type* o_ptr);
+static bool queue_deferred_pickup_pack_drop(int item, int amount);
 
 static bool pack_item_matches_replacement_type(const object_type* incoming,
                                                const object_type* candidate)
@@ -621,9 +622,8 @@ static bool prompt_replace_pack_item(const object_type* incoming)
         return false;
     }
 
-    object_type* drop_ptr = &inventory[item];
-
-    inven_drop(item, drop_ptr->number);
+    if (!queue_deferred_pickup_pack_drop(item, inventory[item].number))
+        return false;
 
     /* Let inventory housekeeping run before we attempt the pickup again */
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -638,6 +638,136 @@ typedef enum
     PICKUP_FAILURE_RETRY,
     PICKUP_FAILURE_EQUIPPED
 } pickup_failure_result;
+
+static bool deferred_pickup_drop_pending = false;
+static object_type deferred_pickup_drop;
+static int deferred_pickup_drop_lantern_oil = 0;
+
+static void clear_deferred_pickup_drop(void)
+{
+    deferred_pickup_drop_pending = false;
+    object_wipe(&deferred_pickup_drop);
+    deferred_pickup_drop_lantern_oil = 0;
+}
+
+static void drop_object_at_player_feet_or_nearby(object_type* drop)
+{
+    bool can_drop_here;
+
+    if (!drop || !drop->k_idx || drop->number <= 0)
+        return;
+
+    can_drop_here = (cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR
+        || cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT);
+
+    if (can_drop_here && floor_carry(p_ptr->py, p_ptr->px, drop) > 0)
+        return;
+
+    (void)drop_near(drop, 0, p_ptr->py, p_ptr->px);
+}
+
+static void flush_deferred_pickup_drop(void)
+{
+    if (!deferred_pickup_drop_pending)
+        return;
+
+    if ((deferred_pickup_drop.tval == TV_LIGHT)
+        && (deferred_pickup_drop.sval == SV_LIGHT_LANTERN))
+    {
+        int oil_remaining = deferred_pickup_drop_lantern_oil;
+
+        for (int n = 0; n < deferred_pickup_drop.number; n++)
+        {
+            object_type single_drop;
+            object_wipe(&single_drop);
+            object_copy(&single_drop, &deferred_pickup_drop);
+            single_drop.number = 1;
+            single_drop.timeout = MIN(oil_remaining, FUEL_LAMP);
+            oil_remaining -= single_drop.timeout;
+            drop_object_at_player_feet_or_nearby(&single_drop);
+        }
+    }
+    else
+    {
+        drop_object_at_player_feet_or_nearby(&deferred_pickup_drop);
+    }
+
+    clear_deferred_pickup_drop();
+}
+
+static bool queue_deferred_pickup_drop(const object_type* src, int amount,
+    int lantern_oil_to_drop)
+{
+    if (!src || !src->k_idx || amount <= 0)
+        return false;
+
+    if (amount > src->number)
+        amount = src->number;
+
+    if (deferred_pickup_drop_pending)
+        flush_deferred_pickup_drop();
+
+    object_wipe(&deferred_pickup_drop);
+    object_copy(&deferred_pickup_drop, src);
+    deferred_pickup_drop.number = amount;
+    deferred_pickup_drop_lantern_oil = lantern_oil_to_drop;
+    deferred_pickup_drop_pending = true;
+
+    return true;
+}
+
+static bool queue_deferred_pickup_pack_drop(int item, int amount)
+{
+    object_type* drop_ptr;
+    object_type deferred;
+    char o_name[80];
+    int lantern_oil_to_drop = 0;
+
+    if ((item < 0) || (item >= INVEN_PACK) || amount <= 0)
+        return false;
+
+    drop_ptr = &inventory[item];
+    if (!drop_ptr->k_idx)
+        return false;
+
+    if (amount > drop_ptr->number)
+        amount = drop_ptr->number;
+
+    object_wipe(&deferred);
+    object_copy(&deferred, drop_ptr);
+    deferred.number = amount;
+
+    if ((deferred.tval == TV_LIGHT) && (deferred.sval == SV_LIGHT_LANTERN))
+    {
+        if (!player_prepare_lantern_drop(amount, &lantern_oil_to_drop, NULL))
+            return false;
+    }
+
+    object_desc(o_name, sizeof(o_name), &deferred, true, 3);
+
+    if (player_light_destroyed_on_drop(&deferred))
+    {
+        msg_format("You discard %s; %s too spent to keep.", o_name,
+            (deferred.number > 1) ? "they are" : "it is");
+
+        inven_item_increase(item, -amount);
+        inven_item_describe(item);
+        inven_item_optimize(item);
+        p_ptr->redraw |= (PR_MAP | PR_LIGHT);
+        p_ptr->window |= (PW_MESSAGE);
+        handle_stuff();
+        return true;
+    }
+
+    if (!queue_deferred_pickup_drop(drop_ptr, amount, lantern_oil_to_drop))
+        return false;
+
+    inven_item_increase(item, -amount);
+    inven_item_describe(item);
+    inven_item_optimize(item);
+
+    return true;
+}
 
 static pickup_failure_result resolve_pickup_failure(object_type* incoming,
                                                     int floor_o_idx,
@@ -663,7 +793,10 @@ void py_pickup_aux(int o_idx)
     int pickup_x = o_ptr->ix;
 
     if (object_is_searched_skeleton(o_ptr))
+    {
+        flush_deferred_pickup_drop();
         return;
+    }
 
     /*hack - don't pickup &nothings*/
     if (o_ptr->k_idx)
@@ -672,14 +805,23 @@ void py_pickup_aux(int o_idx)
         if (smith_oath_forbids_object(o_ptr))
         {
             if (!smith_oath_confirm_break())
+            {
+                flush_deferred_pickup_drop();
                 return;
+            }
         }
 
         if (pickup_oil_flask(o_idx, o_ptr))
+        {
+            flush_deferred_pickup_drop();
             return;
+        }
 
         if (pickup_brass_lamp(o_idx, o_ptr))
+        {
+            flush_deferred_pickup_drop();
             return;
+        }
 
         /* Check for supply items with partial pickup option */
         if (supplies_is_supply_object(o_ptr) && o_ptr->number > 1)
@@ -701,6 +843,7 @@ void py_pickup_aux(int o_idx)
                 if (qty <= 0)
                 {
                     msg_print("You leave it on the ground.");
+                    flush_deferred_pickup_drop();
                     return;
                 }
                 
@@ -716,7 +859,8 @@ void py_pickup_aux(int o_idx)
                 
                 /* Break the truce if creatures see */
                 break_truce(false);
-                
+
+                flush_deferred_pickup_drop();
                 return;
             }
         }
@@ -736,6 +880,7 @@ void py_pickup_aux(int o_idx)
             delete_object_idx(o_idx);
         }
 
+        flush_deferred_pickup_drop();
         return;
     }
 
@@ -743,6 +888,7 @@ void py_pickup_aux(int o_idx)
     o_ptr->iy = pickup_y;
     o_ptr->ix = pickup_x;
     delete_object_idx(o_idx);
+    flush_deferred_pickup_drop();
 }
 
 static bool pickup_try_channel_floor_staff(object_type* o_ptr, int floor_o_idx)
@@ -1027,6 +1173,7 @@ static bool pickup_handle_floor_object(int floor_o_idx,
             continue;
         }
 
+        flush_deferred_pickup_drop();
         return (failure == PICKUP_FAILURE_EQUIPPED);
     }
 
@@ -1034,6 +1181,7 @@ static bool pickup_handle_floor_object(int floor_o_idx,
         && (p_ptr->total_weight + o_ptr->weight > weight_limit() * 3 / 2))
     {
         msg_format("You cannot lift %s.", o_name);
+        flush_deferred_pickup_drop();
         return false;
     }
 
@@ -1337,7 +1485,8 @@ static bool prompt_replace_pack_item_limit(const object_type* incoming,
         return false;
     }
 
-    inven_drop(item, drop_ptr->number);
+    if (!queue_deferred_pickup_pack_drop(item, drop_ptr->number))
+        return false;
 
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
     notice_stuff();

@@ -1834,7 +1834,7 @@ F:DROP_1D2 | DROP_GOOD
 F:SMART | TERRITORIAL
 F:BASH_DOOR | DRAGON
 S:SPELL_PCT_20
-S:CONF | SCARE | HOLD
+S:BRTH_COLD | CONF | SCARE | HOLD
 D:Not all dragons have the gift of fire, but none is needed here.
 D: The lashing tail, the great claws, the sharp teeth -- and above
 D: all, the mesmerising eyes. To meet its gaze is to feel one's

@@ -1033,7 +1033,8 @@ static bool option_list_contains(const byte* ids, int opt)
 bool option_is_app_persistent(int opt)
 {
     /* Multi-value non-bool options saved explicitly in the visual JSON block */
-    if (opt == OPT_intro_style || opt == OPT_banner_popup_seconds)
+    if (opt == OPT_intro_style || opt == OPT_banner_popup_seconds
+        || opt == OPT_hide_left_panel)
         return true;
     return option_list_contains(app_interface_options, opt)
         || option_list_contains(app_text_options, opt)
@@ -1395,6 +1396,12 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
         if (cJSON_IsBool(item)) {
             cfg->enable_bottom_panes = cJSON_IsTrue(item);
             log_debug("Loaded enableBottomPanes: %s", cfg->enable_bottom_panes ? "true" : "false");
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "showPaneBorders");
+        if (cJSON_IsBool(item)) {
+            cfg->show_pane_borders = cJSON_IsTrue(item);
+            log_debug("Loaded showPaneBorders: %s", cfg->show_pane_borders ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "hideLeftPanel");
@@ -1856,6 +1863,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
         (cfg->palette_preset[0]) ? cfg->palette_preset : "classic");
     cJSON_AddBoolToObject(sdl, "enableRightPanes", cfg->enable_right_panes);
     cJSON_AddBoolToObject(sdl, "enableBottomPanes", cfg->enable_bottom_panes);
+    cJSON_AddBoolToObject(sdl, "showPaneBorders", cfg->show_pane_borders);
     cJSON_AddBoolToObject(sdl, "hideLeftPanel", cfg->hide_left_panel);
     cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(cfg->min_terminal_mode));
     
@@ -2185,6 +2193,7 @@ void sdl_config_set_defaults(struct sdl_config* cfg)
         sizeof(cfg->palette_preset));
     cfg->enable_right_panes = true;
     cfg->enable_bottom_panes = true;
+    cfg->show_pane_borders = true;
     cfg->hide_left_panel = false;
 #if defined(__ANDROID__) || defined(SIL_IOS)
     cfg->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;

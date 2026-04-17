@@ -43,6 +43,8 @@ bool platform_enable_right_panes(void);
 void platform_set_enable_right_panes(bool value);
 bool platform_enable_bottom_panes(void);
 void platform_set_enable_bottom_panes(bool value);
+bool platform_show_pane_borders(void);
+void platform_set_show_pane_borders(bool value);
 bool platform_hide_left_panel(void);
 void platform_set_hide_left_panel(bool value);
 int platform_pane_type(int index);

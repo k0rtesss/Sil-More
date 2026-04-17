@@ -53,6 +53,7 @@ typedef struct settings_sdl_pane_overview {
     bool tiles;
     bool right_panes_enabled;
     bool bottom_panes_enabled;
+    bool show_pane_borders;
     cptr config_path;
 } settings_sdl_pane_overview;
 
@@ -84,6 +85,8 @@ static void settings_sdl_read_pane_overview(
         SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED);
     overview->bottom_panes_enabled = settings_sdl_get_bool_config(
         SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED);
+    overview->show_pane_borders = settings_sdl_get_bool_config(
+        SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS);
     overview->config_path = settings_sdl_config_path();
 }
 
@@ -287,9 +290,20 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    strnfmt(value_buf, sizeof(value_buf), "%d", get_supporting_pane_config_count());
     if (!settings_browser_add_pair_row(panel, 9, (k == 9) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 9,
+            settings_ui_pick_label(label_hint,
+                "White Pane Borders",
+                "White Pane Borders",
+                "White Borders"),
+            overview->show_pane_borders ? "white" : "black"))
+    {
+        return false;
+    }
+
+    strnfmt(value_buf, sizeof(value_buf), "%d", get_supporting_pane_config_count());
+    if (!settings_browser_add_pair_row(panel, 10, (k == 10) ? TERM_L_BLUE
+            : TERM_WHITE, TERM_SLATE, true, k == 10,
             settings_ui_pick_label(label_hint,
                 "View Pane Configuration",
                 "Pane Configuration",
@@ -298,8 +312,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 10, (k == 10) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 10,
+    if (!settings_browser_add_label_row(panel, 11, (k == 11) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 11,
             settings_ui_pick_label(label_hint,
                 "Menu Font Sizes",
                 "Menu Fonts",
@@ -308,8 +322,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 11, (k == 11) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 11,
+    if (!settings_browser_add_label_row(panel, 12, (k == 12) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 12,
             settings_ui_pick_label(label_hint,
                 "Pane Font Sizes",
                 "Pane Fonts",
@@ -318,8 +332,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 12, (k == 12) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 12, settings_changed
+    if (!settings_browser_add_label_row(panel, 13, (k == 13) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 13, settings_changed
             ? "Save Changes and Return"
             : "Return to Options Menu"))
     {
@@ -341,7 +355,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
         (k == 2) || (k == 3), "0", "Auto");
     (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "Enter", (k == 9 || k == 10 || k == 11) ? "Open" : "Accept");
+        "Enter", (k == 10 || k == 11 || k == 12) ? "Open" : "Accept");
     (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
         "Esc", "Back");
 
@@ -351,7 +365,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
 void do_cmd_pane_settings(void)
 {
     int k = 0;
-    int n = 13; /* Total number of options */
+    int n = 14; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
     int dir;
@@ -403,17 +417,17 @@ void do_cmd_pane_settings(void)
         case '\r':
         {
             /* Enter activates the current option for actions; otherwise accept/exit. */
-            if (k == 9) /* Supporting Pane Layout */
+            if (k == 10) /* Supporting Pane Layout */
             {
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
                 break;
             }
-            if (k == 10) /* Menu Font Sizes */
+            if (k == 11) /* Menu Font Sizes */
             {
                 do_cmd_menu_font_editor(&settings_changed);
                 break;
             }
-            if (k == 11) /* Pane Font Sizes */
+            if (k == 12) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
                 break;
@@ -516,19 +530,27 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 platform_apply_config();
             }
-            else if (k == 9) /* Supporting Pane Layout */
+            else if (k == 9) /* White Pane Borders */
+            {
+                settings_sdl_set_bool_config(
+                    SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS,
+                    !overview.show_pane_borders);
+                settings_changed = true;
+                platform_apply_config();
+            }
+            else if (k == 10) /* Supporting Pane Layout */
             {
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
             }
-            else if (k == 10) /* Menu Font Sizes */
+            else if (k == 11) /* Menu Font Sizes */
             {
                 do_cmd_menu_font_editor(&settings_changed);
             }
-            else if (k == 11) /* Pane Font Sizes */
+            else if (k == 12) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
             }
-            else if (k == 12) /* Save/Return */
+            else if (k == 13) /* Save/Return */
             {
                 if (settings_changed)
                 {
@@ -656,6 +678,16 @@ void do_cmd_pane_settings(void)
                     platform_apply_config();
                 }
             }
+            else if (k == 9) /* White Pane Borders */
+            {
+                if (!overview.show_pane_borders)
+                {
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS, true);
+                    settings_changed = true;
+                    platform_apply_config();
+                }
+            }
             break;
         }
         
@@ -770,6 +802,16 @@ void do_cmd_pane_settings(void)
                 {
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED, false);
+                    settings_changed = true;
+                    platform_apply_config();
+                }
+            }
+            else if (k == 9) /* White Pane Borders */
+            {
+                if (overview.show_pane_borders)
+                {
+                    settings_sdl_set_bool_config(
+                        SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS, false);
                     settings_changed = true;
                     platform_apply_config();
                 }
