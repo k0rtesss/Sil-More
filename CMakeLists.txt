@@ -389,6 +389,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/ui-information-scene.c
     src/ui/ui-look-sidebar.c
     src/ui/ui-narrative.c
+    src/ui/ui-semantic-scene.c
     src/ui/ui-story.c
     src/ui/ui-status.c
     src/ui/story_font.c

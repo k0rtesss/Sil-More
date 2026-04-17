@@ -8,6 +8,7 @@
 #include "log/log.h"
 #include "platform-input.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 
 #define BLITZ_MAX_EFFECT_COUNT 9
 
@@ -54,12 +55,7 @@ static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
 static void birth_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
-    if (!buf || !buflen)
-        return;
-
-    platform_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback, buflen);
+    ui_semantic_prompt_label(binding, fallback, buf, buflen);
 }
 
 static bool birth_ui_panel_add_wrapped_lines(app_ui_panel* panel, byte attr,
@@ -265,21 +261,16 @@ static bool blitz_setup_build_ui_scene(app_ui_scene* scene,
     if (!scene || !setup)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_YELLOW, "Blitz Setup",
+        TERM_SLATE,
+        "Configure a self-contained Blitz run. Story progress stays untouched.",
+        TERM_L_BLUE, APP_UI_PANEL_FLAG_SHOW_DETAIL
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS, 980, 1800);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->focus_area = APP_UI_FOCUS_ROWS;
     panel->selected_row = selected;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 1800);
-    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Setup");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE,
-        "Configure a self-contained Blitz run. Story progress stays untouched.");
 
     strnfmt(meta, sizeof(meta), "%s",
         blitz_character_mode_name(setup->character_mode));
@@ -696,23 +687,18 @@ static bool blitz_effect_picker_build_ui_scene(app_ui_scene* scene,
         ? (cu->blessing_power ? cu_text + cu->blessing_power : "")
         : (cu->power ? cu_text + cu->power : "");
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    strnfmt(title, sizeof(title), "Choose %s %d of %d",
+        blessing ? "Blessing" : "Curse", ordinal, total);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_YELLOW, title,
+        blessing ? TERM_L_GREEN : TERM_L_RED,
+        blessing ? "Blessings" : "Curses", TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_SHOW_DETAIL | APP_UI_PANEL_FLAG_SCROLL_ROWS,
+        980, 1800);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->focus_area = APP_UI_FOCUS_ROWS;
     panel->selected_row = selected;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 1800);
-    strnfmt(title, sizeof(title), "Choose %s %d of %d",
-        blessing ? "Blessing" : "Curse", ordinal, total);
-    app_ui_panel_set_title(panel, TERM_YELLOW, title);
-    app_ui_panel_set_subtitle(panel, blessing ? TERM_L_GREEN : TERM_L_RED,
-        blessing ? "Blessings" : "Curses");
 
     for (int row = 0; row < count; row++)
     {
@@ -845,17 +831,12 @@ static bool blitz_effect_summary_build_ui_scene(app_ui_scene* scene)
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_YELLOW,
+        "Blitz Effects", TERM_SLATE,
+        "Starting blessings and curses for this Blitz run.", TERM_L_BLUE,
+        0, 900, 1600);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 900, 1600);
-    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Effects");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE,
-        "Starting blessings and curses for this Blitz run.");
 
     for (int id = 0; z_info && id < z_info->cu_max; id++)
     {

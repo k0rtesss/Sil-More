@@ -15,6 +15,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "cmd-ui-knowledge.h"
+#include "ui/ui-semantic-scene.h"
 
 static int g_knowledge_last_page = KNOWLEDGE_PAGE_ARTEFACTS;
 
@@ -454,22 +455,15 @@ app_ui_panel* knowledge_scene_begin(app_ui_scene* scene, int page,
 {
     app_ui_panel* panel;
 
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_L_WHITE, "Known lore",
+        TERM_SLATE, "", TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_TOP_ANCHORED
+            | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS,
+        980, 2048);
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_WHITE, "Known lore");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE, "");
     knowledge_scene_add_tabs(panel, page, tabs_focus);
     if (status && status[0])
         (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, status);

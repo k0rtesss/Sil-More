@@ -11,6 +11,7 @@
 #include "score/score_logic.h"
 #include "score/score_runs.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 #include "metarun.h"
 
 #include <ctype.h>
@@ -115,12 +116,14 @@ static bool score_last_layout_short = true;
 
 static void score_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
 {
-    if (!buf || !buflen)
-        return;
+    ui_semantic_prompt_label(binding, fallback, buf, buflen);
+}
 
-    platform_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback, buflen);
+static app_ui_panel* score_begin_browser_scene(app_ui_scene* scene,
+    u16b panel_flags)
+{
+    return ui_semantic_scene_begin_browser(scene, 0, NULL, 0, NULL,
+        TERM_L_BLUE, panel_flags, 1180, 2200);
 }
 
 typedef enum
@@ -712,17 +715,12 @@ static char display_scores_pages_information(const high_score* entries,
         app_ui_scene scene;
         app_ui_panel* panel;
 
-        app_ui_scene_init(&scene);
-        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+        panel = score_begin_browser_scene(&scene, APP_UI_PANEL_FLAG_SHOW_DETAIL);
         if (!panel)
         {
             ui_information_scene_leave(&scope);
             return 0;
         }
-        panel->style = APP_UI_PANEL_STYLE_BROWSER;
-        panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
-        panel->accent_attr = TERM_L_BLUE;
-        app_ui_panel_set_widths(panel, 1180, 2200);
         app_ui_panel_set_title(panel, TERM_L_WHITE, "Halls of Mandos");
         app_ui_panel_set_subtitle(panel, TERM_SLATE,
             score_view_order_label(order));
@@ -740,8 +738,8 @@ static char display_scores_pages_information(const high_score* entries,
             (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
                 "Any", "Close");
         }
-        (void)ui_information_scene_present_ui(&scene);
-        (void)ui_information_scene_wait_key_nonrepeat();
+        (void)ui_semantic_scene_present_and_wait_key(&scene, true, false,
+            APP_WAIT_REASON_NONE, NULL);
         ui_information_scene_leave(&scope);
         return 0;
     }
@@ -786,19 +784,15 @@ static char display_scores_pages_information(const high_score* entries,
                 : start_index;
             has_more = (start_index + entries_per_page < count);
 
-            app_ui_scene_init(&scene);
-            panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+            panel = score_begin_browser_scene(&scene,
+                APP_UI_PANEL_FLAG_SHOW_DETAIL);
             if (!panel)
             {
                 log_warn("scores: failed to build browser scene");
                 ui_information_scene_leave(&scope);
                 return 0;
             }
-            panel->style = APP_UI_PANEL_STYLE_BROWSER;
-            panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
             panel->focus_area = APP_UI_FOCUS_ROWS;
-            panel->accent_attr = TERM_L_BLUE;
-            app_ui_panel_set_widths(panel, 1180, 2200);
 
             strnfmt(title, sizeof(title), "Halls of Mandos");
             strnfmt(subtitle, sizeof(subtitle),
@@ -1395,18 +1389,14 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         selected_entry = &entries[highlight];
         rec = &selected_entry->record;
 
-        app_ui_scene_init(&scene);
-        panel = app_ui_scene_append_panel(&scene, APP_UI_LAYER_BROWSER);
+        panel = score_begin_browser_scene(&scene,
+            APP_UI_PANEL_FLAG_SHOW_DETAIL);
         if (!panel)
         {
             ui_information_scene_leave(&scope);
             return false;
         }
-        panel->style = APP_UI_PANEL_STYLE_BROWSER;
-        panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
         panel->focus_area = APP_UI_FOCUS_ROWS;
-        panel->accent_attr = TERM_L_BLUE;
-        app_ui_panel_set_widths(panel, 1180, 2200);
 
         strnfmt(title, sizeof(title), "Run History");
         strnfmt(subtitle, sizeof(subtitle), "%d entries  |  Page %d/%d  |  Sort: %s",
@@ -2327,17 +2317,12 @@ static int run_history_ui_build_scene(app_ui_scene* scene,
     if (!scene || !entry || !view || !rec)
         return -1;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = score_begin_browser_scene(scene,
+        APP_UI_PANEL_FLAG_TOP_ANCHORED
+            | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS);
     if (!panel)
         return -1;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 1180, 2200);
     run_history_ui_build_header(title, sizeof(title), subtitle,
         sizeof(subtitle), rec, player, race_name,
         score_run_status_label(rec->status));

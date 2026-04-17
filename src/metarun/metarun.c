@@ -33,6 +33,7 @@
 #include "score/score_entry.h"
 #include "score/score_io.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 #include "h-define.h"
 #include "platform.h"    /* MKDIR helper                      */
 #include "supplies.h"
@@ -1697,64 +1698,22 @@ app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     byte title_attr, const char* title, byte subtitle_attr,
     const char* subtitle)
 {
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, title_attr, title ? title : "");
-    if (subtitle && subtitle[0])
-        app_ui_panel_set_subtitle(panel, subtitle_attr, subtitle);
-
-    return panel;
+    return ui_semantic_scene_begin_browser(scene, title_attr, title,
+        subtitle_attr, subtitle, 0, APP_UI_PANEL_FLAG_SCROLL_ROWS, 980, 2048);
 }
 
 static app_ui_panel* metarun_ui_begin_modal_scene(app_ui_scene* scene,
     byte title_attr, const char* title)
 {
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    app_ui_panel_set_widths(panel, 340, 620);
-    app_ui_panel_set_title(panel, title_attr, title ? title : "");
-    return panel;
+    return ui_semantic_scene_begin_plain(scene, APP_UI_SCENE_FLAG_DIM_BACKDROP,
+        APP_UI_LAYER_MODAL, title_attr, title, 0, NULL, 0, 340, 620);
 }
 
 app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
     byte title_attr, const char* title)
 {
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    app_ui_panel_set_widths(panel, 720, 1180);
-    app_ui_panel_set_title(panel, title_attr, title ? title : "");
-    return panel;
+    return ui_semantic_scene_begin_plain(scene, APP_UI_SCENE_FLAG_DIM_BACKDROP,
+        APP_UI_LAYER_MODAL, title_attr, title, 0, NULL, 0, 720, 1180);
 }
 
 static bool metarun_ui_add_wrapped_text_lines(app_ui_panel* panel, byte attr,
@@ -1911,14 +1870,9 @@ bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
 
 void metarun_ui_clear_pending_input(void)
 {
-    app_session* session = app_session_current();
-
     log_debug("[metarun-esc-trace] clear_pending_input active=%d",
         ui_information_scene_is_active() ? 1 : 0);
-    if (session)
-        app_session_clear_inputs(session);
-    input_byte_queue_clear();
-    input_clear_movement_commands();
+    ui_semantic_scene_clear_pending_input();
 }
 
 bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)

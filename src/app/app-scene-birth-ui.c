@@ -9,6 +9,7 @@
 #include "platform-input.h"
 #include "platform-story-font.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 
 typedef struct birth_compact_flag_line {
     cptr txt;
@@ -190,12 +191,7 @@ static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
 static void birth_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
-    if (!buf || !buflen)
-        return;
-
-    platform_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback, buflen);
+    ui_semantic_prompt_label(binding, fallback, buf, buflen);
 }
 
 static bool birth_confirm_input(int ch, bool steamdeck)
@@ -311,18 +307,26 @@ static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
     if (!build_character_sheet_ui_scene(scene, prompt))
         return false;
 
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    strnfmt(subtitle, sizeof(subtitle), "Points Left: %d", points_left);
+    panel = ui_semantic_scene_append_panel(scene,
+        &(const ui_semantic_panel_config) {
+            0,
+            APP_UI_LAYER_MODAL,
+            APP_UI_PANEL_STYLE_BROWSER,
+            0,
+            TERM_L_BLUE,
+            TERM_L_GREEN,
+            TERM_L_BLUE,
+            420,
+            560,
+            "Allocate Stats",
+            subtitle
+        });
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
     panel->focus_area = APP_UI_FOCUS_ROWS;
     panel->selected_row = selected_stat;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 420, 560);
-    app_ui_panel_set_title(panel, TERM_L_BLUE, "Allocate Stats");
-    strnfmt(subtitle, sizeof(subtitle), "Points Left: %d", points_left);
-    app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
 
     for (i = 0; i < A_MAX; i++)
     {
@@ -376,17 +380,25 @@ static bool birth_build_skills_allocation_ui_scene(app_ui_scene* scene,
     if (!build_character_sheet_ui_scene(scene, prompt))
         return false;
 
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    strnfmt(subtitle, sizeof(subtitle), "Experience Left: %d", exp_left);
+    panel = ui_semantic_scene_append_panel(scene,
+        &(const ui_semantic_panel_config) {
+            0,
+            APP_UI_LAYER_MODAL,
+            APP_UI_PANEL_STYLE_BROWSER,
+            0,
+            TERM_L_BLUE,
+            TERM_L_GREEN,
+            TERM_L_BLUE,
+            420,
+            640,
+            "Allocate Skills",
+            subtitle
+        });
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
     panel->focus_area = APP_UI_FOCUS_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 420, 640);
-    app_ui_panel_set_title(panel, TERM_L_BLUE, "Allocate Skills");
-    strnfmt(subtitle, sizeof(subtitle), "Experience Left: %d", exp_left);
-    app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
 
     for (i = 0; i < S_MAX; i++)
     {
@@ -443,14 +455,23 @@ static bool birth_build_assignment_review_ui_scene(app_ui_scene* scene,
     if (!build_character_sheet_ui_scene(scene, prompt))
         return false;
 
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    panel = ui_semantic_scene_append_panel(scene,
+        &(const ui_semantic_panel_config) {
+            0,
+            APP_UI_LAYER_MODAL,
+            APP_UI_PANEL_STYLE_PLAIN,
+            0,
+            TERM_L_BLUE,
+            0,
+            TERM_L_BLUE,
+            420,
+            560,
+            "Character Review",
+            NULL
+        });
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 420, 560);
-    app_ui_panel_set_title(panel, TERM_L_BLUE, "Character Review");
     if (!app_ui_panel_add_body_line(panel, TERM_WHITE,
             "Review the character sheet before you start."))
     {
@@ -665,17 +686,12 @@ static bool birth_build_description_ui_scene(app_ui_scene* scene,
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
-        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    panel = ui_semantic_scene_begin_plain(scene,
+        APP_UI_SCENE_FLAG_USE_BACKDROP | APP_UI_SCENE_FLAG_DIM_BACKDROP,
+        APP_UI_LAYER_MODAL, TERM_L_BLUE, title, 0, NULL, TERM_L_BLUE, 900,
+        1600);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 900, 1600);
-    app_ui_panel_set_title(panel, TERM_L_BLUE, title ? title : "");
     if (text && text[0])
     {
         if (!app_ui_panel_begin_rich_paragraph(scene, panel))
@@ -704,14 +720,13 @@ static bool birth_show_description_ui_scene(birth_menu choice)
 
     birth_choice_full_name(choice, full_name, sizeof(full_name));
     if (!birth_build_description_ui_scene(&scene, full_name, choice.text)
-        || !ui_information_scene_present_ui(&scene))
+        || !ui_semantic_scene_present_and_wait_key(&scene, true, false,
+            APP_WAIT_REASON_NONE, NULL))
     {
         ui_information_scene_leave(&scope);
         log_warn("birth description: semantic scene presentation failed");
         return false;
     }
-
-    (void)ui_information_scene_wait_key_nonrepeat();
     ui_information_scene_leave(&scope);
     return true;
 }
@@ -1090,20 +1105,14 @@ static bool birth_selection_build_ui_scene(app_ui_scene* scene,
     if (!scene || !choices || num <= 0 || cur < 0 || cur >= num)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_L_BLUE,
+        character_selection_header_text(character_phase), 0, NULL,
+        TERM_L_BLUE, APP_UI_PANEL_FLAG_SHOW_DETAIL
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS, 980, 2048);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->focus_area = APP_UI_FOCUS_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_BLUE,
-        character_selection_header_text(character_phase));
-
     if (character_phase)
     {
         strnfmt(subtitle, sizeof(subtitle), "Race: %s",
@@ -1633,19 +1642,14 @@ static bool oath_build_ui_scene(app_ui_scene* scene, int available_mask,
     if (visible_count > (int)N_ELEMENTS(visible_oaths))
         visible_count = (int)N_ELEMENTS(visible_oaths);
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_semantic_scene_begin_browser(scene, TERM_L_BLUE,
+        "Choose your Oath", 0, NULL, TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_SHOW_DETAIL | APP_UI_PANEL_FLAG_SCROLL_ROWS,
+        980, 2048);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->focus_area = APP_UI_FOCUS_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_BLUE, "Choose your Oath");
-
     for (int i = 0; i < visible_count; i++)
     {
         int oath_id = visible_oaths[i];

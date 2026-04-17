@@ -7,6 +7,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 
 static run_mode g_pending_run_mode = RUN_MODE_STORY;
 static run_mode g_current_run_mode = RUN_MODE_STORY;
@@ -40,19 +41,10 @@ static bool blitz_build_end_summary_ui_scene(app_ui_scene* scene,
     app_ui_panel* panel;
     char result_line[APP_UI_TEXT_MAX];
 
-    if (!scene)
-        return false;
-
-    app_ui_scene_init(scene);
-    scene->flags = APP_UI_SCENE_FLAG_DIM_BACKDROP;
-
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    panel = ui_semantic_scene_begin_plain(scene, APP_UI_SCENE_FLAG_DIM_BACKDROP,
+        APP_UI_LAYER_MODAL, TERM_YELLOW, "Blitz Result", 0, NULL, 0, 320, 560);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    app_ui_panel_set_widths(panel, 320, 560);
-    app_ui_panel_set_title(panel, TERM_YELLOW, "Blitz Result");
 
     blitz_format_end_summary_line(sil_count, result_line, sizeof(result_line));
     if (!app_ui_panel_add_body_line(panel, TERM_L_WHITE, result_line))
@@ -72,7 +64,8 @@ static bool blitz_show_end_summary_ui(byte sil_count)
         return false;
 
     if (!blitz_build_end_summary_ui_scene(&scene, sil_count)
-        || !ui_information_scene_present_ui(&scene))
+        || !ui_semantic_scene_present_and_wait_key(&scene, true, false,
+            APP_WAIT_REASON_NONE, NULL))
     {
         ui_information_scene_leave(&scope);
         log_warn("blitz summary: semantic scene presentation failed");
@@ -80,8 +73,8 @@ static bool blitz_show_end_summary_ui(byte sil_count)
         return false;
     }
 
-    (void)ui_information_scene_wait_key_nonrepeat();
-    app_session_clear_inputs(session);
+    (void)session;
+    ui_semantic_scene_clear_pending_input();
     ui_information_scene_leave(&scope);
     return true;
 }

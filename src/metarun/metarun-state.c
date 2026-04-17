@@ -1,4 +1,5 @@
 #include "metarun-internal.h"
+#include "ui/ui-semantic-scene.h"
 
 /* =========================  globals  =========================== */
 metarun         metar;
@@ -290,12 +291,7 @@ void metarun_set_orome_great_hunt_active(bool active)
 void metarun_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
-    if (!buf || !buflen)
-        return;
-
-    platform_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback, buflen);
+    ui_semantic_prompt_label(binding, fallback, buf, buflen);
 }
 
 /* ----------------------- accessors --------------------------- */

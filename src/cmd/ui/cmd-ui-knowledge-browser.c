@@ -12,6 +12,7 @@
 #include "platform-input.h"
 #include "log/log.h"
 #include "cmd-ui-knowledge.h"
+#include "ui/ui-semantic-scene.h"
 
 /*
  * Description of each object group.
@@ -684,25 +685,9 @@ static bool knowledge_scene_add_rich_paragraph(app_ui_scene* scene,
 static app_ui_panel* knowledge_begin_curse_detail_scene(app_ui_scene* scene,
     cptr cname, cptr subtitle)
 {
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    scene->flags |= APP_UI_SCENE_FLAG_DIM_BACKDROP;
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 720, 1180);
-    app_ui_panel_set_title(panel, TERM_L_RED, cname ? cname : "");
-    if (subtitle && subtitle[0])
-        app_ui_panel_set_subtitle(panel, TERM_L_GREEN, subtitle);
-
-    return panel;
+    return ui_semantic_scene_begin_plain(scene, APP_UI_SCENE_FLAG_DIM_BACKDROP,
+        APP_UI_LAYER_MODAL, TERM_L_RED, cname, TERM_L_GREEN, subtitle,
+        TERM_L_BLUE, 720, 1180);
 }
 
 static bool knowledge_present_curse_detail_scene(app_ui_scene* scene,
@@ -722,11 +707,8 @@ static bool knowledge_present_curse_detail_scene(app_ui_scene* scene,
             "Any", "Continue");
     }
 
-    if (!ui_information_scene_present_ui(scene))
-        return false;
-
-    (void)ui_information_scene_wait_key_nonrepeat();
-    return true;
+    return ui_semantic_scene_present_and_wait_key(scene, true, false,
+        APP_WAIT_REASON_NONE, NULL);
 }
 
 static bool knowledge_show_curse_detail_ui(int curse_id)

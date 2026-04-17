@@ -13,6 +13,7 @@
 #include "runtime/runtime-dungeon-internal.h"
 #include "runtime/runtime-dungeon.h"
 #include "ui/ui-information-scene.h"
+#include "ui/ui-semantic-scene.h"
 
 #include <string.h>
 
@@ -296,25 +297,12 @@ static bool dungeon_fullscreen_scene_present(const app_ui_scene* scene)
 static app_ui_panel* dungeon_fullscreen_scene_begin(app_ui_scene* scene,
     bool overlay_dungeon)
 {
-    app_ui_panel* panel;
-
-    if (!scene)
-        return NULL;
-
-    app_ui_scene_init(scene);
-    if (overlay_dungeon)
-        scene->flags |= APP_UI_SCENE_FLAG_USE_BACKDROP;
-    panel = app_ui_scene_append_panel(scene,
-        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL);
-    if (!panel)
-        return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->accent_attr = TERM_SLATE;
-    app_ui_panel_set_widths(panel,
+    return ui_semantic_scene_begin_plain(scene,
+        overlay_dungeon ? APP_UI_SCENE_FLAG_USE_BACKDROP : 0,
+        overlay_dungeon ? APP_UI_LAYER_TRANSIENT : APP_UI_LAYER_MODAL,
+        0, NULL, 0, NULL, TERM_SLATE,
         overlay_dungeon ? 980 : 900,
         overlay_dungeon ? 1700 : 1500);
-    return panel;
 }
 
 static bool dungeon_fullscreen_add_paragraph(app_ui_scene* scene,
@@ -793,12 +781,11 @@ void runtime_dungeon_print_story_intro(void)
     while (index < total)
     {
         int next_index = index;
-        char key;
+        int key;
         bool final_page;
 
         if (!story_intro_build_ui_scene(&scene, overlay_dungeon, intro_texts,
-                total, index, &next_index)
-            || !dungeon_fullscreen_scene_present(&scene))
+                total, index, &next_index))
         {
             ui_information_scene_leave(&scope);
             log_error("story intro: semantic scene presentation failed");
@@ -806,7 +793,14 @@ void runtime_dungeon_print_story_intro(void)
             return;
         }
 
-        key = (char)ui_information_scene_wait_key_nonrepeat();
+        if (!ui_semantic_scene_present_and_wait_key(&scene, true, false,
+                APP_WAIT_REASON_NONE, &key))
+        {
+            ui_information_scene_leave(&scope);
+            log_error("story intro: semantic scene presentation failed");
+            quit("Story intro could not be displayed.");
+            return;
+        }
         if (key == 'S')
             break;
 
@@ -814,7 +808,7 @@ void runtime_dungeon_print_story_intro(void)
         if (final_page && (key == 'c' || key == 'C'))
         {
             if (session)
-                app_session_clear_inputs(session);
+                ui_semantic_scene_clear_pending_input();
             ui_information_scene_leave_without_restore(&scope);
             choose_difficulty_level();
             return;
@@ -824,7 +818,7 @@ void runtime_dungeon_print_story_intro(void)
     }
 
     if (session)
-        app_session_clear_inputs(session);
+        ui_semantic_scene_clear_pending_input();
     ui_information_scene_leave_without_restore(&scope);
 }
 
@@ -849,8 +843,7 @@ void runtime_dungeon_maybe_show_blitz_unlock_screen(void)
         return;
     }
 
-    if (!blitz_unlock_build_ui_scene(&scene, overlay_dungeon)
-        || !dungeon_fullscreen_scene_present(&scene))
+    if (!blitz_unlock_build_ui_scene(&scene, overlay_dungeon))
     {
         ui_information_scene_leave(&scope);
         log_error("blitz unlock: semantic scene presentation failed");
@@ -858,9 +851,16 @@ void runtime_dungeon_maybe_show_blitz_unlock_screen(void)
         return;
     }
 
-    (void)ui_information_scene_wait_key_nonrepeat();
+    if (!ui_semantic_scene_present_and_wait_key(&scene, true, false,
+            APP_WAIT_REASON_NONE, NULL))
+    {
+        ui_information_scene_leave(&scope);
+        log_error("blitz unlock: semantic scene presentation failed");
+        quit("Blitz unlock notice could not be displayed.");
+        return;
+    }
     if (session)
-        app_session_clear_inputs(session);
+        ui_semantic_scene_clear_pending_input();
     ui_information_scene_leave_without_restore(&scope);
     op_ptr->opt[OPT_unlock_blitz_mode] = true;
     save_pane_config_to_json();
