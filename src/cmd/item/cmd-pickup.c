@@ -72,7 +72,7 @@ void give_player_item(object_type * o_ptr)
     }
 }
 
-bool is_weapon_or_armor(const object_type* o_ptr)
+static bool is_weapon_or_armor(const object_type* o_ptr)
 {
     /* Check if it's a weapon */
     if (o_ptr->tval == TV_SWORD || o_ptr->tval == TV_POLEARM || 

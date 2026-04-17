@@ -668,7 +668,7 @@ void do_cmd_unified_look(void)
             /* Display entity name in left sidebar if cursor is on something */
             {
                 char out_val[256];
-                int cursor_m_idx = cave_m_idx[y][x];
+                int current_cursor_m_idx = cave_m_idx[y][x];
                 int cursor_o_idx = cave_o_idx[y][x];
                 int feat = cave_feat[y][x];
                 bool has_visible_monster = unified_look_can_show_monster_at(y, x);
@@ -732,7 +732,7 @@ void do_cmd_unified_look(void)
                 /* Priority: monster first, then object (only if marked), then feature */
                 if (has_visible_monster)
                 {
-                    monster_type* m_ptr = &mon_list[cursor_m_idx];
+                    monster_type* m_ptr = &mon_list[current_cursor_m_idx];
                     char m_name[80];
                     
                     /* Get the monster name with indefinite article */

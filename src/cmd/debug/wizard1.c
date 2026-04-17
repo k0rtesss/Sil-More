@@ -353,7 +353,7 @@ static void spoil_artefact(cptr fname)
         for (j = 1; j < z_info->art_max; ++j)
         {
             artefact_type* a_ptr = &a_info[j];
-            char buf[80];
+            char art_name[80];
 
             if (j >= ART_ULTIMATE)
                 continue;
@@ -373,15 +373,15 @@ static void spoil_artefact(cptr fname)
                 continue;
 
             /* Grab artefact name */
-            object_desc_spoil(buf, sizeof(buf), i_ptr, true, 1);
+            object_desc_spoil(art_name, sizeof(art_name), i_ptr, true, 1);
 
-            SDL_strlcat(buf,
+            SDL_strlcat(art_name,
                 format("     %d.%d lb", (a_ptr->weight / 10),
                     (a_ptr->weight % 10)),
-                sizeof(buf));
+                sizeof(art_name));
 
             /* Print name and underline */
-            spoiler_underline(buf, '-');
+            spoiler_underline(art_name, '-');
 
             // mark as a spoiled item
             i_ptr->ident |= (IDENT_SPOIL);

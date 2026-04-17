@@ -945,10 +945,11 @@ void do_cmd_fire(int quiver)
                     /* Handle visible monster */
                     else
                     {
-                        char m_name[80];
+                        char target_name[80];
 
                         /* Get "the monster" or "it" */
-                        monster_desc(m_name, sizeof(m_name), m_ptr, 0);
+                        monster_desc(target_name, sizeof(target_name), m_ptr,
+                            0);
 
                         // determine the punctuation for the attack ("...", ".",
                         // "!" etc)
@@ -957,10 +958,12 @@ void do_cmd_fire(int quiver)
 
                         /* Message */
                         if (pierce)
-                            msg_format("The %s pierces %s%s", o_name, m_name,
+                            msg_format("The %s pierces %s%s", o_name,
+                                target_name,
                                 punctuation);
                         else if (deadly_hail_bonus)
-                            msg_format("The %s tears into %s!", o_name, m_name);
+                            msg_format("The %s tears into %s!", o_name,
+                                target_name);
                         else if (puncture)
                             msg_format("The %s hits %s in a vulnerable spot%s",
                                 o_name, m_name, punctuation);

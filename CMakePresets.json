@@ -87,6 +87,13 @@
       }
     },
     {
+      "name": "test-portable",
+      "configurePreset": "dev-portable",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "test-strict",
       "configurePreset": "dev-strict",
       "output": {

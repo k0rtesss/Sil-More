@@ -379,7 +379,7 @@ errr parse_a_info(char* buf, header* head)
     /* The banetype is optional (defaults to 0 = player choice) */
     else if (buf[0] == 'B')
     {
-        int i;
+        int ability_idx;
         char* u;
 
         /* There better be a current a_ptr */
@@ -387,18 +387,19 @@ errr parse_a_info(char* buf, header* head)
             return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
         /* XXX Simply read each number following a colon */
-        for (i = 0, s = buf + 1; s && (s[0] == ':') && s[1]; ++i)
+        for (ability_idx = 0, s = buf + 1; s && (s[0] == ':') && s[1];
+             ++ability_idx)
         {
             /* Sanity check */
-            if (i > 3)
+            if (ability_idx > 3)
                 return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
 
             /* Default abilitynum and bane_type */
-            a_ptr->abilitynum[i] = 0;
-            a_ptr->bane_type[i] = 0;
+            a_ptr->abilitynum[ability_idx] = 0;
+            a_ptr->bane_type[ability_idx] = 0;
 
             /* Store the skilltype */
-            a_ptr->skilltype[i] = atoi(s + 1);
+            a_ptr->skilltype[ability_idx] = atoi(s + 1);
 
             /* List this ability */
             a_ptr->abilities++;
@@ -414,7 +415,7 @@ errr parse_a_info(char* buf, header* head)
             {
                 int abilitynum = atoi(t + 1);
                 if (abilitynum > 0)
-                    a_ptr->abilitynum[i] = abilitynum;
+                    a_ptr->abilitynum[ability_idx] = abilitynum;
 
                 /* Look for a second slash (bane_type) */
                 u = strchr(t + 1, '/');
@@ -422,7 +423,7 @@ errr parse_a_info(char* buf, header* head)
                 {
                     int banetype = atoi(u + 1);
                     if (banetype > 0)
-                        a_ptr->bane_type[i] = banetype;
+                        a_ptr->bane_type[ability_idx] = banetype;
                 }
             }
         }

@@ -17,6 +17,7 @@
 #include "object/object-ui-select.h"
 #include "player/killer.h"
 #include "metarun.h"
+#include "cmd-interact-chest.h"
 #include "cmd-world.h"
 
 #define MIN_DEPTH_COUNTER_STEP 180000

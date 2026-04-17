@@ -17,6 +17,8 @@ alloc_entry* alloc_race_table;
 s16b object_level;
 byte object_generation_mode;
 
+bool prep_object_theme(int themetype);
+
 /*
  * Hack -- determine if a template is a damaged item
  *

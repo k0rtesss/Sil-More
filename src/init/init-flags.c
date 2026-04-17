@@ -17,6 +17,8 @@
 
 #ifdef ALLOW_TEMPLATES
 
+void dbg_show_active_flags(void);
+
 /*
  * Monster race, object, vault, curse, and character flags.
  */
@@ -620,10 +622,10 @@ static bool dbg_show_active_flags_scene_enter(ui_information_scene_scope* scope,
 static bool dbg_show_active_flags_build_ui_scene(app_ui_scene* scene,
     bool overlay_dungeon)
 {
-    player_race* rp_ptr = &p_info[p_ptr->prace];
-    character_profile* current_character_profile = &c_info[p_ptr->pcharacter];
-    u32b rhf_bits = rp_ptr->flags | current_character_profile->flags;
-    u32b unq_bits = current_character_profile->flags_u;
+    player_race* current_race = &p_info[p_ptr->prace];
+    character_profile* character_profile_ptr = &c_info[p_ptr->pcharacter];
+    u32b rhf_bits = current_race->flags | character_profile_ptr->flags;
+    u32b unq_bits = character_profile_ptr->flags_u;
     char subtitle[160];
     char rhf_buf[2048];
     char unq_buf[1024];
@@ -661,7 +663,7 @@ static bool dbg_show_active_flags_build_ui_scene(app_ui_scene* scene,
         overlay_dungeon ? 1900 : 1700);
     app_ui_panel_set_title(panel, TERM_ORANGE, "Active Flags");
     strnfmt(subtitle, sizeof(subtitle), "%s of the %s",
-        c_name + current_character_profile->name, p_name + rp_ptr->name);
+        c_name + character_profile_ptr->name, p_name + current_race->name);
     app_ui_panel_set_subtitle(panel, TERM_L_WHITE, subtitle);
     app_ui_panel_set_detail_title(panel, TERM_L_RED,
         "Active curses and blessings");

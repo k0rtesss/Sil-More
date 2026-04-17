@@ -1232,9 +1232,9 @@ static bool generate_chest(int depth, const drop_profile* profile, object_type* 
     return true;
 }
 
-void drop_set_chest_vault_type(int vault_type)
+void drop_set_chest_vault_type(int vault_type_id)
 {
-    g_chest_vault_type = vault_type;
+    g_chest_vault_type = vault_type_id;
 }
 
 void drop_set_chest_mode(int mode)

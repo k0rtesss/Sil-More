@@ -8,7 +8,7 @@
 
 errr parse_z_info(char* buf, header* head)
 {
-    maxima* z_info = head->info_ptr;
+    maxima* limits = head->info_ptr;
 
     if (buf[0] != 'M')
         return PARSE_ERROR_UNDEFINED_DIRECTIVE;
@@ -24,7 +24,7 @@ errr parse_z_info(char* buf, header* head)
         if (1 != sscanf(buf + 4, "%d", &max))
             return PARSE_ERROR_GENERIC;
 
-        z_info->f_max = max;
+        limits->f_max = max;
     }
     else if (buf[2] == 'K')
     {
@@ -33,7 +33,7 @@ errr parse_z_info(char* buf, header* head)
         if (1 != sscanf(buf + 4, "%d", &max))
             return PARSE_ERROR_GENERIC;
 
-        z_info->k_max = max;
+        limits->k_max = max;
     }
     else if (buf[2] == 'B')
     {

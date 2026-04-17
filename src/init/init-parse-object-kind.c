@@ -354,24 +354,25 @@ errr parse_k_info(char* buf, header* head)
     /* Process 'B' for "aBilities" (one line only) */
     else if (buf[0] == 'B')
     {
-        int i;
+        int ability_idx;
 
         /* There better be a current k_ptr */
         if (!k_ptr)
             return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
         /* XXX Simply read each number following a colon */
-        for (i = 0, s = buf + 1; s && (s[0] == ':') && s[1]; ++i)
+        for (ability_idx = 0, s = buf + 1; s && (s[0] == ':') && s[1];
+             ++ability_idx)
         {
             /* Sanity check */
-            if (i > 3)
+            if (ability_idx > 3)
                 return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
 
             /* Default abilitynum */
-            k_ptr->abilitynum[i] = 0;
+            k_ptr->abilitynum[ability_idx] = 0;
 
             /* Store the skilltype */
-            k_ptr->skilltype[i] = atoi(s + 1);
+            k_ptr->skilltype[ability_idx] = atoi(s + 1);
 
             /* List this ability */
             k_ptr->abilities++;
@@ -387,7 +388,7 @@ errr parse_k_info(char* buf, header* head)
             {
                 int abilitynum = atoi(t + 1);
                 if (abilitynum > 0)
-                    k_ptr->abilitynum[i] = abilitynum;
+                    k_ptr->abilitynum[ability_idx] = abilitynum;
             }
         }
     }

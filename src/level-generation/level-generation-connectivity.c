@@ -17,6 +17,10 @@
 #include "level-generation/level-generation-internal.h"
 #include <string.h>
 
+void label_rooms(void);
+void place_item_randomly(int tval, int sval, bool close);
+bool doubled_doors(void);
+
 /* Dungeon streamer generation values */
 #define DUN_STR_DEN 5 /* Density of streamers */
 #define DUN_STR_RNG 2 /* Width of streamers */
@@ -130,8 +134,8 @@ void flood_access(int y, int x,
     bool ignore_rubble_and_chasms)
 {
     static int queue[MAX_DUNGEON_HGT * MAX_DUNGEON_WID];
-    static const int ddy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
-    static const int ddx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    static const int flood_ddy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
+    static const int flood_ddx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
     int head = 0;
     int tail = 0;
 
@@ -150,8 +154,8 @@ void flood_access(int y, int x,
 
         for (int d = 0; d < 8; ++d)
         {
-            int ny = cy + ddy[d];
-            int nx = cx + ddx[d];
+            int ny = cy + flood_ddy[d];
+            int nx = cx + flood_ddx[d];
 
             if (!in_bounds_fully(ny, nx)) continue;
             if (access_array[ny][nx]) continue;
@@ -191,7 +195,7 @@ void label_rooms(void)
 }
 
 // floodfills access through the *graph* of the dungeon
-void flood_piece(int n, int piece_num)
+static void flood_piece(int n, int piece_num)
 {
     int i;
 
@@ -4364,7 +4368,7 @@ static bool alloc_stairs(int feat, int num)
     return (true);
 }
 
-bool feat_within_los(int y0, int x0, int feat)
+static bool feat_within_los(int y0, int x0, int feat)
 {
     int y, x;
 
@@ -4396,7 +4400,7 @@ bool feat_within_los(int y0, int x0, int feat)
 /*
  * Are there any stairs within line of sight?
  */
-bool stairs_within_los(int y, int x)
+static bool stairs_within_los(int y, int x)
 {
     if (feat_within_los(y, x, FEAT_LESS))
         return (true);

@@ -14,7 +14,7 @@
 #include "player/killer.h"
 #include "metarun.h"
 
-void slay_desc(char* description, u32b flag, const monster_type* m_ptr)
+static void slay_desc(char* description, u32b flag, const monster_type* m_ptr)
 {
     char m_name[80];
     char m_poss[80];
@@ -1446,7 +1446,7 @@ void apply_weapon_combat_effects(object_type* o_ptr, monster_type* m_ptr,
  * ident_weapon_by_use
  */
 
-u32b maybe_notice_slay(const object_type* o_ptr, u32b flag)
+static u32b maybe_notice_slay(const object_type* o_ptr, u32b flag)
 {
     u32b noticed_flag = 0L;
 

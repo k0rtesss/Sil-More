@@ -2226,14 +2226,14 @@ static void knowledge_scene_append_object_rows(app_ui_panel* panel,
 }
 
 static void knowledge_scene_append_monster_rows(app_ui_panel* panel,
-    monster_list_entry mon_idx[], int mon_cnt, int mon_cur)
+    monster_list_entry mon_idx[], int monster_count, int mon_cur)
 {
     int i;
 
-    if (!panel || !mon_idx || mon_cnt <= 0)
+    if (!panel || !mon_idx || monster_count <= 0)
         return;
 
-    for (i = 0; i < mon_cnt; i++)
+    for (i = 0; i < monster_count; i++)
     {
         int r_idx = mon_idx[i].r_idx;
         monster_race* r_ptr = &r_info[r_idx];
@@ -2408,12 +2408,12 @@ static bool knowledge_build_object_browser_scene(app_ui_scene* scene, int page,
 
 static bool knowledge_build_monster_browser_scene(app_ui_scene* scene, int page,
     bool tabs_focus, int grp_idx[], int grp_cnt, int grp_cur, int grp_top,
-    monster_list_entry mon_idx[], int mon_cnt, int mon_top, int mon_cur)
+    monster_list_entry mon_idx[], int monster_count, int mon_top, int mon_cur)
 {
     app_ui_panel* panel;
     char status[APP_UI_TEXT_MAX];
 
-    if (mon_cnt > 0)
+    if (monster_count > 0)
         knowledge_monster_summary(status, sizeof(status), grp_idx[grp_cur]);
     else
         SDL_strlcpy(status, "No known monsters in this group yet.",
@@ -2427,9 +2427,9 @@ static bool knowledge_build_monster_browser_scene(app_ui_scene* scene, int page,
     app_ui_panel_set_subtitle(panel, TERM_SLATE, "Monster");
     knowledge_scene_add_group_detail_lines(panel, grp_idx, monster_group_text,
         grp_cnt, grp_cur, grp_top);
-    knowledge_scene_append_monster_rows(panel, mon_idx, mon_cnt, mon_cur);
+    knowledge_scene_append_monster_rows(panel, mon_idx, monster_count, mon_cur);
     app_ui_panel_set_row_offset(panel, (s16b)mon_top);
-    knowledge_scene_add_footer_actions(panel, true, mon_cnt > 0);
+    knowledge_scene_add_footer_actions(panel, true, monster_count > 0);
     knowledge_scene_set_focus(panel, tabs_focus);
     return true;
 }

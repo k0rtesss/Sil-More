@@ -2,7 +2,7 @@
   "metadata": {
     "schema_version": 1,
     "status_date": "2026-04-17",
-    "notes": "Wave 4 modernization audit baseline after the sixth folder-normalization batch, including the files/variable deletion slice, the runtime/fs/ui ownership split, and the tightened remaining root holdout allowlist."
+    "notes": "Wave 4 modernization audit baseline after the eighth folder-normalization batch, including the cJSON vendor move and the tightened root holdout allowlist."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -28,8 +28,6 @@
       "src/sound-config.h"
     ],
     "root_src_c_allowlist": [
-      "src/cJSON.c",
-      "src/dungeon.c",
       "src/main-sdl.c",
       "src/main.c",
       "src/pane.c",
@@ -205,6 +203,18 @@
         ]
       },
       {
+        "key": "cjson_family",
+        "match_globs": [
+          "src/**/cJSON.c",
+          "src/**/cJSON.h"
+        ],
+        "allowed_globs": [
+          "src/support/cJSON.c",
+          "src/cJSON.h",
+          "src/support/cJSON.h"
+        ]
+      },
+      {
         "key": "angle_family",
         "match_globs": [
           "src/**/angle.c"
@@ -329,6 +339,17 @@
         "allowed_globs": [
           "src/runtime/*.c",
           "src/runtime/*.h"
+        ]
+      },
+      {
+        "key": "runtime_dungeon_family",
+        "match_globs": [
+          "src/**/runtime-dungeon.c",
+          "src/**/runtime-dungeon.h"
+        ],
+        "allowed_globs": [
+          "src/runtime/runtime-dungeon.c",
+          "src/runtime/runtime-dungeon.h"
         ]
       },
       {
@@ -617,7 +638,6 @@
             "src/cmd/debug/wizard1.c": 1,
             "src/cmd/debug/wizard2.c": 1,
             "src/cmd/ui/cmd-ui-info.c": 1,
-            "src/dungeon.c": 1,
             "src/fs/load.c": 1,
             "src/fs/save.c": 1,
             "src/level-generation/level-generation-connectivity.c": 1,
@@ -630,6 +650,7 @@
             "src/monster/monster2.c": 1,
             "src/object/object-randart.c": 1,
             "src/object/object-use.c": 1,
+            "src/runtime/runtime-dungeon.c": 1,
             "src/runtime/runtime-game.c": 1,
             "src/score/score_ui.c": 1,
             "src/sdl-main-internal.h": 1,
@@ -646,12 +667,10 @@
         },
         "root_src_c_files": {
           "label": "root-level src/*.c files",
-          "files": 20,
-          "value": 20,
+          "files": 18,
+          "value": 18,
           "notes": "Tracks root implementation file count to ensure the root source bucket stops growing.",
           "file_matches": {
-            "src/cJSON.c": 1,
-            "src/dungeon.c": 1,
             "src/main-sdl.c": 1,
             "src/main.c": 1,
             "src/pane.c": 1,

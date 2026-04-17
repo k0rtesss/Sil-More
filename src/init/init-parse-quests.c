@@ -401,18 +401,19 @@ errr parse_quest_info(char* buf, header* head)
     /* Process 'A' for "Ability reward" */
     else if (buf[0] == 'A')
     {
-        int ability_type, ability_id;
+        int reward_ability_type, reward_ability_id;
 
         /* There better be a current quest_ptr */
         if (!quest_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
         /* Scan for the values */
-        if (2 != sscanf(buf + 2, "%d:%d", &ability_type, &ability_id))
+        if (2 != sscanf(buf + 2, "%d:%d", &reward_ability_type,
+                &reward_ability_id))
             return (PARSE_ERROR_GENERIC);
 
         /* Save the values in the new ability fields */
-        quest_ptr->ability_type = ability_type;
-        quest_ptr->ability_id = ability_id;
+        quest_ptr->ability_type = reward_ability_type;
+        quest_ptr->ability_id = reward_ability_id;
     }
 
     /* Process 'D' for "Description" */

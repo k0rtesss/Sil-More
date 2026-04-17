@@ -571,11 +571,12 @@ static void move_player(int dir)
                     app_command_clear_pending();
                     platform_frame_flush_events();
 
-                    cptr prompt = "Step into the chasm? ";
+                    cptr chasm_prompt = "Step into the chasm? ";
                     if (p_ptr->depth >= MORGOTH_DEPTH)
-                        prompt = "Step into the chasm? You will surely die. ";
+                        chasm_prompt
+                            = "Step into the chasm? You will surely die. ";
 
-                    if (!get_check(prompt))
+                    if (!get_check(chasm_prompt))
                     {
                         // don't take a turn...
                         p_ptr->energy_use = 0;

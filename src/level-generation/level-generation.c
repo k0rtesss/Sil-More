@@ -296,9 +296,10 @@ static bool cave_gen(void)
     log_trace("cave_gen: before guaranteed forge handling");
     if (is_guaranteed_forge_level)
     {
-        int y = rand_range(5, p_ptr->cur_map_hgt - 5);
-        int x = rand_range(5, p_ptr->cur_map_wid - 5);
-        log_trace("cave_gen: attempting guaranteed forge at (%d,%d)", y, x);
+        int forge_y = rand_range(5, p_ptr->cur_map_hgt - 5);
+        int forge_x = rand_range(5, p_ptr->cur_map_wid - 5);
+        log_trace("cave_gen: attempting guaranteed forge at (%d,%d)", forge_y,
+            forge_x);
 
         if (cheat_room)
             msg_format("Trying to force a forge:");
@@ -306,7 +307,7 @@ static bool cave_gen(void)
         p_ptr->fixed_forge_count++;
         log_trace("cave_gen: force_forge=true, fixed_forge_count=%d", p_ptr->fixed_forge_count);
 
-        if (!build_type6(y, x, true))
+        if (!build_type6(forge_y, forge_x, true))
         {
             if (cheat_room)
                 msg_format("failed.");
@@ -800,22 +801,27 @@ static bool cave_gen(void)
                     log_trace("Varda spawn: Primary sunlight tile rejected, scanning for fallback");
 
                     int access[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
-                    for (int y = 0; y < p_ptr->cur_map_hgt; y++)
+                    for (int scan_y = 0; scan_y < p_ptr->cur_map_hgt; scan_y++)
                     {
-                        for (int x = 0; x < p_ptr->cur_map_wid; x++)
+                        for (int scan_x = 0; scan_x < p_ptr->cur_map_wid;
+                             scan_x++)
                         {
-                            access[y][x] = false;
+                            access[scan_y][scan_x] = false;
                         }
                     }
                     flood_access(p_ptr->py, p_ptr->px, access, false);
 
-                    for (int y = 1; y < p_ptr->cur_map_hgt - 1 && !varda_spawned; y++) {
-                        for (int x = 1; x < p_ptr->cur_map_wid - 1 && !varda_spawned; x++) {
-                            if (!varda_sunlight_tile_ok(y, x, true)) continue;
-                            if (!varda_no_rubble_path_tile_ok(y, x, access)) continue;
-                            if (place_monster_one(y, x, R_IDX_VARDA, true, true, NULL)) {
-                                try_y = y;
-                                try_x = x;
+                    for (int scan_y = 1;
+                         scan_y < p_ptr->cur_map_hgt - 1 && !varda_spawned;
+                         scan_y++) {
+                        for (int scan_x = 1;
+                             scan_x < p_ptr->cur_map_wid - 1 && !varda_spawned;
+                             scan_x++) {
+                            if (!varda_sunlight_tile_ok(scan_y, scan_x, true)) continue;
+                            if (!varda_no_rubble_path_tile_ok(scan_y, scan_x, access)) continue;
+                            if (place_monster_one(scan_y, scan_x, R_IDX_VARDA, true, true, NULL)) {
+                                try_y = scan_y;
+                                try_x = scan_x;
                                 varda_spawned = true;
                             }
                         }
@@ -1417,7 +1423,7 @@ static bool spawn_niena_morgoth_hall(void)
  *
  * "You can't unring a bell." -- Tom Waits
  */
-void unring_a_bell(void)
+static void unring_a_bell(void)
 {
     object_type* o_ptr;
     int y, x, i;

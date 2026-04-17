@@ -633,16 +633,17 @@ errr parse_c_info(char* buf, header* head)
     /* Process 'N' for "New/Number/Name" */
     if (buf[0] == 'N')
     {
-        char *s;
-        int   idx, j;
+        char* name_text;
+        int idx;
+        int slot;
 
         /* Find the colon before the name */
-        s = strchr(buf + 2, ':');
-        if (!s) return (PARSE_ERROR_GENERIC);
+        name_text = strchr(buf + 2, ':');
+        if (!name_text) return (PARSE_ERROR_GENERIC);
 
         /* Split and advance to the name text */
-        *s++ = '\0';
-        if (!*s) return (PARSE_ERROR_GENERIC);
+        *name_text++ = '\0';
+        if (!*name_text) return (PARSE_ERROR_GENERIC);
 
         /* Parse the index */
         idx = atoi(buf + 2);
@@ -660,7 +661,7 @@ errr parse_c_info(char* buf, header* head)
         ph_ptr->power = 1;
 
         /* Store the name offset */
-        if (!(ph_ptr->name = add_name(head, s)))
+        if (!(ph_ptr->name = add_name(head, name_text)))
             return (PARSE_ERROR_OUT_OF_MEMORY);
 
         /* Debug: announce new character and its name */
@@ -668,20 +669,20 @@ errr parse_c_info(char* buf, header* head)
                 head->name_ptr + ph_ptr->name);
 
         /* Sentinel‐initialize all ability slots to "empty" */
-        for (j = 0; j < CHARACTER_ABILITY_MAX; j++)
+        for (slot = 0; slot < CHARACTER_ABILITY_MAX; slot++)
         {
-            ph_ptr->a_adj[j][0] = -1;
-            ph_ptr->a_adj[j][1] = -1;
+            ph_ptr->a_adj[slot][0] = -1;
+            ph_ptr->a_adj[slot][1] = -1;
         }
         log_trace("  a_adj slots 0..%d set to -1", CHARACTER_ABILITY_MAX - 1);
 
         /* Initialize starting items array */
-        for (j = 0; j < MAX_START_ITEMS; j++)
+        for (slot = 0; slot < MAX_START_ITEMS; slot++)
         {
-            ph_ptr->start_items[j].tval = 0;
-            ph_ptr->start_items[j].sval = 0;
-            ph_ptr->start_items[j].min = 0;
-            ph_ptr->start_items[j].max = 0;
+            ph_ptr->start_items[slot].tval = 0;
+            ph_ptr->start_items[slot].sval = 0;
+            ph_ptr->start_items[slot].min = 0;
+            ph_ptr->start_items[slot].max = 0;
         }
         log_debug("  start_items array initialized");
     }
@@ -894,9 +895,10 @@ errr parse_c_info(char* buf, header* head)
     /* Process 'C' for character ability entries */
     else if (buf[0] == 'C')
     {
-        char *t = buf + 2; /* Skip 'C:' */
-        int   pair = 0;
-        char *stat_start, *ability_start;
+        char* cursor = buf + 2; /* Skip 'C:' */
+        int pair = 0;
+        char* stat_start;
+        char* ability_start;
 
         if (!ph_ptr) return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
@@ -905,24 +907,24 @@ errr parse_c_info(char* buf, header* head)
                 head->name_ptr + ph_ptr->name, buf);
 
         /* Read up to CHARACTER_ABILITY_MAX of ":stat:ability" pairs */
-        while (pair < CHARACTER_ABILITY_MAX && t && *t)
+        while (pair < CHARACTER_ABILITY_MAX && cursor && *cursor)
         {
             /* Find first colon for stat */
-            if (*t == ':') t++; /* Skip leading colon if present */
-            stat_start = t;
+            if (*cursor == ':') cursor++; /* Skip leading colon if present */
+            stat_start = cursor;
             
-            t = strchr(t, ':');
-            if (!t) break;
-            *t++ = '\0';
+            cursor = strchr(cursor, ':');
+            if (!cursor) break;
+            *cursor++ = '\0';
             
             if (!*stat_start) break; /* Empty stat */
             ph_ptr->a_adj[pair][0] = (s16b)atoi(stat_start);
 
             /* Find second colon for ability */
-            ability_start = t;
-            t = strchr(t, ':');
-            if (t) {
-                *t++ = '\0';
+            ability_start = cursor;
+            cursor = strchr(cursor, ':');
+            if (cursor) {
+                *cursor++ = '\0';
             }
             
             if (!*ability_start) break; /* Empty ability */
@@ -936,7 +938,7 @@ errr parse_c_info(char* buf, header* head)
             pair++;
             
             /* If no more colons, we're done */
-            if (!t) break;
+            if (!cursor) break;
         }
 
         log_debug("  total %d ability pairs parsed", pair);

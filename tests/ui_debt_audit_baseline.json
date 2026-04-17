@@ -35,9 +35,9 @@
       "notes": "Slice-0 guardrail for the legacy movement input stack that the movement rewrite is expected to delete.",
       "scope": [
         "src/externs.h",
-        "src/util-input.c",
-        "src/dungeon.c",
-        "src/targeting.c",
+        "src/support/input.c",
+        "src/runtime/runtime-dungeon.c",
+        "src/ui/targeting.c",
         "src/main-sdl.c",
         "src/sdl-main-internal.h",
         "src/cmd/movement/cmd-movement.c",

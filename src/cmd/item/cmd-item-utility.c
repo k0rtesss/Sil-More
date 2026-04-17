@@ -116,7 +116,7 @@ static void do_cmd_observe_enhanced(void)
 /*
  * Helper function which actually removes the inscription
  */
-void uninscribe(object_type* o_ptr)
+static void uninscribe(object_type* o_ptr)
 {
     /* Remove the inscription */
     o_ptr->obj_note = 0;

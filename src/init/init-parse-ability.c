@@ -81,24 +81,25 @@ errr parse_b_info(char* buf, header* head)
     /* Process 'P' for "Prerequisites" (one line only) */
     else if (buf[0] == 'P')
     {
-        int i;
+        int prereq_idx;
 
         /* There better be a current b_ptr */
         if (!b_ptr)
             return (PARSE_ERROR_MISSING_RECORD_HEADER);
 
         /* XXX Simply read each number following a colon */
-        for (i = 0, s = buf + 1; s && (s[0] == ':') && s[1]; ++i)
+        for (prereq_idx = 0, s = buf + 1; s && (s[0] == ':') && s[1];
+             ++prereq_idx)
         {
             /* Sanity check */
-            if (i > 3)
+            if (prereq_idx > 3)
                 return (PARSE_ERROR_TOO_MANY_ALLOCATIONS);
 
             /* Default abilitynum */
-            b_ptr->prereq_abilitynum[i] = 0;
+            b_ptr->prereq_abilitynum[prereq_idx] = 0;
 
             /* Store the skilltype */
-            b_ptr->prereq_skilltype[i] = atoi(s + 1);
+            b_ptr->prereq_skilltype[prereq_idx] = atoi(s + 1);
 
             /* List this prerequisite */
             b_ptr->prereqs++;
@@ -114,7 +115,7 @@ errr parse_b_info(char* buf, header* head)
             {
                 int prereq_abilitynum = atoi(t + 1);
                 if (prereq_abilitynum > 0)
-                    b_ptr->prereq_abilitynum[i] = prereq_abilitynum;
+                    b_ptr->prereq_abilitynum[prereq_idx] = prereq_abilitynum;
             }
         }
     }

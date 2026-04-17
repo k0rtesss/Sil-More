@@ -1572,10 +1572,10 @@ void drop_system_init(void)
     /* Ego prefix+suffix combos */
     for (int p_idx = 1; p_idx < z_info->e_max; p_idx++)
     {
-        ego_item_type* p_ptr = &e_info[p_idx];
-        if (!p_ptr->tval[0])
+        ego_item_type* prefix_ptr = &e_info[p_idx];
+        if (!prefix_ptr->tval[0])
             continue;
-        if (!ego_name_is_prefix(e_name + p_ptr->name))
+        if (!ego_name_is_prefix(e_name + prefix_ptr->name))
             continue;
 
         for (int s_idx = 1; s_idx < z_info->e_max; s_idx++)

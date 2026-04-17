@@ -1083,21 +1083,22 @@ static bool is_aoe_attack_type(int attack_type)
  */
 void apply_oath_breaking_curse(int oath_id)
 {
-    cptr oath_name;
+    cptr broken_oath_name;
     
     if (oath_id < 1 || !z_info || oath_id >= z_info->oath_max) return;
     
     /* Get oath name for logging - use static fallback names to avoid dangling pointer */
     static const char* fallback_oath_names[] = {"", "Mercy", "Silence", "Iron", "Smith", "Valorous", "Light"};
     if (oath_id <= z_info->oath_max && oath_info[oath_id].name) {
-        oath_name = oath_name_text + oath_info[oath_id].name;
+        broken_oath_name = oath_name_text + oath_info[oath_id].name;
     } else if (oath_id < 7) {
-        oath_name = fallback_oath_names[oath_id];
+        broken_oath_name = fallback_oath_names[oath_id];
     } else {
-        oath_name = "Unknown";
+        broken_oath_name = "Unknown";
     }
     
-    log_trace("Applying oath breaking consequences for oath %d (%s)", oath_id, oath_name);
+    log_trace("Applying oath breaking consequences for oath %d (%s)", oath_id,
+        broken_oath_name);
     
     /* Disable the corresponding special ability */
     if (oath_id == OATH_MERCY) {
@@ -1535,13 +1536,14 @@ void py_attack_aux(int y, int x, int attack_type)
 
         if (hit_result <= 0 && (f3 & TR3_ACCURATE))
         {
-            char m_name[80];
-            monster_desc(m_name, sizeof(m_name), m_ptr, 0x00);
+            char accurate_m_name[80];
+            monster_desc(accurate_m_name, sizeof(accurate_m_name), m_ptr, 0x00);
 
             hit_result = hit_roll(
                 total_attack_mod, total_evasion_mod, PLAYER, m_ptr, true);
             if (hit_result > 0)
-                msg_format("%^s tries and fails to dodge your blow.", m_name);
+                msg_format("%^s tries and fails to dodge your blow.",
+                    accurate_m_name);
         }
 
         /* If the attack connects... */
@@ -1989,7 +1991,7 @@ static int count_open_adjacent_squares(int y, int x)
     return max_continuous;
 }
 
-bool whirlwind_possible(void)
+static bool whirlwind_possible(void)
 {
     if (!p_ptr->active_ability[S_MEL][MEL_WHIRLWIND_ATTACK])
     {
@@ -1999,7 +2001,7 @@ bool whirlwind_possible(void)
     return (true);
 }
 
-bool can_impale()
+static bool can_impale(void)
 {
     bool has_impale_skill = p_ptr->active_ability[S_MEL][MEL_IMPALE];
 

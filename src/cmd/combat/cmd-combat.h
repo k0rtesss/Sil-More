@@ -38,6 +38,7 @@ void py_attack_aux(int y, int x, int attack_type);
 void hit_trap(int y, int x);
 void py_attack(int y, int x, int attack_type);
 void flanking_or_retreat(int y, int x);
+void apply_oath_breaking_curse(int oath_id);
 
 int skill_check(
     monster_type* m_ptr1, int skill, int difficulty, monster_type* m_ptr2);

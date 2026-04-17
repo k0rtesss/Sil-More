@@ -1336,15 +1336,15 @@ void map_info(int y, int x, byte* ap, char* cp, byte* tap, char* tcp)
         /* Memorized (or seen) floor */
         if ((info & (CAVE_MARK)) || (info & (CAVE_SEEN)))
         {
-            int feat = FEAT_FLOOR;
+            int floor_feat = FEAT_FLOOR;
 
             if (rage_active && !graphics_are_ascii())
             {
-                feat = FEAT_RAGE_FLOOR;
+                floor_feat = FEAT_RAGE_FLOOR;
             }
 
             /* Get the floor feature */
-            f_ptr = &f_info[feat];
+            f_ptr = &f_info[floor_feat];
 
             /* Normal attr */
             a = feature_visual_attr(f_ptr);
@@ -2780,7 +2780,7 @@ void forget_view(void)
     view_n = fast_view_n;
 }
 
-bool same_side_of_wall_as_player(int y, int x, int fy, int fx)
+static bool same_side_of_wall_as_player(int y, int x, int fy, int fx)
 {
     int py = p_ptr->py;
     int px = p_ptr->px;
@@ -3713,17 +3713,18 @@ void update_view(void)
         int dark_delta = curse_flag_delta_cur(CUR_LIGHTP);
         if (dark_delta)
         {
-            int i, g, y, x;
+            int view_i, view_grid, view_y, view_x;
 
             /* Iterate over the grids we just updated */
-            for (i = 0; i < view_n; i++)
+            for (view_i = 0; view_i < view_n; view_i++)
             {
-                g = view_g[i];            /* packed grid index      */
-                y = GRID_Y(g);            /* unpack coordinates     */
-                x = GRID_X(g);
+                view_grid = view_g[view_i];  /* packed grid index      */
+                view_y = GRID_Y(view_grid);  /* unpack coordinates     */
+                view_x = GRID_X(view_grid);
 
-                cave_light[y][x] -= dark_delta;
-                if (cave_light[y][x] < -5) cave_light[y][x] = -5;
+                cave_light[view_y][view_x] -= dark_delta;
+                if (cave_light[view_y][view_x] < -5)
+                    cave_light[view_y][view_x] = -5;
             }
         }
     }

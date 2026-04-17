@@ -28,9 +28,9 @@ TERMINAL_MODEL_SCOPE = ("src/**/*.c", "src/**/*.h")
 TERMINAL_KERNEL_SCOPE = ("src/**/*.c", "src/**/*.h")
 MOVEMENT_INPUT_SCOPE = (
     "src/externs.h",
-    "src/util-input.c",
-    "src/dungeon.c",
-    "src/targeting.c",
+    "src/support/input.c",
+    "src/runtime/runtime-dungeon.c",
+    "src/ui/targeting.c",
     "src/main-sdl.c",
     "src/sdl-main-internal.h",
     "src/cmd/movement/cmd-movement.c",
@@ -66,8 +66,8 @@ UI0_METRICS = (
         key="inkey_calls",
         label="inkey() call sites",
         pattern=re.compile(r"\binkey\s*\("),
-        exclude_paths=("src/externs.h", "src/util-input.c"),
-        notes="Excludes the declaration in externs.h and the legacy implementation in util-input.c.",
+        exclude_paths=("src/externs.h", "src/support/input.c"),
+        notes="Excludes the declaration in externs.h and the legacy implementation in support/input.c.",
     ),
     MetricSpec(
         key="screen_overlay_calls",
@@ -103,14 +103,18 @@ MOVEMENT_INPUT_METRICS = (
         key="movement_inkey_waits",
         label="movement direction char fallbacks",
         pattern=re.compile(r"\btarget_dir\s*\(\s*ch\s*\)"),
-        include_paths=("src/targeting.c",),
+        include_paths=("src/ui/targeting.c",),
         notes="Tracks remaining character-to-direction fallback in get_aim_dir()/get_rep_dir() after semantic movement input is wired on the SDL path.",
     ),
     MetricSpec(
         key="movement_request_command_ownership",
         label="movement request_command() ownership",
         pattern=re.compile(r"\brequest_command\s*\("),
-        include_paths=("src/externs.h", "src/util-input.c", "src/dungeon.c"),
+        include_paths=(
+            "src/externs.h",
+            "src/support/input.c",
+            "src/runtime/runtime-dungeon.c",
+        ),
         notes="Tracks the legacy command acquisition loop that still owns top-level movement input.",
     ),
     MetricSpec(
@@ -118,7 +122,7 @@ MOVEMENT_INPUT_METRICS = (
         label="movement-related flush() usage",
         pattern=re.compile(r"\bflush\s*\("),
         include_paths=(
-            "src/dungeon.c",
+            "src/runtime/runtime-dungeon.c",
             "src/cmd/movement/cmd-movement.c",
             "src/cmd/world/cmd-interact.c",
         ),

@@ -181,7 +181,7 @@ extern void do_cmd_play_instrument(
     object_type* default_o_ptr, int default_item);
 extern void do_cmd_activate(void);
 
-/* dungeon.c */
+/* runtime-dungeon.c */
 extern bool can_be_pseudo_ided(const object_type* o_ptr);
 extern int value_check_aux1(const object_type* o_ptr);
 extern void land(void);

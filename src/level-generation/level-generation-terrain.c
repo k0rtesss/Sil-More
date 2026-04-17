@@ -54,7 +54,7 @@ void basic_granite(void)
     }
 }
 
-void make_patch_of_sunlight(int y, int x)
+static void make_patch_of_sunlight(int y, int x)
 {
     int m, n, floor;
 

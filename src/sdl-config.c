@@ -617,26 +617,26 @@ static bool sdl_config_movement_binding_equals(
         && left->trigger_aux == right->trigger_aux;
 }
 
-static bool sdl_config_movement_append_binding(struct sdl_config* config,
+static bool sdl_config_movement_append_binding(struct sdl_config* cfg,
     const app_movement_binding* binding)
 {
     u16b i;
 
-    if (!config || !binding || !app_movement_binding_is_valid(binding))
+    if (!cfg || !binding || !app_movement_binding_is_valid(binding))
         return false;
-    if (config->movement_binding_count >= SDL_MOVEMENT_BINDING_MAX)
+    if (cfg->movement_binding_count >= SDL_MOVEMENT_BINDING_MAX)
         return false;
 
-    for (i = 0; i < config->movement_binding_count; i++)
+    for (i = 0; i < cfg->movement_binding_count; i++)
     {
-        if (sdl_config_movement_binding_equals(&config->movement_bindings[i],
+        if (sdl_config_movement_binding_equals(&cfg->movement_bindings[i],
                 binding))
         {
             return true;
         }
     }
 
-    config->movement_bindings[config->movement_binding_count++] = *binding;
+    cfg->movement_bindings[cfg->movement_binding_count++] = *binding;
     return true;
 }
 
@@ -655,21 +655,21 @@ static void sdl_config_init_keyboard_binding(app_movement_binding* binding,
     binding->trigger = (u32b)scancode;
 }
 
-static bool sdl_config_add_keyboard_binding(struct sdl_config* config,
+static bool sdl_config_add_keyboard_binding(struct sdl_config* cfg,
     u16b action, u16b direction, SDL_Scancode scancode, u16b required_modifiers,
     u16b forbidden_modifiers)
 {
     app_movement_binding binding;
 
-    if (!config || scancode == SDL_SCANCODE_UNKNOWN)
+    if (!cfg || scancode == SDL_SCANCODE_UNKNOWN)
         return false;
 
     sdl_config_init_keyboard_binding(&binding, action, direction, scancode,
         required_modifiers, forbidden_modifiers);
-    return sdl_config_movement_append_binding(config, &binding);
+    return sdl_config_movement_append_binding(cfg, &binding);
 }
 
-static void sdl_config_add_directional_preset_set(struct sdl_config* config,
+static void sdl_config_add_directional_preset_set(struct sdl_config* cfg,
     const SDL_Scancode* primary_scancodes)
 {
     static const SDL_Scancode keypad_scancodes[] = {
@@ -690,28 +690,28 @@ static void sdl_config_add_directional_preset_set(struct sdl_config* config,
     {
         u16b direction = movement_direction_order[i];
 
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_MOVE_DIR, direction, primary_scancodes[i], 0,
             plain_forbidden);
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_MOVE_DIR, direction, keypad_scancodes[i], 0,
             plain_forbidden);
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_RUN_DIR, direction, primary_scancodes[i],
             APP_INPUT_MODIFIER_SHIFT, shift_forbidden);
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_RUN_DIR, direction, keypad_scancodes[i],
             APP_INPUT_MODIFIER_SHIFT, shift_forbidden);
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_INTERACT_DIR, direction, primary_scancodes[i],
             APP_INPUT_MODIFIER_CTRL, ctrl_forbidden);
-        (void)sdl_config_add_keyboard_binding(config,
+        (void)sdl_config_add_keyboard_binding(cfg,
             APP_MOVEMENT_ACTION_INTERACT_DIR, direction, keypad_scancodes[i],
             APP_INPUT_MODIFIER_CTRL, ctrl_forbidden);
     }
 }
 
-static void sdl_config_add_wait_rest_bindings(struct sdl_config* config,
+static void sdl_config_add_wait_rest_bindings(struct sdl_config* cfg,
     SDL_Scancode wait_primary, SDL_Scancode rest_primary,
     SDL_Scancode wait_secondary, SDL_Scancode rest_secondary)
 {
@@ -721,30 +721,30 @@ static void sdl_config_add_wait_rest_bindings(struct sdl_config* config,
     const u16b shift_forbidden = APP_INPUT_MODIFIER_CTRL
         | APP_INPUT_MODIFIER_ALT | APP_INPUT_MODIFIER_META;
 
-    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_WAIT,
+    (void)sdl_config_add_keyboard_binding(cfg, APP_MOVEMENT_ACTION_WAIT,
         APP_MOVEMENT_DIRECTION_NONE, wait_primary, 0, plain_forbidden);
-    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_WAIT,
+    (void)sdl_config_add_keyboard_binding(cfg, APP_MOVEMENT_ACTION_WAIT,
         APP_MOVEMENT_DIRECTION_NONE, wait_secondary, 0, plain_forbidden);
-    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_REST,
+    (void)sdl_config_add_keyboard_binding(cfg, APP_MOVEMENT_ACTION_REST,
         APP_MOVEMENT_DIRECTION_NONE, rest_primary, APP_INPUT_MODIFIER_SHIFT,
         shift_forbidden);
-    (void)sdl_config_add_keyboard_binding(config, APP_MOVEMENT_ACTION_REST,
+    (void)sdl_config_add_keyboard_binding(cfg, APP_MOVEMENT_ACTION_REST,
         APP_MOVEMENT_DIRECTION_NONE, rest_secondary, APP_INPUT_MODIFIER_SHIFT,
         shift_forbidden);
 }
 
-void sdl_config_clear_movement_bindings(struct sdl_config* config)
+void sdl_config_clear_movement_bindings(struct sdl_config* cfg)
 {
-    if (!config)
+    if (!cfg)
         return;
 
-    config->movement_keyboard_present = false;
-    config->movement_keyboard_preset = APP_MOVEMENT_PRESET_NONE;
-    config->movement_binding_count = 0;
-    memset(config->movement_bindings, 0, sizeof(config->movement_bindings));
+    cfg->movement_keyboard_present = false;
+    cfg->movement_keyboard_preset = APP_MOVEMENT_PRESET_NONE;
+    cfg->movement_binding_count = 0;
+    memset(cfg->movement_bindings, 0, sizeof(cfg->movement_bindings));
 }
 
-void sdl_config_set_default_movement_bindings(struct sdl_config* config,
+void sdl_config_set_default_movement_bindings(struct sdl_config* cfg,
     u16b preset_id)
 {
     static const SDL_Scancode classic_scancodes[] = {
@@ -769,7 +769,7 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* config,
     };
     const SDL_Scancode* directional_scancodes = classic_scancodes;
 
-    if (!config)
+    if (!cfg)
         return;
 
     switch (preset_id)
@@ -790,10 +790,10 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* config,
         break;
     }
 
-    sdl_config_clear_movement_bindings(config);
-    config->movement_keyboard_present = true;
-    config->movement_keyboard_preset = preset_id;
-    sdl_config_add_directional_preset_set(config, directional_scancodes);
+    sdl_config_clear_movement_bindings(cfg);
+    cfg->movement_keyboard_present = true;
+    cfg->movement_keyboard_preset = preset_id;
+    sdl_config_add_directional_preset_set(cfg, directional_scancodes);
 
     if (preset_id == APP_MOVEMENT_PRESET_CLASSIC_SIL)
     {
@@ -802,24 +802,24 @@ void sdl_config_set_default_movement_bindings(struct sdl_config* config,
          * but accept the navigation-cluster scancodes too so running and
          * directed interact continue to work in deployment builds.
          */
-        sdl_config_add_directional_preset_set(config, arrows_scancodes);
-        sdl_config_add_wait_rest_bindings(config, SDL_SCANCODE_KP_5,
+        sdl_config_add_directional_preset_set(cfg, arrows_scancodes);
+        sdl_config_add_wait_rest_bindings(cfg, SDL_SCANCODE_KP_5,
             SDL_SCANCODE_KP_5, SDL_SCANCODE_Z, SDL_SCANCODE_Z);
     }
     else
     {
-        sdl_config_add_wait_rest_bindings(config, SDL_SCANCODE_PERIOD,
+        sdl_config_add_wait_rest_bindings(cfg, SDL_SCANCODE_PERIOD,
             SDL_SCANCODE_PERIOD, SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_5);
     }
 }
 
-bool sdl_config_has_movement_bindings(const struct sdl_config* config)
+bool sdl_config_has_movement_bindings(const struct sdl_config* cfg)
 {
-    return config && config->movement_binding_count > 0;
+    return cfg && cfg->movement_binding_count > 0;
 }
 
 static void sdl_config_load_movement_bindings(cJSON* root,
-    struct sdl_config* config)
+    struct sdl_config* cfg)
 {
     cJSON* movement;
     cJSON* preset;
@@ -827,20 +827,20 @@ static void sdl_config_load_movement_bindings(cJSON* root,
     int binding_count;
     int i;
 
-    if (!root || !config)
+    if (!root || !cfg)
         return;
 
     movement = cJSON_GetObjectItemCaseSensitive(root, "movement");
     if (!cJSON_IsObject(movement))
         return;
 
-    config->movement_keyboard_present = true;
+    cfg->movement_keyboard_present = true;
 
     preset = cJSON_GetObjectItemCaseSensitive(movement, "keyboardPreset");
     if (cJSON_IsString(preset) && preset->valuestring)
     {
         (void)sdl_config_movement_preset_from_name(preset->valuestring,
-            &config->movement_keyboard_preset);
+            &cfg->movement_keyboard_preset);
     }
 
     bindings = cJSON_GetObjectItemCaseSensitive(movement, "keyboardBindings");
@@ -911,7 +911,7 @@ static void sdl_config_load_movement_bindings(cJSON* root,
         if (cJSON_IsNumber(forbidden_item) && forbidden_item->valueint >= 0)
             binding.forbidden_modifiers = (u16b)forbidden_item->valueint;
 
-        if (!sdl_config_movement_append_binding(config, &binding))
+        if (!sdl_config_movement_append_binding(cfg, &binding))
         {
             log_warn("Skipping invalid or duplicate movement binding at JSON index %d",
                 i);
@@ -920,16 +920,16 @@ static void sdl_config_load_movement_bindings(cJSON* root,
 }
 
 static void sdl_config_save_movement_bindings(cJSON* root,
-    const struct sdl_config* config)
+    const struct sdl_config* cfg)
 {
     cJSON* movement;
     cJSON* bindings;
     u16b i;
 
-    if (!root || !config)
+    if (!root || !cfg)
         return;
-    if (!config->movement_keyboard_present && config->movement_binding_count == 0
-        && config->movement_keyboard_preset == APP_MOVEMENT_PRESET_NONE)
+    if (!cfg->movement_keyboard_present && cfg->movement_binding_count == 0
+        && cfg->movement_keyboard_preset == APP_MOVEMENT_PRESET_NONE)
     {
         return;
     }
@@ -940,14 +940,14 @@ static void sdl_config_save_movement_bindings(cJSON* root,
 
     cJSON_AddNumberToObject(movement, "version", APP_MOVEMENT_FORMAT_VERSION);
     cJSON_AddStringToObject(movement, "keyboardPreset",
-        sdl_config_movement_preset_name(config->movement_keyboard_preset));
+        sdl_config_movement_preset_name(cfg->movement_keyboard_preset));
 
     bindings = cJSON_CreateArray();
     if (bindings)
     {
-        for (i = 0; i < config->movement_binding_count; i++)
+        for (i = 0; i < cfg->movement_binding_count; i++)
         {
-            const app_movement_binding* binding = &config->movement_bindings[i];
+            const app_movement_binding* binding = &cfg->movement_bindings[i];
             cJSON* item;
 
             if (!app_movement_binding_is_valid(binding))
@@ -1275,7 +1275,7 @@ static cJSON* sdl_config_create_string_array(const char src[][SDL_TOUCH_PANE_LAB
     return array;
 }
 
-void sdl_config_load(const char* filename, struct sdl_config* config, 
+void sdl_config_load(const char* filename, struct sdl_config* cfg, 
                      struct pane_config* pane_configs, int* pane_count, int max_panes)
 {
     log_info("Loading SDL configuration from: %s", filename);
@@ -1311,217 +1311,217 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "mainViewScale");
         if (cJSON_IsNumber(item)) {
-            config->main_view_scale = item->valueint;
-            log_debug("Loaded mainViewScale: %d", config->main_view_scale);
+            cfg->main_view_scale = item->valueint;
+            log_debug("Loaded mainViewScale: %d", cfg->main_view_scale);
         } else {
             log_warn("mainViewScale not found or not a number");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "auxViewFontSize");
         if (cJSON_IsNumber(item)) {
-            config->aux_view_font_size = item->valueint;
-            log_debug("Loaded auxViewFontSize: %d", config->aux_view_font_size);
+            cfg->aux_view_font_size = item->valueint;
+            log_debug("Loaded auxViewFontSize: %d", cfg->aux_view_font_size);
         } else {
             log_warn("auxViewFontSize not found or not a number");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "menuPanelFontSize");
         if (cJSON_IsNumber(item)) {
-            config->menu_panel_font_size = item->valueint;
+            cfg->menu_panel_font_size = item->valueint;
             log_debug("Loaded menuPanelFontSize: %d",
-                config->menu_panel_font_size);
+                cfg->menu_panel_font_size);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "margin");
         if (cJSON_IsNumber(item)) {
-            config->margin = item->valueint;
-            log_debug("Loaded margin: %d", config->margin);
+            cfg->margin = item->valueint;
+            log_debug("Loaded margin: %d", cfg->margin);
         } else {
             log_warn("margin not found or not a number");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "fullscreen");
         if (cJSON_IsBool(item)) {
-            config->fullscreen = cJSON_IsTrue(item);
-            log_debug("Loaded fullscreen: %s", config->fullscreen ? "true" : "false");
+            cfg->fullscreen = cJSON_IsTrue(item);
+            log_debug("Loaded fullscreen: %s", cfg->fullscreen ? "true" : "false");
         } else {
             log_warn("fullscreen not found or not a boolean");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "tiles");
         if (cJSON_IsBool(item)) {
-            config->tiles = cJSON_IsTrue(item);
-            log_debug("Loaded tiles: %s", config->tiles ? "true" : "false");
+            cfg->tiles = cJSON_IsTrue(item);
+            log_debug("Loaded tiles: %s", cfg->tiles ? "true" : "false");
         } else {
             log_warn("tiles not found or not a boolean");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "palettePreset");
         if (cJSON_IsString(item) && item->valuestring && item->valuestring[0]) {
-            SDL_strlcpy(config->palette_preset, item->valuestring,
-                sizeof(config->palette_preset));
-            log_debug("Loaded palettePreset: %s", config->palette_preset);
+            SDL_strlcpy(cfg->palette_preset, item->valuestring,
+                sizeof(cfg->palette_preset));
+            log_debug("Loaded palettePreset: %s", cfg->palette_preset);
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "enableRightPanes");
         if (cJSON_IsBool(item)) {
-            config->enable_right_panes = cJSON_IsTrue(item);
-            log_debug("Loaded enableRightPanes: %s", config->enable_right_panes ? "true" : "false");
+            cfg->enable_right_panes = cJSON_IsTrue(item);
+            log_debug("Loaded enableRightPanes: %s", cfg->enable_right_panes ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "enableBottomPanes");
         if (cJSON_IsBool(item)) {
-            config->enable_bottom_panes = cJSON_IsTrue(item);
-            log_debug("Loaded enableBottomPanes: %s", config->enable_bottom_panes ? "true" : "false");
+            cfg->enable_bottom_panes = cJSON_IsTrue(item);
+            log_debug("Loaded enableBottomPanes: %s", cfg->enable_bottom_panes ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "hideLeftPanel");
         if (cJSON_IsBool(item)) {
-            config->hide_left_panel = cJSON_IsTrue(item);
-            log_debug("Loaded hideLeftPanel: %s", config->hide_left_panel ? "true" : "false");
+            cfg->hide_left_panel = cJSON_IsTrue(item);
+            log_debug("Loaded hideLeftPanel: %s", cfg->hide_left_panel ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(sdl, "minTerminalMode");
         if (cJSON_IsString(item)) {
-            config->min_terminal_mode = parse_min_terminal_mode(item->valuestring);
-            log_debug("Loaded minTerminalMode: %s", min_terminal_mode_to_string(config->min_terminal_mode));
+            cfg->min_terminal_mode = parse_min_terminal_mode(item->valuestring);
+            log_debug("Loaded minTerminalMode: %s", min_terminal_mode_to_string(cfg->min_terminal_mode));
         } else if (cJSON_IsNumber(item)) {
             if (item->valueint == SDL_MIN_TERMINAL_COMPACT)
-                config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
+                cfg->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
             else
-                config->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
-            log_debug("Loaded numeric minTerminalMode: %s", min_terminal_mode_to_string(config->min_terminal_mode));
+                cfg->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
+            log_debug("Loaded numeric minTerminalMode: %s", min_terminal_mode_to_string(cfg->min_terminal_mode));
         }
         
         // Window position and size for windowed mode
         item = cJSON_GetObjectItemCaseSensitive(sdl, "windowX");
         if (cJSON_IsNumber(item)) {
-            config->window_x = item->valueint;
-            log_debug("Loaded windowX: %d", config->window_x);
+            cfg->window_x = item->valueint;
+            log_debug("Loaded windowX: %d", cfg->window_x);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "windowY");
         if (cJSON_IsNumber(item)) {
-            config->window_y = item->valueint;
-            log_debug("Loaded windowY: %d", config->window_y);
+            cfg->window_y = item->valueint;
+            log_debug("Loaded windowY: %d", cfg->window_y);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "windowWidth");
         if (cJSON_IsNumber(item)) {
-            config->window_width = item->valueint;
-            log_debug("Loaded windowWidth: %d", config->window_width);
+            cfg->window_width = item->valueint;
+            log_debug("Loaded windowWidth: %d", cfg->window_width);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "windowHeight");
         if (cJSON_IsNumber(item)) {
-            config->window_height = item->valueint;
-            log_debug("Loaded windowHeight: %d", config->window_height);
+            cfg->window_height = item->valueint;
+            log_debug("Loaded windowHeight: %d", cfg->window_height);
         }
         
         // Custom fonts
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyFont");
         if (cJSON_IsString(item)) {
-            SDL_strlcpy(config->story_font, item->valuestring, sizeof(config->story_font));
-            log_debug("Loaded storyFont: %s", config->story_font);
+            SDL_strlcpy(cfg->story_font, item->valuestring, sizeof(cfg->story_font));
+            log_debug("Loaded storyFont: %s", cfg->story_font);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monospaceFont");
         if (cJSON_IsString(item)) {
-            SDL_strlcpy(config->monospace_font, item->valuestring, sizeof(config->monospace_font));
-            log_debug("Loaded monospaceFont: %s", config->monospace_font);
+            SDL_strlcpy(cfg->monospace_font, item->valuestring, sizeof(cfg->monospace_font));
+            log_debug("Loaded monospaceFont: %s", cfg->monospace_font);
         }
         
         // Monospace font rendering options (with backward compatibility)
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoBold");
         if (!cJSON_IsBool(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontBold");
         if (cJSON_IsBool(item)) {
-            config->mono_bold = cJSON_IsTrue(item);
-            log_debug("Loaded monoBold: %s", config->mono_bold ? "true" : "false");
+            cfg->mono_bold = cJSON_IsTrue(item);
+            log_debug("Loaded monoBold: %s", cfg->mono_bold ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoItalic");
         if (!cJSON_IsBool(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontItalic");
         if (cJSON_IsBool(item)) {
-            config->mono_italic = cJSON_IsTrue(item);
-            log_debug("Loaded monoItalic: %s", config->mono_italic ? "true" : "false");
+            cfg->mono_italic = cJSON_IsTrue(item);
+            log_debug("Loaded monoItalic: %s", cfg->mono_italic ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoUnderline");
         if (!cJSON_IsBool(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontUnderline");
         if (cJSON_IsBool(item)) {
-            config->mono_underline = cJSON_IsTrue(item);
-            log_debug("Loaded monoUnderline: %s", config->mono_underline ? "true" : "false");
+            cfg->mono_underline = cJSON_IsTrue(item);
+            log_debug("Loaded monoUnderline: %s", cfg->mono_underline ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoStrikethrough");
         if (!cJSON_IsBool(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontStrikethrough");
         if (cJSON_IsBool(item)) {
-            config->mono_strikethrough = cJSON_IsTrue(item);
-            log_debug("Loaded monoStrikethrough: %s", config->mono_strikethrough ? "true" : "false");
+            cfg->mono_strikethrough = cJSON_IsTrue(item);
+            log_debug("Loaded monoStrikethrough: %s", cfg->mono_strikethrough ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoHinting");
         if (!cJSON_IsNumber(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontHinting");
         if (cJSON_IsNumber(item)) {
-            config->mono_hinting = item->valueint;
-            log_debug("Loaded monoHinting: %d", config->mono_hinting);
+            cfg->mono_hinting = item->valueint;
+            log_debug("Loaded monoHinting: %d", cfg->mono_hinting);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoKerning");
         if (!cJSON_IsBool(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontKerning");
         if (cJSON_IsBool(item)) {
-            config->mono_kerning = cJSON_IsTrue(item);
-            log_debug("Loaded monoKerning: %s", config->mono_kerning ? "true" : "false");
+            cfg->mono_kerning = cJSON_IsTrue(item);
+            log_debug("Loaded monoKerning: %s", cfg->mono_kerning ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "monoOutline");
         if (!cJSON_IsNumber(item)) item = cJSON_GetObjectItemCaseSensitive(sdl, "fontOutline");
         if (cJSON_IsNumber(item)) {
-            config->mono_outline = item->valueint;
-            log_debug("Loaded monoOutline: %d", config->mono_outline);
+            cfg->mono_outline = item->valueint;
+            log_debug("Loaded monoOutline: %d", cfg->mono_outline);
         }
         
         // Story font rendering options
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyBold");
         if (cJSON_IsBool(item)) {
-            config->story_bold = cJSON_IsTrue(item);
-            log_debug("Loaded storyBold: %s", config->story_bold ? "true" : "false");
+            cfg->story_bold = cJSON_IsTrue(item);
+            log_debug("Loaded storyBold: %s", cfg->story_bold ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyItalic");
         if (cJSON_IsBool(item)) {
-            config->story_italic = cJSON_IsTrue(item);
-            log_debug("Loaded storyItalic: %s", config->story_italic ? "true" : "false");
+            cfg->story_italic = cJSON_IsTrue(item);
+            log_debug("Loaded storyItalic: %s", cfg->story_italic ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyUnderline");
         if (cJSON_IsBool(item)) {
-            config->story_underline = cJSON_IsTrue(item);
-            log_debug("Loaded storyUnderline: %s", config->story_underline ? "true" : "false");
+            cfg->story_underline = cJSON_IsTrue(item);
+            log_debug("Loaded storyUnderline: %s", cfg->story_underline ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyStrikethrough");
         if (cJSON_IsBool(item)) {
-            config->story_strikethrough = cJSON_IsTrue(item);
-            log_debug("Loaded storyStrikethrough: %s", config->story_strikethrough ? "true" : "false");
+            cfg->story_strikethrough = cJSON_IsTrue(item);
+            log_debug("Loaded storyStrikethrough: %s", cfg->story_strikethrough ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyHinting");
         if (cJSON_IsNumber(item)) {
-            config->story_hinting = item->valueint;
-            log_debug("Loaded storyHinting: %d", config->story_hinting);
+            cfg->story_hinting = item->valueint;
+            log_debug("Loaded storyHinting: %d", cfg->story_hinting);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyKerning");
         if (cJSON_IsBool(item)) {
-            config->story_kerning = cJSON_IsTrue(item);
-            log_debug("Loaded storyKerning: %s", config->story_kerning ? "true" : "false");
+            cfg->story_kerning = cJSON_IsTrue(item);
+            log_debug("Loaded storyKerning: %s", cfg->story_kerning ? "true" : "false");
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "storyOutline");
         if (cJSON_IsNumber(item)) {
-            config->story_outline = item->valueint;
-            log_debug("Loaded storyOutline: %d", config->story_outline);
+            cfg->story_outline = item->valueint;
+            log_debug("Loaded storyOutline: %d", cfg->story_outline);
         }
     } else {
         log_warn("'sdl' object not found in JSON");
@@ -1618,44 +1618,44 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "enabled");
         if (cJSON_IsBool(item)) {
-            config->gamepad_enabled = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.enabled: %s", config->gamepad_enabled ? "true" : "false");
+            cfg->gamepad_enabled = cJSON_IsTrue(item);
+            log_debug("Loaded gamepad.enabled: %s", cfg->gamepad_enabled ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "autoMode");
         if (cJSON_IsBool(item)) {
-            config->gamepad_auto_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.autoMode: %s", config->gamepad_auto_mode ? "true" : "false");
+            cfg->gamepad_auto_mode = cJSON_IsTrue(item);
+            log_debug("Loaded gamepad.autoMode: %s", cfg->gamepad_auto_mode ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "steamdeckMode");
         if (cJSON_IsBool(item)) {
-            config->steamdeck_mode = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.steamdeckMode: %s", config->steamdeck_mode ? "true" : "false");
+            cfg->steamdeck_mode = cJSON_IsTrue(item);
+            log_debug("Loaded gamepad.steamdeckMode: %s", cfg->steamdeck_mode ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useDpad");
         if (cJSON_IsBool(item)) {
-            config->gamepad_use_dpad = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.useDpad: %s", config->gamepad_use_dpad ? "true" : "false");
+            cfg->gamepad_use_dpad = cJSON_IsTrue(item);
+            log_debug("Loaded gamepad.useDpad: %s", cfg->gamepad_use_dpad ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "useLeftStick");
         if (cJSON_IsBool(item)) {
-            config->gamepad_use_left_stick = cJSON_IsTrue(item);
-            log_debug("Loaded gamepad.useLeftStick: %s", config->gamepad_use_left_stick ? "true" : "false");
+            cfg->gamepad_use_left_stick = cJSON_IsTrue(item);
+            log_debug("Loaded gamepad.useLeftStick: %s", cfg->gamepad_use_left_stick ? "true" : "false");
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "deadzone");
         if (cJSON_IsNumber(item)) {
-            config->gamepad_deadzone = item->valueint;
-            log_debug("Loaded gamepad.deadzone: %d", config->gamepad_deadzone);
+            cfg->gamepad_deadzone = item->valueint;
+            log_debug("Loaded gamepad.deadzone: %d", cfg->gamepad_deadzone);
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "triggerThreshold");
         if (cJSON_IsNumber(item)) {
-            config->gamepad_trigger_threshold = item->valueint;
-            log_debug("Loaded gamepad.triggerThreshold: %d", config->gamepad_trigger_threshold);
+            cfg->gamepad_trigger_threshold = item->valueint;
+            log_debug("Loaded gamepad.triggerThreshold: %d", cfg->gamepad_trigger_threshold);
         }
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "buttonBindings");
@@ -1664,7 +1664,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             for (int i = 0; i < GAMEPAD_BUTTON_COUNT && i < count; i++) {
                 cJSON* binding = cJSON_GetArrayItem(item, i);
                 if (cJSON_IsNumber(binding)) {
-                    config->gamepad_button_bindings[i] = binding->valueint;
+                    cfg->gamepad_button_bindings[i] = binding->valueint;
                 }
             }
             log_debug("Loaded gamepad.buttonBindings (%d entries)", count);
@@ -1676,7 +1676,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             for (int i = 0; i < GAMEPAD_TRIGGER_COUNT && i < count; i++) {
                 cJSON* binding = cJSON_GetArrayItem(item, i);
                 if (cJSON_IsNumber(binding)) {
-                    config->gamepad_trigger_bindings[i] = binding->valueint;
+                    cfg->gamepad_trigger_bindings[i] = binding->valueint;
                 }
             }
             log_debug("Loaded gamepad.triggerBindings (%d entries)", count);
@@ -1688,7 +1688,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT && i < count; i++) {
                 cJSON* binding = cJSON_GetArrayItem(item, i);
                 if (cJSON_IsNumber(binding)) {
-                    config->gamepad_left_stick_bindings[i] = binding->valueint;
+                    cfg->gamepad_left_stick_bindings[i] = binding->valueint;
                 }
             }
             log_debug("Loaded gamepad.leftStickBindings (%d entries)", count);
@@ -1700,7 +1700,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
             for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT && i < count; i++) {
                 cJSON* binding = cJSON_GetArrayItem(item, i);
                 if (cJSON_IsNumber(binding)) {
-                    config->gamepad_right_stick_bindings[i] = binding->valueint;
+                    cfg->gamepad_right_stick_bindings[i] = binding->valueint;
                 }
             }
             log_debug("Loaded gamepad.rightStickBindings (%d entries)", count);
@@ -1708,20 +1708,20 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
 
         item = cJSON_GetObjectItemCaseSensitive(gamepad, "shoulderComboBinding");
         if (cJSON_IsNumber(item)) {
-            config->gamepad_shoulder_combo_binding = item->valueint;
-            log_debug("Loaded gamepad.shoulderComboBinding: %d", config->gamepad_shoulder_combo_binding);
+            cfg->gamepad_shoulder_combo_binding = item->valueint;
+            log_debug("Loaded gamepad.shoulderComboBinding: %d", cfg->gamepad_shoulder_combo_binding);
         }
 
-        if (config->gamepad_use_dpad) {
-            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
-            config->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
+        if (cfg->gamepad_use_dpad) {
+            cfg->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_UP] = GAMEPAD_BIND_NONE;
+            cfg->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_DOWN] = GAMEPAD_BIND_NONE;
+            cfg->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_LEFT] = GAMEPAD_BIND_NONE;
+            cfg->gamepad_button_bindings[GAMEPAD_BUTTON_DPAD_RIGHT] = GAMEPAD_BIND_NONE;
         }
 
-        if (config->gamepad_use_left_stick) {
+        if (cfg->gamepad_use_left_stick) {
             for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-                config->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
+                cfg->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
             }
         }
     } else {
@@ -1745,13 +1745,13 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
                             int value = binding->valueint;
                             if (value == ' ')
                                 value = INPUT_BIND_CONFIRM;
-                            config->touch_pane_bindings[i + 3] = value;
+                            cfg->touch_pane_bindings[i + 3] = value;
                         }
                     }
                     log_info("Migrated legacy touchPane.bindings layout (21 -> %d entries)",
                         SDL_TOUCH_PANE_BUTTON_COUNT);
                 } else {
-                    sdl_config_load_touch_binding_array(bindings, config->touch_pane_bindings,
+                    sdl_config_load_touch_binding_array(bindings, cfg->touch_pane_bindings,
                         SDL_TOUCH_PANE_BUTTON_COUNT);
                 }
                 log_debug("Loaded touchPane.bindings (%d entries)", count);
@@ -1759,21 +1759,21 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
 
             if (cJSON_IsArray(labels)) {
                 int count = cJSON_GetArraySize(labels);
-                sdl_config_load_touch_label_array(labels, config->touch_pane_labels,
+                sdl_config_load_touch_label_array(labels, cfg->touch_pane_labels,
                     SDL_TOUCH_PANE_BUTTON_COUNT);
                 log_debug("Loaded touchPane.labels (%d entries)", count);
             }
 
             if (cJSON_IsArray(second_bindings)) {
                 int count = cJSON_GetArraySize(second_bindings);
-                sdl_config_load_touch_binding_array(second_bindings, config->touch_pane_second_bindings,
+                sdl_config_load_touch_binding_array(second_bindings, cfg->touch_pane_second_bindings,
                     SDL_TOUCH_PANE_BUTTON_COUNT);
                 log_debug("Loaded touchPane.secondBindings (%d entries)", count);
             }
 
             if (cJSON_IsArray(second_labels)) {
                 int count = cJSON_GetArraySize(second_labels);
-                sdl_config_load_touch_label_array(second_labels, config->touch_pane_second_labels,
+                sdl_config_load_touch_label_array(second_labels, cfg->touch_pane_second_labels,
                     SDL_TOUCH_PANE_BUTTON_COUNT);
                 log_debug("Loaded touchPane.secondLabels (%d entries)", count);
             }
@@ -1783,8 +1783,8 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
                 for (int i = 0; i < SDL_TOUCH_PANE_PANEL_COUNT && i < count; i++) {
                     cJSON* panel_name = cJSON_GetArrayItem(panel_names, i);
                     if (cJSON_IsString(panel_name) && panel_name->valuestring) {
-                        SDL_strlcpy(config->touch_pane_panel_names[i], panel_name->valuestring,
-                            sizeof(config->touch_pane_panel_names[i]));
+                        SDL_strlcpy(cfg->touch_pane_panel_names[i], panel_name->valuestring,
+                            sizeof(cfg->touch_pane_panel_names[i]));
                     }
                 }
                 log_debug("Loaded touchPane.panelNames (%d entries)", count);
@@ -1794,13 +1794,13 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
         }
     }
 
-    sdl_config_load_movement_bindings(root, config);
+    sdl_config_load_movement_bindings(root, cfg);
     
     cJSON_Delete(root);
     log_debug("Configuration loading complete. Total panes: %d", *pane_count);
 }
 
-void sdl_config_save(const char* filename, const struct sdl_config* config,
+void sdl_config_save(const char* filename, const struct sdl_config* cfg,
                      const struct pane_config* pane_configs, int pane_count)
 {
     cJSON* root = cJSON_CreateObject();
@@ -1817,47 +1817,47 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         return;
     }
     
-    cJSON_AddNumberToObject(sdl, "mainViewScale", config->main_view_scale);
-    cJSON_AddNumberToObject(sdl, "auxViewFontSize", config->aux_view_font_size);
+    cJSON_AddNumberToObject(sdl, "mainViewScale", cfg->main_view_scale);
+    cJSON_AddNumberToObject(sdl, "auxViewFontSize", cfg->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "menuPanelFontSize",
-        config->menu_panel_font_size);
-    cJSON_AddNumberToObject(sdl, "margin", config->margin);
-    cJSON_AddBoolToObject(sdl, "fullscreen", config->fullscreen);
-    cJSON_AddBoolToObject(sdl, "tiles", config->tiles);
+        cfg->menu_panel_font_size);
+    cJSON_AddNumberToObject(sdl, "margin", cfg->margin);
+    cJSON_AddBoolToObject(sdl, "fullscreen", cfg->fullscreen);
+    cJSON_AddBoolToObject(sdl, "tiles", cfg->tiles);
     cJSON_AddStringToObject(sdl, "palettePreset",
-        (config->palette_preset[0]) ? config->palette_preset : "classic");
-    cJSON_AddBoolToObject(sdl, "enableRightPanes", config->enable_right_panes);
-    cJSON_AddBoolToObject(sdl, "enableBottomPanes", config->enable_bottom_panes);
-    cJSON_AddBoolToObject(sdl, "hideLeftPanel", config->hide_left_panel);
-    cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(config->min_terminal_mode));
+        (cfg->palette_preset[0]) ? cfg->palette_preset : "classic");
+    cJSON_AddBoolToObject(sdl, "enableRightPanes", cfg->enable_right_panes);
+    cJSON_AddBoolToObject(sdl, "enableBottomPanes", cfg->enable_bottom_panes);
+    cJSON_AddBoolToObject(sdl, "hideLeftPanel", cfg->hide_left_panel);
+    cJSON_AddStringToObject(sdl, "minTerminalMode", min_terminal_mode_to_string(cfg->min_terminal_mode));
     
     // Save window position and size for windowed mode
-    cJSON_AddNumberToObject(sdl, "windowX", config->window_x);
-    cJSON_AddNumberToObject(sdl, "windowY", config->window_y);
-    cJSON_AddNumberToObject(sdl, "windowWidth", config->window_width);
-    cJSON_AddNumberToObject(sdl, "windowHeight", config->window_height);
+    cJSON_AddNumberToObject(sdl, "windowX", cfg->window_x);
+    cJSON_AddNumberToObject(sdl, "windowY", cfg->window_y);
+    cJSON_AddNumberToObject(sdl, "windowWidth", cfg->window_width);
+    cJSON_AddNumberToObject(sdl, "windowHeight", cfg->window_height);
     
     // Save custom fonts
-    cJSON_AddStringToObject(sdl, "storyFont", config->story_font);
-    cJSON_AddStringToObject(sdl, "monospaceFont", config->monospace_font);
+    cJSON_AddStringToObject(sdl, "storyFont", cfg->story_font);
+    cJSON_AddStringToObject(sdl, "monospaceFont", cfg->monospace_font);
     
     // Save monospace font rendering options
-    cJSON_AddBoolToObject(sdl, "monoBold", config->mono_bold);
-    cJSON_AddBoolToObject(sdl, "monoItalic", config->mono_italic);
-    cJSON_AddBoolToObject(sdl, "monoUnderline", config->mono_underline);
-    cJSON_AddBoolToObject(sdl, "monoStrikethrough", config->mono_strikethrough);
-    cJSON_AddNumberToObject(sdl, "monoHinting", config->mono_hinting);
-    cJSON_AddBoolToObject(sdl, "monoKerning", config->mono_kerning);
-    cJSON_AddNumberToObject(sdl, "monoOutline", config->mono_outline);
+    cJSON_AddBoolToObject(sdl, "monoBold", cfg->mono_bold);
+    cJSON_AddBoolToObject(sdl, "monoItalic", cfg->mono_italic);
+    cJSON_AddBoolToObject(sdl, "monoUnderline", cfg->mono_underline);
+    cJSON_AddBoolToObject(sdl, "monoStrikethrough", cfg->mono_strikethrough);
+    cJSON_AddNumberToObject(sdl, "monoHinting", cfg->mono_hinting);
+    cJSON_AddBoolToObject(sdl, "monoKerning", cfg->mono_kerning);
+    cJSON_AddNumberToObject(sdl, "monoOutline", cfg->mono_outline);
     
     // Save story font rendering options
-    cJSON_AddBoolToObject(sdl, "storyBold", config->story_bold);
-    cJSON_AddBoolToObject(sdl, "storyItalic", config->story_italic);
-    cJSON_AddBoolToObject(sdl, "storyUnderline", config->story_underline);
-    cJSON_AddBoolToObject(sdl, "storyStrikethrough", config->story_strikethrough);
-    cJSON_AddNumberToObject(sdl, "storyHinting", config->story_hinting);
-    cJSON_AddBoolToObject(sdl, "storyKerning", config->story_kerning);
-    cJSON_AddNumberToObject(sdl, "storyOutline", config->story_outline);
+    cJSON_AddBoolToObject(sdl, "storyBold", cfg->story_bold);
+    cJSON_AddBoolToObject(sdl, "storyItalic", cfg->story_italic);
+    cJSON_AddBoolToObject(sdl, "storyUnderline", cfg->story_underline);
+    cJSON_AddBoolToObject(sdl, "storyStrikethrough", cfg->story_strikethrough);
+    cJSON_AddNumberToObject(sdl, "storyHinting", cfg->story_hinting);
+    cJSON_AddBoolToObject(sdl, "storyKerning", cfg->story_kerning);
+    cJSON_AddNumberToObject(sdl, "storyOutline", cfg->story_outline);
     
     cJSON_AddItemToObject(root, "sdl", sdl);
     
@@ -1911,18 +1911,18 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             cJSON* left_stick = NULL;
             cJSON* right_stick = NULL;
 
-            cJSON_AddBoolToObject(gamepad, "enabled", config->gamepad_enabled);
-            cJSON_AddBoolToObject(gamepad, "autoMode", config->gamepad_auto_mode);
-            cJSON_AddBoolToObject(gamepad, "steamdeckMode", config->steamdeck_mode);
-            cJSON_AddBoolToObject(gamepad, "useDpad", config->gamepad_use_dpad);
-            cJSON_AddBoolToObject(gamepad, "useLeftStick", config->gamepad_use_left_stick);
-            cJSON_AddNumberToObject(gamepad, "deadzone", config->gamepad_deadzone);
-            cJSON_AddNumberToObject(gamepad, "triggerThreshold", config->gamepad_trigger_threshold);
+            cJSON_AddBoolToObject(gamepad, "enabled", cfg->gamepad_enabled);
+            cJSON_AddBoolToObject(gamepad, "autoMode", cfg->gamepad_auto_mode);
+            cJSON_AddBoolToObject(gamepad, "steamdeckMode", cfg->steamdeck_mode);
+            cJSON_AddBoolToObject(gamepad, "useDpad", cfg->gamepad_use_dpad);
+            cJSON_AddBoolToObject(gamepad, "useLeftStick", cfg->gamepad_use_left_stick);
+            cJSON_AddNumberToObject(gamepad, "deadzone", cfg->gamepad_deadzone);
+            cJSON_AddNumberToObject(gamepad, "triggerThreshold", cfg->gamepad_trigger_threshold);
 
             bindings = cJSON_CreateArray();
             if (bindings) {
                 for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
-                    cJSON_AddItemToArray(bindings, cJSON_CreateNumber(config->gamepad_button_bindings[i]));
+                    cJSON_AddItemToArray(bindings, cJSON_CreateNumber(cfg->gamepad_button_bindings[i]));
                 }
                 cJSON_AddItemToObject(gamepad, "buttonBindings", bindings);
             }
@@ -1930,7 +1930,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             triggers = cJSON_CreateArray();
             if (triggers) {
                 for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
-                    cJSON_AddItemToArray(triggers, cJSON_CreateNumber(config->gamepad_trigger_bindings[i]));
+                    cJSON_AddItemToArray(triggers, cJSON_CreateNumber(cfg->gamepad_trigger_bindings[i]));
                 }
                 cJSON_AddItemToObject(gamepad, "triggerBindings", triggers);
             }
@@ -1938,7 +1938,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             left_stick = cJSON_CreateArray();
             if (left_stick) {
                 for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-                    cJSON_AddItemToArray(left_stick, cJSON_CreateNumber(config->gamepad_left_stick_bindings[i]));
+                    cJSON_AddItemToArray(left_stick, cJSON_CreateNumber(cfg->gamepad_left_stick_bindings[i]));
                 }
                 cJSON_AddItemToObject(gamepad, "leftStickBindings", left_stick);
             }
@@ -1946,12 +1946,12 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
             right_stick = cJSON_CreateArray();
             if (right_stick) {
                 for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-                    cJSON_AddItemToArray(right_stick, cJSON_CreateNumber(config->gamepad_right_stick_bindings[i]));
+                    cJSON_AddItemToArray(right_stick, cJSON_CreateNumber(cfg->gamepad_right_stick_bindings[i]));
                 }
                 cJSON_AddItemToObject(gamepad, "rightStickBindings", right_stick);
             }
 
-            cJSON_AddNumberToObject(gamepad, "shoulderComboBinding", config->gamepad_shoulder_combo_binding);
+            cJSON_AddNumberToObject(gamepad, "shoulderComboBinding", cfg->gamepad_shoulder_combo_binding);
 
             cJSON_AddItemToObject(root, "gamepad", gamepad);
         }
@@ -1960,15 +1960,15 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     {
         cJSON* touch_pane = cJSON_CreateObject();
         if (touch_pane) {
-            cJSON* bindings = sdl_config_create_int_array(config->touch_pane_bindings,
+            cJSON* bindings = sdl_config_create_int_array(cfg->touch_pane_bindings,
                 SDL_TOUCH_PANE_BUTTON_COUNT);
-            cJSON* labels = sdl_config_create_string_array(config->touch_pane_labels,
+            cJSON* labels = sdl_config_create_string_array(cfg->touch_pane_labels,
                 SDL_TOUCH_PANE_BUTTON_COUNT);
-            cJSON* second_bindings = sdl_config_create_int_array(config->touch_pane_second_bindings,
+            cJSON* second_bindings = sdl_config_create_int_array(cfg->touch_pane_second_bindings,
                 SDL_TOUCH_PANE_BUTTON_COUNT);
-            cJSON* second_labels = sdl_config_create_string_array(config->touch_pane_second_labels,
+            cJSON* second_labels = sdl_config_create_string_array(cfg->touch_pane_second_labels,
                 SDL_TOUCH_PANE_BUTTON_COUNT);
-            cJSON* panel_names = sdl_config_create_string_array(config->touch_pane_panel_names,
+            cJSON* panel_names = sdl_config_create_string_array(cfg->touch_pane_panel_names,
                 SDL_TOUCH_PANE_PANEL_COUNT);
             if (bindings) {
                 cJSON_AddItemToObject(touch_pane, "bindings", bindings);
@@ -1989,7 +1989,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
         }
     }
 
-    sdl_config_save_movement_bindings(root, config);
+    sdl_config_save_movement_bindings(root, cfg);
 
     /* Create app-wide options object */
     {
@@ -2054,49 +2054,49 @@ void sdl_config_save(const char* filename, const struct sdl_config* config,
     log_info("Saved SDL configuration to: %s", filename);
 }
 
-void sdl_config_set_default_gamepad_bindings(struct sdl_config* config)
+void sdl_config_set_default_gamepad_bindings(struct sdl_config* cfg)
 {
-    if (!config)
+    if (!cfg)
         return;
 
     for (int i = 0; i < GAMEPAD_BUTTON_COUNT; i++) {
-        config->gamepad_button_bindings[i] = GAMEPAD_BIND_NONE;
+        cfg->gamepad_button_bindings[i] = GAMEPAD_BIND_NONE;
     }
     for (int i = 0; i < GAMEPAD_TRIGGER_COUNT; i++) {
-        config->gamepad_trigger_bindings[i] = GAMEPAD_BIND_NONE;
+        cfg->gamepad_trigger_bindings[i] = GAMEPAD_BIND_NONE;
     }
     for (int i = 0; i < GAMEPAD_STICK_DIR_COUNT; i++) {
-        config->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
-        config->gamepad_right_stick_bindings[i] = GAMEPAD_BIND_NONE;
+        cfg->gamepad_left_stick_bindings[i] = GAMEPAD_BIND_NONE;
+        cfg->gamepad_right_stick_bindings[i] = GAMEPAD_BIND_NONE;
     }
 
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_SOUTH] = ' ';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_EAST] = 'f';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_WEST] = 'u';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_NORTH] = 's';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_START] = ESCAPE;
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_BACK] = 'h';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE1] = 'r';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE2] = 'o';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE1] = 'q';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE2] = '?';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_STICK] = 'z';
-    config->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_STICK] = 'j';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_SOUTH] = ' ';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_EAST] = 'f';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_WEST] = 'u';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_NORTH] = 's';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_SHOULDER] = 'e';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_SHOULDER] = 'i';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_START] = ESCAPE;
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_BACK] = 'h';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE1] = 'r';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_PADDLE2] = 'o';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE1] = 'q';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_PADDLE2] = '?';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_LEFT_STICK] = 'z';
+    cfg->gamepad_button_bindings[GAMEPAD_BUTTON_RIGHT_STICK] = 'j';
 
-    config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_RIGHT] = 'x';
-    config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_LEFT] = 'a';
-    config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_UP] = 'M';
-    config->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_DOWN] = 'b';
+    cfg->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_RIGHT] = 'x';
+    cfg->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_LEFT] = 'a';
+    cfg->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_UP] = 'M';
+    cfg->gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_DOWN] = 'b';
 
-    config->gamepad_trigger_bindings[0] = GAMEPAD_BIND_SHIFT;
-    config->gamepad_trigger_bindings[1] = GAMEPAD_BIND_CTRL;
+    cfg->gamepad_trigger_bindings[0] = GAMEPAD_BIND_SHIFT;
+    cfg->gamepad_trigger_bindings[1] = GAMEPAD_BIND_CTRL;
 
-    config->gamepad_shoulder_combo_binding = 'l';
+    cfg->gamepad_shoulder_combo_binding = 'l';
 }
 
-void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config)
+void sdl_config_set_default_touch_pane_bindings(struct sdl_config* cfg)
 {
     static const int main_defaults[SDL_TOUCH_PANE_BUTTON_COUNT] = {
         ESCAPE, GAMEPAD_BIND_CTRL, GAMEPAD_BIND_SHIFT,
@@ -2119,93 +2119,93 @@ void sdl_config_set_default_touch_pane_bindings(struct sdl_config* config)
         'w', 'b', 'c',
     };
 
-    if (!config)
+    if (!cfg)
         return;
 
-    memcpy(config->touch_pane_bindings, main_defaults, sizeof(main_defaults));
-    memcpy(config->touch_pane_second_bindings, second_defaults, sizeof(second_defaults));
-    SDL_strlcpy(config->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN], "Main",
-        sizeof(config->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN]));
-    SDL_strlcpy(config->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND], "Shift",
-        sizeof(config->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND]));
+    memcpy(cfg->touch_pane_bindings, main_defaults, sizeof(main_defaults));
+    memcpy(cfg->touch_pane_second_bindings, second_defaults, sizeof(second_defaults));
+    SDL_strlcpy(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN], "Main",
+        sizeof(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_MAIN]));
+    SDL_strlcpy(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND], "Shift",
+        sizeof(cfg->touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_SECOND]));
 }
 
-void sdl_config_clear_touch_pane_labels(struct sdl_config* config)
+void sdl_config_clear_touch_pane_labels(struct sdl_config* cfg)
 {
-    if (!config)
+    if (!cfg)
         return;
 
-    memset(config->touch_pane_labels, 0, sizeof(config->touch_pane_labels));
-    memset(config->touch_pane_second_labels, 0, sizeof(config->touch_pane_second_labels));
+    memset(cfg->touch_pane_labels, 0, sizeof(cfg->touch_pane_labels));
+    memset(cfg->touch_pane_second_labels, 0, sizeof(cfg->touch_pane_second_labels));
 }
 
-void sdl_config_set_defaults(struct sdl_config* config)
+void sdl_config_set_defaults(struct sdl_config* cfg)
 {
-    if (!config)
+    if (!cfg)
         return;
 
-    config->main_view_scale = 1;
-    config->aux_view_font_size = 0;
-    config->menu_panel_font_size = 0;
-    config->margin = 4;
-    config->fullscreen = true;
-    config->tiles = true;
-    SDL_strlcpy(config->palette_preset, "classic",
-        sizeof(config->palette_preset));
-    config->enable_right_panes = true;
-    config->enable_bottom_panes = true;
-    config->hide_left_panel = false;
+    cfg->main_view_scale = 1;
+    cfg->aux_view_font_size = 0;
+    cfg->menu_panel_font_size = 0;
+    cfg->margin = 4;
+    cfg->fullscreen = true;
+    cfg->tiles = true;
+    SDL_strlcpy(cfg->palette_preset, "classic",
+        sizeof(cfg->palette_preset));
+    cfg->enable_right_panes = true;
+    cfg->enable_bottom_panes = true;
+    cfg->hide_left_panel = false;
 #if defined(__ANDROID__) || defined(SIL_IOS)
-    config->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
+    cfg->min_terminal_mode = SDL_MIN_TERMINAL_COMPACT;
 #else
-    config->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
+    cfg->min_terminal_mode = SDL_MIN_TERMINAL_NORMAL;
 #endif
     
     // Default window position and size (will be overridden by actual screen size)
-    config->window_x = -1;  // -1 means centered
-    config->window_y = -1;  // -1 means centered
-    config->window_width = 0;  // 0 means use default calculation
-    config->window_height = 0; // 0 means use default calculation
+    cfg->window_x = -1;  // -1 means centered
+    cfg->window_y = -1;  // -1 means centered
+    cfg->window_width = 0;  // 0 means use default calculation
+    cfg->window_height = 0; // 0 means use default calculation
     
     // Default fonts
-    SDL_strlcpy(config->story_font, "font/Cinzel-Medium.ttf",
-        sizeof(config->story_font));
-    SDL_strlcpy(config->monospace_font, "font/VictorMono-Medium.ttf",
-        sizeof(config->monospace_font));
+    SDL_strlcpy(cfg->story_font, "font/Cinzel-Medium.ttf",
+        sizeof(cfg->story_font));
+    SDL_strlcpy(cfg->monospace_font, "font/VictorMono-Medium.ttf",
+        sizeof(cfg->monospace_font));
     
     // Default monospace font rendering options
-    config->mono_bold = false;
-    config->mono_italic = false;
-    config->mono_underline = false;
-    config->mono_strikethrough = false;
-    config->mono_hinting = 0;  // TTF_HINTING_NORMAL
-    config->mono_kerning = true;
-    config->mono_outline = 0;
+    cfg->mono_bold = false;
+    cfg->mono_italic = false;
+    cfg->mono_underline = false;
+    cfg->mono_strikethrough = false;
+    cfg->mono_hinting = 0;  // TTF_HINTING_NORMAL
+    cfg->mono_kerning = true;
+    cfg->mono_outline = 0;
     
     // Default story font rendering options
-    config->story_bold = false;
-    config->story_italic = false;
-    config->story_underline = false;
-    config->story_strikethrough = false;
-    config->story_hinting = 0;  // TTF_HINTING_NORMAL
-    config->story_kerning = true;
-    config->story_outline = 0;
+    cfg->story_bold = false;
+    cfg->story_italic = false;
+    cfg->story_underline = false;
+    cfg->story_strikethrough = false;
+    cfg->story_hinting = 0;  // TTF_HINTING_NORMAL
+    cfg->story_kerning = true;
+    cfg->story_outline = 0;
 
     // Default gamepad settings
-    config->gamepad_enabled = true;
-    config->gamepad_auto_mode = true;
-    config->steamdeck_mode = false;
-    config->gamepad_use_dpad = true;
-    config->gamepad_use_left_stick = true;
-    config->gamepad_deadzone = 12000;
-    config->gamepad_trigger_threshold = 16000;
-    sdl_config_set_default_gamepad_bindings(config);
-    sdl_config_set_default_touch_pane_bindings(config);
-    sdl_config_clear_touch_pane_labels(config);
-    sdl_config_clear_movement_bindings(config);
+    cfg->gamepad_enabled = true;
+    cfg->gamepad_auto_mode = true;
+    cfg->steamdeck_mode = false;
+    cfg->gamepad_use_dpad = true;
+    cfg->gamepad_use_left_stick = true;
+    cfg->gamepad_deadzone = 12000;
+    cfg->gamepad_trigger_threshold = 16000;
+    sdl_config_set_default_gamepad_bindings(cfg);
+    sdl_config_set_default_touch_pane_bindings(cfg);
+    sdl_config_clear_touch_pane_labels(cfg);
+    sdl_config_clear_movement_bindings(cfg);
 }
 
-void sdl_config_set_defaults_for_resolution(struct sdl_config* config, 
+void sdl_config_set_defaults_for_resolution(struct sdl_config* cfg, 
                                             struct pane_config* pane_configs,
                                             int* pane_count,
                                             int max_panes,
@@ -2213,7 +2213,7 @@ void sdl_config_set_defaults_for_resolution(struct sdl_config* config,
                                             int screen_height)
 {
     // Start with base defaults
-    sdl_config_set_defaults(config);
+    sdl_config_set_defaults(cfg);
     *pane_count = 0;
     
     log_info("Setting resolution-specific defaults for %dx%d", screen_width, screen_height);
@@ -2232,9 +2232,9 @@ void sdl_config_set_defaults_for_resolution(struct sdl_config* config,
         // Apply resolution-specific settings
         log_info("Detected %s resolution - applying optimized defaults", profile->name);
         
-        config->main_view_scale = profile->main_view_scale;
-        config->aux_view_font_size = 0;
-        config->menu_panel_font_size = 0;
+        cfg->main_view_scale = profile->main_view_scale;
+        cfg->aux_view_font_size = 0;
+        cfg->menu_panel_font_size = 0;
         // Note: margin, fullscreen, tiles, and window position/size use base defaults
         
         // Apply pane configuration
@@ -2262,12 +2262,12 @@ void sdl_config_set_defaults_for_resolution(struct sdl_config* config,
     }
 
     if (screen_width == 1280 && screen_height == 800) {
-        config->steamdeck_mode = true;
+        cfg->steamdeck_mode = true;
         log_info("Detected 1280x800 resolution - enabling Steam Deck UI mode by default");
     }
 }
 
-void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
+void sdl_config_apply_cmdline(struct sdl_config* cfg, int argc, char** argv)
 {
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--scale") == 0) {
@@ -2275,28 +2275,28 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
                 const char* scale_str = argv[++i];
                 int scale = atoi(scale_str);
                 if (scale > 0) {
-                    config->main_view_scale = scale;
+                    cfg->main_view_scale = scale;
                     log_info("Command line: main view scale set to %d", scale);
                 }
             }
         } else if (strcmp(argv[i], "--ascii") == 0) {
-            config->tiles = false;
+            cfg->tiles = false;
             log_info("Command line: ASCII mode enabled");
         } else if (strcmp(argv[i], "--windowed") == 0) {
-            config->fullscreen = false;
+            cfg->fullscreen = false;
             log_info("Command line: windowed mode enabled");
         } else if (strcmp(argv[i], "--fullscreen") == 0) {
-            config->fullscreen = true;
+            cfg->fullscreen = true;
             log_info("Command line: fullscreen mode enabled");
         } else if (strcmp(argv[i], "--tiles") == 0) {
-            config->tiles = true;
+            cfg->tiles = true;
             log_info("Command line: tiles mode enabled");
         } else if (strcmp(argv[i], "--font-size") == 0) {
             if (argc > i + 1) {
                 const char* size_str = argv[++i];
                 int size = atoi(size_str);
                 if (size > 0) {
-                    config->aux_view_font_size = size;
+                    cfg->aux_view_font_size = size;
                     log_info("Command line: auxiliary view font size set to %d", size);
                 }
             }
@@ -2305,7 +2305,7 @@ void sdl_config_apply_cmdline(struct sdl_config* config, int argc, char** argv)
                 const char* margin_str = argv[++i];
                 int margin = atoi(margin_str);
                 if (margin >= 0) {
-                    config->margin = margin;
+                    cfg->margin = margin;
                     log_info("Command line: margin set to %d", margin);
                 }
             }

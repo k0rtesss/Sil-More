@@ -815,7 +815,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
         level_gen_screen.detail_text[0] ? level_gen_screen.detail_text
                                         : "(waiting)");
     {
-        int used = level_gen_screen_append_wrapped_panel_text(panel, false,
+        used = level_gen_screen_append_wrapped_panel_text(panel, false,
             TERM_SLATE, buf, body_width, MIN(2, body_remaining));
         if (used < 0)
             return false;
@@ -826,7 +826,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
         level_gen_screen.last_failure[0] ? level_gen_screen.last_failure
                                          : "(none)");
     {
-        int used = level_gen_screen_append_wrapped_panel_text(panel, false,
+        used = level_gen_screen_append_wrapped_panel_text(panel, false,
             TERM_ORANGE, buf, body_width, MIN(3, body_remaining));
         if (used < 0)
             return false;
@@ -835,7 +835,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
 
     if (partition_buf[0] && body_remaining > 0)
     {
-        int used = level_gen_screen_append_wrapped_panel_text(panel, false,
+        used = level_gen_screen_append_wrapped_panel_text(panel, false,
             TERM_SLATE, partition_buf, body_width, body_remaining);
         if (used < 0)
             return false;
@@ -843,7 +843,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
     }
     if (type_buf[0] && body_remaining > 0)
     {
-        int used = level_gen_screen_append_wrapped_panel_text(panel, false,
+        used = level_gen_screen_append_wrapped_panel_text(panel, false,
             TERM_SLATE, type_buf, body_width, body_remaining);
         if (used < 0)
             return false;
@@ -883,7 +883,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
         return false;
     if (qv_status_buf[0] && body_remaining > 0)
     {
-        int used = level_gen_screen_append_wrapped_panel_text(panel, false,
+        used = level_gen_screen_append_wrapped_panel_text(panel, false,
             TERM_ORANGE, qv_status_buf, body_width, MIN(2, body_remaining));
         if (used < 0)
             return false;
@@ -936,7 +936,7 @@ static bool level_gen_screen_build_debug_scene(app_ui_scene* scene)
                 level_gen_screen.issues[best].count,
                 level_gen_screen.issues[best].key);
             {
-                int used = level_gen_screen_append_wrapped_panel_text(panel,
+                used = level_gen_screen_append_wrapped_panel_text(panel,
                     false, TERM_SLATE, buf, body_width,
                     MIN(2, body_remaining));
                 if (used < 0)

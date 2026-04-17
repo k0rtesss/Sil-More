@@ -819,7 +819,7 @@ extern void place_monster_by_flag(
  * letter (eg 'v' for vampire) at (y,x). It is goverened by a maximum depth and
  * tries 100 times at this depth and each depth below it.
  */
-void place_monster_by_letter(
+static void place_monster_by_letter(
     int y, int x, char c, bool allow_unique, int max_depth)
 {
     bool got_r_idx = false;

@@ -396,7 +396,7 @@ static int wiz_create_itemtype(void)
     int i, num, max_num;
     int tval;
 
-    cptr tval_desc;
+    cptr tval_name;
     char ch;
 
     int choice[60];
@@ -439,12 +439,12 @@ static int wiz_create_itemtype(void)
 
     /* Base object type chosen, fill in tval */
     tval = tvals[num].tval;
-    tval_desc = tvals[num].desc;
+    tval_name = tvals[num].desc;
 
     /*** And now we go for k_idx ***/
 
     viewer[0] = '\0';
-    strnfmt(buf, sizeof(buf), "What kind of %s?", tval_desc);
+    strnfmt(buf, sizeof(buf), "What kind of %s?", tval_name);
     wizard_buffer_append_line(viewer, sizeof(viewer), buf);
     wizard_buffer_append_line(viewer, sizeof(viewer), "");
 
@@ -479,7 +479,7 @@ static int wiz_create_itemtype(void)
     (void)show_buffer(viewer, 0);
 
     /* Choose! */
-    if (!get_com(format("What Kind of %s? ", tval_desc), &ch))
+    if (!get_com(format("What Kind of %s? ", tval_name), &ch))
         return (0);
 
     /* Analyze choice */
@@ -711,10 +711,11 @@ static void wiz_statistics(object_type* o_ptr)
             /* Wipe the object */
             object_wipe(i_ptr);
 
-            drop_quality quality = drop_quality_from_flags(good, great, false);
+            drop_quality obj_quality
+                = drop_quality_from_flags(good, great, false);
 
             /* Create an object */
-            make_object(i_ptr, quality, DROP_TYPE_UNTHEMED);
+            make_object(i_ptr, obj_quality, DROP_TYPE_UNTHEMED);
 
             /* Mega-Hack -- allow multiple artefacts XXX XXX XXX */
             if (artefact_p(i_ptr))
@@ -1624,7 +1625,7 @@ static void do_cmd_wiz_unlock_all_oaths(void)
 /*
  * Modify the dungeon
  */
-void do_cmd_wiz_look(void)
+static void do_cmd_wiz_look(void)
 {
     /* Look around and modify things */
     target_set_interactive(TARGET_WIZ, 0);

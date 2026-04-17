@@ -118,9 +118,9 @@ static object_type* resolve_selected_item_object(int item)
 
 static bool activate_select_item_or_open_supplies(int* out_item,
     object_type** out_o_ptr, byte tval, cptr prompt, cptr empty_prompt,
-    int supply_group)
+    int supply_group_id)
 {
-    bool allow_supplies = (supply_group >= 0);
+    bool allow_supplies = (supply_group_id >= 0);
 
     if (!out_item || !out_o_ptr)
         return false;
@@ -130,7 +130,7 @@ static bool activate_select_item_or_open_supplies(int* out_item,
 
     if (allow_supplies)
     {
-        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, supply_group,
+        supplies_set_pending_action(SUPPLY_MENU_ACTION_USE, supply_group_id,
             true);
     }
 
@@ -147,7 +147,7 @@ static bool activate_select_item_or_open_supplies(int* out_item,
         {
             supplies_clear_pending_action();
             open_supplies_menu_with_context(SUPPLY_MENU_ACTION_USE,
-                supply_group, true, true);
+                supply_group_id, true, true);
         }
         return false;
     }

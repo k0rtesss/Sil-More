@@ -25,6 +25,16 @@ static int parse_partition_style_kind(const char* tok);
 static int parse_big_cave_weight_token(const char* tok);
 static char* trim_narrative_text(char* s);
 static int parse_narrative_idx(char* colon_start, char** out_text);
+byte get_default_vein_row(void);
+byte get_default_vein_col(void);
+bool get_overlay_key_enabled(void);
+void get_overlay_key_rgb(byte* r, byte* g, byte* b);
+const char* styles_get_style_short_desc(int sidx);
+const char* styles_get_style_m1(int sidx);
+const char* styles_get_style_m2(int sidx);
+const char* styles_get_style_display(int sidx);
+void styles_clear_display_messages(void);
+void styles_reload_messages_from_text(void);
 
 byte get_default_vein_row(void) { return g_default_vein_row; }
 byte get_default_vein_col(void) { return g_default_vein_col; }

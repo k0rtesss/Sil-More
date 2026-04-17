@@ -140,8 +140,6 @@ set(SIL_MORE_SOURCES_CORE
     src/cave/cave-geometry.c
     src/cave/cave.c
     src/cave/cave-map-ui.c
-    src/cJSON.c
-    src/dungeon.c
 )
 
 set(SIL_MORE_SOURCES_CMD
@@ -341,6 +339,7 @@ set(SIL_MORE_SOURCES_FS
 set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/blitz.c
     src/runtime/runtime-cli.c
+    src/runtime/runtime-dungeon.c
     src/runtime/runtime-exit.c
     src/runtime/runtime-game.c
     src/runtime/runtime-state.c
@@ -411,6 +410,7 @@ set(SIL_MORE_SOURCES_LOG
 )
 
 set(SIL_MORE_SOURCES_SUPPORT
+    src/support/cJSON.c
     src/support/angle.c
     src/support/game-tables.c
     src/support/input.c
@@ -516,25 +516,7 @@ set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(sil-core PUBLIC sil-build-config log)
 
 if (SIL_STRICT_WARNINGS)
-  add_library(sil-phase01-strict-gate OBJECT
-    src/drop/drop-system-difficulty.c
-    src/fs/file.c
-    src/fs/load.c
-    src/init/init2.c
-    src/metarun/metarun.c
-    src/runtime/runtime-exit.c
-    src/runtime/runtime-game.c
-    src/runtime/runtime-state.c
-    src/score/score_io.c
-    src/support/reliability-checks.c
-    src/support/util.c
-    src/ui/ui-character-dump.c
-  )
-  target_link_libraries(sil-phase01-strict-gate PRIVATE
-    sil-build-config
-    sil-strict-build-config
-    log
-  )
+  target_link_libraries(sil-core PUBLIC sil-strict-build-config)
 endif()
 
 # WP50: keep the SDL implementation isolated in its own object target while
@@ -549,6 +531,9 @@ target_link_libraries(sil-platform-sdl PUBLIC
   SDL3_mixer::SDL3_mixer
   log
 )
+if (SIL_STRICT_WARNINGS)
+  target_link_libraries(sil-platform-sdl PUBLIC sil-strict-build-config)
+endif()
 
 if(ANDROID)
   add_library(sil-more SHARED ${SIL_MORE_SOURCES_APP})
@@ -621,6 +606,9 @@ if(MINGW)
 endif()
 
 target_link_libraries(sil-more PRIVATE sil-platform-sdl sil-core m)
+if (SIL_STRICT_WARNINGS)
+  target_link_libraries(sil-more PRIVATE sil-strict-build-config)
+endif()
 
 if(BUILD_TESTING)
   add_executable(sil-phase01-tests
@@ -628,9 +616,6 @@ if(BUILD_TESTING)
     src/support/reliability-checks.c
   )
   target_link_libraries(sil-phase01-tests PRIVATE sil-build-config)
-  if(SIL_STRICT_WARNINGS)
-    target_link_libraries(sil-phase01-tests PRIVATE sil-strict-build-config)
-  endif()
   add_test(
     NAME sil_phase01_regressions
     COMMAND sil-phase01-tests
@@ -645,9 +630,6 @@ if(BUILD_TESTING)
     sil-core
     sil-platform-sdl
   )
-  if(SIL_STRICT_WARNINGS)
-    target_link_libraries(sil-ui1-tests PRIVATE sil-strict-build-config)
-  endif()
   add_test(
     NAME sil_ui1_scaffolding
     COMMAND sil-ui1-tests
@@ -660,9 +642,6 @@ if(BUILD_TESTING)
     sil-core
     sil-platform-sdl
   )
-  if(SIL_STRICT_WARNINGS)
-    target_link_libraries(sil-ui8-tests PRIVATE sil-strict-build-config)
-  endif()
   add_test(
     NAME sil_ui8_wire
     COMMAND sil-ui8-tests
@@ -675,9 +654,6 @@ if(BUILD_TESTING)
     sil-core
     sil-platform-sdl
   )
-  if(SIL_STRICT_WARNINGS)
-    target_link_libraries(sil-ui8-demo-packets PRIVATE sil-strict-build-config)
-  endif()
   add_test(
     NAME sil_ui8_demo_packets
     COMMAND sil-ui8-demo-packets

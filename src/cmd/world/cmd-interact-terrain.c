@@ -410,8 +410,8 @@ bool cmd_interact_tunnel_aux(int y, int x)
     /* test for success */
     if ((difficulty <= digging_score) && (difficulty <= p_ptr->stat_use[A_STR]))
     {
-        u32b f1, f2, f3;
-        object_flags(digger_ptr, &f1, &f2, &f3);
+        u32b digger_f1, digger_f2, digger_f3;
+        object_flags(digger_ptr, &digger_f1, &digger_f2, &digger_f3);
 
         /* Make a lot of noise */
         monster_perception(true, false, -10);
@@ -420,7 +420,7 @@ bool cmd_interact_tunnel_aux(int y, int x)
         msg_print(success_message);
 
         // Possibly identify the digger
-        if (!object_known_p(digger_ptr) && (f1 & (TR1_TUNNEL)))
+        if (!object_known_p(digger_ptr) && (digger_f1 & (TR1_TUNNEL)))
         {
             char o_short_name[80];
 
@@ -724,13 +724,13 @@ bool cmd_interact_disarm_aux(int y, int x)
         msg_format("You cannot disarm the %s.", name);
         return (false);
     }
-    case FEAT_TRAP_WEB:
-    {
-        if ((p_ptr->py == y) && (p_ptr->px == x))
+        case FEAT_TRAP_WEB:
         {
-            int more = break_free_of_web();
-            return (!more);
-        }
+            if ((p_ptr->py == y) && (p_ptr->px == x))
+            {
+                int web_more = break_free_of_web();
+                return (!web_more);
+            }
         else
         {
             msg_format("You cannot disarm the %s.", name);

@@ -2642,18 +2642,18 @@ void apply_quadrant_generation_modes(void)
             {
                 if (!partition_is_interior(row, col, grid_rows, grid_cols))
                     continue;
-                int idx = row * grid_cols + col;
-                if (idx >= partition_count || gv_interior_count >= 25)
+                int partition_idx = row * grid_cols + col;
+                if (partition_idx >= partition_count || gv_interior_count >= 25)
                     continue;
-                gv_candidates[gv_interior_count++] = idx;
+                gv_candidates[gv_interior_count++] = partition_idx;
 
                 /* Prefer a non-special partition for greater vaults so their setpiece
                  * effects don't overlap with LABYRINTH/CHASM/BIG_CAVE zones. */
-                quadrant_mode_t m = modes[idx];
+                quadrant_mode_t m = modes[partition_idx];
                 if (m != QUAD_MODE_LABYRINTH && m != QUAD_MODE_CHASM && m != QUAD_MODE_BIG_CAVE)
                 {
                     if (gv_preferred_count < 25)
-                        gv_preferred[gv_preferred_count++] = idx;
+                        gv_preferred[gv_preferred_count++] = partition_idx;
                 }
             }
         }
@@ -2842,8 +2842,9 @@ void apply_quadrant_generation_modes(void)
         case QUAD_MODE_CAVEY:
             {
                 /* Natural cave system: CA blobs with quartz veins */
-                int area = (y2 - y1) * (x2 - x1);
-                int base_blobs = 2 + area / 400;  /* Scale with partition size */
+                int partition_area = (y2 - y1) * (x2 - x1);
+                int base_blobs
+                    = 2 + partition_area / 400;  /* Scale with partition size */
                 int blob_target = (density == DENSITY_SPARSE) ? base_blobs : 
                                   (density == DENSITY_DENSE) ? base_blobs + 2 : base_blobs + 1;
                 if (blob_target > 6) blob_target = 6;
