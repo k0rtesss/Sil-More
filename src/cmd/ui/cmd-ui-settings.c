@@ -104,6 +104,21 @@ static const settings_int_binding settings_sdl_int_bindings
                 SETTINGS_SDL_SET(menu_panel_font_size) },
         [SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE]
             = { SETTINGS_SDL_GET(effective_menu_panel_font_size), NULL },
+        [SETTINGS_SDL_INT_PLAIN_MENU_FONT_SIZE]
+            = { SETTINGS_SDL_GET(plain_menu_font_size),
+                SETTINGS_SDL_SET(plain_menu_font_size) },
+        [SETTINGS_SDL_INT_EFFECTIVE_PLAIN_MENU_FONT_SIZE]
+            = { SETTINGS_SDL_GET(effective_plain_menu_font_size), NULL },
+        [SETTINGS_SDL_INT_BROWSER_MENU_FONT_SIZE]
+            = { SETTINGS_SDL_GET(browser_menu_font_size),
+                SETTINGS_SDL_SET(browser_menu_font_size) },
+        [SETTINGS_SDL_INT_EFFECTIVE_BROWSER_MENU_FONT_SIZE]
+            = { SETTINGS_SDL_GET(effective_browser_menu_font_size), NULL },
+        [SETTINGS_SDL_INT_CHARACTER_SHEET_FONT_SIZE]
+            = { SETTINGS_SDL_GET(character_sheet_font_size),
+                SETTINGS_SDL_SET(character_sheet_font_size) },
+        [SETTINGS_SDL_INT_EFFECTIVE_CHARACTER_SHEET_FONT_SIZE]
+            = { SETTINGS_SDL_GET(effective_character_sheet_font_size), NULL },
         [SETTINGS_SDL_INT_MARGIN]
             = { SETTINGS_SDL_GET(margin), SETTINGS_SDL_SET(margin) },
     };

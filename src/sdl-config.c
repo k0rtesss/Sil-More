@@ -1331,6 +1331,28 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
             log_debug("Loaded menuPanelFontSize: %d",
                 cfg->menu_panel_font_size);
         }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "plainMenuFontSize");
+        if (cJSON_IsNumber(item)) {
+            cfg->plain_menu_font_size = item->valueint;
+            log_debug("Loaded plainMenuFontSize: %d",
+                cfg->plain_menu_font_size);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "browserMenuFontSize");
+        if (cJSON_IsNumber(item)) {
+            cfg->browser_menu_font_size = item->valueint;
+            log_debug("Loaded browserMenuFontSize: %d",
+                cfg->browser_menu_font_size);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl,
+            "characterSheetFontSize");
+        if (cJSON_IsNumber(item)) {
+            cfg->character_sheet_font_size = item->valueint;
+            log_debug("Loaded characterSheetFontSize: %d",
+                cfg->character_sheet_font_size);
+        }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "margin");
         if (cJSON_IsNumber(item)) {
@@ -1821,6 +1843,12 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", cfg->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "menuPanelFontSize",
         cfg->menu_panel_font_size);
+    cJSON_AddNumberToObject(sdl, "plainMenuFontSize",
+        cfg->plain_menu_font_size);
+    cJSON_AddNumberToObject(sdl, "browserMenuFontSize",
+        cfg->browser_menu_font_size);
+    cJSON_AddNumberToObject(sdl, "characterSheetFontSize",
+        cfg->character_sheet_font_size);
     cJSON_AddNumberToObject(sdl, "margin", cfg->margin);
     cJSON_AddBoolToObject(sdl, "fullscreen", cfg->fullscreen);
     cJSON_AddBoolToObject(sdl, "tiles", cfg->tiles);
@@ -2147,6 +2175,9 @@ void sdl_config_set_defaults(struct sdl_config* cfg)
     cfg->main_view_scale = 1;
     cfg->aux_view_font_size = 0;
     cfg->menu_panel_font_size = 0;
+    cfg->plain_menu_font_size = 0;
+    cfg->browser_menu_font_size = 0;
+    cfg->character_sheet_font_size = 0;
     cfg->margin = 4;
     cfg->fullscreen = true;
     cfg->tiles = true;
@@ -2235,6 +2266,9 @@ void sdl_config_set_defaults_for_resolution(struct sdl_config* cfg,
         cfg->main_view_scale = profile->main_view_scale;
         cfg->aux_view_font_size = 0;
         cfg->menu_panel_font_size = 0;
+        cfg->plain_menu_font_size = 0;
+        cfg->browser_menu_font_size = 0;
+        cfg->character_sheet_font_size = 0;
         // Note: margin, fullscreen, tiles, and window position/size use base defaults
         
         // Apply pane configuration

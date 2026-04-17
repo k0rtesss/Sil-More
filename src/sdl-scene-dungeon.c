@@ -651,6 +651,12 @@ static const app_ui_panel* sdl_scene_find_strip_panel(const app_ui_scene* scene,
     return NULL;
 }
 
+static bool sdl_scene_hide_chrome_left_rail(
+    const app_interaction_state* interaction)
+{
+    return interaction && interaction->kind == APP_INTERACTION_KIND_LOOK;
+}
+
 static const char* sdl_scene_ui_status_label_text(const app_ui_row* row)
 {
     if (!row)
@@ -1058,7 +1064,8 @@ static void sdl_scene_draw_mono_text_px(const sdl_view* view, float x_px,
 }
 
 static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
-    const app_map_snapshot* map, const app_ui_scene* chrome_scene)
+    const app_map_snapshot* map, const app_ui_scene* chrome_scene,
+    const app_interaction_state* interaction)
 {
     sdl_scene_layout layout;
     const app_ui_panel* top_strip;
@@ -1098,10 +1105,13 @@ static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
             - layout.bottom_strip_h_px;
         if (chrome_content_h < 0)
             chrome_content_h = 0;
-        layout.left_panel_w_px = sdl_scene_ui_left_reserved_px(view, status_rail,
-            layout.canvas_w, chrome_content_h);
-        if (layout.left_panel_w_px > 0)
-            layout.map_origin_x_px = layout.left_panel_w_px;
+        if (!sdl_scene_hide_chrome_left_rail(interaction))
+        {
+            /* The visible left rail now overlays the dungeon instead of
+             * reserving black canvas beside it. */
+            layout.left_panel_w_px = sdl_scene_ui_left_reserved_px(view,
+                status_rail, layout.canvas_w, chrome_content_h);
+        }
     }
 
     layout.content_bottom_px = layout.canvas_h - layout.bottom_strip_h_px;
@@ -1263,7 +1273,7 @@ static bool sdl_scene_render_chrome_status_rail_panel(const sdl_view* view,
     clear_rect.h = (float)(metrics.row_visible * metrics.line_h);
     if (clear_rect.w <= 0.0f || clear_rect.h <= 0.0f)
         return false;
-    sdl_scene_fill_rect(&clear_rect, (SDL_Color){ 0, 0, 0, 255 });
+    sdl_scene_fill_rect(&clear_rect, (SDL_Color){ 10, 18, 26, 184 });
 
     clip_rect.x = 0;
     clip_rect.y = (int)clear_rect.y;
@@ -1509,12 +1519,16 @@ static bool sdl_scene_render_chrome_overlay_rail_panel(const sdl_view* view,
 }
 
 static bool sdl_scene_render_chrome_scene(const sdl_view* view,
-    const sdl_scene_layout* layout, const app_ui_scene* scene)
+    const sdl_scene_layout* layout, const app_ui_scene* scene,
+    const app_interaction_state* interaction)
 {
+    bool hide_left_rail;
     u16b i;
 
     if (!view || !layout || !scene)
         return false;
+
+    hide_left_rail = sdl_scene_hide_chrome_left_rail(interaction);
 
     /* Keep dungeon chrome geometry and rendering coupled in this renderer. */
     for (i = 0; i < scene->panel_count; i++)
@@ -1523,6 +1537,13 @@ static bool sdl_scene_render_chrome_scene(const sdl_view* view,
 
         if (!(panel->flags & APP_UI_PANEL_FLAG_ACTIVE))
             continue;
+        if (hide_left_rail
+            && (panel->flags & APP_UI_PANEL_FLAG_LEFT_ANCHORED)
+            && (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL
+                || panel->style == APP_UI_PANEL_STYLE_OVERLAY_RAIL))
+        {
+            continue;
+        }
 
         if (panel->style == APP_UI_PANEL_STYLE_STRIP)
         {
@@ -2384,7 +2405,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     if (!map || !panes || !overlay)
         return false;
 
-    layout = sdl_scene_make_layout(main_view, map, chrome_scene);
+    layout = sdl_scene_make_layout(main_view, map, chrome_scene, interaction);
     have_map_clip = sdl_scene_layout_map_clip_rect(&layout, &map_clip_rect);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
@@ -2402,7 +2423,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     sdl_scene_render_combat_overlay(main_view, &layout, map, panes);
     if (chrome_scene && !sdl_scene_render_chrome_scene(main_view, &layout,
-            chrome_scene))
+            chrome_scene, interaction))
     {
         SDL_SetRenderTarget(g_state.renderer, NULL);
         return false;

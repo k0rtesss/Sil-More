@@ -14,6 +14,38 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ArgumentList
+    )
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+
+    try {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+
+        if (Test-Path $stdoutFile) {
+            Get-Content -Path $stdoutFile | ForEach-Object { Write-Host $_ }
+        }
+        if (Test-Path $stderrFile) {
+            Get-Content -Path $stderrFile | ForEach-Object { Write-Host $_ }
+        }
+
+        return $process.ExitCode
+    }
+    finally {
+        Remove-Item -Path $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-LatestAndroidSdkPackagePath {
     param(
         [Parameter(Mandatory = $true)]
@@ -107,6 +139,39 @@ function Resolve-CMakePath {
     return $null
 }
 
+function Resolve-NinjaPath {
+    $command = Get-Command ninja -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $cmakeNinja = 'C:\Program Files\CMake\bin\ninja.exe'
+    if (Test-Path $cmakeNinja) {
+        return $cmakeNinja
+    }
+
+    $sdkNinja = Get-LatestAndroidSdkPackagePath -PackageName 'cmake' -RelativeExecutablePath 'bin\ninja.exe'
+    if ($sdkNinja) {
+        return $sdkNinja
+    }
+
+    return $null
+}
+
+function Resolve-MingwMakePath {
+    $command = Get-Command mingw32-make -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $msysMake = 'C:\msys64\mingw64\bin\mingw32-make.exe'
+    if (Test-Path $msysMake) {
+        return $msysMake
+    }
+
+    return $null
+}
+
 $cmakePath = Resolve-CMakePath
 if (-not $cmakePath) {
     throw 'CMake not found. Install CMake or the Android SDK CMake package, or add cmake.exe to PATH.'
@@ -144,6 +209,7 @@ Write-Host "Using NDK: $NdkPath" -ForegroundColor Cyan
 Write-Host "Using toolchain: $toolchain" -ForegroundColor Cyan
 
 $configureArgs = @(
+    '-Wno-dev',
     '-S', $PSScriptRoot,
     '-B', $buildDir,
     "-DCMAKE_BUILD_TYPE=$Config",
@@ -153,24 +219,35 @@ $configureArgs = @(
     '-DSIL_BUILD_WITH_SDL_SOURCES=ON'
 )
 
-if (Get-Command ninja -ErrorAction SilentlyContinue) {
+$ninjaPath = Resolve-NinjaPath
+$mingwMakePath = Resolve-MingwMakePath
+
+if ($ninjaPath) {
+    $ninjaBinDir = Split-Path $ninjaPath -Parent
+    if ($env:Path -notlike "*$ninjaBinDir*") {
+        $env:Path = "$ninjaBinDir;$env:Path"
+    }
     $configureArgs += @('-G', 'Ninja')
-    Write-Host 'Generator: Ninja' -ForegroundColor Cyan
-} elseif (Get-Command mingw32-make -ErrorAction SilentlyContinue) {
+    Write-Host "Generator: Ninja ($ninjaPath)" -ForegroundColor Cyan
+} elseif ($mingwMakePath) {
+    $mingwMakeBinDir = Split-Path $mingwMakePath -Parent
+    if ($env:Path -notlike "*$mingwMakeBinDir*") {
+        $env:Path = "$mingwMakeBinDir;$env:Path"
+    }
     $configureArgs += @('-G', 'MinGW Makefiles')
-    Write-Host 'Generator: MinGW Makefiles' -ForegroundColor Cyan
+    Write-Host "Generator: MinGW Makefiles ($mingwMakePath)" -ForegroundColor Cyan
 } else {
     Write-Warning 'No explicit generator selected (ninja/mingw32-make not found). CMake default generator will be used.'
 }
 
-& $cmakePath @configureArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "CMake configure failed with exit code $LASTEXITCODE"
+$configureExitCode = Invoke-NativeCommand $cmakePath @configureArgs
+if ($configureExitCode -ne 0) {
+    throw "CMake configure failed with exit code $configureExitCode"
 }
 
-& $cmakePath --build $buildDir --parallel
-if ($LASTEXITCODE -ne 0) {
-    throw "CMake build failed with exit code $LASTEXITCODE"
+$buildExitCode = Invoke-NativeCommand $cmakePath --build $buildDir --parallel
+if ($buildExitCode -ne 0) {
+    throw "CMake build failed with exit code $buildExitCode"
 }
 
 Write-Host "Built native library for $Abi in $buildDir" -ForegroundColor Green

@@ -100,10 +100,12 @@ static int sdl_menu_scale_px(float logical_value)
     return sdl_ui_scale_px(logical_value);
 }
 
-static int sdl_menu_font_size_logical(const sdl_view* view)
+static int sdl_menu_font_size_logical(const app_ui_panel* panel)
 {
-    (void)view;
-    return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
+    if (!panel)
+        return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
+
+    return sdl_effective_menu_font_size_for_panel_style(panel->style);
 }
 
 static int sdl_menu_measure_text(TTF_Font* font, cptr text)
@@ -736,7 +738,7 @@ static bool sdl_menu_render_term_plain_panel(const sdl_view* main_view,
     if (menu_w <= 0)
         return false;
 
-    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(10.0f);
     if (min_px < 10)
         min_px = 10;
@@ -1305,7 +1307,7 @@ static bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -1673,7 +1675,7 @@ static bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -2266,7 +2268,7 @@ static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
         return false;
 
     desired_px = sdl_menu_scale_px(
-        (float)sdl_menu_font_size_logical(main_view));
+        (float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(10.0f);
     if (min_px < 10)
         min_px = 10;
@@ -2503,7 +2505,7 @@ static bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
         return false;
 
     desired_px = sdl_menu_scale_px(
-        (float)sdl_menu_font_size_logical(main_view));
+        (float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(10.0f);
     if (min_px < 10)
         min_px = 10;
@@ -2688,7 +2690,7 @@ static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
         return false;
 
     pixel_height = sdl_menu_scale_px(
-        (float)sdl_menu_font_size_logical(main_view));
+        (float)sdl_menu_font_size_logical(panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -3335,7 +3337,7 @@ static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -3443,7 +3445,7 @@ static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
             / (float)panel->minimap_height;
     }
 
-    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(main_view));
+    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(8.0f);
     if (min_px < 8)
         min_px = 8;

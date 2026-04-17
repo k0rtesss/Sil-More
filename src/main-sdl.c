@@ -2019,6 +2019,33 @@ errr init_sdl(int argc, char **argv)
             config.menu_panel_font_size);
         config.menu_panel_font_size = 64;
     }
+    if (config.plain_menu_font_size < 0) {
+        log_warn("Invalid plain_menu_font_size %d, using auto",
+            config.plain_menu_font_size);
+        config.plain_menu_font_size = 0;
+    } else if (config.plain_menu_font_size > 64) {
+        log_warn("Invalid plain_menu_font_size %d, clamping to 64",
+            config.plain_menu_font_size);
+        config.plain_menu_font_size = 64;
+    }
+    if (config.browser_menu_font_size < 0) {
+        log_warn("Invalid browser_menu_font_size %d, using auto",
+            config.browser_menu_font_size);
+        config.browser_menu_font_size = 0;
+    } else if (config.browser_menu_font_size > 64) {
+        log_warn("Invalid browser_menu_font_size %d, clamping to 64",
+            config.browser_menu_font_size);
+        config.browser_menu_font_size = 64;
+    }
+    if (config.character_sheet_font_size < 0) {
+        log_warn("Invalid character_sheet_font_size %d, using auto",
+            config.character_sheet_font_size);
+        config.character_sheet_font_size = 0;
+    } else if (config.character_sheet_font_size > 64) {
+        log_warn("Invalid character_sheet_font_size %d, clamping to 64",
+            config.character_sheet_font_size);
+        config.character_sheet_font_size = 64;
+    }
     if (config.margin < 0) {
         log_warn("Invalid margin %d, using 0", config.margin);
         config.margin = 0;
@@ -2067,11 +2094,31 @@ errr init_sdl(int argc, char **argv)
     else
         log_info("  Default aux view font size: auto (%d)", sdl_auto_aux_view_font_size());
     if (config.menu_panel_font_size > 0)
-        log_info("  Menu + left panel font size: %d",
+        log_info("  Default menu + left panel font size: %d",
             config.menu_panel_font_size);
     else
-        log_info("  Menu + left panel font size: auto (%d)",
+        log_info("  Default menu + left panel font size: auto (%d)",
             sdl_resolve_menu_panel_font_size(config.menu_panel_font_size));
+    if (config.plain_menu_font_size > 0)
+        log_info("  Plain menu font size: %d", config.plain_menu_font_size);
+    else
+        log_info("  Plain menu font size: auto (%d)",
+            sdl_effective_menu_font_size_for_panel_style(
+                APP_UI_PANEL_STYLE_PLAIN));
+    if (config.browser_menu_font_size > 0)
+        log_info("  Browser menu font size: %d",
+            config.browser_menu_font_size);
+    else
+        log_info("  Browser menu font size: auto (%d)",
+            sdl_effective_menu_font_size_for_panel_style(
+                APP_UI_PANEL_STYLE_BROWSER));
+    if (config.character_sheet_font_size > 0)
+        log_info("  Character sheet font size: %d",
+            config.character_sheet_font_size);
+    else
+        log_info("  Character sheet font size: auto (%d)",
+            sdl_effective_menu_font_size_for_panel_style(
+                APP_UI_PANEL_STYLE_CHARACTER_SHEET));
     log_info("  Margin: %d", config.margin);
     log_info("  Fullscreen: %s", config.fullscreen ? "true" : "false");
     log_info("  Tiles: %s", config.tiles ? "true" : "false");

@@ -2,7 +2,6 @@
 #include "app/app-session.h"
 #include "log/log.h"
 #include "platform-audio.h"
-#include "sdl-main-internal.h"
 #include "ui/ui-information-scene.h"
 
 static int message_topline_wrap_width(void)
@@ -15,7 +14,7 @@ static bool message_semantic_scene_kind(u16b* out_scene_kind)
     app_session* session = app_session_current();
     const app_snapshot* snapshot;
 
-    if (!session || !sdl_scene_stack_handles_main_view()
+    if (!session || !platform_frame_main_view_handles_scene_stack()
         || !ui_information_scene_supported())
         return false;
 

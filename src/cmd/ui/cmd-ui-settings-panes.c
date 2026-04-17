@@ -23,6 +23,7 @@
  */
 static int get_supporting_pane_config_count(void);
 static void do_cmd_supporting_pane_layout_editor(bool* settings_changed);
+static void do_cmd_menu_font_editor(bool* settings_changed);
 static void do_cmd_supporting_pane_font_editor(bool* settings_changed);
 void do_cmd_touch_pane_button_editor(bool* settings_changed);
 static const char* pane_type_short_name(enum pane_type type);
@@ -232,9 +233,9 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     if (!settings_browser_add_pair_row(panel, 3, (k == 3) ? TERM_L_BLUE
             : TERM_WHITE, TERM_SLATE, true, k == 3,
             settings_ui_pick_label(label_hint,
-                "Menu + Left Panel Font (0=auto, 8-64)",
-                "Menu + Left Panel Font",
-                "Menu Font"), font_value))
+                "Default Menu + Left Panel Font (0=auto, 8-64)",
+                "Default Menu + Left Panel Font",
+                "Menu Default"), font_value))
     {
         return false;
     }
@@ -300,6 +301,16 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     if (!settings_browser_add_label_row(panel, 10, (k == 10) ? TERM_L_BLUE
             : TERM_WHITE, true, k == 10,
             settings_ui_pick_label(label_hint,
+                "Menu Font Sizes",
+                "Menu Fonts",
+                "Menu Fonts")))
+    {
+        return false;
+    }
+
+    if (!settings_browser_add_label_row(panel, 11, (k == 11) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 11,
+            settings_ui_pick_label(label_hint,
                 "Pane Font Sizes",
                 "Pane Fonts",
                 "Pane Fonts")))
@@ -307,8 +318,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 11, (k == 11) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 11, settings_changed
+    if (!settings_browser_add_label_row(panel, 12, (k == 12) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 12, settings_changed
             ? "Save Changes and Return"
             : "Return to Options Menu"))
     {
@@ -330,7 +341,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
         (k == 2) || (k == 3), "0", "Auto");
     (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "Enter", (k == 9 || k == 10) ? "Open" : "Accept");
+        "Enter", (k == 9 || k == 10 || k == 11) ? "Open" : "Accept");
     (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
         "Esc", "Back");
 
@@ -340,7 +351,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
 void do_cmd_pane_settings(void)
 {
     int k = 0;
-    int n = 12; /* Total number of options */
+    int n = 13; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
     int dir;
@@ -397,7 +408,12 @@ void do_cmd_pane_settings(void)
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
                 break;
             }
-            if (k == 10) /* Pane Font Sizes */
+            if (k == 10) /* Menu Font Sizes */
+            {
+                do_cmd_menu_font_editor(&settings_changed);
+                break;
+            }
+            if (k == 11) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
                 break;
@@ -504,11 +520,15 @@ void do_cmd_pane_settings(void)
             {
                 do_cmd_supporting_pane_layout_editor(&settings_changed);
             }
-            else if (k == 10) /* Pane Font Sizes */
+            else if (k == 10) /* Menu Font Sizes */
+            {
+                do_cmd_menu_font_editor(&settings_changed);
+            }
+            else if (k == 11) /* Pane Font Sizes */
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
             }
-            else if (k == 11) /* Save/Return */
+            else if (k == 12) /* Save/Return */
             {
                 if (settings_changed)
                 {
@@ -797,6 +817,190 @@ static const char* pane_type_name(enum pane_type type)
     case PANE_TOUCH: return "TOUCH";
     default: return "UNKNOWN";
     }
+}
+
+typedef struct settings_sdl_menu_font_entry {
+    settings_sdl_int_config raw_id;
+    settings_sdl_int_config effective_id;
+    cptr long_label;
+    cptr medium_label;
+    cptr short_label;
+} settings_sdl_menu_font_entry;
+
+static const settings_sdl_menu_font_entry settings_sdl_menu_font_entries[] = {
+    {
+        SETTINGS_SDL_INT_MENU_PANEL_FONT_SIZE,
+        SETTINGS_SDL_INT_EFFECTIVE_MENU_PANEL_FONT_SIZE,
+        "Default Menu + Left Panel",
+        "Default Menu + Left",
+        "Default"
+    },
+    {
+        SETTINGS_SDL_INT_PLAIN_MENU_FONT_SIZE,
+        SETTINGS_SDL_INT_EFFECTIVE_PLAIN_MENU_FONT_SIZE,
+        "Plain Menus + Dialogs",
+        "Plain Menus",
+        "Plain"
+    },
+    {
+        SETTINGS_SDL_INT_BROWSER_MENU_FONT_SIZE,
+        SETTINGS_SDL_INT_EFFECTIVE_BROWSER_MENU_FONT_SIZE,
+        "Browser Menus",
+        "Browser Menus",
+        "Browser"
+    },
+    {
+        SETTINGS_SDL_INT_CHARACTER_SHEET_FONT_SIZE,
+        SETTINGS_SDL_INT_EFFECTIVE_CHARACTER_SHEET_FONT_SIZE,
+        "Character Sheet",
+        "Character Sheet",
+        "Sheet"
+    }
+};
+
+static void do_cmd_menu_font_editor(bool* settings_changed)
+{
+    int sel = 0;
+    bool done = false;
+    bool changed = false;
+    int dir;
+
+    while (!done)
+    {
+        settings_ui_layout layout = settings_ui_read_layout();
+        app_ui_scene scene;
+        app_ui_panel* panel = settings_browser_scene_begin(&scene,
+            "Menu Font Sizes", "");
+
+        if (!panel)
+        {
+            done = true;
+        }
+        else
+        {
+            if (sel > 4)
+                app_ui_panel_set_row_offset(panel, (s16b)(sel - 4));
+
+            for (int i = 0; i < (int)N_ELEMENTS(settings_sdl_menu_font_entries);
+                i++)
+            {
+                const settings_sdl_menu_font_entry* entry
+                    = &settings_sdl_menu_font_entries[i];
+                byte a = (i == sel) ? TERM_L_BLUE : TERM_WHITE;
+                char font_value[24];
+                const char* label = settings_ui_pick_label(
+                    layout.supporting_font_label_chars,
+                    entry->long_label, entry->medium_label,
+                    entry->short_label);
+
+                format_font_size_value(font_value, sizeof(font_value),
+                    settings_sdl_get_int_config(entry->raw_id),
+                    settings_sdl_get_int_config(entry->effective_id),
+                    layout.pane_overview_value_chars);
+                if (!settings_browser_add_pair_row(panel, (s16b)i, a,
+                        TERM_SLATE, true, i == sel, label, font_value))
+                {
+                    done = true;
+                    break;
+                }
+            }
+
+            (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+                "Overrides fall back to the default menu font.");
+            (void)app_ui_panel_add_body_line(panel, TERM_SLATE,
+                "Changes apply immediately.");
+            (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
+                true, "8/2", "Move");
+            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
+                true, "4/6", "Set");
+            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
+                true, "0", "Auto");
+            (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE,
+                true, "Esc", "Back");
+            if (!done && !ui_information_scene_present_ui(&scene))
+                done = true;
+        }
+
+        inkey_set_cursor_hidden(true);
+        char ch = settings_ui_read_key(false);
+        inkey_set_cursor_hidden(false);
+
+        dir = target_dir(ch);
+        if ((dir == 2) || (dir == 4) || (dir == 6) || (dir == 8))
+            ch = I2D(dir);
+
+        switch (ch)
+        {
+        case ESCAPE:
+        case '\n':
+        case '\r':
+            done = true;
+            break;
+
+        case '-':
+        case '8':
+            sel = ((int)N_ELEMENTS(settings_sdl_menu_font_entries) + sel - 1)
+                % (int)N_ELEMENTS(settings_sdl_menu_font_entries);
+            break;
+
+        case '2':
+            sel = (sel + 1) % (int)N_ELEMENTS(settings_sdl_menu_font_entries);
+            break;
+
+        case '0':
+        {
+            const settings_sdl_menu_font_entry* entry
+                = &settings_sdl_menu_font_entries[sel];
+
+            if (settings_sdl_get_int_config(entry->raw_id) != 0)
+            {
+                settings_sdl_set_int_config(entry->raw_id, 0);
+                changed = true;
+                platform_apply_config();
+            }
+            break;
+        }
+
+        case 'n':
+        case '4':
+        case 'y':
+        case '6':
+        {
+            const settings_sdl_menu_font_entry* entry
+                = &settings_sdl_menu_font_entries[sel];
+            int delta = ((ch == 'n') || (ch == '4')) ? -1 : 1;
+            int value = settings_sdl_get_int_config(entry->raw_id);
+
+            if (value == 0)
+            {
+                settings_sdl_set_int_config(entry->raw_id,
+                    settings_sdl_get_int_config(entry->effective_id));
+                changed = true;
+                platform_apply_config();
+            }
+            else if (delta > 0 && value < 64)
+            {
+                settings_sdl_set_int_config(entry->raw_id, value + 1);
+                changed = true;
+                platform_apply_config();
+            }
+            else if (delta < 0 && value > 8)
+            {
+                settings_sdl_set_int_config(entry->raw_id, value - 1);
+                changed = true;
+                platform_apply_config();
+            }
+            break;
+        }
+
+        default:
+            bell("Illegal command for menu font editor!");
+            break;
+        }
+    }
+
+    if (changed && settings_changed)
+        *settings_changed = true;
 }
 
 static void do_cmd_supporting_pane_font_editor(bool* settings_changed)

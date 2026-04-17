@@ -5,6 +5,38 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ArgumentList
+    )
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+
+    try {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+
+        if (Test-Path $stdoutFile) {
+            Get-Content -Path $stdoutFile | ForEach-Object { Write-Host $_ }
+        }
+        if (Test-Path $stderrFile) {
+            Get-Content -Path $stderrFile | ForEach-Object { Write-Host $_ }
+        }
+
+        return $process.ExitCode
+    }
+    finally {
+        Remove-Item -Path $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Resolve-JavaHome {
     if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
         return $env:JAVA_HOME
@@ -34,9 +66,9 @@ try {
     }
 
     if (Test-Path '.\\gradlew.bat') {
-        & .\\gradlew.bat $task
-        if ($LASTEXITCODE -ne 0) {
-            throw "Gradle wrapper failed with exit code $LASTEXITCODE"
+        $wrapperExitCode = Invoke-NativeCommand '.\\gradlew.bat' $task
+        if ($wrapperExitCode -ne 0) {
+            throw "Gradle wrapper failed with exit code $wrapperExitCode"
         }
         $apkPath = if ($Config -eq 'Release') {
             Join-Path $androidDir 'app\build\outputs\apk\release\app-release.apk'
@@ -51,9 +83,9 @@ try {
     }
 
     if (Get-Command gradle -ErrorAction SilentlyContinue) {
-        & gradle $task
-        if ($LASTEXITCODE -ne 0) {
-            throw "Gradle CLI failed with exit code $LASTEXITCODE"
+        $gradleExitCode = Invoke-NativeCommand 'gradle' $task
+        if ($gradleExitCode -ne 0) {
+            throw "Gradle CLI failed with exit code $gradleExitCode"
         }
         $apkPath = if ($Config -eq 'Release') {
             Join-Path $androidDir 'app\build\outputs\apk\release\app-release.apk'

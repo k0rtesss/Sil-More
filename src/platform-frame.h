@@ -17,6 +17,7 @@ const char* platform_frame_view_name(int view_index);
 int platform_frame_active_view_index(void);
 void platform_frame_set_active_view(int view_index);
 bool platform_frame_main_view_ready(void);
+bool platform_frame_main_view_handles_scene_stack(void);
 int platform_frame_main_grid_cols(void);
 int platform_frame_main_grid_rows(void);
 int platform_frame_active_grid_cols(void);

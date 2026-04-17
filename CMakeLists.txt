@@ -513,7 +513,19 @@ endif()
 
 add_library(sil-core STATIC ${SIL_MORE_SOURCES_CORE_LIBRARY})
 set_target_properties(sil-core PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(sil-core PUBLIC sil-build-config log)
+target_link_libraries(sil-core PUBLIC
+  sil-build-config
+  log
+)
+# Some UI/settings sources still live in sil-core and include SDL-facing
+# migration headers directly, so the core target needs SDL usage requirements
+# during compilation on source-built/mobile configurations.
+target_link_libraries(sil-core PRIVATE
+  SDL3::SDL3
+  SDL3_ttf::SDL3_ttf
+  SDL3_image::SDL3_image
+  SDL3_mixer::SDL3_mixer
+)
 
 if (SIL_STRICT_WARNINGS)
   target_link_libraries(sil-core PUBLIC sil-strict-build-config)

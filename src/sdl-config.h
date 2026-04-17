@@ -20,6 +20,15 @@ struct sdl_config {
     int aux_view_font_size;
     // Fixed-pixel menu and classic left-panel font size. Zero means auto.
     int menu_panel_font_size;
+    // Fixed-pixel plain menu/dialog font size. Zero means use the default
+    // menu + left-panel font size.
+    int plain_menu_font_size;
+    // Fixed-pixel browser menu font size. Zero means use the default
+    // menu + left-panel font size.
+    int browser_menu_font_size;
+    // Fixed-pixel character-sheet font size. Zero means use the default
+    // menu + left-panel font size.
+    int character_sheet_font_size;
     int margin;
     bool fullscreen;
     bool tiles;

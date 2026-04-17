@@ -376,6 +376,39 @@ int sdl_resolve_menu_panel_font_size(int requested_size)
     return size;
 }
 
+static int sdl_resolve_menu_style_font_size(int requested_size)
+{
+    int size = requested_size;
+
+    if (size <= 0)
+        size = sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
+    if (size < 8)
+        size = 8;
+    if (size > 64)
+        size = 64;
+
+    return size;
+}
+
+int sdl_effective_menu_font_size_for_panel_style(u16b panel_style)
+{
+    switch (panel_style)
+    {
+    case APP_UI_PANEL_STYLE_PLAIN:
+        return sdl_resolve_menu_style_font_size(config.plain_menu_font_size);
+
+    case APP_UI_PANEL_STYLE_BROWSER:
+        return sdl_resolve_menu_style_font_size(config.browser_menu_font_size);
+
+    case APP_UI_PANEL_STYLE_CHARACTER_SHEET:
+        return sdl_resolve_menu_style_font_size(
+            config.character_sheet_font_size);
+
+    default:
+        return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
+    }
+}
+
 int sdl_effective_pane_font_size_for_config(const struct pane_config* pc)
 {
     if (pc && pc->font_size > 0)
@@ -585,6 +618,32 @@ void platform_config_info(char* buf, size_t size)
             "Menu + Left Panel Font Size: auto (%d)\n",
             sdl_resolve_menu_panel_font_size(config.menu_panel_font_size));
     }
+    if (config.plain_menu_font_size > 0) {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Plain Menu Font Size: %d\n", config.plain_menu_font_size);
+    } else {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Plain Menu Font Size: auto (%d)\n",
+            sdl_resolve_menu_style_font_size(config.plain_menu_font_size));
+    }
+    if (config.browser_menu_font_size > 0) {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Browser Menu Font Size: %d\n", config.browser_menu_font_size);
+    } else {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Browser Menu Font Size: auto (%d)\n",
+            sdl_resolve_menu_style_font_size(config.browser_menu_font_size));
+    }
+    if (config.character_sheet_font_size > 0) {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Character Sheet Font Size: %d\n",
+            config.character_sheet_font_size);
+    } else {
+        offset += (size_t)strnfmt(buf + offset, size - offset,
+            "Character Sheet Font Size: auto (%d)\n",
+            sdl_resolve_menu_style_font_size(
+                config.character_sheet_font_size));
+    }
     offset += (size_t)strnfmt(buf + offset, size - offset, "Margin: %d\n", config.margin);
     offset += (size_t)strnfmt(buf + offset, size - offset, "Fullscreen: %s\n", config.fullscreen ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Tiles: %s\n", config.tiles ? "Yes" : "No");
@@ -716,6 +775,54 @@ void platform_set_menu_panel_font_size(int value)
 {
     if (value == 0 || (value >= 8 && value <= 64))
         config.menu_panel_font_size = value;
+}
+
+int platform_plain_menu_font_size(void)
+{
+    return config.plain_menu_font_size;
+}
+
+int platform_effective_plain_menu_font_size(void)
+{
+    return sdl_resolve_menu_style_font_size(config.plain_menu_font_size);
+}
+
+void platform_set_plain_menu_font_size(int value)
+{
+    if (value == 0 || (value >= 8 && value <= 64))
+        config.plain_menu_font_size = value;
+}
+
+int platform_browser_menu_font_size(void)
+{
+    return config.browser_menu_font_size;
+}
+
+int platform_effective_browser_menu_font_size(void)
+{
+    return sdl_resolve_menu_style_font_size(config.browser_menu_font_size);
+}
+
+void platform_set_browser_menu_font_size(int value)
+{
+    if (value == 0 || (value >= 8 && value <= 64))
+        config.browser_menu_font_size = value;
+}
+
+int platform_character_sheet_font_size(void)
+{
+    return config.character_sheet_font_size;
+}
+
+int platform_effective_character_sheet_font_size(void)
+{
+    return sdl_resolve_menu_style_font_size(config.character_sheet_font_size);
+}
+
+void platform_set_character_sheet_font_size(int value)
+{
+    if (value == 0 || (value >= 8 && value <= 64))
+        config.character_sheet_font_size = value;
 }
 
 int platform_margin(void)

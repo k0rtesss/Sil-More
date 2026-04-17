@@ -61,6 +61,11 @@ bool platform_frame_main_view_ready(void)
     return platform_frame_view_ready(0);
 }
 
+bool platform_frame_main_view_handles_scene_stack(void)
+{
+    return sdl_scene_stack_handles_main_view();
+}
+
 int platform_frame_main_grid_cols(void)
 {
     if (platform_frame_main_view_ready() && g_views[0].cols > 0)

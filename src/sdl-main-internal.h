@@ -114,6 +114,7 @@ int sdl_auto_aux_view_font_size(void);
 int sdl_resolve_aux_view_font_size(int requested_size);
 int sdl_auto_menu_panel_font_size(void);
 int sdl_resolve_menu_panel_font_size(int requested_size);
+int sdl_effective_menu_font_size_for_panel_style(u16b panel_style);
 int sdl_effective_pane_font_size_for_config(const struct pane_config* pc);
 int sdl_effective_pane_font_size_for_type(enum pane_type type);
 void sdl_build_supporting_pane_metrics(const struct pane_config* configs,
