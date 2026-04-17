@@ -93,7 +93,7 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
     }
 }
 
-static bool metarun_show_known_curses_information_scene(bool steamdeck,
+bool metarun_show_known_curses_information_scene(bool steamdeck,
     const char* accept_label, const char* back_label)
 {
     int known_ids[METAR_CURSE_SLOTS];
@@ -152,8 +152,10 @@ static bool metarun_show_known_curses_information_scene(bool steamdeck,
 
         for (int i = 0; i < known_count; i++)
         {
-            const char* blessing_name = blessing_display_name(known_ids[i]);
-            const char* curse_name = curse_display_name(known_ids[i]);
+            const char* blessing_name =
+                metarun_blessing_display_name(known_ids[i]);
+            const char* curse_name =
+                metarun_curse_display_name(known_ids[i]);
             char meta[APP_UI_META_MAX];
             byte meta_attr = TERM_SLATE;
 
@@ -356,11 +358,11 @@ static bool blessing_apply_remove_curse_choice(int curse_id, char *result_msg,
         if (current_stacks > 1) {
             snprintf(result_msg, msg_size,
                 "One stack of %s is lifted. (%d remain%s)",
-                curse_display_name(curse_id), current_stacks - 1,
+                metarun_curse_display_name(curse_id), current_stacks - 1,
                 (current_stacks - 1 == 1) ? "s" : "");
         } else {
             snprintf(result_msg, msg_size, "The curse of %s is lifted.",
-                curse_display_name(curse_id));
+                metarun_curse_display_name(curse_id));
         }
         if (result_attr) *result_attr = TERM_L_BLUE;
     }
@@ -524,7 +526,7 @@ static bool blessing_apply_minor_choice(int blessing_id, char *result_msg,
 
     if (result_msg && msg_size > 0) {
         snprintf(result_msg, msg_size, "You receive the %s.",
-            blessing_display_name(blessing_id));
+            metarun_blessing_display_name(blessing_id));
         if (result_attr) *result_attr = TERM_L_GREEN;
     }
 
@@ -848,7 +850,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                     CURSE_CURSE_STACK(ids[i]));
                 if (!app_ui_panel_add_row(panel, ids[i], TERM_RED, true,
                         i == selected_remove, key_buf,
-                        curse_display_name(ids[i]), meta))
+                        metarun_curse_display_name(ids[i]), meta))
                 {
                     return false;
                 }
@@ -952,7 +954,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 strnfmt(meta, sizeof(meta), "current: %d", blessing_stacks);
                 if (!app_ui_panel_add_row(panel, options[i], TERM_L_GREEN, true,
                         i == selected_minor, key_buf,
-                        blessing_display_name(options[i]), meta))
+                        metarun_blessing_display_name(options[i]), meta))
                 {
                     return false;
                 }
@@ -963,7 +965,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 app_ui_panel_set_detail_title(panel, TERM_L_BLUE,
                     "Selected Blessing");
                 (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN,
-                    blessing_display_name(options[selected_minor]));
+                    metarun_blessing_display_name(options[selected_minor]));
                 if (c->blessing_text) {
                     if (!metarun_ui_add_wrapped_detail_lines(panel, TERM_WHITE,
                             cu_text + c->blessing_text))

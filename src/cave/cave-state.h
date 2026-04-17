@@ -25,5 +25,7 @@ extern byte flow_center_x[MAX_FLOWS];
 extern byte update_center_y[MAX_FLOWS];
 extern byte update_center_x[MAX_FLOWS];
 extern s16b wandering_pause[MAX_FLOWS];
+extern s16b image_count;
+extern bool shimmer_objects;
 
 #endif /* INCLUDED_CAVE_CAVE_STATE_H */

@@ -1,5 +1,15 @@
 #include "metarun-internal.h"
 
+static int popcount32(u32b value)
+{
+    int count = 0;
+    while (value) {
+        value &= (value - 1);
+        count++;
+    }
+    return count;
+}
+
 static int parse_character_file(ang_file *fp)
 {
     int count = 0;

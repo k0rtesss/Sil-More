@@ -12,7 +12,7 @@ static const char* challenge_display_name(int challenge_id)
     }
 }
 
-static bool metarun_show_completed_quests_information_scene(bool steamdeck,
+bool metarun_show_completed_quests_information_scene(bool steamdeck,
     const char* accept_label, const char* back_label)
 {
     struct quest_summary_entry {
@@ -518,7 +518,7 @@ void metarun_choose_difficulty_menu(bool reopen_stats_on_exit)
 }
 
 /* compact table of all meta-runs */
-static bool metarun_list_history_information_scene(bool steamdeck,
+bool metarun_list_history_information_scene(bool steamdeck,
     const char* accept_label, const char* back_label)
 {
     refresh_current_metar_score();

@@ -58,66 +58,15 @@
 /* #define METARUN_CLEANUP_OLD_FILES */
 
 /* =========================  globals  =========================== */
-#include "metarun/metarun-state.c"
-
-#include "metarun/metarun-score.c"
-
-#include "metarun/metarun-persistence.c"
 
 /* forward declarations */
 static void start_new_metarun(void);
-static int required_survivor_target(int win_goal);
-void metarun_choose_difficulty_menu(bool reopen_stats_on_exit);
-static bool metarun_adjust_blessing_threshold_information_scene(
-    bool steamdeck, const char* accept_label, const char* back_label);
-static bool metarun_list_history_information_scene(bool steamdeck,
-    const char* accept_label, const char* back_label);
-static cptr curse_display_name(int idx);
-static cptr blessing_display_name(int idx);
-static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
-    bool selected);
-static bool metarun_ui_add_effect_row(app_ui_panel* panel, int id);
-static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
-    byte title_attr, const char* title, byte subtitle_attr,
-    const char* subtitle);
-static app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
-    byte title_attr, const char* title);
-static bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in);
-static void metarun_ui_clear_pending_input(void);
-static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
-    const char* text);
-static bool metarun_ui_add_section_row(app_ui_panel* panel, byte attr,
-    const char* text);
-static bool metarun_ui_add_value_row(app_ui_panel* panel, byte label_attr,
-    const char* label, byte value_attr, const char* value);
-static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
-    app_ui_panel* panel, const char* const* paragraphs, const byte* attrs,
-    int paragraph_count);
-static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id);
-static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id);
-static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
-    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
-    const char* accept_label);
-static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
-    const char* const* paragraphs, const byte* attrs, int paragraph_count,
-    bool steamdeck, const char* accept_label, const char* action_label);
-static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
-    const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
-    const char* accept_label, const char* back_label);
-static void metarun_present_story_texts(const char* title,
-    cptr texts[], int total_texts, byte title_attr,
-    byte text_attr, const char* action_label);
-static void metarun_trim_first_line(char* dst, size_t dst_size,
-    const char* source);
+static bool metarun_ui_show_story_texts(const char* title, byte title_attr,
+    cptr texts[], int total_texts, byte text_attr, bool steamdeck,
+    const char* accept_label, const char* action_label);
 static cptr metarun_curse_choice_label(int n);
-static int metarun_ui_choose_curse_scene(int n,
-    const int picks[CURSE_MENU_LINES], bool steamdeck,
-    const char* accept_label);
-static void metarun_log_blessing_key(const char* context, int mode, int key);
-static bool metarun_show_known_curses_information_scene(bool steamdeck,
-    const char* accept_label, const char* back_label);
-#include "metarun/metarun-ui-history.c"
-#include "metarun/metarun-ui-stats.c"
+
+static int rng_int(int max) { return max ? (int)(rand() % max) : 0; }
 
 /* ---------------------------------------------------------------
  * Pick a curse at random, respecting weights, stacks, caps,
@@ -304,7 +253,7 @@ void metarun_clear_all_curses(void)
  *    All show in the intended order with no garbled overlaps.
  */
 
-static cptr curse_display_name(int idx)
+cptr metarun_curse_display_name(int idx)
 {
     cptr raw = cu_name + cu_info[idx].name;
     /* Strip common prefixes for cleaner display */
@@ -315,7 +264,7 @@ static cptr curse_display_name(int idx)
     return raw;
 }
 
-static cptr blessing_display_name(int idx)
+cptr metarun_blessing_display_name(int idx)
 {
     if (cu_info[idx].blessing_name) {
         cptr raw = cu_name + cu_info[idx].blessing_name;
@@ -323,7 +272,7 @@ static cptr blessing_display_name(int idx)
         if (strncmp(raw, "Blessing of ", 12) == 0) raw += 12;
         return raw;
     }
-    return curse_display_name(idx);
+    return metarun_curse_display_name(idx);
 }
 
 /****************  Escapeâ€‘curse chooser (clean version) ************/
@@ -456,7 +405,7 @@ static bool metarun_ui_show_story_texts(const char* title, byte title_attr,
     return presented;
 }
 
-static void metarun_present_story_texts(const char* title,
+void metarun_present_story_texts(const char* title,
     cptr texts[], int total_texts, byte title_attr,
     byte text_attr, const char* action_label)
 {
@@ -894,7 +843,7 @@ static byte metarun_play_escape_victory_semantic_sequence(int sil_count,
         {
             strnfmt(curse_lines[i], sizeof(curse_lines[i]),
                 "The curse of %s binds your fate.",
-                curse_display_name(chosen[i]));
+                metarun_curse_display_name(chosen[i]));
             paragraphs[i] = curse_lines[i];
             attrs[i] = TERM_RED;
         }
@@ -1406,7 +1355,7 @@ void metarun_update_on_exit(bool died, bool escaped, byte sil_count, s32b final_
 }
 
 
-static int required_survivor_target(int win_goal)
+int required_survivor_target(int win_goal)
 {
     int remaining_silmarils = win_goal - metar.silmarils;
     if (remaining_silmarils < 0) remaining_silmarils = 0;
@@ -1601,7 +1550,7 @@ static void start_new_metarun(void)
     log_info("New metarun %d created and initialized", metar.id);
 }
 
-static bool metarun_ui_add_section_row(app_ui_panel* panel, byte attr,
+bool metarun_ui_add_section_row(app_ui_panel* panel, byte attr,
     const char* text)
 {
     if (!panel || !text || !text[0]
@@ -1614,14 +1563,14 @@ static bool metarun_ui_add_section_row(app_ui_panel* panel, byte attr,
     return true;
 }
 
-static bool metarun_ui_add_value_row(app_ui_panel* panel, byte label_attr,
+bool metarun_ui_add_value_row(app_ui_panel* panel, byte label_attr,
     const char* label, byte value_attr, const char* value)
 {
     return app_ui_panel_add_row_ex(panel, 0, label_attr, value_attr, 0, '\0',
         true, false, "", label ? label : "", value ? value : "");
 }
 
-static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
+bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
     bool selected)
 {
     const curse_type* cu;
@@ -1644,7 +1593,8 @@ static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
 
     is_blessing = (stacks < 0);
     magnitude = is_blessing ? -stacks : stacks;
-    name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
+    name = is_blessing ? metarun_blessing_display_name(id)
+                       : metarun_curse_display_name(id);
     attr = is_blessing ? TERM_L_GREEN : TERM_RED;
     icon = is_blessing ? '+' : '-';
     cu = &cu_info[id];
@@ -1666,12 +1616,12 @@ static bool metarun_ui_add_effect_row_ex(app_ui_panel* panel, int id,
         selected, "", label, meta);
 }
 
-static bool metarun_ui_add_effect_row(app_ui_panel* panel, int id)
+bool metarun_ui_add_effect_row(app_ui_panel* panel, int id)
 {
     return metarun_ui_add_effect_row_ex(panel, id, false);
 }
 
-static void metarun_trim_first_line(char* dst, size_t dst_size,
+void metarun_trim_first_line(char* dst, size_t dst_size,
     const char* source)
 {
     char* newline;
@@ -1706,7 +1656,7 @@ static void metarun_ui_set_scene_alpha(app_ui_scene* scene, byte alpha)
         scene->panels[i].alpha = alpha;
 }
 
-static bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in)
+bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in)
 {
     u64b start_ms;
 
@@ -1743,7 +1693,7 @@ static bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in)
     return true;
 }
 
-static app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
+app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     byte title_attr, const char* title, byte subtitle_attr,
     const char* subtitle)
 {
@@ -1787,7 +1737,7 @@ static app_ui_panel* metarun_ui_begin_modal_scene(app_ui_scene* scene,
     return panel;
 }
 
-static app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
+app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
     byte title_attr, const char* title)
 {
     app_ui_panel* panel;
@@ -1911,13 +1861,13 @@ static bool metarun_ui_add_wrapped_body_lines(app_ui_panel* panel, byte attr,
     return metarun_ui_add_wrapped_text_lines(panel, attr, text, false);
 }
 
-static bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
+bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
     const char* text)
 {
     return metarun_ui_add_wrapped_text_lines(panel, attr, text, true);
 }
 
-static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
+bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
     app_ui_panel* panel, const char* const* paragraphs, const byte* attrs,
     int paragraph_count)
 {
@@ -1959,7 +1909,7 @@ static bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,
     return true;
 }
 
-static void metarun_ui_clear_pending_input(void)
+void metarun_ui_clear_pending_input(void)
 {
     app_session* session = app_session_current();
 
@@ -1971,7 +1921,7 @@ static void metarun_ui_clear_pending_input(void)
     input_clear_movement_commands();
 }
 
-static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
+bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
 {
     const curse_type* cu;
     const char* desc = NULL;
@@ -1992,7 +1942,8 @@ static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
 
     is_blessing = (stacks < 0);
     magnitude = is_blessing ? -stacks : stacks;
-    name = is_blessing ? blessing_display_name(id) : curse_display_name(id);
+    name = is_blessing ? metarun_blessing_display_name(id)
+                       : metarun_curse_display_name(id);
     attr = is_blessing ? TERM_L_GREEN : TERM_RED;
     cu = &cu_info[id];
 
@@ -2043,7 +1994,7 @@ static bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
     return true;
 }
 
-static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id)
+bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id)
 {
     curse_type* cu;
     const char* curse_name;
@@ -2062,8 +2013,8 @@ static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id)
     }
 
     cu = &cu_info[id];
-    curse_name = curse_display_name(id);
-    blessing_name = blessing_display_name(id);
+    curse_name = metarun_curse_display_name(id);
+    blessing_name = metarun_blessing_display_name(id);
     show_blessing_name = blessing_name && blessing_name[0]
         && strcmp(blessing_name, curse_name) != 0;
 
@@ -2140,7 +2091,7 @@ static bool metarun_ui_add_known_curse_detail_lines(app_ui_panel* panel, int id)
     return true;
 }
 
-static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
+bool metarun_ui_show_story_modal(const char* title, byte title_attr,
     const char* const* paragraphs, const byte* attrs, int paragraph_count,
     bool steamdeck, const char* accept_label, const char* action_label)
 {
@@ -2168,7 +2119,7 @@ static bool metarun_ui_show_story_modal(const char* title, byte title_attr,
     return true;
 }
 
-static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
+bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label)
 {
@@ -2200,7 +2151,7 @@ static bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     return true;
 }
 
-static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
+bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     const char* const* lines, const byte* attrs, int line_count, bool steamdeck,
     const char* accept_label, const char* back_label)
 {
@@ -2278,8 +2229,8 @@ static bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     }
 }
 
-static int metarun_ui_choose_curse_scene(int n,
-    const int picks[CURSE_MENU_LINES], bool steamdeck,
+int metarun_ui_choose_curse_scene(int n,
+    const int* picks, bool steamdeck,
     const char* accept_label)
 {
     int selected = 0;

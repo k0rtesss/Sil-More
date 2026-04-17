@@ -137,7 +137,9 @@ add_subdirectory(src/log)
 # Transitional subsystem groupings for the unstable refactor port.
 # Keep the compiled source set unchanged until each split lands.
 set(SIL_MORE_SOURCES_CORE
+    src/cave/cave-awareness.c
     src/cave/cave-geometry.c
+    src/cave/cave-visuals.c
     src/cave/cave.c
     src/cave/cave-map-ui.c
 )
@@ -178,6 +180,7 @@ set(SIL_MORE_SOURCES_CMD
     src/cmd/world/cmd-interact-chest.c
     src/cmd/world/cmd-interact-chest-core.c
     src/cmd/world/cmd-interact-chest-skeleton-loot.c
+    src/cmd/world/cmd-interact-chest-skeleton-note-hints.c
     src/cmd/world/cmd-interact-chest-skeleton-note.c
     src/cmd/world/cmd-interact-door.c
     src/cmd/world/cmd-interact-terrain.c
@@ -321,6 +324,11 @@ set(SIL_MORE_SOURCES_SMITHING
 
 set(SIL_MORE_SOURCES_SAVE_AND_META
     src/metarun/metarun.c
+    src/metarun/metarun-persistence.c
+    src/metarun/metarun-score.c
+    src/metarun/metarun-state.c
+    src/metarun/metarun-ui-history.c
+    src/metarun/metarun-ui-stats.c
 )
 
 set(SIL_MORE_SOURCES_SCORE
@@ -345,6 +353,7 @@ set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/blitz.c
     src/runtime/runtime-cli.c
     src/runtime/runtime-dungeon.c
+    src/runtime/runtime-dungeon-presentation.c
     src/runtime/runtime-exit.c
     src/runtime/runtime-game.c
     src/runtime/runtime-state.c
@@ -355,6 +364,9 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-movement.c
     src/app/app-interaction.c
     src/app/app-scene-birth.c
+    src/app/app-scene-birth-blitz.c
+    src/app/app-scene-birth-setup.c
+    src/app/app-scene-birth-ui.c
     src/app/app-ui.c
     src/app/app-events.c
     src/app/app-host.c

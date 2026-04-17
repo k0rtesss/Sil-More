@@ -7,19 +7,6 @@ s16b     metarun_max = 0;
 s16b     current_run = 0;
 bool            metarun_created = false;
 
-/* ==================  tiny local helpers  ======================= */
-static int rng_int(int max) { return max ? (int)(rand() % max) : 0; }
-
-static int popcount32(u32b value)
-{
-    int count = 0;
-    while (value) {
-        value &= (value - 1);
-        count++;
-    }
-    return count;
-}
-
 static bool metarun_runtime_ready(void)
 {
     return metarun_current_index() >= 0;
