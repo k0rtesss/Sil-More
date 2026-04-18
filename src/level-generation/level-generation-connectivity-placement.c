@@ -13,6 +13,13 @@
 #define DUN_STR_RNG 2 /* Width of streamers */
 #define DUN_STR_QUA 4 /* Number of quartz streamers */
 
+int choose_up_stairs(void);
+int choose_down_stairs(void);
+void place_item_randomly(int tval, int sval, bool close);
+bool build_streamer(int feat);
+void build_chasms(void);
+bool alloc_stairs(int feat, int num);
+
 static void place_rubble(int y, int x)
 {
     /* Create rubble */

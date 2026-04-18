@@ -41,20 +41,20 @@ validation gates.
   - `sil_architecture_debt_audit`
   - `sil_folder_ownership_audit`
   - `sil_smithing_parity`
-- Current source-surface metrics measured on April 17, 2026:
-  - `src/externs.h`: 184 lines, 39 `extern` declarations
-  - direct `externs.h` include sites: 16 files
+- Current source-surface metrics measured on April 18, 2026:
+  - `src/externs.h`: 181 lines, 36 `extern` declarations
+  - direct `externs.h` include sites: 0 files
   - `src/variable.c`: removed from the live tree
   - root-level `src/*.c`: 18 files
   - root-level `src/*.h`: 39 files
   - non-platform SDL header include sites: 0 files
   - non-platform SDL I/O usage sites: 0 files
-- Largest active monoliths:
-  - `src/level-generation/level-generation-connectivity.c`: 5636 lines
-  - `src/monster/monster2.c`: 4211 lines
-  - `src/level-generation/level-generation-layout.c`: 4189 lines
-  - `src/runtime/runtime-dungeon.c`: 4036 lines
-  - `src/sdl-scene-menu.c`: 3994 lines
+- Remaining oversized headers:
+  - `src/defines.h`: 4012 lines
+  - `src/types.h`: 1656 lines
+  - `src/level-generation/level-generation-internal.h`: 412 lines
+  - `src/metarun.h`: 352 lines
+  - `src/config.h`: 329 lines
 
 ## End State
 - `src/externs.h` is transitional compatibility only.

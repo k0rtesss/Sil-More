@@ -12,6 +12,7 @@
 #include "blitz.h"
 #include "fs/file.h"
 #include "fs/path.h"
+#include "fs/save.h"
 #include "fs/save-internal.h"
 #include "log/log.h"
 #include <stdio.h>

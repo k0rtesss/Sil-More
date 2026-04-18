@@ -53,19 +53,20 @@ Status date: April 17, 2026.
   - asset sync exists
   - touch pane and gamepad plumbing exist
 - The dependency-surface cleanup wave is now largely complete in the live tree:
-  - [`src/externs.h`](../src/externs.h) is down to 184 lines, 39 `extern`
-    declarations, and 16 direct include sites
+  - [`src/externs.h`](../src/externs.h) is down to 181 lines, 36 `extern`
+    declarations, and 0 direct include sites
   - [`src/variable.c`](../src/variable.c) is removed from the live tree
   - `tests/modernization_audit_baseline.json` and
     `tests/source_size_audit_baseline.json` freeze the current architecture and
-    oversize-file exceptions
-- The remaining bottlenecks are now concentrated in a smaller set of files and
-  surfaces:
-  - [`src/level-generation/level-generation-connectivity.c`](../src/level-generation/level-generation-connectivity.c): 5,636 lines
-  - [`src/monster/monster2.c`](../src/monster/monster2.c): 4,211 lines
-  - [`src/level-generation/level-generation-layout.c`](../src/level-generation/level-generation-layout.c): 4,189 lines
-  - [`src/runtime/runtime-dungeon.c`](../src/runtime/runtime-dungeon.c): 4,036 lines
-  - [`src/sdl-scene-menu.c`](../src/sdl-scene-menu.c): 3,994 lines
+    the remaining oversized-header exceptions after the final post-finish-line
+    closure
+- The remaining bottlenecks are now concentrated in a smaller set of headers
+  and follow-through surfaces:
+  - [`src/defines.h`](../src/defines.h): 4,012 lines
+  - [`src/types.h`](../src/types.h): 1,656 lines
+  - [`src/level-generation/level-generation-internal.h`](../src/level-generation/level-generation-internal.h): 412 lines
+  - [`src/metarun.h`](../src/metarun.h): 352 lines
+  - mobile safe-area, device-class, and resource-path assumptions
 - The biggest newly-audited risk areas are:
   - save/load corruption handling
   - metarun atomicity and corruption recovery
@@ -383,16 +384,16 @@ These can run in parallel as long as write sets stay disjoint.
 
 ## Recommended Execution Order
 1. Treat `WP110` through `WP151` as complete in the live tree.
-2. Use [`post_finish_line_refactor_parallel_plan.md`](./post_finish_line_refactor_parallel_plan.md) as the active execution plan for the remaining monolith, audit-baseline, and `externs.h` follow-up work.
-3. Use [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) for the current UI replacement lane once the active core refactor window is stable.
-4. Do mobile adaptation after the platform boundary and post-finish-line ownership cleanup are stable: `WP160`, `WP161`.
+2. Treat [`post_finish_line_refactor_parallel_plan.md`](./post_finish_line_refactor_parallel_plan.md) as the completed closure record for the monolith, audit-baseline, and `externs.h` follow-up work.
+3. Use [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) for the current UI replacement lane.
+4. Do mobile adaptation after the platform boundary and post-finish-line ownership cleanup are closed: `WP160`, `WP161`.
 5. Close with docs and integration: `WP170`, `WP199`.
 
 ## Recommended Immediate Start
-1. Start from the active post-finish-line plan instead of reopening `WP130` or `WP131`; those dependency-surface goals are already landed.
+1. Start from [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) instead of reopening `WP130` or `WP131`; the dependency-surface and monolith-closure goals are already landed.
 2. Keep ratcheting `tests/modernization_audit_baseline.json` and `tests/source_size_audit_baseline.json` downward whenever another oversized ownership bucket lands.
 3. Take the next UI or mobile slice from [`ui_render_replacement_plan.md`](./ui_render_replacement_plan.md) once the current monolith lane is green.
 
 The hardening and validation ratchet are in place now; the next highest-value
-work is closing the remaining oversized ownership buckets and then carrying the
-same discipline into the UI and mobile follow-through.
+work is carrying the same discipline into the UI and mobile follow-through
+while the remaining oversized headers continue to ratchet down opportunistically.

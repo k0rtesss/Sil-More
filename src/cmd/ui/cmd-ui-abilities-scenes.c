@@ -24,6 +24,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "cmd-ui-abilities-scenes.h"
 #include "ui/ui-information-scene.h"
 
 static int ability_purchase_exp_cost(int skilltype)

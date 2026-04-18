@@ -26,6 +26,8 @@ int choose_down_stairs(void);
 bool build_streamer(int feat);
 void build_chasms(void);
 bool alloc_stairs(int feat, int num);
+void label_rooms(void);
+bool doubled_doors(void);
 
 bool feature_is_any_door(int feat)
 {

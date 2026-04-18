@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "blitz.h"
 #include "fs/file.h"
+#include "fs/load.h"
 #include "log/log.h"
 #include "platform-config.h"
 #include "platform-frame.h"

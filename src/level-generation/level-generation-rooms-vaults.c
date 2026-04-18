@@ -62,6 +62,10 @@ static vault_monster_spec vault_monster_table[] = {
 static int current_build_vault_type = 0;
 static bool current_build_vault_exact_token = false;
 
+bool build_vault(int y0, int x0, vault_type* v_ptr, bool flip_d);
+bool place_room(int y0, int x0, vault_type* v_ptr);
+bool try_place_docked_vault(vault_type* v_ptr, int* placed_y, int* placed_x);
+
 bool monster_special_vault_selection_allowed(void)
 {
     if (current_build_vault_exact_token)

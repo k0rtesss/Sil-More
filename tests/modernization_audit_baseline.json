@@ -1,8 +1,8 @@
 {
   "metadata": {
     "schema_version": 1,
-    "status_date": "2026-04-17",
-    "notes": "Wave 5 final-gate modernization audit baseline after the externs drain and post-finish-line monolith waves stabilized."
+    "status_date": "2026-04-18",
+    "notes": "Wave 8 final end-state closure baseline after the continuation validation matrix completed successfully."
   },
   "policy": {
     "platform_boundary_globs": [
@@ -617,49 +617,32 @@
   "audits": {
     "architecture": {
       "label": "Architecture debt audit",
-      "notes": "Wave 5 final-gate baseline for the shared modernization debt surface.",
+      "notes": "Wave 8 final-closure baseline for the shared modernization debt surface.",
       "metrics": {
         "externs_header_lines": {
           "label": "externs.h line count",
           "files": 1,
-          "value": 184,
+          "value": 181,
           "notes": "Tracks the transitional umbrella header size. The finish-line target is under 400 lines.",
           "file_matches": {
-            "src/externs.h": 184
+            "src/externs.h": 181
           }
         },
         "extern_declarations": {
           "label": "extern declarations in externs.h",
           "files": 1,
-          "value": 39,
+          "value": 36,
           "notes": "Tracks how much runtime ownership still lives in the compatibility umbrella header.",
           "file_matches": {
-            "src/externs.h": 39
+            "src/externs.h": 36
           }
         },
         "extern_include_sites": {
           "label": "direct #include \"externs.h\" sites",
-          "files": 16,
-          "value": 16,
+          "files": 0,
+          "value": 0,
           "notes": "Tracks the direct include fan-out of the compatibility header.",
-          "file_matches": {
-            "src/cmd/ui/cmd-ui-info.c": 1,
-            "src/fs/load.c": 1,
-            "src/fs/save.c": 1,
-            "src/level-generation/level-generation-connectivity.c": 1,
-            "src/level-generation/level-generation-rooms.c": 1,
-            "src/melee/melee-attack.c": 1,
-            "src/melee/melee-movement.c": 1,
-            "src/melee/melee-process.c": 1,
-            "src/monster/monster1.c": 1,
-            "src/monster/monster2.c": 1,
-            "src/object/object-randart.c": 1,
-            "src/object/object-use.c": 1,
-            "src/score/score_ui.c": 1,
-            "src/sdl-main-internal.h": 1,
-            "src/sdl-sound.c": 1,
-            "src/spell/spell-projection.c": 1
-          }
+          "file_matches": {}
         },
         "variable_source_lines": {
           "label": "variable.c line count",

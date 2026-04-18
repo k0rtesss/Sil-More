@@ -23,48 +23,41 @@ high-value dependency cleanup.
 
 ## Current Baseline
 - The finish-line plan is complete in the live tree.
-- This post-finish-line program completed its first ratchet snapshot on
-  April 17, 2026, but it is now reopened for continuation waves because the
-  original end-state thresholds are still not fully met.
-- `src/externs.h` is down to 184 lines with 39 `extern` declarations and 16
+- This post-finish-line program completed its final end-state closure in the
+  live tree on April 18, 2026.
+- `src/externs.h` is down to 181 lines with 36 `extern` declarations and 0
   direct include sites.
 - `src/variable.c` is gone from the live tree.
 - The checked-in modernization audit now scans normal source files plus
   compiled `*.inc` payloads reachable from the source tree, and the current
-  baseline records zero compiled code-bearing `*.inc` files plus zero
-  non-platform SDL I/O leakage.
+  baseline records zero compiled code-bearing `*.inc` files, zero non-platform
+  SDL header leakage, and zero non-platform SDL I/O leakage.
 - A checked-in source size audit now freezes oversized non-vendor source files
   against a committed baseline.
-- Quick audit counts measured on April 17, 2026 show:
-  - 14 non-vendor `src/**/*.c` files above 2500 lines
-  - 7 non-vendor `src/**/*.c` files above 3500 lines
-  - 4 non-vendor `src/**/*.c` files above 4000 lines
+- Quick audit counts measured on April 18, 2026 show:
+  - 0 non-vendor `src/**/*.c` files above 2500 lines
+  - 0 non-vendor `src/**/*.c` files above 3500 lines
+  - 0 non-vendor `src/**/*.c` files above 4000 lines
   - 9 non-vendor `src/**/*.h` files above 250 lines
   - 2 non-vendor `src/**/*.h` files above 1000 lines
-- Largest current non-vendor hotspots:
-  - `src/level-generation/level-generation-connectivity.c`: 5636 lines
-  - `src/monster/monster2.c`: 4211 lines
-  - `src/level-generation/level-generation-layout.c`: 4189 lines
-  - `src/runtime/runtime-dungeon.c`: 4036 lines
-  - `src/sdl-scene-menu.c`: 3994 lines
-  - `src/level-generation/level-generation-rooms.c`: 3732 lines
-  - `src/melee/melee-movement.c`: 3704 lines
-  - `src/object/object-randart.c`: 3337 lines
+- Remaining oversized non-vendor hotspots are headers:
+  - `src/defines.h`: 4012 lines
+  - `src/types.h`: 1656 lines
+  - `src/level-generation/level-generation-internal.h`: 412 lines
+  - `src/metarun.h`: 352 lines
+  - `src/config.h`: 329 lines
 
-## Continuation Trigger
-- The first ratchet snapshot closed the audit blind spots and froze the
-  remaining exceptions, but it did not satisfy the original quantitative end
-  state.
-- The active continuation targets are:
-  - reduce direct `#include "externs.h"` sites from 16 to fewer than 15
-  - reduce oversized non-vendor `src/**/*.c` files from 14 to 0 above 2500
-    lines
-  - keep the zero-debt wins intact:
-    - zero compiled code-bearing `*.inc` files
-    - zero non-platform SDL header leakage
-    - zero non-platform SDL I/O leakage
-- Earlier waves remain historically complete. The continuation waves below
-  reopen only the remaining explicit exceptions.
+## Continuation Result
+- The continuation program closes the remaining quantitative gaps from the
+  first ratchet snapshot.
+- The final continuation metrics are:
+  - 0 direct `#include "externs.h"` sites
+  - 0 oversized non-vendor `src/**/*.c` files above 2500 lines
+  - 0 compiled code-bearing `*.inc` files
+  - 0 non-platform SDL header leakage sites
+  - 0 non-platform SDL I/O leakage sites
+- No follow-up rescope plan is required for the continuation targets tracked
+  by this document.
 
 ## End State
 - No compiled code-bearing `*.inc` files remain in the live tree.
@@ -652,6 +645,8 @@ Constraints:
 ### Wave 8: Final End-State Closure
 Owner: main integrator only.
 
+Status: complete in the live tree on April 18, 2026.
+
 Deliverables:
 - Re-run the full validation matrix after the continuation lanes merge.
 - Ratchet the architecture and size baselines downward only if counts actually
@@ -672,6 +667,31 @@ Validation:
 - `cmake --preset dev-sanitize`
 - `cmake --build build-sanitize --parallel`
 - `ctest --preset test-sanitize` when runtime support is available
+
+Completion notes:
+- The full validation matrix is green:
+  - `.\build-incremental.ps1`
+  - `ctest --preset test-standard`
+  - `ctest --preset test-portable`
+  - `cmake --preset dev-strict`
+  - `cmake --build build-strict --parallel`
+  - `ctest --preset test-strict`
+  - `cmake --preset dev-sanitize`
+  - `cmake --build build-sanitize --parallel`
+  - `ctest --preset test-sanitize`
+- The sanitize preset emitted the expected configure warning on this host
+  because ASan/UBSan runtime support is unavailable; the preset continued
+  without sanitizer instrumentation and the test suite still passed.
+- `tests/modernization_audit_baseline.json` is ratcheted downward to
+  `src/externs.h` at 181 lines, 36 `extern` declarations, and 0 direct
+  include sites, with zero compiled code-bearing `*.inc` files and zero
+  non-platform SDL leakage.
+- `tests/source_size_audit_baseline.json` is ratcheted downward to 0
+  non-vendor `src/**/*.c` files above 2500, 3500, or 4000 lines; the
+  remaining header exceptions stay at 9 files above 250 lines and 2 above
+  1000 lines.
+- The continuation goals are fully met in the live tree, so this plan closes
+  without a follow-up rescope package.
 
 ## Work Package Map
 | ID | Type | Scope | Owner | Depends on |
