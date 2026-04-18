@@ -142,6 +142,7 @@ set(SIL_MORE_SOURCES_CORE
     src/cave/cave-visuals.c
     src/cave/cave.c
     src/cave/cave-map-ui.c
+    src/cave/cave-state.c
 )
 
 set(SIL_MORE_SOURCES_CMD
@@ -221,11 +222,18 @@ set(SIL_MORE_SOURCES_LEVEL_GENERATION
     src/level-generation/gen-log.c
     src/level-generation/level-generation-big-cave.c
     src/level-generation/level-generation-connectivity.c
+    src/level-generation/level-generation-connectivity-partitions.c
+    src/level-generation/level-generation-connectivity-placement.c
+    src/level-generation/level-generation-layout-info.c
     src/level-generation/level-generation-layout-anchors.c
     src/level-generation/level-generation-layout.c
     src/level-generation/level-generation-layout-morgoth.c
+    src/level-generation/level-generation-layout-partitions.c
     src/level-generation/level-generation-quests.c
     src/level-generation/level-generation-rooms.c
+    src/level-generation/level-generation-rooms-vault-advanced.c
+    src/level-generation/level-generation-rooms-special.c
+    src/level-generation/level-generation-rooms-vaults.c
     src/level-generation/level-generation-screen.c
     src/level-generation/level-generation-state.c
     src/level-generation/level-generation-terrain.c
@@ -247,12 +255,14 @@ set(SIL_MORE_SOURCES_OBJECT
     src/object/object-flags.c
     src/object/object-flavor.c
     src/object/object-info.c
+    src/object/object-info-lore.c
     src/object/object-inventory.c
     src/object/object-knowledge.c
     src/object/object-list.c
     src/object/object-make.c
     src/object/object-place.c
     src/object/object-randart.c
+    src/object/object-randart-generation.c
     src/object/object-slot.c
     src/object/object-ui-display.c
     src/object/object-ui-enhanced.c
@@ -265,13 +275,18 @@ set(SIL_MORE_SOURCES_OBJECT
 
 set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
     src/melee/melee-attack.c
+    src/melee/melee-attack-ranged.c
     src/melee/melee-combat-display.c
     src/melee/melee-movement.c
+    src/melee/melee-movement-path.c
+    src/melee/melee-movement-resolution.c
     src/melee/melee-process.c
     src/melee/melee-util.c
     src/monster/monster-death.c
     src/monster/monster1.c
+    src/monster/monster-message.c
     src/monster/monster2.c
+    src/monster/monster-spawn.c
 )
 
 set(SIL_MORE_SOURCES_SPELL

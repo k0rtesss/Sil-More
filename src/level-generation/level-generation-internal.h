@@ -1,5 +1,4 @@
 /* File: level-generation-internal.h */
-
 #ifndef INCLUDED_LEVEL_GENERATION_INTERNAL_H
 #define INCLUDED_LEVEL_GENERATION_INTERNAL_H
 
@@ -241,6 +240,7 @@ extern void apply_partition_and_room_glow_rules(void);
 extern void apply_quadrant_generation_modes(void);
 extern void remember_partition_grid(int rows, int cols, int count);
 extern int partition_index_from_point(int y, int x, int rows, int cols);
+extern level_partition_kind partition_kind_from_mode(quadrant_mode_t mode);
 extern void connect_partition_hubs(void);
 extern void repair_all_outer_walls(void);
 extern void ensure_minimum_rooms(void);
