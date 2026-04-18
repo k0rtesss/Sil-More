@@ -1,6 +1,6 @@
 #include "angband.h"
 
-#include "sdl-main-internal.h"
+#include "sdl-scene-menu.h"
 
 static int sdl_menu_browser_action_width(TTF_Font* font,
     const app_ui_footer_action* action)
@@ -188,7 +188,7 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
             line_h, meta_color, row->meta);
 }
 
-static bool sdl_menu_render_browser_panel(const sdl_view* main_view,
+bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
     const app_ui_panel* ui_panel)
 {

@@ -1,12 +1,24 @@
 #include "angband.h"
 
-#include "sdl-main-internal.h"
+#include "sdl-menu/sdl-scene-menu.h"
 
-/* Keep the menu scene split by ownership without touching CMake wiring. */
-#include "sdl-scene-menu-base.inl"
-#include "sdl-scene-menu-browser.inl"
-#include "sdl-scene-menu-chrome.inl"
-#include "sdl-scene-menu-pages.inl"
+static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
+{
+    u16b i;
+
+    if (!scene)
+        return NULL;
+
+    for (i = 0; i < scene->panel_count; i++)
+    {
+        const app_ui_panel* panel = &scene->panels[i];
+
+        if (panel->flags & APP_UI_PANEL_FLAG_ACTIVE)
+            return panel;
+    }
+
+    return NULL;
+}
 
 static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,

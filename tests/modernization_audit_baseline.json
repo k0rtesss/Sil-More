@@ -17,6 +17,8 @@
       "src/platform-*.h",
       "src/sdl-*.c",
       "src/sdl-*.h",
+      "src/sdl-menu/*.c",
+      "src/sdl-menu/*.h",
       "src/fs/io_sdl.c",
       "src/fs/io_sdl.h",
       "src/fs/path.c",
@@ -105,13 +107,15 @@
           "src/**/sdl-*.c",
           "src/**/sdl-*.h"
         ],
-        "allowed_globs": [
-          "src/platform-*.c",
-          "src/platform-*.h",
-          "src/sdl-*.c",
-          "src/sdl-*.h"
-        ]
-      },
+          "allowed_globs": [
+            "src/platform-*.c",
+            "src/platform-*.h",
+            "src/sdl-*.c",
+            "src/sdl-*.h",
+            "src/sdl-menu/*.c",
+            "src/sdl-menu/*.h"
+          ]
+        },
       {
         "key": "fs_sdl_io_family",
         "match_globs": [

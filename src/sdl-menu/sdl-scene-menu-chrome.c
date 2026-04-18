@@ -1,6 +1,6 @@
 #include "angband.h"
 
-#include "sdl-main-internal.h"
+#include "sdl-scene-menu.h"
 
 static const char* sdl_menu_status_rail_label_text(const app_ui_row* row)
 {
@@ -95,40 +95,6 @@ static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
         icon_attr, icon_char);
 }
 
-static void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
-    int icon_slot_w, int line_h, byte icon_attr, char icon_char)
-{
-    SDL_FRect tile_dst;
-    byte ch = (byte)icon_char;
-
-    if (!icon_char || icon_char == ' ')
-        return;
-
-    if (g_state.use_tiles && g_state.tileset
-        && (icon_attr & TILE_FLAG) && (ch & TILE_FLAG))
-    {
-        float tile_size = (float)MIN(line_h, icon_slot_w);
-
-        tile_dst.x = x_px + ((float)icon_slot_w - tile_size) * 0.5f;
-        tile_dst.y = y_px + ((float)line_h - tile_size) * 0.5f;
-        tile_dst.w = tile_size;
-        tile_dst.h = tile_size;
-        sdl_menu_draw_tile(icon_attr, ch, &tile_dst);
-        return;
-    }
-
-    {
-        char glyph[2] = { icon_char, '\0' };
-        int glyph_w = sdl_menu_measure_text(font, glyph);
-        float text_x = x_px;
-
-        if (glyph_w < icon_slot_w)
-            text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
-        sdl_menu_render_text(font, text_x, y_px, line_h,
-            sdl_menu_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
-    }
-}
-
 static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
     TTF_Font* story_font, float x_px, float y_px, int line_h,
     byte attr, byte flags, cptr text)
@@ -147,7 +113,7 @@ static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
         sdl_menu_color(attr), text);
 }
 
-static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
+bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* mono_font = NULL;
@@ -385,7 +351,7 @@ static bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
     return true;
 }
 
-static bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
+bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* mono_font = NULL;
@@ -557,25 +523,7 @@ static bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
     return true;
 }
 
-static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
-{
-    u16b i;
-
-    if (!scene)
-        return NULL;
-
-    for (i = 0; i < scene->panel_count; i++)
-    {
-        const app_ui_panel* panel = &scene->panels[i];
-
-        if (panel->flags & APP_UI_PANEL_FLAG_ACTIVE)
-            return panel;
-    }
-
-    return NULL;
-}
-
-static bool sdl_menu_render_strip_panel(const sdl_view* main_view,
+bool sdl_menu_render_strip_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* font;
@@ -786,7 +734,7 @@ static void sdl_menu_welcome_format_prompt(const app_ui_panel* panel,
     }
 }
 
-static bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
+bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
     TTF_Font* story_font;

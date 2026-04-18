@@ -1,8 +1,8 @@
 #include "angband.h"
 
-#include "sdl-main-internal.h"
+#include "sdl-scene-menu.h"
 
-static SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
+SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 {
     byte color = attr & 0x0Fu;
 
@@ -14,12 +14,12 @@ static SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
     };
 }
 
-static SDL_Color sdl_menu_color(byte attr)
+SDL_Color sdl_menu_color(byte attr)
 {
     return sdl_menu_color_alpha(attr, 255);
 }
 
-static void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color)
+void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color)
 {
     if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
         return;
@@ -28,7 +28,7 @@ static void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color)
     SDL_RenderFillRect(g_state.renderer, rect);
 }
 
-static void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color)
+void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color)
 {
     if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
         return;
@@ -37,7 +37,7 @@ static void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color)
     SDL_RenderRect(g_state.renderer, rect);
 }
 
-static void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst)
+void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst)
 {
     SDL_FRect src;
 
@@ -56,7 +56,7 @@ static void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst)
 static void sdl_menu_render_fixed_glyph(TTF_Font* font, float x_px, float y_px,
     int cell_w, int cell_h, SDL_Color color, char ch);
 
-static void sdl_menu_draw_view_glyph(const sdl_view* view,
+void sdl_menu_draw_view_glyph(const sdl_view* view,
     const SDL_FRect* dst, SDL_Color color, char ch)
 {
     unsigned char glyph = (unsigned char)(ch ? ch : ' ');
@@ -95,12 +95,12 @@ static void sdl_menu_draw_view_glyph(const sdl_view* view,
     SDL_RenderTexture(g_state.renderer, view->font_atlas, &src, dst);
 }
 
-static int sdl_menu_scale_px(float logical_value)
+int sdl_menu_scale_px(float logical_value)
 {
     return sdl_ui_scale_px(logical_value);
 }
 
-static int sdl_menu_font_size_logical(const app_ui_panel* panel)
+int sdl_menu_font_size_logical(const app_ui_panel* panel)
 {
     if (!panel)
         return sdl_resolve_menu_panel_font_size(config.menu_panel_font_size);
@@ -108,19 +108,51 @@ static int sdl_menu_font_size_logical(const app_ui_panel* panel)
     return sdl_effective_menu_font_size_for_panel_style(panel->style);
 }
 
-static int sdl_menu_measure_text(TTF_Font* font, cptr text)
+int sdl_menu_measure_text(TTF_Font* font, cptr text)
 {
     return sdl_ui_measure_text(font, text);
 }
 
-static void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
-    int icon_slot_w, int line_h, byte icon_attr, char icon_char);
 static int sdl_menu_measure_text_n(TTF_Font* font, cptr text, size_t len);
 static int sdl_menu_render_document_text_run_px(TTF_Font* font, float x_px,
     float y_px, SDL_Color color, cptr text, size_t len, int target_h,
     float max_w_px);
 static float sdl_menu_measure_document_text_run_px(TTF_Font* font, cptr text,
     size_t len, int target_h, float max_w_px);
+
+void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
+    int icon_slot_w, int line_h, byte icon_attr, char icon_char)
+{
+    SDL_FRect tile_dst;
+    byte ch = (byte)icon_char;
+
+    if (!icon_char || icon_char == ' ')
+        return;
+
+    if (g_state.use_tiles && g_state.tileset
+        && (icon_attr & TILE_FLAG) && (ch & TILE_FLAG))
+    {
+        float tile_size = (float)MIN(line_h, icon_slot_w);
+
+        tile_dst.x = x_px + ((float)icon_slot_w - tile_size) * 0.5f;
+        tile_dst.y = y_px + ((float)line_h - tile_size) * 0.5f;
+        tile_dst.w = tile_size;
+        tile_dst.h = tile_size;
+        sdl_menu_draw_tile(icon_attr, ch, &tile_dst);
+        return;
+    }
+
+    {
+        char glyph[2] = { icon_char, '\0' };
+        int glyph_w = sdl_menu_measure_text(font, glyph);
+        float text_x = x_px;
+
+        if (glyph_w < icon_slot_w)
+            text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
+        sdl_menu_render_text(font, text_x, y_px, line_h,
+            sdl_menu_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
+    }
+}
 
 static int sdl_menu_measure_text_n(TTF_Font* font, cptr text, size_t len)
 {
@@ -238,7 +270,7 @@ static float sdl_menu_measure_document_text_run_px(TTF_Font* font, cptr text,
     return scaled_w;
 }
 
-static int sdl_menu_icon_slot_px(TTF_Font* font, int line_h)
+int sdl_menu_icon_slot_px(TTF_Font* font, int line_h)
 {
     int icon_slot_w = sdl_menu_measure_text(font, "MM");
 
@@ -250,7 +282,7 @@ static int sdl_menu_icon_slot_px(TTF_Font* font, int line_h)
     return icon_slot_w;
 }
 
-static void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
+void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px,
     int line_h, SDL_Color color, cptr text)
 {
     SDL_Surface* surface;
@@ -357,7 +389,7 @@ static void sdl_menu_render_fixed_text(TTF_Font* font, float x_px, float y_px,
     }
 }
 
-static bool sdl_menu_document_cell_is_raw(byte attr, char ch, byte terrain_attr,
+bool sdl_menu_document_cell_is_raw(byte attr, char ch, byte terrain_attr,
     char terrain_char)
 {
     unsigned char raw = (unsigned char)ch;
@@ -371,7 +403,7 @@ static bool sdl_menu_document_cell_is_raw(byte attr, char ch, byte terrain_attr,
     return false;
 }
 
-static void sdl_menu_draw_misc_icon(const SDL_FRect* dst, int icon)
+void sdl_menu_draw_misc_icon(const SDL_FRect* dst, int icon)
 {
     byte attr;
     byte ch;
@@ -923,7 +955,7 @@ static int sdl_menu_measure_rich_paragraph_height(TTF_Font* mono_font,
     return lines * line_h + (lines - 1) * line_gap;
 }
 
-static int sdl_menu_measure_rich_text_height(TTF_Font* mono_font,
+int sdl_menu_measure_rich_text_height(TTF_Font* mono_font,
     TTF_Font* story_font, int line_h, int line_gap, int paragraph_gap,
     int width_px, const app_ui_scene* scene, const app_ui_panel* panel)
 {
@@ -1039,7 +1071,7 @@ static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
     return current_y - y_px + line_h;
 }
 
-static int sdl_menu_render_rich_text(const app_ui_scene* scene,
+int sdl_menu_render_rich_text(const app_ui_scene* scene,
     const app_ui_panel* panel, TTF_Font* mono_font, TTF_Font* story_font,
     const SDL_Rect* clip_rect, int line_h, int line_gap, int paragraph_gap,
     int start_y)
@@ -1071,7 +1103,7 @@ static int sdl_menu_render_rich_text(const app_ui_scene* scene,
     return current_y - start_y;
 }
 
-static bool sdl_menu_render_panel_internal(const sdl_view* main_view,
+bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
     const app_ui_panel* ui_panel)
 {

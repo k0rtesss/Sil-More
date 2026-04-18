@@ -137,10 +137,7 @@ extern void py_steal(int y, int x);
 extern void options_birth_menu(bool adult);
 extern void show_songs_with_highlight(int highlight);
 extern void wipe_screen_from(int col);
-extern void do_cmd_pane_settings(void);
-extern void do_cmd_keybinds(void);
 extern void do_cmd_visuals(void);
-extern void do_cmd_colors(void);
 
 /* cmd5.c */
 /* cmd6.c */

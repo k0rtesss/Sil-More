@@ -1,7 +1,6 @@
 #include "score/score_ui.h"
 
 #include "angband.h"
-#include "externs.h"
 #include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
@@ -10,9 +9,10 @@
 #include "score/score_io.h"
 #include "score/score_logic.h"
 #include "score/score_runs.h"
+#include "score/score_ui-browser.h"
+#include "score/score_ui-run-history.h"
 #include "ui/ui-information-scene.h"
 #include "ui/ui-semantic-scene.h"
-#include "metarun.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -44,44 +44,6 @@ static bool build_meta_path(char* buf, size_t len, const char* filename)
 #define RUN_HISTORY_ROWS       15
 #define SCORE_BROWSER_SHORT_ROWS 10
 
-typedef struct run_history_entry {
-    score_record_v1 record;
-    s64b detail_offset;
-    int rating;
-} run_history_entry;
-
-typedef enum run_detail_panel {
-    RUN_PANEL_GENERAL = 0,
-    RUN_PANEL_STATS,
-    RUN_PANEL_ABILITIES,
-    RUN_PANEL_MILESTONES,
-    RUN_PANEL_ARTEFACTS,
-    RUN_PANEL_MONSTERS,
-    RUN_PANEL_COUNT
-} run_detail_panel;
-
-typedef enum run_monster_sort_mode {
-    RUN_MON_SORT_APPEARANCE = 0,
-    RUN_MON_SORT_DEPTH,
-    RUN_MON_SORT_COUNT
-} run_monster_sort_mode;
-
-typedef struct run_detail_list_state {
-    int highlight;
-} run_detail_list_state;
-
-typedef struct run_detail_view_state {
-    int general_top;
-    int stats_top;
-    run_detail_list_state abilities;
-    run_detail_list_state milestones;
-    run_detail_list_state artefacts;
-    run_detail_list_state monsters;
-    run_monster_sort_mode monster_sort_mode;
-} run_detail_view_state;
-
-void run_history_show_detail(const run_history_entry* entry);
-
 static void run_history_refresh_active_run(void)
 {
     if (!character_generated || !p_ptr || p_ptr->is_dead)
@@ -96,28 +58,18 @@ static void run_history_refresh_active_run(void)
     }
 }
 
-static bool run_history_is_current(const run_history_entry* entry)
-{
-    if (!entry)
-        return false;
-    if (!character_generated || !p_ptr || p_ptr->is_dead)
-        return false;
-    if (entry->record.status != SCORE_RECORD_ALIVE)
-        return false;
-    return (entry->record.metarun_id == metar.id);
-}
-
 static high_score forced_highlight_entry;
 static bool forced_highlight_active = false;
 static bool force_interactive_scores = false;
 static bool score_last_layout_short = true;
 
-static void score_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
+void score_ui_prompt_label(int binding, const char* fallback, char* buf,
+    size_t buflen)
 {
     ui_semantic_prompt_label(binding, fallback, buf, buflen);
 }
 
-static app_ui_panel* score_begin_browser_scene(app_ui_scene* scene,
+app_ui_panel* score_ui_begin_browser_scene(app_ui_scene* scene,
     u16b panel_flags)
 {
     return ui_semantic_scene_begin_browser(scene, 0, NULL, 0, NULL,
@@ -698,13 +650,13 @@ static char display_scores_pages_information(const high_score* entries,
 
     if (steamdeck)
     {
-        score_prompt_label(steamdeck_secondary_key(), "Y", order_label,
+        score_ui_prompt_label(steamdeck_secondary_key(), "Y", order_label,
             sizeof(order_label));
-        score_prompt_label(steamdeck_alt_action_key(), "X", layout_label,
+        score_ui_prompt_label(steamdeck_alt_action_key(), "X", layout_label,
             sizeof(layout_label));
-        score_prompt_label(steamdeck_back_key(), "B", exit_label,
+        score_ui_prompt_label(steamdeck_back_key(), "B", exit_label,
             sizeof(exit_label));
-        score_prompt_label(steamdeck_confirm_key(), "A", next_label,
+        score_ui_prompt_label(steamdeck_confirm_key(), "A", next_label,
             sizeof(next_label));
     }
 
@@ -713,7 +665,8 @@ static char display_scores_pages_information(const high_score* entries,
         app_ui_scene scene;
         app_ui_panel* panel;
 
-        panel = score_begin_browser_scene(&scene, APP_UI_PANEL_FLAG_SHOW_DETAIL);
+        panel = score_ui_begin_browser_scene(&scene,
+            APP_UI_PANEL_FLAG_SHOW_DETAIL);
         if (!panel)
         {
             ui_information_scene_leave(&scope);
@@ -782,7 +735,7 @@ static char display_scores_pages_information(const high_score* entries,
                 : start_index;
             has_more = (start_index + entries_per_page < count);
 
-            panel = score_begin_browser_scene(&scene,
+            panel = score_ui_begin_browser_scene(&scene,
                 APP_UI_PANEL_FLAG_SHOW_DETAIL);
             if (!panel)
             {
@@ -1139,16 +1092,6 @@ void show_scores_interactive_highlight_from_file(bool longscore,
     score_file_reset_ctx(&temp_ctx);
 }
 
-static const char* score_run_status_label(score_record_status status)
-{
-    switch (status) {
-    case SCORE_RECORD_ALIVE: return "Alive";
-    case SCORE_RECORD_DEAD: return "Dead";
-    case SCORE_RECORD_ESCAPED: return "Escaped";
-    default: return "Unknown";
-    }
-}
-
 static bool run_history_skip_details(ang_file* file, s64b* detail_offset)
 {
     if (!file)
@@ -1164,37 +1107,6 @@ static bool run_history_skip_details(ang_file* file, s64b* detail_offset)
         *detail_offset = (s64b)header_pos;
 
     return score_runs_skip_detail_payload(file, &detail_header);
-}
-static const char* run_history_race_name(byte idx)
-{
-    if (!p_info || !p_name || !z_info || idx >= z_info->p_max)
-        return "<unknown>";
-    return p_name + p_info[idx].name;
-}
-static void run_history_format_timestamp(u32b utc, bool include_time,
-                                         char* out, size_t out_len)
-{
-    if (!out || out_len == 0)
-        return;
-
-    if (!utc) {
-        SDL_strlcpy(out, "----", out_len);
-        return;
-    }
-
-    time_t ts = (time_t)utc;
-    struct tm* tm_info = localtime(&ts);
-    if (!tm_info) {
-        SDL_strlcpy(out, "----", out_len);
-        return;
-    }
-
-    if (include_time) {
-        if (strftime(out, out_len, "%Y-%m-%d %H:%M", tm_info) == 0)
-            SDL_strlcpy(out, "----", out_len);
-    } else if (strftime(out, out_len, "%Y-%m-%d", tm_info) == 0) {
-        SDL_strlcpy(out, "----", out_len);
-    }
 }
 
 static int run_history_compare_date_desc(const void* a, const void* b)
@@ -1348,11 +1260,11 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         byte row_color;
 
         if (steamdeck) {
-            score_prompt_label(steamdeck_confirm_key(), "A",
+            score_ui_prompt_label(steamdeck_confirm_key(), "A",
                 confirm_label, sizeof(confirm_label));
-            score_prompt_label(steamdeck_back_key(), "B",
+            score_ui_prompt_label(steamdeck_back_key(), "B",
                 back_label, sizeof(back_label));
-            score_prompt_label(steamdeck_secondary_key(), "Y",
+            score_ui_prompt_label(steamdeck_secondary_key(), "Y",
                 sort_label, sizeof(sort_label));
         }
 
@@ -1381,7 +1293,7 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         selected_entry = &entries[highlight];
         rec = &selected_entry->record;
 
-        panel = score_begin_browser_scene(&scene,
+        panel = score_ui_begin_browser_scene(&scene,
             APP_UI_PANEL_FLAG_SHOW_DETAIL);
         if (!panel)
         {
@@ -1406,11 +1318,12 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             int depth_ft = row_rec->exit_depth * 50;
             char icon_char = run_history_status_short(row_rec->status);
 
-            run_history_format_timestamp(row_rec->completed_utc, false, date,
+            score_ui_run_history_format_timestamp(row_rec->completed_utc,
+                false, date,
                 sizeof(date));
             strnfmt(label, sizeof(label), "%s  %s", date, row_player);
             strnfmt(meta, sizeof(meta), "%s  %d pts  %d ft  %u Sil",
-                score_run_status_label(row_rec->status), entries[i].rating,
+                score_ui_run_status_label(row_rec->status), entries[i].rating,
                 depth_ft, (unsigned)row_rec->silmarils);
 
             row_color = (i == highlight) ? TERM_YELLOW
@@ -1434,22 +1347,23 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         SDL_strlcpy(player, rec->player_name[0] ? rec->player_name
             : (rec->savefile_hint[0] ? rec->savefile_hint : "<unknown>"),
             sizeof(player));
-        run_history_format_timestamp(rec->created_utc, true, created,
+        score_ui_run_history_format_timestamp(rec->created_utc, true, created,
             sizeof(created));
-        run_history_format_timestamp(rec->completed_utc, true, completed,
+        score_ui_run_history_format_timestamp(rec->completed_utc, true,
+            completed,
             sizeof(completed));
         strnfmt(title, sizeof(title), "%s  |  Run #%u", player,
             (unsigned)rec->record_id);
         app_ui_panel_set_detail_title(panel, TERM_L_BLUE, title);
         strnfmt(detail, sizeof(detail), "Status: %s  |  Rating: %d points",
-            score_run_status_label(rec->status), selected_entry->rating);
+            score_ui_run_status_label(rec->status), selected_entry->rating);
         (void)app_ui_panel_add_detail_line(panel, TERM_WHITE, detail);
-        strnfmt(detail, sizeof(detail), "Race: %s", run_history_race_name(
-            rec->race_id));
+        strnfmt(detail, sizeof(detail), "Race: %s",
+            score_ui_run_history_race_name(rec->race_id));
         (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
         strnfmt(detail, sizeof(detail), "Started: %s", created);
         (void)app_ui_panel_add_detail_line(panel, TERM_SLATE, detail);
-        if (run_history_is_current(selected_entry))
+        if (score_ui_run_history_is_current(selected_entry))
         {
             strnfmt(detail, sizeof(detail), "Current run in progress.");
             (void)app_ui_panel_add_detail_line(panel, TERM_L_GREEN, detail);

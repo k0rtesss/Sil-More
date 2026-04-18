@@ -121,6 +121,8 @@ int settings_choice_find_index_by_id(const settings_choice_entry* entries,
     int entry_count, int id);
 int settings_choice_menu(cptr title, const settings_choice_entry* entries,
     int entry_count, int* highlight, int cancel_id);
+void do_cmd_keybinds(void);
+void do_cmd_colors(void);
 void do_cmd_pane_settings(void);
 void do_cmd_touch_pane_button_editor(bool* settings_changed);
 void do_cmd_controller_settings(void);

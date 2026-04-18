@@ -378,6 +378,7 @@ set(SIL_MORE_SOURCES_RUNTIME
     src/runtime/blitz.c
     src/runtime/runtime-cli.c
     src/runtime/runtime-dungeon.c
+    src/runtime/runtime-dungeon-maintenance.c
     src/runtime/runtime-dungeon-presentation.c
     src/runtime/runtime-dungeon-session.c
     src/runtime/runtime-exit.c
@@ -429,6 +430,10 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-scene-bootstrap.c
     src/sdl-scene-dungeon.c
     src/sdl-scene-menu.c
+    src/sdl-menu/sdl-scene-menu-base.c
+    src/sdl-menu/sdl-scene-menu-browser.c
+    src/sdl-menu/sdl-scene-menu-chrome.c
+    src/sdl-menu/sdl-scene-menu-pages.c
     src/sdl-scene.c
     src/sdl-story-font.c
     src/sdl-touch.c

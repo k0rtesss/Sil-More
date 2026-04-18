@@ -14,6 +14,7 @@
 #include "platform-time.h"
 #include "runtime/runtime-dungeon-internal.h"
 #include "runtime/runtime-dungeon.h"
+#include "runtime/runtime-game.h"
 #include "score/score_io.h"
 #include "spell/spell-detection.h"
 #include "ui/ui-information-scene.h"
@@ -27,6 +28,12 @@ static u32b g_active_partition_banner_hold_ms = 0;
 static int last_music_depth = -999;
 static bool first_entry_to_dungeon = true;
 static bool death_spectator_mode = false;
+static int last_player_y = 0;
+static int last_player_x = 0;
+static bool was_in_morgoth_vault = false;
+static bool morgoth_entry_preconfirmed = false;
+static char greater_vault_xp_name[80] = "";
+static bool greater_vault_xp_awarded = false;
 
 static int last_partition_pi = -1;
 static level_partition_kind last_partition_kind = LEVEL_PART_NONE;
@@ -38,11 +45,167 @@ static int last_narrated_style_idx = -1;
 /* Forward declarations for partition kind helpers (defined later in file). */
 static bool is_big_partition_kind(level_partition_kind kind);
 static bool is_small_cave_partition_kind(level_partition_kind kind);
+static bool player_in_morgoth_vault(void);
+static void reset_greater_vault_tracking(void);
+static void rewind_player_to_last_safe_position(void);
+static void award_greater_vault_entry(bool entered_morgoth_hall);
+static void runtime_dungeon_describe_greater_vault_entry(cptr vault_name);
 
 enum {
     DUNGEON_NARRATIVE_BANNER_POP_IN_MS = 220u,
     DUNGEON_NARRATIVE_BANNER_POP_OUT_MS = 260u
 };
+
+static bool player_in_morgoth_vault(void)
+{
+    return (p_ptr->depth == MORGOTH_DEPTH)
+        && (cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT);
+}
+
+static void reset_greater_vault_tracking(void)
+{
+    greater_vault_xp_name[0] = '\0';
+    greater_vault_xp_awarded = false;
+}
+
+static void rewind_player_to_last_safe_position(void)
+{
+    if (!in_bounds_fully(last_player_y, last_player_x))
+        return;
+
+    p_ptr->py = last_player_y;
+    p_ptr->px = last_player_x;
+    p_ptr->update |= (PU_FORGET_VIEW | PU_UPDATE_VIEW | PU_PANEL);
+    p_ptr->redraw |= PR_MAP;
+}
+
+static void award_greater_vault_entry(bool entered_morgoth_hall)
+{
+    const int vault_xp = 500;
+    char note[120];
+
+    strnfmt(note, sizeof(note), "Entered %s", g_vault_name);
+    do_cmd_note(note, p_ptr->depth);
+
+    if (entered_morgoth_hall)
+        p_ptr->morgoth_hall_entered = true;
+
+    runtime_dungeon_describe_greater_vault_entry(g_vault_name);
+
+    if (entered_morgoth_hall)
+        msg_print("From within you hear the harsh din of feasting in Morgoth's own hall.");
+
+    if (!greater_vault_xp_awarded)
+    {
+        gain_exp(vault_xp);
+        greater_vault_xp_awarded = true;
+    }
+
+    if (!entered_morgoth_hall)
+        return;
+
+    pause_with_text(throne_poetry, 5, 13, NULL, 0);
+    p_ptr->truce = true;
+    msg_print("There is a strange tension in the air.");
+    if (p_ptr->skill_use[S_PER] >= 15)
+        msg_print("You feel that Morgoth's servants are reluctant to attack before he delivers judgment.");
+}
+
+void runtime_dungeon_reset_vault_transition_state(void)
+{
+    last_player_y = 0;
+    last_player_x = 0;
+    was_in_morgoth_vault = false;
+    morgoth_entry_preconfirmed = false;
+    reset_greater_vault_tracking();
+}
+
+bool preconfirm_enter_morgoth_hall(void)
+{
+    if (!runtime_dungeon_confirm_enter_morgoth_hall())
+        return false;
+
+    morgoth_entry_preconfirmed = true;
+    return true;
+}
+
+void runtime_dungeon_begin_level_vault_tracking(void)
+{
+    was_in_morgoth_vault = player_in_morgoth_vault();
+    if ((p_ptr->depth == MORGOTH_DEPTH) && !p_ptr->morgoth_hall_entered
+        && (was_in_morgoth_vault || (silmarils_possessed() > 0)))
+    {
+        p_ptr->morgoth_hall_entered = true;
+    }
+
+    last_player_y = p_ptr->py;
+    last_player_x = p_ptr->px;
+}
+
+void runtime_dungeon_handle_vault_transition(void)
+{
+    bool in_morgoth_vault = player_in_morgoth_vault();
+
+    if ((cave_info[p_ptr->py][p_ptr->px] & CAVE_G_VAULT)
+        && (g_vault_name[0] != '\0') && !was_in_morgoth_vault)
+    {
+        bool clear_vault_name = true;
+
+        if (strcmp(greater_vault_xp_name, g_vault_name) != 0)
+        {
+            SDL_strlcpy(greater_vault_xp_name, g_vault_name,
+                sizeof(greater_vault_xp_name));
+            greater_vault_xp_awarded = false;
+        }
+
+        if (in_morgoth_vault)
+        {
+            bool allow_entry = morgoth_entry_preconfirmed;
+
+            if (!allow_entry)
+                allow_entry = runtime_dungeon_confirm_enter_morgoth_hall();
+
+            if (!allow_entry)
+            {
+                clear_vault_name = false;
+                rewind_player_to_last_safe_position();
+            }
+            else
+            {
+                award_greater_vault_entry(true);
+            }
+        }
+        else
+        {
+            award_greater_vault_entry(false);
+        }
+
+        if (clear_vault_name)
+        {
+            g_vault_name[0] = '\0';
+            reset_greater_vault_tracking();
+        }
+    }
+
+    in_morgoth_vault = player_in_morgoth_vault();
+
+    if (p_ptr->morgoth_hall_entered && was_in_morgoth_vault && !in_morgoth_vault
+        && (silmarils_possessed() == 0))
+    {
+        msg_print("The Shadow bars your way: you cannot flee without a Silmaril.");
+        rewind_player_to_last_safe_position();
+        in_morgoth_vault = true;
+    }
+
+    if (was_in_morgoth_vault && !in_morgoth_vault && p_ptr->truce)
+        break_truce(true);
+
+    was_in_morgoth_vault = in_morgoth_vault;
+    last_player_y = p_ptr->py;
+    last_player_x = p_ptr->px;
+    morgoth_entry_preconfirmed = false;
+}
+
 void runtime_dungeon_reset_level_entry_tracking(void)
 {
     g_labyrinth_view_active = false;
@@ -565,7 +728,7 @@ static cptr vault_entry_message_for_name(cptr vault_name)
     return NULL;
 }
 
-void runtime_dungeon_describe_greater_vault_entry(cptr vault_name)
+static void runtime_dungeon_describe_greater_vault_entry(cptr vault_name)
 {
     cptr text = vault_entry_message_for_name(vault_name);
 

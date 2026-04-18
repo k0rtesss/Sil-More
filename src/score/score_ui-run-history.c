@@ -8,54 +8,12 @@
 #include "log/log.h"
 #include "platform-input.h"
 #include "score/score_runs.h"
+#include "score/score_ui-browser.h"
+#include "score/score_ui-run-history.h"
 #include "ui/ui-information-scene.h"
-#include "ui/ui-semantic-scene.h"
 #include <time.h>
 
-typedef struct run_history_entry {
-    score_record_v1 record;
-    s64b detail_offset;
-    int rating;
-} run_history_entry;
-
-typedef enum run_detail_panel {
-    RUN_PANEL_GENERAL = 0,
-    RUN_PANEL_STATS,
-    RUN_PANEL_ABILITIES,
-    RUN_PANEL_MILESTONES,
-    RUN_PANEL_ARTEFACTS,
-    RUN_PANEL_MONSTERS,
-    RUN_PANEL_COUNT
-} run_detail_panel;
-
-typedef enum run_monster_sort_mode {
-    RUN_MON_SORT_APPEARANCE = 0,
-    RUN_MON_SORT_DEPTH,
-    RUN_MON_SORT_COUNT
-} run_monster_sort_mode;
-
-typedef struct run_detail_list_state {
-    int highlight;
-} run_detail_list_state;
-
-typedef struct run_detail_view_state {
-    int general_top;
-    int stats_top;
-    run_detail_list_state abilities;
-    run_detail_list_state milestones;
-    run_detail_list_state artefacts;
-    run_detail_list_state monsters;
-    run_monster_sort_mode monster_sort_mode;
-} run_detail_view_state;
-
-static app_ui_panel* score_begin_browser_scene(app_ui_scene* scene,
-    u16b panel_flags)
-{
-    return ui_semantic_scene_begin_browser(scene, 0, NULL, 0, NULL,
-        TERM_L_BLUE, panel_flags, 1180, 2200);
-}
-
-static bool run_history_is_current(const run_history_entry* entry)
+bool score_ui_run_history_is_current(const run_history_entry* entry)
 {
     if (!entry)
         return false;
@@ -66,7 +24,7 @@ static bool run_history_is_current(const run_history_entry* entry)
     return (entry->record.metarun_id == metar.id);
 }
 
-static const char* run_history_race_name(byte idx)
+const char* score_ui_run_history_race_name(byte idx)
 {
     if (!p_info || !p_name || !z_info || idx >= z_info->p_max)
         return "<unknown>";
@@ -80,7 +38,7 @@ static const char* run_history_monster_name(u16b r_idx)
     return r_name + r_info[r_idx].name;
 }
 
-static const char* score_run_status_label(score_record_status status)
+const char* score_ui_run_status_label(score_record_status status)
 {
     switch (status) {
     case SCORE_RECORD_ALIVE: return "Alive";
@@ -90,7 +48,7 @@ static const char* score_run_status_label(score_record_status status)
     }
 }
 
-static void run_history_format_timestamp(u32b utc, bool include_time,
+void score_ui_run_history_format_timestamp(u32b utc, bool include_time,
     char* out, size_t out_len)
 {
     if (!out || out_len == 0)
@@ -337,7 +295,7 @@ static void run_history_ui_add_general_rows(app_ui_panel* panel,
     (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Rating", TERM_WHITE,
         buf);
     (void)run_history_ui_add_value_row(panel, TERM_L_WHITE, "Status",
-        status_color, score_run_status_label(rec->status));
+        status_color, score_ui_run_status_label(rec->status));
     if (current_run)
     {
         strnfmt(buf, sizeof(buf), "%s (run in progress)", created);
@@ -775,7 +733,7 @@ static int run_history_ui_build_scene(app_ui_scene* scene,
     if (!scene || !entry || !view || !rec)
         return -1;
 
-    panel = score_begin_browser_scene(scene,
+    panel = score_ui_begin_browser_scene(scene,
         APP_UI_PANEL_FLAG_TOP_ANCHORED
             | APP_UI_PANEL_FLAG_LEFT_ANCHORED
             | APP_UI_PANEL_FLAG_SCROLL_ROWS);
@@ -783,7 +741,7 @@ static int run_history_ui_build_scene(app_ui_scene* scene,
         return -1;
     run_history_ui_build_header(title, sizeof(title), subtitle,
         sizeof(subtitle), rec, player, race_name,
-        score_run_status_label(rec->status));
+        score_ui_run_status_label(rec->status));
     app_ui_panel_set_title(panel, TERM_L_WHITE, title);
     app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
     run_history_ui_add_tabs(panel, active_panel, available);
@@ -1003,7 +961,7 @@ void run_history_show_detail(const run_history_entry* entry)
     bool have_details = (entry->detail_offset >= 0)
         && score_runs_load_details(entry->detail_offset, &details);
 
-    bool current_run = run_history_is_current(entry);
+    bool current_run = score_ui_run_history_is_current(entry);
     if ((!have_details || details.header.monster_count == 0
             || details.header.artefact_count == 0)
         && current_run) {
@@ -1024,10 +982,12 @@ void run_history_show_detail(const run_history_entry* entry)
     }
 
     char created[32], completed[32];
-    run_history_format_timestamp(rec->created_utc, true, created, sizeof(created));
-    run_history_format_timestamp(rec->completed_utc, true, completed, sizeof(completed));
+    score_ui_run_history_format_timestamp(rec->created_utc, true, created,
+        sizeof(created));
+    score_ui_run_history_format_timestamp(rec->completed_utc, true, completed,
+        sizeof(completed));
 
-    const char* race_name = run_history_race_name(rec->race_id);
+    const char* race_name = score_ui_run_history_race_name(rec->race_id);
 
     bool panel_has_data[RUN_PANEL_COUNT];
     panel_has_data[RUN_PANEL_GENERAL] = true;

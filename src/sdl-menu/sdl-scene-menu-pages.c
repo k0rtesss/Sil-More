@@ -1,6 +1,6 @@
 #include "angband.h"
 
-#include "sdl-main-internal.h"
+#include "sdl-scene-menu.h"
 
 static int sdl_menu_character_metric_group_width(TTF_Font* mono_font,
     const app_ui_character_metric* metric, int token_gap)
@@ -346,7 +346,7 @@ static void sdl_menu_render_minimap_widget(const sdl_view* main_view,
     }
 }
 
-static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
+bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
     const app_ui_panel* panel)
 {
@@ -429,7 +429,7 @@ static bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
     return true;
 }
 
-static bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
+bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
     const app_ui_panel* panel)
 {

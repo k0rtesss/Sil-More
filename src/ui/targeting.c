@@ -16,10 +16,7 @@
 #include "angband.h"
 #include "app/app-command.h"
 #include "app/app-session.h"
-#include "log/log.h"
-#include "platform-story-font.h"
 #include "targeting.h"
-#include "ui/ui-information-scene.h"
 
 static void targeting_direction_prompt(cptr prompt, cptr detail)
 {

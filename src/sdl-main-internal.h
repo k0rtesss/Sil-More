@@ -1,7 +1,6 @@
 #ifndef INCLUDED_SDL_MAIN_INTERNAL_H
 #define INCLUDED_SDL_MAIN_INTERNAL_H
 
-#include "externs.h"
 #include "app/app-session.h"
 #include "app/app-ui.h"
 #define ANGBAND_NO_IO_COMPAT
@@ -12,6 +11,7 @@
 #include "main.h"
 #include "main-sdl.h"
 #include "pane.h"
+#include "runtime/runtime-dungeon.h"
 #include "runtime/runtime-cli.h"
 #include "sdl-config.h"
 #include "sdl-sound.h"
