@@ -1,4 +1,18 @@
 /* File: runtime/runtime-game.c */
+/*
+ * Copyright (C) 2025-2026 Sil-More contributors
+ *
+ * This file is part of Sil-More.
+ *
+ * Sil-More is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Sil-More is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+ * for more details.
+ */
 
 #include "angband.h"
 #include "app/app-session.h"
@@ -46,11 +60,15 @@ int player_generation_depth(void)
 #include <time.h>
 
 cptr copyright
-    = "Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Keoneke\n"
+    = "Copyright (C) 2025-2026 Sil-More contributors\n"
+      "Portions of Sil-More retain historical notices from inherited Sil / "
+      "Sil-Q / Angband code.\n"
       "\n"
-      "This software may be copied and distributed for educational, research,\n"
-      "and not for profit purposes provided that this copyright and statement\n"
-      "are included in all such copies.  Other copyrights may also apply.\n";
+      "Sil-More is free software; you can redistribute it and/or modify it\n"
+      "under the terms of the GNU General Public License version 2 as\n"
+      "published by the Free Software Foundation.\n"
+      "\n"
+      "Sil-More is distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.\n";
 
 byte version_major = VERSION_MAJOR;
 byte version_minor = VERSION_MINOR;

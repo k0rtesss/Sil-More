@@ -1,3 +1,18 @@
+/*
+ * Copyright (C) 2025-2026 Sil-More contributors
+ *
+ * This file is part of Sil-More.
+ *
+ * Sil-More is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Sil-More is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+ * for more details.
+ */
+
 #include "angband.h"
 
 /*
@@ -148,4 +163,3 @@ byte get_angle_to_grid[41][41] = {
         128, 129, 131, 132, 134, 135, 136, 138, 139, 141, 142, 143, 145, 146,
         147, 148, 149, 150, 152, 152, 153, 154, 155, 156, 157, 158 }
 };
-

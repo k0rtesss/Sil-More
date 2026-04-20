@@ -1,5 +1,19 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+# Copyright (C) 2025-2026 Sil-More contributors
+#
+# This file is part of Sil-More.
+#
+# Sil-More is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# Sil-More is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+# for more details.
+
 """
 Calculate smithing difficulty for each artefact in artefact.txt and special.txt
 
@@ -1933,7 +1947,7 @@ def main(argv=None):
     possible_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'artefact.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'artefact.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\artefact.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\artefact.txt',
     ]
     
     artefact_file = None
@@ -1949,7 +1963,7 @@ def main(argv=None):
     special_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'special.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'special.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\special.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\special.txt',
     ]
     
     special_file = None
@@ -1962,7 +1976,7 @@ def main(argv=None):
     object_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'object.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'object.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\object.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\object.txt',
     ]
     
     object_file = None
@@ -1975,7 +1989,7 @@ def main(argv=None):
     ability_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'ability.txt'),
         os.path.join(script_dir, 'lib', 'edit', 'ability.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\ability.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\ability.txt',
     ]
 
     ability_file = None

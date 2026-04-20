@@ -1,11 +1,18 @@
 /* File: melee/melee-attack.c */
-
 /*
  * Copyright (c) 1997 Ben Harrison, James E. Wilson, Robert A. Koeneke
+ * Copyright (C) 2025-2026 Sil-More contributors
  *
- * This software may be copied and distributed for educational, research,
- * and not for profit purposes provided that this copyright and statement
- * are included in all such copies.  Other copyrights may also apply.
+ * This file is part of Sil-More.
+ *
+ * Sil-More is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Sil-More is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+ * for more details.
  */
 
 /*
@@ -2066,5 +2073,4 @@ bool make_attack_normal(monster_type* m_ptr)
     /* Assume we attacked */
     return (true);
 }
-
 

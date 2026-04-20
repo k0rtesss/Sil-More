@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2025-2026 Sil-More contributors
+#
+# This file is part of Sil-More.
+#
+# Sil-More is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# Sil-More is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+# for more details.
+
 """
 Calculate the distribution of smithable items and artefacts by difficulty.
 
@@ -855,15 +869,15 @@ def main():
     
     artefact_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'artefact.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\artefact.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\artefact.txt',
     ]
     special_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'special.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\special.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\special.txt',
     ]
     object_paths = [
         os.path.join(script_dir, '..', 'lib', 'edit', 'object.txt'),
-        r'c:\Users\efrem\Documents\GitHub\sil-qh\lib\edit\object.txt',
+        r'c:\Users\efrem\Documents\GitHub\Sil-More\lib\edit\object.txt',
     ]
     
     artefact_file = None

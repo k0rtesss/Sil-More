@@ -2,24 +2,23 @@ Sil-More is distributed by this repository under the terms of the
 GNU General Public License as published by the Free Software Foundation,
 version 2 ("GPL v2").
 
-Sil-More descends from Sil / Sil-Q, and some inherited source files still
-carry historical Angband-style notices.  The original Sil / Sil-Q
-distribution offered GPL v2 and the Angband licence as alternative grants.
-This repository chooses GPL v2 for the game code and reproduces the
-historical Angband text below for provenance.
+Sil-More descends from Sil / Sil-Q / Angband, and some inherited source files
+retain historical upstream copyright notices. This repository distributes the
+Sil-More game code under GPL v2 only.
+
+Repo-owned additions and original files may also carry the collective notice:
+
+Copyright (C) 2025-2026 Sil-More contributors
 
 Commercial distribution of the game code is permitted under GPL v2, but any
 public release must also comply with the separate licenses and permissions for
 bundled assets and runtime libraries:
 
- * The SDL runtime libraries (if provided with your copy of the game) are
-   under their own upstream licenses.  SDL3, SDL3_image, and SDL3_ttf use the
-   zlib license; other bundled runtime DLLs remain under their respective
-   upstream licenses.
+ * Runtime libraries shipped with a release remain under their own upstream
+   licenses. SDL3, SDL3_image, and SDL3_ttf use the zlib license; other
+   bundled runtime binaries remain under their respective upstream licenses.
 
  * Current graphics and tiles are documented in lib/xtra/graf/copying.txt.
-   No Adam Bolt or David Gervais tiles are included in current Sil-More
-   releases.
 
  * Current sounds and music are documented in lib/xtra/sound/copying.txt.
 
@@ -30,8 +29,10 @@ requirements for providing the corresponding source code.
 
 ------------------------------------------------------------------------------
 
-Historical provenance: the Angband Licence text used by inherited Sil / Sil-Q
-materials is reproduced below.
+Historical provenance: the Angband Licence text used by some inherited
+Sil / Sil-Q / Angband materials is reproduced below as archival provenance
+only. In this repository, it is not offered as an alternative license grant
+for the Sil-More game code.
 
 ------------------------------------------------------------------------------
 

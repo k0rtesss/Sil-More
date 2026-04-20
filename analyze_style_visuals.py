@@ -1,3 +1,16 @@
+# Copyright (C) 2025-2026 Sil-More contributors
+#
+# This file is part of Sil-More.
+#
+# Sil-More is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# Sil-More is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+# for more details.
+
 import re
 from PIL import Image
 import os
@@ -131,7 +144,7 @@ def get_color_name(r, g, b):
     return "Complex"
 
 def analyze():
-    base_path = r"c:\Users\efrem\Documents\GitHub\sil-qh"
+    base_path = r"c:\Users\efrem\Documents\GitHub\Sil-More"
     style_path = os.path.join(base_path, "lib", "edit", "style.txt")
     img_path = os.path.join(base_path, "lib", "xtra", "graf", "16x16.png")
     

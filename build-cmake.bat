@@ -1,4 +1,17 @@
 @echo off
+REM Copyright (C) 2025-2026 Sil-More contributors
+REM
+REM This file is part of Sil-More.
+REM
+REM Sil-More is free software; you can redistribute it and/or modify it
+REM under the terms of the GNU General Public License version 2 as
+REM published by the Free Software Foundation.
+REM
+REM Sil-More is distributed in the hope that it will be useful, but
+REM WITHOUT ANY WARRANTY; without even the implied warranty of
+REM MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+REM for more details.
+
 setlocal
 REM Build Sil-More for native Windows with pinned SDL source submodules.
 REM This script uses MSYS2's MinGW64 environment for the toolchain.

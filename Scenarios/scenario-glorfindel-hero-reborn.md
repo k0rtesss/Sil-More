@@ -28,7 +28,7 @@ darkness that would rise again.
 
 ### Thematic Analysis
 
-This is the **default scenario** of Sil-QH. Where other scenarios tell focused
+This is the **default scenario** of Sil-More. Where other scenarios tell focused
 stories with fixed run counts and restricted hero pools, the Glorfindel scenario
 tells the widest story: *the entire war against Morgoth*, experienced through the
 eyes of every hero of the First Age.

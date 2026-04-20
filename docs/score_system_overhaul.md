@@ -1,6 +1,6 @@
 ﻿# Score / Statistics Database Overhaul
 
-This document tracks the binary redesign for Sil-QH's end-of-run data. It
+This document tracks the binary redesign for Sil-More's end-of-run data. It
 supersedes the ad-hoc `scores.raw` text-within-binary file by introducing a
 modular statistics database that cleanly separates metaruns, individual runs,
 characters, and monster analytics.

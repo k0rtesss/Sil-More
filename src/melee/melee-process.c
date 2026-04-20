@@ -1,15 +1,18 @@
 /* File: melee/melee-process.c */
-
 /*
  * Copyright (c) 2001 Leon Marrick & Bahman Rabii, Ben Harrison,
- * James E. Wilson, Robert A. Koeneke
+ * Copyright (C) 2025-2026 Sil-More contributors
  *
- * Additional code and concepts by David Reeve Sward, Keldon Jones,
- * and others.
+ * This file is part of Sil-More.
  *
- * This software may be copied and distributed for educational, research,
- * and not for profit purposes provided that this copyright and statement
- * are included in all such copies.  Other copyrights may also apply.
+ * Sil-More is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * Sil-More is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
+ * for more details.
  */
 
 /*
@@ -2027,6 +2030,5 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
         }
     }
 }
-
 
 
