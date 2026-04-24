@@ -49,12 +49,15 @@ int platform_gamepad_left_stick_binding(int dir);
 void platform_set_gamepad_left_stick_binding(int dir, int binding);
 int platform_gamepad_right_stick_binding(int dir);
 void platform_set_gamepad_right_stick_binding(int dir, int binding);
+int platform_gamepad_combo_binding(int modifier, int type, int id);
+void platform_set_gamepad_combo_binding(int modifier, int type, int id, int binding);
 int platform_gamepad_shoulder_combo_binding(void);
 void platform_set_gamepad_shoulder_combo_binding(int binding);
 int platform_gamepad_default_button_binding(int button);
 int platform_gamepad_default_trigger_binding(int index);
 int platform_gamepad_default_left_stick_binding(int dir);
 int platform_gamepad_default_right_stick_binding(int dir);
+int platform_gamepad_default_combo_binding(int modifier, int type, int id);
 int platform_gamepad_default_shoulder_combo_binding(void);
 void platform_gamepad_reset_bindings_to_default(void);
 void platform_gamepad_action_binding_label(int binding, char* buf, size_t buflen);
@@ -79,6 +82,12 @@ void platform_set_touch_pane_button_label_for_panel(int panel, int index,
 void platform_clear_touch_pane_button_label_for_panel(int panel, int index);
 void platform_touch_pane_panel_name(int panel, char* buf, size_t buflen);
 void platform_set_touch_pane_panel_name(int panel, cptr name);
+bool platform_touch_swipe_enabled(void);
+void platform_set_touch_swipe_enabled(bool value);
+int platform_touch_swipe_binding(int dir);
+void platform_set_touch_swipe_binding(int dir, int binding);
+bool platform_touch_swipe_default_enabled(void);
+int platform_touch_swipe_default_binding(int dir);
 
 #define GAMEPAD_CAPTURE_BUTTON 0
 #define GAMEPAD_CAPTURE_TRIGGER 1

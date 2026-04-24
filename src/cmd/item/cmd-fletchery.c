@@ -57,6 +57,136 @@ static bool item_tester_hook_fletchery_source(const object_type* o_ptr)
 
     return false;
 }
+
+static object_type fletchery_source_snapshot;
+static bool fletchery_source_snapshot_valid = false;
+static bool fletchery_source_in_pack = false;
+
+static void log_fletchery_object_state(
+    const char* tag, const object_type* o_ptr, int slot)
+{
+    char o_name[160];
+
+    if (!tag)
+        tag = "state";
+
+    if (!o_ptr || !o_ptr->k_idx)
+    {
+        log_debug("fletchery:%s slot=%d empty", tag, slot);
+        return;
+    }
+
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    log_debug(
+        "fletchery:%s slot=%d name='%s' k_idx=%d tval=%d sval=%d num=%d "
+        "att=%d evn=%d dd=%d ds=%d pval=%d prefix=%d suffix=%d ident=0x%08x "
+        "note=%u discount=%d pickup=%d pickup_slot=%d runtime=%ld",
+        tag, slot, o_name, o_ptr->k_idx, o_ptr->tval, o_ptr->sval,
+        o_ptr->number, o_ptr->att, o_ptr->evn, o_ptr->dd, o_ptr->ds,
+        o_ptr->pval, (int)object_ego_prefix(o_ptr),
+        (int)object_ego_suffix(o_ptr), (unsigned int)o_ptr->ident,
+        (unsigned int)o_ptr->obj_note, o_ptr->discount,
+        o_ptr->pickup ? 1 : 0, o_ptr->pickup_slot,
+        (long)object_runtime_state(o_ptr));
+}
+
+static void clear_fletchery_source_snapshot(void)
+{
+    if (fletchery_source_snapshot_valid)
+        log_fletchery_object_state("clear_snapshot", &fletchery_source_snapshot,
+            p_ptr->fletch_item);
+
+    object_wipe(&fletchery_source_snapshot);
+    fletchery_source_snapshot_valid = false;
+    fletchery_source_in_pack = false;
+    p_ptr->fletch_item = -1;
+}
+
+static void remember_fletchery_source_snapshot(const object_type* o_ptr)
+{
+    if (!o_ptr)
+    {
+        clear_fletchery_source_snapshot();
+        return;
+    }
+
+    object_copy(&fletchery_source_snapshot, o_ptr);
+    fletchery_source_snapshot_valid = true;
+    log_fletchery_object_state("remember_snapshot", o_ptr, p_ptr->fletch_item);
+}
+
+static bool fletchery_source_matches(const object_type* o_ptr)
+{
+    const object_type* source = &fletchery_source_snapshot;
+
+    if (!fletchery_source_snapshot_valid || !o_ptr || !o_ptr->k_idx)
+        return false;
+
+    if (o_ptr->k_idx != source->k_idx)
+        return false;
+    if (o_ptr->tval != source->tval || o_ptr->sval != source->sval)
+        return false;
+    if (o_ptr->att != source->att || o_ptr->evn != source->evn)
+        return false;
+    if (o_ptr->dd != source->dd || o_ptr->ds != source->ds)
+        return false;
+    if (o_ptr->pd != source->pd || o_ptr->ps != source->ps)
+        return false;
+    if (o_ptr->pval != source->pval)
+        return false;
+    if (o_ptr->name1 != source->name1)
+        return false;
+    if (object_ego_prefix(o_ptr) != object_ego_prefix(source)
+        || object_ego_suffix(o_ptr) != object_ego_suffix(source))
+    {
+        return false;
+    }
+    if (o_ptr->timeout != source->timeout)
+        return false;
+    if (o_ptr->obj_note != source->obj_note)
+        return false;
+    if (o_ptr->discount != source->discount)
+        return false;
+    if (((o_ptr->ident ^ source->ident) & (IDENT_CURSED | IDENT_BROKEN)) != 0)
+        return false;
+    if (memcmp(o_ptr->stat_bonus, source->stat_bonus, sizeof(o_ptr->stat_bonus)) != 0)
+        return false;
+    if (memcmp(o_ptr->skill_bonus, source->skill_bonus, sizeof(o_ptr->skill_bonus)) != 0)
+        return false;
+
+    return object_runtime_state(o_ptr) == object_runtime_state(source);
+}
+
+static int collect_fletchery_source_slots(int slots[INVEN_TOTAL])
+{
+    int count = 0;
+    int preferred_slot = p_ptr->fletch_item;
+
+    if ((preferred_slot >= 0) && (preferred_slot < INVEN_TOTAL)
+        && fletchery_source_matches(&inventory[preferred_slot]))
+    {
+        slots[count++] = preferred_slot;
+    }
+
+    if (!fletchery_source_in_pack)
+        return count;
+
+    for (int slot = 0; slot < INVEN_PACK; slot++)
+    {
+        if (slot == preferred_slot)
+            continue;
+        if (!fletchery_source_matches(&inventory[slot]))
+            continue;
+        slots[count++] = slot;
+    }
+
+    log_debug("fletchery:collect_slots preferred=%d count=%d in_pack=%d",
+        preferred_slot, count, fletchery_source_in_pack ? 1 : 0);
+    for (int i = 0; i < count; i++)
+        log_fletchery_object_state("collect_slot", &inventory[slots[i]], slots[i]);
+
+    return count;
+}
 enum fletch_source_type
 {
     FLETCH_SOURCE_INVEN = 0,
@@ -203,10 +333,82 @@ static bool consume_fletchery_supply_torches(int sval, int amount)
     return amount == 0;
 }
 
+static bool drop_fletchered_arrows_near(object_type* arrows)
+{
+    object_type drop_obj;
+    s16b o_idx;
+
+    if (!arrows || arrows->number <= 0 || arrows->k_idx == 0)
+        return false;
+
+    log_fletchery_object_state("drop_attempt", arrows, -1);
+
+    if ((cave_feat[p_ptr->py][p_ptr->px] == FEAT_FLOOR)
+        || (cave_feat[p_ptr->py][p_ptr->px] == FEAT_SUNLIGHT))
+    {
+        object_copy(&drop_obj, arrows);
+        o_idx = floor_carry(p_ptr->py, p_ptr->px, &drop_obj);
+        if (o_idx > 0)
+        {
+            log_debug("fletchery:drop_here_success o_idx=%d y=%d x=%d",
+                o_idx, p_ptr->py, p_ptr->px);
+            log_fletchery_object_state("drop_here_floor", &o_list[o_idx], -1);
+            return true;
+        }
+    }
+
+    for (int d = 0; d < 8; d++)
+    {
+        int yy = p_ptr->py + ddy_ddd[d];
+        int xx = p_ptr->px + ddx_ddd[d];
+
+        if (!in_bounds_fully(yy, xx))
+            continue;
+        if (cave_feat[yy][xx] != FEAT_FLOOR
+            && cave_feat[yy][xx] != FEAT_SUNLIGHT)
+        {
+            continue;
+        }
+
+        object_copy(&drop_obj, arrows);
+        o_idx = floor_carry(yy, xx, &drop_obj);
+        if (o_idx > 0)
+        {
+            log_debug("fletchery:drop_adjacent_success o_idx=%d y=%d x=%d",
+                o_idx, yy, xx);
+            log_fletchery_object_state("drop_adjacent_floor", &o_list[o_idx], -1);
+            return true;
+        }
+    }
+
+    object_copy(&drop_obj, arrows);
+    drop_obj.pickup = true;
+    drop_obj.pickup_slot = -1;
+
+    o_idx = drop_near(&drop_obj, 0, p_ptr->py, p_ptr->px);
+    if (!o_idx)
+    {
+        log_warn("drop_fletchered_arrows_near: failed to place %d crafted arrows",
+            arrows->number);
+        return false;
+    }
+
+    if (o_idx > 0)
+    {
+        log_debug("fletchery:drop_near_success o_idx=%d", o_idx);
+        o_list[o_idx].pickup = false;
+        o_list[o_idx].pickup_slot = -1;
+    }
+
+    return true;
+}
+
 static void distribute_fletchered_arrows(const object_type* arrows)
 {
     if (!arrows || arrows->number <= 0 || arrows->k_idx == 0)
         return;
+
+    log_fletchery_object_state("distribute_input", arrows, -1);
 
     object_type leftover = *arrows;
     bool combined_existing = false;
@@ -285,14 +487,18 @@ static void distribute_fletchered_arrows(const object_type* arrows)
 
         if (carry_obj.number > 0)
         {
-            drop_near(&carry_obj, 0, p_ptr->py, p_ptr->px);
-            msg_print("Some arrows spill to the ground.");
+            if (drop_fletchered_arrows_near(&carry_obj))
+                msg_print("Some arrows spill to the ground.");
+            else
+                msg_print("You lose track of some of the arrows.");
         }
     }
     else
     {
-        drop_near(&carry_obj, 0, p_ptr->py, p_ptr->px);
-        msg_print("Your pack is too full; you leave the arrows on the ground.");
+        if (drop_fletchered_arrows_near(&carry_obj))
+            msg_print("Your pack is too full; you leave the arrows on the ground.");
+        else
+            msg_print("Your pack is too full, and you lose track of the arrows.");
     }
 
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
@@ -432,6 +638,11 @@ void do_cmd_fletchery(void)
 
         p_ptr->fletch_item = source_index;
         p_ptr->fletching = o_ptr->number;
+        fletchery_source_in_pack = (source_index < INVEN_WIELD);
+        log_debug("fletchery:start source_index=%d in_pack=%d turns=%d",
+            source_index, fletchery_source_in_pack ? 1 : 0, p_ptr->fletching);
+        log_fletchery_object_state("start_source", o_ptr, source_index);
+        remember_fletchery_source_snapshot(o_ptr);
         return;
     }
 
@@ -498,14 +709,98 @@ void do_cmd_fletchery(void)
 }
 void finish_fletching(int turns_left)
 {
-    object_type* o_ptr = &inventory[p_ptr->fletch_item];
-    int count = o_ptr->number - turns_left;
+    object_type source_template;
+    object_type* o_ptr = NULL;
+    int slots[INVEN_TOTAL];
+    int remove_amounts[INVEN_TOTAL];
+    int slot_count = 0;
+    int count = 0;
+
+    memset(remove_amounts, 0, sizeof(remove_amounts));
+    log_debug("fletchery:finish begin turns_left=%d fletch_item=%d active_turns=%d snapshot=%d in_pack=%d",
+        turns_left, p_ptr->fletch_item, p_ptr->fletching,
+        fletchery_source_snapshot_valid ? 1 : 0,
+        fletchery_source_in_pack ? 1 : 0);
+
+    if (fletchery_source_snapshot_valid)
+    {
+        object_copy(&source_template, &fletchery_source_snapshot);
+        count = source_template.number - turns_left;
+        slot_count = collect_fletchery_source_slots(slots);
+        log_fletchery_object_state("finish_snapshot", &source_template,
+            p_ptr->fletch_item);
+    }
+    else if ((p_ptr->fletch_item >= 0) && (p_ptr->fletch_item < INVEN_TOTAL))
+    {
+        o_ptr = &inventory[p_ptr->fletch_item];
+        object_copy(&source_template, o_ptr);
+        count = o_ptr->number - turns_left;
+        if (o_ptr->k_idx)
+            slots[slot_count++] = p_ptr->fletch_item;
+        log_fletchery_object_state("finish_fallback_source", o_ptr,
+            p_ptr->fletch_item);
+    }
+
+    log_debug("fletchery:finish computed count=%d slot_count=%d", count, slot_count);
+
+    if ((slot_count <= 0) || (count <= 0))
+    {
+        if (count <= 0)
+        {
+            msg_print("You did not manage to improve any arrows.");
+        }
+        else
+        {
+            msg_print("You can no longer find the arrows you were working on.");
+            log_warn("finish_fletching: lost track of source arrows for slot %d",
+                p_ptr->fletch_item);
+        }
+
+        clear_fletchery_source_snapshot();
+        return;
+    }
 
     /* Unstack if necessary */
     if (count > 0)
     {
+        int source_total = source_template.number;
+        int available_total = 0;
+        int improved;
+        int remaining_original;
+
+        for (int i = 0; i < slot_count && available_total < source_total; i++)
+        {
+            int slot = slots[i];
+            int available = inventory[slot].number;
+            int used = MIN(source_total - available_total, available);
+
+            if (used <= 0)
+                continue;
+
+            remove_amounts[i] = used;
+            available_total += used;
+            log_debug("fletchery:finish slot=%d available=%d remove=%d running_total=%d source_total=%d",
+                slot, available, used, available_total, source_total);
+        }
+
+        improved = MIN(count, available_total);
+        remaining_original = available_total - improved;
+        log_debug("fletchery:finish improved=%d remaining_original=%d available_total=%d requested=%d",
+            improved, remaining_original, available_total, count);
+
+        if (available_total < count)
+            log_warn("finish_fletching: only found %d of %d arrows to improve",
+                available_total, count);
+
+        if (improved <= 0)
+        {
+            msg_print("You can no longer find the arrows you were working on.");
+            clear_fletchery_source_snapshot();
+            return;
+        }
+
         /* Message */
-        msg_format("You improve %d arrows.", count);
+        msg_format("You improve %d arrows.", improved);
 
         object_type* i_ptr;
         object_type object_type_body;
@@ -514,32 +809,54 @@ void finish_fletching(int turns_left)
         i_ptr = &object_type_body;
 
         /* Obtain a local object */
-        object_copy(i_ptr, o_ptr);
+        object_copy(i_ptr, &source_template);
 
         /* Modify quantity */
-        i_ptr->number = count;
+        i_ptr->number = improved;
         i_ptr->att = 3;
 
-        /* Reduce original pile */
-        inven_item_increase(p_ptr->fletch_item, -count);
-        inven_item_optimize(p_ptr->fletch_item);
+        /* Reduce original stacks. Delay optimization so pack slots stay stable. */
+        for (int i = 0; i < slot_count; i++)
+        {
+            if (remove_amounts[i] <= 0)
+                continue;
+            log_fletchery_object_state("finish_remove_before",
+                &inventory[slots[i]], slots[i]);
+            inven_item_increase(slots[i], -remove_amounts[i]);
+            log_fletchery_object_state("finish_remove_after",
+                &inventory[slots[i]], slots[i]);
+        }
+
+        for (int i = slot_count - 1; i >= 0; i--)
+        {
+            if (remove_amounts[i] <= 0)
+                continue;
+            inven_item_optimize(slots[i]);
+        }
 
         /* Add new arrows */
         distribute_fletchered_arrows(i_ptr);
+
+        if (remaining_original > 0)
+        {
+            object_type remainder = source_template;
+            remainder.number = remaining_original;
+            distribute_fletchered_arrows(&remainder);
+        }
     }
     else
     {
         msg_print("You did not manage to improve any arrows.");
     }
 
+    clear_fletchery_source_snapshot();
+
     /* Combine / Reorder the pack (later) */
     p_ptr->notice |= (PN_COMBINE | PN_REORDER);
+    p_ptr->redraw |= (PR_QUIVER | PR_ARC);
 
     /* Window stuff */
-    p_ptr->window |= (PW_INVEN);
-
-    /* Window stuff */
-    p_ptr->window |= (PW_EQUIP);
+    p_ptr->window |= (PW_INVEN | PW_EQUIP | PW_PLAYER_0);
 }
 
 /*

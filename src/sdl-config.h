@@ -47,6 +47,7 @@ struct sdl_config {
     int margin;
     bool fullscreen;
     bool tiles;
+    bool use_unsafe_area;
     bool enable_right_panes;
     bool enable_bottom_panes;
     bool show_pane_borders;
@@ -94,12 +95,18 @@ struct sdl_config {
     int gamepad_trigger_bindings[GAMEPAD_TRIGGER_COUNT];
     int gamepad_left_stick_bindings[GAMEPAD_STICK_DIR_COUNT];
     int gamepad_right_stick_bindings[GAMEPAD_STICK_DIR_COUNT];
+    int gamepad_button_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_BUTTON_COUNT];
+    int gamepad_trigger_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_TRIGGER_COUNT];
+    int gamepad_left_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
+    int gamepad_right_stick_combo_bindings[GAMEPAD_MODIFIER_COUNT][GAMEPAD_STICK_DIR_COUNT];
     int gamepad_shoulder_combo_binding;   // Binding for L1+R1 combo action
     int touch_pane_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
     char touch_pane_labels[SDL_TOUCH_PANE_BUTTON_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
     int touch_pane_second_bindings[SDL_TOUCH_PANE_BUTTON_COUNT];
     char touch_pane_second_labels[SDL_TOUCH_PANE_BUTTON_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
     char touch_pane_panel_names[SDL_TOUCH_PANE_PANEL_COUNT][SDL_TOUCH_PANE_LABEL_LEN];
+    bool touch_swipe_enabled;
+    int touch_swipe_bindings[GAMEPAD_STICK_DIR_COUNT];
 
     bool movement_keyboard_present;
     u16b movement_keyboard_preset;

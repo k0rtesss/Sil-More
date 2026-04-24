@@ -58,6 +58,7 @@ typedef struct sdl_state {
     SDL_Renderer* renderer;
     SDL_Texture* tileset;
     SDL_Color palette[16];
+    SDL_Rect safe_area;
     float system_scale;
     int tileset_cols;
     bool need_present;
@@ -135,6 +136,8 @@ int sdl_effective_pane_font_size_for_type(enum pane_type type);
 void sdl_build_supporting_pane_metrics(const struct pane_config* configs,
     int count, int* cell_widths, int* cell_heights);
 void sdl_compute_split_panes(const SDL_Rect* screen, SDL_Rect* panes);
+void sdl_refresh_safe_area(void);
+SDL_Rect sdl_get_layout_screen_rect(void);
 int sdl_max_scale_for_rect(const SDL_Rect* rect);
 void sdl_update_cursor_visibility(void);
 void resize(const SDL_Rect* screen);

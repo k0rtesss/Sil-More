@@ -12,16 +12,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 #ifndef INCLUDED_APP_UI_H
 #define INCLUDED_APP_UI_H
-
 #include "h-basic.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #define APP_UI_FORMAT_VERSION 11u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
@@ -39,13 +35,11 @@ extern "C" {
 #define APP_UI_CHARACTER_METRIC_MAX 24u
 #define APP_UI_CHARACTER_STAT_MAX 24u
 #define APP_UI_MINIMAP_CELL_MAX 54000u
-
 typedef enum app_ui_scene_flag {
     APP_UI_SCENE_FLAG_NONE = 0x0000u,
     APP_UI_SCENE_FLAG_USE_BACKDROP = 0x0001u,
     APP_UI_SCENE_FLAG_DIM_BACKDROP = 0x0002u
 } app_ui_scene_flag;
-
 typedef enum app_ui_layer_kind {
     APP_UI_LAYER_NONE = 0,
     APP_UI_LAYER_CHROME = 1,
@@ -53,7 +47,6 @@ typedef enum app_ui_layer_kind {
     APP_UI_LAYER_MODAL = 3,
     APP_UI_LAYER_BROWSER = 4
 } app_ui_layer_kind;
-
 typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_DEFAULT = 0,
     APP_UI_PANEL_STYLE_PLAIN = 1,
@@ -65,10 +58,8 @@ typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_OVERLAY_RAIL = 8,
     APP_UI_PANEL_STYLE_WELCOME = 9
 } app_ui_panel_style;
-
 #define APP_UI_TEXT_FLAG_WELCOME_COL_MASK 0x00FFu
 #define APP_UI_TEXT_FLAG_WELCOME_BLANK 0x0100u
-
 typedef enum app_ui_panel_flag {
     APP_UI_PANEL_FLAG_NONE = 0x0000u,
     APP_UI_PANEL_FLAG_ACTIVE = 0x0001u,
@@ -79,7 +70,6 @@ typedef enum app_ui_panel_flag {
     APP_UI_PANEL_FLAG_SCROLL_ROWS = 0x0020u,
     APP_UI_PANEL_FLAG_DETAIL_LEADING = 0x0040u
 } app_ui_panel_flag;
-
 typedef enum app_ui_focus_area {
     APP_UI_FOCUS_NONE = 0,
     APP_UI_FOCUS_TABS = 1,
@@ -87,7 +77,6 @@ typedef enum app_ui_focus_area {
     APP_UI_FOCUS_DETAIL = 3,
     APP_UI_FOCUS_FOOTER = 4
 } app_ui_focus_area;
-
 typedef enum app_ui_item_flag {
     APP_UI_ITEM_FLAG_NONE = 0x00u,
     APP_UI_ITEM_FLAG_DISABLED = 0x01u,
@@ -96,14 +85,12 @@ typedef enum app_ui_item_flag {
     APP_UI_ITEM_FLAG_SECTION = 0x08u,
     APP_UI_ITEM_FLAG_STORY_LABEL = 0x10u
 } app_ui_item_flag;
-
 typedef struct app_ui_text_line {
     byte attr;
     byte story;
     u16b flags;
     char text[APP_UI_TEXT_MAX];
 } app_ui_text_line;
-
 typedef struct app_ui_row {
     s16b id;
     byte attr;
@@ -117,7 +104,6 @@ typedef struct app_ui_row {
     char label[APP_UI_LABEL_MAX];
     char meta[APP_UI_META_MAX];
 } app_ui_row;
-
 typedef struct app_ui_footer_action {
     s16b id;
     byte attr;
@@ -125,19 +111,16 @@ typedef struct app_ui_footer_action {
     char key[APP_UI_KEY_MAX];
     char label[APP_UI_LABEL_MAX];
 } app_ui_footer_action;
-
 typedef struct app_ui_tab {
     s16b id;
     byte attr;
     byte flags;
     char label[APP_UI_LABEL_MAX];
 } app_ui_tab;
-
 typedef struct app_ui_rich_paragraph {
     u16b run_first;
     u16b run_count;
 } app_ui_rich_paragraph;
-
 typedef struct app_ui_rich_run {
     byte attr;
     byte story;
@@ -145,7 +128,6 @@ typedef struct app_ui_rich_run {
     byte reserved;
     char text[APP_UI_TEXT_MAX];
 } app_ui_rich_run;
-
 typedef struct app_ui_character_metric {
     byte label_attr;
     byte value_attr;
@@ -157,7 +139,6 @@ typedef struct app_ui_character_metric {
     char value[APP_UI_META_MAX];
     char secondary[APP_UI_META_MAX];
 } app_ui_character_metric;
-
 typedef struct app_ui_character_stat {
     byte label_attr;
     byte value_attr;
@@ -175,14 +156,12 @@ typedef struct app_ui_character_stat {
     char mod2[APP_UI_KEY_MAX];
     char mod3[APP_UI_KEY_MAX];
 } app_ui_character_stat;
-
 typedef struct app_ui_minimap_cell {
     byte attr;
     char ch;
     byte terrain_attr;
     char terrain_char;
 } app_ui_minimap_cell;
-
 typedef struct app_ui_panel {
     u16b layer;
     u16b flags;
@@ -229,7 +208,6 @@ typedef struct app_ui_panel {
     app_ui_character_metric character_metrics[APP_UI_CHARACTER_METRIC_MAX];
     app_ui_character_stat character_stats[APP_UI_CHARACTER_STAT_MAX];
 } app_ui_panel;
-
 typedef struct app_ui_scene {
     u16b format_version;
     u16b flags;
@@ -242,7 +220,6 @@ typedef struct app_ui_scene {
     app_ui_rich_run rich_runs[APP_UI_RICH_RUN_MAX];
     app_ui_minimap_cell minimap_cells[APP_UI_MINIMAP_CELL_MAX];
 } app_ui_scene;
-
 void app_ui_panel_init(app_ui_panel* panel, u16b layer);
 void app_ui_scene_init(app_ui_scene* scene);
 app_ui_panel* app_ui_scene_append_panel(app_ui_scene* scene, u16b layer);
@@ -291,5 +268,4 @@ bool app_ui_panel_add_character_stat(app_ui_panel* panel, byte label_attr,
 #ifdef __cplusplus
 }
 #endif
-
 #endif /* INCLUDED_APP_UI_H */

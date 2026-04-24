@@ -19,6 +19,8 @@
 #include "log/log.h"
 #include "object/object-info-internal.h"
 
+#include <ctype.h>
+
 typedef struct object_lore_profile
 {
     cptr keywords[12];
@@ -31,6 +33,18 @@ typedef enum object_lore_alignment
     OBJECT_LORE_ALIGNMENT_NOBLE = 1,
     OBJECT_LORE_ALIGNMENT_EVIL = 2
 } object_lore_alignment;
+
+static void object_info_capitalize_first(char* str)
+{
+    if (!str)
+        return;
+
+    while (*str && isspace((unsigned char)*str))
+        str++;
+
+    if (*str && islower((unsigned char)*str))
+        *str = (char)toupper((unsigned char)*str);
+}
 
 static void object_lore_add_keyword(object_lore_profile* profile, cptr keyword)
 {
@@ -453,21 +467,18 @@ static bool screen_out_ego_lore(const object_type* o_ptr)
  */
 bool object_info_screen_out_head(const object_type* o_ptr)
 {
-    char* o_name;
+    char o_name[2048];
     char base_desc_buf[2048];
     cptr base_desc = NULL;
-    int name_size = OBJECT_INFO_NAME_BUF_COLS;
 
     bool has_description = false;
 
     log_trace("screen_out_head: Starting, wrap_cols=%d",
         OBJECT_INFO_CAPTURE_WRAP_COLS);
 
-    /* Allocate memory sized for semantic capture, not the legacy term width. */
-    o_name = mem_alloc_array(name_size, char);
-
     /* Description */
-    object_desc(o_name, name_size, o_ptr, true, 3);
+    object_desc(o_name, sizeof(o_name), o_ptr, true, 3);
+    object_info_capitalize_first(o_name);
 
     log_trace("screen_out_head: About to print object name at current position");
 
@@ -488,7 +499,7 @@ bool object_info_screen_out_head(const object_type* o_ptr)
     byte name_color = object_display_color(o_ptr, base_color);
 
     /* Print, in colour */
-    text_out_c(name_color, format("%^s", o_name));
+    text_out_c(name_color, o_name);
 
     /* Show weight information */
     {
@@ -519,9 +530,6 @@ bool object_info_screen_out_head(const object_type* o_ptr)
         int wr = object_weight_rarity(o_ptr, depth);
         text_out_c(TERM_SLATE, format(" {%d,%d}", sd, wr));
     }
-
-    /* Free up the memory */
-    mem_free_null(o_name);
 
     /* Display the known artefact description */
     if (!adult_rand_artefacts && o_ptr->name1 && object_known_p(o_ptr)

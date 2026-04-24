@@ -26,7 +26,7 @@
 #
 # 'Q' is for the stable GUID used by the score/analytics subsystems.
 #
-# 'G' is for graphics overrides, if any. The char is the symbol 
+# 'G' is for graphics overrides, if any. The char is the symbol
 #     and the attr the colour. (See object.txt)
 #
 # 'I' is for basic information. The tval is for the type of item, the
@@ -37,11 +37,11 @@
 # 'S' sets the number of items in the initial spawned stack (for stackable
 #     artefacts such as arrows and throwing weapons). If omitted, defaults to 1.
 #
-# 'B' is for granted abilities, represented as pairs of skill 
+# 'B' is for granted abilities, represented as pairs of skill
 #     numbers and ability numbers. (See ability.txt)
 #
 # 'M' is for per-stat/skill bonus overrides. It allows customizing the bonus
-#     granted to a specific stat (STR, INT, WIS, DEX, CON, GRA) or skill 
+#     granted to a specific stat (STR, INT, WIS, DEX, CON, GRA) or skill
 #     (MELEE, MISSILE, EVASION, STEALTH, PERCEPTION, WILL, SMITHING, SONG).
 #     Format: M:STAT_or_SKILL:value. As many M: lines may be used as needed.
 #
@@ -55,12 +55,12 @@
 #     Note that for non-weapons, adding damage dice will not
 #     help with melee, only with the thrown damage.
 #
-# 'F' is for flags. These are fairly self-explanatory. As many 
+# 'F' is for flags. These are fairly self-explanatory. As many
 #     F: lines may be used as are needed to specify all the flags
 #     and flags are separated by the '|' symbol.
 #
 # 'D' is a textual description of the artefact.
-# 
+#
 # === Important Notes ===
 #
 # (1) The artefact indexes are defined in 'defines.h', and must not be changed.
@@ -97,7 +97,7 @@
 #   * Curufin		(helm - perception, stealth, will, res confusion) [Implemented]
 #     * Celebrimbor	(gloves - expertise, free action) [Implemented]
 #   * Amrod		(short sword - perception, stealth) [Implemented]
-#   * Amras		
+#   * Amras
 # * Fingolfin		('ringil' - rcold, light) (shield - con, rfear) [Both Implemented]
 #   * Fingon		(corslet - resist fear, con) [Implemented]
 #     * Gil-galad	('aeglos' - cold) [Implemented]
@@ -164,8 +164,8 @@
 #
 # The Iron Helm of Vinyamar (Set Item)
 #
-#D:The helm left by Turgon in Vinyamar for the messenger of Ulmo.  Crowned by 
-#D:three swan's feathers, it greatens the heart and clarifies the purpose of 
+#D:The helm left by Turgon in Vinyamar for the messenger of Ulmo.  Crowned by
+#D:three swan's feathers, it greatens the heart and clarifies the purpose of
 #D:the one who wears it.
 #
 # Also, a Shadow Cloak of Ulmo could be added to complete the Vinyamar set
@@ -177,7 +177,7 @@
 V:0.9.6
 
 #################################################################
-# Here is the list of 'Special' artefacts. 
+# Here is the list of 'Special' artefacts.
 # They can be:
 #   - Rings
 #   - Amulets
@@ -415,7 +415,7 @@ D: It remembers his defiant song and stirs the same courage in its bearer.
 
 
 #################################################################
-# Here is the list of 'Normal' artefacts. 
+# Here is the list of 'Normal' artefacts.
 # They can be Armour or Weapons.
 # They use indices 20 - 139.
 
@@ -496,7 +496,7 @@ D:This armour bears the weight of sorrow and treachery alike. It was worn by
 D: Gorlim, called the Unhappy, one of Barahir's outlaws in Dorthonion after
 D: the Dagor Bragollach had laid that land waste. When his beloved Eithel was
 D: taken from him, Gorthaur's servants promised her return if he would betray
-D: his lord. Driven beyond endurance, Gorlim revealed Barahir's hiding place —
+D: his lord. Driven beyond endurance, Gorlim revealed Barahir's hiding place -
 D: only to learn Eithel was already dead and the promise but a lie. He was
 D: slain, and this armour has been black with shame ever since.
 
@@ -591,7 +591,7 @@ I:36:11:1
 W:15:1:70:45000
 P:0:0d0:1:1d10
 F:DEX | RES_POIS
-F:HUNGER | LIGHT_CURSE 
+F:HUNGER | LIGHT_CURSE
 F:EASY_ID | INSTA_ART
 D:Armour wrought of Galvorn, a metal devised by Eol the Dark Elf in Nan
 D: Elmoth. Black and shining as jet, yet hard as Dwarf-steel, Galvorn could
@@ -1051,7 +1051,7 @@ D: Mandos, who quenched the blade in the blood of his own kin. It drinks
 D: deeply of those it wounds, sustaining its wielder even as it wakes a
 D: terrible hunger within them and clouds their mind with red thoughts.
 
-# Mim's Long Knife (Poisoned Runes). 
+# Mim's Long Knife (Poisoned Runes).
 # A long knife of the Petty-dwarf Mim, inscribed with toxic runes. It excels in secretive strikes. Cursed: once wielded, it's difficult to discard, echoing Mim's treacherous doom.
 
 # Smithing difficulty: 38
@@ -1149,8 +1149,8 @@ D: Though little is spoken of this blade in the songs of Beleriand, strange
 D: fate is woven about it, and it will yet play a part in tales unwritten.
 
 # Idril's Sword (Guardian of Gondolin)
-# A graceful short sword borne by Idril Celebrindal during the Fall of Gondolin. It is light and protective, aiding in swift escapes. 
-# The blade carries an aura of royal Majesty (foes quail to attack the wielder). 
+# A graceful short sword borne by Idril Celebrindal during the Fall of Gondolin. It is light and protective, aiding in swift escapes.
+# The blade carries an aura of royal Majesty (foes quail to attack the wielder).
 # Special ability: Song of Elveness 7/11 and Song of Freedom 7/3
 
 # Smithing difficulty: 43
@@ -1181,10 +1181,10 @@ W:8:30:15:15000
 P:1:1d7:1:0d0
 B:1/4
 F:STEALTH | PERCEPTION | PAIRED | NOBLE_ITEM
-D:The hunting blade of Amras, twin brother of Amrod. Like his brother, he 
-D: rejoiced in the hunt, riding often with Celegorm in the woods of 
-D: Valinor. Though bound by the terrible Oath, he dwelt long in the wild 
-D: lands of East Beleriand, far from the wars of Angband. This blade grants 
+D:The hunting blade of Amras, twin brother of Amrod. Like his brother, he
+D: rejoiced in the hunt, riding often with Celegorm in the woods of
+D: Valinor. Though bound by the terrible Oath, he dwelt long in the wild
+D: lands of East Beleriand, far from the wars of Angband. This blade grants
 D: the mastery of two weapons, striking with the swift accord of the twins.
 
 
@@ -1279,12 +1279,12 @@ G:|:D
 I:23:30:0
 W:18:20:50:130000
 P:0:3d6:1:0d0
-F:DANGER | TRAITOR | LIGHT_CURSE | WILL_DRAIN | SLAY_DRAGON 
+F:DANGER | TRAITOR | LIGHT_CURSE | WILL_DRAIN | SLAY_DRAGON
 D:The black sword Anglachel, forged by Eol of Nan Elmoth from star-iron.
 D: It was brought to Thingol in Doriath, and later borne by Beleg
 D: Cuthalion. Its edge is dreadful keen, and a cold will seems to wake
 D: when it is drawn. Many have found that mischance follows where this
-D: blade passes — as though it remembers every death it has dealt.
+D: blade passes - as though it remembers every death it has dealt.
 
 # Gurthang (Black Sword of Turin)
 # Smithing difficulty: 60
@@ -1296,10 +1296,10 @@ W:20:15:50:80000
 P:0:3d7:1:0d0
 F:SLAY_DRAGON | VAMPIRIC | DANGER | HUNGER | LIGHT_CURSE | TRAITOR | WILL_DRAIN
 B:4/5/8
-D:The sable sword reforged from Anglachel, wielded by Turin. Its blade can 
-D: slice iron like parchment, and it drinks deeply of blood. A fell curse 
-D: lies upon it: once unsheathed, it must taste blood. The sword's grim will 
-D: fills its master with fearless despair, drawing mighty foes nigh – and 
+D:The sable sword reforged from Anglachel, wielded by Turin. Its blade can
+D: slice iron like parchment, and it drinks deeply of blood. A fell curse
+D: lies upon it: once unsheathed, it must taste blood. The sword's grim will
+D: fills its master with fearless despair, drawing mighty foes nigh - and
 D: giving strength to slay them.
 
 # Smithing difficulty: 59
@@ -1442,7 +1442,7 @@ D: bitter cold burns the servants of darkness.
 
 
 ##
-## The Mithril Sword 'Ungoliant's Lament' 
+## The Mithril Sword 'Ungoliant's Lament'
 ##
 # Smithing difficulty: 57
 
@@ -1514,7 +1514,7 @@ I:22:1:-1
 W:12:20:25:50000
 P:1:1d11:1:0d0
 F:SLAY_RAUKO | SLAY_MAN_OR_ELF | SEE_INVIS | FREE_ACT | EVIL_ITEM | MIN_DEPTH_SPEED
-F:GRA | AGGRAVATE | THROWING | DARKNESS
+F:GRA | AGGRAVATE | THROWING | UNLIGHT
 M:DEX:1
 B:3/2
 D:A cruel spear, black-hafted with a head of dark bronze, forged by Gorthaur
@@ -1624,12 +1624,12 @@ W:20:8:80:100000
 P:2:1d16:1:0d0
 F:GRA | BRAND_POIS
 M:STR:2
-F:FREE_ACT | VUL_POIS | LIGHT_CURSE | DARKNESS | HUNGER | VAMPIRIC | ENCHANTABLE | EVIL_ITEM | MIN_DEPTH_SPEED
+F:FREE_ACT | VUL_POIS | LIGHT_CURSE | UNLIGHT | HUNGER | VAMPIRIC | ENCHANTABLE | EVIL_ITEM | MIN_DEPTH_SPEED
 B:0/11
 D:The black spear of Melkor Morgoth, mightiest of the Ainur who fell, wielded
 D: in the hour when he and the great spider Ungoliant came in darkness to the
-D: heart of Valinor. With this weapon he struck the Two Trees of Yavanna —
-D: Telperion the White and Laurelin the Gold — and Ungoliant's venom poured
+D: heart of Valinor. With this weapon he struck the Two Trees of Yavanna -
+D: Telperion the White and Laurelin the Gold - and Ungoliant's venom poured
 D: into the wounds until all the light of the world was swallowed. The weapon
 D: still carries a sliver of that primal malice, and even to touch it is to
 D: feel the cold of the Unlight that once shrouded the land in darkness.
@@ -1653,8 +1653,8 @@ D: they do not share true names with outsiders. The Haladin, not understanding,
 D: took this as the axe's name, and so it has been called ever since. It bites
 D: deep into orc-flesh and spider-hide alike.
 
-# The Axe of Durin 
-# The ancestral axe of Durin the Deathless, father of the Dwarves. It bestows the fortitude and courage of Durin's line. 
+# The Axe of Durin
+# The ancestral axe of Durin the Deathless, father of the Dwarves. It bestows the fortitude and courage of Durin's line.
 # Its bright head gleams in the dark halls, a comfort against fear.
 
 # Smithing difficulty: 50
@@ -1706,7 +1706,7 @@ D: Angband by Morgoth Bauglir himself for the breaking of kin and the severing
 D: of hope. Many are the lives it has claimed, and each one it remembers: it
 D: is blood-warm to the touch and thirsting always for vitality, drinking
 D: deeply of those it wounds. Those who wield it are haunted by the cries of
-D: the slain — mothers weeping over fallen sons in the wars of Beleriand.
+D: the slain - mothers weeping over fallen sons in the wars of Beleriand.
 
 
 ## The Great Axe of Dolmed
@@ -2081,7 +2081,7 @@ D:A mithril helm rising to a tall spike, worn by Ecthelion, Lord of the
 D: Fountains of Gondolin. When the city fell, he faced Gothmog, Lord of
 D: Balrogs, and drove the spike into the demon's breast as they plunged
 D: together into the Fountain of the King. Both perished, but the helm
-D: still echoes with the music of falling water. 
+D: still echoes with the music of falling water.
 
 ## Ability 4/7 - Resonance
 
@@ -2415,7 +2415,7 @@ D: made by their bowyers for the wardens of the marches. Though worn at the
 D: notches from years of faithful service, it remains supple and true. Its
 D: arrows fly straight and swift, unhindered by enchantment or shadow.
 
-# Longbow of the Heavenly Arch 
+# Longbow of the Heavenly Arch
 
 # Smithing difficulty: 33
 
@@ -2749,7 +2749,7 @@ W:1:20:1:10000
 P:0:0d0:0:0d0
 F:LIGHT | NOBLE_ITEM
 B:5/4
-D:A jewel once woven into the silver embroideries of Míriel Þerinde,
+D:A jewel once woven into the silver embroideries of Miriel Therinde,
 D: first wife of Finwe and mother of Feanor. Serinde, the Broideress,
 D: she was called, for none could match her skill with needle and thread.
 D: So greatly did she spend herself in bearing Feanor that her spirit
@@ -2794,7 +2794,7 @@ P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
 D:The Iron Crown of Morgoth Bauglir, forged in Angband to bear the three
 D: Silmarils, the stolen light of the Two Trees. Now all three jewels are
-D: gone, and the crown sits cold and empty — three dark sockets where stars
+D: gone, and the crown sits cold and empty - three dark sockets where stars
 D: once blazed, a monument to a glory stolen and a glory lost. Much of the
 D: Dark Lord's will was poured into its making.
 
@@ -2811,7 +2811,7 @@ P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
 D:The Iron Crown of Morgoth Bauglir, wrought in Angband to hold the stolen
 D: light of the world. Two sockets are empty and dark, but in the third burns
-D: still a Silmaril — a jewel of Feanor, containing the imperishable light of
+D: still a Silmaril - a jewel of Feanor, containing the imperishable light of
 D: the Two Trees of Valinor. It is the greatest treasure remaining in
 D: Middle-earth, and the Oath of Feanor binds his sons to claim it.
 
@@ -2828,7 +2828,7 @@ P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
 D:The Iron Crown of Morgoth Bauglir, wrought in Angband to hold the stolen
 D: light of the world. One socket gapes empty and dark, but in the other two
-D: burn still two Silmarils — jewels of Feanor, containing the imperishable
+D: burn still two Silmarils - jewels of Feanor, containing the imperishable
 D: light of the Two Trees. They are the greatest treasures remaining in
 D: Middle-earth, and war and ruin have followed in their wake.
 
@@ -2843,11 +2843,12 @@ I:33:50:6
 W:20:1:4000:10000000
 P:0:0d0:0:0d0:0
 F:INSTA_ART | EVIL_ITEM
-D:The Iron Crown of Morgoth Bauglir, in which burn the three Silmarils —
+D:The Iron Crown of Morgoth Bauglir, in which burn the three Silmarils -
 D: jewels of Feanor, stolen from Formenos and set here by the Dark Lord
 D: himself. In them burns the imperishable light of the Two Trees of Valinor,
 D: and the Oath of Feanor compels his sons to claim them, even unto the ruin
-D: of the world. To cut a Silmaril from the crown, stand over it and press (k).
+D: of the world. To cut a Silmaril from the crown, stand over it and use it (u),
+D: or press (k).
 
 
 ## The Mighty Hammer 'Grond'
@@ -2897,7 +2898,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_POLEARM
@@ -2918,7 +2919,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_HAFTED
@@ -2939,7 +2940,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_DIGGING
@@ -2960,7 +2961,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_BOW
@@ -2987,7 +2988,7 @@ F:SLAY_UNDEAD | SLAY_RAUKO | SLAY_DRAGON | SLAY_SERPENT
 F:SLAY_VAMPIRE | SLAY_HORROR | SLAY_CAT | SLAY_GIANT
 F:BRAND_FIRE | BRAND_COLD | BRAND_POIS
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_RING
@@ -3003,7 +3004,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | REGEN | SEE_INVIS | FREE_ACT | SPEED
 F:HUNGER | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_AMULET
@@ -3018,7 +3019,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_LIGHT
@@ -3033,7 +3034,7 @@ F:RES_FEAR | RES_BLIND | RES_HALLU
 F:LIGHT | SEE_INVIS
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_SOFT_ARMOR
@@ -3049,7 +3050,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT | SPEED
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_MAIL
@@ -3065,7 +3066,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT | SPEED
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_CLOAK
@@ -3081,7 +3082,7 @@ F:RES_FEAR | RES_CONFU | RES_STUN | RES_HALLU
 F:SLOW_DIGEST | LIGHT | REGEN | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_SHIELD
@@ -3097,7 +3098,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN
 F:LIGHT | REGEN | FREE_ACT
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_HELM
@@ -3113,7 +3114,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:LIGHT | REGEN | SEE_INVIS
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_CROWN
@@ -3129,7 +3130,7 @@ F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 F:LIGHT | REGEN | SEE_INVIS
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_GLOVES
@@ -3144,7 +3145,7 @@ F:SUST_STR | SUST_DEX
 F:FREE_ACT | RES_FIRE | RES_COLD | RES_POIS | RES_BLEED
 F:HUNGER | DANGER | AGGRAVATE | LIGHT_CURSE | DARKNESS
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 ## The Ultimate TV_BOOTS
@@ -3160,7 +3161,7 @@ F:RES_FEAR | RES_CONFU | REGEN
 F:FREE_ACT | SPEED | AVOID_TRAPS
 F:HUNGER | DARKNESS | DANGER | AGGRAVATE | LIGHT_CURSE
 F:HAUNTED | FEAR | VUL_FIRE | VUL_COLD | VUL_POIS
-F:INSTA_ART 
+F:INSTA_ART
 
 
 # List of all relevant flags...
@@ -3177,7 +3178,7 @@ F:INSTA_ART
 #F:RES_FEAR | RES_BLIND | RES_CONFU | RES_STUN | RES_HALLU
 #F:RADIANCE | SLOW_DIGEST | LIGHT | REGEN | SEE_INVIS | FREE_ACT | SPEED
 #F:HUNGER | DARKNESS | SLOWNESS | DANGER | AGGRAVATE | LIGHT_CURSE
-#F:INSTA_ART 
+#F:INSTA_ART
 
 
 #################################################################

@@ -29,6 +29,7 @@ extern char* bane_name[];
 
 int bane_type_killed(int bane_type);
 int elf_bane_bonus(monster_type* m_ptr);
+int dwarf_bane_bonus(monster_type* m_ptr);
 int bane_bonus(monster_type* m_ptr);
 int bane_bonus_for_type(int bane_type_idx);
 int artifact_bane_bonus(monster_type* m_ptr);

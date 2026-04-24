@@ -641,6 +641,7 @@ static bool cave_gen(void)
             }
         }
     squash_double_doors();
+    prune_invalid_nonvault_doors();
 
     if (morgoth_level_active)
     {
@@ -689,6 +690,8 @@ static bool cave_gen(void)
         gen_log_level_end(false, dun->cent_n, 1);
         return (false);
     }
+
+    prune_invalid_nonvault_doors();
 
     {
         partition_population_plan plans[PARTITION_META_MAX];

@@ -762,8 +762,11 @@ static void wr_options(void)
     /* Write "noble_item_spawn_mode" */
     wr_byte(op_ptr->noble_item_spawn_mode);
 
-    /* 1 remaining spare byte */
+    /* Reserved spare byte from 0.9.5.5 */
     wr_byte(0);
+
+    /* Write "min_depth_timer_mode" */
+    wr_byte(op_ptr->min_depth_timer_mode);
 
     /*** Normal options ***/
 

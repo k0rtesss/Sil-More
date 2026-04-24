@@ -96,6 +96,7 @@ errr parse_k_info(char* buf, header* head)
             k_ptr->skill_bonus[sk] = 0;
             k_ptr->skill_bonus_set[sk] = false;
         }
+        k_ptr->elemental_block = 0;
     }
 
     /* Process 'G' for "Graphics" (one line only) */
@@ -328,6 +329,23 @@ errr parse_k_info(char* buf, header* head)
             k_ptr->max_pval = (s16b)value;
         else
             return (PARSE_ERROR_GENERIC);
+    }
+
+    /* Process 'X' for elemental block chance bonus */
+    else if (buf[0] == 'X')
+    {
+        int chance;
+
+        if (!k_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 != sscanf(buf + 2, "%d", &chance))
+            return (PARSE_ERROR_GENERIC);
+
+        if ((chance < 0) || (chance > 100))
+            return (PARSE_ERROR_GENERIC);
+
+        k_ptr->elemental_block = (byte)chance;
     }
 
     /* Hack -- Process 'F' for flags */

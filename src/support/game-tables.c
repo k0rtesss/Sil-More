@@ -190,7 +190,7 @@ cptr option_text[OPT_MAX] = {
     "stealth_vision", /* OPT_stealth_vision */
     "sleep_icon", /* OPT_sleep_icon */
     "assassination_over_charge", /* OPT_assassination_over_charge */
-    NULL, /* xxx expand_list */
+    "pacifist_attack_warning", /* OPT_pacifist_attack_warning */
     NULL, /* xxx view_perma_grids */
     NULL, /* xxx view_torch_grids */
     NULL, /* xxx dungeon_align */
@@ -258,11 +258,11 @@ cptr option_text[OPT_MAX] = {
     "look_objects_sort_by_difficulty", /* OPT_look_objects_sort_by_difficulty */
     "look_nearby_filter_default", /* OPT_look_nearby_filter_default */
     "show_elemental_item_rolls", /* OPT_show_elemental_item_rolls */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
+    NULL, /* OPT_hidden_left_panel_mode */
+    NULL, /* OPT_top_status_line */
+    "hide_supporting_panes_fullscreen", /* OPT_hide_supporting_panes_fullscreen */
+    NULL, /* OPT_narrative_banner_turns */
+    NULL, /* OPT_min_depth_timer_mode */
     NULL, /* xxx */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -434,7 +434,7 @@ cptr option_desc[OPT_MAX] = {
     "Stealth vision mode: show when monsters can see you", /* OPT_stealth_vision */
     "Show an overlay icon on sleeping monsters", /* OPT_sleep_icon */
     "On unaware targets, use Assassination instead of Charge bonuses", /* OPT_assassination_over_charge */
-    NULL, /* xxx expand_list */
+    "Confirm before direct attacks", /* OPT_pacifist_attack_warning */
     NULL, /* xxx view_perma_grids */
     NULL, /* xxx view_torch_grids */
     NULL, /* xxx dungeon_align */
@@ -502,11 +502,11 @@ cptr option_desc[OPT_MAX] = {
     "Sort look (L) objects by difficulty only (off = category, then difficulty)", /* OPT_look_objects_sort_by_difficulty */
     "Start look (l) with the nearby-only sidebar filter enabled", /* OPT_look_nearby_filter_default */
     "Debug: Show elemental item break rolls and target probabilities", /* OPT_show_elemental_item_rolls */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
-    NULL, /* xxx */
+    NULL, /* OPT_hidden_left_panel_mode */
+    NULL, /* OPT_top_status_line */
+    "Hide supporting panes during full-screen overlays", /* OPT_hide_supporting_panes_fullscreen */
+    NULL, /* OPT_narrative_banner_turns */
+    "Minimum-depth timer pace (0=Normal, 1=Relaxed, 2=Harsh)", /* OPT_min_depth_timer_mode */
     NULL, /* xxx */
     NULL, /* xxx */
     NULL, /* xxx */
@@ -695,7 +695,7 @@ const bool option_norm[OPT_MAX] = {
     true, /* OPT_stealth_vision */
     true, /* OPT_sleep_icon */
     false, /* OPT_assassination_over_charge */
-    false, /* xxx expand_list */
+    false, /* OPT_pacifist_attack_warning */
     false, /* xxx view_perma_grids */
     false, /* xxx view_torch_grids */
     false, /* xxx dungeon_align */
@@ -762,11 +762,11 @@ const bool option_norm[OPT_MAX] = {
     false, /* OPT_look_objects_sort_by_difficulty */
     false, /* OPT_look_nearby_filter_default */
     false, /* OPT_show_elemental_item_rolls */
-    false, /* xxx */
-    false, /* xxx */
-    false, /* xxx */
-    false, /* xxx */
-    false, /* xxx */
+    false, /* OPT_hidden_left_panel_mode */
+    false, /* OPT_top_status_line */
+    true, /* OPT_hide_supporting_panes_fullscreen */
+    false, /* OPT_narrative_banner_turns */
+    false, /* OPT_min_depth_timer_mode (default 0 via byte field) */
     false, /* xxx */
     false, /* xxx */
     false, /* xxx */
@@ -938,13 +938,14 @@ const byte option_page[OPT_PAGE_MAX][OPT_PAGE_PER] = {
 
     /*** Game-Play ***/
 
-    { OPT_valorous_oath_auto_attack_safety, OPT_forgo_attacking_unwary,
-        OPT_assassination_over_charge, OPT_stop_singing_on_rest,
-        OPT_know_monster_info, OPT_visual_recognition,
+    { OPT_valorous_oath_auto_attack_safety, OPT_pacifist_attack_warning,
+        OPT_forgo_attacking_unwary, OPT_assassination_over_charge,
+        OPT_stop_singing_on_rest, OPT_know_monster_info, OPT_visual_recognition,
         OPT_disable_skeleton_note_tutorial, OPT_smaller_level_size, OPT_more_stairs,
-        OPT_vault_drop_frequency, OPT_noble_item_spawn_mode, OPT_unlock_blitz_mode,
-        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
-        OPT_NONE, OPT_NONE, OPT_NONE },
+        OPT_vault_drop_frequency, OPT_noble_item_spawn_mode,
+        OPT_min_depth_timer_mode, OPT_unlock_blitz_mode,
+        OPT_NONE, OPT_NONE, OPT_NONE, OPT_NONE,
+        OPT_NONE, OPT_NONE },
 
     /*** Efficiency ***/
 

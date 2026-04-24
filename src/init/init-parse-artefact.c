@@ -131,6 +131,7 @@ errr parse_a_info(char* buf, header* head)
         a_ptr->d_attr = 0;
         a_ptr->d_char = 0;
         a_ptr->spawn_num = 1;
+        a_ptr->elemental_block = 0;
 
         /* Reset per-stat/skill bonuses. */
         for (int si = 0; si < A_MAX; si++)
@@ -243,6 +244,23 @@ errr parse_a_info(char* buf, header* head)
         apply_default_pval_bonuses(a_ptr->flags1, a_ptr->pval,
             a_ptr->stat_bonus, a_ptr->stat_bonus_set,
             a_ptr->skill_bonus, a_ptr->skill_bonus_set);
+    }
+
+    /* Process 'X' for elemental block chance bonus */
+    else if (buf[0] == 'X')
+    {
+        int chance;
+
+        if (!a_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 != sscanf(buf + 2, "%d", &chance))
+            return (PARSE_ERROR_GENERIC);
+
+        if ((chance < 0) || (chance > 100))
+            return (PARSE_ERROR_GENERIC);
+
+        a_ptr->elemental_block = (byte)chance;
     }
 
     /* Process 'M' for per-stat/skill bonus overrides (one per line) */

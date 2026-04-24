@@ -14,7 +14,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 /*
  * Note that "char" may or may not be signed, and that "signed char"
  * may or may not work on all machines.  So always use "s16b" or "s32b"
@@ -41,31 +40,24 @@
  * and when modifying the data in one place it must also be modified in the
  * other places, to prevent the creation of inconsistant data.
  */
-
 /**** Available Types ****/
-
 /*
  * An array of 256 byte's
  */
 typedef byte byte_256[256];
-
 /*
  * An array of 256 u16b's
  */
 typedef u16b u16b_256[256];
-
 /*
  * An array of MAX_DUNGEON_WID byte's
  */
 typedef byte byte_wid[MAX_DUNGEON_WID];
-
 /*
  * An array of MAX_DUNGEON_WID s16b's
  */
 typedef s16b s16b_wid[MAX_DUNGEON_WID];
-
 /**** Available Structs ****/
-
 typedef struct maxima maxima;
 typedef struct feature_type feature_type;
 typedef struct object_kind object_kind;
@@ -98,9 +90,7 @@ typedef struct style_type style_type;
 typedef struct quest_type quest_type;
 typedef struct oath_type oath_type;
 typedef struct skeleton_note_template skeleton_note_template;
-
 /**** Available structs ****/
-
 /*
  * Information about maximal indices of certain arrays
  * Actually, these are not the maxima, but the maxima plus one
@@ -109,7 +99,6 @@ struct maxima
 {
     u32b fake_text_size;
     u32b fake_name_size;
-
     u16b f_max; /* Max size for "f_info[]" */
     u16b k_max; /* Max size for "k_info[]" */
     u16b b_max; /* Max size for "b_info[]" */
@@ -132,18 +121,16 @@ struct maxima
     u16b art_norm_max; /* Max number for normal artefacts (special - normal) */
     u16b art_rand_max; /* Max number of random artefacts */
     u16b art_self_made_max; /* Max number of self-made artefacts */
-    u16b rt_max;           /* ↑ total run-type records                         */
+    u16b rt_max;           /* total run-type records */
     u16b style_max;        /* Max size for "style_info[]" */
     u16b skeleton_note_max; /* Max size for skeleton note templates */
 };
-
 typedef enum skeleton_note_role {
     SKELETON_NOTE_ROLE_NONE = 0,
     SKELETON_NOTE_ROLE_OPENING = 1,
     SKELETON_NOTE_ROLE_SIGNOFF = 2,
     SKELETON_NOTE_ROLE_HINT = 3
 } skeleton_note_role;
-
 typedef enum skeleton_hint_kind {
     SKEL_HINT_NONE = 0,
     SKEL_HINT_GREAT_VAULT,
@@ -238,6 +225,8 @@ struct object_kind
 
     s32b cost; /* Object "base cost" */
 
+    byte elemental_block; /* Percent chance bonus for blocking elemental damage */
+
     u32b flags1; /* Flags, set 1 */
     u32b flags2; /* Flags, set 2 */
     u32b flags3; /* Flags, set 3 */
@@ -330,6 +319,8 @@ struct artefact_type
 
     s32b cost; /* Artefact "cost" */
 
+    byte elemental_block; /* Percent chance bonus for blocking elemental damage */
+
     u32b flags1; /* Artefact Flags, set 1 */
     u32b flags2; /* Artefact Flags, set 2 */
     u32b flags3; /* Artefact Flags, set 3 */
@@ -370,6 +361,8 @@ struct ego_item_type
     u32b flags2; /* Ego-Item Flags, set 2 */
     u32b flags3; /* Ego-Item Flags, set 3 */
     u32b flags4; /* Ego-Item Flags, set 4 */
+
+    byte elemental_block; /* Percent chance bonus for blocking elemental damage */
 
     byte level; /* Minimum level */
     byte max_level; /* Maximum level */
@@ -886,14 +879,14 @@ struct story_type
 
 // Curses
 
-/* Existing … */
+/* Existing ... */
 typedef struct curse_type              /* one entry in cu_info[]          */
 {
     s16b             name;             /* index in cu_name */ 
     s16b             blessing_name;    /* blessing name index */ 
     u32b             text;             /* offset in the big text pool  */
     u32b             blessing_text;    /* blessing description offset  */
-    u32b             power;            /* NEW – offset of P:-effect text       */
+    u32b             power;            /* NEW - offset of P:-effect text       */
     u32b             blessing_power;   /* offset of blessing effect text       */
     s16b             cu_adj[A_MAX];    /* stat adjustments  */
     u32b             flags;            /* RHF flags contributed by curse */
@@ -901,7 +894,7 @@ typedef struct curse_type              /* one entry in cu_info[]          */
     u32b             flags_u;          /* CUR flags contributed by curse */
     u32b             blessing_flags_u; /* CUR flags contributed by blessing */
     byte  weight;              /* selection weight   (default 1)  */
-    byte  max_stacks;          /* hard cap per meta-run (0 = ∞)   */    
+    byte  max_stacks;          /* hard cap per meta-run (0 = unlimited)   */
     byte  max_blessing_stacks; /* hard cap for blessing stacks (0 = use max_stacks) */
 }
 curse_type;
@@ -1065,6 +1058,7 @@ struct player_other
     byte level_entry_narrative_mode; /* Initial partition text (banner with delay/banner without delay/message/off) */
     byte partition_narrative_mode; /* Transition text between partitions */
     byte noble_item_spawn_mode; /* Noble item sources (NOBLE_ITEM_SPAWN_*) */
+    byte min_depth_timer_mode; /* Minimum-depth timer pace (MIN_DEPTH_TIMER_MODE_*) */
 };
 
 /*
@@ -1481,7 +1475,7 @@ typedef struct score_file_header
  * sum of the declared field lengths (8+5+10+10+16+8+2+3+3+4+4+4+50+2+2+2=133).
  *
  * Portability: we need a packed representation without relying on
- * non‑standard attributes under non-GNU compilers (e.g. MSVC). We use
+ * non-standard attributes under non-GNU compilers (e.g. MSVC). We use
  * #pragma pack for MSVC and GCC/Clang attribute elsewhere. If neither
  * is available we accept potential padding (in which case add manual
  * serialization before shipping to that platform).
@@ -1628,8 +1622,8 @@ struct autoinscription
 
 typedef struct header        header;        /* <<< add this line */
 
-extern runtype_type *runtype_info;   /* NEW — allocated by init_info() */
-extern header        rt_head;        /* NEW — loader header            */
+extern runtype_type *runtype_info;   /* NEW - allocated by init_info() */
+extern header        rt_head;        /* NEW - loader header            */
 
 #ifndef UI_NAV_H
 #define UI_NAV_H

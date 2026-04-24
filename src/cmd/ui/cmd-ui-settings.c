@@ -140,6 +140,9 @@ static const settings_bool_binding settings_sdl_bool_bindings
             = { SETTINGS_SDL_GET(fullscreen), SETTINGS_SDL_SET(fullscreen) },
         [SETTINGS_SDL_BOOL_TILES]
             = { SETTINGS_SDL_GET(tiles), SETTINGS_SDL_SET(tiles) },
+        [SETTINGS_SDL_BOOL_USE_UNSAFE_AREA]
+            = { SETTINGS_SDL_GET(use_unsafe_area),
+                SETTINGS_SDL_SET(use_unsafe_area) },
         [SETTINGS_SDL_BOOL_RIGHT_PANES_ENABLED]
             = { SETTINGS_SDL_GET(enable_right_panes),
                 SETTINGS_SDL_SET(enable_right_panes) },
@@ -920,6 +923,12 @@ static cptr option_menu_label(const settings_ui_layout* layout, int opt)
     case OPT_noble_item_spawn_mode:
         return compact ? (narrow ? "Noble items" : "Noble item sources")
                        : "Noble item spawns";
+    case OPT_min_depth_timer_mode:
+        return compact ? (narrow ? "Depth timer" : "Min-depth timer")
+                       : "Minimum-depth timer pace";
+    case OPT_pacifist_attack_warning:
+        return compact ? (narrow ? "Attack warn" : "Pacifist warning")
+                       : "Confirm before direct attacks";
     case OPT_look_objects_sort_by_difficulty:
         return compact ? (narrow ? "Look diff sort" : "Look sort by diff")
                        : "Sort look (L) objects by difficulty only";
@@ -1176,6 +1185,24 @@ static cptr option_menu_describe_value(const settings_ui_layout* layout,
                 ? "0 restricted"
                 : "0 (good+/chests/human+elf skeletons)");
 
+        strnfmt(value_buf, buflen, "%s", mode_str);
+    }
+    else if (opt[index] == OPT_min_depth_timer_mode)
+    {
+        const char* mode_str;
+
+        switch (op_ptr->min_depth_timer_mode)
+        {
+        case MIN_DEPTH_TIMER_MODE_RELAXED:
+            mode_str = compact ? "1 relaxed" : "1 (Relaxed)";
+            break;
+        case MIN_DEPTH_TIMER_MODE_HARSH:
+            mode_str = compact ? "2 harsh" : "2 (Harsh)";
+            break;
+        default:
+            mode_str = compact ? "0 normal" : "0 (Normal)";
+            break;
+        }
         strnfmt(value_buf, buflen, "%s", mode_str);
     }
     else if (opt[index] == OPT_intro_style)
@@ -1500,6 +1527,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                         ? NOBLE_ITEM_SPAWN_INCLUDE_VAULTS
                         : NOBLE_ITEM_SPAWN_RESTRICTED;
                 }
+                else if (opt[k] == OPT_min_depth_timer_mode)
+                {
+                    op_ptr->min_depth_timer_mode
+                        = (op_ptr->min_depth_timer_mode < MIN_DEPTH_TIMER_MODE_MAX)
+                        ? op_ptr->min_depth_timer_mode + 1
+                        : MIN_DEPTH_TIMER_MODE_NORMAL;
+                }
                 else
                 {
                     op_ptr->opt[opt[k]] = !op_ptr->opt[opt[k]];
@@ -1605,6 +1639,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                         = (op_ptr->noble_item_spawn_mode < NOBLE_ITEM_SPAWN_INCLUDE_VAULTS)
                         ? op_ptr->noble_item_spawn_mode + 1
                         : NOBLE_ITEM_SPAWN_INCLUDE_VAULTS;
+                }
+                else if (opt[k] == OPT_min_depth_timer_mode)
+                {
+                    op_ptr->min_depth_timer_mode
+                        = (op_ptr->min_depth_timer_mode < MIN_DEPTH_TIMER_MODE_MAX)
+                        ? op_ptr->min_depth_timer_mode + 1
+                        : MIN_DEPTH_TIMER_MODE_MAX;
                 }
                 else if (opt[k] == OPT_intro_style)
                 {
@@ -1717,6 +1758,13 @@ extern void do_cmd_options_aux(int page, cptr info)
                         = (op_ptr->noble_item_spawn_mode > NOBLE_ITEM_SPAWN_RESTRICTED)
                         ? op_ptr->noble_item_spawn_mode - 1
                         : NOBLE_ITEM_SPAWN_RESTRICTED;
+                }
+                else if (opt[k] == OPT_min_depth_timer_mode)
+                {
+                    op_ptr->min_depth_timer_mode
+                        = (op_ptr->min_depth_timer_mode > MIN_DEPTH_TIMER_MODE_NORMAL)
+                        ? op_ptr->min_depth_timer_mode - 1
+                        : MIN_DEPTH_TIMER_MODE_NORMAL;
                 }
                 else if (opt[k] == OPT_intro_style)
                 {

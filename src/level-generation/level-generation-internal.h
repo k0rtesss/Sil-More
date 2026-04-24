@@ -13,28 +13,22 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 #ifndef INCLUDED_LEVEL_GENERATION_INTERNAL_H
 #define INCLUDED_LEVEL_GENERATION_INTERNAL_H
-
 #include "level-generation/level-generation.h"
 #include "drop_system.h"
-
 #ifndef CENT_MAX
 #define CENT_MAX DUN_ROOMS
 #endif
-
 #ifndef ROOM_MIN
 #define ROOM_MIN 2
 #endif
-
 typedef struct coord coord;
 struct coord
 {
     byte y;
     byte x;
 };
-
 typedef struct rectangle rectangle;
 struct rectangle
 {
@@ -43,7 +37,6 @@ struct rectangle
     byte y2;
     byte x2;
 };
-
 typedef enum room_kind
 {
     ROOM_KIND_NONE = 0,
@@ -53,7 +46,6 @@ typedef enum room_kind
     ROOM_KIND_LESSER_VAULT = 7,
     ROOM_KIND_GREATER_VAULT = 8
 } room_kind_t;
-
 typedef struct dun_data dun_data;
 struct dun_data
 {
@@ -65,9 +57,7 @@ struct dun_data
     byte piece[CENT_MAX];
     bool connection[DUN_ROOMS][DUN_ROOMS];
 };
-
 #define LAYOUT_ANCHOR_MAX CENT_MAX
-
 typedef enum layout_anchor_kind
 {
     LAYOUT_ANCHOR_NONE = 0,
@@ -77,7 +67,6 @@ typedef enum layout_anchor_kind
     LAYOUT_ANCHOR_BSP_SLICE,
     LAYOUT_ANCHOR_SETPIECE
 } layout_anchor_kind_t;
-
 typedef struct layout_anchor
 {
     layout_anchor_kind_t kind;
@@ -90,12 +79,10 @@ typedef struct layout_anchor
     int style_primary;
     int room_slot;
 } layout_anchor_t;
-
 static inline int room_capacity_limit(void)
 {
     return MIN(CENT_MAX, DUN_ROOMS - 1);
 }
-
 typedef enum quadrant_mode
 {
     QUAD_MODE_ROOMY = 0,
@@ -105,14 +92,12 @@ typedef enum quadrant_mode
     QUAD_MODE_CHASM,
     QUAD_MODE_BIG_CAVE
 } quadrant_mode_t;
-
 typedef enum density_level
 {
     DENSITY_SPARSE = 0,
     DENSITY_NORMAL,
     DENSITY_DENSE
 } density_level_t;
-
 typedef enum level_gen_screen_stage
 {
     LEVEL_GEN_STAGE_PLANNING = 0,
@@ -125,17 +110,14 @@ typedef enum level_gen_screen_stage
     LEVEL_GEN_STAGE_FINALIZING,
     LEVEL_GEN_STAGE_COUNT
 } level_gen_screen_stage_t;
-
 typedef struct partition_drop_profile
 {
     bool allow_floor_drops;
     drop_profile profile;
 } partition_drop_profile;
-
 bool place_room_forced(int y0, int x0, vault_type* v_ptr);
 bool place_room_forced_exhaustive(
     vault_type* v_ptr, int* placed_y, int* placed_x);
-
 #ifndef ALLOC_SET_CORR
 #define ALLOC_SET_CORR 1
 #endif
@@ -145,20 +127,17 @@ bool place_room_forced_exhaustive(
 #ifndef ALLOC_SET_BOTH
 #define ALLOC_SET_BOTH 3
 #endif
-
 #ifndef ALLOC_TYP_RUBBLE
 #define ALLOC_TYP_RUBBLE 1
 #endif
 #ifndef ALLOC_TYP_OBJECT
 #define ALLOC_TYP_OBJECT 5
 #endif
-
 typedef enum partition_chest_anchor_pref
 {
     PARTITION_CHEST_ANCHOR_ANY = 0,
     PARTITION_CHEST_ANCHOR_BSP_SLICE
 } partition_chest_anchor_pref;
-
 typedef struct partition_chest_recipe
 {
     byte chest_mode;
@@ -167,19 +146,16 @@ typedef struct partition_chest_recipe
     s16b material_jewel_pct;
     byte anchor_pref;
 } partition_chest_recipe;
-
 #define PARTITION_CHEST_RECIPE_MAX 3
 #define PARTITION_THEME_MONSTER_PERCENT 80
 #define PARTITION_THEME_LEVEL_DELTA 2
 #define CHASM_WHISPERING_SHADOW_TARGET 8
 #define CHASM_AMBUSH_UNIQUE_SUB_PERCENT 10
-
 typedef struct partition_population_meta
 {
     int chest_count;
     partition_chest_recipe chest_recipes[PARTITION_CHEST_RECIPE_MAX];
 } partition_population_meta;
-
 typedef struct partition_population_plan
 {
     int pi;
@@ -202,7 +178,6 @@ typedef struct partition_population_plan
     int room_objects;
     int corr_objects;
 } partition_population_plan;
-
 typedef struct pending_quest_states {
     bool has_aule_change;
     bool has_mandos_change;
@@ -223,18 +198,15 @@ typedef struct pending_quest_states {
     int tulkas_next_state;
     bool tulkas_spawn_pending;
 } pending_quest_states_t;
-
 extern dun_data* dun;
 extern int cave_corridor1[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 extern int cave_corridor2[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 extern bool cave_escape_tunnel[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 extern partition_population_meta current_partition_population_meta[25];
-
 extern layout_anchor_t layout_anchors[LAYOUT_ANCHOR_MAX];
 extern int layout_anchor_count;
 extern layout_anchor_kind_t room_anchor_kind[CENT_MAX];
 extern bool room_anchor_requires_neighbor[CENT_MAX];
-
 extern int style_at_color(int y, int x);
 extern void layout_anchor_reset(void);
 extern void mark_room_anchor_meta(int room_idx, layout_anchor_kind_t kind,
@@ -282,7 +254,6 @@ extern bool build_type2(int y0, int x0);
 extern bool build_type6(int y0, int x0, bool force_forge);
 extern bool build_type7(int y0, int x0);
 extern bool build_type8(int y0, int x0);
-
 extern int current_partition_rows;
 extern int current_partition_cols;
 extern int current_partition_count;
@@ -305,20 +276,17 @@ extern void level_gen_screen_note_failure(cptr reason);
 extern void level_gen_screen_finish(bool success);
 extern cptr level_gen_screen_last_failure(void);
 extern cptr level_gen_debug_last_quest_vault_name_current(void);
-
 extern bool morgoth_level_active;
 extern bool morgoth_partition_reserved;
 extern int morgoth_partition_index;
 extern rectangle morgoth_partition_bounds;
 extern int morgoth_vault_center_y;
 extern int morgoth_vault_center_x;
-
 extern bool morgoth_region_active(void);
 extern bool coord_in_morgoth_region(int y, int x, int margin);
 extern bool morgoth_segment_blocked(int y1, int x1, int y2, int x2, int margin);
 extern void reset_morgoth_layout_state(bool active);
 extern void seal_morgoth_partition(const vault_type* v_ptr, int y0, int x0);
-
 extern void set_perm_boundry(void);
 extern void basic_granite(void);
 extern void make_patches_of_sunlight(void);
@@ -329,7 +297,6 @@ extern int pick_varda_sunlight_spawn_tile(int *out_y, int *out_x,
     int *out_total_sunlight, int *out_empty_sunlight);
 extern bool force_varda_sunlight_tile(int *out_y, int *out_x);
 extern void ensure_sunlight_for_varda(void);
-
 extern void flood_access(int y, int x,
     int access_array[MAX_DUNGEON_HGT][MAX_DUNGEON_WID],
     bool ignore_rubble_and_chasms);
@@ -337,6 +304,7 @@ extern bool player_passable(int y, int x, bool ignore_rubble_and_chasms);
 extern int calculate_nearest_down_stair_distance_from(int y0, int x0);
 extern bool feature_is_any_door(int feat);
 extern int squash_double_doors(void);
+extern int prune_invalid_nonvault_doors(void);
 extern int dungeon_pieces(void);
 extern quadrant_mode_t partition_mode_for_point(int y, int x);
 extern quadrant_mode_t drop_mode_for_point(int y, int x);
@@ -401,10 +369,8 @@ extern bool place_chasm_theme_monster_at(int y, int x, int r_idx);
 extern bool place_big_cave_elemental_monster(int y, int x,
     big_cave_type_t cave_type, int max_depth);
 extern bool place_big_cave_troll_or_giant(int y, int x, int max_depth);
-
 extern pending_quest_states_t pending_quest_states;
 extern int quest_lottery_winner;
-
 extern bool quest_metarun_blocked(int quest_id, u32b metarun_flag);
 extern bool mandos_second_stage_ready(void);
 extern bool mandos_third_stage_ready(void);
@@ -423,5 +389,4 @@ extern void level_gen_debug_note_quest_vault_name(cptr name);
 extern void level_gen_debug_activate_quest_vault_name(cptr name);
 extern void level_gen_debug_note_questgiver(int quest_id);
 extern bool place_orc_stronghold(void);
-
 #endif /* INCLUDED_LEVEL_GENERATION_INTERNAL_H */

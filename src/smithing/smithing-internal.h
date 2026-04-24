@@ -13,33 +13,26 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 /*
  * Internal smithing declarations shared across smithing translation units.
  *
  * This header is not meant to be included outside of the smithing subsystem
  * and the smithing UI implementation.
  */
-
 #ifndef INCLUDED_SMITHING_INTERNAL_H
 #define INCLUDED_SMITHING_INTERNAL_H
-
 #include "smithing/smithing.h"
 #include "thrall_quest.h"
-
 typedef struct artefact_type artefact_type;
 typedef struct object_kind object_kind;
 typedef struct ability_type ability_type;
-
 /*
  * Smithing UI categories for base items.
  */
 #define CAT_WEAPON 0
 #define CAT_ARMOUR 1
 #define CAT_JEWELRY 2
-
 #define MAX_SMITHING_TVALS 17
-
 #define SMT_NUM_MENU_I_ATT 1
 #define SMT_NUM_MENU_D_ATT 2
 #define SMT_NUM_MENU_I_DS 3
@@ -53,23 +46,19 @@ typedef struct ability_type ability_type;
 #define SMT_NUM_MENU_ALLOY_CYCLE 11
 #define SMT_NUM_MENU_ALLOY_CLEAR 12
 #define SMT_NUM_MENU_EDIT_BONUSES 13
-
 #define SMT_NUM_MENU_MAX 13
-
 typedef struct smithing_tval_desc
 {
     int category;
     int tval;
     cptr desc;
 } smithing_tval_desc;
-
 typedef enum
 {
     SMITH_ALLOY_NONE = 0,
     SMITH_ALLOY_MITHRIL,
     SMITH_ALLOY_STAR_IRON,
 } smith_alloy_type;
-
 typedef struct
 {
     smith_alloy_type type;
@@ -78,26 +67,20 @@ typedef struct
     byte bonus_evn;
     byte bonus_ps;
 } smith_alloy_state;
-
 /* Internal smithing state (backups used by menus/preview). */
 extern object_type* smith2_o_ptr;
 extern object_type* smith3_o_ptr;
-
 extern smith_alloy_state smith_alloy;
 extern smith_alloy_state smith2_alloy;
 extern smith_alloy_state smith3_alloy;
-
 extern bool enchant_then_numbers;
-
 /*
  * Temporary artefact slots used while crafting self-made artefacts.
  */
 #define smith_a_name (z_info->art_self_made_max - 1)
 #define smith_a_ptr (&a_info[smith_a_name])
-
 #define smith2_a_name (z_info->art_self_made_max - 2)
 #define smith2_a_ptr (&a_info[smith2_a_name])
-
 /*
  * Costs computed as a side-effect of object_difficulty().
  */
@@ -122,9 +105,7 @@ typedef struct smithing_cost_type
     int enchantment;
     int artifice;
 } smithing_cost_type;
-
 extern smithing_cost_type smithing_cost;
-
 typedef struct reforge_preview_type
 {
     int scaled_difficulty;
@@ -133,20 +114,17 @@ typedef struct reforge_preview_type
     smithing_cost_type cost;
     bool affordable;
 } reforge_preview_type;
-
 typedef enum
 {
     SMT_BONUS_ENTRY_STAT = 0,
     SMT_BONUS_ENTRY_SKILL = 1,
     SMT_BONUS_ENTRY_SPECIAL = 2,
 } smith_bonus_entry_kind;
-
 typedef enum
 {
     SMT_BONUS_SPECIAL_DAMAGE_SIDES = 0,
     SMT_BONUS_SPECIAL_TUNNEL = 1,
 } smith_bonus_special_kind;
-
 typedef struct
 {
     smith_bonus_entry_kind kind;
@@ -155,18 +133,15 @@ typedef struct
     u32b flag_neg;
     u32b flag;
 } smith_bonus_entry;
-
 typedef struct
 {
     smith_bonus_entry entry;
     int delta;
 } smith_bonus_action;
-
 /*
  * Base item list shared by smithing UI and alloy/difficulty helpers.
  */
 extern const smithing_tval_desc smithing_tvals[MAX_SMITHING_TVALS];
-
 /*
  * Alloy helpers.
  */
@@ -179,7 +154,6 @@ bool smith_apply_alloy(
     object_type* o_ptr, smith_alloy_state* state, smith_alloy_type new_type);
 int smith_alloy_weight_required(const object_type* o_ptr);
 byte smith_default_stack_size(const object_type* o_ptr);
-
 /*
  * UI-facing smithing core helpers.
  */
@@ -211,7 +185,6 @@ bool smith_base_item_kind_allowed(const object_kind* k_ptr);
 void modify_numbers(int choice);
 int smith_collect_bonus_actions(smith_bonus_action* actions, int max_actions);
 bool smith_adjust_bonus_entry(const smith_bonus_entry* entry, int delta);
-
 /*
  * Metal + forge helpers.
  */
@@ -223,7 +196,6 @@ void use_mithril(int cost);
 void use_star_iron(int cost);
 int forge_uses(int y, int x);
 int forge_bonus(int y, int x);
-
 /*
  * Costs (computed by object_difficulty()) and payment helpers.
  */
@@ -233,7 +205,6 @@ void pay_costs(void);
 bool reforge_preview_build(const object_type* source, int prefix_idx,
     reforge_preview_type* preview);
 void pay_smithing_cost_struct(const smithing_cost_type* cost);
-
 /*
  * Ego, reforge, and artefact helpers used by the smithing UI.
  */
@@ -255,11 +226,9 @@ bool applicable_ability(ability_type* b_ptr, object_type* o_ptr);
 void add_artefact_ability(int skilltype, int abilitynum);
 void remove_artefact_ability(int skilltype, int abilitynum);
 bool has_ability(artefact_type* a_ptr, int skilltype, int abilitynum);
-
 /*
  * Artefact utility used by smithing menus and finalize step.
  */
 void artefact_copy(artefact_type* a1_ptr, artefact_type* a2_ptr);
 void add_artefact_details(void);
-
 #endif /* INCLUDED_SMITHING_INTERNAL_H */

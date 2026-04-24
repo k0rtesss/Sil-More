@@ -12,7 +12,10 @@ include(CheckCSourceCompiles)
 find_package(Python3 QUIET COMPONENTS Interpreter)
 
 set(SIL_BUILD_WITH_SDL_SOURCES_DEFAULT OFF)
-if(WIN32 OR ANDROID)
+# On macOS, Homebrew ships sdl3 / sdl3_image / sdl3_ttf but no sdl3_mixer,
+# and its sdl3 lags the version our vendored SDL_mixer pins. Default APPLE
+# (macOS + iOS) to the source build alongside Windows/Android.
+if(WIN32 OR ANDROID OR APPLE)
   set(SIL_BUILD_WITH_SDL_SOURCES_DEFAULT ON)
 endif()
 
@@ -42,8 +45,35 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
   endif()
 endif()
 
+set(SIL_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
+
+# Configure SDL_mixer when built from the vendored submodule: enable only the
+# codecs we actually use (WAV + Ogg Vorbis via stb_vorbis) and keep the build
+# self-contained so it works on every platform without system codec packages.
+macro(_sil_configure_vendored_sdl_mixer)
+  set(SDLMIXER_INSTALL OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_TESTS OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_STRICT OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_VENDORED ON CACHE BOOL "" FORCE)
+  set(SDLMIXER_AIFF OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_VOC OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_AU OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_FLAC OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_GME OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_MOD OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_MP3 OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_MIDI OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_OPUS OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_WAVPACK OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_WAVE ON CACHE BOOL "" FORCE)
+  set(SDLMIXER_VORBIS_STB ON CACHE BOOL "" FORCE)
+  set(SDLMIXER_VORBIS_VORBISFILE OFF CACHE BOOL "" FORCE)
+  set(SDLMIXER_VORBIS_TREMOR OFF CACHE BOOL "" FORCE)
+endmacro()
+
 if (SIL_BUILD_WITH_SDL_SOURCES)
-  set(SIL_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 
   if(SIL_IOS OR ANDROID)
     set(SDLTTF_VENDORED ON CACHE BOOL "Use vendored freetype/harfbuzz for mobile" FORCE)
@@ -96,26 +126,7 @@ if (SIL_BUILD_WITH_SDL_SOURCES)
   endif()
 
   if (EXISTS "${SIL_EXTERNAL_DIR}/SDL_mixer/CMakeLists.txt")
-    set(SDLMIXER_INSTALL OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_TESTS OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_STRICT OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_VENDORED ON CACHE BOOL "" FORCE)
-    set(SDLMIXER_AIFF OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_VOC OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_AU OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_FLAC OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_GME OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_MOD OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_MP3 OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_MIDI OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_OPUS OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_WAVPACK OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_WAVE ON CACHE BOOL "" FORCE)
-    set(SDLMIXER_VORBIS_STB ON CACHE BOOL "" FORCE)
-    set(SDLMIXER_VORBIS_VORBISFILE OFF CACHE BOOL "" FORCE)
-    set(SDLMIXER_VORBIS_TREMOR OFF CACHE BOOL "" FORCE)
+    _sil_configure_vendored_sdl_mixer()
     add_subdirectory("${SIL_EXTERNAL_DIR}/SDL_mixer" "${CMAKE_BINARY_DIR}/_deps/SDL_mixer")
   else()
     message(FATAL_ERROR "SIL_BUILD_WITH_SDL_SOURCES=ON but external/SDL_mixer is missing. Run 'git submodule update --init --recursive' from the repo root or disable SIL_BUILD_WITH_SDL_SOURCES.")
@@ -129,7 +140,15 @@ else()
   find_package(SDL3 REQUIRED)
   find_package(SDL3_ttf REQUIRED)
   find_package(SDL3_image REQUIRED)
-  find_package(SDL3_mixer REQUIRED)
+  find_package(SDL3_mixer QUIET)
+  if(NOT SDL3_mixer_FOUND)
+    if (EXISTS "${SIL_EXTERNAL_DIR}/SDL_mixer/CMakeLists.txt")
+      _sil_configure_vendored_sdl_mixer()
+      add_subdirectory("${SIL_EXTERNAL_DIR}/SDL_mixer" "${CMAKE_BINARY_DIR}/_deps/SDL_mixer")
+    else()
+      message(FATAL_ERROR "SDL3_mixer was not found as an installed package and external/SDL_mixer is missing. Run 'git submodule update --init --recursive' to build it from source, or install SDL3_mixer system-wide.")
+    endif()
+  endif()
 endif()
 
 add_subdirectory(src/log)
@@ -291,6 +310,7 @@ set(SIL_MORE_SOURCES_MONSTER_AND_COMBAT
 
 set(SIL_MORE_SOURCES_SPELL
     src/spell/spell-damage.c
+    src/spell/spell-elemental-materials.c
     src/spell/spell-detection.c
     src/spell/spell-monster.c
     src/spell/spell-projection-effects.c
@@ -298,6 +318,7 @@ set(SIL_MORE_SOURCES_SPELL
     src/spell/spell-teleport.c
     src/spell/spell-terrain.c
     src/spell/spell-utility.c
+    src/spell/spell-visuals.c
 )
 
 set(SIL_MORE_SOURCES_PLAYER
@@ -433,6 +454,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-menu/sdl-scene-menu-base.c
     src/sdl-menu/sdl-scene-menu-browser.c
     src/sdl-menu/sdl-scene-menu-chrome.c
+    src/sdl-menu/sdl-gamepad-labels.c
     src/sdl-menu/sdl-scene-menu-pages.c
     src/sdl-scene.c
     src/sdl-story-font.c

@@ -230,7 +230,7 @@
 #     - very low perception
 #     - very low evasion/melee
 #     - very high damage
-#�    - 1d4 prot, very high health
+#     - 1d4 prot, very high health
 #     - drop items
 #
 # - R   (raukar)
@@ -277,7 +277,7 @@
 #     - mindless
 #     - tunnel
 #     - regenerates
-#�    - 6d4 prot, very high health
+#     - 6d4 prot, very high health
 #
 # - V   (valar)
 #
@@ -1644,13 +1644,15 @@ F:DROP_1D2 | DROP_100 | DROP_GREAT
 F:HAS_WEAPON | HAS_ARMOUR
 F:NO_FEAR | BASH_DOOR
 F:RAUKO | RES_FIRE | HURT_COLD
+S:DWARFBANE
 S:SPELL_PCT_20
 S:SCARE
 D:Some have called the Balrogs 'Demons of Terror', but none inspires
 D: such dread as Delthaur. His very presence fills the heart with
 D: nameless fear, and the bravest warriors have fled screaming at his
-D: approach. Even other Balrogs give him wide berth, for his malice
-D: is ancient and his hatred of all living things burns cold and deep.
+D: approach. Yet his malice turns most keenly against those who delve
+D: in the deep places of the earth, and dark halls may one day remember
+D: him by another name.
 
 
 N:146:Nan, the Giant
@@ -1834,7 +1836,7 @@ F:DROP_1D2 | DROP_GOOD
 F:SMART | TERRITORIAL
 F:BASH_DOOR | DRAGON
 S:SPELL_PCT_20
-S:BRTH_COLD | CONF | SCARE | HOLD
+S:CONF | SCARE | HOLD
 D:Not all dragons have the gift of fire, but none is needed here.
 D: The lashing tail, the great claws, the sharp teeth -- and above
 D: all, the mesmerising eyes. To meet its gaze is to feel one's
@@ -2016,7 +2018,7 @@ F:UNIQUE | MALE | TERRITORIAL
 F:DROP_2D2 | DROP_GREAT | SMART
 F:BASH_DOOR | DRAGON
 S:SPELL_PCT_20 | POW_16
-S:CONF | SCARE | HOLD
+S:BRTH_COLD | CONF | SCARE | HOLD
 D:A young cold-drake, long and sinuous, coiling upon the stone floor.
 D: Scatha is cunning beyond his years, and has already begun to amass
 D: a hoard through theft and murder. His kind lack the fire of the
@@ -2425,7 +2427,8 @@ D:Vallach was among the Balrogs who burst forth in the Dagor Bragollach,
 D: the Battle of Sudden Flame, when rivers of fire poured from Thangorodrim.
 D: He moves with terrifying speed, a huge shape cloaked in flame and shadow,
 D: his fiery axe cutting down all in his path before they can even raise
-D: their weapons in defense.
+D: their weapons in defense. There is something headlong in his wrath,
+D: as though it will one day bear him and a golden lord to a common doom.
 
 
 ##### 21 #####

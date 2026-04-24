@@ -1313,6 +1313,18 @@ static void rd_options(void)
 
         /* Skip 1 remaining spare byte */
         strip_bytes(1);
+
+        if (savefile_version_at_least(0, 9, 6, 1))
+        {
+            rd_byte(&b);
+            op_ptr->min_depth_timer_mode = b;
+            if (op_ptr->min_depth_timer_mode > MIN_DEPTH_TIMER_MODE_MAX)
+                op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
+        }
+        else
+        {
+            op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
+        }
     }
     else
     {
@@ -1320,6 +1332,7 @@ static void rd_options(void)
         op_ptr->level_entry_narrative_mode = LEVEL_ENTRY_NARRATIVE_BANNER_DELAY;
         op_ptr->partition_narrative_mode = PARTITION_NARRATIVE_BANNER;
         op_ptr->noble_item_spawn_mode = NOBLE_ITEM_SPAWN_RESTRICTED;
+        op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
         strip_bytes(4);
     }
 
@@ -1371,6 +1384,7 @@ static void rd_options(void)
             ? PARTITION_NARRATIVE_BANNER
             : PARTITION_NARRATIVE_OFF;
         op_ptr->noble_item_spawn_mode = NOBLE_ITEM_SPAWN_RESTRICTED;
+        op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
     }
 
     /*** Window Options ***/

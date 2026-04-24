@@ -39,9 +39,9 @@ int skill_check(
 
     // elf-bane bonus against you
     if ((m_ptr1 == PLAYER) && (m_ptr2 != NULL))
-        difficulty += elf_bane_bonus(m_ptr2);
+        difficulty += elf_bane_bonus(m_ptr2) + dwarf_bane_bonus(m_ptr2);
     if ((m_ptr2 == PLAYER) && (m_ptr1 != NULL))
-        skill += elf_bane_bonus(m_ptr1);
+        skill += elf_bane_bonus(m_ptr1) + dwarf_bane_bonus(m_ptr1);
 
     // the basic rolls
     skill_total = dieroll(10) + skill;
@@ -272,6 +272,7 @@ int total_monster_attack(monster_type* m_ptr, int base)
 
     // elf-bane bonus
     att += elf_bane_bonus(m_ptr);
+    att += dwarf_bane_bonus(m_ptr);
 
     // unique bane penalty (player ability affecting monster)
     att -= unique_bane_bonus(m_ptr);
@@ -314,6 +315,7 @@ int total_monster_evasion(monster_type* m_ptr, bool archery)
 
     // elf-bane bonus
     evn += elf_bane_bonus(m_ptr);
+    evn += dwarf_bane_bonus(m_ptr);
 
     // unique bane penalty (player ability affecting monster)
     evn -= unique_bane_bonus(m_ptr);

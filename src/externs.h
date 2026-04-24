@@ -15,14 +15,6 @@
  * for more details.
  */
 
-/*
- * Note that some files have their own header files
- * (z-virt.h, rng.h)
- */
-
-/*
- * Automatically generated "variable" declarations
- */
 #include "h-basic.h"
 #include "app/app-movement.h"
 #include "cave/cave.h"
@@ -92,8 +84,6 @@ typedef struct app_ui_scene app_ui_scene;
 #include "ui/story_font.h"
 #include "ui/targeting.h"
 #include "ui/ui-status.h"
-// extern FILE *log_file;
-
 /* Transitional globals */
 extern const cptr angband_sound_name[MSG_MAX];
 
@@ -158,26 +148,10 @@ extern bool prep_object_theme(int themetype);
 
 /* randart.c */
 
-/*
- * Hack -- conditional (or "bizarre") externs
- */
-
-#ifdef SET_UID
-#endif /* SET_UID */
-
-#ifdef ALLOW_REPEAT
-#endif /* ALLOW_REPEAT */
-
-#ifdef ALLOW_DEBUG
-#endif /* ALLOW_DEBUG */
-
-#ifdef ALLOW_SPOILERS
-#endif /* ALLOW_SPOILERS */
-
 // Metarun.c
 
 extern errr load_metaruns(bool create_if_missing);
-extern bool metarun_created; 
+extern bool metarun_created;
 extern u32b curse_flag_mask(void);
 extern int curse_flag_count_rhf(u32b rhf_flag);
 extern int curse_flag_count_cur(u32b cur_flag);

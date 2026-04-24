@@ -12,28 +12,21 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 #ifndef INCLUDED_APP_SCENE_DUNGEON_H
 #define INCLUDED_APP_SCENE_DUNGEON_H
-
 #include "app-interaction.h"
 #include "app-snapshot.h"
 #include "app-ui.h"
 #include "h-basic.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 struct app_session;
 struct app_wait_state;
-
 #define APP_DUNGEON_MAP_FORMAT_VERSION 1u
 #define APP_DUNGEON_PANES_FORMAT_VERSION 5u
 #define APP_DUNGEON_OVERLAY_FORMAT_VERSION 6u
-
 #define APP_DUNGEON_PLAYER_SUBJECT (-1)
-
 #define APP_DUNGEON_NAME_TEXT_MAX 32u
 #define APP_DUNGEON_STATUS_TEXT_MAX 32u
 #define APP_DUNGEON_MESSAGE_TEXT_MAX 160u
@@ -46,7 +39,6 @@ struct app_wait_state;
     ((((u32b)((u16b)(y))) << 16) | ((u32b)((u16b)(x))))
 #define APP_UNPACK_COORD_Y(packed) ((s16b)(((packed) >> 16) & 0xFFFFu))
 #define APP_UNPACK_COORD_X(packed) ((s16b)((packed) & 0xFFFFu))
-
 typedef enum app_snapshot_invalidation_mask {
     APP_SNAPSHOT_INVALIDATE_NONE = 0x00000000u,
     APP_SNAPSHOT_INVALIDATE_MAP = 0x00000001u,
@@ -58,7 +50,6 @@ typedef enum app_snapshot_invalidation_mask {
     APP_SNAPSHOT_INVALIDATE_OVERLAY = 0x00000040u,
     APP_SNAPSHOT_INVALIDATE_ALL = 0x0000007Fu
 } app_snapshot_invalidation_mask;
-
 typedef enum app_animation_hint_kind {
     APP_ANIMATION_HINT_NONE = 0,
     APP_ANIMATION_HINT_ACTOR_MOVED = 1,
@@ -66,7 +57,6 @@ typedef enum app_animation_hint_kind {
     APP_ANIMATION_HINT_PROJECTILE = 3,
     APP_ANIMATION_HINT_OBJECT_TRANSFER = 4
 } app_animation_hint_kind;
-
 typedef enum app_map_cell_flag {
     APP_MAP_CELL_FLAG_SEEN = 0x0001u,
     APP_MAP_CELL_FLAG_MARK = 0x0002u,
@@ -78,16 +68,13 @@ typedef enum app_map_cell_flag {
     APP_MAP_CELL_FLAG_TARGET = 0x0080u,
     APP_MAP_CELL_FLAG_CURSOR = 0x0100u
 } app_map_cell_flag;
-
 typedef enum app_dungeon_snapshot_flag {
     APP_DUNGEON_SNAPSHOT_FLAG_WAITING = 0x0004u
 } app_dungeon_snapshot_flag;
-
 typedef enum app_dungeon_overlay_snapshot_flag {
     APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_NONE = 0x0000u,
     APP_DUNGEON_OVERLAY_SNAPSHOT_FLAG_TRANSIENT_MENU = 0x0001u
 } app_dungeon_overlay_snapshot_flag;
-
 typedef enum app_status_text_kind {
     APP_STATUS_TEXT_HUNGER = 0,
     APP_STATUS_TEXT_BLIND = 1,
@@ -105,20 +92,17 @@ typedef enum app_status_text_kind {
     APP_STATUS_TEXT_LIGHT = 13,
     APP_STATUS_TEXT_EVASION = 14
 } app_status_text_kind;
-
 typedef struct app_status_compact_segment {
     byte attr;
     byte required;
     char long_text[APP_DUNGEON_STATUS_TEXT_MAX];
     char short_text[APP_DUNGEON_COMPACT_SHORT_TEXT_MAX];
 } app_status_compact_segment;
-
 typedef struct app_status_compact_line {
     u16b segment_count;
     u16b reserved;
     app_status_compact_segment segments[APP_DUNGEON_COMPACT_SEGMENT_MAX];
 } app_status_compact_line;
-
 typedef struct app_status_tracked_monster_live {
     byte visible;
     byte hp_attr;
@@ -131,7 +115,6 @@ typedef struct app_status_tracked_monster_live {
     char health[APP_DUNGEON_STATUS_TEXT_MAX];
     char alertness[APP_DUNGEON_STATUS_TEXT_MAX];
 } app_status_tracked_monster_live;
-
 typedef struct app_status_quiver_live {
     byte q1_active;
     byte q2_active;
@@ -145,7 +128,6 @@ typedef struct app_status_quiver_live {
     s16b q2_current;
     s16b q2_max;
 } app_status_quiver_live;
-
 typedef struct app_cursor_snapshot {
     byte visible;
     byte relative;
@@ -154,7 +136,6 @@ typedef struct app_cursor_snapshot {
     s16b map_y;
     s16b map_x;
 } app_cursor_snapshot;
-
 typedef struct app_target_snapshot {
     byte active;
     byte reserved;
@@ -162,7 +143,6 @@ typedef struct app_target_snapshot {
     s16b map_y;
     s16b map_x;
 } app_target_snapshot;
-
 typedef struct app_map_cell_snapshot {
     s16b map_y;
     s16b map_x;
@@ -177,7 +157,6 @@ typedef struct app_map_cell_snapshot {
     char terrain_char;
     char ch;
 } app_map_cell_snapshot;
-
 typedef struct app_map_snapshot {
     u16b format_version;
     u16b flags;
@@ -192,9 +171,7 @@ typedef struct app_map_snapshot {
     u32b cell_count;
     app_map_cell_snapshot cells[];
 } app_map_snapshot;
-
 typedef app_raw_cell_snapshot app_panel_cell_snapshot;
-
 typedef struct app_combat_roll_snapshot {
     s16b round;
     s16b index;
@@ -220,7 +197,6 @@ typedef struct app_combat_roll_snapshot {
     byte melee;
     byte reserved;
 } app_combat_roll_snapshot;
-
 typedef struct app_panes_snapshot {
     u16b format_version;
     u16b flags;
@@ -228,7 +204,6 @@ typedef struct app_panes_snapshot {
     u16b main_combat_roll_lines;
     app_combat_roll_snapshot combat_entries[APP_DUNGEON_COMBAT_ENTRY_MAX];
 } app_panes_snapshot;
-
 typedef struct app_dungeon_overlay_snapshot {
     u16b format_version;
     u16b flags;
@@ -236,7 +211,6 @@ typedef struct app_dungeon_overlay_snapshot {
     app_ui_scene transient_scene;
     app_ui_scene chrome_scene;
 } app_dungeon_overlay_snapshot;
-
 typedef struct app_dungeon_snapshot {
     app_snapshot snapshot;
     app_snapshot_blob blobs[3];
@@ -251,7 +225,6 @@ typedef struct app_dungeon_snapshot {
     size_t overlay_capacity;
     app_cursor_snapshot cursor_state;
 } app_dungeon_snapshot;
-
 void app_dungeon_snapshot_init(app_dungeon_snapshot* snapshot);
 void app_dungeon_snapshot_destroy(app_dungeon_snapshot* snapshot);
 bool app_status_text_live(app_status_text_kind kind, char* out_text,
@@ -278,9 +251,7 @@ bool app_dump_dungeon_snapshot_text(const app_dungeon_snapshot* snapshot,
     char* buf, size_t buf_size);
 u32b app_snapshot_invalidation_from_masks(u32b update_mask, u32b redraw_mask,
     u32b window_mask);
-
 #ifdef __cplusplus
 }
 #endif
-
 #endif /* INCLUDED_APP_SCENE_DUNGEON_H */

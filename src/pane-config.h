@@ -39,6 +39,7 @@ enum pane_placement {
     PLACE_LEFT = 1u << 2,
     PLACE_DOUBLE_LEFT = 1u << 3,
     PLACE_DOUBLE_RIGHT = 1u << 4,
+    PLACE_DOUBLE_BOTTOM = 1u << 5,
 };
 
 struct rect {
@@ -68,6 +69,7 @@ struct pane_config {
 };
 
 bool pane_placement_is_side(enum pane_placement where);
+bool pane_placement_is_bottom(enum pane_placement where);
 bool pane_type_allows_placement(enum pane_type type, enum pane_placement where);
 int pane_primary_min_cells(enum pane_type type, enum pane_placement where);
 int pane_secondary_min_cells(enum pane_type type, enum pane_placement where);

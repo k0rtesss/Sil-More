@@ -14,19 +14,19 @@
 # for more details.
 
 """
-Drop Group Viewer ÔÇö shows all eligible drop groups for a given depth.
+Drop Group Viewer -- shows all eligible drop groups for a given depth.
 
 Groups match the C drop system logic (drop-system-catalog.c / drop-system-selection.c):
-  - Normal items: grouped by (tval, sval) ÔÇö one group per base item type
-  - Ego items:   grouped by (ego_combo, tval, sval) ÔÇö one group per ego ├ù base type
+  - Normal items: grouped by (tval, sval) -- one group per base item type
+  - Ego items:   grouped by (ego_combo, tval, sval) -- one group per ego + base type
   - Artefacts:   each is its own group
 
 Usage:
-  python drop_viewer.py [depth]          ÔÇö show groups at depth (must be 1-20+)
-  python drop_viewer.py                  ÔÇö interactive: prompts for depth
-  python drop_viewer.py --cat weapon     ÔÇö filter to one category
-  python drop_viewer.py --min-weight N   ÔÇö hide groups with weight below N
-  python drop_viewer.py --diff L U       ÔÇö filter to difficulty range [L, U]
+  python drop_viewer.py [depth]          -- show groups at depth (must be 1-20+)
+  python drop_viewer.py                  -- interactive: prompts for depth
+  python drop_viewer.py --cat weapon     -- filter to one category
+  python drop_viewer.py --min-weight N   -- hide groups with weight below N
+  python drop_viewer.py --diff L U       -- filter to difficulty range [L, U]
 """
 
 import sys
@@ -119,7 +119,7 @@ def get_drop_category(tval, sval=None):
     if tval in (_TV_ARROW, _TV_SWORD, _TV_HAFTED, _TV_POLEARM, _TV_BOW):
         return DROP_CAT_WEAPON
     if tval == _TV_DIGGING:
-        # Plain shovels/mattocks ÔåÆ supply; all others (ego digging tools) ÔåÆ weapon
+        # Plain shovels/mattocks -> supply; all others (ego digging tools) -> weapon
         if sval in (_SV_SHOVEL, _SV_MATTOCK):
             return DROP_CAT_SUPPLY
         return DROP_CAT_WEAPON
@@ -134,7 +134,7 @@ def get_drop_category(tval, sval=None):
         if sval in (_SV_LIGHT_TORCH, _SV_LIGHT_LANTERN,
                     _SV_LIGHT_LESSER_JEWEL, _SV_LIGHT_MALLORN):
             return DROP_CAT_SUPPLY
-        return None  # unknown light sval ÔÇö excluded
+        return None  # unknown light sval -- excluded
     if tval in (_TV_POTION, _TV_STAFF, _TV_GEM, _TV_FOOD, _TV_FLASK):
         return DROP_CAT_SUPPLY
     return None  # unknown / excluded
@@ -159,7 +159,7 @@ def build_drop_groups(normals, specials, dual_egos, artefacts):
       name            : display name
       category        : DROP_CAT_*  (None = supply/ignored)
       tval / sval     : representative item type
-      rarity_schedule : [(depth, rarity), ...] ÔÇö same for all variants in group
+      rarity_schedule : [(depth, rarity), ...] -- same for all variants in group
       min_depth       : depth at which the group first appears
       diff_min/max    : difficulty range across all stat-variants in the group
       variant_count   : number of stat-variants (informational)
@@ -499,7 +499,7 @@ def show_drop_simulation(all_groups, depth, throw):
     Simulate a single drop at 'depth' after a difficulty roll of 'throw'.
 
     Eligible items: effective difficulty in [throw-2, throw+2].
-    Groups are merged the same way C does (same ego combo + same weight ÔåÆ one group;
+    Groups are merged the same way C does (same ego combo + same weight -> one group;
     item within group chosen uniformly). The 1/N column shows this split.
     """
     diff_lo = throw - 2
@@ -766,7 +766,7 @@ def main():
                                  min_weight=args.min_weight,
                                  diff_lo=args.throw, diff_hi=args.diff_hi_arg)
         elif args.throw is not None:
-            # depth throw -> simulate with ┬▒2 band
+            # depth throw -> simulate with +/-2 band
             show_drop_simulation(all_groups, args.depth, throw=args.throw)
         else:
             # depth only -> browse
@@ -814,7 +814,7 @@ def main():
             except ValueError:
                 print("  Expected: depth lo hi")
         elif len(parts) == 2:
-            # depth throw -> simulate with ┬▒2 band
+            # depth throw -> simulate with +/-2 band
             try:
                 throw_val = int(parts[1])
                 show_drop_simulation(all_groups, depth_val, throw=throw_val)

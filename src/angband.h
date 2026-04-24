@@ -14,15 +14,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 #ifndef INCLUDED_ANGBAND_H
 #define INCLUDED_ANGBAND_H
-
 /*
  * Include the low-level includes.
  */
 #include "h-basic.h"
-
 /*
  * Include the mid-level includes.
  */
@@ -32,17 +29,14 @@
 #include "platform-frame.h"
 #include "support/rng.h"
 #include "support/strl.h"
-
 /* Story font flags used by semantic document and menu rendering. */
 #define STORY_FLAG_USE        0x01
 #define STORY_FLAG_CELL_ALIGN 0x02
-
 /* Background-variant color encoding used by map/tile rendering. */
 #define MAX_COLORS 32
 #define BG_BLACK 0
 #define BG_SAME 1
 #define BG_DARK 2
-
 /*
  * Include the high-level includes.
  */
@@ -101,21 +95,16 @@
 #include "ui/ui-look-sidebar.h"
 #include "ui/ui-narrative.h"
 #include "ui/ui-story.h"
-
 /***** Some older copyright messages follow below *****/
-
 /*
  * Note that these copyright messages apply to an ancient version
  * of Angband, as in, from pre-2.4.frog-knows days, and thus the
  * references to version numbers may be rather misleading...
  */
-
 /*
  * UNIX ANGBAND Version 5.0
  */
-
 /* Original copyright message follows. */
-
 /*
  * ANGBAND Version 4.8	COPYRIGHT (c) Robert Alan Koeneke
  *
@@ -140,30 +129,25 @@
  *		wilson@ernie.Berkeley.EDU
  *		ucbvax!ucbernie!wilson
  */
-
 /*
  *	 ANGBAND may be copied and modified freely as long as the above
  *	 credits are retained.	No one who-so-ever may sell or market
  *	 this software in any form without the expressed written consent
  *	 of the author Robert Alan Koeneke.
  */
-
 /*
  * Inline string helper functions (replacing z-util.c implementations)
  * These provide simple wrappers for common string operations.
  */
 #include <stdlib.h>
 #include <string.h>
-
 /* String equality check */
 static inline bool streq(const char* a, const char* b) {
     return (strcmp(a, b) == 0);
 }
-
 /* ------------------------------------------------------------------------ */
 /* Ego affix helpers                                                        */
 /* ------------------------------------------------------------------------ */
-
 /*
  * Ego items now support a prefix and a suffix.
  *
@@ -184,7 +168,6 @@ static inline byte object_ego_prefix(const object_type* o_ptr)
         return 0;
     return (byte)o_ptr->unused2;
 }
-
 static inline void object_set_ego_prefix(object_type* o_ptr, int e_idx)
 {
     if (!o_ptr)
@@ -196,14 +179,12 @@ static inline void object_set_ego_prefix(object_type* o_ptr, int e_idx)
     }
     o_ptr->unused2 = (s32b)(byte)e_idx;
 }
-
 static inline byte object_ego_suffix(const object_type* o_ptr)
 {
     if (!o_ptr)
         return 0;
     return o_ptr->name2;
 }
-
 static inline void object_set_ego_suffix(object_type* o_ptr, int e_idx)
 {
     if (!o_ptr)
@@ -215,12 +196,10 @@ static inline void object_set_ego_suffix(object_type* o_ptr, int e_idx)
     }
     o_ptr->name2 = (byte)e_idx;
 }
-
 static inline bool object_has_ego(const object_type* o_ptr)
 {
     return object_ego_prefix(o_ptr) || object_ego_suffix(o_ptr);
 }
-
 static inline bool object_has_ego_idx(const object_type* o_ptr, int e_idx)
 {
     if (!o_ptr || e_idx <= 0 || e_idx > 255)
@@ -228,35 +207,30 @@ static inline bool object_has_ego_idx(const object_type* o_ptr, int e_idx)
     return object_ego_prefix(o_ptr) == (byte)e_idx
         || object_ego_suffix(o_ptr) == (byte)e_idx;
 }
-
 static inline s32b object_runtime_state(const object_type* o_ptr)
 {
     if (!o_ptr)
         return OBJECT_RUNTIME_STATE_NONE;
     return o_ptr->unused3;
 }
-
 static inline void object_set_runtime_state(object_type* o_ptr, s32b state)
 {
     if (!o_ptr)
         return;
     o_ptr->unused3 = state;
 }
-
 static inline s32b object_runtime_payload(const object_type* o_ptr)
 {
     if (!o_ptr)
         return 0;
     return o_ptr->unused4;
 }
-
 static inline void object_set_runtime_payload(object_type* o_ptr, s32b payload)
 {
     if (!o_ptr)
         return;
     o_ptr->unused4 = payload;
 }
-
 static inline bool ego_name_is_prefix(const char* name)
 {
     if (!name || !name[0])
@@ -264,7 +238,6 @@ static inline bool ego_name_is_prefix(const char* name)
     size_t len = strlen(name);
     return (len >= 2 && name[0] == '(' && name[len - 1] == ')');
 }
-
 /* Check if string t is a prefix of string s */
 static inline bool prefix(const char* s, const char* t) {
     while (*t) {
@@ -272,7 +245,6 @@ static inline bool prefix(const char* s, const char* t) {
     }
     return true;
 }
-
 /* Check if string t is a suffix of string s */
 static inline bool suffix(const char* s, const char* t) {
     size_t slen = strlen(s);
@@ -280,26 +252,21 @@ static inline bool suffix(const char* s, const char* t) {
     if (tlen > slen) return false;
     return (strcmp(s + slen - tlen, t) == 0);
 }
-
 /* Duplicate a string using standard allocation. */
 static inline char* str_dup(const char* str) {
     if (!str)
         return NULL;
-
     size_t len = strlen(str) + 1;
     char* copy = malloc(len);
     if (!copy)
         return NULL;
-
     memcpy(copy, str, len);
     return copy;
 }
-
 /* Free a string allocated with str_dup and return NULL */
 static inline void* str_free(const char* str) {
     if (str)
         free((void*)str);
     return NULL;
 }
-
 #endif

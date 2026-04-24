@@ -533,6 +533,7 @@ void runtime_dungeon_scan_artifacts_near_player(void)
                     && !(a_info[o_ptr->name1].seen & ART_SEEN_PHYSICAL))
                 {
                     a_info[o_ptr->name1].seen |= ART_SEEN_PHYSICAL;
+                    o_ptr->ident |= IDENT_ARTIFACT_SEEN;
                     
                     /* Optional: log for debugging */
                     if (cheat_peek)

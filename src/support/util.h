@@ -30,6 +30,7 @@ void messages_free(void);
 
 void bell(cptr reason);
 void sound(int val);
+void sound_delayed(int val, unsigned int delay_ms);
 void msg_print(cptr msg);
 void msg_format(cptr fmt, ...);
 void message_format(u16b message_type, s16b extra, cptr fmt, ...);

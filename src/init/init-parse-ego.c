@@ -101,6 +101,7 @@ errr parse_e_info(char* buf, header* head)
 
         /* Reset allocation tracking */
         e_ptr->alloc_count = 0;
+        e_ptr->elemental_block = 0;
     }
 
     /* Process 'W' for "More Info" (one line only) */
@@ -206,6 +207,23 @@ errr parse_e_info(char* buf, header* head)
         e_ptr->to_pd = to_pd;
         e_ptr->to_ps = to_ps;
         e_ptr->max_pval = pv;
+    }
+
+    /* Process 'X' for elemental block chance bonus */
+    else if (buf[0] == 'X')
+    {
+        int chance;
+
+        if (!e_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (1 != sscanf(buf + 2, "%d", &chance))
+            return (PARSE_ERROR_GENERIC);
+
+        if ((chance < 0) || (chance > 100))
+            return (PARSE_ERROR_GENERIC);
+
+        e_ptr->elemental_block = (byte)chance;
     }
 
     /* Process 'M' for per-stat/skill bonus offsets (one per line) */

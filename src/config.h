@@ -14,7 +14,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
  * for more details.
  */
-
 /*
  * Look through the following lines, and where a comment includes the
  * tag "OPTION:", examine the associated "#define" statements, and decide
@@ -26,7 +25,6 @@
  * And finally, remember that the "Makefile" will specify some rather
  * important compile time options, like what visual module to use.
  */
-
 /*
  * OPTION: See the Makefile(s), where several options may be declared.
  *
@@ -43,22 +41,18 @@
  * You may also need to specify the "system", using defines such as
  * "SOLARIS" (for Solaris), etc, see "h-config.h" for more info.
  */
-
 /*
  * OPTION: Use the POSIX "termios" methods in "main-gcu.c"
  */
 /* #define USE_TPOSIX */
-
 /*
  * OPTION: Use the "termio" methods in "main-gcu.c"
  */
 /* #define USE_TERMIO */
-
 /*
  * OPTION: Use the icky BSD "tchars" methods in "main-gcu.c"
  */
 /* #define USE_TCHARS */
-
 /*
  * OPTION: Use "blocking getch() calls" in "main-gcu.c".
  * Hack -- Note that this option will NOT work on many BSD machines
@@ -68,7 +62,6 @@
 #ifdef SYS_V
 #define USE_GETCH
 #endif
-
 /*
  * OPTION: Use the "curs_set()" call in "main-gcu.c".
  * Hack -- This option will not work on most BSD machines
@@ -76,12 +69,10 @@
 #ifdef SYS_V
 #define USE_CURS_SET
 #endif
-
 /*
  * OPTION: Include "ncurses.h" instead of "curses.h" in "main-gcu.c"
  */
 /* #define USE_NCURSES */
-
 /*
  * OPTION: for multi-user machines running the game setuid to some other
  * user (like 'games') this SAFE_SETUID option allows the program to drop
@@ -92,19 +83,14 @@
  * This will handle "gids" correctly once the permissions are set right.
  */
 #define SAFE_SETUID
-
 /*
  * This flag enables the "POSIX" methods for "SAFE_SETUID".
  */
-
 /* XXX - hack to get it to compile under tiger
-
 #ifdef _POSIX_SAVED_IDS
 # define SAFE_SETUID_POSIX
 #endif
-
 */
-
 /*
  * Prevent problems on (non-Solaris) Suns using "SAFE_SETUID".
  * The SAFE_SETUID code is weird, use it at your own risk...
@@ -112,7 +98,6 @@
 #if defined(SUNOS) && !defined(SOLARIS)
 #undef SAFE_SETUID_POSIX
 #endif
-
 /*
  * OPTION: Forbid the use of "fiddled" savefiles.  As far as I can tell,
  * a fiddled savefile is one with an internal timestamp different from
@@ -124,7 +109,6 @@
  * the use of savefiles from other platforms, so be careful.
  */
 /* #define VERIFY_TIMESTAMP */
-
 /*
  * OPTION: Forbid the "savefile over-write" cheat, in which you simply
  * run another copy of the game, loading a previously saved savefile,
@@ -133,106 +117,85 @@
  * the use of the savefile until the file is deleted.  Not ready yet.
  */
 /* #define VERIFY_SAVEFILE */
-
 /*
  * OPTION: Enable anti-cheat logic that marks characters as dead when
  * savefiles are missing. Set to 0 to disable this behavior (recommended
  * during development to avoid losing characters due to file issues).
  */
 #define ANTICHEAT 0
-
 /*
  * OPTION: Hack -- Compile in support for "Debug Commands"
  */
 #define ALLOW_DEBUG
-
 /*
  * OPTION: Hack -- Compile in support for "Spoiler Generation"
  */
 #define ALLOW_SPOILERS
-
 /*
  * OPTION: Allow "do_cmd_colors" at run-time
  */
 #define ALLOW_COLORS
-
 /*
  * OPTION: Allow "do_cmd_visuals" at run-time
  */
 #define ALLOW_VISUALS
-
 /*
  * OPTION: Allow characteres to be "auto-rolled"
  */
 #define ALLOW_AUTOROLLER
-
 /*
  * OPTION: Allow parsing of the ascii template files in "init.c".
  * This must be defined if you do not have valid binary image files.
  * It should be usually be defined anyway to allow easy "updating".
  */
 #define ALLOW_TEMPLATES
-
 /*
  * OPTION: Allow repeating of last command.
  */
 #define ALLOW_REPEAT
-
 /*
  * OPTION: Handle signals
  */
 #define HANDLE_SIGNALS
-
 /*
  * OPTION: Allow "Wizards" to yield "high scores"
  */
 #define SCORE_WIZARDS
-
 /*
  * OPTION: Allow "Cheaters" to yield "high scores"
  */
 /* #define SCORE_CHEATERS */
-
 /*
  * OPTION: Support multiple "player" grids in "map_info()"
  */
 /* #define MAP_INFO_MULTIPLE_PLAYERS */
-
 /*
  * OPTION: Use the "complex" wall illumination code
  */
 /* #define UPDATE_VIEW_COMPLEX_WALL_ILLUMINATION */
-
 /*
  * OPTION: Gamma correct colours (with X11)
  */
 #define SUPPORT_GAMMA
-
 /*
  * OPTION: Check the modification time of *_info.raw files
  */
 #define CHECK_MODIFICATION_TIME
-
 /*
  * OPTION: Allow the use of "sound" in various places.
  */
 #define USE_SOUND
-
 /*
  * OPTION: Allow the use of "graphics" in various places
  */
 #define USE_GRAPHICS
-
 /*
  * Hack -- Windows stuff
  */
 #ifdef WINDOWS
-
 /* Do not handle signals */
 #undef HANDLE_SIGNALS
-
 #endif
-
 /*
  * OPTION: Set the "default" path to the angband "lib" directory.
  *
@@ -257,12 +220,10 @@
 #ifndef DEFAULT_PATH
 #define DEFAULT_PATH "./lib/"
 #endif /* DEFAULT_PATH */
-
 /*
  * OPTION: Check the "time" against "lib/file/hours.txt"
  */
 /* #define CHECK_TIME */
-
 /*
  * OPTION: Prevent usage of the "ANGBAND_PATH" environment variable and
  * the '-d<what>=<path>' command line option (except for '-du=<path>').
@@ -273,23 +234,19 @@
 #ifdef SET_UID
 #define FIXED_PATHS
 #endif /* SET_UID */
-
 /*
  * OPTION: Capitalize the "user_name" (for "default" player name)
  * This option is only relevant on SET_UID machines.
  */
 #define CAPITALIZE_USER_NAME
-
 /*
  * OPTION: Person to bother if something goes wrong.
  */
 #define MAINTAINER "sil@amirrorclear.net"
-
 /*
  * OPTION: Default font (when using X11).
  */
 #define DEFAULT_X11_FONT "9x15"
-
 /*
  * OPTION: Default fonts (when using X11)
  */
@@ -301,14 +258,12 @@
 #define DEFAULT_X11_FONT_5 "5x8"
 #define DEFAULT_X11_FONT_6 "5x8"
 #define DEFAULT_X11_FONT_7 "5x8"
-
 /*
  * OPTION: Attempt to minimize the size of the game
  */
 #ifndef ANGBAND_LITE
 /* #define ANGBAND_LITE */
 #endif
-
 /*
  * Hack -- React to the "ANGBAND_LITE" flag
  */
@@ -320,12 +275,10 @@
 #undef ALLOW_SPOILERS
 #undef ALLOW_TEMPLATES
 #endif
-
 /*
  * OPTION: Attempt to prevent all "cheating"
  */
 /* #define VERIFY_HONOR */
-
 /*
  * React to the "VERIFY_HONOR" flag
  */

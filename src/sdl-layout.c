@@ -28,6 +28,114 @@ SDL_Rect g_pane_rects[PANE_MAX];
 
 static int g_auto_aux_main_cell_h_override = 0;
 
+static bool sdl_rect_has_area(const SDL_Rect* rect)
+{
+    return rect && rect->w > 0 && rect->h > 0;
+}
+
+static SDL_Rect sdl_get_window_pixel_rect(void)
+{
+    SDL_Rect rect = { 0, 0, 0, 0 };
+
+    if (g_state.window)
+        SDL_GetWindowSizeInPixels(g_state.window, &rect.w, &rect.h);
+
+    return rect;
+}
+
+static SDL_Rect sdl_window_rect_to_pixel_rect(const SDL_Rect* rect)
+{
+    SDL_Rect pixel_rect = { 0, 0, 0, 0 };
+    SDL_Rect window_units = { 0, 0, 0, 0 };
+    SDL_Rect window_pixels = sdl_get_window_pixel_rect();
+    double scale_x;
+    double scale_y;
+
+    if (!rect || !g_state.window || !sdl_rect_has_area(&window_pixels))
+        return pixel_rect;
+
+    SDL_GetWindowSize(g_state.window, &window_units.w, &window_units.h);
+    if (window_units.w <= 0 || window_units.h <= 0)
+        return window_pixels;
+
+    scale_x = (double)window_pixels.w / (double)window_units.w;
+    scale_y = (double)window_pixels.h / (double)window_units.h;
+    pixel_rect.x = (int)((double)rect->x * scale_x + 0.5);
+    pixel_rect.y = (int)((double)rect->y * scale_y + 0.5);
+    pixel_rect.w = (int)((double)rect->w * scale_x + 0.5);
+    pixel_rect.h = (int)((double)rect->h * scale_y + 0.5);
+    return pixel_rect;
+}
+
+void sdl_refresh_safe_area(void)
+{
+    SDL_Rect window_pixels = sdl_get_window_pixel_rect();
+    SDL_Rect safe_area = window_pixels;
+
+    if (!g_state.window || !sdl_rect_has_area(&window_pixels)) {
+        g_state.safe_area = window_pixels;
+        return;
+    }
+
+    {
+        SDL_Rect window_units = { 0, 0, 0, 0 };
+        SDL_Rect safe_units = { 0, 0, 0, 0 };
+
+        SDL_GetWindowSize(g_state.window, &window_units.w, &window_units.h);
+        if (window_units.w > 0 && window_units.h > 0
+            && SDL_GetWindowSafeArea(g_state.window, &safe_units)
+            && safe_units.x >= 0 && safe_units.y >= 0
+            && safe_units.w > 0 && safe_units.h > 0
+            && safe_units.x + safe_units.w <= window_units.w
+            && safe_units.y + safe_units.h <= window_units.h)
+        {
+            safe_area = sdl_window_rect_to_pixel_rect(&safe_units);
+            if (!sdl_rect_has_area(&safe_area))
+                safe_area = window_pixels;
+        }
+    }
+
+    if (SDL_memcmp(&g_state.safe_area, &safe_area, sizeof(safe_area)) != 0) {
+        log_info("SDL layout safe area updated to (%d,%d %dx%d)",
+            safe_area.x, safe_area.y, safe_area.w, safe_area.h);
+    }
+
+    g_state.safe_area = safe_area;
+}
+
+SDL_Rect sdl_get_layout_screen_rect(void)
+{
+    SDL_Rect window_pixels = sdl_get_window_pixel_rect();
+
+    if (config.use_unsafe_area)
+        return window_pixels;
+
+    if (!sdl_rect_has_area(&g_state.safe_area))
+        sdl_refresh_safe_area();
+
+    if (sdl_rect_has_area(&g_state.safe_area)) {
+        SDL_Rect safe = g_state.safe_area;
+
+        if (safe.x < 0)
+            safe.x = 0;
+        if (safe.y < 0)
+            safe.y = 0;
+        if (safe.x > window_pixels.w)
+            safe.x = window_pixels.w;
+        if (safe.y > window_pixels.h)
+            safe.y = window_pixels.h;
+        if (safe.x + safe.w > window_pixels.w)
+            safe.w = window_pixels.w - safe.x;
+        if (safe.y + safe.h > window_pixels.h)
+            safe.h = window_pixels.h - safe.y;
+
+        if (sdl_rect_has_area(&safe))
+            return safe;
+    }
+
+    return window_pixels;
+}
+
 static const struct pane_config default_pane_config[] = {
     { .pane = PANE_INVENTORY, .where = PLACE_RIGHT, .enabled = true },
     { .pane = PANE_WORN, .where = PLACE_RIGHT, .enabled = true },
@@ -662,6 +770,8 @@ void platform_config_info(char* buf, size_t size)
     offset += (size_t)strnfmt(buf + offset, size - offset, "Margin: %d\n", config.margin);
     offset += (size_t)strnfmt(buf + offset, size - offset, "Fullscreen: %s\n", config.fullscreen ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Tiles: %s\n", config.tiles ? "Yes" : "No");
+    offset += (size_t)strnfmt(buf + offset, size - offset,
+        "Use Unsafe Area: %s\n", config.use_unsafe_area ? "Yes" : "No");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Pane Borders: %s\n",
         config.show_pane_borders ? "White" : "Black");
     offset += (size_t)strnfmt(buf + offset, size - offset, "Hide Left Panel: %s\n\n",
@@ -895,8 +1005,9 @@ void platform_set_fullscreen(bool value)
             log_info("Exited fullscreen mode");
         }
 
-        SDL_Rect window = { 0 };
-        SDL_GetWindowSizeInPixels(g_state.window, &window.w, &window.h);
+        SDL_Rect window;
+        sdl_refresh_safe_area();
+        window = sdl_get_layout_screen_rect();
         sdl_load_story_fonts();
         resize(&window);
         sdl_update_cursor_visibility();
@@ -908,6 +1019,20 @@ void platform_set_fullscreen(bool value)
 bool platform_tiles(void)
 {
     return config.tiles;
+}
+
+bool platform_use_unsafe_area(void)
+{
+    return config.use_unsafe_area;
+}
+
+void platform_set_use_unsafe_area(bool value)
+{
+    if (config.use_unsafe_area == value)
+        return;
+
+    config.use_unsafe_area = value;
+    platform_apply_config();
 }
 
 static void sdl_request_tiles_mode_refresh(void)
@@ -1220,7 +1345,8 @@ int platform_max_scale(void)
         return 10;
 
     SDL_GetWindowSizeInPixels(g_state.window, &w, &h);
-    screen = (SDL_Rect){ 0, 0, w, h };
+    sdl_refresh_safe_area();
+    screen = sdl_get_layout_screen_rect();
     sdl_compute_split_panes(&screen, panes);
     max_scale = sdl_max_scale_for_rect(&panes[PANE_MAIN]);
 
@@ -1234,15 +1360,11 @@ int platform_max_scale(void)
 
 void platform_apply_config(void)
 {
-    int w;
-    int h;
-
     if (!g_state.window) {
         log_warn("platform_apply_config: no window, skipping");
         return;
     }
 
-    SDL_GetWindowSizeInPixels(g_state.window, &w, &h);
     {
         int max_scale = platform_max_scale();
         if (config.main_view_scale > max_scale) {
@@ -1252,7 +1374,8 @@ void platform_apply_config(void)
         }
     }
 
-    SDL_Rect screen = { 0, 0, w, h };
+    sdl_refresh_safe_area();
+    SDL_Rect screen = sdl_get_layout_screen_rect();
     g_auto_aux_main_cell_h_override = config.main_view_scale * TILE_SIZE;
     sdl_load_story_fonts();
     resize(&screen);

@@ -15,4 +15,9 @@
 
 #pragma once
 
+#include <SDL3/SDL.h>
+#include <stdbool.h>
+
 #include "platform-audio.h"
+
+bool sdl_sound_try_handle_event(const SDL_Event* ev);

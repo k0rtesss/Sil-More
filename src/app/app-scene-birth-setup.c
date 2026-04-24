@@ -736,6 +736,7 @@ void birth_finalize_character_creation_selection(void)
     {
         op_ptr->vault_drop_frequency = VDF_NORMAL;
         op_ptr->noble_item_spawn_mode = NOBLE_ITEM_SPAWN_RESTRICTED;
+        op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
     }
 
     if (op_ptr->main_combat_rolls > 4)
@@ -754,6 +755,8 @@ void birth_finalize_character_creation_selection(void)
         op_ptr->intro_style = INTRO_STYLE_RANDOM;
     if (op_ptr->noble_item_spawn_mode > NOBLE_ITEM_SPAWN_INCLUDE_VAULTS)
         op_ptr->noble_item_spawn_mode = NOBLE_ITEM_SPAWN_RESTRICTED;
+    if (op_ptr->min_depth_timer_mode > MIN_DEPTH_TIMER_MODE_MAX)
+        op_ptr->min_depth_timer_mode = MIN_DEPTH_TIMER_MODE_NORMAL;
 
     for (i = 0; i < z_info->e_max; i++)
         e_info[i].aware = false;

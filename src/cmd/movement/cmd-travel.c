@@ -24,10 +24,15 @@
 #include "runtime/runtime-game.h"
 #include "metarun.h"
 
-#define MIN_DEPTH_COUNTER_STEP 180000
+#define MIN_DEPTH_COUNTER_STEP_BASE 150000
+#define MIN_DEPTH_COUNTER_STEP_SETTING_DELTA 30000
 #define MIN_DEPTH_BASE_INCREMENT_START 85
 #define MIN_DEPTH_BASE_INCREMENT_DIVISOR 850
-#define MIN_DEPTH_INCREMENT_PER_BONUS 3
+#define MIN_DEPTH_INCREMENT_PER_BONUS 5
+#define MIN_DEPTH_ITEM_BONUS_DEEP_CALL 3
+#define MIN_DEPTH_ITEM_BONUS_PERMA_CURSE 5
+#define MIN_DEPTH_KILL_BONUS_STEP 500
+#define MIN_DEPTH_KILL_BONUS_AMOUNT 5
 
 static byte mandos_second_state(void)
 {
@@ -92,12 +97,48 @@ static int min_depth_timer_item_bonus_count(void)
             continue;
 
         if (f4 & TR4_DEEP_CALL)
-            count++;
+            count += MIN_DEPTH_ITEM_BONUS_DEEP_CALL;
         if (f3 & TR3_PERMA_CURSE)
-            count += 3;
+            count += MIN_DEPTH_ITEM_BONUS_PERMA_CURSE;
     }
 
     return count;
+}
+
+static int min_depth_timer_kill_bonus(void)
+{
+    int total_kills = 0;
+
+    if (!z_info || !l_list)
+        return 0;
+
+    for (int i = 1; i < z_info->r_max; i++)
+        total_kills += l_list[i].pkills;
+
+    return (total_kills / MIN_DEPTH_KILL_BONUS_STEP)
+        * MIN_DEPTH_KILL_BONUS_AMOUNT;
+}
+
+static int min_depth_counter_step_adjustment(void)
+{
+    switch (op_ptr->min_depth_timer_mode) {
+    case MIN_DEPTH_TIMER_MODE_RELAXED:
+        return MIN_DEPTH_COUNTER_STEP_SETTING_DELTA;
+    case MIN_DEPTH_TIMER_MODE_HARSH:
+        return -MIN_DEPTH_COUNTER_STEP_SETTING_DELTA;
+    default:
+        return 0;
+    }
+}
+
+static int min_depth_counter_step(void)
+{
+    int step = MIN_DEPTH_COUNTER_STEP_BASE + min_depth_counter_step_adjustment();
+
+    if (step < MIN_DEPTH_COUNTER_STEP_SETTING_DELTA)
+        step = MIN_DEPTH_COUNTER_STEP_SETTING_DELTA;
+
+    return step;
 }
 
 static int min_depth_timer_base_increment(void)
@@ -109,8 +150,9 @@ static int min_depth_timer_additional_increment(void)
 {
     int depth_bonus = MIN_DEPTH_INCREMENT_PER_BONUS * (p_ptr->depth - min_depth());
     int item_bonus = MIN_DEPTH_INCREMENT_PER_BONUS * min_depth_timer_item_bonus_count();
+    int kill_bonus = min_depth_timer_kill_bonus();
 
-    return depth_bonus + item_bonus;
+    return depth_bonus + item_bonus + kill_bonus;
 }
 
 void min_depth_timer_status(int* base_increment, int* additional_increment,
@@ -119,10 +161,11 @@ void min_depth_timer_status(int* base_increment, int* additional_increment,
     int base = min_depth_timer_base_increment();
     int additional = min_depth_timer_additional_increment();
     int total = base + additional;
-    int current_progress = min_depth_counter % MIN_DEPTH_COUNTER_STEP;
+    int step = min_depth_counter_step();
+    int current_progress = min_depth_counter % step;
 
     if (current_progress < 0)
-        current_progress += MIN_DEPTH_COUNTER_STEP;
+        current_progress += step;
 
     if (base_increment)
         *base_increment = base;
@@ -133,7 +176,7 @@ void min_depth_timer_status(int* base_increment, int* additional_increment,
     if (progress)
         *progress = current_progress;
     if (threshold)
-        *threshold = MIN_DEPTH_COUNTER_STEP;
+        *threshold = step;
 }
 
 /*
@@ -142,7 +185,7 @@ void min_depth_timer_status(int* base_increment, int* additional_increment,
  */
 int min_depth(void)
 {
-    int min_depth_value = min_depth_counter / MIN_DEPTH_COUNTER_STEP + 1;
+    int min_depth_value = min_depth_counter / min_depth_counter_step() + 1;
 
     // bounds on the base
     if (min_depth_value < 1)

@@ -53,6 +53,8 @@ bool platform_fullscreen(void);
 void platform_set_fullscreen(bool value);
 bool platform_tiles(void);
 void platform_set_tiles(bool value);
+bool platform_use_unsafe_area(void);
+void platform_set_use_unsafe_area(bool value);
 int get_pane_config_count(void);
 bool platform_enable_right_panes(void);
 void platform_set_enable_right_panes(bool value);

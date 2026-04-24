@@ -1436,6 +1436,7 @@ void calc_morale(monster_type* m_ptr)
 
     // increase morale for the Elf-Bane ability
     morale += elf_bane_bonus(m_ptr) * 10;
+    morale += dwarf_bane_bonus(m_ptr) * 10;
 
     // add temporary morale modifiers
     morale += m_ptr->tmp_morale;
@@ -1924,6 +1925,7 @@ void monster_perception(bool player_centered, bool main_roll, int difficulty)
 
             // increase morale for the Elf-Bane ability
             m_perception += elf_bane_bonus(m_ptr);
+            m_perception += dwarf_bane_bonus(m_ptr);
 
             // monsters are looking more carefully during the escape
             if (p_ptr->on_the_run)

@@ -23,6 +23,7 @@ void platform_sound_init(void);
 void platform_sound_reload(void);
 void platform_sound_shutdown(void);
 void platform_sound_handle(int sound_idx);
+void platform_sound_handle_delayed(int sound_idx, unsigned int delay_ms);
 struct sound_config* platform_sound_config(void);
 void platform_sound_save_config(void);
 void platform_music_play_main(void);

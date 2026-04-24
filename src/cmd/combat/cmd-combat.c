@@ -1011,6 +1011,25 @@ static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr)
     return (m_ptr->stance == STANCE_FLEEING);
 }
 
+static bool weapon_has_attack_confirmation_inscription(const object_type* o_ptr)
+{
+    cptr s;
+
+    if (!o_ptr || !o_ptr->obj_note)
+        return false;
+
+    s = strchr(quark_str(o_ptr->obj_note), '!');
+    while (s)
+    {
+        if (s[1] == 'a')
+            return true;
+
+        s = strchr(s + 1, '!');
+    }
+
+    return false;
+}
+
 bool abort_for_mercy(monster_type* m_ptr)
 {
     // Unseen enemies are okay to kill
@@ -1321,26 +1340,12 @@ void py_attack_aux(int y, int x, int attack_type)
         abort_attack = true;
     }
 
-    // inscribing an object with "!a" produces prompts to confirm that you with
-    // to attack with it idea and code from MarvinPA
-    if (o_ptr->obj_note && !p_ptr->truce && m_ptr->ml)
+    // "!a" on the weapon, or the gameplay option, prompts before attacking.
+    if ((pacifist_attack_warning || weapon_has_attack_confirmation_inscription(o_ptr))
+        && !p_ptr->truce && m_ptr->ml)
     {
-        cptr s;
-        /* Find a '!' */
-        s = strchr(quark_str(o_ptr->obj_note), '!');
-
-        /* Process inscription */
-        while (s)
-        {
-            if ((s[1] == 'a')
-                && !get_check("Are you sure you wish to attack? "))
-            {
-                abort_attack = true;
-            }
-
-            /* Find another '!' */
-            s = strchr(s + 1, '!');
-        }
+        if (!get_check("Are you sure you wish to attack? "))
+            abort_attack = true;
     }
 
     // Warning about breaking the truce
@@ -1640,18 +1645,9 @@ void py_attack_aux(int y, int x, int attack_type)
             u16b weapon_swing_type = weapon_sound_message_type(o_ptr, false);
             sound(weapon_swing_type);
 
-            // Delay before result sound (varies by weapon type)
-            platform_delay_ms((u32b)weapon_animation_delay(weapon_swing_type));
-
-            // Determine result sound: armor blocked, hit, or nothing
-            u16b result_sound = MSG_ARMOR; // default to armor
-            if (net_dam > 0)
-            {
-                result_sound = MSG_HIT;
-            }
-
-            // Play result sound
-            sound(result_sound);
+            // Schedule the result sound from the swing onset without blocking.
+            u16b result_sound = (net_dam > 0) ? MSG_HIT : MSG_ARMOR;
+            sound_delayed(result_sound, (unsigned int)weapon_animation_delay(weapon_swing_type));
 
             // determine the punctuation for the attack ("...", ".", "!" etc)
             attack_punctuation(punctuation, net_dam, crit_bonus_dice);
@@ -1865,9 +1861,6 @@ void py_attack_aux(int y, int x, int attack_type)
             // Play weapon swing sound first (layered sound system)
             u16b weapon_swing_type = weapon_sound_message_type(o_ptr, false);
             sound(weapon_swing_type);
-
-            // Delay before message (shorter for misses, still weapon-aware)
-            platform_delay_ms((u32b)MAX(0, weapon_animation_delay(weapon_swing_type) - 200));
 
             /* Message - no additional sound for miss */
             msg_format("You miss %s.", m_name);

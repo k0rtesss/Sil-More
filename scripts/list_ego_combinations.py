@@ -13,7 +13,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See LICENSE.md
 # for more details.
 
-"""List all valid base-item × ego combinations with rarity + stat ranges.
+"""List all valid base-item x ego combinations with rarity + stat ranges.
 
 This mirrors the allocation-combining logic in `src/drop_system.c`:
 - Base item allocation schedule comes from `A:` lines in `lib/edit/object.txt`.
@@ -1355,7 +1355,7 @@ def _ego_applies_to_kind(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="List all valid base-item × ego combinations with combined rarity schedules and stat ranges",
+        description="List all valid base-item x ego combinations with combined rarity schedules and stat ranges",
     )
     parser.add_argument(
         "--object-txt",

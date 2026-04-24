@@ -193,6 +193,17 @@ void sound(int val)
 }
 
 /*
+ * Schedule a sound without blocking the game loop.
+ */
+void sound_delayed(int val, unsigned int delay_ms)
+{
+    if (!use_sound)
+        return;
+
+    platform_sound_handle_delayed(val, delay_ms);
+}
+
+/*
  * The "quark" package
  */
 
