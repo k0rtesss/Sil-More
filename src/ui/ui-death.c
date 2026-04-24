@@ -98,7 +98,8 @@ static app_ui_panel* death_begin_item_list_scene(app_ui_scene* scene,
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_ITEM_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 920, 1380);
     if (title && title[0])
@@ -426,6 +427,56 @@ static bool death_add_final_menu_row(app_ui_panel* panel, int id, int highlight,
         (highlight == id), key, label, "");
 }
 
+static bool death_add_final_menu_detail(app_ui_panel* panel, int highlight,
+    bool morgoth_victory)
+{
+    cptr title = "Selected Action";
+    cptr detail = "";
+
+    if (!panel)
+        return false;
+
+    switch (highlight)
+    {
+    case 1:
+        title = morgoth_victory ? "Valar's Record" : "Scores";
+        detail = "Open the Halls of Mandos with this run highlighted.";
+        break;
+    case 2:
+        title = morgoth_victory ? "Last Survey" : "Final Look";
+        detail = "Return to the revealed dungeon for a final, non-turn review.";
+        break;
+    case 3:
+        title = morgoth_victory ? "Proclamations" : "Final Messages";
+        detail = "Open the message recall document for the end of the run.";
+        break;
+    case 4:
+        title = morgoth_victory ? "Legend Review" : "Character Review";
+        detail = "Review the final character sheet, equipment, inventory, and notes.";
+        break;
+    case 5:
+        title = "Annals";
+        detail = "Append a final note to the run record before leaving.";
+        break;
+    case 6:
+        title = "Archive";
+        detail = "Write a character dump for external review.";
+        break;
+    case 7:
+        title = "Exit";
+        detail = "Close the postmortem menu and return to the title hub.";
+        break;
+    default:
+        break;
+    }
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, title);
+    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, detail))
+        return false;
+    return app_ui_panel_add_detail_line(panel, TERM_SLATE,
+        "The score, metarun, and run-history records have already been written.");
+}
+
 static char death_final_menu_scroll_command_key(const app_ui_command* command)
 {
     if (!command)
@@ -697,9 +748,14 @@ static bool death_build_final_menu_scene(app_ui_scene* scene,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_HUB;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
     panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 900, 1360);
+    app_ui_panel_set_icon(panel, p_ptr->morgoth_slain ? TERM_YELLOW
+                                                      : TERM_L_RED,
+        p_ptr->morgoth_slain ? 'V' : 'X');
+    app_ui_panel_set_widths(panel, 920, 1400);
     app_ui_panel_set_title(panel, death_status_title_attr(),
         death_status_title_text());
 
@@ -739,6 +795,9 @@ static bool death_build_final_menu_scene(app_ui_scene* scene,
     {
         return false;
     }
+
+    if (!death_add_final_menu_detail(panel, highlight, morgoth_victory))
+        return false;
 
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
         "Enter", "Choose");

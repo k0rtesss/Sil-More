@@ -801,8 +801,9 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
         page, total_pages);
 
     ui_browser_shell_scene_config_init(&config);
-    config.style = APP_UI_PANEL_STYLE_PLAIN;
-    config.accent_attr = TERM_SLATE;
+    config.scene_flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    config.style = APP_UI_PANEL_STYLE_DOCUMENT;
+    config.accent_attr = TERM_L_BLUE;
     config.min_width_px = 1600;
     config.width_cap_px = 2800;
     config.title_attr = help_role_attr(ROLE_HEADER);

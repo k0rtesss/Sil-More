@@ -27,6 +27,7 @@
 #include "metarun.h"
 #include "platform-input.h"
 #include "score/score_io.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 #ifdef ALLOW_TEMPLATES
@@ -794,49 +795,30 @@ static bool dbg_show_active_flags_build_ui_scene(app_ui_scene* scene,
         return false;
     }
 
-    if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            "a", "Add curse"))
     {
-        return false;
-    }
 #ifdef DEBUG_CURSES
-    if (!app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "x", "Clear all"))
-    {
-        return false;
-    }
-    if (!app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            "e", "+death"))
-    {
-        return false;
-    }
-    if (!app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-            "r", "Reset scores"))
-    {
-        return false;
-    }
-    if (!app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-            "1-3", "Escape"))
-    {
-        return false;
-    }
-    if (!app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
-            "d", "Debug"))
-    {
-        return false;
-    }
-    if (!app_ui_panel_add_footer_action(panel, 7, TERM_WHITE, true,
-            "Esc", "Back"))
-    {
-        return false;
-    }
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, "a", "Add curse" },
+            { 2, TERM_WHITE, true, "x", "Clear all" },
+            { 3, TERM_WHITE, true, "e", "+death" },
+            { 4, TERM_WHITE, true, "r", "Reset scores" },
+            { 5, TERM_WHITE, true, "1-3", "Escape" },
+            { 6, TERM_WHITE, true, "d", "Debug" },
+            { 7, TERM_WHITE, true, "Esc", "Back" }
+        };
 #else
-    if (!app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "Esc", "Back"))
-    {
-        return false;
-    }
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, "a", "Add curse" },
+            { 2, TERM_WHITE, true, "Esc", "Back" }
+        };
 #endif
+
+        if (!ui_browser_shell_add_footer_actions(panel, actions,
+                N_ELEMENTS(actions)))
+        {
+            return false;
+        }
+    }
 
     return true;
 }
@@ -847,9 +829,22 @@ static bool dbg_show_active_flags_semantic(void)
 
     while (true)
     {
+        static const ui_browser_shell_button_key button_keys[] = {
+            { 1, 'a' },
+#ifdef DEBUG_CURSES
+            { 2, 'x' },
+            { 3, 'e' },
+            { 4, 'r' },
+            { 6, 'd' },
+            { 7, ESCAPE }
+#else
+            { 2, ESCAPE }
+#endif
+        };
         ui_information_scene_scope scope;
         app_ui_scene scene;
         bool overlay_dungeon = false;
+        ui_browser_shell_command_map map;
         int ch;
 
         if (!dbg_show_active_flags_scene_enter(&scope, &overlay_dungeon))
@@ -867,9 +862,14 @@ static bool dbg_show_active_flags_semantic(void)
             return false;
         }
 
-        ch = ui_information_scene_wait_key_nonrepeat();
+        ui_browser_shell_command_map_init(&map);
+        map.button_keys = button_keys;
+        map.button_key_count = N_ELEMENTS(button_keys);
+        ch = ui_browser_shell_wait_key(&map, APP_INPUT_FLAG_REPEAT, NULL);
         ui_information_scene_leave(&scope);
 
+        if (!ch)
+            continue;
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
 

@@ -2171,12 +2171,6 @@ static bool ability_semantic_command_to_key(ability_semantic_state* state,
     if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
         return ability_semantic_footer_command_to_key(state, command, out_key);
 
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
-    }
-
     return false;
 }
 

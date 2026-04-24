@@ -42,6 +42,16 @@ static int welcome_screen_current_intro_style(void);
 static void welcome_prompt_label(int binding, const char* fallback,
     char* buf, size_t buflen);
 
+typedef enum initial_menu_action {
+    INITIAL_MENU_ACTION_CONTINUE = 1,
+    INITIAL_MENU_ACTION_NEW_RUN = 2,
+    INITIAL_MENU_ACTION_HALLS = 3,
+    INITIAL_MENU_ACTION_RUN_HISTORY = 4,
+    INITIAL_MENU_ACTION_SETTINGS = 5,
+    INITIAL_MENU_ACTION_HELP = 6,
+    INITIAL_MENU_ACTION_QUIT = 7
+} initial_menu_action;
+
 /*
  * Reinitialize some things between games
  *
@@ -650,7 +660,7 @@ static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
         welcome_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
         if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                confirm_label, metarun_created ? "Begin" : "Continue")
+                confirm_label, "Begin")
             || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
                 back_label, "Quit"))
         {
@@ -660,7 +670,7 @@ static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
                    APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_ACTIVATE,
                    APP_UI_INTERACTION_FLAG_POINTER_ENABLED
                        | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
-                   ' ', "Start the run")
+                   ' ', "Open the main hub")
             && app_ui_panel_set_footer_action_interaction(panel, 2,
                 APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_CANCEL,
                 APP_UI_INTERACTION_FLAG_POINTER_ENABLED
@@ -669,7 +679,7 @@ static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
     }
 
     if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            "Space", metarun_created ? "Begin" : "Continue")
+            "Space/Enter", "Begin")
         || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
             "Q/Esc", "Quit"))
     {
@@ -679,12 +689,181 @@ static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
                APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_ACTIVATE,
                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
-               ' ', "Start the run")
+               ' ', "Open the main hub")
         && app_ui_panel_set_footer_action_interaction(panel, 2,
             APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_CANCEL,
             APP_UI_INTERACTION_FLAG_POINTER_ENABLED
                 | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
             ESCAPE, "Quit to desktop");
+}
+
+static bool initial_menu_add_row(app_ui_panel* panel, int id, byte attr,
+    bool enabled, bool selected, cptr key, cptr label, cptr meta,
+    cptr tooltip)
+{
+    u16b flags = APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+        | APP_UI_INTERACTION_FLAG_TOUCH_TARGET
+        | APP_UI_INTERACTION_FLAG_TOOLTIP;
+
+    if (!app_ui_panel_add_row(panel, (s16b)id, attr, enabled, selected,
+            key, label, meta))
+    {
+        return false;
+    }
+
+    return app_ui_panel_set_row_interaction(panel, (s16b)id,
+        APP_UI_WIDGET_ROLE_LIST_ITEM,
+        enabled ? APP_UI_WIDGET_ACTION_ACTIVATE
+                : APP_UI_WIDGET_ACTION_NONE,
+        flags, (key && key[0]) ? (s16b)key[0] : 0, tooltip);
+}
+
+static bool initial_menu_add_hub_detail(app_ui_panel* panel, bool has_alive)
+{
+    char buf[APP_UI_TEXT_MAX];
+
+    if (!panel)
+        return false;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Saga Status");
+    strnfmt(buf, sizeof(buf), "%d living %s recorded.",
+        score_count_alive_entries(),
+        score_count_alive_entries() == 1 ? "run is" : "runs are");
+    if (!app_ui_panel_add_detail_line(panel,
+            has_alive ? TERM_L_GREEN : TERM_SLATE, buf))
+    {
+        return false;
+    }
+
+    if (metarun_created)
+    {
+        strnfmt(buf, sizeof(buf), "Silmarils claimed across the saga: %d",
+            metar.silmarils);
+        if (!app_ui_panel_add_detail_line(panel, TERM_YELLOW, buf))
+            return false;
+    }
+    else if (!app_ui_panel_add_detail_line(panel, TERM_SLATE,
+                 "No metarun record has been created yet."))
+    {
+        return false;
+    }
+
+    return app_ui_panel_add_detail_line(panel, TERM_WHITE,
+        has_alive ? "Continue resumes the living run recorded in the score log."
+                  : "New Run begins character creation for a fresh descent.");
+}
+
+static bool initial_menu_set_footer_interactions(app_ui_panel* panel,
+    bool has_alive)
+{
+    return app_ui_panel_set_footer_action_interaction(panel, 1,
+               APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_ACTIVATE,
+               APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                   | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+               has_alive ? 'c' : 'n',
+               has_alive ? "Resume the living run."
+                         : "Begin character creation.")
+        && app_ui_panel_set_footer_action_interaction(panel, 2,
+            APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_CANCEL,
+            APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+            ESCAPE, "Quit Sil-More.");
+}
+
+static bool initial_menu_build_hub_scene(app_ui_scene* scene)
+{
+    app_ui_panel* panel;
+    bool has_alive = score_count_alive_entries() > 0;
+    char subtitle[APP_UI_TEXT_MAX];
+    char continue_meta[APP_UI_META_MAX];
+    char new_meta[APP_UI_META_MAX];
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_MODAL);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_HUB;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    app_ui_panel_set_widths(panel, 920, 1360);
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Sil-More");
+    strnfmt(subtitle, sizeof(subtitle), "Shining Darkness  |  %s",
+        has_alive ? "living run available" : "no living run recorded");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    if (!app_ui_panel_add_body_line(panel, TERM_WHITE,
+            "A quiet hall before the descent into Angband."))
+    {
+        return false;
+    }
+
+    SDL_strlcpy(continue_meta,
+        has_alive ? "Resume the living hero" : "No living save in the ledger",
+        sizeof(continue_meta));
+    SDL_strlcpy(new_meta,
+        has_alive ? "Finish or abandon the living run first" : "Create a hero",
+        sizeof(new_meta));
+
+    if (!initial_menu_add_row(panel, INITIAL_MENU_ACTION_CONTINUE,
+            has_alive ? TERM_L_GREEN : TERM_L_DARK, has_alive, has_alive,
+            "c", "Continue", continue_meta,
+            has_alive ? "Resume the living run." : "No living run is available.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_NEW_RUN,
+            has_alive ? TERM_L_DARK : TERM_L_BLUE, !has_alive, !has_alive,
+            "n", "New Run", new_meta,
+            has_alive ? "Disabled while a living run is recorded."
+                      : "Begin a new run.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_HALLS, TERM_WHITE,
+            true, false, "m", "Halls of Mandos", "High scores and fallen heroes",
+            "Open high scores.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_RUN_HISTORY,
+            TERM_WHITE, true, false, "v", "Run History",
+            "Detailed run chronicle", "Open run history.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_SETTINGS,
+            TERM_WHITE, true, false, "o", "Settings",
+            "Input, interface, sound, panes", "Open settings.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_HELP, TERM_WHITE,
+            true, false, "h", "Help", "Rules and command reference",
+            "Open help.")
+        || !initial_menu_add_row(panel, INITIAL_MENU_ACTION_QUIT, TERM_WHITE,
+            true, false, "q", "Quit", "Return to desktop",
+            "Quit Sil-More."))
+    {
+        return false;
+    }
+
+    if (!initial_menu_add_hub_detail(panel, has_alive))
+        return false;
+
+    if (steamdeck_controls_active())
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        welcome_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        welcome_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                   confirm_label, has_alive ? "Continue" : "New Run")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Quit")
+            && initial_menu_set_footer_interactions(panel, has_alive);
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+               has_alive ? "C/Enter" : "N/Enter",
+               has_alive ? "Continue" : "New Run")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Q/Esc", "Quit")
+        && initial_menu_set_footer_interactions(panel, has_alive);
 }
 
 static bool welcome_screen_build_ui_scene(app_ui_scene* scene,
@@ -734,6 +913,16 @@ static bool welcome_screen_present_ui(cptr status_line, bool show_footer)
     app_ui_scene scene;
 
     if (!welcome_screen_build_ui_scene(&scene, status_line, show_footer))
+        return false;
+
+    return ui_information_scene_present_ui(&scene);
+}
+
+static bool initial_menu_present_hub_ui(void)
+{
+    app_ui_scene scene;
+
+    if (!initial_menu_build_hub_scene(&scene))
         return false;
 
     return ui_information_scene_present_ui(&scene);
@@ -1003,7 +1192,9 @@ static int initial_menu_wait_key(void)
                 || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
                 || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
             {
-                key = '\r';
+                key = command->target.action_key
+                    ? (command->target.action_key & 0xFF)
+                    : '\r';
                 break;
             }
         }
@@ -1021,44 +1212,147 @@ NavResult initial_menu(bool* start_new)
     else
         platform_music_play_main_full();
 
-    int ch;
+    int ch = 0;
     NavResult result = NAV_BACK;
     bool steamdeck = steamdeck_controls_active();
-    ui_information_scene_scope welcome_scope;
+    bool enter_hub = false;
 
-    if (!welcome_screen_present_ui(NULL, true))
+    while (result == NAV_BACK && !enter_hub)
     {
-        log_error("initial_menu: failed to present semantic welcome screen");
-        return NAV_QUIT;
+        ui_information_scene_scope welcome_scope;
+
+        if (!welcome_screen_present_ui(NULL, true))
+        {
+            log_error("initial_menu: failed to present semantic welcome screen");
+            return NAV_QUIT;
+        }
+        if (!ui_information_scene_claim_input(&welcome_scope,
+                APP_WAIT_REASON_BOOTSTRAP))
+        {
+            log_error("initial_menu: failed to claim semantic welcome input");
+            return NAV_QUIT;
+        }
+
+        ch = initial_menu_wait_key();
+        ui_information_scene_leave(&welcome_scope);
+
+        if (steamdeck && ch == steamdeck_confirm_key())
+            ch = ' ';
+        else if (steamdeck && ch == steamdeck_back_key())
+            ch = ESCAPE;
+
+        switch (ch)
+        {
+        case '\n':
+        case '\r':
+        case ' ':
+            log_info("initial_menu: welcome dismissed - opening hub");
+            enter_hub = true;
+            break;
+
+        case 'q':
+        case 'Q':
+        case ESCAPE:
+            result = NAV_QUIT;
+            break;
+
+        default:
+            bell("Press Space/Enter to begin, or Q/Esc to quit.");
+            break;
+        }
     }
-    if (!ui_information_scene_claim_input(&welcome_scope,
-            APP_WAIT_REASON_BOOTSTRAP))
+
+    while (result == NAV_BACK)
     {
-        log_error("initial_menu: failed to claim semantic welcome input");
-        return NAV_QUIT;
+        bool has_alive = score_count_alive_entries() > 0;
+        ui_information_scene_scope hub_scope;
+
+        if (!initial_menu_present_hub_ui())
+        {
+            log_error("initial_menu: failed to present semantic main hub");
+            return NAV_QUIT;
+        }
+        if (!ui_information_scene_claim_input(&hub_scope,
+                APP_WAIT_REASON_BOOTSTRAP))
+        {
+            log_error("initial_menu: failed to claim semantic main hub input");
+            return NAV_QUIT;
+        }
+
+        ch = initial_menu_wait_key();
+        ui_information_scene_leave(&hub_scope);
+
+        if (steamdeck && ch == steamdeck_confirm_key())
+            ch = has_alive ? 'c' : 'n';
+        else if (steamdeck && ch == steamdeck_back_key())
+            ch = ESCAPE;
+
+        if (ch == '\n' || ch == '\r' || ch == ' ')
+            ch = has_alive ? 'c' : 'n';
+
+        switch (ch)
+        {
+        case 'c':
+        case 'C':
+            if (!has_alive)
+            {
+                bell("No living run is available.");
+                break;
+            }
+            log_info("initial_menu: continuing living run");
+            run_mode_set_pending(RUN_MODE_STORY);
+            if (start_new)
+                *start_new = false;
+            result = NAV_OK;
+            break;
+
+        case 'n':
+        case 'N':
+            if (has_alive)
+            {
+                bell("Finish the living run before starting another.");
+                break;
+            }
+            log_info("initial_menu: starting new run");
+            run_mode_set_pending(RUN_MODE_STORY);
+            if (start_new)
+                *start_new = true;
+            result = NAV_OK;
+            break;
+
+        case 'm':
+        case 'M':
+            show_scores_interactive(true);
+            break;
+
+        case 'v':
+        case 'V':
+            do_cmd_run_history();
+            break;
+
+        case 'o':
+        case 'O':
+            do_cmd_options();
+            break;
+
+        case 'h':
+        case 'H':
+        case '?':
+            do_cmd_help();
+            break;
+
+        case 'q':
+        case 'Q':
+        case ESCAPE:
+            result = NAV_QUIT;
+            break;
+
+        default:
+            bell("Unknown menu command.");
+            break;
+        }
     }
 
-    ch = initial_menu_wait_key();
-    ui_information_scene_leave(&welcome_scope);
-
-    if (ch == '\n' || ch == '\r' || ch == ' '
-        || (steamdeck && ch == steamdeck_confirm_key()))
-    {
-        log_info("initial_menu: User pressed space/enter - starting game");
-        run_mode_set_pending(RUN_MODE_STORY);
-        *start_new = true;
-        result = NAV_OK;
-        goto menu_done;
-    }
-
-    if (ch == 'q' || ch == ESCAPE
-        || (steamdeck && ch == steamdeck_back_key()))
-    {
-        result = NAV_QUIT;
-        goto menu_done;
-    }
-
-menu_done:
     log_info("initial_menu: EXITING with result=%d", result);
     if (platform_intro_should_force_flame())
     {

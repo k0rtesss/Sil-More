@@ -88,8 +88,20 @@ void score_ui_prompt_label(int binding, const char* fallback, char* buf,
 app_ui_panel* score_ui_begin_browser_scene(app_ui_scene* scene,
     u16b panel_flags)
 {
-    return ui_browser_shell_begin_browser(scene, 0, NULL, 0, NULL,
-        TERM_L_BLUE, panel_flags, 1180, 2200);
+    ui_browser_shell_scene_config config;
+    app_ui_panel* panel;
+
+    ui_browser_shell_scene_config_init(&config);
+    config.scene_flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    config.style = APP_UI_PANEL_STYLE_BROWSER;
+    config.accent_attr = TERM_L_BLUE;
+    config.panel_flags = panel_flags;
+    config.min_width_px = 1180;
+    config.width_cap_px = 2200;
+    panel = ui_browser_shell_begin(scene, &config);
+    if (panel)
+        app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    return panel;
 }
 
 typedef enum

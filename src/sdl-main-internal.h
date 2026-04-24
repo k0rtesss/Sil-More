@@ -290,6 +290,9 @@ bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene);
+bool sdl_scene_ui_render_at(SDL_Texture* canvas, const sdl_view* main_view,
+    int canvas_w, int canvas_h, int hit_origin_x, int hit_origin_y,
+    u16b hit_view_index, const app_ui_scene* scene);
 bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
     int canvas_h, const app_ui_scene* scene);
 /* Wave 7A continuation staging surface for the frontend scene-menu split. */

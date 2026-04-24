@@ -305,7 +305,7 @@ static void sdl_menu_render_minimap_widget(const sdl_view* main_view,
     map_rect.w = map_w;
     map_rect.h = map_h;
 
-    sdl_menu_fill_rect(&map_rect, (SDL_Color){ 0, 0, 0, 255 });
+    sdl_menu_fill_rect(&map_rect, sdl_menu_panel_style(panel)->canvas_fill);
     if (panel->minimap_border_attr)
         sdl_menu_draw_rect(&map_rect,
             sdl_menu_panel_color(panel, panel->minimap_border_attr));
@@ -326,7 +326,7 @@ static void sdl_menu_render_minimap_widget(const sdl_view* main_view,
                 cell_h
             };
 
-            sdl_menu_fill_rect(&dst, (SDL_Color){ 0, 0, 0, 255 });
+            sdl_menu_fill_rect(&dst, sdl_menu_panel_style(panel)->canvas_fill);
 
             if (sdl_menu_document_cell_is_raw(cell->attr, cell->ch,
                     cell->terrain_attr, cell->terrain_char))
@@ -389,7 +389,7 @@ bool sdl_menu_render_minimap_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
+    pixel_height = sdl_menu_font_px((float)sdl_menu_font_size_logical(panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -496,7 +496,7 @@ bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
             / (float)panel->minimap_height;
     }
 
-    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
+    desired_px = sdl_menu_font_px((float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(8.0f);
     if (min_px < 8)
         min_px = 8;

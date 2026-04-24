@@ -1713,7 +1713,7 @@ app_ui_panel* metarun_ui_begin_browser_scene(app_ui_scene* scene,
     byte title_attr, const char* title, byte subtitle_attr,
     const char* subtitle)
 {
-    return ui_semantic_scene_begin_browser(scene, title_attr, title,
+    return ui_browser_shell_begin_browser(scene, title_attr, title,
         subtitle_attr, subtitle, 0, APP_UI_PANEL_FLAG_SCROLL_ROWS, 980, 2048);
 }
 
@@ -1888,6 +1888,45 @@ void metarun_ui_clear_pending_input(void)
     log_debug("[metarun-esc-trace] clear_pending_input active=%d",
         ui_information_scene_is_active() ? 1 : 0);
     ui_semantic_scene_clear_pending_input();
+}
+
+int metarun_ui_wait_browser_key(const int* row_ids, int row_count,
+    int* cursor, int* top, int window_rows, char row_activate_key,
+    const ui_browser_shell_button_key* button_keys, size_t button_key_count)
+{
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+    int key;
+
+    ui_browser_shell_command_map_init(&map);
+    map.row_activate_key = row_activate_key;
+    map.button_keys = button_keys;
+    map.button_key_count = button_key_count;
+
+    key = ui_browser_shell_wait_key(&map, APP_INPUT_FLAG_REPEAT, &result);
+    if (!cursor || row_count <= 0 || result.role != APP_UI_WIDGET_ROLE_LIST_ITEM)
+        return key;
+
+    if (row_ids)
+    {
+        for (int i = 0; i < row_count; i++)
+        {
+            if (row_ids[i] != result.widget_id)
+                continue;
+
+            *cursor = i;
+            ui_browser_shell_clamp_cursor(cursor, top, row_count,
+                window_rows);
+            return key;
+        }
+    }
+    else
+    {
+        (void)ui_browser_shell_apply_row_focus(&result, cursor, row_count,
+            top, window_rows);
+    }
+
+    return key;
 }
 
 bool metarun_ui_add_effect_detail_lines(app_ui_panel* panel, int id)
@@ -2240,94 +2279,6 @@ bool metarun_ui_confirm_modal(const char* title, byte title_attr,
     }
 }
 
-static int metarun_ui_choose_curse_command_key(
-    const app_ui_command* command, const int* picks, int* selected,
-    bool* handled)
-{
-    const app_ui_widget_ref* target;
-
-    if (handled)
-        *handled = false;
-    if (!command || !picks || !selected)
-        return 0;
-
-    target = &command->target;
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        if (handled)
-            *handled = true;
-        return ESCAPE;
-    }
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
-    {
-        if (handled)
-            *handled = true;
-        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-            && command->scroll_y != 0)
-        {
-            return (command->scroll_y > 0) ? '8' : '2';
-        }
-        return 0;
-    }
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
-    {
-        if (handled)
-            *handled = true;
-        for (int i = 0; i < CURSE_MENU_LINES; i++)
-        {
-            if (target->widget_id == picks[i])
-            {
-                *selected = i;
-                break;
-            }
-        }
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return 0;
-        return '\r';
-    }
-    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-    {
-        if (handled)
-            *handled = true;
-        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
-            return (command->dy < 0) ? '8' : '2';
-        return 0;
-    }
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (handled)
-            *handled = true;
-        if (target->widget_id == 1)
-            return '\r';
-        return 0;
-    }
-
-    return 0;
-}
-
-static int metarun_ui_choose_curse_wait_key(const int* picks, int* selected)
-{
-    while (true)
-    {
-        ui_information_scene_event event;
-
-        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
-            return ESCAPE;
-        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
-            return event.key;
-        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
-        {
-            bool handled = false;
-            int key = metarun_ui_choose_curse_command_key(&event.command,
-                picks, selected, &handled);
-
-            if (key || handled)
-                return key;
-        }
-    }
-}
-
 int metarun_ui_choose_curse_scene(int n,
     const int* picks, bool steamdeck,
     const char* accept_label)
@@ -2342,6 +2293,9 @@ int metarun_ui_choose_curse_scene(int n,
 
     while (true)
     {
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' }
+        };
         app_ui_scene scene;
         app_ui_panel* panel;
         const curse_type* cu;
@@ -2382,20 +2336,33 @@ int metarun_ui_choose_curse_scene(int n,
             return -1;
         }
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Enter", "Accept");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        if (!steamdeck) {
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                "A-C", "Select");
+        {
+            ui_browser_shell_footer_action actions[3];
+            size_t count = 0;
+
+            actions[count++] = (ui_browser_shell_footer_action){
+                1, TERM_L_BLUE, true, steamdeck ? accept_label : "Enter",
+                "Accept"
+            };
+            actions[count++] = (ui_browser_shell_footer_action){
+                2, TERM_WHITE, true, "8/2", "Move"
+            };
+            if (!steamdeck) {
+                actions[count++] = (ui_browser_shell_footer_action){
+                    3, TERM_WHITE, true, "A-C", "Select"
+                };
+            }
+            (void)ui_browser_shell_add_footer_actions(panel, actions, count);
         }
 
         if (!metarun_ui_present_scene(&scene, first_present))
             return -1;
         first_present = false;
 
-        key = metarun_ui_choose_curse_wait_key(picks, &selected);
+        key = metarun_ui_wait_browser_key(picks, CURSE_MENU_LINES, &selected,
+            NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == '\r' || key == '\n' || key == ' '
             || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
         {

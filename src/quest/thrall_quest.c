@@ -26,6 +26,7 @@
 #include "platform-input.h"
 #include "supplies.h"
 #include "thrall_quest.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 static s16b get_upgrade_kind(const object_type* o_ptr);
@@ -1444,6 +1445,34 @@ static int next_thrall_reward_selection(const thrall_reward_option options[],
     return current;
 }
 
+static char thrall_reward_wait_key(const thrall_reward_option options[],
+    int option_count, int* selected)
+{
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+    int key;
+
+    ui_browser_shell_command_map_init(&map);
+    key = ui_browser_shell_wait_key(&map, 0, &result);
+
+    if (result.handled && result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        for (int i = 0; options && i < option_count; i++)
+        {
+            if (options[i].reward != result.widget_id)
+                continue;
+            if (selected)
+                *selected = i;
+            if (result.focus_only)
+                return '\0';
+            return result.inspect ? 'x' : '\r';
+        }
+        return '\0';
+    }
+
+    return (char)key;
+}
+
 static bool thrall_reward_build_ui_scene(app_ui_scene* scene,
     const monster_type* m_ptr, const thrall_reward_option options[],
     int option_count, int selected, bool pending_reward)
@@ -1554,7 +1583,9 @@ static int choose_thrall_reward_information_scene(monster_type* m_ptr,
             return THRALL_REWARD_LATER;
         }
 
-        key = (char)ui_information_scene_wait_key();
+        key = thrall_reward_wait_key(options, option_count, &selected);
+        if (key == '\0')
+            continue;
         dir = target_dir(key);
         if ((dir == 8) || (dir == 2))
             key = I2D(dir);

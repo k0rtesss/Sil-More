@@ -64,7 +64,6 @@ typedef struct ui_browser_shell_command_map {
     char cancel_key;
     char row_activate_key;
     char row_inspect_key;
-    bool action_key_fallback;
 } ui_browser_shell_command_map;
 
 typedef struct ui_browser_shell_command_result {
@@ -75,6 +74,8 @@ typedef struct ui_browser_shell_command_result {
     u16b role;
     u16b action;
     s16b widget_id;
+    s32b payload0;
+    s32b payload1;
     char key;
 } ui_browser_shell_command_result;
 
@@ -101,11 +102,20 @@ char ui_browser_shell_direction_command_key(const app_ui_command* command,
 bool ui_browser_shell_translate_command(const app_ui_command* command,
     const ui_browser_shell_command_map* map,
     ui_browser_shell_command_result* out_result);
+int ui_browser_shell_wait_key(const ui_browser_shell_command_map* map,
+    u16b ignored_flags, ui_browser_shell_command_result* out_result);
+int ui_browser_shell_wait_key_with_wait_reason(
+    const ui_browser_shell_command_map* map, u16b ignored_flags,
+    u16b wait_reason, bool hidden_cursor,
+    ui_browser_shell_command_result* out_result);
 
 void ui_browser_shell_clamp_cursor(int* cursor, int* top, int count,
     int window_rows);
 bool ui_browser_shell_apply_vertical_key(int ch, int* cursor, int count,
     int page_rows);
+bool ui_browser_shell_apply_row_focus(
+    const ui_browser_shell_command_result* result, int* cursor, int count,
+    int* top, int window_rows);
 
 #ifdef __cplusplus
 }

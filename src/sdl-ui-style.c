@@ -527,29 +527,199 @@ static void sdl_ui_style_draw_rect(const SDL_FRect* rect, SDL_Color color)
     SDL_RenderRect(g_state.renderer, rect);
 }
 
+static SDL_Color sdl_ui_style_alpha(SDL_Color color, int alpha)
+{
+    color.a = (byte)MAX(0, MIN(255, alpha));
+    return color;
+}
+
+static SDL_Color sdl_ui_style_mix(SDL_Color a, SDL_Color b, int b_weight,
+    int total_weight)
+{
+    int a_weight;
+
+    if (total_weight <= 0)
+        return a;
+    if (b_weight < 0)
+        b_weight = 0;
+    if (b_weight > total_weight)
+        b_weight = total_weight;
+
+    a_weight = total_weight - b_weight;
+    a.r = (byte)((int)a.r * a_weight / total_weight
+        + (int)b.r * b_weight / total_weight);
+    a.g = (byte)((int)a.g * a_weight / total_weight
+        + (int)b.g * b_weight / total_weight);
+    a.b = (byte)((int)a.b * a_weight / total_weight
+        + (int)b.b * b_weight / total_weight);
+    a.a = (byte)((int)a.a * a_weight / total_weight
+        + (int)b.a * b_weight / total_weight);
+    return a;
+}
+
+static unsigned sdl_ui_style_slot_hash(cptr text)
+{
+    unsigned hash = 2166136261u;
+
+    if (!text)
+        return hash;
+
+    while (*text)
+    {
+        hash ^= (unsigned char)*text++;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
+
+static void sdl_ui_style_draw_material_pixels(const sdl_ui_style* style,
+    int canvas_w, int canvas_h)
+{
+    int step;
+    int dot;
+    int line_w;
+    unsigned hash;
+    SDL_Color fleck;
+    SDL_Color rule;
+
+    if (!style || canvas_w <= 0 || canvas_h <= 0)
+        return;
+
+    step = MAX(10, sdl_ui_scale_px(34.0f));
+    dot = MAX(1, sdl_ui_scale_px(1.0f));
+    line_w = MAX(1, sdl_ui_scale_px(1.0f));
+    hash = sdl_ui_style_slot_hash(
+        (style->backdrop_slot && style->backdrop_slot[0])
+            ? style->backdrop_slot
+            : style->material);
+    fleck = sdl_ui_style_alpha(style->panel_border_soft, 24);
+    rule = sdl_ui_style_alpha(style->panel_fill_alt, 20);
+
+    for (int y = (int)(hash % (unsigned)step); y < canvas_h; y += step)
+    {
+        int x_offset = (int)((hash >> ((y / step) % 11)) % (unsigned)step);
+
+        for (int x = x_offset; x < canvas_w; x += step * 2)
+        {
+            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)x, (float)y,
+                (float)dot, (float)dot }, fleck);
+        }
+    }
+
+    for (int y = step * 2; y < canvas_h; y += step * 3)
+    {
+        sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, (float)y,
+            (float)canvas_w, (float)line_w }, rule);
+    }
+}
+
+static void sdl_ui_style_draw_vignette(const sdl_ui_style* style, int canvas_w,
+    int canvas_h)
+{
+    int bands;
+    int i;
+
+    if (!style || canvas_w <= 0 || canvas_h <= 0)
+        return;
+
+    bands = MAX(1, sdl_ui_scale_px(6.0f));
+    for (i = 0; i < bands; i++)
+    {
+        int alpha = 18 + i * 8;
+        SDL_Color shade = sdl_ui_style_alpha(style->shadow, alpha);
+        float inset = (float)i;
+
+        sdl_ui_style_fill_rect(&(SDL_FRect){ inset, inset,
+            (float)canvas_w - inset * 2.0f, 1.0f }, shade);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ inset,
+            (float)canvas_h - inset - 1.0f,
+            (float)canvas_w - inset * 2.0f, 1.0f }, shade);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ inset, inset, 1.0f,
+            (float)canvas_h - inset * 2.0f }, shade);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ (float)canvas_w - inset - 1.0f,
+            inset, 1.0f, (float)canvas_h - inset * 2.0f }, shade);
+    }
+}
+
+static void sdl_ui_style_draw_canvas_accents(const sdl_ui_style* style,
+    int canvas_w, int canvas_h, int band_h)
+{
+    int rail_w;
+    int notch;
+    int step;
+    SDL_Color rail;
+    SDL_Color accent;
+
+    if (!style || canvas_w <= 0 || canvas_h <= 0)
+        return;
+
+    rail_w = MAX(1, sdl_ui_scale_px(3.0f));
+    notch = MAX(3, sdl_ui_scale_px(8.0f));
+    step = MAX(notch * 3, sdl_ui_scale_px(72.0f));
+    rail = sdl_ui_style_alpha(style->panel_border_soft, 84);
+    accent = sdl_ui_style_alpha(style->accent_dim, 112);
+
+    if (rail_w * 2 < canvas_w)
+    {
+        sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f,
+            (float)rail_w, (float)canvas_h }, rail);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ (float)rail_w, 0.0f,
+            1.0f, (float)canvas_h }, sdl_ui_style_alpha(accent, 72));
+        sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w),
+            0.0f, (float)rail_w, (float)canvas_h }, rail);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w - 1),
+            0.0f, 1.0f, (float)canvas_h }, sdl_ui_style_alpha(accent, 72));
+    }
+
+    for (int x = step / 2; x < canvas_w - notch; x += step)
+    {
+        sdl_ui_style_fill_rect(&(SDL_FRect){ (float)x,
+            (float)MAX(0, band_h - 3), (float)notch, 1.0f }, accent);
+    }
+
+    sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)notch, 1.0f },
+        accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, 1.0f, (float)notch },
+        accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - notch), 0.0f,
+        (float)notch, 1.0f }, accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - 1), 0.0f, 1.0f,
+        (float)notch }, accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, (float)(canvas_h - 1),
+        (float)notch, 1.0f }, accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, (float)(canvas_h - notch),
+        1.0f, (float)notch }, accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - notch),
+        (float)(canvas_h - 1), (float)notch, 1.0f }, accent);
+    sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - 1),
+        (float)(canvas_h - notch), 1.0f, (float)notch }, accent);
+}
+
 void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
     int canvas_h)
 {
     const sdl_ui_style* resolved = style ? style : &g_sdl_ui_style_default;
     SDL_FRect rect = { 0.0f, 0.0f, (float)canvas_w, (float)canvas_h };
-    SDL_Color rail = resolved->panel_border_soft;
-    SDL_Color accent = resolved->accent_dim;
     int band_h;
-    int rail_w;
 
     if (canvas_w <= 0 || canvas_h <= 0)
         return;
 
     sdl_ui_style_fill_rect(&rect, resolved->canvas_fill);
+    sdl_ui_style_draw_material_pixels(resolved, canvas_w, canvas_h);
 
-    band_h = sdl_ui_scale_px(54.0f);
+    band_h = sdl_ui_scale_px((resolved->header_slot
+        && resolved->header_slot[0]) ? 62.0f : 42.0f);
     if (band_h > 0 && band_h < canvas_h)
     {
-        SDL_Color top = resolved->panel_fill_alt;
-        SDL_Color bottom = resolved->shadow;
+        SDL_Color top = sdl_ui_style_mix(resolved->panel_fill_alt,
+            resolved->accent_dim, 1, 8);
+        SDL_Color bottom = sdl_ui_style_mix(resolved->shadow,
+            resolved->panel_fill, 1, 5);
 
-        top.a = MIN(top.a, 76);
-        bottom.a = MIN(bottom.a, 78);
+        top.a = MIN(top.a, 82);
+        bottom.a = MIN(bottom.a, 82);
         sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f,
             (float)canvas_w, (float)band_h }, top);
         sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f,
@@ -572,21 +742,9 @@ void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
 
     if (resolved->backdrop_slot && resolved->backdrop_slot[0])
     {
-        rail_w = sdl_ui_scale_px(3.0f);
-        if (rail_w > 0 && rail_w * 2 < canvas_w)
-        {
-            rail.a = MIN(rail.a, 84);
-            accent.a = MIN(accent.a, 72);
-            sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f,
-                (float)rail_w, (float)canvas_h }, rail);
-            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)rail_w, 0.0f,
-                1.0f, (float)canvas_h }, accent);
-            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w),
-                0.0f, (float)rail_w, (float)canvas_h }, rail);
-            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w - 1),
-                0.0f, 1.0f, (float)canvas_h }, accent);
-        }
+        sdl_ui_style_draw_canvas_accents(resolved, canvas_w, canvas_h, band_h);
     }
+    sdl_ui_style_draw_vignette(resolved, canvas_w, canvas_h);
 }
 
 void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
@@ -623,11 +781,16 @@ void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
     {
         SDL_Color top_rule = resolved->accent_dim;
         SDL_Color inner_rule = resolved->panel_border_soft;
+        SDL_Color side_rule = resolved->accent_soft;
+        int accent_w = MAX(1, sdl_ui_scale_px(2.0f));
 
-        top_rule.a = MIN(top_rule.a, 132);
+        top_rule.a = MIN(top_rule.a, 142);
         inner_rule.a = MIN(inner_rule.a, 110);
+        side_rule.a = MIN(side_rule.a, 94);
         sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 1.0f,
             MAX(0.0f, rect->w - 2.0f), 1.0f }, top_rule);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 2.0f,
+            (float)accent_w, MAX(0.0f, rect->h - 4.0f) }, side_rule);
         sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f,
             rect->y + rect->h - 2.0f, MAX(0.0f, rect->w - 2.0f), 1.0f },
             inner_rule);
@@ -647,6 +810,22 @@ void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
             break;
         sdl_ui_style_draw_rect(&border_rect,
             (i == 0) ? resolved->panel_border : resolved->panel_border_soft);
+    }
+
+    if (rect->w > 12.0f && rect->h > 12.0f)
+    {
+        int corner = MAX(2, sdl_ui_scale_px(5.0f));
+        SDL_Color corner_color = sdl_ui_style_alpha(resolved->accent_dim, 132);
+
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 1.0f,
+            (float)corner, 1.0f }, corner_color);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 1.0f,
+            1.0f, (float)corner }, corner_color);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + rect->w
+            - (float)corner - 1.0f, rect->y + 1.0f, (float)corner, 1.0f },
+            corner_color);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + rect->w - 2.0f,
+            rect->y + 1.0f, 1.0f, (float)corner }, corner_color);
     }
 }
 
@@ -699,10 +878,21 @@ void sdl_ui_style_draw_control_frame(const sdl_ui_style* style,
     {
         SDL_Color accent = resolved->accent;
         int accent_w = MAX(1, sdl_ui_scale_px(2.0f));
+        SDL_Color top = resolved->accent_soft;
 
         accent.a = (byte)MIN(255, MAX((int)accent.a, 180));
+        top.a = (byte)MIN(255, MAX((int)top.a, 112));
         sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x, rect->y,
             (float)accent_w, rect->h }, accent);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + (float)accent_w,
+            rect->y, MAX(0.0f, rect->w - (float)accent_w), 1.0f }, top);
+    }
+    else if (!disabled && rect->w > 4.0f && rect->h > 4.0f)
+    {
+        SDL_Color top = sdl_ui_style_alpha(resolved->panel_border_soft, 80);
+
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 1.0f,
+            MAX(0.0f, rect->w - 2.0f), 1.0f }, top);
     }
 
     border_px = MAX(1, sdl_ui_scale_px(resolved->border_px));

@@ -30,7 +30,8 @@ typedef struct prompt_menu_scene_scope {
 
 static char prompt_inkey_with_wait_reason(u16b reason)
 {
-    return (char)ui_information_scene_wait_key_with_wait_reason(reason);
+    return (char)ui_information_scene_wait_choice_with_wait_reason(0, reason,
+        false);
 }
 
 static bool prompt_menu_scene_supported(void)

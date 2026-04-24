@@ -25,6 +25,7 @@ typedef struct sdl_menu_hit_registry {
     u16b count;
     int origin_x;
     int origin_y;
+    u16b view_index;
     u16b scene_kind;
     u16b panel_index;
     u16b panel_layer;
@@ -34,6 +35,8 @@ typedef struct sdl_menu_hit_registry {
 } sdl_menu_hit_registry;
 
 static sdl_menu_hit_registry g_sdl_menu_hit_registry;
+static sdl_menu_hit_registry g_sdl_menu_hit_view_snapshots[MAX_TERM_DATA];
+static bool g_sdl_menu_hit_view_snapshot_active[MAX_TERM_DATA];
 static u16b g_sdl_menu_target_size_warning_count;
 
 static void sdl_menu_copy_hit_text(char* dst, size_t dst_size, cptr text)
@@ -46,9 +49,16 @@ static void sdl_menu_copy_hit_text(char* dst, size_t dst_size, cptr text)
 
 void sdl_menu_hit_reset(int origin_x, int origin_y)
 {
+    sdl_menu_hit_reset_for_view(origin_x, origin_y, 0);
+}
+
+void sdl_menu_hit_reset_for_view(int origin_x, int origin_y,
+    u16b view_index)
+{
     memset(&g_sdl_menu_hit_registry, 0, sizeof(g_sdl_menu_hit_registry));
     g_sdl_menu_hit_registry.origin_x = origin_x;
     g_sdl_menu_hit_registry.origin_y = origin_y;
+    g_sdl_menu_hit_registry.view_index = view_index;
     g_sdl_menu_hit_registry.focus_id = -1;
 }
 
@@ -136,6 +146,7 @@ bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
     target->rect = *canvas_rect;
     target->rect.x += (float)g_sdl_menu_hit_registry.origin_x;
     target->rect.y += (float)g_sdl_menu_hit_registry.origin_y;
+    target->view_index = g_sdl_menu_hit_registry.view_index;
     target->scene_kind = g_sdl_menu_hit_registry.scene_kind;
     target->panel_index = g_sdl_menu_hit_registry.panel_index;
     target->panel_layer = g_sdl_menu_hit_registry.panel_layer;
@@ -175,6 +186,70 @@ const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y)
         if (window_y >= target->rect.y + target->rect.h)
             continue;
         return target;
+    }
+
+    return NULL;
+}
+
+void sdl_menu_hit_snapshot_view(u16b view_index)
+{
+    sdl_menu_hit_registry* snapshot;
+
+    if (view_index >= MAX_TERM_DATA)
+        return;
+
+    snapshot = &g_sdl_menu_hit_view_snapshots[view_index];
+    *snapshot = g_sdl_menu_hit_registry;
+    snapshot->view_index = view_index;
+    for (u16b i = 0; i < snapshot->count; i++)
+        snapshot->targets[i].view_index = view_index;
+    g_sdl_menu_hit_view_snapshot_active[view_index] = true;
+}
+
+void sdl_menu_hit_clear_view_snapshot(u16b view_index)
+{
+    if (view_index >= MAX_TERM_DATA)
+        return;
+
+    memset(&g_sdl_menu_hit_view_snapshots[view_index], 0,
+        sizeof(g_sdl_menu_hit_view_snapshots[view_index]));
+    g_sdl_menu_hit_view_snapshot_active[view_index] = false;
+}
+
+void sdl_menu_hit_clear_view_snapshots(void)
+{
+    memset(g_sdl_menu_hit_view_snapshots, 0,
+        sizeof(g_sdl_menu_hit_view_snapshots));
+    memset(g_sdl_menu_hit_view_snapshot_active, 0,
+        sizeof(g_sdl_menu_hit_view_snapshot_active));
+}
+
+const sdl_menu_hit_target* sdl_menu_hit_test_view_snapshots(float window_x,
+    float window_y)
+{
+    u16b view_index;
+
+    for (view_index = 1; view_index < MAX_TERM_DATA; view_index++)
+    {
+        const sdl_menu_hit_registry* snapshot;
+        int i;
+
+        if (!g_sdl_menu_hit_view_snapshot_active[view_index])
+            continue;
+
+        snapshot = &g_sdl_menu_hit_view_snapshots[view_index];
+        for (i = (int)snapshot->count - 1; i >= 0; i--)
+        {
+            const sdl_menu_hit_target* target = &snapshot->targets[i];
+
+            if (window_x < target->rect.x || window_y < target->rect.y)
+                continue;
+            if (window_x >= target->rect.x + target->rect.w)
+                continue;
+            if (window_y >= target->rect.y + target->rect.h)
+                continue;
+            return target;
+        }
     }
 
     return NULL;
@@ -270,6 +345,7 @@ bool sdl_menu_overlay_panel_get_offset(cptr id, int* out_x, int* out_y,
 void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned)
 {
     struct sdl_overlay_panel_config* overlay = NULL;
+    int overlay_index = -1;
 
     if (!id || !id[0])
         return;
@@ -279,8 +355,29 @@ void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned)
     {
         if (streq(config.overlay_panels[i].id, id)) {
             overlay = &config.overlay_panels[i];
+            overlay_index = i;
             break;
         }
+    }
+
+    if (!pinned && x == 0 && y == 0)
+    {
+        if (overlay_index >= 0)
+        {
+            for (int i = overlay_index; i + 1 < config.overlay_panel_count;
+                i++)
+            {
+                config.overlay_panels[i] = config.overlay_panels[i + 1];
+            }
+            config.overlay_panel_count--;
+            if (config.overlay_panel_count >= 0
+                && config.overlay_panel_count < SDL_OVERLAY_PANEL_CONFIG_MAX)
+            {
+                memset(&config.overlay_panels[config.overlay_panel_count], 0,
+                    sizeof(config.overlay_panels[config.overlay_panel_count]));
+            }
+        }
+        return;
     }
 
     if (!overlay) {
@@ -737,6 +834,29 @@ void sdl_menu_draw_control_frame(const app_ui_panel* panel,
 }
 
 int sdl_menu_scale_px(float logical_value)
+{
+    float density = 1.0f;
+
+    switch (config.overlay_density)
+    {
+    case SDL_OVERLAY_DENSITY_COMPACT:
+        density = 0.90f;
+        break;
+    case SDL_OVERLAY_DENSITY_ROOMY:
+        density = 1.10f;
+        break;
+    case SDL_OVERLAY_DENSITY_LARGE:
+        density = 1.20f;
+        break;
+    case SDL_OVERLAY_DENSITY_AUTO:
+    default:
+        break;
+    }
+
+    return sdl_ui_scale_px(logical_value * density);
+}
+
+int sdl_menu_font_px(float logical_value)
 {
     return sdl_ui_scale_px(logical_value);
 }
@@ -1420,6 +1540,97 @@ static TTF_Font* sdl_menu_rich_run_font(TTF_Font* mono_font,
     return mono_font;
 }
 
+static int sdl_menu_panel_layout_controls_width(int line_h)
+{
+    int button_px = MAX(sdl_menu_scale_px(24.0f),
+        line_h + sdl_menu_scale_px(4.0f));
+    int gap_px = MAX(1, sdl_menu_scale_px(4.0f));
+    int inset_px = MAX(1, sdl_menu_scale_px(5.0f));
+
+    return button_px * 2 + gap_px + inset_px * 2;
+}
+
+static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
+    const app_ui_panel* ui_panel, const SDL_FRect* panel_rect,
+    int line_h, int handle_h, cptr overlay_key, bool pinned)
+{
+    const sdl_ui_style* style;
+    int button_px;
+    int gap_px;
+    int inset_px;
+    int y_px;
+    SDL_FRect pin_rect;
+    SDL_FRect reset_rect;
+    SDL_Color text_color;
+    char pin_glyph[2];
+    cptr overlay_label;
+
+    if (!font || !ui_panel || !panel_rect || panel_rect->w <= 0.0f
+        || panel_rect->h <= 0.0f)
+    {
+        return;
+    }
+
+    style = sdl_menu_panel_style(ui_panel);
+    button_px = MAX(sdl_menu_scale_px(24.0f),
+        line_h + sdl_menu_scale_px(4.0f));
+    if (handle_h > 0)
+        button_px = MIN(button_px, MAX(sdl_menu_scale_px(24.0f), handle_h - 4));
+    gap_px = MAX(1, sdl_menu_scale_px(4.0f));
+    inset_px = MAX(1, sdl_menu_scale_px(5.0f));
+    if ((float)(button_px * 2 + gap_px + inset_px * 2) > panel_rect->w)
+        return;
+
+    y_px = (int)(panel_rect->y + MAX(2.0f,
+        ((float)handle_h - (float)button_px) * 0.5f));
+    reset_rect = (SDL_FRect){
+        panel_rect->x + panel_rect->w - (float)inset_px - (float)button_px,
+        (float)y_px,
+        (float)button_px,
+        (float)button_px
+    };
+    pin_rect = reset_rect;
+    pin_rect.x -= (float)(button_px + gap_px);
+
+    overlay_label = (overlay_key && overlay_key[0]) ? overlay_key : NULL;
+    sdl_menu_draw_control_frame(ui_panel, &pin_rect,
+        pinned ? APP_UI_ITEM_FLAG_ACTIVE : APP_UI_ITEM_FLAG_NONE, pinned,
+        false, false);
+    sdl_menu_draw_control_frame(ui_panel, &reset_rect, APP_UI_ITEM_FLAG_NONE,
+        false, false, false);
+
+    pin_glyph[0] = pinned ? 'P' : 'p';
+    pin_glyph[1] = '\0';
+    text_color = pinned ? style->text : style->text_muted;
+    sdl_menu_render_text(font,
+        pin_rect.x + ((float)button_px
+            - (float)sdl_menu_measure_text(font, pin_glyph)) * 0.5f,
+        pin_rect.y + ((float)button_px - (float)line_h) * 0.5f,
+        line_h, text_color, pin_glyph);
+    sdl_menu_render_text(font,
+        reset_rect.x + ((float)button_px
+            - (float)sdl_menu_measure_text(font, "R")) * 0.5f,
+        reset_rect.y + ((float)button_px - (float)line_h) * 0.5f,
+        line_h, style->text_muted, "R");
+
+    (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+        SDL_MENU_HIT_PANEL_PIN_ID, 0, APP_UI_WIDGET_ROLE_BUTTON,
+        APP_UI_WIDGET_ACTION_ACTIVATE,
+        APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+            | APP_UI_INTERACTION_FLAG_TOUCH_TARGET
+            | APP_UI_INTERACTION_FLAG_TOOLTIP,
+        APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &pin_rect, overlay_label,
+        pinned ? "Unpin panel" : "Pin panel");
+    (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+        SDL_MENU_HIT_PANEL_RESET_ID, 0, APP_UI_WIDGET_ROLE_BUTTON,
+        APP_UI_WIDGET_ACTION_ACTIVATE,
+        APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+            | APP_UI_INTERACTION_FLAG_TOUCH_TARGET
+            | APP_UI_INTERACTION_FLAG_TOOLTIP,
+        APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &reset_rect, overlay_label,
+        "Reset panel position");
+}
+
 static float sdl_menu_measure_rich_token_px(TTF_Font* mono_font,
     TTF_Font* story_font, int line_h, const app_ui_rich_run* run, cptr text,
     size_t len)
@@ -1719,6 +1930,10 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     bool has_top;
     bool has_columns;
     bool has_footer;
+    bool overlay_pinned = false;
+    int overlay_handle_h = 0;
+    int layout_controls_w = 0;
+    cptr overlay_key;
     u16b i;
 
     if (!main_view || !scene || !ui_panel)
@@ -1727,8 +1942,10 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
+    overlay_key = ui_panel->id[0] ? ui_panel->id : ui_panel->title;
+
     style = sdl_menu_panel_style(ui_panel);
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
+    pixel_height = sdl_menu_font_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;
@@ -1750,6 +1967,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     pill_pad_x = MAX(1, sdl_menu_scale_px(style->pill_pad_x));
     pill_pad_y = MAX(1, sdl_menu_scale_px(style->pill_pad_y));
     paragraph_gap = line_h + line_gap;
+    layout_controls_w = sdl_menu_panel_layout_controls_width(line_h);
 
     if (ui_panel->icon_char)
     {
@@ -1780,6 +1998,13 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     tabs_w = sdl_menu_measure_tabs(font, ui_panel, pill_gap, pill_pad_x);
 
     left_w = MAX(MAX(title_w, subtitle_w), MAX(body_w, rows_w));
+    if (layout_controls_w > 0
+        && (ui_panel->title[0] || ui_panel->subtitle[0]
+            || ui_panel->tab_count > 0))
+    {
+        left_w = MAX(left_w, MAX(MAX(title_w, subtitle_w), tabs_w)
+            + layout_controls_w);
+    }
     left_w = MAX(left_w, footer_w);
     left_w = MAX(left_w, tabs_w);
     if (left_w == 0)
@@ -1953,12 +2178,18 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         int handle_h;
         SDL_FRect drag_rect;
 
-        cptr overlay_key = ui_panel->id[0] ? ui_panel->id : ui_panel->title;
-
         sdl_menu_overlay_panel_id(scene_kind, panel_index, ui_panel->style,
             overlay_key, overlay_id, sizeof(overlay_id));
         sdl_menu_overlay_panel_id(scene_kind, panel_index, ui_panel->style,
             NULL, legacy_overlay_id, sizeof(legacy_overlay_id));
+        (void)sdl_menu_overlay_panel_get_offset(overlay_id, NULL, NULL,
+            &overlay_pinned);
+        if (!overlay_pinned && legacy_overlay_id[0]
+            && !streq(legacy_overlay_id, overlay_id))
+        {
+            (void)sdl_menu_overlay_panel_get_offset(legacy_overlay_id, NULL,
+                NULL, &overlay_pinned);
+        }
         sdl_menu_overlay_panel_clamp_offset(overlay_id, legacy_overlay_id,
             canvas_w, canvas_h, &panel, &offset_x, &offset_y);
         panel.x += (float)offset_x;
@@ -1969,6 +2200,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
             handle_h = sdl_menu_scale_px(28.0f);
         if (handle_h > (int)panel.h)
             handle_h = (int)panel.h;
+        overlay_handle_h = handle_h;
         drag_rect = (SDL_FRect){
             panel.x,
             panel.y,
@@ -1982,7 +2214,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
                 | APP_UI_INTERACTION_FLAG_DRAGGABLE
                 | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
             APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &drag_rect,
-            overlay_key && overlay_key[0] ? overlay_key : "Panel",
+            overlay_key && overlay_key[0] ? overlay_key : NULL,
             "Drag panel. Right-click resets position.");
     }
 
@@ -2218,6 +2450,9 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         sdl_menu_render_footer(font, ui_panel, &footer_clip, line_h,
             pill_gap, pill_pad_x, pill_pad_y);
     }
+
+    sdl_menu_render_panel_layout_controls(font, ui_panel, &panel, line_h,
+        overlay_handle_h, overlay_key, overlay_pinned);
 
     return true;
 }

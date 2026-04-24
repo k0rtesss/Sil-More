@@ -369,7 +369,7 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         return false;
 
     style = sdl_menu_panel_style(ui_panel);
-    pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
+    pixel_height = sdl_menu_font_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
         return false;

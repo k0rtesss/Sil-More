@@ -44,8 +44,8 @@ static void targeting_snapshot_prompt(cptr text)
 
 static char targeting_inkey_with_wait_reason(void)
 {
-    return (char)ui_information_scene_wait_key_with_wait_reason(
-        APP_WAIT_REASON_TARGETING);
+    return (char)ui_information_scene_wait_choice_with_wait_reason(0,
+        APP_WAIT_REASON_TARGETING, false);
 }
 
 /*

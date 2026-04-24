@@ -80,16 +80,24 @@ static int show_buffer_clamp_line(int line, int size)
 
 static app_ui_panel* show_file_begin_browser_scene(app_ui_scene* scene)
 {
+    ui_browser_shell_scene_config config;
     app_ui_panel* panel;
 
     if (!scene)
         return NULL;
 
-    panel = ui_browser_shell_begin_browser(scene, 0, NULL, 0, NULL,
-        TERM_L_BLUE, APP_UI_PANEL_FLAG_SCROLL_ROWS, 1180, 2800);
+    ui_browser_shell_scene_config_init(&config);
+    config.scene_flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    config.style = APP_UI_PANEL_STYLE_DOCUMENT;
+    config.accent_attr = TERM_L_BLUE;
+    config.panel_flags = APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    config.min_width_px = 1180;
+    config.width_cap_px = 2800;
+    panel = ui_browser_shell_begin(scene, &config);
     if (!panel)
         return NULL;
 
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '?');
     return panel;
 }
 

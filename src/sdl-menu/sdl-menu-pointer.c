@@ -15,8 +15,10 @@
 
 #include "angband.h"
 
+#include "object/object-slot.h"
 #include "platform-config.h"
 #include "sdl-scene-menu.h"
+#include "ui/ui-information-scene.h"
 
 #define SDL_MENU_TOUCH_LONG_PRESS_MS 450
 #define SDL_MENU_TOUCH_SCROLL_PX 18.0f
@@ -36,6 +38,7 @@ typedef struct sdl_menu_pointer_capture {
     float last_x;
     float last_y;
     Uint64 start_time_ns;
+    u16b view_index;
     u16b scene_kind;
     u16b panel_index;
     u16b target_kind;
@@ -147,6 +150,41 @@ static bool sdl_menu_pointer_submit_input(u16b device, u16b type, u16b flags,
     return app_session_submit_input(session, &input);
 }
 
+static bool sdl_menu_pointer_submit_outside_cancel(u16b device,
+    u16b input_type, u16b input_flags, float x, float y, u16b button,
+    u16b clicks)
+{
+    app_session* session = app_session_current();
+    app_ui_command command;
+
+    if (button != SDL_BUTTON_RIGHT || !ui_information_scene_owns_input())
+        return false;
+
+    app_ui_command_clear(&command);
+    command.kind = APP_UI_COMMAND_KIND_CANCEL;
+    command.device = device;
+    command.input_type = input_type;
+    command.input_flags = input_flags;
+    command.modifiers = sdl_menu_pointer_modifiers_from_keymod(
+        SDL_GetModState());
+    command.x = (s32b)x;
+    command.y = (s32b)y;
+    command.button = button;
+    command.clicks = clicks;
+    command.sequence = ++g_structured_input_sequence;
+    command.timestamp_usec = SDL_GetTicksNS() / 1000ULL;
+    command.target.scene_kind = sdl_menu_hit_scene_kind();
+    command.target.target_kind = SDL_MENU_HIT_TARGET_NONE;
+    command.target.widget_id = -1;
+    command.target.action_key = ESCAPE;
+    command.target.role = APP_UI_WIDGET_ROLE_BUTTON;
+    command.target.action = APP_UI_WIDGET_ACTION_CANCEL;
+    SDL_strlcpy(command.target.label, "Outside", sizeof(command.target.label));
+    SDL_strlcpy(command.target.tooltip, "Close", sizeof(command.target.tooltip));
+
+    return session && app_session_submit_ui_command(session, &command);
+}
+
 static void sdl_menu_pointer_capture_clear(void)
 {
     memset(&g_menu_pointer_capture, 0, sizeof(g_menu_pointer_capture));
@@ -246,10 +284,117 @@ static bool sdl_menu_pointer_target_matches_capture(
     const sdl_menu_hit_target* target)
 {
     return target && g_menu_pointer_capture.active
+        && target->view_index == g_menu_pointer_capture.view_index
         && target->scene_kind == g_menu_pointer_capture.scene_kind
         && target->panel_index == g_menu_pointer_capture.panel_index
         && target->kind == g_menu_pointer_capture.target_kind
         && target->id == g_menu_pointer_capture.target_id;
+}
+
+static bool sdl_menu_pointer_view_snapshot_hits_enabled(void)
+{
+    app_session* session = app_session_current();
+    const app_snapshot* snapshot = session ? app_session_snapshot(session)
+                                           : NULL;
+
+    return character_dungeon && p_ptr && session && snapshot
+        && snapshot->scene == APP_SCENE_KIND_DUNGEON
+        && !app_session_input_capture_active(session);
+}
+
+static const sdl_menu_hit_target* sdl_menu_pointer_hit_test(float x, float y)
+{
+    const sdl_menu_hit_target* target = sdl_menu_hit_test(x, y);
+
+    if (target)
+        return target;
+    if (!sdl_menu_pointer_view_snapshot_hits_enabled())
+        return NULL;
+
+    target = sdl_menu_hit_test_view_snapshots(x, y);
+    if (target && target->kind == SDL_MENU_HIT_TARGET_ROW
+        && target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
+        && (target->view_index == PANE_INVENTORY
+            || target->view_index == PANE_WORN))
+    {
+        return target;
+    }
+
+    return NULL;
+}
+
+static bool sdl_menu_pointer_item_pane_target(
+    const sdl_menu_hit_target* target)
+{
+    return target && target->kind == SDL_MENU_HIT_TARGET_ROW
+        && target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
+        && (target->view_index == PANE_INVENTORY
+            || target->view_index == PANE_WORN);
+}
+
+static bool sdl_menu_pointer_item_pane_item_valid(
+    const sdl_menu_hit_target* target)
+{
+    int item;
+
+    if (!sdl_menu_pointer_item_pane_target(target))
+        return false;
+
+    item = target->id;
+    if (target->view_index == PANE_INVENTORY)
+    {
+        if (item < 0)
+        {
+            int floor_idx = 0 - item;
+
+            return floor_idx > 0 && floor_idx < o_max
+                && o_list[floor_idx].k_idx;
+        }
+
+        return item >= 0 && item < INVEN_PACK && inventory[item].k_idx;
+    }
+
+    return item >= INVEN_WIELD && item < INVEN_TOTAL;
+}
+
+static void sdl_menu_pointer_submit_item_legacy_sequence(bool inspect,
+    bool worn, char item_key)
+{
+    char keys[3];
+    int count = 0;
+
+    keys[count++] = inspect ? 'x' : 'u';
+    if (worn)
+        keys[count++] = '/';
+    keys[count++] = item_key;
+
+    for (int i = 0; i < count; i++)
+        sdl_submit_legacy_input_byte(keys[i]);
+}
+
+static bool sdl_menu_pointer_submit_item_pane_command(
+    const sdl_menu_hit_target* target, u16b command_kind, u16b button)
+{
+    bool inspect;
+    char item_key;
+
+    if (!sdl_menu_pointer_item_pane_item_valid(target))
+        return true;
+
+    inspect = command_kind == APP_UI_COMMAND_KIND_INSPECT
+        || command_kind == APP_UI_COMMAND_KIND_CONTEXT
+        || target->action == APP_UI_WIDGET_ACTION_INSPECT;
+
+    if (!inspect && button && button != SDL_BUTTON_LEFT)
+        return true;
+
+    item_key = (target->id < 0) ? '-' : index_to_label(target->id);
+    if (!item_key)
+        return true;
+
+    sdl_menu_pointer_submit_item_legacy_sequence(inspect,
+        target->view_index == PANE_WORN, item_key);
+    return true;
 }
 
 static bool sdl_menu_pointer_submit_target_command(
@@ -262,6 +407,76 @@ static bool sdl_menu_pointer_submit_target_command(
 
     if (!target)
         return false;
+
+    if (sdl_menu_pointer_item_pane_target(target)
+        && sdl_menu_pointer_submit_item_pane_command(target, command_kind,
+            button))
+    {
+        return true;
+    }
+
+    if ((command_kind == APP_UI_COMMAND_KIND_NONE
+            || command_kind == APP_UI_COMMAND_KIND_ACTIVATE)
+        && target->kind == SDL_MENU_HIT_TARGET_PANEL
+        && target->role == APP_UI_WIDGET_ROLE_BUTTON
+        && target->action == APP_UI_WIDGET_ACTION_ACTIVATE
+        && (target->id == SDL_MENU_HIT_PANEL_PIN_ID
+            || target->id == SDL_MENU_HIT_PANEL_RESET_ID))
+    {
+        char overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+        char legacy_overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+        int offset_x = 0;
+        int offset_y = 0;
+        bool pinned = false;
+        bool legacy_pinned = false;
+
+        sdl_menu_overlay_panel_id(target->scene_kind, target->panel_index,
+            target->panel_style, target->label, overlay_id,
+            sizeof(overlay_id));
+        sdl_menu_overlay_panel_id(target->scene_kind, target->panel_index,
+            target->panel_style, NULL, legacy_overlay_id,
+            sizeof(legacy_overlay_id));
+        if (target->id == SDL_MENU_HIT_PANEL_RESET_ID)
+        {
+            if (overlay_id[0])
+                sdl_menu_overlay_panel_set_offset(overlay_id, 0, 0, false);
+            if (legacy_overlay_id[0] && !streq(legacy_overlay_id, overlay_id))
+                sdl_menu_overlay_panel_set_offset(legacy_overlay_id, 0, 0,
+                    false);
+        }
+        else
+        {
+            (void)sdl_menu_overlay_panel_get_offset(overlay_id, &offset_x,
+                &offset_y, &pinned);
+            if (!pinned && legacy_overlay_id[0]
+                && !streq(legacy_overlay_id, overlay_id))
+            {
+                (void)sdl_menu_overlay_panel_get_offset(legacy_overlay_id,
+                    &offset_x, &offset_y, &legacy_pinned);
+                pinned = legacy_pinned;
+            }
+            if (pinned)
+            {
+                if (overlay_id[0])
+                    sdl_menu_overlay_panel_set_offset(overlay_id, 0, 0,
+                        false);
+                if (legacy_overlay_id[0]
+                    && !streq(legacy_overlay_id, overlay_id))
+                {
+                    sdl_menu_overlay_panel_set_offset(legacy_overlay_id, 0,
+                        0, false);
+                }
+            }
+            else
+            {
+                sdl_menu_overlay_panel_set_offset(overlay_id, offset_x,
+                    offset_y, true);
+            }
+        }
+        (void)save_pane_config_to_json();
+        g_state.need_present = true;
+        return true;
+    }
 
     app_ui_command_clear(&command);
     command.kind = command_kind;
@@ -291,16 +506,10 @@ static bool sdl_menu_pointer_submit_target_command(
     log_trace("ui command: kind=%u device=%u target kind=%u id=%d action=%u key=%d label='%s'",
         (unsigned)command.kind, (unsigned)device,
         (unsigned)target->kind, (int)target->id,
-        (unsigned)target->action, (int)target->action_key,
+        (unsigned)target->action, (int)command.target.action_key,
         target->label);
     if (session && app_session_submit_ui_command(session, &command))
         return true;
-
-    if (target->action_key)
-    {
-        sdl_submit_legacy_input_byte(target->action_key);
-        return true;
-    }
 
     return true;
 }
@@ -357,7 +566,7 @@ static bool sdl_menu_pointer_submit_long_press(Uint64 now_ns)
         return false;
     }
 
-    target = sdl_menu_hit_test(g_menu_pointer_capture.last_x,
+    target = sdl_menu_pointer_hit_test(g_menu_pointer_capture.last_x,
         g_menu_pointer_capture.last_y);
     if (!sdl_menu_pointer_target_matches_capture(target))
         return false;
@@ -722,7 +931,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
         float dy = ev->motion.yrel;
 
         sdl_menu_pointer_window_point_to_pixels(&x, &y);
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         if (target)
             sdl_menu_pointer_note_focus(target, APP_INPUT_DEVICE_POINTER,
                 false);
@@ -740,7 +949,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
 
         (void)SDL_GetMouseState(&mx, &my);
         sdl_menu_pointer_window_point_to_pixels(&mx, &my);
-        target = sdl_menu_hit_test(mx, my);
+        target = sdl_menu_pointer_hit_test(mx, my);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_POINTER,
             APP_INPUT_TYPE_POINTER_WHEEL, 0, 0.0f, 0.0f, (float)ev->wheel.x,
             (float)ev->wheel.y, 0, 0);
@@ -760,12 +969,21 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
             return false;
         if (!sdl_menu_pointer_event_xy(ev, &x, &y))
             return false;
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_POINTER,
             APP_INPUT_TYPE_POINTER_BUTTON, APP_INPUT_FLAG_PRESS, x, y, 0.0f,
             0.0f, ev->button.button, ev->button.clicks);
         if (!target)
+        {
+            if (sdl_menu_pointer_submit_outside_cancel(
+                    APP_INPUT_DEVICE_POINTER, APP_INPUT_TYPE_POINTER_BUTTON,
+                    APP_INPUT_FLAG_PRESS, x, y, ev->button.button,
+                    ev->button.clicks))
+            {
+                return true;
+            }
             return false;
+        }
         if (ev->button.button == SDL_BUTTON_RIGHT
             && sdl_menu_panel_drag_target(target))
         {
@@ -792,6 +1010,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
         g_menu_pointer_capture.last_x = x;
         g_menu_pointer_capture.last_y = y;
         g_menu_pointer_capture.start_time_ns = SDL_GetTicksNS();
+        g_menu_pointer_capture.view_index = target->view_index;
         g_menu_pointer_capture.scene_kind = target->scene_kind;
         g_menu_pointer_capture.panel_index = target->panel_index;
         g_menu_pointer_capture.target_kind = target->kind;
@@ -810,7 +1029,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
             return false;
         if (!sdl_menu_pointer_event_xy(ev, &x, &y))
             return false;
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_POINTER,
             APP_INPUT_TYPE_POINTER_BUTTON, APP_INPUT_FLAG_RELEASE, x, y, 0.0f,
             0.0f, ev->button.button, ev->button.clicks);
@@ -841,7 +1060,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
     {
         if (!sdl_menu_pointer_event_xy(ev, &x, &y))
             return false;
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_TOUCH,
             APP_INPUT_TYPE_POINTER_BUTTON, APP_INPUT_FLAG_PRESS, x, y, 0.0f,
             0.0f, SDL_BUTTON_LEFT, 1);
@@ -866,6 +1085,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
         g_menu_pointer_capture.last_x = x;
         g_menu_pointer_capture.last_y = y;
         g_menu_pointer_capture.start_time_ns = SDL_GetTicksNS();
+        g_menu_pointer_capture.view_index = target->view_index;
         g_menu_pointer_capture.scene_kind = target->scene_kind;
         g_menu_pointer_capture.panel_index = target->panel_index;
         g_menu_pointer_capture.target_kind = target->kind;
@@ -892,7 +1112,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_TOUCH,
             APP_INPUT_TYPE_POINTER_MOTION, 0, x, y, dx, dy,
             SDL_BUTTON_LEFT, 1);
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         if (target)
             sdl_menu_pointer_note_focus(target, APP_INPUT_DEVICE_TOUCH, true);
         if (ABS((int)(x - g_menu_pointer_capture.start_x))
@@ -931,7 +1151,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
             sdl_menu_pointer_capture_clear();
             return true;
         }
-        target = sdl_menu_hit_test(x, y);
+        target = sdl_menu_pointer_hit_test(x, y);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_TOUCH,
             APP_INPUT_TYPE_POINTER_BUTTON, APP_INPUT_FLAG_RELEASE, x, y, 0.0f,
             0.0f, SDL_BUTTON_LEFT, 1);

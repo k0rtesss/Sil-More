@@ -19,6 +19,7 @@
 #include "quest/quest.h"
 #include "quest/quest-internal.h"
 #include "log/log.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 void ensure_varda_ungoliant_active(void)
@@ -291,6 +292,40 @@ static bool varda_reward_choice_scene_build(app_ui_scene* scene,
     return true;
 }
 
+static int varda_reward_wait_key(int choice_count, int* selection)
+{
+    const ui_browser_shell_button_key buttons[] = {
+        { 2, '\r' },
+        { 3, 'x' },
+        { 4, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+    int key;
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = buttons;
+    map.button_key_count = N_ELEMENTS(buttons);
+    key = ui_browser_shell_wait_key(&map, 0, &result);
+
+    if (result.handled && result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (result.widget_id >= 0 && result.widget_id < choice_count)
+        {
+            if (selection)
+                *selection = result.widget_id;
+            if (result.focus_only)
+                return '\0';
+            if (result.inspect)
+                return 'x';
+            return '\r';
+        }
+        return '\0';
+    }
+
+    return key;
+}
+
 /*
  * Display Varda's reward selection in a scrollable menu integrated with quest completion text.
  * Returns the selected artefact index, or 0 if cancelled.
@@ -317,7 +352,9 @@ static int prompt_varda_reward_choice_menu(const int* choices, int choice_count,
             return 0;
         }
 
-        key = ui_information_scene_wait_key();
+        key = varda_reward_wait_key(choice_count, &selection);
+        if (key == '\0')
+            continue;
         dir = target_dir((char)key);
         if (dir == 8) {
             selection = (selection + choice_count - 1) % choice_count;

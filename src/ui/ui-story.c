@@ -191,16 +191,20 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
         return false;
 
     app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
     app_ui_panel_set_widths(panel, STORY_BROWSER_MIN_WIDTH,
         STORY_BROWSER_MAX_WIDTH);
     app_ui_panel_set_title(panel, TERM_YELLOW, "The Tale So Far");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        active_index >= 0 ? "Chapter reveal" : "Recovered chapters");
 
     for (int i = start; i < complete_count; i++)
     {

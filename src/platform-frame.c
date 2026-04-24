@@ -17,6 +17,7 @@
 
 #include "platform-frame.h"
 #include "sdl-main-internal.h"
+#include "sdl-menu/sdl-scene-menu.h"
 
 static const char* const g_platform_view_names[ANGBAND_TERM_MAX] = {
     VERSION_NAME, "Inventory", "Equipment", "Combat Rolls",
@@ -140,12 +141,14 @@ void platform_frame_present(void)
     sdl_present_if_needed(NULL);
 }
 
-static bool platform_frame_render_ui_scene_to_canvas(sdl_view* view,
-    const app_ui_scene* scene)
+static bool platform_frame_render_ui_scene_to_canvas(int view_index,
+    sdl_view* view, const app_ui_scene* scene)
 {
     const sdl_view* main_view;
     int canvas_w;
     int canvas_h;
+    int hit_origin_x;
+    int hit_origin_y;
 
     if (!scene || !view)
         return false;
@@ -160,10 +163,18 @@ static bool platform_frame_render_ui_scene_to_canvas(sdl_view* view,
         : view;
     canvas_w = view->cols * view->cell_w;
     canvas_h = view->rows * view->cell_h;
-    if (!sdl_scene_ui_render(view->canvas, main_view, canvas_w, canvas_h,
-            scene))
+    hit_origin_x = view->rect.x + view->margin_x;
+    hit_origin_y = view->rect.y + view->margin_y;
+    if (!sdl_scene_ui_render_at(view->canvas, main_view, canvas_w, canvas_h,
+            hit_origin_x, hit_origin_y, (u16b)view_index, scene))
+    {
+        if (view_index > 0 && view_index < MAX_TERM_DATA)
+            sdl_menu_hit_clear_view_snapshot((u16b)view_index);
         return false;
+    }
 
+    if (view_index > 0 && view_index < MAX_TERM_DATA)
+        sdl_menu_hit_snapshot_view((u16b)view_index);
     g_state.need_present = true;
     return true;
 }
@@ -174,7 +185,8 @@ bool platform_frame_render_ui_scene_to_view(int view_index,
     if (view_index < 0 || view_index >= MAX_TERM_DATA)
         return false;
 
-    return platform_frame_render_ui_scene_to_canvas(&g_views[view_index], scene);
+    return platform_frame_render_ui_scene_to_canvas(view_index,
+        &g_views[view_index], scene);
 }
 
 bool platform_frame_render_ui_scene_to_active_view(const app_ui_scene* scene)
@@ -188,7 +200,8 @@ bool platform_frame_render_ui_scene_to_active_view(const app_ui_scene* scene)
     if (!platform_frame_view_ready(view_index))
         return false;
 
-    return platform_frame_render_ui_scene_to_canvas(&g_views[view_index], scene);
+    return platform_frame_render_ui_scene_to_canvas(view_index,
+        &g_views[view_index], scene);
 }
 
 void platform_frame_process_events(bool wait)

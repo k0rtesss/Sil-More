@@ -18,6 +18,7 @@
 
 #include "../metarun.h"
 #include "app/app-ui.h"
+#include "ui/ui-browser-shell.h"
 
 cptr metarun_curse_display_name(int idx);
 cptr metarun_blessing_display_name(int idx);
@@ -47,6 +48,9 @@ app_ui_panel* metarun_ui_begin_story_scene(app_ui_scene* scene,
     byte title_attr, const char* title);
 bool metarun_ui_present_scene(app_ui_scene* scene, bool fade_in);
 void metarun_ui_clear_pending_input(void);
+int metarun_ui_wait_browser_key(const int* row_ids, int row_count,
+    int* cursor, int* top, int window_rows, char row_activate_key,
+    const ui_browser_shell_button_key* button_keys, size_t button_key_count);
 bool metarun_ui_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
     const char* text);
 bool metarun_ui_add_story_paragraphs(app_ui_scene* scene,

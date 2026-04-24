@@ -205,7 +205,6 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
     int canvas_h, const app_ui_scene* scene)
 {
     const app_ui_panel* panel;
-    SDL_Color scrim_color = { 0, 0, 0, 112 };
     u16b i;
 
     if (!main_view || !scene)
@@ -218,6 +217,10 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
     if ((scene->flags & APP_UI_SCENE_FLAG_DIM_BACKDROP)
         && canvas_w > 0 && canvas_h > 0)
     {
+        const sdl_ui_style* style = sdl_menu_panel_style(panel);
+        SDL_Color scrim_color = style->shadow;
+
+        scrim_color.a = 112;
         sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, 0.0f, (float)canvas_w,
             (float)canvas_h }, scrim_color);
     }
@@ -241,20 +244,27 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
     return true;
 }
 
-bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
-    int canvas_w, int canvas_h, const app_ui_scene* scene)
+bool sdl_scene_ui_render_at(SDL_Texture* canvas, const sdl_view* main_view,
+    int canvas_w, int canvas_h, int hit_origin_x, int hit_origin_y,
+    u16b hit_view_index, const app_ui_scene* scene)
 {
     if (!canvas || !main_view || !scene)
         return false;
 
-    sdl_menu_hit_reset(main_view->rect.x, main_view->rect.y);
+    sdl_menu_hit_reset_for_view(hit_origin_x, hit_origin_y,
+        hit_view_index);
     sdl_menu_hit_set_scene(APP_SCENE_KIND_MENU);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     if ((scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)
         && main_view->canvas && canvas_w > 0 && canvas_h > 0)
     {
-        SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
+        const sdl_ui_style* style = sdl_ui_style_for_panel(
+            scene->panel_count > 0 ? scene->panels[0].style
+                                   : APP_UI_PANEL_STYLE_DEFAULT);
+
+        SDL_SetRenderDrawColor(g_state.renderer, style->canvas_fill.r,
+            style->canvas_fill.g, style->canvas_fill.b, style->canvas_fill.a);
         SDL_RenderClear(g_state.renderer);
         SDL_RenderTexture(g_state.renderer, main_view->canvas, NULL,
             &(SDL_FRect){
@@ -283,6 +293,16 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     SDL_SetRenderTarget(g_state.renderer, NULL);
     return true;
+}
+
+bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
+    int canvas_w, int canvas_h, const app_ui_scene* scene)
+{
+    if (!main_view)
+        return false;
+
+    return sdl_scene_ui_render_at(canvas, main_view, canvas_w, canvas_h,
+        main_view->rect.x, main_view->rect.y, 0, scene);
 }
 
 bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,

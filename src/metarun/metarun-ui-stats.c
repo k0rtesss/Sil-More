@@ -42,6 +42,10 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
 
     while (true)
     {
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' },
+            { 3, ESCAPE }
+        };
         app_ui_scene scene;
         app_ui_panel* panel;
         char subtitle[APP_UI_TEXT_MAX];
@@ -66,21 +70,34 @@ static bool metarun_show_active_effects_information_scene(bool steamdeck,
         if (!metarun_ui_add_effect_detail_lines(panel, active_ids[selected]))
             return false;
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Any", "Close");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        if (steamdeck)
         {
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                back_label, "Back");
+            ui_browser_shell_footer_action actions[3];
+            size_t count = 0;
+
+            actions[count++] = (ui_browser_shell_footer_action){
+                1, TERM_L_BLUE, true, steamdeck ? accept_label : "Any",
+                "Close"
+            };
+            actions[count++] = (ui_browser_shell_footer_action){
+                2, TERM_WHITE, true, "8/2", "Move"
+            };
+            if (steamdeck)
+            {
+                actions[count++] = (ui_browser_shell_footer_action){
+                    3, TERM_WHITE, true, back_label, "Back"
+                };
+            }
+            (void)ui_browser_shell_add_footer_actions(panel, actions, count);
         }
 
         if (!metarun_ui_present_scene(&scene, first_present))
             return false;
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_wait_browser_key(active_ids, active_count,
+            &selected, NULL, 0, '\0', buttons, N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == '8' || key == 'k' || key == '-')
         {
             selected = (selected + active_count - 1) % active_count;
@@ -142,6 +159,10 @@ bool metarun_show_known_curses_information_scene(bool steamdeck,
 
     while (true)
     {
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' },
+            { 4, ESCAPE }
+        };
         app_ui_scene scene;
         app_ui_panel* panel;
         char subtitle[APP_UI_TEXT_MAX];
@@ -194,23 +215,38 @@ bool metarun_show_known_curses_information_scene(bool steamdeck,
         if (!metarun_ui_add_known_curse_detail_lines(panel, known_ids[selected]))
             return false;
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Enter", "Close");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        if (known_count > METARUN_KNOWN_CURSE_PAGE_SIZE)
         {
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                "4/6", "Page");
+            ui_browser_shell_footer_action actions[4];
+            size_t count = 0;
+
+            actions[count++] = (ui_browser_shell_footer_action){
+                1, TERM_L_BLUE, true, steamdeck ? accept_label : "Enter",
+                "Close"
+            };
+            actions[count++] = (ui_browser_shell_footer_action){
+                2, TERM_WHITE, true, "8/2", "Move"
+            };
+            if (known_count > METARUN_KNOWN_CURSE_PAGE_SIZE)
+            {
+                actions[count++] = (ui_browser_shell_footer_action){
+                    3, TERM_WHITE, true, "4/6", "Page"
+                };
+            }
+            actions[count++] = (ui_browser_shell_footer_action){
+                4, TERM_WHITE, true, steamdeck ? back_label : "Esc", "Back"
+            };
+            (void)ui_browser_shell_add_footer_actions(panel, actions, count);
         }
-        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-            steamdeck ? back_label : "Esc", "Back");
 
         if (!metarun_ui_present_scene(&scene, first_present))
             return false;
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_wait_browser_key(known_ids, known_count, &selected,
+            &row_offset, METARUN_KNOWN_CURSE_PAGE_SIZE, '\0', buttons,
+            N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == '8' || key == 'k' || key == '-')
         {
             selected = (selected + known_count - 1) % known_count;
@@ -620,6 +656,10 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
     byte status_attr = TERM_WHITE;
     bool clear_status_on_next_key = false;
     bool first_present = true;
+    const ui_browser_shell_button_key buttons[] = {
+        { 1, '\r' },
+        { 3, ESCAPE }
+    };
 
     log_debug("[metarun-esc-trace] blessing exchange semantic enter");
 
@@ -735,19 +775,28 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 }
             }
 
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Choose");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Leave");
+            {
+                const ui_browser_shell_footer_action actions[] = {
+                    { 1, TERM_L_BLUE, true,
+                        steamdeck ? accept_label : "Enter", "Choose" },
+                    { 2, TERM_WHITE, true, "8/2", "Move" },
+                    { 3, TERM_WHITE, true,
+                        steamdeck ? back_label : "Esc", "Leave" }
+                };
+
+                (void)ui_browser_shell_add_footer_actions(panel, actions,
+                    N_ELEMENTS(actions));
+            }
 
             if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
             first_present = false;
 
-            key = ui_information_scene_wait_key_nonrepeat();
+            key = metarun_ui_wait_browser_key(NULL, main_option_count,
+                &selected_main, NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
             metarun_log_blessing_key("blessing-scene-read", mode, key);
+            if (!key)
+                continue;
             if (clear_status_on_next_key || key == '8' || key == 'k'
                 || key == '-' || key == '2' || key == 'j' || key == '+')
             {
@@ -874,19 +923,28 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             if (!metarun_ui_add_effect_detail_lines(panel, ids[selected_remove]))
                 return false;
 
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Lift");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Back");
+            {
+                const ui_browser_shell_footer_action actions[] = {
+                    { 1, TERM_L_BLUE, true,
+                        steamdeck ? accept_label : "Enter", "Lift" },
+                    { 2, TERM_WHITE, true, "8/2", "Move" },
+                    { 3, TERM_WHITE, true,
+                        steamdeck ? back_label : "Esc", "Back" }
+                };
+
+                (void)ui_browser_shell_add_footer_actions(panel, actions,
+                    N_ELEMENTS(actions));
+            }
 
             if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
             first_present = false;
 
-            key = ui_information_scene_wait_key_nonrepeat();
+            key = metarun_ui_wait_browser_key(ids, count, &selected_remove,
+                NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
             metarun_log_blessing_key("blessing-scene-read", mode, key);
+            if (!key)
+                continue;
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
@@ -997,19 +1055,28 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 }
             }
 
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Accept");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Back");
+            {
+                const ui_browser_shell_footer_action actions[] = {
+                    { 1, TERM_L_BLUE, true,
+                        steamdeck ? accept_label : "Enter", "Accept" },
+                    { 2, TERM_WHITE, true, "8/2", "Move" },
+                    { 3, TERM_WHITE, true,
+                        steamdeck ? back_label : "Esc", "Back" }
+                };
+
+                (void)ui_browser_shell_add_footer_actions(panel, actions,
+                    N_ELEMENTS(actions));
+            }
 
             if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
             first_present = false;
 
-            key = ui_information_scene_wait_key_nonrepeat();
+            key = metarun_ui_wait_browser_key(options, picks,
+                &selected_minor, NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
             metarun_log_blessing_key("blessing-scene-read", mode, key);
+            if (!key)
+                continue;
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
@@ -1104,7 +1171,7 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
 
                 strnfmt(key_buf, sizeof(key_buf), "%c", major_options[i].key);
                 strnfmt(meta, sizeof(meta), "cost %d", major_options[i].cost);
-                if (!app_ui_panel_add_row(panel, major_options[i].idx,
+                if (!app_ui_panel_add_row(panel, i,
                         affordable ? TERM_L_GREEN : TERM_L_DARK, true,
                         i == selected_major, key_buf,
                         major_blessing_name_str(major_options[i].idx), meta))
@@ -1137,19 +1204,28 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
                 }
             }
 
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Unlock");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                steamdeck ? back_label : "Esc", "Back");
+            {
+                const ui_browser_shell_footer_action actions[] = {
+                    { 1, TERM_L_BLUE, true,
+                        steamdeck ? accept_label : "Enter", "Unlock" },
+                    { 2, TERM_WHITE, true, "8/2", "Move" },
+                    { 3, TERM_WHITE, true,
+                        steamdeck ? back_label : "Esc", "Back" }
+                };
+
+                (void)ui_browser_shell_add_footer_actions(panel, actions,
+                    N_ELEMENTS(actions));
+            }
 
             if (!metarun_ui_present_scene(&scene, first_present))
                 return false;
             first_present = false;
 
-            key = ui_information_scene_wait_key_nonrepeat();
+            key = metarun_ui_wait_browser_key(NULL, major_option_count,
+                &selected_major, NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
             metarun_log_blessing_key("blessing-scene-read", mode, key);
+            if (!key)
+                continue;
             if (key == ESCAPE || key == '4'
                 || (steamdeck && key == steamdeck_back_key())
                 || (!steamdeck && (key == 'h' || key == 'H')))
@@ -1180,6 +1256,10 @@ static bool open_blessing_exchange_information_scene(bool steamdeck,
             if (key == '\r' || key == '\n'
                 || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
             {
+                if (major_options[selected_major].cost > available) {
+                    bell("Not enough blessing points for that covenant.");
+                    continue;
+                }
                 (void)blessing_apply_major_choice(
                     major_options[selected_major].idx, status_msg,
                     sizeof(status_msg), &status_attr);
@@ -1363,15 +1443,12 @@ static bool metarun_build_stats_browser_scene(app_ui_scene* scene,
     if (!scene || !view)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    strnfmt(subtitle, sizeof(subtitle), "Run-ID %u", metar.id);
+    panel = metarun_ui_begin_browser_scene(scene, TERM_YELLOW,
+        "Current Story Statistics", TERM_L_BLUE, subtitle);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    app_ui_panel_set_title(panel, TERM_YELLOW, "Current Story Statistics");
-    strnfmt(subtitle, sizeof(subtitle), "Run-ID %u", metar.id);
-    app_ui_panel_set_subtitle(panel, TERM_L_BLUE, subtitle);
     app_ui_panel_set_detail_title(panel, TERM_L_BLUE, "Blessing Pool");
 
     alive_attr = (view->alive < view->required_survivors)
@@ -1517,25 +1594,39 @@ static bool metarun_build_stats_browser_scene(app_ui_scene* scene,
         }
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-        view->continue_label, "Continue");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_GREEN, true,
-        view->spend_label, "Spend");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        view->threshold_label, "Threshold");
-    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        view->diff_label, "Difficulty");
-    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-        view->full_label, "Effects");
-    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
-        view->history_label, "History");
-    if (view->blitz_enabled)
     {
-        (void)app_ui_panel_add_footer_action(panel, 7, TERM_WHITE, true,
-            view->blitz_label, "Blitz");
+        ui_browser_shell_footer_action actions[8];
+        size_t count = 0;
+
+        actions[count++] = (ui_browser_shell_footer_action){
+            1, TERM_L_BLUE, true, view->continue_label, "Continue"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            2, TERM_L_GREEN, true, view->spend_label, "Spend"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, view->threshold_label, "Threshold"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            4, TERM_WHITE, true, view->diff_label, "Difficulty"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            5, TERM_WHITE, true, view->full_label, "Effects"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            6, TERM_WHITE, true, view->history_label, "History"
+        };
+        if (view->blitz_enabled)
+        {
+            actions[count++] = (ui_browser_shell_footer_action){
+                7, TERM_WHITE, true, view->blitz_label, "Blitz"
+            };
+        }
+        actions[count++] = (ui_browser_shell_footer_action){
+            8, TERM_WHITE, true, view->back_label, "Back"
+        };
+        (void)ui_browser_shell_add_footer_actions(panel, actions, count);
     }
-    (void)app_ui_panel_add_footer_action(panel, 8, TERM_WHITE, true,
-        view->back_label, "Back");
 
     return true;
 }
@@ -1570,6 +1661,10 @@ static bool metarun_adjust_blessing_threshold_information_scene(
     metarun_blessing_threshold_mode chosen_mode = current_mode;
     bool semantic_ok = true;
     bool first_present = true;
+    const ui_browser_shell_button_key buttons[] = {
+        { 1, '\r' },
+        { 3, ESCAPE }
+    };
 
     while (true) {
         app_ui_scene scene;
@@ -1644,12 +1739,18 @@ static bool metarun_adjust_blessing_threshold_information_scene(
             }
         }
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Enter", "Apply");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            steamdeck ? back_label : "Esc", "Cancel");
+        {
+            const ui_browser_shell_footer_action actions[] = {
+                { 1, TERM_L_BLUE, true,
+                    steamdeck ? accept_label : "Enter", "Apply" },
+                { 2, TERM_WHITE, true, "8/2", "Move" },
+                { 3, TERM_WHITE, true,
+                    steamdeck ? back_label : "Esc", "Cancel" }
+            };
+
+            (void)ui_browser_shell_add_footer_actions(panel, actions,
+                N_ELEMENTS(actions));
+        }
 
         if (!metarun_ui_present_scene(&scene, first_present)) {
             semantic_ok = false;
@@ -1657,7 +1758,10 @@ static bool metarun_adjust_blessing_threshold_information_scene(
         }
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_wait_browser_key(NULL, option_count, &selection,
+            NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
             || (!steamdeck && (key == 'h' || key == 'H')))
         {
@@ -1776,8 +1880,28 @@ metarun_redraw:
     first_present = false;
 
     {
-        int key = ui_information_scene_wait_key_nonrepeat();
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' },
+            { 2, 'b' },
+            { 3, 'f' },
+            { 4, 'c' },
+            { 5, 'u' },
+            { 6, 's' },
+            { 7, 'x' },
+            { 8, ESCAPE }
+        };
+        ui_browser_shell_command_map map;
+        int key;
         bool steamdeck = view.steamdeck;
+
+        ui_browser_shell_command_map_init(&map);
+        map.button_keys = buttons;
+        map.button_key_count = N_ELEMENTS(buttons);
+        map.row_activate_key = '\0';
+
+        key = ui_browser_shell_wait_key(&map, APP_INPUT_FLAG_REPEAT, NULL);
+        if (!key)
+            goto metarun_redraw;
 
         if (steamdeck) {
             int back_key = steamdeck_back_key();

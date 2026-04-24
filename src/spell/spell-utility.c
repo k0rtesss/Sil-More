@@ -700,7 +700,7 @@ static bool display_attributes_ui(char s[][200], char t[][200], bool good[],
             return false;
         }
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = ui_information_scene_wait_choice(APP_INPUT_FLAG_REPEAT);
         if (key == ESCAPE || next <= start || next >= count)
             break;
         start = next;
@@ -1733,7 +1733,7 @@ static bool recharge_choose_target_ui(const recharge_target_entry entries[],
             return false;
         }
 
-        key = ui_information_scene_wait_key();
+        key = ui_information_scene_wait_choice(0);
         switch (key)
         {
         case ESCAPE:

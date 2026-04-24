@@ -66,6 +66,27 @@ static s16b g_map_pointer_path_preview_target_x = -1;
 static void sdl_map_pointer_clear_path_preview(void);
 static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x);
 
+static void sdl_map_pointer_window_point_to_pixels(float* x, float* y)
+{
+    int window_w = 0;
+    int window_h = 0;
+    int pixel_w = 0;
+    int pixel_h = 0;
+
+    if (!g_state.window || !x || !y)
+        return;
+
+    SDL_GetWindowSize(g_state.window, &window_w, &window_h);
+    SDL_GetWindowSizeInPixels(g_state.window, &pixel_w, &pixel_h);
+    if (window_w <= 0 || window_h <= 0 || pixel_w <= 0 || pixel_h <= 0)
+        return;
+
+    if (window_w != pixel_w)
+        *x = *x * (float)pixel_w / (float)window_w;
+    if (window_h != pixel_h)
+        *y = *y * (float)pixel_h / (float)window_h;
+}
+
 static bool sdl_map_pointer_dungeon_scene_ready(u16b* out_reason)
 {
     app_session* session = app_session_current();
@@ -122,6 +143,7 @@ static bool sdl_map_pointer_event_xy(const SDL_Event* ev, float* out_x,
     {
         *out_x = ev->motion.x;
         *out_y = ev->motion.y;
+        sdl_map_pointer_window_point_to_pixels(out_x, out_y);
         return true;
     }
 
@@ -130,6 +152,7 @@ static bool sdl_map_pointer_event_xy(const SDL_Event* ev, float* out_x,
     {
         *out_x = ev->button.x;
         *out_y = ev->button.y;
+        sdl_map_pointer_window_point_to_pixels(out_x, out_y);
         return true;
     }
 
@@ -645,12 +668,13 @@ static bool sdl_map_pointer_start_travel(s16b map_y, s16b map_x, u16b device,
     return true;
 }
 
-static void sdl_map_pointer_open_preview(s16b map_y, s16b map_x, bool detail)
+static void sdl_map_pointer_open_preview(s16b map_y, s16b map_x, u16b device,
+    bool detail)
 {
     sdl_map_pointer_cancel_press();
     sdl_map_pointer_cancel_travel();
     sdl_map_pointer_clear_path_preview();
-    sdl_map_pointer_note_hover(map_y, map_x, APP_INPUT_DEVICE_POINTER);
+    sdl_map_pointer_note_hover(map_y, map_x, device);
 
     if (detail)
         (void)do_cmd_look_recall_at(map_y, map_x);
@@ -665,7 +689,7 @@ static void sdl_map_pointer_handle_cell_release(s16b map_y, s16b map_x,
 {
     if (button == SDL_BUTTON_RIGHT)
     {
-        sdl_map_pointer_open_preview(map_y, map_x, true);
+        sdl_map_pointer_open_preview(map_y, map_x, device, true);
         return;
     }
 
@@ -836,7 +860,7 @@ bool sdl_map_pointer_flush_pending_long_press(Uint64 now_ns)
 
     g_map_pointer_consumed_touch = true;
     g_map_pointer_consumed_finger_id = finger_id;
-    sdl_map_pointer_open_preview(map_y, map_x, true);
+    sdl_map_pointer_open_preview(map_y, map_x, APP_INPUT_DEVICE_TOUCH, true);
     return true;
 }
 
@@ -976,7 +1000,8 @@ bool sdl_map_pointer_handle_event(const SDL_Event* ev)
         {
             map_y = g_map_pointer_press.start_map_y;
             map_x = g_map_pointer_press.start_map_x;
-            sdl_map_pointer_open_preview(map_y, map_x, true);
+            sdl_map_pointer_open_preview(map_y, map_x,
+                APP_INPUT_DEVICE_TOUCH, true);
             return true;
         }
         if (!sdl_map_pointer_hit_test(x, y, &map_y, &map_x))

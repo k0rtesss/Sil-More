@@ -154,7 +154,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    desired_px = sdl_menu_scale_px(
+    desired_px = sdl_menu_font_px(
         (float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(10.0f);
     if (min_px < 10)
@@ -391,7 +391,7 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    desired_px = sdl_menu_scale_px(
+    desired_px = sdl_menu_font_px(
         (float)sdl_menu_font_size_logical(panel));
     min_px = sdl_menu_scale_px(10.0f);
     if (min_px < 10)
@@ -561,7 +561,7 @@ bool sdl_menu_render_strip_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
-    pixel_height = sdl_menu_scale_px(
+    pixel_height = sdl_menu_font_px(
         (float)sdl_menu_font_size_logical(panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
@@ -671,7 +671,7 @@ static bool sdl_menu_welcome_choose_layout(const sdl_view* main_view,
 
     for (i = 0; i < N_ELEMENTS(logical_sizes); i++)
     {
-        int pixel_height = sdl_menu_scale_px((float)logical_sizes[i]);
+        int pixel_height = sdl_menu_font_px((float)logical_sizes[i]);
         TTF_Font* story_font = sdl_story_font_for_height(pixel_height);
         TTF_Font* mono_font = sdl_ui_font_for_height(pixel_height);
         int line_h;

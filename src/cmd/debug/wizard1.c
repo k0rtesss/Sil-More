@@ -20,6 +20,7 @@
 #include "fs/file.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 #include "ui/colors.h"
 
@@ -959,18 +960,13 @@ static bool wizard_build_spoiler_scene(app_ui_scene* scene, int selected)
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_browser_shell_begin_browser(scene, TERM_L_WHITE,
+        "Create Spoiler File", TERM_SLATE,
+        "Write spoiler output to the user directory.", TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_SHOW_DETAIL | APP_UI_PANEL_FLAG_SCROLL_ROWS, 900,
+        1600);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 900, 1600);
-    app_ui_panel_set_title(panel, TERM_L_WHITE, "Create Spoiler File");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE,
-        "Write spoiler output to the user directory.");
 
     for (int i = 0; i < (int)N_ELEMENTS(rows); i++)
     {
@@ -991,12 +987,16 @@ static bool wizard_build_spoiler_scene(app_ui_scene* scene, int selected)
             "Press Enter or the number key to generate this spoiler file.");
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-        "Enter", "Create");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "1-5", "Select");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "Esc", "Back");
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, "Enter", "Create" },
+            { 2, TERM_WHITE, true, "1-5", "Select" },
+            { 3, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
     return true;
 }
 
@@ -1009,8 +1009,14 @@ void do_cmd_spoilers(void)
 
     while (1)
     {
+        static const ui_browser_shell_button_key button_keys[] = {
+            { 1, '\r' },
+            { 3, ESCAPE }
+        };
         ui_information_scene_scope scope;
         app_ui_scene scene;
+        ui_browser_shell_command_map map;
+        ui_browser_shell_command_result result;
         int ch;
 
         if (!ui_information_scene_enter(&scope))
@@ -1023,10 +1029,18 @@ void do_cmd_spoilers(void)
             break;
         }
 
-        ch = ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        ui_browser_shell_command_map_init(&map);
+        map.button_keys = button_keys;
+        map.button_key_count = N_ELEMENTS(button_keys);
+        map.row_activate_key = '\r';
+
+        ch = ui_browser_shell_wait_key_with_wait_reason(&map, 0,
+            APP_WAIT_REASON_LIST_SELECTION, true, &result);
+        (void)ui_browser_shell_apply_row_focus(&result, &selected, 5, NULL, 0);
         ui_information_scene_leave(&scope);
 
+        if (!ch)
+            continue;
         if (ch == ESCAPE)
             break;
         if (ch == '8')

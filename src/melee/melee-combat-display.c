@@ -937,7 +937,7 @@ static bool do_cmd_combat_history_information_scene(void)
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key();
+        ch = (char)ui_information_scene_wait_choice(0);
         if (ch == ESCAPE)
             break;
 

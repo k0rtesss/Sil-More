@@ -20,6 +20,7 @@
 #include "fs/resource.h"
 #include "platform-config.h"
 #include "sdl-main-internal.h"
+#include "sdl-menu/sdl-scene-menu.h"
 
 struct sdl_config config;
 bool g_hide_left_panel = false;
@@ -1368,6 +1369,8 @@ void resize(const SDL_Rect* screen)
     {
         quit("could not resolve monospace font path");
     }
+
+    sdl_menu_hit_clear_view_snapshots();
 
     for (int i = 1; i < MAX_TERM_DATA; i++) {
         sdl_view_destroy(&g_views[i]);

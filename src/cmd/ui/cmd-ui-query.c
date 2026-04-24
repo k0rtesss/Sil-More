@@ -19,6 +19,7 @@
 #include "cmd-ui.h"
 #include "log/log.h"
 #include "platform-input.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 
 /*
@@ -234,18 +235,13 @@ static bool query_symbol_build_choice_scene(app_ui_scene* scene, cptr summary,
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_browser_shell_begin_browser(scene, TERM_L_WHITE,
+        "Query symbol", TERM_SLATE, "Monster recall", TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_TOP_ANCHORED | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS,
+        900, 1500);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 900, 1500);
-    app_ui_panel_set_title(panel, TERM_L_WHITE, "Query symbol");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Monster recall");
 
     if (summary && summary[0])
         (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, summary);
@@ -271,105 +267,33 @@ static bool query_symbol_build_choice_scene(app_ui_scene* scene, cptr summary,
     {
         char confirm_label[16];
         char back_label[16];
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, true, "D-pad", "Move" },
+            { 2, TERM_WHITE, true, confirm_label, "Select" },
+            { 4, TERM_WHITE, true, back_label, "Back" }
+        };
 
         controller_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
             sizeof(confirm_label));
         controller_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "D-pad", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            confirm_label, "Select");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            back_label, "Back");
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
     }
     else
     {
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "8/2", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "Enter", "Select");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            "y/k/p/n", "Shortcut");
-        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-            "Esc", "Back");
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, true, "8/2", "Move" },
+            { 2, TERM_WHITE, true, "Enter", "Select" },
+            { 3, TERM_WHITE, true, "y/k/p/n", "Shortcut" },
+            { 4, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
     }
 
     return true;
-}
-
-static char query_symbol_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '8' : '2';
-
-    return '\0';
-}
-
-static bool query_symbol_command_to_key(const app_ui_command* command,
-    int* selected, char* out_key)
-{
-    const app_ui_widget_ref* target;
-
-    if (out_key)
-        *out_key = '\0';
-    if (!command || !selected || !out_key)
-        return false;
-
-    target = &command->target;
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        *out_key = ESCAPE;
-        return true;
-    }
-
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
-    {
-        *out_key = query_symbol_scroll_command_key(command);
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
-    {
-        if (target->widget_id >= 0
-            && target->widget_id < (int)N_ELEMENTS(query_symbol_choice_rows))
-        {
-            *selected = target->widget_id;
-        }
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-        *out_key = '\r';
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case 2:
-            *out_key = '\r';
-            return true;
-        case 4:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    return false;
 }
 
 static bool query_symbol_snapshot_choose_mode(cptr summary, int match_count,
@@ -387,6 +311,10 @@ static bool query_symbol_snapshot_choose_mode(cptr summary, int match_count,
 
     while (1)
     {
+        static const ui_browser_shell_button_key button_keys[] = {
+            { 2, '\r' },
+            { 4, ESCAPE }
+        };
         app_ui_scene scene;
         int ch;
         int d;
@@ -402,30 +330,20 @@ static bool query_symbol_snapshot_choose_mode(cptr summary, int match_count,
         }
 
         {
-            ui_information_scene_event event;
-            char command_key = '\0';
+            ui_browser_shell_command_map map;
+            ui_browser_shell_command_result result;
 
-            ch = 0;
-            if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
-            {
-                ch = ESCAPE;
-            }
-            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
-            {
-                ch = event.key;
-            }
-            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
-                && query_symbol_command_to_key(&event.command, &selected,
-                    &command_key))
-            {
-                ch = command_key;
-                if (!ch)
-                    continue;
-            }
-            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
-            {
+            ui_browser_shell_command_map_init(&map);
+            map.button_keys = button_keys;
+            map.button_key_count = N_ELEMENTS(button_keys);
+            map.row_activate_key = '\r';
+
+            ch = ui_browser_shell_wait_key(&map, APP_INPUT_FLAG_REPEAT,
+                &result);
+            (void)ui_browser_shell_apply_row_focus(&result, &selected,
+                (int)N_ELEMENTS(query_symbol_choice_rows), NULL, 0);
+            if (!ch)
                 continue;
-            }
         }
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;

@@ -29,9 +29,12 @@ typedef enum sdl_menu_hit_target_kind {
 } sdl_menu_hit_target_kind;
 
 #define SDL_MENU_HIT_DETAIL_ID ((s16b)-2)
+#define SDL_MENU_HIT_PANEL_PIN_ID ((s16b)-3)
+#define SDL_MENU_HIT_PANEL_RESET_ID ((s16b)-4)
 
 typedef struct sdl_menu_hit_target {
     SDL_FRect rect;
+    u16b view_index;
     u16b scene_kind;
     u16b panel_index;
     u16b panel_layer;
@@ -61,6 +64,8 @@ SDL_Color sdl_menu_panel_color_alpha(const app_ui_panel* panel, byte attr,
     byte alpha);
 SDL_Color sdl_menu_panel_accent(const app_ui_panel* panel, byte attr);
 void sdl_menu_hit_reset(int origin_x, int origin_y);
+void sdl_menu_hit_reset_for_view(int origin_x, int origin_y,
+    u16b view_index);
 void sdl_menu_hit_set_scene(u16b scene_kind);
 u16b sdl_menu_hit_scene_kind(void);
 void sdl_menu_hit_begin_panel(u16b panel_index,
@@ -74,8 +79,13 @@ bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
     s32b payload0, s32b payload1, const SDL_FRect* canvas_rect, cptr label,
     cptr tooltip);
 const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y);
+const sdl_menu_hit_target* sdl_menu_hit_test_view_snapshots(float window_x,
+    float window_y);
 const sdl_menu_hit_target* sdl_menu_hit_current_focus(void);
 const sdl_menu_hit_target* sdl_menu_hit_focus_delta(int dy, int dx);
+void sdl_menu_hit_snapshot_view(u16b view_index);
+void sdl_menu_hit_clear_view_snapshot(u16b view_index);
+void sdl_menu_hit_clear_view_snapshots(void);
 void sdl_menu_hit_origin(int* out_x, int* out_y);
 bool sdl_menu_pointer_handle_event(const SDL_Event* ev);
 int sdl_menu_pointer_pending_timeout_ms(Uint64 now_ns);
@@ -103,6 +113,7 @@ void sdl_menu_draw_control_frame(const app_ui_panel* panel,
     const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
     bool pressed);
 int sdl_menu_scale_px(float logical_value);
+int sdl_menu_font_px(float logical_value);
 int sdl_menu_font_size_logical(const app_ui_panel* panel);
 int sdl_menu_measure_text(TTF_Font* font, cptr text);
 int sdl_menu_icon_slot_px(TTF_Font* font, int line_h);

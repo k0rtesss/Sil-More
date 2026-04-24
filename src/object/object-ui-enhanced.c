@@ -846,12 +846,6 @@ static bool enhanced_item_command_to_key(const app_ui_command* command,
         return true;
     }
 
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
-    }
-
     return false;
 }
 

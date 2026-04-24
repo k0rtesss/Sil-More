@@ -455,6 +455,50 @@ bool ui_information_scene_wait_event(ui_information_scene_event* out_event,
     }
 }
 
+bool ui_information_scene_wait_event_with_wait_reason(
+    ui_information_scene_event* out_event, u16b ignored_flags, u16b reason,
+    bool hidden_cursor)
+{
+    app_session* session = app_session_current();
+    app_wait_scope scope;
+    app_input_capture_scope input_capture_scope;
+    bool pushed_capture = false;
+    bool pushed_wait = false;
+    bool saved_hide_cursor = false;
+    bool result;
+
+    if (!ui_information_scene_supported() || !session)
+        return false;
+
+    if (hidden_cursor)
+    {
+        saved_hide_cursor = inkey_cursor_hidden();
+        inkey_set_cursor_hidden(true);
+    }
+
+    if (!app_session_input_capture_active(session))
+    {
+        app_session_push_input_capture(session, &input_capture_scope);
+        pushed_capture = true;
+    }
+    if (reason != APP_WAIT_REASON_NONE)
+    {
+        app_session_push_wait_scope(session, &scope, reason, 0, 0);
+        pushed_wait = true;
+    }
+
+    result = ui_information_scene_wait_event(out_event, ignored_flags);
+
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &scope);
+    if (pushed_capture)
+        app_session_pop_input_capture(session, &input_capture_scope);
+    if (hidden_cursor)
+        inkey_set_cursor_hidden(saved_hide_cursor);
+
+    return result;
+}
+
 static bool ui_information_scene_command_dismisses(
     const app_ui_command* command)
 {
@@ -537,7 +581,7 @@ bool ui_information_scene_wait_dismissal_with_wait_reason(u16b ignored_flags,
     return result;
 }
 
-static int ui_information_scene_wait_key_internal(u16b ignored_flags)
+static int ui_information_scene_wait_choice_internal(u16b ignored_flags)
 {
     app_session* session = app_session_current();
     ui_information_scene_event event;
@@ -576,56 +620,74 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
     return ESCAPE;
 }
 
-int ui_information_scene_wait_key(void)
+int ui_information_scene_wait_choice(u16b ignored_flags)
 {
-    return ui_information_scene_wait_key_internal(0);
+    return ui_information_scene_wait_choice_internal(ignored_flags);
 }
 
-int ui_information_scene_wait_key_nonrepeat(void)
-{
-    return ui_information_scene_wait_key_internal(APP_INPUT_FLAG_REPEAT);
-}
-
-int ui_information_scene_wait_key_with_wait_reason(u16b reason)
+int ui_information_scene_wait_choice_with_wait_reason(u16b ignored_flags,
+    u16b reason, bool hidden_cursor)
 {
     app_session* session = app_session_current();
     app_wait_scope scope;
     app_input_capture_scope input_capture_scope;
-    int key;
+    bool pushed_capture = false;
+    bool pushed_wait = false;
+    bool saved_hide_cursor = false;
+    int choice;
 
     if (!ui_information_scene_supported() || !session)
         return ESCAPE;
 
+    if (hidden_cursor)
+    {
+        saved_hide_cursor = inkey_cursor_hidden();
+        inkey_set_cursor_hidden(true);
+    }
+
     if (!app_session_input_capture_active(session))
     {
         app_session_push_input_capture(session, &input_capture_scope);
-        if (reason != APP_WAIT_REASON_NONE)
-            app_session_push_wait_scope(session, &scope, reason, 0, 0);
-        key = ui_information_scene_wait_key();
-        if (reason != APP_WAIT_REASON_NONE)
-            app_session_pop_wait_scope(session, &scope);
-        app_session_pop_input_capture(session, &input_capture_scope);
-        return key;
+        pushed_capture = true;
+    }
+    if (reason != APP_WAIT_REASON_NONE)
+    {
+        app_session_push_wait_scope(session, &scope, reason, 0, 0);
+        pushed_wait = true;
     }
 
-    if (reason == APP_WAIT_REASON_NONE)
-        return ui_information_scene_wait_key();
+    choice = ui_information_scene_wait_choice(ignored_flags);
 
-    app_session_push_wait_scope(session, &scope, reason, 0, 0);
-    key = ui_information_scene_wait_key();
-    app_session_pop_wait_scope(session, &scope);
-    return key;
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &scope);
+    if (pushed_capture)
+        app_session_pop_input_capture(session, &input_capture_scope);
+    if (hidden_cursor)
+        inkey_set_cursor_hidden(saved_hide_cursor);
+
+    return choice;
+}
+
+int ui_information_scene_wait_key(void)
+{
+    return ui_information_scene_wait_choice_internal(0);
+}
+
+int ui_information_scene_wait_key_nonrepeat(void)
+{
+    return ui_information_scene_wait_choice_internal(APP_INPUT_FLAG_REPEAT);
+}
+
+int ui_information_scene_wait_key_with_wait_reason(u16b reason)
+{
+    return ui_information_scene_wait_choice_with_wait_reason(0, reason,
+        false);
 }
 
 int ui_information_scene_wait_key_hidden_with_wait_reason(u16b reason)
 {
-    bool saved_hide_cursor = inkey_cursor_hidden();
-    int key;
-
-    inkey_set_cursor_hidden(true);
-    key = ui_information_scene_wait_key_with_wait_reason(reason);
-    inkey_set_cursor_hidden(saved_hide_cursor);
-    return key;
+    return ui_information_scene_wait_choice_with_wait_reason(0, reason,
+        true);
 }
 
 void ui_information_scene_leave_without_restore(

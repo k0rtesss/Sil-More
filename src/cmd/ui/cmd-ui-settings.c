@@ -41,6 +41,7 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-look-sidebar.h"
 #include "ui/ui-information-scene.h"
 
@@ -65,7 +66,7 @@ char settings_ui_read_key(bool scan)
         return (char)(input.payload.key.logical_key & 0xFFu);
     }
 
-    return scan ? '\0' : (char)ui_information_scene_wait_key();
+    return scan ? '\0' : (char)ui_information_scene_wait_choice(0);
 }
 
 
@@ -680,21 +681,13 @@ app_ui_panel* settings_browser_scene_begin_ex(app_ui_scene* scene,
     if (!scene)
         return NULL;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_browser_shell_begin_browser(scene, TERM_L_WHITE, title,
+        TERM_SLATE, subtitle, TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_TOP_ANCHORED | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+            | APP_UI_PANEL_FLAG_SCROLL_ROWS,
+        (u16b)min_width_px, (u16b)width_cap_px);
     if (!panel)
         return NULL;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, (u16b)min_width_px, (u16b)width_cap_px);
-    if (title && title[0])
-        app_ui_panel_set_title(panel, TERM_L_WHITE, title);
-    if (subtitle && subtitle[0])
-        app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
     return panel;
 }
@@ -826,12 +819,16 @@ static bool settings_choice_present_ui_scene(cptr title,
         }
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-        "8/2", "Move");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "Enter", "Select");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "Esc", "Back");
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, true, "8/2", "Move" },
+            { 2, TERM_WHITE, true, "Enter", "Select" },
+            { 3, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
 
     return ui_information_scene_present_ui(&scene);
 }
@@ -843,6 +840,12 @@ int settings_choice_menu(cptr title,
     int selected;
     int hotkey_index;
     int ch;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 2, '\r' },
+        { 3, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (!entries || entry_count <= 0 || !highlight)
         return 0;
@@ -866,9 +869,26 @@ int settings_choice_menu(cptr title,
         return cancel_id;
     }
 
-    inkey_set_cursor_hidden(true);
-    ch = settings_ui_read_key(false);
-    inkey_set_cursor_hidden(false);
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = '\r';
+
+    ch = ui_browser_shell_wait_key_with_wait_reason(&map, 0,
+        APP_WAIT_REASON_NONE, true, &result);
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        int row_index = settings_choice_find_index_by_id(entries, entry_count,
+            result.widget_id);
+
+        if (row_index >= 0)
+        {
+            selected = row_index;
+            *highlight = entries[selected].id;
+        }
+    }
+    if (!ch)
+        return 0;
 
     hotkey_index = settings_choice_find_index_by_hotkey(entries, entry_count,
         ch);
@@ -1364,15 +1384,25 @@ static bool option_menu_present_ui_scene(int page, cptr info, int n,
 
     if (!locked)
     {
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "8/2", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "4/6", "Set");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            "Space", "Toggle");
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, true, "8/2", "Move" },
+            { 2, TERM_WHITE, true, "4/6", "Set" },
+            { 3, TERM_WHITE, true, "Space", "Toggle" },
+            { 4, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
     }
-    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "Esc", "Back");
+    else
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 4, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
 
     return ui_information_scene_present_ui(&scene);
 }
@@ -1388,85 +1418,35 @@ static void option_apply_side_effects(int opt)
         p_ptr->redraw |= (PR_MAP);
 }
 
-static char option_menu_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '4' : '6';
-
-    return '\0';
-}
-
 static bool option_menu_command_to_key(const app_ui_command* command,
     int n, int* k, char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 2, '6' },
+        { 3, ' ' },
+        { 4, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !k || !out_key)
         return false;
 
-    target = &command->target;
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = ' ';
 
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        *out_key = ESCAPE;
-        return true;
-    }
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
-    {
-        *out_key = option_menu_scroll_command_key(command);
-        return true;
-    }
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        (void)ui_browser_shell_apply_row_focus(&result, k, n, NULL, 0);
 
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
-    {
-        if (target->widget_id >= 0 && target->widget_id < n)
-            *k = target->widget_id;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-        *out_key = ' ';
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case 2:
-            *out_key = '6';
-            return true;
-        case 3:
-            *out_key = ' ';
-            return true;
-        case 4:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 extern void do_cmd_options_aux(int page, cptr info)

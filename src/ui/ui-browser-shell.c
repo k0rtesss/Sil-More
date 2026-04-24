@@ -17,6 +17,9 @@
 
 #include "ui/ui-browser-shell.h"
 
+#include "app/app-session.h"
+#include "ui/ui-information-scene.h"
+
 void ui_browser_shell_scene_config_init(ui_browser_shell_scene_config* config)
 {
     if (!config)
@@ -146,7 +149,6 @@ void ui_browser_shell_command_map_init(ui_browser_shell_command_map* map)
     map->cancel_key = ESCAPE;
     map->row_activate_key = '\r';
     map->row_inspect_key = 'x';
-    map->action_key_fallback = true;
 }
 
 char ui_browser_shell_scroll_command_key(const app_ui_command* command,
@@ -229,6 +231,8 @@ static void ui_browser_shell_result_target(
     result->role = command->target.role;
     result->action = command->target.action;
     result->widget_id = command->target.widget_id;
+    result->payload0 = command->target.payload0;
+    result->payload1 = command->target.payload1;
 }
 
 bool ui_browser_shell_translate_command(const app_ui_command* command,
@@ -308,15 +312,64 @@ bool ui_browser_shell_translate_command(const app_ui_command* command,
         return true;
     }
 
-    if (map->action_key_fallback && target->action_key)
+    return false;
+}
+
+int ui_browser_shell_wait_key(const ui_browser_shell_command_map* map,
+    u16b ignored_flags, ui_browser_shell_command_result* out_result)
+{
+    ui_information_scene_event event;
+    ui_browser_shell_command_result result;
+
+    if (out_result)
+        ui_browser_shell_result_clear(out_result);
+
+    if (!ui_information_scene_wait_event(&event, ignored_flags))
+        return ESCAPE;
+
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        return event.key;
+
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+        && ui_browser_shell_translate_command(&event.command, map,
+            &result))
     {
-        result.key = (char)(target->action_key & 0xFF);
         if (out_result)
             *out_result = result;
-        return true;
+        return result.key;
     }
 
-    return false;
+    return '\0';
+}
+
+int ui_browser_shell_wait_key_with_wait_reason(
+    const ui_browser_shell_command_map* map, u16b ignored_flags,
+    u16b wait_reason, bool hidden_cursor,
+    ui_browser_shell_command_result* out_result)
+{
+    app_session* session = app_session_current();
+    app_wait_scope wait_scope;
+    bool pushed_wait = false;
+    bool saved_hide_cursor = inkey_cursor_hidden();
+    int key;
+
+    if (session && wait_reason != APP_WAIT_REASON_NONE)
+    {
+        app_session_push_wait_scope(session, &wait_scope, wait_reason, 0, 0);
+        pushed_wait = true;
+    }
+
+    if (hidden_cursor)
+        inkey_set_cursor_hidden(true);
+
+    key = ui_browser_shell_wait_key(map, ignored_flags, out_result);
+
+    if (hidden_cursor)
+        inkey_set_cursor_hidden(saved_hide_cursor);
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &wait_scope);
+
+    return key;
 }
 
 void ui_browser_shell_clamp_cursor(int* cursor, int* top, int count,
@@ -379,5 +432,21 @@ bool ui_browser_shell_apply_vertical_key(int ch, int* cursor, int count,
         return true;
 
     *cursor = next;
+    return true;
+}
+
+bool ui_browser_shell_apply_row_focus(
+    const ui_browser_shell_command_result* result, int* cursor, int count,
+    int* top, int window_rows)
+{
+    if (!result || !cursor || count <= 0)
+        return false;
+    if (!result->handled || result->role != APP_UI_WIDGET_ROLE_LIST_ITEM)
+        return false;
+    if (result->widget_id < 0 || result->widget_id >= count)
+        return false;
+
+    *cursor = result->widget_id;
+    ui_browser_shell_clamp_cursor(cursor, top, count, window_rows);
     return true;
 }

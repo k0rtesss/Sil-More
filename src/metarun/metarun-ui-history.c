@@ -85,6 +85,10 @@ bool metarun_show_completed_quests_information_scene(bool steamdeck,
     }
 
     while (true) {
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' },
+            { 3, ESCAPE }
+        };
         app_ui_scene scene;
         app_ui_panel *panel;
         char subtitle[APP_UI_TEXT_MAX];
@@ -113,7 +117,7 @@ bool metarun_show_completed_quests_information_scene(bool steamdeck,
                 strnfmt(meta, sizeof(meta), "completed %d",
                     entries[i].count);
                 attr = TERM_WHITE;
-                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                if (!app_ui_panel_add_row(panel, i, attr, true,
                         i == selected, "", challenge_display_name(
                             entries[i].id), meta))
                 {
@@ -122,7 +126,7 @@ bool metarun_show_completed_quests_information_scene(bool steamdeck,
             } else {
                 strnfmt(meta, sizeof(meta), "x%d", entries[i].count);
                 attr = TERM_WHITE;
-                if (!app_ui_panel_add_row(panel, entries[i].id, attr, true,
+                if (!app_ui_panel_add_row(panel, i, attr, true,
                         i == selected, "",
                         quest_display_title(entries[i].id), meta))
                 {
@@ -174,20 +178,33 @@ bool metarun_show_completed_quests_information_scene(bool steamdeck,
             }
         }
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Any", "Close");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        if (steamdeck) {
-            (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
-                true, back_label, "Back");
+        {
+            ui_browser_shell_footer_action actions[3];
+            size_t count = 0;
+
+            actions[count++] = (ui_browser_shell_footer_action){
+                1, TERM_L_BLUE, true, steamdeck ? accept_label : "Any",
+                "Close"
+            };
+            actions[count++] = (ui_browser_shell_footer_action){
+                2, TERM_WHITE, true, "8/2", "Move"
+            };
+            if (steamdeck) {
+                actions[count++] = (ui_browser_shell_footer_action){
+                    3, TERM_WHITE, true, back_label, "Back"
+                };
+            }
+            (void)ui_browser_shell_add_footer_actions(panel, actions, count);
         }
 
         if (!metarun_ui_present_scene(&scene, first_present))
             return false;
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_wait_browser_key(NULL, entry_count, &selected, NULL,
+            0, '\0', buttons, N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == '8' || key == 'k' || key == '-') {
             selected = (selected + entry_count - 1) % entry_count;
             continue;
@@ -288,6 +305,10 @@ void metarun_choose_difficulty_menu(bool reopen_stats_on_exit)
 
     while (true)
     {
+        static const ui_browser_shell_button_key buttons[] = {
+            { 1, '\r' },
+            { 3, ESCAPE }
+        };
         app_ui_scene scene;
         app_ui_panel *panel;
         char subtitle[APP_UI_TEXT_MAX];
@@ -374,12 +395,18 @@ void metarun_choose_difficulty_menu(bool reopen_stats_on_exit)
                     status_msg);
         }
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            steamdeck ? accept_label : "Enter", "Accept");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            steamdeck ? back_label : "Esc", "Cancel");
+        {
+            const ui_browser_shell_footer_action actions[] = {
+                { 1, TERM_L_BLUE, true,
+                    steamdeck ? accept_label : "Enter", "Accept" },
+                { 2, TERM_WHITE, true, "8/2", "Move" },
+                { 3, TERM_WHITE, true,
+                    steamdeck ? back_label : "Esc", "Cancel" }
+            };
+
+            (void)ui_browser_shell_add_footer_actions(panel, actions,
+                N_ELEMENTS(actions));
+        }
 
         if (!metarun_ui_present_scene(&scene, first_present)) {
             log_error("metarun_choose_difficulty_menu: failed to publish semantic scene");
@@ -387,7 +414,10 @@ void metarun_choose_difficulty_menu(bool reopen_stats_on_exit)
         }
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_wait_browser_key(NULL, max_difficulty + 1,
+            &choice, NULL, 0, '\r', buttons, N_ELEMENTS(buttons));
+        if (!key)
+            continue;
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key())
             || (!steamdeck && (key == 'h' || key == 'H')))
         {
@@ -575,6 +605,10 @@ bool metarun_list_history_information_scene(bool steamdeck,
         }
 
         while (true) {
+            static const ui_browser_shell_button_key buttons[] = {
+                { 1, '\r' },
+                { 4, ESCAPE }
+            };
             app_ui_scene scene;
             app_ui_panel *panel;
             int page_start;
@@ -627,7 +661,7 @@ bool metarun_list_history_information_scene(bool steamdeck,
                 strnfmt(meta, sizeof(meta), "%lu  S:%d D:%d %c  %s",
                     (unsigned long)m->score, m->silmarils, m->deaths, res,
                     date);
-                if (!app_ui_panel_add_row(panel, idx, attr, true,
+                if (!app_ui_panel_add_row(panel, i, attr, true,
                         i == highlight, "", label, meta))
                 {
                     semantic_ok = false;
@@ -700,17 +734,29 @@ bool metarun_list_history_information_scene(bool steamdeck,
                 }
             }
 
-            (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                steamdeck ? accept_label : "Enter", "Close");
-            (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                "8/2", "Move");
-            if (metarun_max > METARUN_HISTORY_PAGE_SIZE) {
-                (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-                    "4/6", "Page");
-            }
-            if (steamdeck) {
-                (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-                    back_label, "Back");
+            {
+                ui_browser_shell_footer_action actions[4];
+                size_t count = 0;
+
+                actions[count++] = (ui_browser_shell_footer_action){
+                    1, TERM_L_BLUE, true,
+                    steamdeck ? accept_label : "Enter", "Close"
+                };
+                actions[count++] = (ui_browser_shell_footer_action){
+                    2, TERM_WHITE, true, "8/2", "Move"
+                };
+                if (metarun_max > METARUN_HISTORY_PAGE_SIZE) {
+                    actions[count++] = (ui_browser_shell_footer_action){
+                        3, TERM_WHITE, true, "4/6", "Page"
+                    };
+                }
+                if (steamdeck) {
+                    actions[count++] = (ui_browser_shell_footer_action){
+                        4, TERM_WHITE, true, back_label, "Back"
+                    };
+                }
+                (void)ui_browser_shell_add_footer_actions(panel, actions,
+                    count);
             }
 
             if (!metarun_ui_present_scene(&scene, first_present)) {
@@ -719,7 +765,10 @@ bool metarun_list_history_information_scene(bool steamdeck,
             }
             first_present = false;
 
-            key = ui_information_scene_wait_key_nonrepeat();
+            key = metarun_ui_wait_browser_key(NULL, metarun_max, &highlight,
+                NULL, 0, '\0', buttons, N_ELEMENTS(buttons));
+            if (!key)
+                continue;
             if (key == '8' || key == 'k' || key == '-') {
                 highlight = (highlight + metarun_max - 1) % metarun_max;
                 continue;

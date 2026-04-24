@@ -69,10 +69,16 @@ Done:
   waits to command-aware adapters: continue/dismiss modals, message `-more-`
   prompts, main menu selection, nearby overlays, object-info document scrolling,
   quest status/typewriter continuation, smithing menus, metarun confirm/curse
-  prompts, and Morgoth hall confirmation.
+  prompts, birth/blitz selection flows, metarun stats/history browsers, and
+  Morgoth hall confirmation.
 - UX2 is partial: pointer/touch/gamepad rows, tabs, footer actions, scroll
   regions, long-press/context, and per-device prompt fallback exist for the
   migrated screens. It is not yet universal across every screen.
+- UX3 visual remaster foundation is implemented: shared SDL style tokens now
+  drive material backdrops, header bands, accent rails, panel frames, control
+  states, focus/pressed/disabled states, styled scrims, and minimap clears.
+  Main menu, item selector, knowledge browser, and character sheet route through
+  the remastered shared panel styles without per-screen paint code.
 - UX4 dungeon map pointer/touch interaction is in place: SDL-local map-cell hit
   testing, hover/focus cursor inspection, adjacent semantic move/interact,
   right-click or touch long-press recall/detail, and visible safe-travel preview
@@ -80,8 +86,9 @@ Done:
 - UX5 lane F is implemented: pane drag resize persists on release, config save
   failures are reported, overlay panel offsets use stable semantic ids with
   legacy fallback migration, pinned/moved overlay state now affects rendering,
-  right-clicking a panel drag handle resets its persisted position, and the pane
-  settings screen can clear all moved overlay panels.
+  overlay headers expose visible pin/unpin/reset controls, right-clicking a
+  panel drag handle resets its persisted position, and the pane settings screen
+  can clear all moved overlay panels.
 - A UIX semantic-dispatch audit is now part of `tools/ui_debt_audit.py` and
   the `sil_ui0_audit` CTest gate. It tracks remaining `wait_key` consumers,
   `action_key` fallback reads, and legacy command-bridge queue calls.
@@ -91,10 +98,9 @@ Not done:
 - The shared browser shell still needs broader adoption by later workflow
   migrations such as birth, smithing, metarun stats, query/debug browsers, and
   other nested screens.
-- UX3 visual remaster work is still mostly open: token/style pass, blue-menu
-  removal, new art/backdrops, and final modern-pixel styling are not complete.
-- Overlay pinning still lacks visible per-panel pin/unpin controls; reset exists
-  on the drag handle and in pane settings, but the per-panel UX is incomplete.
+- Screen-specific bitmap artwork can still be added later through the existing
+  backdrop/header slots, but UX3 no longer depends on blue terminal-era menu
+  styling for its core look.
 - Birth, quest, smithing, metarun, and other nested workflows still need
   dedicated migration/remaster passes. Death/victory, help, and the file viewer
   have semantic command adapters, but still belong in the visual and
@@ -105,15 +111,16 @@ Current validation:
 - `.\build-incremental.ps1` passes.
 - `py -3 tools\ui_debt_audit.py --check` passes.
 - `py -3 tools\ui_debt_audit.py --audit uix_semantic --details` reports the
-  current remaining migration debt: 14 `wait_key` consumer files / 29 matches,
-  10 `action_key` fallback files / 23 matches, and 5 legacy bridge queue files
+  current remaining migration debt: 0 `wait_key` consumer files / 0 matches,
+  3 `action_key` fallback files / 6 matches, and 5 legacy bridge queue files
   / 18 matches.
 - `py -3 tools\modernization_audit.py --details` passes.
 - `ctest --test-dir build-standard -E sil_source_size_audit --output-on-failure`
   passes.
 - `ctest --test-dir build-standard -R sil_source_size_audit --output-on-failure`
-  still fails on existing source-size baseline drift: `src/main-sdl.c`,
-  `src/sdl-config.c`, and `src/sdl-main-internal.h`.
+  still fails on existing source-size baseline drift: `src/app/app-scene-birth-ui.c`,
+  `src/main-sdl.c`, `src/sdl-config.c`, `src/sdl-scene-dungeon.c`, and
+  `src/sdl-main-internal.h`.
 
 ## Remaining Work Outline
 
@@ -123,12 +130,15 @@ high-level map.
 
 1. Semantic dispatch completion
 
-   - Continue replacing `ui_information_scene_wait_key*()` consumers with
-     `ui_information_scene_wait_event()` command adapters.
-   - Reduce the remaining `action_key` fallback reads and legacy command-bridge
-     queue usage.
-   - Keep preserving keyboard behavior while making pointer, touch, and gamepad
-     actions first-class.
+   - Status: implemented in the current tree.
+   - Maintain zero `ui_information_scene_wait_key*()` consumers outside the
+     compatibility owners.
+   - Keep remaining `action_key` fallback reads and legacy command-bridge queue
+     usage confined to the central compatibility bridge, SDL target metadata,
+     and top-level gameplay input paths until those lanes get direct semantic
+     gameplay command consumers.
+   - Preserve keyboard behavior while making pointer, touch, and gamepad
+     actions first-class in migrated screens.
 
 2. Shared browser shell
 
@@ -141,10 +151,11 @@ high-level map.
 
 3. UX3 visual remaster system
 
-   - Finish the token/style pass in the SDL menu renderers.
-   - Remove remaining terminal-era blue-menu styling.
-   - Add final modern pixel-art treatment, backdrops, accents, typography,
-     spacing, and shared visual states.
+   - Status: implemented in the current tree.
+   - Maintain token-first SDL menu styling for colors, materials, spacing,
+     typography buckets, focus rings, and selected/pressed/disabled states.
+   - Maintain procedural modern-pixel backdrops and keep optional bitmap
+     backdrop/header slots data-independent.
    - Keep the UI dense and fast; this is a remaster, not a marketing redesign.
 
 4. UX4 dungeon map pointer and touch interaction
@@ -157,10 +168,10 @@ high-level map.
 
 5. UX5 panes, overlays, and scale controls
 
-   - Add visible pin/unpin/reset controls for overlay panels.
-   - Finish touch-first pane drag/resize polish.
-   - Broaden scale and density controls beyond the current integer main-view
-     scale.
+   - Status: implemented in the current tree.
+   - Maintain visible pin/unpin/reset controls for overlay panels.
+   - Maintain touch-first pane drag/resize behavior.
+   - Maintain scale and density controls beyond the integer main-view scale.
    - Keep config persistence explicit and failure-aware.
 
 6. Stateful workflow migrations
@@ -173,6 +184,7 @@ high-level map.
 
 7. Out-of-game remaster screens
 
+   - Welcome screen final design.
    - Main hub final design.
    - Death/victory visual polish.
    - Story and lore presentation polish.
@@ -589,8 +601,8 @@ Wave B: shared browser shell.
 
 Wave C: out-of-game remaster screens.
 
-- Main hub final design, birth/character creation, Halls of Mandos, death,
-  story, metarun history/stats.
+- Welcome screen, main hub final design, birth/character creation, Halls of
+  Mandos, death, story, metarun history/stats.
 
 Wave D: complex nested workflows.
 

@@ -72,6 +72,15 @@ typedef struct main_menu_scene_scope {
     app_input_capture_scope input_capture_scope;
 } main_menu_scene_scope;
 
+typedef struct main_menu_entry {
+    int id;
+    cptr key;
+    cptr label;
+    cptr meta;
+    cptr detail_title;
+    cptr detail;
+} main_menu_entry;
+
 static bool main_menu_choice_is_disabled(int choice);
 
 static char main_menu_direction_command_key(const app_ui_command* command)
@@ -196,6 +205,54 @@ static bool main_menu_choice_is_disabled(int choice)
 {
     return (choice == MAIN_MENU_SAVE)
         || (choice == MAIN_MENU_SAVE_QUIT);
+}
+
+static const main_menu_entry main_menu_entries[] = {
+    { MAIN_MENU_CHARACTER, "c", "Character Sheet", "Hero, traits, notes",
+        "Character Sheet", "Review the current hero, equipment summary, and recorded story." },
+    { MAIN_MENU_KNOWLEDGE, "a", "Known Lore", "Creatures, objects, artefacts",
+        "Known Lore", "Open discovered lore with browser rows and recall detail." },
+    { MAIN_MENU_QUEST_STATUS, "t", "Quest Status", "Vows and divine errands",
+        "Quest Status", "Review active quest progress and reward state." },
+    { MAIN_MENU_HALLS_OF_MANDOS, "d", "Halls of Mandos", "High scores",
+        "Halls of Mandos", "View the ranked record of fallen and victorious heroes." },
+    { MAIN_MENU_RUN_HISTORY, "v", "Run History", "Detailed chronicle",
+        "Run History", "Open sortable run records, timelines, artefacts, and monster logs." },
+    { MAIN_MENU_MAP, "m", "Map", "Dungeon overview",
+        "Map", "Survey the known dungeon map without spending a turn." },
+    { MAIN_MENU_LOG, "l", "Message Log", "Recent events",
+        "Message Log", "Search and review the message recall document." },
+    { MAIN_MENU_COMBAT_HISTORY, "x", "Combat History", "Rolls and exchanges",
+        "Combat History", "Inspect recent combat exchanges and roll breakdowns." },
+    { MAIN_MENU_HINT_MESSAGES, "i", "Hint Messages", "Contextual advice",
+        "Hint Messages", "Review hints found on this level and jump back to their source." },
+    { MAIN_MENU_STORY, "y", "The Tale So Far", "Unlocked chapters",
+        "The Tale So Far", "Read the current saga chapters with story typography." },
+    { MAIN_MENU_OPTIONS, "o", "Settings", "Interface, input, sound",
+        "Settings", "Adjust movement, panes, visuals, sound, and gameplay options." },
+    { MAIN_MENU_HELP, "h", "Help", "Rules and commands",
+        "Help", "Open the shared help document browser." },
+    { MAIN_MENU_ABOUT, "b", "About", "Credits",
+        "About", "Read project credits and inherited lineage." },
+    { MAIN_MENU_SAVE, "s", "Save", "Write current run",
+        "Save", "Persist the current living run and score snapshot." },
+    { MAIN_MENU_SAVE_QUIT, "q", "Quit With Save", "Return to title",
+        "Quit With Save", "Save the current run and return to the out-of-game hub." },
+    { MAIN_MENU_RETURN_GAME, "r", "Return To Game", "Close hub",
+        "Return To Game", "Close this hub and resume play." },
+};
+
+static const main_menu_entry* main_menu_find_entry(int id)
+{
+    size_t i;
+
+    for (i = 0; i < N_ELEMENTS(main_menu_entries); i++)
+    {
+        if (main_menu_entries[i].id == id)
+            return &main_menu_entries[i];
+    }
+
+    return NULL;
 }
 
 static void main_menu_prompt_label(int binding, const char* fallback,
@@ -403,26 +460,57 @@ static bool main_menu_scene_enter(main_menu_scene_scope* scope)
 }
 
 static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
-    int highlight, bool death_view, cptr key, cptr label, cptr meta)
+    int highlight, bool death_view)
 {
+    const main_menu_entry* entry = main_menu_find_entry(id);
     byte attr = TERM_WHITE;
     bool enabled = true;
+    char meta_buf[APP_UI_META_MAX];
 
-    if (!panel || !label)
+    if (!panel || !entry)
         return false;
 
     if (death_view && main_menu_choice_is_disabled(id))
     {
         attr = TERM_L_DARK;
         enabled = false;
+        SDL_strlcpy(meta_buf, "Unavailable after death", sizeof(meta_buf));
     }
     else if (highlight == id)
     {
         attr = TERM_L_BLUE;
+        SDL_strlcpy(meta_buf, entry->meta, sizeof(meta_buf));
+    }
+    else
+    {
+        SDL_strlcpy(meta_buf, entry->meta, sizeof(meta_buf));
     }
 
     return app_ui_panel_add_row(panel, (s16b)id, attr, enabled,
-        highlight == id, key ? key : "", label, meta ? meta : "");
+        highlight == id, entry->key, entry->label, meta_buf);
+}
+
+static bool main_menu_scene_add_detail(app_ui_panel* panel, int highlight,
+    bool death_view)
+{
+    const main_menu_entry* entry = main_menu_find_entry(highlight);
+    char status[APP_UI_TEXT_MAX];
+
+    if (!panel || !entry)
+        return false;
+
+    app_ui_panel_set_detail_title(panel, TERM_L_BLUE, entry->detail_title);
+    if (!app_ui_panel_add_detail_line(panel, TERM_WHITE, entry->detail))
+        return false;
+
+    if (death_view && main_menu_choice_is_disabled(highlight))
+    {
+        return app_ui_panel_add_detail_line(panel, TERM_L_RED,
+            "This action is disabled while reviewing a finished run.");
+    }
+
+    strnfmt(status, sizeof(status), "Shortcut: %s", entry->key);
+    return app_ui_panel_add_detail_line(panel, TERM_SLATE, status);
 }
 
 static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
@@ -444,41 +532,53 @@ static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_COMPACT_OVERLAY;
-    app_ui_panel_set_widths(panel, 300, 460);
+    panel->style = APP_UI_PANEL_STYLE_HUB;
+    panel->flags |= APP_UI_PANEL_FLAG_SHOW_DETAIL;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_widths(panel, 920, 1360);
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    app_ui_panel_set_title(panel, TERM_L_WHITE,
+        death_view ? "Postmortem Hub" : "Sil-More Hub");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        death_view ? "Review the finished run" : "Choose a destination");
+
+    if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+            death_view ? "Saving and quitting are disabled after death."
+                       : "Esc or Return To Game closes the hub."))
+    {
+        return false;
+    }
 
     return main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
-               death_view, "c", "Character sheet      (c)", "")
+               death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_KNOWLEDGE, highlight,
-            death_view, "a", "Known lore           (a)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_QUEST_STATUS, highlight,
-            death_view, "t", "Quest status         (t)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_HALLS_OF_MANDOS, highlight,
-            death_view, "d", "Halls of Mandos      (d)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_RUN_HISTORY, highlight,
-            death_view, "v", "Run history          (v)", "")
-        && main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight,
-            death_view, "m", "Map                  (m)", "")
-        && main_menu_scene_add_row(panel, MAIN_MENU_LOG, highlight,
-            death_view, "l", "Log                  (l)", "")
+            death_view)
+        && main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight, death_view)
+        && main_menu_scene_add_row(panel, MAIN_MENU_LOG, highlight, death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_COMBAT_HISTORY, highlight,
-            death_view, "x", "Combat history       (x)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_HINT_MESSAGES, highlight,
-            death_view, "i", "Hint messages        (i)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_STORY, highlight,
-            death_view, "y", "The story so far     (y)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_OPTIONS, highlight,
-            death_view, "o", "Options and misc     (o)", "")
-        && main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight,
-            death_view, "h", "Help                 (h)", "")
+            death_view)
+        && main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight, death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_ABOUT, highlight,
-            death_view, "b", "About                (b)", "")
-        && main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight,
-            death_view, "s", "Save                 (s)", "")
+            death_view)
+        && main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight, death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_SAVE_QUIT, highlight,
-            death_view, "q", "Quit with save       (q)", "")
+            death_view)
         && main_menu_scene_add_row(panel, MAIN_MENU_RETURN_GAME, highlight,
-            death_view, "r", "Return to game       (r)", "");
+            death_view)
+        && main_menu_scene_add_detail(panel, highlight, death_view);
 }
 
 static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,
@@ -1776,12 +1876,6 @@ static bool hint_message_command_to_key(const app_ui_command* command,
         default:
             return true;
         }
-    }
-
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
     }
 
     return false;

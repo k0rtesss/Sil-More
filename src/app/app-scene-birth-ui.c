@@ -44,6 +44,8 @@ typedef struct birth_menu_scene_scope {
 
 #define INVALID_CHOICE 255
 
+static bool oath_option_selectable(int oath_id, int available_mask);
+
 static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
 {
     [S_MEL] = {
@@ -220,6 +222,264 @@ static bool birth_confirm_input(int ch, bool steamdeck)
     return false;
 }
 
+static char birth_ui_direction_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '4' : '6';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '4' : '6';
+    }
+
+    return '\0';
+}
+
+static bool birth_ui_command_cancelled(const app_ui_command* command)
+{
+    return command
+        && (command->kind == APP_UI_COMMAND_KIND_CANCEL
+            || command->target.action == APP_UI_WIDGET_ACTION_CANCEL);
+}
+
+static bool birth_ui_command_activated(const app_ui_command* command)
+{
+    return command
+        && (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || command->kind == APP_UI_COMMAND_KIND_SELECT
+            || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+            || command->target.action == APP_UI_WIDGET_ACTION_SELECT);
+}
+
+static bool birth_ui_wait_event(ui_information_scene_event* event, u16b reason)
+{
+    return ui_information_scene_wait_event_with_wait_reason(event, 0, reason,
+        true);
+}
+
+static char birth_wait_assignment_review_key(void)
+{
+    ui_information_scene_event event;
+
+    while (birth_ui_wait_event(&event, APP_WAIT_REASON_CONFIRM))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (birth_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            if (command->target.widget_id == 1)
+                return '\r';
+            if (command->target.widget_id == 2)
+                return ESCAPE;
+        }
+        if (birth_ui_command_activated(command))
+            return '\r';
+    }
+
+    return ESCAPE;
+}
+
+static char birth_wait_selection_key(int* cur, int num,
+    bool allow_full_description_screen)
+{
+    ui_information_scene_event event;
+
+    while (birth_ui_wait_event(&event, APP_WAIT_REASON_LIST_SELECTION))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (birth_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = birth_ui_direction_command_key(command);
+
+            if (dir_key)
+                return dir_key;
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            int choice = command->target.widget_id;
+
+            if (choice >= 0 && choice < num && cur)
+                *cur = choice;
+            if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+                return '\0';
+            if (allow_full_description_screen
+                && (command->kind == APP_UI_COMMAND_KIND_INSPECT
+                    || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+                    || command->target.action == APP_UI_WIDGET_ACTION_INSPECT))
+            {
+                return 'f';
+            }
+            if (birth_ui_command_activated(command))
+                return '\r';
+            return '\0';
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            switch (command->target.widget_id)
+            {
+            case 1:
+                return '\r';
+            case 2:
+                return ESCAPE;
+            case 3:
+                return 'r';
+            case 4:
+                return allow_full_description_screen ? 'f' : '\0';
+            case 5:
+                return 'o';
+            case 6:
+                return 's';
+            case 7:
+                return 'h';
+            case 8:
+                return 'q';
+            default:
+                break;
+            }
+        }
+    }
+
+    return ESCAPE;
+}
+
+static char birth_wait_oath_key(int* highlight, int available_mask)
+{
+    ui_information_scene_event event;
+
+    while (birth_ui_wait_event(&event, APP_WAIT_REASON_LIST_SELECTION))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (birth_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = birth_ui_direction_command_key(command);
+
+            if (dir_key)
+                return dir_key;
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            int oath_id = command->target.widget_id;
+
+            if (oath_option_selectable(oath_id, available_mask) && highlight)
+                *highlight = oath_id;
+            if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+                return '\0';
+            if (birth_ui_command_activated(command))
+                return '\r';
+            return '\0';
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            if (command->target.widget_id == 1)
+                return '\r';
+            if (command->target.widget_id == 2)
+                return ESCAPE;
+        }
+    }
+
+    return ESCAPE;
+}
+
+static char birth_wait_allocation_key(int* selected, int count,
+    bool skip_special, bool include_quit)
+{
+    ui_information_scene_event event;
+
+    while (birth_ui_wait_event(&event, APP_WAIT_REASON_LIST_SELECTION))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (birth_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = birth_ui_direction_command_key(command);
+
+            if (dir_key)
+                return dir_key;
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            int row_id = command->target.widget_id;
+
+            if (selected && row_id >= 0 && row_id < count
+                && (!skip_special || row_id != S_SPC))
+            {
+                *selected = row_id;
+            }
+            return '\0';
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            switch (command->target.widget_id)
+            {
+            case 1:
+                return '\r';
+            case 2:
+                return ESCAPE;
+            case 3:
+                return '4';
+            case 4:
+                return '6';
+            case 5:
+                return include_quit ? 'q' : '\0';
+            default:
+                break;
+            }
+        }
+    }
+
+    return ESCAPE;
+}
+
 static void birth_trimmed_stat_label(int stat, char* buf, size_t buflen)
 {
     const char *label;
@@ -358,7 +618,37 @@ static bool birth_build_stats_allocation_ui_scene(app_ui_scene* scene,
         }
     }
 
-    return true;
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Confirm")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back")
+            && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "4", "Lower")
+            && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                "6", "Raise")
+            && app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "q", "Quit");
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Confirm")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back")
+        && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "4", "Lower")
+        && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "6", "Raise")
+        && app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "q", "Quit");
 }
 
 static bool birth_present_stats_allocation_ui_scene(const int stats[A_MAX],
@@ -437,7 +727,37 @@ static bool birth_build_skills_allocation_ui_scene(app_ui_scene* scene,
     }
 
     panel->selected_row = selected_row;
-    return true;
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Confirm")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back")
+            && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+                "4", "Lower")
+            && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+                "6", "Raise")
+            && app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "q", "Quit");
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Confirm")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back")
+        && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "4", "Lower")
+        && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "6", "Raise")
+        && app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+            "q", "Quit");
 }
 
 static bool birth_present_skills_allocation_ui_scene(int selected_skill,
@@ -492,8 +812,31 @@ static bool birth_build_assignment_review_ui_scene(app_ui_scene* scene,
     {
         return false;
     }
-    return app_ui_panel_add_body_line(panel, TERM_SLATE,
-        "Continue to start, or go back to adjust your assignments.");
+    if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
+            "Continue to start, or go back to adjust your assignments."))
+    {
+        return false;
+    }
+
+    if (steamdeck)
+    {
+        char confirm_label[16];
+        char back_label[16];
+
+        birth_prompt_label(steamdeck_confirm_key(), "A", confirm_label,
+            sizeof(confirm_label));
+        birth_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, "Continue")
+            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Back");
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Continue")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Esc", "Back");
 }
 
 static bool birth_show_semantic_assignment_review(bool steamdeck)
@@ -511,8 +854,7 @@ static bool birth_show_semantic_assignment_review(bool steamdeck)
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_CONFIRM);
+        ch = birth_wait_assignment_review_key();
 
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
@@ -1283,8 +1625,10 @@ static int get_player_choice(birth_menu* choices, int num, int def,
         if (done)
             return cur;
 
-        c = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        c = birth_wait_selection_key(&cur, num,
+            allow_full_description_screen);
+        if (c == '\0')
+            continue;
 
         if ((c == 'Q') || (c == 'q'))
             quit(NULL);
@@ -1843,8 +2187,9 @@ NavResult birth_select_oath(void)
             log_warn("oath selection: semantic scene presentation failed");
             return NAV_BACK;
         }
-        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        key = birth_wait_oath_key(&highlight, available_mask);
+        if (key == '\0')
+            continue;
 
         if (steamdeck && key == steamdeck_back_key())
             return NAV_BACK;
@@ -2004,8 +2349,9 @@ NavResult birth_run_stats_allocation(void)
             return NAV_TO_MAIN;
         }
 
-        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        ch = birth_wait_allocation_key(&stat, A_MAX, false, true);
+        if (ch == '\0')
+            continue;
 
         if ((ch == 'Q') || (ch == 'q'))
         {
@@ -2103,8 +2449,9 @@ NavResult gain_skills(void)
             return NAV_TO_MAIN;
         }
 
-        ch = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        ch = birth_wait_allocation_key(&skill, S_MAX, true, true);
+        if (ch == '\0')
+            continue;
 
         if (((ch == 'Q') || (ch == 'q')) && (turn == 0))
         {

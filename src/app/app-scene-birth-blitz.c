@@ -73,6 +73,151 @@ static void birth_prompt_label(int binding, const char* fallback, char* buf,
     ui_semantic_prompt_label(binding, fallback, buf, buflen);
 }
 
+static char blitz_ui_direction_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '4' : '6';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '4' : '6';
+    }
+
+    return '\0';
+}
+
+static bool blitz_ui_command_cancelled(const app_ui_command* command)
+{
+    return command
+        && (command->kind == APP_UI_COMMAND_KIND_CANCEL
+            || command->target.action == APP_UI_WIDGET_ACTION_CANCEL);
+}
+
+static bool blitz_ui_command_activated(const app_ui_command* command)
+{
+    return command
+        && (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || command->kind == APP_UI_COMMAND_KIND_SELECT
+            || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+            || command->target.action == APP_UI_WIDGET_ACTION_SELECT);
+}
+
+static bool blitz_ui_wait_event(ui_information_scene_event* event)
+{
+    return ui_information_scene_wait_event_with_wait_reason(event, 0,
+        APP_WAIT_REASON_LIST_SELECTION, true);
+}
+
+static char blitz_wait_setup_key(int* selected)
+{
+    ui_information_scene_event event;
+
+    while (blitz_ui_wait_event(&event))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (blitz_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = blitz_ui_direction_command_key(command);
+
+            if (dir_key)
+                return dir_key;
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            int row_id = command->target.widget_id;
+
+            if (selected && row_id >= 0 && row_id < 5)
+                *selected = row_id;
+            return '\0';
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            if (command->target.widget_id == 1)
+                return '\r';
+            if (command->target.widget_id == 2)
+                return ESCAPE;
+            if (command->target.widget_id == 4)
+                return '6';
+        }
+    }
+
+    return ESCAPE;
+}
+
+static char blitz_wait_effect_picker_key(const int ids[], int count,
+    int* selected)
+{
+    ui_information_scene_event event;
+
+    while (blitz_ui_wait_event(&event))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (blitz_ui_command_cancelled(command))
+            return ESCAPE;
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = blitz_ui_direction_command_key(command);
+
+            if (dir_key)
+                return dir_key;
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            for (int i = 0; ids && i < count; i++)
+            {
+                if (ids[i] != command->target.widget_id)
+                    continue;
+                if (selected)
+                    *selected = i;
+                if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+                    return '\0';
+                return blitz_ui_command_activated(command) ? '\r' : '\0';
+            }
+            return '\0';
+        }
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            if (command->target.widget_id == 1)
+                return '\r';
+            if (command->target.widget_id == 2)
+                return ESCAPE;
+        }
+    }
+
+    return ESCAPE;
+}
+
 static bool birth_ui_panel_add_wrapped_lines(app_ui_panel* panel, byte attr,
     cptr text, bool detail_lines)
 {
@@ -415,8 +560,9 @@ NavResult birth_blitz_setup_menu(void)
             birth_menu_scene_leave(&scene_scope);
             return NAV_TO_MAIN;
         }
-        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        key = blitz_wait_setup_key(&selected);
+        if (key == '\0')
+            continue;
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
         {
@@ -809,8 +955,9 @@ static int blitz_select_effect_from_list(bool blessing, bool show_effects,
             return -1;
         }
 
-        key = (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-            APP_WAIT_REASON_LIST_SELECTION);
+        key = blitz_wait_effect_picker_key(ids, count, &selected);
+        if (key == '\0')
+            continue;
 
         if (key == ESCAPE || (steamdeck && key == steamdeck_back_key()))
             return -1;
