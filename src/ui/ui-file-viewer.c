@@ -21,6 +21,7 @@
 #include "fs/file.h"
 #include "fs/resource.h"
 #include "log/log.h"
+#include "support/utf8.h"
 #include <ctype.h>
 
 #define SHOW_FILE_SCROLL_PAGE_LINES 12
@@ -111,10 +112,10 @@ static bool show_file_scene_add_rich_chunk(app_ui_scene* scene,
 
     while (offset < len)
     {
-        size_t part = len - offset;
-
-        if (part >= sizeof(chunk))
-            part = sizeof(chunk) - 1u;
+        size_t part = utf8_clip_bytes(text + offset,
+            MIN(len - offset, sizeof(chunk) - 1u));
+        if (part == 0)
+            break;
         memcpy(chunk, text + offset, part);
         chunk[part] = '\0';
         if (!app_ui_panel_add_rich_text(scene, panel, attr, chunk))

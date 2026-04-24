@@ -1843,7 +1843,7 @@ static bool ability_semantic_activate_selected(int skilltype, int abilitynum,
             && p_ptr->have_ability[S_SPC][SPC_AULE])
         {
             ability_semantic_bell_status(state, TERM_RED,
-                "Aule's Forge supersedes Masterpiece; you cannot purchase it.");
+                "Aulë's Forge supersedes Masterpiece; you cannot purchase it.");
             return false;
         }
 

@@ -117,20 +117,17 @@ bool story_monster_desc_enabled(void)
     return story_term_is_main() ? story_monster_desc_main : story_monster_desc_pane;
 }
 
-void story_font_term_push(bool active, bool grid, story_font_term_state* prev)
+void story_font_term_push(bool active, story_font_term_state* prev)
 {
     if (!prev)
         return;
 
     prev->active = platform_story_font_enabled();
-    prev->grid = platform_story_font_cell_align_enabled();
 
     if (active && !prev->active)
         platform_story_font_enable();
     else if (!active && prev->active)
         platform_story_font_disable();
-
-    platform_story_font_set_cell_align(grid);
 }
 
 void story_font_term_pop(story_font_term_state* prev)
@@ -143,5 +140,4 @@ void story_font_term_pop(story_font_term_state* prev)
     else if (!prev->active && platform_story_font_enabled())
         platform_story_font_disable();
 
-    platform_story_font_set_cell_align(prev->grid);
 }

@@ -494,6 +494,7 @@ set(SIL_MORE_SOURCES_SUPPORT
     src/support/rng.c
     src/support/strl.c
     src/support/text-output.c
+    src/support/utf8.c
     src/support/util.c
 )
 

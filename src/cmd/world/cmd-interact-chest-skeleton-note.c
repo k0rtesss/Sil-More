@@ -43,6 +43,10 @@ typedef struct skeleton_note_state {
 #define SKELETON_NOTE_LEVEL_MIN_BLOCKS 8
 #define SKELETON_NOTE_SMALLER_LEVEL_DELTA 3
 #define SKELETON_NOTE_SMALLER_LEVEL_MIN_BLOCKS 6
+#define SKELETON_NOTE_WRAP_WIDTH_PX 948
+#define SKELETON_NOTE_WRAP_FALLBACK_COLS 70
+#define SKELETON_NOTE_WRAP_MIN_COLS 10
+#define SKELETON_NOTE_WRAP_MAX_COLS 95
 
 static skeleton_note_state g_skeleton_note_state = { -1, 0, 0, 0, 0, 0, 0, {0} };
 static int g_skeleton_note_entry_count = -1;
@@ -79,7 +83,7 @@ static const int skeleton_hint_base_weight[SKEL_HINT_MAX]
 static void skeleton_note_ensure_level_state(void);
 static bool skeleton_note_has_unseen_template(
     byte sval, skeleton_note_role role, skeleton_hint_kind hint);
-static int skeleton_note_effective_wrap_width(int col);
+static int skeleton_note_effective_wrap_width(void);
 static int skeleton_note_append_wrapped_text(
     const char* text, char lines[][100], int idx, int limit, int wrap);
 static void skeleton_note_recount_templates(void)
@@ -1721,22 +1725,18 @@ static int skeleton_note_append_expanded_lines(const skeleton_note_line* line,
     return idx;
 }
 
-static int skeleton_note_effective_wrap_width(int col)
+static int skeleton_note_effective_wrap_width(void)
 {
-    int wrap = 70;
-    int cols = platform_frame_active_grid_cols();
+    int wrap = SKELETON_NOTE_WRAP_FALLBACK_COLS;
+    int cell_width = platform_story_font_cell_width();
 
-    if (cols > 0)
-    {
-        int avail = cols - col - 1;
-        if (avail < wrap)
-            wrap = avail;
-    }
+    if (cell_width > 0)
+        wrap = SKELETON_NOTE_WRAP_WIDTH_PX / cell_width;
 
-    if (wrap < 10)
-        wrap = 10;
-    if (wrap > 95)
-        wrap = 95;
+    if (wrap < SKELETON_NOTE_WRAP_MIN_COLS)
+        wrap = SKELETON_NOTE_WRAP_MIN_COLS;
+    if (wrap > SKELETON_NOTE_WRAP_MAX_COLS)
+        wrap = SKELETON_NOTE_WRAP_MAX_COLS;
 
     return wrap;
 }
@@ -1772,10 +1772,10 @@ static int skeleton_note_append_wrapped_text(
 
 static void skeleton_note_build_lines(const char* opening,
     const skeleton_note_line* body_lines, int body_count, const char* closing,
-    const level_layout_info* layout, char lines[][100], int col)
+    const level_layout_info* layout, char lines[][100])
 {
     const int max_lines = 12; /* Reserve final slot for terminator */
-    int wrap = skeleton_note_effective_wrap_width(col);
+    int wrap = skeleton_note_effective_wrap_width();
 
     int idx = 0;
     idx = skeleton_note_append_wrapped_text(opening, lines, idx, max_lines, wrap);
@@ -2216,7 +2216,7 @@ static void skeleton_note_maybe_show(byte sval, int skel_y, int skel_x)
 
     char note_lines[16][100];
     skeleton_note_build_lines(
-        opening, body_lines, body_count, signoff, &layout, note_lines, 8);
+        opening, body_lines, body_count, signoff, &layout, note_lines);
 
     /* Prepend title */
     char title_buf[100];

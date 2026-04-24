@@ -762,7 +762,7 @@ static bool quest_status_build_entry_detail(app_ui_panel* panel,
         {
         case AULE_QUEST_FORGE_PRESENT:
             return quest_ui_panel_add_line(panel, TERM_L_BLUE,
-                       "Available - Aule awaits", true)
+                       "Available - Aulë awaits", true)
                 && quest_status_add_challenge_detail(panel, entry->quest_id,
                     TERM_SLATE)
                 && quest_status_add_reward_detail(panel, entry->quest_id,
@@ -880,7 +880,7 @@ static bool quest_status_build_entry_detail(app_ui_panel* panel,
         {
         case OROME_QUEST_GIVER_PRESENT:
             return quest_ui_panel_add_line(panel, TERM_L_BLUE,
-                       "Available - Orome awaits", true)
+                       "Available - Oromë awaits", true)
                 && quest_status_add_challenge_detail(panel, entry->quest_id,
                     TERM_SLATE)
                 && quest_status_add_reward_detail(panel, entry->quest_id,

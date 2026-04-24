@@ -1677,13 +1677,13 @@ static void do_cmd_debug_complete_quest(void)
     }
     
     if (p_ptr->aule_quest > AULE_QUEST_NOT_STARTED && p_ptr->aule_quest < AULE_QUEST_REWARDED) {
-        msg_print("Completing Aule quest...");
+        msg_print("Completing Aulë quest...");
         
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->aule_quest == AULE_QUEST_SUCCESS) {
             /* Aule is vault-based (Y:0) - check if quest giver is present */
             if (!is_quest_giver_present(R_IDX_AULE)) {
-                msg_print("Warning: Aule is not present in this vault. Go to Aule's forge vault to receive your reward.");
+                msg_print("Warning: Aulë is not present in this vault. Go to Aulë's forge vault to receive your reward.");
                 quest_found = true;
                 log_debug("Debug: Aule quest ready for reward but Aule not present - go to vault");
             } else {
@@ -1695,7 +1695,7 @@ static void do_cmd_debug_complete_quest(void)
         } else {
             /* Quest not completed yet - mark as complete and check for giver */
             if (!is_quest_giver_present(R_IDX_AULE)) {
-                msg_print("Warning: Aule is not present in this vault. Go to Aule's forge vault to receive your reward.");
+                msg_print("Warning: Aulë is not present in this vault. Go to Aulë's forge vault to receive your reward.");
                 /* Still mark quest as complete for the challenge completion */
                 p_ptr->aule_quest = AULE_QUEST_SUCCESS;
                 quest_found = true;
@@ -1775,14 +1775,14 @@ static void do_cmd_debug_complete_quest(void)
     }
     
     if (p_ptr->orome_quest > OROME_QUEST_NOT_STARTED && p_ptr->orome_quest < OROME_QUEST_REWARDED) {
-        msg_print("Completing Orome quest...");
+        msg_print("Completing Oromë quest...");
         
         /* If quest is already in SUCCESS state, just give reward */
         if (p_ptr->orome_quest == OROME_QUEST_SUCCESS) {
             /* Orome is spawn-based (Y:1) - spawn quest giver near player for reward */
             if (!is_quest_giver_present(R_IDX_OROME)) {
                 if (!spawn_quest_giver_near_player(R_IDX_OROME)) {
-                    msg_print("Warning: Could not spawn Orome for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Oromë for reward - completing anyway.");
                 }
             }
             /* Trigger quest interaction to give reward */
@@ -1796,7 +1796,7 @@ static void do_cmd_debug_complete_quest(void)
             p_ptr->orome_killed_count = p_ptr->orome_target_count;
             if (!is_quest_giver_present(R_IDX_OROME)) {
                 if (!spawn_quest_giver_near_player(R_IDX_OROME)) {
-                    msg_print("Warning: Could not spawn Orome for reward - completing anyway.");
+                    msg_print("Warning: Could not spawn Oromë for reward - completing anyway.");
                 }
             }
             /* Trigger proper quest interaction */
@@ -1822,12 +1822,12 @@ static void do_cmd_debug_orome_status(void)
     quest_type *q_ptr = &quest_info[5]; /* Orome is quest 5 */
     
     /* Show Orome quest state */
-    strnfmt(buf, sizeof(buf), "Orome Quest Status: %d (0=NOT_STARTED, 1=GIVEN, 2=ACTIVE, 3=COMPLETE, 4=REWARDED)", 
+    strnfmt(buf, sizeof(buf), "Oromë Quest Status: %d (0=NOT_STARTED, 1=GIVEN, 2=ACTIVE, 3=COMPLETE, 4=REWARDED)",
             p_ptr->orome_quest);
     msg_print(buf);
     
     /* Show current depth */
-    strnfmt(buf, sizeof(buf), "Current depth: %d (Orome depth range: %d-%d)", 
+    strnfmt(buf, sizeof(buf), "Current depth: %d (Oromë depth range: %d-%d)",
             p_ptr->depth, q_ptr->depth_min, q_ptr->depth_max);
     msg_print(buf);
     
@@ -1840,16 +1840,16 @@ static void do_cmd_debug_orome_status(void)
     
     /* Check if we're at the right depth for Orome */
     if (p_ptr->depth >= q_ptr->depth_min && p_ptr->depth <= q_ptr->depth_max) {
-        msg_print("Depth is in valid range for Orome spawning.");
+        msg_print("Depth is in valid range for Oromë spawning.");
     } else {
-        msg_print("Depth is NOT in valid range for Orome spawning.");
+        msg_print("Depth is NOT in valid range for Oromë spawning.");
     }
     
     /* Manually trigger quest lottery to see what happens */
     msg_print("Triggering quest lottery manually...");
     debug_run_quest_roulette();
     int winner = debug_get_quest_lottery_winner();
-    strnfmt(buf, sizeof(buf), "Quest lottery result: %d (0=none, 1=Tulkas, 4=Niena, 5=Orome)", winner);
+    strnfmt(buf, sizeof(buf), "Quest lottery result: %d (0=none, 1=Tulkas, 4=Niena, 5=Oromë)", winner);
     msg_print(buf);
 }
 

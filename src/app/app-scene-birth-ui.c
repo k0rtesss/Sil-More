@@ -147,7 +147,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
         [SNG_ELVENESS] = "Song of Elveness",
         [SNG_STAYING] = "Song of Staying",
         [SNG_DISGUISE] = "Song of Disguise",
-        [SNG_LORIEN] = "Song of Lorien",
+        [SNG_LORIEN] = "Song of Lórien",
         [SNG_SHATTERING] = "Song of Shattering",
         [SNG_MASTERY] = "Song of Mastery",
         [SNG_CONTEST] = "Song of Contest",
@@ -156,7 +156,7 @@ static const char *character_ability_names[S_MAX][ABILITIES_MAX] =
     },
     [S_SPC] = {
         [SPC_MANDOS] = "Mandos' Doom",
-        [SPC_AULE] = "Aule's Forge",
+        [SPC_AULE] = "Aulë's Forge",
         [SPC_OATH_MERCY] = "Oath of Mercy",
         [SPC_OATH_SILENCE] = "Oath of Silence",
         [SPC_OATH_IRON] = "Oath of Iron",
@@ -986,14 +986,14 @@ static int collect_character_trait_lines(int race, int character,
     HANDLE_UNIQUE_U_EX("Hidden city", "Hidden City", UNQ_SNG_TURGON, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Chosen of Ulmo", "Ulmo's Chosen", UNQ_WIL_TUOR, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Indominable Will", "Indom. Will", UNQ_EARENDIL, TERM_VIOLET);
-    HANDLE_UNIQUE_U_EX("Orome Himself", "Orome", UNQ_WIL_FIN, TERM_VIOLET);
+    HANDLE_UNIQUE_U_EX("Oromë Himself", "Oromë", UNQ_WIL_FIN, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Songs of Power", "Songs of Power", UNQ_SNG_FIN, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Elven Dance", "Elven Dance", UNQ_SNG_LUT, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Girdle of Melian", "Melian's Girdle", UNQ_SNG_MEL, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Creator of Angrist", "Angrist Maker", UNQ_SMT_TELCHAR, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Old Master", "Old Master", UNQ_SMT_GAMIL, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Ring Master", "Ring Master", UNQ_SMT_CELEBRIMBOR, TERM_VIOLET);
-    HANDLE_UNIQUE_U_EX("Aure entuluva", "Aure Entuluva", UNQ_SNG_HURIN, TERM_VIOLET);
+    HANDLE_UNIQUE_U_EX("Aurë entuluva", "Aurë Entuluva", UNQ_SNG_HURIN, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Voice of Girdle", "Girdle Voice", UNQ_SNG_THINGOL, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Forgotten", "Forgotten", UNQ_MIM, TERM_VIOLET);
     HANDLE_UNIQUE_U_EX("Minstrel", "Minstrel", UNQ_MINSTREL, TERM_VIOLET);

@@ -21,6 +21,7 @@
 #include "object/object-info.h"
 #include "object/object-info-internal.h"
 #include "object/object-use.h"
+#include "support/utf8.h"
 #include "ui/ui-information-scene.h"
 
 #include <limits.h>
@@ -227,9 +228,9 @@ static bool object_info_screen_capture_append_run(
 
                 if (available > 0)
                 {
-                    len = strlen(text);
-                    if (len > available)
-                        len = available;
+                    len = utf8_clip_bytes(text, available);
+                    if (len == 0)
+                        break;
                     memcpy(run->text + current_len, text, len);
                     run->text[current_len + len] = '\0';
                     text += len;
@@ -251,7 +252,7 @@ static bool object_info_screen_capture_append_run(
         run = &capture->runs[capture->run_count++];
         memset(run, 0, sizeof(*run));
         run->attr = attr;
-        SDL_strlcpy(run->text, text, sizeof(run->text));
+        (void)utf8_strlcpy(run->text, text, sizeof(run->text));
         text += strlen(run->text);
         line->run_count++;
     }
@@ -271,21 +272,20 @@ static bool object_info_screen_capture_append_chunk(byte attr, const char* text,
 
     while (offset < len)
     {
-        int chunk = MIN(len - offset, (int)sizeof(buf) - 1);
+        int remaining = len - offset;
+        int chunk = (int)utf8_clip_bytes(text + offset,
+            MIN((size_t)remaining, sizeof(buf) - 1u));
 
-        for (int i = 0; i < chunk; i++)
-        {
-            unsigned char ch = (unsigned char)text[offset + i];
-
-            buf[i] = (char)(isprint(ch) || ch == ' ' ? ch : ' ');
-        }
+        if (chunk <= 0)
+            break;
+        memcpy(buf, text + offset, (size_t)chunk);
         buf[chunk] = '\0';
         if (!object_info_screen_capture_append_run(capture, attr, buf))
             return false;
         offset += chunk;
     }
 
-    object_info_live_capture_col += len;
+    object_info_live_capture_col += (int)utf8_strnlen_cells(text, (size_t)len);
     return true;
 }
 
@@ -352,7 +352,9 @@ static void text_out_to_object_info_capture(byte attr, cptr str)
     while (*s)
     {
         int n = 0;
-        int len = wrap - object_info_live_capture_col;
+        int len;
+        int available;
+        int cells = 0;
         int l_space = -1;
 
         if (object_info_live_capture_col == 0)
@@ -362,17 +364,37 @@ static void text_out_to_object_info_capture(byte attr, cptr str)
                 object_info_live_capture_failed = true;
                 return;
             }
-            len = wrap - object_info_live_capture_col;
         }
 
-        while ((n < len) && !((s[n] == '\n') || (s[n] == '\0')))
+        available = wrap - object_info_live_capture_col;
+        if (available <= 0)
         {
+            if (!object_info_screen_capture_newline())
+            {
+                object_info_live_capture_failed = true;
+                return;
+            }
+            continue;
+        }
+
+        while (!((s[n] == '\n') || (s[n] == '\0')))
+        {
+            size_t char_len = utf8_char_len(s + n);
+            int width;
+
+            if (char_len == 0)
+                break;
+            width = (int)utf8_strnlen_cells(s + n, char_len);
+            if (cells + width > available)
+                break;
             if (s[n] == ' ')
                 l_space = n;
-            n++;
+            cells += width;
+            n += (int)char_len;
         }
+        len = n;
 
-        if ((l_space == -1) && (n == len))
+        if ((l_space == -1) && s[n] && s[n] != '\n')
         {
             if (object_info_live_capture_col == text_out_indent)
             {
@@ -1263,7 +1285,7 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (f4 & (TR4_SUBTLETY_THROW))
         good[gc++] = "lets you use Subtlety with thrown attacks";
     if (f4 & (TR4_BREAKS_PERMA_CURSE))
-        good[gc++] = "can break the Oath of Feanor on your equipped items";
+        good[gc++] = "can break the Oath of Fëanor on your equipped items";
     if (f4 & (TR4_DEEP_CALL))
         good[gc++] = "bears a Deep Call, speeding the minimum depth timer as if you were three levels deeper even in your inventory";
     if ((f4 & (TR4_PROT_FIRE)) && (o_ptr->pd > 0))
@@ -1324,7 +1346,7 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
     if (cursed_p(o_ptr))
     {
         if (f3 & (TR3_PERMA_CURSE))
-            bad[bc++] = "bound by the Oath of Feanor (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were three levels deeper even in your inventory";
+            bad[bc++] = "bound by the Oath of Fëanor (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were three levels deeper even in your inventory";
         else if (f3 & (TR3_HEAVY_CURSE))
             bad[bc++] = "heavily cursed";
         else if (object_known_p(o_ptr))
@@ -1360,7 +1382,7 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
         int i;
         for (i = 0; i < bc; i++)
         {
-            if (strstr(bad[i], "cursed") || strstr(bad[i], "Oath of Feanor"))
+            if (strstr(bad[i], "cursed") || strstr(bad[i], "Oath of Fëanor"))
             {
                 has_curse = true;
                 break;
@@ -1381,10 +1403,10 @@ static bool describe_misc_magic(const object_type* o_ptr, u32b f2, u32b f3, u32b
                 }
                 
                 /* Color curse-related text in violet */
-                if (strstr(bad[i], "Oath of Feanor"))
+                if (strstr(bad[i], "Oath of Fëanor"))
                 {
                     p_text_out("is ");
-                    p_text_out_c(TERM_VIOLET, "bound by the Oath of Feanor");
+                    p_text_out_c(TERM_VIOLET, "bound by the Oath of Fëanor");
                     p_text_out(" (broken by holy light); the Silmarils are calling you, speeding the minimum depth timer as if you were three levels deeper even in your inventory");
                 }
                 else if (strstr(bad[i], "cursed"))
@@ -2098,8 +2120,11 @@ static bool object_info_scene_add_rich_run(app_ui_scene* scene,
 
     while (len > 0)
     {
-        int chunk = MIN(len, max_chunk);
+        int chunk = (int)utf8_clip_bytes(text,
+            (size_t)MIN(len, max_chunk));
 
+        if (chunk <= 0)
+            break;
         memcpy(buf, text, (size_t)chunk);
         buf[chunk] = '\0';
         if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))

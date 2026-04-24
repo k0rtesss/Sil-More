@@ -33,6 +33,7 @@ extern struct sound_config g_sound_config;
 #include "log/log.h"
 #include "runtime/runtime-game.h"
 #include "runtime/runtime-cli.h"
+#include "support/utf8.h"
 #include <ctype.h>
 #include "h-define.h"
 #include "metarun.h"
@@ -110,10 +111,10 @@ static bool main_menu_about_scene_add_rich_span(app_ui_scene* scene,
     len = strlen(text);
     while (len > 0)
     {
-        size_t chunk_len = len;
-
-        if (chunk_len >= sizeof(buf))
-            chunk_len = sizeof(buf) - 1u;
+        size_t chunk_len = utf8_clip_bytes(text,
+            MIN(len, sizeof(buf) - 1u));
+        if (chunk_len == 0)
+            break;
         memcpy(buf, text, chunk_len);
         buf[chunk_len] = '\0';
         if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))
@@ -954,10 +955,10 @@ static bool hint_message_append_rich_span(app_ui_scene* scene,
 
     while (len > 0)
     {
-        size_t chunk = len;
-
-        if (chunk >= sizeof(buf))
-            chunk = sizeof(buf) - 1u;
+        size_t chunk = utf8_clip_bytes(text,
+            MIN(len, sizeof(buf) - 1u));
+        if (chunk == 0)
+            break;
         memcpy(buf, text, chunk);
         buf[chunk] = '\0';
         if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, story, buf))

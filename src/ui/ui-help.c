@@ -932,7 +932,7 @@ static void help_record_page_document_ops(int i, bool include_header)
 
         help_emit_heading("HEROES OF LEGEND", row, col); row++;
         put_role(ROLE_BODY, "- Choose a fixed hero: ", row, col);
-        put_role(ROLE_TERM, "Feanor, Fingolfin, Beren, Luthien", row, col + 23);
+        put_role(ROLE_TERM, "Fëanor, Fingolfin, Beren, Lúthien", row, col + 23);
         put_role(ROLE_BODY, ", and others.", row, col + 56);
         row++;
         put_role(ROLE_BODY, "- Each bears a signature trait: ", row, col);

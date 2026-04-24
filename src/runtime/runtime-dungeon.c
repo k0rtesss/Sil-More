@@ -1136,8 +1136,8 @@ static void process_player(void)
                         p_ptr->aule_quest = AULE_QUEST_SUCCESS;
                         log_trace("Aule quest: state -> SUCCESS (diff=%d)", diff);
                         msg_print("Your forging radiates unparalleled craft!");
-                        msg_print("You sense that Aule would be pleased with this work...");
-                        msg_print("Seek out Aule to receive his blessing.");
+                        msg_print("You sense that Aulë would be pleased with this work...");
+                        msg_print("Seek out Aulë to receive his blessing.");
                     }
                 }
             }

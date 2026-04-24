@@ -16,6 +16,7 @@
 #include "angband.h"
 
 #include "sdl-scene-menu.h"
+#include "support/utf8.h"
 
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 {
@@ -200,8 +201,9 @@ static int sdl_menu_render_document_text_run_px(TTF_Font* font, float x_px,
     if (!font || !text || len == 0)
         return 0;
 
-    if (copy_len >= sizeof(buf))
-        copy_len = sizeof(buf) - 1;
+    copy_len = utf8_clip_bytes(text, MIN(copy_len, sizeof(buf) - 1u));
+    if (copy_len == 0)
+        return 0;
     memcpy(buf, text, copy_len);
     buf[copy_len] = '\0';
 
@@ -389,21 +391,6 @@ static void sdl_menu_render_fixed_glyph(TTF_Font* font, float x_px, float y_px,
     SDL_DestroySurface(surface);
 }
 
-static void sdl_menu_render_fixed_text(TTF_Font* font, float x_px, float y_px,
-    int cell_w, int cell_h, SDL_Color color, cptr text)
-{
-    size_t i;
-
-    if (!font || !text || !text[0] || cell_w <= 0 || cell_h <= 0)
-        return;
-
-    for (i = 0; text[i]; i++)
-    {
-        sdl_menu_render_fixed_glyph(font, x_px + (float)(i * cell_w), y_px,
-            cell_w, cell_h, color, text[i]);
-    }
-}
-
 bool sdl_menu_document_cell_is_raw(byte attr, char ch, byte terrain_attr,
     char terrain_char)
 {
@@ -432,52 +419,6 @@ void sdl_menu_draw_misc_icon(const SDL_FRect* dst, int icon)
         return;
 
     sdl_menu_draw_tile(attr, ch, dst);
-}
-
-static void sdl_menu_format_plain_row(const app_ui_row* row, char* buf,
-    size_t buf_size)
-{
-    if (!buf || buf_size == 0)
-        return;
-
-    buf[0] = '\0';
-    if (!row)
-        return;
-
-    if (row->flags & APP_UI_ITEM_FLAG_SECTION)
-    {
-        SDL_strlcpy(buf, row->label, buf_size);
-        return;
-    }
-
-    if (row->key[0] && row->label[0] && row->meta[0])
-        strnfmt(buf, buf_size, "%s %s %s", row->key, row->label, row->meta);
-    else if (row->key[0] && row->label[0])
-        strnfmt(buf, buf_size, "%s %s", row->key, row->label);
-    else if (row->label[0] && row->meta[0])
-        strnfmt(buf, buf_size, "%s %s", row->label, row->meta);
-    else if (row->label[0])
-        SDL_strlcpy(buf, row->label, buf_size);
-    else if (row->meta[0])
-        SDL_strlcpy(buf, row->meta, buf_size);
-}
-
-static bool sdl_menu_is_plain_panel(const app_ui_panel* panel)
-{
-    if (!panel)
-        return false;
-
-    return panel->style == APP_UI_PANEL_STYLE_PLAIN
-        && panel->row_count > 0
-        && panel->body_line_count == 0
-        && panel->detail_line_count == 0
-        && panel->rich_paragraph_count == 0
-        && panel->footer_action_count == 0
-        && panel->tab_count == 0
-        && !panel->icon_char
-        && !panel->title[0]
-        && !panel->subtitle[0]
-        && !panel->detail_title[0];
 }
 
 static int sdl_menu_measure_row(TTF_Font* font, const app_ui_panel* panel,
@@ -745,126 +686,6 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
 
         cursor_x += (int)pill.w + pill_gap;
     }
-}
-
-static bool sdl_menu_render_term_plain_panel(const sdl_view* main_view,
-    int canvas_w, int canvas_h, const app_ui_panel* panel)
-{
-    TTF_Font* font = NULL;
-    SDL_FRect clear_rect;
-    int desired_px;
-    int min_px;
-    int pixel_height;
-    int menu_w = 0;
-    int col_main = 0;
-    int row_top = 0;
-    int row_first = 0;
-    int menu_h = 0;
-    int clear_x = 0;
-    int clear_w = 0;
-    int cell_w = 0;
-    int cell_h = 0;
-    u16b i;
-
-    if (!main_view || !panel || !sdl_menu_is_plain_panel(panel))
-        return false;
-    if (canvas_w <= 0 || canvas_h <= 0)
-        return false;
-
-    for (i = 0; i < panel->row_count; i++)
-    {
-        char row_text[APP_UI_LABEL_MAX + APP_UI_META_MAX + APP_UI_KEY_MAX + 8];
-        int row_w;
-
-        sdl_menu_format_plain_row(&panel->rows[i], row_text,
-            sizeof(row_text));
-        row_w = (int)strlen(row_text);
-        if (row_w > menu_w)
-            menu_w = row_w;
-    }
-    if (menu_w <= 0)
-        return false;
-
-    desired_px = sdl_menu_scale_px((float)sdl_menu_font_size_logical(panel));
-    min_px = sdl_menu_scale_px(10.0f);
-    if (min_px < 10)
-        min_px = 10;
-    if (desired_px < min_px)
-        desired_px = min_px;
-
-    for (pixel_height = desired_px; pixel_height >= min_px; pixel_height--)
-    {
-        int font_h;
-        int screen_cols;
-        int screen_rows;
-        int top_pad;
-        int bottom_pad;
-
-        font = sdl_ui_font_for_height(pixel_height);
-        if (!font)
-            continue;
-
-        font_h = TTF_GetFontHeight(font);
-        cell_h = MAX(pixel_height, font_h);
-        cell_w = sdl_menu_measure_text(font, "M");
-        if (cell_w < 1)
-            cell_w = 1;
-
-        screen_cols = canvas_w / cell_w;
-        screen_rows = canvas_h / cell_h;
-        if (screen_cols <= 0 || screen_rows <= 0)
-            continue;
-
-        top_pad = 1;
-        bottom_pad = (screen_rows <= 18) ? 0 : 1;
-        row_top = (screen_rows <= 18) ? 0 : ((screen_rows > 1) ? 1 : 0);
-        row_first = row_top + top_pad;
-        menu_h = (int)panel->row_count + top_pad + bottom_pad;
-        if (menu_w + 4 > screen_cols)
-            continue;
-        if (row_top + menu_h > screen_rows)
-            continue;
-
-        col_main = (screen_cols - menu_w) / 2;
-        if (col_main < 0)
-            continue;
-
-        clear_x = col_main - 2;
-        clear_w = menu_w + 4;
-        if (clear_x < 0)
-            clear_x = 0;
-        if (clear_x + clear_w > screen_cols)
-            clear_w = screen_cols - clear_x;
-        if (clear_w <= 0)
-            continue;
-
-        break;
-    }
-
-    if (!font || cell_w <= 0 || cell_h <= 0 || clear_w <= 0 || menu_h <= 0)
-        return false;
-
-    clear_rect.x = (float)(clear_x * cell_w);
-    clear_rect.y = (float)(row_top * cell_h);
-    clear_rect.w = (float)(clear_w * cell_w);
-    clear_rect.h = (float)(menu_h * cell_h);
-    sdl_menu_fill_rect(&clear_rect, (SDL_Color){ 0, 0, 0, 232 });
-
-    for (i = 0; i < panel->row_count; i++)
-    {
-        const app_ui_row* row = &panel->rows[i];
-        char row_text[APP_UI_LABEL_MAX + APP_UI_META_MAX + APP_UI_KEY_MAX + 8];
-        byte attr = (row->flags & APP_UI_ITEM_FLAG_DISABLED)
-            ? TERM_L_DARK
-            : row->attr;
-
-        sdl_menu_format_plain_row(row, row_text, sizeof(row_text));
-        sdl_menu_render_fixed_text(font, (float)(col_main * cell_w),
-            (float)((row_first + (int)i) * cell_h), cell_w, cell_h,
-            sdl_menu_color(attr), row_text);
-    }
-
-    return true;
 }
 
 static TTF_Font* sdl_menu_rich_run_font(TTF_Font* mono_font,
@@ -1180,13 +1001,6 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
 
     if (!main_view || !scene || !ui_panel)
         return false;
-
-    if (sdl_menu_is_plain_panel(ui_panel)
-        && sdl_menu_render_term_plain_panel(main_view, canvas_w, canvas_h,
-            ui_panel))
-    {
-        return true;
-    }
 
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;

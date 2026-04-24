@@ -20,6 +20,7 @@
 #include "log/log.h"
 #include "platform-input.h"
 #include "platform-story-font.h"
+#include "support/utf8.h"
 #include "ui/story_font.h"
 #include "ui/ui-character-screen.h"
 #include "ui/ui-information-scene.h"
@@ -209,8 +210,11 @@ static bool tutorial_scene_add_rich_run(app_ui_scene* scene,
 
     while (offset < len)
     {
-        int chunk = MIN(len - offset, (int)sizeof(buf) - 1);
+        int chunk = (int)utf8_clip_bytes(text + offset,
+            (size_t)MIN(len - offset, (int)sizeof(buf) - 1));
 
+        if (chunk <= 0)
+            break;
         memcpy(buf, text + offset, (size_t)chunk);
         buf[chunk] = '\0';
         if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))
@@ -289,7 +293,8 @@ static bool tutorial_render_target_flush_active_row(
             target->failed = true;
             return false;
         }
-        current_col = MAX(current_col, run->col + (int)strlen(run->text));
+        current_col = MAX(current_col, run->col
+            + (int)utf8_strlen_cells(run->text));
     }
 
     target->last_emitted_row = target->active_row;
@@ -316,8 +321,13 @@ static void tutorial_render_target_add_body_line(tutorial_render_target* target,
 
     padding = MIN(col, (int)sizeof(buf) - 1);
     memset(buf, ' ', (size_t)padding);
-    buf[padding] = '\0';
-    SDL_strlcat(buf, text, sizeof(buf));
+    {
+        size_t text_bytes = utf8_clip_bytes(text,
+            sizeof(buf) - (size_t)padding - 1u);
+
+        memcpy(buf + padding, text, text_bytes);
+        buf[(size_t)padding + text_bytes] = '\0';
+    }
     if (!app_ui_panel_add_body_line(target->panel, attr, buf))
         target->failed = true;
 }
@@ -358,12 +368,20 @@ static void tutorial_render_text(tutorial_render_target* target, int col,
     if (target->run_count > 0)
     {
         tutorial_render_run* last = &target->runs[target->run_count - 1];
-        int last_end = last->col + (int)strlen(last->text);
+        int last_end = last->col + (int)utf8_strlen_cells(last->text);
 
         if (last->attr == attr && last_end == col)
         {
-            SDL_strlcat(last->text, text, MIN(sizeof(last->text),
-                (size_t)remaining + 1u));
+            size_t current_len = strlen(last->text);
+            size_t available = sizeof(last->text) - current_len - 1u;
+            size_t append_len = utf8_clip_cells(text, (size_t)remaining,
+                available);
+
+            if (append_len > 0)
+            {
+                memcpy(last->text + current_len, text, append_len);
+                last->text[current_len + append_len] = '\0';
+            }
             return;
         }
     }
@@ -372,8 +390,14 @@ static void tutorial_render_text(tutorial_render_target* target, int col,
     memset(run, 0, sizeof(*run));
     run->col = (s16b)col;
     run->attr = attr;
-    SDL_strlcpy(run->text, text, MIN(sizeof(run->text),
-        (size_t)remaining + 1u));
+    {
+        size_t copy_len = utf8_clip_cells(text, (size_t)remaining,
+            sizeof(run->text) - 1u);
+
+        if (copy_len > 0)
+            memcpy(run->text, text, copy_len);
+        run->text[copy_len] = '\0';
+    }
 }
 
 static bool tutorial_render_target_finish(tutorial_render_target* target)
@@ -393,7 +417,7 @@ static void tutorial_put_centered(tutorial_render_target* target, int row,
     if (!target || !text)
         return;
 
-    len = (int)strlen(text);
+    len = (int)utf8_strlen_cells(text);
     if (len < target->width)
         col = (target->width - len) / 2;
     if (col < 0)
@@ -415,7 +439,7 @@ static int tutorial_put_trunc(tutorial_render_target* target, int col, int row,
     if (max_wid < 4)
         max_wid = 4;
 
-    len = strlen(text);
+    len = utf8_strlen_cells(text);
     if ((int)len <= max_wid)
     {
         tutorial_render_text(target, col, row, attr, text);
@@ -428,7 +452,14 @@ static int tutorial_put_trunc(tutorial_render_target* target, int col, int row,
     keep = max_wid - 3;
     if (keep < 0)
         keep = 0;
-    SDL_strlcpy(buf, text, (size_t)keep + 1);
+    {
+        size_t copy_len = utf8_clip_cells(text, (size_t)keep,
+            sizeof(buf) - 4u);
+
+        if (copy_len > 0)
+            memcpy(buf, text, copy_len);
+        buf[copy_len] = '\0';
+    }
     SDL_strlcat(buf, "...", sizeof(buf));
     tutorial_render_text(target, col, row, attr, buf);
     return 1;
@@ -759,14 +790,14 @@ static int tutorial_collect_traits(tutorial_trait_line* out, int max_out)
     CHECK_UNIQUE_U("Creator of Galvorn", UNQ_SMT_EOL, TERM_VIOLET);
     CHECK_UNIQUE_U("Chosen of Ulmo", UNQ_WIL_TUOR, TERM_VIOLET);
     CHECK_UNIQUE_U("Indomitable Will", UNQ_EARENDIL, TERM_VIOLET);
-    CHECK_UNIQUE_U("Orome Himself", UNQ_WIL_FIN, TERM_VIOLET);
+    CHECK_UNIQUE_U("Oromë Himself", UNQ_WIL_FIN, TERM_VIOLET);
     CHECK_UNIQUE_U("Songs of Power", UNQ_SNG_FIN, TERM_VIOLET);
     CHECK_UNIQUE_U("Elven Dance", UNQ_SNG_LUT, TERM_VIOLET);
     CHECK_UNIQUE_U("Girdle of Melian", UNQ_SNG_MEL, TERM_VIOLET);
     CHECK_UNIQUE_U("Creator of Angrist", UNQ_SMT_TELCHAR, TERM_VIOLET);
     CHECK_UNIQUE_U("Old Master", UNQ_SMT_GAMIL, TERM_VIOLET);
     CHECK_UNIQUE_U("Ring Master", UNQ_SMT_CELEBRIMBOR, TERM_VIOLET);
-    CHECK_UNIQUE_U("Aure entuluva", UNQ_SNG_HURIN, TERM_VIOLET);
+    CHECK_UNIQUE_U("Aurë entuluva", UNQ_SNG_HURIN, TERM_VIOLET);
     CHECK_UNIQUE_U("Voice of the Girdle", UNQ_SNG_THINGOL, TERM_VIOLET);
     CHECK_UNIQUE_U("Forgotten", UNQ_MIM, TERM_VIOLET);
     CHECK_UNIQUE_U("One Handed", UNQ_MEL_MAEDHROS, TERM_VIOLET);
@@ -1701,14 +1732,14 @@ static int collect_compact_trait_lines(compact_trait_line* out, int out_max)
     HANDLE_UNIQUE_U("Creator of Galvorn", UNQ_SMT_EOL,      TERM_VIOLET);
     HANDLE_UNIQUE_U("Chosen of Ulmo",     UNQ_WIL_TUOR,     TERM_VIOLET);
     HANDLE_UNIQUE_U("Indomitable Will",   UNQ_EARENDIL,     TERM_VIOLET);
-    HANDLE_UNIQUE_U("Orome Himself",      UNQ_WIL_FIN,      TERM_VIOLET);
+    HANDLE_UNIQUE_U("Oromë Himself",      UNQ_WIL_FIN,      TERM_VIOLET);
     HANDLE_UNIQUE_U("Songs of Power",     UNQ_SNG_FIN,      TERM_VIOLET);
     HANDLE_UNIQUE_U("Elven Dance",        UNQ_SNG_LUT,      TERM_VIOLET);
     HANDLE_UNIQUE_U("Girdle of Melian",   UNQ_SNG_MEL,      TERM_VIOLET);
     HANDLE_UNIQUE_U("Creator of Angrist", UNQ_SMT_TELCHAR,  TERM_VIOLET);
     HANDLE_UNIQUE_U("Old Master",         UNQ_SMT_GAMIL,    TERM_VIOLET);
     HANDLE_UNIQUE_U("Ring Master",        UNQ_SMT_CELEBRIMBOR, TERM_VIOLET);
-    HANDLE_UNIQUE_U("Aure entuluva",      UNQ_SNG_HURIN,    TERM_VIOLET);
+    HANDLE_UNIQUE_U("Aurë entuluva",      UNQ_SNG_HURIN,    TERM_VIOLET);
     HANDLE_UNIQUE_U("Voice of the Girdle",UNQ_SNG_THINGOL,  TERM_VIOLET);
     HANDLE_UNIQUE_U("Forgotten",          UNQ_MIM,          TERM_VIOLET);
     HANDLE_UNIQUE_U("One Handed",         UNQ_MEL_MAEDHROS, TERM_VIOLET);
@@ -1766,10 +1797,8 @@ static void character_sheet_copy_trimmed(char* dst, size_t dst_size, cptr text,
     len = strlen(text);
     while (len > 0 && text[len - 1] == ' ')
         len--;
-    if ((int)len > max_chars)
-        len = (size_t)max_chars;
-    if (len >= dst_size)
-        len = dst_size - 1u;
+    len = utf8_clip_cells(text, (size_t)max_chars, len);
+    len = utf8_clip_bytes(text, MIN(len, dst_size - 1u));
 
     memcpy(dst, text, len);
     dst[len] = '\0';

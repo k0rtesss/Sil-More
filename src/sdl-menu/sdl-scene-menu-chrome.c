@@ -749,6 +749,102 @@ static void sdl_menu_welcome_format_prompt(const app_ui_panel* panel,
     }
 }
 
+static bool sdl_menu_welcome_body_bounds(const app_ui_panel* panel,
+    TTF_Font* story_font, TTF_Font* mono_font, int cell_w,
+    int* out_min_x, int* out_max_x)
+{
+    bool saw_text = false;
+    int min_x = 0;
+    int max_x = 0;
+    u16b i;
+
+    if (!panel || !story_font || !mono_font || cell_w <= 0
+        || !out_min_x || !out_max_x)
+    {
+        return false;
+    }
+
+    for (i = 0; i < panel->body_line_count; i++)
+    {
+        const app_ui_text_line* line = &panel->body_lines[i];
+        TTF_Font* font = (line->story & STORY_FLAG_USE) ? story_font : mono_font;
+        int x_px;
+        int text_w;
+
+        if (sdl_menu_welcome_line_blank(line) || !line->text[0])
+            continue;
+
+        x_px = sdl_menu_welcome_line_col(line) * cell_w;
+        text_w = sdl_menu_measure_text(font, line->text);
+        if (text_w <= 0)
+            text_w = (int)strlen(line->text) * cell_w;
+
+        if (!saw_text)
+        {
+            min_x = x_px;
+            max_x = x_px + text_w;
+            saw_text = true;
+        }
+        else
+        {
+            min_x = MIN(min_x, x_px);
+            max_x = MAX(max_x, x_px + text_w);
+        }
+    }
+
+    if (!saw_text)
+        return false;
+
+    *out_min_x = min_x;
+    *out_max_x = max_x;
+    return true;
+}
+
+static int sdl_menu_welcome_centered_base_x(int canvas_w,
+    const app_ui_panel* panel, TTF_Font* story_font, TTF_Font* mono_font,
+    int cell_w, int fallback_base_x)
+{
+    int min_x;
+    int max_x;
+    int body_w;
+    int base_x;
+
+    if (!sdl_menu_welcome_body_bounds(panel, story_font, mono_font, cell_w,
+            &min_x, &max_x))
+    {
+        return fallback_base_x;
+    }
+
+    body_w = max_x - min_x;
+    base_x = (canvas_w - body_w) / 2 - min_x;
+
+    return base_x;
+}
+
+static int sdl_menu_welcome_centered_body_y(int canvas_h,
+    const app_ui_panel* panel, int line_h)
+{
+    int body_h;
+    int body_y;
+    int footer_rows;
+    int footer_top_y;
+
+    if (!panel || line_h <= 0)
+        return 0;
+
+    body_h = (int)panel->body_line_count * line_h;
+    body_y = (canvas_h - body_h) / 2;
+    footer_rows = sdl_menu_welcome_footer_rows(panel);
+    footer_top_y = canvas_h - footer_rows * line_h;
+
+    if (footer_rows > 0 && body_y + body_h > footer_top_y - line_h)
+        body_y = footer_top_y - line_h - body_h;
+    if (body_y < 0)
+        body_y = 0;
+
+    return body_y;
+}
+
 bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_panel* panel)
 {
@@ -757,6 +853,7 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
     int line_h;
     int cell_w;
     int base_x;
+    int body_y;
     int intro_x;
     u16b i;
 
@@ -769,6 +866,10 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
     {
         return false;
     }
+
+    base_x = sdl_menu_welcome_centered_base_x(canvas_w, panel, story_font,
+        mono_font, cell_w, base_x);
+    body_y = sdl_menu_welcome_centered_body_y(canvas_h, panel, line_h);
 
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
     SDL_RenderClear(g_state.renderer);
@@ -784,7 +885,7 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
             continue;
 
         x_px = base_x + sdl_menu_welcome_line_col(line) * cell_w;
-        y_px = (int)(i + 1) * line_h;
+        y_px = body_y + (int)i * line_h;
         sdl_menu_render_text(font, (float)x_px, (float)y_px, line_h,
             sdl_menu_color(line->attr), line->text);
     }

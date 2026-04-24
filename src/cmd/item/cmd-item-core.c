@@ -1764,7 +1764,7 @@ void do_cmd_wield(object_type* default_o_ptr, int default_item)
 
             if (oath_broken)
             {
-                msg_print("The holy light breaks the Oath of Feanor!");
+                msg_print("The holy light breaks the Oath of Fëanor!");
             }
         }
     }

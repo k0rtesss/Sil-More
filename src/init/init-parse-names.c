@@ -17,6 +17,7 @@
 #include "angband.h"
 #include "init.h"
 #include "h-define.h"
+#include "support/utf8.h"
 
 #ifdef ALLOW_TEMPLATES
 
@@ -26,26 +27,35 @@
 static errr build_prob(char* name, names_type* n_ptr)
 {
     int c_prev, c_cur, c_next;
+    cptr cursor = name;
+    u32b codepoint = 0;
 
-    while (*name && !isalpha((unsigned char)*name))
-        ++name;
+    while (utf8_next_codepoint(&cursor, &codepoint))
+    {
+        if (utf8_latin1_fold_codepoint(codepoint) >= 'a')
+            break;
+        name = (char*)cursor;
+    }
 
-    if (!*name)
+    if (!codepoint || utf8_latin1_fold_codepoint(codepoint) < 'a')
         return PARSE_ERROR_GENERIC;
 
     c_prev = c_cur = S_WORD;
+    cursor = name;
 
-    do
+    while (utf8_next_codepoint(&cursor, &codepoint))
     {
-        if (isalpha((unsigned char)*name))
+        int folded = utf8_latin1_fold_codepoint(codepoint);
+
+        if (folded >= 'a' && folded <= 'z')
         {
-            c_next = A2I(tolower((unsigned char)*name));
+            c_next = A2I(folded);
             n_ptr->lprobs[c_prev][c_cur][c_next]++;
             n_ptr->ltotal[c_prev][c_cur]++;
             c_prev = c_cur;
             c_cur = c_next;
         }
-    } while (*++name);
+    }
 
     n_ptr->lprobs[c_prev][c_cur][E_WORD]++;
     n_ptr->ltotal[c_prev][c_cur]++;

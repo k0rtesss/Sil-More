@@ -17,6 +17,7 @@
 
 #include "angband.h"
 #include "log/log.h"
+#include "support/utf8.h"
 #include "ui-look-sidebar.h"
 #include "ui-status.h"
 #include <ctype.h>
@@ -334,7 +335,7 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 
     if (!src) return;
 
-    int src_len = (int)strlen(src);
+    int src_len = (int)utf8_strlen_cells(src);
     if (max_len < 1)
     {
         log_trace("sidebar_compact_name: max_len < 1 for src='%s'", src);
@@ -343,7 +344,7 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 
     if (src_len <= max_len)
     {
-        strnfmt(dest, dest_sz, "%s", src);
+        (void)utf8_strlcpy(dest, src, dest_sz);
         log_trace("sidebar_compact_name: no shortening needed src='%s' len=%d max=%d", src, src_len, max_len);
         return;
     }
@@ -353,13 +354,14 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 
     if (stats_pos < 0)
     {
-        strnfmt(dest, dest_sz, "%.*s", max_len, src);
+        size_t clip = utf8_clip_cells(src, (size_t)max_len, strlen(src));
+        (void)utf8_strlcpy(dest, src, MIN(dest_sz, clip + 1u));
         sidebar_trim_spaces(dest);
         log_trace("sidebar_compact_name: no stats segment, result='%s'", dest);
         return;
     }
 
-    int stats_len = src_len - stats_pos;
+    int stats_len = (int)utf8_strlen_cells(src + stats_pos);
     
     /* If stats are very long and would fill the whole space,
      * prioritize showing at least SOME of the base name rather than stats-only.
@@ -369,19 +371,30 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
         /* Try to show at least a portion of the base name, even if truncated */
         int base_space = max_len / 2; /* Give half space to name */
         if (base_space < 3) base_space = 3; /* Minimum name chars */
-        if (base_space > stats_pos) base_space = stats_pos; /* Don't exceed available name */
+        if (base_space > (int)utf8_strnlen_cells(src, (size_t)stats_pos))
+            base_space = (int)utf8_strnlen_cells(src, (size_t)stats_pos);
         
         int stats_space = max_len - base_space;
         if (stats_space < 3) stats_space = 3; /* Minimum stats chars */
         
         /* Extract truncated base name */
         char base_truncated[64];
-        strnfmt(base_truncated, sizeof(base_truncated), "%.*s", base_space, src);
+        {
+            size_t base_bytes = utf8_clip_cells(src, (size_t)base_space,
+                (size_t)stats_pos);
+            (void)utf8_strlcpy(base_truncated, src,
+                MIN(sizeof(base_truncated), base_bytes + 1u));
+        }
         sidebar_trim_spaces(base_truncated);
         
         /* Extract beginning of stats */
         char stats_truncated[64];
-        strnfmt(stats_truncated, sizeof(stats_truncated), "%.*s", stats_space, src + stats_pos);
+        {
+            size_t stats_bytes = utf8_clip_cells(src + stats_pos,
+                (size_t)stats_space, strlen(src + stats_pos));
+            (void)utf8_strlcpy(stats_truncated, src + stats_pos,
+                MIN(sizeof(stats_truncated), stats_bytes + 1u));
+        }
         
         /* Combine them */
         if (base_truncated[0])
@@ -407,21 +420,23 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
 
     if (stats_pos > 0)
     {
-        strnfmt(base_full, sizeof(base_full), "%.*s", stats_pos, src);
+        (void)utf8_strlcpy(base_full, src,
+            MIN(sizeof(base_full), (size_t)stats_pos + 1u));
         sidebar_trim_spaces(base_full);
     }
 
     if (base_space > 0 && base_full[0])
     {
-        int base_full_len = (int)strlen(base_full);
+        int base_full_len = (int)utf8_strlen_cells(base_full);
         if (base_full_len <= base_space)
         {
-            SDL_strlcpy(base_compact, base_full, sizeof(base_compact));
+            (void)utf8_strlcpy(base_compact, base_full, sizeof(base_compact));
         }
         else
         {
             const char* word_start[16];
-            int word_len[16];
+            int word_byte_len[16];
+            int word_cell_len[16];
             int word_count = 0;
             const char* p = base_full;
 
@@ -435,8 +450,10 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
                 word_start[word_count] = p;
                 const char* q = p;
                 while (*q && !isspace((unsigned char)*q))
-                    ++q;
-                word_len[word_count] = (int)(q - p);
+                    q += utf8_char_len(q);
+                word_byte_len[word_count] = (int)(q - p);
+                word_cell_len[word_count] = (int)utf8_strnlen_cells(p,
+                    (size_t)word_byte_len[word_count]);
                 ++word_count;
                 p = q;
             }
@@ -456,25 +473,31 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
                     --remaining;
                 }
 
-                int take = word_len[i];
+                int take = word_cell_len[i];
                 if (take > remaining)
                 {
                     if (first_word)
                     {
-                        take = remaining;
-                        if (take > 0)
+                        int take_cells = remaining;
+                        if (take_cells > 0)
                         {
                             char temp[64];
-                            strnfmt(temp, sizeof(temp), "%.*s", take, word_start[i]);
+                            size_t take_bytes = utf8_clip_cells(word_start[i],
+                                (size_t)take_cells,
+                                (size_t)word_byte_len[i]);
+                            (void)utf8_strlcpy(temp, word_start[i],
+                                MIN(sizeof(temp), take_bytes + 1u));
                             SDL_strlcat(base_compact, temp, sizeof(base_compact));
-                            remaining -= take;
+                            remaining -= take_cells;
                         }
                     }
                     else if (remaining > 1)
                     {
                         char temp[64];
-                        int partial = remaining;
-                        strnfmt(temp, sizeof(temp), "%.*s", partial, word_start[i]);
+                        size_t partial = utf8_clip_cells(word_start[i],
+                            (size_t)remaining, (size_t)word_byte_len[i]);
+                        (void)utf8_strlcpy(temp, word_start[i],
+                            MIN(sizeof(temp), partial + 1u));
                         SDL_strlcat(base_compact, temp, sizeof(base_compact));
                         remaining = 0;
                     }
@@ -489,7 +512,8 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
                 else
                 {
                     char temp[64];
-                    strnfmt(temp, sizeof(temp), "%.*s", take, word_start[i]);
+                    (void)utf8_strlcpy(temp, word_start[i],
+                        MIN(sizeof(temp), (size_t)word_byte_len[i] + 1u));
                     SDL_strlcat(base_compact, temp, sizeof(base_compact));
                     remaining -= take;
                 }
@@ -502,7 +526,10 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
             if (!base_compact[0] && base_space > 0)
             {
                 int take = (base_space < base_full_len) ? base_space : base_full_len;
-                strnfmt(base_compact, sizeof(base_compact), "%.*s", take, base_full);
+                size_t take_bytes = utf8_clip_cells(base_full, (size_t)take,
+                    strlen(base_full));
+                (void)utf8_strlcpy(base_compact, base_full,
+                    MIN(sizeof(base_compact), take_bytes + 1u));
                 sidebar_trim_spaces(base_compact);
             }
         }
@@ -511,7 +538,7 @@ static void sidebar_compact_name(const char* src, int max_len, char* dest, size_
     dest[0] = 0;
     if (base_compact[0])
     {
-        SDL_strlcpy(dest, base_compact, dest_sz);
+        (void)utf8_strlcpy(dest, base_compact, dest_sz);
         size_t len = strlen(dest);
         if (len && dest[len - 1] != ' ')
             SDL_strlcat(dest, " ", dest_sz);
@@ -567,42 +594,48 @@ static void unified_sidebar_pad_bigtile_pair(char* primary,
     if (!use_bigtile || !primary || !secondary)
         return;
 
-    primary_len = (int)strlen(primary);
-    secondary_len = (int)strlen(secondary);
+    primary_len = (int)utf8_strlen_cells(primary);
+    secondary_len = (int)utf8_strlen_cells(secondary);
     total_span = primary_len + secondary_len;
 
     if (total_span < 13)
     {
         pad_needed = 13 - total_span;
 
-        while (pad_needed > 0 && primary_len + 1 < (int)primary_size)
+        while (pad_needed > 0 && strlen(primary) + 1 < primary_size)
         {
-            primary[primary_len++] = ' ';
+            size_t byte_len = strlen(primary);
+            primary[byte_len++] = ' ';
+            primary[byte_len] = '\0';
+            primary_len++;
             pad_needed--;
         }
-        primary[primary_len] = '\0';
         total_span = primary_len + secondary_len;
 
-        while (pad_needed > 0 && secondary_len + 1 < (int)secondary_size)
+        while (pad_needed > 0 && strlen(secondary) + 1 < secondary_size)
         {
-            secondary[secondary_len++] = ' ';
+            size_t byte_len = strlen(secondary);
+            secondary[byte_len++] = ' ';
+            secondary[byte_len] = '\0';
+            secondary_len++;
             pad_needed--;
         }
-        secondary[secondary_len] = '\0';
         total_span = primary_len + secondary_len;
     }
 
     if ((total_span % 2) == 0)
     {
-        if (secondary_len + 1 < (int)secondary_size)
+        if (strlen(secondary) + 1 < secondary_size)
         {
-            secondary[secondary_len++] = ' ';
-            secondary[secondary_len] = '\0';
+            size_t byte_len = strlen(secondary);
+            secondary[byte_len++] = ' ';
+            secondary[byte_len] = '\0';
         }
-        else if (primary_len + 1 < (int)primary_size)
+        else if (strlen(primary) + 1 < primary_size)
         {
-            primary[primary_len++] = ' ';
-            primary[primary_len] = '\0';
+            size_t byte_len = strlen(primary);
+            primary[byte_len++] = ' ';
+            primary[byte_len] = '\0';
         }
     }
 }
@@ -615,23 +648,26 @@ static void unified_sidebar_pad_bigtile_single(char* text, size_t text_size)
     if (!use_bigtile || !text)
         return;
 
-    text_len = (int)strlen(text);
+    text_len = (int)utf8_strlen_cells(text);
     if (text_len < 13)
     {
         pad_needed = 13 - text_len;
-        while (pad_needed > 0 && text_len + 1 < (int)text_size)
+        while (pad_needed > 0 && strlen(text) + 1 < text_size)
         {
-            text[text_len++] = ' ';
+            size_t byte_len = strlen(text);
+            text[byte_len++] = ' ';
+            text[byte_len] = '\0';
+            text_len++;
             pad_needed--;
         }
-        text[text_len] = '\0';
     }
 
-    text_len = (int)strlen(text);
-    if ((text_len % 2) == 0 && text_len + 1 < (int)text_size)
+    text_len = (int)utf8_strlen_cells(text);
+    if ((text_len % 2) == 0 && strlen(text) + 1 < text_size)
     {
-        text[text_len++] = ' ';
-        text[text_len] = '\0';
+        size_t byte_len = strlen(text);
+        text[byte_len++] = ' ';
+        text[byte_len] = '\0';
     }
 }
 
@@ -704,8 +740,12 @@ static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
 
     memset(truncated_name, 0, sizeof(truncated_name));
     SDL_strlcpy(truncated_name, monster_name, sizeof(truncated_name));
-    if ((int)strlen(truncated_name) > max_name_len)
-        truncated_name[max_name_len] = '\0';
+    if ((int)utf8_strlen_cells(truncated_name) > max_name_len)
+    {
+        size_t clip = utf8_clip_cells(truncated_name, (size_t)max_name_len,
+            strlen(truncated_name));
+        truncated_name[clip] = '\0';
+    }
 
     strnfmt(display_name, display_name_size, "%s%s", truncated_name,
         hp_display);
@@ -715,7 +755,7 @@ static void unified_sidebar_format_monster_row(const monster_type* m_ptr,
     if (morale_attr)
         *morale_attr = meta_attr;
     if (display_name_len)
-        *display_name_len = (int)strlen(display_name);
+        *display_name_len = (int)utf8_strlen_cells(display_name);
 }
 
 static void unified_sidebar_format_object_row(
@@ -796,7 +836,7 @@ static void unified_sidebar_format_object_row(
     unified_sidebar_pad_bigtile_single(display_name, display_name_size);
 
     if (display_name_len)
-        *display_name_len = (int)strlen(display_name);
+        *display_name_len = (int)utf8_strlen_cells(display_name);
 }
 
 static bool unified_look_menu_add_section(app_ui_panel* panel, byte attr,

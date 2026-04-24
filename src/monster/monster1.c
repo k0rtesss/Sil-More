@@ -17,6 +17,7 @@
 
 #include "angband.h"
 #include "monster/monster.h"
+#include "support/utf8.h"
 
 s16b num_repro;
 s16b monster_level;
@@ -82,10 +83,10 @@ static bool monster_recall_append_rich_span(app_ui_scene* scene,
 
     while (len > 0)
     {
-        size_t chunk_len = len;
-
-        if (chunk_len >= sizeof(buf))
-            chunk_len = sizeof(buf) - 1u;
+        size_t chunk_len = utf8_clip_bytes(text,
+            MIN(len, sizeof(buf) - 1u));
+        if (chunk_len == 0)
+            break;
         memcpy(buf, text, chunk_len);
         buf[chunk_len] = '\0';
         if (!app_ui_panel_add_rich_text_ex(scene, panel, attr, story, buf))
@@ -191,7 +192,7 @@ bool build_monster_recall_ui_scene(app_ui_scene* scene, int r_idx,
     app_ui_panel_set_icon(panel, monster_attr(r_ptr), monster_char(r_ptr));
 
     use_story_font = story_monster_desc_enabled();
-    story_font_term_push(use_story_font, false, &story_state);
+    story_font_term_push(use_story_font, &story_state);
 
     old_hook = text_out_hook;
     old_indent = text_out_indent;

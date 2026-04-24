@@ -244,36 +244,6 @@ void sdl_handle_renderer_reset(void)
     sdl_redraw_all_views();
 }
 
-void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col)
-{
-    if (!d || !d->font_atlas || n <= 0)
-        return;
-
-    SDL_SetTextureColorMod(d->font_atlas, col.r, col.g, col.b);
-    SDL_SetTextureAlphaMod(d->font_atlas, 255);
-
-    for (int i = 0; i < n; i++) {
-        unsigned char ch = (unsigned char)s[i];
-        SDL_FRect src = {
-            (ch & 15) * d->cell_w,
-            (ch >> 4) * d->cell_h,
-            d->cell_w,
-            d->cell_h,
-        };
-        SDL_FRect dst = {
-            (x + i) * d->cell_w,
-            y * d->cell_h,
-            d->cell_w,
-            d->cell_h
-        };
-        if (use_graphics == GRAPHICS_PSEUDO && solid_walls && (ch == '#' || ch == '%')) {
-            SDL_SetRenderDrawColor(g_state.renderer, col.r, col.g, col.b, SDL_ALPHA_OPAQUE);
-            SDL_RenderFillRect(g_state.renderer, &dst);
-        }
-        SDL_RenderTexture(g_state.renderer, d->font_atlas, &src, &dst);
-    }
-}
-
 static void sdl_clear_supporting_view_canvases(void)
 {
     for (int i = 1; i < MAX_TERM_DATA; i++)

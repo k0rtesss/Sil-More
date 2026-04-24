@@ -31,7 +31,6 @@
 #include "support/strl.h"
 /* Story font flags used by semantic document and menu rendering. */
 #define STORY_FLAG_USE        0x01
-#define STORY_FLAG_CELL_ALIGN 0x02
 /* Background-variant color encoding used by map/tile rendering. */
 #define MAX_COLORS 32
 #define BG_BLACK 0

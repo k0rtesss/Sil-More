@@ -21,6 +21,7 @@
  */
 
 #include "angband.h"
+#include "support/utf8.h"
 #include "app/app-ui.h"
 #include "app/app-session.h"
 #include "log/log.h"
@@ -61,7 +62,7 @@ flag_name info_flags_desc[] = {
 { "Artifacts take only 1 charge of forge, easier to make fire and light items", UNQ, UNQ_SMT_FEANOR },
 { "Majesty ability is 1.5x effective", UNQ, UNQ_WIL_FIN }, 
 { "Song of Staying is twice effective", UNQ, UNQ_SNG_FIN },
-{ "Song of Lorien is 1.5x effective", UNQ, UNQ_SNG_LUT }, 
+{ "Song of Lórien is 1.5x effective", UNQ, UNQ_SNG_LUT },
 { "Horns are twice effective", UNQ, UNQ_WIL_TUOR },
 { "Song of Threshold and Staff of Warding are twice effective", UNQ, UNQ_SNG_MEL }, 
 { "Can create very sharp items, easier to create sharp and accurate items", UNQ, UNQ_SMT_TELCHAR },
@@ -498,10 +499,10 @@ static bool self_knowledge_append_rich_span(app_ui_scene* scene,
     len = strlen(text);
     while (len > 0)
     {
-        size_t chunk_len = len;
-
-        if (chunk_len >= sizeof(buf))
-            chunk_len = sizeof(buf) - 1u;
+        size_t chunk_len = utf8_clip_bytes(text,
+            MIN(len, sizeof(buf) - 1u));
+        if (chunk_len == 0)
+            break;
         memcpy(buf, text, chunk_len);
         buf[chunk_len] = '\0';
         if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))

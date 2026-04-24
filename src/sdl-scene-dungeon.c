@@ -16,6 +16,7 @@
 #include "angband.h"
 
 #include "sdl-main-internal.h"
+#include "support/utf8.h"
 
 typedef struct sdl_scene_layout {
     int canvas_w;
@@ -318,8 +319,7 @@ static int sdl_scene_wrap_banner_text(TTF_Font* font, cptr text, int max_w_px,
                 size_t candidate_len = strlen(candidate);
                 size_t available = sizeof(candidate) - candidate_len - 1u;
 
-                if (copy_len > available)
-                    copy_len = available;
+                copy_len = utf8_clip_bytes(word, MIN(copy_len, available));
                 memcpy(candidate + candidate_len, word, copy_len);
                 candidate[candidate_len + copy_len] = '\0';
             }
@@ -340,8 +340,15 @@ static int sdl_scene_wrap_banner_text(TTF_Font* font, cptr text, int max_w_px,
                     take = (int)sizeof(truncated) - 1;
                 while (take > 1)
                 {
-                    memcpy(truncated, word, (size_t)take);
-                    truncated[take] = '\0';
+                    size_t copy_len = utf8_clip_bytes(word, (size_t)take);
+
+                    if (copy_len == 0)
+                    {
+                        take--;
+                        continue;
+                    }
+                    memcpy(truncated, word, copy_len);
+                    truncated[copy_len] = '\0';
                     if (sdl_scene_measure_ui_text(font, truncated) <= max_w_px)
                         break;
                     take--;
@@ -560,8 +567,9 @@ static int sdl_scene_render_text_run_px(TTF_Font* font, float x_px, float y_px,
     if (!font || !text || len == 0)
         return 0;
 
-    if (copy_len >= sizeof(buf))
-        copy_len = sizeof(buf) - 1;
+    copy_len = utf8_clip_bytes(text, MIN(copy_len, sizeof(buf) - 1u));
+    if (copy_len == 0)
+        return 0;
     memcpy(buf, text, copy_len);
     buf[copy_len] = '\0';
 
@@ -1047,35 +1055,6 @@ static void sdl_scene_draw_mono_glyph_px(const sdl_view* view, float x_px,
         sdl_scene_fill_rect(&dst, color);
     }
     SDL_RenderTexture(g_state.renderer, view->font_atlas, &src, &dst);
-}
-
-static void sdl_scene_draw_mono_text_px(const sdl_view* view, float x_px,
-    float y_px, byte attr, cptr text)
-{
-    SDL_Color color;
-    float current_x;
-    float canvas_w;
-    size_t i;
-
-    if (!view || !text || !text[0])
-        return;
-    if (view->cell_w <= 0 || view->cell_h <= 0)
-        return;
-    canvas_w = (float)(view->cols * view->cell_w);
-    if (canvas_w <= 0.0f || y_px >= (float)(view->rows * view->cell_h))
-        return;
-    if (x_px < 0.0f)
-        x_px = 0.0f;
-
-    color = sdl_scene_color(attr);
-    current_x = x_px;
-    for (i = 0; text[i]; i++)
-    {
-        if (current_x >= canvas_w)
-            break;
-        sdl_scene_draw_mono_glyph_px(view, current_x, y_px, text[i], color);
-        current_x += (float)view->cell_w;
-    }
 }
 
 static sdl_scene_layout sdl_scene_make_layout(const sdl_view* view,
@@ -2084,18 +2063,6 @@ static void sdl_scene_render_look_prompt(const sdl_view* view,
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
     {
-        if (view->cell_h > 0)
-        {
-            sdl_scene_fill_rect(&(SDL_FRect){
-                .x = 0.0f,
-                .y = 0.0f,
-                .w = (float)canvas_w,
-                .h = (float)view->cell_h
-            }, (SDL_Color){ 0, 0, 0, 255 });
-        }
-        sdl_scene_draw_mono_text_px(view, 0.0f, 0.0f,
-            interaction->prompt_attr ? interaction->prompt_attr : TERM_WHITE,
-            text);
         return;
     }
 

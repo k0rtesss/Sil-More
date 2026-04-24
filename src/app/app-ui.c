@@ -16,13 +16,14 @@
 #include "angband.h"
 
 #include "app-ui.h"
+#include "support/utf8.h"
 
 static void app_ui_copy_text(char* dst, size_t dst_size, cptr text)
 {
     if (!dst || !dst_size)
         return;
 
-    SDL_strlcpy(dst, text ? text : "", dst_size);
+    (void)utf8_strlcpy(dst, text ? text : "", dst_size);
 }
 
 static app_ui_rich_paragraph* app_ui_panel_append_rich_paragraph(
@@ -375,9 +376,11 @@ bool app_ui_panel_add_rich_text_alpha_ex(app_ui_scene* scene,
 
                 if (available > 0)
                 {
-                    len = strlen(cursor);
+                    len = utf8_clip_bytes(cursor, available);
                     if (len > available)
                         len = available;
+                    if (len == 0)
+                        break;
                     memcpy(run->text + current_len, cursor, len);
                     run->text[current_len + len] = '\0';
                     cursor += len;
@@ -391,9 +394,7 @@ bool app_ui_panel_add_rich_text_alpha_ex(app_ui_scene* scene,
         if (!run)
             return false;
 
-        len = strlen(cursor);
-        if (len >= APP_UI_TEXT_MAX)
-            len = APP_UI_TEXT_MAX - 1u;
+        len = utf8_clip_bytes(cursor, APP_UI_TEXT_MAX - 1u);
         if (len == 0)
             break;
 

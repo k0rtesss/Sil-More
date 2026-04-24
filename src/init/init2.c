@@ -385,7 +385,7 @@ static const welcome_ui_line welcome_intro_lines_0[] = {
     WELCOME_STORY(14, TERM_L_BLUE, "\"In the beginning Eru, the One,"),
     WELCOME_STORY(14, TERM_L_BLUE, "  made the Ainur of his thought;"),
     WELCOME_STORY(14, TERM_L_BLUE, "  and they sang, and he was glad.\""),
-    WELCOME_STORY(34, TERM_SLATE, "-- Ainulindale"),
+    WELCOME_STORY(34, TERM_SLATE, "-- Ainulindalë"),
     WELCOME_BLANK(),
     WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
     WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
@@ -405,7 +405,7 @@ static const welcome_ui_line welcome_intro_lines_1[] = {
     WELCOME_STORY(14, TERM_L_BLUE, "\"Be he foe or friend,"),
     WELCOME_STORY(14, TERM_L_BLUE, "  be he foul or clean..."),
     WELCOME_STORY(14, TERM_L_BLUE, "  he shall defend, shall be held mine.\""),
-    WELCOME_STORY(34, TERM_SLATE, "-- Oath of Feanor"),
+    WELCOME_STORY(34, TERM_SLATE, "-- Oath of Fëanor"),
     WELCOME_BLANK(),
     WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
     WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
@@ -446,7 +446,7 @@ static const welcome_ui_line welcome_intro_lines_3[] = {
     WELCOME_STORY(14, TERM_L_BLUE, "  the hemlock-umbels tall and fair,"),
     WELCOME_STORY(14, TERM_L_BLUE, "  and in the glade a light was seen"),
     WELCOME_STORY(14, TERM_L_BLUE, "  of stars in shadow shimmering.\""),
-    WELCOME_STORY(28, TERM_SLATE, "-- Of Beren and Luthien"),
+    WELCOME_STORY(28, TERM_SLATE, "-- Of Beren and Lúthien"),
     WELCOME_BLANK(),
     WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
     WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
@@ -464,7 +464,7 @@ static const welcome_ui_line welcome_intro_lines_3[] = {
 static const welcome_ui_line welcome_intro_lines_4[] = {
     WELCOME_STORY(14, TERM_L_BLUE, "\"The day shall come again when you"),
     WELCOME_STORY(14, TERM_L_BLUE, "  shall see the Sun once more.\""),
-    WELCOME_STORY(34, TERM_SLATE, "-- Words of Hurin"),
+    WELCOME_STORY(34, TERM_SLATE, "-- Words of Húrin"),
     WELCOME_BLANK(),
     WELCOME_STORY(22, TERM_WHITE, "S I L - M O R E"),
     WELCOME_STORY(20, TERM_L_BLUE, "~ Shining  Darkness ~"),
@@ -477,7 +477,7 @@ static const welcome_ui_line welcome_intro_lines_4[] = {
     WELCOME_STORY(14, TERM_YELLOW, "Take up blade and burden. Descend."),
     WELCOME_STORY(14, TERM_YELLOW, "Oaths, quests, blessings of the Valar"),
     WELCOME_STORY(14, TERM_YELLOW, "await in the First Age reborn."),
-    WELCOME_STORY(14, TERM_L_BLUE, "\"Aure entuluva!\""),
+    WELCOME_STORY(14, TERM_L_BLUE, "\"Aurë entuluva!\""),
     WELCOME_END()
 };
 
@@ -496,7 +496,7 @@ static const welcome_ui_line welcome_intro_lines_5[] = {
     WELCOME_STORY(14, TERM_WHITE, "what darkness took, the bold may reap."),
     WELCOME_BLANK(),
     WELCOME_STORY(14, TERM_L_BLUE, "\"...the starlight glittered"),
-    WELCOME_STORY(14, TERM_L_BLUE, "  on the waters of Cuivienen.\""),
+    WELCOME_STORY(14, TERM_L_BLUE, "  on the waters of Cuiviénen.\""),
     WELCOME_STORY(34, TERM_SLATE, "-- Of the Coming of the Elves"),
     WELCOME_END()
 };

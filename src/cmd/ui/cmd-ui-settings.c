@@ -1208,9 +1208,9 @@ static cptr option_menu_describe_value(const settings_ui_layout* layout,
     else if (opt[index] == OPT_intro_style)
     {
         const char* is_names[] = {
-            "Flame Imperishable", "Oath of Feanor",
-            "Twilight of Valinor", "Song of Luthien",
-            "Words of Hurin", "Starlight on Cuivienen",
+            "Flame Imperishable", "Oath of Fëanor",
+            "Twilight of Valinor", "Song of Lúthien",
+            "Words of Húrin", "Starlight on Cuiviénen",
             "Lament of the Noldor", "Random"
         };
         byte mode = op_ptr->intro_style;

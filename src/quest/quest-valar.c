@@ -299,7 +299,7 @@ void aule_quest_interaction(void)
         p_ptr->aule_quest = AULE_QUEST_FORGE_PRESENT;
         p_ptr->aule_level = p_ptr->depth;
         /* Don't start the actual quest conversation yet, let them talk again */
-        msg_print("You encounter Aule the Smith, Maker of Mountains.");
+        msg_print("You encounter Aulë the Smith, Maker of Mountains.");
         msg_print("'Speak with me again to learn of the challenges that await.'");
         return;
     }
@@ -325,19 +325,19 @@ void aule_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_AULE, init_texts, &text_count, false);
         
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Aule the Smith", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
+            quest_typewriter_menu("Aulë the Smith", init_texts, text_count, TERM_YELLOW, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Aule speaks in a voice like hammer on anvil:",
+                "Aulë speaks in a voice like hammer on anvil:",
                 "'Find my forge and create something worthy of my attention.'"
             };
-            quest_typewriter_menu("Aule the Smith", fallback_texts, 2, TERM_YELLOW, TERM_WHITE);
+            quest_typewriter_menu("Aulë the Smith", fallback_texts, 2, TERM_YELLOW, TERM_WHITE);
         }
         
         /* Mark in the notes */
-        do_cmd_note("Aule has challenged me to use his forge to create an item.", p_ptr->depth);
+        do_cmd_note("Aulë has challenged me to use his forge to create an item.", p_ptr->depth);
         return;
     }
     
@@ -357,7 +357,7 @@ void aule_quest_interaction(void)
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Aule nods with satisfaction:",
+                "Aulë nods with satisfaction:",
                 "'Well done! Your skill at the forge shows promise.'"
             };
             quest_typewriter_menu("Quest Complete!", fallback_texts, 2, TERM_L_GREEN, TERM_WHITE);
@@ -378,7 +378,7 @@ void aule_quest_interaction(void)
         /* Apply quest rewards from quest.txt data */
         apply_quest_rewards(2); /* Aule is quest index 2 */
         
-        msg_print("Aule smiles with approval and returns to his eternal labors.");
+        msg_print("Aulë smiles with approval and returns to his eternal labors.");
         
         /* Remove the quest giver after giving reward */
         remove_quest_giver(R_IDX_AULE);
@@ -389,13 +389,13 @@ void aule_quest_interaction(void)
     /* Handle other quest states */
     if (p_ptr->aule_quest == AULE_QUEST_ACTIVE)
     {
-        msg_print("Aule watches you with eyes like glowing coals:");
+        msg_print("Aulë watches you with eyes like glowing coals:");
         msg_print("'The forge awaits your skill. Show me what you can create.'");
         return;
     }
     
     /* Default message */
-    msg_print("Aule the Smith regards you with interest.");
+    msg_print("Aulë the Smith regards you with interest.");
 }
 
 /*
@@ -565,7 +565,7 @@ void mandos_quest_interaction(void)
             msg_print("'Brodda the Easterling still draws breath within these halls.");
             msg_print("Until his tyranny is ended, you may not pass beyond.'");
             msg_print("");
-            msg_print("'Remember - he who ruled Dor-lomin with an iron fist");
+            msg_print("'Remember - he who ruled Dor-lómin with an iron fist");
             msg_print("must face the justice he denied to others.'");
         }
     }
@@ -708,7 +708,7 @@ void check_mandos_quest_completion(int r_idx)
             p_ptr->mandos_quest = MANDOS_QUEST_SUCCESS;
             
             msg_print("Brodda the Easterling falls! His tyranny is ended at last.");
-            msg_print("The spirits of Dor-lomin can finally know peace.");
+            msg_print("The spirits of Dor-lómin can finally know peace.");
             msg_print("Return to Mandos the Doomsman to claim your reward.");
             
             log_trace("Mandos quest completed - Brodda slain");

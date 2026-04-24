@@ -66,7 +66,6 @@ typedef struct sdl_state {
     story_font_entry story_fonts[MAX_STORY_FONT_CACHE];
     int story_font_count;
     int story_font_depth;
-    bool story_cell_align;
 } sdl_state;
 
 typedef struct sdl_view {
@@ -200,15 +199,6 @@ int sdl_ui_text_pair_left_padding(TTF_Font* primary, TTF_Font* secondary,
     int target_h);
 void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text);
-void sdl_render_mono_text(sdl_view* d, int x, int y, int n, const char* s, SDL_Color col);
-void sdl_render_story_text_free(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
-    SDL_Color col);
-void sdl_render_story_text_cell_aligned(sdl_view* d, TTF_Font* font, int x, int y, int n, const char* s,
-    SDL_Color col);
-int sdl_render_story_text_free_px(sdl_view* d, TTF_Font* font, float x_px, int y, const char* s, int n,
-    SDL_Color col, float max_w_px);
-void sdl_render_story_row_packed(sdl_view* d, TTF_Font* font, int y, const byte* story_row,
-    const char* row_chars, const byte* row_attr);
 
 void sdl_scene_stack_init(void);
 void sdl_scene_stack_shutdown(void);

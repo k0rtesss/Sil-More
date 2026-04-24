@@ -15,6 +15,7 @@
 
 #include "angband.h"
 #include "fs/file.h"
+#include "support/utf8.h"
 
 ang_file* text_out_file = NULL;
 void (*text_out_hook)(byte a, cptr str);
@@ -37,24 +38,30 @@ int count_wrapped_lines(cptr str, int wrap_width, int indent)
     int lines = 1;
     cptr s;
 
-    for (s = str; *s; s++)
+    for (s = str; s && *s;)
     {
+        size_t char_len;
+        int width;
+
         if (*s == '\n')
         {
             x = indent;
             lines++;
+            s++;
             continue;
         }
-        /* Printable or space */
-        char ch = isprint((unsigned char)*s) ? *s : ' ';
-        /* If adding this char exceeds wrap, and it's not a space, wrap */
-        if (x >= wrap_width && ch != ' ')
+
+        char_len = utf8_char_len(s);
+        if (char_len == 0)
+            break;
+        width = (int)utf8_strnlen_cells(s, char_len);
+        if (x >= wrap_width && *s != ' ')
         {
             x = indent;
             lines++;
         }
-        /* Advance column */
-        x++;
+        x += width;
+        s += char_len;
     }
     return lines;
 }
@@ -81,10 +88,11 @@ void text_out_to_file(byte a, cptr str)
     /* Process the string */
     while (*s)
     {
-        char ch;
-        int n = 0;
-        int len = wrap - pos;
+        int len;
+        int available;
         int l_space = -1;
+        int cells = 0;
+        int n = 0;
 
         /* If we are at the start of the line... */
         if (pos == 0)
@@ -99,19 +107,37 @@ void text_out_to_file(byte a, cptr str)
             }
         }
 
-        /* Find length of line up to next newline or end-of-string */
-        while ((n < len) && !((s[n] == '\n') || (s[n] == '\0')))
+        available = wrap - pos;
+        if (available <= 0)
         {
+            write_text_out_byte('\n');
+            pos = 0;
+            continue;
+        }
+
+        /* Find length of line up to next newline or end-of-string */
+        while (!((s[n] == '\n') || (s[n] == '\0')))
+        {
+            size_t char_len = utf8_char_len(s + n);
+            int width;
+
+            if (char_len == 0)
+                break;
+            width = (int)utf8_strnlen_cells(s + n, char_len);
+            if (cells + width > available)
+                break;
+
             /* Mark the most recent space in the string */
             if (s[n] == ' ')
                 l_space = n;
 
-            /* Increment */
-            n++;
+            cells += width;
+            n += (int)char_len;
         }
+        len = n;
 
         /* If we have encountered no spaces */
-        if ((l_space == -1) && (n == len))
+        if ((l_space == -1) && s[n] && s[n] != '\n')
         {
             /* If we are at the start of a new line */
             if (pos == text_out_indent)
@@ -148,15 +174,10 @@ void text_out_to_file(byte a, cptr str)
         /* Write that line to file */
         for (n = 0; n < len; n++)
         {
-            /* Ensure the character is printable */
-            ch = (isprint((unsigned char)s[n]) ? s[n] : ' ');
-
             /* Write out the character */
-            write_text_out_byte((unsigned char)ch);
-
-            /* Increment */
-            pos++;
+            write_text_out_byte((unsigned char)s[n]);
         }
+        pos += (int)utf8_strnlen_cells(s, (size_t)len);
 
         /* Move 's' past the stuff we've written */
         s += len;

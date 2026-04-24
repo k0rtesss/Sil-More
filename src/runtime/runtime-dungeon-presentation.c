@@ -1286,7 +1286,7 @@ void runtime_dungeon_print_story_intro(void)
         "even as your soul grows thinner,\n"
         "your strength fading with every triumph.\n",
 
-        "You envy the Edain, whose Gift from Iluvatar\n"
+        "You envy the Edain, whose Gift from Ilúvatar\n"
         "frees them from the bonds of Mandos and the world.\n"
         "Yet you do not know if such release can ever be yours.\n"
         "You do not know who-or even what-you truly are.\n",

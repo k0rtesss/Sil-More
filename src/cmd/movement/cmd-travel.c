@@ -328,7 +328,7 @@ void do_cmd_go_up(void)
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         msg_print("The forge fires dim as you prepare to leave...");
-        msg_print("Abandoning Aule's forge will mean failure of the quest.");
+        msg_print("Abandoning Aulë's forge will mean failure of the quest.");
         if (!get_check("Are you sure you wish to abandon the forge and ascend? "))
         {
             return;
@@ -584,7 +584,7 @@ void do_cmd_go_up(void)
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aule's forge. The quest is lost.");
+        msg_print("You have abandoned Aulë's forge. The quest is lost.");
     }
     else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {
@@ -685,7 +685,7 @@ void do_cmd_go_down(void)
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         msg_print("The forge fires dim as you prepare to leave...");
-        msg_print("Abandoning Aule's forge will mean failure of the quest.");
+        msg_print("Abandoning Aulë's forge will mean failure of the quest.");
         if (!get_check("Are you sure you wish to abandon the forge and descend? "))
         {
             return;
@@ -805,7 +805,7 @@ void do_cmd_go_down(void)
     if (p_ptr->aule_quest >= AULE_QUEST_ACTIVE && p_ptr->aule_quest < AULE_QUEST_REWARDED)
     {
         p_ptr->aule_quest = AULE_QUEST_NOT_STARTED;
-        msg_print("You have abandoned Aule's forge. The quest is lost.");
+        msg_print("You have abandoned Aulë's forge. The quest is lost.");
     }
     else if (p_ptr->aule_quest == AULE_QUEST_FORGE_PRESENT)
     {

@@ -261,7 +261,7 @@ D:A flickering vision of a chained elf, eyes wide with madness from endless toil
 D:It reaches out weakly, as if pleading for release.
 
 #### 2. Hallucinatory Mad Sindar Miner
-Lore: Sindar elves mined for Morgoth, some hallucinating from darkness/fumes (*The Children of Hurin* implies tormented thralls).
+Lore: Sindar elves mined for Morgoth, some hallucinating from darkness/fumes (*The Children of Húrin* implies tormented thralls).
 
 N:602:Hallucinatory mad Sindar miner
 W:30:5
@@ -304,7 +304,7 @@ D:His eyes reflect endless suffering, but no treachery - only the weight of lost
 
 ### New Maiar-Inspired Monsters (Focus on Corrupted, Especially Frost)
 
-Deep lore inspection (via tools): Corrupted Maiar are primarily Balrogs (fire Maiar, e.g., Gothmog, Lungorthin - all fiery, no cold variants mentioned) and Sauron (shadow/deception). Other possibles: Werewolves/vampires like Draugluin/Thuringwethil may be embodied Maiar (speculated in HoMe/Myths Transformed); dragons like Glaurung possibly Maiar spirits in beast form. No direct "frost or ice Maiar corrupted" found - Morgoth's early phase was cold (Utumno's ice, blizzards in *The Silmarillion*, Ainulindale), but he corrupted fire spirits later. Osse (sea/storms, cold-adjacent) was tempted but repented. Early drafts (HoMe/Book of Lost Tales) mention "demons of cold" or ice-related horrors from Melkor's discord, but not named Maiar. No white/cold Balrogs.
+Deep lore inspection (via tools): Corrupted Maiar are primarily Balrogs (fire Maiar, e.g., Gothmog, Lungorthin - all fiery, no cold variants mentioned) and Sauron (shadow/deception). Other possibles: Werewolves/vampires like Draugluin/Thuringwethil may be embodied Maiar (speculated in HoMe/Myths Transformed); dragons like Glaurung possibly Maiar spirits in beast form. No direct "frost or ice Maiar corrupted" found - Morgoth's early phase was cold (Utumno's ice, blizzards in *The Silmarillion*, Ainulindalë), but he corrupted fire spirits later. Ossë (sea/storms, cold-adjacent) was tempted but repented. Early drafts (HoMe/Book of Lost Tales) mention "demons of cold" or ice-related horrors from Melkor's discord, but not named Maiar. No white/cold Balrogs.
 
 To fit: Expanded on Raukar (demonic Maiar in file, e.g., Ringrauko as cold variant with HIT:COLD). Suggested commons as lesser corrupted Maiar (shadow/cold themes), and uniques as frost-focused, lore-close creations (e.g., a cold Rauko from Utumno's icy era, or a tempted sea-spirit variant). All use 'R' symbol, like existing Raukar. Depth/rarity deeper for power.
 
@@ -325,7 +325,7 @@ D:A weakened corrupted Maia, reduced to a shadowy wisp after Morgoth's fall.
 D:It drifts, seeking to ensnare the living.
 
 #### 2. Frost Wisp Maia (Corrupted cold spirit)
-Lore: Inspired by Melkor's early cold mists/discord (*Ainulindale* - he created cold/ice in opposition; speculated lesser Maiar of chill corrupted in Utumno).
+Lore: Inspired by Melkor's early cold mists/discord (*Ainulindalë* - he created cold/ice in opposition; speculated lesser Maiar of chill corrupted in Utumno).
 
 N:606:Frost wisp Maia
 W:16:2
@@ -340,10 +340,10 @@ D:A corrupted Maia of ancient chills, a wisp from Melkor's icy discords.
 D:It freezes the air, born of Utumno's frozen depths.
 
 #### New Unique Maiar Monsters (Frost Focus)
-#### 1. Osse the Storm-Tempted (Tempted but not fully corrupted, as lore)
+#### 1. Ossë the Storm-Tempted (Tempted but not fully corrupted, as lore)
 Lore: Directly from *The Silmarillion* (Ch. 1) - Maia of Ulmo, tempted by Melkor to storms/cold seas, but repented; could appear as a hallucination or weakened servant.
 
-N:607:Osse, the Storm-Tempted
+N:607:Ossë, the Storm-Tempted
 W:20:15
 G:R:B
 I:2:20d4:0
@@ -524,7 +524,7 @@ D:$:7:$$
 D: $$$$
 
 #### 2. Shadow Wisp Chamber (Type 6: Interesting Room - Dark spirit haunt)
-Lore: Phantoms from Utumno's discords (*Ainulindale*).
+Lore: Phantoms from Utumno's discords (*Ainulindalë*).
 
 N:502:Shadow Wisp Chamber
 X:6:16:8:5:9

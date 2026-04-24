@@ -16,6 +16,7 @@
  */
 
 #include "angband.h"
+#include "support/utf8.h"
 
 static bool object_recall_prepare_fake_kind(int k_idx, object_type* o_ptr)
 {
@@ -56,10 +57,10 @@ static bool object_recall_append_rich_text(app_ui_scene* scene,
 
         while (len > 0)
         {
-            size_t chunk_len = len;
-
-            if (chunk_len >= sizeof(buf))
-                chunk_len = sizeof(buf) - 1u;
+            size_t chunk_len = utf8_clip_bytes(cursor,
+                MIN(len, sizeof(buf) - 1u));
+            if (chunk_len == 0)
+                break;
             memcpy(buf, cursor, chunk_len);
             buf[chunk_len] = '\0';
             if (!app_ui_panel_add_rich_text(scene, panel, attr, buf))

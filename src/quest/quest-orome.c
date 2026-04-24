@@ -94,7 +94,7 @@ void check_orome_quest_completion(int r_idx)
             
             msg_format("The hunt is complete! You have slain %d %s, proving your prowess!", 
                        kill_count, monster_name);
-            msg_print("Orome the Huntsman will be pleased with your mastery.");
+            msg_print("Oromë the Huntsman will be pleased with your mastery.");
             msg_print("Seek him out to claim your reward - the knowledge of Unique Bane!");
             
             log_trace("Orome quest completed - %d %s slain (wolves=%d, spiders=%d, serpents=%d, vampires=%d)", 
@@ -126,14 +126,14 @@ void check_orome_quest_completion(int r_idx)
             completion_texts = prepend_repeat_context(QUEST_ID_OROME_GREAT_HUNT, completion_texts, &completion_count, true);
 
             if (completion_texts && completion_count > 0) {
-                quest_typewriter_menu("Orome, Hunt of the Great", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+                quest_typewriter_menu("Oromë, Hunt of the Great", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
                 free_quest_texts(completion_texts, completion_count);
             } else {
                 cptr fallback[] = {
-                    "The last of Orome's marked prey falls at last.",
-                    "The Valaroma rings once more, and the great hunt is ended."
+                    "The last of Oromë's marked prey falls at last.",
+                    "The Valaróma rings once more, and the great hunt is ended."
                 };
-                quest_typewriter_menu("Orome, Hunt of the Great", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+                quest_typewriter_menu("Oromë, Hunt of the Great", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
             }
 
             quest_set_state(QUEST_ID_OROME_GREAT_HUNT, QUEST_STATE_REWARDED);
@@ -169,14 +169,14 @@ void orome_quest_interaction(void)
         remove_quest_giver(R_IDX_OROME);
 
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Orome, Warden of the Drakes", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë, Warden of the Drakes", init_texts, text_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             cptr fallback[] = {
-                "Orome's horn-call echoes like fire through the deep halls.",
+                "Oromë's horn-call echoes like fire through the deep halls.",
                 "'Slay ten mighty dragons and return to me, hunter.'"
             };
-            quest_typewriter_menu("Orome, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
         }
         return;
     }
@@ -189,14 +189,14 @@ void orome_quest_interaction(void)
         quest_set_state(QUEST_ID_OROME_DRAGONS, QUEST_STATE_REWARDED);
 
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Orome, Warden of the Drakes", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë, Warden of the Drakes", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             cptr fallback[] = {
-                "Orome appears amid the fading terror of the drakes.",
+                "Oromë appears amid the fading terror of the drakes.",
                 "'The mightiest worms have learned to fear your name.'"
             };
-            quest_typewriter_menu("Orome, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë, Warden of the Drakes", fallback, N_ELEMENTS(fallback), TERM_GREEN, TERM_WHITE);
         }
 
         grant_followup_quest_rewards(QUEST_ID_OROME_DRAGONS);
@@ -222,15 +222,15 @@ void orome_quest_interaction(void)
         init_texts = prepend_repeat_context(QUEST_ID_OROME, init_texts, &text_count, false);
         
         if (init_texts && text_count > 0) {
-            quest_typewriter_menu("Orome the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë the Huntsman", init_texts, text_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(init_texts, text_count);
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Orome the Huntsman regards you with keen eyes:",
+                "Oromë the Huntsman regards you with keen eyes:",
                 "'Prove your skill as a hunter. The dark creatures multiply.'"
             };
-            quest_typewriter_menu("Orome the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
         
         /* Determine hunt target based on dungeon depth */
@@ -266,7 +266,7 @@ void orome_quest_interaction(void)
         
         msg_format("You must hunt and slay %d %s to prove your prowess.", target_count, target_name);
         msg_print("Return when the hunt is complete to claim your reward.");
-        msg_print("Orome fades into the wild, but his presence lingers in your soul.");
+        msg_print("Oromë fades into the wild, but his presence lingers in your soul.");
         
         log_trace("Orome quest started - hunt %d %s at depth %d", 
                  target_count, target_name, depth);
@@ -281,15 +281,15 @@ void orome_quest_interaction(void)
         completion_texts = prepend_repeat_context(QUEST_ID_OROME, completion_texts, &completion_count, true);
         
         if (completion_texts && completion_count > 0) {
-            quest_typewriter_menu("Orome the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë the Huntsman", completion_texts, completion_count, TERM_GREEN, TERM_WHITE);
             free_quest_texts(completion_texts, completion_count);
         } else {
             /* Fallback to simple message if text extraction fails */
             cptr fallback_texts[] = {
-                "Orome appears with a proud smile!",
+                "Oromë appears with a proud smile!",
                 "'You have proven yourself a true hunter of the wild.'"
             };
-            quest_typewriter_menu("Orome the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
+            quest_typewriter_menu("Oromë the Huntsman", fallback_texts, 2, TERM_GREEN, TERM_WHITE);
         }
         
         /* Show the specific numbers after the main dialogue */
@@ -377,7 +377,7 @@ void check_orome_quest_interaction(void)
                 {
                     if (place_monster_one(y, x, R_IDX_OROME, true, true, NULL))
                     {
-                        msg_print("Orome the Huntsman materializes nearby, ready to honor your success!");
+                        msg_print("Oromë the Huntsman materializes nearby, ready to honor your success!");
                         log_trace("Successfully spawned Orome for quest completion");
                         return;
                     }

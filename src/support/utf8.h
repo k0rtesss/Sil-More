@@ -13,16 +13,18 @@
  * for more details.
  */
 
-#ifndef INCLUDED_PLATFORM_STORY_FONT_H
-#define INCLUDED_PLATFORM_STORY_FONT_H
+#ifndef INCLUDED_SUPPORT_UTF8_H
+#define INCLUDED_SUPPORT_UTF8_H
 
 #include "h-basic.h"
 
-void platform_story_font_enable(void);
-void platform_story_font_disable(void);
-void platform_story_font_reset(void);
-bool platform_story_font_enabled(void);
-int platform_story_font_text_width(cptr text, int len);
-int platform_story_font_cell_width(void);
+size_t utf8_char_len(cptr s);
+size_t utf8_clip_bytes(cptr s, size_t max_bytes);
+size_t utf8_clip_cells(cptr s, size_t max_cells, size_t max_bytes);
+size_t utf8_strlcpy(char* dst, cptr src, size_t dst_size);
+size_t utf8_strlen_cells(cptr s);
+size_t utf8_strnlen_cells(cptr s, size_t max_bytes);
+bool utf8_next_codepoint(cptr* cursor, u32b* out_codepoint);
+int utf8_latin1_fold_codepoint(u32b codepoint);
 
-#endif /* INCLUDED_PLATFORM_STORY_FONT_H */
+#endif /* INCLUDED_SUPPORT_UTF8_H */

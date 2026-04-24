@@ -83,6 +83,14 @@ errr init_info_txt(
         /* Advance the line number */
         error_line++;
 
+        if (error_line == 1
+            && (unsigned char)buf[0] == 0xEF
+            && (unsigned char)buf[1] == 0xBB
+            && (unsigned char)buf[2] == 0xBF)
+        {
+            memmove(buf, buf + 3, strlen(buf + 3) + 1u);
+        }
+
         /* Skip comments and blank lines */
         if (!buf[0] || (buf[0] == '#'))
             continue;

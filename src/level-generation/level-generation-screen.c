@@ -485,13 +485,13 @@ static const char* level_gen_debug_quest_name(int quest_id)
     case QUEST_ID_TULKAS:
         return "Tulkas the Strong";
     case QUEST_ID_AULE:
-        return "Aule the Smith";
+        return "Aulë the Smith";
     case QUEST_ID_MANDOS:
         return "Mandos the Doomsman";
     case QUEST_ID_NIENA:
         return "Niena, Lady of Pity";
     case QUEST_ID_OROME:
-        return "Orome the Hunter";
+        return "Oromë the Hunter";
     case QUEST_ID_VARDA:
         return "Varda, Lady of the Stars";
     default:
