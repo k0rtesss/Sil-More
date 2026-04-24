@@ -28,9 +28,10 @@ like a modern semantic UI while keeping the compact pixel-art soul of Sil.
   to `action_key` and `sdl_submit_legacy_input_byte()`.
 - Panes and integer main-view scale are live configurable through
   `src/pane-config.h`, `src/pane.c`, `src/sdl-layout.c`, and `src/sdl-config.c`.
-  Direct pane drag resize, layout schema versioning, and immediate pane save
-  paths are present. Remaining layout work is broader scale/density controls,
-  explicit user-facing overlay pin/unpin/reset controls, and touch-first polish.
+  Direct pane drag resize, layout schema versioning, immediate pane save
+  paths, scale/density/menu-font controls, and overlay drag/pin/reset state are
+  present. Remaining layout work is touch-first polish and later shared overlay
+  UX built on top of those primitives.
 
 ## Implementation Status - 2026-04-25
 
@@ -57,28 +58,43 @@ Done:
   or look at the clicked hint, settings rows toggle the clicked option, supplies
   commands operate on the clicked supply, and enhanced inventory ignores
   decorative compare/summary rows as selectable items.
+- The shared browser shell first pass is in place:
+  `src/ui/ui-browser-shell.[ch]` now owns common browser panel setup, tab
+  interaction wiring, footer action insertion, scroll/direction translation,
+  cancel/back handling, row/button/tab command translation, and simple cursor
+  clamping. Knowledge, supplies, Halls of Mandos, run history list/detail,
+  quest status, help, and the file viewer now route shared shell glue through
+  it while keeping screen-specific content/detail builders local.
+- The semantic-dispatch completion pass has converted additional key-shaped
+  waits to command-aware adapters: continue/dismiss modals, message `-more-`
+  prompts, main menu selection, nearby overlays, object-info document scrolling,
+  quest status/typewriter continuation, smithing menus, metarun confirm/curse
+  prompts, and Morgoth hall confirmation.
 - UX2 is partial: pointer/touch/gamepad rows, tabs, footer actions, scroll
   regions, long-press/context, and per-device prompt fallback exist for the
   migrated screens. It is not yet universal across every screen.
-- UX5 is partial: pane drag resize persists on release, config save failures
-  are reported, overlay panel offsets use stable semantic ids with legacy
-  fallback migration, pinned/moved overlay state now affects rendering, and
-  right-clicking a panel drag handle resets its persisted position.
+- UX4 dungeon map pointer/touch interaction is in place: SDL-local map-cell hit
+  testing, hover/focus cursor inspection, adjacent semantic move/interact,
+  right-click or touch long-press recall/detail, and visible safe-travel preview
+  for distant click/tap travel.
+- UX5 lane F is implemented: pane drag resize persists on release, config save
+  failures are reported, overlay panel offsets use stable semantic ids with
+  legacy fallback migration, pinned/moved overlay state now affects rendering,
+  right-clicking a panel drag handle resets its persisted position, and the pane
+  settings screen can clear all moved overlay panels.
 - A UIX semantic-dispatch audit is now part of `tools/ui_debt_audit.py` and
   the `sil_ui0_audit` CTest gate. It tracks remaining `wait_key` consumers,
   `action_key` fallback reads, and legacy command-bridge queue calls.
 
 Not done:
 
-- The shared browser shell has not been extracted; migrated browsers still own
-  their screen-specific command adapters.
+- The shared browser shell still needs broader adoption by later workflow
+  migrations such as birth, smithing, metarun stats, query/debug browsers, and
+  other nested screens.
 - UX3 visual remaster work is still mostly open: token/style pass, blue-menu
   removal, new art/backdrops, and final modern-pixel styling are not complete.
-- UX4 dungeon map pointer/touch interaction is still open: map-cell hit testing,
-  hover inspect, adjacent click/tap interaction, recall/context, and safe travel
-  preview are not done.
-- Overlay pinning still lacks visible user controls for pin/unpin; reset exists
-  on the drag handle, but the UX is incomplete.
+- Overlay pinning still lacks visible per-panel pin/unpin controls; reset exists
+  on the drag handle and in pane settings, but the per-panel UX is incomplete.
 - Birth, quest, smithing, metarun, and other nested workflows still need
   dedicated migration/remaster passes. Death/victory, help, and the file viewer
   have semantic command adapters, but still belong in the visual and
@@ -89,8 +105,8 @@ Current validation:
 - `.\build-incremental.ps1` passes.
 - `py -3 tools\ui_debt_audit.py --check` passes.
 - `py -3 tools\ui_debt_audit.py --audit uix_semantic --details` reports the
-  current remaining migration debt: 25 `wait_key` consumer files / 47 matches,
-  13 `action_key` fallback files / 31 matches, and 5 legacy bridge queue files
+  current remaining migration debt: 14 `wait_key` consumer files / 29 matches,
+  10 `action_key` fallback files / 23 matches, and 5 legacy bridge queue files
   / 18 matches.
 - `py -3 tools\modernization_audit.py --details` passes.
 - `ctest --test-dir build-standard -E sil_source_size_audit --output-on-failure`
@@ -116,12 +132,12 @@ high-level map.
 
 2. Shared browser shell
 
-   - Extract common browser/list/detail/footer command helpers from knowledge,
-     scores, quest UI, help, and file viewer screens.
-   - Standardize row selection, tabs, footer actions, scroll behavior, detail
-     panes, search/filter prompts, and cancel/back handling.
-   - Do this before deep visual styling so every browser does not duplicate the
-     same remaster work.
+   - Extend `src/ui/ui-browser-shell.[ch]` adoption to remaining browser-like
+     nested workflows.
+   - Keep row selection, tabs, footer actions, scroll behavior,
+     search/filter prompts, and cancel/back handling centralized there.
+   - Keep content-specific detail pane construction local unless a helper
+     removes real duplication.
 
 3. UX3 visual remaster system
 
@@ -133,10 +149,10 @@ high-level map.
 
 4. UX4 dungeon map pointer and touch interaction
 
-   - Add map-cell hit testing and hover/focus inspection.
-   - Support adjacent click/tap movement and interaction.
-   - Add pointer/touch recall and context actions.
-   - Add safe-travel preview behavior without changing keyboard targeting
+   - Maintain map-cell hit testing and hover/focus inspection.
+   - Maintain adjacent click/tap movement and interaction.
+   - Maintain pointer/touch recall and context actions.
+   - Keep safe-travel preview behavior independent from keyboard targeting
      semantics.
 
 5. UX5 panes, overlays, and scale controls

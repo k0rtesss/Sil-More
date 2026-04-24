@@ -115,18 +115,22 @@ static void sdl_menu_render_browser_tabs(TTF_Font* font,
             (float)tab_w,
             (float)(line_h + pad_y * 2)
         };
-        SDL_Color fill = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE)
-            ? sdl_menu_panel_style(panel)->selected_fill
-            : sdl_menu_panel_style(panel)->panel_fill_alt;
         SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
+        bool focused;
+        bool pressed = false;
 
         if (i > 0)
             cursor_x += item_gap;
         pill.x = (float)cursor_x;
-        fill.a = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) ? 132 : 70;
         border.a = 212;
-        sdl_menu_fill_rect(&pill, fill);
-        sdl_menu_draw_rect(&pill, border);
+        focused = sdl_menu_target_has_visual_focus(SDL_MENU_HIT_TARGET_TAB,
+            tab->id, &pressed);
+        sdl_menu_draw_control_frame(panel, &pill, tab->flags,
+            (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) != 0, focused, pressed);
+        if (!focused && !pressed)
+        {
+            sdl_menu_draw_rect(&pill, border);
+        }
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_TAB, tab->id,
             tab->interaction.action_key, tab->interaction.role,
             tab->interaction.action, tab->interaction.flags, tab->flags, -1,
@@ -162,8 +166,11 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
         int pad_x = sdl_menu_scale_px(8.0f);
         int pad_y = sdl_menu_scale_px(2.0f);
         byte attr;
-        SDL_Color fill;
         SDL_Color border;
+        bool focused;
+        bool pressed = false;
+        SDL_FRect pill;
+        SDL_FRect hit_rect;
 
         if (!action->label[0])
             continue;
@@ -180,26 +187,28 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
         attr = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
             ? TERM_L_DARK
             : (action->attr ? action->attr : TERM_SLATE);
-        fill = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
-            ? sdl_menu_panel_style(panel)->disabled_fill
-            : sdl_menu_panel_style(panel)->panel_fill_alt;
         border = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
             ? sdl_menu_panel_style(panel)->panel_border_soft
             : sdl_menu_panel_accent(panel, panel->accent_attr);
-        fill.a = (action->flags & APP_UI_ITEM_FLAG_DISABLED) ? 96 : 76;
         border.a = (action->flags & APP_UI_ITEM_FLAG_DISABLED) ? 150 : 196;
-        sdl_menu_fill_rect(&(SDL_FRect){ (float)cursor_x, (float)cursor_y,
-            (float)token_w, (float)(line_h + pad_y * 2) }, fill);
-        sdl_menu_draw_rect(&(SDL_FRect){ (float)cursor_x, (float)cursor_y,
-            (float)token_w, (float)(line_h + pad_y * 2) }, border);
+        pill = (SDL_FRect){ (float)cursor_x, (float)cursor_y,
+            (float)token_w, (float)(line_h + pad_y * 2) };
+        hit_rect = (SDL_FRect){ (float)cursor_x, (float)cursor_y,
+            (float)token_w, (float)MAX(line_h + pad_y * 2,
+                sdl_menu_scale_px(24.0f)) };
+        focused = sdl_menu_target_has_visual_focus(
+            SDL_MENU_HIT_TARGET_FOOTER_ACTION, action->id, &pressed);
+        sdl_menu_draw_control_frame(panel, &pill, action->flags, false,
+            focused, pressed);
+        if (!focused && !pressed)
+        {
+            sdl_menu_draw_rect(&pill, border);
+        }
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
             action->id, action->interaction.action_key,
             action->interaction.role, action->interaction.action,
             action->interaction.flags, action->flags, -1, 0, 0,
-            &(SDL_FRect){ (float)cursor_x, (float)cursor_y,
-                (float)token_w, (float)MAX(line_h + pad_y * 2,
-                    sdl_menu_scale_px(24.0f)) },
-            action->label, action->interaction.tooltip);
+            &hit_rect, action->label, action->interaction.tooltip);
         sdl_menu_render_text(font, (float)(cursor_x + pad_x),
             (float)(cursor_y + pad_y), line_h,
             sdl_menu_panel_color(panel, attr), text);
@@ -218,6 +227,10 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
     int label_x;
     int meta_w = 0;
     int meta_x;
+    int row_pad_y;
+    bool focused;
+    bool pressed = false;
+    SDL_FRect hit_rect;
 
     if (!font || !panel || !row || !clip_rect)
         return;
@@ -248,32 +261,32 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
     label_x = clip_rect->x;
     meta_x = clip_rect->x;
 
+    row_pad_y = MAX(1, sdl_menu_scale_px(
+        sdl_menu_panel_style(panel)->row_pad_y));
+    hit_rect = (SDL_FRect){
+        (float)clip_rect->x,
+        (float)(current_y - row_pad_y),
+        (float)clip_rect->w,
+        (float)MAX(line_h + row_pad_y * 2, sdl_menu_scale_px(24.0f))
+    };
+    focused = sdl_menu_target_has_visual_focus(SDL_MENU_HIT_TARGET_ROW,
+        row->id, &pressed);
+    if ((row->flags & APP_UI_ITEM_FLAG_SELECTED) || focused || pressed)
     {
-        SDL_FRect hit_rect = {
-            (float)clip_rect->x,
-            (float)(current_y - sdl_menu_scale_px(2.0f)),
-            (float)clip_rect->w,
-            (float)MAX(line_h + sdl_menu_scale_px(4.0f),
-                sdl_menu_scale_px(24.0f))
-        };
-
-        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_ROW, row->id,
-            row->interaction.action_key, row->interaction.role,
-            row->interaction.action, row->interaction.flags, row->flags, -1,
-            row_index, panel->selected_row, &hit_rect, row->label,
-            row->interaction.tooltip);
-        if (row->flags & APP_UI_ITEM_FLAG_SELECTED)
-        {
-            SDL_Color fill = sdl_menu_panel_style(panel)->selected_fill;
-
-            sdl_menu_fill_rect(&hit_rect, fill);
-        }
+        sdl_menu_draw_control_frame(panel, &hit_rect, row->flags,
+            (row->flags & APP_UI_ITEM_FLAG_SELECTED) != 0, focused, pressed);
     }
+    (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_ROW, row->id,
+        row->interaction.action_key, row->interaction.role,
+        row->interaction.action, row->interaction.flags, row->flags, -1,
+        row_index, panel->selected_row, &hit_rect, row->label,
+        row->interaction.tooltip);
 
     if (row->icon_char)
     {
         icon_slot_w = sdl_menu_icon_slot_px(font, line_h);
-        sdl_menu_render_icon(font, (float)label_x, (float)current_y,
+        sdl_menu_render_panel_icon(font, panel, (float)label_x,
+            (float)current_y,
             icon_slot_w, line_h, row->icon_attr, row->icon_char);
         label_x += icon_slot_w;
         if (row->key[0] || row->label[0] || row->meta[0])
@@ -539,6 +552,39 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
             row_start = ui_panel->row_count - row_visible;
         if (row_start < 0)
             row_start = 0;
+    }
+
+    if (content_bottom > content_top)
+    {
+        SDL_Color content_fill = style->panel_fill;
+        SDL_Color content_border = style->panel_border_soft;
+
+        content_fill.a = MIN(content_fill.a, 72);
+        content_border.a = MIN(content_border.a, 116);
+        if (ui_panel->row_count > 0 || rich_h > 0)
+        {
+            SDL_FRect content_rect = {
+                (float)rows_x,
+                (float)content_top,
+                (float)content_w,
+                (float)(content_bottom - content_top)
+            };
+
+            sdl_menu_fill_rect(&content_rect, content_fill);
+            sdl_menu_draw_rect(&content_rect, content_border);
+        }
+        if (has_detail)
+        {
+            SDL_FRect detail_rect = {
+                (float)detail_x,
+                (float)content_top,
+                (float)detail_w,
+                (float)(content_bottom - content_top)
+            };
+
+            sdl_menu_fill_rect(&detail_rect, content_fill);
+            sdl_menu_draw_rect(&detail_rect, content_border);
+        }
     }
 
     if (has_detail)

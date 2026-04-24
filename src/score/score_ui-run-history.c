@@ -24,6 +24,7 @@
 #include "score/score_runs.h"
 #include "score/score_ui-browser.h"
 #include "score/score_ui-run-history.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 #include <time.h>
 
@@ -173,8 +174,8 @@ static void run_history_ui_add_tabs(app_ui_panel* panel,
 
         if (i == (int)active)
             attr = available && available[i] ? TERM_L_BLUE : TERM_SLATE;
-        (void)app_ui_panel_add_tab(panel, (s16b)i, attr,
-            i == (int)active, run_detail_panel_names[i]);
+        (void)ui_browser_shell_add_tab(panel, (s16b)i, attr,
+            i == (int)active, run_detail_panel_names[i], 0, "Open tab");
     }
 }
 
@@ -432,61 +433,44 @@ static void run_history_ui_add_stats_rows(app_ui_panel* panel,
 static void run_history_ui_add_list_footer(app_ui_panel* panel,
     run_detail_panel active_panel, bool can_inspect, bool can_sort)
 {
+    ui_browser_shell_footer_action actions[5];
+    size_t count = 0;
+
     if (!panel)
         return;
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-        "4/6", "View");
+    actions[count++] = (ui_browser_shell_footer_action){
+        1, TERM_L_BLUE, true, "4/6", "View"
+    };
     if (active_panel == RUN_PANEL_GENERAL || active_panel == RUN_PANEL_STATS)
     {
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Scroll");
+        actions[count++] = (ui_browser_shell_footer_action){
+            2, TERM_WHITE, true, "8/2", "Scroll"
+        };
     }
     else
     {
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "8/2", "Move");
+        actions[count++] = (ui_browser_shell_footer_action){
+            2, TERM_WHITE, true, "8/2", "Move"
+        };
     }
     if (can_inspect)
     {
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            "Enter", "Inspect");
+        actions[count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, "Enter", "Inspect"
+        };
     }
     if (can_sort)
     {
-        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-            "s", "Sort");
+        actions[count++] = (ui_browser_shell_footer_action){
+            4, TERM_WHITE, true, "s", "Sort"
+        };
     }
-    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-        "Esc", "Back");
-}
+    actions[count++] = (ui_browser_shell_footer_action){
+        5, TERM_WHITE, true, "Esc", "Back"
+    };
 
-static char run_history_ui_direction_command_key(
-    const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
-        return (command->dy < 0) ? '8' : '2';
-    if (command->dx != 0)
-        return (command->dx < 0) ? '4' : '6';
-
-    return '\0';
-}
-
-static char run_history_ui_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '4' : '6';
-
-    return '\0';
+    (void)ui_browser_shell_add_footer_actions(panel, actions, count);
 }
 
 static bool run_history_ui_set_active_row(run_detail_panel panel,
@@ -518,56 +502,41 @@ static bool run_history_ui_command_to_key(const app_ui_command* command,
     const bool available[RUN_PANEL_COUNT], run_detail_panel* panel,
     run_detail_view_state* view, int total_rows, char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '6' },
+        { 3, '\r' },
+        { 4, 's' },
+        { 5, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !panel || !view || !out_key)
         return false;
 
-    target = &command->target;
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
 
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    if (!ui_browser_shell_translate_command(command, &map, &result))
     {
-        *out_key = ESCAPE;
-        return true;
-    }
-
-    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-    {
-        if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
-            && run_history_ui_set_active_row(*panel, view, target->widget_id,
-                total_rows))
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
         {
+            *out_key = ui_browser_shell_direction_command_key(command, NULL);
             return true;
         }
-        if (target->role == APP_UI_WIDGET_ROLE_TAB
-            && target->widget_id >= 0
-            && target->widget_id < RUN_PANEL_COUNT)
-        {
-            if (!available || available[target->widget_id])
-                *panel = (run_detail_panel)target->widget_id;
-            return true;
-        }
-        *out_key = run_history_ui_direction_command_key(command);
-        return true;
+        return false;
     }
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    if (result.role == APP_UI_WIDGET_ROLE_TAB)
     {
-        *out_key = run_history_ui_scroll_command_key(command);
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_TAB)
-    {
-        if (target->widget_id >= 0 && target->widget_id < RUN_PANEL_COUNT)
+        if (result.widget_id >= 0 && result.widget_id < RUN_PANEL_COUNT)
         {
-            if (!available || available[target->widget_id])
+            if (!available || available[result.widget_id])
             {
-                *panel = (run_detail_panel)target->widget_id;
+                *panel = (run_detail_panel)result.widget_id;
             }
             else
             {
@@ -577,46 +546,20 @@ static bool run_history_ui_command_to_key(const app_ui_command* command,
         return true;
     }
 
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
     {
-        (void)run_history_ui_set_active_row(*panel, view, target->widget_id,
+        (void)run_history_ui_set_active_row(*panel, view, result.widget_id,
             total_rows);
-        if (*panel == RUN_PANEL_ARTEFACTS || *panel == RUN_PANEL_MONSTERS)
-            *out_key = '\r';
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
+        if (!result.focus_only
+            && (*panel == RUN_PANEL_ARTEFACTS || *panel == RUN_PANEL_MONSTERS))
         {
-        case 1:
-            *out_key = '6';
-            return true;
-        case 3:
-            *out_key = '\r';
-            return true;
-        case 4:
-            *out_key = 's';
-            return true;
-        case 5:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
+            *out_key = result.key;
         }
-    }
-
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
         return true;
     }
 
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 static void run_history_ui_add_ability_rows(app_ui_panel* panel,

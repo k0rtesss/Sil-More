@@ -104,9 +104,10 @@ static int sdl_menu_status_rail_row_width_px(TTF_Font* mono_font,
 }
 
 static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
-    float y_px, int icon_slot_w, int line_h, byte icon_attr, char icon_char)
+    const app_ui_panel* panel, float y_px, int icon_slot_w, int line_h,
+    byte icon_attr, char icon_char)
 {
-    sdl_menu_render_icon(mono_font, x_px, y_px, icon_slot_w, line_h,
+    sdl_menu_render_panel_icon(mono_font, panel, x_px, y_px, icon_slot_w, line_h,
         icon_attr, icon_char);
 }
 
@@ -269,7 +270,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 x_px = (float)panel_w_px - (float)group_w;
                 if (x_px < content_x)
                     x_px = content_x;
-                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                sdl_menu_render_status_rail_icon(mono_font, x_px, panel, y_px,
                     icon_slot_w, line_h, row->icon_attr, row->icon_char);
                 x_px += (float)icon_slot_w;
                 if (row->label[0])
@@ -280,7 +281,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 x_px += (float)label_w;
                 if (label_w > 0 && meta_w > 0)
                     x_px += (float)gap_px;
-                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                sdl_menu_render_status_rail_icon(mono_font, x_px, panel, y_px,
                     icon_slot_w, line_h, row->extra_icon_attr,
                     row->extra_icon_char);
                 if (row->meta[0])
@@ -305,7 +306,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 x_px += (float)label_w;
                 if (label_w > 0 && meta_w > 0)
                     x_px += (float)gap_px;
-                sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+                sdl_menu_render_status_rail_icon(mono_font, x_px, panel, y_px,
                     icon_slot_w, line_h, row->extra_icon_attr,
                     row->extra_icon_char);
                 if (row->meta[0])
@@ -320,7 +321,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
 
         if (row->icon_char)
         {
-            sdl_menu_render_status_rail_icon(mono_font, content_x, y_px,
+            sdl_menu_render_status_rail_icon(mono_font, content_x, panel, y_px,
                 icon_slot_w, line_h, row->icon_attr, row->icon_char);
             if (row->label[0])
             {
@@ -501,7 +502,7 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
 
         if (row->icon_char)
         {
-            sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+            sdl_menu_render_status_rail_icon(mono_font, x_px, panel, y_px,
                 icon_slot_w, line_h, row->icon_attr, row->icon_char);
             x_px += (float)icon_slot_w;
             if (label_text[0] || row->meta[0] || row->extra_icon_char)
@@ -520,7 +521,7 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
         {
             if (has_tail)
                 x_px += (float)gap_px;
-            sdl_menu_render_status_rail_icon(mono_font, x_px, y_px,
+            sdl_menu_render_status_rail_icon(mono_font, x_px, panel, y_px,
                 icon_slot_w, line_h, row->extra_icon_attr,
                 row->extra_icon_char);
             x_px += (float)icon_slot_w;

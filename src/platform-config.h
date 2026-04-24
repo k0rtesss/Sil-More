@@ -66,6 +66,8 @@ bool platform_show_pane_borders(void);
 void platform_set_show_pane_borders(bool value);
 bool platform_hide_left_panel(void);
 void platform_set_hide_left_panel(bool value);
+int platform_overlay_panel_layout_count(void);
+void platform_reset_overlay_panel_layout(void);
 int platform_pane_type(int index);
 int platform_pane_where(int index);
 void platform_set_pane_where(int index, int where);

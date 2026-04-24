@@ -23,6 +23,7 @@
 #include "log/log.h"
 #include "metarun.h"
 #include "cmd-ui-knowledge.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-semantic-scene.h"
 
 static int g_knowledge_last_page = KNOWLEDGE_PAGE_ARTEFACTS;
@@ -471,13 +472,8 @@ static void knowledge_scene_add_tabs(app_ui_panel* panel, int page,
 
         if (i == page)
             attr = tabs_focus ? TERM_YELLOW : TERM_L_BLUE;
-        (void)app_ui_panel_add_tab(panel, (s16b)i, attr, i == page,
-            knowledge_tab_label(i));
-        (void)app_ui_panel_set_tab_interaction(panel, (s16b)i,
-            APP_UI_WIDGET_ROLE_TAB, APP_UI_WIDGET_ACTION_SELECT,
-            APP_UI_INTERACTION_FLAG_POINTER_ENABLED
-                | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
-            knowledge_tab_key(i), "Open tab");
+        (void)ui_browser_shell_add_tab(panel, (s16b)i, attr, i == page,
+            knowledge_tab_label(i), knowledge_tab_key(i), "Open tab");
     }
 }
 
@@ -486,7 +482,7 @@ app_ui_panel* knowledge_scene_begin(app_ui_scene* scene, int page,
 {
     app_ui_panel* panel;
 
-    panel = ui_semantic_scene_begin_browser(scene, TERM_L_WHITE, "Known lore",
+    panel = ui_browser_shell_begin_browser(scene, TERM_L_WHITE, "Known lore",
         TERM_SLATE, "", TERM_L_BLUE,
         APP_UI_PANEL_FLAG_TOP_ANCHORED
             | APP_UI_PANEL_FLAG_LEFT_ANCHORED
@@ -558,84 +554,62 @@ static bool knowledge_build_root_menu_scene(app_ui_scene* scene, int selected)
         }
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-        "Enter", "Select");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "Esc", "Back");
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, "Enter", "Select" },
+            { 2, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
     knowledge_scene_set_focus(panel, false);
     return true;
-}
-
-static char knowledge_root_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-
-    return '\0';
 }
 
 static bool knowledge_root_command_to_key(const app_ui_command* command,
     int* selected, char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '\r' },
+        { 2, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !selected || !out_key)
         return false;
 
-    target = &command->target;
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = '\0';
 
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
     {
-        *out_key = ESCAPE;
+        if (result.widget_id < 1 || result.widget_id > 6)
+            return true;
+
+        *selected = result.widget_id - 1;
+        if (result.focus_only)
+            return true;
+        *out_key = (char)('0' + result.widget_id);
         return true;
     }
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    if (result.role == APP_UI_WIDGET_ROLE_BUTTON && result.key == '\r')
     {
-        *out_key = knowledge_root_scroll_command_key(command);
+        *out_key = (char)('1' + *selected);
         return true;
     }
 
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
-    {
-        if (target->widget_id < 1 || target->widget_id > 6)
-            return true;
-
-        *selected = target->widget_id - 1;
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-        *out_key = (char)('0' + target->widget_id);
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case 1:
-            *out_key = (char)('1' + *selected);
-            return true;
-        case 2:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 /*

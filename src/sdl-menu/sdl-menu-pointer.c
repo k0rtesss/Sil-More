@@ -69,6 +69,27 @@ static sdl_menu_tooltip_state g_menu_tooltip_state;
 static sdl_menu_panel_drag_capture g_menu_panel_drag_capture;
 static u64b g_structured_input_sequence;
 
+static void sdl_menu_pointer_window_point_to_pixels(float* x, float* y)
+{
+    int window_w = 0;
+    int window_h = 0;
+    int pixel_w = 0;
+    int pixel_h = 0;
+
+    if (!g_state.window || !x || !y)
+        return;
+
+    SDL_GetWindowSize(g_state.window, &window_w, &window_h);
+    SDL_GetWindowSizeInPixels(g_state.window, &pixel_w, &pixel_h);
+    if (window_w <= 0 || window_h <= 0 || pixel_w <= 0 || pixel_h <= 0)
+        return;
+
+    if (window_w != pixel_w)
+        *x = *x * (float)pixel_w / (float)window_w;
+    if (window_h != pixel_h)
+        *y = *y * (float)pixel_h / (float)window_h;
+}
+
 static u16b sdl_menu_pointer_modifiers_from_keymod(SDL_Keymod mod)
 {
     u16b modifiers = 0;
@@ -364,6 +385,7 @@ static bool sdl_menu_pointer_event_xy(const SDL_Event* ev, float* out_x,
     {
         *out_x = ev->motion.x;
         *out_y = ev->motion.y;
+        sdl_menu_pointer_window_point_to_pixels(out_x, out_y);
         return true;
     }
     if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
@@ -371,6 +393,7 @@ static bool sdl_menu_pointer_event_xy(const SDL_Event* ev, float* out_x,
     {
         *out_x = ev->button.x;
         *out_y = ev->button.y;
+        sdl_menu_pointer_window_point_to_pixels(out_x, out_y);
         return true;
     }
     if (ev->type == SDL_EVENT_FINGER_DOWN
@@ -693,13 +716,20 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
 
     if (ev->type == SDL_EVENT_MOUSE_MOTION)
     {
-        target = sdl_menu_hit_test(ev->motion.x, ev->motion.y);
+        float x = ev->motion.x;
+        float y = ev->motion.y;
+        float dx = ev->motion.xrel;
+        float dy = ev->motion.yrel;
+
+        sdl_menu_pointer_window_point_to_pixels(&x, &y);
+        target = sdl_menu_hit_test(x, y);
         if (target)
             sdl_menu_pointer_note_focus(target, APP_INPUT_DEVICE_POINTER,
                 false);
+        sdl_menu_pointer_window_point_to_pixels(&dx, &dy);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_POINTER,
-            APP_INPUT_TYPE_POINTER_MOTION, 0, ev->motion.x, ev->motion.y,
-            ev->motion.xrel, ev->motion.yrel, 0, 0);
+            APP_INPUT_TYPE_POINTER_MOTION, 0, x, y,
+            dx, dy, 0, 0);
         return false;
     }
 
@@ -709,6 +739,7 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
         float my = 0.0f;
 
         (void)SDL_GetMouseState(&mx, &my);
+        sdl_menu_pointer_window_point_to_pixels(&mx, &my);
         target = sdl_menu_hit_test(mx, my);
         (void)sdl_menu_pointer_submit_input(APP_INPUT_DEVICE_POINTER,
             APP_INPUT_TYPE_POINTER_WHEEL, 0, 0.0f, 0.0f, (float)ev->wheel.x,

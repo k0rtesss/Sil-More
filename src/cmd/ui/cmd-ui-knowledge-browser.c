@@ -20,6 +20,7 @@
 #include "platform-input.h"
 #include "log/log.h"
 #include "cmd-ui-knowledge.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-semantic-scene.h"
 
 /*
@@ -706,13 +707,21 @@ static bool knowledge_present_curse_detail_scene(app_ui_scene* scene,
 
     if (steamdeck)
     {
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            accept_label, "Continue");
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, accept_label, "Continue" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
     }
     else
     {
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-            "Any", "Continue");
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_L_BLUE, true, "Any", "Continue" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
     }
 
     return ui_semantic_scene_present_and_wait_key(scene, true, false,
@@ -807,24 +816,35 @@ static bool knowledge_show_curse_detail_ui(int curse_id)
 static void knowledge_scene_add_footer_actions(app_ui_panel* panel,
     bool has_groups, bool can_recall)
 {
+    ui_browser_shell_footer_action actions[6];
+    size_t count = 0;
+
     if (!panel)
         return;
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-        "e", "Prev page");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
-        "i", "Next page");
+    actions[count++] = (ui_browser_shell_footer_action){
+        1, TERM_L_BLUE, true, "e", "Prev page"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        2, TERM_L_BLUE, true, "i", "Next page"
+    };
     if (has_groups)
     {
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            "4/6", "Group");
+        actions[count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, "4/6", "Group"
+        };
     }
-    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "8/2", "Move");
-    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, can_recall,
-        "r", "Recall");
-    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
-        "Esc", "Back");
+    actions[count++] = (ui_browser_shell_footer_action){
+        4, TERM_WHITE, true, "8/2", "Move"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        5, TERM_WHITE, can_recall, "r", "Recall"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        6, TERM_WHITE, true, "Esc", "Back"
+    };
+
+    (void)ui_browser_shell_add_footer_actions(panel, actions, count);
 }
 
 static void knowledge_scene_add_group_detail_lines(app_ui_panel* panel,
@@ -1230,119 +1250,63 @@ static bool knowledge_build_curse_browser_scene(app_ui_scene* scene, int page,
     return true;
 }
 
-static char knowledge_browser_scroll_command_key(
-    const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '4' : '6';
-
-    return '\0';
-}
-
 static bool knowledge_browser_command_to_key(
     const app_ui_command* command, knowledge_browser_state* state, int* page,
     int entry_cnt, bool has_groups, char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, 'e' },
+        { 2, 'i' },
+        { 3, '6' },
+        { 5, 'r' },
+        { 6, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !state || !page || !out_key)
         return false;
 
-    target = &command->target;
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_inspect_key = 'r';
 
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        *out_key = ESCAPE;
-        return true;
-    }
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    if (result.role == APP_UI_WIDGET_ROLE_TAB)
     {
-        *out_key = knowledge_browser_scroll_command_key(command);
-        return true;
-    }
-
-    if (target->role == APP_UI_WIDGET_ROLE_TAB)
-    {
-        if (target->widget_id >= KNOWLEDGE_PAGE_ARTEFACTS
-            && target->widget_id <= KNOWLEDGE_PAGE_CURSES)
+        if (result.widget_id >= KNOWLEDGE_PAGE_ARTEFACTS
+            && result.widget_id <= KNOWLEDGE_PAGE_CURSES)
         {
-            *page = target->widget_id;
+            *page = result.widget_id;
             knowledge_set_last_page(*page);
             state->tabs_focus = true;
         }
         return true;
     }
 
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
     {
-        if (target->widget_id < 0 || target->widget_id >= entry_cnt)
+        if (result.widget_id < 0 || result.widget_id >= entry_cnt)
             return true;
 
-        state->entry_cur[*page] = target->widget_id;
+        state->entry_cur[*page] = result.widget_id;
         if (has_groups)
             state->column[*page] = 1;
         state->tabs_focus = false;
 
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        if (result.focus_only)
             return true;
-        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
-            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
-            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
-        {
-            *out_key = 'r';
-            return true;
-        }
-
-        *out_key = '\r';
+        *out_key = result.key;
         return true;
     }
 
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case 1:
-            *out_key = 'e';
-            return true;
-        case 2:
-            *out_key = 'i';
-            return true;
-        case 3:
-            *out_key = '6';
-            return true;
-        case 5:
-            *out_key = 'r';
-            return true;
-        case 6:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 static int knowledge_browser_wait_input(knowledge_browser_state* state,

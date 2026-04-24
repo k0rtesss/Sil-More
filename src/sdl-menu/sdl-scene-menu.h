@@ -62,6 +62,7 @@ SDL_Color sdl_menu_panel_color_alpha(const app_ui_panel* panel, byte attr,
 SDL_Color sdl_menu_panel_accent(const app_ui_panel* panel, byte attr);
 void sdl_menu_hit_reset(int origin_x, int origin_y);
 void sdl_menu_hit_set_scene(u16b scene_kind);
+u16b sdl_menu_hit_scene_kind(void);
 void sdl_menu_hit_begin_panel(u16b panel_index,
     const app_ui_panel* panel);
 void sdl_menu_hit_end_panel(void);
@@ -97,12 +98,19 @@ void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst);
 void sdl_menu_draw_view_glyph(const sdl_view* view, const SDL_FRect* dst,
     SDL_Color color, char ch);
+bool sdl_menu_target_has_visual_focus(u16b kind, s16b id, bool* out_pressed);
+void sdl_menu_draw_control_frame(const app_ui_panel* panel,
+    const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
+    bool pressed);
 int sdl_menu_scale_px(float logical_value);
 int sdl_menu_font_size_logical(const app_ui_panel* panel);
 int sdl_menu_measure_text(TTF_Font* font, cptr text);
 int sdl_menu_icon_slot_px(TTF_Font* font, int line_h);
 void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
     int icon_slot_w, int line_h, byte icon_attr, char icon_char);
+void sdl_menu_render_panel_icon(TTF_Font* font, const app_ui_panel* panel,
+    float x_px, float y_px, int icon_slot_w, int line_h, byte icon_attr,
+    char icon_char);
 void sdl_menu_render_text(TTF_Font* font, float x_px, float y_px, int line_h,
     SDL_Color color, cptr text);
 bool sdl_menu_document_cell_is_raw(byte attr, char ch, byte terrain_attr,

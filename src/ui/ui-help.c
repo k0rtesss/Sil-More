@@ -18,6 +18,7 @@
 #include "angband.h"
 #include "app/app-ui.h"
 #include "ui-help.h"
+#include "ui-browser-shell.h"
 #include "ui-information-scene.h"
 #include "log/log.h"
 #include "platform-audio.h"
@@ -507,12 +508,7 @@ void binding_action_short(int binding, char* buf, size_t buflen)
 
 static void help_prompt_label(int binding, const char* fallback, char* buf, size_t buflen)
 {
-    if (!buf || !buflen)
-        return;
-
-    platform_gamepad_action_binding_short_label(binding, buf, buflen);
-    if (streq(buf, "(unbound)") || streq(buf, "Multiple"))
-        SDL_strlcpy(buf, fallback, buflen);
+    ui_browser_shell_prompt_label(binding, fallback, buf, buflen);
 }
 
 static int help_gamepad_button_binding(int button)
@@ -792,6 +788,7 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
     int doc_start_y, int doc_end_y)
 {
     app_ui_panel* panel;
+    ui_browser_shell_scene_config config;
     char page_header[96];
     char nav[160];
     int row;
@@ -799,23 +796,20 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
-    if (!panel)
-        return false;
-
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_SLATE;
-    panel->min_width_px = 1600;
-    panel->width_cap_px = 2800;
-
     strnfmt(page_header, sizeof(page_header),
         "SIL-MORE: SHINING DARKNESS - HELP [%d/%d]",
         page, total_pages);
-    app_ui_panel_set_title(panel, help_role_attr(ROLE_HEADER), page_header);
+
+    ui_browser_shell_scene_config_init(&config);
+    config.style = APP_UI_PANEL_STYLE_PLAIN;
+    config.accent_attr = TERM_SLATE;
+    config.min_width_px = 1600;
+    config.width_cap_px = 2800;
+    config.title_attr = help_role_attr(ROLE_HEADER);
+    config.title = page_header;
+    panel = ui_browser_shell_begin(scene, &config);
+    if (!panel)
+        return false;
 
     if (!app_ui_panel_begin_rich_paragraph(scene, panel))
         return false;
@@ -878,12 +872,17 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
         return false;
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, page > 1,
-        "4", "Prev");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
-        "6", (page >= total_pages) ? "Done" : "Next");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "Esc", "Back");
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, page > 1, "4", "Prev" },
+            { 2, TERM_L_BLUE, true, "6",
+                (page >= total_pages) ? "Done" : "Next" },
+            { 3, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
 
     return true;
 }
@@ -1631,7 +1630,6 @@ static void help_record_page_document_ops(int i, bool include_header)
 
 
 
-static char help_scroll_command_key(const app_ui_command* command);
 static bool help_command_to_key(const app_ui_command* command, char* out_key);
 
 static bool do_cmd_help_information_scene(void)
@@ -1740,67 +1738,30 @@ static bool do_cmd_help_information_scene(void)
     return true;
 }
 
-static char help_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '4' : '6';
-
-    return '\0';
-}
-
 static bool help_command_to_key(const app_ui_command* command, char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '4' },
+        { 2, '6' },
+        { 3, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !out_key)
         return false;
 
-    target = &command->target;
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        *out_key = ESCAPE;
-        return true;
-    }
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
-    {
-        *out_key = help_scroll_command_key(command);
-        return true;
-    }
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
 
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case 1:
-            *out_key = '4';
-            return true;
-        case 2:
-            *out_key = '6';
-            return true;
-        case 3:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 void do_cmd_help(void)

@@ -35,10 +35,109 @@ static void smith_ui_artefact_flag_snapshot_menu(int category);
 static void smith_ui_artefact_ability_snapshot_menu(int skill);
 static int smith_ui_reforge_prefix_snapshot_menu(const object_type* source);
 
+static char smith_ui_direction_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '4' : '6';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '4' : '6';
+    }
+
+    return '\0';
+}
+
+static char smith_ui_command_key(const app_ui_command* command)
+{
+    const app_ui_widget_ref* target;
+
+    if (!command)
+        return '\0';
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        return ESCAPE;
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        return smith_ui_direction_command_key(command);
+    }
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id <= 0 || target->widget_id > 26)
+            return '\0';
+        return (char)('a' + target->widget_id - 1);
+    }
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        switch (target->widget_id)
+        {
+        case 1:
+        case 2:
+            return '\r';
+        case 5:
+            return ESCAPE;
+        default:
+            return '\0';
+        }
+    }
+
+    return '\0';
+}
+
 static char smith_ui_inkey_with_wait_reason(void)
 {
-    return (char)ui_information_scene_wait_key_hidden_with_wait_reason(
-        APP_WAIT_REASON_LIST_SELECTION);
+    app_session* session = app_session_current();
+    app_wait_scope wait_scope;
+    bool pushed_wait = false;
+    bool saved_hide_cursor = inkey_cursor_hidden();
+    char key = ESCAPE;
+
+    if (session)
+    {
+        app_session_push_wait_scope(session, &wait_scope,
+            APP_WAIT_REASON_LIST_SELECTION, 0, 0);
+        pushed_wait = true;
+    }
+    inkey_set_cursor_hidden(true);
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, 0))
+            break;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            key = (char)event.key;
+            break;
+        }
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            key = smith_ui_command_key(&event.command);
+            if (key)
+                break;
+        }
+    }
+    inkey_set_cursor_hidden(saved_hide_cursor);
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &wait_scope);
+    return key;
 }
 
 static void create_tval_menu(void)

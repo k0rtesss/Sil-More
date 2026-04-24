@@ -19,6 +19,7 @@
 #include "metarun.h"
 #include "platform-time.h"
 #include "quest/quest.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 #include "log/log.h"
 
@@ -403,7 +404,7 @@ static int quest_typewriter_estimate_lines(cptr text, int wrap_width)
 static bool quest_typewriter_wait_for_continue(
     quest_typewriter_scene_state* state, cptr prompt)
 {
-    int key;
+    int key = ESCAPE;
 
     if (!state)
         return false;
@@ -413,7 +414,37 @@ static bool quest_typewriter_wait_for_continue(
     if (!quest_typewriter_present(state))
         return false;
 
-    key = ui_information_scene_wait_key_nonrepeat();
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            break;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            key = event.key;
+            break;
+        }
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            const app_ui_command* command = &event.command;
+
+            if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+                || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+            {
+                key = ESCAPE;
+                break;
+            }
+            if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+                || command->kind == APP_UI_COMMAND_KIND_SELECT
+                || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+                || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+            {
+                key = '\r';
+                break;
+            }
+        }
+    }
     if (key == ESCAPE || key == 'q' || key == 'Q')
         return false;
 
@@ -989,6 +1020,7 @@ static bool quest_status_build_browser_scene(app_ui_scene* scene,
     const quest_status_entry* entries, int entry_count, int selected)
 {
     app_ui_panel* panel;
+    ui_browser_shell_scene_config config;
     int i;
 
     if (!scene || !entries || entry_count <= 0)
@@ -999,18 +1031,16 @@ static bool quest_status_build_browser_scene(app_ui_scene* scene,
     if (selected >= entry_count)
         selected = entry_count - 1;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    ui_browser_shell_scene_config_init(&config);
+    config.min_width_px = 980;
+    config.width_cap_px = 1700;
+    config.title_attr = TERM_YELLOW;
+    config.title = "Quest Status";
+    config.subtitle_attr = TERM_SLATE;
+    config.subtitle = "Current run progress and metarun echoes";
+    panel = ui_browser_shell_begin(scene, &config);
     if (!panel)
         return false;
-
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 980, 1700);
-    app_ui_panel_set_title(panel, TERM_YELLOW, "Quest Status");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE,
-        "Current run progress and metarun echoes");
 
     for (i = 0; i < entry_count; i++)
     {
@@ -1026,14 +1056,91 @@ static bool quest_status_build_browser_scene(app_ui_scene* scene,
     if (!quest_status_build_entry_detail(panel, &entries[selected]))
         return false;
 
-    if (entry_count > 1)
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "8/2", "Move");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "Enter", "Back");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true, "Esc",
-        "Back");
+    {
+        ui_browser_shell_footer_action actions[3];
+        size_t count = 0;
+
+        if (entry_count > 1)
+        {
+            actions[count++] = (ui_browser_shell_footer_action){
+                1, TERM_WHITE, true, "8/2", "Move"
+            };
+        }
+        actions[count++] = (ui_browser_shell_footer_action){
+            2, TERM_WHITE, true, "Enter", "Back"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, "Esc", "Back"
+        };
+        (void)ui_browser_shell_add_footer_actions(panel, actions, count);
+    }
     return true;
+}
+
+static char quest_status_command_key(const app_ui_command* command,
+    int entry_count, int* selected, bool* handled)
+{
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 2, ESCAPE },
+        { 3, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+
+    if (handled)
+        *handled = false;
+    if (!command || !selected)
+        return '\0';
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_activate_key = '\0';
+
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            if (handled)
+                *handled = true;
+            return ui_browser_shell_direction_command_key(command, NULL);
+        }
+        return '\0';
+    }
+
+    if (handled)
+        *handled = true;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (result.widget_id >= 0 && result.widget_id < entry_count)
+            *selected = result.widget_id;
+        return '\0';
+    }
+
+    return result.key;
+}
+
+static int quest_status_wait_key(int entry_count, int* selected)
+{
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            return ESCAPE;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return event.key;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            bool handled = false;
+            char key = quest_status_command_key(&event.command, entry_count,
+                selected, &handled);
+
+            if (key || handled)
+                return key;
+        }
+    }
 }
 
 static bool quest_status_add_previous_completion_body_line(app_ui_panel* panel,
@@ -1138,10 +1245,15 @@ static bool quest_status_build_empty_scene(app_ui_scene* scene)
         }
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true, "Enter",
-        "Back");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "Esc",
-        "Back");
+    {
+        const ui_browser_shell_footer_action actions[] = {
+            { 1, TERM_WHITE, true, "Enter", "Back" },
+            { 2, TERM_WHITE, true, "Esc", "Back" }
+        };
+
+        (void)ui_browser_shell_add_footer_actions(panel, actions,
+            N_ELEMENTS(actions));
+    }
     return true;
 }
 
@@ -1167,7 +1279,7 @@ static bool do_cmd_quest_status_information_scene(void)
             return false;
         }
 
-        (void)ui_information_scene_wait_key_nonrepeat();
+        (void)ui_information_scene_wait_dismissal(APP_INPUT_FLAG_REPEAT);
         ui_information_scene_leave(&scope);
         return true;
     }
@@ -1186,7 +1298,7 @@ static bool do_cmd_quest_status_information_scene(void)
             return false;
         }
 
-        ch = ui_information_scene_wait_key_nonrepeat();
+        ch = quest_status_wait_key(entry_count, &selected);
         dir = target_dir((char)ch);
         if (dir == 8)
         {

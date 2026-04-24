@@ -479,7 +479,7 @@ bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
     int history_x = 0;
     int history_w = 0;
     int history_box_h = 0;
-    int top_rows;
+    int top_rows = 0;
     int top_h;
     int i;
 
@@ -745,6 +745,52 @@ bool sdl_menu_render_character_sheet_panel(const sdl_view* main_view,
         story_font = mono_font;
 
     sdl_ui_style_draw_canvas(sdl_menu_panel_style(panel), canvas_w, canvas_h);
+
+    {
+        const sdl_ui_style* style = sdl_menu_panel_style(panel);
+        SDL_Color fill = style->panel_fill_alt;
+        SDL_Color border = style->panel_border_soft;
+        int layout_w = (stats_x + stats_w) - layout_x;
+        int column_h = top_rows * line_h + MAX(0, top_rows - 1) * line_gap;
+
+        fill.a = MIN(fill.a, 58);
+        border.a = MIN(border.a, 112);
+        if (layout_w > 0 && column_h > 0)
+        {
+            SDL_FRect top_rect = {
+                (float)layout_x,
+                (float)(columns_y - line_gap),
+                (float)layout_w,
+                (float)(column_h + line_gap * 2)
+            };
+
+            sdl_menu_fill_rect(&top_rect, fill);
+            sdl_menu_draw_rect(&top_rect, border);
+        }
+        if (history_w > 0 && history_box_h > 0)
+        {
+            SDL_FRect history_rect = {
+                (float)history_x,
+                (float)(history_y - line_gap),
+                (float)history_w,
+                (float)(history_box_h + line_gap)
+            };
+
+            sdl_menu_fill_rect(&history_rect, fill);
+            sdl_menu_draw_rect(&history_rect, border);
+        }
+        if (minimap_rect.w > 0.0f && minimap_rect.h > 0.0f)
+        {
+            SDL_FRect map_frame = minimap_rect;
+
+            map_frame.x -= (float)line_gap;
+            map_frame.y -= (float)line_gap;
+            map_frame.w += (float)line_gap * 2.0f;
+            map_frame.h += (float)line_gap * 2.0f;
+            sdl_menu_fill_rect(&map_frame, fill);
+            sdl_menu_draw_rect(&map_frame, border);
+        }
+    }
 
     if (panel->title[0])
     {

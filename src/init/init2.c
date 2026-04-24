@@ -971,6 +971,47 @@ void init_angband(void)
     note("                                              ");
 }
 
+static int initial_menu_wait_key(void)
+{
+    bool saved_hide_cursor = inkey_cursor_hidden();
+    int key = ESCAPE;
+
+    inkey_set_cursor_hidden(true);
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            break;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            key = event.key;
+            break;
+        }
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            const app_ui_command* command = &event.command;
+
+            if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+                || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+            {
+                key = ESCAPE;
+                break;
+            }
+            if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+                || command->kind == APP_UI_COMMAND_KIND_SELECT
+                || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+                || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+            {
+                key = '\r';
+                break;
+            }
+        }
+    }
+    inkey_set_cursor_hidden(saved_hide_cursor);
+    return key;
+}
+
 NavResult initial_menu(bool* start_new)
 {
     log_info("initial_menu: ENTERED - showing main menu");
@@ -997,10 +1038,7 @@ NavResult initial_menu(bool* start_new)
         return NAV_QUIT;
     }
 
-    bool saved_hide_cursor = inkey_cursor_hidden();
-    inkey_set_cursor_hidden(true);
-    ch = ui_information_scene_wait_key_nonrepeat();
-    inkey_set_cursor_hidden(saved_hide_cursor);
+    ch = initial_menu_wait_key();
     ui_information_scene_leave(&welcome_scope);
 
     if (ch == '\n' || ch == '\r' || ch == ' '

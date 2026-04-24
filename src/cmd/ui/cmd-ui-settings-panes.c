@@ -70,6 +70,7 @@ typedef struct settings_sdl_pane_overview {
     bool right_panes_enabled;
     bool bottom_panes_enabled;
     bool show_pane_borders;
+    int overlay_panel_layout_count;
     cptr config_path;
 } settings_sdl_pane_overview;
 
@@ -107,6 +108,7 @@ static void settings_sdl_read_pane_overview(
         SETTINGS_SDL_BOOL_BOTTOM_PANES_ENABLED);
     overview->show_pane_borders = settings_sdl_get_bool_config(
         SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS);
+    overview->overlay_panel_layout_count = platform_overlay_panel_layout_count();
     overview->config_path = settings_sdl_config_path();
 }
 
@@ -390,8 +392,20 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 15, (k == 15) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 15,
+    strnfmt(value_buf, sizeof(value_buf), "%d",
+        overview->overlay_panel_layout_count);
+    if (!settings_browser_add_pair_row(panel, 15, (k == 15) ? TERM_L_BLUE
+            : TERM_WHITE, TERM_SLATE, true, k == 15,
+            settings_ui_pick_label(label_hint,
+                "Reset Moved Overlay Panels",
+                "Reset Overlay Panels",
+                "Reset Overlays"), value_buf))
+    {
+        return false;
+    }
+
+    if (!settings_browser_add_label_row(panel, 16, (k == 16) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 16,
             settings_ui_pick_label(label_hint,
                 "Reset Layout Defaults",
                 "Reset Layout",
@@ -400,8 +414,8 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 16, (k == 16) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 16, settings_changed
+    if (!settings_browser_add_label_row(panel, 17, (k == 17) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 17, settings_changed
             ? "Save Changes and Return"
             : "Return to Options Menu"))
     {
@@ -424,7 +438,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         (k == 2) || (k == 3) || (k == 14), "0", "Auto");
     (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
         "Enter", (k == 11 || k == 12 || k == 13) ? "Open"
-            : (k == 15) ? "Reset" : "Accept");
+            : (k == 15 || k == 16) ? "Reset" : "Accept");
     (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
         "Esc", "Back");
 
@@ -434,7 +448,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
 void do_cmd_pane_settings(void)
 {
     int k = 0;
-    int n = 17; /* Total number of options */
+    int n = 18; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
     int dir;
@@ -501,7 +515,13 @@ void do_cmd_pane_settings(void)
                 do_cmd_supporting_pane_font_editor(&settings_changed);
                 break;
             }
-            if (k == 15) /* Reset Layout Defaults */
+            if (k == 15) /* Reset moved overlay panels */
+            {
+                platform_reset_overlay_panel_layout();
+                settings_changed = true;
+                break;
+            }
+            if (k == 16) /* Reset Layout Defaults */
             {
                 platform_reset_layout_defaults();
                 settings_changed = true;
@@ -652,12 +672,17 @@ void do_cmd_pane_settings(void)
                 settings_changed = true;
                 platform_apply_config();
             }
-            else if (k == 15) /* Reset Layout Defaults */
+            else if (k == 15) /* Reset moved overlay panels */
+            {
+                platform_reset_overlay_panel_layout();
+                settings_changed = true;
+            }
+            else if (k == 16) /* Reset Layout Defaults */
             {
                 platform_reset_layout_defaults();
                 settings_changed = true;
             }
-            else if (k == 16) /* Save/Return */
+            else if (k == 17) /* Save/Return */
             {
                 if (settings_changed)
                 {

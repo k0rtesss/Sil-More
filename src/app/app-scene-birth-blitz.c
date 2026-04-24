@@ -904,8 +904,8 @@ static void blitz_show_effect_summary(void)
         return;
     }
 
-    (void)ui_information_scene_wait_key_hidden_with_wait_reason(
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE);
+    (void)ui_information_scene_wait_dismissal_with_wait_reason(0,
+        APP_WAIT_REASON_INFORMATIONAL_PAUSE, true);
 }
 
 NavResult birth_blitz_configure_effects(void)

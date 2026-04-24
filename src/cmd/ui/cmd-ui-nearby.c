@@ -260,10 +260,58 @@ static bool nearby_snapshot_active(void)
     return app_session_interactions_enabled(app_session_current());
 }
 
-static char nearby_snapshot_wait_key(void)
+static char nearby_snapshot_wait_key(char toggle_key)
 {
-    return (char)ui_information_scene_wait_key_with_wait_reason(
-        APP_WAIT_REASON_INFORMATIONAL_PAUSE);
+    app_session* session = app_session_current();
+    app_wait_scope wait_scope;
+    bool pushed_wait = false;
+    char key = ESCAPE;
+
+    if (session)
+    {
+        app_session_push_wait_scope(session, &wait_scope,
+            APP_WAIT_REASON_INFORMATIONAL_PAUSE, 0, 0);
+        pushed_wait = true;
+    }
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, 0))
+            break;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            key = (char)event.key;
+            break;
+        }
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            const app_ui_command* command = &event.command;
+
+            if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+                || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+            {
+                key = ESCAPE;
+                break;
+            }
+            if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+            {
+                key = (command->target.widget_id == 1) ? toggle_key : ESCAPE;
+                break;
+            }
+            if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+                || command->kind == APP_UI_COMMAND_KIND_SELECT
+                || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+                || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+            {
+                key = ESCAPE;
+                break;
+            }
+        }
+    }
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &wait_scope);
+    return key;
 }
 
 static app_ui_panel* nearby_build_panel(app_ui_scene* scene, cptr prompt,
@@ -424,7 +472,7 @@ static bool nearby_information_scene(nearby_scene_build_fn build_fn,
         platform_frame_present();
 
         inkey_set_cursor_hidden(true);
-        ch = nearby_snapshot_wait_key();
+        ch = nearby_snapshot_wait_key(toggle_key);
         inkey_set_cursor_hidden(false);
 
         if (ch == toggle_key)

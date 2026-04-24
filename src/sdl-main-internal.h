@@ -239,6 +239,8 @@ bool sdl_map_pointer_handle_event(const SDL_Event* ev);
 int sdl_map_pointer_pending_timeout_ms(Uint64 now_ns);
 bool sdl_map_pointer_flush_pending_long_press(Uint64 now_ns);
 void sdl_map_pointer_reset_input_state(void);
+bool sdl_map_pointer_preview_cell(s16b map_y, s16b map_x,
+    bool* out_is_target);
 
 void sdl_load_story_fonts(void);
 void sdl_story_font_cache_clear(void);
@@ -262,6 +264,9 @@ void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
     int canvas_h);
 void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
     const SDL_FRect* rect, bool border);
+void sdl_ui_style_draw_control_frame(const sdl_ui_style* style,
+    const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
+    bool pressed);
 void sdl_ui_style_draw_rule(const sdl_ui_style* style, const SDL_FRect* rect);
 
 void sdl_scene_stack_init(void);

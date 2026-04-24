@@ -279,7 +279,7 @@ void do_cmd_view_map(void)
         return;
     }
 
-    (void)ui_information_scene_wait_key_nonrepeat();
+    (void)ui_information_scene_wait_dismissal(APP_INPUT_FLAG_REPEAT);
     ui_information_scene_leave(&scope);
     do_cmd_redraw();
 }

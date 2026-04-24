@@ -2083,7 +2083,7 @@ bool metarun_ui_show_story_modal(const char* title, byte title_attr,
     if (!metarun_ui_present_scene(&scene, true))
         return false;
 
-    (void)ui_information_scene_wait_key_nonrepeat();
+    (void)ui_information_scene_wait_dismissal(APP_INPUT_FLAG_REPEAT);
     metarun_ui_clear_pending_input();
     return true;
 }
@@ -2115,9 +2115,51 @@ bool metarun_ui_show_notice_modal(const char* title, byte title_attr,
     if (!metarun_ui_present_scene(&scene, true))
         return false;
 
-    (void)ui_information_scene_wait_key_nonrepeat();
+    (void)ui_information_scene_wait_dismissal(APP_INPUT_FLAG_REPEAT);
     metarun_ui_clear_pending_input();
     return true;
+}
+
+static int metarun_ui_confirm_modal_wait_key(void)
+{
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            return ESCAPE;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return event.key;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            const app_ui_command* command = &event.command;
+
+            if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+                || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+            {
+                return ESCAPE;
+            }
+            if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+            {
+                switch (command->target.widget_id)
+                {
+                case 1:
+                    return '\r';
+                case 2:
+                    return ESCAPE;
+                default:
+                    return 0;
+                }
+            }
+            if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+                || command->kind == APP_UI_COMMAND_KIND_SELECT
+                || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+                || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+            {
+                return '\r';
+            }
+        }
+    }
 }
 
 bool metarun_ui_confirm_modal(const char* title, byte title_attr,
@@ -2165,7 +2207,7 @@ bool metarun_ui_confirm_modal(const char* title, byte title_attr,
             return false;
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_confirm_modal_wait_key();
         if (steamdeck)
         {
             if (key == steamdeck_confirm_key() || key == '\r' || key == '\n'
@@ -2194,6 +2236,94 @@ bool metarun_ui_confirm_modal(const char* title, byte title_attr,
                 metarun_ui_clear_pending_input();
                 return false;
             }
+        }
+    }
+}
+
+static int metarun_ui_choose_curse_command_key(
+    const app_ui_command* command, const int* picks, int* selected,
+    bool* handled)
+{
+    const app_ui_widget_ref* target;
+
+    if (handled)
+        *handled = false;
+    if (!command || !picks || !selected)
+        return 0;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        if (handled)
+            *handled = true;
+        return ESCAPE;
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (handled)
+            *handled = true;
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        return 0;
+    }
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (handled)
+            *handled = true;
+        for (int i = 0; i < CURSE_MENU_LINES; i++)
+        {
+            if (target->widget_id == picks[i])
+            {
+                *selected = i;
+                break;
+            }
+        }
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return 0;
+        return '\r';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (handled)
+            *handled = true;
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        return 0;
+    }
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (handled)
+            *handled = true;
+        if (target->widget_id == 1)
+            return '\r';
+        return 0;
+    }
+
+    return 0;
+}
+
+static int metarun_ui_choose_curse_wait_key(const int* picks, int* selected)
+{
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            return ESCAPE;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return event.key;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            bool handled = false;
+            int key = metarun_ui_choose_curse_command_key(&event.command,
+                picks, selected, &handled);
+
+            if (key || handled)
+                return key;
         }
     }
 }
@@ -2265,7 +2395,7 @@ int metarun_ui_choose_curse_scene(int n,
             return -1;
         first_present = false;
 
-        key = ui_information_scene_wait_key_nonrepeat();
+        key = metarun_ui_choose_curse_wait_key(picks, &selected);
         if (key == '\r' || key == '\n' || key == ' '
             || (steamdeck && key == steamdeck_confirm_key()) || key == '6')
         {

@@ -22,6 +22,7 @@
 #include "fs/resource.h"
 #include "log/log.h"
 #include "support/utf8.h"
+#include "ui/ui-browser-shell.h"
 #include <ctype.h>
 
 #define SHOW_FILE_SCROLL_PAGE_LINES 12
@@ -84,116 +85,79 @@ static app_ui_panel* show_file_begin_browser_scene(app_ui_scene* scene)
     if (!scene)
         return NULL;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    panel = ui_browser_shell_begin_browser(scene, 0, NULL, 0, NULL,
+        TERM_L_BLUE, APP_UI_PANEL_FLAG_SCROLL_ROWS, 1180, 2800);
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_BLUE;
-    app_ui_panel_set_widths(panel, 1180, 2800);
     return panel;
 }
 
 static bool show_file_add_footer_actions(app_ui_panel* panel, bool can_scroll,
     bool can_search)
 {
+    ui_browser_shell_footer_action actions[5];
+    size_t count = 0;
+
     if (!panel)
         return false;
 
     if (can_scroll)
     {
-        if (!app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_UP,
-                TERM_WHITE, true, "8", "Up")
-            || !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_DOWN,
-                TERM_WHITE, true, "2", "Down")
-            || !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_PAGE,
-                TERM_L_BLUE, true, "Space", "Page"))
-        {
-            return false;
-        }
+        actions[count++] = (ui_browser_shell_footer_action){
+            SHOW_FILE_ACTION_UP, TERM_WHITE, true, "8", "Up"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            SHOW_FILE_ACTION_DOWN, TERM_WHITE, true, "2", "Down"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            SHOW_FILE_ACTION_PAGE, TERM_L_BLUE, true, "Space", "Page"
+        };
     }
 
-    if (can_search
-        && !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_FIND,
-            TERM_WHITE, true, "/", "Find"))
+    if (can_search)
     {
-        return false;
+        actions[count++] = (ui_browser_shell_footer_action){
+            SHOW_FILE_ACTION_FIND, TERM_WHITE, true, "/", "Find"
+        };
     }
 
-    return app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_EXIT,
-        TERM_WHITE, true, "Esc", "Exit");
-}
+    actions[count++] = (ui_browser_shell_footer_action){
+        SHOW_FILE_ACTION_EXIT, TERM_WHITE, true, "Esc", "Exit"
+    };
 
-static char show_file_scroll_command_key(const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '9' : '3';
-
-    return '\0';
+    return ui_browser_shell_add_footer_actions(panel, actions, count);
 }
 
 static bool show_file_command_to_key(const app_ui_command* command,
     char* out_key)
 {
-    const app_ui_widget_ref* target;
+    static const ui_browser_shell_button_key button_keys[] = {
+        { SHOW_FILE_ACTION_UP, '8' },
+        { SHOW_FILE_ACTION_DOWN, '2' },
+        { SHOW_FILE_ACTION_PAGE, ' ' },
+        { SHOW_FILE_ACTION_FIND, '/' },
+        { SHOW_FILE_ACTION_EXIT, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !out_key)
         return false;
 
-    target = &command->target;
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
-    {
-        *out_key = ESCAPE;
-        return true;
-    }
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.scroll_keys.left_key = '9';
+    map.scroll_keys.right_key = '3';
 
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
-    {
-        *out_key = show_file_scroll_command_key(command);
-        return true;
-    }
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
 
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        switch (target->widget_id)
-        {
-        case SHOW_FILE_ACTION_UP:
-            *out_key = '8';
-            return true;
-        case SHOW_FILE_ACTION_DOWN:
-            *out_key = '2';
-            return true;
-        case SHOW_FILE_ACTION_PAGE:
-            *out_key = ' ';
-            return true;
-        case SHOW_FILE_ACTION_FIND:
-            *out_key = '/';
-            return true;
-        case SHOW_FILE_ACTION_EXIT:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 static int show_file_wait_key(void)

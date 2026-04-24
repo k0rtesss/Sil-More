@@ -2095,6 +2095,21 @@ static void sdl_scene_draw_map_cell(const sdl_view* view,
         }
     }
 
+    {
+        bool preview_target = false;
+
+        if (sdl_map_pointer_preview_cell(cell->map_y, cell->map_x,
+                &preview_target))
+        {
+            SDL_Color preview_color = sdl_scene_color(TERM_L_BLUE);
+
+            preview_color.a = preview_target ? 78 : 46;
+            sdl_scene_fill_rect(&dst, preview_color);
+            preview_color.a = preview_target ? 190 : 112;
+            sdl_scene_draw_rect(&dst, preview_color);
+        }
+    }
+
     if (cell->flags & APP_MAP_CELL_FLAG_TARGET)
     {
         SDL_Color target_color = sdl_scene_color(TERM_L_RED);

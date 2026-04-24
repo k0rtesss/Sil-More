@@ -152,10 +152,10 @@ void app_ui_panel_init(app_ui_panel* panel, u16b layer)
     panel->row_offset = 0;
     panel->min_width_px = 260;
     panel->width_cap_px = 720;
-    panel->title_attr = TERM_L_BLUE;
+    panel->title_attr = TERM_YELLOW;
     panel->subtitle_attr = TERM_WHITE;
-    panel->detail_title_attr = TERM_L_BLUE;
-    panel->accent_attr = TERM_L_BLUE;
+    panel->detail_title_attr = TERM_YELLOW;
+    panel->accent_attr = TERM_YELLOW;
     panel->alpha = 0xFFu;
 }
 

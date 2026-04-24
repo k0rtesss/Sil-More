@@ -436,6 +436,7 @@ set(SIL_MORE_SOURCES_FRONTEND
     src/ui/ui-death.c
     src/ui/ui-file-viewer.c
     src/ui/ui-help.c
+    src/ui/ui-browser-shell.c
     src/ui/ui-information-scene.c
     src/ui/ui-look-sidebar.c
     src/ui/ui-narrative.c

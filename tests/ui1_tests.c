@@ -27,6 +27,7 @@
 #include "externs.h"
 #include "sdl-config.h"
 #include "sdl-main-internal.h"
+#include "ui/ui-browser-shell.h"
 #include "ui/ui-information-scene.h"
 #include <SDL3/SDL_scancode.h>
 
@@ -1137,6 +1138,114 @@ static void test_ui_scene_direct_panel_payload(void)
     CHECK((panel->tabs[0].flags & APP_UI_ITEM_FLAG_ACTIVE) != 0);
 }
 
+static void test_ui_browser_shell_helpers(void)
+{
+    app_ui_scene scene;
+    app_ui_panel* panel;
+    app_ui_command command;
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
+    static const ui_browser_shell_footer_action footer_actions[] = {
+        { 1, TERM_WHITE, true, "Enter", "Open" },
+        { 2, TERM_SLATE, false, "/", "Find" }
+    };
+    static const ui_browser_shell_button_key button_keys[] = {
+        { 1, '\r' },
+        { 3, ESCAPE }
+    };
+
+    panel = ui_browser_shell_begin_browser(&scene, TERM_L_WHITE,
+        "Browser", TERM_SLATE, "Subtitle", TERM_L_BLUE,
+        APP_UI_PANEL_FLAG_SCROLL_ROWS, 640, 1280);
+    CHECK(panel != NULL);
+    if (!panel)
+        return;
+
+    CHECK(scene.panel_count == 1);
+    CHECK(panel->style == APP_UI_PANEL_STYLE_BROWSER);
+    CHECK((panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS) != 0);
+    CHECK(panel->min_width_px == 640);
+    CHECK(panel->width_cap_px == 1280);
+    CHECK(streq(panel->title, "Browser"));
+    CHECK(ui_browser_shell_add_footer_actions(panel, footer_actions,
+        N_ELEMENTS(footer_actions)));
+    CHECK(panel->footer_action_count == 2);
+    CHECK((panel->footer_actions[1].flags & APP_UI_ITEM_FLAG_DISABLED) != 0);
+    CHECK(ui_browser_shell_add_tab(panel, 7, TERM_L_BLUE, true, "Runs",
+        'r', "Open runs"));
+    CHECK(panel->tab_count == 1);
+    CHECK(panel->tabs[0].interaction.action_key == 'r');
+
+    ui_browser_shell_command_map_init(&map);
+    map.button_keys = button_keys;
+    map.button_key_count = N_ELEMENTS(button_keys);
+    map.row_inspect_key = 'r';
+
+    app_ui_command_clear(&command);
+    command.kind = APP_UI_COMMAND_KIND_SCROLL;
+    command.scroll_y = 1;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.key == '8');
+
+    command.scroll_y = 0;
+    command.scroll_x = 1;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.key == '6');
+
+    map.scroll_keys.right_key = '3';
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.key == '3');
+
+    app_ui_command_clear(&command);
+    command.kind = APP_UI_COMMAND_KIND_ACTIVATE;
+    command.target.role = APP_UI_WIDGET_ROLE_LIST_ITEM;
+    command.target.action = APP_UI_WIDGET_ACTION_ACTIVATE;
+    command.target.widget_id = 5;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.role == APP_UI_WIDGET_ROLE_LIST_ITEM);
+    CHECK(result.widget_id == 5);
+    CHECK(result.key == '\r');
+
+    command.kind = APP_UI_COMMAND_KIND_INSPECT;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.inspect);
+    CHECK(result.key == 'r');
+
+    command.kind = APP_UI_COMMAND_KIND_FOCUS;
+    command.dy = -1;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.focus_only);
+    CHECK(result.key == '\0');
+    CHECK(ui_browser_shell_direction_command_key(&command, NULL) == '8');
+
+    app_ui_command_clear(&command);
+    command.kind = APP_UI_COMMAND_KIND_ACTIVATE;
+    command.target.role = APP_UI_WIDGET_ROLE_BUTTON;
+    command.target.action = APP_UI_WIDGET_ACTION_ACTIVATE;
+    command.target.widget_id = 3;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.key == ESCAPE);
+
+    command.target.role = APP_UI_WIDGET_ROLE_TAB;
+    command.target.action = APP_UI_WIDGET_ACTION_SELECT;
+    command.target.widget_id = 2;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.role == APP_UI_WIDGET_ROLE_TAB);
+    CHECK(result.widget_id == 2);
+    CHECK(result.key == '\0');
+
+    {
+        int cursor = 8;
+        int top = 0;
+
+        ui_browser_shell_clamp_cursor(&cursor, &top, 5, 3);
+        CHECK(cursor == 4);
+        CHECK(top == 2);
+        CHECK(ui_browser_shell_apply_vertical_key('7', &cursor, 5, 3));
+        CHECK(cursor == 1);
+    }
+}
+
 static void test_movement_service(void)
 {
     app_movement_direction_payload payload;
@@ -1543,6 +1652,7 @@ int main(void)
     test_information_scene_wait_key_nonrepeat();
     test_information_scene_wait_key_with_wait_reason();
     test_ui_scene_direct_panel_payload();
+    test_ui_browser_shell_helpers();
     test_movement_service();
     test_sdl_movement_presets();
     test_sdl_movement_config_round_trip();

@@ -19,6 +19,7 @@
 #include "platform-input.h"
 #include "supplies.h"
 #include "cmd-ui-knowledge.h"
+#include "ui/ui-browser-shell.h"
 
 static cptr supply_group_text[SUPPLY_GROUP_MAX + 1] = {
     "Herbs",
@@ -558,6 +559,8 @@ static byte get_supply_item_color(int k_idx, bool aware)
 
 static void knowledge_scene_add_supply_footer_actions(app_ui_panel* panel)
 {
+    ui_browser_shell_footer_action actions[6];
+    size_t count = 0;
     char recall_key[APP_UI_KEY_MAX];
     char use_key[APP_UI_KEY_MAX];
     char confirm_key[APP_UI_KEY_MAX];
@@ -582,31 +585,44 @@ static void knowledge_scene_add_supply_footer_actions(app_ui_panel* panel)
         strnfmt(use_confirm_key, sizeof(use_confirm_key), "%s/%s", use_key,
             confirm_key);
 
-        (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-            "D-pad", "Move");
-        (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            recall_key, "Recall");
-        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-            use_confirm_key, "Use");
-        (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-            drop_key, "Drop");
-        (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-            back_key, "Back");
+        actions[count++] = (ui_browser_shell_footer_action){
+            1, TERM_WHITE, true, "D-pad", "Move"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            2, TERM_WHITE, true, recall_key, "Recall"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, use_confirm_key, "Use"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            4, TERM_WHITE, true, drop_key, "Drop"
+        };
+        actions[count++] = (ui_browser_shell_footer_action){
+            5, TERM_WHITE, true, back_key, "Back"
+        };
+        (void)ui_browser_shell_add_footer_actions(panel, actions, count);
         return;
     }
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-        "4/6", "Group");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "8/2", "Move");
-    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "r", "Recall");
-    (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "u/Space", "Use");
-    (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
-        "d", "Drop");
-    (void)app_ui_panel_add_footer_action(panel, 6, TERM_WHITE, true,
-        "Esc", "Back");
+    actions[count++] = (ui_browser_shell_footer_action){
+        1, TERM_WHITE, true, "4/6", "Group"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        2, TERM_WHITE, true, "8/2", "Move"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        3, TERM_WHITE, true, "r", "Recall"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        4, TERM_WHITE, true, "u/Space", "Use"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        5, TERM_WHITE, true, "d", "Drop"
+    };
+    actions[count++] = (ui_browser_shell_footer_action){
+        6, TERM_WHITE, true, "Esc", "Back"
+    };
+    (void)ui_browser_shell_add_footer_actions(panel, actions, count);
 }
 
 static void knowledge_scene_add_supply_group_detail_lines(app_ui_panel* panel,
@@ -756,24 +772,23 @@ static bool knowledge_build_supplies_browser_scene(app_ui_scene* scene,
     int column, cptr weight_text)
 {
     app_ui_panel* panel;
+    ui_browser_shell_scene_config config;
 
     if (!scene)
         return false;
 
-    app_ui_scene_init(scene);
-    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    ui_browser_shell_scene_config_init(&config);
+    config.accent_attr = TERM_L_WHITE;
+    config.min_width_px = 980;
+    config.width_cap_px = 2048;
+    config.title_attr = TERM_L_WHITE;
+    config.title = "Supplies - Herbs, Food, Potions, Gems, Lights";
+    config.subtitle_attr = TERM_SLATE;
+    config.subtitle = "Name / Qty / Sym";
+    panel = ui_browser_shell_begin(scene, &config);
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
-    panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
-        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
-    panel->accent_attr = TERM_L_WHITE;
-    app_ui_panel_set_widths(panel, 980, 2048);
-    app_ui_panel_set_title(panel, TERM_L_WHITE,
-        "Supplies - Herbs, Food, Potions, Gems, Lights");
-    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Name / Qty / Sym");
     if (weight_text && weight_text[0])
         (void)app_ui_panel_add_body_line(panel, TERM_SLATE, weight_text);
     {
@@ -805,126 +820,66 @@ static bool knowledge_build_supplies_browser_scene(app_ui_scene* scene,
     return true;
 }
 
-static char knowledge_supplies_scroll_command_key(
-    const app_ui_command* command)
-{
-    if (!command)
-        return '\0';
-    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
-        && command->scroll_y != 0)
-    {
-        return (command->scroll_y > 0) ? '8' : '2';
-    }
-    if (command->scroll_x != 0)
-        return (command->scroll_x < 0) ? '4' : '6';
-
-    return '\0';
-}
-
 static bool knowledge_supplies_command_to_key(
     const app_ui_command* command, int entry_cnt, int* entry_cur,
     int* column, supply_menu_action forced_action, char* out_key)
 {
-    const app_ui_widget_ref* target;
-    bool steamdeck;
+    static const ui_browser_shell_button_key steamdeck_button_keys[] = {
+        { 2, 'x' },
+        { 3, 'u' },
+        { 4, 'd' },
+        { 5, ESCAPE }
+    };
+    static const ui_browser_shell_button_key keyboard_button_keys[] = {
+        { 3, 'x' },
+        { 4, 'u' },
+        { 5, 'd' },
+        { 6, ESCAPE }
+    };
+    ui_browser_shell_command_map map;
+    ui_browser_shell_command_result result;
 
     if (out_key)
         *out_key = '\0';
     if (!command || !entry_cur || !column || !out_key)
         return false;
 
-    target = &command->target;
-    steamdeck = steamdeck_controls_active();
-
-    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
-        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    ui_browser_shell_command_map_init(&map);
+    if (steamdeck_controls_active())
     {
-        *out_key = ESCAPE;
-        return true;
+        map.button_keys = steamdeck_button_keys;
+        map.button_key_count = N_ELEMENTS(steamdeck_button_keys);
     }
-
-    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
-        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    else
     {
-        *out_key = knowledge_supplies_scroll_command_key(command);
-        return true;
+        map.button_keys = keyboard_button_keys;
+        map.button_key_count = N_ELEMENTS(keyboard_button_keys);
     }
+    map.row_inspect_key = 'x';
+    if (forced_action == SUPPLY_MENU_ACTION_USE)
+        map.row_activate_key = 'u';
+    else if (forced_action == SUPPLY_MENU_ACTION_DROP)
+        map.row_activate_key = 'd';
+    else
+        map.row_activate_key = '\0';
 
-    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    if (!ui_browser_shell_translate_command(command, &map, &result))
+        return false;
+
+    if (result.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
     {
-        if (target->widget_id >= 0 && target->widget_id < entry_cnt)
+        if (result.widget_id >= 0 && result.widget_id < entry_cnt)
         {
-            *entry_cur = target->widget_id;
+            *entry_cur = result.widget_id;
             *column = 1;
         }
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
-            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
-            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
-        {
-            *out_key = 'x';
-            return true;
-        }
-        if (forced_action == SUPPLY_MENU_ACTION_USE)
-            *out_key = 'u';
-        else if (forced_action == SUPPLY_MENU_ACTION_DROP)
-            *out_key = 'd';
+        if (!result.focus_only)
+            *out_key = result.key;
         return true;
     }
 
-    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
-    {
-        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
-            return true;
-
-        if (steamdeck)
-        {
-            switch (target->widget_id)
-            {
-            case 2:
-                *out_key = 'x';
-                return true;
-            case 3:
-                *out_key = 'u';
-                return true;
-            case 4:
-                *out_key = 'd';
-                return true;
-            case 5:
-                *out_key = ESCAPE;
-                return true;
-            default:
-                return true;
-            }
-        }
-
-        switch (target->widget_id)
-        {
-        case 3:
-            *out_key = 'x';
-            return true;
-        case 4:
-            *out_key = 'u';
-            return true;
-        case 5:
-            *out_key = 'd';
-            return true;
-        case 6:
-            *out_key = ESCAPE;
-            return true;
-        default:
-            return true;
-        }
-    }
-
-    if (target->action_key)
-    {
-        *out_key = (char)(target->action_key & 0xFF);
-        return true;
-    }
-
-    return false;
+    *out_key = result.key;
+    return true;
 }
 
 bool do_cmd_knowledge_supplies(const supply_menu_request* request)

@@ -543,9 +543,74 @@ static bool confirm_enter_morgoth_hall_build_ui_scene(app_ui_scene* scene,
         return false;
     }
 
-    return dungeon_fullscreen_add_body_hint(panel, TERM_YELLOW,
-        steamdeck ? "Enter Morgoth's hall? [y/n/space]"
-                  : "Enter Morgoth's hall? [y/n]");
+    if (!dungeon_fullscreen_add_body_hint(panel, TERM_YELLOW,
+            steamdeck ? "Enter Morgoth's hall? [y/n/space]"
+                      : "Enter Morgoth's hall? [y/n]"))
+    {
+        return false;
+    }
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_GREEN, true, "Y",
+        "Enter");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true, "N/Esc",
+        "Cancel");
+    if (steamdeck)
+        (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "Space", "Enter");
+    return true;
+}
+
+static char confirm_enter_morgoth_hall_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        return 'n';
+    }
+    if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        switch (command->target.widget_id)
+        {
+        case 1:
+        case 3:
+            return 'y';
+        case 2:
+            return 'n';
+        default:
+            return '\0';
+        }
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+    {
+        return 'y';
+    }
+
+    return '\0';
+}
+
+static char confirm_enter_morgoth_hall_wait_key(void)
+{
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            return ESCAPE;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            char key = confirm_enter_morgoth_hall_command_key(&event.command);
+
+            if (key)
+                return key;
+        }
+    }
 }
 
 static bool blitz_unlock_build_ui_scene(app_ui_scene* scene, bool overlay_dungeon)
@@ -610,7 +675,7 @@ bool runtime_dungeon_confirm_enter_morgoth_hall(void)
 
     while (true)
     {
-        ch = (char)ui_information_scene_wait_key_nonrepeat();
+        ch = confirm_enter_morgoth_hall_wait_key();
         if (quick_messages)
             break;
         if (ch == ESCAPE)

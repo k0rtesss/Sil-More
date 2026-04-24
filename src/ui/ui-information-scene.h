@@ -59,6 +59,9 @@ bool ui_information_scene_show_monster_recall(int r_idx,
     int* out_key);
 bool ui_information_scene_wait_event(ui_information_scene_event* out_event,
     u16b ignored_flags);
+bool ui_information_scene_wait_dismissal(u16b ignored_flags);
+bool ui_information_scene_wait_dismissal_with_wait_reason(u16b ignored_flags,
+    u16b reason, bool hidden_cursor);
 int ui_information_scene_wait_key(void);
 int ui_information_scene_wait_key_nonrepeat(void);
 int ui_information_scene_wait_key_with_wait_reason(u16b reason);

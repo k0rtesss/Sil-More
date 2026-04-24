@@ -72,10 +72,105 @@ typedef struct main_menu_scene_scope {
     app_input_capture_scope input_capture_scope;
 } main_menu_scene_scope;
 
-static char main_menu_read_key(void)
+static bool main_menu_choice_is_disabled(int choice);
+
+static char main_menu_direction_command_key(const app_ui_command* command)
 {
-    return (char)ui_information_scene_wait_key_with_wait_reason(
-        APP_WAIT_REASON_LIST_SELECTION);
+    if (!command)
+        return '\0';
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '4' : '6';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '4' : '6';
+    }
+
+    return '\0';
+}
+
+static bool main_menu_command_to_key(const app_ui_command* command,
+    int* highlight, bool death_view, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !highlight || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        *out_key = main_menu_direction_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        int choice = target->widget_id;
+
+        if (choice < 1 || choice > MAIN_MENU_MAX)
+            return true;
+        if (death_view && main_menu_choice_is_disabled(choice))
+        {
+            msg_print("You can no longer take that action.");
+            return true;
+        }
+
+        *highlight = choice;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = '\r';
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        *out_key = main_menu_direction_command_key(command);
+        return true;
+    }
+
+    return false;
+}
+
+static char main_menu_read_key(int* highlight, bool death_view)
+{
+    ui_information_scene_event event;
+
+    if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+        return ESCAPE;
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        return (char)event.key;
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+    {
+        char command_key = '\0';
+
+        if (main_menu_command_to_key(&event.command, highlight, death_view,
+                &command_key))
+        {
+            return command_key;
+        }
+    }
+
+    return '\0';
 }
 
 static void main_menu_wait_close_event(void)
@@ -470,7 +565,9 @@ static int main_menu_aux(int* highlight, main_menu_scene_scope* menu_scene_scope
         *highlight = MAIN_MENU_RETURN_GAME;
 
     /* Get key (while allowing menu commands). */
-    ch = main_menu_read_key();
+    ch = main_menu_read_key(highlight, death_view);
+    if (!ch)
+        return 0;
 
     // choose an option by letter - alphabetical mapping (updated for new order)
     switch (ch)

@@ -56,8 +56,15 @@ static bool g_map_pointer_consumed_touch = false;
 static SDL_FingerID g_map_pointer_consumed_finger_id = 0;
 static byte g_map_pointer_path_seen[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static byte g_map_pointer_path_prev[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
+static byte g_map_pointer_path_preview[MAX_DUNGEON_HGT][MAX_DUNGEON_WID];
 static s16b g_map_pointer_path_queue_y[SDL_MAP_POINTER_PATH_QUEUE_MAX];
 static s16b g_map_pointer_path_queue_x[SDL_MAP_POINTER_PATH_QUEUE_MAX];
+static bool g_map_pointer_path_preview_active = false;
+static s16b g_map_pointer_path_preview_target_y = -1;
+static s16b g_map_pointer_path_preview_target_x = -1;
+
+static void sdl_map_pointer_clear_path_preview(void);
+static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x);
 
 static bool sdl_map_pointer_dungeon_scene_ready(u16b* out_reason)
 {
@@ -223,6 +230,7 @@ static void sdl_map_pointer_note_hover(s16b map_y, s16b map_x, u16b device)
     dungeon_note_cursor_relative(map_y, map_x);
     sdl_map_pointer_note_focus(map_y, map_x, device, false,
         APP_UI_WIDGET_ACTION_INSPECT);
+    sdl_map_pointer_update_path_preview(map_y, map_x);
     g_state.need_present = true;
 }
 
@@ -236,6 +244,8 @@ static void sdl_map_pointer_clear_hover(void)
     g_map_pointer_hover_active = false;
     g_map_pointer_hover_y = -1;
     g_map_pointer_hover_x = -1;
+    if (!g_map_pointer_travel.active)
+        sdl_map_pointer_clear_path_preview();
     dungeon_sync_cursor_state();
     if (session)
         app_session_clear_ui_focus(session);
@@ -253,6 +263,7 @@ static void sdl_map_pointer_cancel_travel(void)
         return;
 
     memset(&g_map_pointer_travel, 0, sizeof(g_map_pointer_travel));
+    sdl_map_pointer_clear_path_preview();
     dungeon_sync_cursor_state();
     g_state.need_present = true;
 }
@@ -263,7 +274,83 @@ void sdl_map_pointer_reset_input_state(void)
     sdl_map_pointer_cancel_travel();
     g_map_pointer_consumed_touch = false;
     g_map_pointer_consumed_finger_id = 0;
+    sdl_map_pointer_clear_path_preview();
     sdl_map_pointer_clear_hover();
+}
+
+static void sdl_map_pointer_clear_path_preview(void)
+{
+    if (!g_map_pointer_path_preview_active)
+        return;
+
+    g_map_pointer_path_preview_active = false;
+    g_map_pointer_path_preview_target_y = -1;
+    g_map_pointer_path_preview_target_x = -1;
+    memset(g_map_pointer_path_preview, 0, sizeof(g_map_pointer_path_preview));
+    g_state.need_present = true;
+}
+
+static bool sdl_map_pointer_store_path_preview(s16b target_y, s16b target_x)
+{
+    int y = target_y;
+    int x = target_x;
+
+    if (!p_ptr)
+        return false;
+
+    memset(g_map_pointer_path_preview, 0, sizeof(g_map_pointer_path_preview));
+
+    while (y != p_ptr->py || x != p_ptr->px)
+    {
+        int dir;
+
+        if (!in_bounds_fully(y, x))
+        {
+            memset(g_map_pointer_path_preview, 0,
+                sizeof(g_map_pointer_path_preview));
+            return false;
+        }
+
+        dir = g_map_pointer_path_prev[y][x];
+        if (dir <= 0 || dir == 5)
+        {
+            memset(g_map_pointer_path_preview, 0,
+                sizeof(g_map_pointer_path_preview));
+            return false;
+        }
+
+        g_map_pointer_path_preview[y][x] = 1;
+        y -= ddy[dir];
+        x -= ddx[dir];
+    }
+
+    g_map_pointer_path_preview_active = true;
+    g_map_pointer_path_preview_target_y = target_y;
+    g_map_pointer_path_preview_target_x = target_x;
+    return true;
+}
+
+bool sdl_map_pointer_preview_cell(s16b map_y, s16b map_x,
+    bool* out_is_target)
+{
+    if (out_is_target)
+        *out_is_target = false;
+    if (!g_map_pointer_path_preview_active)
+        return false;
+    if (map_y < 0 || map_y >= MAX_DUNGEON_HGT
+        || map_x < 0 || map_x >= MAX_DUNGEON_WID)
+    {
+        return false;
+    }
+    if (!g_map_pointer_path_preview[map_y][map_x])
+        return false;
+
+    if (out_is_target)
+    {
+        *out_is_target = map_y == g_map_pointer_path_preview_target_y
+            && map_x == g_map_pointer_path_preview_target_x;
+    }
+    return true;
 }
 
 static bool sdl_map_pointer_path_cell_known(int y, int x)
@@ -328,7 +415,7 @@ static void sdl_map_pointer_path_clear_seen(int hgt, int wid)
 }
 
 static bool sdl_map_pointer_path_first_step(s16b target_y, s16b target_x,
-    int* out_dir)
+    int* out_dir, bool record_preview)
 {
     static const byte dirs[8] = { 8, 6, 2, 4, 9, 3, 1, 7 };
     int hgt;
@@ -379,6 +466,12 @@ static bool sdl_map_pointer_path_first_step(s16b target_y, s16b target_x,
             {
                 int step_dir = dir;
 
+                if (record_preview
+                    && !sdl_map_pointer_store_path_preview(target_y, target_x))
+                {
+                    return false;
+                }
+
                 while (y != p_ptr->py || x != p_ptr->px)
                 {
                     step_dir = g_map_pointer_path_prev[y][x];
@@ -426,6 +519,26 @@ static bool sdl_map_pointer_is_adjacent_to_player(s16b map_y, s16b map_x,
     if (out_dir)
         *out_dir = dir;
     return true;
+}
+
+static void sdl_map_pointer_update_path_preview(s16b map_y, s16b map_x)
+{
+    int dir = 0;
+
+    if (!p_ptr || (p_ptr->py == map_y && p_ptr->px == map_x)
+        || sdl_map_pointer_is_adjacent_to_player(map_y, map_x, NULL))
+    {
+        sdl_map_pointer_clear_path_preview();
+        return;
+    }
+
+    if (!sdl_map_pointer_path_first_step(map_y, map_x, &dir, true))
+    {
+        sdl_map_pointer_clear_path_preview();
+        return;
+    }
+
+    g_state.need_present = true;
 }
 
 static bool sdl_map_pointer_submit_adjacent_movement(s16b map_y, s16b map_x,
@@ -490,7 +603,7 @@ static bool sdl_map_pointer_submit_travel_step(void)
         return false;
     }
 
-    if (!sdl_map_pointer_path_first_step(target_y, target_x, &dir))
+    if (!sdl_map_pointer_path_first_step(target_y, target_x, &dir, true))
     {
         msg_print("You do not know a safe path there.");
         sdl_map_pointer_cancel_travel();
@@ -512,9 +625,10 @@ static bool sdl_map_pointer_start_travel(s16b map_y, s16b map_x, u16b device,
 
     if (!p_ptr || (p_ptr->py == map_y && p_ptr->px == map_x))
         return false;
-    if (!sdl_map_pointer_path_first_step(map_y, map_x, &dir))
+    if (!sdl_map_pointer_path_first_step(map_y, map_x, &dir, true))
     {
         msg_print("You do not know a safe path there.");
+        sdl_map_pointer_clear_path_preview();
         return false;
     }
 
@@ -535,6 +649,7 @@ static void sdl_map_pointer_open_preview(s16b map_y, s16b map_x, bool detail)
 {
     sdl_map_pointer_cancel_press();
     sdl_map_pointer_cancel_travel();
+    sdl_map_pointer_clear_path_preview();
     sdl_map_pointer_note_hover(map_y, map_x, APP_INPUT_DEVICE_POINTER);
 
     if (detail)
@@ -562,6 +677,7 @@ static void sdl_map_pointer_handle_cell_release(s16b map_y, s16b map_x,
     {
         sdl_map_pointer_cancel_press();
         sdl_map_pointer_cancel_travel();
+        sdl_map_pointer_clear_path_preview();
         return;
     }
 
@@ -588,7 +704,7 @@ static bool sdl_map_pointer_handle_consumed_touch_release(
 
 static void sdl_map_pointer_cancel_travel_for_input_event(const SDL_Event* ev)
 {
-    if (!ev || !g_map_pointer_travel.active)
+    if (!ev)
         return;
 
     switch (ev->type)
@@ -599,12 +715,20 @@ static void sdl_map_pointer_cancel_travel_for_input_event(const SDL_Event* ev)
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
     case SDL_EVENT_GAMEPAD_AXIS_MOTION:
     case SDL_EVENT_FINGER_DOWN:
-        sdl_map_pointer_cancel_travel();
+        if (g_map_pointer_travel.active)
+            sdl_map_pointer_cancel_travel();
+        else
+            sdl_map_pointer_clear_path_preview();
         break;
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
         if (ev->button.which != SDL_TOUCH_MOUSEID)
-            sdl_map_pointer_cancel_travel();
+        {
+            if (g_map_pointer_travel.active)
+                sdl_map_pointer_cancel_travel();
+            else
+                sdl_map_pointer_clear_path_preview();
+        }
         break;
 
     default:

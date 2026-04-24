@@ -2219,6 +2219,76 @@ static bool object_info_screen_capture_build_scene(
     return app_ui_panel_add_body_line(panel, TERM_SLATE, scroll_buf);
 }
 
+static char object_info_screen_capture_command_key(
+    const app_ui_command* command, int max_scroll)
+{
+    if (!command)
+        return '\0';
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        return ESCAPE;
+    }
+    if (max_scroll <= 0
+        && (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || command->kind == APP_UI_COMMAND_KIND_SELECT
+            || command->kind == APP_UI_COMMAND_KIND_INSPECT
+            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+            || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+            || command->target.action == APP_UI_WIDGET_ACTION_SELECT
+            || command->target.action == APP_UI_WIDGET_ACTION_INSPECT))
+    {
+        return '\r';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
+        {
+            return (command->scroll_y > 0) ? '8' : '2';
+        }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '9' : '3';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '9' : '3';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+    {
+        return '\r';
+    }
+
+    return '\0';
+}
+
+static char object_info_screen_capture_wait_key(int max_scroll)
+{
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, 0))
+            return ESCAPE;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            char key = object_info_screen_capture_command_key(
+                &event.command, max_scroll);
+
+            if (key)
+                return key;
+        }
+    }
+}
+
 static bool object_info_screen_capture_view_document(
     const object_info_screen_capture* capture, byte prompt_attr,
     cptr exit_prompt)
@@ -2249,7 +2319,7 @@ static bool object_info_screen_capture_view_document(
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key();
+        ch = object_info_screen_capture_wait_key(max_scroll);
         if (max_scroll <= 0)
             break;
 

@@ -532,7 +532,10 @@ void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
 {
     const sdl_ui_style* resolved = style ? style : &g_sdl_ui_style_default;
     SDL_FRect rect = { 0.0f, 0.0f, (float)canvas_w, (float)canvas_h };
+    SDL_Color rail = resolved->panel_border_soft;
+    SDL_Color accent = resolved->accent_dim;
     int band_h;
+    int rail_w;
 
     if (canvas_w <= 0 || canvas_h <= 0)
         return;
@@ -552,6 +555,37 @@ void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
         sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f,
             (float)(canvas_h - band_h), (float)canvas_w, (float)band_h },
             bottom);
+
+        if (resolved->header_slot && resolved->header_slot[0])
+        {
+            SDL_Color header_rule = resolved->panel_border_soft;
+            SDL_Color header_accent = resolved->accent_dim;
+
+            header_rule.a = MIN(header_rule.a, 116);
+            header_accent.a = MIN(header_accent.a, 136);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, (float)(band_h - 2),
+                (float)canvas_w, 1.0f }, header_rule);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, (float)(band_h - 1),
+                (float)canvas_w, 1.0f }, header_accent);
+        }
+    }
+
+    if (resolved->backdrop_slot && resolved->backdrop_slot[0])
+    {
+        rail_w = sdl_ui_scale_px(3.0f);
+        if (rail_w > 0 && rail_w * 2 < canvas_w)
+        {
+            rail.a = MIN(rail.a, 84);
+            accent.a = MIN(accent.a, 72);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ 0.0f, 0.0f,
+                (float)rail_w, (float)canvas_h }, rail);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)rail_w, 0.0f,
+                1.0f, (float)canvas_h }, accent);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w),
+                0.0f, (float)rail_w, (float)canvas_h }, rail);
+            sdl_ui_style_fill_rect(&(SDL_FRect){ (float)(canvas_w - rail_w - 1),
+                0.0f, 1.0f, (float)canvas_h }, accent);
+        }
     }
 }
 
@@ -585,6 +619,20 @@ void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
     if (!border)
         return;
 
+    if (rect->w > 4.0f && rect->h > 4.0f)
+    {
+        SDL_Color top_rule = resolved->accent_dim;
+        SDL_Color inner_rule = resolved->panel_border_soft;
+
+        top_rule.a = MIN(top_rule.a, 132);
+        inner_rule.a = MIN(inner_rule.a, 110);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f, rect->y + 1.0f,
+            MAX(0.0f, rect->w - 2.0f), 1.0f }, top_rule);
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x + 1.0f,
+            rect->y + rect->h - 2.0f, MAX(0.0f, rect->w - 2.0f), 1.0f },
+            inner_rule);
+    }
+
     border_px = MAX(1, sdl_ui_scale_px(resolved->border_px));
     for (i = 0; i < border_px; i++)
     {
@@ -599,6 +647,93 @@ void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
             break;
         sdl_ui_style_draw_rect(&border_rect,
             (i == 0) ? resolved->panel_border : resolved->panel_border_soft);
+    }
+}
+
+void sdl_ui_style_draw_control_frame(const sdl_ui_style* style,
+    const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
+    bool pressed)
+{
+    const sdl_ui_style* resolved = style ? style : &g_sdl_ui_style_default;
+    bool disabled = (state_flags & APP_UI_ITEM_FLAG_DISABLED) != 0;
+    SDL_Color fill = resolved->panel_fill_alt;
+    SDL_Color border = resolved->panel_border_soft;
+    int border_px;
+    int focus_px;
+    int i;
+
+    if (!rect || rect->w <= 0.0f || rect->h <= 0.0f)
+        return;
+
+    if (disabled)
+    {
+        fill = resolved->disabled_fill;
+        border = resolved->panel_border_soft;
+    }
+    else if (pressed)
+    {
+        fill = resolved->pressed_fill;
+        border = resolved->focus_ring;
+    }
+    else if (active)
+    {
+        fill = resolved->selected_fill;
+        border = resolved->focus_ring;
+    }
+    else if (focused)
+    {
+        fill = resolved->panel_fill_alt;
+        fill.a = (byte)MIN(255, MAX((int)fill.a, 108));
+        border = resolved->focus_ring;
+    }
+    else
+    {
+        fill.a = MIN(fill.a, 88);
+        border.a = MIN(border.a, 176);
+    }
+
+    sdl_ui_style_fill_rect(rect, fill);
+
+    if (!disabled && (active || focused || pressed) && rect->w > 4.0f
+        && rect->h > 4.0f)
+    {
+        SDL_Color accent = resolved->accent;
+        int accent_w = MAX(1, sdl_ui_scale_px(2.0f));
+
+        accent.a = (byte)MIN(255, MAX((int)accent.a, 180));
+        sdl_ui_style_fill_rect(&(SDL_FRect){ rect->x, rect->y,
+            (float)accent_w, rect->h }, accent);
+    }
+
+    border_px = MAX(1, sdl_ui_scale_px(resolved->border_px));
+    for (i = 0; i < border_px; i++)
+    {
+        SDL_FRect border_rect = {
+            rect->x + (float)i,
+            rect->y + (float)i,
+            rect->w - (float)(i * 2),
+            rect->h - (float)(i * 2)
+        };
+
+        if (border_rect.w <= 0.0f || border_rect.h <= 0.0f)
+            break;
+        sdl_ui_style_draw_rect(&border_rect, border);
+    }
+
+    if (!disabled && (focused || pressed))
+    {
+        focus_px = MAX(1, sdl_ui_scale_px(resolved->focus_px));
+        for (i = 0; i < focus_px; i++)
+        {
+            SDL_FRect focus_rect = {
+                rect->x - (float)i,
+                rect->y - (float)i,
+                rect->w + (float)(i * 2),
+                rect->h + (float)(i * 2)
+            };
+
+            sdl_ui_style_draw_rect(&focus_rect, resolved->focus_ring);
+        }
     }
 }
 

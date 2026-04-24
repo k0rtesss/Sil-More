@@ -39,8 +39,14 @@ static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
     const app_ui_panel* panel, u16b panel_index)
 {
+    u16b scene_kind;
+
     if (!main_view || !scene || !panel)
         return false;
+
+    scene_kind = sdl_menu_hit_scene_kind();
+    if (scene_kind == APP_SCENE_KIND_NONE)
+        scene_kind = APP_SCENE_KIND_MENU;
 
     if (panel->style == APP_UI_PANEL_STYLE_STRIP)
     {
@@ -131,7 +137,7 @@ static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
     }
 
     if (!sdl_menu_render_panel_internal(main_view, canvas_w, canvas_h, scene,
-            panel, APP_SCENE_KIND_MENU, panel_index))
+            panel, scene_kind, panel_index))
     {
         log_warn("ui render: default panel failed (canvas=%dx%d rect=%dx%d style=%u)",
             canvas_w, canvas_h, main_view->rect.w, main_view->rect.h,

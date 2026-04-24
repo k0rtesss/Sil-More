@@ -185,6 +185,27 @@ static bool sdl_pane_point_in_rect(float x, float y, const SDL_Rect* rect)
         && y < (float)(rect->y + rect->h);
 }
 
+static void sdl_pane_window_point_to_pixels(float* x, float* y)
+{
+    int window_w = 0;
+    int window_h = 0;
+    int pixel_w = 0;
+    int pixel_h = 0;
+
+    if (!g_state.window || !x || !y)
+        return;
+
+    SDL_GetWindowSize(g_state.window, &window_w, &window_h);
+    SDL_GetWindowSizeInPixels(g_state.window, &pixel_w, &pixel_h);
+    if (window_w <= 0 || window_h <= 0 || pixel_w <= 0 || pixel_h <= 0)
+        return;
+
+    if (window_w != pixel_w)
+        *x = *x * (float)pixel_w / (float)window_w;
+    if (window_h != pixel_h)
+        *y = *y * (float)pixel_h / (float)window_h;
+}
+
 static int sdl_pane_resize_hit_px(void)
 {
     int hit_px = sdl_ui_scale_px(14.0f);
@@ -353,6 +374,7 @@ static bool sdl_pane_resize_event_xy(const SDL_Event* ev, float* out_x,
     if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         *out_x = ev->motion.x;
         *out_y = ev->motion.y;
+        sdl_pane_window_point_to_pixels(out_x, out_y);
         return true;
     }
     if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN
@@ -360,6 +382,7 @@ static bool sdl_pane_resize_event_xy(const SDL_Event* ev, float* out_x,
     {
         *out_x = ev->button.x;
         *out_y = ev->button.y;
+        sdl_pane_window_point_to_pixels(out_x, out_y);
         return true;
     }
     if (ev->type == SDL_EVENT_FINGER_DOWN
@@ -888,8 +911,11 @@ bool sdl_pane_resize_handle_event(const SDL_Event* ev)
 
     if (ev->type == SDL_EVENT_MOUSE_MOTION) {
         sdl_pane_resize_handle handle;
+        float motion_x = ev->motion.x;
+        float motion_y = ev->motion.y;
 
-        if (sdl_pane_resize_hit_test(ev->motion.x, ev->motion.y, &handle)) {
+        sdl_pane_window_point_to_pixels(&motion_x, &motion_y);
+        if (sdl_pane_resize_hit_test(motion_x, motion_y, &handle)) {
             (void)handle;
             return false;
         }
@@ -1992,6 +2018,31 @@ void platform_set_hide_left_panel(bool value)
     config.hide_left_panel = value;
 }
 
+int platform_overlay_panel_layout_count(void)
+{
+    int count = 0;
+
+    for (int i = 0; i < config.overlay_panel_count
+        && i < SDL_OVERLAY_PANEL_CONFIG_MAX; i++)
+    {
+        const struct sdl_overlay_panel_config* overlay =
+            &config.overlay_panels[i];
+
+        if (overlay->id[0] && overlay->pinned)
+            count++;
+    }
+
+    return count;
+}
+
+void platform_reset_overlay_panel_layout(void)
+{
+    config.overlay_panel_count = 0;
+    memset(config.overlay_panels, 0, sizeof(config.overlay_panels));
+    (void)save_pane_config_to_json();
+    g_state.need_present = true;
+}
+
 int platform_intro_style(void)
 {
     if (!op_ptr)
@@ -2104,6 +2155,8 @@ void platform_reset_layout_defaults(void)
     config.hide_left_panel = defaults.hide_left_panel;
     g_hide_left_panel = defaults.hide_left_panel;
     config.min_terminal_mode = defaults.min_terminal_mode;
+    config.overlay_panel_count = 0;
+    memset(config.overlay_panels, 0, sizeof(config.overlay_panels));
 
     if (default_pane_count > 0) {
         pane_config_count = default_pane_count;

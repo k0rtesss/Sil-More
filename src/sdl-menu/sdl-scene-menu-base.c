@@ -57,6 +57,11 @@ void sdl_menu_hit_set_scene(u16b scene_kind)
     g_sdl_menu_hit_registry.scene_kind = scene_kind;
 }
 
+u16b sdl_menu_hit_scene_kind(void)
+{
+    return g_sdl_menu_hit_registry.scene_kind;
+}
+
 void sdl_menu_hit_begin_panel(u16b panel_index,
     const app_ui_panel* panel)
 {
@@ -697,6 +702,40 @@ void sdl_menu_draw_view_glyph(const sdl_view* view,
     SDL_RenderTexture(g_state.renderer, view->font_atlas, &src, dst);
 }
 
+bool sdl_menu_target_has_visual_focus(u16b kind, s16b id, bool* out_pressed)
+{
+    app_session* session = app_session_current();
+    const app_ui_focus_state* focus
+        = session ? app_session_ui_focus(session) : NULL;
+
+    if (out_pressed)
+        *out_pressed = false;
+    if (!focus || !focus->active)
+        return false;
+    if (!app_ui_widget_ref_is_valid(&focus->target))
+        return false;
+    if (focus->target.scene_kind != g_sdl_menu_hit_registry.scene_kind)
+        return false;
+    if (focus->target.panel_index != g_sdl_menu_hit_registry.panel_index)
+        return false;
+    if (focus->target.target_kind != kind)
+        return false;
+    if (focus->target.widget_id != id)
+        return false;
+
+    if (out_pressed)
+        *out_pressed = focus->pressed != 0;
+    return true;
+}
+
+void sdl_menu_draw_control_frame(const app_ui_panel* panel,
+    const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
+    bool pressed)
+{
+    sdl_ui_style_draw_control_frame(sdl_menu_panel_style(panel), rect,
+        state_flags, active, focused, pressed);
+}
+
 int sdl_menu_scale_px(float logical_value)
 {
     return sdl_ui_scale_px(logical_value);
@@ -752,7 +791,44 @@ void sdl_menu_render_icon(TTF_Font* font, float x_px, float y_px,
         if (glyph_w < icon_slot_w)
             text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
         sdl_menu_render_text(font, text_x, y_px, line_h,
-            sdl_menu_color(icon_attr ? icon_attr : TERM_WHITE), glyph);
+            sdl_ui_style_color_for_attr(NULL, icon_attr ? icon_attr : TERM_WHITE),
+            glyph);
+    }
+}
+
+void sdl_menu_render_panel_icon(TTF_Font* font, const app_ui_panel* panel,
+    float x_px, float y_px, int icon_slot_w, int line_h, byte icon_attr,
+    char icon_char)
+{
+    SDL_FRect tile_dst;
+    byte ch = (byte)icon_char;
+
+    if (!icon_char || icon_char == ' ')
+        return;
+
+    if (g_state.use_tiles && g_state.tileset
+        && (icon_attr & TILE_FLAG) && (ch & TILE_FLAG))
+    {
+        float tile_size = (float)MIN(line_h, icon_slot_w);
+
+        tile_dst.x = x_px + ((float)icon_slot_w - tile_size) * 0.5f;
+        tile_dst.y = y_px + ((float)line_h - tile_size) * 0.5f;
+        tile_dst.w = tile_size;
+        tile_dst.h = tile_size;
+        sdl_menu_draw_tile(icon_attr, ch, &tile_dst);
+        return;
+    }
+
+    {
+        char glyph[2] = { icon_char, '\0' };
+        int glyph_w = sdl_menu_measure_text(font, glyph);
+        float text_x = x_px;
+
+        if (glyph_w < icon_slot_w)
+            text_x += ((float)icon_slot_w - (float)glyph_w) * 0.5f;
+        sdl_menu_render_text(font, text_x, y_px, line_h,
+            sdl_menu_panel_color(panel, icon_attr ? icon_attr : TERM_WHITE),
+            glyph);
     }
 }
 
@@ -1094,12 +1170,15 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
 {
     SDL_Color color;
     SDL_Color meta_color;
-    SDL_Color selected_fill;
     int icon_slot_w = 0;
     int key_w = 0;
     int label_x = clip_rect->x;
     int meta_w = 0;
     int meta_x = clip_rect->x;
+    int row_pad_y;
+    bool focused;
+    bool pressed = false;
+    SDL_FRect hit_rect;
 
     if (!font || !panel || !row || !clip_rect)
         return;
@@ -1123,40 +1202,38 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
         (row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : (row->meta_attr ? row->meta_attr : row->attr));
-    selected_fill = sdl_menu_panel_style(panel)->selected_fill;
+    row_pad_y = MAX(1, sdl_menu_scale_px(
+        sdl_menu_panel_style(panel)->row_pad_y));
+    hit_rect = (SDL_FRect){
+        (float)clip_rect->x,
+        (float)(current_y - row_pad_y),
+        (float)clip_rect->w,
+        (float)MAX(line_h + row_pad_y * 2, sdl_menu_scale_px(24.0f))
+    };
+    focused = sdl_menu_target_has_visual_focus(SDL_MENU_HIT_TARGET_ROW,
+        row->id, &pressed);
 
-    if (row->flags & APP_UI_ITEM_FLAG_SELECTED)
+    if ((row->flags & APP_UI_ITEM_FLAG_SELECTED) || focused || pressed)
     {
-        SDL_FRect selected_rect = {
-            (float)(clip_rect->x - item_gap),
-            (float)(current_y - sdl_menu_scale_px(3.0f)),
-            (float)(clip_rect->w + item_gap * 2),
-            (float)(line_h + sdl_menu_scale_px(6.0f))
-        };
+        SDL_FRect visual_rect = hit_rect;
 
-        sdl_menu_fill_rect(&selected_rect, selected_fill);
+        visual_rect.x -= (float)item_gap;
+        visual_rect.w += (float)item_gap * 2.0f;
+        sdl_menu_draw_control_frame(panel, &visual_rect, row->flags,
+            (row->flags & APP_UI_ITEM_FLAG_SELECTED) != 0, focused, pressed);
     }
 
-    {
-        SDL_FRect hit_rect = {
-            (float)clip_rect->x,
-            (float)(current_y - sdl_menu_scale_px(3.0f)),
-            (float)clip_rect->w,
-            (float)MAX(line_h + sdl_menu_scale_px(6.0f),
-                sdl_menu_scale_px(24.0f))
-        };
-
-        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_ROW, row->id,
-            row->interaction.action_key, row->interaction.role,
-            row->interaction.action, row->interaction.flags, row->flags, -1,
-            row_index, panel->selected_row, &hit_rect, row->label,
-            row->interaction.tooltip);
-    }
+    (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_ROW, row->id,
+        row->interaction.action_key, row->interaction.role,
+        row->interaction.action, row->interaction.flags, row->flags, -1,
+        row_index, panel->selected_row, &hit_rect, row->label,
+        row->interaction.tooltip);
 
     if (row->icon_char)
     {
         icon_slot_w = sdl_menu_icon_slot_px(font, line_h);
-        sdl_menu_render_icon(font, (float)label_x, (float)current_y,
+        sdl_menu_render_panel_icon(font, panel, (float)label_x,
+            (float)current_y,
             icon_slot_w, line_h, row->icon_attr, row->icon_char);
         label_x += icon_slot_w;
         if ((panel->style != APP_UI_PANEL_STYLE_PLAIN && row->key[0])
@@ -1235,10 +1312,11 @@ static void sdl_menu_render_footer(TTF_Font* font,
         const app_ui_footer_action* action = &panel->footer_actions[i];
         char text[APP_UI_LABEL_MAX + 40];
         int text_w;
-        SDL_Color fill = sdl_menu_panel_style(panel)->accent_dim;
         SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
         SDL_Color text_color;
         SDL_FRect pill;
+        bool focused;
+        bool pressed = false;
 
         sdl_menu_footer_action_text(action, text, sizeof(text));
 
@@ -1253,20 +1331,24 @@ static void sdl_menu_render_footer(TTF_Font* font,
 
         if (action->flags & APP_UI_ITEM_FLAG_DISABLED)
         {
-            fill = sdl_menu_panel_style(panel)->disabled_fill;
             border = sdl_menu_panel_style(panel)->panel_border_soft;
             text_color = sdl_menu_panel_color(panel, TERM_L_DARK);
         }
         else
         {
-            fill.a = 96;
             border.a = 220;
             text_color = sdl_menu_panel_color(panel,
                 action->attr ? action->attr : TERM_WHITE);
         }
 
-        sdl_menu_fill_rect(&pill, fill);
-        sdl_menu_draw_rect(&pill, border);
+        focused = sdl_menu_target_has_visual_focus(
+            SDL_MENU_HIT_TARGET_FOOTER_ACTION, action->id, &pressed);
+        sdl_menu_draw_control_frame(panel, &pill, action->flags, false,
+            focused, pressed);
+        if (!focused && !pressed)
+        {
+            sdl_menu_draw_rect(&pill, border);
+        }
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
             action->id, action->interaction.action_key,
             action->interaction.role, action->interaction.action,
@@ -1293,12 +1375,11 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
     for (i = 0; i < panel->tab_count; i++)
     {
         const app_ui_tab* tab = &panel->tabs[i];
-        SDL_Color fill = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE)
-            ? sdl_menu_panel_style(panel)->selected_fill
-            : sdl_menu_panel_style(panel)->panel_fill_alt;
         SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
         SDL_Color text_color = sdl_menu_panel_color(panel,
             tab->attr ? tab->attr : TERM_WHITE);
+        bool focused;
+        bool pressed = false;
         int text_w = sdl_menu_measure_text(font, tab->label);
         SDL_FRect pill = {
             (float)cursor_x,
@@ -1310,10 +1391,15 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
         if (pill.x + pill.w > (float)(clip_rect->x + clip_rect->w))
             break;
 
-        fill.a = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) ? 132 : 72;
         border.a = 220;
-        sdl_menu_fill_rect(&pill, fill);
-        sdl_menu_draw_rect(&pill, border);
+        focused = sdl_menu_target_has_visual_focus(SDL_MENU_HIT_TARGET_TAB,
+            tab->id, &pressed);
+        sdl_menu_draw_control_frame(panel, &pill, tab->flags,
+            (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) != 0, focused, pressed);
+        if (!focused && !pressed)
+        {
+            sdl_menu_draw_rect(&pill, border);
+        }
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_TAB, tab->id,
             tab->interaction.action_key, tab->interaction.role,
             tab->interaction.action, tab->interaction.flags, tab->flags, -1,
@@ -1944,7 +2030,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         if (ui_panel->icon_char
             && ui_panel->style != APP_UI_PANEL_STYLE_PLAIN)
         {
-            sdl_menu_render_icon(font, (float)left_clip.x,
+            sdl_menu_render_panel_icon(font, ui_panel, (float)left_clip.x,
                 (float)(current_y + (header_h - title_icon_h) / 2),
                 title_icon_h, title_icon_h, ui_panel->icon_attr,
                 ui_panel->icon_char);
@@ -1961,7 +2047,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
             {
                 int title_text_w = sdl_menu_measure_text(font, ui_panel->title);
 
-                sdl_menu_render_icon(font,
+                sdl_menu_render_panel_icon(font, ui_panel,
                     (float)(text_x + title_text_w + item_gap * 0.5f),
                     (float)(current_y + (header_h - title_icon_h) / 2),
                     title_icon_h, title_icon_h, ui_panel->icon_attr,
@@ -1971,7 +2057,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         }
         else if (ui_panel->icon_char)
         {
-            sdl_menu_render_icon(font, (float)left_clip.x,
+            sdl_menu_render_panel_icon(font, ui_panel, (float)left_clip.x,
                 (float)(current_y + (header_h - title_icon_h) / 2),
                 title_icon_h, title_icon_h, ui_panel->icon_attr,
                 ui_panel->icon_char);

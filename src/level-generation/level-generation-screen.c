@@ -1177,7 +1177,7 @@ void level_gen_screen_finish(bool success)
         {
             app_session* session = app_session_current();
 
-            (void)ui_information_scene_wait_key_nonrepeat();
+            (void)ui_information_scene_wait_dismissal(APP_INPUT_FLAG_REPEAT);
             if (session)
                 app_session_clear_inputs(session);
         }

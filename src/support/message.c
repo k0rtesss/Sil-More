@@ -104,6 +104,47 @@ static void message_menu_prompt_add_wrapped_text(app_ui_panel* panel,
     }
 }
 
+static bool message_more_event_dismisses(
+    const ui_information_scene_event* event)
+{
+    const app_ui_command* command;
+
+    if (!event)
+        return false;
+    if (quick_messages)
+        return true;
+    if (event->kind == UI_INFORMATION_SCENE_EVENT_KEY)
+    {
+        int ch = event->key;
+
+        return ch == ESCAPE || ch == ' ' || ch == '\n' || ch == '\r';
+    }
+    if (event->kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+        return false;
+
+    command = &event->command;
+    return command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->target.action == APP_UI_WIDGET_ACTION_CANCEL
+        || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || command->target.action == APP_UI_WIDGET_ACTION_SELECT;
+}
+
+static void message_wait_more_prompt(void)
+{
+    while (1)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            return;
+        if (message_more_event_dismisses(&event))
+            return;
+        bell("Illegal response to a 'more' prompt!");
+    }
+}
+
 static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
 {
     ui_information_scene_scope scope;
@@ -138,18 +179,7 @@ static bool message_present_semantic_menu_more_prompt(byte attr, cptr text)
         return false;
     }
 
-    while (1)
-    {
-        int ch = ui_information_scene_wait_key_nonrepeat();
-
-        if (quick_messages)
-            break;
-        if ((ch == ESCAPE) || (ch == ' '))
-            break;
-        if ((ch == '\n') || (ch == '\r'))
-            break;
-        bell("Illegal response to a 'more' prompt!");
-    }
+    message_wait_more_prompt();
 
     ui_information_scene_leave(&scope);
     return true;
@@ -773,18 +803,7 @@ static void msg_flush(int x)
             app_session_set_interaction_detail(session, TERM_SLATE,
                 "Press Space, Enter, or Esc to continue.");
 
-            /* Get an acceptable keypress */
-            while (1)
-            {
-                int ch = ui_information_scene_wait_key_nonrepeat();
-                if (quick_messages)
-                    break;
-                if ((ch == ESCAPE) || (ch == ' '))
-                    break;
-                if ((ch == '\n') || (ch == '\r'))
-                    break;
-                bell("Illegal response to a 'more' prompt!");
-            }
+            message_wait_more_prompt();
 
             app_session_clear_interaction(session);
             ui_information_scene_leave(&input_scope);

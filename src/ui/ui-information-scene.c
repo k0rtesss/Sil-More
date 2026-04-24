@@ -455,6 +455,88 @@ bool ui_information_scene_wait_event(ui_information_scene_event* out_event,
     }
 }
 
+static bool ui_information_scene_command_dismisses(
+    const app_ui_command* command)
+{
+    if (!command)
+        return false;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->kind == APP_UI_COMMAND_KIND_INSPECT
+        || command->kind == APP_UI_COMMAND_KIND_CONTEXT)
+    {
+        return true;
+    }
+
+    return command->target.action == APP_UI_WIDGET_ACTION_CANCEL
+        || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || command->target.action == APP_UI_WIDGET_ACTION_SELECT
+        || command->target.action == APP_UI_WIDGET_ACTION_INSPECT;
+}
+
+bool ui_information_scene_wait_dismissal(u16b ignored_flags)
+{
+    ui_information_scene_event event;
+
+    while (ui_information_scene_wait_event(&event, ignored_flags))
+    {
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return true;
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+            && ui_information_scene_command_dismisses(&event.command))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ui_information_scene_wait_dismissal_with_wait_reason(u16b ignored_flags,
+    u16b reason, bool hidden_cursor)
+{
+    app_session* session = app_session_current();
+    app_wait_scope scope;
+    app_input_capture_scope input_capture_scope;
+    bool pushed_capture = false;
+    bool pushed_wait = false;
+    bool saved_hide_cursor = false;
+    bool result;
+
+    if (!ui_information_scene_supported() || !session)
+        return false;
+
+    if (hidden_cursor)
+    {
+        saved_hide_cursor = inkey_cursor_hidden();
+        inkey_set_cursor_hidden(true);
+    }
+
+    if (!app_session_input_capture_active(session))
+    {
+        app_session_push_input_capture(session, &input_capture_scope);
+        pushed_capture = true;
+    }
+    if (reason != APP_WAIT_REASON_NONE)
+    {
+        app_session_push_wait_scope(session, &scope, reason, 0, 0);
+        pushed_wait = true;
+    }
+
+    result = ui_information_scene_wait_dismissal(ignored_flags);
+
+    if (pushed_wait)
+        app_session_pop_wait_scope(session, &scope);
+    if (pushed_capture)
+        app_session_pop_input_capture(session, &input_capture_scope);
+    if (hidden_cursor)
+        inkey_set_cursor_hidden(saved_hide_cursor);
+
+    return result;
+}
+
 static int ui_information_scene_wait_key_internal(u16b ignored_flags)
 {
     app_session* session = app_session_current();
