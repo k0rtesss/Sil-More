@@ -461,6 +461,164 @@ static void run_history_ui_add_list_footer(app_ui_panel* panel,
         "Esc", "Back");
 }
 
+static char run_history_ui_direction_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+        return (command->dy < 0) ? '8' : '2';
+    if (command->dx != 0)
+        return (command->dx < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static char run_history_ui_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool run_history_ui_set_active_row(run_detail_panel panel,
+    run_detail_view_state* view, int row, int total_rows)
+{
+    if (!view || row < 0 || row >= total_rows)
+        return false;
+
+    switch (panel)
+    {
+    case RUN_PANEL_ABILITIES:
+        view->abilities.highlight = row;
+        return true;
+    case RUN_PANEL_MILESTONES:
+        view->milestones.highlight = row;
+        return true;
+    case RUN_PANEL_ARTEFACTS:
+        view->artefacts.highlight = row;
+        return true;
+    case RUN_PANEL_MONSTERS:
+        view->monsters.highlight = row;
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool run_history_ui_command_to_key(const app_ui_command* command,
+    const bool available[RUN_PANEL_COUNT], run_detail_panel* panel,
+    run_detail_view_state* view, int total_rows, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !panel || !view || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
+            && run_history_ui_set_active_row(*panel, view, target->widget_id,
+                total_rows))
+        {
+            return true;
+        }
+        if (target->role == APP_UI_WIDGET_ROLE_TAB
+            && target->widget_id >= 0
+            && target->widget_id < RUN_PANEL_COUNT)
+        {
+            if (!available || available[target->widget_id])
+                *panel = (run_detail_panel)target->widget_id;
+            return true;
+        }
+        *out_key = run_history_ui_direction_command_key(command);
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = run_history_ui_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        if (target->widget_id >= 0 && target->widget_id < RUN_PANEL_COUNT)
+        {
+            if (!available || available[target->widget_id])
+            {
+                *panel = (run_detail_panel)target->widget_id;
+            }
+            else
+            {
+                bell("No detail data for that run history tab.");
+            }
+        }
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        (void)run_history_ui_set_active_row(*panel, view, target->widget_id,
+            total_rows);
+        if (*panel == RUN_PANEL_ARTEFACTS || *panel == RUN_PANEL_MONSTERS)
+            *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '6';
+            return true;
+        case 3:
+            *out_key = '\r';
+            return true;
+        case 4:
+            *out_key = 's';
+            return true;
+        case 5:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static void run_history_ui_add_ability_rows(app_ui_panel* panel,
     const score_run_detail_block* details, run_detail_list_state* state)
 {
@@ -1039,7 +1197,35 @@ void run_history_show_detail(const run_history_entry* entry)
             break;
         }
 
-        int ch = ui_information_scene_wait_key();
+        int ch;
+
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && run_history_ui_command_to_key(&event.command,
+                    panel_has_data, &panel, &view, current_total_rows,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
 
         if (steamdeck) {
             if (ch == steamdeck_back_key())

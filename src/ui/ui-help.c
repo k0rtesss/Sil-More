@@ -806,7 +806,8 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
 
     panel->style = APP_UI_PANEL_STYLE_PLAIN;
     panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
-        | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
+        | APP_UI_PANEL_FLAG_LEFT_ANCHORED
+        | APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_SLATE;
     panel->min_width_px = 1600;
     panel->width_cap_px = 2800;
@@ -876,6 +877,13 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
     {
         return false;
     }
+
+    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, page > 1,
+        "4", "Prev");
+    (void)app_ui_panel_add_footer_action(panel, 2, TERM_L_BLUE, true,
+        "6", (page >= total_pages) ? "Done" : "Next");
+    (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        "Esc", "Back");
 
     return true;
 }
@@ -1623,6 +1631,9 @@ static void help_record_page_document_ops(int i, bool include_header)
 
 
 
+static char help_scroll_command_key(const app_ui_command* command);
+static bool help_command_to_key(const app_ui_command* command, char* out_key);
+
 static bool do_cmd_help_information_scene(void)
 {
     ui_information_scene_scope scope;
@@ -1640,7 +1651,7 @@ static bool do_cmd_help_information_scene(void)
     {
         app_ui_scene scene;
         int total_pages;
-        int ch;
+        int ch = 0;
         const int page_rows = 24;
 
         help_build_document_ops(&doc_hgt, row_has_content, row_has_heading);
@@ -1661,13 +1672,40 @@ static bool do_cmd_help_information_scene(void)
             return false;
         }
 
-        ch = ui_information_scene_wait_key();
-        if (steamdeck_controls_active())
         {
-            if (ch == steamdeck_back_key())
+            ui_information_scene_event event;
+            char command_key = '\0';
+            bool skip_input = false;
+
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
                 ch = ESCAPE;
-            else if (ch == steamdeck_confirm_key())
-                ch = ' ';
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && help_command_to_key(&event.command, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    skip_input = true;
+            }
+            else
+            {
+                skip_input = true;
+            }
+
+            if (steamdeck_controls_active())
+            {
+                if (ch == steamdeck_back_key())
+                    ch = ESCAPE;
+                else if (ch == steamdeck_confirm_key())
+                    ch = ' ';
+            }
+            if (skip_input)
+                continue;
         }
 
         if (ch == 'q' || ch == 'Q' || ch == ESCAPE)
@@ -1700,6 +1738,69 @@ static bool do_cmd_help_information_scene(void)
     ui_information_scene_leave(&scope);
     message_flush();
     return true;
+}
+
+static char help_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool help_command_to_key(const app_ui_command* command, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = help_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '4';
+            return true;
+        case 2:
+            *out_key = '6';
+            return true;
+        case 3:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void do_cmd_help(void)

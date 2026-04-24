@@ -85,9 +85,24 @@ static void story_consume_peeked_key(char* out_key)
     }
 }
 
-static char story_wait_key(void)
+static void story_wait_continue(void)
 {
-    return (char)ui_information_scene_wait_key();
+    ui_information_scene_event event;
+
+    while (ui_information_scene_wait_event(&event, 0))
+    {
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+            || event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
+        {
+            return;
+        }
+    }
 }
 
 static void story_prompt_label(int binding, const char* fallback, char* buf,
@@ -231,6 +246,13 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
 
     if (footer_text && footer_text[0]
         && !app_ui_panel_add_body_line(panel, footer_attr, footer_text))
+    {
+        return false;
+    }
+
+    if (active_index < 0
+        && !app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+            "Space", "Continue"))
     {
         return false;
     }
@@ -466,7 +488,7 @@ void print_story(int last_parts, bool fade_in,
         scene_failed = true;
         goto cleanup;
     }
-    (void)story_wait_key();
+    story_wait_continue();
 
 cleanup:
     platform_story_font_disable();

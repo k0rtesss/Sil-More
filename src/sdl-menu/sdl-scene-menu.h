@@ -28,6 +28,8 @@ typedef enum sdl_menu_hit_target_kind {
     SDL_MENU_HIT_TARGET_PANEL = 4
 } sdl_menu_hit_target_kind;
 
+#define SDL_MENU_HIT_DETAIL_ID ((s16b)-2)
+
 typedef struct sdl_menu_hit_target {
     SDL_FRect rect;
     u16b scene_kind;
@@ -35,6 +37,7 @@ typedef struct sdl_menu_hit_target {
     u16b panel_layer;
     u16b panel_style;
     u16b focus_area;
+    s16b focus_id;
     u16b state_flags;
     s16b focus_order;
     s16b owner_id;
@@ -86,8 +89,9 @@ void sdl_menu_overlay_panel_id(u16b scene_kind, u16b panel_index,
 bool sdl_menu_overlay_panel_get_offset(cptr id, int* out_x, int* out_y,
     bool* out_pinned);
 void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned);
-void sdl_menu_overlay_panel_clamp_offset(cptr id, int canvas_w, int canvas_h,
-    const SDL_FRect* panel, int* offset_x, int* offset_y);
+void sdl_menu_overlay_panel_clamp_offset(cptr id, cptr fallback_id,
+    int canvas_w, int canvas_h, const SDL_FRect* panel, int* offset_x,
+    int* offset_y);
 void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst);

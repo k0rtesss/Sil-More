@@ -33,6 +33,18 @@ typedef struct ui_information_scene_scope {
     app_input_capture_scope input_capture_scope;
 } ui_information_scene_scope;
 
+typedef enum ui_information_scene_event_kind {
+    UI_INFORMATION_SCENE_EVENT_NONE = 0,
+    UI_INFORMATION_SCENE_EVENT_KEY = 1,
+    UI_INFORMATION_SCENE_EVENT_COMMAND = 2
+} ui_information_scene_event_kind;
+
+typedef struct ui_information_scene_event {
+    u16b kind;
+    int key;
+    app_ui_command command;
+} ui_information_scene_event;
+
 bool ui_information_scene_supported(void);
 bool ui_information_scene_set_refresh_enabled(bool enabled);
 bool ui_information_scene_acquire(ui_information_scene_scope* scope);
@@ -45,6 +57,8 @@ bool ui_information_scene_present_overlay(ui_information_scene_scope* scope,
 bool ui_information_scene_show_monster_recall(int r_idx,
     const monster_type* m_ptr, cptr prompt, bool overlay_dungeon,
     int* out_key);
+bool ui_information_scene_wait_event(ui_information_scene_event* out_event,
+    u16b ignored_flags);
 int ui_information_scene_wait_key(void);
 int ui_information_scene_wait_key_nonrepeat(void);
 int ui_information_scene_wait_key_with_wait_reason(u16b reason);

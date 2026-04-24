@@ -2078,13 +2078,22 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
     log_debug("Configuration loading complete. Total panes: %d", *pane_count);
 }
 
-void sdl_config_save(const char* filename, const struct sdl_config* cfg,
+bool sdl_config_save(const char* filename, const struct sdl_config* cfg,
                      const struct pane_config* pane_configs, int pane_count)
 {
-    cJSON* root = cJSON_CreateObject();
+    cJSON* root;
+
+    if (!filename || !filename[0] || !cfg
+        || (pane_count > 0 && !pane_configs))
+    {
+        log_error("Invalid SDL configuration save request");
+        return false;
+    }
+
+    root = cJSON_CreateObject();
     if (!root) {
         log_error("Failed to create JSON root object");
-        return;
+        return false;
     }
     
     // Create SDL settings object
@@ -2092,7 +2101,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
     if (!sdl) {
         cJSON_Delete(root);
         log_error("Failed to create SDL settings object");
-        return;
+        return false;
     }
     
     cJSON_AddNumberToObject(sdl, "layoutVersion",
@@ -2156,7 +2165,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
     if (!panes) {
         cJSON_Delete(root);
         log_error("Failed to create panes array");
-        return;
+        return false;
     }
     
     for (int i = 0; i < pane_count; i++) {
@@ -2370,7 +2379,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
     if (!json_string) {
         cJSON_Delete(root);
         log_error("Failed to print JSON");
-        return;
+        return false;
     }
     
     FILE* f = fopen(filename, "w");
@@ -2378,15 +2387,29 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
         log_error("Could not write JSON file: %s", filename);
         cJSON_free(json_string);
         cJSON_Delete(root);
-        return;
+        return false;
     }
     
-    fprintf(f, "%s\n", json_string);
-    fclose(f);
+    bool saved = true;
+
+    if (fprintf(f, "%s\n", json_string) < 0)
+    {
+        log_error("Failed writing JSON file: %s", filename);
+        saved = false;
+    }
+    if (fclose(f) != 0)
+    {
+        log_error("Failed closing JSON file after write: %s", filename);
+        saved = false;
+    }
     cJSON_free(json_string);
     cJSON_Delete(root);
+
+    if (!saved)
+        return false;
     
     log_info("Saved SDL configuration to: %s", filename);
+    return true;
 }
 
 void sdl_config_set_default_gamepad_bindings(struct sdl_config* cfg)

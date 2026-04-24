@@ -228,7 +228,8 @@ static bool pause_with_text_build_ui_scene(app_ui_scene* scene, int row, int col
         }
     }
 
-    return true;
+    return app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
+        "Space", "Continue");
 }
 
 static bool pause_with_text_scene_enter(ui_information_scene_scope* scope,
@@ -253,6 +254,26 @@ static bool pause_with_text_scene_enter(ui_information_scene_scope* scope,
 static bool pause_with_text_scene_present(const app_ui_scene* scene)
 {
     return scene ? ui_information_scene_present_ui(scene) : false;
+}
+
+static void pause_with_text_wait_continue(void)
+{
+    ui_information_scene_event event;
+
+    while (ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+    {
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+            || event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
+        {
+            return;
+        }
+    }
 }
 
 void pause_with_text(const char desc[][100], int row, int col,
@@ -282,7 +303,7 @@ void pause_with_text(const char desc[][100], int row, int col,
     {
         app_session* session = app_session_current();
 
-        (void)ui_information_scene_wait_key_nonrepeat();
+        pause_with_text_wait_continue();
         if (session)
             app_session_clear_inputs(session);
     }

@@ -559,6 +559,24 @@ static bool movement_present_prompt_scene(bool showing_primary,
     return ui_information_scene_present_ui(&scene);
 }
 
+static void movement_set_slot_tab_interactions(app_ui_panel* panel,
+    bool showing_primary)
+{
+    if (!panel)
+        return;
+
+    (void)app_ui_panel_set_tab_interaction(panel, 1,
+        APP_UI_WIDGET_ROLE_TAB, APP_UI_WIDGET_ACTION_SELECT,
+        APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+            | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+        showing_primary ? 0 : '\t', "Show primary bindings");
+    (void)app_ui_panel_set_tab_interaction(panel, 2,
+        APP_UI_WIDGET_ROLE_TAB, APP_UI_WIDGET_ACTION_SELECT,
+        APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+            | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+        showing_primary ? '\t' : 0, "Show secondary bindings");
+}
+
 static bool movement_present_ui_scene(
     const movement_slot_state slots[][MOVEMENT_SLOT_COUNT], int entry_count,
     bool showing_primary, int highlight, int top, bool dirty, u16b preset_id,
@@ -583,6 +601,7 @@ static bool movement_present_ui_scene(
     (void)app_ui_panel_add_tab(panel, 2,
         showing_primary ? TERM_SLATE : TERM_L_BLUE, !showing_primary,
         "Secondary");
+    movement_set_slot_tab_interactions(panel, showing_primary);
 
     if (top > 0)
         app_ui_panel_set_row_offset(panel, (s16b)top);

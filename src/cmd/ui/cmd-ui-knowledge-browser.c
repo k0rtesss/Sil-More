@@ -1230,6 +1230,152 @@ static bool knowledge_build_curse_browser_scene(app_ui_scene* scene, int page,
     return true;
 }
 
+static char knowledge_browser_scroll_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool knowledge_browser_command_to_key(
+    const app_ui_command* command, knowledge_browser_state* state, int* page,
+    int entry_cnt, bool has_groups, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !state || !page || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = knowledge_browser_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        if (target->widget_id >= KNOWLEDGE_PAGE_ARTEFACTS
+            && target->widget_id <= KNOWLEDGE_PAGE_CURSES)
+        {
+            *page = target->widget_id;
+            knowledge_set_last_page(*page);
+            state->tabs_focus = true;
+        }
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id < 0 || target->widget_id >= entry_cnt)
+            return true;
+
+        state->entry_cur[*page] = target->widget_id;
+        if (has_groups)
+            state->column[*page] = 1;
+        state->tabs_focus = false;
+
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
+            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
+        {
+            *out_key = 'r';
+            return true;
+        }
+
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = 'e';
+            return true;
+        case 2:
+            *out_key = 'i';
+            return true;
+        case 3:
+            *out_key = '6';
+            return true;
+        case 5:
+            *out_key = 'r';
+            return true;
+        case 6:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
+static int knowledge_browser_wait_input(knowledge_browser_state* state,
+    int* page, int entry_cnt, bool has_groups, bool* out_skip)
+{
+    ui_information_scene_event event;
+    char command_key = '\0';
+
+    if (out_skip)
+        *out_skip = false;
+
+    if (!ui_information_scene_wait_event(&event, 0))
+        return ESCAPE;
+
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        return event.key;
+
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+        && knowledge_browser_command_to_key(&event.command, state, page,
+            entry_cnt, has_groups, &command_key))
+    {
+        if (command_key)
+            return command_key;
+        if (out_skip)
+            *out_skip = true;
+        return 0;
+    }
+
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND && out_skip)
+        *out_skip = true;
+    return 0;
+}
+
 void do_cmd_knowledge_browser_page(int page)
 {
     ui_information_scene_scope info_scope;
@@ -1342,9 +1488,16 @@ void do_cmd_knowledge_browser_page(int page)
                 }
             }
 
-            ch = ui_information_scene_wait_key();
-            if (steamdeck_controls_active() && ch == steamdeck_back_key())
-                ch = ESCAPE;
+            {
+                bool skip_input = false;
+
+                ch = knowledge_browser_wait_input(&state, &page, artefact_cnt,
+                    true, &skip_input);
+                if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                    ch = ESCAPE;
+                if (skip_input)
+                    break;
+            }
 
             if (knowledge_handle_tab_navigation((char)ch, &page,
                     &state.tabs_focus,
@@ -1440,9 +1593,16 @@ void do_cmd_knowledge_browser_page(int page)
                 }
             }
 
-            ch = ui_information_scene_wait_key();
-            if (steamdeck_controls_active() && ch == steamdeck_back_key())
-                ch = ESCAPE;
+            {
+                bool skip_input = false;
+
+                ch = knowledge_browser_wait_input(&state, &page, object_cnt,
+                    true, &skip_input);
+                if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                    ch = ESCAPE;
+                if (skip_input)
+                    break;
+            }
 
             if (knowledge_handle_tab_navigation((char)ch, &page,
                     &state.tabs_focus,
@@ -1537,9 +1697,16 @@ void do_cmd_knowledge_browser_page(int page)
                 }
             }
 
-            ch = ui_information_scene_wait_key();
-            if (steamdeck_controls_active() && ch == steamdeck_back_key())
-                ch = ESCAPE;
+            {
+                bool skip_input = false;
+
+                ch = knowledge_browser_wait_input(&state, &page, monster_cnt,
+                    true, &skip_input);
+                if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                    ch = ESCAPE;
+                if (skip_input)
+                    break;
+            }
 
             if (knowledge_handle_tab_navigation((char)ch, &page,
                     &state.tabs_focus,
@@ -1610,9 +1777,16 @@ void do_cmd_knowledge_browser_page(int page)
                 }
             }
 
-            ch = ui_information_scene_wait_key();
-            if (steamdeck_controls_active() && ch == steamdeck_back_key())
-                ch = ESCAPE;
+            {
+                bool skip_input = false;
+
+                ch = knowledge_browser_wait_input(&state, &page, curse_cnt,
+                    false, &skip_input);
+                if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                    ch = ESCAPE;
+                if (skip_input)
+                    break;
+            }
 
             if (knowledge_handle_tab_navigation((char)ch, &page,
                     &state.tabs_focus,

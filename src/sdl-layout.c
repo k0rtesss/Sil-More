@@ -53,6 +53,8 @@ typedef struct sdl_pane_resize_handle {
 
 static sdl_pane_resize_capture g_pane_resize_capture;
 
+static void sdl_apply_config_internal(bool save_config);
+
 static bool sdl_rect_has_area(const SDL_Rect* rect)
 {
     return rect && rect->w > 0 && rect->h > 0;
@@ -870,13 +872,15 @@ bool sdl_pane_resize_handle_event(const SDL_Event* ev)
             {
                 g_pane_resize_capture.last_cells = cells;
                 g_pane_resize_capture.changed = true;
-                platform_apply_config();
+                sdl_apply_config_internal(false);
                 if (character_dungeon)
                     sdl_submit_legacy_input_byte(KTRL('R'));
             }
             return true;
         }
 
+        if (g_pane_resize_capture.changed)
+            (void)save_pane_config_to_json();
         sdl_pane_resize_capture_clear();
         g_state.need_present = true;
         return true;
@@ -1482,7 +1486,13 @@ bool save_pane_config_to_json(void)
     if (!config_file_path[0])
         return false;
 
-    sdl_config_save(config_file_path, &config, pane_config, pane_config_count);
+    if (!sdl_config_save(config_file_path, &config, pane_config,
+            pane_config_count))
+    {
+        log_error("Failed to save pane configuration to: %s",
+            config_file_path);
+        return false;
+    }
     log_info("Pane configuration saved to: %s", config_file_path);
     return true;
 }
@@ -2025,7 +2035,7 @@ int platform_max_scale(void)
     return max_scale;
 }
 
-void platform_apply_config(void)
+static void sdl_apply_config_internal(bool save_config)
 {
     if (!g_state.window) {
         log_warn("platform_apply_config: no window, skipping");
@@ -2048,7 +2058,13 @@ void platform_apply_config(void)
     resize(&screen);
     g_auto_aux_main_cell_h_override = 0;
     sdl_redraw_all_views();
-    (void)save_pane_config_to_json();
+    if (save_config)
+        (void)save_pane_config_to_json();
+}
+
+void platform_apply_config(void)
+{
+    sdl_apply_config_internal(true);
 }
 
 void platform_reset_layout_defaults(void)

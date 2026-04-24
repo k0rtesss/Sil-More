@@ -466,12 +466,13 @@ static bool item_selector_build_ui_scene(app_ui_scene* scene, cptr prompt,
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 760, 1220);
-    app_ui_panel_set_title(panel, TERM_L_WHITE,
-        (prompt && prompt[0]) ? prompt : "Select item");
+    app_ui_panel_set_title(panel, TERM_L_WHITE, "Select item");
     app_ui_panel_set_subtitle(panel, TERM_SLATE,
         item_selector_mode_name(current_mode));
     item_selector_add_tabs(panel, current_mode, use_inven, use_equip, use_floor);
 
+    if (prompt && prompt[0])
+        (void)app_ui_panel_add_body_line(panel, TERM_L_BLUE, prompt);
     SDL_strlcpy(controls, "Enter/Space selects, x examines, 8/2 moves.",
         sizeof(controls));
     if (available_modes > 1)
@@ -659,6 +660,152 @@ static void item_selector_move_highlight(item_selector_visible_state* state,
     state->highlight_row = (state->highlight_row + count + dir) % count;
 }
 
+static int item_selector_visible_count(const item_selector_visible_state* state,
+    int current_mode)
+{
+    if (!state)
+        return 0;
+    if (current_mode == (USE_INVEN))
+        return state->vis_inven_cnt;
+    if (current_mode == (USE_EQUIP))
+        return state->vis_equip_cnt;
+    if (current_mode == (USE_FLOOR))
+        return state->vis_floor_cnt;
+
+    return 0;
+}
+
+static bool item_selector_set_highlight_row(item_selector_visible_state* state,
+    int current_mode, int row)
+{
+    int count = item_selector_visible_count(state, current_mode);
+
+    if (!state || row < 0 || row >= count)
+        return false;
+
+    state->highlight_row = row;
+    state->highlight_active = true;
+    return true;
+}
+
+static bool item_selector_set_mode(int mode, bool use_inven, bool use_equip,
+    bool use_floor)
+{
+    if (!item_selector_mode_enabled(mode, use_inven, use_equip, use_floor))
+        return false;
+
+    p_ptr->command_wrk = mode;
+    return true;
+}
+
+static char item_selector_scroll_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool item_selector_command_to_key(const app_ui_command* command,
+    item_selector_visible_state* state, bool use_inven, bool use_equip,
+    bool use_floor, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = item_selector_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (!item_selector_set_mode(target->widget_id, use_inven, use_equip,
+                use_floor))
+        {
+            bell("Cannot switch item selector!");
+        }
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        (void)item_selector_set_highlight_row(state, p_ptr->command_wrk,
+            target->payload0);
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
+            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
+        {
+            *out_key = 'x';
+            return true;
+        }
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '\r';
+            return true;
+        case 2:
+            *out_key = ' ';
+            return true;
+        case 3:
+            *out_key = 'x';
+            return true;
+        case 5:
+            *out_key = '/';
+            return true;
+        case 6:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static bool item_selector_highlighted_item(const item_selector_visible_state* state,
     int current_mode, const int* floor_list, int* out_item)
 {
@@ -824,7 +971,31 @@ static bool item_selector_run_snapshot_loop(int* cp, cptr pmt, bool use_inven,
             }
         }
 
-        which = (char)ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+
+            which = '\0';
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                which = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                which = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && item_selector_command_to_key(&event.command,
+                    &visible_state, use_inven, use_equip, use_floor, &which)
+                && !which)
+            {
+                continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && !which)
+            {
+                continue;
+            }
+        }
 
         switch (which)
         {

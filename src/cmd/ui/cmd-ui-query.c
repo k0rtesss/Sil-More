@@ -298,6 +298,80 @@ static bool query_symbol_build_choice_scene(app_ui_scene* scene, cptr summary,
     return true;
 }
 
+static char query_symbol_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '8' : '2';
+
+    return '\0';
+}
+
+static bool query_symbol_command_to_key(const app_ui_command* command,
+    int* selected, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !selected || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = query_symbol_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id >= 0
+            && target->widget_id < (int)N_ELEMENTS(query_symbol_choice_rows))
+        {
+            *selected = target->widget_id;
+        }
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 2:
+            *out_key = '\r';
+            return true;
+        case 4:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool query_symbol_snapshot_choose_mode(cptr summary, int match_count,
     char* out_choice)
 {
@@ -327,7 +401,32 @@ static bool query_symbol_snapshot_choose_mode(cptr summary, int match_count,
             return true;
         }
 
-        ch = ui_information_scene_wait_key_nonrepeat();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && query_symbol_command_to_key(&event.command, &selected,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
 

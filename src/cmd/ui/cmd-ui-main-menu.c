@@ -78,6 +78,25 @@ static char main_menu_read_key(void)
         APP_WAIT_REASON_LIST_SELECTION);
 }
 
+static void main_menu_wait_close_event(void)
+{
+    ui_information_scene_event event;
+
+    while (ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+    {
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+            || event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
+        {
+            return;
+        }
+    }
+}
+
 static bool main_menu_choice_is_disabled(int choice)
 {
     return (choice == MAIN_MENU_SAVE)
@@ -244,7 +263,7 @@ static void main_menu_about(void)
         if (main_menu_about_build_ui_scene(&scene)
             && ui_information_scene_present_ui(&scene))
         {
-            (void)ui_information_scene_wait_key_nonrepeat();
+            main_menu_wait_close_event();
             ui_information_scene_leave(&scope);
         }
         else
@@ -1500,7 +1519,44 @@ static bool hint_message_show_ui_scene(int index, int* look_y,
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key_nonrepeat();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = '\0';
+            if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                const app_ui_widget_ref* target = &event.command.target;
+
+                if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+                    || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+                {
+                    command_key = ESCAPE;
+                }
+                else if (target->role == APP_UI_WIDGET_ROLE_BUTTON
+                    && event.command.kind != APP_UI_COMMAND_KIND_FOCUS)
+                {
+                    if (target->widget_id == 1)
+                        command_key = 'l';
+                    else if (target->widget_id == 2)
+                        command_key = 'h';
+                    else if (target->widget_id == 3)
+                        command_key = ESCAPE;
+                }
+
+                if (!command_key)
+                    continue;
+                ch = command_key;
+            }
+        }
         if (!show_all_tips && (ch == 'l' || ch == 'L')
             && hint_message_has_source(&meta))
         {
@@ -1542,6 +1598,98 @@ void show_hint_message_screen(int index)
     }
 }
 
+static char hint_message_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+
+    return '\0';
+}
+
+static bool hint_message_command_to_key(const app_ui_command* command,
+    int active_n, int* sel, bool show_all_tips, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !sel || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = hint_message_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id < 0 || target->widget_id >= active_n)
+            return true;
+
+        *sel = target->widget_id;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
+            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
+        {
+            *out_key = show_all_tips ? '\r' : 'l';
+            return true;
+        }
+
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '\r';
+            return true;
+        case 3:
+            *out_key = 'l';
+            return true;
+        case 4:
+            *out_key = 'h';
+            return true;
+        case 5:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
     int* out_look_y, int* out_look_x)
 {
@@ -1566,7 +1714,7 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
     while (1)
     {
         app_ui_scene scene;
-        char ch;
+        char ch = '\0';
         int active_n = show_all_tips ? tip_n : n;
 
         if (active_n > 0)
@@ -1589,7 +1737,37 @@ static bool do_cmd_hint_messages_information_scene(bool* out_pending_look,
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+            bool skip_input = false;
+
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && hint_message_command_to_key(&event.command, active_n, &sel,
+                    show_all_tips, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    skip_input = true;
+            }
+            else
+            {
+                skip_input = true;
+            }
+
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+            if (skip_input)
+                continue;
+        }
 
         if (ch == ESCAPE)
             break;
@@ -1848,7 +2026,77 @@ static bool do_cmd_messages_information_scene(void)
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = '\0';
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                const app_ui_widget_ref* target = &event.command.target;
+
+                if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+                    || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+                {
+                    command_key = ESCAPE;
+                }
+                else if (event.command.kind == APP_UI_COMMAND_KIND_SCROLL
+                    || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+                {
+                    if (ABS(event.command.scroll_y)
+                        >= ABS(event.command.scroll_x)
+                        && event.command.scroll_y != 0)
+                    {
+                        command_key =
+                            (event.command.scroll_y > 0) ? '8' : '2';
+                    }
+                    else if (event.command.scroll_x != 0)
+                    {
+                        command_key =
+                            (event.command.scroll_x < 0) ? '4' : '6';
+                    }
+                }
+                else if (target->role == APP_UI_WIDGET_ROLE_BUTTON
+                    && event.command.kind != APP_UI_COMMAND_KIND_FOCUS)
+                {
+                    switch (target->widget_id)
+                    {
+                    case 1:
+                        command_key = 'p';
+                        break;
+                    case 2:
+                        command_key = 'n';
+                        break;
+                    case 3:
+                        command_key = '6';
+                        break;
+                    case 4:
+                        command_key = '=';
+                        break;
+                    case 5:
+                        command_key = '/';
+                        break;
+                    case 6:
+                        command_key = ESCAPE;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+
+                if (!command_key)
+                    continue;
+                ch = command_key;
+            }
+        }
 
         if (ch == ESCAPE)
             break;

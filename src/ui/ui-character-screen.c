@@ -40,6 +40,12 @@
 #define TUTORIAL_BROWSER_MAX_WIDTH 1800
 #define TUTORIAL_BROWSER_MAX_ROW_RUNS 16
 
+typedef enum tutorial_footer_action {
+    TUTORIAL_ACTION_PREV = 1,
+    TUTORIAL_ACTION_NEXT = 2,
+    TUTORIAL_ACTION_EXIT = 3
+} tutorial_footer_action;
+
 static byte format_deep_call_value(char* buf, size_t buflen, int max_width)
 {
     int base_increment = 0;
@@ -406,6 +412,87 @@ static bool tutorial_render_target_finish(tutorial_render_target* target)
         return false;
 
     return tutorial_render_target_flush_active_row(target) && !target->failed;
+}
+
+static bool tutorial_add_footer_actions(app_ui_panel* panel, int page,
+    bool steamdeck)
+{
+    if (!panel)
+        return false;
+
+    if (steamdeck)
+    {
+        char next_label[APP_UI_KEY_MAX];
+        char back_label[APP_UI_KEY_MAX];
+
+        tutorial_prompt_label(steamdeck_confirm_key(), "A", next_label,
+            sizeof(next_label));
+        tutorial_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        if (page > 0
+            && !app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_PREV,
+                TERM_WHITE, true, "D-Left", "Previous"))
+        {
+            return false;
+        }
+        return app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_NEXT,
+            TERM_L_BLUE, true, next_label, "Next")
+            && app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_EXIT,
+                TERM_WHITE, true, back_label, "Exit");
+    }
+
+    if (page > 0
+        && !app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_PREV,
+            TERM_WHITE, true, "4", "Previous"))
+    {
+        return false;
+    }
+    return app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_NEXT,
+        TERM_L_BLUE, true, "6", "Next")
+        && app_ui_panel_add_footer_action(panel, TUTORIAL_ACTION_EXIT,
+            TERM_WHITE, true, "Esc", "Exit");
+}
+
+static bool tutorial_command_to_key(const app_ui_command* command,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case TUTORIAL_ACTION_PREV:
+            *out_key = '4';
+            return true;
+        case TUTORIAL_ACTION_NEXT:
+            *out_key = '6';
+            return true;
+        case TUTORIAL_ACTION_EXIT:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void tutorial_put_centered(tutorial_render_target* target, int row,
@@ -1624,6 +1711,7 @@ void display_character_tutorial(void)
         }
 
         if (!tutorial_render_target_finish(&target)
+            || !tutorial_add_footer_actions(ui_panel, page, steamdeck)
             || !ui_information_scene_present_ui(&ui_scene))
         {
             ui_information_scene_leave(&info_scope);
@@ -1632,7 +1720,31 @@ void display_character_tutorial(void)
             return;
         }
 
-        ch = (char)ui_information_scene_wait_key_nonrepeat();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && tutorial_command_to_key(&event.command, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck && ch == steamdeck_back_key())
             ch = ESCAPE;
 

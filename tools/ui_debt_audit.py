@@ -40,6 +40,7 @@ PLATFORM_SDL_GLOBS = (
 )
 TERMINAL_MODEL_SCOPE = ("src/**/*.c", "src/**/*.h")
 TERMINAL_KERNEL_SCOPE = ("src/**/*.c", "src/**/*.h")
+UIX_SEMANTIC_SCOPE = ("src/**/*.c",)
 MOVEMENT_INPUT_SCOPE = (
     "src/externs.h",
     "src/support/input.c",
@@ -269,6 +270,34 @@ TERMINAL_KERNEL_METRICS = (
     ),
 )
 
+UIX_SEMANTIC_METRICS = (
+    MetricSpec(
+        key="information_scene_wait_key_consumers",
+        label="information-scene wait_key consumers",
+        pattern=re.compile(
+            r"\bui_information_scene_wait_key(?:_nonrepeat|_with_wait_reason|_hidden_with_wait_reason)?\s*\("
+        ),
+        exclude_paths=("src/ui/ui-information-scene.c", "src/ui/ui-semantic-scene.c"),
+        notes="Tracks screens still consuming key-shaped choices instead of ui_information_scene_wait_event() widget commands.",
+    ),
+    MetricSpec(
+        key="action_key_fallback_reads",
+        label="action_key fallback field reads",
+        pattern=re.compile(
+            r"\b[A-Za-z_][A-Za-z0-9_]*->action_key\b|\bevent\.command\.target\.action_key\b"
+        ),
+        notes="Tracks compatibility fallback reads that should shrink as screens consume semantic widget commands directly.",
+    ),
+    MetricSpec(
+        key="legacy_command_bridge_queue",
+        label="legacy command bridge queue calls",
+        pattern=re.compile(
+            r"\b(?:sdl_submit_legacy_input_byte|ui_information_scene_queue_legacy_key)\s*\("
+        ),
+        notes="Tracks the legacy-byte bridge still used as compatibility glue for hybrid UI screens.",
+    ),
+)
+
 AUDITS = (
     AuditSpec(
         key="ui0",
@@ -298,6 +327,13 @@ AUDITS = (
         scope=TERMINAL_KERNEL_SCOPE,
         metrics=TERMINAL_KERNEL_METRICS,
         notes="Zero-debt guardrail against reintroducing the internal SDL terminal kernel or export-mirror compatibility state.",
+    ),
+    AuditSpec(
+        key="uix_semantic",
+        label="UIX semantic dispatch audit",
+        scope=UIX_SEMANTIC_SCOPE,
+        metrics=UIX_SEMANTIC_METRICS,
+        notes="Progress guardrail for replacing key-shaped UI screen ownership with semantic widget-command consumption.",
     ),
 )
 AUDITS_BY_KEY = {audit.key: audit for audit in AUDITS}

@@ -646,6 +646,94 @@ static void score_add_browser_detail(app_ui_panel* panel,
             entry->escaped[0] == 't' ? TERM_GREEN : TERM_SLATE, buf);
     }
 }
+
+static char score_ui_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool score_pages_command_to_key(const app_ui_command* command,
+    int count, int start_index, int entries_per_page, bool has_more,
+    int* highlight_index, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = score_ui_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (highlight_index && target->widget_id >= 0
+            && target->widget_id < count
+            && target->widget_id >= start_index
+            && target->widget_id < start_index + entries_per_page)
+        {
+            *highlight_index = target->widget_id;
+        }
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = 's';
+            return true;
+        case 2:
+            *out_key = 'l';
+            return true;
+        case 3:
+            *out_key = ESCAPE;
+            return true;
+        case 4:
+            *out_key = has_more ? '\r' : ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static char display_scores_pages_information(const high_score* entries,
     int count, int highlight_index, score_view_order order, bool detailed,
     int page_size)
@@ -828,7 +916,33 @@ static char display_scores_pages_information(const high_score* entries,
                 return 0;
             }
 
-            ch = ui_information_scene_wait_key();
+            {
+                ui_information_scene_event event;
+                char command_key = '\0';
+
+                ch = 0;
+                if (!ui_information_scene_wait_event(&event, 0))
+                {
+                    ch = ESCAPE;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+                {
+                    ch = event.key;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                    && score_pages_command_to_key(&event.command, count,
+                        start_index, entries_per_page, has_more,
+                        &highlight_index, &command_key))
+                {
+                    ch = command_key;
+                    if (!ch)
+                        continue;
+                }
+                else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+                {
+                    continue;
+                }
+            }
 
             if (steamdeck)
             {
@@ -1236,6 +1350,76 @@ static int collect_run_history(run_history_entry* out, int capacity)
     return count;
 }
 
+static bool run_history_list_command_to_key(const app_ui_command* command,
+    int count, int page_offset, int rows, int* highlight, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !highlight || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = score_ui_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id >= 0 && target->widget_id < count
+            && target->widget_id >= page_offset
+            && target->widget_id < page_offset + rows)
+        {
+            *highlight = target->widget_id;
+        }
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '\r';
+            return true;
+        case 4:
+            *out_key = 'r';
+            return true;
+        case 5:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static bool do_cmd_run_history_information(run_history_entry* entries, int count)
 {
     ui_information_scene_scope scope;
@@ -1442,7 +1626,32 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             return false;
         }
 
-        ch = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && run_history_list_command_to_key(&event.command, count,
+                    page_offset, rows, &highlight, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck) {
             if (ch == steamdeck_back_key())
                 ch = ESCAPE;

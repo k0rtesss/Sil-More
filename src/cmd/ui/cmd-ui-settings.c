@@ -535,6 +535,48 @@ static bool settings_ui_present_text_prompt_scene(cptr title, cptr prompt,
     return ui_information_scene_present_ui(&scene);
 }
 
+static bool settings_ui_prompt_string_command_to_key(
+    const app_ui_command* command, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '\r';
+            return true;
+        case 2:
+            *out_key = '\b';
+            return true;
+        case 3:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool settings_ui_prompt_string(cptr title, cptr prompt, cptr note,
     char* buf, size_t len)
 {
@@ -566,7 +608,32 @@ bool settings_ui_prompt_string(cptr title, cptr prompt, cptr note,
             return false;
         }
 
-        ch = (char)ui_information_scene_wait_key_nonrepeat();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = '\0';
+            if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && settings_ui_prompt_string_command_to_key(&event.command,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         used = strlen(work);
 
         if (ch == ESCAPE)
@@ -639,10 +706,10 @@ app_ui_panel* settings_browser_scene_begin(app_ui_scene* scene,
 }
 
 static bool settings_browser_add_label_row(app_ui_panel* panel, s16b id,
-    byte attr, bool enabled, bool selected, cptr label)
+    byte attr, bool enabled, bool selected, cptr key, cptr label)
 {
     return app_ui_panel_add_row_ex(panel, id, attr, attr, 0, '\0', enabled,
-        selected, "", label ? label : "", "");
+        selected, key ? key : "", label ? label : "", "");
 }
 
 bool settings_browser_add_pair_row(app_ui_panel* panel, s16b id,
@@ -747,9 +814,13 @@ static bool settings_choice_present_ui_scene(cptr title,
     {
         byte attr = entries[i].disabled ? TERM_L_DARK
             : ((i == selected) ? TERM_L_BLUE : TERM_WHITE);
+        char key[2] = { '\0', '\0' };
+
+        if (entries[i].hotkey)
+            key[0] = entries[i].hotkey;
 
         if (!settings_browser_add_label_row(panel, (s16b)entries[i].id, attr,
-                !entries[i].disabled, i == selected, entries[i].label))
+                !entries[i].disabled, i == selected, key, entries[i].label))
         {
             return false;
         }
@@ -1317,6 +1388,87 @@ static void option_apply_side_effects(int opt)
         p_ptr->redraw |= (PR_MAP);
 }
 
+static char option_menu_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool option_menu_command_to_key(const app_ui_command* command,
+    int n, int* k, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !k || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = option_menu_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id >= 0 && target->widget_id < n)
+            *k = target->widget_id;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = ' ';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 2:
+            *out_key = '6';
+            return true;
+        case 3:
+            *out_key = ' ';
+            return true;
+        case 4:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 extern void do_cmd_options_aux(int page, cptr info)
 {
     char ch;
@@ -1382,9 +1534,38 @@ extern void do_cmd_options_aux(int page, cptr info)
             return;
         }
 
-        /* Get a key */
+        /* Get a key or semantic row/footer command. */
         inkey_set_cursor_hidden(true);
-        ch = settings_ui_read_key(false);
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = '\0';
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && option_menu_command_to_key(&event.command, n, &k,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                {
+                    inkey_set_cursor_hidden(false);
+                    continue;
+                }
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                inkey_set_cursor_hidden(false);
+                continue;
+            }
+        }
         inkey_set_cursor_hidden(false);
 
         /*

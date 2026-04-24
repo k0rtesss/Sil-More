@@ -566,6 +566,78 @@ static bool knowledge_build_root_menu_scene(app_ui_scene* scene, int selected)
     return true;
 }
 
+static char knowledge_root_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+
+    return '\0';
+}
+
+static bool knowledge_root_command_to_key(const app_ui_command* command,
+    int* selected, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !selected || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = knowledge_root_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id < 1 || target->widget_id > 6)
+            return true;
+
+        *selected = target->widget_id - 1;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = (char)('0' + target->widget_id);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = (char)('1' + *selected);
+            return true;
+        case 2:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
  * Display kill counts
  */
@@ -627,7 +699,7 @@ void do_cmd_knowledge_kills(void)
 void do_cmd_knowledge(void)
 {
     ui_information_scene_scope info_scope;
-    char ch;
+        char ch = '\0';
     int selected = 0;
 
     /* File type is "TEXT" */
@@ -652,9 +724,37 @@ void do_cmd_knowledge(void)
             goto cleanup;
         }
 
-        ch = (char)ui_information_scene_wait_key();
-        if (steamdeck_controls_active() && ch == steamdeck_back_key())
-            ch = ESCAPE;
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+            bool skip_input = false;
+
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && knowledge_root_command_to_key(&event.command, &selected,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    skip_input = true;
+            }
+            else
+            {
+                skip_input = true;
+            }
+
+            if (steamdeck_controls_active() && ch == steamdeck_back_key())
+                ch = ESCAPE;
+            if (skip_input)
+                continue;
+        }
 
         {
             int d = target_dir(ch);

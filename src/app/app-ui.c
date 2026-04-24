@@ -40,6 +40,18 @@ static s16b app_ui_legacy_key_from_label(cptr key)
     {
         return '\r';
     }
+    if (prefix(key, "Tab") || prefix(key, "tab"))
+        return '\t';
+    if (prefix(key, "Bksp") || prefix(key, "Backspace")
+        || prefix(key, "bksp") || prefix(key, "backspace"))
+    {
+        return '\b';
+    }
+    if (prefix(key, "Del") || prefix(key, "Delete")
+        || prefix(key, "del") || prefix(key, "delete"))
+    {
+        return 127;
+    }
     if (prefix(key, "Esc") || prefix(key, "ESC")
         || strstr(key, "Esc") || strstr(key, "ESC"))
     {
@@ -177,6 +189,14 @@ void app_ui_panel_set_icon(app_ui_panel* panel, byte attr, char ch)
     panel->icon_char = ch;
 }
 
+void app_ui_panel_set_id(app_ui_panel* panel, cptr id)
+{
+    if (!panel)
+        return;
+
+    app_ui_copy_text(panel->id, sizeof(panel->id), id);
+}
+
 void app_ui_panel_set_title(app_ui_panel* panel, byte attr, cptr text)
 {
     if (!panel)
@@ -184,6 +204,8 @@ void app_ui_panel_set_title(app_ui_panel* panel, byte attr, cptr text)
 
     panel->title_attr = attr;
     app_ui_copy_text(panel->title, sizeof(panel->title), text);
+    if (!panel->id[0])
+        app_ui_panel_set_id(panel, text);
 }
 
 void app_ui_panel_set_subtitle(app_ui_panel* panel, byte attr, cptr text)

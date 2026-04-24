@@ -551,6 +551,27 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         };
         int detail_y = content_top;
 
+        if (detail_clip.w > 0 && detail_clip.h > 0)
+        {
+            SDL_FRect detail_hit_rect = {
+                (float)detail_clip.x,
+                (float)detail_clip.y,
+                (float)detail_clip.w,
+                (float)detail_clip.h
+            };
+            cptr detail_label = ui_panel->detail_title[0]
+                ? ui_panel->detail_title
+                : (ui_panel->title[0] ? ui_panel->title : "Detail");
+
+            (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+                SDL_MENU_HIT_DETAIL_ID, 0,
+                APP_UI_WIDGET_ROLE_SCROLL_REGION,
+                APP_UI_WIDGET_ACTION_SCROLL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                APP_UI_ITEM_FLAG_NONE, -1, 0, ui_panel->detail_line_count,
+                &detail_hit_rect, detail_label, "");
+        }
         SDL_SetRenderClipRect(g_state.renderer, &detail_clip);
         for (i = 0; i < ui_panel->detail_line_count; i++)
         {

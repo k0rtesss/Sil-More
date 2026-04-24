@@ -214,6 +214,82 @@
         "src/**/*.c",
         "src/**/*.h"
       ]
+    },
+    "uix_semantic": {
+      "label": "UIX semantic dispatch audit",
+      "metrics": {
+        "action_key_fallback_reads": {
+          "file_matches": {
+            "src/cmd/ui/cmd-ui-abilities-scenes.c": 2,
+            "src/cmd/ui/cmd-ui-knowledge-browser.c": 2,
+            "src/cmd/ui/cmd-ui-knowledge-supplies.c": 2,
+            "src/cmd/ui/cmd-ui-main-menu.c": 2,
+            "src/cmd/ui/cmd-ui-settings.c": 2,
+            "src/object/object-ui-enhanced.c": 2,
+            "src/object/object-ui-identify.c": 2,
+            "src/object/object-ui-select.c": 2,
+            "src/score/score_ui-run-history.c": 2,
+            "src/score/score_ui.c": 4,
+            "src/sdl-menu/sdl-menu-pointer.c": 5,
+            "src/sdl-menu/sdl-scene-menu-base.c": 1,
+            "src/ui/ui-information-scene.c": 3
+          },
+          "files": 13,
+          "label": "action_key fallback field reads",
+          "matches": 31,
+          "notes": "Tracks compatibility fallback reads that should shrink as screens consume semantic widget commands directly."
+        },
+        "information_scene_wait_key_consumers": {
+          "file_matches": {
+            "src/app/app-scene-birth-blitz.c": 3,
+            "src/app/app-scene-birth-ui.c": 5,
+            "src/cave/cave-map-ui.c": 1,
+            "src/cmd/debug/wizard1.c": 1,
+            "src/cmd/ui/cmd-ui-look.c": 1,
+            "src/cmd/ui/cmd-ui-main-menu.c": 1,
+            "src/cmd/ui/cmd-ui-nearby.c": 1,
+            "src/cmd/ui/cmd-ui-settings.c": 1,
+            "src/init/init-flags.c": 1,
+            "src/init/init2.c": 1,
+            "src/level-generation/level-generation-screen.c": 1,
+            "src/melee/melee-combat-display.c": 1,
+            "src/metarun/metarun-ui-history.c": 3,
+            "src/metarun/metarun-ui-stats.c": 8,
+            "src/metarun/metarun.c": 4,
+            "src/object/object-info.c": 1,
+            "src/quest/quest-ui.c": 3,
+            "src/quest/quest-varda.c": 1,
+            "src/quest/thrall_quest.c": 1,
+            "src/runtime/runtime-dungeon-presentation.c": 1,
+            "src/spell/spell-utility.c": 2,
+            "src/support/message.c": 2,
+            "src/support/prompt.c": 1,
+            "src/ui/smithing/ui-smithing-screen.c": 1,
+            "src/ui/targeting-interactive.c": 1
+          },
+          "files": 25,
+          "label": "information-scene wait_key consumers",
+          "matches": 47,
+          "notes": "Tracks screens still consuming key-shaped choices instead of ui_information_scene_wait_event() widget commands."
+        },
+        "legacy_command_bridge_queue": {
+          "file_matches": {
+            "src/main-sdl.c": 8,
+            "src/sdl-layout.c": 1,
+            "src/sdl-menu/sdl-menu-pointer.c": 1,
+            "src/sdl-touch.c": 4,
+            "src/ui/ui-information-scene.c": 4
+          },
+          "files": 5,
+          "label": "legacy command bridge queue calls",
+          "matches": 18,
+          "notes": "Tracks the legacy-byte bridge still used as compatibility glue for hybrid UI screens."
+        }
+      },
+      "notes": "Progress guardrail for replacing key-shaped UI screen ownership with semantic widget-command consumption.",
+      "scope": [
+        "src/**/*.c"
+      ]
     }
   },
   "metrics": {

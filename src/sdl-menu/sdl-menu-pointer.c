@@ -51,6 +51,7 @@ typedef struct sdl_menu_tooltip_state {
 
 typedef struct sdl_menu_panel_drag_capture {
     bool active;
+    bool changed;
     u16b device;
     u16b button;
     SDL_FingerID finger_id;
@@ -58,6 +59,8 @@ typedef struct sdl_menu_panel_drag_capture {
     float start_y;
     int start_offset_x;
     int start_offset_y;
+    int current_offset_x;
+    int current_offset_y;
     char overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
 } sdl_menu_panel_drag_capture;
 
@@ -522,11 +525,48 @@ static bool sdl_menu_panel_drag_target(const sdl_menu_hit_target* target)
         && target->action == APP_UI_WIDGET_ACTION_DRAG;
 }
 
+static void sdl_menu_panel_overlay_ids_for_target(
+    const sdl_menu_hit_target* target, char* overlay_id, size_t overlay_id_sz,
+    char* legacy_id, size_t legacy_id_sz)
+{
+    if (overlay_id && overlay_id_sz)
+        overlay_id[0] = '\0';
+    if (legacy_id && legacy_id_sz)
+        legacy_id[0] = '\0';
+    if (!target)
+        return;
+
+    sdl_menu_overlay_panel_id(target->scene_kind, target->panel_index,
+        target->panel_style, target->label, overlay_id, overlay_id_sz);
+    sdl_menu_overlay_panel_id(target->scene_kind, target->panel_index,
+        target->panel_style, NULL, legacy_id, legacy_id_sz);
+}
+
+static void sdl_menu_panel_reset_offset(const sdl_menu_hit_target* target)
+{
+    char overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+    char legacy_overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+
+    if (!sdl_menu_panel_drag_target(target))
+        return;
+
+    sdl_menu_panel_overlay_ids_for_target(target, overlay_id,
+        sizeof(overlay_id), legacy_overlay_id, sizeof(legacy_overlay_id));
+    if (overlay_id[0])
+        sdl_menu_overlay_panel_set_offset(overlay_id, 0, 0, false);
+    if (legacy_overlay_id[0] && !streq(legacy_overlay_id, overlay_id))
+        sdl_menu_overlay_panel_set_offset(legacy_overlay_id, 0, 0, false);
+    (void)save_pane_config_to_json();
+    g_state.need_present = true;
+}
+
 static void sdl_menu_panel_drag_begin(const sdl_menu_hit_target* target,
     u16b device, u16b button, SDL_FingerID finger_id, float x, float y)
 {
     int offset_x = 0;
     int offset_y = 0;
+    bool pinned = false;
+    char legacy_overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
 
     if (!target)
         return;
@@ -538,14 +578,33 @@ static void sdl_menu_panel_drag_begin(const sdl_menu_hit_target* target,
     g_menu_panel_drag_capture.finger_id = finger_id;
     g_menu_panel_drag_capture.start_x = x;
     g_menu_panel_drag_capture.start_y = y;
-    sdl_menu_overlay_panel_id(target->scene_kind, target->panel_index,
-        target->panel_style, target->label,
+    sdl_menu_panel_overlay_ids_for_target(target,
         g_menu_panel_drag_capture.overlay_id,
-        sizeof(g_menu_panel_drag_capture.overlay_id));
+        sizeof(g_menu_panel_drag_capture.overlay_id),
+        legacy_overlay_id, sizeof(legacy_overlay_id));
     (void)sdl_menu_overlay_panel_get_offset(
-        g_menu_panel_drag_capture.overlay_id, &offset_x, &offset_y, NULL);
+        g_menu_panel_drag_capture.overlay_id, &offset_x, &offset_y, &pinned);
+    if (!pinned && !streq(g_menu_panel_drag_capture.overlay_id,
+            legacy_overlay_id))
+    {
+        (void)sdl_menu_overlay_panel_get_offset(
+            legacy_overlay_id, &offset_x, &offset_y, &pinned);
+        if (pinned)
+        {
+            sdl_menu_overlay_panel_set_offset(
+                g_menu_panel_drag_capture.overlay_id, offset_x, offset_y,
+                true);
+        }
+    }
+    if (!pinned)
+    {
+        offset_x = 0;
+        offset_y = 0;
+    }
     g_menu_panel_drag_capture.start_offset_x = offset_x;
     g_menu_panel_drag_capture.start_offset_y = offset_y;
+    g_menu_panel_drag_capture.current_offset_x = offset_x;
+    g_menu_panel_drag_capture.current_offset_y = offset_y;
 }
 
 static void sdl_menu_panel_drag_clear(void)
@@ -599,9 +658,20 @@ static bool sdl_menu_panel_drag_handle_event(const SDL_Event* ev)
 
         sdl_menu_overlay_panel_set_offset(
             g_menu_panel_drag_capture.overlay_id, next_x, next_y, true);
-        (void)save_pane_config_to_json();
+        g_menu_panel_drag_capture.current_offset_x = next_x;
+        g_menu_panel_drag_capture.current_offset_y = next_y;
+        g_menu_panel_drag_capture.changed = true;
         g_state.need_present = true;
         return true;
+    }
+
+    if (g_menu_panel_drag_capture.changed)
+    {
+        sdl_menu_overlay_panel_set_offset(
+            g_menu_panel_drag_capture.overlay_id,
+            g_menu_panel_drag_capture.current_offset_x,
+            g_menu_panel_drag_capture.current_offset_y, true);
+        (void)save_pane_config_to_json();
     }
 
     sdl_menu_panel_drag_clear();
@@ -665,6 +735,13 @@ bool sdl_menu_pointer_handle_event(const SDL_Event* ev)
             0.0f, ev->button.button, ev->button.clicks);
         if (!target)
             return false;
+        if (ev->button.button == SDL_BUTTON_RIGHT
+            && sdl_menu_panel_drag_target(target))
+        {
+            sdl_menu_panel_reset_offset(target);
+            sdl_menu_pointer_note_focus(target, APP_INPUT_DEVICE_POINTER, true);
+            return true;
+        }
         if (ev->button.button == SDL_BUTTON_LEFT
             && sdl_menu_panel_drag_target(target))
         {

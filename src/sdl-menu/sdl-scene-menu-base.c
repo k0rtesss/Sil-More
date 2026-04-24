@@ -30,6 +30,7 @@ typedef struct sdl_menu_hit_registry {
     u16b panel_layer;
     u16b panel_style;
     u16b focus_area;
+    s16b focus_id;
 } sdl_menu_hit_registry;
 
 static sdl_menu_hit_registry g_sdl_menu_hit_registry;
@@ -48,6 +49,7 @@ void sdl_menu_hit_reset(int origin_x, int origin_y)
     memset(&g_sdl_menu_hit_registry, 0, sizeof(g_sdl_menu_hit_registry));
     g_sdl_menu_hit_registry.origin_x = origin_x;
     g_sdl_menu_hit_registry.origin_y = origin_y;
+    g_sdl_menu_hit_registry.focus_id = -1;
 }
 
 void sdl_menu_hit_set_scene(u16b scene_kind)
@@ -63,6 +65,7 @@ void sdl_menu_hit_begin_panel(u16b panel_index,
     g_sdl_menu_hit_registry.panel_style = panel ? panel->style : 0;
     g_sdl_menu_hit_registry.focus_area = panel ? panel->focus_area
         : APP_UI_FOCUS_NONE;
+    g_sdl_menu_hit_registry.focus_id = panel ? panel->focus_id : -1;
 }
 
 void sdl_menu_hit_end_panel(void)
@@ -71,6 +74,7 @@ void sdl_menu_hit_end_panel(void)
     g_sdl_menu_hit_registry.panel_layer = 0;
     g_sdl_menu_hit_registry.panel_style = 0;
     g_sdl_menu_hit_registry.focus_area = APP_UI_FOCUS_NONE;
+    g_sdl_menu_hit_registry.focus_id = -1;
 }
 
 static void sdl_menu_hit_note_target_size(
@@ -132,6 +136,7 @@ bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
     target->panel_layer = g_sdl_menu_hit_registry.panel_layer;
     target->panel_style = g_sdl_menu_hit_registry.panel_style;
     target->focus_area = g_sdl_menu_hit_registry.focus_area;
+    target->focus_id = g_sdl_menu_hit_registry.focus_id;
     target->state_flags = state_flags;
     target->focus_order = focus_order;
     target->owner_id = owner_id >= 0 ? owner_id
@@ -170,29 +175,60 @@ const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y)
     return NULL;
 }
 
-static u32b sdl_menu_overlay_hash(cptr text)
+static void sdl_menu_overlay_panel_slug(cptr label, char* buf, size_t buflen)
 {
-    u32b hash = 2166136261u;
+    size_t out = 0;
+    bool pending_dash = false;
 
-    if (!text)
-        text = "";
-    while (*text) {
-        hash ^= (byte)*text++;
-        hash *= 16777619u;
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+    if (!label)
+        return;
+
+    for (size_t i = 0; label[i] && out + 1 < buflen; i++)
+    {
+        unsigned char ch = (unsigned char)label[i];
+        bool alpha = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+        bool digit = (ch >= '0' && ch <= '9');
+
+        if (alpha || digit)
+        {
+            if (pending_dash && out > 0 && out + 1 < buflen)
+                buf[out++] = '-';
+            pending_dash = false;
+            if (ch >= 'A' && ch <= 'Z')
+                ch = (unsigned char)(ch - 'A' + 'a');
+            buf[out++] = (char)ch;
+        }
+        else if (out > 0)
+        {
+            pending_dash = true;
+        }
     }
 
-    return hash;
+    buf[out] = '\0';
 }
 
 void sdl_menu_overlay_panel_id(u16b scene_kind, u16b panel_index,
     u16b panel_style, cptr label, char* buf, size_t buflen)
 {
+    char slug[SDL_OVERLAY_PANEL_ID_LEN];
+
     if (!buf || !buflen)
         return;
 
-    strnfmt(buf, buflen, "scene:%u:panel:%u:style:%u:title:%08lx",
-        (unsigned)scene_kind, (unsigned)panel_index, (unsigned)panel_style,
-        (unsigned long)sdl_menu_overlay_hash(label));
+    sdl_menu_overlay_panel_slug(label, slug, sizeof(slug));
+    if (slug[0])
+    {
+        strnfmt(buf, buflen, "scene:%u:id:%s",
+            (unsigned)scene_kind, slug);
+        return;
+    }
+
+    strnfmt(buf, buflen, "scene:%u:panel:%u:style:%u",
+        (unsigned)scene_kind, (unsigned)panel_index, (unsigned)panel_style);
 }
 
 bool sdl_menu_overlay_panel_get_offset(cptr id, int* out_x, int* out_y,
@@ -255,8 +291,41 @@ void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned)
     overlay->pinned = pinned;
 }
 
-void sdl_menu_overlay_panel_clamp_offset(cptr id, int canvas_w, int canvas_h,
-    const SDL_FRect* panel, int* offset_x, int* offset_y)
+static bool sdl_menu_overlay_panel_active_offset(cptr id, cptr fallback_id,
+    int* out_x, int* out_y)
+{
+    int x = 0;
+    int y = 0;
+    bool pinned = false;
+
+    if (sdl_menu_overlay_panel_get_offset(id, &x, &y, &pinned) && pinned)
+    {
+        if (out_x)
+            *out_x = x;
+        if (out_y)
+            *out_y = y;
+        return true;
+    }
+
+    if (fallback_id && fallback_id[0] && (!id || !streq(id, fallback_id))
+        && sdl_menu_overlay_panel_get_offset(fallback_id, &x, &y, &pinned)
+        && pinned)
+    {
+        if (id && id[0])
+            sdl_menu_overlay_panel_set_offset(id, x, y, true);
+        if (out_x)
+            *out_x = x;
+        if (out_y)
+            *out_y = y;
+        return true;
+    }
+
+    return false;
+}
+
+void sdl_menu_overlay_panel_clamp_offset(cptr id, cptr fallback_id,
+    int canvas_w, int canvas_h, const SDL_FRect* panel, int* offset_x,
+    int* offset_y)
 {
     int x = 0;
     int y = 0;
@@ -268,7 +337,12 @@ void sdl_menu_overlay_panel_clamp_offset(cptr id, int canvas_w, int canvas_h,
     if (!panel || !offset_x || !offset_y)
         return;
 
-    (void)sdl_menu_overlay_panel_get_offset(id, &x, &y, NULL);
+    if (!sdl_menu_overlay_panel_active_offset(id, fallback_id, &x, &y))
+    {
+        *offset_x = 0;
+        *offset_y = 0;
+        return;
+    }
 
     min_x = -(int)panel->x;
     max_x = canvas_w - (int)(panel->x + panel->w);
@@ -300,6 +374,14 @@ static bool sdl_menu_hit_target_matches_ref(const sdl_menu_hit_target* target,
         && target->id == ref->widget_id;
 }
 
+static bool sdl_menu_hit_target_is_detail_region(
+    const sdl_menu_hit_target* target)
+{
+    return target && target->kind == SDL_MENU_HIT_TARGET_PANEL
+        && target->id == SDL_MENU_HIT_DETAIL_ID
+        && target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION;
+}
+
 static bool sdl_menu_hit_target_focusable(const sdl_menu_hit_target* target)
 {
     if (!target)
@@ -310,6 +392,9 @@ static bool sdl_menu_hit_target_focusable(const sdl_menu_hit_target* target)
         return false;
     if (target->action == APP_UI_WIDGET_ACTION_NONE)
         return false;
+
+    if (sdl_menu_hit_target_is_detail_region(target))
+        return true;
 
     return target->role == APP_UI_WIDGET_ROLE_BUTTON
         || target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
@@ -333,6 +418,9 @@ static bool sdl_menu_hit_target_in_focus_area(
     case APP_UI_FOCUS_FOOTER:
         return target->role == APP_UI_WIDGET_ROLE_BUTTON;
 
+    case APP_UI_FOCUS_DETAIL:
+        return sdl_menu_hit_target_is_detail_region(target);
+
     default:
         return true;
     }
@@ -345,6 +433,8 @@ const sdl_menu_hit_target* sdl_menu_hit_current_focus(void)
         = session ? app_session_ui_focus(session) : NULL;
     const sdl_menu_hit_target* first = NULL;
     const sdl_menu_hit_target* area_first = NULL;
+    const sdl_menu_hit_target* area_selected = NULL;
+    const sdl_menu_hit_target* focus_id_target = NULL;
     const sdl_menu_hit_target* selected = NULL;
     u16b i;
 
@@ -373,8 +463,18 @@ const sdl_menu_hit_target* sdl_menu_hit_current_focus(void)
             continue;
         if (!first)
             first = target;
-        if (!area_first && sdl_menu_hit_target_in_focus_area(target))
-            area_first = target;
+        if (sdl_menu_hit_target_in_focus_area(target))
+        {
+            if (!area_first)
+                area_first = target;
+            if (target->focus_id >= 0 && target->id == target->focus_id)
+                focus_id_target = target;
+            if (target->state_flags
+                & (APP_UI_ITEM_FLAG_SELECTED | APP_UI_ITEM_FLAG_ACTIVE))
+            {
+                area_selected = target;
+            }
+        }
         if (target->state_flags
             & (APP_UI_ITEM_FLAG_SELECTED | APP_UI_ITEM_FLAG_ACTIVE))
         {
@@ -382,7 +482,13 @@ const sdl_menu_hit_target* sdl_menu_hit_current_focus(void)
         }
     }
 
-    return selected ? selected : (area_first ? area_first : first);
+    if (focus_id_target)
+        return focus_id_target;
+    if (area_selected)
+        return area_selected;
+    if (area_first)
+        return area_first;
+    return selected ? selected : first;
 }
 
 static bool sdl_menu_hit_targets_share_nav_group(
@@ -395,6 +501,8 @@ static bool sdl_menu_hit_targets_share_nav_group(
         return false;
     if (!sdl_menu_hit_target_focusable(candidate))
         return false;
+    if (sdl_menu_hit_target_is_detail_region(current))
+        return sdl_menu_hit_target_is_detail_region(candidate);
 
     if (dx && current->role == APP_UI_WIDGET_ROLE_TAB)
         return candidate->role == APP_UI_WIDGET_ROLE_TAB;
@@ -1753,15 +1861,20 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
 
     {
         char overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+        char legacy_overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
         int offset_x = 0;
         int offset_y = 0;
         int handle_h;
         SDL_FRect drag_rect;
 
+        cptr overlay_key = ui_panel->id[0] ? ui_panel->id : ui_panel->title;
+
         sdl_menu_overlay_panel_id(scene_kind, panel_index, ui_panel->style,
-            ui_panel->title, overlay_id, sizeof(overlay_id));
-        sdl_menu_overlay_panel_clamp_offset(overlay_id, canvas_w, canvas_h,
-            &panel, &offset_x, &offset_y);
+            overlay_key, overlay_id, sizeof(overlay_id));
+        sdl_menu_overlay_panel_id(scene_kind, panel_index, ui_panel->style,
+            NULL, legacy_overlay_id, sizeof(legacy_overlay_id));
+        sdl_menu_overlay_panel_clamp_offset(overlay_id, legacy_overlay_id,
+            canvas_w, canvas_h, &panel, &offset_x, &offset_y);
         panel.x += (float)offset_x;
         panel.y += (float)offset_y;
 
@@ -1783,8 +1896,8 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
                 | APP_UI_INTERACTION_FLAG_DRAGGABLE
                 | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
             APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &drag_rect,
-            ui_panel->title[0] ? ui_panel->title : "Panel",
-            "Drag panel");
+            overlay_key && overlay_key[0] ? overlay_key : "Panel",
+            "Drag panel. Right-click resets position.");
     }
 
     sdl_ui_style_draw_panel_frame(style, &panel, true);
@@ -1973,6 +2086,27 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
 
         if (detail_clip_rect.h < 0)
             detail_clip_rect.h = 0;
+        if (detail_clip_rect.w > 0 && detail_clip_rect.h > 0)
+        {
+            SDL_FRect detail_hit_rect = {
+                (float)detail_clip_rect.x,
+                (float)detail_clip_rect.y,
+                (float)detail_clip_rect.w,
+                (float)detail_clip_rect.h
+            };
+            cptr detail_label = ui_panel->detail_title[0]
+                ? ui_panel->detail_title
+                : (ui_panel->title[0] ? ui_panel->title : "Detail");
+
+            (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+                SDL_MENU_HIT_DETAIL_ID, 0,
+                APP_UI_WIDGET_ROLE_SCROLL_REGION,
+                APP_UI_WIDGET_ACTION_SCROLL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                APP_UI_ITEM_FLAG_NONE, -1, 0, ui_panel->detail_line_count,
+                &detail_hit_rect, detail_label, "");
+        }
         SDL_SetRenderClipRect(g_state.renderer, &detail_clip_rect);
         if (ui_panel->detail_title[0])
         {

@@ -19,8 +19,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define APP_UI_FORMAT_VERSION 12u
+#define APP_UI_FORMAT_VERSION 13u
 #define APP_UI_TITLE_MAX 80u
+#define APP_UI_PANEL_ID_MAX 64u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
 #define APP_UI_META_MAX 64u
@@ -37,16 +38,12 @@ extern "C" {
 #define APP_UI_CHARACTER_STAT_MAX 24u
 #define APP_UI_MINIMAP_CELL_MAX 54000u
 typedef enum app_ui_scene_flag {
-    APP_UI_SCENE_FLAG_NONE = 0x0000u,
-    APP_UI_SCENE_FLAG_USE_BACKDROP = 0x0001u,
+    APP_UI_SCENE_FLAG_NONE = 0x0000u, APP_UI_SCENE_FLAG_USE_BACKDROP = 0x0001u,
     APP_UI_SCENE_FLAG_DIM_BACKDROP = 0x0002u
 } app_ui_scene_flag;
 typedef enum app_ui_layer_kind {
-    APP_UI_LAYER_NONE = 0,
-    APP_UI_LAYER_CHROME = 1,
-    APP_UI_LAYER_TRANSIENT = 2,
-    APP_UI_LAYER_MODAL = 3,
-    APP_UI_LAYER_BROWSER = 4
+    APP_UI_LAYER_NONE = 0, APP_UI_LAYER_CHROME = 1,
+    APP_UI_LAYER_TRANSIENT = 2, APP_UI_LAYER_MODAL = 3, APP_UI_LAYER_BROWSER = 4
 } app_ui_layer_kind;
 typedef enum app_ui_panel_style {
     APP_UI_PANEL_STYLE_DEFAULT = 0,
@@ -68,8 +65,7 @@ typedef enum app_ui_panel_style {
 #define APP_UI_TEXT_FLAG_WELCOME_COL_MASK 0x00FFu
 #define APP_UI_TEXT_FLAG_WELCOME_BLANK 0x0100u
 typedef enum app_ui_panel_flag {
-    APP_UI_PANEL_FLAG_NONE = 0x0000u,
-    APP_UI_PANEL_FLAG_ACTIVE = 0x0001u,
+    APP_UI_PANEL_FLAG_NONE = 0x0000u, APP_UI_PANEL_FLAG_ACTIVE = 0x0001u,
     APP_UI_PANEL_FLAG_TOP_ANCHORED = 0x0002u,
     APP_UI_PANEL_FLAG_BOTTOM_ANCHORED = 0x0004u,
     APP_UI_PANEL_FLAG_LEFT_ANCHORED = 0x0008u,
@@ -78,17 +74,12 @@ typedef enum app_ui_panel_flag {
     APP_UI_PANEL_FLAG_DETAIL_LEADING = 0x0040u
 } app_ui_panel_flag;
 typedef enum app_ui_focus_area {
-    APP_UI_FOCUS_NONE = 0,
-    APP_UI_FOCUS_TABS = 1,
-    APP_UI_FOCUS_ROWS = 2,
-    APP_UI_FOCUS_DETAIL = 3,
-    APP_UI_FOCUS_FOOTER = 4
+    APP_UI_FOCUS_NONE = 0, APP_UI_FOCUS_TABS = 1, APP_UI_FOCUS_ROWS = 2,
+    APP_UI_FOCUS_DETAIL = 3, APP_UI_FOCUS_FOOTER = 4
 } app_ui_focus_area;
 typedef enum app_ui_item_flag {
-    APP_UI_ITEM_FLAG_NONE = 0x00u,
-    APP_UI_ITEM_FLAG_DISABLED = 0x01u,
-    APP_UI_ITEM_FLAG_SELECTED = 0x02u,
-    APP_UI_ITEM_FLAG_ACTIVE = 0x04u,
+    APP_UI_ITEM_FLAG_NONE = 0x00u, APP_UI_ITEM_FLAG_DISABLED = 0x01u,
+    APP_UI_ITEM_FLAG_SELECTED = 0x02u, APP_UI_ITEM_FLAG_ACTIVE = 0x04u,
     APP_UI_ITEM_FLAG_SECTION = 0x08u,
     APP_UI_ITEM_FLAG_STORY_LABEL = 0x10u
 } app_ui_item_flag;
@@ -207,6 +198,7 @@ typedef struct app_ui_panel {
     byte minimap_player_attr;
     byte alpha;
     byte reserved;
+    char id[APP_UI_PANEL_ID_MAX];
     char title[APP_UI_TITLE_MAX];
     char subtitle[APP_UI_TEXT_MAX];
     char detail_title[APP_UI_TITLE_MAX];
@@ -234,6 +226,7 @@ void app_ui_panel_init(app_ui_panel* panel, u16b layer);
 void app_ui_scene_init(app_ui_scene* scene);
 app_ui_panel* app_ui_scene_append_panel(app_ui_scene* scene, u16b layer);
 void app_ui_panel_set_icon(app_ui_panel* panel, byte attr, char ch);
+void app_ui_panel_set_id(app_ui_panel* panel, cptr id);
 void app_ui_panel_set_title(app_ui_panel* panel, byte attr, cptr text);
 void app_ui_panel_set_subtitle(app_ui_panel* panel, byte attr, cptr text);
 void app_ui_panel_set_detail_title(app_ui_panel* panel, byte attr, cptr text);

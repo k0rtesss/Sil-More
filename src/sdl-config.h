@@ -143,7 +143,7 @@ void sdl_config_load(const char* filename, struct sdl_config* config,
                      struct pane_config* pane_configs, int* pane_count, int max_panes);
 
 // Save SDL configuration to JSON file
-void sdl_config_save(const char* filename, const struct sdl_config* config,
+bool sdl_config_save(const char* filename, const struct sdl_config* config,
                      const struct pane_config* pane_configs, int pane_count);
 
 // Set default configuration values

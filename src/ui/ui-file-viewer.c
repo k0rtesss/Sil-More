@@ -26,6 +26,14 @@
 
 #define SHOW_FILE_SCROLL_PAGE_LINES 12
 
+typedef enum show_file_footer_action {
+    SHOW_FILE_ACTION_UP = 1,
+    SHOW_FILE_ACTION_DOWN = 2,
+    SHOW_FILE_ACTION_PAGE = 3,
+    SHOW_FILE_ACTION_FIND = 4,
+    SHOW_FILE_ACTION_EXIT = 5
+} show_file_footer_action;
+
 /*
  * Make a string lower case.
  */
@@ -86,6 +94,124 @@ static app_ui_panel* show_file_begin_browser_scene(app_ui_scene* scene)
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 1180, 2800);
     return panel;
+}
+
+static bool show_file_add_footer_actions(app_ui_panel* panel, bool can_scroll,
+    bool can_search)
+{
+    if (!panel)
+        return false;
+
+    if (can_scroll)
+    {
+        if (!app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_UP,
+                TERM_WHITE, true, "8", "Up")
+            || !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_DOWN,
+                TERM_WHITE, true, "2", "Down")
+            || !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_PAGE,
+                TERM_L_BLUE, true, "Space", "Page"))
+        {
+            return false;
+        }
+    }
+
+    if (can_search
+        && !app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_FIND,
+            TERM_WHITE, true, "/", "Find"))
+    {
+        return false;
+    }
+
+    return app_ui_panel_add_footer_action(panel, SHOW_FILE_ACTION_EXIT,
+        TERM_WHITE, true, "Esc", "Exit");
+}
+
+static char show_file_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '9' : '3';
+
+    return '\0';
+}
+
+static bool show_file_command_to_key(const app_ui_command* command,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = show_file_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case SHOW_FILE_ACTION_UP:
+            *out_key = '8';
+            return true;
+        case SHOW_FILE_ACTION_DOWN:
+            *out_key = '2';
+            return true;
+        case SHOW_FILE_ACTION_PAGE:
+            *out_key = ' ';
+            return true;
+        case SHOW_FILE_ACTION_FIND:
+            *out_key = '/';
+            return true;
+        case SHOW_FILE_ACTION_EXIT:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static int show_file_wait_key(void)
+{
+    ui_information_scene_event event;
+    char command_key = '\0';
+
+    if (!ui_information_scene_wait_event(&event, 0))
+        return ESCAPE;
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        return event.key;
+    if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+        && show_file_command_to_key(&event.command, &command_key))
+    {
+        return command_key;
+    }
+
+    return 0;
 }
 
 static size_t show_file_trim_line(char* buf)
@@ -237,8 +363,8 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
 
     if (size <= 1)
     {
-        return app_ui_panel_add_body_line(panel, TERM_SLATE,
-            "ESC exit");
+        return app_ui_panel_add_body_line(panel, TERM_SLATE, "ESC exit")
+            && show_file_add_footer_actions(panel, false, false);
     }
 
     if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
@@ -248,7 +374,8 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
     }
 
     return app_ui_panel_add_body_line(panel, TERM_SLATE,
-        format("[line %d/%d]", line + 1, size));
+        format("[line %d/%d]", line + 1, size))
+        && show_file_add_footer_actions(panel, true, false);
 }
 
 typedef enum show_file_scene_result {
@@ -283,7 +410,9 @@ static bool show_buffer_information_scene(cptr main_buffer, int line)
             return false;
         }
 
-        ch = ui_information_scene_wait_key();
+        ch = show_file_wait_key();
+        if (!ch)
+            continue;
         dir = target_dir(ch);
         if (dir == 8 || dir == 2)
             ch = I2D(dir);
@@ -486,7 +615,7 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
             return false;
     }
 
-    return true;
+    return show_file_add_footer_actions(panel, size > 1, !menu);
 }
 
 static show_file_scene_result show_file_information_scene(
@@ -616,7 +745,9 @@ static show_file_scene_result show_file_information_scene(
             return SHOW_FILE_SCENE_RESULT_ERROR;
         }
 
-        ch = (char)ui_information_scene_wait_key();
+        ch = (char)show_file_wait_key();
+        if (!ch)
+            continue;
 
         if (ch == '?')
             break;

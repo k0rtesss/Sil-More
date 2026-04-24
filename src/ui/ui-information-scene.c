@@ -86,6 +86,13 @@ static int ui_information_scene_activation_key_for_command(
     if (!command)
         return 0;
 
+    if (!command->target.action_key
+        && (command->target.role == APP_UI_WIDGET_ROLE_BUTTON
+            || command->target.role == APP_UI_WIDGET_ROLE_TAB))
+    {
+        return 0;
+    }
+
     if (command->kind == APP_UI_COMMAND_KIND_SELECT
         || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
     {
@@ -185,6 +192,21 @@ static int ui_information_scene_bridge_keyless_command(
     }
 
     return activation_key;
+}
+
+static bool ui_information_scene_command_waitable(
+    const app_ui_command* command)
+{
+    if (!command)
+        return false;
+
+    return command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+        || command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->kind == APP_UI_COMMAND_KIND_INSPECT
+        || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+        || command->kind == APP_UI_COMMAND_KIND_FOCUS
+        || command->kind == APP_UI_COMMAND_KIND_SCROLL;
 }
 
 static app_menu_snapshot* ui_information_scene_clone_menu_snapshot(
@@ -373,14 +395,18 @@ bool ui_information_scene_show_monster_recall(int r_idx,
     return true;
 }
 
-static int ui_information_scene_wait_key_internal(u16b ignored_flags)
+bool ui_information_scene_wait_event(ui_information_scene_event* out_event,
+    u16b ignored_flags)
 {
     app_session* session = app_session_current();
     app_input input;
     app_ui_command ui_command;
 
     if (!ui_information_scene_supported() || !session)
-        return ESCAPE;
+        return false;
+
+    if (out_event)
+        memset(out_event, 0, sizeof(*out_event));
 
     while (true)
     {
@@ -388,41 +414,16 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
         {
             if (ui_command.input_flags & ignored_flags)
                 continue;
-            if (ui_command.kind != APP_UI_COMMAND_KIND_ACTIVATE
-                && ui_command.kind != APP_UI_COMMAND_KIND_SELECT
-                && ui_command.kind != APP_UI_COMMAND_KIND_CANCEL
-                && ui_command.kind != APP_UI_COMMAND_KIND_INSPECT
-                && ui_command.kind != APP_UI_COMMAND_KIND_CONTEXT
-                && ui_command.kind != APP_UI_COMMAND_KIND_FOCUS
-                && ui_command.kind != APP_UI_COMMAND_KIND_SCROLL)
-            {
+            if (!ui_information_scene_command_waitable(&ui_command))
                 continue;
-            }
-            if (ui_command.kind == APP_UI_COMMAND_KIND_FOCUS
-                || ui_command.kind == APP_UI_COMMAND_KIND_SCROLL
-                || ui_command.kind == APP_UI_COMMAND_KIND_CONTEXT)
-            {
-                int bridge_key = ui_information_scene_bridge_keyless_command(
-                    session, &ui_command);
-                if (bridge_key)
-                    return bridge_key;
-                continue;
-            }
-            if (!ui_command.target.action_key)
-            {
-                int bridge_key = ui_information_scene_bridge_keyless_command(
-                    session, &ui_command);
-                if (bridge_key)
-                    return bridge_key;
-                continue;
-            }
 
-            if ((int)(ui_command.target.action_key & 0xFFu) == ESCAPE) {
-                log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal ui-command esc flags=0x%04x kind=%d",
-                    (unsigned)ui_command.input_flags,
-                    (int)ui_command.kind);
+            if (out_event)
+            {
+                out_event->kind = UI_INFORMATION_SCENE_EVENT_COMMAND;
+                out_event->key = 0;
+                out_event->command = ui_command;
             }
-            return (int)(ui_command.target.action_key & 0xFFu);
+            return true;
         }
 
         while (app_session_pop_input(session, &input))
@@ -436,15 +437,61 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
                 continue;
 
             if ((int)(input.payload.key.logical_key & 0xFFu) == ESCAPE) {
-                log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal esc flags=0x%04x layer=%d type=%d",
+                log_debug("[metarun-esc-trace] ui_information_scene_wait_event esc flags=0x%04x layer=%d type=%d",
                     (unsigned)input.flags, (int)input.layer, (int)input.type);
             }
-            return (int)(input.payload.key.logical_key & 0xFFu);
+
+            if (out_event)
+            {
+                out_event->kind = UI_INFORMATION_SCENE_EVENT_KEY;
+                out_event->key = (int)(input.payload.key.logical_key & 0xFFu);
+                app_ui_command_clear(&out_event->command);
+            }
+            return true;
         }
 
         ui_information_scene_process_events(true);
         ui_information_scene_present_frame();
     }
+}
+
+static int ui_information_scene_wait_key_internal(u16b ignored_flags)
+{
+    app_session* session = app_session_current();
+    ui_information_scene_event event;
+
+    if (!ui_information_scene_supported() || !session)
+        return ESCAPE;
+
+    while (ui_information_scene_wait_event(&event, ignored_flags))
+    {
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return event.key;
+
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        if (event.command.kind == APP_UI_COMMAND_KIND_FOCUS
+            || event.command.kind == APP_UI_COMMAND_KIND_SCROLL
+            || event.command.kind == APP_UI_COMMAND_KIND_CONTEXT
+            || !event.command.target.action_key)
+        {
+            int bridge_key = ui_information_scene_bridge_keyless_command(
+                session, &event.command);
+            if (bridge_key)
+                return bridge_key;
+            continue;
+        }
+
+        if ((int)(event.command.target.action_key & 0xFFu) == ESCAPE) {
+            log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal ui-command esc flags=0x%04x kind=%d",
+                (unsigned)event.command.input_flags,
+                (int)event.command.kind);
+        }
+        return (int)(event.command.target.action_key & 0xFFu);
+    }
+
+    return ESCAPE;
 }
 
 int ui_information_scene_wait_key(void)

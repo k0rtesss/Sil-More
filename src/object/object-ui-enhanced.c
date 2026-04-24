@@ -764,6 +764,97 @@ static int enhanced_item_selected_action(
     return examine_action ? ENHANCED_ACTION_EXAMINE : ENHANCED_ACTION_USE;
 }
 
+static char enhanced_item_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static int enhanced_item_find_entry_by_item_index(
+    const enhanced_item_snapshot_state* state, int item_index)
+{
+    int i;
+
+    if (!state)
+        return -1;
+
+    for (i = 0; i < state->entry_count; i++)
+    {
+        if (state->entries[i].item_index == item_index)
+            return i;
+    }
+
+    return -1;
+}
+
+static bool enhanced_item_command_to_key(const app_ui_command* command,
+    const enhanced_item_snapshot_state* state, int* highlight_row,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !state || !highlight_row || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = enhanced_item_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        int entry_index = enhanced_item_find_entry_by_item_index(state,
+            target->widget_id);
+
+        if (entry_index < 0)
+            return true;
+
+        *highlight_row = entry_index;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (command->kind == APP_UI_COMMAND_KIND_INSPECT
+            || command->kind == APP_UI_COMMAND_KIND_CONTEXT
+            || target->action == APP_UI_WIDGET_ACTION_INSPECT)
+        {
+            *out_key = 'x';
+            return true;
+        }
+
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static bool enhanced_item_run_snapshot_menu(int mode)
 {
     enhanced_item_snapshot_scope scene_scope;
@@ -795,7 +886,32 @@ static bool enhanced_item_run_snapshot_menu(int mode)
         if (enhanced_item_build_snapshot_scene(&scene, &state, highlight_row))
             (void)enhanced_item_snapshot_scene_present(&scene_scope, &scene);
 
-        which = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            which = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                which = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                which = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && enhanced_item_command_to_key(&event.command, &state,
+                    &highlight_row, &command_key))
+            {
+                which = command_key;
+                if (!which)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         switch (which)
         {
         case ESCAPE:

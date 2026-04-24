@@ -2009,7 +2009,12 @@ static void sdl_quit_hook(cptr str)
         }
         
         // Save configuration
-        sdl_config_save(config_file_path, &config, pane_config, pane_config_count);
+        if (!sdl_config_save(config_file_path, &config, pane_config,
+                pane_config_count))
+        {
+            log_error("Failed to save SDL configuration during shutdown: %s",
+                config_file_path);
+        }
     }
 }
 

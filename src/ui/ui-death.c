@@ -31,8 +31,6 @@
 
 static bool death_present_ui_page(const app_ui_scene* scene, bool* out_escape)
 {
-    int key;
-
     if (out_escape)
         *out_escape = false;
     if (!scene)
@@ -40,10 +38,43 @@ static bool death_present_ui_page(const app_ui_scene* scene, bool* out_escape)
     if (!ui_information_scene_present_ui(scene))
         return false;
 
-    key = ui_information_scene_wait_key_nonrepeat();
-    if (out_escape)
-        *out_escape = (key == ESCAPE);
-    return true;
+    while (true)
+    {
+        ui_information_scene_event event;
+
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+        {
+            if (out_escape)
+                *out_escape = true;
+            return true;
+        }
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            if (out_escape)
+                *out_escape = (event.key == ESCAPE);
+            return true;
+        }
+
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
+            || event.command.target.action == APP_UI_WIDGET_ACTION_CANCEL
+            || (event.command.target.role == APP_UI_WIDGET_ROLE_BUTTON
+                && event.command.target.widget_id == 2))
+        {
+            if (out_escape)
+                *out_escape = true;
+            return true;
+        }
+
+        if (event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
+            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
+        {
+            return true;
+        }
+    }
 }
 
 static bool death_add_body_line(app_ui_panel* panel, byte attr, cptr text)
@@ -382,6 +413,96 @@ static bool death_build_trophy_line(const high_score* score, char* out,
     return true;
 }
 
+static bool death_add_final_menu_row(app_ui_panel* panel, int id, int highlight,
+    cptr key, cptr option)
+{
+    cptr label = option;
+
+    if (option && strlen(option) > 3 && option[1] == ')' && option[2] == ' ')
+        label = option + 3;
+
+    return app_ui_panel_add_row(panel, (s16b)id,
+        (highlight == id) ? TERM_L_BLUE : TERM_WHITE, true,
+        (highlight == id), key, label, "");
+}
+
+static char death_final_menu_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '8' : '2';
+
+    return '\0';
+}
+
+static bool death_final_menu_command_to_key(const app_ui_command* command,
+    int* highlight, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !highlight || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = death_final_menu_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id >= 1 && target->widget_id <= 7)
+            *highlight = target->widget_id;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = '\r';
+            return true;
+        case 2:
+            *out_key = '8';
+            return true;
+        case 3:
+            *out_key = '2';
+            return true;
+        case 4:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool death_build_inventory_scene(app_ui_scene* scene)
 {
     app_ui_panel* panel;
@@ -608,20 +729,13 @@ static bool death_build_final_menu_scene(app_ui_scene* scene,
         return false;
     }
 
-    if (!death_add_body_line(panel,
-            (highlight == 1) ? TERM_L_BLUE : TERM_WHITE, option_a)
-        || !death_add_body_line(panel,
-            (highlight == 2) ? TERM_L_BLUE : TERM_WHITE, option_b)
-        || !death_add_body_line(panel,
-            (highlight == 3) ? TERM_L_BLUE : TERM_WHITE, option_c)
-        || !death_add_body_line(panel,
-            (highlight == 4) ? TERM_L_BLUE : TERM_WHITE, option_d)
-        || !death_add_body_line(panel,
-            (highlight == 5) ? TERM_L_BLUE : TERM_WHITE, option_e)
-        || !death_add_body_line(panel,
-            (highlight == 6) ? TERM_L_BLUE : TERM_WHITE, option_f)
-        || !death_add_body_line(panel,
-            (highlight == 7) ? TERM_L_BLUE : TERM_WHITE, option_g))
+    if (!death_add_final_menu_row(panel, 1, highlight, "a", option_a)
+        || !death_add_final_menu_row(panel, 2, highlight, "b", option_b)
+        || !death_add_final_menu_row(panel, 3, highlight, "c", option_c)
+        || !death_add_final_menu_row(panel, 4, highlight, "d", option_d)
+        || !death_add_final_menu_row(panel, 5, highlight, "e", option_e)
+        || !death_add_final_menu_row(panel, 6, highlight, "f", option_f)
+        || !death_add_final_menu_row(panel, 7, highlight, "g", option_g))
     {
         return false;
     }
@@ -629,9 +743,9 @@ static bool death_build_final_menu_scene(app_ui_scene* scene,
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
         "Enter", "Choose");
     (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "a-g", "Jump");
+        "8", "Up");
     (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
-        "8/2", "Move");
+        "2", "Down");
     (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
         "Esc", "Exit");
 
@@ -791,7 +905,27 @@ int ui_death_final_menu(const high_score* score, int* highlight)
     }
 
     inkey_set_cursor_hidden(true);
-    ch = (char)ui_information_scene_wait_key();
+    ch = '\0';
+    while (!ch)
+    {
+        ui_information_scene_event event;
+        char command_key = '\0';
+
+        if (!ui_information_scene_wait_event(&event, 0))
+        {
+            ch = ESCAPE;
+        }
+        else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            ch = (char)event.key;
+        }
+        else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+            && death_final_menu_command_to_key(&event.command, highlight,
+                &command_key))
+        {
+            ch = command_key;
+        }
+    }
     inkey_set_cursor_hidden(false);
     ui_information_scene_leave(&scope);
 

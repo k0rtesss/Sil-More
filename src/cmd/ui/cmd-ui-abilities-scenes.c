@@ -1411,6 +1411,99 @@ static bool ability_semantic_build_bane_scene(app_ui_scene* scene,
     return true;
 }
 
+static char ability_semantic_choice_scroll_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool ability_semantic_choice_command_to_key(
+    const app_ui_command* command, int max_choice, int* highlight,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+    bool steamdeck;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !highlight || !out_key)
+        return false;
+
+    target = &command->target;
+    steamdeck = steamdeck_controls_active();
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = ability_semantic_choice_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        if (target->widget_id >= 1 && target->widget_id <= max_choice)
+            *highlight = target->widget_id;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        if (steamdeck)
+        {
+            switch (target->widget_id)
+            {
+            case 2:
+                *out_key = '\r';
+                return true;
+            case 4:
+                *out_key = ESCAPE;
+                return true;
+            default:
+                return true;
+            }
+        }
+
+        switch (target->widget_id)
+        {
+        case 2:
+        case 3:
+            *out_key = '\r';
+            return true;
+        case 5:
+        case 6:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static int ability_semantic_run_bane_menu(int* highlight)
 {
     int visible_count = PLAYER_BANE_TYPES - 1;
@@ -1434,7 +1527,32 @@ static int ability_semantic_run_bane_menu(int* highlight)
             return PLAYER_BANE_TYPES + 1;
         }
 
-        ch = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && ability_semantic_choice_command_to_key(&event.command,
+                    visible_count, highlight, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck_controls_active())
         {
             if (ch == steamdeck_back_key())
@@ -1594,7 +1712,32 @@ static int ability_semantic_run_oath_menu(int* highlight)
             return OATH_TYPES + 1;
         }
 
-        ch = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && ability_semantic_choice_command_to_key(&event.command,
+                    OATH_TYPES, highlight, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck_controls_active())
         {
             if (ch == steamdeck_back_key())
@@ -1866,6 +2009,177 @@ static bool ability_semantic_activate_selected(int skilltype, int abilitynum,
     return false;
 }
 
+static bool ability_semantic_select_skill_by_type(
+    ability_semantic_state* state, int skilltype)
+{
+    int i;
+
+    if (!state)
+        return false;
+
+    for (i = 0; i < state->skill_count; i++)
+    {
+        if (state->skill_order[i] != skilltype)
+            continue;
+        state->current_skill_slot = i;
+        state->focus = ABILITY_SEMANTIC_FOCUS_SKILLS;
+        ability_semantic_set_status(state, TERM_SLATE, "");
+        return true;
+    }
+
+    return false;
+}
+
+static bool ability_semantic_select_ability_by_id(
+    ability_semantic_state* state, int current_skill,
+    const ability_ui_entry* entries, int entry_count, int abilitynum)
+{
+    int index;
+
+    if (!state || !entries || entry_count <= 0)
+        return false;
+
+    index = ability_semantic_find_entry_index(entries, entry_count, abilitynum);
+    if (index < 0)
+        return false;
+
+    state->ability_highlight[current_skill] = entries[index].abilitynum + 1;
+    state->focus = ABILITY_SEMANTIC_FOCUS_ABILITIES;
+    ability_semantic_set_status(state, TERM_SLATE, "");
+    return true;
+}
+
+static char ability_semantic_scroll_command_key(
+    const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static bool ability_semantic_footer_command_to_key(
+    ability_semantic_state* state, const app_ui_command* command,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+    bool steamdeck;
+
+    if (!state || !command || !out_key)
+        return false;
+
+    target = &command->target;
+    steamdeck = steamdeck_controls_active();
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        return true;
+
+    if (steamdeck)
+    {
+        switch (target->widget_id)
+        {
+        case 2:
+            *out_key = '\r';
+            return true;
+        case 3:
+            *out_key = 'i';
+            return true;
+        case 4:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    switch (target->widget_id)
+    {
+    case 2:
+        *out_key = (state->focus == ABILITY_SEMANTIC_FOCUS_SKILLS)
+            ? '\r'
+            : '4';
+        return true;
+    case 3:
+        *out_key = '\r';
+        return true;
+    case 4:
+        *out_key = 'i';
+        return true;
+    case 5:
+        *out_key = ESCAPE;
+        return true;
+    case 6:
+        *out_key = '\t';
+        return true;
+    default:
+        return true;
+    }
+}
+
+static bool ability_semantic_command_to_key(ability_semantic_state* state,
+    const ability_ui_entry* entries, int entry_count, int current_skill,
+    const app_ui_command* command, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!state || !command || !out_key)
+        return false;
+
+    target = &command->target;
+
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = ability_semantic_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        if (!ability_semantic_select_skill_by_type(state, target->widget_id))
+            bell("Cannot switch ability tab!");
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        (void)ability_semantic_select_ability_by_id(state, current_skill,
+            entries, entry_count, target->widget_id);
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (command->clicks >= 2)
+            *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+        return ability_semantic_footer_command_to_key(state, command, out_key);
+
+    if (target->action_key)
+    {
+        *out_key = (char)(target->action_key & 0xFF);
+        return true;
+    }
+
+    return false;
+}
+
 static void do_cmd_ability_screen_semantic(void)
 {
     ability_semantic_state state;
@@ -1908,7 +2222,32 @@ static void do_cmd_ability_screen_semantic(void)
             return;
         }
 
-        ch = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && ability_semantic_command_to_key(&state, entries,
+                    entry_count, current_skill, &event.command, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck_controls_active())
         {
             if (ch == steamdeck_back_key())

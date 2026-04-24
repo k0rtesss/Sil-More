@@ -36,6 +36,17 @@ extern struct sound_config g_sound_config;
 #include "score/score_artefact.h"
 #include "score/score_guid.h"
 #include "cmd-ui.h"
+
+typedef enum character_sheet_footer_action {
+    CHARACTER_SHEET_ACTION_ABILITIES = 1,
+    CHARACTER_SHEET_ACTION_INCREASE = 2,
+    CHARACTER_SHEET_ACTION_HELP = 3,
+    CHARACTER_SHEET_ACTION_BACK = 4,
+    CHARACTER_SHEET_ACTION_NOTES = 5,
+    CHARACTER_SHEET_ACTION_STORY = 6,
+    CHARACTER_SHEET_ACTION_FILE = 7
+} character_sheet_footer_action;
+
 static bool character_sheet_prompt_append(char* buf, size_t buflen, cptr token, int max_width)
 {
     size_t cur_len;
@@ -150,6 +161,122 @@ static bool character_sheet_resume_information_scene(
     return ui_information_scene_enter(scope);
 }
 
+static bool character_sheet_add_footer_actions(app_ui_scene* scene,
+    bool steamdeck)
+{
+    app_ui_panel* panel;
+
+    if (!scene || scene->panel_count == 0)
+        return false;
+
+    panel = &scene->panels[0];
+    if (steamdeck)
+    {
+        char abilities_label[APP_UI_KEY_MAX];
+        char increase_label[APP_UI_KEY_MAX];
+        char help_label[APP_UI_KEY_MAX];
+        char back_label[APP_UI_KEY_MAX];
+
+        controller_prompt_label(steamdeck_alt_action_key(), "X",
+            abilities_label, sizeof(abilities_label));
+        controller_prompt_label(steamdeck_confirm_key(), "A",
+            increase_label, sizeof(increase_label));
+        controller_prompt_label(steamdeck_info_key(), "RS", help_label,
+            sizeof(help_label));
+        controller_prompt_label(steamdeck_back_key(), "B", back_label,
+            sizeof(back_label));
+        if (!app_ui_panel_add_footer_action(panel,
+                CHARACTER_SHEET_ACTION_ABILITIES, TERM_WHITE, true,
+                abilities_label, "Abilities")
+            || !app_ui_panel_add_footer_action(panel,
+                CHARACTER_SHEET_ACTION_INCREASE, TERM_L_BLUE, true,
+                increase_label, "Increase")
+            || !app_ui_panel_add_footer_action(panel,
+                CHARACTER_SHEET_ACTION_HELP, TERM_WHITE, true, help_label,
+                "Help")
+            || !app_ui_panel_add_footer_action(panel,
+                CHARACTER_SHEET_ACTION_BACK, TERM_WHITE, true, back_label,
+                "Back"))
+        {
+            return false;
+        }
+    }
+    else if (!app_ui_panel_add_footer_action(panel,
+            CHARACTER_SHEET_ACTION_ABILITIES, TERM_WHITE, true, "a",
+            "Abilities")
+        || !app_ui_panel_add_footer_action(panel,
+            CHARACTER_SHEET_ACTION_INCREASE, TERM_L_BLUE, true, "Space",
+            "Increase")
+        || !app_ui_panel_add_footer_action(panel, CHARACTER_SHEET_ACTION_HELP,
+            TERM_WHITE, true, "?", "Help")
+        || !app_ui_panel_add_footer_action(panel, CHARACTER_SHEET_ACTION_BACK,
+            TERM_WHITE, true, "Esc", "Back"))
+    {
+        return false;
+    }
+
+    return app_ui_panel_add_footer_action(panel, CHARACTER_SHEET_ACTION_NOTES,
+        TERM_WHITE, true, "n", "Notes")
+        && app_ui_panel_add_footer_action(panel, CHARACTER_SHEET_ACTION_STORY,
+            TERM_WHITE, true, "s", "Story")
+        && app_ui_panel_add_footer_action(panel, CHARACTER_SHEET_ACTION_FILE,
+            TERM_WHITE, true, "f", "File");
+}
+
+static bool character_sheet_command_to_key(const app_ui_command* command,
+    char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 1:
+            *out_key = 'a';
+            return true;
+        case 2:
+            *out_key = ' ';
+            return true;
+        case 3:
+            *out_key = '?';
+            return true;
+        case 4:
+            *out_key = ESCAPE;
+            return true;
+        case 5:
+            *out_key = 'n';
+            return true;
+        case 6:
+            *out_key = 's';
+            return true;
+        case 7:
+            *out_key = 'f';
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void do_cmd_character_sheet(void)
 {
     char ch;
@@ -179,6 +306,7 @@ void do_cmd_character_sheet(void)
         }
 
         if (!build_character_sheet_ui_scene(&scene, prompt_buf)
+            || !character_sheet_add_footer_actions(&scene, steamdeck)
             || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&info_scope);
@@ -188,7 +316,32 @@ void do_cmd_character_sheet(void)
         }
 
         /* Query */
-        ch = (char)ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = '\0';
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = (char)event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && character_sheet_command_to_key(&event.command,
+                    &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
 
         /* Exit - B button (back) or ESC */
         if (ch == ESCAPE || (steamdeck && ch == steamdeck_back_key()))

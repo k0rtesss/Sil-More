@@ -251,6 +251,90 @@ static int song_semantic_find_index_for_key(const song_semantic_entry* entries,
     return -1;
 }
 
+static int song_semantic_find_index_for_row(const song_semantic_entry* entries,
+    int count, int row)
+{
+    if (!entries || row < 0 || row >= count)
+        return -1;
+
+    return row;
+}
+
+static char song_semantic_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '8' : '2';
+
+    return '\0';
+}
+
+static bool song_semantic_command_to_key(const app_ui_command* command,
+    const song_semantic_entry* entries, int count, int* selected, char* out_key)
+{
+    const app_ui_widget_ref* target;
+
+    if (out_key)
+        *out_key = '\0';
+    if (!command || !entries || !selected || !out_key)
+        return false;
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        *out_key = ESCAPE;
+        return true;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        *out_key = song_semantic_scroll_command_key(command);
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+    {
+        int row = song_semantic_find_index_for_row(entries, count,
+            target->widget_id);
+
+        if (row >= 0)
+            *selected = row;
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+        if (row >= 0)
+            *out_key = '\r';
+        return true;
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return true;
+
+        switch (target->widget_id)
+        {
+        case 2:
+            *out_key = '\r';
+            return true;
+        case 3:
+            *out_key = ESCAPE;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void song_semantic_add_detail(app_ui_panel* panel,
     const song_semantic_entry* entry)
 {
@@ -343,7 +427,7 @@ static bool song_semantic_build_scene(app_ui_scene* scene,
         char keybuf[APP_UI_KEY_MAX];
 
         strnfmt(keybuf, sizeof(keybuf), "%c", entries[i].key);
-        (void)app_ui_panel_add_row_ex(panel, (s16b)entries[i].song,
+        (void)app_ui_panel_add_row_ex(panel, (s16b)i,
             entries[i].attr, TERM_SLATE, 0, '\0', true, i == selected, keybuf,
             entries[i].label, entries[i].meta);
     }
@@ -431,7 +515,32 @@ void do_cmd_change_song(void)
             return;
         }
 
-        ch = ui_information_scene_wait_key();
+        {
+            ui_information_scene_event event;
+            char command_key = '\0';
+
+            ch = 0;
+            if (!ui_information_scene_wait_event(&event, 0))
+            {
+                ch = ESCAPE;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            {
+                ch = event.key;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
+                && song_semantic_command_to_key(&event.command, entries,
+                    entry_count, &selected, &command_key))
+            {
+                ch = command_key;
+                if (!ch)
+                    continue;
+            }
+            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+            {
+                continue;
+            }
+        }
         if (steamdeck_controls_active())
         {
             if (ch == steamdeck_back_key())
