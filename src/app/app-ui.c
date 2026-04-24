@@ -26,6 +26,40 @@ static void app_ui_copy_text(char* dst, size_t dst_size, cptr text)
     (void)utf8_strlcpy(dst, text ? text : "", dst_size);
 }
 
+static s16b app_ui_legacy_key_from_label(cptr key)
+{
+    if (!key || !key[0])
+        return 0;
+
+    if (strlen(key) == 1)
+        return (s16b)(unsigned char)key[0];
+    if (prefix(key, "Space") || prefix(key, "space"))
+        return ' ';
+    if (prefix(key, "Enter") || prefix(key, "Return")
+        || prefix(key, "enter") || prefix(key, "return"))
+    {
+        return '\r';
+    }
+    if (prefix(key, "Esc") || prefix(key, "ESC")
+        || strstr(key, "Esc") || strstr(key, "ESC"))
+    {
+        return ESCAPE;
+    }
+    if (prefix(key, "Any") || prefix(key, "any"))
+        return '\r';
+
+    return 0;
+}
+
+static u16b app_ui_default_interaction_flags(bool enabled)
+{
+    if (!enabled)
+        return APP_UI_INTERACTION_FLAG_NONE;
+
+    return APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+        | APP_UI_INTERACTION_FLAG_TOUCH_TARGET;
+}
+
 static app_ui_rich_paragraph* app_ui_panel_append_rich_paragraph(
     app_ui_scene* scene, app_ui_panel* panel)
 {
@@ -229,6 +263,10 @@ bool app_ui_panel_add_row_ex(app_ui_panel* panel, s16b id, byte attr,
     row = &panel->rows[panel->row_count];
     memset(row, 0, sizeof(*row));
     row->id = id;
+    row->interaction.action_key = app_ui_legacy_key_from_label(key);
+    row->interaction.role = APP_UI_WIDGET_ROLE_LIST_ITEM;
+    row->interaction.action = APP_UI_WIDGET_ACTION_ACTIVATE;
+    row->interaction.flags = app_ui_default_interaction_flags(enabled);
     row->attr = attr;
     row->meta_attr = meta_attr;
     row->flags = APP_UI_ITEM_FLAG_NONE;
@@ -299,6 +337,10 @@ bool app_ui_panel_add_footer_action(app_ui_panel* panel, s16b id, byte attr,
     action = &panel->footer_actions[panel->footer_action_count++];
     memset(action, 0, sizeof(*action));
     action->id = id;
+    action->interaction.action_key = app_ui_legacy_key_from_label(key);
+    action->interaction.role = APP_UI_WIDGET_ROLE_BUTTON;
+    action->interaction.action = APP_UI_WIDGET_ACTION_ACTIVATE;
+    action->interaction.flags = app_ui_default_interaction_flags(enabled);
     action->attr = attr;
     action->flags = enabled ? APP_UI_ITEM_FLAG_NONE : APP_UI_ITEM_FLAG_DISABLED;
     app_ui_copy_text(action->key, sizeof(action->key), key);
@@ -322,6 +364,11 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     tab = &panel->tabs[panel->tab_count++];
     memset(tab, 0, sizeof(*tab));
     tab->id = id;
+    tab->interaction.action_key = app_ui_legacy_key_from_label(label);
+    tab->interaction.role = APP_UI_WIDGET_ROLE_TAB;
+    tab->interaction.action = APP_UI_WIDGET_ACTION_SELECT;
+    tab->interaction.flags = APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+        | APP_UI_INTERACTION_FLAG_TOUCH_TARGET;
     tab->attr = attr;
     tab->flags = active ? APP_UI_ITEM_FLAG_ACTIVE : APP_UI_ITEM_FLAG_NONE;
     app_ui_copy_text(tab->label, sizeof(tab->label), label);
@@ -331,6 +378,90 @@ bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
         panel->focus_id = id;
     }
     return true;
+}
+
+bool app_ui_panel_set_row_interaction(app_ui_panel* panel, s16b id,
+    u16b role, u16b action, u16b flags, s16b action_key, cptr tooltip)
+{
+    u16b i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < panel->row_count; i++)
+    {
+        app_ui_row* row = &panel->rows[i];
+
+        if (row->id != id)
+            continue;
+        row->interaction.role = role;
+        row->interaction.action = action;
+        row->interaction.flags = flags;
+        row->interaction.action_key = action_key;
+        app_ui_copy_text(row->interaction.tooltip,
+            sizeof(row->interaction.tooltip), tooltip);
+        if (row->interaction.tooltip[0])
+            row->interaction.flags |= APP_UI_INTERACTION_FLAG_TOOLTIP;
+        return true;
+    }
+
+    return false;
+}
+
+bool app_ui_panel_set_footer_action_interaction(app_ui_panel* panel, s16b id,
+    u16b role, u16b action, u16b flags, s16b action_key, cptr tooltip)
+{
+    u16b i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < panel->footer_action_count; i++)
+    {
+        app_ui_footer_action* footer = &panel->footer_actions[i];
+
+        if (footer->id != id)
+            continue;
+        footer->interaction.role = role;
+        footer->interaction.action = action;
+        footer->interaction.flags = flags;
+        footer->interaction.action_key = action_key;
+        app_ui_copy_text(footer->interaction.tooltip,
+            sizeof(footer->interaction.tooltip), tooltip);
+        if (footer->interaction.tooltip[0])
+            footer->interaction.flags |= APP_UI_INTERACTION_FLAG_TOOLTIP;
+        return true;
+    }
+
+    return false;
+}
+
+bool app_ui_panel_set_tab_interaction(app_ui_panel* panel, s16b id,
+    u16b role, u16b action, u16b flags, s16b action_key, cptr tooltip)
+{
+    u16b i;
+
+    if (!panel)
+        return false;
+
+    for (i = 0; i < panel->tab_count; i++)
+    {
+        app_ui_tab* tab = &panel->tabs[i];
+
+        if (tab->id != id)
+            continue;
+        tab->interaction.role = role;
+        tab->interaction.action = action;
+        tab->interaction.flags = flags;
+        tab->interaction.action_key = action_key;
+        app_ui_copy_text(tab->interaction.tooltip,
+            sizeof(tab->interaction.tooltip), tooltip);
+        if (tab->interaction.tooltip[0])
+            tab->interaction.flags |= APP_UI_INTERACTION_FLAG_TOOLTIP;
+        return true;
+    }
+
+    return false;
 }
 
 bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene, app_ui_panel* panel)

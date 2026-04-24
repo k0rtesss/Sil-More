@@ -15,10 +15,11 @@
 #ifndef INCLUDED_APP_UI_H
 #define INCLUDED_APP_UI_H
 #include "h-basic.h"
+#include "app-ui-interaction.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define APP_UI_FORMAT_VERSION 11u
+#define APP_UI_FORMAT_VERSION 12u
 #define APP_UI_TITLE_MAX 80u
 #define APP_UI_TEXT_MAX 160u
 #define APP_UI_LABEL_MAX 96u
@@ -93,6 +94,7 @@ typedef struct app_ui_text_line {
 } app_ui_text_line;
 typedef struct app_ui_row {
     s16b id;
+    app_ui_interaction interaction;
     byte attr;
     byte meta_attr;
     byte flags;
@@ -106,6 +108,7 @@ typedef struct app_ui_row {
 } app_ui_row;
 typedef struct app_ui_footer_action {
     s16b id;
+    app_ui_interaction interaction;
     byte attr;
     byte flags;
     char key[APP_UI_KEY_MAX];
@@ -113,6 +116,7 @@ typedef struct app_ui_footer_action {
 } app_ui_footer_action;
 typedef struct app_ui_tab {
     s16b id;
+    app_ui_interaction interaction;
     byte attr;
     byte flags;
     char label[APP_UI_LABEL_MAX];
@@ -245,8 +249,13 @@ bool app_ui_panel_add_footer_action(app_ui_panel* panel, s16b id, byte attr,
     bool enabled, cptr key, cptr label);
 bool app_ui_panel_add_tab(app_ui_panel* panel, s16b id, byte attr,
     bool active, cptr label);
-bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene,
-    app_ui_panel* panel);
+bool app_ui_panel_set_row_interaction(app_ui_panel* panel, s16b id, u16b role,
+    u16b action, u16b flags, s16b action_key, cptr tooltip);
+bool app_ui_panel_set_footer_action_interaction(app_ui_panel* panel, s16b id,
+    u16b role, u16b action, u16b flags, s16b action_key, cptr tooltip);
+bool app_ui_panel_set_tab_interaction(app_ui_panel* panel, s16b id, u16b role,
+    u16b action, u16b flags, s16b action_key, cptr tooltip);
+bool app_ui_panel_begin_rich_paragraph(app_ui_scene* scene, app_ui_panel* panel);
 bool app_ui_panel_add_rich_text_alpha_ex(app_ui_scene* scene,
     app_ui_panel* panel, byte attr, byte story, byte alpha, cptr text);
 bool app_ui_panel_add_rich_text_ex(app_ui_scene* scene, app_ui_panel* panel,

@@ -230,6 +230,8 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
     if (!canvas || !main_view || !scene)
         return false;
 
+    sdl_menu_hit_reset(main_view->rect.x, main_view->rect.y);
+
     SDL_SetRenderTarget(g_state.renderer, canvas);
     if ((scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)
         && main_view->canvas && canvas_w > 0 && canvas_h > 0)

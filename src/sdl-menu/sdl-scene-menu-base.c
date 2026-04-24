@@ -18,6 +18,81 @@
 #include "sdl-scene-menu.h"
 #include "support/utf8.h"
 
+#define SDL_MENU_HIT_TARGET_MAX 512u
+
+typedef struct sdl_menu_hit_registry {
+    sdl_menu_hit_target targets[SDL_MENU_HIT_TARGET_MAX];
+    u16b count;
+    int origin_x;
+    int origin_y;
+} sdl_menu_hit_registry;
+
+static sdl_menu_hit_registry g_sdl_menu_hit_registry;
+
+static void sdl_menu_copy_hit_text(char* dst, size_t dst_size, cptr text)
+{
+    if (!dst || dst_size == 0)
+        return;
+
+    (void)utf8_strlcpy(dst, text ? text : "", dst_size);
+}
+
+void sdl_menu_hit_reset(int origin_x, int origin_y)
+{
+    memset(&g_sdl_menu_hit_registry, 0, sizeof(g_sdl_menu_hit_registry));
+    g_sdl_menu_hit_registry.origin_x = origin_x;
+    g_sdl_menu_hit_registry.origin_y = origin_y;
+}
+
+bool sdl_menu_hit_register(u16b kind, s16b id, s16b action_key, u16b role,
+    u16b action, u16b flags, const SDL_FRect* canvas_rect, cptr label,
+    cptr tooltip)
+{
+    sdl_menu_hit_target* target;
+
+    if (!canvas_rect || canvas_rect->w <= 0.0f || canvas_rect->h <= 0.0f)
+        return false;
+    if (!(flags & APP_UI_INTERACTION_FLAG_POINTER_ENABLED))
+        return false;
+    if (g_sdl_menu_hit_registry.count >= SDL_MENU_HIT_TARGET_MAX)
+        return false;
+
+    target = &g_sdl_menu_hit_registry.targets[g_sdl_menu_hit_registry.count++];
+    memset(target, 0, sizeof(*target));
+    target->rect = *canvas_rect;
+    target->rect.x += (float)g_sdl_menu_hit_registry.origin_x;
+    target->rect.y += (float)g_sdl_menu_hit_registry.origin_y;
+    target->kind = kind;
+    target->id = id;
+    target->action_key = action_key;
+    target->role = role;
+    target->action = action;
+    target->flags = flags;
+    sdl_menu_copy_hit_text(target->label, sizeof(target->label), label);
+    sdl_menu_copy_hit_text(target->tooltip, sizeof(target->tooltip), tooltip);
+    return true;
+}
+
+const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y)
+{
+    int i;
+
+    for (i = (int)g_sdl_menu_hit_registry.count - 1; i >= 0; i--)
+    {
+        const sdl_menu_hit_target* target = &g_sdl_menu_hit_registry.targets[i];
+
+        if (window_x < target->rect.x || window_y < target->rect.y)
+            continue;
+        if (window_x >= target->rect.x + target->rect.w)
+            continue;
+        if (window_y >= target->rect.y + target->rect.h)
+            continue;
+        return target;
+    }
+
+    return NULL;
+}
+
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 {
     byte color = attr & 0x0Fu;
@@ -551,6 +626,21 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
         sdl_menu_fill_rect(&selected_rect, selected_fill);
     }
 
+    {
+        SDL_FRect hit_rect = {
+            (float)clip_rect->x,
+            (float)(current_y - sdl_menu_scale_px(3.0f)),
+            (float)clip_rect->w,
+            (float)MAX(line_h + sdl_menu_scale_px(6.0f),
+                sdl_menu_scale_px(24.0f))
+        };
+
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_ROW, row->id,
+            row->interaction.action_key, row->interaction.role,
+            row->interaction.action, row->interaction.flags, &hit_rect,
+            row->label, row->interaction.tooltip);
+    }
+
     if (row->icon_char)
     {
         icon_slot_w = sdl_menu_icon_slot_px(font, line_h);
@@ -640,6 +730,11 @@ static void sdl_menu_render_footer(TTF_Font* font,
 
         sdl_menu_fill_rect(&pill, fill);
         sdl_menu_draw_rect(&pill, border);
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
+            action->id, action->interaction.action_key,
+            action->interaction.role, action->interaction.action,
+            action->interaction.flags, &pill, action->label,
+            action->interaction.tooltip);
         sdl_menu_render_text(font, pill.x + pill_pad_x, pill.y + pill_pad_y,
             line_h, text_color, text);
 
@@ -681,6 +776,10 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
         border.a = 220;
         sdl_menu_fill_rect(&pill, fill);
         sdl_menu_draw_rect(&pill, border);
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_TAB, tab->id,
+            tab->interaction.action_key, tab->interaction.role,
+            tab->interaction.action, tab->interaction.flags, &pill,
+            tab->label, tab->interaction.tooltip);
         sdl_menu_render_text(font, pill.x + pill_pad_x, pill.y + pill_pad_y,
             line_h, text_color, tab->label);
 

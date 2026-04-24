@@ -17,6 +17,7 @@
 #include "app/app-movement.h"
 #include "fs/resource.h"
 #include "sdl-main-internal.h"
+#include "sdl-menu/sdl-scene-menu.h"
 #include "ui/ui-information-scene.h"
 
 struct sound_config g_sound_config;
@@ -1622,6 +1623,9 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
         sdl_submit_legacy_input_byte(27);
         return;
     }
+
+    if (sdl_menu_pointer_handle_event(ev))
+        return;
 
     if (sdl_touch_pane_handle_event(ev))
         return;

@@ -649,17 +649,42 @@ static bool welcome_screen_add_footer_actions(app_ui_panel* panel)
             sizeof(confirm_label));
         welcome_prompt_label(steamdeck_back_key(), "B", back_label,
             sizeof(back_label));
-        return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-                   confirm_label,
-                   metarun_created ? "Begin" : "Continue")
-            && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-                back_label, "Quit");
+        if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+                confirm_label, metarun_created ? "Begin" : "Continue")
+            || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+                back_label, "Quit"))
+        {
+            return false;
+        }
+        return app_ui_panel_set_footer_action_interaction(panel, 1,
+                   APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_ACTIVATE,
+                   APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                       | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                   ' ', "Start the run")
+            && app_ui_panel_set_footer_action_interaction(panel, 2,
+                APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_CANCEL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                ESCAPE, "Quit to desktop");
     }
 
-    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
-               "Space", metarun_created ? "Begin" : "Continue")
-        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-            "Q/Esc", "Quit");
+    if (!app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Space", metarun_created ? "Begin" : "Continue")
+        || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "Q/Esc", "Quit"))
+    {
+        return false;
+    }
+    return app_ui_panel_set_footer_action_interaction(panel, 1,
+               APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_ACTIVATE,
+               APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                   | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+               ' ', "Start the run")
+        && app_ui_panel_set_footer_action_interaction(panel, 2,
+            APP_UI_WIDGET_ROLE_BUTTON, APP_UI_WIDGET_ACTION_CANCEL,
+            APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+            ESCAPE, "Quit to desktop");
 }
 
 static bool welcome_screen_build_ui_scene(app_ui_scene* scene,

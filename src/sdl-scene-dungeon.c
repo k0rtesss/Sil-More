@@ -15,6 +15,7 @@
 
 #include "angband.h"
 
+#include "sdl-menu/sdl-scene-menu.h"
 #include "sdl-main-internal.h"
 #include "support/utf8.h"
 
@@ -2389,6 +2390,8 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
 
     layout = sdl_scene_make_layout(main_view, map, chrome_scene, interaction);
     have_map_clip = sdl_scene_layout_map_clip_rect(&layout, &map_clip_rect);
+    sdl_menu_hit_reset(main_view->rect.x + main_view->margin_x,
+        main_view->rect.y + main_view->margin_y);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);

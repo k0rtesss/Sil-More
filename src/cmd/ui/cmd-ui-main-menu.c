@@ -289,7 +289,7 @@ static bool main_menu_scene_enter(main_menu_scene_scope* scope)
 }
 
 static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
-    int highlight, bool death_view, cptr label, cptr meta)
+    int highlight, bool death_view, cptr key, cptr label, cptr meta)
 {
     byte attr = TERM_WHITE;
     bool enabled = true;
@@ -308,7 +308,7 @@ static bool main_menu_scene_add_row(app_ui_panel* panel, int id,
     }
 
     return app_ui_panel_add_row(panel, (s16b)id, attr, enabled,
-        highlight == id, "", label, meta ? meta : "");
+        highlight == id, key ? key : "", label, meta ? meta : "");
 }
 
 static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
@@ -334,37 +334,37 @@ static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
     app_ui_panel_set_widths(panel, 300, 460);
 
     return main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
-               death_view, "Character sheet      (c)", "")
+               death_view, "c", "Character sheet      (c)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_KNOWLEDGE, highlight,
-            death_view, "Known lore           (a)", "")
+            death_view, "a", "Known lore           (a)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_QUEST_STATUS, highlight,
-            death_view, "Quest status         (t)", "")
+            death_view, "t", "Quest status         (t)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_HALLS_OF_MANDOS, highlight,
-            death_view, "Halls of Mandos      (d)", "")
+            death_view, "d", "Halls of Mandos      (d)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_RUN_HISTORY, highlight,
-            death_view, "Run history          (v)", "")
+            death_view, "v", "Run history          (v)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_MAP, highlight,
-            death_view, "Map                  (m)", "")
+            death_view, "m", "Map                  (m)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_LOG, highlight,
-            death_view, "Log                  (l)", "")
+            death_view, "l", "Log                  (l)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_COMBAT_HISTORY, highlight,
-            death_view, "Combat history       (x)", "")
+            death_view, "x", "Combat history       (x)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_HINT_MESSAGES, highlight,
-            death_view, "Hint messages        (i)", "")
+            death_view, "i", "Hint messages        (i)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_STORY, highlight,
-            death_view, "The story so far     (y)", "")
+            death_view, "y", "The story so far     (y)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_OPTIONS, highlight,
-            death_view, "Options and misc     (o)", "")
+            death_view, "o", "Options and misc     (o)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_HELP, highlight,
-            death_view, "Help                 (h)", "")
+            death_view, "h", "Help                 (h)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_ABOUT, highlight,
-            death_view, "About                (b)", "")
+            death_view, "b", "About                (b)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_SAVE, highlight,
-            death_view, "Save                 (s)", "")
+            death_view, "s", "Save                 (s)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_SAVE_QUIT, highlight,
-            death_view, "Quit with save       (q)", "")
+            death_view, "q", "Quit with save       (q)", "")
         && main_menu_scene_add_row(panel, MAIN_MENU_RETURN_GAME, highlight,
-            death_view, "Return to game       (r)", "");
+            death_view, "r", "Return to game       (r)", "");
 }
 
 static bool main_menu_scene_present(main_menu_scene_scope* scope, int highlight,

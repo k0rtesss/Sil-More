@@ -20,8 +20,34 @@
 
 #include "../sdl-main-internal.h"
 
+typedef enum sdl_menu_hit_target_kind {
+    SDL_MENU_HIT_TARGET_NONE = 0,
+    SDL_MENU_HIT_TARGET_ROW = 1,
+    SDL_MENU_HIT_TARGET_FOOTER_ACTION = 2,
+    SDL_MENU_HIT_TARGET_TAB = 3,
+    SDL_MENU_HIT_TARGET_PANEL = 4
+} sdl_menu_hit_target_kind;
+
+typedef struct sdl_menu_hit_target {
+    SDL_FRect rect;
+    u16b kind;
+    s16b id;
+    s16b action_key;
+    u16b role;
+    u16b action;
+    u16b flags;
+    char label[APP_UI_LABEL_MAX];
+    char tooltip[APP_UI_TOOLTIP_MAX];
+} sdl_menu_hit_target;
+
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha);
 SDL_Color sdl_menu_color(byte attr);
+void sdl_menu_hit_reset(int origin_x, int origin_y);
+bool sdl_menu_hit_register(u16b kind, s16b id, s16b action_key, u16b role,
+    u16b action, u16b flags, const SDL_FRect* canvas_rect, cptr label,
+    cptr tooltip);
+const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y);
+bool sdl_menu_pointer_handle_event(const SDL_Event* ev);
 void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst);

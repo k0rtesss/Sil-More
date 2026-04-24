@@ -451,6 +451,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/sdl-scene-bootstrap.c
     src/sdl-scene-dungeon.c
     src/sdl-scene-menu.c
+    src/sdl-menu/sdl-menu-pointer.c
     src/sdl-menu/sdl-scene-menu-base.c
     src/sdl-menu/sdl-scene-menu-browser.c
     src/sdl-menu/sdl-scene-menu-chrome.c

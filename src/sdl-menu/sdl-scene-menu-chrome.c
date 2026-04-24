@@ -718,34 +718,57 @@ static bool sdl_menu_welcome_choose_layout(const sdl_view* main_view,
     return true;
 }
 
-static void sdl_menu_welcome_format_prompt(const app_ui_panel* panel,
-    char* buf, size_t buflen)
+static void sdl_menu_welcome_format_action(
+    const app_ui_footer_action* action, char* buf, size_t buflen)
 {
-    u16b i;
-
     if (!buf || buflen == 0)
         return;
 
     buf[0] = '\0';
-    if (!panel)
+    if (!action || !action->label[0])
+        return;
+
+    if (action->key[0])
+        strnfmt(buf, buflen, "[%s] %s", action->key, action->label);
+    else
+        SDL_strlcpy(buf, action->label, buflen);
+}
+
+static void sdl_menu_render_welcome_footer_actions(TTF_Font* mono_font,
+    const app_ui_panel* panel, int x_px, int y_px, int line_h)
+{
+    int cursor_x = x_px;
+    int gap = sdl_menu_scale_px(24.0f);
+    u16b i;
+
+    if (!mono_font || !panel || line_h <= 0)
         return;
 
     for (i = 0; i < panel->footer_action_count; i++)
     {
         const app_ui_footer_action* action = &panel->footer_actions[i];
         char token[APP_UI_LABEL_MAX + APP_UI_KEY_MAX + 8];
+        int token_w;
+        SDL_FRect hit_rect;
 
-        if (!action->label[0])
+        sdl_menu_welcome_format_action(action, token, sizeof(token));
+        if (!token[0])
             continue;
 
-        if (action->key[0])
-            strnfmt(token, sizeof(token), "[%s] %s", action->key, action->label);
-        else
-            SDL_strlcpy(token, action->label, sizeof(token));
+        token_w = sdl_menu_measure_text(mono_font, token);
+        hit_rect.x = (float)cursor_x;
+        hit_rect.y = (float)y_px;
+        hit_rect.w = (float)MAX(token_w, sdl_menu_scale_px(48.0f));
+        hit_rect.h = (float)MAX(line_h, sdl_menu_scale_px(24.0f));
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
+            action->id, action->interaction.action_key,
+            action->interaction.role, action->interaction.action,
+            action->interaction.flags, &hit_rect, action->label,
+            action->interaction.tooltip);
 
-        if (buf[0])
-            SDL_strlcat(buf, "    ", buflen);
-        SDL_strlcat(buf, token, buflen);
+        sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
+            sdl_menu_color(action->attr ? action->attr : TERM_SLATE), token);
+        cursor_x += token_w + gap;
     }
 }
 
@@ -893,15 +916,8 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
     intro_x = base_x + 14 * cell_w;
     if (panel->footer_action_count > 0)
     {
-        char prompt_buf[APP_UI_TEXT_MAX];
-
-        sdl_menu_welcome_format_prompt(panel, prompt_buf, sizeof(prompt_buf));
-        if (prompt_buf[0])
-        {
-            sdl_menu_render_text(mono_font, (float)intro_x,
-                (float)(canvas_h - line_h), line_h, sdl_menu_color(TERM_SLATE),
-                prompt_buf);
-        }
+        sdl_menu_render_welcome_footer_actions(mono_font, panel, intro_x,
+            canvas_h - line_h, line_h);
 
         sdl_menu_render_text(mono_font, (float)intro_x,
             (float)(canvas_h - line_h * 3), line_h,

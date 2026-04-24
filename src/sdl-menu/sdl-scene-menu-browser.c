@@ -83,6 +83,12 @@ static void sdl_menu_render_browser_tabs(TTF_Font* font,
 
         if (i > 0)
             cursor_x += item_gap;
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_TAB, tab->id,
+            tab->interaction.action_key, tab->interaction.role,
+            tab->interaction.action, tab->interaction.flags,
+            &(SDL_FRect){ (float)cursor_x, (float)y_px, (float)tab_w,
+                (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
+            tab->label, tab->interaction.tooltip);
         sdl_menu_render_text(font, (float)cursor_x, (float)y_px, line_h,
             sdl_menu_color(tab->attr ? tab->attr : TERM_SLATE), tab->label);
         cursor_x += tab_w;
@@ -124,6 +130,13 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
         attr = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
             ? TERM_L_DARK
             : (action->attr ? action->attr : TERM_SLATE);
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
+            action->id, action->interaction.action_key,
+            action->interaction.role, action->interaction.action,
+            action->interaction.flags,
+            &(SDL_FRect){ (float)cursor_x, (float)cursor_y,
+                (float)token_w, (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
+            action->label, action->interaction.tooltip);
         sdl_menu_render_text(font, (float)cursor_x, (float)cursor_y, line_h,
             sdl_menu_color(attr), text);
         cursor_x += token_w + item_gap;
@@ -168,6 +181,21 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
             : (row->meta_attr ? row->meta_attr : row->attr)));
     label_x = clip_rect->x;
     meta_x = clip_rect->x;
+
+    {
+        SDL_FRect hit_rect = {
+            (float)clip_rect->x,
+            (float)(current_y - sdl_menu_scale_px(2.0f)),
+            (float)clip_rect->w,
+            (float)MAX(line_h + sdl_menu_scale_px(4.0f),
+                sdl_menu_scale_px(24.0f))
+        };
+
+        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_ROW, row->id,
+            row->interaction.action_key, row->interaction.role,
+            row->interaction.action, row->interaction.flags, &hit_rect,
+            row->label, row->interaction.tooltip);
+    }
 
     if (row->icon_char)
     {
