@@ -57,6 +57,7 @@ const char* settings_sdl_config_path(void)
 typedef struct settings_sdl_pane_overview {
     int main_view_scale;
     int max_scale;
+    int overlay_density;
     int min_terminal_mode;
     int aux_view_font_size;
     int effective_aux_view_font_size;
@@ -82,6 +83,8 @@ static void settings_sdl_read_pane_overview(
     overview->main_view_scale = settings_sdl_get_int_config(
         SETTINGS_SDL_INT_MAIN_VIEW_SCALE);
     overview->max_scale = settings_sdl_get_int_config(SETTINGS_SDL_INT_MAX_SCALE);
+    overview->overlay_density = settings_sdl_get_int_config(
+        SETTINGS_SDL_INT_OVERLAY_DENSITY);
     overview->min_terminal_mode = settings_sdl_get_int_config(
         SETTINGS_SDL_INT_MIN_TERMINAL_MODE);
     overview->aux_view_font_size = settings_sdl_get_int_config(
@@ -181,6 +184,22 @@ static void settings_ui_format_auto_value(char* buf, size_t buflen, int value,
 static const char* sdl_min_terminal_mode_label(int mode)
 {
     return (mode == 1) ? "compact (50x18)" : "normal (80x24)";
+}
+
+static const char* sdl_overlay_density_label(int density)
+{
+    switch (density)
+    {
+    case SDL_OVERLAY_DENSITY_COMPACT:
+        return "compact";
+    case SDL_OVERLAY_DENSITY_ROOMY:
+        return "roomy";
+    case SDL_OVERLAY_DENSITY_LARGE:
+        return "large";
+    case SDL_OVERLAY_DENSITY_AUTO:
+    default:
+        return "auto";
+    }
 }
 
 static bool pane_settings_present_ui_scene(int k, bool settings_changed,
@@ -360,8 +379,29 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         return false;
     }
 
-    if (!settings_browser_add_label_row(panel, 14, (k == 14) ? TERM_L_BLUE
-            : TERM_WHITE, true, k == 14, settings_changed
+    if (!settings_browser_add_pair_row(panel, 14, (k == 14) ? TERM_L_BLUE
+            : TERM_WHITE, TERM_SLATE, true, k == 14,
+            settings_ui_pick_label(label_hint,
+                "Overlay Density",
+                "Overlay Density",
+                "Density"),
+            sdl_overlay_density_label(overview->overlay_density)))
+    {
+        return false;
+    }
+
+    if (!settings_browser_add_label_row(panel, 15, (k == 15) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 15,
+            settings_ui_pick_label(label_hint,
+                "Reset Layout Defaults",
+                "Reset Layout",
+                "Reset")))
+    {
+        return false;
+    }
+
+    if (!settings_browser_add_label_row(panel, 16, (k == 16) ? TERM_L_BLUE
+            : TERM_WHITE, true, k == 16, settings_changed
             ? "Save Changes and Return"
             : "Return to Options Menu"))
     {
@@ -373,7 +413,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
         (void)app_ui_panel_add_body_line(panel, TERM_YELLOW,
             "Settings changed. Changes take effect immediately.");
         (void)app_ui_panel_add_body_line(panel, TERM_YELLOW,
-            "Changes will be saved to the SDL config file on exit.");
+            "Changes are saved to the SDL config file immediately.");
     }
 
     (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
@@ -381,9 +421,10 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
     (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
         "4/6", "Set");
     (void)app_ui_panel_add_footer_action(panel, 3, TERM_WHITE,
-        (k == 2) || (k == 3), "0", "Auto");
+        (k == 2) || (k == 3) || (k == 14), "0", "Auto");
     (void)app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-        "Enter", (k == 11 || k == 12 || k == 13) ? "Open" : "Accept");
+        "Enter", (k == 11 || k == 12 || k == 13) ? "Open"
+            : (k == 15) ? "Reset" : "Accept");
     (void)app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
         "Esc", "Back");
 
@@ -393,7 +434,7 @@ static bool pane_settings_present_ui_scene(int k, bool settings_changed,
 void do_cmd_pane_settings(void)
 {
     int k = 0;
-    int n = 15; /* Total number of options */
+    int n = 17; /* Total number of options */
     bool done = false;
     bool settings_changed = false;
     int dir;
@@ -460,6 +501,12 @@ void do_cmd_pane_settings(void)
                 do_cmd_supporting_pane_font_editor(&settings_changed);
                 break;
             }
+            if (k == 15) /* Reset Layout Defaults */
+            {
+                platform_reset_layout_defaults();
+                settings_changed = true;
+                break;
+            }
 
             /* Save if changed, then exit */
             if (settings_changed)
@@ -510,9 +557,20 @@ void do_cmd_pane_settings(void)
                     platform_apply_config();
                 }
             }
+            else if (k == 14)
+            {
+                if (overview.overlay_density != SDL_OVERLAY_DENSITY_AUTO)
+                {
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_OVERLAY_DENSITY,
+                        SDL_OVERLAY_DENSITY_AUTO);
+                    settings_changed = true;
+                    platform_apply_config();
+                }
+            }
             else
             {
-                bell("0 sets the selected font to auto");
+                bell("0 sets selected font or density to auto");
             }
             break;
         }
@@ -586,7 +644,20 @@ void do_cmd_pane_settings(void)
             {
                 do_cmd_supporting_pane_font_editor(&settings_changed);
             }
-            else if (k == 14) /* Save/Return */
+            else if (k == 14) /* Overlay Density */
+            {
+                settings_sdl_set_int_config(SETTINGS_SDL_INT_OVERLAY_DENSITY,
+                    (overview.overlay_density + 1)
+                        % (SDL_OVERLAY_DENSITY_LARGE + 1));
+                settings_changed = true;
+                platform_apply_config();
+            }
+            else if (k == 15) /* Reset Layout Defaults */
+            {
+                platform_reset_layout_defaults();
+                settings_changed = true;
+            }
+            else if (k == 16) /* Save/Return */
             {
                 if (settings_changed)
                 {
@@ -734,6 +805,17 @@ void do_cmd_pane_settings(void)
                     platform_apply_config();
                 }
             }
+            else if (k == 14) /* Overlay Density */
+            {
+                if (overview.overlay_density < SDL_OVERLAY_DENSITY_LARGE)
+                {
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_OVERLAY_DENSITY,
+                        overview.overlay_density + 1);
+                    settings_changed = true;
+                    platform_apply_config();
+                }
+            }
             break;
         }
         
@@ -868,6 +950,17 @@ void do_cmd_pane_settings(void)
                 {
                     settings_sdl_set_bool_config(
                         SETTINGS_SDL_BOOL_SHOW_PANE_BORDERS, false);
+                    settings_changed = true;
+                    platform_apply_config();
+                }
+            }
+            else if (k == 14) /* Overlay Density */
+            {
+                if (overview.overlay_density > SDL_OVERLAY_DENSITY_AUTO)
+                {
+                    settings_sdl_set_int_config(
+                        SETTINGS_SDL_INT_OVERLAY_DENSITY,
+                        overview.overlay_density - 1);
                     settings_changed = true;
                     platform_apply_config();
                 }

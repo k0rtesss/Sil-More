@@ -180,6 +180,7 @@ void sdl_present_if_needed(sdl_view* d)
     if (g_pane_rects[PANE_TOUCH].w > 0 && sdl_touch_pane_is_config_enabled())
         sdl_touch_pane_render();
 
+    sdl_pane_resize_render_handles();
     sdl_touch_pane_render_reset_prompt();
     SDL_RenderPresent(g_state.renderer);
 

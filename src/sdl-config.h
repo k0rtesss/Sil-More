@@ -21,15 +21,34 @@
 #include "pane-config.h"
 
 #define SDL_MOVEMENT_BINDING_MAX 64
+#define SDL_LAYOUT_SCHEMA_VERSION 2
+#define SDL_OVERLAY_PANEL_CONFIG_MAX 16
+#define SDL_OVERLAY_PANEL_ID_LEN 48
 
 enum sdl_min_terminal_mode {
     SDL_MIN_TERMINAL_NORMAL = 0,
     SDL_MIN_TERMINAL_COMPACT = 1,
 };
 
+enum sdl_overlay_density {
+    SDL_OVERLAY_DENSITY_AUTO = 0,
+    SDL_OVERLAY_DENSITY_COMPACT = 1,
+    SDL_OVERLAY_DENSITY_ROOMY = 2,
+    SDL_OVERLAY_DENSITY_LARGE = 3,
+};
+
+struct sdl_overlay_panel_config {
+    char id[SDL_OVERLAY_PANEL_ID_LEN];
+    bool pinned;
+    int x;
+    int y;
+};
+
 // SDL-specific configuration structure
 struct sdl_config {
+    int layout_schema_version;
     int main_view_scale;
+    int overlay_density;
     // Default supporting-pane font size. Zero means auto from the main pane's
     // visible font/cell height.
     int aux_view_font_size;
@@ -112,6 +131,9 @@ struct sdl_config {
     u16b movement_keyboard_preset;
     u16b movement_binding_count;
     app_movement_binding movement_bindings[SDL_MOVEMENT_BINDING_MAX];
+
+    int overlay_panel_count;
+    struct sdl_overlay_panel_config overlay_panels[SDL_OVERLAY_PANEL_CONFIG_MAX];
 };
 
 extern struct sdl_config config;

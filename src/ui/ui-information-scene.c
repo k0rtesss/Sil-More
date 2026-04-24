@@ -105,6 +105,39 @@ static int ui_information_scene_activation_key_for_command(
     return '\r';
 }
 
+static int ui_information_scene_direction_key(int dy, int dx)
+{
+    if (ABS(dy) >= ABS(dx) && dy != 0)
+        return (dy < 0) ? '8' : '2';
+    if (dx != 0)
+        return (dx < 0) ? '4' : '6';
+
+    return 0;
+}
+
+static int ui_information_scene_scroll_key(int scroll_y, int scroll_x)
+{
+    if (ABS(scroll_y) >= ABS(scroll_x) && scroll_y != 0)
+        return (scroll_y > 0) ? '8' : '2';
+    if (scroll_x != 0)
+        return (scroll_x < 0) ? '4' : '6';
+
+    return 0;
+}
+
+static int ui_information_scene_queue_repeated_key(app_session* session,
+    int key, int steps)
+{
+    int i;
+
+    if (!key || steps <= 0)
+        return 0;
+
+    for (i = 1; i < steps; i++)
+        (void)ui_information_scene_queue_legacy_key(session, key);
+    return key;
+}
+
 static int ui_information_scene_bridge_keyless_command(
     app_session* session, const app_ui_command* command)
 {
@@ -112,6 +145,25 @@ static int ui_information_scene_bridge_keyless_command(
 
     if (!session || !command)
         return 0;
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        return ui_information_scene_direction_key(command->dy, command->dx);
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
+    {
+        int key = ui_information_scene_scroll_key(command->scroll_y,
+            command->scroll_x);
+        int steps = MAX(ABS(command->scroll_y), ABS(command->scroll_x));
+
+        if (steps < 1)
+            steps = 1;
+        if (steps > 6)
+            steps = 6;
+        return ui_information_scene_queue_repeated_key(session, key, steps);
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_CONTEXT)
+        return 'x';
 
     activation_key = ui_information_scene_activation_key_for_command(command);
     if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM
@@ -339,8 +391,21 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
             if (ui_command.kind != APP_UI_COMMAND_KIND_ACTIVATE
                 && ui_command.kind != APP_UI_COMMAND_KIND_SELECT
                 && ui_command.kind != APP_UI_COMMAND_KIND_CANCEL
-                && ui_command.kind != APP_UI_COMMAND_KIND_INSPECT)
+                && ui_command.kind != APP_UI_COMMAND_KIND_INSPECT
+                && ui_command.kind != APP_UI_COMMAND_KIND_CONTEXT
+                && ui_command.kind != APP_UI_COMMAND_KIND_FOCUS
+                && ui_command.kind != APP_UI_COMMAND_KIND_SCROLL)
             {
+                continue;
+            }
+            if (ui_command.kind == APP_UI_COMMAND_KIND_FOCUS
+                || ui_command.kind == APP_UI_COMMAND_KIND_SCROLL
+                || ui_command.kind == APP_UI_COMMAND_KIND_CONTEXT)
+            {
+                int bridge_key = ui_information_scene_bridge_keyless_command(
+                    session, &ui_command);
+                if (bridge_key)
+                    return bridge_key;
                 continue;
             }
             if (!ui_command.target.action_key)

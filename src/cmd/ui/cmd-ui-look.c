@@ -334,6 +334,34 @@ static bool unified_look_can_show_marked_object_at(int y, int x)
         && grid_info_is_available(y, x);
 }
 
+bool do_cmd_look_recall_at(int y, int x)
+{
+    if (y < 0 || y >= p_ptr->cur_map_hgt || x < 0 || x >= p_ptr->cur_map_wid)
+        return false;
+
+    if (p_ptr->image)
+    {
+        msg_print("Your vision is too distorted to examine things carefully.");
+        return false;
+    }
+
+    if (unified_look_can_show_marked_object_at(y, x))
+    {
+        unified_look_snapshot_clear();
+        unified_look_show_object_info(&o_list[cave_o_idx[y][x]]);
+        return true;
+    }
+
+    if (unified_look_can_show_monster_at(y, x))
+    {
+        unified_look_show_monster_recall(&mon_list[cave_m_idx[y][x]]);
+        return true;
+    }
+
+    do_cmd_look_at(y, x);
+    return false;
+}
+
 static bool unified_look_sidebar_in_radius(const unified_look_state* state, int y,
     int x)
 {

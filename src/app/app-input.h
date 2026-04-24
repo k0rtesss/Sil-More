@@ -64,7 +64,8 @@ typedef enum app_input_flag {
     APP_INPUT_FLAG_PRESS = 0x0001u,
     APP_INPUT_FLAG_RELEASE = 0x0002u,
     APP_INPUT_FLAG_REPEAT = 0x0004u,
-    APP_INPUT_FLAG_SYNTHETIC = 0x0008u
+    APP_INPUT_FLAG_SYNTHETIC = 0x0008u,
+    APP_INPUT_FLAG_LONG_PRESS = 0x0010u
 } app_input_flag;
 
 typedef enum app_intent_kind {

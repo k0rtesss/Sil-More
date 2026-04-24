@@ -207,6 +207,123 @@ void platform_gamepad_action_binding_short_label(int binding, char* buf, size_t 
     sdl_gamepad_action_binding_label_ex(binding, buf, buflen, true);
 }
 
+static void sdl_input_key_prompt_label(int action_key, char* buf,
+    size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+    if (!action_key)
+        return;
+
+    switch (action_key)
+    {
+    case ESCAPE:
+        SDL_strlcpy(buf, "Esc", buflen);
+        return;
+    case '\r':
+        SDL_strlcpy(buf, "Enter", buflen);
+        return;
+    case ' ':
+        SDL_strlcpy(buf, "Space", buflen);
+        return;
+    case '\t':
+        SDL_strlcpy(buf, "Tab", buflen);
+        return;
+    default:
+        break;
+    }
+
+    if (action_key >= 32 && action_key <= 126)
+    {
+        if (buflen < 2)
+            return;
+        buf[0] = (char)action_key;
+        buf[1] = '\0';
+    }
+}
+
+static void sdl_gamepad_ui_action_prompt_label(u16b action, int action_key,
+    char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+
+    if (action == APP_UI_WIDGET_ACTION_CANCEL || action_key == ESCAPE)
+    {
+        SDL_strlcpy(buf, "B", buflen);
+        return;
+    }
+    if (action == APP_UI_WIDGET_ACTION_INSPECT || action_key == 'x'
+        || action_key == 'X' || action_key == '?')
+    {
+        SDL_strlcpy(buf, "X", buflen);
+        return;
+    }
+    if (action == APP_UI_WIDGET_ACTION_SCROLL || action_key == '2'
+        || action_key == '4' || action_key == '6' || action_key == '8')
+    {
+        SDL_strlcpy(buf, "D-pad", buflen);
+        return;
+    }
+    if (action == APP_UI_WIDGET_ACTION_SELECT
+        || action == APP_UI_WIDGET_ACTION_ACTIVATE
+        || action_key == '\r' || action_key == ' ')
+    {
+        SDL_strlcpy(buf, "A", buflen);
+        return;
+    }
+    if (action == APP_UI_WIDGET_ACTION_DRAG
+        || action == APP_UI_WIDGET_ACTION_RESIZE)
+    {
+        SDL_strlcpy(buf, "Hold", buflen);
+        return;
+    }
+
+    sdl_input_key_prompt_label(action_key, buf, buflen);
+}
+
+void platform_input_prompt_for_ui_action(u16b device, u16b action,
+    int action_key, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    buf[0] = '\0';
+    switch (device)
+    {
+    case APP_INPUT_DEVICE_GAMEPAD:
+        sdl_gamepad_ui_action_prompt_label(action, action_key, buf, buflen);
+        return;
+
+    case APP_INPUT_DEVICE_POINTER:
+        if (action == APP_UI_WIDGET_ACTION_SCROLL)
+            SDL_strlcpy(buf, "Wheel", buflen);
+        else if (action == APP_UI_WIDGET_ACTION_DRAG
+            || action == APP_UI_WIDGET_ACTION_RESIZE)
+            SDL_strlcpy(buf, "Drag", buflen);
+        else
+            SDL_strlcpy(buf, "Click", buflen);
+        return;
+
+    case APP_INPUT_DEVICE_TOUCH:
+        if (action == APP_UI_WIDGET_ACTION_INSPECT)
+            SDL_strlcpy(buf, "Hold", buflen);
+        else if (action == APP_UI_WIDGET_ACTION_SCROLL)
+            SDL_strlcpy(buf, "Swipe", buflen);
+        else
+            SDL_strlcpy(buf, "Tap", buflen);
+        return;
+
+    default:
+        sdl_input_key_prompt_label(action_key, buf, buflen);
+        return;
+    }
+}
+
 int steamdeck_back_key(void)
 {
     return platform_gamepad_button_binding(SDL_GAMEPAD_BUTTON_EAST);

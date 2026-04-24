@@ -32,7 +32,7 @@ static bool smith_ui_enchant_build_scene(app_ui_scene* scene,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->style = APP_UI_PANEL_STYLE_CRAFTING;
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 920, 1380);

@@ -17,20 +17,46 @@
 
 #include "sdl-scene-menu.h"
 
+static void sdl_menu_browser_action_text(const app_ui_footer_action* action,
+    char* text, size_t text_size)
+{
+    char prompt[32];
+    cptr key_text;
+
+    if (!text || !text_size)
+        return;
+
+    text[0] = '\0';
+    if (!action || !action->label[0])
+        return;
+
+    prompt[0] = '\0';
+    if (portable_controls_active())
+    {
+        platform_input_prompt_for_ui_action(APP_INPUT_DEVICE_GAMEPAD,
+            action->interaction.action, action->interaction.action_key,
+            prompt, sizeof(prompt));
+    }
+
+    key_text = prompt[0] ? prompt : action->key;
+    if (key_text && key_text[0])
+        strnfmt(text, text_size, "%s %s", key_text, action->label);
+    else
+        SDL_strlcpy(text, action->label, text_size);
+}
+
 static int sdl_menu_browser_action_width(TTF_Font* font,
     const app_ui_footer_action* action)
 {
-    char text[APP_UI_KEY_MAX + APP_UI_LABEL_MAX + 4];
+    char text[APP_UI_LABEL_MAX + 40];
+    int pad_x;
 
     if (!font || !action || !action->label[0])
         return 0;
 
-    if (action->key[0])
-        strnfmt(text, sizeof(text), "%s %s", action->key, action->label);
-    else
-        SDL_strlcpy(text, action->label, sizeof(text));
-
-    return sdl_menu_measure_text(font, text);
+    sdl_menu_browser_action_text(action, text, sizeof(text));
+    pad_x = sdl_menu_scale_px(8.0f);
+    return sdl_menu_measure_text(font, text) + pad_x * 2;
 }
 
 static int sdl_menu_browser_footer_lines(TTF_Font* font,
@@ -71,6 +97,8 @@ static void sdl_menu_render_browser_tabs(TTF_Font* font,
     const app_ui_panel* panel, int x_px, int y_px, int line_h, int item_gap)
 {
     int cursor_x = x_px;
+    int pad_x = sdl_menu_scale_px(10.0f);
+    int pad_y = sdl_menu_scale_px(3.0f);
     u16b i;
 
     if (!font || !panel || panel->tab_count == 0)
@@ -79,19 +107,37 @@ static void sdl_menu_render_browser_tabs(TTF_Font* font,
     for (i = 0; i < panel->tab_count; i++)
     {
         const app_ui_tab* tab = &panel->tabs[i];
-        int tab_w = sdl_menu_measure_text(font, tab->label);
+        int text_w = sdl_menu_measure_text(font, tab->label);
+        int tab_w = text_w + pad_x * 2;
+        SDL_FRect pill = {
+            (float)cursor_x,
+            (float)y_px,
+            (float)tab_w,
+            (float)(line_h + pad_y * 2)
+        };
+        SDL_Color fill = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE)
+            ? sdl_menu_panel_style(panel)->selected_fill
+            : sdl_menu_panel_style(panel)->panel_fill_alt;
+        SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
 
         if (i > 0)
             cursor_x += item_gap;
+        pill.x = (float)cursor_x;
+        fill.a = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) ? 132 : 70;
+        border.a = 212;
+        sdl_menu_fill_rect(&pill, fill);
+        sdl_menu_draw_rect(&pill, border);
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_TAB, tab->id,
             tab->interaction.action_key, tab->interaction.role,
             tab->interaction.action, tab->interaction.flags, tab->flags, -1,
             0, 0,
             &(SDL_FRect){ (float)cursor_x, (float)y_px, (float)tab_w,
-                (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
+                (float)MAX(line_h + pad_y * 2, sdl_menu_scale_px(24.0f)) },
             tab->label, tab->interaction.tooltip);
-        sdl_menu_render_text(font, (float)cursor_x, (float)y_px, line_h,
-            sdl_menu_color(tab->attr ? tab->attr : TERM_SLATE), tab->label);
+        sdl_menu_render_text(font, (float)(cursor_x + pad_x),
+            (float)(y_px + pad_y), line_h,
+            sdl_menu_panel_color(panel, tab->attr ? tab->attr : TERM_SLATE),
+            tab->label);
         cursor_x += tab_w;
     }
 }
@@ -110,18 +156,21 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
     for (i = 0; i < panel->footer_action_count; i++)
     {
         const app_ui_footer_action* action = &panel->footer_actions[i];
-        char text[APP_UI_KEY_MAX + APP_UI_LABEL_MAX + 4];
+        char text[APP_UI_LABEL_MAX + 40];
         int token_w;
+        int text_w;
+        int pad_x = sdl_menu_scale_px(8.0f);
+        int pad_y = sdl_menu_scale_px(2.0f);
         byte attr;
+        SDL_Color fill;
+        SDL_Color border;
 
         if (!action->label[0])
             continue;
-        if (action->key[0])
-            strnfmt(text, sizeof(text), "%s %s", action->key, action->label);
-        else
-            SDL_strlcpy(text, action->label, sizeof(text));
+        sdl_menu_browser_action_text(action, text, sizeof(text));
 
-        token_w = sdl_menu_measure_text(font, text);
+        text_w = sdl_menu_measure_text(font, text);
+        token_w = text_w + pad_x * 2;
         if (cursor_x > x_px && cursor_x + token_w > x_px + max_w)
         {
             cursor_x = x_px;
@@ -131,15 +180,29 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
         attr = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
             ? TERM_L_DARK
             : (action->attr ? action->attr : TERM_SLATE);
+        fill = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
+            ? sdl_menu_panel_style(panel)->disabled_fill
+            : sdl_menu_panel_style(panel)->panel_fill_alt;
+        border = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
+            ? sdl_menu_panel_style(panel)->panel_border_soft
+            : sdl_menu_panel_accent(panel, panel->accent_attr);
+        fill.a = (action->flags & APP_UI_ITEM_FLAG_DISABLED) ? 96 : 76;
+        border.a = (action->flags & APP_UI_ITEM_FLAG_DISABLED) ? 150 : 196;
+        sdl_menu_fill_rect(&(SDL_FRect){ (float)cursor_x, (float)cursor_y,
+            (float)token_w, (float)(line_h + pad_y * 2) }, fill);
+        sdl_menu_draw_rect(&(SDL_FRect){ (float)cursor_x, (float)cursor_y,
+            (float)token_w, (float)(line_h + pad_y * 2) }, border);
         (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
             action->id, action->interaction.action_key,
             action->interaction.role, action->interaction.action,
             action->interaction.flags, action->flags, -1, 0, 0,
             &(SDL_FRect){ (float)cursor_x, (float)cursor_y,
-                (float)token_w, (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
+                (float)token_w, (float)MAX(line_h + pad_y * 2,
+                    sdl_menu_scale_px(24.0f)) },
             action->label, action->interaction.tooltip);
-        sdl_menu_render_text(font, (float)cursor_x, (float)cursor_y, line_h,
-            sdl_menu_color(attr), text);
+        sdl_menu_render_text(font, (float)(cursor_x + pad_x),
+            (float)(cursor_y + pad_y), line_h,
+            sdl_menu_panel_color(panel, attr), text);
         cursor_x += token_w + item_gap;
     }
 }
@@ -164,18 +227,20 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
         if (row->label[0])
         {
             sdl_menu_render_text(font, (float)clip_rect->x, (float)current_y,
-                line_h, sdl_menu_color(row->attr ? row->attr : TERM_WHITE),
-                row->label);
+                line_h, sdl_menu_panel_color(panel,
+                    row->attr ? row->attr : TERM_WHITE), row->label);
         }
         return;
     }
 
-    color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
+    color = sdl_menu_panel_color(panel,
+        (row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : ((row->flags & APP_UI_ITEM_FLAG_SELECTED)
             ? panel->accent_attr
             : row->attr));
-    meta_color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
+    meta_color = sdl_menu_panel_color(panel,
+        (row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : ((row->flags & APP_UI_ITEM_FLAG_SELECTED)
             ? panel->accent_attr
@@ -197,6 +262,12 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
             row->interaction.action, row->interaction.flags, row->flags, -1,
             row_index, panel->selected_row, &hit_rect, row->label,
             row->interaction.tooltip);
+        if (row->flags & APP_UI_ITEM_FLAG_SELECTED)
+        {
+            SDL_Color fill = sdl_menu_panel_style(panel)->selected_fill;
+
+            sdl_menu_fill_rect(&hit_rect, fill);
+        }
     }
 
     if (row->icon_char)
@@ -213,7 +284,8 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
     {
         key_w = sdl_menu_measure_text(font, row->key);
         sdl_menu_render_text(font, (float)label_x, (float)current_y,
-            line_h, sdl_menu_color(panel->accent_attr), row->key);
+            line_h, sdl_menu_panel_accent(panel, panel->accent_attr),
+            row->key);
         label_x += key_w + item_gap;
     }
 
@@ -239,7 +311,7 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
 {
     TTF_Font* font;
     TTF_Font* story_font = NULL;
-    SDL_Color line_color = sdl_menu_color(TERM_L_DARK);
+    const sdl_ui_style* style;
     int pixel_height;
     int line_h;
     int line_gap;
@@ -283,6 +355,7 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
+    style = sdl_menu_panel_style(ui_panel);
     pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
@@ -294,16 +367,14 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     line_h = pixel_height;
     if (line_h <= 0)
         line_h = TTF_GetFontHeight(font);
-    line_gap = sdl_menu_scale_px(2.0f);
-    section_gap = sdl_menu_scale_px(10.0f);
-    item_gap = sdl_menu_scale_px(16.0f);
-    margin_x = sdl_menu_scale_px(18.0f);
-    margin_y = sdl_menu_scale_px(10.0f);
-    column_gap = sdl_menu_scale_px(28.0f);
+    line_gap = MAX(1, sdl_menu_scale_px(style->line_gap));
+    section_gap = MAX(line_gap, sdl_menu_scale_px(style->section_gap));
+    item_gap = MAX(1, sdl_menu_scale_px(style->item_gap));
+    margin_x = MAX(0, sdl_menu_scale_px(style->margin_x));
+    margin_y = MAX(0, sdl_menu_scale_px(style->margin_y));
+    column_gap = MAX(1, sdl_menu_scale_px(style->column_gap));
 
-    sdl_menu_fill_rect(&(SDL_FRect){
-        0.0f, 0.0f, (float)canvas_w, (float)canvas_h
-    }, (SDL_Color){ 0, 0, 0, 255 });
+    sdl_ui_style_draw_canvas(style, canvas_w, canvas_h);
 
     footer_lines = sdl_menu_browser_footer_lines(font, ui_panel,
         MAX(1, canvas_w - margin_x * 2), item_gap);
@@ -364,7 +435,8 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (ui_panel->title[0])
     {
         sdl_menu_render_text(font, (float)margin_x, (float)header_y, line_h,
-            sdl_menu_color(ui_panel->title_attr), ui_panel->title);
+            sdl_menu_panel_color(ui_panel, ui_panel->title_attr),
+            ui_panel->title);
         header_y += line_h + line_gap;
         has_header = true;
     }
@@ -379,13 +451,15 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (ui_panel->detail_title[0])
     {
         sdl_menu_render_text(font, (float)detail_x, (float)subheader_y, line_h,
-            sdl_menu_color(ui_panel->detail_title_attr), ui_panel->detail_title);
+            sdl_menu_panel_color(ui_panel, ui_panel->detail_title_attr),
+            ui_panel->detail_title);
         has_header = true;
     }
     if (ui_panel->subtitle[0])
     {
         sdl_menu_render_text(font, (float)rows_x, (float)subheader_y, line_h,
-            sdl_menu_color(ui_panel->subtitle_attr), ui_panel->subtitle);
+            sdl_menu_panel_color(ui_panel, ui_panel->subtitle_attr),
+            ui_panel->subtitle);
         has_header = true;
     }
 
@@ -395,21 +469,21 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
     if (has_header)
     {
         divider_y = header_y;
-        sdl_menu_fill_rect(&(SDL_FRect){
+        sdl_ui_style_draw_rule(style, &(SDL_FRect){
             (float)margin_x, (float)divider_y,
             (float)(canvas_w - margin_x * 2), 1.0f
-        }, line_color);
+        });
         if (has_detail)
         {
             float rule_x = detail_leading
                 ? (float)(rows_x - column_gap / 2)
                 : (float)(detail_x - column_gap / 2);
 
-            sdl_menu_fill_rect(&(SDL_FRect){
+            sdl_ui_style_draw_rule(style, &(SDL_FRect){
                 rule_x, (float)(divider_y + line_gap),
                 1.0f, (float)(canvas_h - divider_y - margin_y - footer_h
                     - status_h - section_gap * 2)
-            }, line_color);
+            });
         }
         content_top = divider_y + line_gap + section_gap;
     }
@@ -481,7 +555,7 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         for (i = 0; i < ui_panel->detail_line_count; i++)
         {
             sdl_menu_render_text(font, (float)detail_x, (float)detail_y, line_h,
-                sdl_menu_color(ui_panel->detail_lines[i].attr),
+                sdl_menu_panel_color(ui_panel, ui_panel->detail_lines[i].attr),
                 ui_panel->detail_lines[i].text);
             detail_y += line_h + line_gap;
         }
@@ -515,6 +589,24 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         row_clip.w = content_w;
         row_clip.h = MAX(0, content_bottom - row_y);
 
+        if ((ui_panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS)
+            && row_clip.w > 0 && row_clip.h > 0)
+        {
+            SDL_FRect scroll_rect = {
+                (float)row_clip.x,
+                (float)row_clip.y,
+                (float)row_clip.w,
+                (float)row_clip.h
+            };
+
+            (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL, -1, 0,
+                APP_UI_WIDGET_ROLE_SCROLL_REGION,
+                APP_UI_WIDGET_ACTION_SCROLL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                APP_UI_ITEM_FLAG_NONE, -1, row_start, row_visible,
+                &scroll_rect, ui_panel->title, "");
+        }
         SDL_SetRenderClipRect(g_state.renderer, &row_clip);
         for (i = 0; i < (u16b)row_visible; i++)
         {
@@ -537,6 +629,24 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         };
         int rich_start_y = content_top - rich_scroll_px;
 
+        if ((ui_panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS)
+            && rich_clip.w > 0 && rich_clip.h > 0)
+        {
+            SDL_FRect scroll_rect = {
+                (float)rich_clip.x,
+                (float)rich_clip.y,
+                (float)rich_clip.w,
+                (float)rich_clip.h
+            };
+
+            (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL, -1, 0,
+                APP_UI_WIDGET_ROLE_SCROLL_REGION,
+                APP_UI_WIDGET_ACTION_SCROLL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                APP_UI_ITEM_FLAG_NONE, -1, ui_panel->row_offset, 0,
+                &scroll_rect, ui_panel->title, "");
+        }
         SDL_SetRenderClipRect(g_state.renderer, &rich_clip);
         (void)sdl_menu_render_rich_text(scene, ui_panel, font, story_font,
             &rich_clip, line_h, line_gap, line_h + line_gap, rich_start_y);
@@ -545,15 +655,16 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         {
             sdl_menu_render_text(font,
                 (float)(rows_x + content_w - sdl_menu_scale_px(10.0f)),
-                (float)content_top, line_h, sdl_menu_color(ui_panel->accent_attr),
-                "^");
+                (float)content_top, line_h,
+                sdl_menu_panel_accent(ui_panel, ui_panel->accent_attr), "^");
         }
         if (rich_scrollable && rich_scroll_px < rich_max_scroll_px)
         {
             sdl_menu_render_text(font,
                 (float)(rows_x + content_w - sdl_menu_scale_px(10.0f)),
                 (float)(content_bottom - line_h),
-                line_h, sdl_menu_color(ui_panel->accent_attr), "v");
+                line_h, sdl_menu_panel_accent(ui_panel, ui_panel->accent_attr),
+                "v");
         }
     }
 
@@ -564,7 +675,7 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         for (i = 0; i < ui_panel->body_line_count; i++)
         {
             sdl_menu_render_text(font, (float)margin_x, (float)y, line_h,
-                sdl_menu_color(ui_panel->body_lines[i].attr),
+                sdl_menu_panel_color(ui_panel, ui_panel->body_lines[i].attr),
                 ui_panel->body_lines[i].text);
             y += line_h + line_gap;
         }

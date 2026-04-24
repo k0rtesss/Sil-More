@@ -46,6 +46,7 @@ void do_cmd_options_aux(int page, cptr info);
 void do_cmd_target(void);
 void do_cmd_look(void);
 void do_cmd_look_at(int y, int x);
+bool do_cmd_look_recall_at(int y, int x);
 void do_cmd_unified_look(void);
 void do_cmd_locate(void);
 void do_cmd_query_symbol(void);

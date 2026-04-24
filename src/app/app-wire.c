@@ -717,7 +717,8 @@ bool app_wire_validate_input(const app_input* input)
     if (input->flags & ~(APP_INPUT_FLAG_PRESS
             | APP_INPUT_FLAG_RELEASE
             | APP_INPUT_FLAG_REPEAT
-            | APP_INPUT_FLAG_SYNTHETIC))
+            | APP_INPUT_FLAG_SYNTHETIC
+            | APP_INPUT_FLAG_LONG_PRESS))
     {
         return false;
     }

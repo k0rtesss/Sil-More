@@ -55,6 +55,7 @@ typedef struct gamepad_input_state {
     Sint16 left_y;
     int left_dir;
     int left_bind_dir;
+    int ui_left_dir;
     bool left_pending;
     int left_pending_dir;
     Uint64 left_pending_time;
@@ -64,6 +65,7 @@ typedef struct gamepad_input_state {
     Sint16 right_x;
     Sint16 right_y;
     int right_dir;
+    int ui_right_dir;
     bool left_shoulder_down;
     bool right_shoulder_down;
     bool shoulder_pending;
@@ -108,6 +110,10 @@ static int sdl_gamepad_axis_to_dir(Sint16 x, Sint16 y, int deadzone);
 static int sdl_gamepad_axis_to_cardinal_dir(Sint16 x, Sint16 y, int deadzone);
 static void sdl_dispatch_gamepad_direction(int dir, bool shift, bool ctrl,
     bool alt, u16b input_type);
+static bool sdl_gamepad_try_handle_menu_button(SDL_GamepadButton button,
+    bool down);
+static bool sdl_gamepad_try_handle_menu_axis(
+    const SDL_GamepadAxisEvent* ev);
 void sdl_gamepad_send_key(int key, bool apply_modifiers);
 static u16b sdl_input_modifiers_from_keymod(SDL_Keymod mod);
 static bool sdl_build_movement_command_from_input(u16b context, u16b action,
@@ -1093,6 +1099,253 @@ int sdl_gamepad_pending_timeout_ms(Uint64 now_ns)
     }
 }
 
+static bool sdl_gamepad_menu_input_active(void)
+{
+    return ui_information_scene_owns_input();
+}
+
+static bool sdl_gamepad_menu_delta_key(int dy, int dx, int* out_key)
+{
+    if (!out_key)
+        return false;
+
+    *out_key = 0;
+    if (ABS(dy) >= ABS(dx) && dy != 0)
+        *out_key = (dy < 0) ? '8' : '2';
+    else if (dx != 0)
+        *out_key = (dx < 0) ? '4' : '6';
+
+    return *out_key != 0;
+}
+
+static bool sdl_gamepad_menu_submit_delta(int dy, int dx, u16b input_type,
+    u16b control)
+{
+    int fallback_key = 0;
+
+    if (sdl_menu_gamepad_submit_focus_delta(dy, dx, input_type, control))
+        return true;
+
+    if (sdl_gamepad_menu_delta_key(dy, dx, &fallback_key))
+        sdl_gamepad_send_key(fallback_key, false);
+    return true;
+}
+
+static bool sdl_gamepad_menu_button_delta(SDL_GamepadButton button,
+    int* out_dy, int* out_dx)
+{
+    if (out_dy)
+        *out_dy = 0;
+    if (out_dx)
+        *out_dx = 0;
+
+    switch (button)
+    {
+    case SDL_GAMEPAD_BUTTON_DPAD_UP:
+        if (out_dy)
+            *out_dy = -1;
+        return true;
+
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+        if (out_dy)
+            *out_dy = 1;
+        return true;
+
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+        if (out_dx)
+            *out_dx = -1;
+        return true;
+
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+        if (out_dx)
+            *out_dx = 1;
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static bool sdl_gamepad_menu_axis_delta(int dir, int* out_dy, int* out_dx)
+{
+    if (out_dy)
+        *out_dy = 0;
+    if (out_dx)
+        *out_dx = 0;
+
+    switch (dir)
+    {
+    case GAMEPAD_STICK_DIR_UP:
+        if (out_dy)
+            *out_dy = -1;
+        return true;
+
+    case GAMEPAD_STICK_DIR_DOWN:
+        if (out_dy)
+            *out_dy = 1;
+        return true;
+
+    case GAMEPAD_STICK_DIR_LEFT:
+        if (out_dx)
+            *out_dx = -1;
+        return true;
+
+    case GAMEPAD_STICK_DIR_RIGHT:
+        if (out_dx)
+            *out_dx = 1;
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static void sdl_gamepad_update_menu_dpad_state(SDL_GamepadButton button,
+    bool down)
+{
+    switch (button)
+    {
+    case SDL_GAMEPAD_BUTTON_DPAD_UP:
+        g_gamepad_state.dpad_up = down;
+        break;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+        g_gamepad_state.dpad_down = down;
+        break;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+        g_gamepad_state.dpad_left = down;
+        break;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+        g_gamepad_state.dpad_right = down;
+        break;
+    default:
+        break;
+    }
+}
+
+static bool sdl_gamepad_try_handle_menu_button(SDL_GamepadButton button,
+    bool down)
+{
+    int dy = 0;
+    int dx = 0;
+
+    if (!sdl_gamepad_menu_input_active())
+        return false;
+
+    if (sdl_gamepad_menu_button_delta(button, &dy, &dx))
+    {
+        sdl_gamepad_update_menu_dpad_state(button, down);
+        sdl_gamepad_clear_pending_dpad();
+        if (down)
+            (void)sdl_gamepad_menu_submit_delta(dy, dx,
+                APP_INPUT_TYPE_GAMEPAD_BUTTON, (u16b)button);
+        return true;
+    }
+
+    if (!down)
+        return button == SDL_GAMEPAD_BUTTON_SOUTH
+            || button == SDL_GAMEPAD_BUTTON_EAST
+            || button == SDL_GAMEPAD_BUTTON_START
+            || button == SDL_GAMEPAD_BUTTON_WEST
+            || button == SDL_GAMEPAD_BUTTON_BACK;
+
+    if (button == SDL_GAMEPAD_BUTTON_SOUTH)
+    {
+        if (!sdl_menu_gamepad_submit_current(APP_UI_COMMAND_KIND_ACTIVATE,
+                APP_INPUT_TYPE_GAMEPAD_BUTTON, (u16b)button))
+        {
+            sdl_gamepad_send_key('\r', false);
+        }
+        return true;
+    }
+
+    if (button == SDL_GAMEPAD_BUTTON_EAST
+        || button == SDL_GAMEPAD_BUTTON_START)
+    {
+        if (!sdl_menu_gamepad_submit_current(APP_UI_COMMAND_KIND_CANCEL,
+                APP_INPUT_TYPE_GAMEPAD_BUTTON, (u16b)button))
+        {
+            sdl_gamepad_send_key(ESCAPE, false);
+        }
+        return true;
+    }
+
+    if (button == SDL_GAMEPAD_BUTTON_WEST
+        || button == SDL_GAMEPAD_BUTTON_BACK)
+    {
+        if (!sdl_menu_gamepad_submit_current(APP_UI_COMMAND_KIND_INSPECT,
+                APP_INPUT_TYPE_GAMEPAD_BUTTON, (u16b)button))
+        {
+            sdl_gamepad_send_key('x', false);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static bool sdl_gamepad_try_handle_menu_axis(
+    const SDL_GamepadAxisEvent* ev)
+{
+    int deadzone;
+    int dir;
+    int dy = 0;
+    int dx = 0;
+
+    if (!ev || !sdl_gamepad_menu_input_active())
+        return false;
+
+    deadzone = config.gamepad_deadzone;
+    if (deadzone < 0)
+        deadzone = 0;
+
+    if (ev->axis == SDL_GAMEPAD_AXIS_LEFTX
+        || ev->axis == SDL_GAMEPAD_AXIS_LEFTY)
+    {
+        if (ev->axis == SDL_GAMEPAD_AXIS_LEFTX)
+            g_gamepad_state.left_x = ev->value;
+        else
+            g_gamepad_state.left_y = ev->value;
+
+        dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.left_x,
+            g_gamepad_state.left_y, deadzone);
+        if (dir != g_gamepad_state.ui_left_dir)
+        {
+            g_gamepad_state.ui_left_dir = dir;
+            sdl_gamepad_clear_pending_left_stick();
+            if (sdl_gamepad_menu_axis_delta(dir, &dy, &dx))
+            {
+                (void)sdl_gamepad_menu_submit_delta(dy, dx,
+                    APP_INPUT_TYPE_GAMEPAD_AXIS, (u16b)ev->axis);
+            }
+        }
+        return true;
+    }
+
+    if (ev->axis == SDL_GAMEPAD_AXIS_RIGHTX
+        || ev->axis == SDL_GAMEPAD_AXIS_RIGHTY)
+    {
+        if (ev->axis == SDL_GAMEPAD_AXIS_RIGHTX)
+            g_gamepad_state.right_x = ev->value;
+        else
+            g_gamepad_state.right_y = ev->value;
+
+        dir = sdl_gamepad_axis_to_cardinal_dir(g_gamepad_state.right_x,
+            g_gamepad_state.right_y, deadzone);
+        if (dir != g_gamepad_state.ui_right_dir)
+        {
+            g_gamepad_state.ui_right_dir = dir;
+            if (sdl_gamepad_menu_axis_delta(dir, &dy, &dx))
+            {
+                (void)sdl_gamepad_menu_submit_delta(dy, dx,
+                    APP_INPUT_TYPE_GAMEPAD_AXIS, (u16b)ev->axis);
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
 static void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
 {
     if (!ev)
@@ -1154,6 +1407,8 @@ static void sdl_gamepad_handle_button(const SDL_GamepadButtonEvent* ev)
         return;
 
     sdl_gamepad_mark_auto_ui();
+    if (sdl_gamepad_try_handle_menu_button(button, down))
+        return;
 
     if (config.gamepad_use_dpad &&
         (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
@@ -1356,6 +1611,8 @@ static void sdl_gamepad_handle_axis(const SDL_GamepadAxisEvent* ev)
         return;
 
     sdl_gamepad_mark_auto_ui();
+    if (sdl_gamepad_try_handle_menu_axis(ev))
+        return;
 
     if (ev->axis == SDL_GAMEPAD_AXIS_LEFTX || ev->axis == SDL_GAMEPAD_AXIS_LEFTY) {
         if (ev->axis == SDL_GAMEPAD_AXIS_LEFTX)
@@ -1587,6 +1844,8 @@ void sdl_gamepad_init(void)
     SDL_SetGamepadEventsEnabled(true);
     g_gamepad_state.left_bind_dir = -1;
     g_gamepad_state.right_dir = -1;
+    g_gamepad_state.ui_left_dir = -1;
+    g_gamepad_state.ui_right_dir = -1;
     sdl_gamepad_clear_pending_shoulder();
 
     int count = 0;
@@ -1624,7 +1883,13 @@ void sdl_handle_event(sdl_state* st, const SDL_Event* ev)
         return;
     }
 
+    if (sdl_pane_resize_handle_event(ev))
+        return;
+
     if (sdl_menu_pointer_handle_event(ev))
+        return;
+
+    if (sdl_map_pointer_handle_event(ev))
         return;
 
     if (sdl_touch_pane_handle_event(ev))
@@ -1932,6 +2197,13 @@ errr init_sdl(int argc, char **argv)
         log_warn("Invalid main_view_scale %d, using 1", config.main_view_scale);
         config.main_view_scale = 1;
     }
+    if (config.overlay_density < SDL_OVERLAY_DENSITY_AUTO
+        || config.overlay_density > SDL_OVERLAY_DENSITY_LARGE)
+    {
+        log_warn("Invalid overlay_density %d, using auto",
+            config.overlay_density);
+        config.overlay_density = SDL_OVERLAY_DENSITY_AUTO;
+    }
     if (config.aux_view_font_size < 0) {
         log_warn("Invalid aux_view_font_size %d, using auto", config.aux_view_font_size);
         config.aux_view_font_size = 0;
@@ -2018,6 +2290,7 @@ errr init_sdl(int argc, char **argv)
     
     log_info("SDL Configuration:");
     log_info("  Main view scale: %d", config.main_view_scale);
+    log_info("  Overlay density: %d", config.overlay_density);
     if (config.aux_view_font_size > 0)
         log_info("  Default aux view font size: %d", config.aux_view_font_size);
     else

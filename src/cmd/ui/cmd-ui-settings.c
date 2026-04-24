@@ -99,6 +99,9 @@ static const settings_int_binding settings_sdl_int_bindings
             = { SETTINGS_SDL_GET(main_view_scale),
                 SETTINGS_SDL_SET(main_view_scale) },
         [SETTINGS_SDL_INT_MAX_SCALE] = { SETTINGS_SDL_GET(max_scale), NULL },
+        [SETTINGS_SDL_INT_OVERLAY_DENSITY]
+            = { SETTINGS_SDL_GET(overlay_density),
+                SETTINGS_SDL_SET(overlay_density) },
         [SETTINGS_SDL_INT_MIN_TERMINAL_MODE]
             = { SETTINGS_SDL_GET(min_terminal_mode),
                 SETTINGS_SDL_SET(min_terminal_mode) },

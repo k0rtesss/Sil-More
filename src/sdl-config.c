@@ -338,6 +338,40 @@ static int parse_min_terminal_mode(const char* value)
     return SDL_MIN_TERMINAL_NORMAL;
 }
 
+static bool sdl_overlay_density_is_valid(int value)
+{
+    return value >= SDL_OVERLAY_DENSITY_AUTO
+        && value <= SDL_OVERLAY_DENSITY_LARGE;
+}
+
+static const char* sdl_overlay_density_to_string(int value)
+{
+    switch (value) {
+    case SDL_OVERLAY_DENSITY_COMPACT:
+        return "COMPACT";
+    case SDL_OVERLAY_DENSITY_ROOMY:
+        return "ROOMY";
+    case SDL_OVERLAY_DENSITY_LARGE:
+        return "LARGE";
+    case SDL_OVERLAY_DENSITY_AUTO:
+    default:
+        return "AUTO";
+    }
+}
+
+static int parse_overlay_density(const char* value)
+{
+    if (!value)
+        return SDL_OVERLAY_DENSITY_AUTO;
+    if (strcmp(value, "COMPACT") == 0)
+        return SDL_OVERLAY_DENSITY_COMPACT;
+    if (strcmp(value, "ROOMY") == 0 || strcmp(value, "NORMAL") == 0)
+        return SDL_OVERLAY_DENSITY_ROOMY;
+    if (strcmp(value, "LARGE") == 0)
+        return SDL_OVERLAY_DENSITY_LARGE;
+    return SDL_OVERLAY_DENSITY_AUTO;
+}
+
 static char* read_file_contents(const char* filename)
 {
     FILE* f = fopen(filename, "rb");
@@ -1292,6 +1326,126 @@ static cJSON* sdl_config_create_string_array(const char src[][SDL_TOUCH_PANE_LAB
     return array;
 }
 
+static void sdl_config_load_overlay_panels(cJSON* root,
+    struct sdl_config* cfg)
+{
+    cJSON* overlays;
+    cJSON* item;
+    int count = 0;
+
+    if (!root || !cfg)
+        return;
+
+    overlays = cJSON_GetObjectItemCaseSensitive(root, "overlayPanels");
+    if (!cJSON_IsArray(overlays))
+        return;
+
+    cJSON_ArrayForEach(item, overlays) {
+        cJSON* id;
+        cJSON* pinned;
+        cJSON* x;
+        cJSON* y;
+        struct sdl_overlay_panel_config* overlay;
+
+        if (count >= SDL_OVERLAY_PANEL_CONFIG_MAX)
+            break;
+        if (!cJSON_IsObject(item))
+            continue;
+
+        id = cJSON_GetObjectItemCaseSensitive(item, "id");
+        if (!cJSON_IsString(id) || !id->valuestring || !id->valuestring[0])
+            continue;
+
+        overlay = &cfg->overlay_panels[count];
+        memset(overlay, 0, sizeof(*overlay));
+        SDL_strlcpy(overlay->id, id->valuestring, sizeof(overlay->id));
+
+        pinned = cJSON_GetObjectItemCaseSensitive(item, "pinned");
+        overlay->pinned = cJSON_IsBool(pinned) && cJSON_IsTrue(pinned);
+
+        x = cJSON_GetObjectItemCaseSensitive(item, "x");
+        if (cJSON_IsNumber(x))
+            overlay->x = x->valueint;
+
+        y = cJSON_GetObjectItemCaseSensitive(item, "y");
+        if (cJSON_IsNumber(y))
+            overlay->y = y->valueint;
+
+        count++;
+    }
+
+    cfg->overlay_panel_count = count;
+    log_debug("Loaded %d overlay panel layout entries", count);
+}
+
+static void sdl_config_save_overlay_panels(cJSON* root,
+    const struct sdl_config* cfg)
+{
+    cJSON* overlays;
+
+    if (!root || !cfg || cfg->overlay_panel_count <= 0)
+        return;
+
+    overlays = cJSON_CreateArray();
+    if (!overlays)
+        return;
+
+    for (int i = 0; i < cfg->overlay_panel_count
+        && i < SDL_OVERLAY_PANEL_CONFIG_MAX; i++)
+    {
+        const struct sdl_overlay_panel_config* overlay = &cfg->overlay_panels[i];
+        cJSON* item;
+
+        if (!overlay->id[0])
+            continue;
+
+        item = cJSON_CreateObject();
+        if (!item)
+            continue;
+
+        cJSON_AddStringToObject(item, "id", overlay->id);
+        cJSON_AddBoolToObject(item, "pinned", overlay->pinned);
+        cJSON_AddNumberToObject(item, "x", overlay->x);
+        cJSON_AddNumberToObject(item, "y", overlay->y);
+        cJSON_AddItemToArray(overlays, item);
+    }
+
+    if (cJSON_GetArraySize(overlays) > 0)
+        cJSON_AddItemToObject(root, "overlayPanels", overlays);
+    else
+        cJSON_Delete(overlays);
+}
+
+static void sdl_config_migrate_layout(struct sdl_config* cfg,
+    struct pane_config* pane_configs, int pane_count)
+{
+    if (!cfg)
+        return;
+
+    if (cfg->layout_schema_version < 1)
+        cfg->layout_schema_version = 1;
+
+    if (!sdl_overlay_density_is_valid(cfg->overlay_density))
+        cfg->overlay_density = SDL_OVERLAY_DENSITY_AUTO;
+
+    for (int i = 0; pane_configs && i < pane_count; i++) {
+        if (pane_configs[i].rect.rows < 0)
+            pane_configs[i].rect.rows = 0;
+        if (pane_configs[i].rect.cols < 0)
+            pane_configs[i].rect.cols = 0;
+        if (pane_configs[i].ratio < 0.0f)
+            pane_configs[i].ratio = 0.0f;
+        if (pane_configs[i].ratio > 1.0f)
+            pane_configs[i].ratio = 1.0f;
+    }
+
+    if (cfg->layout_schema_version < SDL_LAYOUT_SCHEMA_VERSION) {
+        log_info("Migrated SDL layout schema from %d to %d",
+            cfg->layout_schema_version, SDL_LAYOUT_SCHEMA_VERSION);
+        cfg->layout_schema_version = SDL_LAYOUT_SCHEMA_VERSION;
+    }
+}
+
 void sdl_config_load(const char* filename, struct sdl_config* cfg, 
                      struct pane_config* pane_configs, int* pane_count, int max_panes)
 {
@@ -1325,6 +1479,15 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
     if (cJSON_IsObject(sdl)) {
         log_debug("Found 'sdl' object in JSON");
         cJSON* item;
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "layoutVersion");
+        if (cJSON_IsNumber(item)) {
+            cfg->layout_schema_version = item->valueint;
+            log_debug("Loaded layoutVersion: %d",
+                cfg->layout_schema_version);
+        } else {
+            cfg->layout_schema_version = 1;
+        }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "mainViewScale");
         if (cJSON_IsNumber(item)) {
@@ -1369,6 +1532,17 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
             cfg->character_sheet_font_size = item->valueint;
             log_debug("Loaded characterSheetFontSize: %d",
                 cfg->character_sheet_font_size);
+        }
+
+        item = cJSON_GetObjectItemCaseSensitive(sdl, "overlayDensity");
+        if (cJSON_IsString(item)) {
+            cfg->overlay_density = parse_overlay_density(item->valuestring);
+            log_debug("Loaded overlayDensity: %s",
+                sdl_overlay_density_to_string(cfg->overlay_density));
+        } else if (cJSON_IsNumber(item)) {
+            cfg->overlay_density = item->valueint;
+            log_debug("Loaded numeric overlayDensity: %d",
+                cfg->overlay_density);
         }
         
         item = cJSON_GetObjectItemCaseSensitive(sdl, "margin");
@@ -1663,6 +1837,9 @@ void sdl_config_load(const char* filename, struct sdl_config* cfg,
         log_warn("'panes' array not found in JSON");
     }
 
+    sdl_config_load_overlay_panels(root, cfg);
+    sdl_config_migrate_layout(cfg, pane_configs, pane_count ? *pane_count : 0);
+
     // Parse gamepad settings
     cJSON* gamepad = cJSON_GetObjectItemCaseSensitive(root, "gamepad");
     if (cJSON_IsObject(gamepad)) {
@@ -1918,7 +2095,11 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
         return;
     }
     
+    cJSON_AddNumberToObject(sdl, "layoutVersion",
+        SDL_LAYOUT_SCHEMA_VERSION);
     cJSON_AddNumberToObject(sdl, "mainViewScale", cfg->main_view_scale);
+    cJSON_AddStringToObject(sdl, "overlayDensity",
+        sdl_overlay_density_to_string(cfg->overlay_density));
     cJSON_AddNumberToObject(sdl, "auxViewFontSize", cfg->aux_view_font_size);
     cJSON_AddNumberToObject(sdl, "menuPanelFontSize",
         cfg->menu_panel_font_size);
@@ -2010,6 +2191,7 @@ void sdl_config_save(const char* filename, const struct sdl_config* cfg,
     }
     
     cJSON_AddItemToObject(root, "panes", panes);
+    sdl_config_save_overlay_panels(root, cfg);
 
     // Create gamepad settings object
     {
@@ -2318,7 +2500,9 @@ void sdl_config_set_defaults(struct sdl_config* cfg)
     if (!cfg)
         return;
 
+    cfg->layout_schema_version = SDL_LAYOUT_SCHEMA_VERSION;
     cfg->main_view_scale = 1;
+    cfg->overlay_density = SDL_OVERLAY_DENSITY_AUTO;
     cfg->aux_view_font_size = 0;
     cfg->menu_panel_font_size = 0;
     cfg->plain_menu_font_size = 0;
@@ -2382,6 +2566,8 @@ void sdl_config_set_defaults(struct sdl_config* cfg)
     sdl_config_set_default_touch_pane_bindings(cfg);
     sdl_config_clear_touch_pane_labels(cfg);
     sdl_config_clear_movement_bindings(cfg);
+    cfg->overlay_panel_count = 0;
+    memset(cfg->overlay_panels, 0, sizeof(cfg->overlay_panels));
 }
 
 void sdl_config_set_defaults_for_resolution(struct sdl_config* cfg, 

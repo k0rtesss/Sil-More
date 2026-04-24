@@ -1667,6 +1667,65 @@ static const app_ui_scene* sdl_scene_overlay_chrome_scene(
     return &overlay->chrome_scene;
 }
 
+bool sdl_scene_dungeon_hit_test_map_cell(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot, float window_x, float window_y,
+    s16b* out_map_y, s16b* out_map_x)
+{
+    const app_map_snapshot* map;
+    const app_dungeon_overlay_snapshot* overlay;
+    sdl_scene_layout layout;
+    float canvas_x, canvas_y;
+    int cell_w_px, clip_w, clip_h, cell_x, cell_y;
+
+    if (out_map_y) *out_map_y = -1;
+    if (out_map_x) *out_map_x = -1;
+    if (!main_view || !snapshot || !main_view->ready) return false;
+
+    map = sdl_scene_map_snapshot(snapshot);
+    overlay = sdl_scene_overlay_snapshot(snapshot);
+    if (!map || !overlay) return false;
+
+    layout = sdl_scene_make_layout(main_view, map,
+        sdl_scene_overlay_chrome_scene(overlay),
+        sdl_scene_overlay_interaction(overlay));
+    if (layout.canvas_w <= 0 || layout.canvas_h <= 0) return false;
+
+    canvas_x = window_x - (float)(main_view->rect.x + main_view->margin_x);
+    canvas_y = window_y - (float)(main_view->rect.y + main_view->margin_y);
+    if (canvas_x < 0.0f || canvas_y < 0.0f
+        || canvas_x >= (float)layout.canvas_w
+        || canvas_y >= (float)layout.canvas_h)
+        return false;
+    if (layout.left_panel_w_px > 0 && canvas_x < (float)layout.left_panel_w_px)
+        return false;
+
+    cell_w_px = sdl_scene_map_cell_width_px(main_view);
+    if (cell_w_px <= 0 || main_view->cell_h <= 0) return false;
+    clip_w = layout.map_width_px;
+    clip_h = layout.map_height_px;
+    if (layout.map_origin_x_px + clip_w > layout.canvas_w)
+        clip_w = layout.canvas_w - layout.map_origin_x_px;
+    if (layout.map_origin_y_px + clip_h > layout.content_bottom_px)
+        clip_h = layout.content_bottom_px - layout.map_origin_y_px;
+    if (clip_w <= 0 || clip_h <= 0)
+        return false;
+    if (canvas_x < (float)layout.map_origin_x_px
+        || canvas_y < (float)layout.map_origin_y_px
+        || canvas_x >= (float)(layout.map_origin_x_px + clip_w)
+        || canvas_y >= (float)(layout.map_origin_y_px + clip_h))
+        return false;
+
+    cell_x = (int)((canvas_x - (float)layout.map_origin_x_px) / (float)cell_w_px);
+    cell_y = (int)((canvas_y - (float)layout.map_origin_y_px) / (float)main_view->cell_h);
+    if (cell_x < 0 || cell_y < 0
+        || cell_x >= (int)map->width || cell_y >= (int)map->height)
+        return false;
+
+    if (out_map_y) *out_map_y = map->panel_y + (s16b)cell_y;
+    if (out_map_x) *out_map_x = map->panel_x + (s16b)cell_x;
+    return true;
+}
+
 static void sdl_scene_render_interaction_overlay(const sdl_view* view,
     const sdl_scene_layout* layout, const app_interaction_state* interaction)
 {

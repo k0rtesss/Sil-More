@@ -702,7 +702,7 @@ static bool enhanced_item_build_snapshot_scene(app_ui_scene* scene,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_ITEM_BROWSER;
     panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED;
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;

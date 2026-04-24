@@ -168,7 +168,7 @@ static bool object_subwindow_content_build_scene(app_ui_scene* scene,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->style = APP_UI_PANEL_STYLE_ITEM_BROWSER;
     if (content->row_count > 0)
         panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = content->accent_attr;

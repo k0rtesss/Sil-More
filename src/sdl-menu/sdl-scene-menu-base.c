@@ -33,6 +33,7 @@ typedef struct sdl_menu_hit_registry {
 } sdl_menu_hit_registry;
 
 static sdl_menu_hit_registry g_sdl_menu_hit_registry;
+static u16b g_sdl_menu_target_size_warning_count;
 
 static void sdl_menu_copy_hit_text(char* dst, size_t dst_size, cptr text)
 {
@@ -70,6 +71,31 @@ void sdl_menu_hit_end_panel(void)
     g_sdl_menu_hit_registry.panel_layer = 0;
     g_sdl_menu_hit_registry.panel_style = 0;
     g_sdl_menu_hit_registry.focus_area = APP_UI_FOCUS_NONE;
+}
+
+static void sdl_menu_hit_note_target_size(
+    const sdl_menu_hit_target* target)
+{
+    int min_px;
+
+    if (!target)
+        return;
+    if (!(target->flags & APP_UI_INTERACTION_FLAG_TOUCH_TARGET))
+        return;
+    if (target->state_flags & APP_UI_ITEM_FLAG_DISABLED)
+        return;
+
+    min_px = sdl_ui_scale_px(24.0f);
+    if (target->rect.w >= (float)min_px && target->rect.h >= (float)min_px)
+        return;
+
+    if (g_sdl_menu_target_size_warning_count < 24)
+    {
+        g_sdl_menu_target_size_warning_count++;
+        log_trace("ui target-size audit: kind=%u id=%d label='%s' size=%.1fx%.1f min=%d",
+            (unsigned)target->kind, (int)target->id, target->label,
+            target->rect.w, target->rect.h, min_px);
+    }
 }
 
 bool sdl_menu_hit_register(u16b kind, s16b id, s16b action_key, u16b role,
@@ -120,6 +146,7 @@ bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
     target->flags = flags;
     sdl_menu_copy_hit_text(target->label, sizeof(target->label), label);
     sdl_menu_copy_hit_text(target->tooltip, sizeof(target->tooltip), tooltip);
+    sdl_menu_hit_note_target_size(target);
     return true;
 }
 
@@ -143,6 +170,310 @@ const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y)
     return NULL;
 }
 
+static u32b sdl_menu_overlay_hash(cptr text)
+{
+    u32b hash = 2166136261u;
+
+    if (!text)
+        text = "";
+    while (*text) {
+        hash ^= (byte)*text++;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
+
+void sdl_menu_overlay_panel_id(u16b scene_kind, u16b panel_index,
+    u16b panel_style, cptr label, char* buf, size_t buflen)
+{
+    if (!buf || !buflen)
+        return;
+
+    strnfmt(buf, buflen, "scene:%u:panel:%u:style:%u:title:%08lx",
+        (unsigned)scene_kind, (unsigned)panel_index, (unsigned)panel_style,
+        (unsigned long)sdl_menu_overlay_hash(label));
+}
+
+bool sdl_menu_overlay_panel_get_offset(cptr id, int* out_x, int* out_y,
+    bool* out_pinned)
+{
+    if (out_x)
+        *out_x = 0;
+    if (out_y)
+        *out_y = 0;
+    if (out_pinned)
+        *out_pinned = false;
+    if (!id || !id[0])
+        return false;
+
+    for (int i = 0; i < config.overlay_panel_count
+        && i < SDL_OVERLAY_PANEL_CONFIG_MAX; i++)
+    {
+        const struct sdl_overlay_panel_config* overlay = &config.overlay_panels[i];
+
+        if (!streq(overlay->id, id))
+            continue;
+        if (out_x)
+            *out_x = overlay->x;
+        if (out_y)
+            *out_y = overlay->y;
+        if (out_pinned)
+            *out_pinned = overlay->pinned;
+        return true;
+    }
+
+    return false;
+}
+
+void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned)
+{
+    struct sdl_overlay_panel_config* overlay = NULL;
+
+    if (!id || !id[0])
+        return;
+
+    for (int i = 0; i < config.overlay_panel_count
+        && i < SDL_OVERLAY_PANEL_CONFIG_MAX; i++)
+    {
+        if (streq(config.overlay_panels[i].id, id)) {
+            overlay = &config.overlay_panels[i];
+            break;
+        }
+    }
+
+    if (!overlay) {
+        if (config.overlay_panel_count >= SDL_OVERLAY_PANEL_CONFIG_MAX)
+            return;
+        overlay = &config.overlay_panels[config.overlay_panel_count++];
+        memset(overlay, 0, sizeof(*overlay));
+        SDL_strlcpy(overlay->id, id, sizeof(overlay->id));
+    }
+
+    overlay->x = x;
+    overlay->y = y;
+    overlay->pinned = pinned;
+}
+
+void sdl_menu_overlay_panel_clamp_offset(cptr id, int canvas_w, int canvas_h,
+    const SDL_FRect* panel, int* offset_x, int* offset_y)
+{
+    int x = 0;
+    int y = 0;
+    int min_x;
+    int max_x;
+    int min_y;
+    int max_y;
+
+    if (!panel || !offset_x || !offset_y)
+        return;
+
+    (void)sdl_menu_overlay_panel_get_offset(id, &x, &y, NULL);
+
+    min_x = -(int)panel->x;
+    max_x = canvas_w - (int)(panel->x + panel->w);
+    min_y = -(int)panel->y;
+    max_y = canvas_h - (int)(panel->y + panel->h);
+
+    if (x < min_x)
+        x = min_x;
+    if (x > max_x)
+        x = max_x;
+    if (y < min_y)
+        y = min_y;
+    if (y > max_y)
+        y = max_y;
+
+    *offset_x = x;
+    *offset_y = y;
+}
+
+static bool sdl_menu_hit_target_matches_ref(const sdl_menu_hit_target* target,
+    const app_ui_widget_ref* ref)
+{
+    if (!target || !ref)
+        return false;
+
+    return target->scene_kind == ref->scene_kind
+        && target->panel_index == ref->panel_index
+        && target->kind == ref->target_kind
+        && target->id == ref->widget_id;
+}
+
+static bool sdl_menu_hit_target_focusable(const sdl_menu_hit_target* target)
+{
+    if (!target)
+        return false;
+    if (target->state_flags & APP_UI_ITEM_FLAG_DISABLED)
+        return false;
+    if (target->role == APP_UI_WIDGET_ROLE_NONE)
+        return false;
+    if (target->action == APP_UI_WIDGET_ACTION_NONE)
+        return false;
+
+    return target->role == APP_UI_WIDGET_ROLE_BUTTON
+        || target->role == APP_UI_WIDGET_ROLE_LIST_ITEM
+        || target->role == APP_UI_WIDGET_ROLE_TAB;
+}
+
+static bool sdl_menu_hit_target_in_focus_area(
+    const sdl_menu_hit_target* target)
+{
+    if (!target)
+        return false;
+
+    switch (target->focus_area)
+    {
+    case APP_UI_FOCUS_ROWS:
+        return target->role == APP_UI_WIDGET_ROLE_LIST_ITEM;
+
+    case APP_UI_FOCUS_TABS:
+        return target->role == APP_UI_WIDGET_ROLE_TAB;
+
+    case APP_UI_FOCUS_FOOTER:
+        return target->role == APP_UI_WIDGET_ROLE_BUTTON;
+
+    default:
+        return true;
+    }
+}
+
+const sdl_menu_hit_target* sdl_menu_hit_current_focus(void)
+{
+    app_session* session = app_session_current();
+    const app_ui_focus_state* focus
+        = session ? app_session_ui_focus(session) : NULL;
+    const sdl_menu_hit_target* first = NULL;
+    const sdl_menu_hit_target* area_first = NULL;
+    const sdl_menu_hit_target* selected = NULL;
+    u16b i;
+
+    if (focus && focus->active
+        && app_ui_widget_ref_is_valid(&focus->target))
+    {
+        for (i = 0; i < g_sdl_menu_hit_registry.count; i++)
+        {
+            const sdl_menu_hit_target* target
+                = &g_sdl_menu_hit_registry.targets[i];
+
+            if (sdl_menu_hit_target_focusable(target)
+                && sdl_menu_hit_target_matches_ref(target, &focus->target))
+            {
+                return target;
+            }
+        }
+    }
+
+    for (i = 0; i < g_sdl_menu_hit_registry.count; i++)
+    {
+        const sdl_menu_hit_target* target
+            = &g_sdl_menu_hit_registry.targets[i];
+
+        if (!sdl_menu_hit_target_focusable(target))
+            continue;
+        if (!first)
+            first = target;
+        if (!area_first && sdl_menu_hit_target_in_focus_area(target))
+            area_first = target;
+        if (target->state_flags
+            & (APP_UI_ITEM_FLAG_SELECTED | APP_UI_ITEM_FLAG_ACTIVE))
+        {
+            selected = target;
+        }
+    }
+
+    return selected ? selected : (area_first ? area_first : first);
+}
+
+static bool sdl_menu_hit_targets_share_nav_group(
+    const sdl_menu_hit_target* current, const sdl_menu_hit_target* candidate,
+    int dy, int dx)
+{
+    if (!current || !candidate)
+        return false;
+    if (current->panel_index != candidate->panel_index)
+        return false;
+    if (!sdl_menu_hit_target_focusable(candidate))
+        return false;
+
+    if (dx && current->role == APP_UI_WIDGET_ROLE_TAB)
+        return candidate->role == APP_UI_WIDGET_ROLE_TAB;
+    if (dx && current->role == APP_UI_WIDGET_ROLE_BUTTON)
+        return candidate->role == APP_UI_WIDGET_ROLE_BUTTON;
+    if (dy && current->role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        return candidate->role == APP_UI_WIDGET_ROLE_LIST_ITEM;
+
+    return true;
+}
+
+const sdl_menu_hit_target* sdl_menu_hit_focus_delta(int dy, int dx)
+{
+    const sdl_menu_hit_target* current = sdl_menu_hit_current_focus();
+    const sdl_menu_hit_target* best = NULL;
+    bool forward = (dy > 0) || (dy == 0 && dx > 0);
+    u16b i;
+
+    if (!current)
+        return NULL;
+
+    for (i = 0; i < g_sdl_menu_hit_registry.count; i++)
+    {
+        const sdl_menu_hit_target* candidate
+            = &g_sdl_menu_hit_registry.targets[i];
+
+        if (!sdl_menu_hit_targets_share_nav_group(current, candidate, dy, dx))
+            continue;
+        if (candidate == current)
+            continue;
+
+        if (forward)
+        {
+            if (candidate->focus_order <= current->focus_order)
+                continue;
+            if (!best || candidate->focus_order < best->focus_order)
+                best = candidate;
+        }
+        else
+        {
+            if (candidate->focus_order >= current->focus_order)
+                continue;
+            if (!best || candidate->focus_order > best->focus_order)
+                best = candidate;
+        }
+    }
+
+    if (best)
+        return best;
+
+    for (i = 0; i < g_sdl_menu_hit_registry.count; i++)
+    {
+        const sdl_menu_hit_target* candidate
+            = &g_sdl_menu_hit_registry.targets[i];
+
+        if (!sdl_menu_hit_targets_share_nav_group(current, candidate, dy, dx))
+            continue;
+        if (!best)
+        {
+            best = candidate;
+            continue;
+        }
+        if (forward && candidate->focus_order < best->focus_order)
+            best = candidate;
+        if (!forward && candidate->focus_order > best->focus_order)
+            best = candidate;
+    }
+
+    return best ? best : current;
+}
+
+void sdl_menu_hit_origin(int* out_x, int* out_y)
+{
+    if (out_x)
+        *out_x = g_sdl_menu_hit_registry.origin_x;
+    if (out_y)
+        *out_y = g_sdl_menu_hit_registry.origin_y;
+}
+
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 {
     byte color = attr & 0x0Fu;
@@ -158,6 +489,28 @@ SDL_Color sdl_menu_color_alpha(byte attr, byte alpha)
 SDL_Color sdl_menu_color(byte attr)
 {
     return sdl_menu_color_alpha(attr, 255);
+}
+
+const sdl_ui_style* sdl_menu_panel_style(const app_ui_panel* panel)
+{
+    return sdl_ui_style_for_panel(panel ? panel->style
+        : APP_UI_PANEL_STYLE_DEFAULT);
+}
+
+SDL_Color sdl_menu_panel_color(const app_ui_panel* panel, byte attr)
+{
+    return sdl_ui_style_color_for_attr(sdl_menu_panel_style(panel), attr);
+}
+
+SDL_Color sdl_menu_panel_color_alpha(const app_ui_panel* panel, byte attr,
+    byte alpha)
+{
+    return sdl_ui_style_with_alpha(sdl_menu_panel_color(panel, attr), alpha);
+}
+
+SDL_Color sdl_menu_panel_accent(const app_ui_panel* panel, byte attr)
+{
+    return sdl_ui_style_accent_for_attr(sdl_menu_panel_style(panel), attr);
 }
 
 void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color)
@@ -576,6 +929,9 @@ static int sdl_menu_measure_row(TTF_Font* font, const app_ui_panel* panel,
 }
 
 
+static void sdl_menu_footer_action_text(const app_ui_footer_action* action,
+    char* text, size_t text_size);
+
 static int sdl_menu_measure_footer(TTF_Font* font,
     const app_ui_panel* panel, int pill_gap, int pill_pad_x)
 {
@@ -588,13 +944,10 @@ static int sdl_menu_measure_footer(TTF_Font* font,
     for (i = 0; i < panel->footer_action_count; i++)
     {
         const app_ui_footer_action* action = &panel->footer_actions[i];
-        char text[APP_UI_KEY_MAX + APP_UI_LABEL_MAX + 4];
+        char text[APP_UI_LABEL_MAX + 40];
         int action_w;
 
-        if (action->key[0])
-            strnfmt(text, sizeof(text), "%s %s", action->key, action->label);
-        else
-            SDL_strlcpy(text, action->label, sizeof(text));
+        sdl_menu_footer_action_text(action, text, sizeof(text));
 
         action_w = sdl_menu_measure_text(font, text) + pill_pad_x * 2;
         if (width > 0)
@@ -648,23 +1001,23 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
         if (row->label[0])
         {
             sdl_menu_render_text(font, (float)clip_rect->x, (float)current_y,
-                line_h, sdl_menu_color(row->attr ? row->attr : accent_attr),
-                row->label);
+                line_h, sdl_menu_panel_color(panel,
+                    row->attr ? row->attr : accent_attr), row->label);
         }
         return;
     }
 
-    color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
+    color = sdl_menu_panel_color(panel,
+        (row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : row->attr);
-    meta_color = sdl_menu_color((row->flags & APP_UI_ITEM_FLAG_DISABLED)
+    meta_color = sdl_menu_panel_color(panel,
+        (row->flags & APP_UI_ITEM_FLAG_DISABLED)
         ? TERM_L_DARK
         : (row->meta_attr ? row->meta_attr : row->attr));
-    selected_fill = sdl_menu_color(accent_attr);
-    selected_fill.a = (panel->style == APP_UI_PANEL_STYLE_PLAIN) ? 72 : 104;
+    selected_fill = sdl_menu_panel_style(panel)->selected_fill;
 
-    if ((row->flags & APP_UI_ITEM_FLAG_SELECTED)
-        && panel->style != APP_UI_PANEL_STYLE_PLAIN)
+    if (row->flags & APP_UI_ITEM_FLAG_SELECTED)
     {
         SDL_FRect selected_rect = {
             (float)(clip_rect->x - item_gap),
@@ -709,7 +1062,8 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
     {
         key_w = sdl_menu_measure_text(font, row->key);
         sdl_menu_render_text(font, (float)label_x, (float)current_y,
-            line_h, sdl_menu_color(panel->accent_attr), row->key);
+            line_h, sdl_menu_panel_accent(panel, panel->accent_attr),
+            row->key);
         label_x += key_w + item_gap;
     }
 
@@ -729,6 +1083,34 @@ static void sdl_menu_render_row(TTF_Font* font, const app_ui_panel* panel,
             line_h, meta_color, row->meta);
 }
 
+static void sdl_menu_footer_action_text(const app_ui_footer_action* action,
+    char* text, size_t text_size)
+{
+    char prompt[32];
+    cptr key_text;
+
+    if (!text || !text_size)
+        return;
+
+    text[0] = '\0';
+    if (!action || !action->label[0])
+        return;
+
+    prompt[0] = '\0';
+    if (portable_controls_active())
+    {
+        platform_input_prompt_for_ui_action(APP_INPUT_DEVICE_GAMEPAD,
+            action->interaction.action, action->interaction.action_key,
+            prompt, sizeof(prompt));
+    }
+
+    key_text = prompt[0] ? prompt : action->key;
+    if (key_text && key_text[0])
+        strnfmt(text, text_size, "%s %s", key_text, action->label);
+    else
+        SDL_strlcpy(text, action->label, text_size);
+}
+
 static void sdl_menu_render_footer(TTF_Font* font,
     const app_ui_panel* panel, const SDL_Rect* clip_rect, int line_h,
     int pill_gap, int pill_pad_x, int pill_pad_y)
@@ -743,17 +1125,14 @@ static void sdl_menu_render_footer(TTF_Font* font,
     for (i = 0; i < panel->footer_action_count; i++)
     {
         const app_ui_footer_action* action = &panel->footer_actions[i];
-        char text[APP_UI_KEY_MAX + APP_UI_LABEL_MAX + 4];
+        char text[APP_UI_LABEL_MAX + 40];
         int text_w;
-        SDL_Color fill = sdl_menu_color(panel->accent_attr);
-        SDL_Color border = sdl_menu_color(panel->accent_attr);
+        SDL_Color fill = sdl_menu_panel_style(panel)->accent_dim;
+        SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
         SDL_Color text_color;
         SDL_FRect pill;
 
-        if (action->key[0])
-            strnfmt(text, sizeof(text), "%s %s", action->key, action->label);
-        else
-            SDL_strlcpy(text, action->label, sizeof(text));
+        sdl_menu_footer_action_text(action, text, sizeof(text));
 
         text_w = sdl_menu_measure_text(font, text);
         pill.x = (float)cursor_x;
@@ -766,17 +1145,16 @@ static void sdl_menu_render_footer(TTF_Font* font,
 
         if (action->flags & APP_UI_ITEM_FLAG_DISABLED)
         {
-            fill = sdl_menu_color(TERM_L_DARK);
-            fill.a = 88;
-            border = sdl_menu_color(TERM_SLATE);
-            border.a = 180;
-            text_color = sdl_menu_color(TERM_L_DARK);
+            fill = sdl_menu_panel_style(panel)->disabled_fill;
+            border = sdl_menu_panel_style(panel)->panel_border_soft;
+            text_color = sdl_menu_panel_color(panel, TERM_L_DARK);
         }
         else
         {
-            fill.a = 64;
-            border.a = 212;
-            text_color = sdl_menu_color(action->attr ? action->attr : TERM_WHITE);
+            fill.a = 96;
+            border.a = 220;
+            text_color = sdl_menu_panel_color(panel,
+                action->attr ? action->attr : TERM_WHITE);
         }
 
         sdl_menu_fill_rect(&pill, fill);
@@ -807,11 +1185,12 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
     for (i = 0; i < panel->tab_count; i++)
     {
         const app_ui_tab* tab = &panel->tabs[i];
-        SDL_Color fill = sdl_menu_color((tab->flags & APP_UI_ITEM_FLAG_ACTIVE)
-            ? panel->accent_attr
-            : TERM_SLATE);
-        SDL_Color border = sdl_menu_color(panel->accent_attr);
-        SDL_Color text_color = sdl_menu_color(tab->attr ? tab->attr : TERM_WHITE);
+        SDL_Color fill = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE)
+            ? sdl_menu_panel_style(panel)->selected_fill
+            : sdl_menu_panel_style(panel)->panel_fill_alt;
+        SDL_Color border = sdl_menu_panel_accent(panel, panel->accent_attr);
+        SDL_Color text_color = sdl_menu_panel_color(panel,
+            tab->attr ? tab->attr : TERM_WHITE);
         int text_w = sdl_menu_measure_text(font, tab->label);
         SDL_FRect pill = {
             (float)cursor_x,
@@ -823,7 +1202,7 @@ static void sdl_menu_render_tabs(TTF_Font* font, const app_ui_panel* panel,
         if (pill.x + pill.w > (float)(clip_rect->x + clip_rect->w))
             break;
 
-        fill.a = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) ? 96 : 40;
+        fill.a = (tab->flags & APP_UI_ITEM_FLAG_ACTIVE) ? 132 : 72;
         border.a = 220;
         sdl_menu_fill_rect(&pill, fill);
         sdl_menu_draw_rect(&pill, border);
@@ -971,7 +1350,7 @@ int sdl_menu_measure_rich_text_height(TTF_Font* mono_font,
 static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
     TTF_Font* story_font, int line_h, int line_gap, int x_px, int y_px,
     int width_px, const app_ui_scene* scene,
-    const app_ui_rich_paragraph* paragraph)
+    const app_ui_panel* panel, const app_ui_rich_paragraph* paragraph)
 {
     float current_x = 0.0f;
     int current_y = y_px;
@@ -1043,8 +1422,8 @@ static int sdl_menu_render_rich_paragraph(TTF_Font* mono_font,
 
             (void)sdl_menu_render_document_text_run_px(font,
                 (float)x_px + current_x, (float)current_y,
-                sdl_menu_color_alpha(run->attr, run->alpha), cursor, len,
-                line_h,
+                sdl_menu_panel_color_alpha(panel, run->attr, run->alpha),
+                cursor, len, line_h,
                 (float)width_px - current_x);
             current_x += token_w;
             if (current_x > (float)width_px)
@@ -1077,7 +1456,7 @@ int sdl_menu_render_rich_text(const app_ui_scene* scene,
             (u16b)(panel->rich_paragraph_first + i)];
         int paragraph_h = sdl_menu_render_rich_paragraph(mono_font,
             story_font, line_h, line_gap, clip_rect->x, current_y, clip_rect->w,
-            scene, paragraph);
+            scene, panel, paragraph);
 
         if (paragraph_h <= 0)
             continue;
@@ -1091,12 +1470,11 @@ int sdl_menu_render_rich_text(const app_ui_scene* scene,
 
 bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
-    const app_ui_panel* ui_panel)
+    const app_ui_panel* ui_panel, u16b scene_kind, u16b panel_index)
 {
     TTF_Font* font;
     TTF_Font* story_font = NULL;
-    SDL_Color panel_fill;
-    SDL_Color panel_border;
+    const sdl_ui_style* style;
     SDL_FRect panel;
     SDL_Rect left_clip;
     SDL_Rect right_clip;
@@ -1155,6 +1533,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     if (canvas_w <= 0 || canvas_h <= 0)
         return false;
 
+    style = sdl_menu_panel_style(ui_panel);
     pixel_height = sdl_menu_scale_px((float)sdl_menu_font_size_logical(ui_panel));
     font = sdl_ui_font_for_height(pixel_height);
     if (!font)
@@ -1166,18 +1545,16 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     line_h = pixel_height;
     if (line_h <= 0)
         line_h = TTF_GetFontHeight(font);
-    line_gap = sdl_menu_scale_px(2.0f);
-    section_gap = sdl_menu_scale_px(12.0f);
-    item_gap = sdl_menu_scale_px(10.0f);
-    pad_x = sdl_menu_scale_px((ui_panel->style == APP_UI_PANEL_STYLE_PLAIN)
-        ? 16.0f : 18.0f);
-    pad_y = sdl_menu_scale_px((ui_panel->style == APP_UI_PANEL_STYLE_PLAIN)
-        ? 12.0f : 16.0f);
-    outer_margin = sdl_menu_scale_px(24.0f);
-    column_gap = sdl_menu_scale_px(24.0f);
-    pill_gap = sdl_menu_scale_px(10.0f);
-    pill_pad_x = sdl_menu_scale_px(10.0f);
-    pill_pad_y = sdl_menu_scale_px(4.0f);
+    line_gap = MAX(1, sdl_menu_scale_px(style->line_gap));
+    section_gap = MAX(line_gap, sdl_menu_scale_px(style->section_gap));
+    item_gap = MAX(1, sdl_menu_scale_px(style->item_gap));
+    pad_x = MAX(1, sdl_menu_scale_px(style->pad_x));
+    pad_y = MAX(1, sdl_menu_scale_px(style->pad_y));
+    outer_margin = MAX(0, sdl_menu_scale_px(style->margin_x));
+    column_gap = MAX(1, sdl_menu_scale_px(style->column_gap));
+    pill_gap = MAX(1, sdl_menu_scale_px(style->pill_gap));
+    pill_pad_x = MAX(1, sdl_menu_scale_px(style->pill_pad_x));
+    pill_pad_y = MAX(1, sdl_menu_scale_px(style->pill_pad_y));
     paragraph_gap = line_h + line_gap;
 
     if (ui_panel->icon_char)
@@ -1374,17 +1751,43 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
     else
         panel.y = (float)((canvas_h - (int)panel.h) / 2);
 
-    panel_fill = (ui_panel->style == APP_UI_PANEL_STYLE_PLAIN)
-        ? (SDL_Color){ 0, 0, 0, 232 }
-        : (SDL_Color){ 10, 18, 26, 224 };
-    panel_border = sdl_menu_color(ui_panel->accent_attr
-        ? ui_panel->accent_attr
-        : TERM_L_BLUE);
-    panel_border.a = 220;
+    {
+        char overlay_id[SDL_OVERLAY_PANEL_ID_LEN];
+        int offset_x = 0;
+        int offset_y = 0;
+        int handle_h;
+        SDL_FRect drag_rect;
 
-    sdl_menu_fill_rect(&panel, panel_fill);
-    if (ui_panel->style != APP_UI_PANEL_STYLE_PLAIN)
-        sdl_menu_draw_rect(&panel, panel_border);
+        sdl_menu_overlay_panel_id(scene_kind, panel_index, ui_panel->style,
+            ui_panel->title, overlay_id, sizeof(overlay_id));
+        sdl_menu_overlay_panel_clamp_offset(overlay_id, canvas_w, canvas_h,
+            &panel, &offset_x, &offset_y);
+        panel.x += (float)offset_x;
+        panel.y += (float)offset_y;
+
+        handle_h = header_h + pad_y * 2;
+        if (handle_h < sdl_menu_scale_px(28.0f))
+            handle_h = sdl_menu_scale_px(28.0f);
+        if (handle_h > (int)panel.h)
+            handle_h = (int)panel.h;
+        drag_rect = (SDL_FRect){
+            panel.x,
+            panel.y,
+            panel.w,
+            (float)handle_h
+        };
+        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+            (s16b)panel_index, 0, APP_UI_WIDGET_ROLE_PANEL_DRAG_HANDLE,
+            APP_UI_WIDGET_ACTION_DRAG,
+            APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                | APP_UI_INTERACTION_FLAG_DRAGGABLE
+                | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+            APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &drag_rect,
+            ui_panel->title[0] ? ui_panel->title : "Panel",
+            "Drag panel");
+    }
+
+    sdl_ui_style_draw_panel_frame(style, &panel, true);
 
     left_clip.x = (int)panel.x + pad_x;
     left_clip.y = (int)panel.y + pad_y;
@@ -1438,7 +1841,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         if (ui_panel->title[0])
         {
             sdl_menu_render_text(font, (float)text_x, (float)text_y,
-                line_h, sdl_menu_color(ui_panel->title_attr),
+                line_h, sdl_menu_panel_color(ui_panel, ui_panel->title_attr),
                 ui_panel->title);
             if (ui_panel->icon_char
                 && ui_panel->style == APP_UI_PANEL_STYLE_PLAIN)
@@ -1464,7 +1867,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         if (ui_panel->subtitle[0])
         {
             sdl_menu_render_text(font, (float)text_x, (float)text_y,
-                line_h, sdl_menu_color(ui_panel->subtitle_attr),
+                line_h, sdl_menu_panel_color(ui_panel, ui_panel->subtitle_attr),
                 ui_panel->subtitle);
         }
         current_y = header_y + header_h;
@@ -1489,11 +1892,30 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
 
         if (column_clip.h < 0)
             column_clip.h = 0;
+        if ((ui_panel->flags & APP_UI_PANEL_FLAG_SCROLL_ROWS)
+            && column_clip.w > 0 && column_clip.h > 0)
+        {
+            SDL_FRect scroll_rect = {
+                (float)column_clip.x,
+                (float)column_clip.y,
+                (float)column_clip.w,
+                (float)column_clip.h
+            };
+
+            (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL, -1, 0,
+                APP_UI_WIDGET_ROLE_SCROLL_REGION,
+                APP_UI_WIDGET_ACTION_SCROLL,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                APP_UI_ITEM_FLAG_NONE, -1, row_start, row_visible,
+                &scroll_rect, ui_panel->title, "");
+        }
         SDL_SetRenderClipRect(g_state.renderer, &column_clip);
         for (i = 0; i < ui_panel->body_line_count; i++)
         {
             sdl_menu_render_text(font, (float)left_clip.x, (float)current_y,
-                line_h, sdl_menu_color(ui_panel->body_lines[i].attr),
+                line_h, sdl_menu_panel_color(ui_panel,
+                    ui_panel->body_lines[i].attr),
                 ui_panel->body_lines[i].text);
             current_y += line_h + line_gap;
         }
@@ -1515,7 +1937,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
             sdl_menu_render_text(font,
                 (float)(left_clip.x + left_clip.w - sdl_menu_scale_px(10.0f)),
                 (float)current_y, line_h,
-                sdl_menu_color(ui_panel->accent_attr), "^");
+                sdl_menu_panel_accent(ui_panel, ui_panel->accent_attr), "^");
         }
 
         for (i = 0; i < (u16b)row_visible; i++)
@@ -1533,7 +1955,7 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
             sdl_menu_render_text(font,
                 (float)(left_clip.x + left_clip.w - sdl_menu_scale_px(10.0f)),
                 (float)(current_y - line_gap), line_h,
-                sdl_menu_color(ui_panel->accent_attr), "v");
+                sdl_menu_panel_accent(ui_panel, ui_panel->accent_attr), "v");
         }
 
         SDL_SetRenderClipRect(g_state.renderer, NULL);
@@ -1555,14 +1977,16 @@ bool sdl_menu_render_panel_internal(const sdl_view* main_view,
         if (ui_panel->detail_title[0])
         {
             sdl_menu_render_text(font, (float)right_clip.x, (float)detail_y,
-                line_h, sdl_menu_color(ui_panel->detail_title_attr),
+                line_h, sdl_menu_panel_color(ui_panel,
+                    ui_panel->detail_title_attr),
                 ui_panel->detail_title);
             detail_y += line_h + line_gap;
         }
         for (i = 0; i < ui_panel->detail_line_count; i++)
         {
             sdl_menu_render_text(font, (float)right_clip.x, (float)detail_y,
-                line_h, sdl_menu_color(ui_panel->detail_lines[i].attr),
+                line_h, sdl_menu_panel_color(ui_panel,
+                    ui_panel->detail_lines[i].attr),
                 ui_panel->detail_lines[i].text);
             detail_y += line_h + line_gap;
         }

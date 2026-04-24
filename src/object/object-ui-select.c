@@ -462,7 +462,7 @@ static bool item_selector_build_ui_scene(app_ui_scene* scene, cptr prompt,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->style = APP_UI_PANEL_STYLE_ITEM_BROWSER;
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 760, 1220);

@@ -2102,7 +2102,7 @@ static app_ui_panel* object_info_begin_browser_scene(app_ui_scene* scene)
     if (!panel)
         return NULL;
 
-    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->style = APP_UI_PANEL_STYLE_MAP_RECALL;
     panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 1180, 2200);

@@ -375,7 +375,7 @@ Deliverables:
 - Hover updates cursor/inspection preview without committing a turn.
 - Adjacent left click/tap submits semantic move/interact.
 - Right click or touch long-press opens recall/detail/context.
-- Distant click starts look/target preview first.
+- Distant left click/tap starts travel toward the clicked map cell.
 - Safe path preview before any full click-to-travel implementation.
 
 Exit gate:

@@ -197,7 +197,7 @@ static bool main_menu_about_build_ui_scene(app_ui_scene* scene)
     panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
     if (!panel)
         return false;
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
     panel->accent_attr = TERM_L_BLUE;
     app_ui_panel_set_widths(panel, 920, 1360);
     app_ui_panel_set_title(panel, TERM_YELLOW, "About Sil-More");
@@ -330,7 +330,7 @@ static bool main_menu_build_ui_scene(app_ui_scene* scene, int highlight,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_COMPACT_OVERLAY;
     app_ui_panel_set_widths(panel, 300, 460);
 
     return main_menu_scene_add_row(panel, MAIN_MENU_CHARACTER, highlight,
@@ -1386,7 +1386,7 @@ static bool hint_message_build_ui_detail_scene(app_ui_scene* scene, int index,
     if (!panel)
         return false;
 
-    panel->style = APP_UI_PANEL_STYLE_PLAIN;
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
     panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
         | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
     panel->accent_attr = TERM_SLATE;
@@ -1756,7 +1756,7 @@ static bool do_cmd_messages_information_scene(void)
             return false;
         }
 
-        panel->style = APP_UI_PANEL_STYLE_PLAIN;
+        panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
         panel->flags |= APP_UI_PANEL_FLAG_TOP_ANCHORED
             | APP_UI_PANEL_FLAG_LEFT_ANCHORED;
         panel->accent_attr = TERM_SLATE;

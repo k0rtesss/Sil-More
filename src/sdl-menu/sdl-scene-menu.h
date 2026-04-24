@@ -52,6 +52,11 @@ typedef struct sdl_menu_hit_target {
 
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha);
 SDL_Color sdl_menu_color(byte attr);
+const sdl_ui_style* sdl_menu_panel_style(const app_ui_panel* panel);
+SDL_Color sdl_menu_panel_color(const app_ui_panel* panel, byte attr);
+SDL_Color sdl_menu_panel_color_alpha(const app_ui_panel* panel, byte attr,
+    byte alpha);
+SDL_Color sdl_menu_panel_accent(const app_ui_panel* panel, byte attr);
 void sdl_menu_hit_reset(int origin_x, int origin_y);
 void sdl_menu_hit_set_scene(u16b scene_kind);
 void sdl_menu_hit_begin_panel(u16b panel_index,
@@ -65,7 +70,24 @@ bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
     s32b payload0, s32b payload1, const SDL_FRect* canvas_rect, cptr label,
     cptr tooltip);
 const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y);
+const sdl_menu_hit_target* sdl_menu_hit_current_focus(void);
+const sdl_menu_hit_target* sdl_menu_hit_focus_delta(int dy, int dx);
+void sdl_menu_hit_origin(int* out_x, int* out_y);
 bool sdl_menu_pointer_handle_event(const SDL_Event* ev);
+int sdl_menu_pointer_pending_timeout_ms(Uint64 now_ns);
+bool sdl_menu_pointer_flush_pending_long_press(Uint64 now_ns);
+bool sdl_menu_gamepad_submit_focus_delta(int dy, int dx, u16b input_type,
+    u16b control);
+bool sdl_menu_gamepad_submit_current(u16b command_kind, u16b input_type,
+    u16b control);
+void sdl_menu_pointer_render_tooltip(int canvas_w, int canvas_h);
+void sdl_menu_overlay_panel_id(u16b scene_kind, u16b panel_index,
+    u16b panel_style, cptr label, char* buf, size_t buflen);
+bool sdl_menu_overlay_panel_get_offset(cptr id, int* out_x, int* out_y,
+    bool* out_pinned);
+void sdl_menu_overlay_panel_set_offset(cptr id, int x, int y, bool pinned);
+void sdl_menu_overlay_panel_clamp_offset(cptr id, int canvas_w, int canvas_h,
+    const SDL_FRect* panel, int* offset_x, int* offset_y);
 void sdl_menu_fill_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_rect(const SDL_FRect* rect, SDL_Color color);
 void sdl_menu_draw_tile(byte attr, byte ch, const SDL_FRect* dst);
@@ -90,7 +112,8 @@ int sdl_menu_render_rich_text(const app_ui_scene* scene,
     const SDL_Rect* clip_rect, int line_h, int line_gap, int paragraph_gap,
     int start_y);
 bool sdl_menu_render_panel_internal(const sdl_view* main_view, int canvas_w,
-    int canvas_h, const app_ui_scene* scene, const app_ui_panel* ui_panel);
+    int canvas_h, const app_ui_scene* scene, const app_ui_panel* ui_panel,
+    u16b scene_kind, u16b panel_index);
 bool sdl_menu_render_browser_panel(const sdl_view* main_view, int canvas_w,
     int canvas_h, const app_ui_scene* scene, const app_ui_panel* ui_panel);
 bool sdl_menu_render_status_rail_panel(const sdl_view* main_view, int canvas_w,

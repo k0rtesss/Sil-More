@@ -37,6 +37,8 @@ static bool platform_frame_session_input_pending(void)
 
 static void platform_frame_flush_pending_inputs(Uint64 now_ns)
 {
+    sdl_menu_pointer_flush_pending_long_press(now_ns);
+    sdl_map_pointer_flush_pending_long_press(now_ns);
     sdl_gamepad_flush_pending_dpad(now_ns, false);
     sdl_gamepad_flush_pending_left_stick(now_ns, false);
     sdl_gamepad_flush_pending_shoulder(now_ns, false);
@@ -205,9 +207,21 @@ void platform_frame_process_events(bool wait)
         {
             Uint64 now_ns = SDL_GetTicksNS();
             int timeout_ms = sdl_gamepad_pending_timeout_ms(now_ns);
+            int menu_timeout_ms = sdl_menu_pointer_pending_timeout_ms(now_ns);
+            int map_timeout_ms = sdl_map_pointer_pending_timeout_ms(now_ns);
             int touch_timeout_ms = sdl_touch_pane_pending_timeout_ms(now_ns);
             int scene_timeout_ms = sdl_scene_stack_pending_timeout_ms(now_ns);
 
+            if (timeout_ms < 0
+                || (menu_timeout_ms >= 0 && menu_timeout_ms < timeout_ms))
+            {
+                timeout_ms = menu_timeout_ms;
+            }
+            if (timeout_ms < 0
+                || (map_timeout_ms >= 0 && map_timeout_ms < timeout_ms))
+            {
+                timeout_ms = map_timeout_ms;
+            }
             if (timeout_ms < 0
                 || (touch_timeout_ms >= 0 && touch_timeout_ms < timeout_ms))
             {
@@ -277,6 +291,8 @@ void platform_frame_flush_events(void)
     while (SDL_PollEvent(&ev))
         sdl_handle_event(&g_state, &ev);
 
+    sdl_menu_pointer_flush_pending_long_press(SDL_GetTicksNS());
+    sdl_map_pointer_reset_input_state();
     sdl_touch_pane_flush_pending_press(SDL_GetTicksNS());
     sdl_clear_legacy_input_queue();
     platform_frame_present();

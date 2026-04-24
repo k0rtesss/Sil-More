@@ -82,6 +82,51 @@ typedef struct sdl_view {
     bool ready;
 } sdl_view;
 
+typedef struct sdl_ui_style {
+    const char* name;
+    const char* material;
+    const char* backdrop_slot;
+    const char* header_slot;
+    SDL_Color canvas_fill;
+    SDL_Color panel_fill;
+    SDL_Color panel_fill_alt;
+    SDL_Color panel_border;
+    SDL_Color panel_border_soft;
+    SDL_Color divider;
+    SDL_Color shadow;
+    SDL_Color focus_ring;
+    SDL_Color selected_fill;
+    SDL_Color pressed_fill;
+    SDL_Color disabled_fill;
+    SDL_Color text;
+    SDL_Color text_muted;
+    SDL_Color text_subtle;
+    SDL_Color text_disabled;
+    SDL_Color accent;
+    SDL_Color accent_soft;
+    SDL_Color accent_dim;
+    SDL_Color success;
+    SDL_Color warning;
+    SDL_Color danger;
+    SDL_Color magic;
+    SDL_Color cool;
+    float margin_x;
+    float margin_y;
+    float pad_x;
+    float pad_y;
+    float line_gap;
+    float section_gap;
+    float item_gap;
+    float column_gap;
+    float pill_gap;
+    float pill_pad_x;
+    float pill_pad_y;
+    float row_pad_y;
+    float border_px;
+    float focus_px;
+    float shadow_px;
+} sdl_ui_style;
+
 typedef enum sdl_scene_animation_kind {
     SDL_SCENE_ANIMATION_NONE = 0,
     SDL_SCENE_ANIMATION_ACTOR_MOVED = 1,
@@ -140,6 +185,8 @@ SDL_Rect sdl_get_layout_screen_rect(void);
 int sdl_max_scale_for_rect(const SDL_Rect* rect);
 void sdl_update_cursor_visibility(void);
 void resize(const SDL_Rect* screen);
+bool sdl_pane_resize_handle_event(const SDL_Event* ev);
+void sdl_pane_resize_render_handles(void);
 
 void sdl_view_destroy(sdl_view* d);
 int sdl_active_view_index(void);
@@ -185,6 +232,14 @@ bool sdl_touch_pane_panel_is_valid(int panel);
 int sdl_touch_pane_raw_binding_for_panel(int panel, int index);
 void sdl_touch_pane_reset_input_state(void);
 
+int sdl_menu_pointer_pending_timeout_ms(Uint64 now_ns);
+bool sdl_menu_pointer_flush_pending_long_press(Uint64 now_ns);
+
+bool sdl_map_pointer_handle_event(const SDL_Event* ev);
+int sdl_map_pointer_pending_timeout_ms(Uint64 now_ns);
+bool sdl_map_pointer_flush_pending_long_press(Uint64 now_ns);
+void sdl_map_pointer_reset_input_state(void);
+
 void sdl_load_story_fonts(void);
 void sdl_story_font_cache_clear(void);
 TTF_Font* sdl_story_font_for_height(int pixel_height);
@@ -199,6 +254,15 @@ int sdl_ui_text_pair_left_padding(TTF_Font* primary, TTF_Font* secondary,
     int target_h);
 void sdl_ui_render_text(TTF_Font* font, float x_px, float y_px,
     SDL_Color color, cptr text);
+const sdl_ui_style* sdl_ui_style_for_panel(u16b panel_style);
+SDL_Color sdl_ui_style_color_for_attr(const sdl_ui_style* style, byte attr);
+SDL_Color sdl_ui_style_accent_for_attr(const sdl_ui_style* style, byte attr);
+SDL_Color sdl_ui_style_with_alpha(SDL_Color color, byte alpha);
+void sdl_ui_style_draw_canvas(const sdl_ui_style* style, int canvas_w,
+    int canvas_h);
+void sdl_ui_style_draw_panel_frame(const sdl_ui_style* style,
+    const SDL_FRect* rect, bool border);
+void sdl_ui_style_draw_rule(const sdl_ui_style* style, const SDL_FRect* rect);
 
 void sdl_scene_stack_init(void);
 void sdl_scene_stack_shutdown(void);
@@ -214,6 +278,9 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_dungeon_snapshot* snapshot,
     const sdl_scene_animation* animations, size_t animation_count,
     Uint64 now_ns);
+bool sdl_scene_dungeon_hit_test_map_cell(const sdl_view* main_view,
+    const app_dungeon_snapshot* snapshot, float window_x, float window_y,
+    s16b* out_map_y, s16b* out_map_x);
 bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
     const app_bootstrap_snapshot* snapshot);
 bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,

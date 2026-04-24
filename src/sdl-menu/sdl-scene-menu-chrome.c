@@ -111,8 +111,8 @@ static void sdl_menu_render_status_rail_icon(TTF_Font* mono_font, float x_px,
 }
 
 static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
-    TTF_Font* story_font, float x_px, float y_px, int line_h,
-    byte attr, byte flags, cptr text)
+    TTF_Font* story_font, const app_ui_panel* panel, float x_px, float y_px,
+    int line_h, byte attr, byte flags, cptr text)
 {
     if (!text || !text[0])
         return;
@@ -120,12 +120,12 @@ static void sdl_menu_render_status_rail_label(TTF_Font* mono_font,
     if ((flags & APP_UI_ITEM_FLAG_STORY_LABEL) && story_font)
     {
         sdl_menu_render_text(story_font, x_px, y_px, line_h,
-            sdl_menu_color(attr), text);
+            sdl_menu_panel_color(panel, attr), text);
         return;
     }
 
     sdl_menu_render_text(mono_font, x_px, y_px, line_h,
-        sdl_menu_color(attr), text);
+        sdl_menu_panel_color(panel, attr), text);
 }
 
 bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
@@ -228,7 +228,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
     clear_rect.y = (float)(row_top * line_h);
     clear_rect.w = (float)panel_w_px;
     clear_rect.h = (float)(row_visible * line_h);
-    sdl_menu_fill_rect(&clear_rect, (SDL_Color){ 0, 0, 0, 255 });
+    sdl_menu_fill_rect(&clear_rect, sdl_menu_panel_style(panel)->panel_fill);
 
     clip_rect.x = (int)clear_rect.x;
     clip_rect.y = (int)clear_rect.y;
@@ -250,8 +250,8 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
 
         if (row->flags & APP_UI_ITEM_FLAG_SECTION)
         {
-            sdl_menu_render_status_rail_label(mono_font, story_font, content_x,
-                y_px, line_h, label_attr, row->flags,
+            sdl_menu_render_status_rail_label(mono_font, story_font, panel,
+                content_x, y_px, line_h, label_attr, row->flags,
                 row->label[0] ? row->label : row->key);
             continue;
         }
@@ -275,7 +275,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 if (row->label[0])
                 {
                     sdl_menu_render_text(mono_font, x_px, y_px, line_h,
-                        sdl_menu_color(label_attr), row->label);
+                        sdl_menu_panel_color(panel, label_attr), row->label);
                 }
                 x_px += (float)label_w;
                 if (label_w > 0 && meta_w > 0)
@@ -287,7 +287,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 {
                     sdl_menu_render_text(mono_font,
                         x_px + (float)icon_slot_w, y_px, line_h,
-                        sdl_menu_color(meta_attr), row->meta);
+                        sdl_menu_panel_color(panel, meta_attr), row->meta);
                 }
             }
             else
@@ -300,7 +300,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 if (row->label[0])
                 {
                     sdl_menu_render_text(mono_font, x_px, y_px, line_h,
-                        sdl_menu_color(label_attr), row->label);
+                        sdl_menu_panel_color(panel, label_attr), row->label);
                 }
                 x_px += (float)label_w;
                 if (label_w > 0 && meta_w > 0)
@@ -312,7 +312,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 {
                     sdl_menu_render_text(mono_font,
                         x_px + (float)icon_slot_w, y_px, line_h,
-                        sdl_menu_color(meta_attr), row->meta);
+                        sdl_menu_panel_color(panel, meta_attr), row->meta);
                 }
             }
             continue;
@@ -324,7 +324,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 icon_slot_w, line_h, row->icon_attr, row->icon_char);
             if (row->label[0])
             {
-                sdl_menu_render_status_rail_label(mono_font, story_font,
+                sdl_menu_render_status_rail_label(mono_font, story_font, panel,
                     content_x + (float)(icon_slot_w + gap_px), y_px, line_h,
                     label_attr, row->flags, row->label);
             }
@@ -339,15 +339,15 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
                 if (meta_x < min_meta_x)
                     meta_x = min_meta_x;
                 sdl_menu_render_text(mono_font, meta_x, y_px, line_h,
-                    sdl_menu_color(meta_attr), row->meta);
+                    sdl_menu_panel_color(panel, meta_attr), row->meta);
             }
             continue;
         }
 
         if (label_text[0])
         {
-            sdl_menu_render_status_rail_label(mono_font, story_font, content_x,
-                y_px, line_h, label_attr, row->flags, label_text);
+            sdl_menu_render_status_rail_label(mono_font, story_font, panel,
+                content_x, y_px, line_h, label_attr, row->flags, label_text);
         }
         if (row->meta[0])
         {
@@ -358,7 +358,7 @@ bool sdl_menu_render_status_rail_panel(const sdl_view* main_view,
             if (meta_x < content_x)
                 meta_x = content_x;
             sdl_menu_render_text(mono_font, meta_x, y_px, line_h,
-                sdl_menu_color(meta_attr), row->meta);
+                sdl_menu_panel_color(panel, meta_attr), row->meta);
         }
     }
 
@@ -484,14 +484,17 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
 
         if (row_w > 0)
         {
+            SDL_Color row_fill = sdl_menu_panel_style(panel)->panel_fill_alt;
+
+            row_fill.a = 176;
             sdl_menu_fill_rect(&(SDL_FRect){ 0.0f, y_px, (float)row_w,
-                (float)line_h }, (SDL_Color){ 0, 0, 0, 176 });
+                (float)line_h }, row_fill);
         }
 
         if (row->flags & APP_UI_ITEM_FLAG_SECTION)
         {
-            sdl_menu_render_status_rail_label(mono_font, story_font, x_px,
-                y_px, line_h, label_attr, row->flags,
+            sdl_menu_render_status_rail_label(mono_font, story_font, panel,
+                x_px, y_px, line_h, label_attr, row->flags,
                 row->label[0] ? row->label : row->key);
             continue;
         }
@@ -507,8 +510,8 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
 
         if (label_text[0])
         {
-            sdl_menu_render_status_rail_label(mono_font, story_font, x_px,
-                y_px, line_h, label_attr, row->flags, label_text);
+            sdl_menu_render_status_rail_label(mono_font, story_font, panel,
+                x_px, y_px, line_h, label_attr, row->flags, label_text);
             x_px += (float)label_w;
             has_tail = true;
         }
@@ -529,7 +532,7 @@ bool sdl_menu_render_overlay_rail_panel(const sdl_view* main_view,
             if (has_tail)
                 x_px += (float)gap_px;
             sdl_menu_render_text(mono_font, x_px, y_px, line_h,
-                sdl_menu_color(meta_attr), row->meta);
+                sdl_menu_panel_color(panel, meta_attr), row->meta);
             x_px += (float)meta_w;
         }
     }
@@ -582,7 +585,7 @@ bool sdl_menu_render_strip_panel(const sdl_view* main_view,
         .y = y_px,
         .w = (float)canvas_w,
         .h = (float)strip_h
-    }, (SDL_Color){ 0, 0, 0, 255 });
+    }, sdl_menu_panel_style(panel)->panel_fill);
 
     clip_rect.x = 0;
     clip_rect.y = (int)y_px;
@@ -599,7 +602,7 @@ bool sdl_menu_render_strip_panel(const sdl_view* main_view,
         {
             sdl_menu_render_text(font, (float)left_inset_px,
                 (float)current_y, line_h,
-                sdl_menu_color(line->attr), line->text);
+                sdl_menu_panel_color(panel, line->attr), line->text);
         }
         current_y += line_h;
     }
@@ -721,6 +724,9 @@ static bool sdl_menu_welcome_choose_layout(const sdl_view* main_view,
 static void sdl_menu_welcome_format_action(
     const app_ui_footer_action* action, char* buf, size_t buflen)
 {
+    char prompt[32];
+    cptr key_text;
+
     if (!buf || buflen == 0)
         return;
 
@@ -728,8 +734,17 @@ static void sdl_menu_welcome_format_action(
     if (!action || !action->label[0])
         return;
 
-    if (action->key[0])
-        strnfmt(buf, buflen, "[%s] %s", action->key, action->label);
+    prompt[0] = '\0';
+    if (portable_controls_active())
+    {
+        platform_input_prompt_for_ui_action(APP_INPUT_DEVICE_GAMEPAD,
+            action->interaction.action, action->interaction.action_key,
+            prompt, sizeof(prompt));
+    }
+
+    key_text = prompt[0] ? prompt : action->key;
+    if (key_text && key_text[0])
+        strnfmt(buf, buflen, "[%s] %s", key_text, action->label);
     else
         SDL_strlcpy(buf, action->label, buflen);
 }
@@ -767,7 +782,8 @@ static void sdl_menu_render_welcome_footer_actions(TTF_Font* mono_font,
             action->label, action->interaction.tooltip);
 
         sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
-            sdl_menu_color(action->attr ? action->attr : TERM_SLATE), token);
+            sdl_menu_panel_color(panel, action->attr ? action->attr : TERM_SLATE),
+            token);
         cursor_x += token_w + gap;
     }
 }
@@ -894,8 +910,7 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
         mono_font, cell_w, base_x);
     body_y = sdl_menu_welcome_centered_body_y(canvas_h, panel, line_h);
 
-    SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);
-    SDL_RenderClear(g_state.renderer);
+    sdl_ui_style_draw_canvas(sdl_menu_panel_style(panel), canvas_w, canvas_h);
 
     for (i = 0; i < panel->body_line_count; i++)
     {
@@ -910,7 +925,7 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
         x_px = base_x + sdl_menu_welcome_line_col(line) * cell_w;
         y_px = body_y + (int)i * line_h;
         sdl_menu_render_text(font, (float)x_px, (float)y_px, line_h,
-            sdl_menu_color(line->attr), line->text);
+            sdl_menu_panel_color(panel, line->attr), line->text);
     }
 
     intro_x = base_x + 14 * cell_w;
@@ -921,7 +936,8 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
 
         sdl_menu_render_text(mono_font, (float)intro_x,
             (float)(canvas_h - line_h * 3), line_h,
-            sdl_menu_color(TERM_L_DARK), "- - - - - - - - - - - -");
+            sdl_menu_panel_color(panel, TERM_L_DARK),
+            "- - - - - - - - - - - -");
 
         for (i = 0; i < panel->detail_line_count; i++)
         {
@@ -931,7 +947,7 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
             if (!line->text[0])
                 continue;
             sdl_menu_render_text(mono_font, (float)intro_x, (float)y_px, line_h,
-                sdl_menu_color(line->attr), line->text);
+                sdl_menu_panel_color(panel, line->attr), line->text);
         }
     }
     else if (panel->detail_line_count > 0)
@@ -947,8 +963,8 @@ bool sdl_menu_render_welcome_panel(const sdl_view* main_view,
             if (x_px < 0)
                 x_px = 0;
             sdl_menu_render_text(mono_font, (float)x_px,
-                (float)(canvas_h - line_h), line_h, sdl_menu_color(line->attr),
-                line->text);
+                (float)(canvas_h - line_h), line_h,
+                sdl_menu_panel_color(panel, line->attr), line->text);
         }
     }
 

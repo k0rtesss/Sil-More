@@ -37,7 +37,7 @@ static const app_ui_panel* sdl_menu_pick_ui_panel(const app_ui_scene* scene)
 
 static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
     int canvas_w, int canvas_h, const app_ui_scene* scene,
-    const app_ui_panel* panel)
+    const app_ui_panel* panel, u16b panel_index)
 {
     if (!main_view || !scene || !panel)
         return false;
@@ -114,7 +114,11 @@ static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
         return true;
     }
 
-    if (panel->style == APP_UI_PANEL_STYLE_BROWSER)
+    if (panel->style == APP_UI_PANEL_STYLE_BROWSER
+        || (panel->style == APP_UI_PANEL_STYLE_ITEM_BROWSER
+            && panel->layer != APP_UI_LAYER_TRANSIENT)
+        || panel->style == APP_UI_PANEL_STYLE_CRAFTING
+        || panel->style == APP_UI_PANEL_STYLE_MAP_RECALL)
     {
         if (!sdl_menu_render_browser_panel(main_view, canvas_w, canvas_h,
                 scene, panel))
@@ -127,7 +131,7 @@ static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
     }
 
     if (!sdl_menu_render_panel_internal(main_view, canvas_w, canvas_h, scene,
-            panel))
+            panel, APP_SCENE_KIND_MENU, panel_index))
     {
         log_warn("ui render: default panel failed (canvas=%dx%d rect=%dx%d style=%u)",
             canvas_w, canvas_h, main_view->rect.w, main_view->rect.h,
@@ -139,7 +143,8 @@ static bool sdl_scene_ui_render_panel_direct(const sdl_view* main_view,
 }
 
 static bool sdl_scene_ui_render_panel(const sdl_view* main_view, int canvas_w,
-    int canvas_h, const app_ui_scene* scene, const app_ui_panel* panel)
+    int canvas_h, const app_ui_scene* scene, const app_ui_panel* panel,
+    u16b panel_index)
 {
     SDL_Texture* prior_target;
     SDL_Texture* fade_texture;
@@ -149,7 +154,7 @@ static bool sdl_scene_ui_render_panel(const sdl_view* main_view, int canvas_w,
     if (panel->alpha >= 0xFFu || canvas_w <= 0 || canvas_h <= 0)
     {
         return sdl_scene_ui_render_panel_direct(main_view, canvas_w, canvas_h,
-            scene, panel);
+            scene, panel, panel_index);
     }
     if (panel->alpha == 0)
         return true;
@@ -162,7 +167,7 @@ static bool sdl_scene_ui_render_panel(const sdl_view* main_view, int canvas_w,
         log_warn("ui render: fade texture create failed, falling back to direct render (%s)",
             SDL_GetError());
         return sdl_scene_ui_render_panel_direct(main_view, canvas_w, canvas_h,
-            scene, panel);
+            scene, panel, panel_index);
     }
 
     SDL_SetTextureBlendMode(fade_texture, SDL_BLENDMODE_BLEND);
@@ -171,7 +176,7 @@ static bool sdl_scene_ui_render_panel(const sdl_view* main_view, int canvas_w,
     SDL_RenderClear(g_state.renderer);
 
     if (!sdl_scene_ui_render_panel_direct(main_view, canvas_w, canvas_h, scene,
-            panel))
+            panel, panel_index))
     {
         SDL_SetRenderTarget(g_state.renderer, prior_target);
         SDL_DestroyTexture(fade_texture);
@@ -218,7 +223,7 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
             continue;
         sdl_menu_hit_begin_panel(i, panel);
         if (!sdl_scene_ui_render_panel(main_view, canvas_w, canvas_h, scene,
-                panel))
+                panel, i))
         {
             sdl_menu_hit_end_panel();
             return false;
@@ -226,6 +231,7 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
         sdl_menu_hit_end_panel();
     }
 
+    sdl_menu_pointer_render_tooltip(canvas_w, canvas_h);
     return true;
 }
 
@@ -254,7 +260,12 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
     }
     else
     {
-        SDL_SetRenderDrawColor(g_state.renderer, 6, 10, 14, 255);
+        const sdl_ui_style* style = sdl_ui_style_for_panel(
+            scene->panel_count > 0 ? scene->panels[0].style
+                                   : APP_UI_PANEL_STYLE_DEFAULT);
+
+        SDL_SetRenderDrawColor(g_state.renderer, style->canvas_fill.r,
+            style->canvas_fill.g, style->canvas_fill.b, style->canvas_fill.a);
         SDL_RenderClear(g_state.renderer);
     }
 

@@ -63,6 +63,8 @@ void platform_gamepad_reset_bindings_to_default(void);
 void platform_gamepad_action_binding_label(int binding, char* buf, size_t buflen);
 void platform_gamepad_action_binding_short_label(int binding, char* buf,
     size_t buflen);
+void platform_input_prompt_for_ui_action(u16b device, u16b action,
+    int action_key, char* buf, size_t buflen);
 
 int platform_touch_pane_binding(int index);
 void platform_set_touch_pane_binding(int index, int binding);

@@ -28,6 +28,8 @@ void platform_intro_mark_seen(void);
 bool option_is_app_persistent(int opt);
 int platform_main_view_scale(void);
 void platform_set_main_view_scale(int value);
+int platform_overlay_density(void);
+void platform_set_overlay_density(int value);
 int platform_min_terminal_mode(void);
 void platform_set_min_terminal_mode(int value);
 int platform_aux_view_font_size(void);
@@ -82,5 +84,6 @@ int platform_intro_style(void);
 void platform_set_intro_style(int style);
 int platform_max_scale(void);
 void platform_apply_config(void);
+void platform_reset_layout_defaults(void);
 
 #endif /* INCLUDED_PLATFORM_CONFIG_H */
