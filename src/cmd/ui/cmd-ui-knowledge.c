@@ -238,6 +238,23 @@ static cptr knowledge_tab_label(int page)
     return labels[page];
 }
 
+static char knowledge_tab_key(int page)
+{
+    switch (page)
+    {
+    case KNOWLEDGE_PAGE_ARTEFACTS:
+        return 'a';
+    case KNOWLEDGE_PAGE_OBJECTS:
+        return 'b';
+    case KNOWLEDGE_PAGE_MONSTERS:
+        return 'n';
+    case KNOWLEDGE_PAGE_CURSES:
+        return 'u';
+    default:
+        return 0;
+    }
+}
+
 void knowledge_browser_cursor_with_rows(char ch, int* column, int* grp_cur,
     int grp_cnt, int* list_cur, int list_cnt, int page_rows)
 {
@@ -427,7 +444,8 @@ bool knowledge_is_recall_input(int ch)
 {
     int confirm_key = steamdeck_confirm_key();
 
-    if (ch == ' ' || ch == 'R' || ch == 'r' || ch == 'X' || ch == 'x'
+    if (ch == ' ' || ch == '\n' || ch == '\r'
+        || ch == 'R' || ch == 'r' || ch == 'X' || ch == 'x'
         || ch == INPUT_BIND_CONFIRM)
     {
         return true;
@@ -455,6 +473,11 @@ static void knowledge_scene_add_tabs(app_ui_panel* panel, int page,
             attr = tabs_focus ? TERM_YELLOW : TERM_L_BLUE;
         (void)app_ui_panel_add_tab(panel, (s16b)i, attr, i == page,
             knowledge_tab_label(i));
+        (void)app_ui_panel_set_tab_interaction(panel, (s16b)i,
+            APP_UI_WIDGET_ROLE_TAB, APP_UI_WIDGET_ACTION_SELECT,
+            APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+            knowledge_tab_key(i), "Open tab");
     }
 }
 

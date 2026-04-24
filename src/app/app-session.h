@@ -24,6 +24,7 @@
 #include "app-scene-dungeon.h"
 #include "app-scene-menu.h"
 #include "app-snapshot.h"
+#include "app-ui-command.h"
 #include "h-basic.h"
 
 #ifdef __cplusplus
@@ -209,10 +210,20 @@ bool app_session_pop_input(app_session* session, app_input* out_input);
 void app_session_clear_inputs(app_session* session);
 bool app_session_submit_intent(app_session* session, const app_intent* intent);
 size_t app_session_pending_intent_count(const app_session* session);
-bool app_session_peek_intent(const app_session* session,
-    app_intent* out_intent);
+bool app_session_peek_intent(const app_session* session, app_intent* out_intent);
 bool app_session_pop_intent(app_session* session, app_intent* out_intent);
 void app_session_clear_intents(app_session* session);
+const app_ui_focus_state* app_session_ui_focus(const app_session* session);
+void app_session_note_ui_focus(app_session* session,
+    const app_ui_widget_ref* target, u16b reason, bool pressed);
+void app_session_clear_ui_focus(app_session* session);
+bool app_session_submit_ui_command(app_session* session,
+    const app_ui_command* command);
+size_t app_session_pending_ui_command_count(const app_session* session);
+bool app_session_peek_ui_command(const app_session* session,
+    app_ui_command* out_command);
+bool app_session_pop_ui_command(app_session* session, app_ui_command* out_command);
+void app_session_clear_ui_commands(app_session* session);
 bool app_session_emit_event(app_session* session,
     const app_event_record* record);
 app_event_span app_session_view_events(const app_session* session);

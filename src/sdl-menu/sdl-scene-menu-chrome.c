@@ -760,11 +760,11 @@ static void sdl_menu_render_welcome_footer_actions(TTF_Font* mono_font,
         hit_rect.y = (float)y_px;
         hit_rect.w = (float)MAX(token_w, sdl_menu_scale_px(48.0f));
         hit_rect.h = (float)MAX(line_h, sdl_menu_scale_px(24.0f));
-        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
+        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
             action->id, action->interaction.action_key,
             action->interaction.role, action->interaction.action,
-            action->interaction.flags, &hit_rect, action->label,
-            action->interaction.tooltip);
+            action->interaction.flags, action->flags, -1, 0, 0, &hit_rect,
+            action->label, action->interaction.tooltip);
 
         sdl_menu_render_text(mono_font, (float)cursor_x, (float)y_px, line_h,
             sdl_menu_color(action->attr ? action->attr : TERM_SLATE), token);

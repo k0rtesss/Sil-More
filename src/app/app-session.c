@@ -33,6 +33,13 @@ typedef struct app_intent_queue {
     size_t count;
 } app_intent_queue;
 
+typedef struct app_ui_command_queue {
+    app_ui_command* items;
+    size_t capacity;
+    size_t head;
+    size_t count;
+} app_ui_command_queue;
+
 struct app_session {
     const app_host* host;
     u32b flags;
@@ -53,6 +60,8 @@ struct app_session {
     app_event_buffer* events;
     app_input_queue inputs;
     app_intent_queue intents;
+    app_ui_focus_state ui_focus;
+    app_ui_command_queue ui_commands;
     app_session_advance_callback advance_callback;
     void* advance_user_data;
 };
@@ -81,6 +90,11 @@ static size_t app_session_initial_input_capacity(void)
 }
 
 static size_t app_session_initial_intent_capacity(void)
+{
+    return 16u;
+}
+
+static size_t app_session_initial_ui_command_capacity(void)
 {
     return 16u;
 }
@@ -405,6 +419,109 @@ static void app_intent_queue_clear(app_intent_queue* queue)
     queue->count = 0;
 }
 
+static bool app_ui_command_queue_init(app_ui_command_queue* queue,
+    size_t capacity)
+{
+    if (!queue || capacity == 0)
+        return false;
+
+    memset(queue, 0, sizeof(*queue));
+    queue->items = calloc(capacity, sizeof(*queue->items));
+    if (!queue->items)
+        return false;
+
+    queue->capacity = capacity;
+    return true;
+}
+
+static void app_ui_command_queue_destroy(app_ui_command_queue* queue)
+{
+    if (!queue)
+        return;
+
+    free(queue->items);
+    memset(queue, 0, sizeof(*queue));
+}
+
+static bool app_ui_command_queue_reserve(app_ui_command_queue* queue,
+    size_t capacity)
+{
+    app_ui_command* items;
+    size_t i;
+
+    if (!queue || capacity <= queue->capacity)
+        return true;
+
+    items = calloc(capacity, sizeof(*items));
+    if (!items)
+        return false;
+
+    for (i = 0; i < queue->count; i++)
+    {
+        size_t index = (queue->head + i) % queue->capacity;
+        items[i] = queue->items[index];
+    }
+
+    free(queue->items);
+    queue->items = items;
+    queue->capacity = capacity;
+    queue->head = 0;
+    return true;
+}
+
+static bool app_ui_command_queue_push(app_ui_command_queue* queue,
+    const app_ui_command* command)
+{
+    size_t index;
+
+    if (!queue || !command)
+        return false;
+
+    if (queue->count == queue->capacity)
+    {
+        size_t next_capacity = queue->capacity ? queue->capacity * 2u : 1u;
+        if (!app_ui_command_queue_reserve(queue, next_capacity))
+            return false;
+    }
+
+    index = (queue->head + queue->count) % queue->capacity;
+    queue->items[index] = *command;
+    queue->count++;
+    return true;
+}
+
+static bool app_ui_command_queue_copy_front(
+    const app_ui_command_queue* queue, app_ui_command* out_command)
+{
+    if (!queue || !queue->count)
+        return false;
+
+    if (out_command)
+        *out_command = queue->items[queue->head];
+
+    return true;
+}
+
+static bool app_ui_command_queue_pop(app_ui_command_queue* queue,
+    app_ui_command* out_command)
+{
+    if (!app_ui_command_queue_copy_front(queue, out_command))
+        return false;
+
+    queue->head = (queue->head + 1) % queue->capacity;
+    queue->count--;
+    return true;
+}
+
+static void app_ui_command_queue_clear(app_ui_command_queue* queue)
+{
+    if (!queue)
+        return;
+
+    queue->head = 0;
+    queue->count = 0;
+}
+
 app_session* app_session_current(void)
 {
     return g_current_session;
@@ -455,6 +572,7 @@ app_session* app_session_create(const app_session_config* config)
     app_dungeon_snapshot_init(&session->dungeon_snapshot);
     app_menu_snapshot_init(&session->menu_snapshot);
     app_ui_scene_init(&session->dungeon_overlay_scene);
+    app_ui_focus_state_clear(&session->ui_focus);
     session->next_snapshot_revision = 1u;
     session->events = app_event_buffer_create(initial_event_capacity);
 
@@ -462,7 +580,9 @@ app_session* app_session_create(const app_session_config* config)
         || !app_input_queue_init(&session->inputs,
             app_session_initial_input_capacity())
         || !app_intent_queue_init(&session->intents,
-            app_session_initial_intent_capacity()))
+            app_session_initial_intent_capacity())
+        || !app_ui_command_queue_init(&session->ui_commands,
+            app_session_initial_ui_command_capacity()))
     {
         app_session_destroy(session);
         return NULL;
@@ -485,6 +605,7 @@ void app_session_destroy(app_session* session)
     app_dungeon_snapshot_destroy(&session->dungeon_snapshot);
     app_input_queue_destroy(&session->inputs);
     app_intent_queue_destroy(&session->intents);
+    app_ui_command_queue_destroy(&session->ui_commands);
     app_event_buffer_destroy(session->events);
     free(session);
 }
@@ -786,6 +907,8 @@ void app_session_clear_menu_snapshot(app_session* session)
 
     app_ui_scene_init(&session->menu_snapshot.scene);
     app_session_sync_menu_blob(session);
+    app_session_clear_ui_focus(session);
+    app_session_clear_ui_commands(session);
 }
 
 void app_session_clear_dungeon_overlay_scene(app_session* session)
@@ -798,6 +921,8 @@ void app_session_clear_dungeon_overlay_scene(app_session* session)
 
     session->dungeon_overlay_scene_active = 0;
     app_ui_scene_init(&session->dungeon_overlay_scene);
+    app_session_clear_ui_focus(session);
+    app_session_clear_ui_commands(session);
     app_session_touch_overlay_menu(session);
 }
 
@@ -828,6 +953,8 @@ bool app_session_publish_menu_scene(app_session* session,
         scene->panel_count,
         scene->panel_count ? scene->panels[0].style : 0,
         scene->flags, session->next_snapshot_revision);
+    app_session_clear_ui_focus(session);
+    app_session_clear_ui_commands(session);
     session->menu_snapshot.scene = *scene;
     app_session_sync_menu_blob(session);
     session->menu_snapshot.snapshot.flags
@@ -846,6 +973,8 @@ bool app_session_publish_dungeon_overlay_scene(app_session* session,
 
     session->dungeon_overlay_scene = *scene;
     session->dungeon_overlay_scene_active = 1;
+    app_session_clear_ui_focus(session);
+    app_session_clear_ui_commands(session);
     app_session_touch_overlay_menu(session);
     return true;
 }
@@ -1241,6 +1370,7 @@ void app_session_clear_inputs(app_session* session)
             (unsigned)session->inputs.count, (unsigned)session->snapshot.scene);
     }
     app_input_queue_clear(&session->inputs);
+    app_session_clear_ui_commands(session);
 }
 
 bool app_session_submit_intent(app_session* session, const app_intent* intent)
@@ -1282,6 +1412,119 @@ void app_session_clear_intents(app_session* session)
         return;
 
     app_intent_queue_clear(&session->intents);
+}
+
+const app_ui_focus_state* app_session_ui_focus(
+    const app_session* session)
+{
+    return session ? &session->ui_focus : NULL;
+}
+
+void app_session_note_ui_focus(app_session* session,
+    const app_ui_widget_ref* target, u16b reason, bool pressed)
+{
+    if (!session)
+        return;
+
+    app_ui_focus_state_clear(&session->ui_focus);
+    if (!app_ui_widget_ref_is_valid(target))
+        return;
+
+    session->ui_focus.active = 1;
+    session->ui_focus.reason = reason;
+    session->ui_focus.pressed = pressed ? 1 : 0;
+    session->ui_focus.sequence = session->next_snapshot_revision;
+    session->ui_focus.timestamp_usec = app_session_event_timestamp(session);
+    session->ui_focus.target = *target;
+}
+
+void app_session_clear_ui_focus(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_ui_focus_state_clear(&session->ui_focus);
+}
+
+static u16b app_session_ui_focus_reason_for_command(
+    const app_ui_command* command)
+{
+    if (!command)
+        return APP_UI_FOCUS_REASON_NONE;
+
+    if (command->device == APP_INPUT_DEVICE_GAMEPAD)
+        return APP_UI_FOCUS_REASON_GAMEPAD;
+    if (command->device == APP_INPUT_DEVICE_KEYBOARD)
+        return APP_UI_FOCUS_REASON_KEYBOARD;
+    if (command->device == APP_INPUT_DEVICE_TOUCH)
+    {
+        return (command->kind == APP_UI_COMMAND_KIND_PRESS)
+            ? APP_UI_FOCUS_REASON_TOUCH_PRESS
+            : APP_UI_FOCUS_REASON_COMMAND;
+    }
+    if (command->device == APP_INPUT_DEVICE_POINTER)
+    {
+        return (command->kind == APP_UI_COMMAND_KIND_HOVER)
+            ? APP_UI_FOCUS_REASON_POINTER_HOVER
+            : ((command->kind == APP_UI_COMMAND_KIND_PRESS)
+                    ? APP_UI_FOCUS_REASON_POINTER_PRESS
+                    : APP_UI_FOCUS_REASON_COMMAND);
+    }
+
+    return APP_UI_FOCUS_REASON_COMMAND;
+}
+
+bool app_session_submit_ui_command(app_session* session,
+    const app_ui_command* command)
+{
+    bool pressed;
+
+    if (!session || !app_ui_command_is_valid(command))
+        return false;
+    if (!app_session_has_flag(session, APP_SESSION_FLAG_ALLOW_INTENT_INPUT))
+        return false;
+
+    pressed = command->kind == APP_UI_COMMAND_KIND_PRESS
+        || command->kind == APP_UI_COMMAND_KIND_DRAG
+        || command->kind == APP_UI_COMMAND_KIND_RESIZE;
+    app_session_note_ui_focus(session, &command->target,
+        app_session_ui_focus_reason_for_command(command), pressed);
+    session->ui_focus.sequence = command->sequence;
+    session->ui_focus.timestamp_usec = command->timestamp_usec;
+
+    return app_ui_command_queue_push(&session->ui_commands, command);
+}
+
+size_t app_session_pending_ui_command_count(const app_session* session)
+{
+    return session ? session->ui_commands.count : 0u;
+}
+
+bool app_session_peek_ui_command(const app_session* session,
+    app_ui_command* out_command)
+{
+    return session ? app_ui_command_queue_copy_front(&session->ui_commands,
+        out_command) : false;
+}
+
+bool app_session_pop_ui_command(app_session* session,
+    app_ui_command* out_command)
+{
+    if (!session || !app_ui_command_queue_pop(&session->ui_commands,
+            out_command))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void app_session_clear_ui_commands(app_session* session)
+{
+    if (!session)
+        return;
+
+    app_ui_command_queue_clear(&session->ui_commands);
 }
 
 bool app_session_emit_event(app_session* session,

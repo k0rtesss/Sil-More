@@ -628,6 +628,117 @@ static void test_session_scaffolding(void)
     CHECK(app_session_current() == NULL);
 }
 
+static void test_ui_command_queue_and_focus(void)
+{
+    app_session_config session_config;
+    app_session* session;
+    app_ui_widget_ref ref;
+    app_ui_command command;
+    app_ui_command peeked;
+    app_ui_command popped;
+    const app_ui_focus_state* focus;
+
+    memset(&session_config, 0, sizeof(session_config));
+    session_config.api_version = APP_SESSION_API_VERSION;
+    session_config.flags = APP_SESSION_FLAG_ALLOW_LEGACY_INPUT
+        | APP_SESSION_FLAG_ALLOW_INTENT_INPUT
+        | APP_SESSION_FLAG_BRIDGE_LEGACY_INPUT;
+    session = app_session_create(&session_config);
+    CHECK(session != NULL);
+    if (!session)
+        return;
+
+    app_session_make_current(session);
+
+    app_ui_widget_ref_clear(&ref);
+    ref.scene_kind = APP_SCENE_KIND_MENU;
+    ref.panel_index = 1;
+    ref.target_kind = 2;
+    ref.widget_id = 42;
+    ref.action_key = 'x';
+    ref.role = APP_UI_WIDGET_ROLE_BUTTON;
+    ref.action = APP_UI_WIDGET_ACTION_ACTIVATE;
+    ref.flags = APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+        | APP_UI_INTERACTION_FLAG_TOUCH_TARGET;
+    ref.focus_area = APP_UI_FOCUS_FOOTER;
+    ref.state_flags = APP_UI_ITEM_FLAG_SELECTED;
+    ref.focus_order = 3;
+    ref.owner_id = 1;
+    ref.payload0 = 55;
+    SDL_strlcpy(ref.label, "Confirm", sizeof(ref.label));
+    SDL_strlcpy(ref.tooltip, "Activate confirm", sizeof(ref.tooltip));
+
+    app_ui_command_clear(&command);
+    command.kind = APP_UI_COMMAND_KIND_ACTIVATE;
+    command.device = APP_INPUT_DEVICE_POINTER;
+    command.input_type = APP_INPUT_TYPE_POINTER_BUTTON;
+    command.input_flags = APP_INPUT_FLAG_RELEASE;
+    command.x = 12;
+    command.y = 34;
+    command.button = 1;
+    command.clicks = 1;
+    command.sequence = 7;
+    command.timestamp_usec = 99;
+    command.target = ref;
+
+    CHECK(app_session_pending_ui_command_count(session) == 0);
+    CHECK(app_session_submit_ui_command(session, &command));
+    CHECK(app_session_pending_ui_command_count(session) == 1);
+
+    focus = app_session_ui_focus(session);
+    CHECK(focus != NULL);
+    CHECK(focus->active == 1);
+    CHECK(focus->reason == APP_UI_FOCUS_REASON_COMMAND);
+    CHECK(focus->pressed == 0);
+    CHECK(focus->sequence == 7);
+    CHECK(focus->target.widget_id == 42);
+    CHECK(focus->target.action_key == 'x');
+    CHECK(focus->target.state_flags == APP_UI_ITEM_FLAG_SELECTED);
+    CHECK(focus->target.focus_order == 3);
+    CHECK(focus->target.owner_id == 1);
+    CHECK(focus->target.payload0 == 55);
+
+    memset(&peeked, 0, sizeof(peeked));
+    CHECK(app_session_peek_ui_command(session, &peeked));
+    CHECK(peeked.kind == APP_UI_COMMAND_KIND_ACTIVATE);
+    CHECK(peeked.target.widget_id == 42);
+    CHECK(app_session_pending_ui_command_count(session) == 1);
+
+    memset(&popped, 0, sizeof(popped));
+    CHECK(app_session_pop_ui_command(session, &popped));
+    CHECK(popped.kind == APP_UI_COMMAND_KIND_ACTIVATE);
+    CHECK(popped.target.action_key == 'x');
+    CHECK(app_session_pending_ui_command_count(session) == 0);
+
+    command.sequence = 8;
+    command.timestamp_usec = 100;
+    CHECK(app_session_submit_ui_command(session, &command));
+    CHECK(ui_information_scene_wait_key() == 'x');
+    CHECK(app_session_pending_ui_command_count(session) == 0);
+
+    CHECK(app_session_submit_ui_command(session, &command));
+    app_session_clear_inputs(session);
+    CHECK(app_session_pending_ui_command_count(session) == 0);
+
+    command.target = ref;
+    command.target.action_key = 0;
+    command.target.role = APP_UI_WIDGET_ROLE_LIST_ITEM;
+    command.target.payload0 = 2;
+    command.target.payload1 = 0;
+    command.sequence = 9;
+    command.timestamp_usec = 101;
+    CHECK(app_session_submit_ui_command(session, &command));
+    CHECK(ui_information_scene_wait_key() == '2');
+    CHECK(ui_information_scene_wait_key() == '2');
+    CHECK(ui_information_scene_wait_key() == '\r');
+
+    app_ui_widget_ref_clear(&command.target);
+    CHECK(!app_session_submit_ui_command(session, &command));
+
+    app_session_destroy(session);
+    CHECK(app_session_current() == NULL);
+}
+
 static void test_public_boundary_wrappers(void)
 {
     static const byte snapshot_bytes[] = { 7, 6, 5, 4 };
@@ -1426,6 +1537,7 @@ int main(void)
     test_drain_semantics();
     test_host_wrappers();
     test_session_scaffolding();
+    test_ui_command_queue_and_focus();
     test_public_boundary_wrappers();
     test_information_scene_nested_restore();
     test_information_scene_wait_key_nonrepeat();

@@ -30,6 +30,16 @@ typedef enum sdl_menu_hit_target_kind {
 
 typedef struct sdl_menu_hit_target {
     SDL_FRect rect;
+    u16b scene_kind;
+    u16b panel_index;
+    u16b panel_layer;
+    u16b panel_style;
+    u16b focus_area;
+    u16b state_flags;
+    s16b focus_order;
+    s16b owner_id;
+    s32b payload0;
+    s32b payload1;
     u16b kind;
     s16b id;
     s16b action_key;
@@ -43,8 +53,16 @@ typedef struct sdl_menu_hit_target {
 SDL_Color sdl_menu_color_alpha(byte attr, byte alpha);
 SDL_Color sdl_menu_color(byte attr);
 void sdl_menu_hit_reset(int origin_x, int origin_y);
+void sdl_menu_hit_set_scene(u16b scene_kind);
+void sdl_menu_hit_begin_panel(u16b panel_index,
+    const app_ui_panel* panel);
+void sdl_menu_hit_end_panel(void);
 bool sdl_menu_hit_register(u16b kind, s16b id, s16b action_key, u16b role,
     u16b action, u16b flags, const SDL_FRect* canvas_rect, cptr label,
+    cptr tooltip);
+bool sdl_menu_hit_register_ex(u16b kind, s16b id, s16b action_key,
+    u16b role, u16b action, u16b flags, u16b state_flags, s16b owner_id,
+    s32b payload0, s32b payload1, const SDL_FRect* canvas_rect, cptr label,
     cptr tooltip);
 const sdl_menu_hit_target* sdl_menu_hit_test(float window_x, float window_y);
 bool sdl_menu_pointer_handle_event(const SDL_Event* ev);

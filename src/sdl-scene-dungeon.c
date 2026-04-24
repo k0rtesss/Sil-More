@@ -1542,22 +1542,37 @@ static bool sdl_scene_render_chrome_scene(const sdl_view* view,
 
         if (panel->style == APP_UI_PANEL_STYLE_STRIP)
         {
+            sdl_menu_hit_begin_panel(i, panel);
             if (!sdl_scene_render_chrome_strip_panel(view, layout, panel))
+            {
+                sdl_menu_hit_end_panel();
                 return false;
+            }
+            sdl_menu_hit_end_panel();
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_STATUS_RAIL)
         {
+            sdl_menu_hit_begin_panel(i, panel);
             if (!sdl_scene_render_chrome_status_rail_panel(view, layout, panel))
+            {
+                sdl_menu_hit_end_panel();
                 return false;
+            }
+            sdl_menu_hit_end_panel();
             continue;
         }
 
         if (panel->style == APP_UI_PANEL_STYLE_OVERLAY_RAIL)
         {
+            sdl_menu_hit_begin_panel(i, panel);
             if (!sdl_scene_render_chrome_overlay_rail_panel(view, layout, panel))
+            {
+                sdl_menu_hit_end_panel();
                 return false;
+            }
+            sdl_menu_hit_end_panel();
             continue;
         }
 
@@ -2392,6 +2407,7 @@ bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
     have_map_clip = sdl_scene_layout_map_clip_rect(&layout, &map_clip_rect);
     sdl_menu_hit_reset(main_view->rect.x + main_view->margin_x,
         main_view->rect.y + main_view->margin_y);
+    sdl_menu_hit_set_scene(APP_SCENE_KIND_DUNGEON);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     SDL_SetRenderDrawColor(g_state.renderer, 0, 0, 0, 255);

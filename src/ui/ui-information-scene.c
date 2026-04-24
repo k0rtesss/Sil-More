@@ -21,6 +21,7 @@
 
 static bool g_ui_information_scene_active = false;
 static bool g_ui_information_scene_refresh_enabled = true;
+static u64b g_ui_information_scene_synthetic_sequence = 0;
 
 static void ui_information_scene_process_events(bool wait)
 {
@@ -58,6 +59,80 @@ static bool ui_information_scene_publish_ui_scene(const app_ui_scene* scene,
 
     ui_information_scene_present_frame();
     return true;
+}
+
+static bool ui_information_scene_queue_legacy_key(app_session* session,
+    int key)
+{
+    app_input input;
+
+    if (!session || key == 0)
+        return false;
+
+    memset(&input, 0, sizeof(input));
+    input.layer = APP_INPUT_LAYER_LEGACY;
+    input.type = APP_INPUT_TYPE_KEY;
+    input.device = APP_INPUT_DEVICE_SYSTEM;
+    input.flags = APP_INPUT_FLAG_PRESS | APP_INPUT_FLAG_SYNTHETIC;
+    input.sequence = ++g_ui_information_scene_synthetic_sequence;
+    input.payload.key.logical_key = (u32b)key;
+    input.payload.key.physical_key = (u32b)key;
+    return app_session_submit_input(session, &input);
+}
+
+static int ui_information_scene_activation_key_for_command(
+    const app_ui_command* command)
+{
+    if (!command)
+        return 0;
+
+    if (command->kind == APP_UI_COMMAND_KIND_SELECT
+        || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+    {
+        return '\r';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_INSPECT
+        || command->target.action == APP_UI_WIDGET_ACTION_INSPECT)
+    {
+        return 'x';
+    }
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        return ESCAPE;
+    }
+
+    return '\r';
+}
+
+static int ui_information_scene_bridge_keyless_command(
+    app_session* session, const app_ui_command* command)
+{
+    int activation_key;
+
+    if (!session || !command)
+        return 0;
+
+    activation_key = ui_information_scene_activation_key_for_command(command);
+    if (command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM
+        && command->target.payload0 >= 0 && command->target.payload1 >= 0)
+    {
+        int delta = command->target.payload0 - command->target.payload1;
+        int step_key = (delta > 0) ? '2' : '8';
+        int steps = ABS(delta);
+        int i;
+
+        if (steps > 0)
+        {
+            for (i = 1; i < steps; i++)
+                (void)ui_information_scene_queue_legacy_key(session, step_key);
+            (void)ui_information_scene_queue_legacy_key(session,
+                activation_key);
+            return step_key;
+        }
+    }
+
+    return activation_key;
 }
 
 static app_menu_snapshot* ui_information_scene_clone_menu_snapshot(
@@ -250,12 +325,41 @@ static int ui_information_scene_wait_key_internal(u16b ignored_flags)
 {
     app_session* session = app_session_current();
     app_input input;
+    app_ui_command ui_command;
 
     if (!ui_information_scene_supported() || !session)
         return ESCAPE;
 
     while (true)
     {
+        while (app_session_pop_ui_command(session, &ui_command))
+        {
+            if (ui_command.input_flags & ignored_flags)
+                continue;
+            if (ui_command.kind != APP_UI_COMMAND_KIND_ACTIVATE
+                && ui_command.kind != APP_UI_COMMAND_KIND_SELECT
+                && ui_command.kind != APP_UI_COMMAND_KIND_CANCEL
+                && ui_command.kind != APP_UI_COMMAND_KIND_INSPECT)
+            {
+                continue;
+            }
+            if (!ui_command.target.action_key)
+            {
+                int bridge_key = ui_information_scene_bridge_keyless_command(
+                    session, &ui_command);
+                if (bridge_key)
+                    return bridge_key;
+                continue;
+            }
+
+            if ((int)(ui_command.target.action_key & 0xFFu) == ESCAPE) {
+                log_debug("[metarun-esc-trace] ui_information_scene_wait_key_internal ui-command esc flags=0x%04x kind=%d",
+                    (unsigned)ui_command.input_flags,
+                    (int)ui_command.kind);
+            }
+            return (int)(ui_command.target.action_key & 0xFFu);
+        }
+
         while (app_session_pop_input(session, &input))
         {
             if (input.layer != APP_INPUT_LAYER_LEGACY

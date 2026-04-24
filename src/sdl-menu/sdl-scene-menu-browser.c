@@ -83,9 +83,10 @@ static void sdl_menu_render_browser_tabs(TTF_Font* font,
 
         if (i > 0)
             cursor_x += item_gap;
-        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_TAB, tab->id,
+        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_TAB, tab->id,
             tab->interaction.action_key, tab->interaction.role,
-            tab->interaction.action, tab->interaction.flags,
+            tab->interaction.action, tab->interaction.flags, tab->flags, -1,
+            0, 0,
             &(SDL_FRect){ (float)cursor_x, (float)y_px, (float)tab_w,
                 (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
             tab->label, tab->interaction.tooltip);
@@ -130,10 +131,10 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
         attr = (action->flags & APP_UI_ITEM_FLAG_DISABLED)
             ? TERM_L_DARK
             : (action->attr ? action->attr : TERM_SLATE);
-        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
+        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_FOOTER_ACTION,
             action->id, action->interaction.action_key,
             action->interaction.role, action->interaction.action,
-            action->interaction.flags,
+            action->interaction.flags, action->flags, -1, 0, 0,
             &(SDL_FRect){ (float)cursor_x, (float)cursor_y,
                 (float)token_w, (float)MAX(line_h, sdl_menu_scale_px(24.0f)) },
             action->label, action->interaction.tooltip);
@@ -144,8 +145,8 @@ static void sdl_menu_render_browser_footer(TTF_Font* font,
 }
 
 static void sdl_menu_render_browser_row(TTF_Font* font,
-    const app_ui_panel* panel, const app_ui_row* row, const SDL_Rect* clip_rect,
-    int line_h, int item_gap, int current_y)
+    const app_ui_panel* panel, const app_ui_row* row, s16b row_index,
+    const SDL_Rect* clip_rect, int line_h, int item_gap, int current_y)
 {
     SDL_Color color;
     SDL_Color meta_color;
@@ -191,10 +192,11 @@ static void sdl_menu_render_browser_row(TTF_Font* font,
                 sdl_menu_scale_px(24.0f))
         };
 
-        (void)sdl_menu_hit_register(SDL_MENU_HIT_TARGET_ROW, row->id,
+        (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_ROW, row->id,
             row->interaction.action_key, row->interaction.role,
-            row->interaction.action, row->interaction.flags, &hit_rect,
-            row->label, row->interaction.tooltip);
+            row->interaction.action, row->interaction.flags, row->flags, -1,
+            row_index, panel->selected_row, &hit_rect, row->label,
+            row->interaction.tooltip);
     }
 
     if (row->icon_char)
@@ -518,7 +520,8 @@ bool sdl_menu_render_browser_panel(const sdl_view* main_view,
         {
             const app_ui_row* row = &ui_panel->rows[row_start + i];
 
-            sdl_menu_render_browser_row(font, ui_panel, row, &row_clip, line_h,
+            sdl_menu_render_browser_row(font, ui_panel, row,
+                (s16b)(row_start + i), &row_clip, line_h,
                 sdl_menu_scale_px(10.0f), row_y);
             row_y += line_h + line_gap;
         }

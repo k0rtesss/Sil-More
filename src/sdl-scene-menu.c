@@ -216,9 +216,14 @@ bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
         panel = &scene->panels[i];
         if (!(panel->flags & APP_UI_PANEL_FLAG_ACTIVE))
             continue;
+        sdl_menu_hit_begin_panel(i, panel);
         if (!sdl_scene_ui_render_panel(main_view, canvas_w, canvas_h, scene,
                 panel))
+        {
+            sdl_menu_hit_end_panel();
             return false;
+        }
+        sdl_menu_hit_end_panel();
     }
 
     return true;
@@ -231,6 +236,7 @@ bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
         return false;
 
     sdl_menu_hit_reset(main_view->rect.x, main_view->rect.y);
+    sdl_menu_hit_set_scene(APP_SCENE_KIND_MENU);
 
     SDL_SetRenderTarget(g_state.renderer, canvas);
     if ((scene->flags & APP_UI_SCENE_FLAG_USE_BACKDROP)

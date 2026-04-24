@@ -411,6 +411,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-command.c
     src/app/app-movement.c
     src/app/app-interaction.c
+    src/app/app-ui-command.c
     src/app/app-scene-birth.c
     src/app/app-scene-birth-blitz.c
     src/app/app-scene-birth-setup.c

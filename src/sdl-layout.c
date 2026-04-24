@@ -409,15 +409,7 @@ bool sdl_touch_pane_is_config_enabled(void)
 
 void sdl_update_cursor_visibility(void)
 {
-    bool show_cursor = true;
-
-    if (config.fullscreen)
-        show_cursor = (g_pane_rects[PANE_TOUCH].w > 0 && sdl_touch_pane_is_config_enabled());
-
-    if (show_cursor)
-        SDL_ShowCursor();
-    else
-        SDL_HideCursor();
+    SDL_ShowCursor();
 }
 
 int sdl_auto_aux_view_font_size(void)
