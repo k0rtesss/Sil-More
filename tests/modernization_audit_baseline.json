@@ -15,6 +15,8 @@
       "src/platform.h",
       "src/platform-*.c",
       "src/platform-*.h",
+      "src/platform/*.c",
+      "src/platform/*.h",
       "src/sdl-*.c",
       "src/sdl-*.h",
       "src/sdl-menu/*.c",
@@ -110,6 +112,8 @@
           "allowed_globs": [
             "src/platform-*.c",
             "src/platform-*.h",
+            "src/platform/*.c",
+            "src/platform/*.h",
             "src/sdl-*.c",
             "src/sdl-*.h",
             "src/sdl-menu/*.c",

@@ -26,6 +26,7 @@
 #include "ui/story_font.h"
 #include "ui/ui-information-scene.h"
 #include "ui/ui-story.h"
+#include <ctype.h>
 
 #define STORY_BROWSER_WRAP_COLS 72
 #define STORY_BROWSER_VISIBLE_LINES 18
@@ -34,6 +35,12 @@
 #define STORY_FADE_DURATION_MS 500u
 #define STORY_FADE_FRAME_SLICE_MS 16u
 #define STORY_REVEAL_HOLD_MS 1000u
+
+typedef enum story_browser_mode {
+    STORY_BROWSER_DOCUMENT = 0,
+    STORY_BROWSER_INDEX,
+    STORY_BROWSER_CHAPTER
+} story_browser_mode;
 
 static int story_count_wrapped_lines(cptr text, int wrap_width, int indent)
 {
@@ -85,24 +92,30 @@ static void story_consume_peeked_key(char* out_key)
     }
 }
 
-static void story_wait_continue(void)
+static char story_direction_command_key(const app_ui_command* command)
 {
-    ui_information_scene_event event;
+    if (!command)
+        return '\0';
 
-    while (ui_information_scene_wait_event(&event, 0))
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL)
     {
-        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
-            return;
-        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
-            continue;
-
-        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
-            || event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
-            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
+        if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+            && command->scroll_y != 0)
         {
-            return;
+            return (command->scroll_y > 0) ? '8' : '2';
         }
+        if (command->scroll_x != 0)
+            return (command->scroll_x < 0) ? '4' : '6';
     }
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+    {
+        if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+            return (command->dy < 0) ? '8' : '2';
+        if (command->dx != 0)
+            return (command->dx < 0) ? '4' : '6';
+    }
+
+    return '\0';
 }
 
 static void story_prompt_label(int binding, const char* fallback, char* buf,
@@ -167,6 +180,85 @@ static bool story_append_paragraph(app_ui_scene* scene, app_ui_panel* panel,
         STORY_FLAG_USE, alpha, text);
 }
 
+static bool story_add_wrapped_detail_lines(app_ui_panel* panel, byte attr,
+    cptr text, int max_lines)
+{
+    char line[APP_UI_TEXT_MAX];
+    int line_pos = 0;
+    int lines = 0;
+    const char* cursor = text;
+    const int wrap = 72;
+
+    if (!panel || !text || !text[0] || max_lines <= 0)
+        return true;
+
+    while (*cursor && lines < max_lines)
+    {
+        while (*cursor == ' ' && line_pos == 0)
+            cursor++;
+
+        if (*cursor == '\n')
+        {
+            line[line_pos] = '\0';
+            if (line_pos > 0)
+            {
+                if (!app_ui_panel_add_detail_line(panel, attr, line))
+                    return false;
+                lines++;
+            }
+            line_pos = 0;
+            cursor++;
+            continue;
+        }
+
+        if (line_pos >= wrap || line_pos >= (int)sizeof(line) - 1)
+        {
+            int break_pos = line_pos;
+
+            while (break_pos > 0 && line[break_pos - 1] != ' ')
+                break_pos--;
+            if (break_pos <= 0)
+                break_pos = line_pos;
+
+            line[break_pos] = '\0';
+            if (!app_ui_panel_add_detail_line(panel, attr, line))
+                return false;
+            lines++;
+            if (lines >= max_lines)
+                break;
+
+            if (break_pos < line_pos)
+            {
+                int remaining = line_pos - break_pos;
+
+                while (break_pos < line_pos && line[break_pos] == ' ')
+                {
+                    break_pos++;
+                    remaining--;
+                }
+                memmove(line, line + break_pos, (size_t)remaining);
+                line_pos = remaining;
+            }
+            else
+            {
+                line_pos = 0;
+            }
+            continue;
+        }
+
+        line[line_pos++] = *cursor++;
+    }
+
+    if (line_pos > 0 && lines < max_lines)
+    {
+        line[line_pos] = '\0';
+        if (!app_ui_panel_add_detail_line(panel, attr, line))
+            return false;
+    }
+
+    return true;
+}
+
 static void story_add_paragraph_line_count(int* total_lines,
     int* paragraph_count, int paragraph_lines)
 {
@@ -181,7 +273,7 @@ static void story_add_paragraph_line_count(int* total_lines,
 
 static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
     int start, int complete_count, int active_index, byte active_alpha,
-    cptr footer_text, byte footer_attr)
+    cptr footer_text, byte footer_attr, bool allow_index)
 {
     app_ui_panel* panel;
     int total_lines = 0;
@@ -260,8 +352,131 @@ static bool story_build_browser_scene(app_ui_scene* scene, const int* sel_idx,
     {
         return false;
     }
+    if (active_index < 0 && allow_index
+        && !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "i", "Index"))
+    {
+        return false;
+    }
 
     return true;
+}
+
+static bool story_build_index_scene(app_ui_scene* scene, const int* sel_idx,
+    int start, int complete_count, int selected)
+{
+    app_ui_panel* panel;
+    int total = complete_count - start;
+
+    if (!scene || !sel_idx || start < 0 || complete_count <= start)
+        return false;
+    if (selected < start || selected >= complete_count)
+        selected = start;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_BROWSER;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS
+        | APP_UI_PANEL_FLAG_SHOW_DETAIL;
+    panel->focus_area = APP_UI_FOCUS_ROWS;
+    panel->selected_row = (s16b)(selected - start);
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    app_ui_panel_set_widths(panel, STORY_BROWSER_MIN_WIDTH,
+        STORY_BROWSER_MAX_WIDTH);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "The Tale So Far");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, "Chapter index");
+
+    for (int i = start; i < complete_count; i++)
+    {
+        story_type* st = &st_info[sel_idx[i]];
+        char key[APP_UI_KEY_MAX];
+        char meta[APP_UI_META_MAX];
+        byte attr = (i == selected) ? TERM_L_BLUE : TERM_WHITE;
+
+        strnfmt(key, sizeof(key), "%d", i - start + 1);
+        strnfmt(meta, sizeof(meta), "Chapter %d of %d", i - start + 1,
+            total);
+        if (!app_ui_panel_add_row(panel, (s16b)i, attr, true, i == selected,
+                key, st_name + st->name, meta))
+        {
+            return false;
+        }
+    }
+
+    {
+        story_type* st = &st_info[sel_idx[selected]];
+
+        app_ui_panel_set_detail_title(panel, TERM_L_BLUE, st_name + st->name);
+        if (!story_add_wrapped_detail_lines(panel, TERM_WHITE,
+                st_text + st->text, 10))
+        {
+            return false;
+        }
+        if ((int)panel->detail_line_count >= 10
+            && !app_ui_panel_add_detail_line(panel, TERM_SLATE,
+                "Open chapter to read the full text."))
+        {
+            return false;
+        }
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_L_BLUE, true,
+            "Enter", "Open")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
+            "8", "Up")
+        && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            "2", "Down")
+        && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "Esc", "Close");
+}
+
+static bool story_build_chapter_scene(app_ui_scene* scene, const int* sel_idx,
+    int start, int complete_count, int selected)
+{
+    app_ui_panel* panel;
+    story_type* st;
+    char subtitle[APP_UI_TEXT_MAX];
+
+    if (!scene || !sel_idx || selected < start || selected >= complete_count)
+        return false;
+
+    st = &st_info[sel_idx[selected]];
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    app_ui_panel_set_widths(panel, STORY_BROWSER_MIN_WIDTH,
+        STORY_BROWSER_MAX_WIDTH);
+    app_ui_panel_set_title(panel, TERM_YELLOW, st_name + st->name);
+    strnfmt(subtitle, sizeof(subtitle), "Chapter %d of %d",
+        selected - start + 1, complete_count - start);
+    app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
+
+    if (!story_append_paragraph(scene, panel, TERM_WHITE, 0xFFu,
+            st_text + st->text))
+    {
+        return false;
+    }
+
+    return app_ui_panel_add_footer_action(panel, 1, TERM_WHITE,
+            selected > start, "4", "Prev")
+        && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE,
+            selected + 1 < complete_count, "6", "Next")
+        && app_ui_panel_add_footer_action(panel, 3, TERM_L_BLUE, true,
+            "i", "Index")
+        && app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
+            "Esc", "Close");
 }
 
 static bool story_present_progress(const int* sel_idx, int start,
@@ -271,12 +486,224 @@ static bool story_present_progress(const int* sel_idx, int start,
     app_ui_scene scene;
 
     if (!story_build_browser_scene(&scene, sel_idx, start, complete_count,
-            active_index, active_alpha, footer_text, footer_attr))
+            active_index, active_alpha, footer_text, footer_attr, false))
     {
         return false;
     }
 
     return ui_information_scene_present_ui(&scene);
+}
+
+static char story_wait_browser_key(story_browser_mode mode, int* selected,
+    int start, int complete_count)
+{
+    ui_information_scene_event event;
+
+    while (ui_information_scene_wait_event(&event, 0))
+    {
+        const app_ui_command* command;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+            return (char)event.key;
+        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
+            continue;
+
+        command = &event.command;
+        if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+            || command->target.action == APP_UI_WIDGET_ACTION_CANCEL)
+        {
+            return ESCAPE;
+        }
+
+        if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+            || command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        {
+            char dir_key = story_direction_command_key(command);
+
+            if (mode == STORY_BROWSER_DOCUMENT)
+                return '\0';
+            if (dir_key)
+                return dir_key;
+        }
+
+        if (mode == STORY_BROWSER_INDEX
+            && command->target.role == APP_UI_WIDGET_ROLE_LIST_ITEM)
+        {
+            int row_id = command->target.widget_id;
+
+            if (row_id >= start && row_id < complete_count && selected)
+                *selected = row_id;
+            if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+                return '\0';
+            if (command->kind == APP_UI_COMMAND_KIND_ACTIVATE
+                || command->kind == APP_UI_COMMAND_KIND_SELECT
+                || command->target.action == APP_UI_WIDGET_ACTION_ACTIVATE
+                || command->target.action == APP_UI_WIDGET_ACTION_SELECT)
+            {
+                return '\r';
+            }
+            return '\0';
+        }
+
+        if (command->target.role == APP_UI_WIDGET_ROLE_BUTTON)
+        {
+            switch (mode)
+            {
+            case STORY_BROWSER_DOCUMENT:
+                if (command->target.widget_id == 1)
+                    return ' ';
+                if (command->target.widget_id == 2)
+                    return 'i';
+                break;
+            case STORY_BROWSER_INDEX:
+                if (command->target.widget_id == 1)
+                    return '\r';
+                if (command->target.widget_id == 2)
+                    return '8';
+                if (command->target.widget_id == 3)
+                    return '2';
+                if (command->target.widget_id == 4)
+                    return ESCAPE;
+                break;
+            case STORY_BROWSER_CHAPTER:
+                if (command->target.widget_id == 1)
+                    return '4';
+                if (command->target.widget_id == 2)
+                    return '6';
+                if (command->target.widget_id == 3)
+                    return 'i';
+                if (command->target.widget_id == 4)
+                    return ESCAPE;
+                break;
+            }
+        }
+    }
+
+    return ESCAPE;
+}
+
+static void story_browse_completed_chapters(const int* sel_idx, int start,
+    int complete_count, cptr final_prompt)
+{
+    story_browser_mode mode = STORY_BROWSER_DOCUMENT;
+    int selected = start;
+
+    if (!sel_idx || complete_count <= start)
+        return;
+
+    while (true)
+    {
+        app_ui_scene scene;
+        char ch = '\0';
+
+        if (mode == STORY_BROWSER_DOCUMENT)
+        {
+            if (!story_build_browser_scene(&scene, sel_idx, start,
+                    complete_count, -1, 0xFFu, final_prompt, TERM_L_WHITE,
+                    true))
+            {
+                log_warn("story display: final document scene failed");
+                return;
+            }
+        }
+        else if (mode == STORY_BROWSER_INDEX)
+        {
+            if (!story_build_index_scene(&scene, sel_idx, start,
+                    complete_count, selected))
+            {
+                log_warn("story display: chapter index scene failed");
+                return;
+            }
+        }
+        else
+        {
+            if (!story_build_chapter_scene(&scene, sel_idx, start,
+                    complete_count, selected))
+            {
+                log_warn("story display: chapter scene failed");
+                return;
+            }
+        }
+
+        if (!ui_information_scene_present_ui(&scene))
+        {
+            log_warn("story display: browser scene presentation failed");
+            return;
+        }
+
+        ch = story_wait_browser_key(mode, &selected, start, complete_count);
+        if (!ch)
+            continue;
+
+        if (mode == STORY_BROWSER_DOCUMENT)
+        {
+            if (ch == 'i' || ch == 'I' || ch == '\t')
+            {
+                mode = STORY_BROWSER_INDEX;
+                continue;
+            }
+            return;
+        }
+
+        if (mode == STORY_BROWSER_INDEX)
+        {
+            if (ch == ESCAPE || ch == 'q' || ch == 'Q')
+                return;
+            if (ch == '8' || ch == 'k' || ch == '-')
+            {
+                if (selected > start)
+                    selected--;
+                continue;
+            }
+            if (ch == '2' || ch == 'j' || ch == '+')
+            {
+                if (selected + 1 < complete_count)
+                    selected++;
+                continue;
+            }
+            if (ch == '\r' || ch == '\n' || ch == ' ')
+            {
+                mode = STORY_BROWSER_CHAPTER;
+                continue;
+            }
+            if (isdigit((unsigned char)ch))
+            {
+                int target = start + (ch - '1');
+
+                if (target >= start && target < complete_count)
+                {
+                    selected = target;
+                    mode = STORY_BROWSER_CHAPTER;
+                }
+                continue;
+            }
+            continue;
+        }
+
+        if (ch == ESCAPE || ch == 'q' || ch == 'Q')
+            return;
+        if (ch == 'i' || ch == 'I' || ch == '\t')
+        {
+            mode = STORY_BROWSER_INDEX;
+            continue;
+        }
+        if (ch == '4' || ch == '8' || ch == 'k' || ch == '-')
+        {
+            if (selected > start)
+                selected--;
+            continue;
+        }
+        if (ch == '6' || ch == '2' || ch == 'j' || ch == '+'
+            || ch == ' ' || ch == '\r' || ch == '\n')
+        {
+            if (selected + 1 < complete_count)
+            {
+                selected++;
+                continue;
+            }
+            return;
+        }
+    }
 }
 
 static int story_poll_skip_input(void)
@@ -485,14 +912,8 @@ void print_story(int last_parts, bool fade_in,
         complete_count = idx + 1;
     }
 
-    if (!story_present_progress(sel_idx, start, complete_count, -1, 0xFFu,
-            final_prompt, TERM_L_WHITE))
-    {
-        log_warn("story display: semantic final prompt failed");
-        scene_failed = true;
-        goto cleanup;
-    }
-    story_wait_continue();
+    story_browse_completed_chapters(sel_idx, start, complete_count,
+        final_prompt);
 
 cleanup:
     platform_story_font_disable();

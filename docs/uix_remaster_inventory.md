@@ -109,6 +109,21 @@ Done:
   File viewer search shows the active search state, supports next/previous
   match actions, and highlights case-sensitive searches correctly. Help pages
   now support find plus next/previous matching page navigation.
+- Story/lore final documents now expose a semantic chapter index. Completed
+  chapters can be opened from row activation or number keys, browsed with
+  previous/next controls, and returned to the index without re-running the
+  reveal sequence.
+- Death/victory character review now uses an integrated semantic review
+  browser. Character, equipment, inventory, and run annals are selectable tabs
+  with footer navigation, direct widget commands, and a scrollable annals
+  document; score/metarun persistence ordering remains unchanged.
+- Halls of Mandos and run history now have client-side semantic filter tabs for
+  all, active, trophy, and fallen entries. The lists and detail previews operate
+  on in-memory filtered views of existing `scores.raw`/`runs.db` records, so no
+  score or metarun format changes are involved.
+- The source-size audit drift is resolved: oversized SDL, birth UI, dungeon
+  scene, and private header owners were split into smaller platform/app
+  helpers without increasing the root source/header bucket.
 
 Not done:
 
@@ -119,9 +134,9 @@ Not done:
   backdrop/header slots, but UX3 no longer depends on blue terminal-era menu
   styling for its core look.
 - Birth and smithing still need larger visual/workflow remaster passes.
-  Death/victory still needs an integrated review surface, story/lore still
-  needs a browsable chapter/index pass, and Halls/run history still need
-  richer filtering/timeline polish.
+  Death/victory still needs broader visual/art polish, story/lore still needs
+  broader presentation/art polish, and Halls/run history still need timeline,
+  score drill-down, search, and metarun-link polish.
 
 Current validation:
 
@@ -132,12 +147,8 @@ Current validation:
   4 `action_key` fallback files / 8 matches, and 5 legacy bridge queue files
   / 18 matches.
 - `py -3 tools\modernization_audit.py --details` passes.
-- `ctest --test-dir build-standard -E sil_source_size_audit --output-on-failure`
-  passes.
-- `ctest --test-dir build-standard -R sil_source_size_audit --output-on-failure`
-  still fails on existing source-size baseline drift: `src/app/app-scene-birth-ui.c`,
-  `src/main-sdl.c`, `src/sdl-config.c`, `src/sdl-scene-dungeon.c`, and
-  `src/sdl-main-internal.h`.
+- `py -3 tools\source_size_audit.py --check` passes.
+- `ctest --test-dir build-standard --output-on-failure` passes.
 
 ## Remaining Work Outline
 
@@ -203,18 +214,18 @@ high-level map.
 
    - Welcome screen final design.
    - Main hub final design.
-   - Death/victory visual polish.
-   - Story and lore presentation polish.
-   - Halls of Mandos and run history polish.
+   - Death/victory visual/art polish beyond the implemented review tabs.
+   - Story and lore presentation polish beyond the implemented chapter index.
+   - Halls of Mandos score drill-down, run-history timeline polish, search,
+     and metarun links beyond the implemented score/run filters.
    - Help and file viewer shared-browser/visual pass.
 
 8. Validation and cleanup
 
    - Keep `py -3 tools\ui_debt_audit.py --check` green.
    - Keep `py -3 tools\modernization_audit.py --details` green.
+   - Keep `py -3 tools\source_size_audit.py --check` green.
    - Keep regular CTest green.
-   - Resolve the known source-size audit drift in `src/main-sdl.c`,
-     `src/sdl-config.c`, and `src/sdl-main-internal.h`.
 
 ## External Design Anchors
 

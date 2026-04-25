@@ -29,6 +29,7 @@
 #include "runtime/runtime-dungeon.h"
 #include "runtime/runtime-cli.h"
 #include "sdl-config.h"
+#include "platform/sdl-ui-style-internal.h"
 #include "sdl-sound.h"
 #include "sound-config.h"
 #include <string.h>
@@ -82,73 +83,7 @@ typedef struct sdl_view {
     bool ready;
 } sdl_view;
 
-typedef struct sdl_ui_style {
-    const char* name;
-    const char* material;
-    const char* backdrop_slot;
-    const char* header_slot;
-    SDL_Color canvas_fill;
-    SDL_Color panel_fill;
-    SDL_Color panel_fill_alt;
-    SDL_Color panel_border;
-    SDL_Color panel_border_soft;
-    SDL_Color divider;
-    SDL_Color shadow;
-    SDL_Color focus_ring;
-    SDL_Color selected_fill;
-    SDL_Color pressed_fill;
-    SDL_Color disabled_fill;
-    SDL_Color text;
-    SDL_Color text_muted;
-    SDL_Color text_subtle;
-    SDL_Color text_disabled;
-    SDL_Color accent;
-    SDL_Color accent_soft;
-    SDL_Color accent_dim;
-    SDL_Color success;
-    SDL_Color warning;
-    SDL_Color danger;
-    SDL_Color magic;
-    SDL_Color cool;
-    float margin_x;
-    float margin_y;
-    float pad_x;
-    float pad_y;
-    float line_gap;
-    float section_gap;
-    float item_gap;
-    float column_gap;
-    float pill_gap;
-    float pill_pad_x;
-    float pill_pad_y;
-    float row_pad_y;
-    float border_px;
-    float focus_px;
-    float shadow_px;
-} sdl_ui_style;
-
-typedef enum sdl_scene_animation_kind {
-    SDL_SCENE_ANIMATION_NONE = 0,
-    SDL_SCENE_ANIMATION_ACTOR_MOVED = 1,
-    SDL_SCENE_ANIMATION_DAMAGE = 2,
-    SDL_SCENE_ANIMATION_PROJECTILE = 3,
-    SDL_SCENE_ANIMATION_OBJECT_TRANSFER = 4
-} sdl_scene_animation_kind;
-
-typedef struct sdl_scene_animation {
-    bool active;
-    u16b kind;
-    Uint64 started_ns;
-    Uint64 duration_ns;
-    s32b subject;
-    s16b from_y;
-    s16b from_x;
-    s16b to_y;
-    s16b to_x;
-    s32b arg0;
-    s32b arg1;
-    s32b arg2;
-} sdl_scene_animation;
+#include "platform/sdl-scene-internal.h"
 
 extern struct sdl_config config;
 extern bool g_hide_left_panel;
@@ -202,6 +137,7 @@ void sdl_window_set_position(int x, int y);
 void sdl_handle_event(sdl_state* st, const SDL_Event* ev);
 void sdl_gamepad_init(void);
 void sdl_gamepad_shutdown(void);
+int sdl_gamepad_count(void);
 void platform_gamepad_action_binding_label(int binding, char* buf, size_t buflen);
 void platform_gamepad_action_binding_short_label(int binding, char* buf, size_t buflen);
 bool steamdeck_controls_active(void);
@@ -268,35 +204,5 @@ void sdl_ui_style_draw_control_frame(const sdl_ui_style* style,
     const SDL_FRect* rect, u16b state_flags, bool active, bool focused,
     bool pressed);
 void sdl_ui_style_draw_rule(const sdl_ui_style* style, const SDL_FRect* rect);
-
-void sdl_scene_stack_init(void);
-void sdl_scene_stack_shutdown(void);
-void sdl_scene_stack_on_layout_changed(void);
-void sdl_scene_stack_on_renderer_reset(void);
-void sdl_scene_stack_prepare_frame(Uint64 now_ns);
-int sdl_scene_stack_pending_timeout_ms(Uint64 now_ns);
-bool sdl_scene_stack_handles_main_view(void);
-bool sdl_scene_stack_render_main_layer(void);
-void sdl_scene_stack_render_overlay_layer(void);
-void sdl_scene_stack_clear(void);
-bool sdl_scene_dungeon_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_dungeon_snapshot* snapshot,
-    const sdl_scene_animation* animations, size_t animation_count,
-    Uint64 now_ns);
-bool sdl_scene_dungeon_hit_test_map_cell(const sdl_view* main_view,
-    const app_dungeon_snapshot* snapshot, float window_x, float window_y,
-    s16b* out_map_y, s16b* out_map_x);
-bool sdl_scene_bootstrap_render(SDL_Texture* canvas, const sdl_view* main_view,
-    const app_bootstrap_snapshot* snapshot);
-bool sdl_scene_ui_render(SDL_Texture* canvas, const sdl_view* main_view,
-    int canvas_w, int canvas_h, const app_ui_scene* scene);
-bool sdl_scene_ui_render_at(SDL_Texture* canvas, const sdl_view* main_view,
-    int canvas_w, int canvas_h, int hit_origin_x, int hit_origin_y,
-    u16b hit_view_index, const app_ui_scene* scene);
-bool sdl_scene_ui_render_overlay(const sdl_view* main_view, int canvas_w,
-    int canvas_h, const app_ui_scene* scene);
-/* Wave 7A continuation staging surface for the frontend scene-menu split. */
-bool sdl_scene_menu_render(SDL_Texture* canvas, const sdl_view* main_view,
-    int canvas_w, int canvas_h, const app_menu_snapshot* snapshot);
 
 #endif /* INCLUDED_SDL_MAIN_INTERNAL_H */

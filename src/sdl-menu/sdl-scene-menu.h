@@ -31,6 +31,7 @@ typedef enum sdl_menu_hit_target_kind {
 #define SDL_MENU_HIT_DETAIL_ID ((s16b)-2)
 #define SDL_MENU_HIT_PANEL_PIN_ID ((s16b)-3)
 #define SDL_MENU_HIT_PANEL_RESET_ID ((s16b)-4)
+#define SDL_MENU_HIT_PANEL_CLOSE_ID ((s16b)-5)
 
 typedef struct sdl_menu_hit_target {
     SDL_FRect rect;

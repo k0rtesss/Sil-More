@@ -415,6 +415,7 @@ set(SIL_MORE_SOURCES_APP_BOUNDARY
     src/app/app-scene-birth.c
     src/app/app-scene-birth-blitz.c
     src/app/app-scene-birth-setup.c
+    src/app/app-scene-birth-traits.c
     src/app/app-scene-birth-ui.c
     src/app/app-ui.c
     src/app/app-events.c
@@ -448,6 +449,7 @@ set(SIL_MORE_SOURCES_FRONTEND
 
 set(SIL_MORE_SOURCES_PLATFORM
     src/main-sdl.c
+    src/platform/sdl-init.c
     src/sdl-layout.c
     src/sdl-render.c
     src/sdl-scene-bootstrap.c
@@ -473,6 +475,7 @@ set(SIL_MORE_SOURCES_PLATFORM
     src/platform-time.c
     src/log/bootstrap.c
     src/sdl-config.c
+    src/platform/sdl-config-defaults.c
     src/sdl-sound.c
     src/sound-config.c
 )

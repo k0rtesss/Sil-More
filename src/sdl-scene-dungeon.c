@@ -16,45 +16,9 @@
 #include "angband.h"
 
 #include "sdl-menu/sdl-scene-menu.h"
+#include "platform/sdl-scene-dungeon-internal.h"
 #include "sdl-main-internal.h"
 #include "support/utf8.h"
-
-typedef struct sdl_scene_layout {
-    int canvas_w;
-    int canvas_h;
-    int top_strip_h_px;
-    int bottom_strip_h_px;
-    int left_panel_w_px;
-    int map_origin_x_px;
-    int map_origin_y_px;
-    int map_width_px;
-    int map_height_px;
-    int content_bottom_px;
-} sdl_scene_layout;
-
-typedef struct sdl_scene_strip_metrics {
-    TTF_Font* font;
-    int line_h;
-    int row_count;
-    int strip_h;
-    int left_inset_px;
-} sdl_scene_strip_metrics;
-
-typedef struct sdl_scene_status_rail_metrics {
-    TTF_Font* mono_font;
-    TTF_Font* story_font;
-    int line_h;
-    int icon_slot_w;
-    int gap_px;
-    int left_inset_px;
-    int panel_w_px;
-    int row_visible;
-} sdl_scene_status_rail_metrics;
-
-enum {
-    SDL_SCENE_NARRATIVE_BANNER_POP_IN_MS = 220u,
-    SDL_SCENE_NARRATIVE_BANNER_POP_OUT_MS = 260u
-};
 
 static void sdl_scene_draw_tile(SDL_Texture* tileset, byte attr, byte ch,
     const SDL_FRect* dst);

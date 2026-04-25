@@ -112,13 +112,165 @@ typedef enum
 
 typedef enum
 {
+    SCORE_BROWSER_FILTER_ALL = 0,
+    SCORE_BROWSER_FILTER_ACTIVE,
+    SCORE_BROWSER_FILTER_TROPHY,
+    SCORE_BROWSER_FILTER_FALLEN,
+    SCORE_BROWSER_FILTER_COUNT
+} score_browser_filter;
+
+#define SCORE_BROWSER_FILTER_TAB_BASE 200
+
+static score_browser_filter score_last_filter = SCORE_BROWSER_FILTER_ALL;
+
+typedef enum
+{
     RUN_HISTORY_SORT_DATE = 0,
     RUN_HISTORY_SORT_RATING = 1
 } run_history_sort_order;
 
+typedef enum
+{
+    RUN_HISTORY_FILTER_ALL = 0,
+    RUN_HISTORY_FILTER_ACTIVE,
+    RUN_HISTORY_FILTER_TROPHY,
+    RUN_HISTORY_FILTER_FALLEN,
+    RUN_HISTORY_FILTER_COUNT
+} run_history_filter;
+
+#define RUN_HISTORY_FILTER_TAB_BASE 100
+
 static const char* run_history_sort_label(run_history_sort_order order)
 {
     return (order == RUN_HISTORY_SORT_RATING) ? "Rating" : "Date";
+}
+
+static const char* run_history_filter_label(run_history_filter filter)
+{
+    switch (filter)
+    {
+    case RUN_HISTORY_FILTER_ACTIVE:
+        return "Active";
+    case RUN_HISTORY_FILTER_TROPHY:
+        return "Trophy";
+    case RUN_HISTORY_FILTER_FALLEN:
+        return "Fallen";
+    case RUN_HISTORY_FILTER_ALL:
+    default:
+        return "All";
+    }
+}
+
+static bool run_history_entry_has_trophy(const run_history_entry* entry)
+{
+    const score_record_v1* rec;
+
+    if (!entry)
+        return false;
+
+    rec = &entry->record;
+    return rec->status == SCORE_RECORD_ESCAPED
+        || (rec->run_flags & SCORE_RUN_FLAG_MORGOTH_SLAIN)
+        || (rec->run_flags & SCORE_RUN_FLAG_ANGBAND_ESCAPED)
+        || rec->silmarils > 0;
+}
+
+static bool run_history_filter_matches(const run_history_entry* entry,
+    run_history_filter filter)
+{
+    const score_record_v1* rec;
+
+    if (!entry)
+        return false;
+
+    rec = &entry->record;
+    switch (filter)
+    {
+    case RUN_HISTORY_FILTER_ACTIVE:
+        return rec->status == SCORE_RECORD_ALIVE;
+    case RUN_HISTORY_FILTER_TROPHY:
+        return run_history_entry_has_trophy(entry);
+    case RUN_HISTORY_FILTER_FALLEN:
+        return rec->status == SCORE_RECORD_DEAD
+            && !run_history_entry_has_trophy(entry);
+    case RUN_HISTORY_FILTER_ALL:
+    default:
+        return true;
+    }
+}
+
+static int run_history_filter_count(const run_history_entry* entries,
+    int count, run_history_filter filter)
+{
+    int matches = 0;
+
+    if (!entries || count <= 0)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (run_history_filter_matches(&entries[i], filter))
+            matches++;
+    }
+
+    return matches;
+}
+
+static int run_history_apply_filter(const run_history_entry* source,
+    int source_count, run_history_entry* out, run_history_filter filter)
+{
+    int out_count = 0;
+
+    if (!source || !out || source_count <= 0)
+        return 0;
+
+    for (int i = 0; i < source_count; i++)
+    {
+        if (!run_history_filter_matches(&source[i], filter))
+            continue;
+        out[out_count++] = source[i];
+    }
+
+    return out_count;
+}
+
+static run_history_filter run_history_next_filter(
+    const int counts[RUN_HISTORY_FILTER_COUNT], run_history_filter filter)
+{
+    int cursor = (int)filter;
+
+    for (int i = 0; i < RUN_HISTORY_FILTER_COUNT; i++)
+    {
+        cursor++;
+        if (cursor >= RUN_HISTORY_FILTER_COUNT)
+            cursor = 0;
+        if (!counts || counts[cursor] > 0)
+            return (run_history_filter)cursor;
+    }
+
+    return filter;
+}
+
+static void run_history_add_filter_tabs(app_ui_panel* panel,
+    const int counts[RUN_HISTORY_FILTER_COUNT], run_history_filter active)
+{
+    if (!panel)
+        return;
+
+    for (int i = 0; i < RUN_HISTORY_FILTER_COUNT; i++)
+    {
+        char tooltip[APP_UI_TEXT_MAX];
+
+        if (counts && counts[i] <= 0)
+            continue;
+
+        strnfmt(tooltip, sizeof(tooltip), "Show %s runs",
+            run_history_filter_label((run_history_filter)i));
+        (void)ui_browser_shell_add_tab(panel,
+            (s16b)(RUN_HISTORY_FILTER_TAB_BASE + i),
+            i == (int)active ? TERM_L_BLUE : TERM_WHITE, i == (int)active,
+            run_history_filter_label((run_history_filter)i), 0, tooltip);
+    }
 }
 
 static char run_history_status_short(score_record_status status)
@@ -456,6 +608,127 @@ static int score_entry_silmarils(const high_score* entry)
     return parse_score_int(entry->silmarils, sizeof(entry->silmarils), 0);
 }
 
+static const char* score_browser_filter_label(score_browser_filter filter)
+{
+    switch (filter)
+    {
+    case SCORE_BROWSER_FILTER_ACTIVE:
+        return "Active";
+    case SCORE_BROWSER_FILTER_TROPHY:
+        return "Trophy";
+    case SCORE_BROWSER_FILTER_FALLEN:
+        return "Fallen";
+    case SCORE_BROWSER_FILTER_ALL:
+    default:
+        return "All";
+    }
+}
+
+static bool score_browser_entry_has_trophy(const high_score* entry)
+{
+    if (!entry)
+        return false;
+
+    return entry->escaped[0] == 't'
+        || entry->morgoth_slain[0] == 't'
+        || score_entry_silmarils(entry) > 0;
+}
+
+static bool score_browser_filter_matches(const high_score* entry,
+    score_browser_filter filter)
+{
+    if (!entry)
+        return false;
+
+    switch (filter)
+    {
+    case SCORE_BROWSER_FILTER_ACTIVE:
+        return streq(entry->how, "(alive and well)");
+    case SCORE_BROWSER_FILTER_TROPHY:
+        return score_browser_entry_has_trophy(entry);
+    case SCORE_BROWSER_FILTER_FALLEN:
+        return !streq(entry->how, "(alive and well)")
+            && !score_browser_entry_has_trophy(entry);
+    case SCORE_BROWSER_FILTER_ALL:
+    default:
+        return true;
+    }
+}
+
+static int score_browser_filter_count(const high_score* entries, int count,
+    score_browser_filter filter)
+{
+    int matches = 0;
+
+    if (!entries || count <= 0)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (score_browser_filter_matches(&entries[i], filter))
+            matches++;
+    }
+
+    return matches;
+}
+
+static int score_browser_apply_filter(const high_score* source,
+    int source_count, high_score* out, score_browser_filter filter)
+{
+    int out_count = 0;
+
+    if (!source || !out || source_count <= 0)
+        return 0;
+
+    for (int i = 0; i < source_count; i++)
+    {
+        if (!score_browser_filter_matches(&source[i], filter))
+            continue;
+        out[out_count++] = source[i];
+    }
+
+    return out_count;
+}
+
+static score_browser_filter score_browser_next_filter(
+    const int counts[SCORE_BROWSER_FILTER_COUNT], score_browser_filter filter)
+{
+    int cursor = (int)filter;
+
+    for (int i = 0; i < SCORE_BROWSER_FILTER_COUNT; i++)
+    {
+        cursor++;
+        if (cursor >= SCORE_BROWSER_FILTER_COUNT)
+            cursor = 0;
+        if (!counts || counts[cursor] > 0)
+            return (score_browser_filter)cursor;
+    }
+
+    return filter;
+}
+
+static void score_browser_add_filter_tabs(app_ui_panel* panel,
+    const int counts[SCORE_BROWSER_FILTER_COUNT], score_browser_filter active)
+{
+    if (!panel)
+        return;
+
+    for (int i = 0; i < SCORE_BROWSER_FILTER_COUNT; i++)
+    {
+        char tooltip[APP_UI_TEXT_MAX];
+
+        if (counts && counts[i] <= 0)
+            continue;
+
+        strnfmt(tooltip, sizeof(tooltip), "Show %s heroes",
+            score_browser_filter_label((score_browser_filter)i));
+        (void)ui_browser_shell_add_tab(panel,
+            (s16b)(SCORE_BROWSER_FILTER_TAB_BASE + i),
+            i == (int)active ? TERM_L_BLUE : TERM_WHITE, i == (int)active,
+            score_browser_filter_label((score_browser_filter)i), 0, tooltip);
+    }
+}
+
 static int score_entry_net_curses(const high_score* entry)
 {
     if (!entry || !scores_version_has_curses(score_file_global_ctx()))
@@ -662,13 +935,14 @@ static void score_add_browser_detail(app_ui_panel* panel,
 
 static bool score_pages_command_to_key(const app_ui_command* command,
     int count, int start_index, int entries_per_page, bool has_more,
-    int* highlight_index, char* out_key)
+    int* highlight_index, score_browser_filter* filter, char* out_key)
 {
     ui_browser_shell_button_key button_keys[] = {
         { 1, 's' },
         { 2, 'l' },
         { 3, ESCAPE },
-        { 4, has_more ? '\r' : ESCAPE }
+        { 4, has_more ? '\r' : ESCAPE },
+        { 5, 'f' }
     };
     ui_browser_shell_command_map map;
     ui_browser_shell_command_result result;
@@ -698,6 +972,15 @@ static bool score_pages_command_to_key(const app_ui_command* command,
         return true;
     }
 
+    if (result.role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        int requested = result.widget_id - SCORE_BROWSER_FILTER_TAB_BASE;
+
+        if (filter && requested >= 0 && requested < SCORE_BROWSER_FILTER_COUNT)
+            *filter = (score_browser_filter)requested;
+        return true;
+    }
+
     *out_key = result.key;
     return true;
 }
@@ -712,6 +995,11 @@ static char display_scores_pages_information(const high_score* entries,
     char layout_label[16] = "";
     char exit_label[16] = "";
     char next_label[16] = "";
+    score_browser_filter filter = score_last_filter;
+    high_score visible_entries[MAX_HISCORES + 1];
+    int filter_counts[SCORE_BROWSER_FILTER_COUNT];
+    int visible_count;
+    int visible_highlight = -1;
 
     if (!ui_information_scene_enter(&scope))
     {
@@ -774,11 +1062,32 @@ static char display_scores_pages_information(const high_score* entries,
         return 0;
     }
 
+    for (int i = 0; i < SCORE_BROWSER_FILTER_COUNT; i++)
+    {
+        filter_counts[i] = score_browser_filter_count(entries, count,
+            (score_browser_filter)i);
+    }
+    if (filter_counts[filter] <= 0)
+        filter = SCORE_BROWSER_FILTER_ALL;
+    visible_count = score_browser_apply_filter(entries, count, visible_entries,
+        filter);
+    if (visible_count <= 0)
+    {
+        filter = SCORE_BROWSER_FILTER_ALL;
+        visible_count = score_browser_apply_filter(entries, count,
+            visible_entries, filter);
+    }
+    if (highlight_index >= 0 && highlight_index < count)
+        visible_highlight = find_score_index(visible_entries, visible_count,
+            &entries[highlight_index]);
+    if (visible_highlight < 0 && visible_count > 0)
+        visible_highlight = 0;
+
     {
         int start_index = 0;
         bool highlight_pending = true;
 
-        while (start_index < count)
+        while (start_index < visible_count)
         {
             int entries_per_page;
             int selected_index;
@@ -797,22 +1106,22 @@ static char display_scores_pages_information(const high_score* entries,
 
             if (highlight_pending && highlight_index >= 0)
             {
-                int max_start = count - entries_per_page;
+                int max_start = visible_count - entries_per_page;
 
                 if (max_start < 0)
                     max_start = 0;
-                start_index = (highlight_index / entries_per_page)
+                start_index = (visible_highlight / entries_per_page)
                     * entries_per_page;
                 if (start_index > max_start)
                     start_index = max_start;
                 highlight_pending = false;
             }
 
-            selected_index = (highlight_index >= start_index
-                && highlight_index < start_index + entries_per_page)
-                ? highlight_index
+            selected_index = (visible_highlight >= start_index
+                && visible_highlight < start_index + entries_per_page)
+                ? visible_highlight
                 : start_index;
-            has_more = (start_index + entries_per_page < count);
+            has_more = (start_index + entries_per_page < visible_count);
 
             panel = score_ui_begin_browser_scene(&scene,
                 APP_UI_PANEL_FLAG_SHOW_DETAIL);
@@ -823,33 +1132,35 @@ static char display_scores_pages_information(const high_score* entries,
                 return 0;
             }
             panel->focus_area = APP_UI_FOCUS_ROWS;
+            score_browser_add_filter_tabs(panel, filter_counts, filter);
 
             strnfmt(title, sizeof(title), "Halls of Mandos");
             strnfmt(subtitle, sizeof(subtitle),
-                "%s  |  Layout: %s  |  Page %d",
+                "%s  |  Layout: %s  |  Filter: %s  |  Page %d",
                 score_view_order_label(order), detailed ? "Full" : "Short",
+                score_browser_filter_label(filter),
                 (start_index / entries_per_page) + 1);
             app_ui_panel_set_title(panel, TERM_L_WHITE, title);
             app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
-            for (int idx = start_index; idx < count
+            for (int idx = start_index; idx < visible_count
                 && idx < start_index + entries_per_page; idx++)
             {
                 char label[APP_UI_LABEL_MAX];
                 char meta[APP_UI_META_MAX];
                 bool selected = (idx == selected_index);
-                byte attr = score_entry_color(&entries[idx], selected);
+                byte attr = score_entry_color(&visible_entries[idx], selected);
                 char icon_char = ' ';
 
-                if (entries[idx].morgoth_slain[0] == 't')
+                if (visible_entries[idx].morgoth_slain[0] == 't')
                     icon_char = 'V';
-                else if (score_entry_silmarils(&entries[idx]) > 0)
+                else if (score_entry_silmarils(&visible_entries[idx]) > 0)
                     icon_char = '*';
 
-                score_build_browser_row_label(&entries[idx], idx + 1, label,
-                    sizeof(label));
-                score_build_browser_row_meta(&entries[idx], detailed, meta,
-                    sizeof(meta));
+                score_build_browser_row_label(&visible_entries[idx],
+                    idx + 1, label, sizeof(label));
+                score_build_browser_row_meta(&visible_entries[idx], detailed,
+                    meta, sizeof(meta));
                 if (!app_ui_panel_add_row_ex(panel, (s16b)idx, attr,
                         TERM_SLATE, attr, icon_char, true, selected, "",
                         label, meta))
@@ -859,7 +1170,7 @@ static char display_scores_pages_information(const high_score* entries,
                 }
             }
 
-            score_add_browser_detail(panel, &entries[selected_index],
+            score_add_browser_detail(panel, &visible_entries[selected_index],
                 selected_index + 1, detailed);
 
             if (steamdeck)
@@ -869,7 +1180,8 @@ static char display_scores_pages_information(const high_score* entries,
                     { 2, TERM_WHITE, true, layout_label, "Layout" },
                     { 3, TERM_WHITE, true, exit_label, "Exit" },
                     { 4, TERM_L_BLUE, true, next_label,
-                        has_more ? "Next" : "Close" }
+                        has_more ? "Next" : "Close" },
+                    { 5, TERM_WHITE, true, "F", "Filter" }
                 };
 
                 (void)ui_browser_shell_add_footer_actions(panel, actions,
@@ -882,7 +1194,8 @@ static char display_scores_pages_information(const high_score* entries,
                     { 2, TERM_WHITE, true, "L", "Layout" },
                     { 3, TERM_WHITE, true, "Esc", "Exit" },
                     { 4, TERM_L_BLUE, true, "Any",
-                        has_more ? "Next" : "Close" }
+                        has_more ? "Next" : "Close" },
+                    { 5, TERM_WHITE, true, "F", "Filter" }
                 };
 
                 (void)ui_browser_shell_add_footer_actions(panel, actions,
@@ -909,18 +1222,38 @@ static char display_scores_pages_information(const high_score* entries,
                 {
                     ch = event.key;
                 }
-                else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
-                    && score_pages_command_to_key(&event.command, count,
-                        start_index, entries_per_page, has_more,
-                        &highlight_index, &command_key))
-                {
-                    ch = command_key;
-                    if (!ch)
-                        continue;
-                }
                 else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
                 {
-                    continue;
+                    score_browser_filter previous_filter = filter;
+
+                    if (!score_pages_command_to_key(&event.command,
+                            visible_count, start_index, entries_per_page,
+                            has_more, &visible_highlight, &filter,
+                            &command_key))
+                    {
+                        continue;
+                    }
+
+                    ch = command_key;
+                    if (!ch)
+                    {
+                        if (filter == previous_filter)
+                            continue;
+
+                        score_last_filter = filter;
+                        visible_count = score_browser_apply_filter(entries,
+                            count, visible_entries, filter);
+                        if (visible_count <= 0)
+                        {
+                            filter = SCORE_BROWSER_FILTER_ALL;
+                            visible_count = score_browser_apply_filter(
+                                entries, count, visible_entries, filter);
+                        }
+                        visible_highlight = 0;
+                        start_index = 0;
+                        highlight_pending = false;
+                        continue;
+                    }
                 }
             }
 
@@ -961,6 +1294,23 @@ static char display_scores_pages_information(const high_score* entries,
             {
                 ui_information_scene_leave(&scope);
                 return (char)ch;
+            }
+            if (ch == 'f' || ch == 'F')
+            {
+                filter = score_browser_next_filter(filter_counts, filter);
+                score_last_filter = filter;
+                visible_count = score_browser_apply_filter(entries, count,
+                    visible_entries, filter);
+                if (visible_count <= 0)
+                {
+                    filter = SCORE_BROWSER_FILTER_ALL;
+                    visible_count = score_browser_apply_filter(entries, count,
+                        visible_entries, filter);
+                }
+                visible_highlight = 0;
+                start_index = 0;
+                highlight_pending = false;
+                continue;
             }
 
             if (!has_more)
@@ -1331,12 +1681,14 @@ static int collect_run_history(run_history_entry* out, int capacity)
 }
 
 static bool run_history_list_command_to_key(const app_ui_command* command,
-    int count, int page_offset, int rows, int* highlight, char* out_key)
+    int count, int page_offset, int rows, int* highlight,
+    run_history_filter* filter, char* out_key)
 {
     static const ui_browser_shell_button_key button_keys[] = {
         { 1, '\r' },
         { 4, 'r' },
-        { 5, ESCAPE }
+        { 5, 'f' },
+        { 6, ESCAPE }
     };
     ui_browser_shell_command_map map;
     ui_browser_shell_command_result result;
@@ -1367,6 +1719,15 @@ static bool run_history_list_command_to_key(const app_ui_command* command,
         return true;
     }
 
+    if (result.role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        int requested = result.widget_id - RUN_HISTORY_FILTER_TAB_BASE;
+
+        if (filter && requested >= 0 && requested < RUN_HISTORY_FILTER_COUNT)
+            *filter = (run_history_filter)requested;
+        return true;
+    }
+
     *out_key = result.key;
     return true;
 }
@@ -1375,13 +1736,33 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
 {
     ui_information_scene_scope scope;
     run_history_sort_order sort_order = RUN_HISTORY_SORT_DATE;
+    run_history_filter filter = RUN_HISTORY_FILTER_ALL;
+    run_history_entry visible_entries[RUN_HISTORY_MAX];
+    int filter_counts[RUN_HISTORY_FILTER_COUNT];
+    int visible_count;
     int page_offset = 0;
     int highlight = 0;
 
     if (!ui_information_scene_enter(&scope))
         return false;
 
+    for (int i = 0; i < RUN_HISTORY_FILTER_COUNT; i++)
+    {
+        filter_counts[i] = run_history_filter_count(entries, count,
+            (run_history_filter)i);
+    }
+    if (filter_counts[filter] <= 0)
+        filter = RUN_HISTORY_FILTER_ALL;
+    visible_count = run_history_apply_filter(entries, count, visible_entries,
+        filter);
+    if (visible_count <= 0)
+    {
+        ui_information_scene_leave(&scope);
+        return true;
+    }
+
     run_history_sort_entries(entries, count, sort_order);
+    run_history_sort_entries(visible_entries, visible_count, sort_order);
 
     while (true)
     {
@@ -1421,8 +1802,8 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         rows = RUN_HISTORY_ROWS;
         if (rows < 1)
             rows = 1;
-        total_pages = (count + rows - 1) / rows;
-        last_page_offset = ((count - 1) / rows) * rows;
+        total_pages = (visible_count + rows - 1) / rows;
+        last_page_offset = ((visible_count - 1) / rows) * rows;
         if (last_page_offset < 0)
             last_page_offset = 0;
 
@@ -1432,15 +1813,15 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             page_offset = last_page_offset;
         if (highlight < 0)
             highlight = 0;
-        if (highlight >= count)
-            highlight = count - 1;
+        if (highlight >= visible_count)
+            highlight = visible_count - 1;
         if (highlight < page_offset)
             page_offset = (highlight / rows) * rows;
         if (highlight >= page_offset + rows)
             page_offset = (highlight / rows) * rows;
 
         page = (rows > 0) ? (page_offset / rows) : 0;
-        selected_entry = &entries[highlight];
+        selected_entry = &visible_entries[highlight];
         rec = &selected_entry->record;
 
         panel = score_ui_begin_browser_scene(&scene,
@@ -1451,16 +1832,21 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             return false;
         }
         panel->focus_area = APP_UI_FOCUS_ROWS;
+        run_history_add_filter_tabs(panel, filter_counts, filter);
 
         strnfmt(title, sizeof(title), "Run History");
-        strnfmt(subtitle, sizeof(subtitle), "%d entries  |  Page %d/%d  |  Sort: %s",
-            count, page + 1, total_pages, run_history_sort_label(sort_order));
+        strnfmt(subtitle, sizeof(subtitle),
+            "%d/%d entries  |  Page %d/%d  |  Sort: %s  |  Filter: %s",
+            visible_count, count, page + 1, total_pages,
+            run_history_sort_label(sort_order),
+            run_history_filter_label(filter));
         app_ui_panel_set_title(panel, TERM_L_WHITE, title);
         app_ui_panel_set_subtitle(panel, TERM_SLATE, subtitle);
 
-        for (int i = page_offset; i < count && i < page_offset + rows; i++)
+        for (int i = page_offset; i < visible_count
+            && i < page_offset + rows; i++)
         {
-            const score_record_v1* row_rec = &entries[i].record;
+            const score_record_v1* row_rec = &visible_entries[i].record;
             const char* row_player = row_rec->player_name[0]
                 ? row_rec->player_name
                 : (row_rec->savefile_hint[0] ? row_rec->savefile_hint
@@ -1473,8 +1859,9 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
                 sizeof(date));
             strnfmt(label, sizeof(label), "%s  %s", date, row_player);
             strnfmt(meta, sizeof(meta), "%s  %d pts  %d ft  %u Sil",
-                score_ui_run_status_label(row_rec->status), entries[i].rating,
-                depth_ft, (unsigned)row_rec->silmarils);
+                score_ui_run_status_label(row_rec->status),
+                visible_entries[i].rating, depth_ft,
+                (unsigned)row_rec->silmarils);
 
             row_color = (i == highlight) ? TERM_YELLOW
                 : (row_rec->status == SCORE_RECORD_ALIVE) ? TERM_L_GREEN
@@ -1551,7 +1938,8 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
                 { 2, TERM_WHITE, true, "Up/Down", "Move" },
                 { 3, TERM_WHITE, true, "3/7", "Page" },
                 { 4, TERM_WHITE, true, sort_label, "Sort" },
-                { 5, TERM_WHITE, true, back_label, "Back" }
+                { 5, TERM_WHITE, true, "F", "Filter" },
+                { 6, TERM_WHITE, true, back_label, "Back" }
             };
 
             (void)ui_browser_shell_add_footer_actions(panel, actions,
@@ -1564,7 +1952,8 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
                 { 2, TERM_WHITE, true, "8/2", "Move" },
                 { 3, TERM_WHITE, true, "3/7", "Page" },
                 { 4, TERM_WHITE, true, "R", "Sort" },
-                { 5, TERM_WHITE, true, "Esc", "Back" }
+                { 5, TERM_WHITE, true, "F", "Filter" },
+                { 6, TERM_WHITE, true, "Esc", "Back" }
             };
 
             (void)ui_browser_shell_add_footer_actions(panel, actions,
@@ -1590,17 +1979,31 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             {
                 ch = event.key;
             }
-            else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND
-                && run_history_list_command_to_key(&event.command, count,
-                    page_offset, rows, &highlight, &command_key))
-            {
-                ch = command_key;
-                if (!ch)
-                    continue;
-            }
             else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
             {
-                continue;
+                run_history_filter previous_filter = filter;
+
+                if (!run_history_list_command_to_key(&event.command,
+                        visible_count, page_offset, rows, &highlight,
+                        &filter, &command_key))
+                {
+                    continue;
+                }
+
+                ch = command_key;
+                if (!ch)
+                {
+                    if (filter == previous_filter)
+                        continue;
+
+                    visible_count = run_history_apply_filter(entries, count,
+                        visible_entries, filter);
+                    run_history_sort_entries(visible_entries, visible_count,
+                        sort_order);
+                    page_offset = 0;
+                    highlight = 0;
+                    continue;
+                }
             }
         }
         if (steamdeck) {
@@ -1624,6 +2027,19 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
             sort_order = (sort_order == RUN_HISTORY_SORT_DATE)
                 ? RUN_HISTORY_SORT_RATING : RUN_HISTORY_SORT_DATE;
             run_history_sort_entries(entries, count, sort_order);
+            run_history_sort_entries(visible_entries, visible_count,
+                sort_order);
+            page_offset = 0;
+            highlight = 0;
+            break;
+
+        case 'f':
+        case 'F':
+            filter = run_history_next_filter(filter_counts, filter);
+            visible_count = run_history_apply_filter(entries, count,
+                visible_entries, filter);
+            run_history_sort_entries(visible_entries, visible_count,
+                sort_order);
             page_offset = 0;
             highlight = 0;
             break;
@@ -1638,7 +2054,7 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         case ARROW_RIGHT:
 #endif
             ui_information_scene_leave(&scope);
-            run_history_show_detail(&entries[highlight]);
+            run_history_show_detail(&visible_entries[highlight]);
             if (!ui_information_scene_enter(&scope))
             {
                 /* Detail view ran fine, but we can no longer resume the
@@ -1650,14 +2066,14 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         case '3':
         case 'n':
         case 'N':
-            if (page_offset + rows < count)
+            if (page_offset + rows < visible_count)
             {
                 page_offset += rows;
                 if (page_offset > last_page_offset)
                     page_offset = last_page_offset;
                 highlight += rows;
-                if (highlight >= count)
-                    highlight = count - 1;
+                if (highlight >= visible_count)
+                    highlight = visible_count - 1;
             }
             else
             {
@@ -1705,7 +2121,7 @@ static bool do_cmd_run_history_information(run_history_entry* entries, int count
         case '2':
         case 'j':
         case 'J':
-            if (highlight + 1 < count)
+            if (highlight + 1 < visible_count)
             {
                 highlight++;
                 if (highlight >= page_offset + rows)

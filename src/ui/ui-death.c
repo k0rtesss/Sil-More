@@ -16,6 +16,8 @@
 
 #include "angband.h"
 
+#include <ctype.h>
+
 #include "blitz.h"
 #include "log/log.h"
 #include "object/object-display.h"
@@ -29,53 +31,19 @@
 #include "ui/ui-death.h"
 #include "ui/ui-information-scene.h"
 
-static bool death_present_ui_page(const app_ui_scene* scene, bool* out_escape)
-{
-    if (out_escape)
-        *out_escape = false;
-    if (!scene)
-        return false;
-    if (!ui_information_scene_present_ui(scene))
-        return false;
+typedef enum death_review_page {
+    DEATH_REVIEW_CHARACTER = 0,
+    DEATH_REVIEW_EQUIPMENT,
+    DEATH_REVIEW_INVENTORY,
+    DEATH_REVIEW_ANNALS,
+    DEATH_REVIEW_MAX
+} death_review_page;
 
-    while (true)
-    {
-        ui_information_scene_event event;
-
-        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
-        {
-            if (out_escape)
-                *out_escape = true;
-            return true;
-        }
-
-        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
-        {
-            if (out_escape)
-                *out_escape = (event.key == ESCAPE);
-            return true;
-        }
-
-        if (event.kind != UI_INFORMATION_SCENE_EVENT_COMMAND)
-            continue;
-
-        if (event.command.kind == APP_UI_COMMAND_KIND_CANCEL
-            || event.command.target.action == APP_UI_WIDGET_ACTION_CANCEL
-            || (event.command.target.role == APP_UI_WIDGET_ROLE_BUTTON
-                && event.command.target.widget_id == 2))
-        {
-            if (out_escape)
-                *out_escape = true;
-            return true;
-        }
-
-        if (event.command.kind == APP_UI_COMMAND_KIND_ACTIVATE
-            || event.command.kind == APP_UI_COMMAND_KIND_SELECT)
-        {
-            return true;
-        }
-    }
-}
+typedef enum death_review_action {
+    DEATH_REVIEW_ACTION_PREV = 1,
+    DEATH_REVIEW_ACTION_NEXT,
+    DEATH_REVIEW_ACTION_CLOSE
+} death_review_action;
 
 static bool death_add_body_line(app_ui_panel* panel, byte attr, cptr text)
 {
@@ -105,12 +73,154 @@ static app_ui_panel* death_begin_item_list_scene(app_ui_scene* scene,
     if (title && title[0])
         app_ui_panel_set_title(panel, TERM_WHITE, title);
 
-    (void)app_ui_panel_add_footer_action(panel, 1, TERM_WHITE, true,
-        "Any key", "Continue");
-    (void)app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
-        "Esc", "Exit");
-
     return panel;
+}
+
+static cptr death_review_page_label(death_review_page page)
+{
+    switch (page)
+    {
+    case DEATH_REVIEW_CHARACTER:
+        return "Character";
+    case DEATH_REVIEW_EQUIPMENT:
+        return "Equipment";
+    case DEATH_REVIEW_INVENTORY:
+        return "Inventory";
+    case DEATH_REVIEW_ANNALS:
+        return "Annals";
+    default:
+        return "";
+    }
+}
+
+static char death_review_page_key(death_review_page page)
+{
+    switch (page)
+    {
+    case DEATH_REVIEW_CHARACTER:
+        return 'c';
+    case DEATH_REVIEW_EQUIPMENT:
+        return 'e';
+    case DEATH_REVIEW_INVENTORY:
+        return 'i';
+    case DEATH_REVIEW_ANNALS:
+        return 'a';
+    default:
+        return '\0';
+    }
+}
+
+static bool death_review_page_available(death_review_page page,
+    bool have_equipment, bool have_inventory)
+{
+    switch (page)
+    {
+    case DEATH_REVIEW_CHARACTER:
+        return true;
+    case DEATH_REVIEW_EQUIPMENT:
+        return have_equipment;
+    case DEATH_REVIEW_INVENTORY:
+        return have_inventory;
+    case DEATH_REVIEW_ANNALS:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static death_review_page death_review_step_page(death_review_page page,
+    int direction, bool have_equipment, bool have_inventory)
+{
+    int cursor = (int)page;
+
+    if (direction == 0)
+        return page;
+
+    for (int i = 0; i < DEATH_REVIEW_MAX; i++)
+    {
+        cursor += (direction > 0) ? 1 : -1;
+        if (cursor < 0)
+            cursor = DEATH_REVIEW_MAX - 1;
+        else if (cursor >= DEATH_REVIEW_MAX)
+            cursor = 0;
+
+        if (death_review_page_available((death_review_page)cursor,
+                have_equipment, have_inventory))
+        {
+            return (death_review_page)cursor;
+        }
+    }
+
+    return page;
+}
+
+static app_ui_panel* death_review_primary_panel(app_ui_scene* scene)
+{
+    if (!scene || scene->panel_count == 0)
+        return NULL;
+
+    return &scene->panels[0];
+}
+
+static bool death_review_add_tabs(app_ui_panel* panel,
+    death_review_page active, bool have_equipment, bool have_inventory)
+{
+    if (!panel)
+        return false;
+
+    for (int i = 0; i < DEATH_REVIEW_MAX; i++)
+    {
+        death_review_page page = (death_review_page)i;
+        char tooltip[APP_UI_TEXT_MAX];
+
+        if (!death_review_page_available(page, have_equipment,
+                have_inventory))
+        {
+            continue;
+        }
+
+        strnfmt(tooltip, sizeof(tooltip), "Open %s review",
+            death_review_page_label(page));
+        if (!app_ui_panel_add_tab(panel, (s16b)(i + 1),
+                page == active ? TERM_L_BLUE : TERM_WHITE, page == active,
+                death_review_page_label(page)))
+        {
+            return false;
+        }
+        if (!app_ui_panel_set_tab_interaction(panel, (s16b)(i + 1),
+                APP_UI_WIDGET_ROLE_TAB, APP_UI_WIDGET_ACTION_SELECT,
+                APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+                    | APP_UI_INTERACTION_FLAG_TOUCH_TARGET,
+                (s16b)death_review_page_key(page), tooltip))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool death_review_add_footer(app_ui_panel* panel)
+{
+    if (!panel)
+        return false;
+
+    return app_ui_panel_add_footer_action(panel, DEATH_REVIEW_ACTION_PREV,
+            TERM_WHITE, true, "4", "Prev")
+        && app_ui_panel_add_footer_action(panel, DEATH_REVIEW_ACTION_NEXT,
+            TERM_L_BLUE, true, "6", "Next")
+        && app_ui_panel_add_footer_action(panel, DEATH_REVIEW_ACTION_CLOSE,
+            TERM_WHITE, true, "Esc", "Close");
+}
+
+static bool death_review_add_navigation(app_ui_scene* scene,
+    death_review_page active, bool have_equipment, bool have_inventory)
+{
+    app_ui_panel* panel = death_review_primary_panel(scene);
+
+    return death_review_add_tabs(panel, active, have_equipment,
+            have_inventory)
+        && death_review_add_footer(panel);
 }
 
 static byte death_item_row_attr(const object_type* o_ptr, bool empty_slot)
@@ -714,6 +824,212 @@ static bool death_build_equipment_scene(app_ui_scene* scene)
     return death_append_armour_total_rows(panel, armour_weight);
 }
 
+static int death_notes_line_count(void)
+{
+    int count = 1;
+
+    if (!notes_buffer[0])
+        return count;
+
+    for (const char* cursor = notes_buffer; *cursor; cursor++)
+    {
+        if (*cursor == '\n' && cursor[1])
+            count++;
+    }
+
+    return count;
+}
+
+static int death_clamp_notes_line(int line)
+{
+    int max_line = MAX(0, death_notes_line_count() - 1);
+
+    if (line < 0)
+        return 0;
+    if (line > max_line)
+        return max_line;
+    return line;
+}
+
+static bool death_build_annals_scene(app_ui_scene* scene, int line)
+{
+    app_ui_panel* panel;
+    char status[APP_UI_TEXT_MAX];
+    int line_count;
+
+    if (!scene)
+        return false;
+
+    app_ui_scene_init(scene);
+    scene->flags = APP_UI_SCENE_FLAG_USE_BACKDROP
+        | APP_UI_SCENE_FLAG_DIM_BACKDROP;
+    panel = app_ui_scene_append_panel(scene, APP_UI_LAYER_BROWSER);
+    if (!panel)
+        return false;
+
+    line_count = death_notes_line_count();
+    line = death_clamp_notes_line(line);
+
+    panel->style = APP_UI_PANEL_STYLE_DOCUMENT;
+    panel->flags |= APP_UI_PANEL_FLAG_SCROLL_ROWS;
+    panel->accent_attr = TERM_L_BLUE;
+    app_ui_panel_set_icon(panel, TERM_YELLOW, '*');
+    app_ui_panel_set_widths(panel, 920, 1380);
+    app_ui_panel_set_row_offset(panel, (s16b)line);
+    app_ui_panel_set_title(panel, TERM_YELLOW, "Run Annals");
+    app_ui_panel_set_subtitle(panel, TERM_SLATE,
+        "Notes recorded during the run");
+
+    if (!app_ui_panel_begin_rich_paragraph(scene, panel))
+        return false;
+    if (notes_buffer[0])
+    {
+        if (!app_ui_panel_add_rich_text(scene, panel, TERM_WHITE,
+                notes_buffer))
+        {
+            return false;
+        }
+    }
+    else if (!app_ui_panel_add_rich_text(scene, panel, TERM_SLATE,
+             "No annals were recorded for this run."))
+    {
+        return false;
+    }
+
+    strnfmt(status, sizeof(status), "Line %d/%d", line + 1, line_count);
+    return app_ui_panel_add_body_line(panel, TERM_SLATE, status);
+}
+
+static bool death_build_review_scene(app_ui_scene* scene,
+    death_review_page page, bool have_equipment, bool have_inventory,
+    int notes_line)
+{
+    bool built = false;
+
+    switch (page)
+    {
+    case DEATH_REVIEW_CHARACTER:
+        built = build_character_sheet_ui_scene(scene, NULL);
+        break;
+    case DEATH_REVIEW_EQUIPMENT:
+    {
+        bool saved_item_tester_full = item_tester_full;
+
+        item_tester_full = true;
+        built = death_build_equipment_scene(scene);
+        item_tester_full = saved_item_tester_full;
+        break;
+    }
+    case DEATH_REVIEW_INVENTORY:
+    {
+        bool saved_item_tester_full = item_tester_full;
+
+        item_tester_full = true;
+        built = death_build_inventory_scene(scene);
+        item_tester_full = saved_item_tester_full;
+        break;
+    }
+    case DEATH_REVIEW_ANNALS:
+        built = death_build_annals_scene(scene, notes_line);
+        break;
+    default:
+        break;
+    }
+
+    return built
+        && death_review_add_navigation(scene, page, have_equipment,
+            have_inventory);
+}
+
+static char death_review_scroll_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->scroll_y) >= ABS(command->scroll_x)
+        && command->scroll_y != 0)
+    {
+        return (command->scroll_y > 0) ? '8' : '2';
+    }
+    if (command->scroll_x != 0)
+        return (command->scroll_x < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static char death_review_direction_command_key(const app_ui_command* command)
+{
+    if (!command)
+        return '\0';
+    if (ABS(command->dy) >= ABS(command->dx) && command->dy != 0)
+        return (command->dy < 0) ? '8' : '2';
+    if (command->dx != 0)
+        return (command->dx < 0) ? '4' : '6';
+
+    return '\0';
+}
+
+static char death_review_command_to_key(const app_ui_command* command,
+    death_review_page* page, bool have_equipment, bool have_inventory)
+{
+    const app_ui_widget_ref* target;
+
+    if (!command)
+        return '\0';
+
+    target = &command->target;
+    if (command->kind == APP_UI_COMMAND_KIND_CANCEL
+        || target->action == APP_UI_WIDGET_ACTION_CANCEL)
+    {
+        return ESCAPE;
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_SCROLL
+        || target->role == APP_UI_WIDGET_ROLE_SCROLL_REGION)
+    {
+        return death_review_scroll_command_key(command);
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_TAB)
+    {
+        death_review_page target_page =
+            (death_review_page)(target->widget_id - 1);
+
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return '\0';
+        if (target_page >= DEATH_REVIEW_CHARACTER
+            && target_page < DEATH_REVIEW_MAX
+            && death_review_page_available(target_page, have_equipment,
+                have_inventory))
+        {
+            *page = target_page;
+        }
+        return '\0';
+    }
+
+    if (target->role == APP_UI_WIDGET_ROLE_BUTTON)
+    {
+        if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+            return '\0';
+
+        switch (target->widget_id)
+        {
+        case DEATH_REVIEW_ACTION_PREV:
+            return '4';
+        case DEATH_REVIEW_ACTION_NEXT:
+            return '6';
+        case DEATH_REVIEW_ACTION_CLOSE:
+            return ESCAPE;
+        default:
+            return '\0';
+        }
+    }
+
+    if (command->kind == APP_UI_COMMAND_KIND_FOCUS)
+        return death_review_direction_command_key(command);
+
+    return '\0';
+}
+
 static bool death_build_final_menu_scene(app_ui_scene* scene,
     const high_score* score, int highlight, bool morgoth_victory)
 {
@@ -851,43 +1167,13 @@ void do_cmd_morgoth_victory(void)
 
 void ui_death_show_character_info(void)
 {
-    app_ui_scene character_scene;
-    app_ui_scene equipment_scene;
-    app_ui_scene inventory_scene;
     bool have_equipment = (p_ptr->equip_cnt > 0);
-    bool have_inventory = (p_ptr->inven_cnt > 0);
-    bool have_character_scene;
-    bool have_equipment_scene = true;
-    bool have_inventory_scene = true;
+    bool have_inventory = (p_ptr->inven_cnt > 0)
+        || (!inventory_menu_get_include_equip()
+            && supplies_visible_for_current_filter());
     ui_information_scene_scope scope;
-    bool escaped = false;
-
-    have_character_scene = build_character_sheet_ui_scene(&character_scene,
-        "(press any key)");
-
-    if (have_equipment)
-    {
-        bool saved_item_tester_full = item_tester_full;
-
-        item_tester_full = true;
-        have_equipment_scene = death_build_equipment_scene(&equipment_scene);
-        item_tester_full = saved_item_tester_full;
-    }
-
-    if (have_inventory)
-    {
-        bool saved_item_tester_full = item_tester_full;
-
-        item_tester_full = true;
-        have_inventory_scene = death_build_inventory_scene(&inventory_scene);
-        item_tester_full = saved_item_tester_full;
-    }
-
-    if (!have_character_scene || !have_equipment_scene || !have_inventory_scene)
-    {
-        log_warn("death character info: semantic scenes required");
-        return;
-    }
+    death_review_page page = DEATH_REVIEW_CHARACTER;
+    int notes_line = 0;
 
     if (!ui_information_scene_enter(&scope))
     {
@@ -895,54 +1181,112 @@ void ui_death_show_character_info(void)
         return;
     }
 
-        if (!death_present_ui_page(&character_scene, &escaped))
+    inkey_set_cursor_hidden(true);
+    while (true)
+    {
+        app_ui_scene scene;
+        ui_information_scene_event event;
+        char ch = '\0';
+        int dir;
+
+        if (!death_build_review_scene(&scene, page, have_equipment,
+                have_inventory, notes_line)
+            || !ui_information_scene_present_ui(&scene))
         {
+            inkey_set_cursor_hidden(false);
             ui_information_scene_leave(&scope);
-            log_warn("death character info: failed to present character sheet scene");
+            log_warn("death character info: failed to present review scene");
             return;
         }
 
-    if (escaped)
-    {
-        ui_information_scene_leave(&scope);
-        return;
+        if (!ui_information_scene_wait_event(&event, APP_INPUT_FLAG_REPEAT))
+            break;
+
+        if (event.kind == UI_INFORMATION_SCENE_EVENT_KEY)
+        {
+            ch = (char)event.key;
+        }
+        else if (event.kind == UI_INFORMATION_SCENE_EVENT_COMMAND)
+        {
+            ch = death_review_command_to_key(&event.command, &page,
+                have_equipment, have_inventory);
+        }
+
+        if (!ch)
+            continue;
+
+        dir = target_dir(ch);
+        if (dir >= 1 && dir <= 9 && dir != 5)
+            ch = I2D(dir);
+
+        if (ch == ESCAPE || ch == 'q' || ch == 'Q')
+            break;
+
+        if (ch == 'c' || ch == 'C' || ch == 'e' || ch == 'E'
+            || ch == 'i' || ch == 'I' || ch == 'a' || ch == 'A')
+        {
+            death_review_page requested = DEATH_REVIEW_CHARACTER;
+
+            switch (tolower((unsigned char)ch))
+            {
+            case 'e':
+                requested = DEATH_REVIEW_EQUIPMENT;
+                break;
+            case 'i':
+                requested = DEATH_REVIEW_INVENTORY;
+                break;
+            case 'a':
+                requested = DEATH_REVIEW_ANNALS;
+                break;
+            default:
+                break;
+            }
+
+            if (death_review_page_available(requested, have_equipment,
+                    have_inventory))
+            {
+                page = requested;
+            }
+            continue;
+        }
+
+        if (ch == '\t' || ch == '6')
+        {
+            page = death_review_step_page(page, 1, have_equipment,
+                have_inventory);
+            continue;
+        }
+
+        if (ch == '4')
+        {
+            page = death_review_step_page(page, -1, have_equipment,
+                have_inventory);
+            continue;
+        }
+
+        if (page == DEATH_REVIEW_ANNALS)
+        {
+            int page_step = 12;
+
+            if (ch == '8' || ch == '=')
+                notes_line--;
+            else if (ch == '2' || ch == '\r' || ch == '\n')
+                notes_line++;
+            else if (ch == '9' || ch == '-')
+                notes_line -= page_step;
+            else if (ch == '3' || ch == ' ')
+                notes_line += page_step;
+            else if (ch == '7')
+                notes_line = 0;
+            else if (ch == '1')
+                notes_line = death_notes_line_count() - 1;
+
+            notes_line = death_clamp_notes_line(notes_line);
+        }
     }
 
-    if (have_equipment)
-    {
-        if (!death_present_ui_page(&equipment_scene, &escaped))
-        {
-            ui_information_scene_leave(&scope);
-            log_warn("death character info: failed to present equipment scene");
-            return;
-        }
-        if (escaped)
-        {
-            ui_information_scene_leave(&scope);
-            return;
-        }
-    }
-
-    if (have_inventory)
-    {
-        if (!death_present_ui_page(&inventory_scene, &escaped))
-        {
-            ui_information_scene_leave(&scope);
-            log_warn("death character info: failed to present inventory scene");
-            return;
-        }
-        if (escaped)
-        {
-            ui_information_scene_leave(&scope);
-            return;
-        }
-    }
-
+    inkey_set_cursor_hidden(false);
     ui_information_scene_leave(&scope);
-    if (escaped)
-        return;
-
-    do_cmd_knowledge_notes();
 }
 
 int ui_death_final_menu(const high_score* score, int* highlight)

@@ -1547,7 +1547,7 @@ static int sdl_menu_panel_layout_controls_width(int line_h)
     int gap_px = MAX(1, sdl_menu_scale_px(4.0f));
     int inset_px = MAX(1, sdl_menu_scale_px(5.0f));
 
-    return button_px * 2 + gap_px + inset_px * 2;
+    return button_px * 3 + gap_px * 2 + inset_px * 2;
 }
 
 static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
@@ -1561,6 +1561,7 @@ static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
     int y_px;
     SDL_FRect pin_rect;
     SDL_FRect reset_rect;
+    SDL_FRect close_rect;
     SDL_Color text_color;
     char pin_glyph[2];
     cptr overlay_label;
@@ -1578,17 +1579,19 @@ static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
         button_px = MIN(button_px, MAX(sdl_menu_scale_px(24.0f), handle_h - 4));
     gap_px = MAX(1, sdl_menu_scale_px(4.0f));
     inset_px = MAX(1, sdl_menu_scale_px(5.0f));
-    if ((float)(button_px * 2 + gap_px + inset_px * 2) > panel_rect->w)
+    if ((float)(button_px * 3 + gap_px * 2 + inset_px * 2) > panel_rect->w)
         return;
 
     y_px = (int)(panel_rect->y + MAX(2.0f,
         ((float)handle_h - (float)button_px) * 0.5f));
-    reset_rect = (SDL_FRect){
+    close_rect = (SDL_FRect){
         panel_rect->x + panel_rect->w - (float)inset_px - (float)button_px,
         (float)y_px,
         (float)button_px,
         (float)button_px
     };
+    reset_rect = close_rect;
+    reset_rect.x -= (float)(button_px + gap_px);
     pin_rect = reset_rect;
     pin_rect.x -= (float)(button_px + gap_px);
 
@@ -1597,6 +1600,8 @@ static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
         pinned ? APP_UI_ITEM_FLAG_ACTIVE : APP_UI_ITEM_FLAG_NONE, pinned,
         false, false);
     sdl_menu_draw_control_frame(ui_panel, &reset_rect, APP_UI_ITEM_FLAG_NONE,
+        false, false, false);
+    sdl_menu_draw_control_frame(ui_panel, &close_rect, APP_UI_ITEM_FLAG_NONE,
         false, false, false);
 
     pin_glyph[0] = pinned ? 'P' : 'p';
@@ -1612,6 +1617,11 @@ static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
             - (float)sdl_menu_measure_text(font, "R")) * 0.5f,
         reset_rect.y + ((float)button_px - (float)line_h) * 0.5f,
         line_h, style->text_muted, "R");
+    sdl_menu_render_text(font,
+        close_rect.x + ((float)button_px
+            - (float)sdl_menu_measure_text(font, "x")) * 0.5f,
+        close_rect.y + ((float)button_px - (float)line_h) * 0.5f,
+        line_h, style->danger, "x");
 
     (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
         SDL_MENU_HIT_PANEL_PIN_ID, 0, APP_UI_WIDGET_ROLE_BUTTON,
@@ -1629,6 +1639,14 @@ static void sdl_menu_render_panel_layout_controls(TTF_Font* font,
             | APP_UI_INTERACTION_FLAG_TOOLTIP,
         APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &reset_rect, overlay_label,
         "Reset panel position");
+    (void)sdl_menu_hit_register_ex(SDL_MENU_HIT_TARGET_PANEL,
+        SDL_MENU_HIT_PANEL_CLOSE_ID, ESCAPE, APP_UI_WIDGET_ROLE_BUTTON,
+        APP_UI_WIDGET_ACTION_CANCEL,
+        APP_UI_INTERACTION_FLAG_POINTER_ENABLED
+            | APP_UI_INTERACTION_FLAG_TOUCH_TARGET
+            | APP_UI_INTERACTION_FLAG_TOOLTIP,
+        APP_UI_ITEM_FLAG_NONE, -1, 0, 0, &close_rect, "Close",
+        "Close menu");
 }
 
 static float sdl_menu_measure_rich_token_px(TTF_Font* mono_font,
