@@ -32,7 +32,10 @@ typedef enum show_file_footer_action {
     SHOW_FILE_ACTION_DOWN = 2,
     SHOW_FILE_ACTION_PAGE = 3,
     SHOW_FILE_ACTION_FIND = 4,
-    SHOW_FILE_ACTION_EXIT = 5
+    SHOW_FILE_ACTION_NEXT_MATCH = 5,
+    SHOW_FILE_ACTION_PREV_MATCH = 6,
+    SHOW_FILE_ACTION_CASE = 7,
+    SHOW_FILE_ACTION_EXIT = 8
 } show_file_footer_action;
 
 /*
@@ -45,6 +48,17 @@ static void string_lower(char* buf)
     /* Lowercase the string */
     for (s = buf; *s != 0; s++)
         *s = tolower((unsigned char)*s);
+}
+
+static void show_file_prepare_search_text(char* dst, size_t dst_size,
+    cptr src, bool case_sensitive)
+{
+    if (!dst || !dst_size)
+        return;
+
+    SDL_strlcpy(dst, src ? src : "", dst_size);
+    if (!case_sensitive)
+        string_lower(dst);
 }
 
 static int show_buffer_count_lines(cptr main_buffer)
@@ -102,9 +116,9 @@ static app_ui_panel* show_file_begin_browser_scene(app_ui_scene* scene)
 }
 
 static bool show_file_add_footer_actions(app_ui_panel* panel, bool can_scroll,
-    bool can_search)
+    bool can_search, bool has_search)
 {
-    ui_browser_shell_footer_action actions[5];
+    ui_browser_shell_footer_action actions[APP_UI_FOOTER_ACTION_MAX];
     size_t count = 0;
 
     if (!panel)
@@ -128,6 +142,18 @@ static bool show_file_add_footer_actions(app_ui_panel* panel, bool can_scroll,
         actions[count++] = (ui_browser_shell_footer_action){
             SHOW_FILE_ACTION_FIND, TERM_WHITE, true, "/", "Find"
         };
+        if (has_search)
+        {
+            actions[count++] = (ui_browser_shell_footer_action){
+                SHOW_FILE_ACTION_NEXT_MATCH, TERM_WHITE, true, "n", "Next"
+            };
+            actions[count++] = (ui_browser_shell_footer_action){
+                SHOW_FILE_ACTION_PREV_MATCH, TERM_WHITE, true, "N", "Prev"
+            };
+        }
+        actions[count++] = (ui_browser_shell_footer_action){
+            SHOW_FILE_ACTION_CASE, TERM_WHITE, true, "!", "Case"
+        };
     }
 
     actions[count++] = (ui_browser_shell_footer_action){
@@ -145,6 +171,9 @@ static bool show_file_command_to_key(const app_ui_command* command,
         { SHOW_FILE_ACTION_DOWN, '2' },
         { SHOW_FILE_ACTION_PAGE, ' ' },
         { SHOW_FILE_ACTION_FIND, '/' },
+        { SHOW_FILE_ACTION_NEXT_MATCH, 'n' },
+        { SHOW_FILE_ACTION_PREV_MATCH, 'N' },
+        { SHOW_FILE_ACTION_CASE, '!' },
         { SHOW_FILE_ACTION_EXIT, ESCAPE }
     };
     ui_browser_shell_command_map map;
@@ -235,9 +264,10 @@ static bool show_file_scene_add_plain_line(app_ui_scene* scene,
 }
 
 static bool show_file_scene_add_highlighted_line(app_ui_scene* scene,
-    app_ui_panel* panel, const char* text, const char* highlight)
+    app_ui_panel* panel, const char* text, const char* highlight,
+    bool case_sensitive)
 {
-    char lower_line[1024];
+    char search_line[1024];
     const char* cursor;
     const char* match;
     size_t highlight_len;
@@ -249,15 +279,16 @@ static bool show_file_scene_add_highlighted_line(app_ui_scene* scene,
     if (!highlight || !highlight[0])
         return show_file_scene_add_plain_line(scene, panel, text);
 
-    SDL_strlcpy(lower_line, text, sizeof(lower_line));
-    string_lower(lower_line);
+    SDL_strlcpy(search_line, text, sizeof(search_line));
+    if (!case_sensitive)
+        string_lower(search_line);
     highlight_len = strlen(highlight);
     cursor = text;
-    match = strstr(lower_line, highlight);
+    match = strstr(search_line, highlight);
 
     while (match)
     {
-        size_t prefix_len = (size_t)(match - lower_line) - (size_t)(cursor - text);
+        size_t prefix_len = (size_t)(match - search_line) - (size_t)(cursor - text);
 
         if (prefix_len > 0
             && !show_file_scene_add_rich_chunk(scene, panel, TERM_WHITE,
@@ -266,12 +297,12 @@ static bool show_file_scene_add_highlighted_line(app_ui_scene* scene,
             return false;
         }
         if (!show_file_scene_add_rich_chunk(scene, panel, TERM_YELLOW,
-                text + (match - lower_line), highlight_len))
+                text + (match - search_line), highlight_len))
         {
             return false;
         }
-        cursor = text + (match - lower_line) + highlight_len;
-        match = strstr(lower_line + (cursor - text), highlight);
+        cursor = text + (match - search_line) + highlight_len;
+        match = strstr(search_line + (cursor - text), highlight);
     }
 
     return show_file_scene_add_rich_chunk(scene, panel, TERM_WHITE, cursor,
@@ -336,7 +367,7 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
     if (size <= 1)
     {
         return app_ui_panel_add_body_line(panel, TERM_SLATE, "ESC exit")
-            && show_file_add_footer_actions(panel, false, false);
+            && show_file_add_footer_actions(panel, false, false, false);
     }
 
     if (!app_ui_panel_add_body_line(panel, TERM_SLATE,
@@ -347,7 +378,7 @@ static bool show_buffer_build_ui_scene(app_ui_scene* scene,
 
     return app_ui_panel_add_body_line(panel, TERM_SLATE,
         format("[line %d/%d]", line + 1, size))
-        && show_file_add_footer_actions(panel, true, false);
+        && show_file_add_footer_actions(panel, true, false, false);
 }
 
 typedef enum show_file_scene_result {
@@ -481,14 +512,57 @@ static bool show_file_find_next_match(cptr path, cptr find,
     return false;
 }
 
+static bool show_file_find_previous_match(cptr path, cptr find,
+    bool case_sensitive, int start_line, int* out_line)
+{
+    ang_file* fff;
+    char buf[1024];
+    char lc_buf[1024];
+    int next = 0;
+    int found = -1;
+
+    if (!path || !find || !find[0] || !out_line || start_line < 0)
+        return false;
+
+    fff = ang_file_open(path, "r");
+    if (!fff)
+        return false;
+
+    while (true)
+    {
+        if (ang_file_gets(fff, buf, sizeof(buf)))
+            break;
+        if (prefix(buf, "***** "))
+            continue;
+        if (next > start_line)
+            break;
+
+        show_file_trim_line(buf);
+        SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
+        if (!case_sensitive)
+            string_lower(lc_buf);
+
+        if (strstr(lc_buf, find))
+            found = next;
+
+        next++;
+    }
+
+    ang_file_close(fff);
+    if (found < 0)
+        return false;
+
+    *out_line = found;
+    return true;
+}
+
 static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
-    cptr caption, cptr shower, bool case_sensitive, bool menu, int size,
-    int line)
+    cptr caption, cptr shower, cptr shower_display, bool case_sensitive,
+    bool menu, int size, int line)
 {
     ang_file* fff;
     app_ui_panel* panel;
     char buf[1024];
-    char lc_buf[1024];
     bool wrote_any = false;
     int scroll_offset = line;
 
@@ -534,17 +608,14 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
             continue;
 
         show_file_trim_line(buf);
-        SDL_strlcpy(lc_buf, buf, sizeof(lc_buf));
-        if (!case_sensitive)
-            string_lower(lc_buf);
-
         if (wrote_any && !app_ui_panel_add_rich_text(scene, panel, TERM_WHITE,
                 "\n"))
         {
             ang_file_close(fff);
             return false;
         }
-        if (!show_file_scene_add_highlighted_line(scene, panel, buf, shower))
+        if (!show_file_scene_add_highlighted_line(scene, panel, buf, shower,
+                case_sensitive))
         {
             ang_file_close(fff);
             return false;
@@ -578,6 +649,17 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
         }
     }
 
+    if (!menu && shower && shower[0])
+    {
+        char search_buf[APP_UI_TEXT_MAX];
+
+        strnfmt(search_buf, sizeof(search_buf), "Search: %s%s",
+            (shower_display && shower_display[0]) ? shower_display : shower,
+            case_sensitive ? " (case-sensitive)" : "");
+        if (!app_ui_panel_add_body_line(panel, TERM_L_BLUE, search_buf))
+            return false;
+    }
+
     if (size > 1)
     {
         char scroll_buf[32];
@@ -587,7 +669,8 @@ static bool show_file_build_ui_scene(app_ui_scene* scene, cptr path,
             return false;
     }
 
-    return show_file_add_footer_actions(panel, size > 1, !menu);
+    return show_file_add_footer_actions(panel, size > 1, !menu,
+        shower && shower[0]);
 }
 
 static show_file_scene_result show_file_information_scene(
@@ -605,7 +688,9 @@ static show_file_scene_result show_file_information_scene(
     char* find = NULL;
     cptr tag = NULL;
     char finder[80];
+    char finder_raw[80];
     char shower[80];
+    char shower_raw[80];
     char filename[1024];
     char caption[128];
     char path[1024];
@@ -615,7 +700,9 @@ static show_file_scene_result show_file_information_scene(
         return SHOW_FILE_SCENE_RESULT_ERROR;
 
     SDL_strlcpy(finder, "", sizeof(finder));
+    SDL_strlcpy(finder_raw, "", sizeof(finder_raw));
     SDL_strlcpy(shower, "", sizeof(shower));
+    SDL_strlcpy(shower_raw, "", sizeof(shower_raw));
     SDL_strlcpy(caption, "", sizeof(caption));
 
     SDL_strlcpy(filename, name, sizeof(filename));
@@ -710,7 +797,7 @@ static show_file_scene_result show_file_information_scene(
 
         line = show_buffer_clamp_line(line, size);
         if (!show_file_build_ui_scene(&scene, path, caption, shower,
-                case_sensitive, menu, size, line)
+                shower_raw, case_sensitive, menu, size, line)
             || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
@@ -725,15 +812,23 @@ static show_file_scene_result show_file_information_scene(
             break;
 
         if (ch == '!')
+        {
             case_sensitive = !case_sensitive;
+            show_file_prepare_search_text(finder, sizeof(finder),
+                finder_raw, case_sensitive);
+            show_file_prepare_search_text(shower, sizeof(shower),
+                shower_raw, case_sensitive);
+        }
 
         if (ch == '&')
         {
             if (!show_file_pause_information_scene(&scope))
                 break;
-            (void)askfor_aux(shower, sizeof(shower));
-            if (!case_sensitive)
-                string_lower(shower);
+            if (askfor_aux(shower_raw, sizeof(shower_raw)))
+            {
+                show_file_prepare_search_text(shower, sizeof(shower),
+                    shower_raw, case_sensitive);
+            }
             if (!show_file_resume_information_scene(&scope))
                 break;
         }
@@ -742,19 +837,46 @@ static show_file_scene_result show_file_information_scene(
         {
             if (!show_file_pause_information_scene(&scope))
                 break;
-            if (askfor_aux(finder, sizeof(finder)))
+            if (askfor_aux(finder_raw, sizeof(finder_raw)))
             {
+                show_file_prepare_search_text(finder, sizeof(finder),
+                    finder_raw, case_sensitive);
                 find = finder;
                 back = line;
                 line = line + 1;
 
-                if (!case_sensitive)
-                    string_lower(finder);
-
+                SDL_strlcpy(shower_raw, finder_raw, sizeof(shower_raw));
                 SDL_strlcpy(shower, finder, sizeof(shower));
             }
             if (!show_file_resume_information_scene(&scope))
                 break;
+        }
+
+        if ((ch == 'n') || (ch == 'N'))
+        {
+            cptr term = finder[0] ? finder : shower;
+            int found_line = 0;
+            bool found = false;
+
+            if (!term[0])
+            {
+                bell("No search string.");
+            }
+            else if (ch == 'n')
+            {
+                found = show_file_find_next_match(path, term, case_sensitive,
+                    line + 1, &found_line);
+            }
+            else
+            {
+                found = show_file_find_previous_match(path, term,
+                    case_sensitive, line - 1, &found_line);
+            }
+
+            if (found)
+                line = found_line;
+            else if (term[0])
+                bell("No further match.");
         }
 
         if (ch == '#')

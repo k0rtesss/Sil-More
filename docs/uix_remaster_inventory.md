@@ -35,9 +35,9 @@ like a modern semantic UI while keeping the compact pixel-art soul of Sil.
 
 ## Implementation Status - 2026-04-25
 
-This section records the current tree status after the semantic-dispatch bug
-fix pass. It narrows the broad plan below; it does not mean the full visual
-remaster is complete.
+This section records the current tree status after the footer hit-target,
+birth cleanup, nested-flow, and document-browser passes. It narrows the broad
+plan below; it does not mean the full visual remaster is complete.
 
 Done:
 
@@ -63,8 +63,9 @@ Done:
   interaction wiring, footer action insertion, scroll/direction translation,
   cancel/back handling, row/button/tab command translation, and simple cursor
   clamping. Knowledge, supplies, Halls of Mandos, run history list/detail,
-  quest status, help, and the file viewer now route shared shell glue through
-  it while keeping screen-specific content/detail builders local.
+  metarun history/stats, query/debug-style browsers, quest status, help, and
+  the file viewer now route shared shell glue through it while keeping
+  screen-specific content/detail builders local.
 - The semantic-dispatch completion pass has converted additional key-shaped
   waits to command-aware adapters: continue/dismiss modals, message `-more-`
   prompts, main menu selection, nearby overlays, object-info document scrolling,
@@ -92,19 +93,35 @@ Done:
 - A UIX semantic-dispatch audit is now part of `tools/ui_debt_audit.py` and
   the `sil_ui0_audit` CTest gate. It tracks remaining `wait_key` consumers,
   `action_key` fallback reads, and legacy command-bridge queue calls.
+- Confirmed footer hit-target regressions are fixed: smithing move/jump footer
+  buttons now activate their keyboard-equivalent actions, hint-message move
+  footers no longer no-op, and the shared browser shell falls back to a
+  footer's parsed compatibility action key when a screen has no explicit
+  button map.
+- Birth selection abort paths now release their temporary race/profile menu
+  arrays before returning, and birth selection clears pending semantic input
+  after returning from nested score/help/options/description screens.
+- Birth/blitz Steam Deck `D-pad` footer chips that are only prompt text are no
+  longer registered as clickable actions, Blitz setup exposes separate
+  decrement/increment footer actions, and metarun curse range-click now
+  confirms the highlighted curse instead of selecting the first range entry.
+- Help and file-viewer document surfaces now expose semantic search controls.
+  File viewer search shows the active search state, supports next/previous
+  match actions, and highlights case-sensitive searches correctly. Help pages
+  now support find plus next/previous matching page navigation.
 
 Not done:
 
-- The shared browser shell still needs broader adoption by later workflow
-  migrations such as birth, smithing, metarun stats, query/debug browsers, and
-  other nested screens.
+- The shared browser shell still needs broader adoption where a screen is truly
+  browser-shaped. Birth and smithing are stateful custom workflows and need
+  dedicated migration/remaster passes rather than mechanical shell adoption.
 - Screen-specific bitmap artwork can still be added later through the existing
   backdrop/header slots, but UX3 no longer depends on blue terminal-era menu
   styling for its core look.
-- Birth, quest, smithing, metarun, and other nested workflows still need
-  dedicated migration/remaster passes. Death/victory, help, and the file viewer
-  have semantic command adapters, but still belong in the visual and
-  shared-browser remaster passes.
+- Birth and smithing still need larger visual/workflow remaster passes.
+  Death/victory still needs an integrated review surface, story/lore still
+  needs a browsable chapter/index pass, and Halls/run history still need
+  richer filtering/timeline polish.
 
 Current validation:
 
@@ -112,7 +129,7 @@ Current validation:
 - `py -3 tools\ui_debt_audit.py --check` passes.
 - `py -3 tools\ui_debt_audit.py --audit uix_semantic --details` reports the
   current remaining migration debt: 0 `wait_key` consumer files / 0 matches,
-  3 `action_key` fallback files / 6 matches, and 5 legacy bridge queue files
+  4 `action_key` fallback files / 8 matches, and 5 legacy bridge queue files
   / 18 matches.
 - `py -3 tools\modernization_audit.py --details` passes.
 - `ctest --test-dir build-standard -E sil_source_size_audit --output-on-failure`

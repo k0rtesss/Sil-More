@@ -1147,7 +1147,8 @@ static void test_ui_browser_shell_helpers(void)
     ui_browser_shell_command_result result;
     static const ui_browser_shell_footer_action footer_actions[] = {
         { 1, TERM_WHITE, true, "Enter", "Open" },
-        { 2, TERM_SLATE, false, "/", "Find" }
+        { 2, TERM_SLATE, false, "/", "Find" },
+        { 4, TERM_WHITE, true, "8/2", "Move" }
     };
     static const ui_browser_shell_button_key button_keys[] = {
         { 1, '\r' },
@@ -1169,8 +1170,9 @@ static void test_ui_browser_shell_helpers(void)
     CHECK(streq(panel->title, "Browser"));
     CHECK(ui_browser_shell_add_footer_actions(panel, footer_actions,
         N_ELEMENTS(footer_actions)));
-    CHECK(panel->footer_action_count == 2);
+    CHECK(panel->footer_action_count == 3);
     CHECK((panel->footer_actions[1].flags & APP_UI_ITEM_FLAG_DISABLED) != 0);
+    CHECK(panel->footer_actions[2].interaction.action_key == '8');
     CHECK(ui_browser_shell_add_tab(panel, 7, TERM_L_BLUE, true, "Runs",
         'r', "Open runs"));
     CHECK(panel->tab_count == 1);
@@ -1225,6 +1227,11 @@ static void test_ui_browser_shell_helpers(void)
     command.target.widget_id = 3;
     CHECK(ui_browser_shell_translate_command(&command, &map, &result));
     CHECK(result.key == ESCAPE);
+
+    command.target.widget_id = 4;
+    command.target.action_key = panel->footer_actions[2].interaction.action_key;
+    CHECK(ui_browser_shell_translate_command(&command, &map, &result));
+    CHECK(result.key == '8');
 
     command.target.role = APP_UI_WIDGET_ROLE_TAB;
     command.target.action = APP_UI_WIDGET_ACTION_SELECT;

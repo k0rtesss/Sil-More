@@ -305,8 +305,12 @@ bool ui_browser_shell_translate_command(const app_ui_command* command,
     {
         result.focus_only = (command->kind == APP_UI_COMMAND_KIND_FOCUS);
         if (!result.focus_only)
+        {
             result.key = ui_browser_shell_lookup_button_key(map,
                 target->widget_id);
+            if (!result.key && target->action_key)
+                result.key = (char)(target->action_key & 0xFF);
+        }
         if (out_result)
             *out_result = result;
         return true;

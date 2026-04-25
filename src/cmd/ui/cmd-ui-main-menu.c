@@ -1864,6 +1864,9 @@ static bool hint_message_command_to_key(const app_ui_command* command,
         case 1:
             *out_key = '\r';
             return true;
+        case 2:
+            *out_key = '2';
+            return true;
         case 3:
             *out_key = 'l';
             return true;

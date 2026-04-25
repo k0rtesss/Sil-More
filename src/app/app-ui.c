@@ -59,6 +59,8 @@ static s16b app_ui_legacy_key_from_label(cptr key)
     }
     if (prefix(key, "Any") || prefix(key, "any"))
         return '\r';
+    if (key[0] && (key[1] == '/' || key[1] == '-'))
+        return (s16b)(unsigned char)key[0];
 
     return 0;
 }

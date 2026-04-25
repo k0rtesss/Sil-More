@@ -160,6 +160,8 @@ static char blitz_wait_setup_key(int* selected)
             if (command->target.widget_id == 2)
                 return ESCAPE;
             if (command->target.widget_id == 4)
+                return '4';
+            if (command->target.widget_id == 5)
                 return '6';
         }
     }
@@ -510,7 +512,7 @@ static bool blitz_setup_build_ui_scene(app_ui_scene* scene,
         {
             return false;
         }
-        if (!app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+        if (!app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, false,
                 "D-pad", "Move/Change"))
         {
             return false;
@@ -525,7 +527,9 @@ static bool blitz_setup_build_ui_scene(app_ui_scene* scene,
             || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
                 "8/2", "Move")
             || !app_ui_panel_add_footer_action(panel, 4, TERM_WHITE, true,
-                "4/6", "Change"))
+                "4", "Dec")
+            || !app_ui_panel_add_footer_action(panel, 5, TERM_WHITE, true,
+                "6", "Inc"))
         {
             return false;
         }
@@ -917,7 +921,7 @@ static bool blitz_effect_picker_build_ui_scene(app_ui_scene* scene,
                 confirm_label, "Select")
             && app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
                 back_label, "Back")
-            && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            && app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, false,
                 "D-pad", "Navigate");
     }
 

@@ -2294,7 +2294,8 @@ int metarun_ui_choose_curse_scene(int n,
     while (true)
     {
         static const ui_browser_shell_button_key buttons[] = {
-            { 1, '\r' }
+            { 1, '\r' },
+            { 3, '\r' }
         };
         app_ui_scene scene;
         app_ui_panel* panel;

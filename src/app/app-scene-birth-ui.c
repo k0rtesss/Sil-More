@@ -205,6 +205,14 @@ static void birth_menu_scene_leave(birth_menu_scene_scope* scope)
     scope->active = false;
 }
 
+static void birth_menu_clear_pending_input(void)
+{
+    app_session *session = app_session_current();
+
+    if (session)
+        app_session_clear_inputs(session);
+}
+
 static void birth_prompt_label(int binding, const char* fallback, char* buf,
     size_t buflen)
 {
@@ -1650,12 +1658,14 @@ static int get_player_choice(birth_menu* choices, int num, int def,
         if (c == 's' || c == 'S')
         {
             show_scores_interactive(false);
+            birth_menu_clear_pending_input();
             continue;
         }
 
         if (c == 'h' || c == 'H' || c == '?')
         {
             do_cmd_help();
+            birth_menu_clear_pending_input();
             continue;
         }
 
@@ -1664,6 +1674,7 @@ static int get_player_choice(birth_menu* choices, int num, int def,
                 || (steamdeck && c == steamdeck_alt_action_key())))
         {
             display_character_description_screen(choices[cur]);
+            birth_menu_clear_pending_input();
             continue;
         }
 
@@ -1681,6 +1692,7 @@ static int get_player_choice(birth_menu* choices, int num, int def,
             if ((c == 'O') || (c == 'o'))
             {
                 do_cmd_options();
+                birth_menu_clear_pending_input();
             }
             else
             {
@@ -1756,7 +1768,10 @@ static bool get_player_race(void)
     race = get_player_choice(races, z_info->p_max, p_ptr->prace, false);
 
     if (race == INVALID_CHOICE)
+    {
+        races = mem_free(races);
         return false;
+    }
 
     if (race != p_ptr->prace)
     {
@@ -1833,7 +1848,10 @@ static bool get_character_profile(void)
         previous_choice, true);
 
     if (character_choice == INVALID_CHOICE)
+    {
+        character_menu = mem_free(character_menu);
         return false;
+    }
 
     character = 0;
     for (i = 0; i < z_info->c_max; i++)
@@ -2126,7 +2144,7 @@ static bool oath_build_ui_scene(app_ui_scene* scene, int available_mask,
                 confirm_label, "Select")
             || !app_ui_panel_add_footer_action(panel, 2, TERM_WHITE, true,
                 back_label, "Back")
-            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, true,
+            || !app_ui_panel_add_footer_action(panel, 3, TERM_WHITE, false,
                 "D-pad", "Navigate"))
         {
             return false;

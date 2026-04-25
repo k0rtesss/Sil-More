@@ -23,6 +23,7 @@
 #include "log/log.h"
 #include "platform-audio.h"
 #include "platform-input.h"
+#include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -784,8 +785,77 @@ static bool help_ui_append_spaces(app_ui_scene* scene, app_ui_panel* panel,
     return true;
 }
 
+static void help_search_normalize(char* dst, size_t dst_size, cptr src)
+{
+    char* s;
+
+    if (!dst || !dst_size)
+        return;
+
+    SDL_strlcpy(dst, src ? src : "", dst_size);
+    for (s = dst; *s; s++)
+        *s = (char)tolower((unsigned char)*s);
+}
+
+static bool help_search_op_matches(const help_draw_op_t* op, cptr needle)
+{
+    char haystack[APP_UI_TEXT_MAX];
+
+    if (!op || !op->text || !op->text[0] || !needle || !needle[0])
+        return false;
+
+    help_search_normalize(haystack, sizeof(haystack), op->text);
+    return strstr(haystack, needle) != NULL;
+}
+
+static bool help_page_contains_search(int page, cptr needle,
+    const int page_starts[HELP_DOC_MAX_PAGES],
+    const int page_ends[HELP_DOC_MAX_PAGES], int total_pages)
+{
+    int op;
+
+    if (page < 1 || page > total_pages || !needle || !needle[0])
+        return false;
+
+    for (op = 0; op < g_help_doc_ops_n; op++)
+    {
+        int row = g_help_doc_ops[op].y;
+
+        if (row < page_starts[page - 1] || row > page_ends[page - 1])
+            continue;
+        if (help_search_op_matches(&g_help_doc_ops[op], needle))
+            return true;
+    }
+
+    return false;
+}
+
+static bool help_find_search_page(cptr needle, int start_page, int step,
+    const int page_starts[HELP_DOC_MAX_PAGES],
+    const int page_ends[HELP_DOC_MAX_PAGES], int total_pages, int* out_page)
+{
+    int page;
+
+    if (!needle || !needle[0] || !out_page || step == 0)
+        return false;
+
+    page = start_page;
+    while (page >= 1 && page <= total_pages)
+    {
+        if (help_page_contains_search(page, needle, page_starts, page_ends,
+                total_pages))
+        {
+            *out_page = page;
+            return true;
+        }
+        page += step;
+    }
+
+    return false;
+}
+
 static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
-    int doc_start_y, int doc_end_y)
+    int doc_start_y, int doc_end_y, cptr search_display)
 {
     app_ui_panel* panel;
     ui_browser_shell_scene_config config;
@@ -873,16 +943,43 @@ static bool help_build_ui_scene(app_ui_scene* scene, int page, int total_pages,
         return false;
     }
 
+    if (search_display && search_display[0])
     {
-        const ui_browser_shell_footer_action actions[] = {
-            { 1, TERM_WHITE, page > 1, "4", "Prev" },
-            { 2, TERM_L_BLUE, true, "6",
-                (page >= total_pages) ? "Done" : "Next" },
-            { 3, TERM_WHITE, true, "Esc", "Back" }
+        char search_buf[APP_UI_TEXT_MAX];
+
+        strnfmt(search_buf, sizeof(search_buf), "Search: %s", search_display);
+        if (!app_ui_panel_add_body_line(panel, TERM_L_BLUE, search_buf))
+            return false;
+    }
+
+    {
+        ui_browser_shell_footer_action actions[6];
+        size_t action_count = 0;
+
+        actions[action_count++] = (ui_browser_shell_footer_action){
+            1, TERM_WHITE, page > 1, "4", "Prev"
+        };
+        actions[action_count++] = (ui_browser_shell_footer_action){
+            2, TERM_L_BLUE, true, "6",
+            (page >= total_pages) ? "Done" : "Next"
+        };
+        actions[action_count++] = (ui_browser_shell_footer_action){
+            4, TERM_WHITE, true, "/", "Find"
+        };
+        if (search_display && search_display[0])
+        {
+            actions[action_count++] = (ui_browser_shell_footer_action){
+                5, TERM_WHITE, true, "n", "Next hit"
+            };
+            actions[action_count++] = (ui_browser_shell_footer_action){
+                6, TERM_WHITE, true, "N", "Prev hit"
+            };
+        }
+        actions[action_count++] = (ui_browser_shell_footer_action){
+            3, TERM_WHITE, true, "Esc", "Back"
         };
 
-        (void)ui_browser_shell_add_footer_actions(panel, actions,
-            N_ELEMENTS(actions));
+        (void)ui_browser_shell_add_footer_actions(panel, actions, action_count);
     }
 
     return true;
@@ -1633,6 +1730,23 @@ static void help_record_page_document_ops(int i, bool include_header)
 
 static bool help_command_to_key(const app_ui_command* command, char* out_key);
 
+static bool help_pause_information_scene(ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    ui_information_scene_leave(scope);
+    return true;
+}
+
+static bool help_resume_information_scene(ui_information_scene_scope* scope)
+{
+    if (!scope)
+        return false;
+
+    return ui_information_scene_enter(scope);
+}
+
 static bool do_cmd_help_information_scene(void)
 {
     ui_information_scene_scope scope;
@@ -1642,9 +1756,14 @@ static bool do_cmd_help_information_scene(void)
     int page_ends[HELP_DOC_MAX_PAGES];
     int doc_hgt = 0;
     int page = 1;
+    char search_raw[80];
+    char search[80];
 
     if (!ui_information_scene_enter(&scope))
         return false;
+
+    SDL_strlcpy(search_raw, "", sizeof(search_raw));
+    SDL_strlcpy(search, "", sizeof(search));
 
     while (true)
     {
@@ -1664,7 +1783,7 @@ static bool do_cmd_help_information_scene(void)
             page = total_pages;
 
         if (!help_build_ui_scene(&scene, page, total_pages,
-                page_starts[page - 1], page_ends[page - 1])
+                page_starts[page - 1], page_ends[page - 1], search_raw)
             || !ui_information_scene_present_ui(&scene))
         {
             ui_information_scene_leave(&scope);
@@ -1709,7 +1828,50 @@ static bool do_cmd_help_information_scene(void)
 
         if (ch == 'q' || ch == 'Q' || ch == ESCAPE)
             break;
-        if (ch == '8' || ch == '-' || ch == '4')
+        if (ch == '/')
+        {
+            if (!help_pause_information_scene(&scope))
+                break;
+            if (askfor_aux(search_raw, sizeof(search_raw)))
+            {
+                int found_page = 0;
+
+                help_search_normalize(search, sizeof(search), search_raw);
+                if (search[0]
+                    && help_find_search_page(search, page, 1, page_starts,
+                        page_ends, total_pages, &found_page))
+                {
+                    page = found_page;
+                }
+                else if (search[0])
+                {
+                    bell("Search string not found!");
+                }
+            }
+            if (!help_resume_information_scene(&scope))
+                break;
+        }
+        else if (ch == 'n' || ch == 'N')
+        {
+            int found_page = 0;
+            int step = (ch == 'n') ? 1 : -1;
+            int start_page = page + step;
+
+            if (!search[0])
+            {
+                bell("No search string.");
+            }
+            else if (help_find_search_page(search, start_page, step,
+                    page_starts, page_ends, total_pages, &found_page))
+            {
+                page = found_page;
+            }
+            else
+            {
+                bell("No further match.");
+            }
+        }
+        else if (ch == '8' || ch == '-' || ch == '4')
         {
             page--;
         }
@@ -1744,7 +1906,10 @@ static bool help_command_to_key(const app_ui_command* command, char* out_key)
     static const ui_browser_shell_button_key button_keys[] = {
         { 1, '4' },
         { 2, '6' },
-        { 3, ESCAPE }
+        { 3, ESCAPE },
+        { 4, '/' },
+        { 5, 'n' },
+        { 6, 'N' }
     };
     ui_browser_shell_command_map map;
     ui_browser_shell_command_result result;

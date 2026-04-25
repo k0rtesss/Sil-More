@@ -91,6 +91,10 @@ static char smith_ui_command_key(const app_ui_command* command)
         case 1:
         case 2:
             return '\r';
+        case 3:
+            return '2';
+        case 4:
+            return 'a';
         case 5:
             return ESCAPE;
         default:
