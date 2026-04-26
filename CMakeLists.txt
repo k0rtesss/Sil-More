@@ -22,6 +22,15 @@ option(STEAMDECK_SUPPORT "Build for Steam Deck" OFF)
 option(SIL_USE_LOCAL_DATA "Store generated data inside the game directory (debug builds)" OFF)
 option(SIL_BUILD_WITH_SDL_SOURCES "Build SDL dependencies from pinned sources under external/ (recommended for Windows and Android)" ${SIL_BUILD_WITH_SDL_SOURCES_DEFAULT})
 
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/defines.h"
+  SIL_DEFINES_VERSION_LINE
+  REGEX "^#define VERSION_STRING \"[^\"]+\"$")
+if(NOT SIL_DEFINES_VERSION_LINE)
+  message(FATAL_ERROR "Could not find VERSION_STRING in src/defines.h")
+endif()
+string(REGEX REPLACE "^#define VERSION_STRING \"([^\"]+)\"$" "\\1"
+  SIL_GAME_VERSION "${SIL_DEFINES_VERSION_LINE}")
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
@@ -248,8 +257,8 @@ if(SIL_IOS)
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/ios/Info.plist.in"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.silqh.silmore"
     MACOSX_BUNDLE_BUNDLE_NAME "Sil-More"
-    MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${SIL_GAME_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${SIL_GAME_VERSION}"
     XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
     XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon"
   )

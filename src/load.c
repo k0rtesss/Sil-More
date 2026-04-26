@@ -2912,8 +2912,9 @@ static void queue_legacy_supply_migration_messages(
     if (!report)
         return;
 
-    message_add("Your save was converted to the 0.9.6 supply system.",
-        MSG_GENERIC);
+    strnfmt(buf, sizeof(buf), "Your save was converted to the %s supply system.",
+        VERSION_STRING);
+    message_add(buf, MSG_GENERIC);
 
     if (legacy_supply_counts_present(report->moved))
     {
@@ -2985,8 +2986,9 @@ static void queue_oil_container_migration_messages(
     if (!legacy_supply_migration_changed(report))
         return;
 
-    message_add("Your save was converted to the 0.9.6.2 oil system.",
-        MSG_GENERIC);
+    strnfmt(buf, sizeof(buf), "Your save was converted to the %s oil system.",
+        VERSION_STRING);
+    message_add(buf, MSG_GENERIC);
 
     if (legacy_supply_counts_present(report->moved))
     {

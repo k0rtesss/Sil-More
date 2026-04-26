@@ -53,7 +53,7 @@ extern curse_type* cu_info;
  *   0.9.0.0 - Initial versioned format (quest support)
  *   0.9.0.1 - Persistent blessing choices added
  *   0.9.0.2 - Per-quest completion counters (capped) stored alongside bitmask
- *   0.9.1.3 - Current meta-file version (matches game release)
+ *   0.9.7.0 - Current meta-file version (matches game release)
  */
 #define METARUN_FILE_VERSION_MAJOR VERSION_MAJOR
 #define METARUN_FILE_VERSION_MINOR VERSION_MINOR
@@ -81,10 +81,10 @@ typedef enum {
 
 typedef struct meta_file_header
 {
-    byte version_major;  /* Major version (0) */
-    byte version_minor;  /* Minor version (9) */
-    byte version_patch;  /* Patch version (1) */
-    byte version_extra;  /* Extra version (0) */
+    byte version_major;  /* Major version (mirrors VERSION_MAJOR) */
+    byte version_minor;  /* Minor version (mirrors VERSION_MINOR) */
+    byte version_patch;  /* Patch version (mirrors VERSION_PATCH) */
+    byte version_extra;  /* Extra version (mirrors VERSION_EXTRA) */
     u32b entry_count;    /* Number of metarun entries in file */
 } meta_file_header;
 
