@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include <math.h>
@@ -18,6 +19,15 @@
 static bool valorous_oath_blocks_auto_attack(monster_type* m_ptr);
 static bool queue_deferred_pickup_pack_drop(int item, int amount,
     bool refill_oil_pool);
+
+static int revenge_bonus_against(const monster_type* m_ptr)
+{
+    if (!m_ptr || !m_ptr->r_idx)
+        return 0;
+    if (!meta_monster_is_revenge_marked_race((u16b)m_ptr->r_idx))
+        return 0;
+    return meta_monster_revenge_bonus();
+}
 
 static bool weapon_has_attack_confirmation_inscription(const object_type* o_ptr)
 {
@@ -808,6 +818,9 @@ int total_player_attack(monster_type* m_ptr, int base)
     // reward unique bane ability (if applicable)
     att += unique_bane_bonus(m_ptr);
 
+    // reward metarun revenge (if applicable)
+    att += revenge_bonus_against(m_ptr);
+
     // reward master hunter ability (if applicable)
     att += master_hunter_bonus(m_ptr);
 
@@ -853,6 +866,9 @@ int total_player_evasion(monster_type* m_ptr, bool archery)
 
     // reward unique bane ability (if applicable)
     evn += unique_bane_bonus(m_ptr);
+
+    // reward metarun revenge (if applicable)
+    evn += revenge_bonus_against(m_ptr);
 
     // halve evasion for certain situations (and only halve positive evasion!)
     if (evn > 0)

@@ -390,6 +390,12 @@ byte (*cave_feat)[MAX_DUNGEON_WID];
 byte (*cave_color)[MAX_DUNGEON_WID];
 
 /*
+ * Active legendary dungeon area map.  Zero means ordinary terrain; non-zero
+ * ids refer to runtime meta_dungeon records restored/spawned for this level.
+ */
+u16b (*legendary_area_id)[MAX_DUNGEON_WID];
+
+/*
  * Array[DUNGEON_HGT][DUNGEON_WID] of cave grid light level
  */
 s16b (*cave_light)[MAX_DUNGEON_WID];

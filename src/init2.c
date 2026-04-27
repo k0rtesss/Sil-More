@@ -17,6 +17,7 @@
 #include "sdl-sound.h"
 #include <stdio.h>
 #include "metarun.h"
+#include "meta_state.h"
 #include "score/score_guid.h"
 #include "item_set.h"
 
@@ -3679,6 +3680,9 @@ void init_angband(void)
         cleanup_old_game_files();
     }
 
+    if (!meta_state_init())
+        quit("Cannot initialize meta-state subsystem");
+
     /* Done */
     note("                                              ");
 }
@@ -3805,6 +3809,8 @@ menu_done:
 
 void cleanup_angband(void)
 {
+    meta_state_shutdown();
+
     /* Free the macros */
     macro_free();
 

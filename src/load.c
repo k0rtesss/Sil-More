@@ -13,6 +13,7 @@
 #include "externs.h"
 #include "fs/io_sdl.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "score/score_guid.h"
 #include <string.h> /* memset, strstr */
@@ -98,6 +99,7 @@ static bool savefile_has_thrall_quest_requested = false;
 static bool savefile_has_randart_flags4 = false;
 static bool savefile_has_item_bonuses = false;
 static bool savefile_has_randart_bonuses = false;
+static bool savefile_has_legendary_area_map = false;
 
 /* Version comparison helpers: update these when bumping savefile semantics. */
 static int savefile_version_compare(byte major, byte minor, byte patch, byte extra)
@@ -1613,16 +1615,22 @@ static errr rd_extra(void)
         byte morgoth_second_wind = 0;
         byte discovery_lore_flags = 0;
         s16b lamp_oil = 0;
+        u16b revenge_kills = 0;
+        u16b revenge_bonus = 0;
         rd_byte(&morgoth_hall_entered);
         rd_byte(&morgoth_second_wind);
         rd_byte(&discovery_lore_flags);
         rd_s16b(&lamp_oil);
+        rd_u16b(&revenge_kills);
+        rd_u16b(&revenge_bonus);
         strip_bytes(2);
         p_ptr->morgoth_hall_entered = morgoth_hall_entered ? 1 : 0;
         p_ptr->morgoth_second_wind = morgoth_second_wind ? 1 : 0;
         p_ptr->discovery_lore_flags = discovery_lore_flags;
         p_ptr->lamp_oil = lamp_oil;
-        strip_bytes(8);
+        p_ptr->revenge_kills = revenge_kills;
+        p_ptr->revenge_bonus = revenge_bonus;
+        strip_bytes(4);
     }
 
     /* Read item-quality squelch sub-menu */
@@ -3548,6 +3556,7 @@ static errr rd_dungeon(void)
     {
         const u16b DOOR_CHOICES_MAGIC = 0xD00D;
         u16b maybe_magic;
+        bool read_door_choices_after_color = false;
         rd_u16b(&maybe_magic);
         log_debug("Probe after cave_color: 0x%04X", maybe_magic);
         if (maybe_magic == DOOR_CHOICES_MAGIC) {
@@ -3560,10 +3569,90 @@ static errr rd_dungeon(void)
             for (int i = to_read; i < n; ++i) { byte skip; rd_byte(&skip); }
             log_debug("Read door-choices block after cave_color: magic=0x%04X, len=%d (used=%d)", DOOR_CHOICES_MAGIC, n, to_read);
             styles_load_level_door_choices(buf, to_read);
+            read_door_choices_after_color = true;
         } else {
             /* Not our magic; interpret it as the first two bytes of the next section. */
             objects_count_prefetch = maybe_magic;
             log_debug("No door-choices after cave_color; staged objects count prefetch=%u", (unsigned)objects_count_prefetch);
+        }
+
+        legendary_area_map_reset();
+        if (savefile_has_legendary_area_map && read_door_choices_after_color) {
+            u16b legendary_magic = 0;
+
+            rd_u16b(&legendary_magic);
+            if (legendary_magic == SAVEFILE_LEGENDARY_AREA_MAGIC) {
+                byte legendary_version = 0;
+                u16b active_count = 0;
+                u16b active_id = META_DUNGEON_LEGENDARY_AREA_ID_NONE;
+                guid64 active_guid = { 0, 0 };
+                bool active_seen = false;
+
+                rd_byte(&legendary_version);
+                if (legendary_version != SAVEFILE_LEGENDARY_AREA_VERSION) {
+                    note(format("Invalid legendary-area map version %u",
+                        (unsigned)legendary_version));
+                    return (-1);
+                }
+
+                rd_u16b(&active_count);
+                if (active_count > 8) {
+                    note(format("Invalid legendary-area active count %u",
+                        (unsigned)active_count));
+                    return (-1);
+                }
+                for (int ai = 0; ai < active_count; ai++) {
+                    u16b area_id = 0;
+                    guid64 record_guid = { 0, 0 };
+                    byte entry_seen = 0;
+
+                    rd_u16b(&area_id);
+                    rd_u32b(&record_guid.hi);
+                    rd_u32b(&record_guid.lo);
+                    rd_byte(&entry_seen);
+                    if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE) {
+                        active_id = area_id;
+                        active_guid = record_guid;
+                        active_seen = entry_seen != 0;
+                    }
+                }
+
+                if (!legendary_area_map_ensure())
+                    return (-1);
+
+                for (x = y = 0; y < p_ptr->cur_map_hgt;) {
+                    u16b area_id = 0;
+
+                    rd_byte(&count);
+                    rd_u16b(&area_id);
+                    if (count == 0) {
+                        note("Invalid legendary-area map run length");
+                        return (-1);
+                    }
+                    for (i = count; i > 0; i--) {
+                        legendary_area_id[y][x] = area_id;
+                        if (++x >= p_ptr->cur_map_wid) {
+                            x = 0;
+                            if (++y >= p_ptr->cur_map_hgt)
+                                break;
+                        }
+                    }
+                }
+
+                if (active_id != META_DUNGEON_LEGENDARY_AREA_ID_NONE &&
+                    !legendary_area_restore_after_load(active_id, active_guid,
+                        active_seen))
+                    legendary_area_discard_unresolved_loaded_records();
+                else if (active_id == META_DUNGEON_LEGENDARY_AREA_ID_NONE)
+                    legendary_area_discard_unresolved_loaded_records();
+
+                log_debug("Read legendary-area block: active_count=%u active_id=%u",
+                    (unsigned)active_count, (unsigned)active_id);
+            } else {
+                objects_count_prefetch = legendary_magic;
+                log_debug("No legendary-area block; staged objects count prefetch=%u",
+                    (unsigned)objects_count_prefetch);
+            }
         }
     }
 
@@ -4001,6 +4090,7 @@ static errr rd_savefile_new_aux(void)
     savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
     savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
     savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
+    savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
 
     /* Reset load byte offset counter */
     load_byte_offset = 0;
@@ -4068,6 +4158,7 @@ static errr rd_savefile_new_aux(void)
         rd_lore(i);
     }
     restore_monster_races_from_base();
+    meta_monster_invalidate_runtime_overrides();
 
     if (savefile_has_runtime_overrides)
     {
@@ -4465,6 +4556,7 @@ bool load_player(void)
             savefile_has_randart_flags4 = savefile_version_at_least(0, 9, 5, 1);
             savefile_has_item_bonuses = savefile_version_at_least(0, 9, 5, 2);
             savefile_has_randart_bonuses = savefile_version_at_least(0, 9, 5, 3);
+            savefile_has_legendary_area_map = savefile_version_at_least(0, 9, 7, 1);
         }
 
         load_byte_offset = 0; /* reset counter before decoding stream */

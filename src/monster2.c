@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 
 /*
@@ -541,6 +542,8 @@ errr get_mon_num_prep(void)
 {
     int i;
 
+    meta_monster_apply_runtime_overrides();
+
     /* Scan the allocation table */
     for (i = 0; i < alloc_race_size; i++)
     {
@@ -621,6 +624,8 @@ s16b get_mon_num(int level, bool special, bool allow_non_smart, bool vault)
     int build_vault_type = 0;
     bool exact_token = false;
     int current_generation_depth = player_generation_depth();
+
+    meta_monster_apply_runtime_overrides();
 
     // determine the effective level:
 
@@ -987,6 +992,8 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         r_ptr = &r_info[m_ptr->r_idx];
     }
 
+    meta_monster_apply_runtime_overrides();
+
     name = (r_name + r_ptr->name);
 
     /* Can we "see" it (forced, or not hidden + visible) */
@@ -1120,6 +1127,16 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
         {
             /* Start with the name (thus nominative and objective) */
             SDL_strlcpy(desc, name, max);
+            {
+                const meta_monster_record* record =
+                    meta_monster_find_record_for_race(m_ptr->r_idx);
+                if (record && record->rank > 0)
+                {
+                    int stars = MIN(3, record->rank);
+                    while (stars-- > 0)
+                        SDL_strlcat(desc, "*", max);
+                }
+            }
         }
 
         /* It could be an indefinite monster */
@@ -1173,11 +1190,20 @@ void monster_desc(char* desc, size_t max, const monster_type* m_ptr, int mode)
 void monster_desc_race(char* desc, size_t max, int r_idx)
 {
     monster_race* r_ptr = &r_info[r_idx];
+    const meta_monster_record* record;
 
+    meta_monster_apply_runtime_overrides();
     cptr name = (r_name + r_ptr->name);
 
     /* Write the name */
     SDL_strlcpy(desc, name, max);
+    record = meta_monster_find_record_for_race(r_idx);
+    if (record && record->rank > 0)
+    {
+        int stars = MIN(3, record->rank);
+        while (stars-- > 0)
+            SDL_strlcat(desc, "*", max);
+    }
 }
 
 /*
@@ -2669,6 +2695,8 @@ bool place_monster_one(
     monster_type monster_type_body;
 
     cptr name;
+
+    meta_monster_apply_runtime_overrides();
 
     /* Paranoia */
     if (!in_bounds(y, x))

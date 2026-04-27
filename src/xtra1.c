@@ -11,6 +11,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 #include "supplies.h"
 #include "item_set.h"
@@ -4147,6 +4148,7 @@ int song_effective_skill(int abilitynum)
 
     // woven theme synergy pairs grant an extra 20% of base song skill
     skill += song_synergy_bonus(abilitynum, full_skill);
+    skill += legendary_area_song_skill_bonus(abilitynum);
 
     // effective skill is never negative
     if (skill < 0)

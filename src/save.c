@@ -14,6 +14,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include <stdio.h>
 
 void updatecharinfoS(void)
@@ -1024,14 +1025,16 @@ static void wr_extra(void)
     wr_byte(p_ptr->self_made_arts);
 
     wr_byte(p_ptr->climbing);
+    meta_monster_sync_player_state();
 
     // 15 spare bytes (was 19, used 4 for song debuff counters)
     wr_byte(p_ptr->morgoth_hall_entered ? 1 : 0);
     wr_byte(p_ptr->morgoth_second_wind ? 1 : 0);
     wr_byte(p_ptr->discovery_lore_flags);
     wr_s16b(p_ptr->lamp_oil);
+    wr_u16b(p_ptr->revenge_kills);
+    wr_u16b(p_ptr->revenge_bonus);
     wr_u16b(0U);
-    wr_u32b(0L);
     wr_u32b(0L);
 
     /* Save item-quality squelch sub-menu */
@@ -1581,6 +1584,64 @@ static void wr_dungeon(void)
         for (int i = 0; i < cap; ++i) wr_byte(buf[i]);
     }
     log_trace("[save:%06u] === END DOOR_CHOICES ===", (unsigned)save_byte_offset);
+
+    log_trace("[save:%06u] === BEGIN LEGENDARY_AREA_ID ===", (unsigned)save_byte_offset);
+    {
+        guid64 record_guid = { 0, 0 };
+        bool entry_seen = false;
+        bool has_active = legendary_area_get_save_record(
+            META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY, &record_guid, &entry_seen);
+        u16b prev_id = 0;
+        bool have_run = false;
+
+        legendary_area_map_ensure();
+        wr_u16b(SAVEFILE_LEGENDARY_AREA_MAGIC);
+        wr_byte(SAVEFILE_LEGENDARY_AREA_VERSION);
+        wr_u16b(has_active ? 1 : 0);
+        if (has_active)
+        {
+            wr_u16b(META_DUNGEON_LEGENDARY_AREA_ID_PRIMARY);
+            wr_u32b(record_guid.hi);
+            wr_u32b(record_guid.lo);
+            wr_byte(entry_seen ? 1 : 0);
+        }
+
+        count = 0;
+        prev_id = 0;
+        for (y = 0; y < p_ptr->cur_map_hgt; y++)
+        {
+            for (x = 0; x < p_ptr->cur_map_wid; x++)
+            {
+                u16b id = legendary_area_id ? legendary_area_id[y][x] : 0;
+
+                if (!have_run)
+                {
+                    prev_id = id;
+                    count = 1;
+                    have_run = true;
+                }
+                else if ((id != prev_id) || (count == MAX_UCHAR))
+                {
+                    wr_byte((byte)count);
+                    wr_u16b(prev_id);
+                    prev_id = id;
+                    count = 1;
+                }
+                else
+                {
+                    count++;
+                }
+            }
+        }
+
+        if (count)
+        {
+            wr_byte((byte)count);
+            wr_u16b(prev_id);
+        }
+        log_debug("Writing legendary-area block: active=%d", has_active ? 1 : 0);
+    }
+    log_trace("[save:%06u] === END LEGENDARY_AREA_ID ===", (unsigned)save_byte_offset);
 
     /*** Compact ***/
 

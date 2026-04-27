@@ -13,6 +13,7 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 
 /*
  * Terrified monsters will turn to fight if they are slower than the
@@ -4897,6 +4898,8 @@ static void process_monster(monster_type* m_ptr)
             // make sure the monster doesn't do any free attacks before its next
             // turn
             m_ptr->skip_this_turn = true;
+            if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+                legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
             // end the monster's turn
             return;

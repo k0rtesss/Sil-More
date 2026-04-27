@@ -79,6 +79,7 @@ B:You rise aflame-spirit of fire, maker of Silmarils, whose oath kindled wrath u
 F:KINSLAYER | SMT_AFFINITY | WIL_AFFINITY | STL_PENALTY | SNG_PENALTY | TREACHERY
 U:SMT_FEANOR 
 C:6:5:6:2  # Jeweller Artifice
+R:0e0f11695f8a443d:The fire-whip of Angband laid him low; let that debt abide.
 S:2:2:1:2
 P:4
 D:Mighty spirit aflame, brightest and proudest among Eldar craftsmen, yet fallen under shadow, whose hand wrought Silmarils kindled grief and war. His fierce oath forever binds sons to ruin, and echoes still unbroken beyond death, through fire and wrath, to the world's unmaking or renewal. Restless in Mandos, his spirit burns fierce, awaiting doomed fulfillment when the Jewels return or fade, and Arda's wounded beauty is restored; yet ever marred, his legacy wrought in flame and boundless sorrow.
@@ -92,6 +93,7 @@ A:, High King of the Noldor
 B:You ride forth, defiant-echo of the High King who faced Morgoth at Angband's gate.
 F:WIL_AFFINITY | EVN_AFFINITY | MEL_AFFINITY | SMT_PENALTY | STL_PENALTY | ARC_PENALTY
 U:WIL_FIN
+R:58d8cf770bfcbe6f:He rode once to the doors of Angband; the Black Foe is not forgotten.
 S:3:2:2:1
 C:2:8:5:9  # Majesty Riposte
 P:4
@@ -146,6 +148,7 @@ B:You step forward bravely-valiant prince, friend and rescuer in darkest hour.
 F:WIL_AFFINITY | ARC_AFFINITY | KINSLAYER
 S:1:2:1:1
 C:1:5 #Versatility
+R:0e0f11695f8a443d:The captain of Balrogs smote him upon the black plain; remember it.
 P:3
 D: Brave-hearted prince, valiant son of Fingolfin, friend to mighty Maedhros; fearless rescuer who cut friend free from torment upon dread peaks. His valor brightens briefly as High King, yet fate cruelly casts him down on Anfauglith's blackened plain, where Morgoth's shadow conquers courage. But his deeds yet inspire hope, shining as stars above fading realms, friendship unbroken even in death, his spirit ever watching kin afar, awaiting the final healing of wounds made by sword and sorrow.
 
@@ -253,6 +256,7 @@ A: Tinuviel
 B:You sing fearlessly-fairest daughter of twilight, whose love defied Morgoth.
 F:WIL_AFFINITY | SNG_AFFINITY | STL_AFFINITY | EVN_AFFINITY | ARC_PENALTY| SMT_PENALTY
 U:SNG_LUT
+R:7b038638b2981d20:The werewolf-lord withstood her song in the dark isle; the debt is remembered.
 S:-1:3:1:3
 C:7:14:5:0   # Curse Breaking #Lorien
 P:3
@@ -389,6 +393,7 @@ A:, Master of Fate
 B:You struggle grimly-tragic hero whose black blade cleaves fate and sorrow.
 F:EVN_AFFINITY | MEL_AFFINITY | PER_PENALTY | MOR_CURSE | STL_AFFINITY |WIL_AFFINITY | STL_PENALTY
 U:WIL_TURIN
+R:3ab7e216cb871fec:The Worm of Angband brought ruin on his house; let memory bite deep.
 S:2:3:2:-1
 C:5:2:0:11:0:6  # Follow-Through  # Smite # Strength in Adversity
 P:2
@@ -411,6 +416,7 @@ A: the Steadfast
 B:You endure bravely-mightiest mortal warrior, spirit unbroken by darkness.
 F:EVN_AFFINITY | WIL_AFFINITY | PER_PENALTY | SNG_AFFINITY | MOR_CURSE | STL_PENALTY
 U:SNG_HURIN
+R:ed37fc4fce32643f:The Easterling usurper darkened his halls; his name is kept in wrath.
 S:2:2:2:0
 C:5:3:5:5:5:7:7:10  # Song of Slaying  # Poison Resistance  # Indomitable # Formidable
 P:2

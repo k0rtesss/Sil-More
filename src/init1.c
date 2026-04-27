@@ -5191,6 +5191,41 @@ static errr grab_one_character_uflag(character_profile *ptr, cptr what)
     return grab_one_flag(f, "player character", what);
 }
 
+static bool resolve_character_revenge_monster_guid(cptr token, guid64* out_guid)
+{
+    int i;
+    u64b parsed_guid = 0;
+
+    if (!token || !out_guid)
+        return false;
+
+    if (parse_u64b_hex(token, &parsed_guid))
+    {
+        guid64 wanted = score_guid_from_u64(parsed_guid);
+
+        for (i = 0; i < z_info->r_max; i++)
+        {
+            guid64 candidate = score_guid_from_u64(r_info[i].guid);
+            if ((candidate.hi == wanted.hi) && (candidate.lo == wanted.lo))
+            {
+                *out_guid = wanted;
+                return true;
+            }
+        }
+    }
+
+    for (i = 0; i < z_info->r_max; i++)
+    {
+        if (r_info[i].name && streq(r_name + r_info[i].name, token))
+        {
+            *out_guid = score_guid_from_u64(r_info[i].guid);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
  * Initialize the "p_info" array, by parsing an ascii "template" file
  */
@@ -5826,6 +5861,9 @@ errr parse_c_info(char* buf, header* head)
             ph_ptr->start_items[j].min = 0;
             ph_ptr->start_items[j].max = 0;
         }
+        ph_ptr->revenge_mark_count = 0;
+        memset(ph_ptr->revenge_monster_guid, 0, sizeof(ph_ptr->revenge_monster_guid));
+        memset(ph_ptr->revenge_reason, 0, sizeof(ph_ptr->revenge_reason));
         log_debug("  start_items array initialized");
     }
 
@@ -6017,6 +6055,39 @@ errr parse_c_info(char* buf, header* head)
 
         /* Next item */
         cur_equip++;
+    }
+
+    /* Process 'R' for "Revenge Mark" */
+    else if (buf[0] == 'R')
+    {
+        char* monster_token;
+        char* reason_text;
+        guid64 monster_guid;
+        int slot;
+
+        if (!ph_ptr)
+            return (PARSE_ERROR_MISSING_RECORD_HEADER);
+
+        if (ph_ptr->revenge_mark_count >= 8)
+            return (PARSE_ERROR_GENERIC);
+
+        monster_token = buf + 2;
+        reason_text = strchr(monster_token, ':');
+        if (!reason_text)
+            return (PARSE_ERROR_GENERIC);
+
+        *reason_text++ = '\0';
+        if (!*monster_token || !*reason_text)
+            return (PARSE_ERROR_GENERIC);
+
+        if (!resolve_character_revenge_monster_guid(monster_token, &monster_guid))
+            return (PARSE_ERROR_GENERIC);
+
+        slot = ph_ptr->revenge_mark_count;
+        ph_ptr->revenge_monster_guid[slot] = monster_guid;
+        if (!add_text(&ph_ptr->revenge_reason[slot], head, reason_text))
+            return (PARSE_ERROR_OUT_OF_MEMORY);
+        ph_ptr->revenge_mark_count++;
     }
 
 

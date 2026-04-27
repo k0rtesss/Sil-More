@@ -11,7 +11,9 @@
 #include "angband.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
+#include "score/score_guid.h"
 #include <math.h>
 
 /*
@@ -555,6 +557,9 @@ static void song_duel_finish_monster_loss(monster_type* m_ptr, int song, int son
         if (dec_stat(A_GRA, 1, false))
             msg_print("You feel drained.");
     }
+
+    if (m_ptr >= mon_list && m_ptr < mon_list + mon_max)
+        legendary_song_observe_monster((int)(m_ptr - mon_list), 0);
 
     m_ptr->song = SNG_NOTHING;
     m_ptr->song_lockout_timer = SONG_DUEL_LOCKOUT_TURNS;
@@ -1468,6 +1473,41 @@ void take_hit(int dam, cptr kb_str)
         }
 
         killer_commit(kb_str);
+
+        {
+            const killer_info* killer = killer_last();
+            const monster_type* killer_mon = killer_last_monster();
+            meta_monster_death_event event;
+            int killer_r_idx = 0;
+
+            if (killer && killer->kind == SCORE_KILLER_MONSTER)
+            {
+                killer_r_idx = killer_mon ? killer_mon->r_idx : killer->race_index;
+                if ((killer_r_idx > 0) && (killer_r_idx < z_info->r_max))
+                {
+                    monster_race* killer_r_ptr = &r_info[killer_r_idx];
+
+                    if ((killer_r_idx != R_IDX_MORGOTH)
+                        && !(killer_r_ptr->flags1 & RF1_QUESTOR))
+                    {
+                        SDL_memset(&event, 0, sizeof(event));
+                        event.monster_guid = score_guid_from_u64(killer_r_ptr->guid);
+                        event.r_idx = (u16b)killer_r_idx;
+                        SDL_strlcpy(event.monster_name,
+                            r_name + (((r_base != NULL) ? r_base[killer_r_idx].name : killer_r_ptr->name)),
+                            sizeof(event.monster_name));
+                        event.character_guid = c_info[p_ptr->pcharacter].guid;
+                        SDL_strlcpy(event.character_name,
+                            c_name + c_info[p_ptr->pcharacter].name,
+                            sizeof(event.character_name));
+                        event.depth = (byte)MAX(0, p_ptr->depth);
+                        event.turn = turn;
+                        SDL_strlcpy(event.cause, p_ptr->died_from, sizeof(event.cause));
+                        meta_monster_record_player_death(&event);
+                    }
+                }
+            }
+        }
 
         /* Note death */
         p_ptr->is_dead = true;
@@ -5202,7 +5242,9 @@ static bool project_m(
                         if (stun_amount > 0)
                         {
                             stun_monster(m_ptr, stun_amount);
-                            
+                            if (dif >= 0)
+                                legendary_song_observe_monster(cave_m_idx[y][x], 0);
+
                             /*possibly update the monster health bar*/
                             if (p_ptr->health_who == cave_m_idx[m_ptr->fy][m_ptr->fx])
                                 p_ptr->redraw |= (PR_HEALTHBAR);
@@ -8203,6 +8245,7 @@ void sing_song_of_challenge(int score)
             m_ptr->tmp_morale = MAX(m_ptr->tmp_morale, 30);
             calc_morale(m_ptr);
             calc_stance(m_ptr);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -8531,6 +8574,7 @@ void sing_song_of_elbereth(int score)
         {
             /* Decrease temporary morale */
             m_ptr->tmp_morale -= result * 10;
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -8598,6 +8642,7 @@ void sing_song_of_lorien(int score)
         if (result > 0)
         {
             set_alertness(m_ptr, m_ptr->alertness - result);
+            legendary_song_observe_monster(i, 0);
         }
     }
 }
@@ -8885,6 +8930,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Weapon damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {
@@ -8914,6 +8960,7 @@ void sing_song_of_shattering(int score)
                 }
                 
                 log_debug("Song of Shattering: Armour damage SUCCESS");
+                legendary_song_observe_monster(i, 0);
             }
             else
             {
@@ -9131,11 +9178,22 @@ void sing_song_of_revealing(int score, bool primary_song)
     song_reveal_items(range);
 }
 
+static bool player_can_sustain_song(int song)
+{
+    if (song == SNG_NOTHING)
+        return true;
+    if (song <= SNG_NOTHING || song >= SNG_MAX)
+        return false;
+    return p_ptr->active_ability[S_SNG][song] ||
+        legendary_area_song_is_available(song);
+}
+
 void sing(void)
 {
     int type;
     int song = p_ptr->song1; // a default to soothe compilation warnings
     int score = 0;
+    int effective_score = 0;
     int cost = 0;
     bool abort_song = false;
 
@@ -9159,9 +9217,9 @@ void sing(void)
     if ((p_ptr->csp < 1)
         || ((p_ptr->song2 != SNG_NOTHING)
             && !p_ptr->active_ability[S_SNG][SNG_WOVEN_THEMES])
-        || (!p_ptr->active_ability[S_SNG][p_ptr->song1])
+        || (!player_can_sustain_song(p_ptr->song1))
         || ((p_ptr->song2 != SNG_NOTHING)
-            && !p_ptr->active_ability[S_SNG][p_ptr->song2]))
+            && !player_can_sustain_song(p_ptr->song2)))
     {
         /* Stop singing */
         if (song_disguise_active)
@@ -9195,6 +9253,9 @@ void sing(void)
             song = p_ptr->song2;
 
         score = ability_bonus(S_SNG, song);
+        effective_score = (song != SNG_NOTHING) ? song_effective_skill(song) : 0;
+        if (song != SNG_NOTHING)
+            legendary_song_observe_begin(song, effective_score);
 
         switch (song)
         {
@@ -9293,7 +9354,7 @@ void sing(void)
             if ((p_ptr->song_duration % 3) == type - 1)
                 cost += 1;
             
-            sing_song_of_trees(song_effective_skill(song));
+            sing_song_of_trees(effective_score);
             
             break;
         }
@@ -9359,6 +9420,9 @@ void sing(void)
             break;
         }
         }
+
+        if (song != SNG_NOTHING)
+            legendary_song_observe_end(song, effective_score);
 
         if (abort_song)
             break;

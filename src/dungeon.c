@@ -12,6 +12,7 @@
 #include "blitz.h"
 #include "externs.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "player/killer.h"
 #include "metarun.h"
 #include "score/score_runs.h"
@@ -85,6 +86,7 @@ static void reset_level_entry_tracking(void)
     last_partition_kind = LEVEL_PART_NONE;
     partition_narrated_mask = 0;
     last_narrated_style_idx = -1;
+    legendary_area_level_reset();
 }
 
 static bool banner_messages_use_stairs(void)
@@ -3301,6 +3303,7 @@ static void process_player(void)
         /* Update labyrinth map restriction and partition-entry messages/XP. */
         update_labyrinth_view_state(true);
         handle_partition_entry(false, op_ptr->partition_narrative_mode);
+        legendary_area_note_player_position();
 
         bool in_morgoth_vault = (p_ptr->depth == MORGOTH_DEPTH)
             && (cave_info[p_ptr->py][p_ptr->px] & (CAVE_G_VAULT));
@@ -4146,6 +4149,7 @@ static void dungeon(void)
         if (op_ptr->level_entry_narrative_mode == LEVEL_ENTRY_NARRATIVE_MESSAGE)
             entry_mode = PARTITION_NARRATIVE_MESSAGE;
         handle_partition_entry(true, entry_mode);
+        legendary_area_note_player_position();
     }
 
     log_info("Dungeon display setup completed successfully");

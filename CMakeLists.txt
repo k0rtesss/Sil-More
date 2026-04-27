@@ -193,6 +193,7 @@ set(SIL_MORE_SOURCES
     src/main-sdl.c
     src/melee1.c
     src/melee2.c
+    src/meta_state.c
     src/metarun.c
     src/metarun_legacy.c
     src/quest.c

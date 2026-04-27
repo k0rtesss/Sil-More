@@ -19,6 +19,7 @@
 #include "fs/io_sdl.h"
 #include "fs/path.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include "metarun.h"
 #include "metarun_legacy.h"
 #include "sdl-sound.h"
@@ -2925,6 +2926,7 @@ static void start_new_metarun(void)
          Then archive/clear the score file so the next run starts clean. */
      metarun_finalize_scores_and_saves();
      clear_scorefile();
+     meta_state_clear_current_metarun_files();
 
     /* Hard purge the current savefile if this was a noscore wizard/debug run */
     if (p_ptr && (p_ptr->wizard || (p_ptr->noscore & 0x0008)) && (p_ptr->noscore & 0x000F)) {

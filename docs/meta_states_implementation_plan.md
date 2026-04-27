@@ -1,6 +1,15 @@
 # Meta States Implementation Plan
 
-Target version: `0.9.7.0`
+Status: `Finished` on 2026-04-27.
+
+Target version: `0.9.7.1`
+
+Completion notes:
+
+- Agents A-E were integrated into the main checkout.
+- The shared meta-state layer, forged artefacts, revenge monsters, legendary song areas, save/load support, and QA checklist are present.
+- Final validation passed with `git diff --check`, `.\build-incremental.ps1`, and `.\build-cmake.bat` for standard and portable builds after integration.
+- Manual gameplay smoke coverage is tracked in `docs/meta_states_validation_checklist.md`.
 
 This plan covers metarun-local persistence for player-forged artefacts, revenge monsters, and legendary song dungeon areas. All new player-facing prose should use original First Age styled language: grave, compact, named for Beleriand, Angband, Doriath, Gondolin, Nargothrond, Hithlum, Himring, Sirion, Valinor, Mandos, Aule, Varda, and the Eldar/Edain/Naugrim. Do not quote Tolkien text.
 
@@ -17,6 +26,292 @@ Use these implementation agents only:
 | E: QA and save compatibility | GPT-5.4 | high | Save/load tests, DB migration tests, run-to-run smoke tests, text review |
 
 Agents are not alone in the codebase. Each must avoid reverting unrelated edits and must keep write ownership disjoint. Agent A defines shared APIs first; B/C/D build against them; E verifies after integration.
+
+## Parallel Execution Order
+
+Use one branch/worktree per agent, or use an agent runner that gives every worker an isolated workspace and then uploads patches for review. Do not run B, C, or D in the same mutable checkout at the same time unless the runner guarantees isolated patches.
+
+### Round 0: Orchestrator Prep
+
+Run from the main checkout:
+
+```powershell
+git status --short
+rg -n "VERSION_STRING|VERSION_EXTRA|MIN_VERSION_EXTRA" src/defines.h
+rg -n "wr_extra|rd_extra|wr_dungeon|rd_dungeon|level_partition_meta_get|level_partition_meta_set" src/save.c src/load.c src/generate.c
+rg -n "score_artefact_register|create_smithing_item|add_artefact_details|object_difficulty|drop_system_init|build_artifact_variants" src/cmd4.c src/drop_system.c src/score
+rg -n "take_hit|killer_mark_monster|mon_take_hit|monster_desc|RF1_UNIQUE" src/player src/spells1.c src/melee1.c src/xtra2.c src/monster1.c src/monster2.c
+rg -n "change_song|singing\\(|void sing\\(|song_effective_skill|SNG_MASTERY|skip_this_turn" src/spells1.c src/xtra1.c src/monster2.c
+```
+
+If using git worktrees:
+
+```powershell
+git worktree add ..\Sil-More-meta-A -b meta-state-core
+git worktree add ..\Sil-More-meta-B -b meta-state-artefacts
+git worktree add ..\Sil-More-meta-C -b meta-state-monsters
+git worktree add ..\Sil-More-meta-D -b meta-state-dungeon
+git worktree add ..\Sil-More-meta-E -b meta-state-qa
+```
+
+If a branch already exists, replace `-b <branch>` with the existing branch name or create a fresh unique branch. Keep `AGENTS.md` and this plan file out of worker ownership unless a worker is explicitly assigned documentation changes.
+
+### Round 1: Core API Barrier
+
+Run Agent A first. B, C, and D can inspect in parallel, but they must not edit until Agent A publishes the shared API contract.
+
+Agent A command:
+
+```text
+Model: GPT-5.5
+Reasoning: xhigh
+Worktree: ..\Sil-More-meta-A
+Role: worker
+
+Implement only the shared Meta States core.
+
+Read docs/meta_states_implementation_plan.md, AGENTS.md, src/metarun.c, src/init2.c, src/files.c, src/save.c, src/load.c, src/score/score_artefact.c, src/score/score_format.h, src/score/score_guid.h, and CMakeLists.txt.
+
+Own these files:
+- src/meta_state.h
+- src/meta_state.c
+- CMakeLists.txt
+- src/metarun.c only for metarun DB cleanup hook declarations/calls
+- src/externs.h only if absolutely necessary for exported functions
+
+Tasks:
+1. Add src/meta_state.h/.c with DB path helpers for artefact.db, monster.db, and dungeon.db under ANGBAND_DIR_APEX.
+2. Add common magic/version/header structs and safe read/write helpers using SDL_IOStream patterns already used by src/score.
+3. Add metarun-id filtering helpers based on metar.id.
+4. Add meta_state_clear_current_metarun_files() and call it from start_new_metarun() after clear_scorefile() and before save_metaruns().
+5. Add public API stubs that B/C/D can link against:
+   - meta_state_init()
+   - meta_state_shutdown()
+   - meta_state_clear_current_metarun_files()
+   - meta_artifact_load_for_current_metarun(...)
+   - meta_artifact_register_created(...)
+   - meta_monster_load_for_current_metarun(...)
+   - meta_monster_record_player_death(...)
+   - meta_dungeon_load_for_current_metarun(...)
+   - meta_dungeon_register_legendary_area(...)
+6. Keep subsystem functions stubbed if needed, but define stable structs/enums and exact ownership comments in the header.
+7. Bump CMakeLists.txt for the new file. Do not bump VERSION_EXTRA yet unless you also add savefile fields.
+
+Validation:
+- Build or at least run: .\build-incremental.ps1
+- Report changed files, public API, and any functions left as stubs.
+```
+
+Barrier check after Agent A:
+
+```powershell
+git -C ..\Sil-More-meta-A diff -- src/meta_state.h src/meta_state.c CMakeLists.txt src/metarun.c
+git -C ..\Sil-More-meta-A diff --check
+```
+
+Merge or apply Agent A first. Then rebase/refresh B, C, D, and E worktrees onto the core branch.
+
+### Round 2: Parallel Feature Work
+
+After Agent A is integrated, launch B, C, and D together. Launch E in read-only QA planning mode at the same time.
+
+Agent B command:
+
+```text
+Model: GPT-5.4
+Reasoning: high
+Worktree: ..\Sil-More-meta-B
+Role: worker
+
+Implement forged artefact meta-state only. You are not alone in the codebase; do not edit monster, song, dungeon capture, or QA files except for compile fixes directly caused by your API use.
+
+Read docs/meta_states_implementation_plan.md, src/meta_state.h, src/cmd4.c, src/drop_system.c, src/obj-info.c, src/score/score_artefact.c, src/types.h, lib/edit/artefact.txt, and scripts/calc_artefact_difficulty.py.
+
+Own these files:
+- src/meta_state.c only for artefact DB implementation behind Agent A's API
+- src/meta_state.h only for artefact-specific struct/API refinements coordinated with Agent A's names
+- src/cmd4.c
+- src/drop_system.c
+- src/obj-info.c
+- scripts/calc_artefact_difficulty.py only if object_difficulty logic is changed; otherwise leave untouched
+
+Tasks:
+1. At artefact creation in create_smithing_item()/add_artefact_details(), if saved object_difficulty(smith_o_ptr) >= 15, show the First Age naming warning and persist the artefact to artefact.db through meta_artifact_register_created().
+2. Store creation depth, saved difficulty, creator character GUID/name, Masterpiece/Aule usage, stats, abilities, spawn_num, rarity weight, and generated description.
+3. Implement meta artefact rarity exactly as in the plan.
+4. Generate deterministic First Age style descriptions from artefact flags/stats/materials and store them in DB.
+5. Load current-metarun artefacts into runtime a_info slots before drop catalogue construction or append them after drops.raw load.
+6. Ensure drop_system uses a_ptr->rarity as weight and creation depth as minimum drop depth.
+7. Show DB description in obj-info.c for meta artefacts.
+
+Validation:
+- .\build-incremental.ps1
+- Manual/log smoke path or a small debug-only helper proving difficulty 14 is not saved and difficulty 15 is saved.
+- Report changed files and exact hook points.
+```
+
+Agent C command:
+
+```text
+Model: GPT-5.4
+Reasoning: high
+Worktree: ..\Sil-More-meta-C
+Role: worker
+
+Implement revenge monsters only. You are not alone in the codebase; do not edit artefact, song, dungeon capture, or QA files except for compile fixes directly caused by your API use.
+
+Read docs/meta_states_implementation_plan.md, src/meta_state.h, src/player/killer.c, src/player/killer.h, src/spells1.c, src/melee1.c, src/xtra2.c, src/monster1.c, src/monster2.c, src/init1.c, src/types.h, src/save.c, src/load.c, lib/edit/character.txt, and lib/edit/monster.txt.
+
+Own these files:
+- src/meta_state.c only for monster DB implementation behind Agent A's API
+- src/meta_state.h only for monster-specific struct/API refinements coordinated with Agent A's names
+- src/player/killer.c
+- src/player/killer.h
+- src/spells1.c
+- src/xtra2.c
+- src/monster1.c
+- src/monster2.c
+- src/init1.c
+- src/types.h
+- src/save.c and src/load.c only for new persistent player/template fields
+- lib/edit/character.txt only for R: lines after verifying monster GUIDs
+
+Tasks:
+1. On player death in take_hit(), resolve the killing monster through the existing killer tracker and write/update monster.db through meta_monster_record_player_death().
+2. Add ranked monster records with metarun id, monster race GUID, rank 1..3, killed character names/GUIDs, depth, and cause.
+3. Inject ranked monsters in later runs as runtime unique overrides: name has 1-3 stars, RF1_UNIQUE behavior, max_num 1, level original + rank, combat stats scaled from base by 100 + 30 * rank percent.
+4. Add First Age kill-memory text to monster recall/description.
+5. Implement global revenge marks and character-specific R: parser lines in character.txt.
+6. Implement revenge bonus milestones: 1 kill -> 1, 3 kills -> 3, 6 kills -> 6, 10 kills -> 10.
+7. Apply the current revenge bonus additively in the same combat layer as banes/unique bane bonuses.
+
+Validation:
+- .\build-incremental.ps1
+- Unit-style helper or debug log proving rank caps at *** and bonus milestones match the plan.
+- Report changed files, save/load fields, and any character R: additions.
+```
+
+Agent D command:
+
+```text
+Model: GPT-5.5
+Reasoning: xhigh
+Worktree: ..\Sil-More-meta-D
+Role: worker
+
+Implement legendary song dungeon meta-state only. You are not alone in the codebase; do not edit artefact, revenge monster, or QA files except for compile fixes directly caused by your API use.
+
+Read docs/meta_states_implementation_plan.md, src/meta_state.h, src/generate.c, src/dungeon.c, src/cave.c, src/spells1.c, src/xtra1.c, src/cmd4.c, src/save.c, src/load.c, src/types.h, src/variable.c, src/externs.h, src/defines.h, lib/edit/ability.txt, and lib/edit/character.txt.
+
+Own these files:
+- src/meta_state.c only for dungeon DB implementation behind Agent A's API
+- src/meta_state.h only for dungeon-specific struct/API refinements coordinated with Agent A's names
+- src/generate.c
+- src/dungeon.c
+- src/spells1.c
+- src/xtra1.c
+- src/cmd4.c only for song menu availability
+- src/save.c
+- src/load.c
+- src/types.h if player state fields are unavoidable
+- src/variable.c
+- src/externs.h
+- src/defines.h only for VERSION_EXTRA/MIN_VERSION_EXTRA and constants
+
+Tasks:
+1. Add legendary song observer begin/monster/end hooks. Only count songs that actually affect at least one monster.
+2. Detect starting songs from character C: abilities where skill is S_SNG.
+3. At effective song score >= 15 and qualifying monster effect, roll the planned chance and register a dungeon.db record.
+4. Capture area from live cave arrays, not dun->corner/layout_anchors. Use source classification, flood fill, cap/crop, and fallback exactly as in the plan.
+5. Store normalized tile mask, cave_feat, cave_color, source metadata, singer, song id, affected monster race GUIDs, and entry text.
+6. Add legendary_area_id active-level map, allocate/reset it with cave arrays, save/load it with a marker and version gate.
+7. Spawn at most one matching legendary area per depth in cave_gen(), exact saved depth only, with safe placement and connection.
+8. On entry, show First Age message once per level and grant area aura: missing song is singable inside; known song gets +5 effective skill inside; area-only song stops on leaving.
+9. Bump VERSION_EXTRA only when active-level save/load is added, and gate older saves safely.
+
+Validation:
+- .\build-incremental.ps1
+- Debug path proving score 14 no capture, score 15 with no affected monster no capture, score 15 with affected monster can capture.
+- Save/load smoke for spawned legendary_area_id map.
+- Report changed files, save format marker, and capture/spawn limitations.
+```
+
+Agent E command:
+
+```text
+Model: GPT-5.4
+Reasoning: high
+Worktree: ..\Sil-More-meta-E
+Role: worker
+
+Prepare QA while B/C/D implement. Start read-only; do not edit production code until the integration round. You are not alone in the codebase.
+
+Read docs/meta_states_implementation_plan.md, AGENTS.md, src/save.c, src/load.c, src/meta_state.h after Agent A lands, src/cmd4.c, src/drop_system.c, src/spells1.c, src/generate.c, src/dungeon.c, src/xtra2.c, and lib/edit/character.txt.
+
+Own these files initially:
+- docs/meta_states_validation_checklist.md, if useful
+- no production files until Round 3
+
+Tasks:
+1. Build a precise manual validation checklist for artefacts, revenge monsters, and legendary song areas.
+2. Identify save/load compatibility risks and expected markers.
+3. Identify likely conflict points among B/C/D before integration.
+4. After B/C/D land, switch to integration QA: run build, inspect compile failures, and propose minimal fixes.
+
+Validation:
+- No production edits in the first pass.
+- Report checklist path, risk list, and integration order recommendations.
+```
+
+### Round 3: Integration Order
+
+Integrate in this order:
+
+1. Agent A core API.
+2. Agent B artefacts.
+3. Agent C monsters.
+4. Agent D dungeon/song.
+5. Agent E QA fixes.
+
+After each integration step:
+
+```powershell
+git status --short
+git diff --check
+.\build-incremental.ps1
+```
+
+Expected conflict points:
+
+- `src/meta_state.h` and `src/meta_state.c`: all feature agents touch these. Resolve by keeping Agent A's structure and merging B/C/D implementations under their subsystem sections.
+- `src/save.c` and `src/load.c`: C and D may both add fields. Keep marker-based optional blocks and read in the same order they are written.
+- `src/defines.h`: D may bump `VERSION_EXTRA`; no other agent should change version constants.
+- `src/cmd4.c`: B touches smithing; D touches song menu. Keep edits separated by function.
+- `CMakeLists.txt`: only A should add `src/meta_state.c`.
+
+### Round 4: Final Verification
+
+Run from the integrated main checkout:
+
+```powershell
+git status --short
+rg -n "meta_state|artefact.db|monster.db|dungeon.db|legendary_area_id|VERSION_EXTRA" src docs
+.\build-cmake.bat
+```
+
+Manual smoke tests:
+
+```text
+1. Start a character with Artifice, forge difficulty 14 artefact, confirm no artefact.db record.
+2. Forge difficulty 15 artefact, confirm naming warning, artefact.db record, and First Age description.
+3. Start a later character in same metarun, confirm meta artefact can appear in drop pool and is not duplicated after seen.
+4. Kill player with a monster, confirm monster.db rank 1 and later unique starred runtime monster.
+5. Kill the starred monster, confirm revenge bonus milestone.
+6. Trigger a starting song at effective score 15+ affecting at least one monster, confirm dungeon.db record.
+7. Enter the saved depth on a later character, confirm one legendary area can spawn, entry message appears once, missing song is granted inside, known song gets +5, and area-only song stops outside.
+8. Save/reload on a level with a legendary area and confirm area behavior persists.
+9. Start a new metarun and confirm old artefact.db, monster.db, and dungeon.db content is cleared or ignored.
+```
 
 ## Shared Meta-State Layer
 

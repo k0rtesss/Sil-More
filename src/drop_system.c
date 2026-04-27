@@ -5,6 +5,7 @@
 #include "fs/io_sdl.h"
 #include "gen-log.h"
 #include "log/log.h"
+#include "meta_state.h"
 #include <string.h>
 
 /*
@@ -2165,6 +2166,11 @@ static void build_ego_combo_variants(int prefix_idx, int suffix_idx)
 static void build_artifact_variants(int a_idx)
 {
     artefact_type* a_ptr = &a_info[a_idx];
+
+    if (a_idx >= z_info->art_rand_max
+        && !meta_artifact_runtime_slot_is_meta(a_idx))
+        return;
+
     if (!a_ptr->tval || !a_ptr->sval)
         return;
     int k_idx = lookup_kind(a_ptr->tval, a_ptr->sval);
@@ -2231,6 +2237,17 @@ static void build_artifact_variants(int a_idx)
     byte rarity_arr[1] = {(byte)rarity};
     add_drop_entry(&v, cat, DROP_GROUP_ARTIFACT, a_idx, level, MORGOTH_DEPTH,
         depth_arr, rarity_arr, 1);
+}
+
+static void append_runtime_meta_artifacts_to_drop_catalog(void)
+{
+    if (meta_artifact_runtime_count() == 0)
+        return;
+
+    for (int a_idx = z_info->art_rand_max; a_idx < z_info->art_max; a_idx++) {
+        if (meta_artifact_runtime_slot_is_meta(a_idx))
+            build_artifact_variants(a_idx);
+    }
 }
 
 static void clear_drop_entries(void)
@@ -2312,6 +2329,10 @@ static bool save_drop_raw(void)
 
 void drop_system_init(void)
 {
+    if (!meta_artifact_prepare_runtime()) {
+        log_warn("drop_system_init: failed to prepare remembered artefacts");
+    }
+
     /* Try to use cached raw if up to date */
 #ifdef CHECK_MODIFICATION_TIME
     char raw_path[1024];
@@ -2340,6 +2361,7 @@ void drop_system_init(void)
 
     if (!need_rebuild && load_drop_raw())
     {
+        append_runtime_meta_artifacts_to_drop_catalog();
         log_info("Loaded drop catalog from drops.raw (%zu entries)", g_drop_count);
         return;
     }
@@ -2376,8 +2398,10 @@ void drop_system_init(void)
         }
     }
 
-    /* Artefacts */
-    for (int a_idx = 1; a_idx < z_info->art_max; a_idx++)
+    /* Canonical artefacts only. Runtime remembered artefacts are appended in
+     * memory after the base catalog is loaded or rebuilt so they never get
+     * serialized into drops.raw. */
+    for (int a_idx = 1; a_idx < z_info->art_rand_max; a_idx++)
         build_artifact_variants(a_idx);
 
     /* Log catalog size by category/group for diagnostics */
@@ -2393,6 +2417,7 @@ void drop_system_init(void)
     }
 
     save_drop_raw();
+    append_runtime_meta_artifacts_to_drop_catalog();
     log_info("Drop catalog rebuilt: %zu entries (weapon=%zu armor=%zu jewelry=%zu supply=%zu | normal=%zu ego=%zu art=%zu)",
         g_drop_count, cat_counts[DROP_CAT_WEAPON], cat_counts[DROP_CAT_ARMOR],
         cat_counts[DROP_CAT_JEWELRY], cat_counts[DROP_CAT_SUPPLY],
